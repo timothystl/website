@@ -278,12 +278,12 @@ export default {
           headers: { Location: '/', 'Set-Cookie': setCookieHeader() }
         });
       }
-      return html(loginPage('Incorrect password. Please try again.'));
+      return loginPage('Incorrect password. Please try again.');
     }
 
     if (!authCookie(request)) {
-      if (path === '/login') return html(loginPage());
-      return html(loginPage());
+      if (path === '/login') return loginPage();
+      return loginPage();
     }
 
     // ── LOGOUT ──
