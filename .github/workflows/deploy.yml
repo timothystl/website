@@ -16,20 +16,17 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          OUTPUT=$(wrangler d1 create tlc-newsletter-db --json 2>&1 || true)
+          OUTPUT=$(wrangler d1 create tlc-newsletter-db 2>&1 || true)
           echo "$OUTPUT"
-          DB_ID=$(echo "$OUTPUT" | python3 -c "import sys,json; data=json.load(sys.stdin); print(data.get('uuid',''))" 2>/dev/null || true)
+
+          # Parse database_id from text output (format: database_id = "xxxx")
+          DB_ID=$(echo "$OUTPUT" | grep -oP 'database_id = "\K[^"]+' || true)
 
           if [ -z "$DB_ID" ]; then
-            # Database may already exist — fetch its ID
-            DB_ID=$(wrangler d1 list --json 2>/dev/null | python3 -c "
-          import sys, json
-          dbs = json.load(sys.stdin)
-          for d in dbs:
-              if d.get('name') == 'tlc-newsletter-db':
-                  print(d.get('uuid',''))
-                  break
-          " 2>/dev/null || true)
+            # Database may already exist — list and grep for it
+            LIST_OUTPUT=$(wrangler d1 list 2>&1)
+            echo "$LIST_OUTPUT"
+            DB_ID=$(echo "$LIST_OUTPUT" | grep -i 'tlc-newsletter-db' | grep -oP '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1 || true)
           fi
 
           if [ -z "$DB_ID" ]; then
