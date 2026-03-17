@@ -7,8 +7,7 @@ const BEEHIIV_API_KEY = 'jBgc1cHvSXJlyoskPkyf8Ujz7r6VzCO4CaA1t4BaaRsiR9nLR4WmjHQ
 const BEEHIIV_PUB_ID = '7c76e5d5-1225-4d04-ae5c-023c2d2d7a40';
 
 // ── DB INIT ─────────────────────────────────────────────────
-const DB_INIT = `
-CREATE TABLE IF NOT EXISTS newsletters (
+const DB_INIT_NEWSLETTERS = `CREATE TABLE IF NOT EXISTS newsletters (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   subject TEXT NOT NULL,
   pastor_note TEXT,
@@ -18,8 +17,9 @@ CREATE TABLE IF NOT EXISTS newsletters (
   published_at TEXT NOT NULL,
   beehiiv_id TEXT,
   created_at TEXT DEFAULT (datetime('now'))
-);
-CREATE TABLE IF NOT EXISTS events (
+)`;
+
+const DB_INIT_EVENTS = `CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   newsletter_id INTEGER,
   event_date TEXT,
@@ -27,8 +27,7 @@ CREATE TABLE IF NOT EXISTS events (
   event_time TEXT,
   event_desc TEXT,
   sort_order INTEGER DEFAULT 0
-);
-`;
+)`;
 
 // ── HELPERS ─────────────────────────────────────────────────
 function authCookie(req) {
@@ -238,9 +237,8 @@ export default {
     const method = request.method;
 
     // Init DB
-    try {
-      await env.DB.exec(DB_INIT);
-    } catch (e) { /* already exists */ }
+    try { await env.DB.exec(DB_INIT_NEWSLETTERS); } catch (e) {}
+    try { await env.DB.exec(DB_INIT_EVENTS); } catch (e) {}
 
     // ── PUBLIC: newsletter archive API ──
     if (path === '/api/newsletters' && method === 'GET') {
