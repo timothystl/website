@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Timothy Lutheran Church — Quick links for worship, giving, volunteering, and more.">
+<title>Timothy Lutheran Church — Links</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,700;1,400&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --steel:#0A3C5C;--steel-dk:#2A5470;--steel-dk2:#0A2038;
+  --mid:#3D627C;--sky:#5C8FA8;--ice:#C4DDE8;--mist:#EDF5F8;
+  --amber:#D4922A;--amber-dk:#C07D1E;--honey:#E8B86D;
+  --sage:#6B8F71;
+  --warm:#FAF7F0;--linen:#F2EDE2;--white:#FFFFFF;
+  --border:#E8E0D0;--charcoal:#3D3530;--gray:#7A6E60;
+  --serif:'Lora',Georgia,serif;--sans:'Source Sans 3',Arial,sans-serif;
+  --shadow:0 2px 12px rgba(10,60,92,.08);--shadow-lift:0 6px 28px rgba(10,60,92,.15);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-height:100vh;display:flex;flex-direction:column;align-items:center;}
+
+/* Header */
+.header{width:100%;background:var(--steel);padding:28px 24px 24px;text-align:center;}
+.header-logo{font-family:var(--serif);font-size:22px;font-weight:700;color:white;letter-spacing:.01em;line-height:1.2;}
+.header-sub{font-size:13px;color:rgba(255,255,255,.65);margin-top:4px;font-weight:300;}
+
+/* Main */
+.main{width:100%;max-width:480px;padding:28px 20px 48px;display:flex;flex-direction:column;gap:12px;}
+
+/* Link cards */
+.link-card{display:flex;align-items:center;gap:16px;background:var(--white);border:1px solid var(--border);border-radius:14px;padding:18px 20px;text-decoration:none;color:var(--charcoal);box-shadow:var(--shadow);transition:transform .15s,box-shadow .15s,border-color .15s;}
+.link-card:hover,.link-card:focus{transform:translateY(-2px);box-shadow:var(--shadow-lift);border-color:var(--ice);outline:none;}
+.link-card:active{transform:translateY(0);box-shadow:var(--shadow);}
+
+.card-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:22px;}
+.icon--amber{background:#FEF3DC;}
+.icon--steel{background:#E4EEF4;}
+.icon--sage{background:#E8F2E9;}
+.icon--mid{background:#EBF0F4;}
+.icon--honey{background:#FEF8EC;}
+
+.card-text{flex:1;min-width:0;}
+.card-title{font-size:16px;font-weight:700;color:var(--charcoal);line-height:1.2;}
+.card-desc{font-size:13px;color:var(--gray);margin-top:2px;line-height:1.4;}
+
+.card-arrow{color:var(--ice);font-size:18px;flex-shrink:0;transition:color .15s;}
+.link-card:hover .card-arrow{color:var(--sky);}
+
+/* Divider label */
+.section-label{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gray);padding:4px 4px 0;margin-top:4px;}
+
+/* Footer */
+.footer{width:100%;max-width:480px;padding:0 20px 32px;text-align:center;}
+.footer-text{font-size:12px;color:var(--gray);line-height:1.6;}
+.footer-text a{color:var(--mid);text-decoration:none;}
+.footer-text a:hover{color:var(--steel);}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">Timothy Lutheran Church</div>
+  <div class="header-sub">St. Louis, Missouri &mdash; Fyler Avenue</div>
+</div>
+
+<div class="main">
+
+  <div class="section-label">Get Involved</div>
+
+  <a class="link-card" href="https://volunteer.timothystl.org" target="_blank" rel="noopener">
+    <div class="card-icon icon--sage">🙌</div>
+    <div class="card-text">
+      <div class="card-title">Volunteer</div>
+      <div class="card-desc">Sign up to serve in our ministries and community</div>
+    </div>
+    <span class="card-arrow">›</span>
+  </a>
+
+  <a class="link-card" href="https://timothystl.breezechms.com/give/online" target="_blank" rel="noopener">
+    <div class="card-icon icon--amber">🤲</div>
+    <div class="card-text">
+      <div class="card-title">Give Online</div>
+      <div class="card-desc">Support the mission and ministries of Timothy</div>
+    </div>
+    <span class="card-arrow">›</span>
+  </a>
+
+  <div class="section-label" style="margin-top:8px;">Worship &amp; Faith</div>
+
+  <a class="link-card" href="https://timothystl.org" target="_blank" rel="noopener">
+    <div class="card-icon icon--steel">⛪</div>
+    <div class="card-text">
+      <div class="card-title">Plan Your Visit</div>
+      <div class="card-desc">Service times, directions, and what to expect</div>
+    </div>
+    <span class="card-arrow">›</span>
+  </a>
+
+  <a class="link-card" href="https://timothystl.org/#sermons" target="_blank" rel="noopener">
+    <div class="card-icon icon--mid">🎙️</div>
+    <div class="card-text">
+      <div class="card-title">Sermons</div>
+      <div class="card-desc">Watch or listen to recent messages</div>
+    </div>
+    <span class="card-arrow">›</span>
+  </a>
+
+  <a class="link-card" href="https://www.timothystl.org/prayer" target="_blank" rel="noopener">
+    <div class="card-icon icon--honey">🙏</div>
+    <div class="card-text">
+      <div class="card-title">Prayer Request</div>
+      <div class="card-desc">Share what's on your heart — we'd love to pray with you</div>
+    </div>
+    <span class="card-arrow">›</span>
+  </a>
+
+  <div class="section-label" style="margin-top:8px;">Stay Connected</div>
+
+  <a class="link-card" href="https://timothystl.org/#news" target="_blank" rel="noopener">
+    <div class="card-icon icon--amber">📬</div>
+    <div class="card-text">
+      <div class="card-title">Newsletter</div>
+      <div class="card-desc">Sign up for news, events, and updates</div>
+    </div>
+    <span class="card-arrow">›</span>
+  </a>
+
+  <a class="link-card" href="https://timothystl.org/#contact" target="_blank" rel="noopener">
+    <div class="card-icon icon--steel">✉️</div>
+    <div class="card-text">
+      <div class="card-title">Contact Us</div>
+      <div class="card-desc">Reach our staff or ask a question</div>
+    </div>
+    <span class="card-arrow">›</span>
+  </a>
+
+</div>
+
+<div class="footer">
+  <p class="footer-text">
+    <a href="https://timothystl.org">timothystl.org</a> &nbsp;&middot;&nbsp; 4th &amp; Fyler Ave, St. Louis, MO<br>
+    Sunday worship &middot; 8:30 &amp; 10:30 am
+  </p>
+</div>
+
+</body>
+</html>
