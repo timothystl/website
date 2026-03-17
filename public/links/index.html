@@ -25,11 +25,20 @@ body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-he
 
 /* Header */
 .header{width:100%;background:var(--steel);padding:28px 24px 24px;text-align:center;}
+.header-icon{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;}
 .header-logo{font-family:var(--serif);font-size:22px;font-weight:700;color:white;letter-spacing:.01em;line-height:1.2;}
-.header-sub{font-size:13px;color:rgba(255,255,255,.65);margin-top:4px;font-weight:300;}
+
+/* Values strip */
+.values{width:100%;max-width:480px;padding:16px 20px 4px;display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.value-pill{background:var(--white);border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center;}
+.value-pill-label{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--steel);}
+.value-pill:nth-child(1){border-top:2px solid var(--amber);}
+.value-pill:nth-child(2){border-top:2px solid var(--sage);}
+.value-pill:nth-child(3){border-top:2px solid var(--sky);}
+.value-pill:nth-child(4){border-top:2px solid var(--steel);}
 
 /* Main */
-.main{width:100%;max-width:480px;padding:28px 20px 48px;display:flex;flex-direction:column;gap:12px;}
+.main{width:100%;max-width:480px;padding:16px 20px 48px;display:flex;flex-direction:column;gap:12px;}
 
 /* Link cards */
 .link-card{display:flex;align-items:center;gap:16px;background:var(--white);border:1px solid var(--border);border-radius:14px;padding:18px 20px;text-decoration:none;color:var(--charcoal);box-shadow:var(--shadow);transition:transform .15s,box-shadow .15s,border-color .15s;}
@@ -63,8 +72,20 @@ body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-he
 <body>
 
 <div class="header">
+  <div class="header-icon">
+    <svg width="18" height="22" viewBox="0 0 18 22" fill="none">
+      <rect x="7.5" y="0" width="3" height="22" rx="1.5" fill="#D4922A"/>
+      <rect x="0" y="7" width="18" height="3" rx="1.5" fill="white"/>
+    </svg>
+  </div>
   <div class="header-logo">Timothy Lutheran Church</div>
-  <div class="header-sub">St. Louis, Missouri &mdash; Fyler Avenue</div>
+</div>
+
+<div class="values">
+  <div class="value-pill"><div class="value-pill-label">Worship</div></div>
+  <div class="value-pill"><div class="value-pill-label">Acceptance</div></div>
+  <div class="value-pill"><div class="value-pill-label">Outreach</div></div>
+  <div class="value-pill"><div class="value-pill-label">Christian Ed</div></div>
 </div>
 
 <div class="main">
@@ -126,10 +147,7 @@ body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-he
 </div>
 
 <div class="footer">
-  <p class="footer-text">
-    <a href="https://timothystl.org">timothystl.org</a> &nbsp;&middot;&nbsp; 6704 Fyler Ave, St. Louis, MO 63139<br>
-    Sunday worship &middot; 8:00 &amp; 10:45 am
-  </p>
+  <p class="footer-text"><a href="https://timothystl.org">timothystl.org</a></p>
 </div>
 
 </body>
