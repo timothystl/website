@@ -247,8 +247,8 @@ export default {
     const method = request.method;
 
     // Init DB
-    try { await env.DB.exec(DB_INIT_NEWSLETTERS); } catch (e) {}
-    try { await env.DB.exec(DB_INIT_EVENTS); } catch (e) {}
+    try { await env.DB.prepare(DB_INIT_NEWSLETTERS).run(); } catch (e) {}
+    try { await env.DB.prepare(DB_INIT_EVENTS).run(); } catch (e) {}
 
     // ── PUBLIC: newsletter archive API ──
     if (path === '/api/newsletters' && method === 'GET') {
