@@ -1,0 +1,55 @@
+name: Deploy TLC Newsletter Admin
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install wrangler
+        run: npm install -g wrangler
+
+      - name: Create D1 database (if not exists)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          OUTPUT=$(wrangler d1 create tlc-newsletter-db --json 2>&1 || true)
+          echo "$OUTPUT"
+          DB_ID=$(echo "$OUTPUT" | python3 -c "import sys,json; data=json.load(sys.stdin); print(data.get('uuid',''))" 2>/dev/null || true)
+
+          if [ -z "$DB_ID" ]; then
+            # Database may already exist — fetch its ID
+            DB_ID=$(wrangler d1 list --json 2>/dev/null | python3 -c "
+          import sys, json
+          dbs = json.load(sys.stdin)
+          for d in dbs:
+              if d.get('name') == 'tlc-newsletter-db':
+                  print(d.get('uuid',''))
+                  break
+          " 2>/dev/null || true)
+          fi
+
+          if [ -z "$DB_ID" ]; then
+            echo "ERROR: Could not get database ID"
+            exit 1
+          fi
+
+          echo "Database ID: $DB_ID"
+          sed -i "s/REPLACE_WITH_DATABASE_ID/$DB_ID/" wrangler.toml
+          echo "Updated wrangler.toml"
+
+      - name: Deploy worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: wrangler deploy
+
+      - name: Done
+        run: |
+          echo ""
+          echo "Worker deployed!"
+          echo "Now add the custom domain in Cloudflare Dashboard:"
+          echo "Workers & Pages → tlc-newsletter-admin → Settings → Triggers → Add Custom Domain"
+          echo "Domain: admin.timothystl.org"
