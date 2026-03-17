@@ -6,7 +6,3 @@ compatibility_date = "2024-01-01"
 binding = "DB"
 database_name = "tlc-newsletter-db"
 database_id = "REPLACE_WITH_DATABASE_ID"
-
-[routes]
-# After deploying, add a custom domain route in the Cloudflare dashboard:
-# admin.timothystl.org → this worker
