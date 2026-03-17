@@ -232,6 +232,16 @@ function buildWebHtml(subject, pastorNote, events, ministryContent, ministryType
 // ── MAIN HANDLER ─────────────────────────────────────────────
 export default {
   async fetch(request, env) {
+    try {
+      return await this._fetch(request, env);
+    } catch (e) {
+      return new Response(`Worker error: ${e.message}\n\nStack: ${e.stack}`, {
+        status: 500, headers: { 'Content-Type': 'text/plain' }
+      });
+    }
+  },
+
+  async _fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
     const method = request.method;
@@ -586,3 +596,4 @@ addEvent();
 </div>`, 'TLC Newsletter Admin');
   }
 };
+
