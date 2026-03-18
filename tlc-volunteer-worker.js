@@ -95,6 +95,91 @@ async function initDb(db) {
     try { await db.prepare(m).run(); } catch(e) { /* column already exists */ }
   }
   await seedEvents(db);
+  await migrateChristmasMarketRoles(db);
+}
+
+// ── MIGRATE CHRISTMAS MARKET ROLES (idempotent) ───────────────────────
+// Runs on every cold start. If the Christmas Market event has fewer than
+// 20 roles it means it was seeded with the old simple role list — replace
+// it with the full time-slotted schedule.
+async function migrateChristmasMarketRoles(db) {
+  const ev = await db.prepare("SELECT id FROM serve_events WHERE name='Christmas Market'").first();
+  if (!ev) return;
+  const count = await db.prepare('SELECT COUNT(*) as n FROM serve_roles WHERE event_id=?').bind(ev.id).first();
+  if (count && count.n >= 20) return; // already migrated
+
+  // Wipe old roles (no signups yet, so signup_slots is also empty for this event)
+  await db.prepare('DELETE FROM signup_slots WHERE role_id IN (SELECT id FROM serve_roles WHERE event_id=?)').bind(ev.id).run();
+  await db.prepare('DELETE FROM serve_roles WHERE event_id=?').bind(ev.id).run();
+
+  const XMAS_ROLES = [
+    // ── Friday Dec 4 — Setup Day ─────────────────────────────────────────
+    { name: 'Move stuff out of storage room', description: 'Bring items from basement storage room up to kitchen or over to parking lot as instructed.', slots: 4,  role_date: '2026-12-04', start_time: '9:00 AM',  end_time: '11:00 AM' },
+    { name: 'Set up tents',                   description: 'Teams of 6 unload tents, spread and raise them, then attach sides and weigh down with sandbags.',         slots: 18, role_date: '2026-12-04', start_time: '9:00 AM',  end_time: '11:00 AM' },
+    { name: 'Help Rick run power cords',       description: 'Run power cords down rows of tents or as otherwise directed by Rick.',                                    slots: 1,  role_date: '2026-12-04', start_time: '11:00 AM', end_time: '12:00 PM' },
+    { name: 'Move Glasses',                    description: 'Bring glassware up from basement and over to parking lot using little wagons.',                            slots: 2,  role_date: '2026-12-04', start_time: '11:00 AM', end_time: '12:00 PM' },
+    { name: 'Set up Tables and Chairs',        description: 'Put tables in front of all tents, stage biergarten tables and chairs out of way. Actual time depends on delivery.', slots: 6, role_date: '2026-12-04', start_time: '11:00 AM', end_time: '12:00 PM' },
+    { name: 'Want free lunch?',                description: "Please let us know if you'll be joining us for lunch during setup day. Fried chicken and misc sides.",    slots: 30, role_date: '2026-12-04', start_time: '12:00 PM', end_time: '1:00 PM'  },
+    { name: 'Help Rick install lights',        description: 'Attach strings of lights to tents.',                                                                        slots: 1,  role_date: '2026-12-04', start_time: '1:00 PM',  end_time: '3:00 PM'  },
+    { name: 'Pick up Meat',                    description: 'Go with Marla to G&W to pick up the meats.',                                                                slots: 1,  role_date: '2026-12-04', start_time: '1:00 PM',  end_time: '2:00 PM'  },
+    { name: 'Potato Salad Prep',               description: 'Prep ingredients for German potato salad.',                                                                 slots: 2,  role_date: '2026-12-04', start_time: '1:00 PM',  end_time: '3:00 PM'  },
+    { name: 'Set up Payment System',           description: 'Configure payment terminals and cash boxes for the market.',                                                 slots: 2,  role_date: '2026-12-04', start_time: '1:00 PM',  end_time: '2:00 PM'  },
+    { name: 'Signs',                           description: 'Post booth numbers and general signage around the market area.',                                             slots: 2,  role_date: '2026-12-04', start_time: '1:00 PM',  end_time: '2:00 PM'  },
+    { name: 'Propane Heaters',                 description: 'Set up and test propane heaters for the tents.',                                                             slots: 1,  role_date: '2026-12-04', start_time: '3:00 PM',  end_time: '4:00 PM'  },
+    // ── Saturday Dec 5 — Market Day ─────────────────────────────────────
+    { name: 'Load-In Traffic Control',         description: 'Direct vendor vehicles during load-in.',                                                                    slots: 2,  role_date: '2026-12-05', start_time: '7:30 AM',  end_time: '11:00 AM' },
+    { name: 'Vendor Directions',               description: 'Help vendors find their assigned booth locations.',                                                          slots: 2,  role_date: '2026-12-05', start_time: '7:30 AM',  end_time: '11:00 AM' },
+    { name: 'German Potato Salad Makers',      description: 'Sauce made in advance. Heat ingredients, mix, scoop into dishes for sale, then transport to parking lot.',  slots: 2,  role_date: '2026-12-05', start_time: '9:00 AM',  end_time: '11:00 AM' },
+    { name: 'Kitchen',                         description: 'Prepare gluhwein base, other food prep and cleaning.',                                                       slots: 3,  role_date: '2026-12-05', start_time: '9:00 AM',  end_time: '11:00 AM' },
+    { name: 'Grill Setup',                     description: 'Set up and light grills for brats and franks.',                                                              slots: 3,  role_date: '2026-12-05', start_time: '10:00 AM', end_time: '11:00 AM' },
+    { name: 'Hot Drinks Setup',                description: 'Set up hot drinks station. Must be 21+. Transport water jugs, heat hot chocolate, mix cider, handle Gluhwein.', slots: 3, role_date: '2026-12-05', start_time: '10:00 AM', end_time: '11:00 AM' },
+    { name: 'Go-Fer',                          description: 'Have a vehicle and be available on-call. Must be over 21.',                                                  slots: 1,  role_date: '2026-12-05', start_time: '10:00 AM', end_time: '12:00 PM' },
+    { name: 'Cashiers',                        description: 'Handle sales of food and beverage. Must be approved by committee — please talk to a committee member before signing up.', slots: 2, role_date: '2026-12-05', start_time: '10:30 AM', end_time: '12:30 PM' },
+    { name: 'German Potato Salad Makers',      description: 'Heat ingredients, mix, scoop into dishes for sale, then transport to parking lot.',                          slots: 2,  role_date: '2026-12-05', start_time: '11:00 AM', end_time: '1:00 PM'  },
+    { name: 'Greeters',                        description: 'Welcome people to Timothy and the Markt. Explain how to buy food and beverage, tell them about the congregation.', slots: 2, role_date: '2026-12-05', start_time: '11:00 AM', end_time: '1:00 PM'  },
+    { name: 'Grill Brats and Franks',          description: 'Grill brats and franks for hungry market guests.',                                                           slots: 3,  role_date: '2026-12-05', start_time: '11:00 AM', end_time: '1:00 PM'  },
+    { name: 'Hot Drinks',                      description: 'Monitor & refill hot chocolate, cider, and Gluhwein. At least one person per shift must be 21+.',            slots: 4,  role_date: '2026-12-05', start_time: '11:00 AM', end_time: '1:00 PM'  },
+    { name: 'Kitchen',                         description: 'Food prep, cooking, and cleaning.',                                                                          slots: 3,  role_date: '2026-12-05', start_time: '11:00 AM', end_time: '1:00 PM'  },
+    { name: 'Sales Assistant',                 description: 'Replenish glassware and assist cashiers. Breakdown boxes and take to dumpster at end of shift.',             slots: 2,  role_date: '2026-12-05', start_time: '11:00 AM', end_time: '1:00 PM'  },
+    { name: 'Ticket Sales / Info Booth',       description: 'Sell drink tickets, answer questions, and direct people around the market.',                                  slots: 2,  role_date: '2026-12-05', start_time: '11:00 AM', end_time: '1:00 PM'  },
+    { name: 'Trash',                           description: 'Monitor trash cans; when full take to dumpster.',                                                            slots: 1,  role_date: '2026-12-05', start_time: '11:00 AM', end_time: '1:00 PM'  },
+    { name: 'Cashiers',                        description: 'Handle sales of food and beverage. Must be approved by committee — please talk to a committee member before signing up.', slots: 2, role_date: '2026-12-05', start_time: '12:30 PM', end_time: '3:00 PM'  },
+    { name: 'German Potato Salad Makers',      description: 'Heat ingredients, mix, scoop into dishes for sale, then transport to parking lot.',                          slots: 2,  role_date: '2026-12-05', start_time: '1:00 PM',  end_time: '3:00 PM'  },
+    { name: 'Greeters',                        description: 'Welcome people to Timothy and the Markt. Explain how to buy food and beverage, tell them about the congregation.', slots: 2, role_date: '2026-12-05', start_time: '1:00 PM',  end_time: '3:00 PM'  },
+    { name: 'Grill Brats and Franks',          description: 'Grill brats and franks for hungry market guests.',                                                           slots: 3,  role_date: '2026-12-05', start_time: '1:00 PM',  end_time: '3:00 PM'  },
+    { name: 'Hot Drinks',                      description: 'Monitor & refill hot chocolate, cider, and Gluhwein. At least one person per shift must be 21+.',            slots: 4,  role_date: '2026-12-05', start_time: '1:00 PM',  end_time: '3:00 PM'  },
+    { name: 'Kitchen',                         description: 'Food prep, cooking, and cleaning.',                                                                          slots: 3,  role_date: '2026-12-05', start_time: '1:00 PM',  end_time: '3:00 PM'  },
+    { name: 'Sales Assistant',                 description: 'Replenish glassware and assist cashiers. Breakdown boxes and take to dumpster at end of shift.',             slots: 2,  role_date: '2026-12-05', start_time: '1:00 PM',  end_time: '3:00 PM'  },
+    { name: 'Ticket Sales / Info Booth',       description: 'Sell drink tickets, answer questions, and direct people around the market.',                                  slots: 2,  role_date: '2026-12-05', start_time: '1:00 PM',  end_time: '3:00 PM'  },
+    { name: 'Trash',                           description: 'Monitor trash cans; when full take to dumpster.',                                                            slots: 1,  role_date: '2026-12-05', start_time: '1:00 PM',  end_time: '3:00 PM'  },
+    { name: 'Cashiers',                        description: 'Handle sales of food and beverage. Must be approved by committee — please talk to a committee member before signing up.', slots: 2, role_date: '2026-12-05', start_time: '3:00 PM',  end_time: '5:00 PM'  },
+    { name: 'German Potato Salad Makers',      description: 'Heat ingredients, mix, scoop into dishes for sale, then transport to parking lot.',                          slots: 2,  role_date: '2026-12-05', start_time: '3:00 PM',  end_time: '5:00 PM'  },
+    { name: 'Greeters',                        description: 'Welcome people to Timothy and the Markt. Explain how to buy food and beverage, tell them about the congregation.', slots: 2, role_date: '2026-12-05', start_time: '3:00 PM',  end_time: '5:00 PM'  },
+    { name: 'Grill Brats and Franks',          description: 'Grill brats and franks for hungry market guests.',                                                           slots: 3,  role_date: '2026-12-05', start_time: '3:00 PM',  end_time: '5:00 PM'  },
+    { name: 'Hot Drinks',                      description: 'Monitor & refill hot chocolate, cider, and Gluhwein. At least one person per shift must be 21+.',            slots: 4,  role_date: '2026-12-05', start_time: '3:00 PM',  end_time: '5:00 PM'  },
+    { name: 'Kitchen',                         description: 'Food prep, cooking, and cleaning.',                                                                          slots: 3,  role_date: '2026-12-05', start_time: '3:00 PM',  end_time: '5:00 PM'  },
+    { name: 'Music',                           description: 'Ensembles, vocal or instrumental. Contact jinah@timothystl.org.',                                            slots: 2,  role_date: '2026-12-05', start_time: '3:00 PM',  end_time: '4:00 PM'  },
+    { name: 'Sales Assistant',                 description: 'Replenish glassware and assist cashiers. Breakdown boxes and take to dumpster at end of shift.',             slots: 2,  role_date: '2026-12-05', start_time: '3:00 PM',  end_time: '5:00 PM'  },
+    { name: 'Ticket Sales / Info Booth',       description: 'Sell drink tickets, answer questions, and direct people around the market.',                                  slots: 2,  role_date: '2026-12-05', start_time: '3:00 PM',  end_time: '5:00 PM'  },
+    { name: 'Trash',                           description: 'Monitor trash cans; when full take to dumpster.',                                                            slots: 1,  role_date: '2026-12-05', start_time: '3:00 PM',  end_time: '5:00 PM'  },
+    { name: 'Hot Drinks',                      description: 'Serving ends at 6, then cleanup. At least one person per shift must be 21+.',                                slots: 3,  role_date: '2026-12-05', start_time: '5:00 PM',  end_time: '6:30 PM'  },
+    { name: 'Kitchen Cleanup',                 description: 'Clean kitchen after market day.',                                                                            slots: 3,  role_date: '2026-12-05', start_time: '5:00 PM',  end_time: '7:00 PM'  },
+    { name: 'Knockdown Boxes',                 description: 'Knockdown boxes and put in recycling dumpster.',                                                             slots: 2,  role_date: '2026-12-05', start_time: '5:00 PM',  end_time: '7:00 PM'  },
+    { name: 'Music',                           description: 'Ensembles, vocal or instrumental. Contact jinah@timothystl.org.',                                            slots: 2,  role_date: '2026-12-05', start_time: '5:00 PM',  end_time: '6:00 PM'  },
+    { name: 'Trash',                           description: 'Monitor trash cans; when full take to dumpster.',                                                            slots: 1,  role_date: '2026-12-05', start_time: '5:00 PM',  end_time: '6:00 PM'  },
+    { name: 'Debris Pickup',                   description: 'Collect trash cans and pick up debris from market area.',                                                    slots: 2,  role_date: '2026-12-05', start_time: '6:00 PM',  end_time: '7:00 PM'  },
+    { name: 'Misc Labor',                      description: 'Carry stuff and do as instructed — general cleanup help.',                                                   slots: 4,  role_date: '2026-12-05', start_time: '6:00 PM',  end_time: '7:00 PM'  },
+    { name: 'Power and Light Teardown',        description: 'Remove zip ties and wind up lights and cords.',                                                              slots: 2,  role_date: '2026-12-05', start_time: '6:00 PM',  end_time: '7:00 PM'  },
+    { name: 'Tear Down Tables and Chairs',     description: 'Stack on rental carts and cover with tarps.',                                                                slots: 6,  role_date: '2026-12-05', start_time: '6:00 PM',  end_time: '7:00 PM'  },
+    { name: 'Tent Teardown',                   description: 'Collapse tents in teams of 6 and put in shipping container.',                                                slots: 12, role_date: '2026-12-05', start_time: '6:30 PM',  end_time: '7:30 PM'  },
+  ];
+
+  for (let i = 0; i < XMAS_ROLES.length; i++) {
+    const r = XMAS_ROLES[i];
+    await db.prepare(
+      'INSERT INTO serve_roles (event_id,name,description,slots,sort_order,role_date,start_time,end_time) VALUES (?,?,?,?,?,?,?,?)'
+    ).bind(ev.id, r.name, r.description, r.slots||0, i, r.role_date||'', r.start_time||'', r.end_time||'').run();
+  }
 }
 
 // ── SEED DEFAULT EVENTS ───────────────────────────────────────────────
