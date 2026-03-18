@@ -839,7 +839,7 @@ function renderEventExpanded(ev) {
         var mday = parseInt(p[2]);
         // Count roles for this date to show a helpful sub-label
         var roleCount = (ev.roles||[]).filter(function(r){return r.role_date===dateStr;}).length;
-        return '<button class="day-pick-btn" data-ev="'+ev.id+'" data-date="'+dateStr+'" onclick="selectDay('+ev.id+',\''+dateStr+'\')">'
+        return '<button class="day-pick-btn" data-ev="'+ev.id+'" data-date="'+dateStr+'" onclick="selectDay('+ev.id+',this.getAttribute(\\'data-date\\'))">'
           + '<span class="day-pick-weekday">'+wday+'</span>'
           + '<span class="day-pick-date">'+mname+' '+mday+'</span>'
           + '<span class="day-pick-sub">'+roleCount+' shift'+(roleCount===1?'':'s')+'</span>'
