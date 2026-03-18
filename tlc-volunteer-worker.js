@@ -614,6 +614,18 @@ const PUBLIC_HTML = `<!DOCTYPE html> <html lang="en"> <head> <meta charset="UTF-
 .slot-group-header { font-size:.85rem; font-weight:600; color:var(--navy); padding:.4rem 0; border-bottom:2px solid var(--teal); margin-bottom:.75rem; }
 .slot-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:.6rem; }
 .slot-card { position:relative; }
+.day-picker { margin-bottom:1.5rem; }
+.day-picker h4 { font-family:Lora,serif; font-size:1rem; font-weight:600; color:var(--navy); margin-bottom:1rem; text-align:center; }
+.day-pick-btns { display:grid; grid-template-columns:1fr 1fr; gap:.75rem; }
+.day-pick-btn { display:flex; flex-direction:column; align-items:center; gap:.2rem; padding:1.1rem 1rem; border-radius:14px; border:2px solid var(--border); background:#fff; cursor:pointer; transition:all .2s; }
+.day-pick-btn:hover { border-color:var(--teal); background:rgba(71,153,145,.06); }
+.day-pick-btn.day-pick-active { border-color:var(--navy); background:var(--navy); color:#fff; }
+.day-pick-btn.day-pick-active .day-pick-weekday { color:#fff; }
+.day-pick-btn.day-pick-active .day-pick-date { color:rgba(255,255,255,.85); }
+.day-pick-btn.day-pick-active .day-pick-sub { color:rgba(255,255,255,.7); }
+.day-pick-weekday { font-family:Lora,serif; font-size:1.15rem; font-weight:700; color:var(--navy); }
+.day-pick-date { font-size:.85rem; font-weight:600; color:var(--text-muted); }
+.day-pick-sub { font-size:.78rem; color:var(--text-muted); }
 .slots-left { font-size:.75rem; font-weight:600; color:var(--teal); background:rgba(46,126,166,.1); border-radius:100px; padding:.15rem .55rem; margin-left:auto; white-space:nowrap; }
 .slots-full { font-size:.75rem; font-weight:600; color:#c0392b; background:rgba(192,57,43,.1); border-radius:100px; padding:.15rem .55rem; margin-left:auto; white-space:nowrap; }
 .role-card.full { opacity:.55; cursor:not-allowed; background:rgba(0,0,0,.03); }
@@ -813,18 +825,43 @@ function renderEventExpanded(ev) {
     + '</div>';
 
   if (isTimeSlotted(ev)) {
-    // Time-slotted event: show sort toggle + shift grid
+    // Time-slotted event: show day-picker first, then sort toggle + shift grid
+    var uniqueDates = getUniqueDates(ev);
+    var dayPickerHtml = '';
+    if (uniqueDates.length > 1) {
+      var months = ['','January','February','March','April','May','June','July','August','September','October','November','December'];
+      var weekdays = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+      var dayBtns = uniqueDates.map(function(dateStr) {
+        var p = dateStr.split('-');
+        var d = new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]));
+        var wday = weekdays[d.getDay()];
+        var mname = months[parseInt(p[1])];
+        var mday = parseInt(p[2]);
+        // Count roles for this date to show a helpful sub-label
+        var roleCount = (ev.roles||[]).filter(function(r){return r.role_date===dateStr;}).length;
+        return '<button class="day-pick-btn" data-ev="'+ev.id+'" data-date="'+dateStr+'" onclick="selectDay('+ev.id+',\''+dateStr+'\')">'
+          + '<span class="day-pick-weekday">'+wday+'</span>'
+          + '<span class="day-pick-date">'+mname+' '+mday+'</span>'
+          + '<span class="day-pick-sub">'+roleCount+' shift'+(roleCount===1?'':'s')+'</span>'
+          + '</button>';
+      }).join('');
+      dayPickerHtml = '<div class="day-picker"><h4>Which day would you like to volunteer?</h4>'
+        + '<div class="day-pick-btns">'+dayBtns+'</div></div>';
+    }
+    var formSectionId = 'day-form-'+ev.id;
+    var formHidden = uniqueDates.length > 1 ? ' hidden' : '';
     var sortBar = '<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:1.25rem;flex-wrap:wrap;">'
       + '<span style="font-size:.88rem;color:var(--text-muted);margin-right:.25rem;">Sort by:</span>'
       + '<button id="sort-time-'+ev.id+'" onclick="setSort(\\'time\\','+ev.id+')" class="sort-btn sort-active">By Time</button>'
       + '<button id="sort-role-'+ev.id+'" onclick="setSort(\\'role\\','+ev.id+')" class="sort-btn">By Role</button>'
       + '<span id="shift-count-'+ev.id+'" style="margin-left:auto;font-size:.85rem;font-weight:600;color:var(--teal);"></span>'
       + '</div>';
-    var grid = '<div id="slot-grid-'+ev.id+'">' + renderSlotsByTime(ev) + '</div>';
+    var grid = '<div id="slot-grid-'+ev.id+'"></div>';
     var notes = '<div class="form-field" style="margin-top:1rem;"><label class="form-label">Notes <span style="font-weight:400;">(optional)</span></label><textarea id="ev-notes-'+ev.id+'" class="form-textarea" placeholder="Any questions or constraints?"></textarea></div>';
     var submitBtn = '<button class="btn-submit" type="button" onclick="submitTimeSlottedEvent('+ev.id+',this)" style="margin-top:1rem;">Sign Up for Selected Shifts <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></button>';
     var bottomBack = '<div style="text-align:center;margin-top:1.5rem;"><button onclick="toggleDynEvent('+ev.id+')" class="back-btn-bottom" style="background:rgba(30,45,74,.08);color:var(--navy);border:1px solid var(--border);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>Back to events</button></div>';
-    return backBtn + contactForm + sortBar + grid + notes + submitBtn + bottomBack;
+    var formSection = '<div id="'+formSectionId+'"'+formHidden+'>'+contactForm+sortBar+grid+notes+submitBtn+bottomBack+'</div>';
+    return backBtn + dayPickerHtml + formSection;
   } else {
     // Simple event: role checkboxes
     var rolesHtml = '';
@@ -843,11 +880,12 @@ function renderEventExpanded(ev) {
   }
 }
 
-function renderSlotsByTime(ev) {
+function renderSlotsByTime(ev, dateFilter) {
   // Group roles by date + time window
   var groups = {};
   var order = [];
-  ev.roles.forEach(function(role) {
+  var roles = dateFilter ? ev.roles.filter(function(r){ return r.role_date === dateFilter; }) : ev.roles;
+  roles.forEach(function(role) {
     var key = (role.role_date||'') + '|' + (role.start_time||'') + '|' + (role.end_time||'');
     if (!groups[key]) { groups[key] = []; order.push(key); }
     groups[key].push(role);
@@ -866,11 +904,12 @@ function renderSlotsByTime(ev) {
   return html;
 }
 
-function renderSlotsByRole(ev) {
+function renderSlotsByRole(ev, dateFilter) {
   // Group roles by name
   var groups = {};
   var order = [];
-  ev.roles.forEach(function(role) {
+  var roles = dateFilter ? ev.roles.filter(function(r){ return r.role_date === dateFilter; }) : ev.roles;
+  roles.forEach(function(role) {
     var key = role.name;
     if (!groups[key]) { groups[key] = []; order.push(key); }
     groups[key].push(role);
@@ -930,13 +969,41 @@ function setSort(mode, evId) {
   document.getElementById('sort-role-'+evId).className = 'sort-btn' + (mode==='role'?' sort-active':'');
   var ev = _eventsData.find(function(e){return e.id===evId;});
   if (!ev) return;
+  var dateFilter = _selectedDays[evId] || null;
   var grid = document.getElementById('slot-grid-'+evId);
-  if (grid) grid.innerHTML = mode==='time' ? renderSlotsByTime(ev) : renderSlotsByRole(ev);
+  if (grid) grid.innerHTML = mode==='time' ? renderSlotsByTime(ev, dateFilter) : renderSlotsByRole(ev, dateFilter);
   // Restore checked state
   restoreCheckedSlots(evId, grid);
 }
 
 var _checkedSlots = {};
+var _selectedDays = {};
+
+function getUniqueDates(ev) {
+  var seen = {}, dates = [];
+  (ev.roles||[]).forEach(function(r){ if (r.role_date && !seen[r.role_date]) { seen[r.role_date]=true; dates.push(r.role_date); } });
+  return dates;
+}
+
+function selectDay(evId, dateStr) {
+  _selectedDays[evId] = dateStr;
+  // Update button highlight
+  document.querySelectorAll('.day-pick-btn[data-ev="'+evId+'"]').forEach(function(btn) {
+    btn.classList.toggle('day-pick-active', btn.dataset.date === dateStr);
+  });
+  // Reveal the form + grid section
+  var formSection = document.getElementById('day-form-'+evId);
+  if (formSection) formSection.hidden = false;
+  // Re-render the grid filtered to this day
+  var ev = _eventsData.find(function(e){return e.id===evId;});
+  if (!ev) return;
+  var grid = document.getElementById('slot-grid-'+evId);
+  if (grid) {
+    grid.innerHTML = _currentSort === 'role' ? renderSlotsByRole(ev, dateStr) : renderSlotsByTime(ev, dateStr);
+    restoreCheckedSlots(evId, grid);
+  }
+}
+
 function restoreCheckedSlots(evId, container) {
   if (!_checkedSlots[evId]) return;
   _checkedSlots[evId].forEach(function(rid) {
