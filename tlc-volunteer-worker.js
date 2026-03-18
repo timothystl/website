@@ -337,6 +337,10 @@ export default {
       if (!isAuthed(req)) return json({ error: 'Unauthorized' }, 401);
       return handleAdminApi(req, env, url, method);
     }
+    if (path.startsWith('/scheduler')) {
+      const ghUrl = 'https://timothystl.github.io/volunteer' + url.pathname + url.search;
+      return fetch(ghUrl, { headers: { 'User-Agent': req.headers.get('User-Agent') || '' } });
+    }
     return new Response('Not Found', { status: 404 });
   }
 };
