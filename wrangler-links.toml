@@ -2,6 +2,6 @@ name = "tlc-links"
 main = "tlc-links-worker.js"
 compatibility_date = "2024-01-01"
 
-routes = [
-  { pattern = "links.timothystl.org/*", custom_domain = true }
-]
+[[routes]]
+pattern = "links.timothystl.org"
+custom_domain = true
