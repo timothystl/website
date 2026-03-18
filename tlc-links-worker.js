@@ -9,7 +9,7 @@ export default {
     // Serve logo image
     if (url.pathname === '/logo.png') {
       // Proxy the logo from the main site
-      return fetch('https://timothystl.org/TLC%20logo.png');
+      return fetch('https://timothystl.org/links/logo.png');
     }
 
     // All other paths serve the links page
