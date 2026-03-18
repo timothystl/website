@@ -77,6 +77,72 @@ async function initDb(db) {
   for (const stmt of DB_INIT) {
     await db.prepare(stmt).run();
   }
+  await seedEvents(db);
+}
+
+// ── SEED DEFAULT EVENTS ───────────────────────────────────────────────
+async function seedEvents(db) {
+  const existing = await db.prepare('SELECT COUNT(*) as n FROM serve_events').first();
+  if (existing && existing.n > 0) return; // already seeded
+
+  const SEED = [
+    {
+      name: 'Easter Egg Hunt',
+      description: 'A neighborhood tradition — families, eggs, and a lot of happy kids. Many hands make it happen.',
+      event_date: '2026-04-04',
+      sort_order: 1,
+      roles: [
+        { name: 'Set-Up', description: 'Arrange the grounds, tables, and stations before families arrive. Early morning crew.' },
+        { name: 'Games', description: 'Run activity games for kids while the hunt is in progress. High energy, high fun.' },
+        { name: 'Check-In', description: 'Register families and hand out baskets as they arrive. The first friendly face of the morning.' },
+        { name: 'Crafts', description: 'Lead or assist with craft activities for kids. Supplies provided; creativity welcome.' },
+        { name: 'Easter Photo Op', description: 'Help set up and run the photo station so families can capture a fun Easter memory.' },
+        { name: 'Face Painting', description: 'Bring joy to kids\' faces — literally. Experience helpful but not required.' },
+        { name: 'Bubble Boss', description: 'Run the bubble station and keep the fun floating. Kids of all ages love this one.' },
+        { name: 'Egg Zone', description: 'Help manage and monitor the egg hunting area — keep it fair, fun, and safe for all age groups.' },
+        { name: 'Clean-Up', description: 'Help restore the grounds after the event wraps. Shouldn\'t take long with many hands.' },
+        { name: 'Planning & Leadership', description: 'Help plan and coordinate the event in the weeks leading up to it. Great if you love organizing.' },
+        { name: 'Easter Bunny / Carrot', description: 'Put on a costume and make the day magical for the kids. Details shared by the coordinator.' },
+        { name: 'Other', description: 'Not sure where you fit? Sign up and the event coordinator will find the perfect spot for you.' },
+      ]
+    },
+    {
+      name: 'Vacation Bible School',
+      description: 'Five mornings of Bible stories, crafts, music, and snacks. Kids love it — and leaders do too.',
+      event_date: '2026-06-01',
+      sort_order: 2,
+      roles: [
+        { name: 'Group Leader', description: 'Lead a crew of kids through the week\'s stations. Training provided.' },
+        { name: 'Station Helper', description: 'Assist at a specific station — Bible story, games, crafts, or music. Great if you can only commit to part of the week.' },
+        { name: 'Crafts Coordinator', description: 'Plan and prep the daily craft projects. Gather supplies and run the craft station each morning.' },
+        { name: 'Snacks', description: 'Provide or prepare themed snacks each day. A small thing that makes a big impression on hungry little people.' },
+      ]
+    },
+    {
+      name: 'Christmas Market',
+      description: 'A beloved community market with booths, baked goods, kids\' activities, and holiday cheer. Many roles, all skill levels.',
+      event_date: '2026-12-05',
+      sort_order: 3,
+      roles: [
+        { name: 'Setup & Teardown', description: 'Arrange booths, tables, signage, and lighting before opening, and break everything down after closing.' },
+        { name: 'Baked Goods & Food', description: 'Donate or staff the food table — cookies, breads, and holiday treats that bring people in and fund church programs.' },
+        { name: 'Kids\' Activities', description: 'Run crafts, games, or a visit with Santa so families can enjoy the whole market.' },
+        { name: 'Welcome Table', description: 'Greet visitors, hand out programs, answer questions, and point people to what\'s happening where.' },
+      ]
+    },
+  ];
+
+  for (const ev of SEED) {
+    const r = await db.prepare(
+      'INSERT INTO serve_events (name,description,event_date,sort_order) VALUES (?,?,?,?)'
+    ).bind(ev.name, ev.description, ev.event_date, ev.sort_order).run();
+    const evId = r.meta?.last_row_id;
+    for (let i = 0; i < ev.roles.length; i++) {
+      await db.prepare(
+        'INSERT INTO serve_roles (event_id,name,description,slots,sort_order) VALUES (?,?,?,?,?)'
+      ).bind(evId, ev.roles[i].name, ev.roles[i].description, 0, i).run();
+    }
+  }
 }
 
 // ── MAIN FETCH HANDLER ────────────────────────────────────────────────
