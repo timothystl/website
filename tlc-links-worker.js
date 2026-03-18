@@ -83,7 +83,7 @@ body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-he
 
 <div class="main">
 
-  <a class="link-card" href="https://www.timothystl.org/connect" target="_blank" rel="noopener">
+  <a class="link-card" href="https://timothystl.org/worship" target="_blank" rel="noopener">
     <div class="card-icon icon--sage">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B8F71" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
     </div>
@@ -94,7 +94,7 @@ body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-he
     <span class="card-arrow">&#x203A;</span>
   </a>
 
-  <a class="link-card" href="https://www.timothystl.org/prayer" target="_blank" rel="noopener">
+  <a class="link-card" href="https://timothystl.org/prayer" target="_blank" rel="noopener">
     <div class="card-icon icon--mist">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3D627C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><line x1="9" y1="10" x2="15" y2="10"/><line x1="9" y1="14" x2="13" y2="14"/></svg>
     </div>
@@ -116,7 +116,7 @@ body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-he
     <span class="card-arrow">&#x203A;</span>
   </a>
 
-  <a class="link-card" href="https://volunteer.timothystl.org" target="_blank" rel="noopener">
+  <a class="link-card" href="https://timothystl.org/ministries" target="_blank" rel="noopener">
     <div class="card-icon icon--sage">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B8F71" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/><path d="M12 21.23V12"/><path d="M7.5 9.5L12 12l4.5-2.5"/></svg>
     </div>
@@ -127,7 +127,7 @@ body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-he
     <span class="card-arrow">&#x203A;</span>
   </a>
 
-  <a class="link-card" href="https://www.timothystl.org/news" target="_blank" rel="noopener">
+  <a class="link-card" href="https://timothystl.org/news" target="_blank" rel="noopener">
     <div class="card-icon icon--sky">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5C8FA8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 20H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h10l6 6v8a2 2 0 0 1-2 2z"/><polyline points="15 2 15 8 21 8"/><line x1="9" y1="15" x2="15" y2="15"/><line x1="9" y1="11" x2="11" y2="11"/></svg>
     </div>
@@ -138,7 +138,7 @@ body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-he
     <span class="card-arrow">&#x203A;</span>
   </a>
 
-  <a class="link-card" href="https://www.timothystl.org/sermon" target="_blank" rel="noopener">
+  <a class="link-card" href="https://timothystl.org/sermons" target="_blank" rel="noopener">
     <div class="card-icon icon--sky">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5C8FA8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
     </div>

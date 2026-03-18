@@ -916,6 +916,7 @@ function showPage(id){
   document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
   var page=document.getElementById('page-'+id);
   if(page){page.classList.add('active');window.scrollTo(0,0);}
+  history.replaceState(null,'','/'+id);
 }
 document.getElementById('navToggle').addEventListener('click',function(){
   document.getElementById('navMobile').classList.toggle('open');
@@ -923,6 +924,11 @@ document.getElementById('navToggle').addEventListener('click',function(){
 function closeMobileNav(){
   document.getElementById('navMobile').classList.remove('open');
 }
+// Route on load based on URL path
+(function(){
+  var path = window.location.pathname.replace(/^\//, '').replace(/\/$/, '');
+  if(path && document.getElementById('page-'+path)){showPage(path);}
+})();
 </script>
 
 <script>
