@@ -3,39 +3,39 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="Timothy Lutheran Church — Quick links for worship, giving, volunteering, and more.">
-<title>Timothy Lutheran Church — Links</title>
+<meta name="description" content="Timothy Lutheran Church — from our Neighborhood to the Nations.">
+<title>Timothy Lutheran Church</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,700;1,400&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,700;1,400&family=Source+Sans+3:wght@300;400;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root {
-  --steel:#0A3C5C;--steel-dk:#2A5470;--steel-dk2:#0A2038;
+  --steel:#0A3C5C;--steel-dk2:#0A2038;
   --mid:#3D627C;--sky:#5C8FA8;--ice:#C4DDE8;--mist:#EDF5F8;
-  --amber:#D4922A;--amber-dk:#C07D1E;--honey:#E8B86D;
-  --sage:#6B8F71;
-  --warm:#FAF7F0;--linen:#F2EDE2;--white:#FFFFFF;
+  --amber:#D4922A;--amber-dk:#C07D1E;
+  --sage:#6B8F71;--pale-sage:#CDE0CF;
+  --warm:#FAF7F0;--white:#FFFFFF;
   --border:#E8E0D0;--charcoal:#3D3530;--gray:#7A6E60;
   --serif:'Lora',Georgia,serif;--sans:'Source Sans 3',Arial,sans-serif;
-  --shadow:0 2px 12px rgba(10,60,92,.08);--shadow-lift:0 6px 28px rgba(10,60,92,.15);
+  --shadow:0 2px 12px rgba(10,60,92,.07);--shadow-lift:0 6px 32px rgba(10,60,92,.13);
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-html{scroll-behavior:smooth;}
 body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-height:100vh;display:flex;flex-direction:column;align-items:center;}
 
 /* Header */
-.header{width:100%;background:var(--steel);padding:28px 24px 24px;text-align:center;}
-.header-icon{width:100px;height:100px;border-radius:50%;margin:0 auto 14px;display:block;}
-.header-logo{font-family:var(--serif);font-size:22px;font-weight:700;color:white;letter-spacing:.01em;line-height:1.2;}
+.header{width:100%;background:var(--steel);border-bottom:3px solid var(--amber);padding:28px 24px 22px;text-align:center;}
+.header-logo{width:96px;height:96px;border-radius:50%;margin:0 auto 14px;display:block;}
+.header-name{font-family:var(--sans);font-size:18px;font-weight:800;color:white;letter-spacing:.01em;line-height:1.2;}
+.header-tag{font-family:var(--sans);font-size:11px;font-weight:600;color:var(--amber);margin-top:5px;letter-spacing:.04em;}
 
-/* Values strip */
+/* Values */
 .values{width:100%;max-width:480px;padding:16px 20px 4px;display:grid;grid-template-columns:1fr 1fr;gap:8px;}
-.value-pill{background:var(--white);border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center;}
-.value-pill-label{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--steel);}
-.value-pill:nth-child(1){border-top:2px solid var(--amber);}
-.value-pill:nth-child(2){border-top:2px solid var(--sage);}
-.value-pill:nth-child(3){border-top:2px solid var(--sky);}
-.value-pill:nth-child(4){border-top:2px solid var(--steel);}
+.value-pill{background:var(--white);border:1px solid var(--border);border-radius:8px;padding:9px 12px;text-align:center;box-shadow:var(--shadow);}
+.value-pill:nth-child(1){border-top:3px solid var(--amber);}
+.value-pill:nth-child(2){border-top:3px solid var(--sage);}
+.value-pill:nth-child(3){border-top:3px solid var(--sky);}
+.value-pill:nth-child(4){border-top:3px solid var(--steel);}
+.value-label{font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--steel);}
 
 /* Main */
 .main{width:100%;max-width:480px;padding:16px 20px 48px;display:flex;flex-direction:column;gap:12px;}
@@ -45,26 +45,22 @@ body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-he
 .link-card:hover,.link-card:focus{transform:translateY(-2px);box-shadow:var(--shadow-lift);border-color:var(--ice);outline:none;}
 .link-card:active{transform:translateY(0);box-shadow:var(--shadow);}
 
-.card-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:22px;}
+.card-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .icon--amber{background:#FEF3DC;}
-.icon--steel{background:#E4EEF4;}
 .icon--sage{background:#E8F2E9;}
-.icon--mid{background:#EBF0F4;}
-.icon--honey{background:#FEF8EC;}
+.icon--sky{background:#E4EEF4;}
+.icon--mist{background:var(--mist);}
 
 .card-text{flex:1;min-width:0;}
-.card-title{font-size:16px;font-weight:700;color:var(--charcoal);line-height:1.2;}
-.card-desc{font-size:13px;color:var(--gray);margin-top:2px;line-height:1.4;}
+.card-title{font-family:var(--serif);font-size:17px;font-weight:700;color:var(--steel);line-height:1.2;}
+.card-desc{font-family:var(--sans);font-size:13px;color:var(--gray);margin-top:3px;line-height:1.4;}
 
-.card-arrow{color:var(--ice);font-size:18px;flex-shrink:0;transition:color .15s;}
+.card-arrow{color:var(--ice);font-size:20px;flex-shrink:0;transition:color .15s;}
 .link-card:hover .card-arrow{color:var(--sky);}
-
-/* Divider label */
-.section-label{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gray);padding:4px 4px 0;margin-top:4px;}
 
 /* Footer */
 .footer{width:100%;max-width:480px;padding:0 20px 32px;text-align:center;}
-.footer-text{font-size:12px;color:var(--gray);line-height:1.6;}
+.footer-text{font-family:var(--sans);font-size:12px;color:var(--gray);}
 .footer-text a{color:var(--mid);text-decoration:none;}
 .footer-text a:hover{color:var(--steel);}
 </style>
@@ -72,21 +68,24 @@ body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-he
 <body>
 
 <div class="header">
-  <img class="header-icon" src="logo.png" alt="Timothy Lutheran Church">
-  <div class="header-logo">Timothy Lutheran Church</div>
+  <img class="header-logo" src="logo.png" alt="Timothy Lutheran Church">
+  <div class="header-name">Timothy Lutheran Church</div>
+  <div class="header-tag">from our Neighborhood to the Nations</div>
 </div>
 
 <div class="values">
-  <div class="value-pill"><div class="value-pill-label">Worship</div></div>
-  <div class="value-pill"><div class="value-pill-label">Acceptance</div></div>
-  <div class="value-pill"><div class="value-pill-label">Outreach</div></div>
-  <div class="value-pill"><div class="value-pill-label">Christian Ed</div></div>
+  <div class="value-pill"><div class="value-label">Worship</div></div>
+  <div class="value-pill"><div class="value-label">Acceptance</div></div>
+  <div class="value-pill"><div class="value-label">Outreach</div></div>
+  <div class="value-pill"><div class="value-label">Christian Ed</div></div>
 </div>
 
 <div class="main">
 
   <a class="link-card" href="https://volunteer.timothystl.org" target="_blank" rel="noopener">
-    <div class="card-icon icon--sage">🙌</div>
+    <div class="card-icon icon--sage">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B8F71" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    </div>
     <div class="card-text">
       <div class="card-title">Volunteer</div>
       <div class="card-desc">Sign up to serve in our ministries and community</div>
@@ -95,7 +94,9 @@ body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-he
   </a>
 
   <a class="link-card" href="https://www.timothystl.org/sermon" target="_blank" rel="noopener">
-    <div class="card-icon icon--steel">📖</div>
+    <div class="card-icon icon--sky">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5C8FA8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+    </div>
     <div class="card-text">
       <div class="card-title">Sermon Notes</div>
       <div class="card-desc">Follow along with today's message</div>
@@ -104,7 +105,9 @@ body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-he
   </a>
 
   <a class="link-card" href="https://www.timothystl.org/connect" target="_blank" rel="noopener">
-    <div class="card-icon icon--mid">🤝</div>
+    <div class="card-icon icon--mist">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3D627C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    </div>
     <div class="card-text">
       <div class="card-title">Connect</div>
       <div class="card-desc">Get connected with our community</div>
@@ -113,7 +116,9 @@ body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-he
   </a>
 
   <a class="link-card" href="https://timothystl.breezechms.com/give/online" target="_blank" rel="noopener">
-    <div class="card-icon icon--amber">🤲</div>
+    <div class="card-icon icon--amber">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D4922A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+    </div>
     <div class="card-text">
       <div class="card-title">Give</div>
       <div class="card-desc">Support the ministry of Timothy</div>
@@ -122,7 +127,9 @@ body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-he
   </a>
 
   <a class="link-card" href="https://www.timothystl.org/prayer" target="_blank" rel="noopener">
-    <div class="card-icon icon--honey">🙏</div>
+    <div class="card-icon icon--sky">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5C8FA8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6.5" y="0" width="3" height="20" rx="1.5"/><rect x="0" y="6" width="16" height="3" rx="1.5"/></svg>
+    </div>
     <div class="card-text">
       <div class="card-title">Prayer Request</div>
       <div class="card-desc">Share what's on your heart</div>
@@ -131,7 +138,9 @@ body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-he
   </a>
 
   <a class="link-card" href="https://www.timothystl.org/news" target="_blank" rel="noopener">
-    <div class="card-icon icon--mid">📰</div>
+    <div class="card-icon icon--sage">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B8F71" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 20H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h10l6 6v8a2 2 0 0 1-2 2z"/><polyline points="15 2 15 8 21 8"/><line x1="9" y1="15" x2="15" y2="15"/><line x1="9" y1="11" x2="11" y2="11"/></svg>
+    </div>
     <div class="card-text">
       <div class="card-title">News &amp; Events</div>
       <div class="card-desc">What's happening at Timothy</div>
