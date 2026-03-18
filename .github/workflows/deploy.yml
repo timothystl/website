@@ -60,9 +60,23 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: wrangler deploy
 
+  deploy-links:
+    name: Deploy links page (links.timothystl.org)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install wrangler
+        run: npm install -g wrangler
+
+      - name: Deploy links worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: wrangler deploy --config wrangler-links.toml
+
   done:
     name: All done
-    needs: [deploy-site, deploy-admin]
+    needs: [deploy-site, deploy-admin, deploy-links]
     runs-on: ubuntu-latest
     steps:
       - name: Done
@@ -73,5 +87,8 @@ jobs:
           echo "If first time setup, add custom domains in Cloudflare Dashboard:"
           echo "  timothystl-site → timothystl.org"
           echo "  tlc-newsletter-admin → admin.timothystl.org"
+          echo "  tlc-links → links.timothystl.org"
           echo ""
-          echo "Note: links.timothystl.org is deployed via Netlify (public/links/)"
+          echo "links.timothystl.org is now served by the tlc-links Cloudflare Worker."
+          echo "DNS: Cloudflare will auto-provision a CNAME for links.timothystl.org"
+          echo "pointing to tlc-links.timothystl.workers.dev via the custom_domain route."
