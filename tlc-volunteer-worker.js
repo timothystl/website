@@ -4,7 +4,7 @@
 
 const ADMIN_PASSWORD = '6704fyler';
 
-// ── DATABASE SCHEMA ──────────────────────────────────────────
+// ── DATABASE SCHEMA ──────────────────────────────────────────────────
 const DB_INIT = [
   `CREATE TABLE IF NOT EXISTS serve_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25,891 +25,1029 @@ const DB_INIT = [
   )`,
   `CREATE TABLE IF NOT EXISTS signups (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    event_id INTEGER NOT NULL,
+    event_id INTEGER,
     role_id INTEGER,
+    ministry TEXT NOT NULL DEFAULT '',
     name TEXT NOT NULL,
     email TEXT NOT NULL DEFAULT '',
     phone TEXT NOT NULL DEFAULT '',
+    roles TEXT NOT NULL DEFAULT '[]',
+    service TEXT NOT NULL DEFAULT '',
+    sundays TEXT NOT NULL DEFAULT '[]',
+    shirt_wanted INTEGER NOT NULL DEFAULT 0,
+    shirt_size TEXT NOT NULL DEFAULT '',
     notes TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`
 ];
 
-// ── AUTH ─────────────────────────────────────────────────────
+// ── AUTH ─────────────────────────────────────────────────────────────
 function isAuthed(req) {
   return (req.headers.get('cookie') || '').includes('vol_auth=ok');
 }
-
 function authCookieHeader() {
   const exp = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toUTCString();
   return `vol_auth=ok; Path=/; Expires=${exp}; HttpOnly; SameSite=Strict`;
 }
 
-// ── UTILITIES ─────────────────────────────────────────────────
+// ── UTILITIES ─────────────────────────────────────────────────────────
+function html(content, status = 200, headers = {}) {
+  return new Response(content, {
+    status,
+    headers: { 'Content-Type': 'text/html;charset=UTF-8', ...headers }
+  });
+}
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json' }
+  });
+}
 function redirect(url) {
   return new Response('', { status: 302, headers: { Location: url } });
 }
-
-function esc(s) {
-  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+function escHtml(str) {
+  return String(str || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
-function formatDate(d) {
-  if (!d) return '';
-  try {
-    return new Date(d + 'T12:00:00').toLocaleDateString('en-US', {
-      weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
-    });
-  } catch { return d; }
+// ── DB INIT ──────────────────────────────────────────────────────────
+async function initDb(db) {
+  for (const stmt of DB_INIT) {
+    await db.prepare(stmt).run();
+  }
 }
 
-// ── CSS ───────────────────────────────────────────────────────
-const CSS = `
-:root{--steel:#0A3C5C;--amber:#D4922A;--sage:#6B8F71;--warm:#FAF7F0;--linen:#F2EDE2;--mist:#EDF5F8;--border:#E8E0D0;--charcoal:#3D3530;--gray:#7A6E60;--white:#fff;--sans:'Source Sans 3',Arial,sans-serif;--serif:'Lora',Georgia,serif;}
-*{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:var(--sans);background:var(--warm);color:var(--charcoal);min-height:100vh;}
-.topbar{background:var(--steel);border-bottom:3px solid var(--amber);padding:0 28px;height:56px;display:flex;align-items:center;justify-content:space-between;}
-.topbar-brand{font-family:var(--sans);font-size:14px;font-weight:800;color:white;}
-.topbar-sub{font-family:var(--sans);font-size:11px;color:var(--amber);}
-.topbar-links{display:flex;gap:16px;}
-.topbar-links a{font-family:var(--sans);font-size:12px;font-weight:700;color:rgba(255,255,255,.7);text-decoration:none;}
-.topbar-links a:hover{color:white;}
-.wrap{max-width:860px;margin:0 auto;padding:40px 28px;}
-.page-title{font-family:var(--serif);font-size:32px;color:var(--steel);margin-bottom:8px;}
-.page-sub{font-family:var(--sans);font-size:15px;color:var(--gray);margin-bottom:32px;line-height:1.7;}
-.card{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:28px;margin-bottom:16px;}
-.card-title{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border);}
-.form-group{margin-bottom:18px;}
-label{display:block;font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:6px;}
-input[type=text],input[type=password],input[type=date],input[type=email],input[type=tel],textarea,select{width:100%;background:var(--white);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-family:var(--sans);font-size:14px;color:var(--charcoal);outline:none;transition:border-color .2s,box-shadow .2s;}
-input:focus,textarea:focus,select:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(212,146,42,.12);}
-textarea{min-height:80px;resize:vertical;line-height:1.65;}
-.btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--sans);font-size:14px;font-weight:700;padding:11px 24px;border-radius:6px;border:none;cursor:pointer;text-decoration:none;transition:background .2s,transform .15s;line-height:1;}
-.btn:hover{transform:translateY(-1px);}
-.btn-primary{background:var(--steel);color:white;}
-.btn-primary:hover{background:#2A5470;}
-.btn-secondary{background:var(--amber);color:var(--steel);}
-.btn-secondary:hover{background:#C07D1E;color:white;}
-.btn-sage{background:var(--sage);color:white;}
-.btn-sage:hover{background:#5a7860;}
-.btn-danger{background:#B85C3A;color:white;}
-.btn-danger:hover{background:#9a4a2e;}
-.btn-sm{font-size:12px;padding:7px 14px;}
-.btn-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;}
-.alert{padding:14px 18px;border-radius:8px;font-family:var(--sans);font-size:14px;margin-bottom:20px;}
-.alert-success{background:#e8f5e9;border-left:3px solid var(--sage);color:#1a3d1f;}
-.alert-error{background:#fce8e8;border-left:3px solid #B85C3A;color:#7a1f1f;}
-.alert-info{background:var(--mist);border-left:3px solid var(--steel);color:var(--steel);}
-.tag{font-family:var(--sans);font-size:10px;font-weight:700;padding:3px 9px;border-radius:999px;background:var(--mist);color:var(--steel);}
-.tag-hidden{background:#fce8e8;color:#B85C3A;}
-.tag-visible{background:#e8f5e9;color:#1a3d1f;}
-/* Public event cards */
-.event-card{background:var(--white);border:1px solid var(--border);border-radius:14px;margin-bottom:16px;overflow:hidden;transition:box-shadow .2s;}
-.event-card:hover{box-shadow:0 4px 20px rgba(10,60,92,.08);}
-.event-card-header{padding:24px 28px;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;}
-.event-name{font-family:var(--serif);font-size:20px;color:var(--steel);margin-bottom:4px;}
-.event-date-label{font-family:var(--sans);font-size:12px;font-weight:700;color:var(--amber);letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px;}
-.event-desc{font-family:var(--sans);font-size:14px;color:var(--gray);margin-top:6px;line-height:1.6;}
-.event-expand-btn{flex-shrink:0;background:var(--steel);color:white;border:none;border-radius:6px;padding:10px 20px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;transition:background .2s;margin-top:4px;}
-.event-expand-btn:hover{background:#2A5470;}
-.event-detail{display:none;border-top:2px solid var(--border);padding:28px 28px 32px;}
-.event-detail.open{display:block;}
-/* Back button — prominent */
-.back-btn{display:inline-flex;align-items:center;gap:10px;background:var(--white);color:var(--steel);border:2px solid var(--steel);font-family:var(--sans);font-size:15px;font-weight:700;padding:12px 26px;border-radius:8px;cursor:pointer;text-decoration:none;transition:background .2s,color .2s;}
-.back-btn:hover{background:var(--steel);color:white;}
-.back-btn-wrap{margin-bottom:24px;}
-.back-btn-bottom{margin-top:28px;padding-top:24px;border-top:1px solid var(--border);}
-.section-label{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:12px;margin-top:24px;padding-bottom:6px;border-bottom:1px solid var(--border);}
-.role-option{background:var(--linen);border:2px solid transparent;border-radius:10px;padding:16px 18px;margin-bottom:10px;cursor:pointer;transition:border-color .15s,background .15s;}
-.role-option:has(input:checked){border-color:var(--steel);background:var(--mist);}
-.role-option label{display:flex;align-items:flex-start;gap:12px;cursor:pointer;letter-spacing:0;text-transform:none;font-size:14px;font-weight:400;color:var(--charcoal);}
-.role-option input[type=radio]{width:18px;height:18px;margin-top:2px;flex-shrink:0;accent-color:var(--steel);}
-.role-name-text{font-weight:700;font-size:15px;color:var(--steel);display:block;margin-bottom:3px;}
-.role-desc-text{font-size:13px;color:var(--gray);display:block;line-height:1.5;}
-/* Admin table */
-table.data-table{width:100%;border-collapse:collapse;font-size:13px;}
-table.data-table th{font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gray);padding:10px 14px;border-bottom:2px solid var(--border);text-align:left;}
-table.data-table td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}
-table.data-table tr:last-child td{border-bottom:none;}
-/* Login */
-.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--steel);}
-.login-card{background:white;border-radius:20px;padding:40px;width:100%;max-width:360px;text-align:center;}
-.login-title{font-family:var(--serif);font-size:24px;color:var(--steel);margin-bottom:4px;}
-.login-sub{font-family:var(--sans);font-size:13px;color:var(--gray);margin-bottom:28px;}
-.login-card .form-group{text-align:left;}
-/* Print */
-@media print {
-  .topbar,.btn,.btn-row,.no-print{display:none!important;}
-  body{background:white;}
-  .wrap{padding:0;max-width:100%;}
-  table.data-table{font-size:11px;}
-  table.data-table th,table.data-table td{padding:6px 8px;}
-  .card{border:none;padding:0;margin:0;}
-  h2{margin-bottom:8px;}
-}
-`;
-
-function htmlPage(body, title = 'Serve at Timothy Lutheran') {
-  return new Response(
-    `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;600;700;800&family=Lora:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet"><style>${CSS}</style></head><body>${body}</body></html>`,
-    { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-  );
-}
-
-// ── ADMIN LAYOUT ──────────────────────────────────────────────
-function adminWrap(content) {
-  return `
-<div class="topbar">
-  <div>
-    <div class="topbar-brand">Timothy Lutheran · Volunteer Admin</div>
-  </div>
-  <div class="topbar-links no-print">
-    <a href="/" target="_blank">View sign-up page ↗</a>
-    <a href="/admin/logout">Sign out</a>
-  </div>
-</div>
-<div class="wrap">${content}</div>`;
-}
-
-// ── FORM PARTIALS ─────────────────────────────────────────────
-function eventForm(ev = null) {
-  return `
-<div class="card">
-  <div class="card-title">Event details</div>
-  <div class="form-group">
-    <label>Event name <span style="color:#B85C3A;">*</span></label>
-    <input type="text" name="name" required placeholder="e.g. Easter Sunday Setup" value="${esc(ev?.name || '')}">
-  </div>
-  <div class="form-group">
-    <label>Description</label>
-    <textarea name="description" placeholder="Describe this opportunity — what volunteers will do, what to expect, time commitment, etc.">${esc(ev?.description || '')}</textarea>
-  </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
-    <div class="form-group">
-      <label>Event date <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">(optional)</span></label>
-      <input type="date" name="event_date" value="${esc(ev?.event_date || '')}">
-    </div>
-    <div class="form-group">
-      <label>Sort order <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">(lower = first)</span></label>
-      <input type="text" name="sort_order" placeholder="0" value="${esc(String(ev?.sort_order ?? 0))}">
-    </div>
-  </div>
-  <div class="form-group" style="margin-bottom:0;">
-    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;letter-spacing:0;text-transform:none;font-size:14px;font-weight:600;color:var(--charcoal);">
-      <input type="checkbox" name="hidden" value="1" style="width:auto;" ${ev?.hidden ? 'checked' : ''}>
-      Hide this event from the public sign-up page
-    </label>
-  </div>
-</div>`;
-}
-
-function roleForm(role = null) {
-  return `
-<div class="card">
-  <div class="card-title">Role details</div>
-  <div class="form-group">
-    <label>Role name <span style="color:#B85C3A;">*</span></label>
-    <input type="text" name="name" required placeholder="e.g. Setup crew, Greeter, Parking attendant" value="${esc(role?.name || '')}">
-  </div>
-  <div class="form-group">
-    <label>Description</label>
-    <textarea name="description" placeholder="What does this role involve? Any special requirements or when to arrive?">${esc(role?.description || '')}</textarea>
-  </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
-    <div class="form-group" style="margin-bottom:0;">
-      <label>Slots available <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">(0 = unlimited)</span></label>
-      <input type="text" name="slots" placeholder="0" value="${esc(String(role?.slots ?? 0))}">
-    </div>
-    <div class="form-group" style="margin-bottom:0;">
-      <label>Sort order</label>
-      <input type="text" name="sort_order" placeholder="0" value="${esc(String(role?.sort_order ?? 0))}">
-    </div>
-  </div>
-</div>`;
-}
-
-// ── LOGIN PAGE ────────────────────────────────────────────────
-function loginPage(error = '') {
-  return htmlPage(`
-<div class="login-wrap">
-  <div class="login-card">
-    <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#D4922A;margin-bottom:8px;">Timothy Lutheran Church</div>
-    <div class="login-title">Volunteer Admin</div>
-    <div class="login-sub">Sign in to manage volunteer events</div>
-    ${error ? `<div class="alert alert-error" style="text-align:left;">${esc(error)}</div>` : ''}
-    <form method="POST" action="/admin/login">
-      <div class="form-group">
-        <label>Password</label>
-        <input type="password" name="password" autofocus placeholder="Enter admin password">
-      </div>
-      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:8px;">Sign in</button>
-    </form>
-  </div>
-</div>`, 'Volunteer Admin — Sign In');
-}
-
-// ── MAIN EXPORT ───────────────────────────────────────────────
+// ── MAIN FETCH HANDLER ────────────────────────────────────────────────
 export default {
-  async fetch(request, env) {
+  async fetch(req, env) {
     try {
-      for (const sql of DB_INIT) {
-        try { await env.DB.prepare(sql).run(); } catch {}
-      }
-      return await this._route(request, env);
+      await initDb(env.DB);
     } catch (e) {
-      return new Response(`Error: ${e.message}\n${e.stack}`, {
-        status: 500, headers: { 'Content-Type': 'text/plain' }
-      });
+      return new Response('DB init error: ' + e.message, { status: 500 });
     }
-  },
 
-  async _route(request, env) {
-    const url = new URL(request.url);
+    const url = new URL(req.url);
     const path = url.pathname.replace(/\/$/, '') || '/';
-    const method = request.method;
+    const method = req.method.toUpperCase();
 
-    // ── PUBLIC: event listing ──────────────────────────────────
-    if (path === '/' && method === 'GET') {
-      const events = await env.DB.prepare(
-        'SELECT * FROM serve_events WHERE hidden=0 ORDER BY sort_order, event_date, id'
-      ).all();
-
-      const successParam = url.searchParams.get('success');
-
-      let eventsHtml = '';
-      for (const ev of events.results) {
-        const roles = await env.DB.prepare(
-          'SELECT * FROM serve_roles WHERE event_id=? ORDER BY sort_order, id'
-        ).bind(ev.id).all();
-
-        const rolesHtml = roles.results.length
-          ? roles.results.map(r => `
-<div class="role-option">
-  <label>
-    <input type="radio" name="role_id" value="${r.id}">
-    <div>
-      <span class="role-name-text">${esc(r.name)}</span>
-      ${r.description ? `<span class="role-desc-text">${esc(r.description)}</span>` : ''}
-    </div>
-  </label>
-</div>`).join('')
-          : `<p style="font-size:14px;color:var(--gray);padding:4px 0 12px;">No specific roles listed — just let us know you'd like to help!</p>`;
-
-        const dateLabel = ev.event_date
-          ? `<div class="event-date-label">${esc(formatDate(ev.event_date))}</div>`
-          : '';
-
-        eventsHtml += `
-<div class="event-card" id="card-${ev.id}">
-  <div class="event-card-header">
-    <div style="flex:1;">
-      ${dateLabel}
-      <div class="event-name">${esc(ev.name)}</div>
-      ${ev.description ? `<div class="event-desc">${esc(ev.description)}</div>` : ''}
-    </div>
-    <button class="event-expand-btn" type="button" onclick="openEvent(${ev.id})">Sign up →</button>
-  </div>
-  <div class="event-detail" id="detail-${ev.id}">
-    <!-- Back button — top -->
-    <div class="back-btn-wrap">
-      <button type="button" class="back-btn" onclick="closeEvent(${ev.id})">
-        ← Back to all ways to serve
-      </button>
-    </div>
-
-    <div style="font-family:var(--serif);font-size:18px;color:var(--steel);margin-bottom:20px;">
-      Signing up for: <strong>${esc(ev.name)}</strong>
-    </div>
-
-    <form method="POST" action="/signup">
-      <input type="hidden" name="event_id" value="${ev.id}">
-
-      <div class="section-label">Your contact info</div>
-      <div class="form-group">
-        <label>Your name <span style="color:#B85C3A;">*</span></label>
-        <input type="text" name="name" required placeholder="First and last name">
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
-        <div class="form-group">
-          <label>Email</label>
-          <input type="email" name="email" placeholder="your@email.com">
-        </div>
-        <div class="form-group">
-          <label>Phone</label>
-          <input type="tel" name="phone" placeholder="(314) 555-0000">
-        </div>
-      </div>
-
-      <div class="section-label" style="margin-top:20px;">How would you like to help?</div>
-      ${rolesHtml}
-
-      <div class="form-group" style="margin-top:16px;">
-        <label>Anything else? <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">(optional)</span></label>
-        <textarea name="notes" placeholder="Questions, availability, anything you'd like us to know…"></textarea>
-      </div>
-
-      <div class="btn-row" style="margin-top:20px;">
-        <button type="submit" class="btn btn-primary">Submit sign-up →</button>
-      </div>
-    </form>
-
-    <!-- Back button — bottom -->
-    <div class="back-btn-bottom">
-      <button type="button" class="back-btn" onclick="closeEvent(${ev.id})">
-        ← Back to all ways to serve
-      </button>
-    </div>
-  </div>
-</div>`;
-      }
-
-      if (!eventsHtml) {
-        eventsHtml = `<div style="text-align:center;padding:60px 20px;color:var(--gray);font-size:15px;">No opportunities posted yet — check back soon!</div>`;
-      }
-
-      return htmlPage(`
-<div class="topbar">
-  <div>
-    <div class="topbar-brand">Timothy Lutheran Church</div>
-    <div class="topbar-sub">Ways to Serve</div>
-  </div>
-</div>
-<div class="wrap">
-  ${successParam === '1' ? `<div class="alert alert-success">✓ Thank you! We received your sign-up and will be in touch soon.</div>` : ''}
-  <div class="page-title">Ways to Serve</div>
-  <div class="page-sub">Find an opportunity to get involved. Expand any event below to sign up — it only takes a minute.</div>
-  ${eventsHtml}
-</div>
-<script>
-function openEvent(id) {
-  // Close any open event first
-  document.querySelectorAll('.event-detail.open').forEach(d => d.classList.remove('open'));
-  const detail = document.getElementById('detail-' + id);
-  detail.classList.add('open');
-  const card = document.getElementById('card-' + id);
-  setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
-  history.pushState({ event: id }, '', '#event-' + id);
-}
-function closeEvent(id) {
-  document.getElementById('detail-' + id).classList.remove('open');
-  history.pushState(null, '', window.location.pathname + window.location.search);
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-// Browser back/forward
-window.addEventListener('popstate', (e) => {
-  document.querySelectorAll('.event-detail').forEach(d => d.classList.remove('open'));
-  if (e.state && e.state.event) {
-    const detail = document.getElementById('detail-' + e.state.event);
-    if (detail) detail.classList.add('open');
-  }
-});
-// Open from URL hash on load
-const hash = window.location.hash;
-if (hash && hash.startsWith('#event-')) {
-  const id = hash.replace('#event-', '');
-  const detail = document.getElementById('detail-' + id);
-  if (detail) {
-    detail.classList.add('open');
-    setTimeout(() => document.getElementById('card-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
-  }
-}
-</script>`, 'Ways to Serve — Timothy Lutheran');
+    // Public routes
+    if ((path === '/' || path === '/index.html') && method === 'GET') {
+      return html(PUBLIC_HTML);
+    }
+    if (path === '/api/events' && method === 'GET') {
+      return handleApiEvents(env);
+    }
+    if (path === '/volunteer/signup' && method === 'POST') {
+      return handleSignup(req, env);
     }
 
-    // ── PUBLIC: submit sign-up ─────────────────────────────────
-    if (path === '/signup' && method === 'POST') {
-      const form = await request.formData();
-      const eventId = parseInt(form.get('event_id') || '0');
-      const name = (form.get('name') || '').trim();
-      if (!name || !eventId) return redirect('/');
-
-      await env.DB.prepare(
-        'INSERT INTO signups (event_id, role_id, name, email, phone, notes) VALUES (?, ?, ?, ?, ?, ?)'
-      ).bind(
-        eventId,
-        form.get('role_id') ? parseInt(form.get('role_id')) : null,
-        name,
-        (form.get('email') || '').trim(),
-        (form.get('phone') || '').trim(),
-        (form.get('notes') || '').trim()
-      ).run();
-
-      return redirect('/?success=1');
-    }
-
-    // ── ADMIN AUTH ─────────────────────────────────────────────
+    // Admin login
     if (path === '/admin/login' && method === 'POST') {
-      const form = await request.formData();
-      if (form.get('password') === ADMIN_PASSWORD) {
-        return new Response('', {
-          status: 302,
-          headers: { Location: '/admin', 'Set-Cookie': authCookieHeader() }
-        });
-      }
-      return loginPage('Incorrect password. Try again.');
+      return handleAdminLogin(req);
     }
 
-    if (path === '/admin/login') return loginPage();
-
-    if (path === '/admin/logout') {
-      return new Response('', {
-        status: 302,
-        headers: { Location: '/admin/login', 'Set-Cookie': 'vol_auth=; Path=/; Max-Age=0' }
-      });
-    }
-
-    // All /admin/* routes require auth
-    if (path.startsWith('/admin') && !isAuthed(request)) {
-      return redirect('/admin/login');
-    }
-
-    // ── ADMIN: dashboard ───────────────────────────────────────
+    // Admin page
     if (path === '/admin' && method === 'GET') {
-      const events = await env.DB.prepare(
-        'SELECT * FROM serve_events ORDER BY sort_order, event_date, id'
-      ).all();
-
-      let rows = '';
-      for (const ev of events.results) {
-        const roleCount = (await env.DB.prepare('SELECT COUNT(*) as c FROM serve_roles WHERE event_id=?').bind(ev.id).first()).c;
-        const signupCount = (await env.DB.prepare('SELECT COUNT(*) as c FROM signups WHERE event_id=?').bind(ev.id).first()).c;
-        rows += `
-<tr>
-  <td>
-    <div style="font-family:var(--serif);font-size:15px;color:var(--steel);">${esc(ev.name)}</div>
-    ${ev.event_date ? `<div style="font-size:12px;color:var(--gray);margin-top:2px;">${esc(formatDate(ev.event_date))}</div>` : ''}
-    ${ev.description ? `<div style="font-size:12px;color:var(--gray);margin-top:3px;max-width:320px;">${esc(ev.description.substring(0, 90))}${ev.description.length > 90 ? '…' : ''}</div>` : ''}
-  </td>
-  <td><span class="tag ${ev.hidden ? 'tag-hidden' : 'tag-visible'}">${ev.hidden ? 'Hidden' : 'Visible'}</span></td>
-  <td>${roleCount}</td>
-  <td>${signupCount}</td>
-  <td>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;">
-      <a href="/admin/events/${ev.id}" class="btn btn-sm btn-primary">Manage</a>
-      <form method="POST" action="/admin/events/${ev.id}/toggle" style="display:inline;">
-        <button class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);" type="submit">${ev.hidden ? 'Show' : 'Hide'}</button>
-      </form>
-      <form method="POST" action="/admin/events/${ev.id}/delete" onsubmit="return confirm('Delete this event and all its sign-ups?')" style="display:inline;">
-        <button class="btn btn-sm btn-danger" type="submit">Delete</button>
-      </form>
-    </div>
-  </td>
-</tr>`;
-      }
-
-      return htmlPage(adminWrap(`
-<div class="page-title">Volunteer Events</div>
-<div class="page-sub">Manage sign-up opportunities, roles, and volunteer lists.</div>
-<div class="btn-row no-print" style="margin-bottom:24px;">
-  <a href="/admin/events/new" class="btn btn-primary">+ Add event</a>
-  <a href="/admin/signups" class="btn btn-secondary">View all sign-ups</a>
-</div>
-<div class="card" style="padding:0;overflow:hidden;">
-  <table class="data-table">
-    <thead><tr>
-      <th>Event</th><th>Status</th><th>Roles</th><th>Sign-ups</th><th>Actions</th>
-    </tr></thead>
-    <tbody>${rows || '<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--gray);">No events yet. Add one above.</td></tr>'}</tbody>
-  </table>
-</div>`), 'Volunteer Admin — Timothy Lutheran');
+      if (!isAuthed(req)) return html(LOGIN_HTML);
+      return html(ADMIN_HTML);
     }
 
-    // ── ADMIN: event detail (manage roles + signups) ───────────
-    if (path.match(/^\/admin\/events\/\d+$/) && method === 'GET') {
-      const id = path.split('/').pop();
-      const ev = await env.DB.prepare('SELECT * FROM serve_events WHERE id=?').bind(id).first();
-      if (!ev) return redirect('/admin');
-
-      const roles = await env.DB.prepare(
-        'SELECT * FROM serve_roles WHERE event_id=? ORDER BY sort_order, id'
-      ).bind(id).all();
-
-      const sups = await env.DB.prepare(`
-        SELECT s.*, r.name as role_name FROM signups s
-        LEFT JOIN serve_roles r ON s.role_id = r.id
-        WHERE s.event_id=? ORDER BY s.created_at DESC
-      `).bind(id).all();
-
-      const rolesHtml = roles.results.length
-        ? roles.results.map(r => `
-<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:14px 0;border-bottom:1px solid var(--border);">
-  <div>
-    <div style="font-weight:700;font-size:14px;color:var(--steel);">${esc(r.name)}</div>
-    ${r.description ? `<div style="font-size:13px;color:var(--gray);margin-top:3px;line-height:1.5;">${esc(r.description)}</div>` : ''}
-    ${r.slots > 0 ? `<div style="font-size:11px;color:var(--amber);font-weight:700;margin-top:3px;">${r.slots} slot${r.slots !== 1 ? 's' : ''}</div>` : ''}
-  </div>
-  <div style="display:flex;gap:6px;flex-shrink:0;">
-    <a href="/admin/events/${id}/roles/${r.id}/edit" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Edit</a>
-    <form method="POST" action="/admin/events/${id}/roles/${r.id}/delete" onsubmit="return confirm('Delete this role?')" style="display:inline;">
-      <button class="btn btn-sm btn-danger" type="submit">Delete</button>
-    </form>
-  </div>
-</div>`).join('')
-        : '<p style="color:var(--gray);font-size:14px;padding:16px 0;">No roles yet. Add one below.</p>';
-
-      const tableRows = sups.results.map(s => `
-<tr>
-  <td><strong>${esc(s.name)}</strong></td>
-  <td>${esc(s.email)}</td>
-  <td>${esc(s.phone)}</td>
-  <td>${esc(s.role_name || '—')}</td>
-  <td style="max-width:200px;">${esc(s.notes || '—')}</td>
-  <td style="white-space:nowrap;color:var(--gray);font-size:12px;">${s.created_at ? s.created_at.substring(0, 10) : ''}</td>
-</tr>`).join('');
-
-      const signupsHtml = sups.results.length
-        ? `<table class="data-table"><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Notes</th><th>Date</th></tr></thead><tbody>${tableRows}</tbody></table>`
-        : '<p style="color:var(--gray);font-size:14px;padding:16px 0;">No sign-ups yet.</p>';
-
-      return htmlPage(adminWrap(`
-<div style="margin-bottom:20px;" class="no-print">
-  <a href="/admin" style="font-size:13px;color:var(--steel);font-weight:700;text-decoration:none;">← All events</a>
-</div>
-<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:8px;">
-  <div>
-    <div class="page-title">${esc(ev.name)}</div>
-    ${ev.event_date ? `<div style="font-size:13px;color:var(--amber);font-weight:700;margin-top:4px;">${esc(formatDate(ev.event_date))}</div>` : ''}
-    <span class="tag ${ev.hidden ? 'tag-hidden' : 'tag-visible'}" style="margin-top:8px;display:inline-block;">${ev.hidden ? 'Hidden from public' : 'Visible to public'}</span>
-  </div>
-  <div class="btn-row no-print" style="margin-top:0;">
-    <a href="/admin/events/${ev.id}/edit" class="btn btn-secondary">Edit event</a>
-    <form method="POST" action="/admin/events/${ev.id}/toggle" style="display:inline;">
-      <button class="btn" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);" type="submit">${ev.hidden ? 'Make visible' : 'Hide event'}</button>
-    </form>
-  </div>
-</div>
-${ev.description ? `<p style="color:var(--gray);font-size:14px;margin-bottom:28px;line-height:1.7;max-width:640px;">${esc(ev.description)}</p>` : ''}
-
-<div class="card">
-  <div class="card-title">Roles</div>
-  ${rolesHtml}
-  <div style="margin-top:16px;" class="no-print">
-    <a href="/admin/events/${id}/roles/new" class="btn btn-sm btn-primary">+ Add role</a>
-  </div>
-</div>
-
-<div class="card">
-  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border);">
-    <div class="card-title" style="margin:0;padding:0;border:none;">Sign-ups (${sups.results.length})</div>
-    <div class="btn-row no-print" style="margin:0;">
-      <a href="/admin/events/${id}/signups/export.csv" class="btn btn-sm btn-sage">Export CSV</a>
-      <button onclick="window.print()" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Print</button>
-    </div>
-  </div>
-  ${signupsHtml}
-</div>`), `${esc(ev.name)} — Volunteer Admin`);
+    // Admin API (requires auth)
+    if (path.startsWith('/admin/api/')) {
+      if (!isAuthed(req)) return json({ error: 'Unauthorized' }, 401);
+      return handleAdminApi(req, env, url, method);
     }
 
-    // ── ADMIN: new event form ──────────────────────────────────
-    if (path === '/admin/events/new' && method === 'GET') {
-      return htmlPage(adminWrap(`
-<div style="margin-bottom:20px;" class="no-print">
-  <a href="/admin" style="font-size:13px;color:var(--steel);font-weight:700;text-decoration:none;">← All events</a>
-</div>
-<div class="page-title">New Event</div>
-<div class="page-sub">Add a volunteer opportunity to the sign-up page.</div>
-<form method="POST" action="/admin/events">
-  ${eventForm()}
-  <div class="btn-row">
-    <button type="submit" class="btn btn-primary">Create event →</button>
-    <a href="/admin" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
-  </div>
-</form>`), 'New Event — Volunteer Admin');
-    }
-
-    // ── ADMIN: create event ────────────────────────────────────
-    if (path === '/admin/events' && method === 'POST') {
-      const form = await request.formData();
-      await env.DB.prepare(
-        'INSERT INTO serve_events (name, description, event_date, hidden, sort_order) VALUES (?, ?, ?, ?, ?)'
-      ).bind(
-        (form.get('name') || '').trim(),
-        (form.get('description') || '').trim(),
-        (form.get('event_date') || '').trim(),
-        form.get('hidden') === '1' ? 1 : 0,
-        parseInt(form.get('sort_order') || '0') || 0
-      ).run();
-      return redirect('/admin');
-    }
-
-    // ── ADMIN: edit event form ─────────────────────────────────
-    if (path.match(/^\/admin\/events\/\d+\/edit$/) && method === 'GET') {
-      const id = path.split('/')[3];
-      const ev = await env.DB.prepare('SELECT * FROM serve_events WHERE id=?').bind(id).first();
-      if (!ev) return redirect('/admin');
-      return htmlPage(adminWrap(`
-<div style="margin-bottom:20px;" class="no-print">
-  <a href="/admin/events/${id}" style="font-size:13px;color:var(--steel);font-weight:700;text-decoration:none;">← Back to event</a>
-</div>
-<div class="page-title">Edit Event</div>
-<form method="POST" action="/admin/events/${id}/update" style="margin-top:24px;">
-  ${eventForm(ev)}
-  <div class="btn-row">
-    <button type="submit" class="btn btn-primary">Save changes →</button>
-    <a href="/admin/events/${id}" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
-  </div>
-</form>`), 'Edit Event — Volunteer Admin');
-    }
-
-    // ── ADMIN: update event ────────────────────────────────────
-    if (path.match(/^\/admin\/events\/\d+\/update$/) && method === 'POST') {
-      const id = path.split('/')[3];
-      const form = await request.formData();
-      await env.DB.prepare(
-        'UPDATE serve_events SET name=?, description=?, event_date=?, hidden=?, sort_order=? WHERE id=?'
-      ).bind(
-        (form.get('name') || '').trim(),
-        (form.get('description') || '').trim(),
-        (form.get('event_date') || '').trim(),
-        form.get('hidden') === '1' ? 1 : 0,
-        parseInt(form.get('sort_order') || '0') || 0,
-        id
-      ).run();
-      return redirect(`/admin/events/${id}`);
-    }
-
-    // ── ADMIN: toggle event visibility ─────────────────────────
-    if (path.match(/^\/admin\/events\/\d+\/toggle$/) && method === 'POST') {
-      const id = path.split('/')[3];
-      await env.DB.prepare('UPDATE serve_events SET hidden = 1 - hidden WHERE id=?').bind(id).run();
-      const ref = request.headers.get('referer') || '/admin';
-      return redirect(ref);
-    }
-
-    // ── ADMIN: delete event ────────────────────────────────────
-    if (path.match(/^\/admin\/events\/\d+\/delete$/) && method === 'POST') {
-      const id = path.split('/')[3];
-      await env.DB.prepare('DELETE FROM signups WHERE event_id=?').bind(id).run();
-      await env.DB.prepare('DELETE FROM serve_roles WHERE event_id=?').bind(id).run();
-      await env.DB.prepare('DELETE FROM serve_events WHERE id=?').bind(id).run();
-      return redirect('/admin');
-    }
-
-    // ── ADMIN: new role form ───────────────────────────────────
-    if (path.match(/^\/admin\/events\/\d+\/roles\/new$/) && method === 'GET') {
-      const id = path.split('/')[3];
-      const ev = await env.DB.prepare('SELECT name FROM serve_events WHERE id=?').bind(id).first();
-      if (!ev) return redirect('/admin');
-      return htmlPage(adminWrap(`
-<div style="margin-bottom:20px;" class="no-print">
-  <a href="/admin/events/${id}" style="font-size:13px;color:var(--steel);font-weight:700;text-decoration:none;">← Back to ${esc(ev.name)}</a>
-</div>
-<div class="page-title">New Role</div>
-<div class="page-sub">Add a specific role people can sign up for.</div>
-<form method="POST" action="/admin/events/${id}/roles">
-  ${roleForm()}
-  <div class="btn-row">
-    <button type="submit" class="btn btn-primary">Add role →</button>
-    <a href="/admin/events/${id}" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
-  </div>
-</form>`), 'New Role — Volunteer Admin');
-    }
-
-    // ── ADMIN: create role ─────────────────────────────────────
-    if (path.match(/^\/admin\/events\/\d+\/roles$/) && method === 'POST') {
-      const id = path.split('/')[3];
-      const form = await request.formData();
-      await env.DB.prepare(
-        'INSERT INTO serve_roles (event_id, name, description, slots, sort_order) VALUES (?, ?, ?, ?, ?)'
-      ).bind(
-        id,
-        (form.get('name') || '').trim(),
-        (form.get('description') || '').trim(),
-        parseInt(form.get('slots') || '0') || 0,
-        parseInt(form.get('sort_order') || '0') || 0
-      ).run();
-      return redirect(`/admin/events/${id}`);
-    }
-
-    // ── ADMIN: edit role form ──────────────────────────────────
-    if (path.match(/^\/admin\/events\/\d+\/roles\/\d+\/edit$/) && method === 'GET') {
-      const parts = path.split('/');
-      const eid = parts[3]; const rid = parts[5];
-      const role = await env.DB.prepare('SELECT * FROM serve_roles WHERE id=? AND event_id=?').bind(rid, eid).first();
-      if (!role) return redirect(`/admin/events/${eid}`);
-      const ev = await env.DB.prepare('SELECT name FROM serve_events WHERE id=?').bind(eid).first();
-      return htmlPage(adminWrap(`
-<div style="margin-bottom:20px;" class="no-print">
-  <a href="/admin/events/${eid}" style="font-size:13px;color:var(--steel);font-weight:700;text-decoration:none;">← Back to ${esc(ev?.name || 'event')}</a>
-</div>
-<div class="page-title">Edit Role</div>
-<form method="POST" action="/admin/events/${eid}/roles/${rid}/update" style="margin-top:24px;">
-  ${roleForm(role)}
-  <div class="btn-row">
-    <button type="submit" class="btn btn-primary">Save changes →</button>
-    <a href="/admin/events/${eid}" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
-  </div>
-</form>`), 'Edit Role — Volunteer Admin');
-    }
-
-    // ── ADMIN: update role ─────────────────────────────────────
-    if (path.match(/^\/admin\/events\/\d+\/roles\/\d+\/update$/) && method === 'POST') {
-      const parts = path.split('/');
-      const eid = parts[3]; const rid = parts[5];
-      const form = await request.formData();
-      await env.DB.prepare(
-        'UPDATE serve_roles SET name=?, description=?, slots=?, sort_order=? WHERE id=? AND event_id=?'
-      ).bind(
-        (form.get('name') || '').trim(),
-        (form.get('description') || '').trim(),
-        parseInt(form.get('slots') || '0') || 0,
-        parseInt(form.get('sort_order') || '0') || 0,
-        rid, eid
-      ).run();
-      return redirect(`/admin/events/${eid}`);
-    }
-
-    // ── ADMIN: delete role ─────────────────────────────────────
-    if (path.match(/^\/admin\/events\/\d+\/roles\/\d+\/delete$/) && method === 'POST') {
-      const parts = path.split('/');
-      const eid = parts[3]; const rid = parts[5];
-      await env.DB.prepare('DELETE FROM serve_roles WHERE id=? AND event_id=?').bind(rid, eid).run();
-      return redirect(`/admin/events/${eid}`);
-    }
-
-    // ── ADMIN: all sign-ups ────────────────────────────────────
-    if (path === '/admin/signups' && method === 'GET') {
-      const eventId = url.searchParams.get('event');
-      let sups;
-
-      if (eventId) {
-        sups = await env.DB.prepare(`
-          SELECT s.*, e.name as event_name, r.name as role_name
-          FROM signups s
-          LEFT JOIN serve_events e ON s.event_id = e.id
-          LEFT JOIN serve_roles r ON s.role_id = r.id
-          WHERE s.event_id=? ORDER BY s.created_at DESC
-        `).bind(eventId).all();
-      } else {
-        sups = await env.DB.prepare(`
-          SELECT s.*, e.name as event_name, r.name as role_name
-          FROM signups s
-          LEFT JOIN serve_events e ON s.event_id = e.id
-          LEFT JOIN serve_roles r ON s.role_id = r.id
-          ORDER BY s.created_at DESC
-        `).all();
-      }
-
-      const allEvents = await env.DB.prepare('SELECT id, name FROM serve_events ORDER BY name').all();
-
-      const filterHtml = `
-<form method="GET" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;" class="no-print">
-  <select name="event" style="width:auto;min-width:220px;" onchange="this.form.submit()">
-    <option value="">All events</option>
-    ${allEvents.results.map(e => `<option value="${e.id}" ${eventId == e.id ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}
-  </select>
-  <button type="submit" class="btn btn-sm btn-primary">Filter</button>
-  ${eventId ? `<a href="/admin/signups" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Clear</a>` : ''}
-</form>`;
-
-      const rows = sups.results;
-      const tableRows = rows.map(s => `
-<tr>
-  <td><strong>${esc(s.name)}</strong></td>
-  <td>${esc(s.email)}</td>
-  <td>${esc(s.phone)}</td>
-  <td>${esc(s.event_name || '—')}</td>
-  <td>${esc(s.role_name || '—')}</td>
-  <td style="max-width:180px;">${esc(s.notes || '—')}</td>
-  <td style="white-space:nowrap;color:var(--gray);font-size:12px;">${s.created_at ? s.created_at.substring(0, 10) : ''}</td>
-</tr>`).join('');
-
-      const tableHtml = rows.length
-        ? `<table class="data-table"><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Event</th><th>Role</th><th>Notes</th><th>Date</th></tr></thead><tbody>${tableRows}</tbody></table>`
-        : '<p style="color:var(--gray);font-size:14px;padding:40px 0;text-align:center;">No sign-ups yet.</p>';
-
-      const exportUrl = `/admin/signups/export.csv${eventId ? `?event=${eventId}` : ''}`;
-
-      return htmlPage(adminWrap(`
-<div style="margin-bottom:20px;" class="no-print">
-  <a href="/admin" style="font-size:13px;color:var(--steel);font-weight:700;text-decoration:none;">← All events</a>
-</div>
-<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:8px;">
-  <div class="page-title">All Sign-ups (${rows.length})</div>
-  <div class="btn-row no-print" style="margin:0;">
-    <a href="${exportUrl}" class="btn btn-sage">Export CSV</a>
-    <button onclick="window.print()" class="btn" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Print</button>
-  </div>
-</div>
-${filterHtml}
-<div class="card" style="padding:0;overflow:hidden;margin-top:16px;">
-  ${tableHtml}
-</div>`), 'Sign-ups — Volunteer Admin');
-    }
-
-    // ── ADMIN: export CSV ──────────────────────────────────────
-    if (path === '/admin/signups/export.csv' && method === 'GET') {
-      const eventId = url.searchParams.get('event');
-      let rows;
-
-      if (eventId) {
-        const q = await env.DB.prepare(`
-          SELECT s.name, s.email, s.phone, e.name as event_name, r.name as role_name, s.notes, s.created_at
-          FROM signups s
-          LEFT JOIN serve_events e ON s.event_id = e.id
-          LEFT JOIN serve_roles r ON s.role_id = r.id
-          WHERE s.event_id=? ORDER BY s.created_at DESC
-        `).bind(eventId).all();
-        rows = q.results;
-      } else {
-        const q = await env.DB.prepare(`
-          SELECT s.name, s.email, s.phone, e.name as event_name, r.name as role_name, s.notes, s.created_at
-          FROM signups s
-          LEFT JOIN serve_events e ON s.event_id = e.id
-          LEFT JOIN serve_roles r ON s.role_id = r.id
-          ORDER BY event_name, s.created_at DESC
-        `).all();
-        rows = q.results;
-      }
-
-      const lines = ['Name,Email,Phone,Event,Role,Notes,Date'];
-      for (const r of rows) {
-        lines.push(
-          [r.name, r.email, r.phone, r.event_name || '', r.role_name || '', r.notes || '', r.created_at || '']
-            .map(v => `"${String(v).replace(/"/g, '""')}"`)
-            .join(',')
-        );
-      }
-
-      const filename = `volunteers-${new Date().toISOString().substring(0, 10)}.csv`;
-      return new Response(lines.join('\r\n'), {
-        headers: {
-          'Content-Type': 'text/csv; charset=utf-8',
-          'Content-Disposition': `attachment; filename="${filename}"`
-        }
-      });
-    }
-
-    // ── ADMIN: per-event CSV export ────────────────────────────
-    if (path.match(/^\/admin\/events\/\d+\/signups\/export\.csv$/) && method === 'GET') {
-      const id = path.split('/')[3];
-      const ev = await env.DB.prepare('SELECT name FROM serve_events WHERE id=?').bind(id).first();
-      const q = await env.DB.prepare(`
-        SELECT s.name, s.email, s.phone, r.name as role_name, s.notes, s.created_at
-        FROM signups s
-        LEFT JOIN serve_roles r ON s.role_id = r.id
-        WHERE s.event_id=? ORDER BY s.created_at DESC
-      `).bind(id).all();
-
-      const lines = ['Name,Email,Phone,Role,Notes,Date'];
-      for (const r of q.results) {
-        lines.push(
-          [r.name, r.email, r.phone, r.role_name || '', r.notes || '', r.created_at || '']
-            .map(v => `"${String(v).replace(/"/g, '""')}"`)
-            .join(',')
-        );
-      }
-
-      const safeName = (ev?.name || 'event').replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase();
-      const filename = `volunteers-${safeName}-${new Date().toISOString().substring(0, 10)}.csv`;
-      return new Response(lines.join('\r\n'), {
-        headers: {
-          'Content-Type': 'text/csv; charset=utf-8',
-          'Content-Disposition': `attachment; filename="${filename}"`
-        }
-      });
-    }
-
-    return new Response('Not found', { status: 404 });
+    return new Response('Not Found', { status: 404 });
   }
 };
+
+// ── PUBLIC API: GET /api/events ───────────────────────────────────────
+async function handleApiEvents(env) {
+  const events = await env.DB.prepare(
+    'SELECT * FROM serve_events WHERE hidden=0 ORDER BY sort_order,event_date,id'
+  ).all();
+
+  const result = [];
+  for (const ev of (events.results || [])) {
+    const roles = await env.DB.prepare(
+      'SELECT * FROM serve_roles WHERE event_id=? ORDER BY sort_order,id'
+    ).bind(ev.id).all();
+    result.push({ ...ev, roles: roles.results || [] });
+  }
+  return json({ events: result });
+}
+
+// ── PUBLIC API: POST /volunteer/signup ────────────────────────────────
+async function handleSignup(req, env) {
+  let data;
+  try { data = await req.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
+
+  const name = (data.name || '').trim();
+  const email = (data.email || '').trim();
+  if (!name || !email) return json({ ok: false, error: 'Name and email required' }, 400);
+
+  await env.DB.prepare(
+    `INSERT INTO signups (event_id,role_id,ministry,name,email,phone,roles,service,sundays,shirt_wanted,shirt_size,notes)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+  ).bind(
+    data.event_id || null,
+    data.role_id || null,
+    data.ministry || '',
+    name,
+    email,
+    data.phone || '',
+    JSON.stringify(data.roles || []),
+    data.service || '',
+    JSON.stringify(data.sundays || []),
+    data.shirt_wanted ? 1 : 0,
+    data.shirt_size || '',
+    data.notes || ''
+  ).run();
+
+  return json({ ok: true });
+}
+
+// ── ADMIN LOGIN ───────────────────────────────────────────────────────
+async function handleAdminLogin(req) {
+  let body;
+  try { body = await req.text(); } catch { body = ''; }
+  const params = new URLSearchParams(body);
+  if (params.get('password') === ADMIN_PASSWORD) {
+    return new Response('', {
+      status: 302,
+      headers: { Location: '/admin', 'Set-Cookie': authCookieHeader() }
+    });
+  }
+  return html(LOGIN_HTML.replace('<!--ERROR-->', '<p style="color:#c0392b;margin-bottom:1rem;">Incorrect password.</p>'));
+}
+
+// ── ADMIN API ─────────────────────────────────────────────────────────
+async function handleAdminApi(req, env, url, method) {
+  const seg = url.pathname.replace('/admin/api/', '');
+
+  // GET /admin/api/signups
+  if (seg === 'signups' && method === 'GET') {
+    const ministry = url.searchParams.get('ministry') || '';
+    let q = 'SELECT s.*, e.name as event_name FROM signups s LEFT JOIN serve_events e ON s.event_id=e.id';
+    const binds = [];
+    if (ministry && ministry !== 'all') { q += ' WHERE s.ministry=?'; binds.push(ministry); }
+    q += ' ORDER BY s.created_at DESC';
+    const rows = await env.DB.prepare(q).bind(...binds).all();
+    return json({ signups: rows.results || [] });
+  }
+
+  // DELETE /admin/api/signups/:id
+  if (seg.startsWith('signups/') && method === 'DELETE') {
+    const id = parseInt(seg.split('/')[1]);
+    await env.DB.prepare('DELETE FROM signups WHERE id=?').bind(id).run();
+    return json({ ok: true });
+  }
+
+  // GET /admin/api/events
+  if (seg === 'events' && method === 'GET') {
+    const events = await env.DB.prepare(
+      'SELECT * FROM serve_events ORDER BY sort_order,event_date,id'
+    ).all();
+    const result = [];
+    for (const ev of (events.results || [])) {
+      const roles = await env.DB.prepare(
+        'SELECT * FROM serve_roles WHERE event_id=? ORDER BY sort_order,id'
+      ).bind(ev.id).all();
+      result.push({ ...ev, roles: roles.results || [] });
+    }
+    return json({ events: result });
+  }
+
+  // POST /admin/api/events
+  if (seg === 'events' && method === 'POST') {
+    let b; try { b = await req.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
+    const r = await env.DB.prepare(
+      'INSERT INTO serve_events (name,description,event_date,sort_order) VALUES (?,?,?,?)'
+    ).bind(b.name||'New Event', b.description||'', b.event_date||'', b.sort_order||0).run();
+    return json({ ok: true, id: r.meta?.last_row_id });
+  }
+
+  // PUT /admin/api/events/:id
+  if (seg.startsWith('events/') && !seg.includes('/roles') && method === 'PUT') {
+    const id = parseInt(seg.split('/')[1]);
+    let b; try { b = await req.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
+    await env.DB.prepare(
+      'UPDATE serve_events SET name=?,description=?,event_date=?,hidden=?,sort_order=? WHERE id=?'
+    ).bind(b.name, b.description||'', b.event_date||'', b.hidden?1:0, b.sort_order||0, id).run();
+    return json({ ok: true });
+  }
+
+  // DELETE /admin/api/events/:id
+  if (seg.startsWith('events/') && !seg.includes('/roles') && method === 'DELETE') {
+    const id = parseInt(seg.split('/')[1]);
+    await env.DB.prepare('DELETE FROM serve_roles WHERE event_id=?').bind(id).run();
+    await env.DB.prepare('DELETE FROM serve_events WHERE id=?').bind(id).run();
+    return json({ ok: true });
+  }
+
+  // POST /admin/api/events/:id/roles
+  if (seg.match(/^events\/\d+\/roles$/) && method === 'POST') {
+    const evId = parseInt(seg.split('/')[1]);
+    let b; try { b = await req.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
+    const r = await env.DB.prepare(
+      'INSERT INTO serve_roles (event_id,name,description,slots,sort_order) VALUES (?,?,?,?,?)'
+    ).bind(evId, b.name||'New Role', b.description||'', b.slots||0, b.sort_order||0).run();
+    return json({ ok: true, id: r.meta?.last_row_id });
+  }
+
+  // PUT /admin/api/events/:id/roles/:rid
+  if (seg.match(/^events\/\d+\/roles\/\d+$/) && method === 'PUT') {
+    const parts = seg.split('/');
+    const rid = parseInt(parts[3]);
+    let b; try { b = await req.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
+    await env.DB.prepare(
+      'UPDATE serve_roles SET name=?,description=?,slots=?,sort_order=? WHERE id=?'
+    ).bind(b.name, b.description||'', b.slots||0, b.sort_order||0, rid).run();
+    return json({ ok: true });
+  }
+
+  // DELETE /admin/api/events/:id/roles/:rid
+  if (seg.match(/^events\/\d+\/roles\/\d+$/) && method === 'DELETE') {
+    const parts = seg.split('/');
+    const rid = parseInt(parts[3]);
+    await env.DB.prepare('DELETE FROM serve_roles WHERE id=?').bind(rid).run();
+    return json({ ok: true });
+  }
+
+  // GET /admin/api/export.csv
+  if (seg === 'export.csv' && method === 'GET') {
+    const ministry = url.searchParams.get('ministry') || '';
+    let q = 'SELECT s.*, e.name as event_name FROM signups s LEFT JOIN serve_events e ON s.event_id=e.id';
+    const binds = [];
+    if (ministry && ministry !== 'all') { q += ' WHERE s.ministry=?'; binds.push(ministry); }
+    q += ' ORDER BY s.created_at DESC';
+    const rows = await env.DB.prepare(q).bind(...binds).all();
+    const cols = ['id','ministry','name','email','phone','roles','service','sundays','shirt_wanted','shirt_size','notes','event_name','created_at'];
+    let csv = cols.join(',') + '\n';
+    for (const r of (rows.results || [])) {
+      csv += cols.map(c => {
+        const v = r[c] == null ? '' : String(r[c]);
+        return v.includes(',') || v.includes('"') || v.includes('\n')
+          ? '"' + v.replace(/"/g, '""') + '"'
+          : v;
+      }).join(',') + '\n';
+    }
+    return new Response(csv, {
+      headers: {
+        'Content-Type': 'text/csv',
+        'Content-Disposition': `attachment; filename="volunteers-${new Date().toISOString().slice(0,10)}.csv"`
+      }
+    });
+  }
+
+  return json({ error: 'Not found' }, 404);
+}
+
+// ── LOGIN HTML ───────────────────────────────────────────────────────
+const LOGIN_HTML = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Admin Login — Timothy Lutheran</title>
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@600&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#1E2D4A;--teal:#2E7EA6;--gold:#C9973A;--cream:#F7F3EC;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Source Sans 3',sans-serif;background:var(--cream);display:flex;align-items:center;justify-content:center;min-height:100vh;}
+.login-card{background:#fff;border-radius:16px;padding:2.5rem;max-width:380px;width:100%;box-shadow:0 4px 24px rgba(30,45,74,.12);}
+.login-title{font-family:'Lora',serif;font-size:1.5rem;color:var(--navy);margin-bottom:.25rem;}
+.login-sub{font-size:.88rem;color:#8A8898;margin-bottom:1.75rem;}
+.form-label{display:block;font-size:.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--navy);margin-bottom:.4rem;}
+.form-input{width:100%;padding:.7rem 1rem;border:1.5px solid rgba(30,45,74,.2);border-radius:8px;font-size:.95rem;font-family:inherit;outline:none;transition:border-color .2s;}
+.form-input:focus{border-color:var(--teal);}
+.btn{width:100%;background:var(--navy);color:#fff;border:none;padding:.85rem;border-radius:8px;font-size:1rem;font-weight:600;cursor:pointer;transition:background .2s;margin-top:1.25rem;}
+.btn:hover{background:var(--teal);}
+</style>
+</head>
+<body>
+<div class="login-card">
+  <h1 class="login-title">Volunteer Admin</h1>
+  <p class="login-sub">Timothy Lutheran Church</p>
+  <!--ERROR-->
+  <form method="POST" action="/admin/login">
+    <label class="form-label" for="pw">Password</label>
+    <input type="password" id="pw" name="password" class="form-input" placeholder="Enter password" autofocus>
+    <button class="btn" type="submit">Sign In</button>
+  </form>
+</div>
+</body>
+</html>
+`;
+
+// ── PUBLIC HTML ──────────────────────────────────────────────────────
+const PUBLIC_HTML = `<!DOCTYPE html> <html lang="en"> <head> <meta charset="UTF-8"> <meta name="viewport" content="width=device-width, initial-scale=1.0"> <title>Serve at Timothy</title> <link rel="preconnect" href="https://fonts.googleapis.com"> <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin> <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400;1,600&family=Source+Sans+3:wght@300;400;600&display=swap" rel="stylesheet"> <style> /* ── DESIGN TOKENS (unified from both pages) ── */ :root {   --navy:         #1E2D4A;   --navy-mid:     #2A3F60;   --navy-pale:    #C4CEDF;   --teal:         #2E7EA6;   --teal-light:   #5BA3C4;   --teal-pale:    #C0D8E4;   --gold:         #C9973A;   --gold-light:   #E8C070;   --gold-pale:    #F5E4C0;   --cream:        #F7F3EC;   --warm-white:   #FBF8F3;   --moss:         #4A5E3A;   --moss-light:   #7A8F6A;   --moss-pale:    #C2CEBC;   --stone:        #8C8880;   --slate:        #3A4E5C;   --slate-light:  #6A8090;   --slate-pale:   #C0CED4;   --plum-light:   #8A6A8A;   --text-primary:   #1A1A2A;   --text-secondary: #4A4860;   --text-muted:     #8A8898;   --border:       rgba(30,45,74,0.12); } *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; } html { scroll-behavior: smooth; } body {   font-family: 'Source Sans 3', sans-serif;   background-color: var(--cream);   color: var(--text-primary);   line-height: 1.6;   overflow-x: hidden; } body::before {   content: '';   position: fixed; inset: 0;   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");   pointer-events: none; z-index: 1000; opacity: 0.5; }  /* ── MOCKUP ANNOTATION BAR ── */ .annotation-bar {   background: #2d1f5e;   color: #c9b8ff;   font-size: 0.78rem;   padding: 0.5rem 1.5rem;   display: flex;   align-items: center;   gap: 1rem;   flex-wrap: wrap; } .annotation-bar strong { color: #e8d8ff; } .annotation-pill {   display: inline-block;   background: rgba(255,255,255,0.12);   border: 1px solid rgba(255,255,255,0.2);   border-radius: 100px;   padding: 0.2rem 0.7rem;   font-size: 0.72rem; } .page-divider {   background: #2d1f5e;   color: #c9b8ff;   font-size: 0.72rem;   font-weight: 600;   letter-spacing: 0.1em;   text-transform: uppercase;   padding: 0.5rem 1.5rem;   display: flex;   align-items: center;   gap: 0.75rem; } .page-divider::after {   content: '';   flex: 1;   height: 1px;   background: rgba(255,255,255,0.2); }  /* ── HEADER ── */ header {   background-color: var(--navy);   padding: 0.75rem 2rem;   display: flex; align-items: center;   justify-content: space-between; gap: 1rem; } .header-logo { display: flex; align-items: center; gap: 0.9rem; text-decoration: none; } .header-logo img { width: 52px; height: 52px; border-radius: 50%; flex-shrink: 0; } .header-logo-placeholder {   width: 52px; height: 52px; border-radius: 50%;   background: rgba(255,255,255,0.1);   border: 2px solid rgba(255,255,255,0.2);   flex-shrink: 0; display: flex; align-items: center; justify-content: center;   font-size: 1.5rem; } .header-logo-text { display: flex; flex-direction: column; } .header-logo-name {   font-family: 'Lora', serif; font-size: 1rem; font-weight: 600;   color: var(--warm-white); line-height: 1.2; letter-spacing: 0.01em; } .header-logo-tag { font-size: 0.72rem; color: var(--navy-pale); letter-spacing: 0.04em; font-style: italic; } .header-address { font-size: 0.75rem; color: var(--navy-pale); text-align: right; line-height: 1.6; }  /* ── HERO ── */ .hero {   position: relative; background-color: var(--navy);   padding: 5rem 2rem 6rem; overflow: hidden; text-align: center; } .hero::after {   content: '';   position: absolute; bottom: 0; left: 0; right: 0; height: 60px;   background: var(--cream); clip-path: ellipse(55% 100% at 50% 100%); } .hero-eyebrow {   font-size: 0.78rem; font-weight: 600; letter-spacing: 0.14em;   text-transform: uppercase; color: var(--gold-light); margin-bottom: 1rem; } .hero h1 {   font-family: 'Lora', serif;   font-size: clamp(2.4rem, 6vw, 3.8rem);   font-weight: 400; color: var(--warm-white); line-height: 1.15; margin-bottom: 1.5rem; } .hero h1 em { font-style: italic; color: var(--gold-light); } .hero-sub {   font-size: 1.1rem; color: var(--navy-pale); max-width: 520px;   margin: 0 auto 2.5rem; font-weight: 300; line-height: 1.7; } .hero-scroll {   display: inline-flex; align-items: center; gap: 0.5rem;   font-size: 0.85rem; color: var(--navy-pale); text-decoration: none;   border: 1px solid rgba(196,168,152,0.3); padding: 0.6rem 1.4rem;   border-radius: 100px; transition: all 0.2s; } .hero-scroll:hover { background: rgba(255,255,255,0.08); border-color: var(--gold-light); color: var(--warm-white); } .hero-scroll svg { width: 14px; height: 14px; }  /* ── MAIN ── */ main { max-width: 1060px; margin: 0 auto; padding: 4rem 1.5rem 6rem; }  .section-intro { text-align: center; margin-bottom: 3.5rem; } .section-intro p {   font-family: 'Lora', serif; font-size: 1.2rem; color: var(--text-secondary);   max-width: 600px; margin: 0 auto; font-style: italic; line-height: 1.8; } .section-label {   font-size: 0.72rem; font-weight: 600; letter-spacing: 0.14em;   text-transform: uppercase; color: var(--text-muted);   margin-bottom: 1rem; padding-bottom: 0.6rem; border-bottom: 1px solid var(--border); } .spacer { height: 2.5rem; }  /* ── CORE VALUES STRIP ── */ .values-strip {   display: grid;   grid-template-columns: repeat(4, 1fr);   gap: 0.75rem;   margin-bottom: 3rem;   max-width: 860px;   margin-left: auto;   margin-right: auto; } .value-tile {   background: var(--warm-white);   border: 1px solid var(--border);   border-radius: 12px;   padding: 1rem 1.1rem;   display: flex;   flex-direction: column;   gap: 0.3rem;   position: relative;   overflow: hidden;   text-decoration: none;   cursor: pointer;   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease; } .value-tile:hover, .value-tile:focus-visible {   transform: translateY(-2px);   box-shadow: 0 4px 16px rgba(30,45,74,0.1);   border-color: rgba(30,45,74,0.22);   outline: none; } .value-tile::before {   content: '';   position: absolute;   top: 0; left: 0; right: 0;   height: 3px;   border-radius: 12px 12px 0 0; } .value-tile.v-worship::before    { background: var(--navy); } .value-tile.v-education::before  { background: var(--gold); } .value-tile.v-acceptance::before { background: var(--moss); } .value-tile.v-outreach::before   { background: var(--slate); } .value-tile-name {   font-family: 'Lora', serif;   font-size: 0.9rem;   font-weight: 600;   line-height: 1.2; } .value-tile.v-worship .value-tile-name    { color: var(--navy); } .value-tile.v-education .value-tile-name  { color: #7a5800; } .value-tile.v-acceptance .value-tile-name { color: var(--moss); } .value-tile.v-outreach .value-tile-name   { color: var(--slate); } .value-tile-desc {   font-size: 0.76rem;   color: var(--text-muted);   line-height: 1.4; } @media (max-width: 860px) {   .values-strip { grid-template-columns: repeat(3, 1fr); } } @media (max-width: 580px) {   .values-strip { grid-template-columns: 1fr 1fr; } } @media (max-width: 380px) {   .values-strip { grid-template-columns: 1fr; } } .value-tile.v-events::before { background: var(--teal); } .value-tile.v-events .value-tile-name { color: var(--teal); }  /* ── CARD VALUE TAG ── */ .card-value-tag {   display: inline-flex;   align-items: center;   gap: 0.3rem;   font-size: 0.68rem;   font-weight: 600;   letter-spacing: 0.08em;   text-transform: uppercase;   margin-top: 0.6rem;   padding: 0.2rem 0.55rem;   border-radius: 100px; } .card.worship  .card-value-tag { background: rgba(30,45,74,0.07);  color: var(--navy-mid); } .card.events   .card-value-tag { background: rgba(58,78,92,0.07);  color: var(--slate); } .card.mdo      .card-value-tag { background: rgba(74,94,58,0.08);  color: var(--moss); } .card.property .card-value-tag { background: rgba(140,136,128,0.1);color: var(--stone); } .card.wol      .card-value-tag { background: rgba(201,151,58,0.1); color: #7a5800; } .card.lasm     .card-value-tag { background: rgba(58,78,92,0.07);  color: var(--slate); } .card-value-tag svg { width: 9px; height: 9px; }  /* ── OVERVIEW CARDS (landing page cards) ── */ .cards {   display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.25rem; } .card {   background: var(--warm-white); border: 1px solid var(--border);   border-radius: 16px; padding: 1.75rem; text-decoration: none; color: inherit;   display: flex; flex-direction: column; position: relative; overflow: hidden;   transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease; } .card:hover { transform: translateY(-4px); border-color: transparent; } .card.worship:hover  { box-shadow: 0 12px 40px rgba(30,45,74,0.16); } .card.events:hover   { box-shadow: 0 12px 40px rgba(201,151,58,0.16); } .card.mdo:hover      { box-shadow: 0 12px 40px rgba(74,94,58,0.16); } .card.property:hover { box-shadow: 0 12px 40px rgba(140,136,128,0.16); } .card.wol:hover      { box-shadow: 0 12px 40px rgba(122,143,106,0.14); } .card.lasm:hover     { box-shadow: 0 12px 40px rgba(58,78,92,0.16); } .card.interest:hover { box-shadow: 0 12px 40px rgba(138,106,138,0.12); } .card::before {   content: ''; position: absolute; top: 0; left: 0; right: 0;   height: 4px; border-radius: 16px 16px 0 0; } .card.worship::before  { background: var(--navy); } .card.events::before   { background: var(--gold); } .card.mdo::before      { background: var(--moss); } .card.property::before { background: var(--stone); } .card.wol::before      { background: var(--teal); } .card.lasm::before     { background: var(--slate); } .card.interest::before { background: var(--plum-light); } .card-icon {   width: 44px; height: 44px; border-radius: 10px;   display: flex; align-items: center; justify-content: center; margin-bottom: 1.1rem; } .card.worship .card-icon  { background: rgba(30,45,74,0.09); } .card.events .card-icon   { background: rgba(201,151,58,0.11); } .card.mdo .card-icon      { background: rgba(74,94,58,0.09); } .card.property .card-icon { background: rgba(140,136,128,0.1); } .card.wol .card-icon      { background: rgba(46,126,166,0.1); } .card.lasm .card-icon     { background: rgba(58,78,92,0.09); } .card.interest .card-icon { background: rgba(138,106,138,0.08); } .card-icon svg { width: 22px; height: 22px; } .card.worship .card-icon svg  { color: var(--navy); } .card.events .card-icon svg   { color: var(--gold); } .card.mdo .card-icon svg      { color: var(--moss); } .card.property .card-icon svg { color: var(--stone); } .card.wol .card-icon svg      { color: var(--teal); } .card.lasm .card-icon svg     { color: var(--slate); } .card.interest .card-icon svg { color: var(--plum-light); } .card-label { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.11em; text-transform: uppercase; margin-bottom: 0.35rem; } .card.worship .card-label  { color: var(--navy-mid); } .card.events .card-label   { color: var(--gold); } .card.mdo .card-label      { color: var(--moss-light); } .card.property .card-label { color: var(--stone); } .card.wol .card-label      { color: var(--teal); } .card.lasm .card-label     { color: var(--slate-light); } .card.interest .card-label { color: var(--plum-light); } .card h2 {   font-family: 'Lora', serif; font-size: 1.25rem; font-weight: 600;   color: var(--text-primary); margin-bottom: 0.65rem; line-height: 1.3; } .card p { font-size: 0.9rem; color: var(--text-secondary); line-height: 1.65; flex: 1; margin-bottom: 1.25rem; } .card-cta { display: flex; align-items: center; gap: 0.4rem; font-size: 0.82rem; font-weight: 600; transition: gap 0.2s; } .card.worship .card-cta  { color: var(--navy); } .card.events .card-cta   { color: var(--gold); } .card.mdo .card-cta      { color: var(--moss); } .card.property .card-cta { color: var(--stone); } .card.wol .card-cta      { color: var(--teal); } .card.lasm .card-cta     { color: var(--slate); } .card.interest .card-cta { color: var(--plum-light); } .card:hover .card-cta    { gap: 0.7rem; } .card-cta svg { width: 15px; height: 15px; flex-shrink: 0; } .card-external {   display: inline-flex; align-items: center; gap: 0.3rem;   font-size: 0.7rem; color: var(--text-muted); margin-top: 0.5rem; } .card-external svg { width: 11px; height: 11px; }  /* ── UPCOMING EVENTS ── */ .upcoming {   background: var(--gold-pale); border: 1px solid rgba(201,151,58,0.25);   border-radius: 16px; padding: 2rem 2.5rem; margin-top: 3rem; } .upcoming-header {   display: flex; align-items: baseline; justify-content: space-between;   margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.5rem; } .upcoming-header h3 { font-family: 'Lora', serif; font-size: 1.1rem; font-weight: 600; color: var(--navy); } .upcoming-header span { font-size: 0.78rem; color: var(--text-muted); } .event-list { list-style: none; display: flex; flex-direction: column; gap: 0.75rem; } .event-item {   display: flex; align-items: center; gap: 1rem; padding: 0.9rem 1.1rem;   background: var(--warm-white); border-radius: 10px; border: 1px solid rgba(201,151,58,0.2);   text-decoration: none; color: inherit; transition: border-color 0.2s, transform 0.2s; } .event-item:hover { border-color: var(--gold); transform: translateX(3px); } .event-date { text-align: center; min-width: 44px; flex-shrink: 0; } .event-date .month { display: block; font-size: 0.63rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); } .event-date .day { display: block; font-family: 'Lora', serif; font-size: 1.5rem; font-weight: 600; color: var(--navy); line-height: 1; } .event-divider { width: 1px; height: 36px; background: var(--border); flex-shrink: 0; } .event-info { flex: 1; } .event-info strong { display: block; font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.15rem; } .event-info span { font-size: 0.78rem; color: var(--text-muted); } .event-slots { font-size: 0.73rem; font-weight: 600; padding: 0.25rem 0.6rem; border-radius: 100px; white-space: nowrap; flex-shrink: 0; } .event-slots.open { color: var(--moss); background: var(--moss-pale); } .event-slots.few  { color: #8B5E1A; background: var(--gold-pale); border: 1px solid rgba(201,151,58,0.3); } .event-slots.soon { color: var(--slate-light); background: var(--slate-pale); }  /* ══════════════════════════════════════════════    WORSHIP ROLES SECTION    This is what would live at /scheduler or    expand inline when clicking the worship card ══════════════════════════════════════════════ */  .roles-page { background: var(--cream); }  .roles-hero {   background: var(--navy); padding: 3rem 2rem 4rem; text-align: center; position: relative; } .roles-hero::after {   content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 48px;   background: var(--cream); clip-path: ellipse(55% 100% at 50% 100%); } .roles-hero-eyebrow {   font-size: 0.72rem; font-weight: 600; letter-spacing: 0.16em;   text-transform: uppercase; color: var(--gold-light); margin-bottom: 0.75rem; } .roles-hero h2 {   font-family: 'Lora', serif; font-size: clamp(1.8rem, 4vw, 2.8rem);   font-weight: 400; color: var(--warm-white); line-height: 1.2; margin-bottom: 1rem; } .roles-hero h2 em { font-style: italic; color: var(--gold-light); } .roles-hero-sub {   font-size: 1rem; color: var(--navy-pale); max-width: 500px;   margin: 0 auto; font-weight: 300; line-height: 1.7; } .back-link { display:inline-flex;align-items:center;gap:.5rem;background:rgba(255,255,255,.15);color:var(--warm-white);font-size:.9rem;font-weight:600;text-decoration:none;margin-bottom:1.5rem;padding:.65rem 1.25rem;border-radius:8px;border:1px solid rgba(255,255,255,.25);transition:all .2s;cursor:pointer; } .back-link:hover{background:rgba(255,255,255,.25);color:#fff;} .back-link svg{width:16px;height:16px;} .back-btn-bottom{display:inline-flex;align-items:center;gap:.5rem;background:var(--navy);color:#fff;font-size:.9rem;font-weight:600;text-decoration:none;padding:.7rem 1.4rem;border-radius:8px;border:none;cursor:pointer;transition:background .2s;} .back-btn-bottom:hover{background:var(--teal);} .back-btn-bottom svg{width:16px;height:16px;}  /* ── Ministry area headers ── */ .ministry-section { margin-bottom: 3rem; } .ministry-header {   display: flex; align-items: center; gap: 1rem;   padding: 1.1rem 1.5rem; border-radius: 12px 12px 0 0; margin-bottom: 0; } .ministry-header.worship  { background: rgba(30,45,74,0.07);  border: 1px solid rgba(30,45,74,0.14);  border-bottom: none; } .ministry-header.education{ background: rgba(201,151,58,0.08); border: 1px solid rgba(201,151,58,0.2); border-bottom: none; } .ministry-header.acceptance{ background: rgba(74,94,58,0.07); border: 1px solid rgba(74,94,58,0.18);  border-bottom: none; } .ministry-header.outreach  { background: rgba(58,78,92,0.07);  border: 1px solid rgba(58,78,92,0.15);  border-bottom: none; } .ministry-icon {   width: 40px; height: 40px; border-radius: 10px;   display: flex; align-items: center; justify-content: center; flex-shrink: 0; } .ministry-header.worship  .ministry-icon { background: rgba(30,45,74,0.12); } .ministry-header.education .ministry-icon { background: rgba(201,151,58,0.15); } .ministry-header.acceptance .ministry-icon { background: rgba(74,94,58,0.12); } .ministry-header.outreach .ministry-icon { background: rgba(58,78,92,0.12); } .ministry-icon svg { width: 20px; height: 20px; } .ministry-header.worship  .ministry-icon svg { color: var(--navy); } .ministry-header.education .ministry-icon svg { color: var(--gold); } .ministry-header.acceptance .ministry-icon svg { color: var(--moss); } .ministry-header.outreach .ministry-icon svg { color: var(--slate); } .ministry-name { font-family: 'Lora', serif; font-size: 1.1rem; font-weight: 600; } .ministry-header.worship  .ministry-name { color: var(--navy); } .ministry-header.education .ministry-name { color: #7a5800; } .ministry-header.acceptance .ministry-name { color: var(--moss); } .ministry-header.outreach .ministry-name { color: var(--slate); } .ministry-header.events { background: rgba(46,126,166,0.07); border: 1px solid rgba(46,126,166,0.2); border-bottom: none; } .ministry-header.events .ministry-icon { background: rgba(46,126,166,0.12); } .ministry-header.events .ministry-icon svg { color: var(--teal); } .ministry-header.events .ministry-name { color: var(--teal); }  .event-group { margin-bottom: 1.75rem; } .event-group:last-child { margin-bottom: 0; } .event-group-header {   display: flex; align-items: center; gap: 0.6rem;   margin-bottom: 0.85rem; padding-bottom: 0.5rem;   border-bottom: 1px solid rgba(46,126,166,0.18); } .event-group-name { font-family: 'Lora', serif; font-weight: 600; font-size: 0.95rem; color: var(--teal); } .event-group-when { font-size: 0.75rem; color: var(--text-muted); margin-left: auto; padding-left: 0.75rem; white-space: nowrap; } .event-group-icon { font-size: 1.15rem; line-height: 1; }  .ministry-tagline { font-size: 0.83rem; color: var(--text-muted); margin-top: 0.1rem; } .ministry-roles {   border: 1px solid rgba(30,45,74,0.1); border-top: none;   border-radius: 0 0 12px 12px; padding: 1.25rem; background: var(--warm-white); } .ministry-header.education ~ .ministry-roles, .ministry-section:nth-child(2) .ministry-roles { border-color: rgba(201,151,58,0.18); } .ministry-section:nth-child(3) .ministry-roles { border-color: rgba(74,94,58,0.15); } .ministry-section:nth-child(4) .ministry-roles { border-color: rgba(58,78,92,0.13); }  /* ── Role cards ── */ .role-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; } .role-card {   background: var(--cream); border: 1px solid var(--border);   border-radius: 12px; padding: 1.25rem; cursor: pointer;   transition: border-color 0.2s, box-shadow 0.2s, background 0.2s; position: relative; } .role-card:hover { border-color: rgba(30,45,74,0.3); box-shadow: 0 4px 20px rgba(30,45,74,0.1); } .role-card.selected {   background: rgba(30,45,74,0.05);   border-color: var(--navy);   box-shadow: 0 0 0 2px rgba(30,45,74,0.15); } .role-card input[type="checkbox"] { position: absolute; opacity: 0; pointer-events: none; } .role-card-top { display: flex; align-items: flex-start; gap: 0.75rem; margin-bottom: 0.6rem; } .role-check {   width: 20px; height: 20px; border: 2px solid var(--border); border-radius: 5px;   flex-shrink: 0; margin-top: 2px; display: flex; align-items: center; justify-content: center;   background: white; transition: all 0.15s; } .role-card.selected .role-check {   background: var(--navy); border-color: var(--navy); color: white; font-size: 12px; } .role-name {   font-family: 'Lora', serif; font-weight: 600; font-size: 0.95rem;   color: var(--text-primary); line-height: 1.3; } .role-desc { font-size: 0.84rem; color: var(--text-secondary); line-height: 1.55; margin-bottom: 0.75rem; } .role-meta { display: flex; flex-direction: column; gap: 0.2rem; } .role-meta-item { font-size: 0.76rem; color: var(--text-muted); } .role-meta-item strong { color: var(--text-secondary); font-weight: 600; }  /* ── Scheduler CTA ── */ .scheduler-cta {   background: var(--navy); border-radius: 16px; padding: 2rem 2.5rem;   display: flex; align-items: center; justify-content: space-between;   gap: 1.5rem; flex-wrap: wrap; margin-top: 2rem; } .scheduler-cta-text h3 {   font-family: 'Lora', serif; font-size: 1.2rem; color: var(--warm-white);   margin-bottom: 0.35rem; } .scheduler-cta-text p { font-size: 0.88rem; color: var(--navy-pale); line-height: 1.5; } .btn-cta {   display: inline-flex; align-items: center; gap: 0.5rem;   background: var(--gold); color: var(--navy); font-family: 'Lora', serif;   font-size: 0.95rem; font-weight: 600; padding: 0.75rem 1.75rem;   border-radius: 100px; text-decoration: none; white-space: nowrap;   transition: background 0.2s, transform 0.2s; } .btn-cta:hover { background: var(--gold-light); transform: translateY(-1px); } .btn-cta svg { width: 16px; height: 16px; }  /* ── Sign-up form section ── */ .signup-section {   background: var(--warm-white); border: 1px solid var(--border);   border-radius: 16px; padding: 2rem 2.5rem; margin-top: 3rem;   display: none; } .signup-section.visible { display: block; } .signup-section-header {   display: flex; align-items: center; gap: 1rem; margin-bottom: 1.75rem;   padding-bottom: 1.25rem; border-bottom: 1px solid var(--border); } .signup-icon {   width: 48px; height: 48px; border-radius: 12px;   background: rgba(138,106,138,0.1); display: flex; align-items: center;   justify-content: center; flex-shrink: 0; } .signup-icon svg { width: 24px; height: 24px; color: var(--plum-light); } .signup-section-header h3 {   font-family: 'Lora', serif; font-size: 1.2rem; color: var(--text-primary); } .signup-section-header p { font-size: 0.85rem; color: var(--text-muted); margin-top: 0.2rem; }  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; } .form-field { margin-bottom: 1.25rem; } .form-label {   display: block; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em;   text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.45rem; } .form-input {   width: 100%; padding: 0.65rem 0.9rem; border: 1.5px solid rgba(30,45,74,0.15);   border-radius: 8px; font-size: 0.95rem; font-family: 'Source Sans 3', sans-serif;   color: var(--text-primary); background: white; outline: none; transition: border-color 0.2s, box-shadow 0.2s; } .form-input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(201,151,58,0.12); } .form-textarea {   width: 100%; padding: 0.65rem 0.9rem; border: 1.5px solid rgba(30,45,74,0.15);   border-radius: 8px; font-size: 0.95rem; font-family: 'Source Sans 3', sans-serif;   color: var(--text-primary); background: white; outline: none;   resize: vertical; min-height: 90px; transition: border-color 0.2s, box-shadow 0.2s; } .form-textarea:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(201,151,58,0.12); }  .chip-group { display: flex; flex-wrap: wrap; gap: 0.5rem; } .chip-label {   display: flex; align-items: center; gap: 0.4rem;   background: var(--cream); border: 1.5px solid var(--border);   border-radius: 8px; padding: 0.45rem 0.9rem; cursor: pointer;   font-size: 0.85rem; font-weight: 600; color: var(--text-secondary);   transition: all 0.15s; user-select: none; } .chip-label:hover { background: rgba(30,45,74,0.05); border-color: rgba(30,45,74,0.25); } .chip-label.checked { background: var(--navy); color: white; border-color: var(--navy); } .chip-label input { position: absolute; opacity: 0; pointer-events: none; }  .form-section-label {   font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;   color: var(--text-muted); margin-bottom: 0.65rem; display: block; } .selected-roles-preview {   background: rgba(30,45,74,0.04); border: 1px solid rgba(30,45,74,0.1);   border-radius: 10px; padding: 0.9rem 1.1rem; margin-bottom: 1.25rem;   font-size: 0.85rem; color: var(--text-secondary); } .selected-roles-preview em { color: var(--text-muted); font-style: italic; }  .btn-submit {   display: inline-flex; align-items: center; gap: 0.5rem;   background: var(--navy); color: white; font-family: 'Source Sans 3', sans-serif;   font-size: 1rem; font-weight: 600; padding: 0.85rem 2rem;   border-radius: 10px; border: none; cursor: pointer; transition: background 0.2s; } .btn-submit:hover { background: var(--navy-mid); }  /* ── FOOTER ── */ footer { background: var(--navy); padding: 2.5rem 2rem; text-align: center; } .footer-logo { display: flex; justify-content: center; margin-bottom: 1rem; } .footer-logo-placeholder {   width: 56px; height: 56px; border-radius: 50%;   background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.15);   display: flex; align-items: center; justify-content: center;   font-size: 1.6rem; opacity: 0.7; } footer p { font-size: 0.82rem; color: var(--navy-pale); line-height: 1.9; } footer a { color: var(--gold-light); text-decoration: none; } footer a:hover { text-decoration: underline; }  @media (max-width: 640px) {   .hero { padding: 3.5rem 1.5rem 5rem; }   .cards { grid-template-columns: 1fr; }   .role-grid { grid-template-columns: 1fr; }   .form-row { grid-template-columns: 1fr; }   .upcoming { padding: 1.5rem; }   header { flex-direction: column; align-items: flex-start; gap: 0.5rem; }   .header-address { text-align: left; }   .scheduler-cta { flex-direction: column; }   .signup-section { padding: 1.5rem; } }  @keyframes fadeUp {   from { opacity: 0; transform: translateY(16px); }   to   { opacity: 1; transform: translateY(0); } }  /* ── App page routing ── */ .app-page[hidden] { display: none !important; }  /* ── Event volunteer cards (events page) ── */ .event-volunteer-list { display: flex; flex-direction: column; gap: 1rem; margin-bottom: 2rem; } .ev-card { background: var(--warm-white); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; } .ev-card-header {   width: 100%; display: flex; align-items: center; gap: 1.25rem;   padding: 1.25rem 1.5rem; background: none; border: none; cursor: pointer;   text-align: left; transition: background 0.15s; } .ev-card-header:hover { background: rgba(30,45,74,0.03); } .ev-card-date {   display: flex; flex-direction: column; align-items: center;   min-width: 52px; background: var(--navy); color: white;   border-radius: 10px; padding: 0.4rem 0.6rem; flex-shrink: 0; } .ev-card-date .month { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.8; } .ev-card-date .day { font-family: 'Lora', serif; font-size: 1.3rem; font-weight: 600; line-height: 1.1; } .ev-card-info { flex: 1; } .ev-card-tag { font-size: 0.74rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; } .ev-card-info h3 { font-family: 'Lora', serif; font-size: 1.05rem; font-weight: 600; color: var(--text-primary); margin: 0.2rem 0 0.25rem; } .ev-card-info p { font-size: 0.85rem; color: var(--text-secondary); line-height: 1.45; margin: 0; } .ev-card-cta { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; flex-shrink: 0; padding-left: 0.5rem; } .ev-volunteer-label { font-size: 0.8rem; font-weight: 600; color: var(--teal); white-space: nowrap; } .ev-chevron { width: 20px; height: 20px; color: var(--teal); transition: transform 0.2s; } .ev-card-header[aria-expanded="true"] .ev-chevron { transform: rotate(180deg); } .ev-card-roles { padding: 1.25rem 1.5rem 1.5rem; border-top: 1px solid var(--border); } @media (max-width: 560px) {   .ev-card-header { flex-wrap: wrap; }   .ev-card-cta { flex-direction: row; width: 100%; justify-content: flex-end; } } </style> </head> <body>  <header id="site-header">   <a href="#" onclick="navigate('landing'); return false;" class="header-logo">     <div class="header-logo-placeholder">✝</div>     <div class="header-logo-text">       <span class="header-logo-name">Timothy Lutheran Church</span>       <span class="header-logo-tag">From our Neighborhood to the Nations</span>     </div>   </a>   <div class="header-address">     6704 Fyler Ave &mdash; St. Louis, MO 63139   </div> </header>  <!-- ══ LANDING PAGE ══════════════════════════════════════════════ --> <div class="app-page" id="page-landing">  <section class="hero">   <p class="hero-eyebrow">Timothy Lutheran &mdash; Serving Together</p>   <h1>Every hand<br><em>makes a difference.</em></h1>   <p class="hero-sub">From Sunday morning to the neighborhood around us — there are many ways to get involved. See where you might fit in.</p>   <a href="#ways-to-serve" class="hero-scroll">     See where you can help     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>   </a> </section>  <main id="ways-to-serve">   <div class="section-intro">     <p>&ldquo;Each of you should use whatever gift you have received to serve others.&rdquo; &mdash; 1 Peter 4:10</p>   </div>    <!-- Core values strip — each tile navigates to its ministry page -->   <div class="values-strip">     <a href="#" onclick="navigate('worship'); return false;" class="value-tile v-worship">       <span class="value-tile-name">Worship</span>       <span class="value-tile-desc">Lead and support the congregation in praise, prayer, and the sacraments</span>     </a>     <a href="#" onclick="navigate('education'); return false;" class="value-tile v-education">       <span class="value-tile-name">Christian Education</span>       <span class="value-tile-desc">Nurture faith and discipleship across every age and stage of life</span>     </a>     <a href="#" onclick="navigate('acceptance'); return false;" class="value-tile v-acceptance">       <span class="value-tile-name">Acceptance</span>       <span class="value-tile-desc">Welcome every person and build a community where all belong</span>     </a>     <a href="#" onclick="navigate('outreach'); return false;" class="value-tile v-outreach">       <span class="value-tile-name">Outreach</span>       <span class="value-tile-desc">Serve our neighbors and share God's love beyond our walls</span>     </a>   </div>    <p class="section-label">Timothy Lutheran Church</p>   <div class="cards">      <a href="#" onclick="navigate('worship'); return false;" class="card worship">       <div class="card-icon">         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>       </div>       <h2>Sunday Worship Roles</h2>       <p>Acolytes, altar guild, lectors, musicians, and more. Sign up for upcoming Sundays or let us know your availability.</p>       <span class="card-cta">View roles &amp; sign up         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>       </span>       <span class="card-value-tag">Worship</span>     </a>      <a href="#" onclick="navigate('events'); return false;" class="card events">       <div class="card-icon">         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>       </div>       <h2>Community Events</h2>       <p>Easter Egg Hunt, Christmas Market, VBS, and other gatherings that bring our corner of St. Louis together.</p>       <span class="card-cta">See events &amp; volunteer         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>       </span>       <span class="card-value-tag">Outreach</span>     </a>      <a href="#" onclick="navigate('acceptance'); return false;" class="card mdo">       <div class="card-icon">         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>       </div>       <h2>Care Ministry</h2>       <p>Stephen Ministry, hospitality, caring ministry — help make sure no one walks through a hard season alone.</p>       <span class="card-cta">Get involved         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>       </span>       <span class="card-value-tag">Care</span>     </a>      <a href="#" onclick="navigate('outreach'); return false;" class="card property">       <div class="card-icon">         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>       </div>       <h2>Outreach Ministry</h2>       <p>Community Pantry, Bee Ministry, service projects, and prayer. Live out your faith in the neighborhood around us.</p>       <span class="card-cta">See opportunities         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>       </span>       <span class="card-value-tag">Outreach</span>     </a>      <a href="#" onclick="navigate('education'); return false;" class="card wol">       <div class="card-icon">         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>       </div>       <h2>Christian Education</h2>       <p>Sunday school, youth group, confirmation mentoring, and VBS — share what you know and walk alongside others as they grow.</p>       <span class="card-cta">Get involved         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>       </span>       <span class="card-value-tag">Christian Education</span>     </a>    </div>    <div class="spacer"></div>   <p class="section-label">Partner Ministries</p>   <div class="cards">      <a href="#" class="card lasm" target="_blank" rel="noopener">       <div class="card-icon">         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>       </div>       <h2>Lindenwood Area Senior Ministry</h2>       <p>Founded by five neighborhood churches including Timothy, LASM serves aging neighbors through companionship, transportation, meals, and community programs.</p>       <span class="card-cta">Volunteer with LASM         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>       </span>       <span class="card-value-tag">Outreach</span>       <span class="card-external">         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>         lasministry.org       </span>     </a>      <a href="https://wordoflifeschool.net/" class="card wol" target="_blank" rel="noopener">       <div class="card-icon">         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>       </div>       <h2>Word of Life Lutheran School</h2>       <p>Timothy Lutheran proudly supports Christian education at Word of Life, in association with Ascension and St. Lucas Lutheran Churches — nurturing students academically and spiritually.</p>       <span class="card-cta">Visit wordoflifeschool.net         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>       </span>       <span class="card-value-tag">Christian Education</span>       <span class="card-external">         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>         wordoflifeschool.net       </span>     </a>    </div>    <div class="spacer"></div>   <div class="cards" style="grid-template-columns: minmax(260px, 480px);">     <a href="#" onclick="navigate('general'); return false;" class="card interest">       <div class="card-icon">         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>       </div>       <h2>I Just Want to Help</h2>       <p>Tell us a little about yourself and what you enjoy. We'll reach out about opportunities that might be a good fit — no pressure, no commitment yet.</p>       <span class="card-cta">Let us know         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>       </span>     </a>   </div>  </main> </div><!-- /page-landing -->   <!-- ══ PAGE: WORSHIP ═════════════════════════════════════════════ --> <div class="app-page" id="page-worship" hidden> <div class="roles-hero">   <a href="#" onclick="navigate('landing'); return false;" class="back-link">     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>     Back to all ways to serve   </a>   <p class="roles-hero-eyebrow">Timothy Lutheran &mdash; Worship Ministry</p>   <h2>Sunday Worship <em>Roles</em></h2>   <p class="roles-hero-sub">These roles support every Sunday service. Select what interests you and we'll be in touch — or jump straight to the scheduler to sign up for a specific date.</p> </div> <main>   <div class="ministry-section">     <div class="ministry-header worship">       <div class="ministry-icon">         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>       </div>       <div>         <div class="ministry-name">Worship</div>         <div class="ministry-tagline">Lead and support the congregation in praise, prayer, and the sacraments</div>       </div>     </div>     <div class="ministry-roles">       <div class="role-grid">          <label class="role-card" for="r-acolyte">           <input type="checkbox" id="r-acolyte" name="roles" value="Acolyte" data-ministry="worship">           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Acolyte</span></div>           <p class="role-desc">Light the altar candles before the service begins and extinguish them at the close. A simple, meaningful act of service for all ages.</p>           <div class="role-meta">             <div class="role-meta-item"><strong>Commitment:</strong> 1 Sunday per month</div>             <div class="role-meta-item"><strong>Training:</strong> 15-minute walk-through</div>           </div>         </label>          <label class="role-card" for="r-powerpoint">           <input type="checkbox" id="r-powerpoint" name="roles" value="PowerPoint Operator" data-ministry="worship">           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">PowerPoint Operator</span></div>           <p class="role-desc">Advance worship slides so the congregation can follow along with hymns, liturgy, and announcements. No tech expertise required.</p>           <div class="role-meta">             <div class="role-meta-item"><strong>Commitment:</strong> 1 Sunday per month</div>             <div class="role-meta-item"><strong>Training:</strong> 30-min practice with worship team</div>           </div>         </label>          <label class="role-card" for="r-lector">           <input type="checkbox" id="r-lector" name="roles" value="Lector" data-ministry="worship">           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Lector</span></div>           <p class="role-desc">Read the appointed Scripture lessons aloud from the lectern. Readings are emailed to you in advance so you can prepare.</p>           <div class="role-meta">             <div class="role-meta-item"><strong>Commitment:</strong> 1 Sunday per month</div>             <div class="role-meta-item"><strong>Training:</strong> Meeting with the pastor</div>           </div>         </label>          <label class="role-card" for="r-altar">           <input type="checkbox" id="r-altar" name="roles" value="Altar Guild" data-ministry="worship">           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Altar Guild</span></div>           <p class="role-desc">Prepare the sanctuary — flowers, altar linens, paraments, and banners for each liturgical season. A quiet ministry of beauty and care.</p>           <div class="role-meta">             <div class="role-meta-item"><strong>Commitment:</strong> One month per year</div>             <div class="role-meta-item"><strong>Training:</strong> Walk-through with coordinator</div>           </div>         </label>          <label class="role-card" for="r-choir">           <input type="checkbox" id="r-choir" name="roles" value="Adult Choir" data-ministry="worship">           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Adult Choir</span></div>           <p class="role-desc">Enhance worship through choral music. Sing anthems and lead the congregation in song throughout the church year.</p>           <div class="role-meta">             <div class="role-meta-item"><strong>Commitment:</strong> Weekly rehearsals + Sundays</div>             <div class="role-meta-item"><strong>Open to:</strong> All voices, all parts</div>           </div>         </label>          <label class="role-card" for="r-handbells">           <input type="checkbox" id="r-handbells" name="roles" value="Handbells" data-ministry="worship">           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Handbells</span></div>           <p class="role-desc">Ring with the handbell choir to add joyful, resonant music to worship. No prior handbell experience needed.</p>           <div class="role-meta">             <div class="role-meta-item"><strong>Commitment:</strong> Weekly rehearsals (seasonal)</div>             <div class="role-meta-item"><strong>Open to:</strong> Anyone who can count!</div>           </div>         </label>          <label class="role-card" for="r-youth-choir">           <input type="checkbox" id="r-youth-choir" name="roles" value="Youth Choir" data-ministry="worship">           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Youth Choir</span></div>           <p class="role-desc">Young singers who lead worship and grow in faith through music. Open to children and youth of the congregation.</p>           <div class="role-meta">             <div class="role-meta-item"><strong>Commitment:</strong> Weekly rehearsals + Sundays</div>           </div>         </label>        </div>      </div>   </div>    <!-- Worship sign-up form — shown when a worship role is selected -->   <div class="signup-section" id="volunteer-form">     <div class="signup-section-header">       <div class="signup-icon">         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>       </div>       <div>         <h3>Sign up for a worship role</h3>         <p>Tell us your availability and we'll schedule you for upcoming Sundays.</p>       </div>     </div>     <span class="form-section-label">Selected worship roles</span>     <div class="selected-roles-preview" id="roles-preview"><em>No worship roles selected yet — click a card above.</em></div>     <div class="form-row">       <div class="form-field">         <label class="form-label" for="f-name">Full Name *</label>         <input type="text" id="f-name" class="form-input" placeholder="Jane Smith" autocomplete="name">       </div>       <div class="form-field">         <label class="form-label" for="f-email">Email Address *</label>         <input type="email" id="f-email" class="form-input" placeholder="jane@example.com" autocomplete="email">       </div>     </div>     <div class="form-field">       <label class="form-label" for="f-phone">Phone <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>       <input type="tel" id="f-phone" class="form-input" placeholder="(314) 555-0123" autocomplete="tel">     </div>     <div class="form-field">       <label class="form-label">Which service do you typically attend?</label>       <div class="chip-group" id="svc-chips">         <label class="chip-label checked" for="svc-both"><input type="radio" id="svc-both" name="svc" value="both" checked>Both services</label>         <label class="chip-label" for="svc-8am"><input type="radio" id="svc-8am" name="svc" value="8am">8:00 AM only</label>         <label class="chip-label" for="svc-1045"><input type="radio" id="svc-1045" name="svc" value="10:45am">10:45 AM only</label>       </div>     </div>     <div class="form-field">       <label class="form-label">Which Sundays work best? <span style="font-weight:400;text-transform:none;letter-spacing:0;">(leave blank if flexible)</span></label>       <div class="chip-group" id="sun-chips">         <label class="chip-label" for="sun-1"><input type="checkbox" id="sun-1" name="sun" value="1">1st Sunday</label>         <label class="chip-label" for="sun-2"><input type="checkbox" id="sun-2" name="sun" value="2">2nd Sunday</label>         <label class="chip-label" for="sun-3"><input type="checkbox" id="sun-3" name="sun" value="3">3rd Sunday</label>         <label class="chip-label" for="sun-4"><input type="checkbox" id="sun-4" name="sun" value="4">4th Sunday</label>         <label class="chip-label" for="sun-5"><input type="checkbox" id="sun-5" name="sun" value="5">5th Sunday</label>       </div>     </div>     <div class="form-field">       <label class="form-label" for="f-notes">Anything else? <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>       <textarea id="f-notes" class="form-textarea" placeholder="Schedule constraints, prior experience, questions&hellip;"></textarea>     </div>     <button class="btn-submit" type="button">       Submit My Interest       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>     </button>     <p style="font-size:0.8rem;color:var(--text-muted);margin-top:0.75rem;">We'll follow up by email to confirm your schedule and answer any questions.</p>   </div>  iv style="text-align:center;margin-top:2.5rem;padding-bottom:1rem;">
+    <a href="#" onclick="navigate('landing'); return false;" class="back-btn-bottom">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      Back to all ways to serve
+    </a>
+  </div>
+</main> </div><!-- /page-worship -->   <!-- ══ PAGE: COMMUNITY EVENTS ════════════════════════════════════ --> <div class="app-page" id="page-events" hidden> <div class="roles-hero">   <a href="#" onclick="navigate('landing'); return false;" class="back-link">     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>     Back to all ways to serve   </a>   <p class="roles-hero-eyebrow">Timothy Lutheran &mdash; Community Events</p>   <h2>Events that bring us <em>together.</em></h2>   <p class="roles-hero-sub">Each of these events runs on the energy of volunteers. Click an event to see the roles and sign up.</p> </div> <main>
+  <div id="dynamic-events-container">
+    <p style="color:var(--text-muted);text-align:center;padding:2rem;">Loading events...</p>
+  </div>
+  <div style="text-align:center;margin-top:3rem;padding-bottom:2rem;">
+    <a href="#" onclick="navigate('landing'); return false;" class="back-btn-bottom">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      Back to all ways to serve
+    </a>
+  </div>
+</main> </div><!-- /page-events -->   <!-- ══ PAGE: CHRISTIAN EDUCATION ════════════════════════════════ --> <div class="app-page" id="page-education" hidden> <div class="roles-hero">   <a href="#" onclick="navigate('landing'); return false;" class="back-link">     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>     Back to all ways to serve   </a>   <p class="roles-hero-eyebrow">Timothy Lutheran &mdash; Christian Education</p>   <h2>Nurture faith <em>at every age.</em></h2>   <p class="roles-hero-sub">From Sunday school to confirmation mentoring &mdash; share what you know and walk alongside others as they grow.</p> </div> <main>   <div class="ministry-section">     <div class="ministry-header education">       <div class="ministry-icon">         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>       </div>       <div>         <div class="ministry-name">Christian Education</div>         <div class="ministry-tagline">Nurture faith and discipleship across every age and stage of life</div>       </div>     </div>     <div class="ministry-roles" style="border-color:rgba(201,151,58,0.18);">       <div class="role-grid">          <label class="role-card" for="r-sundayschool">           <input type="checkbox" id="r-sundayschool" name="roles" value="Sunday School Teacher" data-ministry="education">           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Sunday School Teacher</span></div>           <p class="role-desc">Lead a class through Bible stories and lessons each week. Curriculum provided; your heart for teaching matters most.</p>           <div class="role-meta">             <div class="role-meta-item"><strong>Commitment:</strong> Weekly during the school year</div>             <div class="role-meta-item"><strong>Training:</strong> Curriculum orientation provided</div>           </div>         </label>          <label class="role-card" for="r-youthgroup">           <input type="checkbox" id="r-youthgroup" name="roles" value="Youth Group Leader" data-ministry="education">           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Youth Group Leader</span></div>           <p class="role-desc">Walk alongside middle and high school students through discussion, activities, and faith-building events.</p>           <div class="role-meta">             <div class="role-meta-item"><strong>Commitment:</strong> Monthly + events</div>             <div class="role-meta-item"><strong>Open to:</strong> Adults 21+</div>           </div>         </label>          <label class="role-card" for="r-confirm">           <input type="checkbox" id="r-confirm" name="roles" value="Confirmation Mentor" data-ministry="education">           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Confirmation Mentor</span></div>           <p class="role-desc">Be paired with a confirmation student to meet, pray, and talk through what it means to affirm their faith. An investment that lasts a lifetime.</p>           <div class="role-meta"><div class="role-meta-item"><strong>Commitment:</strong> 1&ndash;2 years alongside a student</div></div>         </label>          <label class="role-card" for="r-vbs-gen">           <input type="checkbox" id="r-vbs-gen" name="roles" value="VBS General Interest" data-ministry="education">           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Vacation Bible School</span></div>           <p class="role-desc">Help during VBS week &mdash; leading groups, running stations, or helping behind the scenes. One of the most energizing weeks of the year.</p>           <div class="role-meta"><div class="role-meta-item"><strong>Commitment:</strong> One week each summer</div></div>         </label>        </div>     </div>   </div>    <div class="signup-section visible" id="edu-volunteer-form">     <div class="signup-section-header">       <div class="signup-icon" style="background:rgba(201,151,58,0.1);">         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:#7a5800;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>       </div>       <div>         <h3>Express your interest</h3>         <p>Select the roles that interest you above, then fill this out and we'll connect you with the ministry leader.</p>       </div>     </div>     <span class="form-section-label">Selected areas</span>     <div class="selected-roles-preview" id="edu-roles-preview"><em>No roles selected yet &mdash; click any card above.</em></div>     <div class="form-row">       <div class="form-field">         <label class="form-label" for="edu-name">Full Name *</label>         <input type="text" id="edu-name" class="form-input" placeholder="Jane Smith" autocomplete="name">       </div>       <div class="form-field">         <label class="form-label" for="edu-email">Email Address *</label>         <input type="email" id="edu-email" class="form-input" placeholder="jane@example.com" autocomplete="email">       </div>     </div>     <div class="form-field">       <label class="form-label" for="edu-notes">Anything else? <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>       <textarea id="edu-notes" class="form-textarea" placeholder="Experience with kids/youth, scheduling, questions&hellip;"></textarea>     </div>     <button class="btn-submit" type="button" style="background:#7a5800;">       Submit My Interest       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>     </button>     <p style="font-size:0.8rem;color:var(--text-muted);margin-top:0.75rem;">We'll pass your info to the right ministry leader and they'll be in touch soon.</p>   </div>  iv style="text-align:center;margin-top:2.5rem;padding-bottom:1rem;">
+    <a href="#" onclick="navigate('landing'); return false;" class="back-btn-bottom">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      Back to all ways to serve
+    </a>
+  </div>
+</main> </div><!-- /page-education -->   <!-- ══ PAGE: ACCEPTANCE ══════════════════════════════════════════ --> <div class="app-page" id="page-acceptance" hidden> <div class="roles-hero">   <a href="#" onclick="navigate('landing'); return false;" class="back-link">     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>     Back to all ways to serve   </a>   <p class="roles-hero-eyebrow">Timothy Lutheran &mdash; Care Ministry</p>   <h2>Welcome every <em>person.</em></h2>   <p class="roles-hero-sub">Help make sure no one walks through our doors &mdash; or through a hard season &mdash; alone.</p> </div> <main>   <div class="ministry-section">     <div class="ministry-header acceptance">       <div class="ministry-icon">         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>       </div>       <div>         <div class="ministry-name">Care Ministry</div>         <div class="ministry-tagline">Welcome every person and build a community where all belong</div>       </div>     </div>     <div class="ministry-roles" style="border-color:rgba(74,94,58,0.15);">       <div class="role-grid">          <label class="role-card" for="r-stephen">           <input type="checkbox" id="r-stephen" name="roles" value="Stephen Ministry" data-ministry="acceptance">           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Stephen Ministry</span></div>           <p class="role-desc">Provide one-on-one Christian care to people experiencing grief, illness, loneliness, divorce, or job loss. Walk alongside someone through a difficult season.</p>           <div class="role-meta">             <div class="role-meta-item"><strong>Commitment:</strong> Weekly meetings with a care receiver</div>             <div class="role-meta-item"><strong>Training:</strong> Comprehensive Stephen Ministry training provided</div>           </div>         </label>          <label class="role-card" for="r-hospitality">           <input type="checkbox" id="r-hospitality" name="roles" value="Hospitality / Coffee Hour" data-ministry="acceptance">           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Hospitality / Coffee Hour</span></div>           <p class="role-desc">Set up and serve refreshments after Sunday worship. A warm space for conversation and connection. Individuals, families, or small groups welcome.</p>           <div class="role-meta">             <div class="role-meta-item"><strong>Commitment:</strong> Occasional Sundays</div>             <div class="role-meta-item"><strong>Open to:</strong> Individuals, families, groups</div>           </div>         </label>          <label class="role-card" for="r-caring">           <input type="checkbox" id="r-caring" name="roles" value="Caring Ministry" data-ministry="acceptance">           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Caring Ministry</span></div>           <p class="role-desc">Reach out to members who are homebound, recovering, or grieving. A friendly visit, a card, or a phone call can make a profound difference.</p>           <div class="role-meta">             <div class="role-meta-item"><strong>Commitment:</strong> As available; flexible</div>             <div class="role-meta-item"><strong>Open to:</strong> Compassionate listeners</div>           </div>         </label>          <label class="role-card" for="r-midweek-dinner">           <input type="checkbox" id="r-midweek-dinner" name="roles" value="Advent &amp; Lent Midweek Dinner" data-ministry="acceptance">           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Advent &amp; Lent Midweek Dinner</span></div>           <p class="role-desc">Help prepare and serve dinner before midweek worship services during Advent and Lent. A meaningful way to nourish both body and spirit in these seasons of reflection and preparation.</p>           <div class="role-meta">             <div class="role-meta-item"><strong>Commitment:</strong> Selected Wednesday evenings in Advent &amp; Lent</div>             <div class="role-meta-item"><strong>Open to:</strong> Anyone who loves to cook or serve</div>           </div>         </label>        </div>     </div>   </div>    <div class="signup-section visible" id="acc-volunteer-form">     <div class="signup-section-header">       <div class="signup-icon" style="background:rgba(74,94,58,0.1);">         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:var(--moss);"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>       </div>       <div>         <h3>Express your interest</h3>         <p>Select the roles that interest you above, then fill this out and we'll connect you with the ministry leader.</p>       </div>     </div>     <span class="form-section-label">Selected areas</span>     <div class="selected-roles-preview" id="acc-roles-preview"><em>No roles selected yet &mdash; click any card above.</em></div>     <div class="form-row">       <div class="form-field">         <label class="form-label" for="acc-name">Full Name *</label>         <input type="text" id="acc-name" class="form-input" placeholder="Jane Smith" autocomplete="name">       </div>       <div class="form-field">         <label class="form-label" for="acc-email">Email Address *</label>         <input type="email" id="acc-email" class="form-input" placeholder="jane@example.com" autocomplete="email">       </div>     </div>     <div class="form-field">       <label class="form-label" for="acc-notes">Anything else? <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>       <textarea id="acc-notes" class="form-textarea" placeholder="Questions, prior experience, or anything that would help us connect you well&hellip;"></textarea>     </div>     <button class="btn-submit" type="button" style="background:var(--moss);">       Submit My Interest       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>     </button>     <p style="font-size:0.8rem;color:var(--text-muted);margin-top:0.75rem;">We'll pass your info to the right ministry leader and they'll be in touch soon.</p>   </div>  iv style="text-align:center;margin-top:2.5rem;padding-bottom:1rem;">
+    <a href="#" onclick="navigate('landing'); return false;" class="back-btn-bottom">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      Back to all ways to serve
+    </a>
+  </div>
+</main> </div><!-- /page-acceptance -->   <!-- ══ PAGE: OUTREACH ════════════════════════════════════════════ --> <div class="app-page" id="page-outreach" hidden> <div class="roles-hero">   <a href="#" onclick="navigate('landing'); return false;" class="back-link">     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>     Back to all ways to serve   </a>   <p class="roles-hero-eyebrow">Timothy Lutheran &mdash; Outreach Ministry</p>   <h2>Serve our neighbors <em>beyond our walls.</em></h2>   <p class="roles-hero-sub">Share God's love through hands-on service, prayer, and partnership with the community around us.</p> </div> <main>   <div class="ministry-section">     <div class="ministry-header outreach">       <div class="ministry-icon">         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>       </div>       <div>         <div class="ministry-name">Outreach</div>         <div class="ministry-tagline">Serve our neighbors and share God's love beyond our walls</div>       </div>     </div>     <div class="ministry-roles" style="border-color:rgba(58,78,92,0.13);">       <div class="role-grid">          <label class="role-card" for="r-pantry">           <input type="checkbox" id="r-pantry" name="roles" value="Community Pantry" data-ministry="outreach">           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Community Pantry</span></div>           <p class="role-desc">Help sort, stock, and distribute food and essentials to neighbors in need. A hands-on way to live out our faith in the community around us.</p>           <div class="role-meta">             <div class="role-meta-item"><strong>Commitment:</strong> Flexible volunteer shifts</div>             <div class="role-meta-item"><strong>Open to:</strong> All ages (youth with adult)</div>           </div>         </label>          <label class="role-card" for="r-service">           <input type="checkbox" id="r-service" name="roles" value="Service Projects" data-ministry="outreach">           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Service Projects</span></div>           <p class="role-desc">Participate in organized community service days, mission trips, and collaborative events with partner organizations.</p>           <div class="role-meta">             <div class="role-meta-item"><strong>Commitment:</strong> Occasional events</div>             <div class="role-meta-item"><strong>Open to:</strong> Individuals, families, youth</div>           </div>         </label>          <label class="role-card" for="r-prayer">           <input type="checkbox" id="r-prayer" name="roles" value="Prayer Ministry" data-ministry="outreach">           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Prayer Ministry</span></div>           <p class="role-desc">Commit to praying regularly for congregation members, our community, and the world. Receive prayer requests and lift them up from anywhere.</p>           <div class="role-meta">             <div class="role-meta-item"><strong>Commitment:</strong> Daily or weekly (self-directed)</div>             <div class="role-meta-item"><strong>Open to:</strong> All who feel called to pray</div>           </div>         </label>          <label class="role-card" for="r-bee">           <input type="checkbox" id="r-bee" name="roles" value="Bee Ministry" data-ministry="outreach">           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Bee Ministry</span></div>           <p class="role-desc">Join our Bee Ministry and help create handmade quilts, blankets, and items for those in need &mdash; a labor of love that stitches our community together.</p>           <div class="role-meta">             <div class="role-meta-item"><strong>Commitment:</strong> Regular meeting times (flexible)</div>             <div class="role-meta-item"><strong>Open to:</strong> All skill levels welcome</div>           </div>         </label>          <label class="role-card" for="r-concerts">           <input type="checkbox" id="r-concerts" name="roles" value="Community Concerts" data-ministry="outreach">           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Community Concerts</span></div>           <p class="role-desc">Help bring our three annual community concerts to life. Opportunities include spreading the word through promotion, setting up and cleaning up the venue, and preparing h&ocirc;rs d&rsquo;oeuvres and refreshments for guests.</p>           <div class="role-meta">             <div class="role-meta-item"><strong>Commitment:</strong> Three concerts per year</div>             <div class="role-meta-item"><strong>Areas:</strong> Promotion, Setup/Cleanup, Hospitality &amp; Refreshments</div>           </div>         </label>          <label class="role-card" for="r-neighboring">           <input type="checkbox" id="r-neighboring" name="roles" value="Neighboring Life Events" data-ministry="outreach">           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Neighboring Life Events</span></div>           <p class="role-desc">Help plan and host fellowship gatherings that connect our congregation with neighbors and build community beyond our walls. Part of our Neighboring Life Ministry, these events are rooted in hospitality and a spirit of welcome.</p>           <div class="role-meta">             <div class="role-meta-item"><strong>Commitment:</strong> Occasional events throughout the year</div>             <div class="role-meta-item"><strong>Open to:</strong> All who love building community</div>           </div>         </label>        </div>     </div>   </div>    <div class="signup-section visible" id="out-volunteer-form">     <div class="signup-section-header">       <div class="signup-icon" style="background:rgba(58,78,92,0.1);">         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:var(--slate);"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>       </div>       <div>         <h3>Express your interest</h3>         <p>Select the roles that interest you above, then fill this out and we'll connect you with the ministry leader.</p>       </div>     </div>     <span class="form-section-label">Selected areas</span>     <div class="selected-roles-preview" id="out-roles-preview"><em>No roles selected yet &mdash; click any card above.</em></div>     <div class="form-row">       <div class="form-field">         <label class="form-label" for="out-name">Full Name *</label>         <input type="text" id="out-name" class="form-input" placeholder="Jane Smith" autocomplete="name">       </div>       <div class="form-field">         <label class="form-label" for="out-email">Email Address *</label>         <input type="email" id="out-email" class="form-input" placeholder="jane@example.com" autocomplete="email">       </div>     </div>     <div class="form-field">       <label class="form-label" for="out-notes">Anything else? <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>       <textarea id="out-notes" class="form-textarea" placeholder="Questions, prior experience, or anything that would help us connect you well&hellip;"></textarea>     </div>     <button class="btn-submit" type="button" style="background:var(--slate);">       Submit My Interest       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>     </button>     <p style="font-size:0.8rem;color:var(--text-muted);margin-top:0.75rem;">We'll pass your info to the right ministry leader and they'll be in touch soon.</p>   </div>  iv style="text-align:center;margin-top:2.5rem;padding-bottom:1rem;">
+    <a href="#" onclick="navigate('landing'); return false;" class="back-btn-bottom">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      Back to all ways to serve
+    </a>
+  </div>
+</main> </div><!-- /page-outreach -->   <!-- ══ PAGE: GENERAL INTEREST ════════════════════════════════════ --> <div class="app-page" id="page-general" hidden> <div class="roles-hero">   <a href="#" onclick="navigate('landing'); return false;" class="back-link">     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>     Back to all ways to serve   </a>   <p class="roles-hero-eyebrow">Timothy Lutheran &mdash; Get Involved</p>   <h2>I just want <em>to help.</em></h2>   <p class="roles-hero-sub">Not sure where to start? Tell us a little about yourself and we'll reach out with opportunities that might be a good fit.</p> </div> <main>   <div class="signup-section visible" style="margin-top:0;">     <div class="signup-section-header">       <div class="signup-icon" style="background:rgba(30,45,74,0.08);">         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:var(--navy);"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>       </div>       <div>         <h3>Tell us about yourself</h3>         <p>No pressure, no commitment &mdash; just let us know you're interested and we'll take it from there.</p>       </div>     </div>     <div class="form-row">       <div class="form-field">         <label class="form-label" for="gen-name">Full Name *</label>         <input type="text" id="gen-name" class="form-input" placeholder="Jane Smith" autocomplete="name">       </div>       <div class="form-field">         <label class="form-label" for="gen-email">Email Address *</label>         <input type="email" id="gen-email" class="form-input" placeholder="jane@example.com" autocomplete="email">       </div>     </div>     <div class="form-field">       <label class="form-label" for="gen-phone">Phone <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>       <input type="tel" id="gen-phone" class="form-input" placeholder="(314) 555-0123" autocomplete="tel">     </div>     <div class="form-field">       <label class="form-label" for="gen-notes">What do you enjoy or feel gifted for? <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>       <textarea id="gen-notes" class="form-textarea" placeholder="Working with kids, music, hands-on projects, behind-the-scenes support, etc. &mdash; anything helps!"></textarea>     </div>     <button class="btn-submit" type="button">       Submit My Interest       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>     </button>     <p style="font-size:0.8rem;color:var(--text-muted);margin-top:0.75rem;">We'll follow up by email within a week.</p>   </div> iv style="text-align:center;margin-top:2.5rem;padding-bottom:1rem;">
+    <a href="#" onclick="navigate('landing'); return false;" class="back-btn-bottom">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      Back to all ways to serve
+    </a>
+  </div>
+</main> </div><!-- /page-general -->   <footer>   <div class="footer-logo"><div class="footer-logo-placeholder">&#10013;</div></div>   <p>     Timothy Lutheran Church &mdash; LCMS &mdash; St. Louis, Missouri<br>     6704 Fyler Ave, St. Louis, MO 63139<br>     <a href="https://timothystl.org">timothystl.org</a>   </p> </footer>  <script>
+// ── Page navigation ──────────────────────────────────────────────────
+function navigate(pageId) {
+  document.querySelectorAll('.app-page').forEach(function(p) { p.hidden = true; });
+  var target = document.getElementById('page-' + pageId);
+  if (target) { target.hidden = false; }
+  window.scrollTo({ top: 0, behavior: 'instant' });
+  if (pageId === 'events') { loadDynamicEvents(); }
+}
+
+// ── Role card checkbox toggle ────────────────────────────────────────
+document.addEventListener('change', function(e) {
+  var t = e.target;
+  if (t.type === 'checkbox' && t.name === 'roles') {
+    var card = t.closest('.role-card');
+    if (card) {
+      card.classList.toggle('selected', t.checked);
+      var chk = card.querySelector('.role-check');
+      if (chk) chk.textContent = t.checked ? '\\u2713' : '';
+    }
+    updatePreviews();
+  }
+  if (t.type === 'radio' && t.name === 'svc') {
+    document.querySelectorAll('#svc-chips .chip-label').forEach(function(l) {
+      l.classList.toggle('checked', l.querySelector('input').checked);
+    });
+  }
+  if (t.type === 'checkbox' && t.name === 'sun') {
+    t.closest('.chip-label').classList.toggle('checked', t.checked);
+  }
+});
+
+function roleTag(r, bg, border) {
+  return '<span style="display:inline-flex;align-items:center;gap:.3rem;background:' + bg + ';border:1px solid ' + border + ';border-radius:6px;padding:.2rem .65rem;font-size:.82rem;margin:.2rem .2rem 0 0;">' + r + '</span>';
+}
+
+function syncPreview(selector, previewId, formId, bg, border, emptyMsg, alwaysShow) {
+  var checked = Array.from(document.querySelectorAll(selector + ':checked'));
+  var preview = document.getElementById(previewId);
+  var form = document.getElementById(formId);
+  if (!preview) return;
+  preview.innerHTML = checked.length
+    ? checked.map(function(cb) { return roleTag(cb.value, bg, border); }).join('')
+    : '<em>' + emptyMsg + '</em>';
+  if (form && !alwaysShow) {
+    form.classList.toggle('visible', checked.length > 0);
+  }
+}
+
+function updatePreviews() {
+  syncPreview('input[name="roles"][data-ministry="worship"]', 'roles-preview', 'volunteer-form',
+    'rgba(30,45,74,0.08)', 'rgba(30,45,74,0.18)', 'No worship roles selected yet \\u2014 click a card above.', false);
+  syncPreview('input[name="roles"][data-ministry="education"]', 'edu-roles-preview', null,
+    'rgba(201,151,58,0.08)', 'rgba(201,151,58,0.25)', 'No roles selected yet \\u2014 click any card above.', true);
+  syncPreview('input[name="roles"][data-ministry="acceptance"]', 'acc-roles-preview', null,
+    'rgba(74,94,58,0.08)', 'rgba(74,94,58,0.2)', 'No roles selected yet \\u2014 click any card above.', true);
+  syncPreview('input[name="roles"][data-ministry="outreach"]', 'out-roles-preview', null,
+    'rgba(58,78,92,0.08)', 'rgba(58,78,92,0.2)', 'No roles selected yet \\u2014 click any card above.', true);
+}
+
+// ── Volunteer form submission ─────────────────────────────────────────
+function showThankYou(formEl) {
+  formEl.innerHTML = '<div style="text-align:center;padding:2.5rem 1rem;">'
+    + '<div style="font-size:2.5rem;margin-bottom:.75rem;color:var(--gold);">\\u2713</div>'
+    + '<h3 style="margin-bottom:.5rem;">Thank you!</h3>'
+    + '<p style="color:var(--text-muted);">We\\'ve received your interest and will be in touch soon.</p>'
+    + '</div>';
+}
+
+function submitVolunteer(data, formEl, btnEl) {
+  if (!data.name || !data.name.trim()) { alert('Please enter your name.'); return; }
+  if (!data.email || !data.email.trim()) { alert('Please enter your email address.'); return; }
+  var origHtml = btnEl.innerHTML;
+  btnEl.disabled = true;
+  btnEl.textContent = 'Sending\\u2026';
+  fetch('/volunteer/signup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(res) {
+    if (res.ok) { showThankYou(formEl); }
+    else { btnEl.disabled = false; btnEl.innerHTML = origHtml; alert('Something went wrong. Please try again.'); }
+  })
+  .catch(function() {
+    btnEl.disabled = false; btnEl.innerHTML = origHtml;
+    alert('Could not send. Please try again or contact the church office.');
+  });
+}
+
+// Worship
+document.querySelector('#volunteer-form .btn-submit').addEventListener('click', function() {
+  var svcEl = document.querySelector('[name=svc]:checked');
+  submitVolunteer({
+    ministry: 'worship',
+    name:    document.getElementById('f-name').value,
+    email:   document.getElementById('f-email').value,
+    phone:   document.getElementById('f-phone').value,
+    service: svcEl ? svcEl.value : 'both',
+    sundays: Array.from(document.querySelectorAll('[name=sun]:checked')).map(function(c) { return c.value; }),
+    roles:   Array.from(document.querySelectorAll('#page-worship [name=roles]:checked')).map(function(c) { return c.value; }),
+    notes:   document.getElementById('f-notes').value
+  }, document.getElementById('volunteer-form'), this);
+});
+
+// Christian Education
+document.querySelector('#edu-volunteer-form .btn-submit').addEventListener('click', function() {
+  submitVolunteer({
+    ministry: 'education',
+    name:  document.getElementById('edu-name').value,
+    email: document.getElementById('edu-email').value,
+    roles: Array.from(document.querySelectorAll('#page-education [name=roles]:checked')).map(function(c) { return c.value; }),
+    notes: document.getElementById('edu-notes').value
+  }, document.getElementById('edu-volunteer-form'), this);
+});
+
+// Acceptance Ministry
+document.querySelector('#acc-volunteer-form .btn-submit').addEventListener('click', function() {
+  submitVolunteer({
+    ministry: 'acceptance',
+    name:  document.getElementById('acc-name').value,
+    email: document.getElementById('acc-email').value,
+    roles: Array.from(document.querySelectorAll('#page-acceptance [name=roles]:checked')).map(function(c) { return c.value; }),
+    notes: document.getElementById('acc-notes').value
+  }, document.getElementById('acc-volunteer-form'), this);
+});
+
+// Outreach
+document.querySelector('#out-volunteer-form .btn-submit').addEventListener('click', function() {
+  submitVolunteer({
+    ministry: 'outreach',
+    name:  document.getElementById('out-name').value,
+    email: document.getElementById('out-email').value,
+    roles: Array.from(document.querySelectorAll('#page-outreach [name=roles]:checked')).map(function(c) { return c.value; }),
+    notes: document.getElementById('out-notes').value
+  }, document.getElementById('out-volunteer-form'), this);
+});
+
+// General Interest
+document.querySelector('#page-general .btn-submit').addEventListener('click', function() {
+  submitVolunteer({
+    ministry: 'general',
+    name:  document.getElementById('gen-name').value,
+    email: document.getElementById('gen-email').value,
+    phone: document.getElementById('gen-phone').value,
+    notes: document.getElementById('gen-notes').value
+  }, document.querySelector('#page-general .signup-section'), this);
+});
+
+// ── Dynamic community events ─────────────────────────────────────────
+var _eventsLoaded = false;
+
+function loadDynamicEvents() {
+  if (_eventsLoaded) return;
+  var container = document.getElementById('dynamic-events-container');
+  if (!container) return;
+  fetch('/api/events')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      _eventsLoaded = true;
+      if (!data.events || data.events.length === 0) {
+        container.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:2rem;">No upcoming events posted yet \\u2014 check back soon!</p>';
+        return;
+      }
+      var html = '<div class="event-volunteer-list">';
+      data.events.forEach(function(ev) {
+        var dateHtml = '';
+        if (ev.event_date) {
+          var parts = ev.event_date.split('-');
+          var months = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+          if (parts.length >= 2) {
+            var mon = months[parseInt(parts[1], 10)] || '';
+            var day = parts.length >= 3 ? parseInt(parts[2], 10) : '';
+            dateHtml = '<div class="ev-card-date"><span class="month">' + mon + '</span><span class="day">' + day + '</span></div>';
+          }
+        }
+        var rolesHtml = '';
+        if (ev.roles && ev.roles.length > 0) {
+          rolesHtml = '<div class="role-grid">';
+          ev.roles.forEach(function(role) {
+            var rid = 'r-ev-' + ev.id + '-' + role.id;
+            rolesHtml += '<label class="role-card" for="' + rid + '">'
+              + '<input type="checkbox" id="' + rid + '" name="ev-role-' + ev.id + '" value="' + escHtml(role.name) + '">'
+              + '<div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">' + escHtml(role.name) + '</span></div>';
+            if (role.description) {
+              rolesHtml += '<p class="role-desc">' + escHtml(role.description) + '</p>';
+            }
+            rolesHtml += '</label>';
+          });
+          rolesHtml += '</div>';
+        }
+        html += '<div class="ev-card" id="ev-card-' + ev.id + '">'
+          + '<button class="ev-card-header" onclick="toggleDynEvent(' + ev.id + ')" aria-expanded="false">'
+          + dateHtml
+          + '<div class="ev-card-info">'
+          + '<h3>' + escHtml(ev.name) + '</h3>'
+          + (ev.description ? '<p>' + escHtml(ev.description) + '</p>' : '')
+          + '</div>'
+          + '<div class="ev-card-cta">'
+          + '<span class="ev-volunteer-label">Volunteer for this</span>'
+          + '<svg class="ev-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
+          + '</div>'
+          + '</button>'
+          + '<div class="ev-card-roles" id="ev-roles-dyn-' + ev.id + '" hidden>'
+          + '<div style="display:flex;justify-content:flex-start;margin-bottom:1.25rem;">'
+          + '<button onclick="toggleDynEvent(' + ev.id + ')" class="back-btn-bottom" style="background:rgba(30,45,74,.08);color:var(--navy);border:1px solid var(--border);">'
+          + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>'
+          + 'Back to events</button></div>'
+          + '<div style="margin-bottom:1.5rem;padding:1.25rem;background:var(--cream);border-radius:12px;border:1px solid var(--border);">'
+          + '<h4 style="font-family:Lora,serif;font-size:1rem;font-weight:600;color:var(--navy);margin-bottom:1rem;">Your Contact Info</h4>'
+          + '<div class="form-row"><div class="form-field"><label class="form-label">Full Name *</label>'
+          + '<input type="text" id="ev-name-' + ev.id + '" class="form-input" placeholder="Jane Smith" autocomplete="name"></div>'
+          + '<div class="form-field"><label class="form-label">Email Address *</label>'
+          + '<input type="email" id="ev-email-' + ev.id + '" class="form-input" placeholder="jane@example.com" autocomplete="email"></div></div>'
+          + '<div class="form-field"><label class="form-label">Phone <span style="font-weight:400;">(optional)</span></label>'
+          + '<input type="tel" id="ev-phone-' + ev.id + '" class="form-input" placeholder="(314) 555-0123" autocomplete="tel"></div>'
+          + '</div>'
+          + (rolesHtml ? '<h4 style="font-family:Lora,serif;font-size:1rem;font-weight:600;color:var(--navy);margin-bottom:.75rem;">Select roles (optional)</h4>' + rolesHtml : '')
+          + '<div style="margin-top:1.25rem;">'
+          + '<div class="form-field"><label class="form-label">Notes <span style="font-weight:400;">(optional)</span></label>'
+          + '<textarea id="ev-notes-' + ev.id + '" class="form-textarea" placeholder="Any questions or preferences?"></textarea></div>'
+          + '</div>'
+          + '<button class="btn-submit" type="button" onclick="submitDynEvent(' + ev.id + ', \\'' + escHtml(ev.name) + '\\', this)" style="margin-top:1rem;">'
+          + 'Sign Up <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>'
+          + '</button>'
+          + '<div style="display:flex;justify-content:center;margin-top:1.5rem;">'
+          + '<button onclick="toggleDynEvent(' + ev.id + ')" class="back-btn-bottom" style="background:rgba(30,45,74,.08);color:var(--navy);border:1px solid var(--border);">'
+          + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>'
+          + 'Back to events</button></div>'
+          + '</div>'
+          + '</div>';
+      });
+      html += '</div>';
+      container.innerHTML = html;
+      // Initialize role-card toggle for dynamically created cards
+      container.addEventListener('change', function(e) {
+        if (e.target.type === 'checkbox' && e.target.name && e.target.name.startsWith('ev-role-')) {
+          var card = e.target.closest('.role-card');
+          if (card) {
+            card.classList.toggle('selected', e.target.checked);
+            var chk = card.querySelector('.role-check');
+            if (chk) chk.textContent = e.target.checked ? '\\u2713' : '';
+          }
+        }
+      });
+    })
+    .catch(function() {
+      container.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:2rem;">Could not load events. Please refresh the page.</p>';
+    });
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function toggleDynEvent(evId) {
+  var rolesEl = document.getElementById('ev-roles-dyn-' + evId);
+  var card = document.getElementById('ev-card-' + evId);
+  var btn = card ? card.querySelector('.ev-card-header') : null;
+  if (!rolesEl) return;
+  // Close all others first
+  document.querySelectorAll('[id^="ev-roles-dyn-"]').forEach(function(el) {
+    el.hidden = true;
+    var c = document.getElementById(el.id.replace('ev-roles-dyn-', 'ev-card-'));
+    if (c) { var b = c.querySelector('.ev-card-header'); if (b) b.setAttribute('aria-expanded', 'false'); }
+  });
+  var isOpen = rolesEl.hidden;
+  if (isOpen) {
+    rolesEl.hidden = false;
+    if (btn) btn.setAttribute('aria-expanded', 'true');
+    setTimeout(function() { rolesEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 50);
+  }
+}
+
+function submitDynEvent(evId, evName, btnEl) {
+  var name = (document.getElementById('ev-name-' + evId) || {}).value || '';
+  var email = (document.getElementById('ev-email-' + evId) || {}).value || '';
+  var phone = (document.getElementById('ev-phone-' + evId) || {}).value || '';
+  var notes = (document.getElementById('ev-notes-' + evId) || {}).value || '';
+  var roles = Array.from(document.querySelectorAll('[name="ev-role-' + evId + '"]:checked')).map(function(c) { return c.value; });
+  var formEl = btnEl.closest('.ev-card-roles');
+  submitVolunteer({
+    ministry: 'events',
+    event_id: evId,
+    event_name: evName,
+    name: name, email: email, phone: phone, roles: roles, notes: notes
+  }, formEl, btnEl);
+}
+</script>
+</body>
+</html>`;
+
+// ── ADMIN HTML ───────────────────────────────────────────────────────
+const ADMIN_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Volunteer Admin — Timothy Lutheran</title>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,600;1,400&family=Source+Sans+3:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#1E2D4A;--teal:#2E7EA6;--gold:#C9973A;--cream:#F7F3EC;--border:rgba(30,45,74,.12);}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Source Sans 3',sans-serif;background:var(--cream);color:#1A1A2A;}
+header{background:var(--navy);color:#fff;padding:.75rem 1.5rem;display:flex;align-items:center;justify-content:space-between;}
+.header-title{font-family:'Lora',serif;font-size:1.1rem;}
+.header-sub{font-size:.8rem;opacity:.7;margin-top:.1rem;}
+.btn-logout{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);padding:.4rem .9rem;border-radius:6px;font-size:.85rem;cursor:pointer;text-decoration:none;}
+.btn-logout:hover{background:rgba(255,255,255,.2);}
+.container{max-width:1100px;margin:0 auto;padding:1.5rem;}
+.tabs{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid var(--border);}
+.tab{padding:.5rem 1.1rem;border-radius:100px;font-size:.88rem;font-weight:600;cursor:pointer;background:rgba(30,45,74,.06);border:none;transition:all .2s;}
+.tab.active{background:var(--navy);color:#fff;}
+.section{margin-bottom:2.5rem;}
+.section-title{font-family:'Lora',serif;font-size:1.2rem;color:var(--navy);margin-bottom:1rem;display:flex;align-items:center;gap:.75rem;}
+.badge{background:var(--navy);color:#fff;border-radius:100px;padding:.15rem .6rem;font-size:.78rem;font-family:'Source Sans 3',sans-serif;}
+.card{background:#fff;border-radius:12px;border:1px solid var(--border);padding:1.1rem 1.25rem;margin-bottom:.75rem;}
+.card-header{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;}
+.card-name{font-weight:600;font-size:1rem;color:var(--navy);}
+.card-ministry{font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--teal);margin-top:.1rem;}
+.card-meta{font-size:.85rem;color:#4A4860;margin-top:.5rem;line-height:1.6;}
+.card-roles{margin-top:.5rem;display:flex;flex-wrap:wrap;gap:.3rem;}
+.role-tag{display:inline-block;background:rgba(30,45,74,.07);border:1px solid var(--border);border-radius:6px;padding:.15rem .6rem;font-size:.8rem;}
+.card-notes{margin-top:.5rem;font-size:.85rem;color:#6A6880;font-style:italic;}
+.card-date{font-size:.78rem;color:#8A8898;white-space:nowrap;}
+.btn-delete{background:none;border:1px solid rgba(192,57,43,.3);color:#c0392b;padding:.3rem .75rem;border-radius:6px;font-size:.8rem;cursor:pointer;transition:all .2s;}
+.btn-delete:hover{background:#c0392b;color:#fff;}
+.btn-primary{background:var(--navy);color:#fff;border:none;padding:.6rem 1.2rem;border-radius:8px;font-size:.9rem;font-weight:600;cursor:pointer;transition:background .2s;}
+.btn-primary:hover{background:var(--teal);}
+.btn-secondary{background:rgba(30,45,74,.08);color:var(--navy);border:1px solid var(--border);padding:.5rem 1rem;border-radius:8px;font-size:.85rem;font-weight:600;cursor:pointer;transition:all .2s;}
+.btn-secondary:hover{background:rgba(30,45,74,.15);}
+.btn-sm{padding:.35rem .75rem;font-size:.8rem;}
+.export-bar{display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap;}
+.filter-label{font-size:.85rem;color:#4A4860;}
+.ev-admin-card{background:#fff;border-radius:12px;border:1px solid var(--border);margin-bottom:1rem;overflow:hidden;}
+.ev-admin-header{display:flex;align-items:center;gap:1rem;padding:1rem 1.25rem;cursor:pointer;background:none;width:100%;text-align:left;border:none;}
+.ev-admin-header:hover{background:rgba(30,45,74,.03);}
+.ev-admin-name{font-family:'Lora',serif;font-weight:600;color:var(--navy);font-size:1rem;flex:1;}
+.ev-admin-date{font-size:.82rem;color:#8A8898;}
+.ev-admin-status{font-size:.75rem;font-weight:600;padding:.2rem .65rem;border-radius:100px;}
+.ev-admin-status.visible{background:rgba(46,126,166,.1);color:var(--teal);}
+.ev-admin-status.hidden{background:rgba(192,57,43,.1);color:#c0392b;}
+.ev-admin-body{padding:1.25rem;border-top:1px solid var(--border);}
+.form-row{display:flex;gap:1rem;flex-wrap:wrap;}
+.form-field{flex:1;min-width:180px;margin-bottom:.75rem;}
+.form-label{display:block;font-size:.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--navy);margin-bottom:.35rem;}
+.form-input,.form-textarea{width:100%;padding:.6rem .9rem;border:1.5px solid rgba(30,45,74,.2);border-radius:8px;font-size:.92rem;font-family:inherit;outline:none;transition:border-color .2s;}
+.form-input:focus,.form-textarea:focus{border-color:var(--teal);}
+.form-textarea{resize:vertical;min-height:70px;}
+.roles-list{margin-top:.75rem;}
+.role-admin-row{display:flex;align-items:center;gap:.75rem;padding:.5rem 0;border-bottom:1px solid var(--border);}
+.role-admin-row:last-child{border-bottom:none;}
+.role-admin-name{flex:1;font-size:.9rem;}
+.add-role-form{display:flex;gap:.5rem;margin-top:.75rem;flex-wrap:wrap;}
+.add-role-form input{flex:1;min-width:140px;}
+.chevron{width:18px;height:18px;transition:transform .2s;}
+.ev-admin-header[aria-expanded="true"] .chevron{transform:rotate(180deg);}
+.empty-msg{text-align:center;padding:2rem;color:#8A8898;font-size:.95rem;}
+.toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;gap:1rem;flex-wrap:wrap;}
+@media(max-width:600px){.form-row{flex-direction:column;}.toolbar{flex-direction:column;align-items:stretch;}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="header-title">Timothy Lutheran — Volunteer Admin</div>
+    <div class="header-sub">volunteer.timothystl.org</div>
+  </div>
+  <a href="#" onclick="doLogout()" class="btn-logout">Sign out</a>
+</header>
+<div class="container">
+  <div class="tabs" id="ministry-tabs">
+    <button class="tab active" onclick="setTab('all')">All</button>
+    <button class="tab" onclick="setTab('worship')">Worship</button>
+    <button class="tab" onclick="setTab('events')">Events</button>
+    <button class="tab" onclick="setTab('education')">Education</button>
+    <button class="tab" onclick="setTab('acceptance')">Acceptance</button>
+    <button class="tab" onclick="setTab('outreach')">Outreach</button>
+    <button class="tab" onclick="setTab('general')">General</button>
+  </div>
+
+  <!-- Signups section -->
+  <div id="signups-section">
+    <div class="toolbar">
+      <h2 class="section-title" id="signups-title">All Volunteers <span class="badge" id="signups-count">…</span></h2>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+        <button class="btn-secondary" onclick="printSignups()">Print List</button>
+        <a id="export-link" href="/admin/api/export.csv" class="btn-secondary" download>Export CSV</a>
+      </div>
+    </div>
+    <div id="signups-list"><p class="empty-msg">Loading...</p></div>
+  </div>
+
+  <!-- Events management section -->
+  <div id="events-section" style="margin-top:2.5rem;">
+    <div class="toolbar">
+      <h2 class="section-title">Community Events <span class="badge" id="events-count">…</span></h2>
+      <button class="btn-primary" onclick="showAddEventForm()">+ Add Event</button>
+    </div>
+    <div id="add-event-form" style="display:none;background:#fff;border-radius:12px;border:1px solid var(--border);padding:1.25rem;margin-bottom:1rem;">
+      <h3 style="font-family:'Lora',serif;font-size:1rem;color:var(--navy);margin-bottom:1rem;">New Event</h3>
+      <div class="form-row">
+        <div class="form-field">
+          <label class="form-label">Event Name *</label>
+          <input type="text" id="new-ev-name" class="form-input" placeholder="e.g. Easter Egg Hunt">
+        </div>
+        <div class="form-field">
+          <label class="form-label">Date</label>
+          <input type="date" id="new-ev-date" class="form-input">
+        </div>
+      </div>
+      <div class="form-field">
+        <label class="form-label">Description</label>
+        <textarea id="new-ev-desc" class="form-textarea" placeholder="Brief description for volunteers..."></textarea>
+      </div>
+      <div style="display:flex;gap:.5rem;margin-top:.5rem;">
+        <button class="btn-primary" onclick="saveNewEvent()">Save Event</button>
+        <button class="btn-secondary" onclick="document.getElementById('add-event-form').style.display='none'">Cancel</button>
+      </div>
+    </div>
+    <div id="events-list"><p class="empty-msg">Loading events...</p></div>
+  </div>
+</div>
+
+<script>
+var currentTab = 'all';
+
+function setTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+  event.target.classList.add('active');
+  var exportLink = document.getElementById('export-link');
+  if (exportLink) exportLink.href = '/admin/api/export.csv' + (tab !== 'all' ? '?ministry=' + tab : '');
+  loadSignups();
+}
+
+function doLogout() {
+  document.cookie = 'vol_auth=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
+  location.href = '/admin';
+}
+
+// ── Signups ──────────────────────────────────────────────────────────
+function loadSignups() {
+  var url = '/admin/api/signups' + (currentTab !== 'all' ? '?ministry=' + currentTab : '');
+  document.getElementById('signups-list').innerHTML = '<p class="empty-msg">Loading...</p>';
+  fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var items = data.signups || [];
+      document.getElementById('signups-count').textContent = items.length;
+      var labels = {all:'All',worship:'Worship',events:'Events',education:'Education',acceptance:'Acceptance',outreach:'Outreach',general:'General'};
+      document.getElementById('signups-title').innerHTML = (labels[currentTab]||currentTab) + ' Volunteers <span class="badge">' + items.length + '</span>';
+      if (!items.length) {
+        document.getElementById('signups-list').innerHTML = '<p class="empty-msg">No sign-ups yet.</p>';
+        return;
+      }
+      document.getElementById('signups-list').innerHTML = items.map(function(s) {
+        var roles = [];
+        try { roles = JSON.parse(s.roles || '[]'); } catch {}
+        var sundays = [];
+        try { sundays = JSON.parse(s.sundays || '[]'); } catch {}
+        var meta = [];
+        if (s.email) meta.push('<strong>Email:</strong> <a href="mailto:' + escHtml(s.email) + '">' + escHtml(s.email) + '</a>');
+        if (s.phone) meta.push('<strong>Phone:</strong> ' + escHtml(s.phone));
+        if (s.service) meta.push('<strong>Service:</strong> ' + escHtml(s.service));
+        if (sundays.length) meta.push('<strong>Sundays:</strong> ' + sundays.map(escHtml).join(', '));
+        if (s.event_name) meta.push('<strong>Event:</strong> ' + escHtml(s.event_name));
+        if (s.shirt_wanted) meta.push('<strong>T-shirt:</strong> ' + (s.shirt_size || 'Yes'));
+        var html = '<div class="card" id="signup-' + s.id + '">'
+          + '<div class="card-header"><div><div class="card-name">' + escHtml(s.name) + '</div>'
+          + '<div class="card-ministry">' + escHtml(s.ministry) + '</div></div>'
+          + '<div style="display:flex;align-items:center;gap:.75rem;">'
+          + '<span class="card-date">' + escHtml((s.created_at||'').slice(0,10)) + '</span>'
+          + '<button class="btn-delete btn-sm" onclick="deleteSignup(' + s.id + ')">Remove</button></div></div>'
+          + (meta.length ? '<div class="card-meta">' + meta.join(' &nbsp;&bull;&nbsp; ') + '</div>' : '')
+          + (roles.length ? '<div class="card-roles">' + roles.map(function(r){return '<span class="role-tag">'+escHtml(r)+'</span>';}).join('') + '</div>' : '')
+          + (s.notes ? '<div class="card-notes">"' + escHtml(s.notes) + '"</div>' : '')
+          + '</div>';
+        return html;
+      }).join('');
+    })
+    .catch(function() {
+      document.getElementById('signups-list').innerHTML = '<p class="empty-msg">Error loading sign-ups.</p>';
+    });
+}
+
+function deleteSignup(id) {
+  if (!confirm('Remove this volunteer sign-up?')) return;
+  fetch('/admin/api/signups/' + id, { method: 'DELETE' })
+    .then(function() { loadSignups(); });
+}
+
+function printSignups() {
+  window.print();
+}
+
+// ── Events management ────────────────────────────────────────────────
+function loadEvents() {
+  fetch('/admin/api/events')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var events = data.events || [];
+      document.getElementById('events-count').textContent = events.length;
+      if (!events.length) {
+        document.getElementById('events-list').innerHTML = '<p class="empty-msg">No events yet. Add one above.</p>';
+        return;
+      }
+      document.getElementById('events-list').innerHTML = events.map(function(ev) {
+        var statusClass = ev.hidden ? 'hidden' : 'visible';
+        var statusLabel = ev.hidden ? 'Hidden' : 'Visible';
+        return '<div class="ev-admin-card" id="ev-admin-' + ev.id + '">'
+          + '<button class="ev-admin-header" onclick="toggleEvAdmin(' + ev.id + ')" aria-expanded="false">'
+          + '<span class="ev-admin-name">' + escHtml(ev.name) + '</span>'
+          + '<span class="ev-admin-date">' + (ev.event_date ? escHtml(ev.event_date) : 'No date') + '</span>'
+          + '<span class="ev-admin-status ' + statusClass + '">' + statusLabel + '</span>'
+          + '<svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
+          + '</button>'
+          + '<div id="ev-admin-body-' + ev.id + '" style="display:none;">'
+          + '<div class="ev-admin-body">'
+          + '<div class="form-row">'
+          + '<div class="form-field"><label class="form-label">Event Name</label>'
+          + '<input type="text" id="ev-name-' + ev.id + '" class="form-input" value="' + escHtml(ev.name) + '"></div>'
+          + '<div class="form-field"><label class="form-label">Date</label>'
+          + '<input type="date" id="ev-date-' + ev.id + '" class="form-input" value="' + escHtml(ev.event_date||'') + '"></div>'
+          + '</div>'
+          + '<div class="form-field"><label class="form-label">Description</label>'
+          + '<textarea id="ev-desc-' + ev.id + '" class="form-textarea">' + escHtml(ev.description||'') + '</textarea></div>'
+          + '<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem;">'
+          + '<button class="btn-primary btn-sm" onclick="saveEvent(' + ev.id + ')">Save Changes</button>'
+          + '<button class="btn-secondary btn-sm" onclick="toggleEventVisibility(' + ev.id + ',' + (ev.hidden?0:1) + ')">'
+          + (ev.hidden ? 'Make Visible' : 'Hide Event') + '</button>'
+          + '<button class="btn-delete btn-sm" onclick="deleteEvent(' + ev.id + ')">Delete Event</button>'
+          + '</div>'
+          + '<h4 style="font-size:.88rem;font-weight:600;color:var(--navy);margin-bottom:.5rem;">Roles</h4>'
+          + '<div class="roles-list" id="roles-list-' + ev.id + '">'
+          + (ev.roles||[]).map(function(r) {
+              return '<div class="role-admin-row" id="role-row-' + r.id + '">'
+                + '<input type="text" class="form-input" style="flex:1;" id="role-name-' + r.id + '" value="' + escHtml(r.name) + '">'
+                + '<input type="text" class="form-input" style="flex:2;" id="role-desc-' + r.id + '" value="' + escHtml(r.description||'') + '" placeholder="Description...">'
+                + '<button class="btn-secondary btn-sm" onclick="saveRole(' + ev.id + ',' + r.id + ')">Save</button>'
+                + '<button class="btn-delete btn-sm" onclick="deleteRole(' + ev.id + ',' + r.id + ')">Del</button>'
+                + '</div>';
+            }).join('')
+          + '</div>'
+          + '<div class="add-role-form">'
+          + '<input type="text" id="new-role-name-' + ev.id + '" class="form-input" placeholder="Role name...">'
+          + '<input type="text" id="new-role-desc-' + ev.id + '" class="form-input" placeholder="Description...">'
+          + '<button class="btn-primary btn-sm" onclick="addRole(' + ev.id + ')">+ Role</button>'
+          + '</div>'
+          + '</div></div>'
+          + '</div>';
+      }).join('');
+    })
+    .catch(function() {
+      document.getElementById('events-list').innerHTML = '<p class="empty-msg">Error loading events.</p>';
+    });
+}
+
+function toggleEvAdmin(evId) {
+  var body = document.getElementById('ev-admin-body-' + evId);
+  var btn = document.querySelector('#ev-admin-' + evId + ' .ev-admin-header');
+  var isOpen = body.style.display !== 'none';
+  // Close all
+  document.querySelectorAll('[id^="ev-admin-body-"]').forEach(function(el) {
+    el.style.display = 'none';
+  });
+  document.querySelectorAll('.ev-admin-header').forEach(function(b) { b.setAttribute('aria-expanded','false'); });
+  if (!isOpen) {
+    body.style.display = '';
+    if (btn) btn.setAttribute('aria-expanded','true');
+  }
+}
+
+function saveEvent(evId) {
+  var name = document.getElementById('ev-name-' + evId).value;
+  var date = document.getElementById('ev-date-' + evId).value;
+  var desc = document.getElementById('ev-desc-' + evId).value;
+  fetch('/admin/api/events/' + evId, {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ name:name, event_date:date, description:desc, hidden:0, sort_order:0 })
+  }).then(function() { alert('Saved!'); loadEvents(); });
+}
+
+function toggleEventVisibility(evId, hidden) {
+  var name = document.getElementById('ev-name-' + evId).value;
+  var date = document.getElementById('ev-date-' + evId).value;
+  var desc = document.getElementById('ev-desc-' + evId).value;
+  fetch('/admin/api/events/' + evId, {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ name:name, event_date:date, description:desc, hidden:hidden, sort_order:0 })
+  }).then(function() { loadEvents(); });
+}
+
+function deleteEvent(evId) {
+  if (!confirm('Delete this event and all its roles? This cannot be undone.')) return;
+  fetch('/admin/api/events/' + evId, { method: 'DELETE' })
+    .then(function() { loadEvents(); });
+}
+
+function showAddEventForm() {
+  var f = document.getElementById('add-event-form');
+  f.style.display = f.style.display === 'none' ? '' : 'none';
+}
+
+function saveNewEvent() {
+  var name = document.getElementById('new-ev-name').value.trim();
+  if (!name) { alert('Please enter an event name.'); return; }
+  var date = document.getElementById('new-ev-date').value;
+  var desc = document.getElementById('new-ev-desc').value;
+  fetch('/admin/api/events', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ name:name, event_date:date, description:desc })
+  }).then(function() {
+    document.getElementById('new-ev-name').value = '';
+    document.getElementById('new-ev-date').value = '';
+    document.getElementById('new-ev-desc').value = '';
+    document.getElementById('add-event-form').style.display = 'none';
+    loadEvents();
+  });
+}
+
+function saveRole(evId, roleId) {
+  var name = document.getElementById('role-name-' + roleId).value;
+  var desc = document.getElementById('role-desc-' + roleId).value;
+  fetch('/admin/api/events/' + evId + '/roles/' + roleId, {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ name:name, description:desc, slots:0, sort_order:0 })
+  }).then(function() { alert('Role saved!'); });
+}
+
+function deleteRole(evId, roleId) {
+  if (!confirm('Delete this role?')) return;
+  fetch('/admin/api/events/' + evId + '/roles/' + roleId, { method: 'DELETE' })
+    .then(function() { loadEvents(); });
+}
+
+function addRole(evId) {
+  var name = (document.getElementById('new-role-name-' + evId)||{}).value||'';
+  var desc = (document.getElementById('new-role-desc-' + evId)||{}).value||'';
+  if (!name.trim()) { alert('Please enter a role name.'); return; }
+  fetch('/admin/api/events/' + evId + '/roles', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ name:name, description:desc })
+  }).then(function() {
+    document.getElementById('new-role-name-' + evId).value = '';
+    document.getElementById('new-role-desc-' + evId).value = '';
+    loadEvents();
+  });
+}
+
+function escHtml(str) {
+  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// Init
+loadSignups();
+loadEvents();
+</script>
+</body>
+</html>`;
