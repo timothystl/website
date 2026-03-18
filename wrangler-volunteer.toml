@@ -5,4 +5,4 @@ compatibility_date = "2024-01-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "tlc-volunteer-db"
-database_id = "REPLACE_WITH_VOLUNTEER_DB_ID"
+database_id = "9399ee53-3386-4084-9b6b-def46b88f96a"
