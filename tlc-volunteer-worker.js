@@ -103,27 +103,6 @@ async function initDb(db) {
 // 20 roles it means it was seeded with the old simple role list — replace
 // it with the full time-slotted schedule.
 async function migrateChristmasMarketRoles(db) {
-  const ev = await db.prepare("SELECT id FROM serve_events WHERE name='Christmas Market'").first();
-  if (!ev) return;
-  const count = await db.prepare('SELECT COUNT(*) as n FROM serve_roles WHERE event_id=?').bind(ev.id).first();
-  if (count && count.n >= 20) {
-    // Roles exist — check if start_time needs populating (added after initial seeding)
-    const needsFix = await db.prepare('SELECT COUNT(*) as n FROM serve_roles WHERE event_id=? AND (start_time="" OR start_time IS NULL)').bind(ev.id).first();
-    if (needsFix && needsFix.n > 0) {
-      // UPDATE in place so existing signups are preserved
-      for (let i = 0; i < XMAS_ROLES.length; i++) {
-        const r = XMAS_ROLES[i];
-        await db.prepare('UPDATE serve_roles SET start_time=?, end_time=? WHERE event_id=? AND name=?')
-          .bind(r.start_time||'', r.end_time||'', ev.id, r.name).run();
-      }
-    }
-    return;
-  }
-
-  // Wipe old roles (no signups yet, so signup_slots is also empty for this event)
-  await db.prepare('DELETE FROM signup_slots WHERE role_id IN (SELECT id FROM serve_roles WHERE event_id=?)').bind(ev.id).run();
-  await db.prepare('DELETE FROM serve_roles WHERE event_id=?').bind(ev.id).run();
-
   const XMAS_ROLES = [
     // ── Friday Dec 4 — Setup Day ─────────────────────────────────────────
     { name: 'Move stuff out of storage room', description: 'Bring items from basement storage room up to kitchen or over to parking lot as instructed.', slots: 4,  role_date: '2026-12-04', start_time: '9:00 AM',  end_time: '11:00 AM' },
@@ -185,6 +164,28 @@ async function migrateChristmasMarketRoles(db) {
     { name: 'Tear Down Tables and Chairs',     description: 'Stack on rental carts and cover with tarps.',                                                                slots: 6,  role_date: '2026-12-05', start_time: '6:00 PM',  end_time: '7:00 PM'  },
     { name: 'Tent Teardown',                   description: 'Collapse tents in teams of 6 and put in shipping container.',                                                slots: 12, role_date: '2026-12-05', start_time: '6:30 PM',  end_time: '7:30 PM'  },
   ];
+
+  const ev = await db.prepare("SELECT id FROM serve_events WHERE name='Christmas Market'").first();
+  if (!ev) return;
+  const count = await db.prepare('SELECT COUNT(*) as n FROM serve_roles WHERE event_id=?').bind(ev.id).first();
+  if (count && count.n >= 20) {
+    // Roles exist — check if start_time needs populating (added after initial seeding)
+    const needsFix = await db.prepare('SELECT COUNT(*) as n FROM serve_roles WHERE event_id=? AND (start_time="" OR start_time IS NULL)').bind(ev.id).first();
+    if (needsFix && needsFix.n > 0) {
+      // UPDATE in place so existing signups are preserved.
+      // Match by sort_order (set to insertion index) to avoid clobbering duplicate-named roles.
+      for (let i = 0; i < XMAS_ROLES.length; i++) {
+        const r = XMAS_ROLES[i];
+        await db.prepare('UPDATE serve_roles SET role_date=?, start_time=?, end_time=? WHERE event_id=? AND sort_order=?')
+          .bind(r.role_date||'', r.start_time||'', r.end_time||'', ev.id, i).run();
+      }
+    }
+    return;
+  }
+
+  // Wipe old roles (no signups yet, so signup_slots is also empty for this event)
+  await db.prepare('DELETE FROM signup_slots WHERE role_id IN (SELECT id FROM serve_roles WHERE event_id=?)').bind(ev.id).run();
+  await db.prepare('DELETE FROM serve_roles WHERE event_id=?').bind(ev.id).run();
 
   for (let i = 0; i < XMAS_ROLES.length; i++) {
     const r = XMAS_ROLES[i];
