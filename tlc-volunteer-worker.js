@@ -221,13 +221,15 @@ async function seedEvents(db) {
     },
     {
       name: 'Vacation Bible School',
-      description: 'Five mornings of Bible stories, crafts, music, and snacks. Kids love it — and leaders do too.',
+      description: 'Five evenings of Bible stories, crafts, music, and snacks. Kids love it — and leaders do too.',
       event_date: '2026-06-01', sort_order: 2,
       roles: [
         { name: 'Group Leader', description: 'Lead a crew of kids through the week\'s stations. Training provided.' },
         { name: 'Station Helper', description: 'Assist at a specific station — Bible story, games, crafts, or music. Great if you can only commit to part of the week.' },
-        { name: 'Crafts Coordinator', description: 'Plan and prep the daily craft projects. Gather supplies and run the craft station each morning.' },
+        { name: 'Crafts Coordinator', description: 'Plan and prep the daily craft projects. Gather supplies and run the craft station each evening.' },
         { name: 'Snacks', description: 'Provide or prepare themed snacks each day. A small thing that makes a big impression on hungry little people.' },
+        { name: 'Meal Prep', description: 'Help prepare and serve a simple evening meal for kids and volunteers each night. A great way to serve behind the scenes and keep everyone fueled.' },
+        { name: 'General Help', description: 'Not sure where you fit? Sign up as general help and we\'ll put you where you\'re needed most — whether that\'s setup, teardown, running supplies, or filling in wherever hands are short.' },
       ]
     },
     {
