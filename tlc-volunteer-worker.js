@@ -108,7 +108,7 @@ async function migrateChristmasMarketRoles(db) {
   const count = await db.prepare('SELECT COUNT(*) as n FROM serve_roles WHERE event_id=?').bind(ev.id).first();
   if (count && count.n >= 20) {
     // Roles exist — check if start_time needs populating (added after initial seeding)
-    const needsFix = await db.prepare('SELECT COUNT(*) as n FROM serve_roles WHERE event_id=? AND start_time=""').bind(ev.id).first();
+    const needsFix = await db.prepare('SELECT COUNT(*) as n FROM serve_roles WHERE event_id=? AND (start_time="" OR start_time IS NULL)').bind(ev.id).first();
     if (needsFix && needsFix.n > 0) {
       // UPDATE in place so existing signups are preserved
       for (let i = 0; i < XMAS_ROLES.length; i++) {
@@ -911,28 +911,33 @@ function parseTimeToMinutes(t) {
 
 function renderSlotsByTime(ev, dateFilter) {
   // Group roles by date + time window
-  var groups = {};
-  var order = [];
+  var groupMap = {};
+  var groups = [];
   var roles = dateFilter ? ev.roles.filter(function(r){ return r.role_date === dateFilter; }) : ev.roles;
   roles.forEach(function(role) {
     var key = (role.role_date||'') + '|' + (role.start_time||'') + '|' + (role.end_time||'');
-    if (!groups[key]) { groups[key] = []; order.push(key); }
-    groups[key].push(role);
+    if (!groupMap[key]) {
+      // Precompute sort minutes from role directly; fall back to end_time if start is absent
+      var mins = parseTimeToMinutes(role.start_time||'');
+      if (!mins) mins = parseTimeToMinutes(role.end_time||'');
+      groupMap[key] = { date: role.role_date||'', startT: role.start_time||'', endT: role.end_time||'', mins: mins, roles: [] };
+      groups.push(key);
+    }
+    groupMap[key].roles.push(role);
   });
-  // Sort by date then by start time numerically (not lexicographically)
-  order.sort(function(a, b) {
-    var pa = a.split('|'), pb = b.split('|');
-    if (pa[0] < pb[0]) return -1;
-    if (pa[0] > pb[0]) return 1;
-    return parseTimeToMinutes(pa[1]) - parseTimeToMinutes(pb[1]);
+  // Sort by date then by start time numerically
+  groups.sort(function(a, b) {
+    var ga = groupMap[a], gb = groupMap[b];
+    if (ga.date < gb.date) return -1;
+    if (ga.date > gb.date) return 1;
+    return ga.mins - gb.mins;
   });
   var html = '';
-  order.forEach(function(key) {
-    var parts = key.split('|');
-    var dateStr = parts[0]; var startT = parts[1]; var endT = parts[2];
-    var dayLabel = formatDayLabel(dateStr, startT, endT);
+  groups.forEach(function(key) {
+    var g = groupMap[key];
+    var dayLabel = formatDayLabel(g.date, g.startT, g.endT);
     html += '<div class="slot-group"><div class="slot-group-header">'+dayLabel+'</div><div class="slot-cards">';
-    groups[key].forEach(function(role) {
+    g.roles.forEach(function(role) {
       html += renderSlotCard(ev.id, role);
     });
     html += '</div></div>';
