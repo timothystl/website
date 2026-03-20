@@ -19,7 +19,7 @@ We are rebuilding the Timothy Lutheran Church website (timothystl.org) to replac
 ### Live Workers (Production)
 | Worker | Domain | File |
 |--------|--------|------|
-| timothystl-site | timothystl.org | `timothystl-site.html` (SPA) |
+| timothystl-site | timothystl.org | `public/index.html` (SPA) |
 | tlc-newsletter-admin | admin.timothystl.org | `tlc-admin-worker.js` |
 | tlc-links | links.timothystl.org | `tlc-links-worker.js` |
 | breeze-proxy-worker | volunteer.timothystl.org | `tlc-volunteer-worker.js` |
@@ -275,6 +275,34 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 - **Youth director** — Resistant to change, needs the simplest possible interface. Build the Youth Pages admin UI with extreme simplicity: password → list of pages → click to edit → one big "Save & Publish" button. No drafts, no accounts, no complexity. Image upload should work like Google Docs (click insert, pick file, done).
 - **Christmas Market** — Vendor registration is a Google Form link. Admin-managed page (Option B). Needs annual update of dates, description, photos, and form link.
 - **`/voters` page** — Admin-managed special page with downloadable reports and Zoom link. Not a plain redirect.
+
+---
+
+## CRITICAL: The Deployed File is `public/index.html`
+
+**DO NOT edit `timothystl-site.html`** — it is a stale duplicate and is NOT deployed anywhere.
+
+Both `wrangler-site.toml` (production) and `wrangler-test-site.toml` (test) deploy from `./public/`.
+The actual SPA is **`public/index.html`**. All HTML edits go there.
+
+`timothystl-site.html` in the repo root is outdated and should be ignored (or deleted eventually).
+
+---
+
+## Session State (as of 2026-03-20)
+
+### What's in `public/index.html` (current deployed content):
+- Nav: About → Worship → MDO (external) → Word of Life → Ministries → News & Events → Contact → Give
+- WOL page (`/wol`) — links out to wordoflifeschool.net
+- About page: correct vision/mission text, Mission Field section, correct staff emails
+- Events page: volunteer events loaded from volunteer.timothystl.org API
+- URL routing (pushState — direct URLs like /about work)
+- Footer: no LCMS in copyright line
+
+### What's next (Build Phase 2):
+- Admin portal: News & Events tab (`admin.timothystl.org`)
+- Wire `/news` page to pull from `news_items` D1 table
+- See Build Phases table below for full roadmap
 
 ---
 
