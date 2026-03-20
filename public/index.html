@@ -79,13 +79,13 @@ p:last-child{margin-bottom:0;}
 .btn-row{display:flex;gap:14px;flex-wrap:wrap;}
 
 /* HERO */
-.hero{background:var(--steel);padding:72px 28px 80px;position:relative;overflow:hidden;}
+.hero{background:var(--sky);padding:72px 28px 80px;position:relative;overflow:hidden;}
 .hero::before{content:'';position:absolute;top:-100px;right:-100px;width:500px;height:500px;background:radial-gradient(circle,rgba(212,146,42,.08) 0%,transparent 65%);pointer-events:none;}
 .hero::after{content:'';position:absolute;bottom:-60px;left:10%;width:360px;height:360px;background:radial-gradient(circle,rgba(61,98,124,.15) 0%,transparent 65%);pointer-events:none;}
 .hero-inner{max-width:1080px;margin:0 auto;display:grid;grid-template-columns:1fr 300px;gap:48px;align-items:center;position:relative;z-index:1;}
 .hero h1{color:white;margin-bottom:20px;}
-.hero-sub{font-size:17px;font-weight:300;color:var(--pale-sage);line-height:1.8;margin-bottom:32px;max-width:500px;}
-.hero-card{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);border-radius:var(--r-lg);padding:28px;}
+.hero-sub{font-size:17px;font-weight:300;color:rgba(255,255,255,.88);line-height:1.8;margin-bottom:32px;max-width:500px;}
+.hero-card{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.28);border-radius:var(--r-lg);padding:28px;}
 .hero-card-label{font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sage);margin-bottom:10px;}
 .hero-card-time{font-family:var(--serif);font-size:24px;color:white;margin-bottom:4px;}
 .hero-card-day{font-family:var(--sans);font-size:12px;font-weight:300;color:rgba(255,255,255,.6);margin-bottom:18px;}
@@ -228,7 +228,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
 /* RESPONSIVE */
 @media(max-width:900px){
   .hero-inner,.about-grid,.contact-grid,.welcome-inner{grid-template-columns:1fr;}
-  .hero-card{display:none;}
+  .hero-card{margin-top:8px;}
   .footer-inner{grid-template-columns:1fr 1fr;}
 }
 @media(max-width:620px){
@@ -1026,11 +1026,16 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
 </footer>
 
 <script>
-function showPage(id){
+function showPage(id, addHistory){
   document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
   var page=document.getElementById('page-'+id);
   if(page){page.classList.add('active');window.scrollTo(0,0);}
-  history.replaceState(null,'','/'+id);
+  var url = (id === 'home') ? '/' : '/'+id;
+  if(addHistory === false){
+    history.replaceState({page:id},'',url);
+  } else {
+    history.pushState({page:id},'',url);
+  }
 }
 document.getElementById('navToggle').addEventListener('click',function(){
   document.getElementById('navMobile').classList.toggle('open');
@@ -1038,11 +1043,21 @@ document.getElementById('navToggle').addEventListener('click',function(){
 function closeMobileNav(){
   document.getElementById('navMobile').classList.remove('open');
 }
-// Route on load based on URL path
+// Route on load based on URL path; replace (don't push) so back goes to previous site
 (function(){
   var path = window.location.pathname.replace(/^\//, '').replace(/\/$/, '');
-  if(path && document.getElementById('page-'+path)){showPage(path);}
+  if(path && document.getElementById('page-'+path)){
+    showPage(path, false);
+  } else {
+    history.replaceState({page:'home'},'','/');
+  }
 })();
+// Handle browser back/forward
+window.addEventListener('popstate', function(e){
+  var id = (e.state && e.state.page) ? e.state.page : 'home';
+  // call via window.showPage so the lazy-load overrides in the second script run too
+  window.showPage(id, false);
+});
 </script>
 
 <script>
@@ -1143,12 +1158,17 @@ async function loadVolunteerEvents() {
   }
 }
 
-// Load when news page is shown
-const origShowPage = window.showPage || function(){};
-window.showPage = function(id) {
+// Load when news page is shown; also handles pushState history
+window.showPage = function(id, addHistory) {
   document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
   var page = document.getElementById('page-'+id);
   if(page){page.classList.add('active');window.scrollTo(0,0);}
+  var url = (id === 'home') ? '/' : '/'+id;
+  if(addHistory === false){
+    history.replaceState({page:id},'',url);
+  } else {
+    history.pushState({page:id},'',url);
+  }
   if (id === 'news') loadNewsletters();
   if (id === 'events' && !volLoaded) { volLoaded = true; loadVolunteerEvents(); }
 };
