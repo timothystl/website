@@ -1209,9 +1209,10 @@ window.showPage = function(id, addHistory) {
   if (id === 'news') { loadNewsletters(); loadNewsItems(); }
   if (id === 'events' && !volLoaded) { volLoaded = true; loadVolunteerEvents(); }
 };
-// Load volunteer events if events page is active on initial load
+// Load data if landing directly on a lazy-loaded page
 (function(){
   var path = window.location.pathname.replace(/^\//, '').replace(/\/$/, '');
+  if (path === 'news') { loadNewsletters(); loadNewsItems(); }
   if (path === 'events') { volLoaded = true; loadVolunteerEvents(); }
 })();
 </script>
