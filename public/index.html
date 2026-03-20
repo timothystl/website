@@ -254,24 +254,24 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     <ul class="nav-links">
       <li><button onclick="showPage('about')">About</button></li>
       <li><button onclick="showPage('worship')">Worship</button></li>
-      <li><button onclick="showPage('sermons')">Sermons</button></li>
+      <li><a href="https://mdo.timothystl.org" target="_blank">MDO</a></li>
+      <li><button onclick="showPage('wol')">Word of Life</button></li>
       <li><button onclick="showPage('ministries')">Ministries</button></li>
-      <li><button onclick="showPage('events')">Events</button></li>
+      <li><button onclick="showPage('news')">News &amp; Events</button></li>
       <li><button onclick="showPage('contact')">Contact</button></li>
-      <li><button onclick="showPage('news')">News</button></li>
       <li><a href="https://timothystl.breezechms.com/give/online" target="_blank" class="nav-cta">Give</a></li>
     </ul>
   </div>
   <div class="nav-mobile" id="navMobile">
     <button onclick="showPage('about');closeMobileNav()">About</button>
     <button onclick="showPage('worship');closeMobileNav()">Worship</button>
-    <button onclick="showPage('sermons');closeMobileNav()">Sermons</button>
+    <a href="https://mdo.timothystl.org" target="_blank" onclick="closeMobileNav()">MDO</a>
+    <button onclick="showPage('wol');closeMobileNav()">Word of Life</button>
     <button onclick="showPage('ministries');closeMobileNav()">Ministries</button>
-    <button onclick="showPage('events');closeMobileNav()">Events</button>
+    <button onclick="showPage('news');closeMobileNav()">News &amp; Events</button>
     <button onclick="showPage('contact');closeMobileNav()">Contact</button>
-    <button onclick="showPage('news');closeMobileNav()">News</button>
     <button onclick="showPage('prayer');closeMobileNav()">Prayer Request</button>
-    <a href="https://timothystl.breezechms.com/give/online" target="_blank">Give Online</a>
+    <a href="https://timothystl.breezechms.com/give/online" target="_blank" onclick="closeMobileNav()">Give Online</a>
   </div>
 </nav>
 
@@ -877,6 +877,26 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       <div id="news-loading" style="text-align:center;padding:40px;color:var(--gray);font-family:var(--sans);font-size:14px;">Loading newsletters...</div>
       <div id="news-list" style="display:none;"></div>
       <div id="news-empty" style="display:none;text-align:center;padding:40px;color:var(--gray);font-family:var(--sans);font-size:14px;">No newsletters yet — check back soon.</div>
+    </div>
+  </section>
+</div>
+
+<!-- WORD OF LIFE -->
+<div id="page-wol" class="page">
+  <div class="page-hero">
+    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">A ministry of Timothy Lutheran</span>
+    <h1>Word of Life Lutheran School</h1>
+    <p>Providing a high-quality educational program in an environment where Christ prevails.</p>
+  </div>
+  <section class="section section--white">
+    <div class="wrap" style="max-width:720px;">
+      <span class="eyebrow">Our school</span>
+      <h2>Where Christ prevails</h2>
+      <p>Word of Life Lutheran School is a Christ-centered school providing high-quality education for students in the Lindenwood Park neighborhood. We believe that every child bears the image of God, and that the best education forms the whole person — mind, heart, and faith.</p>
+      <p>Our school is a ministry of Timothy Lutheran Church (LCMS), rooted in the conviction that Christian education is one of the most important investments a congregation can make in its neighborhood and in the future of the church.</p>
+      <div class="btn-row" style="margin-top:28px;">
+        <a href="https://wordoflifeschool.net" target="_blank" class="btn btn-primary">Visit wordoflifeschool.net →</a>
+      </div>
     </div>
   </section>
 </div>
