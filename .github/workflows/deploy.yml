@@ -3,11 +3,49 @@ name: Deploy TLC Website
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - main
+      - 'claude/**'
 
 jobs:
+
+  # ── TEST ENVIRONMENT ──────────────────────────────────────────────────────
+  # Deploys to test.timothystl.org on any non-main branch push.
+  # Production is never touched until code merges to main.
+
+  deploy-test-site:
+    name: Deploy test site (test.timothystl.org)
+    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install wrangler
+        run: npm install -g wrangler
+
+      - name: Deploy test site worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: wrangler deploy --config wrangler-test-site.toml
+
+      - name: Done
+        run: |
+          echo ""
+          echo "Test site deployed!"
+          echo "  Branch : ${{ github.ref_name }}"
+          echo "  Worker : timothystl-test-site"
+          echo "  URL    : https://test.timothystl.org"
+          echo ""
+          echo "First time only: add custom domain in Cloudflare Dashboard:"
+          echo "  timothystl-test-site  →  test.timothystl.org"
+          echo ""
+
+  # ── PRODUCTION ────────────────────────────────────────────────────────────
+  # Deploys all four production workers on push to main or manual trigger.
+
   deploy-site:
     name: Deploy main site (timothystl.org)
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,6 +60,7 @@ jobs:
 
   deploy-admin:
     name: Deploy newsletter admin (admin.timothystl.org)
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -62,6 +101,7 @@ jobs:
 
   deploy-links:
     name: Deploy links page (links.timothystl.org)
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -76,6 +116,7 @@ jobs:
 
   deploy-volunteer:
     name: Deploy volunteer sign-up (volunteer.timothystl.org)
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -91,18 +132,18 @@ jobs:
   done:
     name: All done
     needs: [deploy-site, deploy-admin, deploy-links, deploy-volunteer]
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Done
         run: |
           echo ""
-          echo "All workers deployed!"
+          echo "All production workers deployed!"
           echo ""
-          echo "If first time setup, add custom domains in Cloudflare Dashboard:"
-          echo "  timothystl-site → timothystl.org"
-          echo "  tlc-newsletter-admin → admin.timothystl.org"
-          echo "  tlc-links → links.timothystl.org"
-          echo "  tlc-volunteer → volunteer.timothystl.org"
+          echo "First time only: add custom domains in Cloudflare Dashboard:"
+          echo "  timothystl-site       →  timothystl.org"
+          echo "  tlc-newsletter-admin  →  admin.timothystl.org"
+          echo "  tlc-links             →  links.timothystl.org"
+          echo "  tlc-volunteer         →  volunteer.timothystl.org"
+          echo "  timothystl-test-site  →  test.timothystl.org"
           echo ""
-          echo "If first time for volunteer worker, add custom domain in Cloudflare Dashboard:"
-          echo "  tlc-volunteer → volunteer.timothystl.org"
