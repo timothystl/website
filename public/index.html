@@ -903,14 +903,25 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
 <!-- NEWS ARCHIVE -->
 <div id="page-news" class="page">
   <div class="page-hero">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Weekly updates</span>
+    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">What's happening at Timothy</span>
     <h1>News &amp; Newsletters</h1>
-    <p>What God is doing at Timothy Lutheran — week by week.</p>
+    <p>Announcements, updates, and weekly letters from our congregation.</p>
   </div>
+
+  <!-- NEWS ITEMS (from admin portal) -->
+  <section class="section section--linen" id="news-items-section" style="display:none;">
+    <div class="wrap">
+      <span class="eyebrow">Announcements</span>
+      <h2>Current news</h2>
+      <div id="news-items-list"></div>
+    </div>
+  </section>
+
+  <!-- NEWSLETTERS -->
   <section class="section section--white">
     <div class="wrap">
-      <span class="eyebrow">Latest</span>
-      <h2>Recent updates</h2>
+      <span class="eyebrow">From the pastor</span>
+      <h2>Weekly newsletters</h2>
       <div id="news-loading" style="text-align:center;padding:40px;color:var(--gray);font-family:var(--sans);font-size:14px;">Loading newsletters...</div>
       <div id="news-list" style="display:none;"></div>
       <div id="news-empty" style="display:none;text-align:center;padding:40px;color:var(--gray);font-family:var(--sans);font-size:14px;">No newsletters yet — check back soon.</div>
@@ -1062,23 +1073,49 @@ window.addEventListener('popstate', function(e){
 
 <script>
 // Load home page news items from admin worker API
-// Phase 2: uncomment and wire up once admin.timothystl.org/api/news endpoint exists
-// async function fetchHomeNews() {
-//   try {
-//     const res = await fetch('https://admin.timothystl.org/api/news?limit=3');
-//     if (!res.ok) throw new Error('not ok');
-//     const items = await res.json();
-//     const list = document.getElementById('home-news-list');
-//     if (!items || items.length === 0) return; // keep placeholders
-//     list.innerHTML = items.map(item => `
-//       <div class="news-item">
-//         <div class="news-item-date">${item.publish_date || ''}</div>
-//         <div class="news-item-title">${item.title}</div>
-//         <div class="news-item-summary">${item.summary || ''}</div>
-//       </div>`).join('');
-//   } catch(e) { /* keep static placeholders on error */ }
-// }
-// fetchHomeNews();
+async function fetchHomeNews() {
+  try {
+    const res = await fetch('https://admin.timothystl.org/api/news?limit=3');
+    if (!res.ok) throw new Error('not ok');
+    const items = await res.json();
+    const list = document.getElementById('home-news-list');
+    if (!items || items.length === 0) return; // keep placeholders
+    list.innerHTML = items.map(item => `
+      <div class="news-item">
+        <div class="news-item-date">${item.publish_date || ''}</div>
+        <div class="news-item-title">${item.title}</div>
+        <div class="news-item-summary">${item.summary || ''}</div>
+      </div>`).join('');
+  } catch(e) { /* keep static placeholders on error */ }
+}
+fetchHomeNews();
+
+// Load news items from admin worker API (for /news page)
+async function loadNewsItems() {
+  try {
+    const res = await fetch('https://admin.timothystl.org/api/news');
+    if (!res.ok) throw new Error('not ok');
+    const items = await res.json();
+    if (!items || items.length === 0) return;
+    const section = document.getElementById('news-items-section');
+    const list = document.getElementById('news-items-list');
+    section.style.display = '';
+    list.innerHTML = items.map(item => {
+      const hasBody = item.body && item.body.trim().length > 0;
+      const hasImage = item.image_url && item.image_url.trim().length > 0;
+      const id = 'ni-body-' + item.id;
+      return `<div style="background:white;border:1px solid var(--border);border-radius:14px;padding:24px 28px;margin-bottom:16px;box-shadow:var(--shadow);">
+  ${item.pinned ? `<div style="font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:6px;">Pinned</div>` : ''}
+  ${hasImage ? `<img src="${item.image_url}" alt="" style="width:100%;max-height:200px;object-fit:cover;border-radius:10px;margin-bottom:16px;">` : ''}
+  <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gray);margin-bottom:6px;">${item.publish_date || ''}</div>
+  <div style="font-family:var(--serif);font-size:20px;color:var(--steel);margin-bottom:10px;">${item.title}</div>
+  ${item.summary ? `<div style="font-family:var(--sans);font-size:15px;color:var(--charcoal);line-height:1.75;">${item.summary}</div>` : ''}
+  ${hasBody ? `<div id="${id}" style="display:none;font-family:var(--sans);font-size:15px;color:var(--charcoal);line-height:1.75;margin-top:12px;">${item.body.replace(/\n/g,'<br>')}</div>
+  <button onclick="var el=document.getElementById('${id}');var btn=this;if(el.style.display==='none'){el.style.display='block';btn.textContent='Show less ↑';}else{el.style.display='none';btn.textContent='Read more ↓';}" style="background:none;border:none;cursor:pointer;color:var(--mid);font-weight:700;font-size:14px;font-family:var(--sans);padding:8px 0 0 0;">Read more ↓</button>` : ''}
+</div>`;
+    }).join('');
+  } catch(e) { /* silently fail — section stays hidden */ }
+}
 
 // Load newsletters from admin worker API
 async function loadNewsletters() {
@@ -1169,7 +1206,7 @@ window.showPage = function(id, addHistory) {
   } else {
     history.pushState({page:id},'',url);
   }
-  if (id === 'news') loadNewsletters();
+  if (id === 'news') { loadNewsletters(); loadNewsItems(); }
   if (id === 'events' && !volLoaded) { volLoaded = true; loadVolunteerEvents(); }
 };
 // Load volunteer events if events page is active on initial load

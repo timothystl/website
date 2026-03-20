@@ -29,6 +29,18 @@ const DB_INIT_EVENTS = `CREATE TABLE IF NOT EXISTS events (
   sort_order INTEGER DEFAULT 0
 )`;
 
+const DB_INIT_NEWS_ITEMS = `CREATE TABLE IF NOT EXISTS news_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  summary TEXT,
+  body TEXT,
+  image_url TEXT,
+  publish_date TEXT,
+  expire_date TEXT,
+  pinned INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now'))
+)`;
+
 // ── HELPERS ─────────────────────────────────────────────────
 function authCookie(req) {
   const cookie = req.headers.get('cookie') || '';
@@ -106,12 +118,49 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
 .divider{border:none;border-top:1px solid var(--border);margin:24px 0;}
 .tag{font-family:var(--sans);font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--mist);color:var(--steel);}
 .preview-box{background:var(--linen);border:1px solid var(--border);border-radius:10px;padding:20px;margin-top:16px;font-size:13px;color:var(--gray);font-style:italic;}
+.tab-nav{background:var(--linen);border-bottom:2px solid var(--border);}
+.tab-nav-inner{max-width:860px;margin:0 auto;padding:0 28px;display:flex;}
+.tab{font-family:var(--sans);font-size:13px;font-weight:700;color:var(--gray);padding:12px 20px;text-decoration:none;border-bottom:3px solid transparent;margin-bottom:-2px;display:inline-block;transition:color .15s;}
+.tab:hover{color:var(--steel);}
+.tab-active{color:var(--steel);border-bottom-color:var(--amber);}
+.ni-row{display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;}
+.ni-row:last-child{border-bottom:none;}
+.ni-title{font-family:var(--serif);font-size:16px;color:var(--steel);flex:1;min-width:160px;}
+.ni-meta{font-family:var(--sans);font-size:11px;color:var(--gray);white-space:nowrap;}
+.ni-actions{display:flex;gap:8px;flex-shrink:0;}
+.badge{font-family:var(--sans);font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;}
+.badge-active{background:#e8f5e9;color:#1a3d1f;}
+.badge-expired{background:#fce8e8;color:#7a1f1f;}
+.badge-upcoming{background:var(--mist);color:var(--steel);}
+.badge-pinned{background:#FFF3D6;color:#7A4F00;}
+.checkbox-row{display:flex;align-items:center;gap:8px;margin-top:6px;}
+.checkbox-row input[type=checkbox]{width:auto;}
+.checkbox-row span{font-family:var(--sans);font-size:13px;font-weight:600;color:var(--charcoal);cursor:pointer;}
 </style>
 </head>
 <body>${body}</body>
 </html>`, {
     headers: { 'Content-Type': 'text/html; charset=utf-8' }
   });
+}
+
+// ── TOPBAR WITH TABS ─────────────────────────────────────────
+function topbarHtml(activeTab, extraLinks = '') {
+  return `<div class="topbar">
+  <div>
+    <div class="topbar-brand">Timothy Lutheran · Admin</div>
+  </div>
+  <div class="topbar-links">
+    ${extraLinks}
+    <a href="/logout">Sign out</a>
+  </div>
+</div>
+<nav class="tab-nav">
+  <div class="tab-nav-inner">
+    <a href="/" class="tab${activeTab === 'newsletter' ? ' tab-active' : ''}">Newsletter</a>
+    <a href="/newsitems" class="tab${activeTab === 'news' ? ' tab-active' : ''}">News &amp; Events</a>
+  </div>
+</nav>`;
 }
 
 // ── LOGIN PAGE ───────────────────────────────────────────────
@@ -249,6 +298,23 @@ export default {
     // Init DB
     try { await env.DB.prepare(DB_INIT_NEWSLETTERS).run(); } catch (e) {}
     try { await env.DB.prepare(DB_INIT_EVENTS).run(); } catch (e) {}
+    try { await env.DB.prepare(DB_INIT_NEWS_ITEMS).run(); } catch (e) {}
+
+    // ── PUBLIC: news items API ──
+    if (path === '/api/news' && method === 'GET') {
+      const limit = parseInt(url.searchParams.get('limit') || '20', 10);
+      const today = new Date().toISOString().split('T')[0];
+      const rows = await env.DB.prepare(
+        `SELECT id, title, summary, body, image_url, publish_date, expire_date, pinned
+         FROM news_items
+         WHERE publish_date <= ? AND (expire_date IS NULL OR expire_date >= ?)
+         ORDER BY pinned DESC, publish_date DESC
+         LIMIT ?`
+      ).bind(today, today, limit).all();
+      return new Response(JSON.stringify(rows.results), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      });
+    }
 
     // ── PUBLIC: newsletter archive API ──
     if (path === '/api/newsletters' && method === 'GET') {
@@ -374,15 +440,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
     if (path === '/new' && method === 'GET') {
       const today = new Date().toISOString().split('T')[0];
       return html(`
-<div class="topbar">
-  <div>
-    <div class="topbar-brand">Timothy Lutheran · Newsletter Admin</div>
-  </div>
-  <div class="topbar-links">
-    <a href="/">← All newsletters</a>
-    <a href="/logout">Sign out</a>
-  </div>
-</div>
+${topbarHtml('newsletter', `<a href="/">← All newsletters</a>`)}
 <div class="wrap">
   <div class="page-title">New newsletter</div>
   <div class="page-sub">Write your update, add events, and publish to the website and Beehiiv.</div>
@@ -596,6 +654,216 @@ addEvent();
       return new Response('', { status: 302, headers: { Location: '/' } });
     }
 
+    // ── NEWS ITEMS: LIST ──
+    if (path === '/newsitems' && method === 'GET') {
+      const items = await env.DB.prepare(
+        'SELECT * FROM news_items ORDER BY pinned DESC, publish_date DESC'
+      ).all();
+      const today = new Date().toISOString().split('T')[0];
+      const msgParam = url.searchParams.get('msg');
+      let alertHtml = '';
+      if (msgParam === 'saved') alertHtml = `<div class="alert alert-success">✓ News item saved.</div>`;
+      if (msgParam === 'deleted') alertHtml = `<div class="alert alert-info">Item deleted.</div>`;
+
+      const listHtml = items.results.length === 0
+        ? `<div style="text-align:center;padding:40px;color:var(--gray);font-size:14px;">No news items yet. Add your first announcement.</div>`
+        : items.results.map(item => {
+            let status = 'active';
+            if (item.publish_date && item.publish_date > today) status = 'upcoming';
+            else if (item.expire_date && item.expire_date < today) status = 'expired';
+            return `<div class="ni-row">
+  ${item.pinned ? `<span class="badge badge-pinned">Pinned</span>` : ''}
+  <span class="badge badge-${status}">${status}</span>
+  <div class="ni-title">${item.title}</div>
+  <div class="ni-meta">${item.publish_date || ''}${item.expire_date ? ' → ' + item.expire_date : ''}</div>
+  <div class="ni-actions">
+    <a href="/newsitems/edit/${item.id}" class="btn btn-sm btn-secondary">Edit</a>
+    <form method="POST" action="/newsitems/delete/${item.id}" onsubmit="return confirm('Delete this item?')" style="margin:0;">
+      <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+    </form>
+  </div>
+</div>`;
+          }).join('');
+
+      return html(`
+${topbarHtml('news', `<a href="https://timothystl.org/news" target="_blank">View site →</a>`)}
+<div class="wrap">
+  <div class="page-title">News &amp; Events</div>
+  <div class="page-sub">Manage announcements shown on the website homepage and news page.</div>
+  ${alertHtml}
+  <div class="btn-row" style="margin-bottom:28px;">
+    <a href="/newsitems/new" class="btn btn-primary">+ Add news item</a>
+  </div>
+  <div class="card">
+    <div class="card-title">All items</div>
+    ${listHtml}
+  </div>
+  <div style="margin-top:20px;padding:16px 20px;background:var(--mist);border-radius:10px;border-left:3px solid var(--steel);">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--steel);margin-bottom:6px;">How it works</div>
+    <div style="font-size:13px;color:var(--charcoal);line-height:1.9;">
+      Items appear on the homepage and /news page automatically.<br>
+      <strong>Pinned</strong> items always show first. Items auto-hide after their expire date.
+    </div>
+  </div>
+</div>`, 'TLC Admin — News & Events');
+    }
+
+    // ── NEWS ITEMS: NEW FORM ──
+    if (path === '/newsitems/new' && method === 'GET') {
+      const today = new Date().toISOString().split('T')[0];
+      const expire = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      return html(`
+${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
+<div class="wrap">
+  <div class="page-title">New news item</div>
+  <div class="page-sub">This will appear on the website homepage and news page immediately.</div>
+  <form method="POST" action="/newsitems/create">
+    <div class="card">
+      <div class="card-title">Content</div>
+      <div class="form-group">
+        <label>Title <span style="color:#B85C3A;">*</span></label>
+        <input type="text" name="title" required placeholder="e.g. Easter services — April 20">
+      </div>
+      <div class="form-group">
+        <label>Summary <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— shown on cards (2–3 sentences)</span></label>
+        <textarea name="summary" style="min-height:80px;" placeholder="Short description shown on the homepage and news page cards."></textarea>
+      </div>
+      <div class="form-group">
+        <label>Full text <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, shown when reader clicks "Read more"</span></label>
+        <textarea name="body" style="min-height:120px;" placeholder="Full details — optional. Leave blank if the summary is enough."></textarea>
+      </div>
+      <div class="form-group">
+        <label>Image URL <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional</span></label>
+        <input type="text" name="image_url" placeholder="https://...">
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Scheduling</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="form-group" style="margin:0;">
+          <label>Publish date</label>
+          <input type="date" name="publish_date" value="${today}">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Expire date <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— auto-hides after this date</span></label>
+          <input type="date" name="expire_date" value="${expire}">
+        </div>
+      </div>
+      <div class="form-group" style="margin-top:18px;margin-bottom:0;">
+        <label>Pin to top</label>
+        <div class="checkbox-row">
+          <input type="checkbox" name="pinned" id="pinned" value="1">
+          <span onclick="document.getElementById('pinned').click()">Show this item first, above all other news</span>
+        </div>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button type="submit" class="btn btn-primary">Save &amp; publish →</button>
+      <a href="/newsitems" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
+    </div>
+  </form>
+</div>`, 'TLC Admin — New News Item');
+    }
+
+    // ── NEWS ITEMS: CREATE (POST) ──
+    if (path === '/newsitems/create' && method === 'POST') {
+      const form = await request.formData();
+      const title = form.get('title') || '';
+      const summary = form.get('summary') || '';
+      const body = form.get('body') || '';
+      const image_url = form.get('image_url') || '';
+      const publish_date = form.get('publish_date') || new Date().toISOString().split('T')[0];
+      const expire_date = form.get('expire_date') || '';
+      const pinned = form.get('pinned') === '1' ? 1 : 0;
+      await env.DB.prepare(
+        'INSERT INTO news_items (title, summary, body, image_url, publish_date, expire_date, pinned) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).bind(title, summary, body, image_url, publish_date, expire_date || null, pinned).run();
+      return new Response('', { status: 302, headers: { Location: '/newsitems?msg=saved' } });
+    }
+
+    // ── NEWS ITEMS: EDIT FORM ──
+    if (path.startsWith('/newsitems/edit/') && method === 'GET') {
+      const id = path.split('/').pop();
+      const item = await env.DB.prepare('SELECT * FROM news_items WHERE id = ?').bind(id).first();
+      if (!item) return new Response('Not found', { status: 404 });
+      const v = (val) => (val || '').replace(/"/g, '&quot;');
+      return html(`
+${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
+<div class="wrap">
+  <div class="page-title">Edit news item</div>
+  <div class="page-sub">Changes go live immediately when you save.</div>
+  <form method="POST" action="/newsitems/update/${item.id}">
+    <div class="card">
+      <div class="card-title">Content</div>
+      <div class="form-group">
+        <label>Title <span style="color:#B85C3A;">*</span></label>
+        <input type="text" name="title" required value="${v(item.title)}">
+      </div>
+      <div class="form-group">
+        <label>Summary <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— shown on cards (2–3 sentences)</span></label>
+        <textarea name="summary" style="min-height:80px;">${item.summary || ''}</textarea>
+      </div>
+      <div class="form-group">
+        <label>Full text <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, shown when reader clicks "Read more"</span></label>
+        <textarea name="body" style="min-height:120px;">${item.body || ''}</textarea>
+      </div>
+      <div class="form-group">
+        <label>Image URL <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional</span></label>
+        <input type="text" name="image_url" value="${v(item.image_url)}">
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Scheduling</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="form-group" style="margin:0;">
+          <label>Publish date</label>
+          <input type="date" name="publish_date" value="${item.publish_date || ''}">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Expire date</label>
+          <input type="date" name="expire_date" value="${item.expire_date || ''}">
+        </div>
+      </div>
+      <div class="form-group" style="margin-top:18px;margin-bottom:0;">
+        <label>Pin to top</label>
+        <div class="checkbox-row">
+          <input type="checkbox" name="pinned" id="pinned" value="1"${item.pinned ? ' checked' : ''}>
+          <span onclick="document.getElementById('pinned').click()">Show this item first, above all other news</span>
+        </div>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button type="submit" class="btn btn-primary">Save changes →</button>
+      <a href="/newsitems" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
+    </div>
+  </form>
+</div>`, 'TLC Admin — Edit News Item');
+    }
+
+    // ── NEWS ITEMS: UPDATE (POST) ──
+    if (path.startsWith('/newsitems/update/') && method === 'POST') {
+      const id = path.split('/').pop();
+      const form = await request.formData();
+      const title = form.get('title') || '';
+      const summary = form.get('summary') || '';
+      const body = form.get('body') || '';
+      const image_url = form.get('image_url') || '';
+      const publish_date = form.get('publish_date') || '';
+      const expire_date = form.get('expire_date') || '';
+      const pinned = form.get('pinned') === '1' ? 1 : 0;
+      await env.DB.prepare(
+        'UPDATE news_items SET title=?, summary=?, body=?, image_url=?, publish_date=?, expire_date=?, pinned=? WHERE id=?'
+      ).bind(title, summary, body, image_url, publish_date, expire_date || null, pinned, id).run();
+      return new Response('', { status: 302, headers: { Location: '/newsitems?msg=saved' } });
+    }
+
+    // ── NEWS ITEMS: DELETE ──
+    if (path.startsWith('/newsitems/delete/') && method === 'POST') {
+      const id = path.split('/').pop();
+      await env.DB.prepare('DELETE FROM news_items WHERE id = ?').bind(id).run();
+      return new Response('', { status: 302, headers: { Location: '/newsitems?msg=deleted' } });
+    }
+
     // ── DASHBOARD ──
     const newsletters = await env.DB.prepare(
       'SELECT id, subject, published_at, beehiiv_id, created_at FROM newsletters ORDER BY published_at DESC'
@@ -631,16 +899,7 @@ addEvent();
 </div>`).join('');
 
     return html(`
-<div class="topbar">
-  <div>
-    <div class="topbar-brand">Timothy Lutheran · Newsletter Admin</div>
-  </div>
-  <div class="topbar-links">
-    <a href="https://timothystl.org/news" target="_blank">View archive →</a>
-    <a href="https://app.beehiiv.com" target="_blank">Beehiiv →</a>
-    <a href="/logout">Sign out</a>
-  </div>
-</div>
+${topbarHtml('newsletter', `<a href="https://timothystl.org/news" target="_blank">View archive →</a><a href="https://app.beehiiv.com" target="_blank">Beehiiv →</a>`)}
 <div class="wrap">
   <div class="page-title">Newsletters</div>
   <div class="page-sub">Write your weekly update, publish to the website, and send via Beehiiv.</div>
