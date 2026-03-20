@@ -342,6 +342,74 @@ export default {
       });
     }
 
+    // ── PUBLIC: newsletter archive page ──
+    if (path === '/news' && method === 'GET') {
+      const rows = await env.DB.prepare(
+        'SELECT id, subject, pastor_note, ministry_content, ministry_type, published_at, events FROM newsletters ORDER BY published_at DESC'
+      ).all();
+      const newsletters = [];
+      for (const row of rows.results) {
+        const evts = await env.DB.prepare('SELECT * FROM events WHERE newsletter_id = ? ORDER BY event_date, sort_order').bind(row.id).all();
+        newsletters.push({ ...row, events: evts.results });
+      }
+
+      const listHtml = newsletters.length === 0
+        ? `<p style="text-align:center;padding:48px 0;color:#7A6E60;font-family:'Source Sans 3',Arial,sans-serif;">No newsletters yet — check back soon.</p>`
+        : newsletters.map(n => {
+            const dateStr = formatDate(n.published_at);
+            const eventsHtml = n.events && n.events.length
+              ? `<div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;">${n.events.map(e =>
+                  `<span style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;background:#EDF5F8;color:#0A3C5C;padding:3px 10px;border-radius:999px;">${e.event_date ? new Date(e.event_date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' · ' : ''}${e.event_name}</span>`
+                ).join('')}</div>`
+              : '';
+            return `
+<div style="padding:24px 0;border-bottom:1px solid #E8E0D0;">
+  <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#D4922A;margin-bottom:6px;">${dateStr}</div>
+  <div style="font-family:'Lora',Georgia,serif;font-size:20px;color:#0A3C5C;margin-bottom:8px;">${n.subject}</div>
+  ${n.pastor_note ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:14px;color:#3D3530;line-height:1.75;">${n.pastor_note.replace(/\n/g,'<br>').substring(0,240)}${n.pastor_note.length > 240 ? '…' : ''}</div>` : ''}
+  ${eventsHtml}
+</div>`;
+          }).join('');
+
+      return new Response(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>News &amp; Updates — Timothy Lutheran Church</title>
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;600;700;800&family=Lora:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Source Sans 3',Arial,sans-serif;background:#FAF7F0;color:#3D3530;min-height:100vh;}
+.topbar{background:#0A3C5C;border-bottom:3px solid #D4922A;padding:0 28px;height:56px;display:flex;align-items:center;justify-content:space-between;}
+.topbar-brand{font-size:14px;font-weight:800;color:white;}
+.topbar-sub{font-size:11px;color:#D4922A;font-style:italic;font-family:'Lora',Georgia,serif;}
+.topbar-links a{font-size:13px;font-weight:600;color:rgba(255,255,255,.75);text-decoration:none;margin-left:20px;}
+.topbar-links a:hover{color:white;}
+.wrap{max-width:720px;margin:0 auto;padding:48px 28px;}
+h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6px;}
+.sub{font-size:14px;color:#7A6E60;margin-bottom:36px;}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div>
+    <div class="topbar-brand">Timothy Lutheran Church</div>
+    <div class="topbar-sub">from our Neighborhood to the Nations</div>
+  </div>
+  <div class="topbar-links">
+    <a href="https://timothystl.org">← Back to site</a>
+  </div>
+</div>
+<div class="wrap">
+  <h1>News &amp; Updates</h1>
+  <p class="sub">Weekly newsletters from Pastor and the Timothy Lutheran family.</p>
+  ${listHtml}
+</div>
+</body>
+</html>`, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+    }
+
     // ── LOGIN ──
     if (path === '/login' && method === 'POST') {
       const form = await request.formData();
