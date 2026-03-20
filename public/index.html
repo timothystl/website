@@ -51,7 +51,7 @@ p:last-child{margin-bottom:0;}
 .nav{position:sticky;top:0;z-index:100;background:var(--steel);border-bottom:3px solid var(--amber);}
 .nav-inner{max-width:1080px;margin:0 auto;padding:0 28px;height:64px;display:flex;align-items:center;justify-content:space-between;}
 .nav-brand{display:flex;align-items:center;gap:12px;cursor:pointer;}
-.nav-logo{width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.nav-logo-img{width:44px;height:44px;border-radius:50%;flex-shrink:0;object-fit:contain;}
 .nav-brand-name{font-family:var(--sans);font-size:14px;font-weight:800;color:white;display:block;}
 .nav-brand-sub{font-family:var(--sans);font-size:10px;font-weight:600;color:var(--amber);display:block;letter-spacing:.04em;}
 .nav-links{display:flex;align-items:center;gap:4px;list-style:none;}
@@ -249,12 +249,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
 <nav class="nav">
   <div class="nav-inner">
     <div class="nav-brand" onclick="showPage('home')">
-      <div class="nav-logo">
-        <svg width="16" height="20" viewBox="0 0 16 20" fill="none">
-          <rect x="6.5" y="0" width="3" height="20" rx="1.5" fill="#D4922A"/>
-          <rect x="0" y="6" width="16" height="3" rx="1.5" fill="white"/>
-        </svg>
-      </div>
+      <img src="/images/logo.png" alt="Timothy Lutheran Church" class="nav-logo-img">
       <div>
         <span class="nav-brand-name">Timothy Lutheran Church</span>
         <span class="nav-brand-sub">from our Neighborhood to the Nations</span>
@@ -269,7 +264,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       <li><button onclick="showPage('ministries')">Ministries</button></li>
       <li><button onclick="showPage('news')">News &amp; Events</button></li>
       <li><button onclick="showPage('contact')">Contact</button></li>
-      <li><a href="https://timothystl.breezechms.com/give/online" target="_blank" class="nav-cta">Give</a></li>
+      <li><button onclick="showPage('give')" class="nav-cta">Give</button></li>
     </ul>
   </div>
   <div class="nav-mobile" id="navMobile">
@@ -281,7 +276,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     <button onclick="showPage('news');closeMobileNav()">News &amp; Events</button>
     <button onclick="showPage('contact');closeMobileNav()">Contact</button>
     <button onclick="showPage('prayer');closeMobileNav()">Prayer Request</button>
-    <a href="https://timothystl.breezechms.com/give/online" target="_blank" onclick="closeMobileNav()">Give Online</a>
+    <button onclick="showPage('give');closeMobileNav()">Give Online</button>
   </div>
 </nav>
 
@@ -923,6 +918,44 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
   </section>
 </div>
 
+<!-- GIVE -->
+<div id="page-give" class="page">
+  <div class="page-hero">
+    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Support our ministry</span>
+    <h1>Give to Timothy Lutheran</h1>
+    <p>Your generosity makes this congregation's work possible — in our neighborhood and beyond.</p>
+  </div>
+  <section class="section section--white">
+    <div class="wrap" style="max-width:760px;">
+      <span class="eyebrow">Why we give</span>
+      <h2>Gathered in grace. Generous in love.</h2>
+      <p style="font-size:17px;line-height:1.8;color:var(--charcoal);margin-bottom:16px;">At Timothy Lutheran, we believe giving is a response to what God has already given us — not an obligation, but an act of worship. Every gift supports the life of this congregation: Sunday worship, Word of Life School, our food pantry, youth ministry, and the neighbors God places in our path each week.</p>
+      <p style="font-size:15px;line-height:1.8;color:var(--gray);">We are grateful for every gift, large or small. If you have questions about giving or would like to set up recurring support, reach out to our office at <a href="mailto:office@timothystl.org" style="color:var(--mid);font-weight:600;">office@timothystl.org</a>.</p>
+
+      <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:32px;margin-top:40px;">
+        <span class="eyebrow eyebrow--sky">Online giving</span>
+        <h3 style="margin-bottom:8px;">Give securely through Breeze</h3>
+        <p style="font-size:14px;color:var(--gray);line-height:1.7;margin-bottom:24px;">We use <strong>Breeze</strong> for secure online giving. You can give a one-time gift or set up automatic recurring giving — weekly, monthly, or whatever works for you. Breeze accepts all major debit and credit cards. Your giving history is always available in your Breeze account.</p>
+        <div class="btn-row">
+          <a href="https://timothystl.breezechms.com/give/online" target="_blank" class="btn btn-primary" style="font-size:15px;">Give online now →</a>
+        </div>
+        <p style="font-size:12px;color:var(--gray);margin-top:16px;">You'll be taken to our secure Breeze giving page. No account required for one-time gifts.</p>
+      </div>
+
+      <div style="margin-top:40px;display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        <div style="background:var(--warm);border:1px solid var(--border);border-radius:var(--r-md);padding:24px;">
+          <div style="font-family:var(--serif);font-size:17px;color:var(--steel);margin-bottom:8px;">Give by check</div>
+          <p style="font-size:13px;color:var(--gray);line-height:1.7;margin:0;">Make checks payable to <strong>Timothy Lutheran Church</strong> and mail or drop off at:<br><br>6704 Fyler Ave<br>St. Louis, MO 63139</p>
+        </div>
+        <div style="background:var(--warm);border:1px solid var(--border);border-radius:var(--r-md);padding:24px;">
+          <div style="font-family:var(--serif);font-size:17px;color:var(--steel);margin-bottom:8px;">Give in the offering</div>
+          <p style="font-size:13px;color:var(--gray);line-height:1.7;margin:0;">Offering plates are passed during our Sunday services at 8:00 and 10:45 am. You are always welcome to give — or simply to receive that Sunday's grace.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
 <!-- WORD OF LIFE -->
 <div id="page-wol" class="page">
   <div class="page-hero">
@@ -974,7 +1007,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
         <li><button onclick="showPage('prayer')">Prayer request</button></li>
         <li><button onclick="showPage('contact')">Contact</button></li>
       <li><button onclick="showPage('news')">News</button></li>
-        <li><a href="https://timothystl.breezechms.com/give/online" target="_blank">Give online</a></li>
+        <li><button onclick="showPage('give')">Give online</button></li>
       </ul>
     </div>
     <div class="footer-col">
