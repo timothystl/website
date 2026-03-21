@@ -149,13 +149,15 @@ p:last-child{margin-bottom:0;}
 .mdo-desc{font-family:var(--sans);font-size:13px;font-weight:300;color:var(--gray);line-height:1.65;}
 
 /* STAFF */
-.staff-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:20px;margin-top:40px;}
-.staff-card{background:var(--white);border:1px solid var(--border);border-radius:var(--r-md);padding:24px 20px;box-shadow:var(--shadow);text-align:center;border-top:3px solid var(--amber);}
+.staff-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:24px;margin-top:40px;}
+.staff-card{background:var(--white);border:1px solid var(--border);border-radius:var(--r-md);padding:28px 20px;box-shadow:var(--shadow);text-align:center;border-top:3px solid var(--amber);}
 .staff-card:nth-child(even){border-top-color:var(--sage);}
-.staff-avatar{width:64px;height:64px;border-radius:50%;background:var(--mist);border:2px solid var(--ice);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-family:var(--serif);font-size:20px;color:var(--steel);font-weight:700;}
-.staff-name{font-family:var(--serif);font-size:15px;color:var(--steel);margin-bottom:4px;}
+.staff-avatar{width:88px;height:88px;border-radius:50%;background:var(--mist);border:3px solid var(--ice);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-family:var(--serif);font-size:24px;color:var(--steel);font-weight:700;overflow:hidden;position:relative;}
+.staff-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+.staff-name{font-family:var(--serif);font-size:16px;color:var(--steel);margin-bottom:4px;}
 .staff-role{font-family:var(--sans);font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--gray);}
-.staff-email{display:block;margin-top:10px;font-family:var(--sans);font-size:12px;font-weight:600;color:var(--mid);}
+.staff-bio{font-family:var(--sans);font-size:13px;color:var(--gray);line-height:1.7;margin-top:12px;text-align:left;}
+.staff-email{display:block;margin-top:12px;font-family:var(--sans);font-size:12px;font-weight:600;color:var(--mid);}
 
 /* ABOUT VALUES */
 .about-grid{display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:start;}
@@ -475,51 +477,59 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       <h2>Staff &amp; leadership</h2>
       <div class="staff-grid">
         <div class="staff-card">
-          <div class="staff-avatar">AD</div>
+          <div class="staff-avatar"><img src="/images/staff/dinger.jpg" alt="Andrew Dinger" onerror="this.remove()">AD</div>
           <div class="staff-name">Andrew Dinger</div>
           <div class="staff-role">Lead Pastor</div>
+          <div class="staff-bio"><!-- bio --></div>
           <a href="mailto:dinger@timothystl.org" class="staff-email">dinger@timothystl.org</a>
         </div>
         <div class="staff-card">
-          <div class="staff-avatar">MG</div>
+          <div class="staff-avatar"><img src="/images/staff/matt.jpg" alt="Matt Gerzevske" onerror="this.remove()">MG</div>
           <div class="staff-name">Matt Gerzevske</div>
           <div class="staff-role">Assistant Pastor</div>
+          <div class="staff-bio"><!-- bio --></div>
           <a href="mailto:pastormatt@timothystl.org" class="staff-email">pastormatt@timothystl.org</a>
         </div>
         <div class="staff-card">
-          <div class="staff-avatar">MT</div>
+          <div class="staff-avatar"><img src="/images/staff/thompson.jpg" alt="Mark Thompson" onerror="this.remove()">MT</div>
           <div class="staff-name">Mark Thompson</div>
           <div class="staff-role">Director of Christian Education</div>
+          <div class="staff-bio"><!-- bio --></div>
           <a href="mailto:dce@timothystl.org" class="staff-email">dce@timothystl.org</a>
         </div>
         <div class="staff-card">
-          <div class="staff-avatar">JK</div>
+          <div class="staff-avatar"><img src="/images/staff/jinah.jpg" alt="Dr. Jinah Knapp" onerror="this.remove()">JK</div>
           <div class="staff-name">Dr. Jinah Knapp</div>
           <div class="staff-role">Music Director</div>
+          <div class="staff-bio"><!-- bio --></div>
           <a href="mailto:jinah@timothystl.org" class="staff-email">jinah@timothystl.org</a>
         </div>
         <div class="staff-card">
-          <div class="staff-avatar">RR</div>
+          <div class="staff-avatar"><img src="/images/staff/rall.jpg" alt="Ron Rall" onerror="this.remove()">RR</div>
           <div class="staff-name">Ron Rall</div>
           <div class="staff-role">Pastor Emeritus</div>
+          <div class="staff-bio"><!-- bio --></div>
           <a href="mailto:pastorrall@timothystl.org" class="staff-email">pastorrall@timothystl.org</a>
         </div>
         <div class="staff-card">
-          <div class="staff-avatar">CV</div>
+          <div class="staff-avatar"><img src="/images/staff/chauvо.jpg" alt="Chau Vo" onerror="this.remove()">CV</div>
           <div class="staff-name">Chau Vo</div>
           <div class="staff-role">Pastor to the Vietnamese Community</div>
+          <div class="staff-bio"><!-- bio --></div>
           <span class="staff-email" style="color:var(--gray);cursor:default;">Contact via office</span>
         </div>
         <div class="staff-card">
           <div class="staff-avatar">JV</div>
           <div class="staff-name">James Vo</div>
           <div class="staff-role">Office Assistant</div>
+          <div class="staff-bio"><!-- bio --></div>
           <a href="mailto:office@timothystl.org" class="staff-email">office@timothystl.org</a>
         </div>
         <div class="staff-card">
-          <div class="staff-avatar" style="font-size:28px;">🐕</div>
+          <div class="staff-avatar"><img src="/images/staff/noah.jpg" alt="Noah" onerror="this.remove()">🐕</div>
           <div class="staff-name">Noah</div>
           <div class="staff-role">Comfort Dog</div>
+          <div class="staff-bio"><!-- bio --></div>
           <a href="mailto:noah@timothystl.org" class="staff-email">noah@timothystl.org</a>
         </div>
       </div>
@@ -1121,6 +1131,9 @@ function closeMobileNav(){
 // Route on load based on URL path; replace (don't push) so back goes to previous site
 (function(){
   var path = window.location.pathname.replace(/^\//, '').replace(/\/$/, '');
+  // External redirects
+  if(path === 'zoom'){ window.location.replace('https://us02web.zoom.us/j/3147818673'); return; }
+  if(path === 'councilfiles'){ window.location.replace('https://drive.google.com/drive/folders/1pgqJ32H3HS7SNYnnf7rOswC5c87IAzA4?usp=drive_link'); return; }
   if(path && document.getElementById('page-'+path)){
     showPage(path, false);
   } else {
