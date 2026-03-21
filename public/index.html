@@ -217,6 +217,26 @@ textarea.form-input{min-height:120px;resize:vertical;}
 .page-hero h1{color:white;}
 .page-hero p{font-size:17px;color:rgba(255,255,255,.72);max-width:600px;margin:12px auto 0;font-weight:300;}
 
+/* RICH CONTENT (TinyMCE output) */
+.rich-content p{margin-bottom:14px;line-height:1.75;}
+.rich-content p:last-child{margin-bottom:0;}
+.rich-content h1,.rich-content h2,.rich-content h3,.rich-content h4{margin:20px 0 10px;font-family:var(--serif);color:var(--steel);}
+.rich-content ul,.rich-content ol{padding-left:24px;margin-bottom:14px;line-height:1.75;}
+.rich-content li{margin-bottom:6px;}
+.rich-content img{max-width:100%;border-radius:var(--r-md);margin:16px 0;}
+.rich-content a{color:var(--mid);font-weight:600;}
+.rich-content strong{font-weight:700;}
+.rich-content hr{border:none;border-top:1px solid var(--border);margin:20px 0;}
+
+/* POST ACCORDION (youth past events) */
+.post-accordion-item{border-bottom:1px solid var(--border);}
+.post-accordion-btn{width:100%;text-align:left;background:none;border:none;cursor:pointer;padding:18px 0;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;}
+.post-accordion-btn:hover .post-accordion-title{color:var(--mid);}
+.post-accordion-title{font-family:var(--serif);font-size:17px;color:var(--steel);transition:color .15s;}
+.post-accordion-date{font-family:var(--sans);font-size:12px;color:var(--gray);margin-top:3px;}
+.post-accordion-icon{font-size:18px;color:var(--steel);flex-shrink:0;margin-top:2px;}
+.post-accordion-body{display:none;padding-bottom:20px;}
+
 /* FOOTER */
 footer{background:var(--steel-dk2);padding:48px 28px 28px;}
 .footer-inner{max-width:1080px;margin:0 auto;display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:40px;margin-bottom:40px;}
@@ -1098,47 +1118,41 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
 
 <div id="page-youth" class="page">
   <div class="page-hero">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">For families at every stage</span>
-    <h1>Youth &amp; Family Ministry</h1>
-    <p>Formation for children, confirmation for middle schoolers, and community for parents and families.</p>
+    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Grades 7–12</span>
+    <h1>Youth Ministry</h1>
+    <p>Growing in faith, serving together, and building friendships that last.</p>
   </div>
-  <section class="section section--white">
-    <div class="wrap">
-      <span class="eyebrow">Programs</span>
-      <h2>Growing together in faith</h2>
-      <div class="min-grid">
-        <div class="min-card">
-          <h3>Sunday School</h3>
-          <p>Bible stories, songs, and formation for children during the 10:45 service. A place where kids encounter the living God in age-appropriate, engaging ways.</p>
-          <a href="#" onclick="showPage('contact')">Contact us →</a>
-        </div>
-        <div class="min-card">
-          <h3>Confirmation</h3>
-          <p>A two-year journey for middle schoolers exploring Lutheran faith, Scripture, and what it means to follow Jesus. Confirmation Sunday is a milestone for the whole congregation.</p>
-          <a href="#" onclick="showPage('contact')">Contact us →</a>
-        </div>
-        <div class="min-card">
-          <h3>VBS</h3>
-          <p>Vacation Bible School each summer — a high-energy week of worship, crafts, games, and Scripture for kids in the neighborhood. All are welcome.</p>
-          <a href="#" onclick="showPage('contact')">Contact us →</a>
-        </div>
-        <div class="min-card">
-          <h3>Easter Egg Hunt</h3>
-          <p>An annual neighborhood celebration of the Resurrection. Families, kids, candy, and the good news that Christ is risen — open to the whole community.</p>
-          <a href="#" onclick="showPage('contact')">Contact us →</a>
-        </div>
-        <div class="min-card">
-          <h3>Family Ministry</h3>
-          <p>Events, resources, and community for parents raising kids in faith. Because the home is the first place faith is formed.</p>
-          <a href="#" onclick="showPage('contact')">Contact us →</a>
-        </div>
-      </div>
+
+  <!-- Page content (from admin) -->
+  <section class="section section--white" id="youth-content-section">
+    <div class="wrap" style="max-width:760px;">
+      <div id="youth-content" class="rich-content"></div>
     </div>
   </section>
+
+  <!-- Upcoming posts -->
+  <section class="section section--linen" id="youth-upcoming-section" style="display:none;">
+    <div class="wrap">
+      <span class="eyebrow">Coming up</span>
+      <h2>Upcoming events</h2>
+      <div id="youth-upcoming-list"></div>
+    </div>
+  </section>
+
+  <!-- Past posts -->
+  <section class="section section--white" id="youth-past-section" style="display:none;">
+    <div class="wrap">
+      <span class="eyebrow eyebrow--sage">Recent activities</span>
+      <h2>Past events &amp; recaps</h2>
+      <div id="youth-past-list"></div>
+    </div>
+  </section>
+
+  <!-- Contact -->
   <section class="section section--linen">
     <div class="wrap" style="max-width:620px;text-align:center;">
       <span class="eyebrow eyebrow--sage">Get connected</span>
-      <h2>Questions about youth &amp; family?</h2>
+      <h2>Questions about youth ministry?</h2>
       <p style="color:var(--gray);margin-bottom:28px;">Reach out to our DCE (Director of Christian Education) — we'd love to connect your family with what's happening here.</p>
       <div class="btn-row" style="justify-content:center;">
         <a href="mailto:dce@timothystl.org" class="btn btn-primary">Email our DCE →</a>
@@ -1279,7 +1293,7 @@ async function loadNewsItems() {
   <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gray);margin-bottom:6px;">${item.publish_date || ''}</div>
   <div style="font-family:var(--serif);font-size:20px;color:var(--steel);margin-bottom:10px;">${item.title}</div>
   ${item.summary ? `<div style="font-family:var(--sans);font-size:15px;color:var(--charcoal);line-height:1.75;">${item.summary}</div>` : ''}
-  ${hasBody ? `<div id="${id}" style="display:none;font-family:var(--sans);font-size:15px;color:var(--charcoal);line-height:1.75;margin-top:12px;">${item.body.replace(/\n/g,'<br>')}</div>
+  ${hasBody ? `<div id="${id}" class="rich-content" style="display:none;margin-top:12px;">${item.body}</div>
   <button onclick="var el=document.getElementById('${id}');var btn=this;if(el.style.display==='none'){el.style.display='block';btn.textContent='Show less ↑';}else{el.style.display='none';btn.textContent='Read more ↓';}" style="background:none;border:none;cursor:pointer;color:var(--mid);font-weight:700;font-size:14px;font-family:var(--sans);padding:8px 0 0 0;">Read more ↓</button>` : ''}
 </div>`;
     }).join('');
@@ -1325,6 +1339,72 @@ async function loadNewsletters() {
   } catch(e) {
     document.getElementById('news-loading').textContent = 'Unable to load newsletters. Please check back later.';
   }
+}
+
+// Load youth page content and posts from admin worker API
+var youthLoaded = false;
+async function loadYouthPage() {
+  if (youthLoaded) return;
+  youthLoaded = true;
+  const today = new Date().toISOString().split('T')[0];
+
+  // Page content block
+  try {
+    const res = await fetch('https://admin.timothystl.org/api/ministry/youth');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.content && data.content.trim()) {
+        document.getElementById('youth-content').innerHTML = data.content;
+      } else {
+        document.getElementById('youth-content-section').style.display = 'none';
+      }
+    } else {
+      document.getElementById('youth-content-section').style.display = 'none';
+    }
+  } catch(e) {
+    document.getElementById('youth-content-section').style.display = 'none';
+  }
+
+  // Posts
+  try {
+    const res = await fetch('https://admin.timothystl.org/api/ministry/youth/posts');
+    if (!res.ok) return;
+    const posts = await res.json();
+    if (!posts || posts.length === 0) return;
+
+    const upcoming = posts.filter(function(p){ return p.post_date && p.post_date >= today; });
+    const past     = posts.filter(function(p){ return !p.post_date || p.post_date < today; });
+
+    if (upcoming.length > 0) {
+      document.getElementById('youth-upcoming-section').style.display = '';
+      document.getElementById('youth-upcoming-list').innerHTML = upcoming.map(function(p) {
+        var d = p.post_date ? new Date(p.post_date + 'T12:00:00') : null;
+        var dateLabel = d ? d.toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'}) : '';
+        return '<div style="background:white;border:1px solid var(--border);border-radius:14px;padding:28px;margin-bottom:16px;box-shadow:var(--shadow);">' +
+          (dateLabel ? '<div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:8px;">' + dateLabel + '</div>' : '') +
+          '<div style="font-family:var(--serif);font-size:22px;color:var(--steel);margin-bottom:16px;">' + p.title + '</div>' +
+          (p.body ? '<div class="rich-content">' + p.body + '</div>' : '') +
+          '</div>';
+      }).join('');
+    }
+
+    if (past.length > 0) {
+      document.getElementById('youth-past-section').style.display = '';
+      document.getElementById('youth-past-list').innerHTML = past.map(function(p, i) {
+        var d = p.post_date ? new Date(p.post_date + 'T12:00:00') : null;
+        var dateLabel = d ? d.toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'}) : '';
+        var bodyId = 'yp-body-' + (p.id || i);
+        return '<div class="post-accordion-item">' +
+          '<button class="post-accordion-btn" onclick="var el=document.getElementById(\'' + bodyId + '\');var ic=this.querySelector(\'.post-accordion-icon\');if(el.style.display===\'none\'){el.style.display=\'block\';ic.textContent=\'↑\';}else{el.style.display=\'none\';ic.textContent=\'↓\';}">' +
+          '<div><div class="post-accordion-title">' + p.title + '</div>' +
+          (dateLabel ? '<div class="post-accordion-date">' + dateLabel + '</div>' : '') +
+          '</div><span class="post-accordion-icon">↓</span></button>' +
+          '<div id="' + bodyId + '" class="post-accordion-body">' +
+          (p.body ? '<div class="rich-content">' + p.body + '</div>' : '') +
+          '</div></div>';
+      }).join('');
+    }
+  } catch(e) {}
 }
 
 // Load volunteer events from volunteer worker API
@@ -1376,12 +1456,14 @@ window.showPage = function(id, addHistory) {
     history.pushState({page:id},'',url);
   }
   if (id === 'news') { loadNewsletters(); loadNewsItems(); }
+  if (id === 'youth') { loadYouthPage(); }
   if (id === 'events' && !volLoaded) { volLoaded = true; loadVolunteerEvents(); }
 };
 // Load data if landing directly on a lazy-loaded page
 (function(){
   var path = window.location.pathname.replace(/^\//, '').replace(/\/$/, '');
   if (path === 'news') { loadNewsletters(); loadNewsItems(); }
+  if (path === 'youth') { loadYouthPage(); }
   if (path === 'events') { volLoaded = true; loadVolunteerEvents(); }
 })();
 </script>
