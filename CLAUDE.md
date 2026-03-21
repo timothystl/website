@@ -164,11 +164,15 @@ CREATE TABLE youth_pages (
 
 ## Design System
 
-### Colors (CSS Variables)
-- Primary: Steel blue `#0A3C5C`
-- Accent: Amber/Gold `#D4922A`
-- Supporting: Sage green `#6B8F71`, Sky blue `#5C8FA8`
-- Neutrals: Warm cream `#FAF7F0`, White, Charcoal, Gray
+### Colors (CSS Variables) — matches volunteer page color system
+- Primary: Navy `#1E2D4A` (--steel)
+- Accent: Gold `#C9973A` (--amber)
+- Teal `#2E7EA6` (--mid/--teal) — links, Beekeepers, Christmas Market
+- Moss `#4A5E3A` (--sage) — nav header, Stephen Ministry (Acceptance)
+- Slate `#3A4E5C` (--slate) — Food Pantry (Outreach)
+- Plum `#8A6A8A` (--plum-light) — LWML (General Interest)
+- Backgrounds: Cream `#F7F3EC`, Warm White `#FBF8F3`, Linen `#EDE9E0`
+- Text: `#1A1A2A` primary, `#4A4860` secondary
 
 ### Typography
 - Headings/quotes: Lora (serif)
@@ -252,13 +256,13 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 | Phase | What | Status |
 |-------|------|--------|
 | 1 | test.timothystl.org setup | **DONE** — deploys from `claude/**` branches |
-| 2 | Admin portal: News & Events tab | TO DO |
+| 2 | Admin portal: News & Events tab | **DONE** — tab exists, DB wired, API live at /api/news |
 | 3 | Admin portal: Youth Pages tab (WYSIWYG, for youth director) | TO DO |
-| 4 | Wire /news and /youth/* on main site | TO DO |
-| 5 | Ministry landing pages with photos | TO DO (need photos from owner) |
+| 4 | Wire /news and /youth/* on main site | **DONE for /news** — fetches /api/news, renders cards, section auto-shows when items exist. /youth/* loads dynamically but youth director admin UI (Phase 3) still needed |
+| 5 | Ministry landing pages with photos | **DONE** (session 2026-03-21) — /music /stephen /foodpantry /bees /christmasmarket all built with hero image placeholder support and CTA button bars. Photos still needed from owner. |
 | 6 | Static page audit: migrate from Tithely/Breeze | TO DO |
 | 7 | SEO: Schema.org, OG tags, meta descriptions | TO DO |
-| 8 | Design reference page | TO DO (was in progress) |
+| 8 | Design reference page | **REPLACED** by /manual staff reference guide (covers colors, header photos, button editing, annual tasks) |
 | 9 | DNS cutover. Cancel Tithely/Breeze. | LAST STEP |
 
 ---
@@ -289,20 +293,24 @@ The actual SPA is **`public/index.html`**. All HTML edits go there.
 
 ---
 
-## Session State (as of 2026-03-20)
+## Session State (as of 2026-03-21)
 
 ### What's in `public/index.html` (current deployed content):
 - Nav: About → Worship → MDO (external) → Word of Life → Ministries → News & Events → Contact → Give
+- **Color system:** Matches volunteer page — Navy #1E2D4A, Gold #C9973A, Moss #4A5E3A, Teal #2E7EA6, Slate #3A4E5C, Plum #8A6A8A. Background texture added.
+- **Nav header:** Moss green (--sage), logo in white circle
 - WOL page (`/wol`) — links out to wordoflifeschool.net
 - About page: correct vision/mission text, Mission Field section, correct staff emails
 - Events page: volunteer events loaded from volunteer.timothystl.org API
+- **News page (`/news`):** Fetches live from admin.timothystl.org/api/news + newsletter archive
+- **Ministry landing pages:** /music /stephen /foodpantry /bees /christmasmarket — all built with hero image placeholders and CTA button bars. Full-card clickable.
 - URL routing (pushState — direct URLs like /about work)
 - Footer: no LCMS in copyright line
+- **Staff manual:** `/manual` — documents header photos, button editing, Christmas Market annual update, color reference
 
-### What's next (Build Phase 2):
-- Admin portal: News & Events tab (`admin.timothystl.org`)
-- Wire `/news` page to pull from `news_items` D1 table
-- See Build Phases table below for full roadmap
+### What's next (Phase 3):
+- Admin portal: Youth Pages tab (WYSIWYG editor for youth director)
+- Then: Phase 6 static page audit, Phase 7 SEO
 
 ---
 
