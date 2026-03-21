@@ -116,7 +116,7 @@ body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-he
     <span class="card-arrow">&#x203A;</span>
   </a>
 
-  <a class="link-card" href="https://volunteer.timothystl.org" target="_blank" rel="noopener">
+  <a class="link-card" href="https://volunteer.timothystl.org" target="_blank" rel="noopener noreferrer">
     <div class="card-icon icon--sage">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B8F71" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/><path d="M12 21.23V12"/><path d="M7.5 9.5L12 12l4.5-2.5"/></svg>
     </div>
