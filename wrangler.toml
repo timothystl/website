@@ -10,3 +10,7 @@ database_id = "REPLACE_WITH_DATABASE_ID"
 [[r2_buckets]]
 binding = "IMAGES"
 bucket_name = "tlc-news-images"
+
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "tlc-news-images"
