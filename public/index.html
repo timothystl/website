@@ -1123,10 +1123,27 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     <p>Growing in faith, serving together, and building friendships that last.</p>
   </div>
 
-  <!-- Page content (from admin) -->
-  <section class="section section--white" id="youth-content-section">
-    <div class="wrap" style="max-width:760px;">
-      <div id="youth-content" class="rich-content"></div>
+  <!-- Page content (from admin) + sidebar -->
+  <section class="section section--white">
+    <div class="wrap">
+      <div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start;">
+        <div id="youth-content-section" style="flex:1 1 440px;min-width:0;">
+          <div id="youth-content" class="rich-content"></div>
+        </div>
+        <aside style="flex:0 0 210px;">
+          <div style="background:var(--linen);border:1px solid var(--border);border-radius:14px;padding:20px 22px;position:sticky;top:80px;">
+            <div style="font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gray);margin-bottom:14px;">Youth &amp; Family Ministries</div>
+            <div style="display:flex;flex-direction:column;gap:2px;">
+              <a href="/youth" onclick="event.preventDefault();showPage('youth')" style="display:block;font-family:var(--sans);font-size:14px;font-weight:600;color:var(--steel);padding:7px 10px;border-radius:8px;text-decoration:none;background:white;border:1px solid var(--border);">Youth Ministry</a>
+              <a href="/sundayschool" onclick="event.preventDefault();showPage('sundayschool')" style="display:block;font-family:var(--sans);font-size:14px;font-weight:600;color:var(--steel);padding:7px 10px;border-radius:8px;text-decoration:none;margin-top:4px;">Sunday School →</a>
+              <a href="/confirmation" onclick="event.preventDefault();showPage('confirmation')" style="display:block;font-family:var(--sans);font-size:14px;font-weight:600;color:var(--steel);padding:7px 10px;border-radius:8px;text-decoration:none;">Confirmation →</a>
+              <a href="/vbs" onclick="event.preventDefault();showPage('vbs')" style="display:block;font-family:var(--sans);font-size:14px;font-weight:600;color:var(--steel);padding:7px 10px;border-radius:8px;text-decoration:none;">Vacation Bible School →</a>
+              <a href="/egghunt" onclick="event.preventDefault();showPage('egghunt')" style="display:block;font-family:var(--sans);font-size:14px;font-weight:600;color:var(--steel);padding:7px 10px;border-radius:8px;text-decoration:none;">Easter Egg Hunt →</a>
+              <a href="/family" onclick="event.preventDefault();showPage('family')" style="display:block;font-family:var(--sans);font-size:14px;font-weight:600;color:var(--steel);padding:7px 10px;border-radius:8px;text-decoration:none;">Family Ministry →</a>
+            </div>
+          </div>
+        </aside>
+      </div>
     </div>
   </section>
 
@@ -1145,21 +1162,6 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       <span class="eyebrow eyebrow--sage">Recent activities</span>
       <h2>Past events &amp; recaps</h2>
       <div id="youth-past-list"></div>
-    </div>
-  </section>
-
-  <!-- Sub-pages -->
-  <section class="section section--linen">
-    <div class="wrap">
-      <span class="eyebrow eyebrow--sage">Programs</span>
-      <h2>Explore youth programs</h2>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-top:8px;">
-        <a href="/sundayschool" onclick="event.preventDefault();showPage('sundayschool')" style="display:block;background:white;border:1px solid var(--border);border-radius:12px;padding:20px 22px;text-decoration:none;color:var(--steel);font-family:var(--serif);font-size:17px;">Sunday School →</a>
-        <a href="/confirmation" onclick="event.preventDefault();showPage('confirmation')" style="display:block;background:white;border:1px solid var(--border);border-radius:12px;padding:20px 22px;text-decoration:none;color:var(--steel);font-family:var(--serif);font-size:17px;">Confirmation →</a>
-        <a href="/vbs" onclick="event.preventDefault();showPage('vbs')" style="display:block;background:white;border:1px solid var(--border);border-radius:12px;padding:20px 22px;text-decoration:none;color:var(--steel);font-family:var(--serif);font-size:17px;">Vacation Bible School →</a>
-        <a href="/egghunt" onclick="event.preventDefault();showPage('egghunt')" style="display:block;background:white;border:1px solid var(--border);border-radius:12px;padding:20px 22px;text-decoration:none;color:var(--steel);font-family:var(--serif);font-size:17px;">Easter Egg Hunt →</a>
-        <a href="/family" onclick="event.preventDefault();showPage('family')" style="display:block;background:white;border:1px solid var(--border);border-radius:12px;padding:20px 22px;text-decoration:none;color:var(--steel);font-family:var(--serif);font-size:17px;">Family Ministry →</a>
-      </div>
     </div>
   </section>
 
@@ -1475,7 +1477,7 @@ async function fetchHomeNews() {
     if (!items || items.length === 0) return; // keep placeholders
     list.innerHTML = items.map(item => `
       <div class="news-item">
-        <div class="news-item-date">${item.publish_date || ''}</div>
+        <div class="news-item-date">${item.event_date || item.publish_date || ''}</div>
         <div class="news-item-title">${item.title}</div>
         <div class="news-item-summary">${item.summary || ''}</div>
       </div>`).join('');
@@ -1494,17 +1496,25 @@ async function loadNewsItems() {
     const list = document.getElementById('news-items-list');
     section.style.display = '';
     list.innerHTML = items.map(item => {
-      const hasBody = item.body && item.body.trim().length > 0;
+      const hasContent = (item.body && item.body.trim().length > 0) || item.summary || item.image_url;
+      const bodyId = 'ni-body-' + item.id;
+      const dateRaw = item.event_date || item.publish_date || '';
+      const dateLabel = dateRaw ? new Date(dateRaw + 'T12:00:00').toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'}) : '';
       const hasImage = item.image_url && item.image_url.trim().length > 0;
-      const id = 'ni-body-' + item.id;
-      return `<div style="background:white;border:1px solid var(--border);border-radius:14px;padding:24px 28px;margin-bottom:16px;box-shadow:var(--shadow);">
-  ${item.pinned ? `<div style="font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:6px;">Pinned</div>` : ''}
-  ${hasImage ? `<img src="${item.image_url}" alt="" style="width:100%;max-height:200px;object-fit:cover;border-radius:10px;margin-bottom:16px;">` : ''}
-  <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gray);margin-bottom:6px;">${item.publish_date || ''}</div>
-  <div style="font-family:var(--serif);font-size:20px;color:var(--steel);margin-bottom:10px;">${item.title}</div>
-  ${item.summary ? `<div style="font-family:var(--sans);font-size:15px;color:var(--charcoal);line-height:1.75;">${item.summary}</div>` : ''}
-  ${hasBody ? `<div id="${id}" class="rich-content" style="display:none;margin-top:12px;">${item.body}</div>
-  <button onclick="var el=document.getElementById('${id}');var btn=this;if(el.style.display==='none'){el.style.display='block';btn.textContent='Show less ↑';}else{el.style.display='none';btn.textContent='Read more ↓';}" style="background:none;border:none;cursor:pointer;color:var(--mid);font-weight:700;font-size:14px;font-family:var(--sans);padding:8px 0 0 0;">Read more ↓</button>` : ''}
+      return `<div style="background:white;border:1px solid var(--border);border-radius:14px;margin-bottom:12px;box-shadow:var(--shadow);overflow:hidden;">
+  <button onclick="var b=document.getElementById('${bodyId}');var ic=this.querySelector('.ni-chevron');if(b.style.display==='none'){b.style.display='block';ic.textContent='↑';}else{b.style.display='none';ic.textContent='↓';}" style="width:100%;text-align:left;background:none;border:none;cursor:${hasContent ? 'pointer' : 'default'};padding:18px 22px;display:flex;justify-content:space-between;align-items:center;gap:16px;">
+    <div>
+      ${item.pinned ? `<div style="font-family:var(--sans);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--amber);margin-bottom:4px;">Pinned</div>` : ''}
+      ${dateLabel ? `<div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gray);margin-bottom:4px;">${dateLabel}</div>` : ''}
+      <div style="font-family:var(--serif);font-size:19px;color:var(--steel);line-height:1.3;">${item.title}</div>
+    </div>
+    ${hasContent ? `<span class="ni-chevron" style="font-size:14px;color:var(--mid);flex-shrink:0;">↓</span>` : ''}
+  </button>
+  <div id="${bodyId}" style="display:none;padding:0 22px 20px;">
+    ${hasImage ? `<img src="${item.image_url}" alt="" style="width:100%;max-height:240px;object-fit:cover;border-radius:10px;margin-bottom:14px;">` : ''}
+    ${item.summary ? `<div style="font-family:var(--sans);font-size:15px;color:var(--charcoal);line-height:1.75;margin-bottom:12px;">${item.summary}</div>` : ''}
+    ${item.body && item.body.trim() ? `<div class="rich-content">${item.body}</div>` : ''}
+  </div>
 </div>`;
     }).join('');
   } catch(e) { /* silently fail — section stays hidden */ }
