@@ -91,6 +91,11 @@ tinymce.init({
   image_caption: false,
   object_resizing: true,
   resize_img_proportional: true,
+  image_style_row_selections: [
+    { title: 'Float left (text wraps)', value: 'float: left; margin: 0 1em 0.5em 0;' },
+    { title: 'Float right (text wraps)', value: 'float: right; margin: 0 0 0.5em 1em;' },
+    { title: 'No float', value: '' }
+  ],
   images_upload_handler: function(blobInfo, progress) {
     return new Promise(function(resolve, reject) {
       if (blobInfo.blob().size > 5242880) {
