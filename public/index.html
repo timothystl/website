@@ -1503,7 +1503,7 @@ async function loadNewsItems() {
     list.innerHTML = items.map(item => {
       const hasContent = (item.body && item.body.trim().length > 0) || item.summary || item.image_url;
       const bodyId = 'ni-body-' + item.id;
-      const dateRaw = item.event_date || item.publish_date || '';
+      const dateRaw = item.event_date || '';
       const dateLabel = dateRaw ? new Date(dateRaw + 'T12:00:00').toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'}) : '';
       const hasImage = item.image_url && item.image_url.trim().length > 0;
       return `<div style="background:white;border:1px solid var(--border);border-radius:14px;margin-bottom:12px;box-shadow:var(--shadow);overflow:hidden;">
