@@ -8,10 +8,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;700&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
-  --steel:#0A3C5C; --mid:#3D627C; --sky:#5C8FA8; --ice:#C4DDE8; --mist:#EDF5F8;
-  --amber:#D4922A; --sage:#6B8F71; --pale-sage:#CDE0CF;
-  --warm:#FAF7F0; --linen:#F2EDE2; --white:#FFFFFF;
-  --border:#E8E0D0; --charcoal:#3D3530; --gray:#7A6E60;
+  --steel:#1E2D4A; --mid:#2E7EA6; --sky:#5BA3C4; --ice:#C4CEDF; --mist:#EDF2F7;
+  --amber:#C9973A; --sage:#4A5E3A; --pale-sage:#C2CEBC;
+  --teal:#2E7EA6; --slate:#3A4E5C; --plum-light:#8A6A8A;
+  --warm:#F7F3EC; --linen:#EDE9E0; --white:#FBF8F3;
+  --border:#DDE3ED; --charcoal:#1A1A2A; --gray:#4A4860;
   --serif:'Lora',Georgia,serif; --sans:'Source Sans 3',Arial,sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -101,6 +102,7 @@ li{margin-bottom:6px;}
     <h3>Getting Help</h3>
     <a href="#asking-claude">Asking Claude to make changes</a>
     <a href="#file-reference">Key file reference</a>
+    <a href="#color-reference">Color reference</a>
   </nav>
 
   <main class="content">
@@ -316,6 +318,57 @@ li{margin-bottom:6px;}
         </tr>
       </tbody>
     </table>
+
+    <!-- ═══ COLOR REFERENCE ══════════════════════════════════════════════ -->
+    <span class="toc-anchor" id="color-reference"></span>
+    <h2>Color Reference</h2>
+    <p>The site shares a color system with the volunteer page. Each ministry type has its own accent color, but they all use the same structure. If you're ever describing a color change to Claude, use these names.</p>
+
+    <table style="width:100%;border-collapse:collapse;font-size:14px;margin-top:12px;">
+      <thead>
+        <tr style="background:var(--steel);color:white;">
+          <th style="padding:10px 14px;text-align:left;font-family:var(--sans);">Color</th>
+          <th style="padding:10px 14px;text-align:left;font-family:var(--sans);">Hex</th>
+          <th style="padding:10px 14px;text-align:left;font-family:var(--sans);">Used for</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="background:var(--white);border-bottom:1px solid var(--border);">
+          <td style="padding:10px 14px;display:flex;align-items:center;gap:10px;"><span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:#1E2D4A;"></span> Navy</td>
+          <td style="padding:10px 14px;font-family:monospace;">#1E2D4A</td>
+          <td style="padding:10px 14px;">Nav, hero, buttons, headings, Music Ministry</td>
+        </tr>
+        <tr style="background:var(--mist);border-bottom:1px solid var(--border);">
+          <td style="padding:10px 14px;display:flex;align-items:center;gap:10px;"><span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:#2E7EA6;"></span> Teal</td>
+          <td style="padding:10px 14px;font-family:monospace;">#2E7EA6</td>
+          <td style="padding:10px 14px;">Links, Beekeepers, Christmas Market</td>
+        </tr>
+        <tr style="background:var(--white);border-bottom:1px solid var(--border);">
+          <td style="padding:10px 14px;display:flex;align-items:center;gap:10px;"><span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:#C9973A;"></span> Gold</td>
+          <td style="padding:10px 14px;font-family:monospace;">#C9973A</td>
+          <td style="padding:10px 14px;">Main accent, Give button, eyebrows, WOL/MDO/Youth</td>
+        </tr>
+        <tr style="background:var(--mist);border-bottom:1px solid var(--border);">
+          <td style="padding:10px 14px;display:flex;align-items:center;gap:10px;"><span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:#4A5E3A;"></span> Moss</td>
+          <td style="padding:10px 14px;font-family:monospace;">#4A5E3A</td>
+          <td style="padding:10px 14px;">Acceptance — Stephen Ministry</td>
+        </tr>
+        <tr style="background:var(--white);border-bottom:1px solid var(--border);">
+          <td style="padding:10px 14px;display:flex;align-items:center;gap:10px;"><span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:#3A4E5C;"></span> Slate</td>
+          <td style="padding:10px 14px;font-family:monospace;">#3A4E5C</td>
+          <td style="padding:10px 14px;">Outreach — Food Pantry</td>
+        </tr>
+        <tr style="background:var(--mist);">
+          <td style="padding:10px 14px;display:flex;align-items:center;gap:10px;"><span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:#8A6A8A;"></span> Plum</td>
+          <td style="padding:10px 14px;font-family:monospace;">#8A6A8A</td>
+          <td style="padding:10px 14px;">General Interest — LWML</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout--sky" style="margin-top:20px;">
+      <p>When asking Claude to change a color on the site, use phrases like <em>"change the Food Pantry card accent to slate"</em> or <em>"use the gold color for the new ministry card"</em> — Claude knows these names.</p>
+    </div>
 
     <div style="margin-top:56px;padding-top:28px;border-top:1px solid var(--border);font-size:13px;color:var(--gray);">
       Timothy Lutheran Church website — internal reference document.<br>

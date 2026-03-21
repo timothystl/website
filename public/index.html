@@ -10,19 +10,31 @@
 <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,700;1,400&family=Source+Sans+3:wght@300;400;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root {
-  --steel:#0A3C5C;--steel-dk:#2A5470;--steel-dk2:#0A2038;
-  --mid:#3D627C;--sky:#5C8FA8;--ice:#C4DDE8;--mist:#EDF5F8;
-  --amber:#D4922A;--amber-dk:#C07D1E;--honey:#E8B86D;--pale-gold:#F5E0B0;
-  --sage:#6B8F71;--soft-sage:#9AB89E;--pale-sage:#CDE0CF;
-  --warm:#FAF7F0;--linen:#F2EDE2;--white:#FFFFFF;
-  --border:#E8E0D0;--charcoal:#3D3530;--gray:#7A6E60;
+  /* Primary — Navy (deep, desaturated blue) */
+  --steel:#1E2D4A;--steel-dk:#2A3F60;--steel-dk2:#111E32;
+  /* Teal — links, sky, active states */
+  --mid:#2E7EA6;--sky:#5BA3C4;--ice:#C4CEDF;--mist:#EDF2F7;
+  /* Gold (warm accent, nav CTA, eyebrows) */
+  --amber:#C9973A;--amber-dk:#B0821E;--honey:#E8C070;--pale-gold:#F5E4C0;
+  /* Moss (acceptance / green accent) */
+  --sage:#4A5E3A;--soft-sage:#7A8F6A;--pale-sage:#C2CEBC;
+  /* Additional ministry accent colors */
+  --teal:#2E7EA6;--teal-light:#5BA3C4;--teal-pale:#C0D8E4;
+  --slate:#3A4E5C;--slate-light:#6A8090;--slate-pale:#C0CED4;
+  --plum-light:#8A6A8A;--stone:#8C8880;
+  /* Backgrounds */
+  --warm:#F7F3EC;--linen:#EDE9E0;--white:#FBF8F3;
+  /* Text & borders */
+  --border:#DDE3ED;--charcoal:#1A1A2A;--gray:#4A4860;--text-muted:#8A8898;
+  /* Fonts & shape */
   --serif:'Lora',Georgia,serif;--sans:'Source Sans 3',Arial,sans-serif;
   --r-sm:6px;--r-md:12px;--r-lg:20px;
-  --shadow:0 2px 12px rgba(10,60,92,.07);--shadow-lift:0 6px 32px rgba(10,60,92,.13);
+  --shadow:0 2px 12px rgba(30,45,74,.08);--shadow-lift:0 6px 32px rgba(30,45,74,.14);
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 html{scroll-behavior:smooth;}
 body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);line-height:1.65;font-size:16px;}
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");pointer-events:none;z-index:1000;opacity:0.5;}
 img{display:block;max-width:100%;}
 a{color:var(--mid);text-decoration:none;}
 a:hover{color:var(--steel);}
@@ -79,9 +91,9 @@ p:last-child{margin-bottom:0;}
 .btn-row{display:flex;gap:14px;flex-wrap:wrap;}
 
 /* HERO */
-.hero{background:var(--mid);padding:72px 28px 80px;position:relative;overflow:hidden;}
-.hero::before{content:'';position:absolute;top:-100px;right:-100px;width:500px;height:500px;background:radial-gradient(circle,rgba(212,146,42,.08) 0%,transparent 65%);pointer-events:none;}
-.hero::after{content:'';position:absolute;bottom:-60px;left:10%;width:360px;height:360px;background:radial-gradient(circle,rgba(61,98,124,.15) 0%,transparent 65%);pointer-events:none;}
+.hero{background:var(--steel);padding:72px 28px 80px;position:relative;overflow:hidden;}
+.hero::before{content:'';position:absolute;top:-100px;right:-100px;width:500px;height:500px;background:radial-gradient(circle,rgba(201,151,58,.10) 0%,transparent 65%);pointer-events:none;}
+.hero::after{content:'';position:absolute;bottom:-60px;left:10%;width:360px;height:360px;background:radial-gradient(circle,rgba(46,126,166,.18) 0%,transparent 65%);pointer-events:none;}
 .hero-inner{max-width:1080px;margin:0 auto;display:grid;grid-template-columns:1fr 300px;gap:48px;align-items:center;position:relative;z-index:1;}
 .hero h1{color:white;margin-bottom:20px;}
 .hero-sub{font-size:17px;font-weight:300;color:rgba(255,255,255,.88);line-height:1.8;margin-bottom:32px;max-width:500px;}
@@ -122,18 +134,22 @@ p:last-child{margin-bottom:0;}
 .news-item-title{font-family:var(--serif);font-size:16px;color:var(--steel);margin-bottom:4px;line-height:1.4;}
 .news-item-summary{font-family:var(--sans);font-size:13px;color:var(--gray);line-height:1.6;}
 
-/* MINISTRY CARDS */
+/* MINISTRY CARDS — accent colors follow ministry-type logic from volunteer page */
 .min-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;margin-top:40px;}
 .min-card{background:var(--white);border:1px solid var(--border);border-radius:var(--r-md);padding:24px;box-shadow:var(--shadow);border-top:3px solid var(--amber);transition:box-shadow .2s,transform .2s;}
-.min-card:nth-child(2){border-top-color:var(--sage);}
-.min-card:nth-child(3){border-top-color:var(--sky);}
-.min-card:nth-child(4){border-top-color:var(--steel);}
-.min-card:nth-child(5){border-top-color:var(--amber);}
-.min-card:nth-child(6){border-top-color:var(--sage);}
-.min-card:nth-child(7){border-top-color:var(--sky);}
-.min-card:nth-child(8){border-top-color:var(--steel);}
-.min-card:nth-child(9){border-top-color:var(--amber);}
-.min-card:nth-child(10){border-top-color:var(--sage);}
+/* 1 WOL: Education → Gold  2 MDO: Education → Gold  3 Music: Worship → Navy */
+.min-card:nth-child(1){border-top-color:var(--amber);}
+.min-card:nth-child(2){border-top-color:var(--amber);}
+.min-card:nth-child(3){border-top-color:var(--steel);}
+/* 4 Stephen: Acceptance → Moss  5 Food Pantry: Outreach → Slate  6 Youth: Education → Gold */
+.min-card:nth-child(4){border-top-color:var(--sage);}
+.min-card:nth-child(5){border-top-color:var(--slate);}
+.min-card:nth-child(6){border-top-color:var(--amber);}
+/* 7 Growing: Education → Gold  8 LWML: General Interest → Plum  9 Bees: Community → Teal  10 Christmas Market: Community Events → Teal */
+.min-card:nth-child(7){border-top-color:var(--amber);}
+.min-card:nth-child(8){border-top-color:var(--plum-light);}
+.min-card:nth-child(9){border-top-color:var(--teal);}
+.min-card:nth-child(10){border-top-color:var(--teal);}
 .min-card:hover{box-shadow:var(--shadow-lift);transform:translateY(-3px);}
 .min-card h3{font-size:17px;margin-bottom:8px;}
 .min-card p{font-size:13px;color:var(--gray);line-height:1.65;margin-bottom:14px;}
@@ -167,13 +183,13 @@ p:last-child{margin-bottom:0;}
 .bio-more:hover{color:var(--amber);}
 .staff-email{display:block;margin-top:12px;font-family:var(--sans);font-size:12px;font-weight:600;color:var(--mid);}
 
-/* ABOUT VALUES */
+/* ABOUT VALUES — Worship/Gold, Acceptance/Moss, Education/Teal, Outreach/Slate */
 .about-grid{display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:start;}
 .about-values{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px;}
 .value-card{background:var(--white);border:1px solid var(--border);border-radius:var(--r-md);padding:20px;border-left:3px solid var(--amber);}
 .value-card:nth-child(2){border-left-color:var(--sage);}
-.value-card:nth-child(3){border-left-color:var(--sky);}
-.value-card:nth-child(4){border-left-color:var(--steel);}
+.value-card:nth-child(3){border-left-color:var(--teal);}
+.value-card:nth-child(4){border-left-color:var(--slate);}
 .value-card h4{font-size:15px;margin-bottom:6px;}
 .value-card p{font-size:13px;color:var(--gray);margin:0;}
 
@@ -217,7 +233,7 @@ textarea.form-input{min-height:120px;resize:vertical;}
 .page-hero h1{color:white;}
 .page-hero p{font-size:17px;color:rgba(255,255,255,.72);max-width:600px;margin:12px auto 0;font-weight:300;}
 .page-hero--photo{background-size:cover;background-position:center;position:relative;}
-.page-hero--photo::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(10,60,92,.80),rgba(10,44,56,.90));}
+.page-hero--photo::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(30,45,74,.82),rgba(17,30,50,.92));}
 .page-cta-bar{background:var(--steel);padding:56px 28px;text-align:center;}
 .page-cta-bar h3{color:white;font-family:var(--serif);font-size:clamp(20px,3vw,28px);margin-bottom:10px;}
 .page-cta-bar p{color:rgba(255,255,255,.7);font-size:15px;margin-bottom:28px;max-width:540px;margin-left:auto;margin-right:auto;}
