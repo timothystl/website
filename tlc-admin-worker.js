@@ -1380,6 +1380,7 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
   <div class="page-title">New post — ${page.title}</div>
   <form method="POST" action="/ministries/${slug}/posts/create">
     <div class="card">
+      <div class="card-title">Content</div>
       <div class="form-group">
         <label>Title <span style="color:#B85C3A;">*</span></label>
         <input type="text" name="title" required placeholder="e.g. Summer Servant Event 2026">
@@ -1448,6 +1449,7 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
   <div class="page-title">Edit post — ${page.title}</div>
   <form method="POST" action="/ministries/${slug}/posts/update/${id}">
     <div class="card">
+      <div class="card-title">Content</div>
       <div class="form-group">
         <label>Title <span style="color:#B85C3A;">*</span></label>
         <input type="text" name="title" required value="${(post.title || '').replace(/"/g, '&quot;')}">
