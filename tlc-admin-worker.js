@@ -474,6 +474,10 @@ export default {
     try { await env.DB.prepare(DB_INIT_MINISTRY_POSTS).run(); } catch (e) {}
     // Migrate: add has_posts column if it doesn't exist yet
     try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN has_posts INTEGER DEFAULT 0').run(); } catch (_) {}
+    // Migrate: add event_date to news_items for sorting by event date independent of publish date
+    try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN event_date TEXT').run(); } catch (_) {}
+    // Migrate: add pinned to ministry_posts
+    try { await env.DB.prepare('ALTER TABLE ministry_posts ADD COLUMN pinned INTEGER DEFAULT 0').run(); } catch (_) {}
     // Pre-populate ministry page slugs so they're always editable
     for (const p of MINISTRY_SLUGS) {
       try {
@@ -501,10 +505,10 @@ export default {
       const limit = parseInt(url.searchParams.get('limit') || '20', 10);
       const today = new Date().toISOString().split('T')[0];
       const rows = await env.DB.prepare(
-        `SELECT id, title, summary, body, image_url, publish_date, expire_date, pinned
+        `SELECT id, title, summary, body, image_url, publish_date, event_date, expire_date, pinned
          FROM news_items
          WHERE publish_date <= ? AND (expire_date IS NULL OR expire_date >= ?)
-         ORDER BY pinned DESC, publish_date DESC
+         ORDER BY pinned DESC, COALESCE(event_date, publish_date) DESC
          LIMIT ?`
       ).bind(today, today, limit).all();
       return new Response(JSON.stringify(rows.results), {
@@ -529,7 +533,7 @@ export default {
       const slug = parts[0];
       if (parts[1] === 'posts') {
         const rows = await env.DB.prepare(
-          'SELECT id, ministry_slug, title, post_date, body, created_at FROM ministry_posts WHERE ministry_slug = ? ORDER BY post_date DESC, id DESC'
+          'SELECT id, ministry_slug, title, post_date, pinned, body, created_at FROM ministry_posts WHERE ministry_slug = ? ORDER BY pinned DESC, post_date DESC, id DESC'
         ).bind(slug).all();
         return new Response(JSON.stringify(rows.results), {
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
@@ -903,7 +907,7 @@ addEvent();
     if (path === '/newsitems' && method === 'GET') {
       await sweepExpiredItems(env, new URL(request.url).origin);
       const items = await env.DB.prepare(
-        'SELECT * FROM news_items ORDER BY pinned DESC, publish_date DESC'
+        'SELECT * FROM news_items ORDER BY pinned DESC, COALESCE(event_date, publish_date) DESC'
       ).all();
       const today = new Date().toISOString().split('T')[0];
       const msgParam = url.searchParams.get('msg');
@@ -921,7 +925,7 @@ addEvent();
   ${item.pinned ? `<span class="badge badge-pinned">Pinned</span>` : ''}
   <span class="badge badge-${status}">${status}</span>
   <div class="ni-title">${item.title}</div>
-  <div class="ni-meta">${item.publish_date || ''}${item.expire_date ? ' → ' + item.expire_date : ''}</div>
+  <div class="ni-meta">${item.event_date ? 'Event: ' + item.event_date + ' · ' : ''}Published: ${item.publish_date || ''}${item.expire_date ? ' → ' + item.expire_date : ''}</div>
   <div class="ni-actions">
     <a href="/newsitems/edit/${item.id}" class="btn btn-sm btn-secondary">Edit</a>
     <form method="POST" action="/newsitems/delete/${item.id}" onsubmit="return confirm('Delete this item?')" style="margin:0;">
@@ -982,10 +986,14 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
     </div>
     <div class="card">
       <div class="card-title">Scheduling</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
         <div class="form-group" style="margin:0;">
           <label>Publish date</label>
           <input type="date" name="publish_date" value="${today}">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Event date <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, sorts by this date</span></label>
+          <input type="date" name="event_date">
         </div>
         <div class="form-group" style="margin:0;">
           <label>Expire date <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— auto-hides after this date</span></label>
@@ -1016,11 +1024,12 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
       const body = form.get('body') || '';
       const image_url = form.get('image_url') || '';
       const publish_date = form.get('publish_date') || new Date().toISOString().split('T')[0];
+      const event_date = form.get('event_date') || '';
       const expire_date = form.get('expire_date') || '';
       const pinned = form.get('pinned') === '1' ? 1 : 0;
       await env.DB.prepare(
-        'INSERT INTO news_items (title, summary, body, image_url, publish_date, expire_date, pinned) VALUES (?, ?, ?, ?, ?, ?, ?)'
-      ).bind(title, summary, body, image_url, publish_date, expire_date || null, pinned).run();
+        'INSERT INTO news_items (title, summary, body, image_url, publish_date, event_date, expire_date, pinned) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(title, summary, body, image_url, publish_date, event_date || null, expire_date || null, pinned).run();
       return new Response('', { status: 302, headers: { Location: '/newsitems?msg=saved' } });
     }
 
@@ -1054,10 +1063,14 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
     </div>
     <div class="card">
       <div class="card-title">Scheduling</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
         <div class="form-group" style="margin:0;">
           <label>Publish date</label>
           <input type="date" name="publish_date" value="${item.publish_date || ''}">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Event date <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, sorts by this date</span></label>
+          <input type="date" name="event_date" value="${item.event_date || ''}">
         </div>
         <div class="form-group" style="margin:0;">
           <label>Expire date</label>
@@ -1089,11 +1102,12 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
       const body = form.get('body') || '';
       const image_url = form.get('image_url') || '';
       const publish_date = form.get('publish_date') || '';
+      const event_date = form.get('event_date') || '';
       const expire_date = form.get('expire_date') || '';
       const pinned = form.get('pinned') === '1' ? 1 : 0;
       await env.DB.prepare(
-        'UPDATE news_items SET title=?, summary=?, body=?, image_url=?, publish_date=?, expire_date=?, pinned=? WHERE id=?'
-      ).bind(title, summary, body, image_url, publish_date, expire_date || null, pinned, id).run();
+        'UPDATE news_items SET title=?, summary=?, body=?, image_url=?, publish_date=?, event_date=?, expire_date=?, pinned=? WHERE id=?'
+      ).bind(title, summary, body, image_url, publish_date, event_date || null, expire_date || null, pinned, id).run();
       return new Response('', { status: 302, headers: { Location: '/newsitems?msg=saved' } });
     }
 
@@ -1276,7 +1290,7 @@ ${topbarHtml('ministries', `<a href="/ministries">← All ministries</a>`)}
         const page = await env.DB.prepare('SELECT title FROM youth_pages WHERE slug = ?').bind(slug).first();
         if (!page) return new Response('Not found', { status: 404 });
         const posts = await env.DB.prepare(
-          'SELECT id, title, post_date, created_at FROM ministry_posts WHERE ministry_slug = ? ORDER BY post_date DESC, id DESC'
+          'SELECT id, title, post_date, pinned, created_at FROM ministry_posts WHERE ministry_slug = ? ORDER BY pinned DESC, post_date DESC, id DESC'
         ).bind(slug).all();
         const msg = url.searchParams.get('msg');
         const alertHtml = msg === 'postsaved' ? `<div class="alert alert-success">✓ Post saved.</div>`
@@ -1288,6 +1302,7 @@ ${topbarHtml('ministries', `<a href="/ministries">← All ministries</a>`)}
           : posts.results.map(p => {
               const upcoming = p.post_date && p.post_date >= today;
               return `<div class="ni-row">
+  ${p.pinned ? `<span class="badge badge-pinned">Pinned</span>` : ''}
   ${p.post_date ? `<span class="badge badge-${upcoming ? 'upcoming' : 'active'}">${upcoming ? 'Upcoming' : 'Past'}</span>` : ''}
   <div class="ni-title">${p.title}</div>
   <div class="ni-meta">${p.post_date || ''}</div>
@@ -1332,9 +1347,18 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
         <label>Title <span style="color:#B85C3A;">*</span></label>
         <input type="text" name="title" required placeholder="e.g. Summer Servant Event 2026">
       </div>
-      <div class="form-group">
-        <label>Post date <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— determines upcoming vs. past sorting</span></label>
-        <input type="date" name="post_date" value="${today}">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:end;">
+        <div class="form-group" style="margin:0;">
+          <label>Post date <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— determines upcoming vs. past sorting</span></label>
+          <input type="date" name="post_date" value="${today}">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Pin to top</label>
+          <div class="checkbox-row">
+            <input type="checkbox" name="pinned" id="pinned_post" value="1">
+            <span onclick="document.getElementById('pinned_post').click()">Show this post above all others</span>
+          </div>
+        </div>
       </div>
       ${tinymcePostSection()}
     </div>
@@ -1353,9 +1377,10 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
         const title = form.get('title') || '';
         const post_date = form.get('post_date') || new Date().toISOString().split('T')[0];
         const body = form.get('body') || '';
+        const pinned = form.get('pinned') === '1' ? 1 : 0;
         await env.DB.prepare(
-          'INSERT INTO ministry_posts (ministry_slug, title, post_date, body) VALUES (?, ?, ?, ?)'
-        ).bind(slug, title, post_date, body).run();
+          'INSERT INTO ministry_posts (ministry_slug, title, post_date, body, pinned) VALUES (?, ?, ?, ?, ?)'
+        ).bind(slug, title, post_date, body, pinned).run();
         return new Response('', { status: 302, headers: { Location: `/ministries/${slug}/posts?msg=postsaved` } });
       }
 
@@ -1377,9 +1402,18 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
         <label>Title <span style="color:#B85C3A;">*</span></label>
         <input type="text" name="title" required value="${(post.title || '').replace(/"/g, '&quot;')}">
       </div>
-      <div class="form-group">
-        <label>Post date</label>
-        <input type="date" name="post_date" value="${post.post_date || ''}">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:end;">
+        <div class="form-group" style="margin:0;">
+          <label>Post date</label>
+          <input type="date" name="post_date" value="${post.post_date || ''}">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Pin to top</label>
+          <div class="checkbox-row">
+            <input type="checkbox" name="pinned" id="pinned_post" value="1"${post.pinned ? ' checked' : ''}>
+            <span onclick="document.getElementById('pinned_post').click()">Show this post above all others</span>
+          </div>
+        </div>
       </div>
       ${tinymcePostSection(post.body || '')}
     </div>
@@ -1400,9 +1434,10 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
         const title = form.get('title') || '';
         const post_date = form.get('post_date') || '';
         const body = form.get('body') || '';
+        const pinned = form.get('pinned') === '1' ? 1 : 0;
         await env.DB.prepare(
-          'UPDATE ministry_posts SET title = ?, post_date = ?, body = ? WHERE id = ? AND ministry_slug = ?'
-        ).bind(title, post_date, body, id, slug).run();
+          'UPDATE ministry_posts SET title = ?, post_date = ?, body = ?, pinned = ? WHERE id = ? AND ministry_slug = ?'
+        ).bind(title, post_date, body, pinned, id, slug).run();
         return new Response('', { status: 302, headers: { Location: `/ministries/${slug}/posts?msg=postsaved` } });
       }
 
