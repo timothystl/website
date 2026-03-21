@@ -1518,7 +1518,7 @@ async function loadNewsItems() {
   <div id="${bodyId}" style="display:none;padding:0 22px 20px;">
     ${hasImage ? `<img src="${item.image_url}" alt="" style="width:100%;max-height:240px;object-fit:cover;border-radius:10px;margin-bottom:14px;">` : ''}
     ${item.summary ? `<div style="font-family:var(--sans);font-size:15px;color:var(--charcoal);line-height:1.75;margin-bottom:12px;">${item.summary}</div>` : ''}
-    ${item.body && item.body.trim() ? `<div class="rich-content">${item.body}</div>` : ''}
+    ${item.body && item.body.trim() ? `<div class="rich-content">${fixImgUrls(item.body)}</div>` : ''}
   </div>
 </div>`;
     }).join('');
