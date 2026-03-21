@@ -28,6 +28,34 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: wrangler deploy --config wrangler-test-site.toml
 
+      - name: Create D1 database (if not exists)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          OUTPUT=$(wrangler d1 create tlc-newsletter-db 2>&1 || true)
+          echo "$OUTPUT"
+
+          DB_ID=$(echo "$OUTPUT" | grep -oP 'database_id = "\K[^"]+' || true)
+
+          if [ -z "$DB_ID" ]; then
+            LIST_OUTPUT=$(wrangler d1 list 2>&1)
+            echo "$LIST_OUTPUT"
+            DB_ID=$(echo "$LIST_OUTPUT" | grep -i 'tlc-newsletter-db' | grep -oP '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1 || true)
+          fi
+
+          if [ -z "$DB_ID" ]; then
+            echo "ERROR: Could not get database ID"
+            exit 1
+          fi
+
+          echo "Database ID: $DB_ID"
+          sed -i "s/REPLACE_WITH_DATABASE_ID/$DB_ID/" wrangler.toml
+
+      - name: Deploy admin worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: wrangler deploy
+
       - name: Done
         run: |
           echo ""
