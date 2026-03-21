@@ -1592,8 +1592,8 @@ async function loadYouthPage() {
     const posts = await res.json();
     if (!posts || posts.length === 0) return;
 
-    const upcoming = posts.filter(function(p){ return p.post_date && p.post_date >= today; });
-    const past     = posts.filter(function(p){ return !p.post_date || p.post_date < today; });
+    const upcoming = posts.filter(function(p){ return p.pinned || (p.post_date && p.post_date >= today); });
+    const past     = posts.filter(function(p){ return !p.pinned && (!p.post_date || p.post_date < today); });
 
     if (upcoming.length > 0) {
       document.getElementById('youth-upcoming-section').style.display = '';
