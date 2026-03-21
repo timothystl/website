@@ -1148,12 +1148,222 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     </div>
   </section>
 
-  <!-- Contact -->
+  <!-- Sub-pages -->
   <section class="section section--linen">
+    <div class="wrap">
+      <span class="eyebrow eyebrow--sage">Programs</span>
+      <h2>Explore youth programs</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-top:8px;">
+        <a href="/sundayschool" onclick="event.preventDefault();showPage('sundayschool')" style="display:block;background:white;border:1px solid var(--border);border-radius:12px;padding:20px 22px;text-decoration:none;color:var(--steel);font-family:var(--serif);font-size:17px;">Sunday School →</a>
+        <a href="/confirmation" onclick="event.preventDefault();showPage('confirmation')" style="display:block;background:white;border:1px solid var(--border);border-radius:12px;padding:20px 22px;text-decoration:none;color:var(--steel);font-family:var(--serif);font-size:17px;">Confirmation →</a>
+        <a href="/vbs" onclick="event.preventDefault();showPage('vbs')" style="display:block;background:white;border:1px solid var(--border);border-radius:12px;padding:20px 22px;text-decoration:none;color:var(--steel);font-family:var(--serif);font-size:17px;">Vacation Bible School →</a>
+        <a href="/egghunt" onclick="event.preventDefault();showPage('egghunt')" style="display:block;background:white;border:1px solid var(--border);border-radius:12px;padding:20px 22px;text-decoration:none;color:var(--steel);font-family:var(--serif);font-size:17px;">Easter Egg Hunt →</a>
+        <a href="/family" onclick="event.preventDefault();showPage('family')" style="display:block;background:white;border:1px solid var(--border);border-radius:12px;padding:20px 22px;text-decoration:none;color:var(--steel);font-family:var(--serif);font-size:17px;">Family Ministry →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Contact -->
+  <section class="section section--white">
     <div class="wrap" style="max-width:620px;text-align:center;">
       <span class="eyebrow eyebrow--sage">Get connected</span>
       <h2>Questions about youth ministry?</h2>
       <p style="color:var(--gray);margin-bottom:28px;">Reach out to our DCE (Director of Christian Education) — we'd love to connect your family with what's happening here.</p>
+      <div class="btn-row" style="justify-content:center;">
+        <a href="mailto:dce@timothystl.org" class="btn btn-primary">Email our DCE →</a>
+        <button class="btn btn-outline" onclick="showPage('contact')">Contact form →</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- SUNDAY SCHOOL -->
+<div id="page-sundayschool" class="page">
+  <div class="page-hero">
+    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Children &amp; families</span>
+    <h1>Sunday School</h1>
+    <p>Growing in faith together — Bible stories, community, and formation for children every Sunday morning.</p>
+  </div>
+  <section class="section section--white" id="sundayschool-content-section">
+    <div class="wrap" style="max-width:760px;">
+      <div id="sundayschool-content" class="rich-content"></div>
+    </div>
+  </section>
+  <section class="section section--linen" id="sundayschool-upcoming-section" style="display:none;">
+    <div class="wrap">
+      <span class="eyebrow">Coming up</span>
+      <h2>Upcoming events</h2>
+      <div id="sundayschool-upcoming-list"></div>
+    </div>
+  </section>
+  <section class="section section--white" id="sundayschool-past-section" style="display:none;">
+    <div class="wrap">
+      <span class="eyebrow eyebrow--sage">Recent</span>
+      <h2>Past events &amp; recaps</h2>
+      <div id="sundayschool-past-list"></div>
+    </div>
+  </section>
+  <section class="section section--linen">
+    <div class="wrap" style="max-width:620px;text-align:center;">
+      <span class="eyebrow eyebrow--sage">Get connected</span>
+      <h2>Questions about Sunday School?</h2>
+      <p style="color:var(--gray);margin-bottom:28px;">Reach out to our DCE — we'd love to connect your family.</p>
+      <div class="btn-row" style="justify-content:center;">
+        <a href="mailto:dce@timothystl.org" class="btn btn-primary">Email our DCE →</a>
+        <button class="btn btn-outline" onclick="showPage('contact')">Contact form →</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- CONFIRMATION -->
+<div id="page-confirmation" class="page">
+  <div class="page-hero">
+    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Middle school</span>
+    <h1>Confirmation</h1>
+    <p>A two-year journey for middle schoolers — rooted in the faith, preparing for a lifetime with Christ.</p>
+  </div>
+  <section class="section section--white" id="confirmation-content-section">
+    <div class="wrap" style="max-width:760px;">
+      <div id="confirmation-content" class="rich-content"></div>
+    </div>
+  </section>
+  <section class="section section--linen" id="confirmation-upcoming-section" style="display:none;">
+    <div class="wrap">
+      <span class="eyebrow">Coming up</span>
+      <h2>Upcoming events</h2>
+      <div id="confirmation-upcoming-list"></div>
+    </div>
+  </section>
+  <section class="section section--white" id="confirmation-past-section" style="display:none;">
+    <div class="wrap">
+      <span class="eyebrow eyebrow--sage">Recent</span>
+      <h2>Past events &amp; recaps</h2>
+      <div id="confirmation-past-list"></div>
+    </div>
+  </section>
+  <section class="section section--linen">
+    <div class="wrap" style="max-width:620px;text-align:center;">
+      <span class="eyebrow eyebrow--sage">Get connected</span>
+      <h2>Questions about Confirmation?</h2>
+      <p style="color:var(--gray);margin-bottom:28px;">Reach out to our DCE — we'd love to connect your family.</p>
+      <div class="btn-row" style="justify-content:center;">
+        <a href="mailto:dce@timothystl.org" class="btn btn-primary">Email our DCE →</a>
+        <button class="btn btn-outline" onclick="showPage('contact')">Contact form →</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- VBS -->
+<div id="page-vbs" class="page">
+  <div class="page-hero">
+    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Summer at Timothy</span>
+    <h1>Vacation Bible School</h1>
+    <p>A week of adventure, music, friendship, and the Good News — open to every child in our neighborhood.</p>
+  </div>
+  <section class="section section--white" id="vbs-content-section">
+    <div class="wrap" style="max-width:760px;">
+      <div id="vbs-content" class="rich-content"></div>
+    </div>
+  </section>
+  <section class="section section--linen" id="vbs-upcoming-section" style="display:none;">
+    <div class="wrap">
+      <span class="eyebrow">Coming up</span>
+      <h2>Upcoming events</h2>
+      <div id="vbs-upcoming-list"></div>
+    </div>
+  </section>
+  <section class="section section--white" id="vbs-past-section" style="display:none;">
+    <div class="wrap">
+      <span class="eyebrow eyebrow--sage">Recent</span>
+      <h2>Past events &amp; recaps</h2>
+      <div id="vbs-past-list"></div>
+    </div>
+  </section>
+  <section class="section section--linen">
+    <div class="wrap" style="max-width:620px;text-align:center;">
+      <span class="eyebrow eyebrow--sage">Get connected</span>
+      <h2>Questions about VBS?</h2>
+      <p style="color:var(--gray);margin-bottom:28px;">Reach out to our DCE — we'd love to have your kids join us.</p>
+      <div class="btn-row" style="justify-content:center;">
+        <a href="mailto:dce@timothystl.org" class="btn btn-primary">Email our DCE →</a>
+        <button class="btn btn-outline" onclick="showPage('contact')">Contact form →</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- EGG HUNT -->
+<div id="page-egghunt" class="page">
+  <div class="page-hero">
+    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Spring event</span>
+    <h1>Easter Egg Hunt</h1>
+    <p>An Easter celebration for families in Lindenwood Park — a gift to our neighborhood every spring.</p>
+  </div>
+  <section class="section section--white" id="egghunt-content-section">
+    <div class="wrap" style="max-width:760px;">
+      <div id="egghunt-content" class="rich-content"></div>
+    </div>
+  </section>
+  <section class="section section--linen" id="egghunt-upcoming-section" style="display:none;">
+    <div class="wrap">
+      <span class="eyebrow">Coming up</span>
+      <h2>Upcoming events</h2>
+      <div id="egghunt-upcoming-list"></div>
+    </div>
+  </section>
+  <section class="section section--white" id="egghunt-past-section" style="display:none;">
+    <div class="wrap">
+      <span class="eyebrow eyebrow--sage">Recent</span>
+      <h2>Past events &amp; recaps</h2>
+      <div id="egghunt-past-list"></div>
+    </div>
+  </section>
+  <section class="section section--linen">
+    <div class="wrap" style="max-width:620px;text-align:center;">
+      <span class="eyebrow eyebrow--sage">Get connected</span>
+      <h2>Questions about the Egg Hunt?</h2>
+      <p style="color:var(--gray);margin-bottom:28px;">Reach out to our office — we'd love to see you there.</p>
+      <div class="btn-row" style="justify-content:center;">
+        <a href="mailto:office@timothystl.org" class="btn btn-primary">Email the office →</a>
+        <button class="btn btn-outline" onclick="showPage('contact')">Contact form →</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- FAMILY MINISTRY -->
+<div id="page-family" class="page">
+  <div class="page-hero">
+    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">All ages, all stages</span>
+    <h1>Family Ministry</h1>
+    <p>Families are welcome at every stage here. Formation, community, and support for parents and children together.</p>
+  </div>
+  <section class="section section--white" id="family-content-section">
+    <div class="wrap" style="max-width:760px;">
+      <div id="family-content" class="rich-content"></div>
+    </div>
+  </section>
+  <section class="section section--linen" id="family-upcoming-section" style="display:none;">
+    <div class="wrap">
+      <span class="eyebrow">Coming up</span>
+      <h2>Upcoming events</h2>
+      <div id="family-upcoming-list"></div>
+    </div>
+  </section>
+  <section class="section section--white" id="family-past-section" style="display:none;">
+    <div class="wrap">
+      <span class="eyebrow eyebrow--sage">Recent</span>
+      <h2>Past events &amp; recaps</h2>
+      <div id="family-past-list"></div>
+    </div>
+  </section>
+  <section class="section section--linen">
+    <div class="wrap" style="max-width:620px;text-align:center;">
+      <span class="eyebrow eyebrow--sage">Get connected</span>
+      <h2>Questions about Family Ministry?</h2>
+      <p style="color:var(--gray);margin-bottom:28px;">Reach out to our DCE — we'd love to connect your family.</p>
       <div class="btn-row" style="justify-content:center;">
         <a href="mailto:dce@timothystl.org" class="btn btn-primary">Email our DCE →</a>
         <button class="btn btn-outline" onclick="showPage('contact')">Contact form →</button>
@@ -1407,6 +1617,74 @@ async function loadYouthPage() {
   } catch(e) {}
 }
 
+// Generic loader for ministry sub-pages (sundayschool, confirmation, vbs, egghunt, family)
+var ministryLoaded = {};
+async function loadMinistryPage(slug) {
+  if (ministryLoaded[slug]) return;
+  ministryLoaded[slug] = true;
+  var today = new Date().toISOString().split('T')[0];
+
+  try {
+    var res = await fetch('https://admin.timothystl.org/api/ministry/' + slug);
+    if (res.ok) {
+      var data = await res.json();
+      if (data.content && data.content.trim()) {
+        document.getElementById(slug + '-content').innerHTML = data.content;
+      } else {
+        document.getElementById(slug + '-content-section').style.display = 'none';
+      }
+      if (!data.has_posts) return;
+    } else {
+      document.getElementById(slug + '-content-section').style.display = 'none';
+      return;
+    }
+  } catch(e) {
+    document.getElementById(slug + '-content-section').style.display = 'none';
+    return;
+  }
+
+  try {
+    var res2 = await fetch('https://admin.timothystl.org/api/ministry/' + slug + '/posts');
+    if (!res2.ok) return;
+    var posts = await res2.json();
+    if (!posts || posts.length === 0) return;
+
+    var upcoming = posts.filter(function(p){ return p.pinned || (p.post_date && p.post_date >= today); });
+    var past     = posts.filter(function(p){ return !p.pinned && (!p.post_date || p.post_date < today); });
+
+    if (upcoming.length > 0) {
+      document.getElementById(slug + '-upcoming-section').style.display = '';
+      document.getElementById(slug + '-upcoming-list').innerHTML = upcoming.map(function(p) {
+        var d = p.post_date ? new Date(p.post_date + 'T12:00:00') : null;
+        var dateLabel = d ? d.toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'}) : '';
+        return '<div style="background:white;border:1px solid var(--border);border-radius:14px;padding:28px;margin-bottom:16px;box-shadow:var(--shadow);">' +
+          (p.pinned ? '<div style="font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:6px;">Pinned</div>' : '') +
+          (dateLabel ? '<div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:8px;">' + dateLabel + '</div>' : '') +
+          '<div style="font-family:var(--serif);font-size:22px;color:var(--steel);margin-bottom:16px;">' + p.title + '</div>' +
+          (p.body ? '<div class="rich-content">' + p.body + '</div>' : '') +
+          '</div>';
+      }).join('');
+    }
+
+    if (past.length > 0) {
+      document.getElementById(slug + '-past-section').style.display = '';
+      document.getElementById(slug + '-past-list').innerHTML = past.map(function(p, i) {
+        var d = p.post_date ? new Date(p.post_date + 'T12:00:00') : null;
+        var dateLabel = d ? d.toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'}) : '';
+        var bodyId = slug + '-body-' + (p.id || i);
+        return '<div class="post-accordion-item">' +
+          '<button class="post-accordion-btn" onclick="var el=document.getElementById(\'' + bodyId + '\');var ic=this.querySelector(\'.post-accordion-icon\');if(el.style.display===\'none\'){el.style.display=\'block\';ic.textContent=\'↑\';}else{el.style.display=\'none\';ic.textContent=\'↓\';}">' +
+          '<div><div class="post-accordion-title">' + p.title + '</div>' +
+          (dateLabel ? '<div class="post-accordion-date">' + dateLabel + '</div>' : '') +
+          '</div><span class="post-accordion-icon">↓</span></button>' +
+          '<div id="' + bodyId + '" class="post-accordion-body">' +
+          (p.body ? '<div class="rich-content">' + p.body + '</div>' : '') +
+          '</div></div>';
+      }).join('');
+    }
+  } catch(e) {}
+}
+
 // Load volunteer events from volunteer worker API
 var volLoaded = false;
 async function loadVolunteerEvents() {
@@ -1458,6 +1736,8 @@ window.showPage = function(id, addHistory) {
   if (id === 'news') { loadNewsletters(); loadNewsItems(); }
   if (id === 'youth') { loadYouthPage(); }
   if (id === 'events' && !volLoaded) { volLoaded = true; loadVolunteerEvents(); }
+  var ministrySubs = ['sundayschool','confirmation','vbs','egghunt','family'];
+  if (ministrySubs.indexOf(id) !== -1) { loadMinistryPage(id); }
 };
 // Load data if landing directly on a lazy-loaded page
 (function(){
@@ -1465,6 +1745,8 @@ window.showPage = function(id, addHistory) {
   if (path === 'news') { loadNewsletters(); loadNewsItems(); }
   if (path === 'youth') { loadYouthPage(); }
   if (path === 'events') { volLoaded = true; loadVolunteerEvents(); }
+  var ministrySubs = ['sundayschool','confirmation','vbs','egghunt','family'];
+  if (ministrySubs.indexOf(path) !== -1) { loadMinistryPage(path); }
 })();
 </script>
 
