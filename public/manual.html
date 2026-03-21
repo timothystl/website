@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Timothy Lutheran Website — Staff Reference Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;700&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --steel:#0A3C5C; --mid:#3D627C; --sky:#5C8FA8; --ice:#C4DDE8; --mist:#EDF5F8;
+  --amber:#D4922A; --sage:#6B8F71; --pale-sage:#CDE0CF;
+  --warm:#FAF7F0; --linen:#F2EDE2; --white:#FFFFFF;
+  --border:#E8E0D0; --charcoal:#3D3530; --gray:#7A6E60;
+  --serif:'Lora',Georgia,serif; --sans:'Source Sans 3',Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);line-height:1.75;font-size:16px;}
+a{color:var(--mid);text-decoration:none;}a:hover{color:var(--steel);}
+img{max-width:100%;}
+
+.header{background:var(--steel);border-bottom:3px solid var(--amber);padding:28px 40px;}
+.header h1{font-family:var(--serif);color:white;font-size:28px;}
+.header p{color:rgba(255,255,255,.7);font-size:14px;margin-top:4px;}
+
+.layout{display:grid;grid-template-columns:240px 1fr;min-height:100vh;}
+
+.sidebar{background:var(--linen);border-right:1px solid var(--border);padding:32px 20px;position:sticky;top:0;height:100vh;overflow-y:auto;}
+.sidebar h3{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:12px;margin-top:24px;}
+.sidebar h3:first-child{margin-top:0;}
+.sidebar a{display:block;font-family:var(--sans);font-size:14px;color:var(--charcoal);padding:5px 8px;border-radius:6px;margin-bottom:2px;}
+.sidebar a:hover{background:var(--ice);color:var(--steel);}
+
+.content{padding:48px 56px;max-width:820px;}
+
+h2{font-family:var(--serif);color:var(--steel);font-size:28px;margin-bottom:8px;margin-top:56px;padding-top:56px;border-top:2px solid var(--border);}
+h2:first-of-type{margin-top:0;padding-top:0;border-top:none;}
+h3{font-family:var(--serif);color:var(--steel);font-size:20px;margin-top:32px;margin-bottom:8px;}
+p{margin-bottom:14px;}
+ul,ol{margin:12px 0 16px 24px;}
+li{margin-bottom:6px;}
+
+.badge{display:inline-block;font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 10px;border-radius:999px;margin-right:6px;margin-bottom:4px;}
+.badge--amber{background:#FBF0DA;color:#7a4e0c;}
+.badge--sage{background:var(--pale-sage);color:#1a3d1f;}
+.badge--sky{background:var(--mist);color:var(--mid);}
+.badge--red{background:#fde8e8;color:#8b1a1a;}
+
+.step{background:var(--white);border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin:16px 0;}
+.step-num{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--amber);margin-bottom:4px;}
+.step p:last-child{margin-bottom:0;}
+
+.code-block{background:#1e2a35;color:#d4e8f0;font-family:'Courier New',monospace;font-size:13px;padding:16px 20px;border-radius:8px;margin:12px 0;overflow-x:auto;line-height:1.8;}
+.code-block .hl-comment{color:#7aa8c0;}
+.code-block .hl-tag{color:#88d4a8;}
+.code-block .hl-attr{color:#f5c97a;}
+.code-block .hl-val{color:#f0a080;}
+.code-block .hl-text{color:#e0e8f0;}
+
+.callout{border-left:4px solid var(--amber);background:#FBF0DA;padding:14px 18px;border-radius:0 8px 8px 0;margin:16px 0;}
+.callout--sage{border-left-color:var(--sage);background:var(--pale-sage);}
+.callout--sky{border-left-color:var(--sky);background:var(--mist);}
+.callout p{margin-bottom:0;}
+.callout strong{color:var(--steel);}
+
+.toc-anchor{display:block;position:relative;top:-80px;visibility:hidden;}
+
+@media(max-width:768px){
+  .layout{grid-template-columns:1fr;}
+  .sidebar{display:none;}
+  .content{padding:28px 20px;}
+}
+@media print{
+  .sidebar{display:none;}
+  .layout{display:block;}
+  .content{padding:16px;}
+  h2{page-break-before:always;}
+  h2:first-of-type{page-break-before:auto;}
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Timothy Lutheran Website — Staff Reference Guide</h1>
+  <p>How to make common changes to the site. Updated March 2026.</p>
+</div>
+
+<div class="layout">
+  <nav class="sidebar">
+    <h3>Ministry Pages</h3>
+    <a href="#header-photos">Adding a header photo</a>
+    <a href="#cta-buttons">Editing page buttons</a>
+    <a href="#christmas-market-annual">Christmas Market (annual)</a>
+    <h3>Admin Portal</h3>
+    <a href="#admin-portal">admin.timothystl.org</a>
+    <a href="#news-events">News &amp; Events</a>
+    <a href="#newsletter">Newsletter</a>
+    <h3>Volunteer Site</h3>
+    <a href="#volunteer-site">volunteer.timothystl.org</a>
+    <h3>Getting Help</h3>
+    <a href="#asking-claude">Asking Claude to make changes</a>
+    <a href="#file-reference">Key file reference</a>
+  </nav>
+
+  <main class="content">
+
+    <!-- ═══ HEADER PHOTOS ═══════════════════════════════════════════════ -->
+    <span class="toc-anchor" id="header-photos"></span>
+    <h2>Adding a Header Photo to a Ministry Page</h2>
+    <p>Each ministry landing page has a <strong>hero section</strong> at the top — the big colored banner with the page title. Right now they all show a solid steel-blue color. When you have a photo for a page, here's how to add it.</p>
+
+    <div class="callout callout--sky">
+      <p><strong>Pages that support header photos:</strong> Music, Stephen Ministry, Food Pantry, Urban Beekeepers, Christmas Market. The Christmas Market page already has its photo set.</p>
+    </div>
+
+    <h3>Step 1 — Get the photo ready</h3>
+    <p>Photos work best when they are:</p>
+    <ul>
+      <li><strong>Landscape orientation</strong> (wider than tall)</li>
+      <li><strong>At least 1400px wide</strong> (wider = looks better on large screens)</li>
+      <li><strong>JPG or WebP format</strong> (smaller file sizes)</li>
+      <li><strong>Not too "busy" in the center</strong> — the text overlays the middle, so a photo with open sky or soft background works well</li>
+    </ul>
+
+    <h3>Step 2 — Upload the photo</h3>
+    <p>Place the photo in <code>/public/images/ministries/</code> in the website repository. Name it clearly, e.g. <code>music-hero.jpg</code>, <code>stephen-hero.jpg</code>, <code>foodpantry-hero.jpg</code>, <code>bees-hero.jpg</code>.</p>
+    <p>If you're working with Claude, just say: <em>"Add this photo as the header image for the Music Ministry page"</em> and share the file.</p>
+
+    <h3>Step 3 — Edit the hero div in <code>public/index.html</code></h3>
+    <p>Find the ministry page section (search for e.g. <code>id="page-music"</code>) and look for the hero div. It will have a comment above it saying exactly what to add:</p>
+
+    <div class="code-block">
+<span class="hl-comment">&lt;!-- Hero: add style="background-image:url('...')" when photo is available --&gt;</span><br>
+<span class="hl-tag">&lt;div</span> <span class="hl-attr">class</span>=<span class="hl-val">"page-hero page-hero--photo"</span><span class="hl-tag">&gt;</span>
+    </div>
+
+    <p>Change it to:</p>
+
+    <div class="code-block">
+<span class="hl-tag">&lt;div</span> <span class="hl-attr">class</span>=<span class="hl-val">"page-hero page-hero--photo"</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hl-attr">style</span>=<span class="hl-val">"background-image:url('/images/ministries/music-hero.jpg');"</span><span class="hl-tag">&gt;</span>
+    </div>
+
+    <p>The overlay (dark blue tint that makes text readable) is applied automatically — you don't need to add anything else.</p>
+
+    <div class="callout">
+      <p><strong>Easier option:</strong> Just tell Claude: <em>"Add music-hero.jpg as the header photo on the Music Ministry page."</em> Claude knows exactly where to put it.</p>
+    </div>
+
+    <h3>How the Christmas Market photo is set (for reference)</h3>
+    <p>The Christmas Market page already has its header photo. Here's what it looks like in the code — the same pattern applies to any ministry page:</p>
+
+    <div class="code-block">
+<span class="hl-tag">&lt;div</span> <span class="hl-attr">class</span>=<span class="hl-val">"page-hero page-hero--photo"</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hl-attr">style</span>=<span class="hl-val">"background-image:url('/images/ministries/Christmas-MKT.jpg');"</span><span class="hl-tag">&gt;</span><br>
+&nbsp;&nbsp;<span class="hl-text">...page title and subtitle here...</span><br>
+<span class="hl-tag">&lt;/div&gt;</span>
+    </div>
+
+
+    <!-- ═══ CTA BUTTONS ══════════════════════════════════════════════════ -->
+    <span class="toc-anchor" id="cta-buttons"></span>
+    <h2>Editing Buttons on Ministry Pages</h2>
+    <p>Every ministry landing page has a <strong>dark blue button bar</strong> at the very bottom of the page. Each button can be changed independently — you can edit the text, change the link, or hide a button you don't need.</p>
+
+    <h3>Where to find them in the code</h3>
+    <p>Each button bar is marked with a comment block that looks like this:</p>
+
+    <div class="code-block">
+<span class="hl-comment">&lt;!-- ══════════════════════════════════════════</span><br>
+<span class="hl-comment">&nbsp;&nbsp;&nbsp;&nbsp; CHRISTMAS MARKET PAGE — CTA BUTTON BAR</span><br>
+<span class="hl-comment">&nbsp;&nbsp;&nbsp;&nbsp; UPDATE ANNUALLY — change these each fall...</span><br>
+<span class="hl-comment">&nbsp;&nbsp;&nbsp;&nbsp; ══════════════════════════════════════════ --&gt;</span>
+    </div>
+
+    <p>Just search for the page name (e.g. <code>CHRISTMAS MARKET PAGE — CTA BUTTON BAR</code>) and you'll jump right to it.</p>
+
+    <h3>Changing button text</h3>
+    <p>The text that appears on the button is between <code>&gt;</code> and <code>&lt;/a&gt;</code>. Edit only that text:</p>
+
+    <div class="code-block">
+<span class="hl-comment">&lt;!-- Button 1: Vendor application --&gt;</span><br>
+<span class="hl-tag">&lt;a</span> <span class="hl-attr">href</span>=<span class="hl-val">"mailto:office@timothystl.org"</span> <span class="hl-attr">class</span>=<span class="hl-val">"btn btn-primary"</span><span class="hl-tag">&gt;</span><span class="hl-text">Apply to be a vendor →</span><span class="hl-tag">&lt;/a&gt;</span>
+    </div>
+
+    <h3>Changing where a button links</h3>
+    <p>Edit the <code>href="..."</code> value. Common patterns:</p>
+
+    <div class="code-block">
+<span class="hl-comment">&lt;!-- Link to a website --&gt;</span><br>
+<span class="hl-attr">href</span>=<span class="hl-val">"https://docs.google.com/forms/your-form-id"</span><br><br>
+<span class="hl-comment">&lt;!-- Send an email --&gt;</span><br>
+<span class="hl-attr">href</span>=<span class="hl-val">"mailto:office@timothystl.org"</span><br><br>
+<span class="hl-comment">&lt;!-- Pre-fill email subject line --&gt;</span><br>
+<span class="hl-attr">href</span>=<span class="hl-val">"mailto:office@timothystl.org?subject=Vendor Application"</span>
+    </div>
+
+    <h3>Hiding a button temporarily</h3>
+    <p>Add <code>style="display:none;"</code> to the <code>&lt;a&gt;</code> tag. Remove it to show it again:</p>
+
+    <div class="code-block">
+<span class="hl-tag">&lt;a</span> <span class="hl-attr">href</span>=<span class="hl-val">"..."</span> <span class="hl-attr">class</span>=<span class="hl-val">"btn btn-primary"</span> <span class="hl-attr">style</span>=<span class="hl-val">"display:none;"</span><span class="hl-tag">&gt;</span><span class="hl-text">Apply to be a vendor →</span><span class="hl-tag">&lt;/a&gt;</span>
+    </div>
+
+    <div class="callout callout--sage">
+      <p><strong>Easier option:</strong> Tell Claude what you want. For example: <em>"Change the vendor button on the Christmas Market page to link to this Google Form: [paste URL]"</em> — Claude will make the edit correctly.</p>
+    </div>
+
+
+    <!-- ═══ CHRISTMAS MARKET ANNUAL ══════════════════════════════════════ -->
+    <span class="toc-anchor" id="christmas-market-annual"></span>
+    <h2>Christmas Market — Annual Update Checklist</h2>
+    <p>Do this each fall when the market details are confirmed, before registration opens.</p>
+
+    <div class="step">
+      <div class="step-num">Step 1</div>
+      <p><strong>Update the date and time</strong> in the info box on the <code>/christmasmarket</code> page. Find the <code>id="xmas-details"</code> block and change the date text.</p>
+    </div>
+
+    <div class="step">
+      <div class="step-num">Step 2</div>
+      <p><strong>Update the vendor application button</strong> with the new Google Form URL. Find the <code>CHRISTMAS MARKET PAGE — CTA BUTTON BAR</code> comment and change the <code>href</code> on Button 1 from the email address to the Google Form link.</p>
+      <p>It should go from: <code>href="mailto:office@..."</code><br>
+      To: <code>href="https://docs.google.com/forms/d/YOUR_FORM_ID/viewform"</code></p>
+    </div>
+
+    <div class="step">
+      <div class="step-num">Step 3</div>
+      <p><strong>Update the year</strong> in the info box. Find <code>2025 Market</code> and change it to the current year.</p>
+    </div>
+
+    <div class="step">
+      <div class="step-num">Step 4 (optional)</div>
+      <p><strong>Replace the header photo</strong> with a new one from this year's market. Upload the new photo to <code>/public/images/ministries/</code>, then update the <code>background-image</code> URL in the hero div. (See <a href="#header-photos">Adding a Header Photo</a> above.)</p>
+    </div>
+
+    <div class="callout">
+      <p><strong>After the market is over:</strong> Change Button 1 back to the email address so it doesn't link to an expired form. You can do this right away or wait until next fall.</p>
+    </div>
+
+
+    <!-- ═══ ADMIN PORTAL ══════════════════════════════════════════════════ -->
+    <span class="toc-anchor" id="admin-portal"></span>
+    <h2>Admin Portal</h2>
+    <p>The admin portal lives at <a href="https://admin.timothystl.org" target="_blank"><strong>admin.timothystl.org</strong></a>. Password: <code>6704fyler</code>.</p>
+
+    <span class="toc-anchor" id="news-events"></span>
+    <h3>News &amp; Events tab</h3>
+    <p><span class="badge badge--amber">Planned</span> This tab is being built. It will let you post news items and events that appear on the <code>/news</code> page of the main site. Items can be set to expire automatically.</p>
+
+    <span class="toc-anchor" id="newsletter"></span>
+    <h3>Newsletter tab</h3>
+    <p><span class="badge badge--sage">Live</span> The Newsletter tab connects to Beehiiv and lets you send the congregation email newsletter directly from the admin portal. This is a separate system from the news items on the website.</p>
+
+
+    <!-- ═══ VOLUNTEER SITE ════════════════════════════════════════════════ -->
+    <span class="toc-anchor" id="volunteer-site"></span>
+    <h2>Volunteer Site</h2>
+    <p>The volunteer signup site is at <a href="https://volunteer.timothystl.org" target="_blank"><strong>volunteer.timothystl.org</strong></a>. Admin access is at <a href="https://volunteer.timothystl.org/admin" target="_blank">volunteer.timothystl.org/admin</a> (same password).</p>
+    <p>Ministry pages with volunteer opportunities link directly to this site. When you add new volunteer events in the admin, they automatically appear in the linked button on those pages.</p>
+
+
+    <!-- ═══ ASKING CLAUDE ════════════════════════════════════════════════ -->
+    <span class="toc-anchor" id="asking-claude"></span>
+    <h2>Asking Claude to Make Changes</h2>
+    <p>Claude (the AI assistant) is the primary way changes get made to this site. You don't need to know how to write code — you just need to describe what you want clearly.</p>
+
+    <h3>Good examples of requests</h3>
+    <ul>
+      <li><em>"Add this photo as the header image on the Food Pantry page: [attach file]"</em></li>
+      <li><em>"Change the vendor button on the Christmas Market page to link to this Google Form: [paste URL]"</em></li>
+      <li><em>"Update the Christmas Market page — the date is December 6, 2025, 10am–4pm"</em></li>
+      <li><em>"Add a button to the Bees page that links to [URL]"</em></li>
+      <li><em>"Change the heading on the Stephen Ministry page from 'You Don't Have to Face This Alone' to [new text]"</em></li>
+      <li><em>"Hide the vendor application button on the Christmas Market page until fall"</em></li>
+    </ul>
+
+    <div class="callout callout--sky">
+      <p><strong>Tip:</strong> When asking Claude to update something on a specific page, always name the page (e.g. "Christmas Market page", "Food Pantry page"). This helps Claude find the right section quickly.</p>
+    </div>
+
+
+    <!-- ═══ FILE REFERENCE ════════════════════════════════════════════════ -->
+    <span class="toc-anchor" id="file-reference"></span>
+    <h2>Key File Reference</h2>
+    <p>For reference when working with a developer or Claude:</p>
+
+    <table style="width:100%;border-collapse:collapse;font-size:14px;margin-top:12px;">
+      <thead>
+        <tr style="background:var(--steel);color:white;">
+          <th style="padding:10px 14px;text-align:left;font-family:var(--sans);">File</th>
+          <th style="padding:10px 14px;text-align:left;font-family:var(--sans);">What it is</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="background:var(--white);border-bottom:1px solid var(--border);">
+          <td style="padding:10px 14px;font-family:monospace;color:var(--mid);">public/index.html</td>
+          <td style="padding:10px 14px;">The entire main website — every page is in this one file</td>
+        </tr>
+        <tr style="background:var(--mist);border-bottom:1px solid var(--border);">
+          <td style="padding:10px 14px;font-family:monospace;color:var(--mid);">public/images/ministries/</td>
+          <td style="padding:10px 14px;">Ministry photos — drop new photos here</td>
+        </tr>
+        <tr style="background:var(--white);border-bottom:1px solid var(--border);">
+          <td style="padding:10px 14px;font-family:monospace;color:var(--mid);">public/images/staff/</td>
+          <td style="padding:10px 14px;">Staff headshots</td>
+        </tr>
+        <tr style="background:var(--mist);border-bottom:1px solid var(--border);">
+          <td style="padding:10px 14px;font-family:monospace;color:var(--mid);">tlc-admin-worker.js</td>
+          <td style="padding:10px 14px;">Code for admin.timothystl.org</td>
+        </tr>
+        <tr style="background:var(--white);">
+          <td style="padding:10px 14px;font-family:monospace;color:var(--mid);">tlc-volunteer-worker.js</td>
+          <td style="padding:10px 14px;">Code for volunteer.timothystl.org</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div style="margin-top:56px;padding-top:28px;border-top:1px solid var(--border);font-size:13px;color:var(--gray);">
+      Timothy Lutheran Church website — internal reference document.<br>
+      For changes or questions, open a session with Claude Code at <a href="https://github.com/timothystl/website" target="_blank">github.com/timothystl/website</a>.
+    </div>
+
+  </main>
+</div>
+
+</body>
+</html>

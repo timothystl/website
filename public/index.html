@@ -218,6 +218,10 @@ textarea.form-input{min-height:120px;resize:vertical;}
 .page-hero p{font-size:17px;color:rgba(255,255,255,.72);max-width:600px;margin:12px auto 0;font-weight:300;}
 .page-hero--photo{background-size:cover;background-position:center;position:relative;}
 .page-hero--photo::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(10,60,92,.80),rgba(10,44,56,.90));}
+.page-cta-bar{background:var(--steel);padding:56px 28px;text-align:center;}
+.page-cta-bar h3{color:white;font-family:var(--serif);font-size:clamp(20px,3vw,28px);margin-bottom:10px;}
+.page-cta-bar p{color:rgba(255,255,255,.7);font-size:15px;margin-bottom:28px;max-width:540px;margin-left:auto;margin-right:auto;}
+.page-cta-bar .btn-row{justify-content:center;}
 .page-hero--photo>*{position:relative;z-index:1;}
 .img-placeholder{background:var(--mist);border:2px dashed var(--ice);border-radius:var(--r-md);display:flex;align-items:center;justify-content:center;color:var(--gray);font-family:var(--sans);font-size:13px;text-align:center;padding:40px 24px;}
 .vid-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:20px;margin-top:24px;}
@@ -1223,6 +1227,24 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       </div>
     </div>
   </section>
+  <!-- ═══════════════════════════════════════════════════════════════════
+       MUSIC PAGE — CTA BUTTON BAR
+       To change a button: edit the text between > and <  (e.g. "Watch on YouTube →")
+       To change where it goes: edit the href="..." value
+       To hide a button: add   style="display:none;"   to the <a> tag
+       ═══════════════════════════════════════════════════════════════════ -->
+  <div class="page-cta-bar">
+    <h3>Ready to get involved?</h3>
+    <p>There's a place for every voice and every instrument at Timothy.</p>
+    <div class="btn-row">
+      <!-- Button 1: Volunteer signup -->
+      <a href="https://volunteer.timothystl.org" target="_blank" class="btn btn-primary">Volunteer sign-up →</a>
+      <!-- Button 2: YouTube channel -->
+      <a href="https://www.youtube.com/@TimothySTL" target="_blank" class="btn btn-ghost">Watch on YouTube</a>
+      <!-- Button 3: Contact -->
+      <a href="mailto:office@timothystl.org" class="btn btn-ghost">Email the office</a>
+    </div>
+  </div>
 </div>
 
 <!-- STEPHEN MINISTRY -->
@@ -1260,6 +1282,21 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       <p style="color:var(--gray);">For more information about Stephen Ministry at Timothy, contact the church office at <a href="mailto:office@timothystl.org" style="color:var(--mid);font-weight:600;">office@timothystl.org</a> or call <a href="tel:+13148390563" style="color:var(--mid);font-weight:600;">(314) 839-0563</a>.</p>
     </div>
   </section>
+  <!-- ═══════════════════════════════════════════════════════════════════
+       STEPHEN MINISTRY PAGE — CTA BUTTON BAR
+       To change a button: edit the text between > and <
+       To change where it goes: edit the href="..." value
+       ═══════════════════════════════════════════════════════════════════ -->
+  <div class="page-cta-bar">
+    <h3>We're here for you.</h3>
+    <p>Reaching out is the first step. Everything is kept strictly confidential.</p>
+    <div class="btn-row">
+      <!-- Button 1: Request a caregiver -->
+      <a href="mailto:office@timothystl.org?subject=Stephen Ministry - Request a Caregiver" class="btn btn-primary">Request a caregiver →</a>
+      <!-- Button 2: Training inquiry -->
+      <a href="mailto:office@timothystl.org?subject=Stephen Ministry - Training Interest" class="btn btn-ghost">Learn about training</a>
+    </div>
+  </div>
 </div>
 
 <!-- FOOD PANTRY -->
@@ -1316,6 +1353,23 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       </div>
     </div>
   </section>
+  <!-- ═══════════════════════════════════════════════════════════════════
+       FOOD PANTRY PAGE — CTA BUTTON BAR
+       To change a button: edit the text between > and <
+       To change where it goes: edit the href="..." value
+       ═══════════════════════════════════════════════════════════════════ -->
+  <div class="page-cta-bar">
+    <h3>Help us serve the neighborhood.</h3>
+    <p>Volunteer on pantry day, donate non-perishables, or spread the word.</p>
+    <div class="btn-row">
+      <!-- Button 1: Volunteer -->
+      <a href="https://volunteer.timothystl.org" target="_blank" class="btn btn-primary">Volunteer sign-up →</a>
+      <!-- Button 2: Pantry dates (links to news/events page) -->
+      <button onclick="showPage('news')" class="btn btn-ghost">See pantry dates</button>
+      <!-- Button 3: Contact -->
+      <a href="mailto:office@timothystl.org" class="btn btn-ghost">Email the office</a>
+    </div>
+  </div>
 </div>
 
 <!-- URBAN BEEKEEPERS -->
@@ -1358,6 +1412,21 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       </div>
     </div>
   </section>
+  <!-- ═══════════════════════════════════════════════════════════════════
+       URBAN BEEKEEPERS PAGE — CTA BUTTON BAR
+       To change a button: edit the text between > and <
+       To change where it goes: edit the href="..." value
+       ═══════════════════════════════════════════════════════════════════ -->
+  <div class="page-cta-bar">
+    <h3>Come tend the hive with us.</h3>
+    <p>Beginners welcome — no experience necessary, just curiosity.</p>
+    <div class="btn-row">
+      <!-- Button 1: Volunteer -->
+      <a href="https://volunteer.timothystl.org" target="_blank" class="btn btn-primary">Volunteer sign-up →</a>
+      <!-- Button 2: Contact -->
+      <a href="mailto:office@timothystl.org" class="btn btn-ghost">Email the office</a>
+    </div>
+  </div>
 </div>
 
 <!-- CHRISTMAS MARKET -->
@@ -1405,6 +1474,26 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       <p style="font-size:13px;color:var(--gray);margin-top:16px;">Vendor registration is handled via Google Form — link posted here when open.</p>
     </div>
   </section>
+  <!-- ═══════════════════════════════════════════════════════════════════
+       CHRISTMAS MARKET PAGE — CTA BUTTON BAR
+       UPDATE ANNUALLY — change these each fall when the market is announced:
+         Button 1 href: paste in the Google Form vendor application URL
+         Button 1 text: change to "Apply to be a vendor →" or keep as is
+         Button 2: volunteer signup — usually stays the same
+         Button 3: usually stays the same
+       ═══════════════════════════════════════════════════════════════════ -->
+  <div class="page-cta-bar">
+    <h3>Join us at the market.</h3>
+    <p>Free and open to the public — vendors, volunteers, and neighbors all welcome.</p>
+    <div class="btn-row">
+      <!-- Button 1: Vendor application — UPDATE href each year with the Google Form link -->
+      <a href="mailto:office@timothystl.org?subject=Christmas Market Vendor Interest" class="btn btn-primary">Apply to be a vendor →</a>
+      <!-- Button 2: Volunteer at the market -->
+      <a href="https://volunteer.timothystl.org" target="_blank" class="btn btn-ghost">Volunteer at the market</a>
+      <!-- Button 3: Contact -->
+      <a href="mailto:office@timothystl.org" class="btn btn-ghost">Email the office</a>
+    </div>
+  </div>
 </div>
 
 <div id="page-youth" class="page">
