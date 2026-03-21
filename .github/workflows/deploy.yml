@@ -51,6 +51,11 @@ jobs:
           echo "Database ID: $DB_ID"
           sed -i "s/REPLACE_WITH_DATABASE_ID/$DB_ID/" wrangler.toml
 
+      - name: Create R2 image bucket (if not exists)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: wrangler r2 bucket create tlc-news-images 2>&1 || true
+
       - name: Deploy admin worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -121,6 +126,11 @@ jobs:
           echo "Database ID: $DB_ID"
           sed -i "s/REPLACE_WITH_DATABASE_ID/$DB_ID/" wrangler.toml
           echo "Updated wrangler.toml"
+
+      - name: Create R2 image bucket (if not exists)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: wrangler r2 bucket create tlc-news-images 2>&1 || true
 
       - name: Deploy admin worker
         env:
