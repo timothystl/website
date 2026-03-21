@@ -1540,8 +1540,8 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
         : `Our latest update from Timothy Lutheran Church:\n${siteNewsUrl}`;
       const bskyShareUrl = `https://bsky.app/intent/compose?text=${encodeURIComponent(bskyText)}`;
       const igCaption = subjectParam
-        ? `📖 ${subjectParam}\n\nOur weekly update is live — read it at timothystl.org/news\n\n#TimothyLutheran #LindenwoordPark #StLouis #church`
-        : `Our latest newsletter is live at timothystl.org/news\n\n#TimothyLutheran #LindenwoordPark #StLouis #church`;
+        ? `📖 ${subjectParam}\n\nOur weekly update is live — read it at timothystl.org/news\n\n@timothystl\n#TimothyLutheran #LindenwoordPark #StLouis #church`
+        : `Our latest newsletter is live at timothystl.org/news\n\n@timothystl\n#TimothyLutheran #LindenwoordPark #StLouis #church`;
       const igCaptionJs = igCaption.replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$/g,'\\$');
       const beehiivLine = beehiivParam === 'success'
         ? `<a href="${decodeURIComponent(beehiivUrlParam)}" target="_blank" style="font-weight:700;color:#1a3d1f;">Open Beehiiv draft →</a> Review and hit Send when ready.`
