@@ -925,7 +925,7 @@ addEvent();
 
       return new Response('', {
         status: 302,
-        headers: { Location: `/?msg=${encodeURIComponent(action === 'publish' ? 'published' : 'draft')}&beehiiv=${beehiivStatus}&url=${encodeURIComponent(beehiivUrl)}` }
+        headers: { Location: `/?msg=${encodeURIComponent(action === 'publish' ? 'published' : 'draft')}&beehiiv=${beehiivStatus}&url=${encodeURIComponent(beehiivUrl)}&subject=${encodeURIComponent(subject)}` }
       });
     }
 
@@ -1526,11 +1526,38 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
     const msgParam = url.searchParams.get('msg');
     const beehiivParam = url.searchParams.get('beehiiv');
     const beehiivUrlParam = url.searchParams.get('url') || '';
+    const subjectParam = decodeURIComponent(url.searchParams.get('subject') || '');
     let alertHtml = '';
     if (msgParam === 'published') {
-      alertHtml = beehiivParam === 'success'
-        ? `<div class="alert alert-success">✓ Newsletter published to website archive. <strong><a href="${decodeURIComponent(beehiivUrlParam)}" target="_blank" style="color:#1a3d1f;">Open Beehiiv draft →</a></strong> Review and hit Send when ready.</div>`
-        : `<div class="alert alert-success">✓ Newsletter saved to website archive. Log in to <a href="https://app.beehiiv.com" target="_blank">Beehiiv</a> to send the email manually.</div>`;
+      const siteNewsUrl = 'https://timothystl.org/news';
+      const fbShareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(siteNewsUrl)}`;
+      const igCaption = subjectParam
+        ? `📖 ${subjectParam}\n\nOur weekly update is live — read it at timothystl.org/news\n\n#TimothyLutheran #LindenwoordPark #StLouis #church`
+        : `Our latest newsletter is live at timothystl.org/news\n\n#TimothyLutheran #LindenwoordPark #StLouis #church`;
+      const igCaptionJs = igCaption.replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$/g,'\\$');
+      const beehiivLine = beehiivParam === 'success'
+        ? `<a href="${decodeURIComponent(beehiivUrlParam)}" target="_blank" style="font-weight:700;color:#1a3d1f;">Open Beehiiv draft →</a> Review and hit Send when ready.`
+        : `Log in to <a href="https://app.beehiiv.com" target="_blank" style="font-weight:700;color:#1a3d1f;">Beehiiv</a> to send the email manually.`;
+      alertHtml = `
+<div class="alert alert-success" style="margin-bottom:0;border-radius:10px 10px 0 0;">
+  ✓ Newsletter published to website archive. ${beehiivLine}
+</div>
+<div style="background:#f0f7f0;border:1px solid #b8d4b8;border-top:none;border-radius:0 0 10px 10px;padding:18px 20px;margin-bottom:20px;">
+  <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#2a4d2a;margin-bottom:14px;">📣 Share to social media</div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;">
+    <a href="${fbShareUrl}" target="_blank" style="display:inline-flex;align-items:center;gap:7px;font-family:var(--sans);font-size:13px;font-weight:700;background:#1877F2;color:white;padding:9px 18px;border-radius:6px;text-decoration:none;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M24 12.07C24 5.41 18.63 0 12 0S0 5.41 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.04V9.41c0-3.02 1.8-4.7 4.54-4.7 1.31 0 2.68.24 2.68.24v2.97h-1.5c-1.5 0-1.96.93-1.96 1.89v2.26h3.32l-.53 3.49h-2.79V24C19.61 23.1 24 18.1 24 12.07z"/></svg>
+      Share on Facebook
+    </a>
+    <a href="https://www.instagram.com" target="_blank" style="display:inline-flex;align-items:center;gap:7px;font-family:var(--sans);font-size:13px;font-weight:700;background:linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);color:white;padding:9px 18px;border-radius:6px;text-decoration:none;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+      Open Instagram
+    </a>
+  </div>
+  <div style="font-family:var(--sans);font-size:12px;font-weight:600;color:var(--gray);margin-bottom:6px;">Caption for Instagram — copy and paste:</div>
+  <div id="ig-cap" style="font-family:var(--sans);font-size:13px;background:white;border:1px solid #ccd4cc;border-radius:6px;padding:12px 14px;line-height:1.8;white-space:pre-wrap;color:var(--charcoal);">${igCaption.replace(/</g,'&lt;')}</div>
+  <button onclick="navigator.clipboard.writeText(\`${igCaptionJs}\`).then(()=>{this.textContent='✓ Copied!';this.style.background='#e8f5e9';setTimeout(()=>{this.textContent='Copy caption';this.style.background='';},2000)})" style="margin-top:8px;font-family:var(--sans);font-size:12px;font-weight:700;background:white;border:1px solid #aab8aa;border-radius:6px;padding:6px 16px;cursor:pointer;transition:background .2s;">Copy caption</button>
+</div>`;
     } else if (msgParam === 'draft') {
       alertHtml = `<div class="alert alert-info">Draft saved. Publish when ready.</div>`;
     }
