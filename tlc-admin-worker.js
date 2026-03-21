@@ -87,24 +87,12 @@ tinymce.init({
   min_height: 320,
   skin: 'oxide',
   content_css: 'default',
-  image_advtab: true,
+  image_advtab: false,
   image_caption: false,
   object_resizing: true,
   resize_img_proportional: true,
-  images_upload_handler: function(blobInfo, progress) {
-    return new Promise(function(resolve, reject) {
-      if (blobInfo.blob().size > 5242880) {
-        reject({ message: 'Image must be under 5MB.', remove: true });
-        return;
-      }
-      var fd = new FormData();
-      fd.append('file', blobInfo.blob(), blobInfo.filename());
-      fetch('/api/upload-image', { method: 'POST', body: fd })
-        .then(function(r) { return r.ok ? r.json() : Promise.reject(); })
-        .then(function(data) { resolve(data.url); })
-        .catch(function() { reject({ message: 'Image upload failed. Please try again.', remove: true }); });
-    });
-  },
+  automatic_uploads: false,
+  paste_data_images: true,
   setup: function(editor) {
     editor.on('change input', function() {
       editor.save();
