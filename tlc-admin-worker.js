@@ -135,8 +135,13 @@ tinymce.init({
     if (initialBody.trim()) editor.setContent(initialBody);
   }
 });
-document.querySelector('form').addEventListener('submit', function() {
-  tinymce.triggerSave();
+document.querySelector('form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  var form = this;
+  tinymce.activeEditor.uploadImages().then(function() {
+    tinymce.triggerSave();
+    form.submit();
+  });
 });
 <\/script>`;
 }
@@ -274,8 +279,13 @@ tinymce.init({
     if (initial.trim()) editor.setContent(initial);
   }
 });
-document.querySelector('form').addEventListener('submit', function() {
-  tinymce.triggerSave();
+document.querySelector('form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  var form = this;
+  tinymce.activeEditor.uploadImages().then(function() {
+    tinymce.triggerSave();
+    form.submit();
+  });
 });
 <\/script>`;
 }
@@ -308,8 +318,13 @@ tinymce.init({
     if (initial.trim()) editor.setContent(initial);
   }
 });
-document.querySelector('form').addEventListener('submit', function() {
-  tinymce.triggerSave();
+document.querySelector('form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  var form = this;
+  tinymce.activeEditor.uploadImages().then(function() {
+    tinymce.triggerSave();
+    form.submit();
+  });
 });
 <\/script>`;
 }
