@@ -6,9 +6,8 @@ const ADMIN_PASSWORD = '6704fyler';
 const BEEHIIV_API_KEY = 'jBgc1cHvSXJlyoskPkyf8Ujz7r6VzCO4CaA1t4BaaRsiR9nLR4WmjHQpMK9Ri0N8';
 const BEEHIIV_PUB_ID = '7c76e5d5-1225-4d04-ae5c-023c2d2d7a40';
 
-// TinyMCE rich-text editor — loaded only on news item form pages
-const TINYMCE_API_KEY = '5wrsrinqxeqvej5slykwic6rgpfb0v8wvj0f21fgk1r4nhs0';
-const TINYMCE_HEAD = `<script src="https://cdn.tiny.cloud/1/${TINYMCE_API_KEY}/tinymce/7/tinymce.min.js" referrerpolicy="origin"><\/script>`;
+// Quill rich-text editor — loaded only on news item form pages
+const TINYMCE_HEAD = `<link href="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.snow.css" rel="stylesheet"><script src="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.js"><\/script>`;
 
 // ── DB INIT ─────────────────────────────────────────────────
 const DB_INIT_NEWSLETTERS = `CREATE TABLE IF NOT EXISTS newsletters (
@@ -71,53 +70,55 @@ async function sweepExpiredItems(env, origin) {
   } catch (_) {}
 }
 
-// Builds the TinyMCE rich-text editor section for the body field
+// Builds the Quill rich-text editor section for the body field
 function tinymceEditorSection(existingBody = '') {
   const safe = (existingBody || '').replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
   return `<div class="form-group">
-  <label>Full text <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, shown when reader clicks "Read more"</span></label>
-  <textarea id="body-editor" name="body"></textarea>
+  <label>FULL TEXT <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, shown when reader clicks "Read more"</span></label>
+  <div id="body-editor" style="min-height:220px;background:#fff;border-radius:4px;"></div>
+  <input type="hidden" id="body-hidden" name="body">
 </div>
 <script>
-tinymce.init({
-  selector: '#body-editor',
-  plugins: 'image link lists blockquote table code',
-  toolbar: 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image | table | code',
-  menubar: false,
-  min_height: 320,
-  skin: 'oxide',
-  content_css: 'default',
-  image_advtab: true,
-  image_caption: false,
-  object_resizing: true,
-  resize_img_proportional: true,
-  images_upload_handler: function(blobInfo, progress) {
-    return new Promise(function(resolve, reject) {
-      if (blobInfo.blob().size > 5242880) {
-        reject({ message: 'Image must be under 5MB.', remove: true });
-        return;
-      }
+(function() {
+  var quill = new Quill('#body-editor', {
+    theme: 'snow',
+    modules: {
+      toolbar: [
+        ['bold','italic','underline'],
+        [{ 'header': [2,3,false] }],
+        [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+        ['link', 'image'],
+        ['clean']
+      ]
+    }
+  });
+  var initialBody = \`${safe}\`;
+  if (initialBody.trim()) quill.root.innerHTML = initialBody;
+  // Custom image upload handler
+  quill.getModule('toolbar').addHandler('image', function() {
+    var input = document.createElement('input');
+    input.setAttribute('type', 'file');
+    input.setAttribute('accept', 'image/*');
+    input.click();
+    input.onchange = function() {
+      var file = input.files[0];
+      if (!file) return;
+      if (file.size > 5242880) { alert('Image must be under 5MB.'); return; }
       var fd = new FormData();
-      fd.append('file', blobInfo.blob(), blobInfo.filename());
+      fd.append('file', file, file.name);
       fetch('/api/upload-image', { method: 'POST', body: fd })
         .then(function(r) { return r.ok ? r.json() : Promise.reject(); })
-        .then(function(data) { resolve(data.url); })
-        .catch(function() { reject({ message: 'Image upload failed. Please try again.', remove: true }); });
-    });
-  },
-  setup: function(editor) {
-    editor.on('change input', function() {
-      editor.save();
-    });
-  },
-  init_instance_callback: function(editor) {
-    var initialBody = \`${safe}\`;
-    if (initialBody.trim()) editor.setContent(initialBody);
-  }
-});
-document.querySelector('form').addEventListener('submit', function() {
-  tinymce.triggerSave();
-});
+        .then(function(data) {
+          var range = quill.getSelection(true);
+          quill.insertEmbed(range.index, 'image', data.url);
+        })
+        .catch(function() { alert('Image upload failed. Please try again.'); });
+    };
+  });
+  document.querySelector('form').addEventListener('submit', function() {
+    document.getElementById('body-hidden').value = quill.root.innerHTML;
+  });
+})();
 <\/script>`;
 }
 
