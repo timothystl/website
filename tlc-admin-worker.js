@@ -6,8 +6,9 @@ const ADMIN_PASSWORD = '6704fyler';
 const BEEHIIV_API_KEY = 'jBgc1cHvSXJlyoskPkyf8Ujz7r6VzCO4CaA1t4BaaRsiR9nLR4WmjHQpMK9Ri0N8';
 const BEEHIIV_PUB_ID = '7c76e5d5-1225-4d04-ae5c-023c2d2d7a40';
 
-// Quill rich-text editor — loaded only on news item form pages
-const QUILL_HEAD = `<link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet"><script src="https://cdn.quilljs.com/1.3.7/quill.min.js"><\/script><style>.ql-toolbar{border-radius:6px 6px 0 0;border-color:var(--border)!important;}.ql-container{border-radius:0 0 6px 6px;border-color:var(--border)!important;font-family:var(--sans);font-size:14px;}.ql-editor{min-height:220px;}.ql-editor img{max-width:100%;border-radius:6px;margin:8px 0;}.ql-editor img.img-sel{outline:2px solid #0A3C5C;outline-offset:2px;}#img-toolbar{display:none;position:fixed;background:#1a2a35;color:#fff;border-radius:6px;padding:5px 8px;z-index:9999;white-space:nowrap;font-size:12px;gap:4px;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,.35);}#img-toolbar button{background:#2d4a5c;border:none;color:#fff;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:12px;line-height:1.4;}#img-toolbar button:hover{background:#0A3C5C;}#img-toolbar .itb-sep{color:#ffffff44;margin:0 4px;}#img-toolbar .itb-lbl{color:#aaa;font-size:11px;}</style>`;
+// TinyMCE rich-text editor — loaded only on news item form pages
+const TINYMCE_API_KEY = '5wrsrinqxeqvej5slykwic6rgpfb0v8wvj0f21fgk1r4nhs0';
+const TINYMCE_HEAD = `<script src="https://cdn.tiny.cloud/1/${TINYMCE_API_KEY}/tinymce/7/tinymce.min.js" referrerpolicy="origin"><\/script>`;
 
 // ── DB INIT ─────────────────────────────────────────────────
 const DB_INIT_NEWSLETTERS = `CREATE TABLE IF NOT EXISTS newsletters (
@@ -70,182 +71,53 @@ async function sweepExpiredItems(env, origin) {
   } catch (_) {}
 }
 
-// Builds the Quill rich-text editor section for the body field
-function quillEditorSection(existingBody = '') {
+// Builds the TinyMCE rich-text editor section for the body field
+function tinymceEditorSection(existingBody = '') {
   const safe = (existingBody || '').replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
   return `<div class="form-group">
   <label>Full text <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, shown when reader clicks "Read more"</span></label>
-  <div id="body-editor"></div>
-  <input type="hidden" name="body" id="body-hidden">
+  <textarea id="body-editor" name="body"></textarea>
 </div>
 <script>
-var quill = new Quill('#body-editor', {
-  theme: 'snow',
-  modules: {
-    toolbar: {
-      container: [
-        ['bold', 'italic', 'underline'],
-        [{ align: [] }],
-        [{ header: [2, 3, false] }],
-        ['blockquote'],
-        [{ list: 'ordered' }, { list: 'bullet' }],
-        ['link', 'image'],
-        ['clean']
-      ],
-      handlers: { image: handleImageInsert }
-    }
+tinymce.init({
+  selector: '#body-editor',
+  plugins: 'image link lists blockquote table code',
+  toolbar: 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image | table | code',
+  menubar: false,
+  min_height: 320,
+  skin: 'oxide',
+  content_css: 'default',
+  image_advtab: true,
+  image_caption: false,
+  object_resizing: true,
+  resize_img_proportional: true,
+  images_upload_handler: function(blobInfo, progress) {
+    return new Promise(function(resolve, reject) {
+      if (blobInfo.blob().size > 5242880) {
+        reject({ message: 'Image must be under 5MB.', remove: true });
+        return;
+      }
+      var fd = new FormData();
+      fd.append('file', blobInfo.blob(), blobInfo.filename());
+      fetch('/api/upload-image', { method: 'POST', body: fd })
+        .then(function(r) { return r.ok ? r.json() : Promise.reject(); })
+        .then(function(data) { resolve(data.url); })
+        .catch(function() { reject({ message: 'Image upload failed. Please try again.', remove: true }); });
+    });
+  },
+  setup: function(editor) {
+    editor.on('change input', function() {
+      editor.save();
+    });
+  },
+  init_instance_callback: function(editor) {
+    var initialBody = \`${safe}\`;
+    if (initialBody.trim()) editor.setContent(initialBody);
   }
 });
-var initialBody = \`${safe}\`;
-if (initialBody.trim()) quill.root.innerHTML = initialBody;
-
-async function uploadToR2(file) {
-  if (file.size > 2097152) {
-    alert('Image must be under 2MB. Please resize it and try again.');
-    return null;
-  }
-  var fd = new FormData();
-  fd.append('file', file);
-  try {
-    var res = await fetch('/api/upload-image', { method: 'POST', body: fd });
-    if (!res.ok) throw new Error();
-    return (await res.json()).url;
-  } catch(e) {
-    alert('Image upload failed. Please try again.');
-    return null;
-  }
-}
-
-function handleImageInsert() {
-  var input = document.createElement('input');
-  input.type = 'file'; input.accept = 'image/*';
-  input.onchange = async function() {
-    var file = input.files[0]; if (!file) return;
-    var url = await uploadToR2(file); if (!url) return;
-    var range = quill.getSelection(true) || { index: quill.getLength() };
-    quill.insertEmbed(range.index, 'image', url);
-    quill.setSelection(range.index + 1);
-  };
-  input.click();
-}
-
-quill.root.addEventListener('drop', async function(e) {
-  var files = e.dataTransfer && e.dataTransfer.files;
-  if (!files || !files.length) return;
-  var hasImg = false;
-  for (var i = 0; i < files.length; i++) { if (files[i].type.indexOf('image/') === 0) { hasImg = true; break; } }
-  if (!hasImg) return;
-  e.preventDefault(); e.stopPropagation();
-  for (var j = 0; j < files.length; j++) {
-    if (files[j].type.indexOf('image/') === 0) {
-      var url = await uploadToR2(files[j]); if (!url) continue;
-      var range = quill.getSelection(true) || { index: quill.getLength() };
-      quill.insertEmbed(range.index, 'image', url);
-      quill.setSelection(range.index + 1);
-    }
-  }
-}, true);
-
-quill.root.addEventListener('paste', async function(e) {
-  var items = e.clipboardData && e.clipboardData.items; if (!items) return;
-  for (var i = 0; i < items.length; i++) {
-    if (items[i].type.indexOf('image/') === 0) {
-      var file = items[i].getAsFile(); if (!file) continue;
-      e.preventDefault();
-      var url = await uploadToR2(file); if (!url) break;
-      var range = quill.getSelection(true) || { index: quill.getLength() };
-      quill.insertEmbed(range.index, 'image', url);
-      quill.setSelection(range.index + 1);
-      break;
-    }
-  }
-}, true);
-
 document.querySelector('form').addEventListener('submit', function() {
-  document.getElementById('body-hidden').value = quill.root.innerHTML;
+  tinymce.triggerSave();
 });
-
-// ── Image toolbar ─────────────────────────────────────────
-(function() {
-  var tb = document.createElement('div');
-  tb.id = 'img-toolbar';
-  tb.innerHTML =
-    '<span class="itb-lbl">Size</span>' +
-    '<button onclick="itbSize(\'25%\')">S</button>' +
-    '<button onclick="itbSize(\'50%\')">M</button>' +
-    '<button onclick="itbSize(\'75%\')">L</button>' +
-    '<button onclick="itbSize(\'100%\')">Full</button>' +
-    '<span class="itb-sep">|</span>' +
-    '<span class="itb-lbl">Align</span>' +
-    '<button onclick="itbFloat(\'left\')">◧ Left</button>' +
-    '<button onclick="itbFloat(\'none\')">&#9633; Block</button>' +
-    '<button onclick="itbFloat(\'right\')">◨ Right</button>';
-  tb.style.display = 'none';
-  document.body.appendChild(tb);
-
-  var activeImg = null;
-
-  function positionToolbar() {
-    if (!activeImg) return;
-    var r = activeImg.getBoundingClientRect();
-    var top = r.bottom + 6;
-    if (top + 44 > window.innerHeight) top = r.top - 44;
-    tb.style.top = top + 'px';
-    tb.style.left = Math.max(4, r.left) + 'px';
-    tb.style.display = 'flex';
-  }
-
-  quill.root.addEventListener('click', function(e) {
-    if (e.target.tagName === 'IMG') {
-      if (activeImg) activeImg.classList.remove('img-sel');
-      activeImg = e.target;
-      activeImg.classList.add('img-sel');
-      positionToolbar();
-      e.stopPropagation();
-    } else {
-      dismiss();
-    }
-  });
-
-  document.addEventListener('click', function(e) {
-    if (!tb.contains(e.target)) dismiss();
-  });
-
-  document.addEventListener('scroll', function() { if (activeImg) positionToolbar(); }, true);
-
-  function dismiss() {
-    if (activeImg) activeImg.classList.remove('img-sel');
-    activeImg = null;
-    tb.style.display = 'none';
-  }
-
-  window.itbSize = function(w) {
-    if (!activeImg) return;
-    activeImg.style.width = w;
-    activeImg.style.maxWidth = '100%';
-    activeImg.style.height = 'auto';
-  };
-
-  window.itbFloat = function(f) {
-    if (!activeImg) return;
-    if (f === 'left') {
-      activeImg.style.float = 'left';
-      activeImg.style.marginRight = '14px';
-      activeImg.style.marginLeft = '0';
-      activeImg.style.display = 'inline';
-    } else if (f === 'right') {
-      activeImg.style.float = 'right';
-      activeImg.style.marginLeft = '14px';
-      activeImg.style.marginRight = '0';
-      activeImg.style.display = 'inline';
-    } else {
-      activeImg.style.float = '';
-      activeImg.style.marginLeft = '';
-      activeImg.style.marginRight = '';
-      activeImg.style.display = 'block';
-    }
-  };
-})();
 <\/script>`;
 }
 
@@ -968,7 +840,7 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
         <label>Summary <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— shown on cards (2–3 sentences)</span></label>
         <textarea name="summary" style="min-height:80px;" placeholder="Short description shown on the homepage and news page cards."></textarea>
       </div>
-      ${quillEditorSection()}
+      ${tinymceEditorSection()}
       <div class="form-group">
         <label>Header image URL <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, shown on the card thumbnail</span></label>
         <input type="text" name="image_url" placeholder="https://... (or leave blank — images can also be dropped into the body above)">
@@ -999,7 +871,7 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
       <a href="/newsitems" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
     </div>
   </form>
-</div>`, 'TLC Admin — New News Item', QUILL_HEAD);
+</div>`, 'TLC Admin — New News Item', TINYMCE_HEAD);
     }
 
     // ── NEWS ITEMS: CREATE (POST) ──
@@ -1040,7 +912,7 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
         <label>Summary <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— shown on cards (2–3 sentences)</span></label>
         <textarea name="summary" style="min-height:80px;">${item.summary || ''}</textarea>
       </div>
-      ${quillEditorSection(item.body || '')}
+      ${tinymceEditorSection(item.body || '')}
       <div class="form-group">
         <label>Header image URL <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, shown on the card thumbnail</span></label>
         <input type="text" name="image_url" value="${v(item.image_url)}" placeholder="https://... (or leave blank — images can also be dropped into the body above)">
@@ -1071,7 +943,7 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
       <a href="/newsitems" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
     </div>
   </form>
-</div>`, 'TLC Admin — Edit News Item', QUILL_HEAD);
+</div>`, 'TLC Admin — Edit News Item', TINYMCE_HEAD);
     }
 
     // ── NEWS ITEMS: UPDATE (POST) ──
