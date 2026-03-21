@@ -3,7 +3,6 @@
 // Cloudflare Worker + D1 Database
 
 const ADMIN_PASSWORD = '6704fyler';
-const YOUTH_PASSWORD = 'tlcyouth2025'; // change independently of admin password
 const BEEHIIV_API_KEY = 'jBgc1cHvSXJlyoskPkyf8Ujz7r6VzCO4CaA1t4BaaRsiR9nLR4WmjHQpMK9Ri0N8';
 const BEEHIIV_PUB_ID = '7c76e5d5-1225-4d04-ae5c-023c2d2d7a40';
 
@@ -137,16 +136,6 @@ function setCookieHeader() {
   return `tlc_auth=authenticated; Path=/; Expires=${exp}; HttpOnly; SameSite=Strict`;
 }
 
-// Youth auth — accepted for /youth/* routes; admin cookie also grants access
-function authYouthCookie(req) {
-  const cookie = req.headers.get('cookie') || '';
-  return cookie.includes('tlc_youth_auth=authenticated') || cookie.includes('tlc_auth=authenticated');
-}
-
-function setYouthCookieHeader() {
-  const exp = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toUTCString();
-  return `tlc_youth_auth=authenticated; Path=/youth; Expires=${exp}; HttpOnly; SameSite=Strict`;
-}
 
 function html(body, title = 'TLC Admin', extraHead = '') {
   return new Response(`<!DOCTYPE html>
@@ -275,22 +264,20 @@ document.querySelector('form').addEventListener('submit', function() {
 }
 
 // ── TOPBAR WITH TABS ─────────────────────────────────────────
-// youthOnly = true when youth director is logged in (hides newsletter/news tabs)
-function topbarHtml(activeTab, extraLinks = '', youthOnly = false) {
-  const logoutHref = youthOnly ? '/youth/logout' : '/logout';
+function topbarHtml(activeTab, extraLinks = '') {
   return `<div class="topbar">
   <div>
     <div class="topbar-brand">Timothy Lutheran · Admin</div>
   </div>
   <div class="topbar-links">
     ${extraLinks}
-    <a href="${logoutHref}">Sign out</a>
+    <a href="/logout">Sign out</a>
   </div>
 </div>
 <nav class="tab-nav">
   <div class="tab-nav-inner">
-    ${!youthOnly ? `<a href="/" class="tab${activeTab === 'newsletter' ? ' tab-active' : ''}">Newsletter</a>` : ''}
-    ${!youthOnly ? `<a href="/newsitems" class="tab${activeTab === 'news' ? ' tab-active' : ''}">News &amp; Events</a>` : ''}
+    <a href="/" class="tab${activeTab === 'newsletter' ? ' tab-active' : ''}">Newsletter</a>
+    <a href="/newsitems" class="tab${activeTab === 'news' ? ' tab-active' : ''}">News &amp; Events</a>
     <a href="/youth" class="tab${activeTab === 'youth' ? ' tab-active' : ''}">Youth Pages</a>
   </div>
 </nav>`;
@@ -1052,52 +1039,11 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
     // ── YOUTH PAGES ─────────────────────────────────────────
     // ════════════════════════════════════════════════════════
 
-    // Youth login page
-    if (path === '/youth/login' && method === 'GET') {
-      const err = url.searchParams.get('error');
-      return html(`
-<div class="login-wrap">
-  <div class="login-card">
-    <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#D4922A;margin-bottom:8px;">Timothy Lutheran Church</div>
-    <div class="login-title">Youth Pages</div>
-    <div class="login-sub">Sign in to update youth &amp; family pages</div>
-    ${err ? `<div class="alert alert-error">Incorrect password. Try again.</div>` : ''}
-    <form method="POST" action="/youth/login">
-      <div class="form-group">
-        <label>Password</label>
-        <input type="password" name="password" autofocus placeholder="Youth director password">
-      </div>
-      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:8px;">Sign in</button>
-    </form>
-  </div>
-</div>`, 'Youth Pages — Sign In');
-    }
-
-    // Youth login POST
-    if (path === '/youth/login' && method === 'POST') {
-      const form = await request.formData();
-      const pw = form.get('password') || '';
-      if (pw === YOUTH_PASSWORD || pw === ADMIN_PASSWORD) {
-        const headers = new Headers({ Location: '/youth' });
-        headers.set('Set-Cookie', pw === ADMIN_PASSWORD ? setCookieHeader() : setYouthCookieHeader());
-        return new Response('', { status: 302, headers });
-      }
-      return new Response('', { status: 302, headers: { Location: '/youth/login?error=1' } });
-    }
-
-    // Youth logout
-    if (path === '/youth/logout') {
-      const headers = new Headers({ Location: '/youth/login' });
-      headers.set('Set-Cookie', 'tlc_youth_auth=; Path=/youth; Expires=Thu, 01 Jan 1970 00:00:00 GMT');
-      return new Response('', { status: 302, headers });
-    }
-
-    // All /youth routes require youth or admin auth
+    // All /youth routes require admin auth
     if (path.startsWith('/youth')) {
-      if (!authYouthCookie(request)) {
-        return new Response('', { status: 302, headers: { Location: '/youth/login' } });
+      if (!authCookie(request)) {
+        return new Response('', { status: 302, headers: { Location: '/login' } });
       }
-      const youthOnly = !authCookie(request); // true if youth director, false if admin
 
       // ── Youth page list ──
       if (path === '/youth' && method === 'GET') {
@@ -1113,7 +1059,7 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
   </div>
 </div>`).join('');
         return html(`
-${topbarHtml('youth', '', youthOnly)}
+${topbarHtml('youth')}
 <div class="wrap">
   <div class="page-title">Youth Pages</div>
   <div class="page-sub">Click any page to edit and publish. Changes appear on the website immediately.</div>
@@ -1135,7 +1081,7 @@ ${topbarHtml('youth', '', youthOnly)}
         const page = await env.DB.prepare('SELECT * FROM youth_pages WHERE slug = ?').bind(slug).first();
         if (!page) return new Response('Not found', { status: 404 });
         return html(`
-${topbarHtml('youth', `<a href="/youth">← All pages</a>`, youthOnly)}
+${topbarHtml('youth', `<a href="/youth">← All pages</a>`)}
 <div class="wrap">
   <div class="page-title">${page.title}</div>
   <div class="page-sub">Edit this page and click Save &amp; Publish when done.</div>
