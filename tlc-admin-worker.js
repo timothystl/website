@@ -6,6 +6,9 @@ const ADMIN_PASSWORD = '6704fyler';
 const BEEHIIV_API_KEY = 'jBgc1cHvSXJlyoskPkyf8Ujz7r6VzCO4CaA1t4BaaRsiR9nLR4WmjHQpMK9Ri0N8';
 const BEEHIIV_PUB_ID = '7c76e5d5-1225-4d04-ae5c-023c2d2d7a40';
 
+// Quill rich-text editor — loaded only on news item form pages
+const QUILL_HEAD = `<link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet"><script src="https://cdn.quilljs.com/1.3.7/quill.min.js"><\/script><style>.ql-toolbar{border-radius:6px 6px 0 0;border-color:var(--border)!important;}.ql-container{border-radius:0 0 6px 6px;border-color:var(--border)!important;font-family:var(--sans);font-size:14px;}.ql-editor{min-height:220px;}.ql-editor img{max-width:100%;border-radius:6px;margin:8px 0;display:block;}</style>`;
+
 // ── DB INIT ─────────────────────────────────────────────────
 const DB_INIT_NEWSLETTERS = `CREATE TABLE IF NOT EXISTS newsletters (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,6 +44,129 @@ const DB_INIT_NEWS_ITEMS = `CREATE TABLE IF NOT EXISTS news_items (
   created_at TEXT DEFAULT (datetime('now'))
 )`;
 
+// ── IMAGE HELPERS ───────────────────────────────────────────
+function extractImageKeys(body, origin) {
+  if (!body) return [];
+  const escaped = origin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(escaped + '/images/([^"\'\\s<>]+)', 'g');
+  const keys = [];
+  let m;
+  while ((m = re.exec(body)) !== null) keys.push(m[1]);
+  return keys;
+}
+
+async function sweepExpiredItems(env, origin) {
+  const today = new Date().toISOString().split('T')[0];
+  try {
+    const expired = await env.DB.prepare(
+      "SELECT id, body FROM news_items WHERE expire_date IS NOT NULL AND expire_date < ?"
+    ).bind(today).all();
+    for (const item of expired.results) {
+      for (const key of extractImageKeys(item.body || '', origin)) {
+        try { await env.IMAGES.delete(key); } catch (_) {}
+      }
+      await env.DB.prepare('DELETE FROM news_items WHERE id = ?').bind(item.id).run();
+    }
+  } catch (_) {}
+}
+
+// Builds the Quill rich-text editor section for the body field
+function quillEditorSection(existingBody = '') {
+  const safe = (existingBody || '').replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+  return `<div class="form-group">
+  <label>Full text <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, shown when reader clicks "Read more"</span></label>
+  <div id="body-editor"></div>
+  <input type="hidden" name="body" id="body-hidden">
+</div>
+<script>
+var quill = new Quill('#body-editor', {
+  theme: 'snow',
+  modules: {
+    toolbar: {
+      container: [
+        ['bold', 'italic', 'underline'],
+        [{ align: [] }],
+        [{ header: [2, 3, false] }],
+        ['blockquote'],
+        [{ list: 'ordered' }, { list: 'bullet' }],
+        ['link', 'image'],
+        ['clean']
+      ],
+      handlers: { image: handleImageInsert }
+    }
+  }
+});
+var initialBody = \`${safe}\`;
+if (initialBody.trim()) quill.root.innerHTML = initialBody;
+
+async function uploadToR2(file) {
+  if (file.size > 2097152) {
+    alert('Image must be under 2MB. Please resize it and try again.');
+    return null;
+  }
+  var fd = new FormData();
+  fd.append('file', file);
+  try {
+    var res = await fetch('/api/upload-image', { method: 'POST', body: fd });
+    if (!res.ok) throw new Error();
+    return (await res.json()).url;
+  } catch(e) {
+    alert('Image upload failed. Please try again.');
+    return null;
+  }
+}
+
+function handleImageInsert() {
+  var input = document.createElement('input');
+  input.type = 'file'; input.accept = 'image/*';
+  input.onchange = async function() {
+    var file = input.files[0]; if (!file) return;
+    var url = await uploadToR2(file); if (!url) return;
+    var range = quill.getSelection(true) || { index: quill.getLength() };
+    quill.insertEmbed(range.index, 'image', url);
+    quill.setSelection(range.index + 1);
+  };
+  input.click();
+}
+
+quill.root.addEventListener('drop', async function(e) {
+  var files = e.dataTransfer && e.dataTransfer.files;
+  if (!files || !files.length) return;
+  var hasImg = false;
+  for (var i = 0; i < files.length; i++) { if (files[i].type.indexOf('image/') === 0) { hasImg = true; break; } }
+  if (!hasImg) return;
+  e.preventDefault(); e.stopPropagation();
+  for (var j = 0; j < files.length; j++) {
+    if (files[j].type.indexOf('image/') === 0) {
+      var url = await uploadToR2(files[j]); if (!url) continue;
+      var range = quill.getSelection(true) || { index: quill.getLength() };
+      quill.insertEmbed(range.index, 'image', url);
+      quill.setSelection(range.index + 1);
+    }
+  }
+}, true);
+
+quill.root.addEventListener('paste', async function(e) {
+  var items = e.clipboardData && e.clipboardData.items; if (!items) return;
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].type.indexOf('image/') === 0) {
+      var file = items[i].getAsFile(); if (!file) continue;
+      e.preventDefault();
+      var url = await uploadToR2(file); if (!url) break;
+      var range = quill.getSelection(true) || { index: quill.getLength() };
+      quill.insertEmbed(range.index, 'image', url);
+      quill.setSelection(range.index + 1);
+      break;
+    }
+  }
+}, true);
+
+document.querySelector('form').addEventListener('submit', function() {
+  document.getElementById('body-hidden').value = quill.root.innerHTML;
+});
+<\/script>`;
+}
+
 // ── HELPERS ─────────────────────────────────────────────────
 function authCookie(req) {
   const cookie = req.headers.get('cookie') || '';
@@ -52,7 +178,7 @@ function setCookieHeader() {
   return `tlc_auth=authenticated; Path=/; Expires=${exp}; HttpOnly; SameSite=Strict`;
 }
 
-function html(body, title = 'TLC Admin') {
+function html(body, title = 'TLC Admin', extraHead = '') {
   return new Response(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -60,6 +186,7 @@ function html(body, title = 'TLC Admin') {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title}</title>
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;600;700;800&family=Lora:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+${extraHead}
 <style>
 :root{--steel:#0A3C5C;--amber:#D4922A;--sage:#6B8F71;--warm:#FAF7F0;--linen:#F2EDE2;--mist:#EDF5F8;--border:#E8E0D0;--charcoal:#3D3530;--gray:#7A6E60;--white:#fff;--sans:'Source Sans 3',Arial,sans-serif;--serif:'Lora',Georgia,serif;}
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -300,6 +427,17 @@ export default {
     try { await env.DB.prepare(DB_INIT_EVENTS).run(); } catch (e) {}
     try { await env.DB.prepare(DB_INIT_NEWS_ITEMS).run(); } catch (e) {}
 
+    // ── PUBLIC: serve uploaded images from R2 ──
+    if (path.startsWith('/images/') && method === 'GET') {
+      const key = path.slice('/images/'.length);
+      const obj = await env.IMAGES.get(key);
+      if (!obj) return new Response('Not found', { status: 404 });
+      const headers = new Headers();
+      obj.writeHttpMetadata(headers);
+      headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+      return new Response(obj.body, { headers });
+    }
+
     // ── PUBLIC: news items API ──
     if (path === '/api/news' && method === 'GET') {
       const limit = parseInt(url.searchParams.get('limit') || '20', 10);
@@ -434,6 +572,25 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
         status: 302,
         headers: { Location: '/login', 'Set-Cookie': 'tlc_auth=; Path=/; Max-Age=0' }
       });
+    }
+
+    // ── IMAGE UPLOAD TO R2 ──
+    if (path === '/api/upload-image' && method === 'POST') {
+      const form = await request.formData();
+      const file = form.get('file');
+      if (!file || typeof file === 'string') {
+        return new Response(JSON.stringify({ error: 'No file' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (file.size > 2097152) {
+        return new Response(JSON.stringify({ error: 'File too large (max 2MB)' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }
+      const ext = (file.name || 'image').split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+      const key = `news-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      await env.IMAGES.put(key, file.stream(), {
+        httpMetadata: { contentType: file.type || 'image/jpeg' }
+      });
+      const url = `${new URL(request.url).origin}/images/${key}`;
+      return new Response(JSON.stringify({ url }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     // ── NEW NEWSLETTER FORM ──
@@ -656,6 +813,7 @@ addEvent();
 
     // ── NEWS ITEMS: LIST ──
     if (path === '/newsitems' && method === 'GET') {
+      await sweepExpiredItems(env, new URL(request.url).origin);
       const items = await env.DB.prepare(
         'SELECT * FROM news_items ORDER BY pinned DESC, publish_date DESC'
       ).all();
@@ -728,13 +886,10 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
         <label>Summary <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— shown on cards (2–3 sentences)</span></label>
         <textarea name="summary" style="min-height:80px;" placeholder="Short description shown on the homepage and news page cards."></textarea>
       </div>
+      ${quillEditorSection()}
       <div class="form-group">
-        <label>Full text <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, shown when reader clicks "Read more"</span></label>
-        <textarea name="body" style="min-height:120px;" placeholder="Full details — optional. Leave blank if the summary is enough."></textarea>
-      </div>
-      <div class="form-group">
-        <label>Image URL <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional</span></label>
-        <input type="text" name="image_url" placeholder="https://...">
+        <label>Header image URL <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, shown on the card thumbnail</span></label>
+        <input type="text" name="image_url" placeholder="https://... (or leave blank — images can also be dropped into the body above)">
       </div>
     </div>
     <div class="card">
@@ -762,7 +917,7 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
       <a href="/newsitems" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
     </div>
   </form>
-</div>`, 'TLC Admin — New News Item');
+</div>`, 'TLC Admin — New News Item', QUILL_HEAD);
     }
 
     // ── NEWS ITEMS: CREATE (POST) ──
@@ -803,13 +958,10 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
         <label>Summary <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— shown on cards (2–3 sentences)</span></label>
         <textarea name="summary" style="min-height:80px;">${item.summary || ''}</textarea>
       </div>
+      ${quillEditorSection(item.body || '')}
       <div class="form-group">
-        <label>Full text <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, shown when reader clicks "Read more"</span></label>
-        <textarea name="body" style="min-height:120px;">${item.body || ''}</textarea>
-      </div>
-      <div class="form-group">
-        <label>Image URL <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional</span></label>
-        <input type="text" name="image_url" value="${v(item.image_url)}">
+        <label>Header image URL <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, shown on the card thumbnail</span></label>
+        <input type="text" name="image_url" value="${v(item.image_url)}" placeholder="https://... (or leave blank — images can also be dropped into the body above)">
       </div>
     </div>
     <div class="card">
@@ -837,7 +989,7 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
       <a href="/newsitems" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
     </div>
   </form>
-</div>`, 'TLC Admin — Edit News Item');
+</div>`, 'TLC Admin — Edit News Item', QUILL_HEAD);
     }
 
     // ── NEWS ITEMS: UPDATE (POST) ──
@@ -860,6 +1012,13 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
     // ── NEWS ITEMS: DELETE ──
     if (path.startsWith('/newsitems/delete/') && method === 'POST') {
       const id = path.split('/').pop();
+      const origin = new URL(request.url).origin;
+      const item = await env.DB.prepare('SELECT body FROM news_items WHERE id = ?').bind(id).first();
+      if (item) {
+        for (const key of extractImageKeys(item.body || '', origin)) {
+          try { await env.IMAGES.delete(key); } catch (_) {}
+        }
+      }
       await env.DB.prepare('DELETE FROM news_items WHERE id = ?').bind(id).run();
       return new Response('', { status: 302, headers: { Location: '/newsitems?msg=deleted' } });
     }

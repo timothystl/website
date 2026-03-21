@@ -182,7 +182,7 @@ textarea.form-input{min-height:120px;resize:vertical;}
 .ci-val{font-family:var(--sans);font-size:14px;color:var(--charcoal);line-height:1.6;}
 .ci-val a{color:var(--mid);}
 .social-row{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;}
-.social-btn{display:inline-flex;align-items:center;font-family:var(--sans);font-size:12px;font-weight:700;color:var(--steel);background:var(--white);border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 14px;text-decoration:none;transition:background .2s,border-color .2s;}
+.social-btn{display:inline-flex;align-items:center;gap:7px;font-family:var(--sans);font-size:12px;font-weight:700;color:var(--steel);background:var(--white);border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 14px;text-decoration:none;transition:background .2s,border-color .2s;}
 .social-btn:hover{background:var(--mist);border-color:var(--ice);color:var(--steel);}
 
 /* EVENTS */
@@ -292,7 +292,6 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
           <button class="btn btn-secondary" onclick="showPage('worship')">Plan your visit</button>
           <button class="btn btn-ghost" onclick="showPage('sermons')">Livestream worship</button>
         </div>
-
       </div>
       <div class="hero-card">
         <div class="hero-card-label">Join us Sunday</div>
@@ -877,9 +876,9 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
             </div>
           </div>
           <div class="social-row">
-            <a href="https://www.facebook.com/timothystl" target="_blank" class="social-btn">Facebook</a>
-            <a href="https://www.instagram.com/timothystl" target="_blank" class="social-btn">Instagram</a>
-            <a href="https://www.youtube.com/@TimothySTL" target="_blank" class="social-btn">YouTube</a>
+            <a href="https://www.facebook.com/timothystl" target="_blank" class="social-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0;"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>Facebook</a>
+            <a href="https://www.instagram.com/timothystl" target="_blank" class="social-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1.5" fill="currentColor" stroke="none"/></svg>Instagram</a>
+            <a href="https://www.youtube.com/@TimothySTL" target="_blank" class="social-btn"><svg width="16" height="12" viewBox="0 0 24 17" fill="currentColor" style="flex-shrink:0;"><path d="M23.5 2.7A3 3 0 0 0 21.4.6C19.5 0 12 0 12 0S4.5 0 2.6.6A3 3 0 0 0 .5 2.7 31 31 0 0 0 0 8.5a31 31 0 0 0 .5 5.8A3 3 0 0 0 2.6 16.4C4.5 17 12 17 12 17s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 8.5a31 31 0 0 0-.5-5.8z"/><polygon points="9.75,12.5 15.5,8.5 9.75,4.5" fill="white"/></svg>YouTube</a>
           </div>
           <div style="margin-top:28px;">
             <span class="eyebrow eyebrow--sage">Prayer requests</span>
@@ -950,11 +949,10 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       <h2>What's on the calendar</h2>
       <p style="color:var(--gray);margin-bottom:24px;">Events, services, and gatherings at Timothy Lutheran. Worship services are every Sunday at 8:00 and 10:45 am.</p>
       <div style="border-radius:var(--r-md);overflow:hidden;border:1px solid var(--border);">
-        <iframe src="https://calendar.google.com/calendar/embed?src=calendar%40timothystl.org&ctz=America%2FChicago&mode=AGENDA&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0" style="border:0;display:block;width:100%;height:480px;" frameborder="0" scrolling="no" title="Timothy Lutheran Church calendar"></iframe>
+        <iframe src="https://calendar.google.com/calendar/embed?src=calendar%40timothystl.org&src=c_7f6d3db77b48c01af48592e21b2743d22fdf2b221d9d3c4e0c02680b73b89041%40group.calendar.google.com&ctz=America%2FChicago&mode=MONTH&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0" style="border:0;display:block;width:100%;height:600px;" frameborder="0" scrolling="no" title="Timothy Lutheran Church calendar"></iframe>
       </div>
-      <div style="margin-top:12px;display:flex;gap:16px;flex-wrap:wrap;">
+      <div style="margin-top:12px;">
         <a href="https://calendar.google.com/calendar/embed?src=calendar%40timothystl.org&ctz=America%2FChicago" target="_blank" style="font-family:var(--sans);font-size:13px;color:var(--mid);font-weight:600;">View full calendar →</a>
-        <a href="https://timothystl.breezechms.com/events/feed/MTkwNTMwLzA%3D" target="_blank" style="font-family:var(--sans);font-size:13px;color:var(--gray);">Subscribe to worship calendar</a>
       </div>
     </div>
   </section>
@@ -981,29 +979,53 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
   <section class="section section--white">
     <div class="wrap" style="max-width:760px;">
       <span class="eyebrow">Why we give</span>
-      <h2>Gathered in grace. Generous in love.</h2>
-      <p style="font-size:17px;line-height:1.8;color:var(--charcoal);margin-bottom:16px;">At Timothy Lutheran, we believe giving is a response to what God has already given us — not an obligation, but an act of worship. Every gift supports the life of this congregation: Sunday worship, Word of Life School, our food pantry, youth ministry, and the neighbors God places in our path each week.</p>
-      <p style="font-size:15px;line-height:1.8;color:var(--gray);">We are grateful for every gift, large or small. If you have questions about giving or would like to set up recurring support, reach out to our office at <a href="mailto:office@timothystl.org" style="color:var(--mid);font-weight:600;">office@timothystl.org</a>.</p>
+      <h2>Participation, not obligation.</h2>
+      <p style="font-size:17px;line-height:1.8;color:var(--charcoal);margin-bottom:16px;">Giving at Timothy is not an obligation — it is a participation with God in what he is already doing in the world. We give because God has given. Every gift supports the life of this congregation: Sunday worship, Word of Life School, our food pantry, youth ministry, and the neighbors God places in our path each week.</p>
+      <p style="font-size:15px;line-height:1.8;color:var(--gray);">You are always welcome to come and simply receive that Sunday's grace. Questions about giving? Reach out to our office at <a href="mailto:office@timothystl.org" style="color:var(--mid);font-weight:600;">office@timothystl.org</a>.</p>
 
+      <!-- Online -->
       <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:32px;margin-top:40px;">
         <span class="eyebrow eyebrow--sky">Online giving</span>
         <h3 style="margin-bottom:8px;">Give securely through Breeze</h3>
-        <p style="font-size:14px;color:var(--gray);line-height:1.7;margin-bottom:24px;">We use <strong>Breeze</strong> for secure online giving. You can give a one-time gift or set up automatic recurring giving — weekly, monthly, or whatever works for you. Breeze accepts all major debit and credit cards. Your giving history is always available in your Breeze account.</p>
-        <div class="btn-row">
-          <a href="https://timothystl.breezechms.com/give/online" target="_blank" class="btn btn-primary" style="font-size:15px;">Give online now →</a>
-        </div>
-        <p style="font-size:12px;color:var(--gray);margin-top:16px;">You'll be taken to our secure Breeze giving page. No account required for one-time gifts.</p>
+        <p style="font-size:14px;color:var(--gray);line-height:1.7;margin-bottom:24px;">One-time or recurring. Weekly, monthly, or whatever works for you. Breeze accepts all major debit and credit cards. No account required for one-time gifts.</p>
+        <a href="https://timothystl.breezechms.com/give/online" target="_blank" class="btn btn-primary" style="font-size:15px;">Give online now →</a>
       </div>
 
-      <div style="margin-top:40px;display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+      <!-- Other ways grid -->
+      <div style="margin-top:32px;display:grid;grid-template-columns:1fr 1fr;gap:16px;">
         <div style="background:var(--warm);border:1px solid var(--border);border-radius:var(--r-md);padding:24px;">
-          <div style="font-family:var(--serif);font-size:17px;color:var(--steel);margin-bottom:8px;">Give by check</div>
-          <p style="font-size:13px;color:var(--gray);line-height:1.7;margin:0;">Make checks payable to <strong>Timothy Lutheran Church</strong> and mail or drop off at:<br><br>6704 Fyler Ave<br>St. Louis, MO 63139</p>
+          <div style="font-family:var(--serif);font-size:17px;color:var(--steel);margin-bottom:8px;">On Sunday morning</div>
+          <p style="font-size:13px;color:var(--gray);line-height:1.7;margin:0;">Offering plates are passed at both services. Cash or check (payable to <strong>Timothy Lutheran Church</strong>) are both welcome. You are always welcome to give — or simply to receive that Sunday's grace.</p>
         </div>
         <div style="background:var(--warm);border:1px solid var(--border);border-radius:var(--r-md);padding:24px;">
-          <div style="font-family:var(--serif);font-size:17px;color:var(--steel);margin-bottom:8px;">Give in the offering</div>
-          <p style="font-size:13px;color:var(--gray);line-height:1.7;margin:0;">Offering plates are passed during our Sunday services at 8:00 and 10:45 am. You are always welcome to give — or simply to receive that Sunday's grace.</p>
+          <div style="font-family:var(--serif);font-size:17px;color:var(--steel);margin-bottom:8px;">Bank bill pay</div>
+          <p style="font-size:13px;color:var(--gray);line-height:1.7;margin:0;">Set up automatic giving directly through your bank's online bill pay — no fees, no middleman. Payable to <strong>Timothy Lutheran Church</strong>, 6704 Fyler Ave, St. Louis, MO 63139.</p>
         </div>
+        <div style="background:var(--warm);border:1px solid var(--border);border-radius:var(--r-md);padding:24px;">
+          <div style="font-family:var(--serif);font-size:17px;color:var(--steel);margin-bottom:8px;">Thrivent Charitable</div>
+          <p style="font-size:13px;color:var(--gray);line-height:1.7;margin-bottom:14px;">Thrivent members can give through Thrivent Charitable Impact &amp; Investing. Thrivent covers all processing fees, so 100% of your gift reaches the church.</p>
+          <a href="https://thriventcharitable.thrivent.com/giving/make-gift" target="_blank" style="font-family:var(--sans);font-size:12px;font-weight:700;color:var(--mid);">Give through Thrivent →</a>
+        </div>
+        <div style="background:var(--warm);border:1px solid var(--border);border-radius:var(--r-md);padding:24px;">
+          <div style="font-family:var(--serif);font-size:17px;color:var(--steel);margin-bottom:8px;">IRA charitable distribution</div>
+          <p style="font-size:13px;color:var(--gray);line-height:1.7;margin:0;">If you are 70½ or older, a Qualified Charitable Distribution (QCD) directly from your IRA to Timothy can count toward your required minimum distribution — and is not included in taxable income. Contact your IRA administrator to arrange.</p>
+        </div>
+        <div style="background:var(--warm);border:1px solid var(--border);border-radius:var(--r-md);padding:24px;">
+          <div style="font-family:var(--serif);font-size:17px;color:var(--steel);margin-bottom:8px;">Donor Advised Fund</div>
+          <p style="font-size:13px;color:var(--gray);line-height:1.7;margin:0;">Recommend a grant to Timothy Lutheran Church from your Donor Advised Fund at Fidelity Charitable, Schwab Charitable, or any other DAF sponsor. Our EIN is available from the church office.</p>
+        </div>
+        <div style="background:var(--warm);border:1px solid var(--border);border-radius:var(--r-md);padding:24px;">
+          <div style="font-family:var(--serif);font-size:17px;color:var(--steel);margin-bottom:8px;">Planned giving</div>
+          <p style="font-size:13px;color:var(--gray);line-height:1.7;margin:0;">A gift through your will or estate is one of the most significant ways to invest in the future of this congregation and its mission. We'd be honored to talk with you. <a href="#" onclick="showPage('contact')" style="color:var(--mid);font-weight:600;">Speak with a pastor →</a></p>
+        </div>
+      </div>
+
+      <!-- Stewardship through service -->
+      <div style="margin-top:40px;background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:28px;">
+        <span class="eyebrow eyebrow--sage">Stewardship of time &amp; talent</span>
+        <h3 style="margin-bottom:8px;">Give through service</h3>
+        <p style="font-size:14px;color:var(--gray);line-height:1.7;margin-bottom:20px;">Stewardship isn't only financial. Serving your neighbors — in and around Timothy — is one of the most meaningful ways to participate in what God is doing here. Find upcoming volunteer opportunities at our volunteer site.</p>
+        <a href="https://volunteer.timothystl.org" target="_blank" class="btn btn-outline">Find ways to serve →</a>
       </div>
     </div>
   </section>
@@ -1037,9 +1059,9 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       <div class="footer-brand-tag">from our Neighborhood to the Nations</div>
       <div class="footer-brand-addr">6704 Fyler Ave · St. Louis, MO 63139<br>Sunday worship · 8:00 &amp; 10:45 am<br>office@timothystl.org</div>
       <div class="footer-social">
-        <a href="https://www.facebook.com/timothystl" target="_blank">Facebook</a>
-        <a href="https://www.instagram.com/timothystl" target="_blank">Instagram</a>
-        <a href="https://www.youtube.com/@TimothySTL" target="_blank">YouTube</a>
+        <a href="https://www.facebook.com/timothystl" target="_blank" style="display:inline-flex;align-items:center;gap:6px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>Facebook</a>
+        <a href="https://www.instagram.com/timothystl" target="_blank" style="display:inline-flex;align-items:center;gap:6px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1.5" fill="currentColor" stroke="none"/></svg>Instagram</a>
+        <a href="https://www.youtube.com/@TimothySTL" target="_blank" style="display:inline-flex;align-items:center;gap:6px;"><svg width="14" height="10" viewBox="0 0 24 17" fill="currentColor"><path d="M23.5 2.7A3 3 0 0 0 21.4.6C19.5 0 12 0 12 0S4.5 0 2.6.6A3 3 0 0 0 .5 2.7 31 31 0 0 0 0 8.5a31 31 0 0 0 .5 5.8A3 3 0 0 0 2.6 16.4C4.5 17 12 17 12 17s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 8.5a31 31 0 0 0-.5-5.8z"/><polygon points="9.75,12.5 15.5,8.5 9.75,4.5" fill="white"/></svg>YouTube</a>
       </div>
     </div>
     <div class="footer-col">
