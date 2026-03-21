@@ -124,7 +124,7 @@ body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-he
       <div class="card-title">Volunteer</div>
       <div class="card-desc">Find your place to serve</div>
     </div>
-    <span class="card-arrow">&#x203A;</span>
+    <span class="card-arrow">›</span>
   </a>
 
   <a class="link-card" href="https://timothystl.org/news" target="_blank" rel="noopener">
