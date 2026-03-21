@@ -45,6 +45,22 @@ const DB_INIT_NEWS_ITEMS = `CREATE TABLE IF NOT EXISTS news_items (
   created_at TEXT DEFAULT (datetime('now'))
 )`;
 
+const DB_INIT_YOUTH_PAGES = `CREATE TABLE IF NOT EXISTS youth_pages (
+  slug TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  content TEXT,
+  updated_at TEXT
+)`;
+
+const YOUTH_SLUGS = [
+  { slug: 'youth',        title: 'Youth & Family' },
+  { slug: 'sundayschool', title: 'Sunday School' },
+  { slug: 'confirmation', title: 'Confirmation' },
+  { slug: 'vbs',          title: 'Vacation Bible School' },
+  { slug: 'egghunt',      title: 'Egg Hunt' },
+  { slug: 'family',       title: 'Family Ministry' },
+];
+
 // ── IMAGE HELPERS ───────────────────────────────────────────
 function extractImageKeys(body, origin) {
   if (!body) return [];
@@ -119,6 +135,7 @@ function setCookieHeader() {
   const exp = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toUTCString();
   return `tlc_auth=authenticated; Path=/; Expires=${exp}; HttpOnly; SameSite=Strict`;
 }
+
 
 function html(body, title = 'TLC Admin', extraHead = '') {
   return new Response(`<!DOCTYPE html>
@@ -213,6 +230,39 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
   });
 }
 
+// TinyMCE editor for youth page content field
+function tinymceYouthSection(existingContent = '') {
+  const safe = (existingContent || '').replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+  return `<div class="form-group">
+  <label>Page content</label>
+  <textarea id="youth-editor" name="content"></textarea>
+</div>
+<script>
+tinymce.init({
+  selector: '#youth-editor',
+  plugins: 'image link lists blockquote table code',
+  toolbar: 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image | table | code',
+  menubar: false,
+  min_height: 400,
+  skin: 'oxide',
+  content_css: 'default',
+  image_advtab: false,
+  automatic_uploads: false,
+  paste_data_images: true,
+  setup: function(editor) {
+    editor.on('change input', function() { editor.save(); });
+  },
+  init_instance_callback: function(editor) {
+    var initial = \`${safe}\`;
+    if (initial.trim()) editor.setContent(initial);
+  }
+});
+document.querySelector('form').addEventListener('submit', function() {
+  tinymce.triggerSave();
+});
+<\/script>`;
+}
+
 // ── TOPBAR WITH TABS ─────────────────────────────────────────
 function topbarHtml(activeTab, extraLinks = '') {
   return `<div class="topbar">
@@ -228,6 +278,7 @@ function topbarHtml(activeTab, extraLinks = '') {
   <div class="tab-nav-inner">
     <a href="/" class="tab${activeTab === 'newsletter' ? ' tab-active' : ''}">Newsletter</a>
     <a href="/newsitems" class="tab${activeTab === 'news' ? ' tab-active' : ''}">News &amp; Events</a>
+    <a href="/youth" class="tab${activeTab === 'youth' ? ' tab-active' : ''}">Youth Pages</a>
   </div>
 </nav>`;
 }
@@ -368,6 +419,15 @@ export default {
     try { await env.DB.prepare(DB_INIT_NEWSLETTERS).run(); } catch (e) {}
     try { await env.DB.prepare(DB_INIT_EVENTS).run(); } catch (e) {}
     try { await env.DB.prepare(DB_INIT_NEWS_ITEMS).run(); } catch (e) {}
+    try { await env.DB.prepare(DB_INIT_YOUTH_PAGES).run(); } catch (e) {}
+    // Pre-populate youth page slugs so they're always editable
+    for (const p of YOUTH_SLUGS) {
+      try {
+        await env.DB.prepare(
+          'INSERT OR IGNORE INTO youth_pages (slug, title, content, updated_at) VALUES (?, ?, ?, ?)'
+        ).bind(p.slug, p.title, '', '').run();
+      } catch (_) {}
+    }
 
     // ── PUBLIC: serve uploaded images from R2 ──
     if (path.startsWith('/images/') && method === 'GET') {
@@ -392,6 +452,16 @@ export default {
          LIMIT ?`
       ).bind(today, today, limit).all();
       return new Response(JSON.stringify(rows.results), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      });
+    }
+
+    // ── PUBLIC: youth page content API ──
+    if (path.startsWith('/api/youth/') && method === 'GET') {
+      const slug = path.slice('/api/youth/'.length);
+      const row = await env.DB.prepare('SELECT slug, title, content, updated_at FROM youth_pages WHERE slug = ?').bind(slug).first();
+      if (!row) return new Response('Not found', { status: 404 });
+      return new Response(JSON.stringify(row), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
       });
     }
@@ -963,6 +1033,86 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
       }
       await env.DB.prepare('DELETE FROM news_items WHERE id = ?').bind(id).run();
       return new Response('', { status: 302, headers: { Location: '/newsitems?msg=deleted' } });
+    }
+
+    // ════════════════════════════════════════════════════════
+    // ── YOUTH PAGES ─────────────────────────────────────────
+    // ════════════════════════════════════════════════════════
+
+    // All /youth routes require admin auth
+    if (path.startsWith('/youth')) {
+      if (!authCookie(request)) {
+        return new Response('', { status: 302, headers: { Location: '/login' } });
+      }
+
+      // ── Youth page list ──
+      if (path === '/youth' && method === 'GET') {
+        const pages = await env.DB.prepare('SELECT slug, title, updated_at FROM youth_pages ORDER BY rowid').all();
+        const msg = url.searchParams.get('msg');
+        const alertHtml = msg === 'saved' ? `<div class="alert alert-success">✓ Page saved and published.</div>` : '';
+        const listHtml = pages.results.map(p => `
+<div class="ni-row">
+  <div class="ni-title">${p.title}</div>
+  <div class="ni-meta">${p.updated_at ? 'Updated ' + p.updated_at.split('T')[0] : 'Not yet published'}</div>
+  <div class="ni-actions">
+    <a href="/youth/edit/${p.slug}" class="btn btn-sm btn-secondary">Edit</a>
+  </div>
+</div>`).join('');
+        return html(`
+${topbarHtml('youth')}
+<div class="wrap">
+  <div class="page-title">Youth Pages</div>
+  <div class="page-sub">Click any page to edit and publish. Changes appear on the website immediately.</div>
+  ${alertHtml}
+  <div class="card">
+    ${listHtml}
+  </div>
+  <div style="margin-top:20px;padding:16px 20px;background:var(--mist);border-radius:10px;border-left:3px solid var(--steel);">
+    <div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);line-height:1.9;">
+      Click <strong>Edit</strong> next to any page, make your changes, and hit <strong>Save &amp; Publish</strong>. That's it — the page updates immediately.
+    </div>
+  </div>
+</div>`, 'Youth Pages Admin', TINYMCE_HEAD);
+      }
+
+      // ── Edit youth page ──
+      if (path.startsWith('/youth/edit/') && method === 'GET') {
+        const slug = path.slice('/youth/edit/'.length);
+        const page = await env.DB.prepare('SELECT * FROM youth_pages WHERE slug = ?').bind(slug).first();
+        if (!page) return new Response('Not found', { status: 404 });
+        return html(`
+${topbarHtml('youth', `<a href="/youth">← All pages</a>`)}
+<div class="wrap">
+  <div class="page-title">${page.title}</div>
+  <div class="page-sub">Edit this page and click Save &amp; Publish when done.</div>
+  <div class="card">
+    <form method="POST" action="/youth/update/${slug}">
+      <div class="form-group">
+        <label>Page title</label>
+        <input type="text" name="title" value="${page.title}" required>
+      </div>
+      ${tinymceYouthSection(page.content || '')}
+      <div class="btn-row" style="margin-top:24px;">
+        <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save &amp; Publish →</button>
+        <a href="/youth" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>`, `Edit — ${page.title}`, TINYMCE_HEAD);
+      }
+
+      // ── Save youth page ──
+      if (path.startsWith('/youth/update/') && method === 'POST') {
+        const slug = path.slice('/youth/update/'.length);
+        const form = await request.formData();
+        const title = form.get('title') || '';
+        const content = form.get('content') || '';
+        const now = new Date().toISOString();
+        await env.DB.prepare(
+          'UPDATE youth_pages SET title = ?, content = ?, updated_at = ? WHERE slug = ?'
+        ).bind(title, content, now, slug).run();
+        return new Response('', { status: 302, headers: { Location: '/youth?msg=saved' } });
+      }
     }
 
     // ── DASHBOARD ──
