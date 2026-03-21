@@ -103,6 +103,17 @@ async function sweepExpiredItems(env, origin) {
 }
 
 // Builds the TinyMCE rich-text editor section for the body field
+function tlcUploadHandler(blobInfo) {
+  return new Promise(function(resolve, reject) {
+    var fd = new FormData();
+    fd.append('file', blobInfo.blob(), blobInfo.filename());
+    fetch('/api/upload-image', { method: 'POST', body: fd })
+      .then(function(r) { return r.ok ? r.json() : Promise.reject('HTTP ' + r.status); })
+      .then(function(d) { d && d.location ? resolve(d.location) : reject('Bad response'); })
+      .catch(function(err) { reject('Upload failed: ' + err); });
+  });
+}
+
 function tinymceEditorSection(existingBody = '') {
   const safe = (existingBody || '').replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
   return `<div class="form-group">
@@ -123,12 +134,10 @@ tinymce.init({
   object_resizing: true,
   resize_img_proportional: true,
   automatic_uploads: true,
-  images_upload_url: '/api/upload-image',
+  images_upload_handler: tlcUploadHandler,
   paste_data_images: true,
   setup: function(editor) {
-    editor.on('change input', function() {
-      editor.save();
-    });
+    editor.on('change input', function() { editor.save(); });
   },
   init_instance_callback: function(editor) {
     var initialBody = \`${safe}\`;
@@ -138,10 +147,9 @@ tinymce.init({
 document.querySelector('form').addEventListener('submit', function(e) {
   e.preventDefault();
   var form = this;
-  tinymce.activeEditor.uploadImages().then(function() {
-    tinymce.triggerSave();
-    form.submit();
-  });
+  var ed = tinymce.get('body-editor');
+  if (!ed) { form.submit(); return; }
+  ed.uploadImages().then(function() { ed.save(); form.submit(); });
 });
 <\/script>`;
 }
@@ -269,7 +277,7 @@ tinymce.init({
   content_css: 'default',
   image_advtab: false,
   automatic_uploads: true,
-  images_upload_url: '/api/upload-image',
+  images_upload_handler: tlcUploadHandler,
   paste_data_images: true,
   setup: function(editor) {
     editor.on('change input', function() { editor.save(); });
@@ -282,10 +290,9 @@ tinymce.init({
 document.querySelector('form').addEventListener('submit', function(e) {
   e.preventDefault();
   var form = this;
-  tinymce.activeEditor.uploadImages().then(function() {
-    tinymce.triggerSave();
-    form.submit();
-  });
+  var ed = tinymce.get('post-editor');
+  if (!ed) { form.submit(); return; }
+  ed.uploadImages().then(function() { ed.save(); form.submit(); });
 });
 <\/script>`;
 }
@@ -308,7 +315,7 @@ tinymce.init({
   content_css: 'default',
   image_advtab: false,
   automatic_uploads: true,
-  images_upload_url: '/api/upload-image',
+  images_upload_handler: tlcUploadHandler,
   paste_data_images: true,
   setup: function(editor) {
     editor.on('change input', function() { editor.save(); });
@@ -321,10 +328,9 @@ tinymce.init({
 document.querySelector('form').addEventListener('submit', function(e) {
   e.preventDefault();
   var form = this;
-  tinymce.activeEditor.uploadImages().then(function() {
-    tinymce.triggerSave();
-    form.submit();
-  });
+  var ed = tinymce.get('youth-editor');
+  if (!ed) { form.submit(); return; }
+  ed.uploadImages().then(function() { ed.save(); form.submit(); });
 });
 <\/script>`;
 }
@@ -523,7 +529,7 @@ export default {
         `SELECT id, title, summary, body, image_url, publish_date, event_date, expire_date, pinned
          FROM news_items
          WHERE publish_date <= ? AND (expire_date IS NULL OR expire_date >= ?)
-         ORDER BY pinned DESC, COALESCE(event_date, publish_date) DESC
+         ORDER BY pinned DESC, COALESCE(event_date, publish_date) ASC
          LIMIT ?`
       ).bind(today, today, limit).all();
       return new Response(JSON.stringify(rows.results), {
@@ -548,7 +554,7 @@ export default {
       const slug = parts[0];
       if (parts[1] === 'posts') {
         const rows = await env.DB.prepare(
-          'SELECT id, ministry_slug, title, post_date, pinned, body, created_at FROM ministry_posts WHERE ministry_slug = ? ORDER BY pinned DESC, post_date DESC, id DESC'
+          'SELECT id, ministry_slug, title, post_date, pinned, body, created_at FROM ministry_posts WHERE ministry_slug = ? ORDER BY pinned DESC, post_date ASC, id ASC'
         ).bind(slug).all();
         return new Response(JSON.stringify(rows.results), {
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
@@ -922,7 +928,7 @@ addEvent();
     if (path === '/newsitems' && method === 'GET') {
       await sweepExpiredItems(env, new URL(request.url).origin);
       const items = await env.DB.prepare(
-        'SELECT * FROM news_items ORDER BY pinned DESC, COALESCE(event_date, publish_date) DESC'
+        'SELECT * FROM news_items ORDER BY pinned DESC, COALESCE(event_date, publish_date) ASC'
       ).all();
       const today = new Date().toISOString().split('T')[0];
       const msgParam = url.searchParams.get('msg');
@@ -1305,7 +1311,7 @@ ${topbarHtml('ministries', `<a href="/ministries">← All ministries</a>`)}
         const page = await env.DB.prepare('SELECT title FROM youth_pages WHERE slug = ?').bind(slug).first();
         if (!page) return new Response('Not found', { status: 404 });
         const posts = await env.DB.prepare(
-          'SELECT id, title, post_date, pinned, created_at FROM ministry_posts WHERE ministry_slug = ? ORDER BY pinned DESC, post_date DESC, id DESC'
+          'SELECT id, title, post_date, pinned, created_at FROM ministry_posts WHERE ministry_slug = ? ORDER BY pinned DESC, post_date ASC, id ASC'
         ).bind(slug).all();
         const msg = url.searchParams.get('msg');
         const alertHtml = msg === 'postsaved' ? `<div class="alert alert-success">✓ Post saved.</div>`
