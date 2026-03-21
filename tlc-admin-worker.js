@@ -134,7 +134,7 @@ tinymce.init({
   object_resizing: true,
   resize_img_proportional: true,
   automatic_uploads: true,
-  images_upload_handler: tlcUploadHandler,
+  images_upload_handler: ${tlcUploadHandler},
   paste_data_images: true,
   setup: function(editor) {
     editor.on('change input', function() { editor.save(); });
@@ -277,7 +277,7 @@ tinymce.init({
   content_css: 'default',
   image_advtab: false,
   automatic_uploads: true,
-  images_upload_handler: tlcUploadHandler,
+  images_upload_handler: ${tlcUploadHandler},
   paste_data_images: true,
   setup: function(editor) {
     editor.on('change input', function() { editor.save(); });
@@ -315,7 +315,7 @@ tinymce.init({
   content_css: 'default',
   image_advtab: false,
   automatic_uploads: true,
-  images_upload_handler: tlcUploadHandler,
+  images_upload_handler: ${tlcUploadHandler},
   paste_data_images: true,
   setup: function(editor) {
     editor.on('change input', function() { editor.save(); });
@@ -1380,36 +1380,32 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
   <div class="page-title">New post — ${page.title}</div>
   <form method="POST" action="/ministries/${slug}/posts/create">
     <div class="card">
-      <div class="card-title">Content</div>
       <div class="form-group">
         <label>Title <span style="color:#B85C3A;">*</span></label>
         <input type="text" name="title" required placeholder="e.g. Summer Servant Event 2026">
       </div>
-      ${tinymcePostSection()}
-    </div>
-    <div class="card">
-      <div class="card-title">Scheduling</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
         <div class="form-group" style="margin:0;">
           <label>Publish date</label>
           <input type="date" name="post_date" value="${today}">
         </div>
         <div class="form-group" style="margin:0;">
-          <label>Event date <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, sorts by this date</span></label>
+          <label>Event date <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional</span></label>
           <input type="date" name="event_date">
         </div>
         <div class="form-group" style="margin:0;">
-          <label>Expire date <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— auto-hides after this date</span></label>
+          <label>Expire date <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— auto-hides</span></label>
           <input type="date" name="expire_date">
         </div>
       </div>
-      <div class="form-group" style="margin-top:18px;margin-bottom:0;">
+      <div class="form-group" style="margin-top:14px;">
         <label>Pin to top</label>
         <div class="checkbox-row">
           <input type="checkbox" name="pinned" id="pinned_post" value="1">
           <span onclick="document.getElementById('pinned_post').click()">Show this post above all others</span>
         </div>
       </div>
+      ${tinymcePostSection()}
     </div>
     <div class="btn-row">
       <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save &amp; Publish →</button>
@@ -1449,36 +1445,32 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
   <div class="page-title">Edit post — ${page.title}</div>
   <form method="POST" action="/ministries/${slug}/posts/update/${id}">
     <div class="card">
-      <div class="card-title">Content</div>
       <div class="form-group">
         <label>Title <span style="color:#B85C3A;">*</span></label>
         <input type="text" name="title" required value="${(post.title || '').replace(/"/g, '&quot;')}">
       </div>
-      ${tinymcePostSection(post.body || '')}
-    </div>
-    <div class="card">
-      <div class="card-title">Scheduling</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
         <div class="form-group" style="margin:0;">
           <label>Publish date</label>
           <input type="date" name="post_date" value="${post.post_date || ''}">
         </div>
         <div class="form-group" style="margin:0;">
-          <label>Event date <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, sorts by this date</span></label>
+          <label>Event date <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional</span></label>
           <input type="date" name="event_date" value="${post.event_date || ''}">
         </div>
         <div class="form-group" style="margin:0;">
-          <label>Expire date <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— auto-hides after this date</span></label>
+          <label>Expire date <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— auto-hides</span></label>
           <input type="date" name="expire_date" value="${post.expire_date || ''}">
         </div>
       </div>
-      <div class="form-group" style="margin-top:18px;margin-bottom:0;">
+      <div class="form-group" style="margin-top:14px;">
         <label>Pin to top</label>
         <div class="checkbox-row">
           <input type="checkbox" name="pinned" id="pinned_post" value="1"${post.pinned ? ' checked' : ''}>
           <span onclick="document.getElementById('pinned_post').click()">Show this post above all others</span>
         </div>
       </div>
+      ${tinymcePostSection(post.body || '')}
     </div>
     <div class="btn-row">
       <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save changes →</button>
