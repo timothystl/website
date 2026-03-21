@@ -49,16 +49,31 @@ const DB_INIT_YOUTH_PAGES = `CREATE TABLE IF NOT EXISTS youth_pages (
   slug TEXT PRIMARY KEY,
   title TEXT NOT NULL,
   content TEXT,
+  has_posts INTEGER DEFAULT 0,
   updated_at TEXT
 )`;
 
-const YOUTH_SLUGS = [
-  { slug: 'youth',        title: 'Youth & Family' },
-  { slug: 'sundayschool', title: 'Sunday School' },
-  { slug: 'confirmation', title: 'Confirmation' },
-  { slug: 'vbs',          title: 'Vacation Bible School' },
-  { slug: 'egghunt',      title: 'Egg Hunt' },
-  { slug: 'family',       title: 'Family Ministry' },
+const DB_INIT_MINISTRY_POSTS = `CREATE TABLE IF NOT EXISTS ministry_posts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ministry_slug TEXT NOT NULL,
+  title TEXT NOT NULL,
+  post_date TEXT,
+  body TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+)`;
+
+const MINISTRY_SLUGS = [
+  { slug: 'youth',          title: 'Youth',                  has_posts: 1 },
+  { slug: 'sundayschool',   title: 'Sunday School',          has_posts: 0 },
+  { slug: 'confirmation',   title: 'Confirmation',           has_posts: 0 },
+  { slug: 'vbs',            title: 'Vacation Bible School',  has_posts: 0 },
+  { slug: 'egghunt',        title: 'Egg Hunt',               has_posts: 0 },
+  { slug: 'family',         title: 'Family Ministry',        has_posts: 0 },
+  { slug: 'music',          title: 'Music Ministry',         has_posts: 0 },
+  { slug: 'stephen',        title: 'Stephen Ministry',       has_posts: 0 },
+  { slug: 'foodpantry',     title: 'Food Pantry',            has_posts: 0 },
+  { slug: 'bees',           title: 'Urban Beekeepers',       has_posts: 0 },
+  { slug: 'christmasmarket',title: 'Christmas Market',       has_posts: 0 },
 ];
 
 // ── IMAGE HELPERS ───────────────────────────────────────────
@@ -230,6 +245,39 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
   });
 }
 
+// TinyMCE editor for ministry post body field
+function tinymcePostSection(existingBody = '') {
+  const safe = (existingBody || '').replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+  return `<div class="form-group">
+  <label>Post content</label>
+  <textarea id="post-editor" name="body"></textarea>
+</div>
+<script>
+tinymce.init({
+  selector: '#post-editor',
+  plugins: 'image link lists blockquote table code',
+  toolbar: 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image | table | code',
+  menubar: false,
+  min_height: 400,
+  skin: 'oxide',
+  content_css: 'default',
+  image_advtab: false,
+  automatic_uploads: false,
+  paste_data_images: true,
+  setup: function(editor) {
+    editor.on('change input', function() { editor.save(); });
+  },
+  init_instance_callback: function(editor) {
+    var initial = \`${safe}\`;
+    if (initial.trim()) editor.setContent(initial);
+  }
+});
+document.querySelector('form').addEventListener('submit', function() {
+  tinymce.triggerSave();
+});
+<\/script>`;
+}
+
 // TinyMCE editor for youth page content field
 function tinymceYouthSection(existingContent = '') {
   const safe = (existingContent || '').replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
@@ -278,7 +326,7 @@ function topbarHtml(activeTab, extraLinks = '') {
   <div class="tab-nav-inner">
     <a href="/" class="tab${activeTab === 'newsletter' ? ' tab-active' : ''}">Newsletter</a>
     <a href="/newsitems" class="tab${activeTab === 'news' ? ' tab-active' : ''}">News &amp; Events</a>
-    <a href="/youth" class="tab${activeTab === 'youth' ? ' tab-active' : ''}">Youth Pages</a>
+    <a href="/ministries" class="tab${activeTab === 'ministries' ? ' tab-active' : ''}">Ministries</a>
   </div>
 </nav>`;
 }
@@ -420,14 +468,19 @@ export default {
     try { await env.DB.prepare(DB_INIT_EVENTS).run(); } catch (e) {}
     try { await env.DB.prepare(DB_INIT_NEWS_ITEMS).run(); } catch (e) {}
     try { await env.DB.prepare(DB_INIT_YOUTH_PAGES).run(); } catch (e) {}
-    // Pre-populate youth page slugs so they're always editable
-    for (const p of YOUTH_SLUGS) {
+    try { await env.DB.prepare(DB_INIT_MINISTRY_POSTS).run(); } catch (e) {}
+    // Migrate: add has_posts column if it doesn't exist yet
+    try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN has_posts INTEGER DEFAULT 0').run(); } catch (_) {}
+    // Pre-populate ministry page slugs so they're always editable
+    for (const p of MINISTRY_SLUGS) {
       try {
         await env.DB.prepare(
-          'INSERT OR IGNORE INTO youth_pages (slug, title, content, updated_at) VALUES (?, ?, ?, ?)'
-        ).bind(p.slug, p.title, '', '').run();
+          'INSERT OR IGNORE INTO youth_pages (slug, title, content, has_posts, updated_at) VALUES (?, ?, ?, ?, ?)'
+        ).bind(p.slug, p.title, '', p.has_posts, '').run();
       } catch (_) {}
     }
+    // Ensure youth always has has_posts=1 (migration for existing rows)
+    try { await env.DB.prepare("UPDATE youth_pages SET has_posts = 1 WHERE slug = 'youth' AND has_posts = 0").run(); } catch (_) {}
 
     // ── PUBLIC: serve uploaded images from R2 ──
     if (path.startsWith('/images/') && method === 'GET') {
@@ -456,10 +509,30 @@ export default {
       });
     }
 
-    // ── PUBLIC: youth page content API ──
+    // ── PUBLIC: youth page content API (legacy — keep for compat) ──
     if (path.startsWith('/api/youth/') && method === 'GET') {
       const slug = path.slice('/api/youth/'.length);
       const row = await env.DB.prepare('SELECT slug, title, content, updated_at FROM youth_pages WHERE slug = ?').bind(slug).first();
+      if (!row) return new Response('Not found', { status: 404 });
+      return new Response(JSON.stringify(row), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      });
+    }
+
+    // ── PUBLIC: ministry content API ──
+    if (path.startsWith('/api/ministry/') && method === 'GET') {
+      const rest = path.slice('/api/ministry/'.length);
+      const parts = rest.split('/');
+      const slug = parts[0];
+      if (parts[1] === 'posts') {
+        const rows = await env.DB.prepare(
+          'SELECT id, ministry_slug, title, post_date, body, created_at FROM ministry_posts WHERE ministry_slug = ? ORDER BY post_date DESC, id DESC'
+        ).bind(slug).all();
+        return new Response(JSON.stringify(rows.results), {
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+        });
+      }
+      const row = await env.DB.prepare('SELECT slug, title, content, has_posts, updated_at FROM youth_pages WHERE slug = ?').bind(slug).first();
       if (!row) return new Response('Not found', { status: 404 });
       return new Response(JSON.stringify(row), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
@@ -1036,74 +1109,141 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
     }
 
     // ════════════════════════════════════════════════════════
-    // ── YOUTH PAGES ─────────────────────────────────────────
+    // ── MINISTRIES ──────────────────────────────────────────
     // ════════════════════════════════════════════════════════
 
-    // All /youth routes require admin auth
-    if (path.startsWith('/youth')) {
-      if (!authCookie(request)) {
-        return new Response('', { status: 302, headers: { Location: '/login' } });
-      }
+    // Compat: redirect old /youth/* admin URLs to /ministries/*
+    if (path === '/youth' && method === 'GET') {
+      return new Response('', { status: 302, headers: { Location: '/ministries' } });
+    }
+    if (path.startsWith('/youth/') && method === 'GET') {
+      return new Response('', { status: 302, headers: { Location: '/ministries' + path.slice('/youth'.length) } });
+    }
 
-      // ── Youth page list ──
-      if (path === '/youth' && method === 'GET') {
-        const pages = await env.DB.prepare('SELECT slug, title, updated_at FROM youth_pages ORDER BY rowid').all();
+    if (path.startsWith('/ministries')) {
+      const CORE_SLUGS = ['youth','sundayschool','confirmation','vbs','egghunt','family','music','stephen','foodpantry','bees','christmasmarket'];
+
+      // ── Ministry list ──
+      if (path === '/ministries' && method === 'GET') {
+        const pages = await env.DB.prepare('SELECT slug, title, has_posts, updated_at FROM youth_pages ORDER BY rowid').all();
         const msg = url.searchParams.get('msg');
-        const alertHtml = msg === 'saved' ? `<div class="alert alert-success">✓ Page saved and published.</div>` : '';
-        const listHtml = pages.results.map(p => `
-<div class="ni-row">
+        let alertHtml = '';
+        if (msg === 'saved')       alertHtml = `<div class="alert alert-success">✓ Page saved and published.</div>`;
+        if (msg === 'created')     alertHtml = `<div class="alert alert-success">✓ Ministry page created.</div>`;
+        if (msg === 'deleted')     alertHtml = `<div class="alert alert-info">Ministry page deleted.</div>`;
+        if (msg === 'postsaved')   alertHtml = `<div class="alert alert-success">✓ Post saved.</div>`;
+        if (msg === 'postdeleted') alertHtml = `<div class="alert alert-info">Post deleted.</div>`;
+
+        const countRows = await env.DB.prepare(
+          'SELECT ministry_slug, COUNT(*) as cnt FROM ministry_posts GROUP BY ministry_slug'
+        ).all();
+        const countMap = {};
+        for (const r of countRows.results) countMap[r.ministry_slug] = r.cnt;
+
+        const listHtml = pages.results.map(p => {
+          const postCount = countMap[p.slug] || 0;
+          return `<div class="ni-row">
   <div class="ni-title">${p.title}</div>
-  <div class="ni-meta">${p.updated_at ? 'Updated ' + p.updated_at.split('T')[0] : 'Not yet published'}</div>
+  <div class="ni-meta">${p.updated_at ? 'Updated ' + p.updated_at.split('T')[0] : 'Not yet edited'}</div>
   <div class="ni-actions">
-    <a href="/youth/edit/${p.slug}" class="btn btn-sm btn-secondary">Edit</a>
+    ${p.has_posts ? `<a href="/ministries/${p.slug}/posts" class="btn btn-sm btn-sage">Posts${postCount > 0 ? ' (' + postCount + ')' : ''}</a>` : ''}
+    <a href="/ministries/edit/${p.slug}" class="btn btn-sm btn-secondary">Edit</a>
+    ${!CORE_SLUGS.includes(p.slug) ? `<form method="POST" action="/ministries/delete/${p.slug}" onsubmit="return confirm('Delete this ministry page?')" style="margin:0;"><button type="submit" class="btn btn-sm btn-danger">Delete</button></form>` : ''}
   </div>
-</div>`).join('');
+</div>`;
+        }).join('');
+
         return html(`
-${topbarHtml('youth')}
+${topbarHtml('ministries')}
 <div class="wrap">
-  <div class="page-title">Youth Pages</div>
-  <div class="page-sub">Click any page to edit and publish. Changes appear on the website immediately.</div>
+  <div class="page-title">Ministries</div>
+  <div class="page-sub">Edit ministry pages and manage posts. Changes appear on the website immediately.</div>
   ${alertHtml}
+  <div class="btn-row" style="margin-bottom:28px;">
+    <a href="/ministries/add" class="btn btn-primary">+ Add ministry page</a>
+  </div>
   <div class="card">
     ${listHtml}
   </div>
-  <div style="margin-top:20px;padding:16px 20px;background:var(--mist);border-radius:10px;border-left:3px solid var(--steel);">
-    <div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);line-height:1.9;">
-      Click <strong>Edit</strong> next to any page, make your changes, and hit <strong>Save &amp; Publish</strong>. That's it — the page updates immediately.
-    </div>
-  </div>
-</div>`, 'Youth Pages Admin', TINYMCE_HEAD);
+</div>`, 'Ministries Admin');
       }
 
-      // ── Edit youth page ──
-      if (path.startsWith('/youth/edit/') && method === 'GET') {
-        const slug = path.slice('/youth/edit/'.length);
+      // ── Add ministry form (GET) ──
+      if (path === '/ministries/add' && method === 'GET') {
+        return html(`
+${topbarHtml('ministries', `<a href="/ministries">← All ministries</a>`)}
+<div class="wrap">
+  <div class="page-title">New ministry page</div>
+  <div class="page-sub">Create a new ministry landing page.</div>
+  <form method="POST" action="/ministries/create">
+    <div class="card">
+      <div class="form-group">
+        <label>Slug <span style="color:#B85C3A;">*</span></label>
+        <input type="text" name="slug" required placeholder="e.g. outreach (becomes the URL: /outreach)">
+        <div style="font-size:12px;color:var(--gray);margin-top:4px;">Lowercase letters, numbers, and hyphens only. Cannot be changed after creation.</div>
+      </div>
+      <div class="form-group">
+        <label>Page title <span style="color:#B85C3A;">*</span></label>
+        <input type="text" name="title" required placeholder="e.g. Outreach Ministry">
+      </div>
+      <div class="form-group">
+        <label>Enable posts <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— allows adding time-stamped posts (events, recaps, announcements)</span></label>
+        <div class="checkbox-row">
+          <input type="checkbox" name="has_posts" id="has_posts" value="1">
+          <span onclick="document.getElementById('has_posts').click()">This ministry needs a posts feed</span>
+        </div>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button type="submit" class="btn btn-primary">Create ministry →</button>
+      <a href="/ministries" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
+    </div>
+  </form>
+</div>`, 'New Ministry');
+      }
+
+      // ── Create ministry (POST) ──
+      if (path === '/ministries/create' && method === 'POST') {
+        const form = await request.formData();
+        const slug = (form.get('slug') || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
+        const title = form.get('title') || '';
+        const has_posts = form.get('has_posts') === '1' ? 1 : 0;
+        if (!slug || !title) return new Response('', { status: 302, headers: { Location: '/ministries/add' } });
+        await env.DB.prepare(
+          'INSERT OR IGNORE INTO youth_pages (slug, title, content, has_posts, updated_at) VALUES (?, ?, ?, ?, ?)'
+        ).bind(slug, title, '', has_posts, '').run();
+        return new Response('', { status: 302, headers: { Location: '/ministries?msg=created' } });
+      }
+
+      // ── Edit ministry page (GET) ──
+      if (path.startsWith('/ministries/edit/') && method === 'GET') {
+        const slug = path.slice('/ministries/edit/'.length);
         const page = await env.DB.prepare('SELECT * FROM youth_pages WHERE slug = ?').bind(slug).first();
         if (!page) return new Response('Not found', { status: 404 });
         return html(`
-${topbarHtml('youth', `<a href="/youth">← All pages</a>`)}
+${topbarHtml('ministries', `<a href="/ministries">← All ministries</a>`)}
 <div class="wrap">
   <div class="page-title">${page.title}</div>
   <div class="page-sub">Edit this page and click Save &amp; Publish when done.</div>
   <div class="card">
-    <form method="POST" action="/youth/update/${slug}">
+    <form method="POST" action="/ministries/update/${slug}">
       <div class="form-group">
         <label>Page title</label>
-        <input type="text" name="title" value="${page.title}" required>
+        <input type="text" name="title" value="${(page.title || '').replace(/"/g, '&quot;')}" required>
       </div>
       ${tinymceYouthSection(page.content || '')}
       <div class="btn-row" style="margin-top:24px;">
         <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save &amp; Publish →</button>
-        <a href="/youth" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
+        <a href="/ministries" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
       </div>
     </form>
   </div>
 </div>`, `Edit — ${page.title}`, TINYMCE_HEAD);
       }
 
-      // ── Save youth page ──
-      if (path.startsWith('/youth/update/') && method === 'POST') {
-        const slug = path.slice('/youth/update/'.length);
+      // ── Save ministry page (POST) ──
+      if (path.startsWith('/ministries/update/') && method === 'POST') {
+        const slug = path.slice('/ministries/update/'.length);
         const form = await request.formData();
         const title = form.get('title') || '';
         const content = form.get('content') || '';
@@ -1111,9 +1251,166 @@ ${topbarHtml('youth', `<a href="/youth">← All pages</a>`)}
         await env.DB.prepare(
           'UPDATE youth_pages SET title = ?, content = ?, updated_at = ? WHERE slug = ?'
         ).bind(title, content, now, slug).run();
-        return new Response('', { status: 302, headers: { Location: '/youth?msg=saved' } });
+        return new Response('', { status: 302, headers: { Location: '/ministries?msg=saved' } });
       }
-    }
+
+      // ── Delete ministry page (POST) — non-core only ──
+      if (path.startsWith('/ministries/delete/') && method === 'POST') {
+        const slug = path.slice('/ministries/delete/'.length);
+        if (CORE_SLUGS.includes(slug)) {
+          return new Response('Cannot delete a built-in ministry page.', { status: 403 });
+        }
+        await env.DB.prepare('DELETE FROM ministry_posts WHERE ministry_slug = ?').bind(slug).run();
+        await env.DB.prepare('DELETE FROM youth_pages WHERE slug = ?').bind(slug).run();
+        return new Response('', { status: 302, headers: { Location: '/ministries?msg=deleted' } });
+      }
+
+      // ── Posts list ──
+      if (path.match(/^\/ministries\/[^/]+\/posts$/) && method === 'GET') {
+        const slug = path.split('/')[2];
+        const page = await env.DB.prepare('SELECT title FROM youth_pages WHERE slug = ?').bind(slug).first();
+        if (!page) return new Response('Not found', { status: 404 });
+        const posts = await env.DB.prepare(
+          'SELECT id, title, post_date, created_at FROM ministry_posts WHERE ministry_slug = ? ORDER BY post_date DESC, id DESC'
+        ).bind(slug).all();
+        const msg = url.searchParams.get('msg');
+        const alertHtml = msg === 'postsaved' ? `<div class="alert alert-success">✓ Post saved.</div>`
+          : msg === 'postdeleted' ? `<div class="alert alert-info">Post deleted.</div>` : '';
+        const today = new Date().toISOString().split('T')[0];
+
+        const listHtml = posts.results.length === 0
+          ? `<div style="text-align:center;padding:40px;color:var(--gray);font-size:14px;">No posts yet. Add your first one.</div>`
+          : posts.results.map(p => {
+              const upcoming = p.post_date && p.post_date >= today;
+              return `<div class="ni-row">
+  ${p.post_date ? `<span class="badge badge-${upcoming ? 'upcoming' : 'active'}">${upcoming ? 'Upcoming' : 'Past'}</span>` : ''}
+  <div class="ni-title">${p.title}</div>
+  <div class="ni-meta">${p.post_date || ''}</div>
+  <div class="ni-actions">
+    <a href="/ministries/${slug}/posts/edit/${p.id}" class="btn btn-sm btn-secondary">Edit</a>
+    <form method="POST" action="/ministries/${slug}/posts/delete/${p.id}" onsubmit="return confirm('Delete this post?')" style="margin:0;">
+      <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+    </form>
+  </div>
+</div>`;
+            }).join('');
+
+        return html(`
+${topbarHtml('ministries', `<a href="/ministries">← All ministries</a>`)}
+<div class="wrap">
+  <div class="page-title">${page.title} — Posts</div>
+  <div class="page-sub">Upcoming posts show at top. Past posts roll down automatically by date.</div>
+  ${alertHtml}
+  <div class="btn-row" style="margin-bottom:28px;">
+    <a href="/ministries/${slug}/posts/new" class="btn btn-primary">+ New post</a>
+    <a href="/ministries/edit/${slug}" class="btn btn-secondary">Edit page content</a>
+  </div>
+  <div class="card">
+    ${listHtml}
+  </div>
+</div>`, `${page.title} Posts`);
+      }
+
+      // ── New post form (GET) ──
+      if (path.match(/^\/ministries\/[^/]+\/posts\/new$/) && method === 'GET') {
+        const slug = path.split('/')[2];
+        const page = await env.DB.prepare('SELECT title FROM youth_pages WHERE slug = ?').bind(slug).first();
+        if (!page) return new Response('Not found', { status: 404 });
+        const today = new Date().toISOString().split('T')[0];
+        return html(`
+${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
+<div class="wrap">
+  <div class="page-title">New post — ${page.title}</div>
+  <form method="POST" action="/ministries/${slug}/posts/create">
+    <div class="card">
+      <div class="form-group">
+        <label>Title <span style="color:#B85C3A;">*</span></label>
+        <input type="text" name="title" required placeholder="e.g. Summer Servant Event 2026">
+      </div>
+      <div class="form-group">
+        <label>Post date <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— determines upcoming vs. past sorting</span></label>
+        <input type="date" name="post_date" value="${today}">
+      </div>
+      ${tinymcePostSection()}
+    </div>
+    <div class="btn-row">
+      <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save &amp; Publish →</button>
+      <a href="/ministries/${slug}/posts" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
+    </div>
+  </form>
+</div>`, `New Post — ${page.title}`, TINYMCE_HEAD);
+      }
+
+      // ── Create post (POST) ──
+      if (path.match(/^\/ministries\/[^/]+\/posts\/create$/) && method === 'POST') {
+        const slug = path.split('/')[2];
+        const form = await request.formData();
+        const title = form.get('title') || '';
+        const post_date = form.get('post_date') || new Date().toISOString().split('T')[0];
+        const body = form.get('body') || '';
+        await env.DB.prepare(
+          'INSERT INTO ministry_posts (ministry_slug, title, post_date, body) VALUES (?, ?, ?, ?)'
+        ).bind(slug, title, post_date, body).run();
+        return new Response('', { status: 302, headers: { Location: `/ministries/${slug}/posts?msg=postsaved` } });
+      }
+
+      // ── Edit post form (GET) ──
+      if (path.match(/^\/ministries\/[^/]+\/posts\/edit\/\d+$/) && method === 'GET') {
+        const parts = path.split('/');
+        const slug = parts[2];
+        const id = parts[5];
+        const page = await env.DB.prepare('SELECT title FROM youth_pages WHERE slug = ?').bind(slug).first();
+        const post = await env.DB.prepare('SELECT * FROM ministry_posts WHERE id = ? AND ministry_slug = ?').bind(id, slug).first();
+        if (!post || !page) return new Response('Not found', { status: 404 });
+        return html(`
+${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
+<div class="wrap">
+  <div class="page-title">Edit post — ${page.title}</div>
+  <form method="POST" action="/ministries/${slug}/posts/update/${id}">
+    <div class="card">
+      <div class="form-group">
+        <label>Title <span style="color:#B85C3A;">*</span></label>
+        <input type="text" name="title" required value="${(post.title || '').replace(/"/g, '&quot;')}">
+      </div>
+      <div class="form-group">
+        <label>Post date</label>
+        <input type="date" name="post_date" value="${post.post_date || ''}">
+      </div>
+      ${tinymcePostSection(post.body || '')}
+    </div>
+    <div class="btn-row">
+      <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save changes →</button>
+      <a href="/ministries/${slug}/posts" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
+    </div>
+  </form>
+</div>`, `Edit Post — ${page.title}`, TINYMCE_HEAD);
+      }
+
+      // ── Update post (POST) ──
+      if (path.match(/^\/ministries\/[^/]+\/posts\/update\/\d+$/) && method === 'POST') {
+        const parts = path.split('/');
+        const slug = parts[2];
+        const id = parts[5];
+        const form = await request.formData();
+        const title = form.get('title') || '';
+        const post_date = form.get('post_date') || '';
+        const body = form.get('body') || '';
+        await env.DB.prepare(
+          'UPDATE ministry_posts SET title = ?, post_date = ?, body = ? WHERE id = ? AND ministry_slug = ?'
+        ).bind(title, post_date, body, id, slug).run();
+        return new Response('', { status: 302, headers: { Location: `/ministries/${slug}/posts?msg=postsaved` } });
+      }
+
+      // ── Delete post (POST) ──
+      if (path.match(/^\/ministries\/[^/]+\/posts\/delete\/\d+$/) && method === 'POST') {
+        const parts = path.split('/');
+        const slug = parts[2];
+        const id = parts[5];
+        await env.DB.prepare('DELETE FROM ministry_posts WHERE id = ? AND ministry_slug = ?').bind(id, slug).run();
+        return new Response('', { status: 302, headers: { Location: `/ministries/${slug}/posts?msg=postdeleted` } });
+      }
+
+    } // end if (path.startsWith('/ministries'))
 
     // ── DASHBOARD ──
     const newsletters = await env.DB.prepare(
