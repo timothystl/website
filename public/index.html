@@ -216,6 +216,15 @@ textarea.form-input{min-height:120px;resize:vertical;}
 .page-hero{background:var(--steel);padding:56px 28px;text-align:center;}
 .page-hero h1{color:white;}
 .page-hero p{font-size:17px;color:rgba(255,255,255,.72);max-width:600px;margin:12px auto 0;font-weight:300;}
+.page-hero--photo{background-size:cover;background-position:center;position:relative;}
+.page-hero--photo::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(10,60,92,.80),rgba(10,44,56,.90));}
+.page-hero--photo>*{position:relative;z-index:1;}
+.img-placeholder{background:var(--mist);border:2px dashed var(--ice);border-radius:var(--r-md);display:flex;align-items:center;justify-content:center;color:var(--gray);font-family:var(--sans);font-size:13px;text-align:center;padding:40px 24px;}
+.vid-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:20px;margin-top:24px;}
+.vid-card{background:var(--steel);border-radius:var(--r-md);overflow:hidden;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;position:relative;text-decoration:none;}
+.vid-card:hover .vid-play{transform:scale(1.1);}
+.vid-play{width:52px;height:52px;background:rgba(255,255,255,.9);border-radius:50%;display:flex;align-items:center;justify-content:center;transition:transform .2s;flex-shrink:0;}
+.vid-label{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.68));padding:28px 14px 12px;color:white;font-family:var(--sans);font-size:13px;font-weight:600;}
 
 /* RICH CONTENT (TinyMCE output) */
 .rich-content p{margin-bottom:14px;line-height:1.75;}
@@ -664,7 +673,38 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
         <span style="font-family:var(--sans);font-size:13px;background:var(--mist);border:1px solid var(--ice);border-radius:999px;padding:6px 16px;color:var(--charcoal);">Steel Drums</span>
         <span style="font-family:var(--sans);font-size:13px;background:var(--mist);border:1px solid var(--ice);border-radius:999px;padding:6px 16px;color:var(--charcoal);">African Choir</span>
       </div>
-      <p style="font-size:13px;color:var(--gray);margin-top:24px;">Special music moments are often captured on video. <a href="https://www.youtube.com/@TimothySTL" target="_blank" style="color:var(--mid);font-weight:600;">Watch on our YouTube channel →</a></p>
+      <div style="margin-top:32px;">
+        <span class="eyebrow eyebrow--sky">Special music</span>
+        <h3 style="font-size:22px;margin-bottom:8px;">Moments from worship</h3>
+        <p style="font-size:14px;color:var(--gray);max-width:600px;">Special music moments are captured on video and posted to our YouTube channel — choirs, handbells, guest musicians, and more.</p>
+        <div class="vid-grid">
+          <a href="https://www.youtube.com/@TimothySTL" target="_blank" class="vid-card" style="background:linear-gradient(135deg,var(--steel),var(--mid));">
+            <div class="vid-play"><svg width="18" height="20" viewBox="0 0 18 20" fill="none"><path d="M2 1.5l14 8.5-14 8.5V1.5z" fill="#0A3C5C"/></svg></div>
+            <div class="vid-label">Handbell Choir</div>
+          </a>
+          <a href="https://www.youtube.com/@TimothySTL" target="_blank" class="vid-card" style="background:linear-gradient(135deg,#2a4d2e,var(--sage));">
+            <div class="vid-play"><svg width="18" height="20" viewBox="0 0 18 20" fill="none"><path d="M2 1.5l14 8.5-14 8.5V1.5z" fill="#0A3C5C"/></svg></div>
+            <div class="vid-label">African Choir</div>
+          </a>
+          <a href="https://www.youtube.com/@TimothySTL" target="_blank" class="vid-card" style="background:linear-gradient(135deg,#4a3010,var(--amber));">
+            <div class="vid-play"><svg width="18" height="20" viewBox="0 0 18 20" fill="none"><path d="M2 1.5l14 8.5-14 8.5V1.5z" fill="#0A3C5C"/></svg></div>
+            <div class="vid-label">Steel Drums &amp; Special Music</div>
+          </a>
+        </div>
+        <p style="font-size:13px;color:var(--gray);margin-top:16px;"><a href="https://www.youtube.com/@TimothySTL" target="_blank" style="color:var(--mid);font-weight:600;">See all videos on YouTube →</a></p>
+      </div>
+    </div>
+  </section>
+  <section class="section section--linen">
+    <div class="wrap" style="max-width:720px;text-align:center;">
+      <span class="eyebrow eyebrow--sage">Share your gift</span>
+      <h2>Music is for everyone here</h2>
+      <p style="max-width:560px;margin:0 auto 28px;">Whether you play an instrument, sing, or want to learn, there is a place for you in worship at Timothy. We welcome musicians of all skill levels and backgrounds — because the music here, like the congregation, belongs to everybody.</p>
+      <div class="btn-row" style="justify-content:center;">
+        <a href="https://volunteer.timothystl.org" target="_blank" class="btn btn-primary">Browse music volunteer opportunities →</a>
+        <button class="btn btn-outline" onclick="showPage('music')">Music ministry page</button>
+      </div>
+      <p style="font-size:13px;color:var(--gray);margin-top:16px;">Questions? Email <a href="mailto:office@timothystl.org" style="color:var(--mid);font-weight:600;">office@timothystl.org</a></p>
     </div>
   </section>
 </div>
@@ -731,20 +771,20 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
         </div>
         <div class="min-card">
           <h3>Music Ministry</h3>
-          <p>Praise the Lord with music. From ancient Lutheran hymns to contemporary worship, our musicians lead the congregation into the presence of the living God — week after week.</p>
-          <a href="#" onclick="showPage('contact')">Get involved →</a>
+          <p>Traditional with eclectic music — organ, handbells, guitar, drums, African choir, hammer dulcimer, and steel drums. A unique but familiar worship experience.</p>
+          <a href="/music" onclick="event.preventDefault();showPage('music')">Learn more →</a>
         </div>
         <div class="min-card">
           <img src="/images/ministries/SS_logo_title_blue%20copy.png" alt="Stephen Ministry" class="min-card-img">
           <h3>Stephen Ministry</h3>
           <p>Through Stephen Ministry, Timothy listens to the real life pains of our members and community. Trained caregivers walk alongside people in difficult seasons.</p>
-          <a href="#" onclick="showPage('contact')">Learn more →</a>
+          <a href="/stephen" onclick="event.preventDefault();showPage('stephen')">Learn more →</a>
         </div>
         <div class="min-card">
           <img src="/images/ministries/food%20pantry.png" alt="Food Pantry" class="min-card-img">
           <h3>Food Pantry</h3>
           <p>Timothy operates a food pantry for members and neighbors. Open monthly, serving families in Lindenwood Park with practical care in the name of Christ.</p>
-          <a href="#" onclick="showPage('contact')">Get details →</a>
+          <a href="/foodpantry" onclick="event.preventDefault();showPage('foodpantry')">Get details →</a>
         </div>
         <div class="min-card">
           <h3>Youth &amp; Family Ministry</h3>
@@ -766,13 +806,13 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
           <img src="/images/ministries/Bees.webp" alt="Timothy Urban Beekeepers" class="min-card-img">
           <h3>Timothy Urban Beekeepers</h3>
           <p>St. Louis neighbors learning about and supporting the art of beekeeping in an urban setting — a joyful reminder that creation care is part of our calling.</p>
-          <a href="#" onclick="showPage('contact')">Learn more →</a>
+          <a href="/bees" onclick="event.preventDefault();showPage('bees')">Learn more →</a>
         </div>
         <div class="min-card">
           <img src="/images/ministries/Christmas-MKT.jpg" alt="Christmas Market" class="min-card-img">
           <h3>Christmas Market</h3>
           <p>An annual community event in Lindenwood Park. Shopping, fellowship, and celebration — a gift to the neighborhood every December.</p>
-          <a href="#" onclick="showPage('events')">See events →</a>
+          <a href="/christmasmarket" onclick="event.preventDefault();showPage('christmasmarket')">Learn more →</a>
         </div>
       </div>
     </div>
@@ -1112,6 +1152,257 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       <div class="btn-row" style="margin-top:28px;">
         <a href="https://wordoflifeschool.net" target="_blank" class="btn btn-primary">Visit wordoflifeschool.net →</a>
       </div>
+    </div>
+  </section>
+</div>
+
+<!-- MUSIC MINISTRY -->
+<div id="page-music" class="page">
+  <!-- Hero: add style="background-image:url('/images/ministries/music-hero.jpg')" to the div below when photo is available -->
+  <div class="page-hero page-hero--photo">
+    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Music Ministry</span>
+    <h1>Praise the Lord with Every Gift</h1>
+    <p>Rooted in the Lutheran tradition. Wide open to every sound God's people bring.</p>
+  </div>
+  <section class="section section--white">
+    <div class="wrap">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:start;">
+        <div>
+          <span class="eyebrow eyebrow--sky">A unique — but familiar — sound</span>
+          <h2>Traditional with eclectic music</h2>
+          <p>We are a congregation shaped by the Lutheran liturgical tradition — and deeply open to the full range of musical gifts God has placed in our community. On any given Sunday you might hear a pipe organ prelude, a handbell choir, a drum kit, a hammer dulcimer, a steel drum ensemble, or an African choir. Sometimes all in the same service.</p>
+          <p>The music here is wide-ranging because the grace we celebrate is wide-ranging. <em>A unique — but familiar — worship experience.</em></p>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:20px;">
+            <span style="font-family:var(--sans);font-size:13px;background:var(--mist);border:1px solid var(--ice);border-radius:999px;padding:5px 14px;color:var(--charcoal);">Pipe Organ</span>
+            <span style="font-family:var(--sans);font-size:13px;background:var(--mist);border:1px solid var(--ice);border-radius:999px;padding:5px 14px;color:var(--charcoal);">Handbell Choir</span>
+            <span style="font-family:var(--sans);font-size:13px;background:var(--mist);border:1px solid var(--ice);border-radius:999px;padding:5px 14px;color:var(--charcoal);">Guitar</span>
+            <span style="font-family:var(--sans);font-size:13px;background:var(--mist);border:1px solid var(--ice);border-radius:999px;padding:5px 14px;color:var(--charcoal);">Drums</span>
+            <span style="font-family:var(--sans);font-size:13px;background:var(--mist);border:1px solid var(--ice);border-radius:999px;padding:5px 14px;color:var(--charcoal);">Hammer Dulcimer</span>
+            <span style="font-family:var(--sans);font-size:13px;background:var(--mist);border:1px solid var(--ice);border-radius:999px;padding:5px 14px;color:var(--charcoal);">Steel Drums</span>
+            <span style="font-family:var(--sans);font-size:13px;background:var(--mist);border:1px solid var(--ice);border-radius:999px;padding:5px 14px;color:var(--charcoal);">African Choir</span>
+          </div>
+        </div>
+        <div>
+          <!-- Photo: replace with <img> when ministry photo is available -->
+          <div class="img-placeholder" style="min-height:280px;">📷 Ministry photo coming soon</div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section class="section section--linen">
+    <div class="wrap">
+      <span class="eyebrow eyebrow--sky">Special music</span>
+      <h2>Moments from worship</h2>
+      <p style="max-width:600px;color:var(--gray);">Special music moments are captured on video and posted to our YouTube channel — choirs, handbells, guest musicians, and seasonal celebrations.</p>
+      <div class="vid-grid">
+        <a href="https://www.youtube.com/@TimothySTL" target="_blank" class="vid-card" style="background:linear-gradient(135deg,var(--steel),var(--mid));">
+          <div class="vid-play"><svg width="18" height="20" viewBox="0 0 18 20" fill="none"><path d="M2 1.5l14 8.5-14 8.5V1.5z" fill="#0A3C5C"/></svg></div>
+          <div class="vid-label">Handbell Choir</div>
+        </a>
+        <a href="https://www.youtube.com/@TimothySTL" target="_blank" class="vid-card" style="background:linear-gradient(135deg,#2a4d2e,var(--sage));">
+          <div class="vid-play"><svg width="18" height="20" viewBox="0 0 18 20" fill="none"><path d="M2 1.5l14 8.5-14 8.5V1.5z" fill="#0A3C5C"/></svg></div>
+          <div class="vid-label">African Choir</div>
+        </a>
+        <a href="https://www.youtube.com/@TimothySTL" target="_blank" class="vid-card" style="background:linear-gradient(135deg,#4a3010,var(--amber));">
+          <div class="vid-play"><svg width="18" height="20" viewBox="0 0 18 20" fill="none"><path d="M2 1.5l14 8.5-14 8.5V1.5z" fill="#0A3C5C"/></svg></div>
+          <div class="vid-label">Steel Drums &amp; Special Music</div>
+        </a>
+      </div>
+      <p style="font-size:13px;color:var(--gray);margin-top:20px;"><a href="https://www.youtube.com/@TimothySTL" target="_blank" style="color:var(--mid);font-weight:600;">See all videos on YouTube →</a></p>
+    </div>
+  </section>
+  <section class="section section--white">
+    <div class="wrap" style="max-width:720px;text-align:center;">
+      <span class="eyebrow eyebrow--sage">Share your gift</span>
+      <h2>There's a place for you here</h2>
+      <p style="max-width:580px;margin:0 auto 12px;">Whether you play an instrument, sing, or want to learn — there is a place for you in worship at Timothy. We welcome musicians of all skill levels and backgrounds. The music here, like the congregation, belongs to everybody.</p>
+      <p style="max-width:580px;margin:0 auto 28px;color:var(--gray);font-size:15px;">Check the volunteer page to see current openings — choir rehearsals, special services, seasonal events, and more.</p>
+      <div class="btn-row" style="justify-content:center;">
+        <a href="https://volunteer.timothystl.org" target="_blank" class="btn btn-primary">Browse music volunteer opportunities →</a>
+        <a href="mailto:office@timothystl.org" class="btn btn-outline">Email the office</a>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- STEPHEN MINISTRY -->
+<div id="page-stephen" class="page">
+  <!-- Hero: add style="background-image:url('/images/ministries/stephen-hero.jpg')" when photo is available -->
+  <div class="page-hero page-hero--photo">
+    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Stephen Ministry</span>
+    <h1>You Don't Have to Face This Alone</h1>
+    <p>Trained lay caregivers walking alongside people in life's hardest seasons.</p>
+  </div>
+  <section class="section section--white">
+    <div class="wrap" style="max-width:800px;">
+      <span class="eyebrow">What is Stephen Ministry?</span>
+      <h2>One-to-one Christian care</h2>
+      <p>Stephen Ministry equips congregation members to provide confidential, one-to-one Christian care to people going through difficult times — grief, illness, job loss, divorce, loneliness, or any of life's challenges. A trained Stephen Minister walks alongside you as a caring presence for as long as you need.</p>
+      <p>Stephen Ministers are not counselors or therapists. They are listeners — people who have been trained to be fully present, to keep confidence, and to bring the compassion of Christ to someone who is hurting.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-top:40px;">
+        <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:28px;">
+          <div style="font-family:var(--serif);font-size:20px;color:var(--steel);margin-bottom:10px;">Request a Caregiver</div>
+          <p style="font-size:14px;color:var(--gray);margin-bottom:16px;">If you or someone you know is going through a difficult time, reaching out is the first step. Everything is kept strictly confidential.</p>
+          <a href="mailto:office@timothystl.org" class="btn btn-primary" style="font-size:14px;padding:10px 20px;">Contact the office →</a>
+        </div>
+        <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:28px;">
+          <div style="font-family:var(--serif);font-size:20px;color:var(--steel);margin-bottom:10px;">Become a Stephen Minister</div>
+          <p style="font-size:14px;color:var(--gray);margin-bottom:16px;">Stephen Ministers complete approximately 50 hours of training before being commissioned. New training cohorts form periodically.</p>
+          <a href="mailto:office@timothystl.org" class="btn btn-outline" style="font-size:14px;padding:10px 20px;">Inquire about training →</a>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section class="section section--linen">
+    <div class="wrap" style="max-width:720px;text-align:center;">
+      <div style="font-family:var(--serif);font-size:clamp(20px,3vw,28px);color:var(--steel);font-style:italic;line-height:1.5;margin-bottom:20px;">"Bear one another's burdens, and so fulfill the law of Christ."</div>
+      <div style="font-family:var(--sans);font-size:13px;color:var(--gray);margin-bottom:28px;">Galatians 6:2</div>
+      <p style="color:var(--gray);">For more information about Stephen Ministry at Timothy, contact the church office at <a href="mailto:office@timothystl.org" style="color:var(--mid);font-weight:600;">office@timothystl.org</a> or call <a href="tel:+13148390563" style="color:var(--mid);font-weight:600;">(314) 839-0563</a>.</p>
+    </div>
+  </section>
+</div>
+
+<!-- FOOD PANTRY -->
+<div id="page-foodpantry" class="page">
+  <!-- Hero: add style="background-image:url('/images/ministries/foodpantry-hero.jpg')" when photo is available -->
+  <div class="page-hero page-hero--photo">
+    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Food Pantry</span>
+    <h1>Caring for Neighbors in Jesus' Name</h1>
+    <p>Practical love for families in Lindenwood Park, offered freely and without condition.</p>
+  </div>
+  <section class="section section--white">
+    <div class="wrap">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:start;">
+        <div>
+          <span class="eyebrow">About the pantry</span>
+          <h2>Serving our neighborhood</h2>
+          <p>Timothy's food pantry serves members and neighbors in Lindenwood Park and the surrounding community. We believe that caring for the hungry is not a program — it is a natural expression of what it means to be the church in a neighborhood.</p>
+          <p>The pantry is open monthly. No appointments are required. All are welcome.</p>
+          <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:24px;margin-top:24px;">
+            <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sage);margin-bottom:12px;">Pantry Details</div>
+            <div style="font-family:var(--sans);font-size:14px;color:var(--charcoal);line-height:2;">
+              <strong>Location:</strong> Timothy Lutheran Church<br>
+              6704 Fyler Ave · St. Louis, MO 63139<br>
+              <strong>Schedule:</strong> Monthly — check the News &amp; Events page for dates<br>
+              <strong>Questions:</strong> <a href="mailto:office@timothystl.org" style="color:var(--mid);font-weight:600;">office@timothystl.org</a>
+            </div>
+          </div>
+        </div>
+        <div>
+          <!-- Photo: replace with <img> when ministry photo is available -->
+          <div class="img-placeholder" style="min-height:280px;">📷 Ministry photo coming soon</div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section class="section section--linen">
+    <div class="wrap">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;">
+        <div>
+          <span class="eyebrow eyebrow--sage">Receive food</span>
+          <h2>How to get help</h2>
+          <p>The pantry is open to anyone in need. Come during pantry hours — no appointment, no paperwork, no questions asked. Bring a bag or box if you have one.</p>
+          <p style="font-size:14px;color:var(--gray);">Check the <button onclick="showPage('news')" style="background:none;border:none;cursor:pointer;color:var(--mid);font-weight:700;font-size:14px;padding:0;">News &amp; Events page</button> for upcoming pantry dates.</p>
+        </div>
+        <div>
+          <span class="eyebrow eyebrow--sky">Give &amp; serve</span>
+          <h2>How to help</h2>
+          <p>There are two ways to support the pantry: donate non-perishable food items, or volunteer to help on pantry day with setup, sorting, and distribution.</p>
+          <div class="btn-row" style="margin-top:20px;">
+            <a href="https://volunteer.timothystl.org" target="_blank" class="btn btn-primary">Volunteer sign-up →</a>
+            <a href="mailto:office@timothystl.org" class="btn btn-outline">Donate food</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- URBAN BEEKEEPERS -->
+<div id="page-bees" class="page">
+  <!-- Hero: add style="background-image:url('/images/ministries/bees-hero.jpg')" when photo is available -->
+  <div class="page-hero page-hero--photo">
+    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Urban Beekeepers</span>
+    <h1>Creation Care in the City</h1>
+    <p>St. Louis neighbors tending hives, learning together, and celebrating the gift of creation.</p>
+  </div>
+  <section class="section section--white">
+    <div class="wrap">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:start;">
+        <div>
+          <span class="eyebrow">About the ministry</span>
+          <h2>Beekeeping in Lindenwood Park</h2>
+          <p>Timothy's Urban Beekeepers ministry brings together neighbors who want to learn about and support the art of beekeeping in an urban setting. Our hives are tended by congregation members and community friends — a joyful reminder that creation care is part of our calling as people of God.</p>
+          <p>This ministry is open to curious beginners and experienced beekeepers alike. No prior experience is needed — just a love for the neighborhood and a willingness to learn.</p>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:20px;">
+            <span style="font-family:var(--sans);font-size:13px;background:var(--pale-gold);border-radius:999px;padding:5px 14px;color:#4a3010;">Beekeeping basics</span>
+            <span style="font-family:var(--sans);font-size:13px;background:var(--pale-gold);border-radius:999px;padding:5px 14px;color:#4a3010;">Urban pollinator support</span>
+            <span style="font-family:var(--sans);font-size:13px;background:var(--pale-gold);border-radius:999px;padding:5px 14px;color:#4a3010;">Honey harvest</span>
+            <span style="font-family:var(--sans);font-size:13px;background:var(--pale-gold);border-radius:999px;padding:5px 14px;color:#4a3010;">Community education</span>
+          </div>
+        </div>
+        <div>
+          <img src="/images/ministries/Bees.webp" alt="Timothy Urban Beekeepers" style="width:100%;border-radius:var(--r-md);box-shadow:var(--shadow);">
+        </div>
+      </div>
+    </div>
+  </section>
+  <section class="section section--linen">
+    <div class="wrap" style="max-width:720px;text-align:center;">
+      <span class="eyebrow eyebrow--sage">Get involved</span>
+      <h2>Join the hive</h2>
+      <p style="max-width:560px;margin:0 auto 28px;">Whether you want to learn about bees, help with the hives, or just show up for the honey harvest — we'd love to have you. Contact the church office to find out when the next gathering is.</p>
+      <div class="btn-row" style="justify-content:center;">
+        <a href="https://volunteer.timothystl.org" target="_blank" class="btn btn-primary">Volunteer opportunities →</a>
+        <a href="mailto:office@timothystl.org" class="btn btn-outline">Email the office</a>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- CHRISTMAS MARKET -->
+<div id="page-christmasmarket" class="page">
+  <!-- Hero uses the Christmas Market photo -->
+  <div class="page-hero page-hero--photo" style="background-image:url('/images/ministries/Christmas-MKT.jpg');">
+    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Annual Community Event</span>
+    <h1>Timothy Christmas Market</h1>
+    <p>Shopping, fellowship, and celebration — a gift to Lindenwood Park every December.</p>
+  </div>
+  <section class="section section--white">
+    <div class="wrap">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:start;">
+        <div>
+          <span class="eyebrow">About the market</span>
+          <h2>A neighborhood tradition</h2>
+          <p>The Timothy Christmas Market is an annual outdoor market bringing the Lindenwood Park community together each December. Local artisans and vendors set up in the church grounds — offering handmade goods, food, and festive fun for families and neighbors of all kinds.</p>
+          <p>The market is free and open to the public. It's one of our favorite ways to be a blessing to the neighborhood God has planted us in.</p>
+          <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:20px;margin-top:24px;" id="xmas-details">
+            <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:10px;">2025 Market</div>
+            <div style="font-family:var(--sans);font-size:14px;color:var(--charcoal);line-height:2;">
+              <strong>Date &amp; Time:</strong> Check back for 2025 dates<br>
+              <strong>Location:</strong> Timothy Lutheran Church<br>
+              6704 Fyler Ave · St. Louis, MO 63139<br>
+              <strong>Admission:</strong> Free and open to the public
+            </div>
+          </div>
+        </div>
+        <div>
+          <img src="/images/ministries/Christmas-MKT.jpg" alt="Timothy Christmas Market" style="width:100%;border-radius:var(--r-md);box-shadow:var(--shadow);">
+        </div>
+      </div>
+    </div>
+  </section>
+  <section class="section section--linen">
+    <div class="wrap" style="max-width:720px;">
+      <span class="eyebrow eyebrow--amber" style="color:var(--amber);">Vendors</span>
+      <h2>Apply to be a vendor</h2>
+      <p style="max-width:600px;">Are you a local artisan, crafter, or small business? We'd love to have you at the market. Vendor applications open in the fall — check back here for the application link or contact the office to be notified when registration opens.</p>
+      <div class="btn-row" style="margin-top:28px;">
+        <!-- Vendor form link: update this href each year with the Google Form URL -->
+        <a href="mailto:office@timothystl.org?subject=Christmas Market Vendor Interest" class="btn btn-primary">Express vendor interest →</a>
+        <a href="mailto:office@timothystl.org" class="btn btn-outline">Contact the office</a>
+      </div>
+      <p style="font-size:13px;color:var(--gray);margin-top:16px;">Vendor registration is handled via Google Form — link posted here when open.</p>
     </div>
   </section>
 </div>
