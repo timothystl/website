@@ -122,7 +122,8 @@ tinymce.init({
   image_caption: false,
   object_resizing: true,
   resize_img_proportional: true,
-  automatic_uploads: false,
+  automatic_uploads: true,
+  images_upload_url: '/api/upload-image',
   paste_data_images: true,
   setup: function(editor) {
     editor.on('change input', function() {
@@ -262,7 +263,8 @@ tinymce.init({
   skin: 'oxide',
   content_css: 'default',
   image_advtab: false,
-  automatic_uploads: false,
+  automatic_uploads: true,
+  images_upload_url: '/api/upload-image',
   paste_data_images: true,
   setup: function(editor) {
     editor.on('change input', function() { editor.save(); });
@@ -295,7 +297,8 @@ tinymce.init({
   skin: 'oxide',
   content_css: 'default',
   image_advtab: false,
-  automatic_uploads: false,
+  automatic_uploads: true,
+  images_upload_url: '/api/upload-image',
   paste_data_images: true,
   setup: function(editor) {
     editor.on('change input', function() { editor.save(); });
@@ -675,7 +678,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
         httpMetadata: { contentType: file.type || 'image/jpeg' }
       });
       const url = `${new URL(request.url).origin}/images/${key}`;
-      return new Response(JSON.stringify({ url }), { headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ url, location: url }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     // ── NEW NEWSLETTER FORM ──
