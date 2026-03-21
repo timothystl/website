@@ -566,13 +566,16 @@ export default {
         const rows = await env.DB.prepare(
           'SELECT id, ministry_slug, title, post_date, event_date, expire_date, pinned, body, created_at FROM ministry_posts WHERE ministry_slug = ? AND (expire_date IS NULL OR expire_date >= ?) ORDER BY pinned DESC, COALESCE(event_date, post_date) ASC, id ASC'
         ).bind(slug, today2).all();
-        return new Response(JSON.stringify(rows.results), {
+        const fixUrl = s => s ? s.replace(/src="\/images\//g, 'src="https://admin.timothystl.org/images/') : s;
+        const fixed = rows.results.map(r => ({ ...r, body: fixUrl(r.body) }));
+        return new Response(JSON.stringify(fixed), {
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
         });
       }
       const row = await env.DB.prepare('SELECT slug, title, content, has_posts, updated_at FROM youth_pages WHERE slug = ?').bind(slug).first();
       if (!row) return new Response('Not found', { status: 404 });
-      return new Response(JSON.stringify(row), {
+      const fixUrl = s => s ? s.replace(/src="\/images\//g, 'src="https://admin.timothystl.org/images/') : s;
+      return new Response(JSON.stringify({ ...row, content: fixUrl(row.content) }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
       });
     }
