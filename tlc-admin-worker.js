@@ -479,8 +479,8 @@ export default {
         ).bind(p.slug, p.title, '', p.has_posts, '').run();
       } catch (_) {}
     }
-    // Ensure youth always has has_posts=1 (migration for existing rows)
-    try { await env.DB.prepare("UPDATE youth_pages SET has_posts = 1 WHERE slug = 'youth' AND has_posts = 0").run(); } catch (_) {}
+    // Ensure youth always has has_posts=1 (unconditional — handles NULL from ALTER TABLE)
+    try { await env.DB.prepare("UPDATE youth_pages SET has_posts = 1 WHERE slug = 'youth'").run(); } catch (_) {}
 
     // ── PUBLIC: serve uploaded images from R2 ──
     if (path.startsWith('/images/') && method === 'GET') {
@@ -1134,11 +1134,13 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
         if (msg === 'postsaved')   alertHtml = `<div class="alert alert-success">✓ Post saved.</div>`;
         if (msg === 'postdeleted') alertHtml = `<div class="alert alert-info">Post deleted.</div>`;
 
-        const countRows = await env.DB.prepare(
-          'SELECT ministry_slug, COUNT(*) as cnt FROM ministry_posts GROUP BY ministry_slug'
-        ).all();
-        const countMap = {};
-        for (const r of countRows.results) countMap[r.ministry_slug] = r.cnt;
+        let countMap = {};
+        try {
+          const countRows = await env.DB.prepare(
+            'SELECT ministry_slug, COUNT(*) as cnt FROM ministry_posts GROUP BY ministry_slug'
+          ).all();
+          for (const r of countRows.results) countMap[r.ministry_slug] = r.cnt;
+        } catch (_) {}
 
         const listHtml = pages.results.map(p => {
           const postCount = countMap[p.slug] || 0;
