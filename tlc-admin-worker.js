@@ -1317,23 +1317,24 @@ ${topbarHtml('ministries', `<a href="/ministries">← All ministries</a>`)}
         const alertHtml = msg === 'postsaved' ? `<div class="alert alert-success">✓ Post saved.</div>`
           : msg === 'postdeleted' ? `<div class="alert alert-info">Post deleted.</div>` : '';
         const today = new Date().toISOString().split('T')[0];
+        const esc = s => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
         const listHtml = posts.results.length === 0
           ? `<div style="text-align:center;padding:40px;color:var(--gray);font-size:14px;">No posts yet. Add your first one.</div>`
           : posts.results.map(p => {
               const upcoming = p.post_date && p.post_date >= today;
-              return `<div class="ni-row">
-  ${p.pinned ? `<span class="badge badge-pinned">Pinned</span>` : ''}
-  ${p.post_date ? `<span class="badge badge-${upcoming ? 'upcoming' : 'active'}">${upcoming ? 'Upcoming' : 'Past'}</span>` : ''}
-  <div class="ni-title">${p.title}</div>
-  <div class="ni-meta">${p.post_date || ''}</div>
-  <div class="ni-actions">
-    <a href="/ministries/${slug}/posts/edit/${p.id}" class="btn btn-sm btn-secondary">Edit</a>
-    <form method="POST" action="/ministries/${slug}/posts/delete/${p.id}" onsubmit="return confirm('Delete this post?')" style="margin:0;">
-      <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-    </form>
-  </div>
-</div>`;
+              const editUrl = '/ministries/' + slug + '/posts/edit/' + p.id;
+              const deleteUrl = '/ministries/' + slug + '/posts/delete/' + p.id;
+              return '<div class="ni-row">' +
+                (p.pinned ? '<span class="badge badge-pinned">Pinned</span>' : '') +
+                (p.post_date ? '<span class="badge badge-' + (upcoming ? 'upcoming' : 'active') + '">' + (upcoming ? 'Upcoming' : 'Past') + '</span>' : '') +
+                '<div class="ni-title">' + esc(p.title) + '</div>' +
+                '<div class="ni-meta">' + (p.post_date || '') + '</div>' +
+                '<div class="ni-actions">' +
+                '<a href="' + editUrl + '" class="btn btn-sm btn-secondary">Edit</a>' +
+                '<form method="POST" action="' + deleteUrl + '" onsubmit="return confirm(\'Delete this post?\')" style="margin:0;">' +
+                '<button type="submit" class="btn btn-sm btn-danger">Delete</button>' +
+                '</form></div></div>';
             }).join('');
 
         return html(`
@@ -1344,10 +1345,12 @@ ${topbarHtml('ministries', `<a href="/ministries">← All ministries</a>`)}
   ${alertHtml}
   <div class="btn-row" style="margin-bottom:28px;">
     <a href="/ministries/${slug}/posts/new" class="btn btn-primary">+ New post</a>
-    <a href="/ministries/edit/${slug}" class="btn btn-secondary">Edit page content</a>
   </div>
   <div class="card">
     ${listHtml}
+  </div>
+  <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border);">
+    <a href="/ministries/edit/${slug}" style="font-family:var(--sans);font-size:13px;color:var(--gray);text-decoration:none;">⚙ Edit the ${page.title} page description →</a>
   </div>
 </div>`, `${page.title} Posts`);
       }
@@ -1406,7 +1409,7 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
       }
 
       // ── Edit post form (GET) ──
-      if (path.match(/^\/ministries\/[^/]+\/posts\/edit\/\d+$/) && method === 'GET') {
+      if (path.match(/^\/ministries\/[^/]+\/posts\/edit\/[^/]+$/) && method === 'GET') {
         const parts = path.split('/');
         const slug = parts[2];
         const id = parts[5];
@@ -1447,7 +1450,7 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
       }
 
       // ── Update post (POST) ──
-      if (path.match(/^\/ministries\/[^/]+\/posts\/update\/\d+$/) && method === 'POST') {
+      if (path.match(/^\/ministries\/[^/]+\/posts\/update\/[^/]+$/) && method === 'POST') {
         const parts = path.split('/');
         const slug = parts[2];
         const id = parts[5];
@@ -1463,7 +1466,7 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
       }
 
       // ── Delete post (POST) ──
-      if (path.match(/^\/ministries\/[^/]+\/posts\/delete\/\d+$/) && method === 'POST') {
+      if (path.match(/^\/ministries\/[^/]+\/posts\/delete\/[^/]+$/) && method === 'POST') {
         const parts = path.split('/');
         const slug = parts[2];
         const id = parts[5];
