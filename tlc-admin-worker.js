@@ -499,6 +499,9 @@ export default {
     try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN event_date TEXT').run(); } catch (_) {}
     // Migrate: add pinned to ministry_posts
     try { await env.DB.prepare('ALTER TABLE ministry_posts ADD COLUMN pinned INTEGER DEFAULT 0').run(); } catch (_) {}
+    // Migrate: add event_date and expire_date to ministry_posts
+    try { await env.DB.prepare('ALTER TABLE ministry_posts ADD COLUMN event_date TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE ministry_posts ADD COLUMN expire_date TEXT').run(); } catch (_) {}
     // Pre-populate ministry page slugs so they're always editable
     for (const p of MINISTRY_SLUGS) {
       try {
@@ -553,9 +556,10 @@ export default {
       const parts = rest.split('/');
       const slug = parts[0];
       if (parts[1] === 'posts') {
+        const today2 = new Date().toISOString().split('T')[0];
         const rows = await env.DB.prepare(
-          'SELECT id, ministry_slug, title, post_date, pinned, body, created_at FROM ministry_posts WHERE ministry_slug = ? ORDER BY pinned DESC, post_date ASC, id ASC'
-        ).bind(slug).all();
+          'SELECT id, ministry_slug, title, post_date, event_date, expire_date, pinned, body, created_at FROM ministry_posts WHERE ministry_slug = ? AND (expire_date IS NULL OR expire_date >= ?) ORDER BY pinned DESC, COALESCE(event_date, post_date) ASC, id ASC'
+        ).bind(slug, today2).all();
         return new Response(JSON.stringify(rows.results), {
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
         });
@@ -1311,7 +1315,7 @@ ${topbarHtml('ministries', `<a href="/ministries">← All ministries</a>`)}
         const page = await env.DB.prepare('SELECT title FROM youth_pages WHERE slug = ?').bind(slug).first();
         if (!page) return new Response('Not found', { status: 404 });
         const posts = await env.DB.prepare(
-          'SELECT id, title, post_date, pinned, created_at FROM ministry_posts WHERE ministry_slug = ? ORDER BY pinned DESC, post_date ASC, id ASC'
+          'SELECT id, title, post_date, event_date, expire_date, pinned, created_at FROM ministry_posts WHERE ministry_slug = ? ORDER BY pinned DESC, COALESCE(event_date, post_date) ASC, id ASC'
         ).bind(slug).all();
         const msg = url.searchParams.get('msg');
         const alertHtml = msg === 'postsaved' ? `<div class="alert alert-success">✓ Post saved.</div>`
@@ -1322,14 +1326,23 @@ ${topbarHtml('ministries', `<a href="/ministries">← All ministries</a>`)}
         const listHtml = posts.results.length === 0
           ? `<div style="text-align:center;padding:40px;color:var(--gray);font-size:14px;">No posts yet. Add your first one.</div>`
           : posts.results.map(p => {
-              const upcoming = p.post_date && p.post_date >= today;
+              const sortDate = p.event_date || p.post_date;
+              const upcoming = sortDate && sortDate >= today;
+              const expired = p.expire_date && p.expire_date < today;
               const editUrl = '/ministries/' + slug + '/posts/edit/' + p.id;
               const deleteUrl = '/ministries/' + slug + '/posts/delete/' + p.id;
+              let badge = '';
+              if (p.pinned) badge += '<span class="badge badge-pinned">Pinned</span>';
+              if (expired) badge += '<span class="badge badge-expired">Expired</span>';
+              else if (sortDate) badge += '<span class="badge badge-' + (upcoming ? 'upcoming' : 'active') + '">' + (upcoming ? 'Upcoming' : 'Past') + '</span>';
+              const metaParts = [];
+              if (p.event_date) metaParts.push('Event: ' + p.event_date);
+              else if (p.post_date) metaParts.push('Posted: ' + p.post_date);
+              if (p.expire_date) metaParts.push('Expires: ' + p.expire_date);
               return '<div class="ni-row">' +
-                (p.pinned ? '<span class="badge badge-pinned">Pinned</span>' : '') +
-                (p.post_date ? '<span class="badge badge-' + (upcoming ? 'upcoming' : 'active') + '">' + (upcoming ? 'Upcoming' : 'Past') + '</span>' : '') +
+                badge +
                 '<div class="ni-title">' + esc(p.title) + '</div>' +
-                '<div class="ni-meta">' + (p.post_date || '') + '</div>' +
+                '<div class="ni-meta">' + metaParts.join(' · ') + '</div>' +
                 '<div class="ni-actions">' +
                 '<a href="' + editUrl + '" class="btn btn-sm btn-secondary">Edit</a>' +
                 '<form method="POST" action="' + deleteUrl + '" onsubmit="return confirm(\'Delete this post?\')" style="margin:0;">' +
@@ -1371,20 +1384,31 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
         <label>Title <span style="color:#B85C3A;">*</span></label>
         <input type="text" name="title" required placeholder="e.g. Summer Servant Event 2026">
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:end;">
+      ${tinymcePostSection()}
+    </div>
+    <div class="card">
+      <div class="card-title">Scheduling</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
         <div class="form-group" style="margin:0;">
-          <label>Post date <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— determines upcoming vs. past sorting</span></label>
+          <label>Publish date</label>
           <input type="date" name="post_date" value="${today}">
         </div>
         <div class="form-group" style="margin:0;">
-          <label>Pin to top</label>
-          <div class="checkbox-row">
-            <input type="checkbox" name="pinned" id="pinned_post" value="1">
-            <span onclick="document.getElementById('pinned_post').click()">Show this post above all others</span>
-          </div>
+          <label>Event date <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, sorts by this date</span></label>
+          <input type="date" name="event_date">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Expire date <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— auto-hides after this date</span></label>
+          <input type="date" name="expire_date">
         </div>
       </div>
-      ${tinymcePostSection()}
+      <div class="form-group" style="margin-top:18px;margin-bottom:0;">
+        <label>Pin to top</label>
+        <div class="checkbox-row">
+          <input type="checkbox" name="pinned" id="pinned_post" value="1">
+          <span onclick="document.getElementById('pinned_post').click()">Show this post above all others</span>
+        </div>
+      </div>
     </div>
     <div class="btn-row">
       <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save &amp; Publish →</button>
@@ -1400,11 +1424,13 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
         const form = await request.formData();
         const title = form.get('title') || '';
         const post_date = form.get('post_date') || new Date().toISOString().split('T')[0];
+        const event_date = form.get('event_date') || null;
+        const expire_date = form.get('expire_date') || null;
         const body = form.get('body') || '';
         const pinned = form.get('pinned') === '1' ? 1 : 0;
         await env.DB.prepare(
-          'INSERT INTO ministry_posts (ministry_slug, title, post_date, body, pinned) VALUES (?, ?, ?, ?, ?)'
-        ).bind(slug, title, post_date, body, pinned).run();
+          'INSERT INTO ministry_posts (ministry_slug, title, post_date, event_date, expire_date, body, pinned) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        ).bind(slug, title, post_date, event_date, expire_date, body, pinned).run();
         return new Response('', { status: 302, headers: { Location: `/ministries/${slug}/posts?msg=postsaved` } });
       }
 
@@ -1426,20 +1452,31 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
         <label>Title <span style="color:#B85C3A;">*</span></label>
         <input type="text" name="title" required value="${(post.title || '').replace(/"/g, '&quot;')}">
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:end;">
+      ${tinymcePostSection(post.body || '')}
+    </div>
+    <div class="card">
+      <div class="card-title">Scheduling</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
         <div class="form-group" style="margin:0;">
-          <label>Post date</label>
+          <label>Publish date</label>
           <input type="date" name="post_date" value="${post.post_date || ''}">
         </div>
         <div class="form-group" style="margin:0;">
-          <label>Pin to top</label>
-          <div class="checkbox-row">
-            <input type="checkbox" name="pinned" id="pinned_post" value="1"${post.pinned ? ' checked' : ''}>
-            <span onclick="document.getElementById('pinned_post').click()">Show this post above all others</span>
-          </div>
+          <label>Event date <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, sorts by this date</span></label>
+          <input type="date" name="event_date" value="${post.event_date || ''}">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Expire date <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— auto-hides after this date</span></label>
+          <input type="date" name="expire_date" value="${post.expire_date || ''}">
         </div>
       </div>
-      ${tinymcePostSection(post.body || '')}
+      <div class="form-group" style="margin-top:18px;margin-bottom:0;">
+        <label>Pin to top</label>
+        <div class="checkbox-row">
+          <input type="checkbox" name="pinned" id="pinned_post" value="1"${post.pinned ? ' checked' : ''}>
+          <span onclick="document.getElementById('pinned_post').click()">Show this post above all others</span>
+        </div>
+      </div>
     </div>
     <div class="btn-row">
       <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save changes →</button>
@@ -1457,11 +1494,13 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
         const form = await request.formData();
         const title = form.get('title') || '';
         const post_date = form.get('post_date') || '';
+        const event_date = form.get('event_date') || null;
+        const expire_date = form.get('expire_date') || null;
         const body = form.get('body') || '';
         const pinned = form.get('pinned') === '1' ? 1 : 0;
         await env.DB.prepare(
-          'UPDATE ministry_posts SET title = ?, post_date = ?, body = ?, pinned = ? WHERE id = ? AND ministry_slug = ?'
-        ).bind(title, post_date, body, pinned, id, slug).run();
+          'UPDATE ministry_posts SET title = ?, post_date = ?, event_date = ?, expire_date = ?, body = ?, pinned = ? WHERE id = ? AND ministry_slug = ?'
+        ).bind(title, post_date, event_date, expire_date, body, pinned, id, slug).run();
         return new Response('', { status: 302, headers: { Location: `/ministries/${slug}/posts?msg=postsaved` } });
       }
 
