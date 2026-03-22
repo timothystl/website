@@ -868,8 +868,7 @@ ${topbarHtml('newsletter', `<a href="/">← All newsletters</a>`)}
       <div class="card-title" style="color:var(--sage);">What happens when you publish</div>
       <div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);line-height:1.8;">
         <strong>1.</strong> The newsletter is saved to your website archive at timothystl.org/news<br>
-        <strong>2.</strong> A draft is created in Beehiiv, ready for you to review and send<br>
-        <strong>3.</strong> Go to beehiiv.com, find the draft, review it, and hit Send
+        <strong>2.</strong> Go to beehiiv.com → New Post, paste in your content, and hit Send
       </div>
     </div>
 
@@ -983,51 +982,9 @@ addEvent();
         ).bind(newsletterId, e.event_date, e.event_name, e.event_time, e.event_desc, e.sort_order).run();
       }
 
-      let beehiivStatus = '';
-      let beehiivUrl = '';
-
-      // Push to Beehiiv if publishing
-      let beehiivError = '';
-      if (action === 'publish') {
-        try {
-          const emailHtml = buildEmailHtml(subject, pastorNote, events, ministryContent, ministryType, publishedAt, selectedNewsItems);
-          const beehiivRes = await fetch(`https://api.beehiiv.com/v2/publications/${BEEHIIV_PUB_ID}/posts`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${BEEHIIV_API_KEY}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              title: subject,
-              subject: subject,
-              content: { free: { email: emailHtml, web: `<h1>${subject}</h1><p>${pastorNote || ''}</p>` } },
-              status: 'draft'
-            })
-          });
-          const beehiivData = await beehiivRes.json();
-          if (beehiivData.data && beehiivData.data.id) {
-            await env.DB.prepare('UPDATE newsletters SET beehiiv_id = ? WHERE id = ?').bind(beehiivData.data.id, newsletterId).run();
-            beehiivStatus = 'success';
-            beehiivUrl = `https://app.beehiiv.com/posts/${beehiivData.data.id}`;
-          } else {
-            beehiivStatus = 'failed';
-            beehiivError = JSON.stringify(beehiivData).substring(0, 300);
-          }
-        } catch (e) {
-          beehiivStatus = 'failed';
-          beehiivError = e.message;
-        }
-      }
-
-      const successMsg = action === 'publish'
-        ? beehiivStatus === 'success'
-          ? `<div class="alert alert-success">✓ Published to website archive. <strong><a href="${beehiivUrl}" target="_blank" style="color:#1a3d1f;">Open Beehiiv draft →</a></strong> Review and send when ready.</div>`
-          : `<div class="alert alert-success">✓ Saved to website archive. <span style="color:#7a1f1f;">Note: Beehiiv draft creation failed — log in to beehiiv.com and create the email manually.</span></div>`
-        : `<div class="alert alert-info">Draft saved. Not yet published to the website or Beehiiv.</div>`;
-
       return new Response('', {
         status: 302,
-        headers: { Location: `/?msg=${encodeURIComponent(action === 'publish' ? 'published' : 'draft')}&beehiiv=${beehiivStatus}&url=${encodeURIComponent(beehiivUrl)}&subject=${encodeURIComponent(subject)}&err=${encodeURIComponent(beehiivError)}` }
+        headers: { Location: `/?msg=${encodeURIComponent(action === 'publish' ? 'published' : 'draft')}&subject=${encodeURIComponent(subject)}` }
       });
     }
 
@@ -1698,10 +1655,7 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
     ).all();
 
     const msgParam = url.searchParams.get('msg');
-    const beehiivParam = url.searchParams.get('beehiiv');
-    const beehiivUrlParam = url.searchParams.get('url') || '';
     const subjectParam = decodeURIComponent(url.searchParams.get('subject') || '');
-    const beehiivErrParam = decodeURIComponent(url.searchParams.get('err') || '');
     let alertHtml = '';
     if (msgParam === 'published') {
       const siteNewsUrl = 'https://timothystl.org/news';
@@ -1718,12 +1672,9 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
         ? `📖 ${subjectParam}\n\nOur weekly update is live — read it at timothystl.org/news\n\n@timothystl\n#TimothyLutheran #LindenwoordPark #StLouis #church`
         : `Our latest newsletter is live at timothystl.org/news\n\n@timothystl\n#TimothyLutheran #LindenwoordPark #StLouis #church`;
       const igCaptionJs = igCaption.replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$/g,'\\$');
-      const beehiivLine = beehiivParam === 'success'
-        ? `<a href="${decodeURIComponent(beehiivUrlParam)}" target="_blank" style="font-weight:700;color:#1a3d1f;">Open Beehiiv draft →</a> Review and hit Send when ready.`
-        : `<span style="color:#7a1f1f;">⚠ Beehiiv draft failed${beehiivErrParam ? ': ' + beehiivErrParam : ''}.</span> Log in to <a href="https://app.beehiiv.com" target="_blank" style="font-weight:700;color:#1a3d1f;">Beehiiv</a> to create the email manually.`;
       alertHtml = `
 <div class="alert alert-success" style="margin-bottom:0;border-radius:10px 10px 0 0;">
-  ✓ Newsletter published to website archive. ${beehiivLine}
+  ✓ Newsletter published to website archive. Now <a href="https://app.beehiiv.com/posts/new" target="_blank" style="font-weight:700;color:#1a3d1f;">create a new post in Beehiiv →</a> and paste in the content to send the email.
 </div>
 <div style="background:#f0f7f0;border:1px solid #b8d4b8;border-top:none;border-radius:0 0 10px 10px;padding:18px 20px;margin-bottom:20px;">
   <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#2a4d2a;margin-bottom:14px;">📣 Share to social media</div>
