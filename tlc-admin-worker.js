@@ -4,7 +4,7 @@
 
 const ADMIN_PASSWORD = '6704fyler';
 const BEEHIIV_API_KEY = 'jBgc1cHvSXJlyoskPkyf8Ujz7r6VzCO4CaA1t4BaaRsiR9nLR4WmjHQpMK9Ri0N8';
-const BEEHIIV_PUB_ID = '7c76e5d5-1225-4d04-ae5c-023c2d2d7a40';
+const BEEHIIV_PUB_ID = 'pub_7c76e5d5-1225-4d04-ae5c-023c2d2d7a40';
 
 // TinyMCE rich-text editor — loaded only on news item form pages
 const TINYMCE_API_KEY = '5wrsrinqxeqvej5slykwic6rgpfb0v8wvj0f21fgk1r4nhs0';
