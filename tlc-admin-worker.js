@@ -484,28 +484,47 @@ function buildEmailHtml(subject, pastorNote, events, ministryContent, ministryTy
 </html>`;
 }
 
-// TinyMCE editor for pastor's note (no image upload)
+// TinyMCE editor for pastor's note
 function tinymcePastorSection(existingBody = '') {
+  const safe = (existingBody || '').replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
   return `
 <div class="form-group">
   <label>Your message this week</label>
-  <textarea id="pastor-editor" name="pastor_note" style="min-height:140px;">${existingBody}</textarea>
+  <textarea id="pastor-editor" name="pastor_note"></textarea>
 </div>
 <script>
 tinymce.init({
   selector: '#pastor-editor',
-  plugins: 'link lists',
-  toolbar: 'bold italic underline | bullist numlist | link',
+  plugins: 'image link lists blockquote table code',
+  toolbar: 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image | table | code',
   menubar: false,
-  statusbar: false,
-  min_height: 140,
+  min_height: 200,
   skin: 'oxide',
   content_css: 'default',
-  setup: function(ed) {
-    ed.on('change input', function() { ed.save(); });
+  convert_urls: false,
+  image_advtab: false,
+  image_caption: false,
+  object_resizing: true,
+  resize_img_proportional: true,
+  automatic_uploads: true,
+  images_upload_handler: ${tlcUploadHandler},
+  paste_data_images: true,
+  setup: function(editor) {
+    editor.on('change input', function() { editor.save(); });
+  },
+  init_instance_callback: function(editor) {
+    var initialBody = \`${safe}\`;
+    if (initialBody.trim()) editor.setContent(initialBody);
   }
 });
-</script>`;
+document.querySelector('form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  var form = this;
+  var ed = tinymce.get('pastor-editor');
+  if (!ed) { form.submit(); return; }
+  ed.uploadImages().then(function() { ed.save(); form.submit(); });
+});
+<\/script>`;
 }
 
 // ── BUILD WEB HTML (for archive) ─────────────────────────────
@@ -964,6 +983,7 @@ addEvent();
       let beehiivUrl = '';
 
       // Push to Beehiiv if publishing
+      let beehiivError = '';
       if (action === 'publish') {
         try {
           const emailHtml = buildEmailHtml(subject, pastorNote, events, ministryContent, ministryType, publishedAt, selectedNewsItems);
@@ -976,8 +996,7 @@ addEvent();
             body: JSON.stringify({
               subject: subject,
               content: { free: { email: emailHtml, web: `<h1>${subject}</h1><p>${pastorNote || ''}</p>` } },
-              status: 'draft',
-              send_at: null
+              status: 'draft'
             })
           });
           const beehiivData = await beehiivRes.json();
@@ -987,9 +1006,11 @@ addEvent();
             beehiivUrl = `https://app.beehiiv.com/posts/${beehiivData.data.id}`;
           } else {
             beehiivStatus = 'failed';
+            beehiivError = JSON.stringify(beehiivData).substring(0, 300);
           }
         } catch (e) {
           beehiivStatus = 'failed';
+          beehiivError = e.message;
         }
       }
 
@@ -1001,7 +1022,7 @@ addEvent();
 
       return new Response('', {
         status: 302,
-        headers: { Location: `/?msg=${encodeURIComponent(action === 'publish' ? 'published' : 'draft')}&beehiiv=${beehiivStatus}&url=${encodeURIComponent(beehiivUrl)}&subject=${encodeURIComponent(subject)}` }
+        headers: { Location: `/?msg=${encodeURIComponent(action === 'publish' ? 'published' : 'draft')}&beehiiv=${beehiivStatus}&url=${encodeURIComponent(beehiivUrl)}&subject=${encodeURIComponent(subject)}&err=${encodeURIComponent(beehiivError)}` }
       });
     }
 
@@ -1675,6 +1696,7 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
     const beehiivParam = url.searchParams.get('beehiiv');
     const beehiivUrlParam = url.searchParams.get('url') || '';
     const subjectParam = decodeURIComponent(url.searchParams.get('subject') || '');
+    const beehiivErrParam = decodeURIComponent(url.searchParams.get('err') || '');
     let alertHtml = '';
     if (msgParam === 'published') {
       const siteNewsUrl = 'https://timothystl.org/news';
@@ -1693,7 +1715,7 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
       const igCaptionJs = igCaption.replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$/g,'\\$');
       const beehiivLine = beehiivParam === 'success'
         ? `<a href="${decodeURIComponent(beehiivUrlParam)}" target="_blank" style="font-weight:700;color:#1a3d1f;">Open Beehiiv draft →</a> Review and hit Send when ready.`
-        : `Log in to <a href="https://app.beehiiv.com" target="_blank" style="font-weight:700;color:#1a3d1f;">Beehiiv</a> to send the email manually.`;
+        : `<span style="color:#7a1f1f;">⚠ Beehiiv draft failed${beehiivErrParam ? ': ' + beehiivErrParam : ''}.</span> Log in to <a href="https://app.beehiiv.com" target="_blank" style="font-weight:700;color:#1a3d1f;">Beehiiv</a> to create the email manually.`;
       alertHtml = `
 <div class="alert alert-success" style="margin-bottom:0;border-radius:10px 10px 0 0;">
   ✓ Newsletter published to website archive. ${beehiivLine}
