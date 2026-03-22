@@ -62,6 +62,20 @@ const DB_INIT_MINISTRY_POSTS = `CREATE TABLE IF NOT EXISTS ministry_posts (
   created_at TEXT DEFAULT (datetime('now'))
 )`;
 
+const DB_INIT_COMM_SETTINGS = `CREATE TABLE IF NOT EXISTS comm_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT
+)`;
+
+const THEMES = ['Acceptance', 'Christian Education', 'Outreach', 'Worship'];
+const CONTENT_TYPES = ['Testimonial / Quote', 'Story', 'Explainer', 'Event Promo', 'Factoid / Trivia'];
+const WEEK_LABELS = [
+  'Week 1 — Testimonial / Quote (photo or video)',
+  'Week 2 — Story (ministry spotlight)',
+  'Week 3 — Explainer (why this matters)',
+  'Week 4 — Factoid / Trivia (engagement)',
+];
+
 const MINISTRY_SLUGS = [
   { slug: 'youth',          title: 'Youth',                  has_posts: 1 },
   { slug: 'sundayschool',   title: 'Sunday School',          has_posts: 0 },
@@ -354,9 +368,10 @@ function topbarHtml(activeTab, extraLinks = '') {
 </div>
 <nav class="tab-nav">
   <div class="tab-nav-inner">
-    <a href="/" class="tab${activeTab === 'newsletter' ? ' tab-active' : ''}">Newsletter</a>
+    <a href="/planning" class="tab${activeTab === 'planning' ? ' tab-active' : ''}">📋 Planning</a>
     <a href="/newsitems" class="tab${activeTab === 'news' ? ' tab-active' : ''}">News &amp; Events</a>
     <a href="/ministries" class="tab${activeTab === 'ministries' ? ' tab-active' : ''}">Ministries</a>
+    <a href="/" class="tab${activeTab === 'newsletter' ? ' tab-active' : ''}">Newsletter</a>
   </div>
 </nav>`;
 }
@@ -499,6 +514,7 @@ export default {
     try { await env.DB.prepare(DB_INIT_NEWS_ITEMS).run(); } catch (e) {}
     try { await env.DB.prepare(DB_INIT_YOUTH_PAGES).run(); } catch (e) {}
     try { await env.DB.prepare(DB_INIT_MINISTRY_POSTS).run(); } catch (e) {}
+    try { await env.DB.prepare(DB_INIT_COMM_SETTINGS).run(); } catch (e) {}
     // Migrate: add has_posts column if it doesn't exist yet
     try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN has_posts INTEGER DEFAULT 0').run(); } catch (_) {}
     // Migrate: add event_date to news_items for sorting by event date independent of publish date
@@ -508,6 +524,11 @@ export default {
     // Migrate: add event_date and expire_date to ministry_posts
     try { await env.DB.prepare('ALTER TABLE ministry_posts ADD COLUMN event_date TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE ministry_posts ADD COLUMN expire_date TEXT').run(); } catch (_) {}
+    // Migrate: add comms planning fields to news_items
+    try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN theme TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN content_type TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN channels TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN week_slot INTEGER').run(); } catch (_) {}
     // Pre-populate ministry page slugs so they're always editable
     for (const p of MINISTRY_SLUGS) {
       try {
@@ -535,9 +556,10 @@ export default {
       const limit = parseInt(url.searchParams.get('limit') || '20', 10);
       const today = new Date().toISOString().split('T')[0];
       const rows = await env.DB.prepare(
-        `SELECT id, title, summary, body, image_url, publish_date, event_date, expire_date, pinned
+        `SELECT id, title, summary, body, image_url, publish_date, event_date, expire_date, pinned, theme, content_type, channels
          FROM news_items
          WHERE publish_date <= ? AND (expire_date IS NULL OR expire_date >= ?)
+           AND (channels IS NULL OR channels LIKE '%web%')
          ORDER BY pinned DESC, COALESCE(event_date, publish_date) ASC
          LIMIT ?`
       ).bind(today, today, limit).all();
@@ -925,7 +947,7 @@ addEvent();
 
       return new Response('', {
         status: 302,
-        headers: { Location: `/?msg=${encodeURIComponent(action === 'publish' ? 'published' : 'draft')}&beehiiv=${beehiivStatus}&url=${encodeURIComponent(beehiivUrl)}` }
+        headers: { Location: `/?msg=${encodeURIComponent(action === 'publish' ? 'published' : 'draft')}&beehiiv=${beehiivStatus}&url=${encodeURIComponent(beehiivUrl)}&subject=${encodeURIComponent(subject)}` }
       });
     }
 
@@ -938,6 +960,131 @@ addEvent();
     }
 
     // ── NEWS ITEMS: LIST ──
+    // ── PLANNING: SET THEME (POST) ──
+    if (path === '/planning/set-theme' && method === 'POST') {
+      const form = await request.formData();
+      const month = form.get('month') || '';
+      const theme = form.get('theme') || '';
+      if (month && theme) {
+        await env.DB.prepare('INSERT OR REPLACE INTO comm_settings (key, value) VALUES (?, ?)')
+          .bind(`theme_${month}`, theme).run();
+      }
+      return new Response('', { status: 302, headers: { Location: `/planning?month=${month}` } });
+    }
+
+    // ── PLANNING: DASHBOARD (GET) ──
+    if (path === '/planning' && method === 'GET') {
+      const now = new Date();
+      const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const month = url.searchParams.get('month') || defaultMonth;
+      const [yr, mo] = month.split('-').map(Number);
+
+      // prev/next month links
+      const prevDate = new Date(yr, mo - 2, 1);
+      const nextDate = new Date(yr, mo, 1);
+      const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+      const nextMonth = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}`;
+      const monthLabel = new Date(yr, mo - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+      // fetch saved theme for this month
+      const themeRow = await env.DB.prepare('SELECT value FROM comm_settings WHERE key = ?')
+        .bind(`theme_${month}`).first();
+      const activeTheme = themeRow ? themeRow.value : '';
+
+      // fetch news items for this month with week_slot set
+      const monthStart = `${month}-01`;
+      const monthEnd = `${month}-31`;
+      const slottedItems = await env.DB.prepare(
+        `SELECT id, title, week_slot, content_type FROM news_items
+         WHERE week_slot IS NOT NULL AND publish_date >= ? AND publish_date <= ?
+         ORDER BY week_slot, publish_date`
+      ).bind(monthStart, monthEnd).all();
+
+      // group by week_slot
+      const bySlot = { 1: [], 2: [], 3: [], 4: [] };
+      for (const item of slottedItems.results) {
+        if (bySlot[item.week_slot]) bySlot[item.week_slot].push(item);
+      }
+
+      const themeOptions = THEMES.map(t =>
+        `<option value="${t}"${activeTheme === t ? ' selected' : ''}>${t}</option>`
+      ).join('');
+
+      const weekCards = WEEK_LABELS.map((label, i) => {
+        const slot = i + 1;
+        const items = bySlot[slot];
+        const itemsHtml = items.length > 0
+          ? items.map(it => `
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
+              <span style="font-size:13px;flex:1;color:var(--charcoal);">✓ ${it.title}</span>
+              ${it.content_type ? `<span style="font-size:11px;padding:2px 8px;background:var(--linen);border-radius:10px;color:var(--gray);">${it.content_type}</span>` : ''}
+              <a href="/newsitems/edit/${it.id}" class="btn btn-sm btn-secondary" style="padding:3px 10px;">Edit</a>
+            </div>`).join('')
+          : `<div style="padding:10px 0;color:var(--gray);font-size:13px;">No content yet for this week.</div>`;
+
+        const addUrl = `/newsitems/new?week=${slot}${activeTheme ? '&theme=' + encodeURIComponent(activeTheme) : ''}`;
+        const slotStatus = items.length > 0
+          ? `style="border-left:4px solid var(--sage);"`
+          : `style="border-left:4px solid var(--border);"`;
+
+        return `<div class="card" ${slotStatus}>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+            <div class="card-title" style="margin:0;">${label}</div>
+            <a href="${addUrl}" class="btn btn-sm btn-primary">+ Write</a>
+          </div>
+          ${itemsHtml}
+        </div>`;
+      }).join('');
+
+      // recent unslotted items (published this month, no week_slot)
+      const unslotted = await env.DB.prepare(
+        `SELECT id, title, publish_date FROM news_items
+         WHERE (week_slot IS NULL) AND publish_date >= ? AND publish_date <= ?
+         ORDER BY publish_date DESC LIMIT 10`
+      ).bind(monthStart, monthEnd).all();
+      const unslottedHtml = unslotted.results.length === 0 ? '' : `
+        <div class="card">
+          <div class="card-title">Other news items this month (not assigned to a week)</div>
+          ${unslotted.results.map(it => `
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
+              <span style="font-size:13px;flex:1;">${it.title}</span>
+              <span style="font-size:11px;color:var(--gray);">${it.publish_date}</span>
+              <a href="/newsitems/edit/${it.id}" class="btn btn-sm btn-secondary" style="padding:3px 10px;">Edit</a>
+            </div>`).join('')}
+        </div>`;
+
+      return html(`
+${topbarHtml('planning')}
+<div class="wrap">
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:4px;">
+    <a href="/planning?month=${prevMonth}" style="color:var(--gray);text-decoration:none;font-size:20px;">‹</a>
+    <div class="page-title" style="margin:0;">${monthLabel}</div>
+    <a href="/planning?month=${nextMonth}" style="color:var(--gray);text-decoration:none;font-size:20px;">›</a>
+  </div>
+  <div class="page-sub">Communications plan — assign content to each week, track what's been written.</div>
+
+  <div class="card" style="margin-bottom:28px;">
+    <div class="card-title">Monthly theme</div>
+    <form method="POST" action="/planning/set-theme" style="display:flex;gap:12px;align-items:center;">
+      <input type="hidden" name="month" value="${month}">
+      <select name="theme" style="flex:1;font-family:var(--sans);font-size:14px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:#fff;">
+        <option value="">— not set —</option>
+        ${themeOptions}
+      </select>
+      <button type="submit" class="btn btn-primary">Save theme</button>
+    </form>
+    ${activeTheme ? `<div style="margin-top:10px;font-size:13px;color:var(--gray);">This month's focus: <strong style="color:var(--steel);">${activeTheme}</strong></div>` : ''}
+  </div>
+
+  ${weekCards}
+  ${unslottedHtml}
+
+  <div style="margin-top:20px;text-align:center;">
+    <a href="/newsitems" style="font-size:13px;color:var(--teal);">View all news items →</a>
+  </div>
+</div>`, `TLC Admin — Planning: ${monthLabel}`);
+    }
+
     if (path === '/newsitems' && method === 'GET') {
       await sweepExpiredItems(env, new URL(request.url).origin);
       const items = await env.DB.prepare(
@@ -955,9 +1102,13 @@ addEvent();
             let status = 'active';
             if (item.publish_date && item.publish_date > today) status = 'upcoming';
             else if (item.expire_date && item.expire_date < today) status = 'expired';
+            const themeBadge = item.theme ? `<span style="font-size:10px;padding:2px 7px;background:var(--mist);border:1px solid var(--border);border-radius:10px;color:var(--steel);">${item.theme}</span>` : '';
+            const typeBadge = item.content_type ? `<span style="font-size:10px;padding:2px 7px;background:#f0f4f8;border:1px solid var(--border);border-radius:10px;color:var(--gray);">${item.content_type}</span>` : '';
+            const weekBadge = item.week_slot ? `<span style="font-size:10px;padding:2px 7px;background:var(--linen);border-radius:10px;color:var(--charcoal);">Wk ${item.week_slot}</span>` : '';
             return `<div class="ni-row">
   ${item.pinned ? `<span class="badge badge-pinned">Pinned</span>` : ''}
   <span class="badge badge-${status}">${status}</span>
+  ${themeBadge}${typeBadge}${weekBadge}
   <div class="ni-title">${item.title}</div>
   <div class="ni-meta">${item.event_date ? 'Event: ' + item.event_date + ' · ' : ''}Published: ${item.publish_date || ''}${item.expire_date ? ' → ' + item.expire_date : ''}</div>
   <div class="ni-actions">
@@ -996,8 +1147,14 @@ ${topbarHtml('news', `<a href="https://timothystl.org/news" target="_blank">View
     if (path === '/newsitems/new' && method === 'GET') {
       const today = new Date().toISOString().split('T')[0];
       const expire = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const preWeek = url.searchParams.get('week') || '';
+      const preTheme = url.searchParams.get('theme') || '';
+      const backUrl = preWeek ? `/planning` : `/newsitems`;
+      const themeOpts = THEMES.map(t => `<option value="${t}"${preTheme === t ? ' selected' : ''}>${t}</option>`).join('');
+      const typeOpts = CONTENT_TYPES.map(t => `<option value="${t}">${t}</option>`).join('');
+      const weekOpts = [1,2,3,4].map(n => `<option value="${n}"${preWeek == n ? ' selected' : ''}>Week ${n}</option>`).join('');
       return html(`
-${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
+${topbarHtml('news', `<a href="${backUrl}">← Back</a>`)}
 <div class="wrap">
   <div class="page-title">New news item</div>
   <div class="page-sub">This will appear on the website homepage and news page immediately.</div>
@@ -1016,6 +1173,42 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
       <div class="form-group">
         <label>Header image URL <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, shown on the card thumbnail</span></label>
         <input type="text" name="image_url" placeholder="https://... (or leave blank — images can also be dropped into the body above)">
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Channels</div>
+      <div style="font-size:12px;color:var(--gray);margin-bottom:12px;">Where should this appear? Check all that apply.</div>
+      <div style="display:flex;gap:24px;flex-wrap:wrap;">
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:400;cursor:pointer;"><input type="checkbox" name="ch_web" value="1" checked> Website</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:400;cursor:pointer;"><input type="checkbox" name="ch_email" value="1" checked> Email newsletter</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:400;cursor:pointer;"><input type="checkbox" name="ch_bulletin" value="1"> Bulletin</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:400;cursor:pointer;"><input type="checkbox" name="ch_social" value="1"> Social media</label>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Communications plan</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+        <div class="form-group" style="margin:0;">
+          <label>Theme</label>
+          <select name="theme" style="width:100%;font-family:var(--sans);font-size:14px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;">
+            <option value="">— none —</option>
+            ${themeOpts}
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Content type</label>
+          <select name="content_type" style="width:100%;font-family:var(--sans);font-size:14px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;">
+            <option value="">— none —</option>
+            ${typeOpts}
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Week slot <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— for planning view</span></label>
+          <select name="week_slot" style="width:100%;font-family:var(--sans);font-size:14px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;">
+            <option value="">— none —</option>
+            ${weekOpts}
+          </select>
+        </div>
       </div>
     </div>
     <div class="card">
@@ -1044,7 +1237,7 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
     </div>
     <div class="btn-row">
       <button type="submit" class="btn btn-primary">Save &amp; publish →</button>
-      <a href="/newsitems" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
+      <a href="${backUrl}" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
     </div>
   </form>
 </div>`, 'TLC Admin — New News Item', TINYMCE_HEAD);
@@ -1061,9 +1254,17 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
       const event_date = form.get('event_date') || '';
       const expire_date = form.get('expire_date') || '';
       const pinned = form.get('pinned') === '1' ? 1 : 0;
+      const theme = form.get('theme') || '';
+      const content_type = form.get('content_type') || '';
+      const week_slot = parseInt(form.get('week_slot') || '0', 10) || null;
+      const chWeb = form.get('ch_web') === '1';
+      const chEmail = form.get('ch_email') === '1';
+      const chBulletin = form.get('ch_bulletin') === '1';
+      const chSocial = form.get('ch_social') === '1';
+      const channels = [chWeb && 'web', chEmail && 'email', chBulletin && 'bulletin', chSocial && 'social'].filter(Boolean).join(',') || 'web';
       await env.DB.prepare(
-        'INSERT INTO news_items (title, summary, body, image_url, publish_date, event_date, expire_date, pinned) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(title, summary, body, image_url, publish_date, event_date || null, expire_date || null, pinned).run();
+        'INSERT INTO news_items (title, summary, body, image_url, publish_date, event_date, expire_date, pinned, theme, content_type, channels, week_slot) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(title, summary, body, image_url, publish_date, event_date || null, expire_date || null, pinned, theme || null, content_type || null, channels, week_slot).run();
       return new Response('', { status: 302, headers: { Location: '/newsitems?msg=saved' } });
     }
 
@@ -1093,6 +1294,42 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
       <div class="form-group">
         <label>Header image URL <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, shown on the card thumbnail</span></label>
         <input type="text" name="image_url" value="${v(item.image_url)}" placeholder="https://... (or leave blank — images can also be dropped into the body above)">
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Channels</div>
+      <div style="font-size:12px;color:var(--gray);margin-bottom:12px;">Where should this appear? Check all that apply.</div>
+      <div style="display:flex;gap:24px;flex-wrap:wrap;">
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:400;cursor:pointer;"><input type="checkbox" name="ch_web" value="1"${(item.channels || 'web').includes('web') ? ' checked' : ''}> Website</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:400;cursor:pointer;"><input type="checkbox" name="ch_email" value="1"${(item.channels || '').includes('email') ? ' checked' : ''}> Email newsletter</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:400;cursor:pointer;"><input type="checkbox" name="ch_bulletin" value="1"${(item.channels || '').includes('bulletin') ? ' checked' : ''}> Bulletin</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:400;cursor:pointer;"><input type="checkbox" name="ch_social" value="1"${(item.channels || '').includes('social') ? ' checked' : ''}> Social media</label>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Communications plan</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+        <div class="form-group" style="margin:0;">
+          <label>Theme</label>
+          <select name="theme" style="width:100%;font-family:var(--sans);font-size:14px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;">
+            <option value="">— none —</option>
+            ${THEMES.map(t => `<option value="${t}"${item.theme === t ? ' selected' : ''}>${t}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Content type</label>
+          <select name="content_type" style="width:100%;font-family:var(--sans);font-size:14px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;">
+            <option value="">— none —</option>
+            ${CONTENT_TYPES.map(t => `<option value="${t}"${item.content_type === t ? ' selected' : ''}>${t}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Week slot <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— for planning view</span></label>
+          <select name="week_slot" style="width:100%;font-family:var(--sans);font-size:14px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;">
+            <option value="">— none —</option>
+            ${[1,2,3,4].map(n => `<option value="${n}"${item.week_slot == n ? ' selected' : ''}>Week ${n}</option>`).join('')}
+          </select>
+        </div>
       </div>
     </div>
     <div class="card">
@@ -1139,9 +1376,17 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
       const event_date = form.get('event_date') || '';
       const expire_date = form.get('expire_date') || '';
       const pinned = form.get('pinned') === '1' ? 1 : 0;
+      const theme = form.get('theme') || '';
+      const content_type = form.get('content_type') || '';
+      const week_slot = parseInt(form.get('week_slot') || '0', 10) || null;
+      const chWeb = form.get('ch_web') === '1';
+      const chEmail = form.get('ch_email') === '1';
+      const chBulletin = form.get('ch_bulletin') === '1';
+      const chSocial = form.get('ch_social') === '1';
+      const channels = [chWeb && 'web', chEmail && 'email', chBulletin && 'bulletin', chSocial && 'social'].filter(Boolean).join(',') || 'web';
       await env.DB.prepare(
-        'UPDATE news_items SET title=?, summary=?, body=?, image_url=?, publish_date=?, event_date=?, expire_date=?, pinned=? WHERE id=?'
-      ).bind(title, summary, body, image_url, publish_date, event_date || null, expire_date || null, pinned, id).run();
+        'UPDATE news_items SET title=?, summary=?, body=?, image_url=?, publish_date=?, event_date=?, expire_date=?, pinned=?, theme=?, content_type=?, channels=?, week_slot=? WHERE id=?'
+      ).bind(title, summary, body, image_url, publish_date, event_date || null, expire_date || null, pinned, theme || null, content_type || null, channels, week_slot, id).run();
       return new Response('', { status: 302, headers: { Location: '/newsitems?msg=saved' } });
     }
 
@@ -1526,11 +1771,54 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
     const msgParam = url.searchParams.get('msg');
     const beehiivParam = url.searchParams.get('beehiiv');
     const beehiivUrlParam = url.searchParams.get('url') || '';
+    const subjectParam = decodeURIComponent(url.searchParams.get('subject') || '');
     let alertHtml = '';
     if (msgParam === 'published') {
-      alertHtml = beehiivParam === 'success'
-        ? `<div class="alert alert-success">✓ Newsletter published to website archive. <strong><a href="${decodeURIComponent(beehiivUrlParam)}" target="_blank" style="color:#1a3d1f;">Open Beehiiv draft →</a></strong> Review and hit Send when ready.</div>`
-        : `<div class="alert alert-success">✓ Newsletter saved to website archive. Log in to <a href="https://app.beehiiv.com" target="_blank">Beehiiv</a> to send the email manually.</div>`;
+      const siteNewsUrl = 'https://timothystl.org/news';
+      const fbShareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(siteNewsUrl)}`;
+      const tweetText = subjectParam
+        ? `📖 ${subjectParam} — read our latest update at ${siteNewsUrl}`
+        : `Our latest update from Timothy Lutheran Church: ${siteNewsUrl}`;
+      const twitterShareUrl = `https://x.com/intent/post?text=${encodeURIComponent(tweetText)}`;
+      const bskyText = subjectParam
+        ? `📖 ${subjectParam}\n\nOur weekly update from Timothy Lutheran Church:\n${siteNewsUrl}`
+        : `Our latest update from Timothy Lutheran Church:\n${siteNewsUrl}`;
+      const bskyShareUrl = `https://bsky.app/intent/compose?text=${encodeURIComponent(bskyText)}`;
+      const igCaption = subjectParam
+        ? `📖 ${subjectParam}\n\nOur weekly update is live — read it at timothystl.org/news\n\n@timothystl\n#TimothyLutheran #LindenwoordPark #StLouis #church`
+        : `Our latest newsletter is live at timothystl.org/news\n\n@timothystl\n#TimothyLutheran #LindenwoordPark #StLouis #church`;
+      const igCaptionJs = igCaption.replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$/g,'\\$');
+      const beehiivLine = beehiivParam === 'success'
+        ? `<a href="${decodeURIComponent(beehiivUrlParam)}" target="_blank" style="font-weight:700;color:#1a3d1f;">Open Beehiiv draft →</a> Review and hit Send when ready.`
+        : `Log in to <a href="https://app.beehiiv.com" target="_blank" style="font-weight:700;color:#1a3d1f;">Beehiiv</a> to send the email manually.`;
+      alertHtml = `
+<div class="alert alert-success" style="margin-bottom:0;border-radius:10px 10px 0 0;">
+  ✓ Newsletter published to website archive. ${beehiivLine}
+</div>
+<div style="background:#f0f7f0;border:1px solid #b8d4b8;border-top:none;border-radius:0 0 10px 10px;padding:18px 20px;margin-bottom:20px;">
+  <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#2a4d2a;margin-bottom:14px;">📣 Share to social media</div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;">
+    <a href="${fbShareUrl}" target="_blank" style="display:inline-flex;align-items:center;gap:7px;font-family:var(--sans);font-size:13px;font-weight:700;background:#1877F2;color:white;padding:9px 18px;border-radius:6px;text-decoration:none;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M24 12.07C24 5.41 18.63 0 12 0S0 5.41 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.04V9.41c0-3.02 1.8-4.7 4.54-4.7 1.31 0 2.68.24 2.68.24v2.97h-1.5c-1.5 0-1.96.93-1.96 1.89v2.26h3.32l-.53 3.49h-2.79V24C19.61 23.1 24 18.1 24 12.07z"/></svg>
+      Share on Facebook
+    </a>
+    <a href="${twitterShareUrl}" target="_blank" style="display:inline-flex;align-items:center;gap:7px;font-family:var(--sans);font-size:13px;font-weight:700;background:#000;color:white;padding:9px 18px;border-radius:6px;text-decoration:none;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="white"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.748l7.73-8.835L1.254 2.25H8.08l4.259 5.63 5.905-5.63zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+      Post on X
+    </a>
+    <a href="${bskyShareUrl}" target="_blank" style="display:inline-flex;align-items:center;gap:7px;font-family:var(--sans);font-size:13px;font-weight:700;background:#0085ff;color:white;padding:9px 18px;border-radius:6px;text-decoration:none;">
+      <svg width="16" height="14" viewBox="0 0 360 320" fill="white"><path d="M180 142c-16.3-31.1-60.7-89.4-102-120C38 0 0 5 0 72c0 29 15.6 121.3 26.2 144C85.4 342 153.9 310.4 180 310.4c26 0 94.6 31.6 153.8-94.4C344.4 193.3 360 101 360 72c0-67-38-72-78-50C240.7 52.6 196.3 110.9 180 142z"/></svg>
+      Post on Bluesky
+    </a>
+    <a href="https://www.instagram.com" target="_blank" style="display:inline-flex;align-items:center;gap:7px;font-family:var(--sans);font-size:13px;font-weight:700;background:linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);color:white;padding:9px 18px;border-radius:6px;text-decoration:none;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+      Open Instagram
+    </a>
+  </div>
+  <div style="font-family:var(--sans);font-size:12px;font-weight:600;color:var(--gray);margin-bottom:6px;">Caption for Instagram — copy and paste:</div>
+  <div id="ig-cap" style="font-family:var(--sans);font-size:13px;background:white;border:1px solid #ccd4cc;border-radius:6px;padding:12px 14px;line-height:1.8;white-space:pre-wrap;color:var(--charcoal);">${igCaption.replace(/</g,'&lt;')}</div>
+  <button onclick="navigator.clipboard.writeText(\`${igCaptionJs}\`).then(()=>{this.textContent='✓ Copied!';this.style.background='#e8f5e9';setTimeout(()=>{this.textContent='Copy caption';this.style.background='';},2000)})" style="margin-top:8px;font-family:var(--sans);font-size:12px;font-weight:700;background:white;border:1px solid #aab8aa;border-radius:6px;padding:6px 16px;cursor:pointer;transition:background .2s;">Copy caption</button>
+</div>`;
     } else if (msgParam === 'draft') {
       alertHtml = `<div class="alert alert-info">Draft saved. Publish when ready.</div>`;
     }
