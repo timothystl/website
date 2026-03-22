@@ -280,12 +280,19 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 - **Prayer + Contact form delivery** — Confirm these forms actually send/deliver somewhere (email? DB?). Check they're wired to a real endpoint.
 - **Sermons page** — YouTube embed page exists; confirm it's pulling correct channel or confirm it's manually maintained.
 
+### Pre-DNS-Cutover Checklist (flagged 2026-03-22 — do not skip)
+- **Sermons page** — Confirm it's pulling correct YouTube channel or is manually maintained.
+- **Mobile nav audit** — Ministry + youth pages added many routes; confirm mobile menu is complete and nothing is orphaned.
+- **404 handling** — Cloudflare Worker should return the SPA for all unknown paths (needed for pushState routing on direct links). Verify this works.
+- **Breeze cancellation checklist** — Volunteer signups, giving, and any other Breeze-tied features must ALL be replaced before cancelling. Make a checklist before pulling the trigger.
+- **DNS cutover map** — Every subdomain (admin, volunteer, links, mdo, test) must have its worker deployed to prod before flipping DNS.
+- **`/manual` update when give platform changes** — Staff manual documents the Breeze link; update both together.
+
 ### Pinned / Low Priority
 - **Newsletter Format 3** — Single-event announcement (date, time, location, RSVP). Skipped for now, add if needed.
 - **SEO refinements** — Schema.org markup, OG tags per page, meta descriptions. Phase 7.
 - **R2 image uploads** — Cloudflare R2 for news items and youth pages image upload. Currently using URL-based images.
 - **WOL page** — Was accidentally removed and restored. Worth a visual check on test site.
-- **`/manual` update when give platform changes** — Staff manual documents the Breeze link; update when new platform is live.
 
 ---
 
