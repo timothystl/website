@@ -404,7 +404,7 @@ async function sendBrevoNewsletter(env, { subject, htmlContent, listIds }) {
     body: JSON.stringify({
       name: `TLC Newsletter — ${subject}`,
       subject,
-      sender: { name: 'Timothy Lutheran Church', email: env.BREVO_SENDER_EMAIL || 'office@timothystl.org' },
+      sender: { name: 'Timothy Lutheran Church', email: env.BREVO_SENDER_EMAIL || 'dinger@timothystl.org' },
       htmlContent,
       recipients: { listIds }
     })
@@ -1035,6 +1035,34 @@ addEvent();
       return new Response('', {
         status: 302,
         headers: { Location: `/?msg=${encodeURIComponent(action === 'publish' ? 'published' : 'draft')}&subject=${encodeURIComponent(subject)}${emailSuffix}` }
+      });
+    }
+
+    // ── SEND EMAIL (for saved newsletters) ──
+    if (path.startsWith('/send-email/') && method === 'POST') {
+      const id = path.split('/').pop();
+      const form = await request.formData();
+      const listType = form.get('list_type') || 'test';
+      const listId = listType === 'test' ? 2 : parseInt(env.BREVO_LIST_ID || '0', 10);
+
+      const row = await env.DB.prepare(
+        'SELECT subject, pastor_note, ministry_content, ministry_type, published_at FROM newsletters WHERE id = ?'
+      ).bind(id).first();
+      if (!row) return new Response('Not found', { status: 404 });
+
+      const eventsRows = await env.DB.prepare(
+        'SELECT event_date, event_name, event_time, event_desc FROM events WHERE newsletter_id = ? ORDER BY sort_order'
+      ).bind(id).all();
+
+      const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.ministry_content, row.ministry_type, row.published_at);
+      const result = await sendBrevoNewsletter(env, { subject: row.subject, htmlContent: emailHtml, listIds: [listId] });
+
+      const suffix = result.success
+        ? `&emailed=${listType}`
+        : `&emailerr=${encodeURIComponent(result.error)}`;
+      return new Response('', {
+        status: 302,
+        headers: { Location: `/?msg=emailed&subject=${encodeURIComponent(row.subject)}${suffix}` }
       });
     }
 
@@ -1753,7 +1781,12 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
   <button onclick="navigator.clipboard.writeText(\`${igCaptionJs}\`).then(()=>{this.textContent='✓ Copied!';this.style.background='#e8f5e9';setTimeout(()=>{this.textContent='Copy caption';this.style.background='';},2000)})" style="margin-top:8px;font-family:var(--sans);font-size:12px;font-weight:700;background:white;border:1px solid #aab8aa;border-radius:6px;padding:6px 16px;cursor:pointer;transition:background .2s;">Copy caption</button>
 </div>`;
     } else if (msgParam === 'draft') {
-      alertHtml = `<div class="alert alert-info">Draft saved. Publish when ready.</div>`;
+      alertHtml = `<div class="alert alert-info">Draft saved. Use "Send test" or "Send to all" below to email it when ready.</div>`;
+    } else if (msgParam === 'emailed') {
+      const sentTo = emailedParam === 'test' ? 'test list' : 'all subscribers';
+      alertHtml = emailErrParam
+        ? `<div class="alert alert-error">Email failed: ${emailErrParam}</div>`
+        : `<div class="alert alert-success">✓ "${subjectParam}" sent to ${sentTo}.</div>`;
     }
 
     const rows = newsletters.results;
@@ -1763,10 +1796,16 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
 <div class="newsletter-row">
   <div class="newsletter-date">${r.published_at}</div>
   <div class="newsletter-subject">${r.subject}</div>
-  <div style="display:flex;gap:6px;align-items:center;">
-  </div>
   <div class="newsletter-actions">
-    <form method="POST" action="/delete/${r.id}" onsubmit="return confirm('Delete this newsletter?')">
+    <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Send to test list?')">
+      <input type="hidden" name="list_type" value="test">
+      <button type="submit" class="btn btn-sm btn-secondary">Send test</button>
+    </form>
+    <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Send to ALL subscribers? This cannot be undone.')">
+      <input type="hidden" name="list_type" value="all">
+      <button type="submit" class="btn btn-sm btn-primary">Send to all</button>
+    </form>
+    <form method="POST" action="/delete/${r.id}" style="display:contents;" onsubmit="return confirm('Delete this newsletter?')">
       <button type="submit" class="btn btn-sm btn-danger">Delete</button>
     </form>
   </div>
