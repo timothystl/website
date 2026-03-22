@@ -392,7 +392,7 @@ function formatDate(d) {
 }
 
 // ── BUILD BEEHIIV HTML ───────────────────────────────────────
-function buildEmailHtml(subject, pastorNote, events, ministryContent, ministryType, publishedAt) {
+function buildEmailHtml(subject, pastorNote, events, ministryContent, ministryType, publishedAt, newsItems = []) {
   const dateStr = formatDate(publishedAt);
   let eventsHtml = '';
   if (events && events.length) {
@@ -455,7 +455,17 @@ function buildEmailHtml(subject, pastorNote, events, ministryContent, ministryTy
         <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#D4922A;margin-bottom:8px;">${dateStr}</div>
         <div style="font-family:'Lora',Georgia,serif;font-size:22px;color:#0A3C5C;margin-bottom:20px;">${subject}</div>
         ${pastorNote ? `
-        <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:15px;color:#3D3530;line-height:1.8;margin-bottom:24px;padding-bottom:24px;border-bottom:1px solid #E8E0D0;">${pastorNote.replace(/\n/g,'<br>')}</div>` : ''}
+        <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:15px;color:#3D3530;line-height:1.8;margin-bottom:24px;padding-bottom:24px;border-bottom:1px solid #E8E0D0;">${pastorNote}</div>` : ''}
+        ${newsItems.length ? `
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0;">
+          <tr><td style="padding-bottom:12px;font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#D4922A;">News &amp; Updates</td></tr>
+          ${newsItems.map(item => `
+          <tr><td style="padding:14px 0;border-top:1px solid #E8E0D0;">
+            <div style="font-family:'Lora',Georgia,serif;font-size:16px;color:#0A3C5C;margin-bottom:6px;">${item.title}</div>
+            ${item.summary ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;color:#3D3530;line-height:1.7;margin-bottom:8px;">${item.summary}</div>` : ''}
+            <a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#D4922A;text-decoration:none;">Read more →</a>
+          </td></tr>`).join('')}
+        </table>` : ''}
         ${eventsHtml}
         ${ministryHtml}
         <div style="margin-top:32px;padding-top:20px;border-top:1px solid #E8E0D0;text-align:center;">
@@ -472,6 +482,30 @@ function buildEmailHtml(subject, pastorNote, events, ministryContent, ministryTy
 </table>
 </body>
 </html>`;
+}
+
+// TinyMCE editor for pastor's note (no image upload)
+function tinymcePastorSection(existingBody = '') {
+  return `
+<div class="form-group">
+  <label>Your message this week</label>
+  <textarea id="pastor-editor" name="pastor_note" style="min-height:140px;">${existingBody}</textarea>
+</div>
+<script>
+tinymce.init({
+  selector: '#pastor-editor',
+  plugins: 'link lists',
+  toolbar: 'bold italic underline | bullist numlist | link',
+  menubar: false,
+  statusbar: false,
+  min_height: 140,
+  skin: 'oxide',
+  content_css: 'default',
+  setup: function(ed) {
+    ed.on('change input', function() { ed.save(); });
+  }
+});
+</script>`;
 }
 
 // ── BUILD WEB HTML (for archive) ─────────────────────────────
@@ -730,6 +764,24 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
     // ── NEW NEWSLETTER FORM ──
     if (path === '/new' && method === 'GET') {
       const today = new Date().toISOString().split('T')[0];
+      // Fetch recent news items available for email inclusion
+      const emailItems = await env.DB.prepare(
+        `SELECT id, title, summary, publish_date FROM news_items
+         WHERE publish_date <= ? AND (expire_date IS NULL OR expire_date >= ?)
+           AND (channels IS NULL OR channels LIKE '%email%')
+         ORDER BY COALESCE(event_date, publish_date) DESC LIMIT 20`
+      ).bind(today, today).all();
+      const newsPickerHtml = emailItems.results.length === 0
+        ? `<div style="font-size:13px;color:var(--gray);padding:10px 0;">No news items available. Add items in the News &amp; Events tab first.</div>`
+        : emailItems.results.map(item => `
+          <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;">
+            <input type="checkbox" name="news_item_ids" value="${item.id}" style="margin-top:3px;flex-shrink:0;">
+            <div>
+              <div style="font-size:14px;font-weight:600;color:var(--charcoal);">${item.title}</div>
+              ${item.summary ? `<div style="font-size:12px;color:var(--gray);margin-top:2px;">${item.summary.substring(0, 100)}${item.summary.length > 100 ? '…' : ''}</div>` : ''}
+              <div style="font-size:11px;color:var(--gray);margin-top:2px;">${item.publish_date}</div>
+            </div>
+          </label>`).join('');
       return html(`
 ${topbarHtml('newsletter', `<a href="/">← All newsletters</a>`)}
 <div class="wrap">
@@ -752,10 +804,13 @@ ${topbarHtml('newsletter', `<a href="/">← All newsletters</a>`)}
 
     <div class="card">
       <div class="card-title">Pastor's note</div>
-      <div class="form-group">
-        <label>Your message this week</label>
-        <textarea name="pastor_note" style="min-height:140px;" placeholder="A few sentences from you — what's on your heart, what God is doing, what you want the congregation to know. Write like you'd say it from the pulpit on Sunday morning."></textarea>
-      </div>
+      ${tinymcePastorSection()}
+    </div>
+
+    <div class="card">
+      <div class="card-title">News &amp; Events <span class="tag">Pick from your posts</span></div>
+      <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">Check items to include in this newsletter. They appear as brief cards with a "Read more" link to the website.</div>
+      ${newsPickerHtml}
     </div>
 
     <div class="card">
@@ -845,7 +900,7 @@ function toggleMinistry(radio) {
 }
 // Add one event by default
 addEvent();
-</script>`, 'New Newsletter');
+</script>`, 'New Newsletter', TINYMCE_HEAD);
     }
 
     // ── PUBLISH ──
@@ -878,6 +933,19 @@ addEvent();
         });
       }
 
+      // Fetch selected news items
+      const selectedNewsIds = form.getAll('news_item_ids');
+      let selectedNewsItems = [];
+      if (selectedNewsIds.length > 0) {
+        const placeholders = selectedNewsIds.map(() => '?').join(',');
+        const newsRows = await env.DB.prepare(
+          `SELECT id, title, summary FROM news_items WHERE id IN (${placeholders})`
+        ).bind(...selectedNewsIds).all();
+        // preserve order selected
+        const newsMap = Object.fromEntries(newsRows.results.map(r => [r.id, r]));
+        selectedNewsItems = selectedNewsIds.map(id => newsMap[id]).filter(Boolean);
+      }
+
       // Save newsletter
       const result = await env.DB.prepare(
         'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at) VALUES (?, ?, ?, ?, ?)'
@@ -898,7 +966,7 @@ addEvent();
       // Push to Beehiiv if publishing
       if (action === 'publish') {
         try {
-          const emailHtml = buildEmailHtml(subject, pastorNote, events, ministryContent, ministryType, publishedAt);
+          const emailHtml = buildEmailHtml(subject, pastorNote, events, ministryContent, ministryType, publishedAt, selectedNewsItems);
           const beehiivRes = await fetch(`https://api.beehiiv.com/v2/publications/${BEEHIIV_PUB_ID}/posts`, {
             method: 'POST',
             headers: {
