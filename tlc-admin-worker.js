@@ -255,6 +255,17 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
 .checkbox-row{display:flex;align-items:center;gap:8px;margin-top:6px;}
 .checkbox-row input[type=checkbox]{width:auto;}
 .checkbox-row span{font-family:var(--sans);font-size:13px;font-weight:600;color:var(--charcoal);cursor:pointer;}
+.format-picker{display:flex;gap:14px;margin-bottom:24px;flex-wrap:wrap;}
+.format-card{flex:1;min-width:180px;border:2px solid var(--border);border-radius:12px;padding:20px 18px;text-align:left;background:white;cursor:pointer;transition:border-color .18s,background .18s;}
+.format-card:hover{border-color:var(--steel);background:var(--mist);}
+.format-card.active{border-color:var(--steel);background:var(--mist);}
+.format-card-icon{font-size:26px;margin-bottom:8px;}
+.format-card-name{font-family:var(--sans);font-size:14px;font-weight:700;color:var(--steel);}
+.format-card-desc{font-family:var(--sans);font-size:12px;color:var(--gray);margin-top:4px;line-height:1.5;}
+.badge-draft{background:#FFF3D6;color:#7A4F00;}
+.badge-published{background:#e8f5e9;color:#1a3d1f;}
+.nl-section-head{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gray);padding:10px 0 6px;border-top:2px solid var(--border);margin-top:4px;}
+.nl-section-head:first-child{border-top:none;margin-top:0;}
 </style>
 </head>
 <body>${body}</body>
@@ -597,6 +608,11 @@ export default {
     try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN theme TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN content_type TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN channels TEXT').run(); } catch (_) {}
+    // Migrate: add status, format, and CTA fields to newsletters
+    try { await env.DB.prepare("ALTER TABLE newsletters ADD COLUMN status TEXT DEFAULT 'published'").run(); } catch (_) {}
+    try { await env.DB.prepare("ALTER TABLE newsletters ADD COLUMN format TEXT DEFAULT 'weekly'").run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN cta_url TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN cta_label TEXT').run(); } catch (_) {}
     // Pre-populate ministry page slugs so they're always editable
     for (const p of MINISTRY_SLUGS) {
       try {
@@ -673,7 +689,7 @@ export default {
     // ── PUBLIC: newsletter archive API ──
     if (path === '/api/newsletters' && method === 'GET') {
       const rows = await env.DB.prepare(
-        'SELECT id, subject, pastor_note, ministry_content, ministry_type, published_at, created_at FROM newsletters ORDER BY published_at DESC'
+        "SELECT id, subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, created_at FROM newsletters WHERE (status IS NULL OR status = 'published') ORDER BY published_at DESC"
       ).all();
       const newsletters = [];
       for (const row of rows.results) {
@@ -699,7 +715,7 @@ export default {
     // ── PUBLIC: newsletter archive page ──
     if (path === '/news' && method === 'GET') {
       const rows = await env.DB.prepare(
-        'SELECT id, subject, pastor_note, ministry_content, ministry_type, published_at, events FROM newsletters ORDER BY published_at DESC'
+        "SELECT id, subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, events FROM newsletters WHERE (status IS NULL OR status = 'published') ORDER BY published_at DESC"
       ).all();
       const newsletters = [];
       for (const row of rows.results) {
@@ -837,6 +853,23 @@ ${topbarHtml('newsletter', `<a href="/">← All newsletters</a>`)}
   <div class="page-sub">Write your update, add events, and publish to the website.</div>
 
   <form method="POST" action="/publish" enctype="multipart/form-data">
+  <input type="hidden" name="format" id="format-input" value="weekly">
+
+  <div class="card">
+    <div class="card-title">What are you writing?</div>
+    <div class="format-picker">
+      <button type="button" class="format-card active" id="fmt-weekly" onclick="pickFormat('weekly')">
+        <div class="format-card-icon">📰</div>
+        <div class="format-card-name">Weekly Newsletter</div>
+        <div class="format-card-desc">Pastor's note, events, ministry content — your regular weekly update.</div>
+      </button>
+      <button type="button" class="format-card" id="fmt-quick" onclick="pickFormat('quick')">
+        <div class="format-card-icon">⚡</div>
+        <div class="format-card-name">Quick Announcement</div>
+        <div class="format-card-desc">Short message + optional button. Snow days, funerals, schedule changes.</div>
+      </button>
+    </div>
+  </div>
 
     <div class="card">
       <div class="card-title">Header</div>
@@ -844,48 +877,74 @@ ${topbarHtml('newsletter', `<a href="/">← All newsletters</a>`)}
         <label>Subject line <span style="color:#B85C3A;">*</span></label>
         <input type="text" name="subject" required placeholder="e.g. This week at Timothy — March 23">
       </div>
-      <div class="form-group">
+      <div class="form-group" id="date-field">
         <label>Date</label>
         <input type="date" name="published_at" value="${today}">
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-title">Pastor's note</div>
-      ${tinymcePastorSection()}
-    </div>
+    <!-- WEEKLY FIELDS -->
+    <div id="weekly-fields">
+      <div class="card">
+        <div class="card-title">Pastor's note</div>
+        ${tinymcePastorSection()}
+      </div>
 
-    <div class="card">
-      <div class="card-title">News &amp; Events <span class="tag">Pick from your posts</span></div>
-      <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">Check items to include in this newsletter. They appear as brief cards with a "Read more" link to the website.</div>
-      ${newsPickerHtml}
-    </div>
+      <div class="card">
+        <div class="card-title">News &amp; Events <span class="tag">Pick from your posts</span></div>
+        <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">Check items to include in this newsletter. They appear as brief cards with a "Read more" link to the website.</div>
+        ${newsPickerHtml}
+      </div>
 
-    <div class="card">
-      <div class="card-title">Upcoming events</div>
-      <div id="events-container"></div>
-      <button type="button" class="add-event-btn" onclick="addEvent()">+ Add an event</button>
-    </div>
+      <div class="card">
+        <div class="card-title">Upcoming events</div>
+        <div id="events-container"></div>
+        <button type="button" class="add-event-btn" onclick="addEvent()">+ Add an event</button>
+      </div>
 
-    <div class="card">
-      <div class="card-title">From our ministries <span class="tag">Optional</span></div>
-      <div class="form-group">
-        <label>Content type</label>
-        <div class="radio-row">
-          <label><input type="radio" name="ministry_type" value="text" checked onchange="toggleMinistry(this)"> Text or link</label>
-          <label><input type="radio" name="ministry_type" value="image" onchange="toggleMinistry(this)"> Image</label>
-          <label><input type="radio" name="ministry_type" value="none" onchange="toggleMinistry(this)"> None this week</label>
+      <div class="card">
+        <div class="card-title">From our ministries <span class="tag">Optional</span></div>
+        <div class="form-group">
+          <label>Content type</label>
+          <div class="radio-row">
+            <label><input type="radio" name="ministry_type" value="text" checked onchange="toggleMinistry(this)"> Text or link</label>
+            <label><input type="radio" name="ministry_type" value="image" onchange="toggleMinistry(this)"> Image</label>
+            <label><input type="radio" name="ministry_type" value="none" onchange="toggleMinistry(this)"> None this week</label>
+          </div>
+        </div>
+        <div id="ministry-text" class="form-group">
+          <label>Text, link, or paste content</label>
+          <textarea name="ministry_content" style="min-height:100px;" placeholder="Paste text from Word of Life, MDO, LWML, or any ministry. Or paste a URL and we'll note it."></textarea>
+        </div>
+        <div id="ministry-image" class="form-group" style="display:none;">
+          <label>Upload image</label>
+          <input type="file" name="ministry_image" accept="image/*" style="border:none;padding:0;background:none;">
+          <div style="margin-top:6px;font-size:12px;color:var(--gray);">Or paste an image URL:</div>
+          <input type="text" name="ministry_image_url" placeholder="https://..." style="margin-top:6px;">
         </div>
       </div>
-      <div id="ministry-text" class="form-group">
-        <label>Text, link, or paste content</label>
-        <textarea name="ministry_content" style="min-height:100px;" placeholder="Paste text from Word of Life, MDO, LWML, or any ministry. Or paste a URL and we'll note it."></textarea>
+    </div>
+
+    <!-- QUICK ANNOUNCEMENT FIELDS -->
+    <div id="quick-fields" style="display:none;">
+      <div class="card">
+        <div class="card-title">Message</div>
+        <div class="form-group">
+          <label>Your announcement <span style="color:#B85C3A;">*</span></label>
+          <textarea name="quick_body" style="min-height:140px;" placeholder="Type your announcement here. Keep it short and clear."></textarea>
+        </div>
       </div>
-      <div id="ministry-image" class="form-group" style="display:none;">
-        <label>Upload image</label>
-        <input type="file" name="ministry_image" accept="image/*" style="border:none;padding:0;background:none;">
-        <div style="margin-top:6px;font-size:12px;color:var(--gray);">Or paste an image URL:</div>
-        <input type="text" name="ministry_image_url" placeholder="https://..." style="margin-top:6px;">
+      <div class="card">
+        <div class="card-title">Button <span class="tag">Optional</span></div>
+        <div style="font-size:12px;color:var(--gray);margin-bottom:14px;">Add a link button — e.g. "Sign Up", "Read More", "RSVP".</div>
+        <div class="form-group">
+          <label>Button label</label>
+          <input type="text" name="cta_label" placeholder="e.g. Sign Up, Read More, RSVP">
+        </div>
+        <div class="form-group">
+          <label>Button link (URL)</label>
+          <input type="url" name="cta_url" placeholder="https://...">
+        </div>
       </div>
     </div>
 
@@ -909,7 +968,7 @@ ${topbarHtml('newsletter', `<a href="/">← All newsletters</a>`)}
     </div>
 
     <div class="btn-row" style="margin-top:8px;">
-      <button type="submit" name="action" value="publish" class="btn btn-primary">Publish newsletter →</button>
+      <button type="submit" name="action" value="publish" class="btn btn-primary">Publish →</button>
       <button type="submit" name="action" value="draft" class="btn btn-secondary">Save as draft</button>
       <a href="/" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
     </div>
@@ -956,18 +1015,30 @@ function toggleMinistry(radio) {
   document.getElementById('ministry-text').style.display = radio.value === 'text' ? 'block' : 'none';
   document.getElementById('ministry-image').style.display = radio.value === 'image' ? 'block' : 'none';
 }
-// Add one event by default
+function pickFormat(fmt) {
+  document.getElementById('format-input').value = fmt;
+  document.getElementById('fmt-weekly').classList.toggle('active', fmt === 'weekly');
+  document.getElementById('fmt-quick').classList.toggle('active', fmt === 'quick');
+  document.getElementById('weekly-fields').style.display = fmt === 'weekly' ? '' : 'none';
+  document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : 'none';
+}
+// Add one event by default for weekly
 addEvent();
 </script>`, 'New Newsletter', TINYMCE_HEAD);
     }
 
-    // ── PUBLISH ──
+    // ── PUBLISH / SAVE ──
     if (path === '/publish' && method === 'POST') {
       const form = await request.formData();
       const subject = form.get('subject') || '';
-      const pastorNote = form.get('pastor_note') || '';
       const publishedAt = form.get('published_at') || new Date().toISOString().split('T')[0];
       const action = form.get('action') || 'publish';
+      const fmt = form.get('format') || 'weekly';
+      const editId = form.get('newsletter_id') || null; // present when editing an existing newsletter
+      const status = action === 'publish' ? 'published' : 'draft';
+
+      // Weekly-specific fields
+      const pastorNote = form.get('pastor_note') || '';
       const ministryType = form.get('ministry_type') || 'none';
       let ministryContent = '';
       if (ministryType === 'text') {
@@ -976,40 +1047,59 @@ addEvent();
         ministryContent = form.get('ministry_image_url') || '';
       }
 
-      // Collect events
+      // Quick-announcement-specific fields
+      const quickBody = form.get('quick_body') || '';
+      const ctaUrl = form.get('cta_url') || '';
+      const ctaLabel = form.get('cta_label') || '';
+
+      // Combine for storage: quick announcements store message in pastor_note
+      const savedNote = fmt === 'quick' ? quickBody : pastorNote;
+
+      // Collect events (weekly only)
       const eventIds = form.getAll('event_ids');
       const events = [];
-      for (const id of eventIds) {
-        const name = form.get(`event_name_${id}`);
-        if (!name) continue;
-        events.push({
-          event_date: form.get(`event_date_${id}`) || '',
-          event_name: name,
-          event_time: form.get(`event_time_${id}`) || '',
-          event_desc: form.get(`event_desc_${id}`) || '',
-          sort_order: events.length
-        });
+      if (fmt === 'weekly') {
+        for (const id of eventIds) {
+          const name = form.get(`event_name_${id}`);
+          if (!name) continue;
+          events.push({
+            event_date: form.get(`event_date_${id}`) || '',
+            event_name: name,
+            event_time: form.get(`event_time_${id}`) || '',
+            event_desc: form.get(`event_desc_${id}`) || '',
+            sort_order: events.length
+          });
+        }
       }
 
-      // Fetch selected news items
-      const selectedNewsIds = form.getAll('news_item_ids');
+      // Fetch selected news items (weekly only)
+      const selectedNewsIds = fmt === 'weekly' ? form.getAll('news_item_ids') : [];
       let selectedNewsItems = [];
       if (selectedNewsIds.length > 0) {
         const placeholders = selectedNewsIds.map(() => '?').join(',');
         const newsRows = await env.DB.prepare(
           `SELECT id, title, summary FROM news_items WHERE id IN (${placeholders})`
         ).bind(...selectedNewsIds).all();
-        // preserve order selected
         const newsMap = Object.fromEntries(newsRows.results.map(r => [r.id, r]));
         selectedNewsItems = selectedNewsIds.map(id => newsMap[id]).filter(Boolean);
       }
 
-      // Save newsletter
-      const result = await env.DB.prepare(
-        'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at) VALUES (?, ?, ?, ?, ?)'
-      ).bind(subject, pastorNote, ministryContent, ministryType === 'none' ? 'text' : ministryType, publishedAt).run();
-
-      const newsletterId = result.meta.last_row_id;
+      let newsletterId;
+      if (editId) {
+        // Update existing newsletter
+        await env.DB.prepare(
+          'UPDATE newsletters SET subject=?, pastor_note=?, ministry_content=?, ministry_type=?, published_at=?, format=?, cta_url=?, cta_label=?, status=? WHERE id=?'
+        ).bind(subject, savedNote, ministryContent, ministryType === 'none' ? 'text' : ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, editId).run();
+        newsletterId = parseInt(editId, 10);
+        // Replace events
+        await env.DB.prepare('DELETE FROM events WHERE newsletter_id = ?').bind(newsletterId).run();
+      } else {
+        // Insert new newsletter
+        const result = await env.DB.prepare(
+          'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(subject, savedNote, ministryContent, ministryType === 'none' ? 'text' : ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status).run();
+        newsletterId = result.meta.last_row_id;
+      }
 
       // Save events
       for (const e of events) {
@@ -1018,13 +1108,13 @@ addEvent();
         ).bind(newsletterId, e.event_date, e.event_name, e.event_time, e.event_desc, e.sort_order).run();
       }
 
-      // Send via Brevo if requested
+      // Send via Brevo if requested (only when publishing, not drafting)
       const emailSend = form.get('email_send') || 'none';
       let emailSuffix = '';
       if (action === 'publish' && emailSend !== 'none') {
         const listId = emailSend === 'test' ? 2 : parseInt(env.BREVO_LIST_ID || '0', 10);
         if (listId) {
-          const emailHtml = buildEmailHtml(subject, pastorNote, events, ministryContent, ministryType, publishedAt, selectedNewsItems);
+          const emailHtml = buildEmailHtml(subject, savedNote, events, ministryContent, ministryType, publishedAt, selectedNewsItems);
           const result = await sendBrevoNewsletter(env, { subject, htmlContent: emailHtml, listIds: [listId] });
           emailSuffix = result.success
             ? `&emailed=${emailSend}`
@@ -1036,6 +1126,176 @@ addEvent();
         status: 302,
         headers: { Location: `/?msg=${encodeURIComponent(action === 'publish' ? 'published' : 'draft')}&subject=${encodeURIComponent(subject)}${emailSuffix}` }
       });
+    }
+
+    // ── EDIT EXISTING NEWSLETTER (GET) ──
+    if (path.startsWith('/edit/') && method === 'GET') {
+      const editId = path.split('/').pop();
+      const row = await env.DB.prepare('SELECT * FROM newsletters WHERE id = ?').bind(editId).first();
+      if (!row) return new Response('Not found', { status: 404 });
+      const eventsRows = await env.DB.prepare('SELECT * FROM events WHERE newsletter_id = ? ORDER BY sort_order').bind(editId).all();
+      const fmt = row.format || 'weekly';
+
+      // Build prefilled events JS
+      const eventsJs = eventsRows.results.map((e, i) => `
+        (function(){
+          const id = ++eventCount;
+          const div = document.createElement('div');
+          div.className = 'event-block'; div.id = 'event-'+id;
+          div.innerHTML = \`<button type="button" class="remove-event" onclick="removeEvent(\${id})">×</button>
+            <div class="event-grid">
+              <div class="form-group" style="margin:0;"><label>Date</label><input type="date" name="event_date_\${id}" value="${e.event_date||''}"></div>
+              <div class="form-group" style="margin:0;"><label>Time</label><input type="text" name="event_time_\${id}" value="${(e.event_time||'').replace(/"/g,'&quot;')}" placeholder="e.g. 6:30 pm"></div>
+            </div>
+            <div class="form-group" style="margin-top:12px;margin-bottom:0;"><label>Event name</label><input type="text" name="event_name_\${id}" value="${(e.event_name||'').replace(/"/g,'&quot;')}"></div>
+            <div class="form-group" style="margin-top:12px;margin-bottom:0;"><label>Short description</label><input type="text" name="event_desc_\${id}" value="${(e.event_desc||'').replace(/"/g,'&quot;')}"></div>
+            <input type="hidden" name="event_ids" value="\${id}">\`;
+          document.getElementById('events-container').appendChild(div);
+        })();
+      `).join('');
+
+      const bodyVal = (fmt === 'quick' ? row.pastor_note : '') || '';
+      const pastorNoteVal = (fmt === 'weekly' ? row.pastor_note : '') || '';
+      const ministryChecked = (t) => (row.ministry_type || 'text') === t ? ' checked' : '';
+
+      return html(`
+${topbarHtml('newsletter', `<a href="/">← All newsletters</a>`)}
+<div class="wrap">
+  <div class="page-title">Edit newsletter</div>
+  <div class="page-sub" style="color:var(--amber);font-weight:700;">You are editing a ${row.status === 'draft' ? 'draft' : 'published'} newsletter. Changes will go live immediately when you publish.</div>
+
+  <form method="POST" action="/publish" enctype="multipart/form-data">
+  <input type="hidden" name="newsletter_id" value="${editId}">
+  <input type="hidden" name="format" id="format-input" value="${fmt}">
+
+  <div class="card">
+    <div class="card-title">Format</div>
+    <div class="format-picker">
+      <button type="button" class="format-card${fmt==='weekly'?' active':''}" id="fmt-weekly" onclick="pickFormat('weekly')">
+        <div class="format-card-icon">📰</div>
+        <div class="format-card-name">Weekly Newsletter</div>
+        <div class="format-card-desc">Pastor's note, events, ministry content.</div>
+      </button>
+      <button type="button" class="format-card${fmt==='quick'?' active':''}" id="fmt-quick" onclick="pickFormat('quick')">
+        <div class="format-card-icon">⚡</div>
+        <div class="format-card-name">Quick Announcement</div>
+        <div class="format-card-desc">Short message + optional button.</div>
+      </button>
+    </div>
+  </div>
+
+    <div class="card">
+      <div class="card-title">Header</div>
+      <div class="form-group">
+        <label>Subject line <span style="color:#B85C3A;">*</span></label>
+        <input type="text" name="subject" required value="${(row.subject||'').replace(/"/g,'&quot;')}">
+      </div>
+      <div class="form-group">
+        <label>Date</label>
+        <input type="date" name="published_at" value="${row.published_at||''}">
+      </div>
+    </div>
+
+    <div id="weekly-fields" style="display:${fmt==='weekly'?'':'none'}">
+      <div class="card">
+        <div class="card-title">Pastor's note</div>
+        <div class="form-group">
+          <textarea name="pastor_note" style="min-height:180px;">${pastorNoteVal.replace(/</g,'&lt;')}</textarea>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Upcoming events</div>
+        <div id="events-container"></div>
+        <button type="button" class="add-event-btn" onclick="addEvent()">+ Add an event</button>
+      </div>
+      <div class="card">
+        <div class="card-title">From our ministries <span class="tag">Optional</span></div>
+        <div class="form-group">
+          <label>Content type</label>
+          <div class="radio-row">
+            <label><input type="radio" name="ministry_type" value="text"${ministryChecked('text')} onchange="toggleMinistry(this)"> Text or link</label>
+            <label><input type="radio" name="ministry_type" value="image"${ministryChecked('image')} onchange="toggleMinistry(this)"> Image</label>
+            <label><input type="radio" name="ministry_type" value="none"${ministryChecked('none')} onchange="toggleMinistry(this)"> None this week</label>
+          </div>
+        </div>
+        <div id="ministry-text" class="form-group" style="display:${(row.ministry_type||'text')==='text'?'block':'none'}">
+          <textarea name="ministry_content" style="min-height:100px;">${(row.ministry_content||'').replace(/</g,'&lt;')}</textarea>
+        </div>
+        <div id="ministry-image" class="form-group" style="display:${row.ministry_type==='image'?'block':'none'}">
+          <input type="text" name="ministry_image_url" value="${(row.ministry_content||'').replace(/"/g,'&quot;')}" placeholder="https://...">
+        </div>
+      </div>
+    </div>
+
+    <div id="quick-fields" style="display:${fmt==='quick'?'':'none'}">
+      <div class="card">
+        <div class="card-title">Message</div>
+        <div class="form-group">
+          <textarea name="quick_body" style="min-height:140px;">${bodyVal.replace(/</g,'&lt;')}</textarea>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Button <span class="tag">Optional</span></div>
+        <div class="form-group">
+          <label>Button label</label>
+          <input type="text" name="cta_label" value="${(row.cta_label||'').replace(/"/g,'&quot;')}" placeholder="e.g. Sign Up">
+        </div>
+        <div class="form-group">
+          <label>Button link (URL)</label>
+          <input type="url" name="cta_url" value="${(row.cta_url||'').replace(/"/g,'&quot;')}" placeholder="https://...">
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="border-color:var(--amber);">
+      <div class="card-title">Send email</div>
+      <div style="font-family:var(--sans);font-size:12px;color:var(--gray);margin-bottom:12px;">Choose who gets this in their inbox. You can save without sending.</div>
+      <div class="radio-row">
+        <label><input type="radio" name="email_send" value="none" checked> Don't send email</label>
+        <label><input type="radio" name="email_send" value="test"> Test list only</label>
+        <label><input type="radio" name="email_send" value="all"> All subscribers</label>
+      </div>
+    </div>
+
+    <div class="btn-row" style="margin-top:8px;">
+      <button type="submit" name="action" value="publish" class="btn btn-primary">Publish →</button>
+      <button type="submit" name="action" value="draft" class="btn btn-secondary">Save as draft</button>
+      <a href="/" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
+    </div>
+
+  </form>
+</div>
+<script>
+let eventCount = 0;
+function addEvent() {
+  const c = document.getElementById('events-container');
+  const id = ++eventCount;
+  const div = document.createElement('div');
+  div.className = 'event-block'; div.id = 'event-'+id;
+  div.innerHTML = \`<button type="button" class="remove-event" onclick="removeEvent(\${id})">×</button>
+    <div class="event-grid">
+      <div class="form-group" style="margin:0;"><label>Date</label><input type="date" name="event_date_\${id}"></div>
+      <div class="form-group" style="margin:0;"><label>Time</label><input type="text" name="event_time_\${id}" placeholder="e.g. 6:30 pm"></div>
+    </div>
+    <div class="form-group" style="margin-top:12px;margin-bottom:0;"><label>Event name</label><input type="text" name="event_name_\${id}" placeholder="e.g. Wednesday Lenten Service"></div>
+    <div class="form-group" style="margin-top:12px;margin-bottom:0;"><label>Short description</label><input type="text" name="event_desc_\${id}" placeholder="One line"></div>
+    <input type="hidden" name="event_ids" value="\${id}">\`;
+  c.appendChild(div);
+}
+function removeEvent(id) { document.getElementById('event-'+id).remove(); }
+function toggleMinistry(radio) {
+  document.getElementById('ministry-text').style.display = radio.value === 'text' ? 'block' : 'none';
+  document.getElementById('ministry-image').style.display = radio.value === 'image' ? 'block' : 'none';
+}
+function pickFormat(fmt) {
+  document.getElementById('format-input').value = fmt;
+  document.getElementById('fmt-weekly').classList.toggle('active', fmt === 'weekly');
+  document.getElementById('fmt-quick').classList.toggle('active', fmt === 'quick');
+  document.getElementById('weekly-fields').style.display = fmt === 'weekly' ? '' : 'none';
+  document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : 'none';
+}
+${eventsJs}
+</script>`, 'Edit Newsletter');
     }
 
     // ── SEND EMAIL (for saved newsletters) ──
@@ -1729,7 +1989,7 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
 
     // ── DASHBOARD ──
     const newsletters = await env.DB.prepare(
-      'SELECT id, subject, published_at, beehiiv_id, created_at FROM newsletters ORDER BY published_at DESC'
+      "SELECT id, subject, published_at, format, status, created_at FROM newsletters ORDER BY CASE WHEN status = 'draft' THEN 0 ELSE 1 END, published_at DESC"
     ).all();
 
     const msgParam = url.searchParams.get('msg');
@@ -1790,21 +2050,45 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
     }
 
     const rows = newsletters.results;
-    const listHtml = rows.length === 0
-      ? `<div style="text-align:center;padding:40px;color:var(--gray);font-family:var(--sans);font-size:14px;">No newsletters yet. Write your first one.</div>`
-      : rows.map(r => `
+    const drafts = rows.filter(r => r.status === 'draft');
+    const published = rows.filter(r => r.status !== 'draft');
+
+    const fmtLabel = (r) => r.format === 'quick'
+      ? `<span class="badge" style="background:#e8f0fe;color:#1a3060;margin-left:8px;">⚡ Quick</span>`
+      : '';
+
+    const draftRowHtml = drafts.length === 0 ? '' : `
+<div class="card" style="border-color:var(--amber);">
+  <div class="card-title">Drafts <span class="badge badge-draft" style="vertical-align:middle;margin-left:8px;">${drafts.length} draft${drafts.length !== 1 ? 's' : ''}</span></div>
+  ${drafts.map(r => `
 <div class="newsletter-row">
-  <div class="newsletter-date">${r.published_at}</div>
-  <div class="newsletter-subject">${r.subject}</div>
+  <div class="newsletter-date">${r.published_at || r.created_at || ''}</div>
+  <div class="newsletter-subject">${r.subject}${fmtLabel(r)}</div>
   <div class="newsletter-actions">
+    <a href="/edit/${r.id}" class="btn btn-sm btn-secondary">Edit</a>
     <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Send to test list?')">
       <input type="hidden" name="list_type" value="test">
-      <button type="submit" class="btn btn-sm btn-secondary">Send test</button>
+      <button type="submit" class="btn btn-sm" style="background:var(--mist);color:var(--steel);border:1px solid var(--border);">Send test</button>
     </form>
     <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Send to ALL subscribers? This cannot be undone.')">
       <input type="hidden" name="list_type" value="all">
       <button type="submit" class="btn btn-sm btn-primary">Send to all</button>
     </form>
+    <form method="POST" action="/delete/${r.id}" style="display:contents;" onsubmit="return confirm('Delete this draft?')">
+      <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+    </form>
+  </div>
+</div>`).join('')}
+</div>`;
+
+    const publishedRowHtml = published.length === 0
+      ? `<div style="text-align:center;padding:40px;color:var(--gray);font-family:var(--sans);font-size:14px;">No newsletters published yet.</div>`
+      : published.map(r => `
+<div class="newsletter-row">
+  <div class="newsletter-date">${r.published_at || ''}</div>
+  <div class="newsletter-subject">${r.subject}${fmtLabel(r)}</div>
+  <div class="newsletter-actions">
+    <a href="/edit/${r.id}" class="btn btn-sm btn-secondary">Edit</a>
     <form method="POST" action="/delete/${r.id}" style="display:contents;" onsubmit="return confirm('Delete this newsletter?')">
       <button type="submit" class="btn btn-sm btn-danger">Delete</button>
     </form>
@@ -1818,17 +2102,18 @@ ${topbarHtml('newsletter', `<a href="https://timothystl.org/news" target="_blank
   <div class="page-sub">Write your weekly update and publish to the website.</div>
   ${alertHtml}
   <div class="btn-row" style="margin-bottom:28px;">
-    <a href="/new" class="btn btn-primary">+ Write this week's newsletter</a>
+    <a href="/new" class="btn btn-primary">+ Write newsletter</a>
   </div>
+  ${draftRowHtml}
   <div class="card">
     <div class="card-title">Past newsletters</div>
-    ${listHtml}
+    ${publishedRowHtml}
   </div>
   <div style="margin-top:24px;padding:16px 20px;background:var(--mist);border-radius:10px;border-left:3px solid var(--steel);">
     <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--steel);margin-bottom:8px;">Your workflow</div>
     <div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);line-height:1.9;">
-      <strong>1.</strong> Click "Write this week's newsletter" above<br>
-      <strong>2.</strong> Type your pastor's note, add events, paste ministry content<br>
+      <strong>1.</strong> Click "Write newsletter" — pick Weekly or Quick Announcement<br>
+      <strong>2.</strong> Fill in your content, add events if needed<br>
       <strong>3.</strong> Hit Publish — it goes live on timothystl.org/news immediately
     </div>
   </div>
