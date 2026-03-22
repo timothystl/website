@@ -404,7 +404,7 @@ async function sendBrevoNewsletter(env, { subject, htmlContent, listIds }) {
     body: JSON.stringify({
       name: `TLC Newsletter — ${subject}`,
       subject,
-      sender: { name: 'Timothy Lutheran Church', email: env.BREVO_SENDER_EMAIL || 'office@timothystl.org' },
+      sender: { name: 'Timothy Lutheran Church', email: env.BREVO_SENDER_EMAIL || 'dinger@timothystl.org' },
       htmlContent,
       recipients: { listIds }
     })
