@@ -353,8 +353,11 @@ export default {
       return handleAdminApi(req, env, url, method);
     }
     if (path.startsWith('/scheduler')) {
-      const ghUrl = 'https://timothystl.github.io/volunteer' + url.pathname + url.search;
-      return fetch(ghUrl, { headers: { 'User-Agent': req.headers.get('User-Agent') || '' } });
+      const rawUrl = 'https://raw.githubusercontent.com/timothystl/volunteer/main/scheduler/index.html';
+      const resp = await fetch(rawUrl);
+      if (!resp.ok) return new Response('Scheduler not available', { status: 502 });
+      const html = await resp.text();
+      return new Response(html, { headers: { 'Content-Type': 'text/html;charset=UTF-8', 'Cache-Control': 'public,max-age=300' } });
     }
     return new Response('Not Found', { status: 404 });
   }
