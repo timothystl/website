@@ -3,8 +3,6 @@
 // Cloudflare Worker + D1 Database
 
 const ADMIN_PASSWORD = '6704fyler';
-const BEEHIIV_API_KEY = 'jBgc1cHvSXJlyoskPkyf8Ujz7r6VzCO4CaA1t4BaaRsiR9nLR4WmjHQpMK9Ri0N8';
-const BEEHIIV_PUB_ID = 'pub_7c76e5d5-1225-4d04-ae5c-023c2d2d7a40';
 
 // TinyMCE rich-text editor — loaded only on news item form pages
 const TINYMCE_API_KEY = '5wrsrinqxeqvej5slykwic6rgpfb0v8wvj0f21fgk1r4nhs0';
@@ -809,7 +807,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
 ${topbarHtml('newsletter', `<a href="/">← All newsletters</a>`)}
 <div class="wrap">
   <div class="page-title">New newsletter</div>
-  <div class="page-sub">Write your update, add events, and publish to the website and Beehiiv.</div>
+  <div class="page-sub">Write your update, add events, and publish to the website.</div>
 
   <form method="POST" action="/publish" enctype="multipart/form-data">
 
@@ -868,7 +866,7 @@ ${topbarHtml('newsletter', `<a href="/">← All newsletters</a>`)}
       <div class="card-title" style="color:var(--sage);">What happens when you publish</div>
       <div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);line-height:1.8;">
         <strong>1.</strong> The newsletter is saved to your website archive at timothystl.org/news<br>
-        <strong>2.</strong> Go to beehiiv.com → New Post, paste in your content, and hit Send
+        <strong>2.</strong> It goes live immediately on timothystl.org/news
       </div>
     </div>
 
@@ -1674,7 +1672,7 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
       const igCaptionJs = igCaption.replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$/g,'\\$');
       alertHtml = `
 <div class="alert alert-success" style="margin-bottom:0;border-radius:10px 10px 0 0;">
-  ✓ Newsletter published to website archive. Now <a href="https://app.beehiiv.com/posts/new" target="_blank" style="font-weight:700;color:#1a3d1f;">create a new post in Beehiiv →</a> and paste in the content to send the email.
+  ✓ Newsletter published to website archive.
 </div>
 <div style="background:#f0f7f0;border:1px solid #b8d4b8;border-top:none;border-radius:0 0 10px 10px;padding:18px 20px;margin-bottom:20px;">
   <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#2a4d2a;margin-bottom:14px;">📣 Share to social media</div>
@@ -1712,7 +1710,6 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
   <div class="newsletter-date">${r.published_at}</div>
   <div class="newsletter-subject">${r.subject}</div>
   <div style="display:flex;gap:6px;align-items:center;">
-    ${r.beehiiv_id ? `<span class="tag" style="background:#e8f5e9;color:#1a3d1f;">Beehiiv ✓</span>` : ''}
   </div>
   <div class="newsletter-actions">
     <form method="POST" action="/delete/${r.id}" onsubmit="return confirm('Delete this newsletter?')">
@@ -1722,10 +1719,10 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
 </div>`).join('');
 
     return html(`
-${topbarHtml('newsletter', `<a href="https://timothystl.org/news" target="_blank">View archive →</a><a href="https://app.beehiiv.com" target="_blank">Beehiiv →</a>`)}
+${topbarHtml('newsletter', `<a href="https://timothystl.org/news" target="_blank">View archive →</a>`)}
 <div class="wrap">
   <div class="page-title">Newsletters</div>
-  <div class="page-sub">Write your weekly update, publish to the website, and send via Beehiiv.</div>
+  <div class="page-sub">Write your weekly update and publish to the website.</div>
   ${alertHtml}
   <div class="btn-row" style="margin-bottom:28px;">
     <a href="/new" class="btn btn-primary">+ Write this week's newsletter</a>
@@ -1739,8 +1736,7 @@ ${topbarHtml('newsletter', `<a href="https://timothystl.org/news" target="_blank
     <div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);line-height:1.9;">
       <strong>1.</strong> Click "Write this week's newsletter" above<br>
       <strong>2.</strong> Type your pastor's note, add events, paste ministry content<br>
-      <strong>3.</strong> Hit Publish — it saves to your website and creates a Beehiiv draft<br>
-      <strong>4.</strong> Click "Open Beehiiv draft", review, and hit Send
+      <strong>3.</strong> Hit Publish — it goes live on timothystl.org/news immediately
     </div>
   </div>
 </div>`, 'TLC Newsletter Admin');
