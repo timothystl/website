@@ -998,6 +998,7 @@ addEvent();
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
+              title: subject,
               subject: subject,
               content: { free: { email: emailHtml, web: `<h1>${subject}</h1><p>${pastorNote || ''}</p>` } },
               status: 'draft'
