@@ -62,6 +62,9 @@ const DB_INIT_MINISTRY_POSTS = `CREATE TABLE IF NOT EXISTS ministry_posts (
   created_at TEXT DEFAULT (datetime('now'))
 )`;
 
+const THEMES = ['Acceptance', 'Christian Education', 'Outreach', 'Worship'];
+const CONTENT_TYPES = ['Testimonial / Quote', 'Story', 'Explainer', 'Event Promo', 'Factoid / Trivia'];
+
 const MINISTRY_SLUGS = [
   { slug: 'youth',          title: 'Youth',                  has_posts: 1 },
   { slug: 'sundayschool',   title: 'Sunday School',          has_posts: 0 },
@@ -508,6 +511,10 @@ export default {
     // Migrate: add event_date and expire_date to ministry_posts
     try { await env.DB.prepare('ALTER TABLE ministry_posts ADD COLUMN event_date TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE ministry_posts ADD COLUMN expire_date TEXT').run(); } catch (_) {}
+    // Migrate: add content classification fields to news_items
+    try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN theme TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN content_type TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN channels TEXT').run(); } catch (_) {}
     // Pre-populate ministry page slugs so they're always editable
     for (const p of MINISTRY_SLUGS) {
       try {
@@ -535,9 +542,10 @@ export default {
       const limit = parseInt(url.searchParams.get('limit') || '20', 10);
       const today = new Date().toISOString().split('T')[0];
       const rows = await env.DB.prepare(
-        `SELECT id, title, summary, body, image_url, publish_date, event_date, expire_date, pinned
+        `SELECT id, title, summary, body, image_url, publish_date, event_date, expire_date, pinned, theme, content_type, channels
          FROM news_items
          WHERE publish_date <= ? AND (expire_date IS NULL OR expire_date >= ?)
+           AND (channels IS NULL OR channels LIKE '%web%')
          ORDER BY pinned DESC, COALESCE(event_date, publish_date) ASC
          LIMIT ?`
       ).bind(today, today, limit).all();
@@ -1019,6 +1027,34 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
       </div>
     </div>
     <div class="card">
+      <div class="card-title">Classification</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+        <div class="form-group" style="margin:0;">
+          <label>Theme <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional</span></label>
+          <select name="theme" style="width:100%;font-family:var(--sans);font-size:14px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;">
+            <option value="">— none —</option>
+            ${THEMES.map(t => `<option value="${t}">${t}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Content type <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional</span></label>
+          <select name="content_type" style="width:100%;font-family:var(--sans);font-size:14px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;">
+            <option value="">— none —</option>
+            ${CONTENT_TYPES.map(t => `<option value="${t}">${t}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label>Channels <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— where should this appear?</span></label>
+        <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:6px;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:400;cursor:pointer;text-transform:none;letter-spacing:0;"><input type="checkbox" name="ch_web" value="1" checked> Website</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:400;cursor:pointer;text-transform:none;letter-spacing:0;"><input type="checkbox" name="ch_email" value="1" checked> Email newsletter</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:400;cursor:pointer;text-transform:none;letter-spacing:0;"><input type="checkbox" name="ch_bulletin" value="1"> Bulletin</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:400;cursor:pointer;text-transform:none;letter-spacing:0;"><input type="checkbox" name="ch_social" value="1"> Social media</label>
+        </div>
+      </div>
+    </div>
+    <div class="card">
       <div class="card-title">Scheduling</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
         <div class="form-group" style="margin:0;">
@@ -1061,9 +1097,17 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
       const event_date = form.get('event_date') || '';
       const expire_date = form.get('expire_date') || '';
       const pinned = form.get('pinned') === '1' ? 1 : 0;
+      const theme = form.get('theme') || '';
+      const content_type = form.get('content_type') || '';
+      const channels = [
+        form.get('ch_web') === '1' && 'web',
+        form.get('ch_email') === '1' && 'email',
+        form.get('ch_bulletin') === '1' && 'bulletin',
+        form.get('ch_social') === '1' && 'social',
+      ].filter(Boolean).join(',') || 'web';
       await env.DB.prepare(
-        'INSERT INTO news_items (title, summary, body, image_url, publish_date, event_date, expire_date, pinned) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(title, summary, body, image_url, publish_date, event_date || null, expire_date || null, pinned).run();
+        'INSERT INTO news_items (title, summary, body, image_url, publish_date, event_date, expire_date, pinned, theme, content_type, channels) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(title, summary, body, image_url, publish_date, event_date || null, expire_date || null, pinned, theme || null, content_type || null, channels).run();
       return new Response('', { status: 302, headers: { Location: '/newsitems?msg=saved' } });
     }
 
@@ -1093,6 +1137,34 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
       <div class="form-group">
         <label>Header image URL <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, shown on the card thumbnail</span></label>
         <input type="text" name="image_url" value="${v(item.image_url)}" placeholder="https://... (or leave blank — images can also be dropped into the body above)">
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Classification</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+        <div class="form-group" style="margin:0;">
+          <label>Theme <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional</span></label>
+          <select name="theme" style="width:100%;font-family:var(--sans);font-size:14px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;">
+            <option value="">— none —</option>
+            ${THEMES.map(t => `<option value="${t}"${item.theme === t ? ' selected' : ''}>${t}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Content type <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional</option></span></label>
+          <select name="content_type" style="width:100%;font-family:var(--sans);font-size:14px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;">
+            <option value="">— none —</option>
+            ${CONTENT_TYPES.map(t => `<option value="${t}"${item.content_type === t ? ' selected' : ''}>${t}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label>Channels <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— where should this appear?</span></label>
+        <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:6px;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:400;cursor:pointer;text-transform:none;letter-spacing:0;"><input type="checkbox" name="ch_web" value="1"${(item.channels == null || item.channels.includes('web')) ? ' checked' : ''}> Website</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:400;cursor:pointer;text-transform:none;letter-spacing:0;"><input type="checkbox" name="ch_email" value="1"${(item.channels || '').includes('email') ? ' checked' : ''}> Email newsletter</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:400;cursor:pointer;text-transform:none;letter-spacing:0;"><input type="checkbox" name="ch_bulletin" value="1"${(item.channels || '').includes('bulletin') ? ' checked' : ''}> Bulletin</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:400;cursor:pointer;text-transform:none;letter-spacing:0;"><input type="checkbox" name="ch_social" value="1"${(item.channels || '').includes('social') ? ' checked' : ''}> Social media</label>
+        </div>
       </div>
     </div>
     <div class="card">
@@ -1139,9 +1211,17 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
       const event_date = form.get('event_date') || '';
       const expire_date = form.get('expire_date') || '';
       const pinned = form.get('pinned') === '1' ? 1 : 0;
+      const theme = form.get('theme') || '';
+      const content_type = form.get('content_type') || '';
+      const channels = [
+        form.get('ch_web') === '1' && 'web',
+        form.get('ch_email') === '1' && 'email',
+        form.get('ch_bulletin') === '1' && 'bulletin',
+        form.get('ch_social') === '1' && 'social',
+      ].filter(Boolean).join(',') || 'web';
       await env.DB.prepare(
-        'UPDATE news_items SET title=?, summary=?, body=?, image_url=?, publish_date=?, event_date=?, expire_date=?, pinned=? WHERE id=?'
-      ).bind(title, summary, body, image_url, publish_date, event_date || null, expire_date || null, pinned, id).run();
+        'UPDATE news_items SET title=?, summary=?, body=?, image_url=?, publish_date=?, event_date=?, expire_date=?, pinned=?, theme=?, content_type=?, channels=? WHERE id=?'
+      ).bind(title, summary, body, image_url, publish_date, event_date || null, expire_date || null, pinned, theme || null, content_type || null, channels, id).run();
       return new Response('', { status: 302, headers: { Location: '/newsitems?msg=saved' } });
     }
 
