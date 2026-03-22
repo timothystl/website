@@ -242,6 +242,8 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
 .tab{font-family:var(--sans);font-size:13px;font-weight:700;color:var(--gray);padding:12px 20px;text-decoration:none;border-bottom:3px solid transparent;margin-bottom:-2px;display:inline-block;transition:color .15s;}
 .tab:hover{color:var(--steel);}
 .tab-active{color:var(--steel);border-bottom-color:var(--amber);}
+.tab-external{color:var(--gray);font-weight:600;border-left:1px solid var(--border);margin-left:8px;padding-left:24px;}
+.tab-external:hover{color:var(--steel);}
 .ni-row{display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;}
 .ni-row:last-child{border-bottom:none;}
 .ni-title{font-family:var(--serif);font-size:16px;color:var(--steel);flex:1;min-width:160px;}
@@ -360,6 +362,8 @@ function topbarHtml(activeTab, extraLinks = '') {
     <a href="/" class="tab${activeTab === 'newsletter' ? ' tab-active' : ''}">Newsletter</a>
     <a href="/newsitems" class="tab${activeTab === 'news' ? ' tab-active' : ''}">News &amp; Events</a>
     <a href="/ministries" class="tab${activeTab === 'ministries' ? ' tab-active' : ''}">Ministries</a>
+    <a href="https://volunteer.timothystl.org/scheduler" target="_blank" class="tab tab-external">Scheduler ↗</a>
+    <a href="https://volunteer.timothystl.org/admin" target="_blank" class="tab tab-external">Volunteer Admin ↗</a>
   </div>
 </nav>`;
 }
