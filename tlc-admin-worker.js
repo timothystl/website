@@ -3,8 +3,6 @@
 // Cloudflare Worker + D1 Database
 
 const ADMIN_PASSWORD = '6704fyler';
-const BEEHIIV_API_KEY = 'jBgc1cHvSXJlyoskPkyf8Ujz7r6VzCO4CaA1t4BaaRsiR9nLR4WmjHQpMK9Ri0N8';
-const BEEHIIV_PUB_ID = 'pub_7c76e5d5-1225-4d04-ae5c-023c2d2d7a40';
 
 // TinyMCE rich-text editor — loaded only on news item form pages
 const TINYMCE_API_KEY = '5wrsrinqxeqvej5slykwic6rgpfb0v8wvj0f21fgk1r4nhs0';
@@ -393,6 +391,33 @@ function formatDate(d) {
   if (!d) return '';
   const dt = new Date(d + 'T12:00:00');
   return dt.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+// ── BREVO EMAIL SEND ─────────────────────────────────────────
+async function sendBrevoNewsletter(env, { subject, htmlContent, listIds }) {
+  const apiKey = env.BREVO_API_KEY;
+  if (!apiKey) return { error: 'BREVO_API_KEY secret not configured' };
+
+  const createResp = await fetch('https://api.brevo.com/v3/emailCampaigns', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'api-key': apiKey },
+    body: JSON.stringify({
+      name: `TLC Newsletter — ${subject}`,
+      subject,
+      sender: { name: 'Timothy Lutheran Church', email: env.BREVO_SENDER_EMAIL || 'office@timothystl.org' },
+      htmlContent,
+      recipients: { listIds }
+    })
+  });
+  if (!createResp.ok) return { error: `Brevo create error: ${await createResp.text()}` };
+  const { id } = await createResp.json();
+
+  const sendResp = await fetch(`https://api.brevo.com/v3/emailCampaigns/${id}/sendNow`, {
+    method: 'POST',
+    headers: { 'api-key': apiKey }
+  });
+  if (!sendResp.ok) return { error: `Brevo send error: ${await sendResp.text()}` };
+  return { success: true, campaignId: id };
 }
 
 // ── BUILD BEEHIIV HTML ───────────────────────────────────────
@@ -809,7 +834,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
 ${topbarHtml('newsletter', `<a href="/">← All newsletters</a>`)}
 <div class="wrap">
   <div class="page-title">New newsletter</div>
-  <div class="page-sub">Write your update, add events, and publish to the website and Beehiiv.</div>
+  <div class="page-sub">Write your update, add events, and publish to the website.</div>
 
   <form method="POST" action="/publish" enctype="multipart/form-data">
 
@@ -864,12 +889,22 @@ ${topbarHtml('newsletter', `<a href="/">← All newsletters</a>`)}
       </div>
     </div>
 
+    <div class="card" style="border-color:var(--amber);">
+      <div class="card-title">Send email</div>
+      <div style="font-family:var(--sans);font-size:12px;color:var(--gray);margin-bottom:12px;">Choose who gets this in their inbox. You can always save as draft without sending.</div>
+      <div class="radio-row">
+        <label><input type="radio" name="email_send" value="none" checked> Don't send email</label>
+        <label><input type="radio" name="email_send" value="test"> Test list only <span style="font-weight:400;font-size:11px;color:var(--gray);">(Your first list)</span></label>
+        <label><input type="radio" name="email_send" value="all"> All subscribers</label>
+      </div>
+    </div>
+
     <div class="card" style="background:var(--mist);border-color:var(--ice);">
       <div class="card-title" style="color:var(--sage);">What happens when you publish</div>
       <div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);line-height:1.8;">
         <strong>1.</strong> The newsletter is saved to your website archive at timothystl.org/news<br>
-        <strong>2.</strong> A draft is created in Beehiiv, ready for you to review and send<br>
-        <strong>3.</strong> Go to beehiiv.com, find the draft, review it, and hit Send
+        <strong>2.</strong> It goes live immediately on timothystl.org/news<br>
+        <strong>3.</strong> If you selected an email list above, it is sent via Brevo
       </div>
     </div>
 
@@ -983,50 +1018,23 @@ addEvent();
         ).bind(newsletterId, e.event_date, e.event_name, e.event_time, e.event_desc, e.sort_order).run();
       }
 
-      let beehiivStatus = '';
-      let beehiivUrl = '';
-
-      // Push to Beehiiv if publishing
-      let beehiivError = '';
-      if (action === 'publish') {
-        try {
+      // Send via Brevo if requested
+      const emailSend = form.get('email_send') || 'none';
+      let emailSuffix = '';
+      if (action === 'publish' && emailSend !== 'none') {
+        const listId = emailSend === 'test' ? 2 : parseInt(env.BREVO_LIST_ID || '0', 10);
+        if (listId) {
           const emailHtml = buildEmailHtml(subject, pastorNote, events, ministryContent, ministryType, publishedAt, selectedNewsItems);
-          const beehiivRes = await fetch(`https://api.beehiiv.com/v2/publications/${BEEHIIV_PUB_ID}/posts`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${BEEHIIV_API_KEY}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              subject: subject,
-              content: { free: { email: emailHtml, web: `<h1>${subject}</h1><p>${pastorNote || ''}</p>` } },
-              status: 'draft'
-            })
-          });
-          const beehiivData = await beehiivRes.json();
-          if (beehiivData.data && beehiivData.data.id) {
-            await env.DB.prepare('UPDATE newsletters SET beehiiv_id = ? WHERE id = ?').bind(beehiivData.data.id, newsletterId).run();
-            beehiivStatus = 'success';
-            beehiivUrl = `https://app.beehiiv.com/posts/${beehiivData.data.id}`;
-          } else {
-            beehiivStatus = 'failed';
-            beehiivError = JSON.stringify(beehiivData).substring(0, 300);
-          }
-        } catch (e) {
-          beehiivStatus = 'failed';
-          beehiivError = e.message;
+          const result = await sendBrevoNewsletter(env, { subject, htmlContent: emailHtml, listIds: [listId] });
+          emailSuffix = result.success
+            ? `&emailed=${emailSend}`
+            : `&emailerr=${encodeURIComponent(result.error)}`;
         }
       }
 
-      const successMsg = action === 'publish'
-        ? beehiivStatus === 'success'
-          ? `<div class="alert alert-success">✓ Published to website archive. <strong><a href="${beehiivUrl}" target="_blank" style="color:#1a3d1f;">Open Beehiiv draft →</a></strong> Review and send when ready.</div>`
-          : `<div class="alert alert-success">✓ Saved to website archive. <span style="color:#7a1f1f;">Note: Beehiiv draft creation failed — log in to beehiiv.com and create the email manually.</span></div>`
-        : `<div class="alert alert-info">Draft saved. Not yet published to the website or Beehiiv.</div>`;
-
       return new Response('', {
         status: 302,
-        headers: { Location: `/?msg=${encodeURIComponent(action === 'publish' ? 'published' : 'draft')}&beehiiv=${beehiivStatus}&url=${encodeURIComponent(beehiivUrl)}&subject=${encodeURIComponent(subject)}&err=${encodeURIComponent(beehiivError)}` }
+        headers: { Location: `/?msg=${encodeURIComponent(action === 'publish' ? 'published' : 'draft')}&subject=${encodeURIComponent(subject)}${emailSuffix}` }
       });
     }
 
@@ -1697,11 +1705,10 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
     ).all();
 
     const msgParam = url.searchParams.get('msg');
-    const beehiivParam = url.searchParams.get('beehiiv');
-    const beehiivUrlParam = url.searchParams.get('url') || '';
     const subjectParam = decodeURIComponent(url.searchParams.get('subject') || '');
-    const beehiivErrParam = decodeURIComponent(url.searchParams.get('err') || '');
     let alertHtml = '';
+    const emailedParam = url.searchParams.get('emailed');
+    const emailErrParam = url.searchParams.get('emailerr');
     if (msgParam === 'published') {
       const siteNewsUrl = 'https://timothystl.org/news';
       const fbShareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(siteNewsUrl)}`;
@@ -1717,12 +1724,9 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
         ? `📖 ${subjectParam}\n\nOur weekly update is live — read it at timothystl.org/news\n\n@timothystl\n#TimothyLutheran #LindenwoordPark #StLouis #church`
         : `Our latest newsletter is live at timothystl.org/news\n\n@timothystl\n#TimothyLutheran #LindenwoordPark #StLouis #church`;
       const igCaptionJs = igCaption.replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$/g,'\\$');
-      const beehiivLine = beehiivParam === 'success'
-        ? `<a href="${decodeURIComponent(beehiivUrlParam)}" target="_blank" style="font-weight:700;color:#1a3d1f;">Open Beehiiv draft →</a> Review and hit Send when ready.`
-        : `<span style="color:#7a1f1f;">⚠ Beehiiv draft failed${beehiivErrParam ? ': ' + beehiivErrParam : ''}.</span> Log in to <a href="https://app.beehiiv.com" target="_blank" style="font-weight:700;color:#1a3d1f;">Beehiiv</a> to create the email manually.`;
       alertHtml = `
 <div class="alert alert-success" style="margin-bottom:0;border-radius:10px 10px 0 0;">
-  ✓ Newsletter published to website archive. ${beehiivLine}
+  ✓ Newsletter published to website archive.${emailedParam === 'test' ? ' Email sent to test list.' : emailedParam === 'all' ? ' Email sent to all subscribers.' : ''}${emailErrParam ? ` ⚠️ Email error: ${emailErrParam}` : ''}
 </div>
 <div style="background:#f0f7f0;border:1px solid #b8d4b8;border-top:none;border-radius:0 0 10px 10px;padding:18px 20px;margin-bottom:20px;">
   <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#2a4d2a;margin-bottom:14px;">📣 Share to social media</div>
@@ -1760,7 +1764,6 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
   <div class="newsletter-date">${r.published_at}</div>
   <div class="newsletter-subject">${r.subject}</div>
   <div style="display:flex;gap:6px;align-items:center;">
-    ${r.beehiiv_id ? `<span class="tag" style="background:#e8f5e9;color:#1a3d1f;">Beehiiv ✓</span>` : ''}
   </div>
   <div class="newsletter-actions">
     <form method="POST" action="/delete/${r.id}" onsubmit="return confirm('Delete this newsletter?')">
@@ -1770,10 +1773,10 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
 </div>`).join('');
 
     return html(`
-${topbarHtml('newsletter', `<a href="https://timothystl.org/news" target="_blank">View archive →</a><a href="https://app.beehiiv.com" target="_blank">Beehiiv →</a>`)}
+${topbarHtml('newsletter', `<a href="https://timothystl.org/news" target="_blank">View archive →</a>`)}
 <div class="wrap">
   <div class="page-title">Newsletters</div>
-  <div class="page-sub">Write your weekly update, publish to the website, and send via Beehiiv.</div>
+  <div class="page-sub">Write your weekly update and publish to the website.</div>
   ${alertHtml}
   <div class="btn-row" style="margin-bottom:28px;">
     <a href="/new" class="btn btn-primary">+ Write this week's newsletter</a>
@@ -1787,8 +1790,7 @@ ${topbarHtml('newsletter', `<a href="https://timothystl.org/news" target="_blank
     <div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);line-height:1.9;">
       <strong>1.</strong> Click "Write this week's newsletter" above<br>
       <strong>2.</strong> Type your pastor's note, add events, paste ministry content<br>
-      <strong>3.</strong> Hit Publish — it saves to your website and creates a Beehiiv draft<br>
-      <strong>4.</strong> Click "Open Beehiiv draft", review, and hit Send
+      <strong>3.</strong> Hit Publish — it goes live on timothystl.org/news immediately
     </div>
   </div>
 </div>`, 'TLC Newsletter Admin');
