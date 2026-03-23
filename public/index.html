@@ -2437,16 +2437,25 @@ loadSermons();
 // ── DESIGN LAB ─────────────────────────────────────────────────────────────
 
 // All Google Font families loaded in the <head>
-var DL_FONT_LIST = [
-  { name: 'Lora',             stack: "'Lora', Georgia, serif",            type: 'serif'  },
-  { name: 'Playfair Display', stack: "'Playfair Display', Georgia, serif", type: 'serif'  },
-  { name: 'EB Garamond',      stack: "'EB Garamond', Georgia, serif",      type: 'serif'  },
-  { name: 'Crimson Pro',      stack: "'Crimson Pro', Georgia, serif",      type: 'serif'  },
-  { name: 'Source Sans 3',    stack: "'Source Sans 3', Arial, sans-serif", type: 'sans'   },
-  { name: 'Raleway',          stack: "'Raleway', Arial, sans-serif",       type: 'sans'   },
-  { name: 'Nunito',           stack: "'Nunito', Arial, sans-serif",        type: 'sans'   },
-  { name: 'Open Sans',        stack: "'Open Sans', Arial, sans-serif",     type: 'sans'   }
-];
+// ~50 curated Google Fonts — loaded on demand when selected
+// User can also type any Google Font name not in this list
+var DL_ALL_FONTS = {
+  serif: [
+    'Lora','Playfair Display','EB Garamond','Crimson Pro','Merriweather',
+    'Libre Baskerville','Cormorant Garamond','Spectral','Vollkorn','Cardo',
+    'Arvo','Zilla Slab','Roboto Slab','PT Serif','Cinzel','Tinos','Domine',
+    'Josefin Slab','Faustina','Fraunces'
+  ],
+  sans: [
+    'Source Sans 3','Open Sans','Lato','Roboto','Montserrat','Inter',
+    'Poppins','Raleway','Work Sans','DM Sans','Nunito','Mulish','Barlow',
+    'Karla','Jost','Outfit','Figtree','Plus Jakarta Sans','Cabin','PT Sans',
+    'Josefin Sans','Noto Sans','Quicksand','Rubik','Manrope','IBM Plex Sans'
+  ]
+};
+
+// Flat sorted list for the datalist (both groups)
+var DL_FONT_NAMES = DL_ALL_FONTS.serif.concat(DL_ALL_FONTS.sans).sort();
 
 // Font roles — each sets these CSS vars
 var DL_FONT_ROLES = [
@@ -2610,39 +2619,62 @@ function dlRender() {
     sw.appendChild(btn);
   });
 
+  // ── Shared datalist for all font inputs ──────────────────────
+  if (!document.getElementById('dl-font-datalist')) {
+    var dl = document.createElement('datalist');
+    dl.id = 'dl-font-datalist';
+    // Grouped: serifs first, then sans (optgroup not supported in datalist, so add visual marker)
+    ['── Serif ──'].concat(DL_ALL_FONTS.serif, ['── Sans-Serif ──'], DL_ALL_FONTS.sans).forEach(function(name) {
+      var opt = document.createElement('option');
+      opt.value = name;
+      dl.appendChild(opt);
+    });
+    document.body.appendChild(dl);
+  }
+
   // ── Per-role font selectors ───────────────────────────────────
   var fc = document.getElementById('dl-fonts');
-  DL_FONT_ROLES.forEach(function(role, ri) {
+  DL_FONT_ROLES.forEach(function(role) {
     var wrap = document.createElement('div');
-    wrap.style.cssText = 'display:flex;align-items:center;gap:8px;';
+    wrap.style.cssText = 'margin-bottom:10px;';
 
     var lbl = document.createElement('div');
-    lbl.style.cssText = 'flex:0 0 130px;font-size:11px;font-weight:600;color:#aaa;';
+    lbl.style.cssText = 'font-size:10px;font-weight:700;color:#777;text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px;';
     lbl.textContent = role.label;
 
-    var sel = document.createElement('select');
-    sel.style.cssText = 'flex:1;background:#2a2a2a;border:1px solid #444;border-radius:6px;padding:5px 8px;color:#ddd;font-size:12px;cursor:pointer;outline:none;';
-    sel.dataset.roleIndex = ri;
+    var inp = document.createElement('input');
+    inp.type = 'text';
+    inp.setAttribute('list', 'dl-font-datalist');
+    inp.value = role.current;
+    inp.placeholder = 'Type any Google Font name…';
+    inp.style.cssText = 'width:100%;background:#2a2a2a;border:1px solid #444;border-radius:6px;padding:7px 10px;color:#ddd;font-size:13px;outline:none;font-family:"' + role.current + '",sans-serif;';
 
-    DL_FONT_LIST.forEach(function(f) {
-      var opt = document.createElement('option');
-      opt.value = f.stack;
-      opt.textContent = f.name;
-      opt.style.fontFamily = f.stack;
-      if (f.name === role.current) opt.selected = true;
-      sel.appendChild(opt);
-    });
+    // Live preview line
+    var preview = document.createElement('div');
+    preview.style.cssText = 'font-size:14px;color:#bbb;padding:5px 2px 0;font-family:"' + role.current + '",sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+    preview.textContent = 'Gathered Around Grace — The quick brown fox';
 
-    sel.addEventListener('change', function() {
+    function applyFont(name) {
+      name = name.trim();
+      if (!name || name.startsWith('──')) return;
+      dlLoadFont(name);
+      var stack = dlFontStack(name);
       role.vars.forEach(function(v) {
-        document.documentElement.style.setProperty(v, sel.value);
+        document.documentElement.style.setProperty(v, stack);
       });
-    });
-    sel.addEventListener('focus', function(){ sel.style.borderColor='#888'; });
-    sel.addEventListener('blur', function(){ sel.style.borderColor='#444'; });
+      inp.style.fontFamily = '"' + name + '",sans-serif';
+      preview.style.fontFamily = '"' + name + '",sans-serif';
+      role.current = name;
+    }
+
+    inp.addEventListener('change', function() { applyFont(inp.value); });
+    inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); applyFont(inp.value); } });
+    inp.addEventListener('focus', function(){ inp.style.borderColor='#888'; });
+    inp.addEventListener('blur', function(){ inp.style.borderColor='#444'; });
 
     wrap.appendChild(lbl);
-    wrap.appendChild(sel);
+    wrap.appendChild(inp);
+    wrap.appendChild(preview);
     fc.appendChild(wrap);
   });
 
@@ -2717,6 +2749,22 @@ function dlRender() {
       body.appendChild(row);
     });
   });
+}
+
+function dlLoadFont(name) {
+  var id = 'gf-' + name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+  if (document.getElementById(id)) return;
+  var link = document.createElement('link');
+  link.id = id;
+  link.rel = 'stylesheet';
+  link.href = 'https://fonts.googleapis.com/css2?family=' + encodeURIComponent(name).replace(/%20/g, '+') + ':ital,wght@0,400;0,600;0,700;1,400&display=swap';
+  document.head.appendChild(link);
+}
+
+function dlFontStack(name) {
+  var isSerif = DL_ALL_FONTS.serif.indexOf(name) !== -1 ||
+    /garamond|baskerville|serif|roman|bodoni|caslon|jenson|cardo|cinzel|faustina|vollkorn|spectral|crimson|lora|playfair|cormorant|fraunces|tinos|arvo|zilla|domine|josefin slab|roboto slab|pt serif/i.test(name);
+  return "'" + name + "', " + (isSerif ? 'Georgia, serif' : 'Arial, sans-serif');
 }
 
 function dlApplyPalette(vars) {
