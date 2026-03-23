@@ -28,12 +28,15 @@
   --border:#DDE3ED;--charcoal:#1A1A2A;--gray:#4A4860;--text-muted:#8A8898;
   /* Fonts & shape */
   --serif:'Lora',Georgia,serif;--sans:'Source Sans 3',Arial,sans-serif;
+  --font-heading:'Lora',Georgia,serif;
+  --font-body:'Source Sans 3',Arial,sans-serif;
+  --font-ui:'Source Sans 3',Arial,sans-serif;
   --r-sm:8px;--r-md:12px;--r-lg:20px;
   --shadow:0 2px 12px rgba(30,45,74,.08);--shadow-lift:0 6px 32px rgba(30,45,74,.14);
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 html{scroll-behavior:smooth;}
-body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);line-height:1.65;font-size:16px;}
+body{font-family:var(--font-body);color:var(--charcoal);background:var(--warm);line-height:1.65;font-size:16px;}
 body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");pointer-events:none;z-index:1000;opacity:0.5;}
 img{display:block;max-width:100%;}
 a{color:var(--mid);text-decoration:none;}
@@ -46,11 +49,11 @@ a:hover{color:var(--steel);}
 .section--white{background:var(--white);}
 .section--mist{background:var(--mist);}
 .section--warm{background:var(--warm);}
-.eyebrow{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--amber);margin-bottom:8px;display:block;}
+.eyebrow{font-family:var(--font-ui);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--amber);margin-bottom:8px;display:block;}
 .eyebrow--sage{color:var(--sage);}
 .eyebrow--sky{color:var(--sky);}
 .eyebrow--light{color:var(--honey);}
-h1,h2,h3,h4{font-family:var(--serif);color:var(--steel);}
+h1,h2,h3,h4{font-family:var(--font-heading);color:var(--steel);}
 h1{font-size:clamp(30px,4.5vw,52px);font-weight:700;line-height:1.15;}
 h2{font-size:clamp(24px,3.5vw,36px);font-weight:700;line-height:1.2;margin-bottom:16px;}
 h3{font-size:20px;font-weight:700;margin-bottom:8px;}
@@ -67,7 +70,7 @@ p:last-child{margin-bottom:0;}
 .nav-brand-name{font-family:var(--sans);font-size:14px;font-weight:800;color:white;display:block;}
 .nav-brand-sub{font-family:var(--sans);font-size:10px;font-weight:600;color:var(--honey);display:block;letter-spacing:.04em;}
 .nav-links{display:flex;align-items:center;gap:4px;list-style:none;}
-.nav-links button,.nav-links a{font-family:var(--sans);font-size:13px;font-weight:700;color:rgba(255,255,255,.85);background:none;border:none;cursor:pointer;padding:6px 10px;border-radius:var(--r-sm);transition:background .15s,color .15s;text-decoration:none;}
+.nav-links button,.nav-links a{font-family:var(--font-ui);font-size:13px;font-weight:700;color:rgba(255,255,255,.85);background:none;border:none;cursor:pointer;padding:6px 10px;border-radius:var(--r-sm);transition:background .15s,color .15s;text-decoration:none;}
 .nav-links button:hover,.nav-links a:hover{background:rgba(255,255,255,.12);color:white;}
 /* Dropdown */
 .nav-dropdown{position:relative;}
@@ -80,11 +83,11 @@ p:last-child{margin-bottom:0;}
 .nav-toggle{display:none;background:none;border:none;cursor:pointer;color:white;font-size:22px;padding:8px;}
 .nav-mobile{display:none;flex-direction:column;background:var(--sage);padding:12px 28px 20px;border-bottom:3px solid var(--amber);}
 .nav-mobile.open{display:flex;}
-.nav-mobile button,.nav-mobile a{font-family:var(--sans);font-size:14px;font-weight:700;color:rgba(255,255,255,.85);background:none;border:none;cursor:pointer;padding:10px 0;text-align:left;border-bottom:1px solid rgba(255,255,255,.1);text-decoration:none;}
+.nav-mobile button,.nav-mobile a{font-family:var(--font-ui);font-size:14px;font-weight:700;color:rgba(255,255,255,.85);background:none;border:none;cursor:pointer;padding:10px 0;text-align:left;border-bottom:1px solid rgba(255,255,255,.1);text-decoration:none;}
 .nav-mobile button:hover,.nav-mobile a:hover{color:white;}
 
 /* BUTTONS */
-.btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--sans);font-size:14px;font-weight:700;padding:12px 26px;border-radius:var(--r-sm);border:none;cursor:pointer;text-decoration:none;transition:transform .15s,background .2s;line-height:1;}
+.btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--font-ui);font-size:14px;font-weight:700;padding:12px 26px;border-radius:var(--r-sm);border:none;cursor:pointer;text-decoration:none;transition:transform .15s,background .2s;line-height:1;}
 .btn:hover{transform:translateY(-1px);}
 .btn-primary{background:var(--steel);color:white;}
 .btn-primary:hover{background:var(--steel-dk);color:white;}
@@ -2417,12 +2420,12 @@ loadSermons();
     <div id="dl-swatches" style="display:flex;flex-direction:column;gap:6px;"></div>
 
     <div style="border-top:1px solid #333;margin:14px 0 12px;"></div>
-    <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#888;margin-bottom:10px;">Font Pairing</div>
-    <div id="dl-fonts" style="display:flex;flex-direction:column;gap:6px;"></div>
+    <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#888;margin-bottom:10px;">Fonts by Role</div>
+    <div id="dl-fonts" style="display:flex;flex-direction:column;gap:8px;"></div>
 
-    <div style="border-top:1px solid #333;margin:14px 0 12px;"></div>
-    <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#888;margin-bottom:10px;">Individual Colors</div>
-    <div id="dl-pickers" style="display:flex;flex-direction:column;gap:8px;"></div>
+    <div style="border-top:1px solid #333;margin:14px 0 10px;"></div>
+    <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#888;margin-bottom:10px;">Colors — All Variables</div>
+    <div id="dl-pickers" style="display:flex;flex-direction:column;gap:0;"></div>
 
     <div style="border-top:1px solid #333;margin:14px 0 12px;"></div>
     <button onclick="dlCopyCSS()" style="width:100%;background:#2a2a2a;color:#ccc;border:1px solid #444;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;">Copy CSS Variables</button>
@@ -2431,7 +2434,83 @@ loadSermons();
 </div>
 
 <script>
-// ── DESIGN LAB ─────────────────────────────────────────────────
+// ── DESIGN LAB ─────────────────────────────────────────────────────────────
+
+// All Google Font families loaded in the <head>
+// ~50 curated Google Fonts — loaded on demand when selected
+// User can also type any Google Font name not in this list
+var DL_ALL_FONTS = {
+  serif: [
+    'Lora','Playfair Display','EB Garamond','Crimson Pro','Merriweather',
+    'Libre Baskerville','Cormorant Garamond','Spectral','Vollkorn','Cardo',
+    'Arvo','Zilla Slab','Roboto Slab','PT Serif','Cinzel','Tinos','Domine',
+    'Josefin Slab','Faustina','Fraunces'
+  ],
+  sans: [
+    'Source Sans 3','Open Sans','Lato','Roboto','Montserrat','Inter',
+    'Poppins','Raleway','Work Sans','DM Sans','Nunito','Mulish','Barlow',
+    'Karla','Jost','Outfit','Figtree','Plus Jakarta Sans','Cabin','PT Sans',
+    'Josefin Sans','Noto Sans','Quicksand','Rubik','Manrope','IBM Plex Sans'
+  ]
+};
+
+// Flat sorted list for the datalist (both groups)
+var DL_FONT_NAMES = DL_ALL_FONTS.serif.concat(DL_ALL_FONTS.sans).sort();
+
+// Font roles — each sets these CSS vars
+var DL_FONT_ROLES = [
+  { label: 'Headings (h1–h4)',  vars: ['--font-heading', '--serif'],  current: 'Lora' },
+  { label: 'Body text',         vars: ['--font-body'],                current: 'Source Sans 3' },
+  { label: 'Buttons & UI',      vars: ['--font-ui', '--sans'],        current: 'Source Sans 3' }
+];
+
+// Color groups — all variables organized
+var DL_COLOR_GROUPS = [
+  { label: 'Primary', open: true, colors: [
+    { label: '--steel',     key: '--steel'    },
+    { label: '--steel-dk',  key: '--steel-dk' },
+    { label: '--steel-dk2', key: '--steel-dk2'}
+  ]},
+  { label: 'Accent / Gold', open: true, colors: [
+    { label: '--amber',     key: '--amber'    },
+    { label: '--amber-dk',  key: '--amber-dk' },
+    { label: '--honey',     key: '--honey'    },
+    { label: '--pale-gold', key: '--pale-gold'}
+  ]},
+  { label: 'Nav / Moss', open: true, colors: [
+    { label: '--sage',      key: '--sage'     },
+    { label: '--soft-sage', key: '--soft-sage'},
+    { label: '--pale-sage', key: '--pale-sage'}
+  ]},
+  { label: 'Links / Teal', open: true, colors: [
+    { label: '--mid',  key: '--mid' },
+    { label: '--sky',  key: '--sky' },
+    { label: '--ice',  key: '--ice' },
+    { label: '--mist', key: '--mist'}
+  ]},
+  { label: 'Backgrounds', open: true, colors: [
+    { label: '--warm',  key: '--warm'  },
+    { label: '--linen', key: '--linen' },
+    { label: '--white', key: '--white' }
+  ]},
+  { label: 'Text & Borders', open: false, colors: [
+    { label: '--charcoal',   key: '--charcoal'   },
+    { label: '--gray',       key: '--gray'       },
+    { label: '--text-muted', key: '--text-muted' },
+    { label: '--border',     key: '--border'     }
+  ]},
+  { label: 'Ministry Accents', open: false, colors: [
+    { label: '--teal',        key: '--teal'       },
+    { label: '--teal-light',  key: '--teal-light' },
+    { label: '--teal-pale',   key: '--teal-pale'  },
+    { label: '--slate',       key: '--slate'      },
+    { label: '--slate-light', key: '--slate-light'},
+    { label: '--slate-pale',  key: '--slate-pale' },
+    { label: '--plum-light',  key: '--plum-light' },
+    { label: '--stone',       key: '--stone'      }
+  ]}
+];
+
 var DL_PALETTES = [
   {
     name: 'Current — Navy & Gold',
@@ -2518,117 +2597,195 @@ var DL_PICKERS = [
 ];
 
 var dlOpen = false;
+var dlRendered = false;
 
 function dlToggle() {
   dlOpen = !dlOpen;
   document.getElementById('dl-panel').style.display = dlOpen ? 'block' : 'none';
-  if (dlOpen && !document.getElementById('dl-swatches').children.length) dlRender();
+  if (dlOpen && !dlRendered) { dlRender(); dlRendered = true; }
 }
 
 function dlRender() {
-  // Palette swatches
+  // ── Palette swatches ──────────────────────────────────────────
   var sw = document.getElementById('dl-swatches');
   DL_PALETTES.forEach(function(p) {
     var btn = document.createElement('button');
     btn.style.cssText = 'display:flex;align-items:center;gap:10px;width:100%;background:#2a2a2a;border:1.5px solid #3a3a3a;border-radius:8px;padding:8px 12px;color:#ccc;font-size:12px;font-weight:600;cursor:pointer;text-align:left;';
-    var dots = p.dot.map(function(c){ return '<span style="width:12px;height:12px;border-radius:50%;background:'+c+';border:1.5px solid rgba(255,255,255,.2);flex-shrink:0;display:inline-block;"></span>'; }).join('');
+    var dots = p.dot.map(function(c){ return '<span style="width:12px;height:12px;border-radius:50%;background:'+c+';border:1.5px solid rgba(255,255,255,.18);flex-shrink:0;display:inline-block;"></span>'; }).join('');
     btn.innerHTML = '<span style="display:flex;gap:3px;">' + dots + '</span>' + p.name;
-    btn.onclick = function() { dlApply(p.vars); dlHighlight(btn); };
+    btn.onclick = function() { dlApplyPalette(p.vars); dlActivate(btn, '#dl-swatches'); };
     btn.onmouseenter = function(){ if(!btn._active) btn.style.borderColor='#666'; };
     btn.onmouseleave = function(){ if(!btn._active) btn.style.borderColor='#3a3a3a'; };
     sw.appendChild(btn);
   });
 
-  // Font pairings
+  // ── Shared datalist for all font inputs ──────────────────────
+  if (!document.getElementById('dl-font-datalist')) {
+    var dl = document.createElement('datalist');
+    dl.id = 'dl-font-datalist';
+    // Grouped: serifs first, then sans (optgroup not supported in datalist, so add visual marker)
+    ['── Serif ──'].concat(DL_ALL_FONTS.serif, ['── Sans-Serif ──'], DL_ALL_FONTS.sans).forEach(function(name) {
+      var opt = document.createElement('option');
+      opt.value = name;
+      dl.appendChild(opt);
+    });
+    document.body.appendChild(dl);
+  }
+
+  // ── Per-role font selectors ───────────────────────────────────
   var fc = document.getElementById('dl-fonts');
-  DL_FONTS.forEach(function(f) {
-    var btn = document.createElement('button');
-    btn.style.cssText = 'display:flex;align-items:center;gap:10px;width:100%;background:#2a2a2a;border:1.5px solid #3a3a3a;border-radius:8px;padding:8px 12px;color:#ccc;font-size:12px;font-weight:600;cursor:pointer;text-align:left;';
-    btn.innerHTML = '<span style="font-family:\''+f.serif+'\',serif;font-size:14px;color:#fff;flex-shrink:0;min-width:24px;">Aa</span>' + f.name;
-    btn.onclick = function() { dlApplyFont(f); dlHighlightFont(btn); };
-    btn.onmouseenter = function(){ if(!btn._active) btn.style.borderColor='#666'; };
-    btn.onmouseleave = function(){ if(!btn._active) btn.style.borderColor='#3a3a3a'; };
-    fc.appendChild(btn);
+  DL_FONT_ROLES.forEach(function(role) {
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'margin-bottom:10px;';
+
+    var lbl = document.createElement('div');
+    lbl.style.cssText = 'font-size:10px;font-weight:700;color:#777;text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px;';
+    lbl.textContent = role.label;
+
+    var inp = document.createElement('input');
+    inp.type = 'text';
+    inp.setAttribute('list', 'dl-font-datalist');
+    inp.value = role.current;
+    inp.placeholder = 'Type any Google Font name…';
+    inp.style.cssText = 'width:100%;background:#2a2a2a;border:1px solid #444;border-radius:6px;padding:7px 10px;color:#ddd;font-size:13px;outline:none;font-family:"' + role.current + '",sans-serif;';
+
+    // Live preview line
+    var preview = document.createElement('div');
+    preview.style.cssText = 'font-size:14px;color:#bbb;padding:5px 2px 0;font-family:"' + role.current + '",sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+    preview.textContent = 'Gathered Around Grace — The quick brown fox';
+
+    function applyFont(name) {
+      name = name.trim();
+      if (!name || name.startsWith('──')) return;
+      dlLoadFont(name);
+      var stack = dlFontStack(name);
+      role.vars.forEach(function(v) {
+        document.documentElement.style.setProperty(v, stack);
+      });
+      inp.style.fontFamily = '"' + name + '",sans-serif';
+      preview.style.fontFamily = '"' + name + '",sans-serif';
+      role.current = name;
+    }
+
+    inp.addEventListener('change', function() { applyFont(inp.value); });
+    inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); applyFont(inp.value); } });
+    inp.addEventListener('focus', function(){ inp.style.borderColor='#888'; });
+    inp.addEventListener('blur', function(){ inp.style.borderColor='#444'; });
+
+    wrap.appendChild(lbl);
+    wrap.appendChild(inp);
+    wrap.appendChild(preview);
+    fc.appendChild(wrap);
   });
 
-  // Color pickers with hex inputs
+  // ── Color groups ─────────────────────────────────────────────
   var pk = document.getElementById('dl-pickers');
-  DL_PICKERS.forEach(function(p) {
-    var row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;gap:8px;';
+  DL_COLOR_GROUPS.forEach(function(grp) {
+    // Group header (toggle)
+    var hdr = document.createElement('button');
+    hdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;width:100%;background:none;border:none;border-bottom:1px solid #333;padding:5px 0;color:#aaa;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;';
+    var arrow = document.createElement('span');
+    arrow.textContent = grp.open ? '▾' : '▸';
+    hdr.innerHTML = grp.label;
+    hdr.appendChild(arrow);
 
-    var colorWrap = document.createElement('label');
-    colorWrap.style.cssText = 'position:relative;width:36px;height:36px;flex-shrink:0;border-radius:8px;overflow:hidden;border:1.5px solid #444;cursor:pointer;';
-    var colorInp = document.createElement('input');
-    colorInp.type = 'color';
-    colorInp.value = rgbToHex(getComputedStyle(document.documentElement).getPropertyValue(p.key).trim());
-    colorInp.style.cssText = 'position:absolute;width:150%;height:150%;top:-25%;left:-25%;border:none;cursor:pointer;padding:0;';
-    colorInp.dataset.key = p.key;
-    colorWrap.appendChild(colorInp);
+    var body = document.createElement('div');
+    body.style.display = grp.open ? 'block' : 'none';
+    body.style.marginBottom = '4px';
 
-    var textWrap = document.createElement('div');
-    textWrap.style.cssText = 'flex:1;';
-    var lbl = document.createElement('div');
-    lbl.style.cssText = 'font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;';
-    lbl.textContent = p.label;
-    var hexInp = document.createElement('input');
-    hexInp.type = 'text';
-    hexInp.value = colorInp.value;
-    hexInp.maxLength = 7;
-    hexInp.placeholder = '#000000';
-    hexInp.style.cssText = 'width:100%;background:#2a2a2a;border:1px solid #444;border-radius:5px;padding:4px 7px;color:#ddd;font-size:12px;font-family:monospace;outline:none;';
+    hdr.onclick = function() {
+      var open = body.style.display !== 'none';
+      body.style.display = open ? 'none' : 'block';
+      arrow.textContent = open ? '▸' : '▾';
+    };
 
-    // Sync color picker → hex input
-    colorInp.addEventListener('input', function() {
+    pk.appendChild(hdr);
+    pk.appendChild(body);
+
+    // Color rows within group
+    grp.colors.forEach(function(c) {
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #2a2a2a;';
+
+      // Color swatch (native color picker)
+      var swatchLabel = document.createElement('label');
+      swatchLabel.style.cssText = 'position:relative;width:28px;height:28px;flex-shrink:0;border-radius:6px;overflow:hidden;border:1.5px solid #555;cursor:pointer;';
+      var colorInp = document.createElement('input');
+      colorInp.type = 'color';
+      colorInp.value = rgbToHex(getComputedStyle(document.documentElement).getPropertyValue(c.key).trim());
+      colorInp.style.cssText = 'position:absolute;width:160%;height:160%;top:-30%;left:-30%;border:none;cursor:pointer;padding:0;';
+      colorInp.dataset.key = c.key;
+      swatchLabel.appendChild(colorInp);
+
+      // Var name label
+      var varLbl = document.createElement('div');
+      varLbl.style.cssText = 'flex:0 0 108px;font-size:10px;font-family:monospace;color:#888;';
+      varLbl.textContent = c.key;
+
+      // Hex text input
+      var hexInp = document.createElement('input');
+      hexInp.type = 'text';
       hexInp.value = colorInp.value;
-      document.documentElement.style.setProperty(p.key, colorInp.value);
-    });
-    // Sync hex input → color picker
-    hexInp.addEventListener('input', function() {
-      if (/^#[0-9a-fA-F]{6}$/.test(hexInp.value)) {
-        colorInp.value = hexInp.value;
-        document.documentElement.style.setProperty(p.key, hexInp.value);
-      }
-    });
-    hexInp.addEventListener('focus', function(){ hexInp.style.borderColor='#888'; });
-    hexInp.addEventListener('blur', function(){ hexInp.style.borderColor='#444'; });
+      hexInp.maxLength = 7;
+      hexInp.placeholder = '#000000';
+      hexInp.style.cssText = 'flex:1;background:#222;border:1px solid #3a3a3a;border-radius:5px;padding:4px 6px;color:#ddd;font-size:11px;font-family:monospace;outline:none;min-width:0;';
 
-    textWrap.appendChild(lbl);
-    textWrap.appendChild(hexInp);
-    row.appendChild(colorWrap);
-    row.appendChild(textWrap);
-    pk.appendChild(row);
+      colorInp.addEventListener('input', function() {
+        hexInp.value = colorInp.value;
+        document.documentElement.style.setProperty(c.key, colorInp.value);
+      });
+      hexInp.addEventListener('input', function() {
+        if (/^#[0-9a-fA-F]{6}$/.test(hexInp.value)) {
+          colorInp.value = hexInp.value;
+          document.documentElement.style.setProperty(c.key, hexInp.value);
+        }
+      });
+      hexInp.addEventListener('focus', function(){ hexInp.style.borderColor='#777'; });
+      hexInp.addEventListener('blur', function(){ hexInp.style.borderColor='#3a3a3a'; });
+
+      row.appendChild(swatchLabel);
+      row.appendChild(varLbl);
+      row.appendChild(hexInp);
+      body.appendChild(row);
+    });
   });
 }
 
-function dlApply(vars) {
+function dlLoadFont(name) {
+  var id = 'gf-' + name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+  if (document.getElementById(id)) return;
+  var link = document.createElement('link');
+  link.id = id;
+  link.rel = 'stylesheet';
+  link.href = 'https://fonts.googleapis.com/css2?family=' + encodeURIComponent(name).replace(/%20/g, '+') + ':ital,wght@0,400;0,600;0,700;1,400&display=swap';
+  document.head.appendChild(link);
+}
+
+function dlFontStack(name) {
+  var isSerif = DL_ALL_FONTS.serif.indexOf(name) !== -1 ||
+    /garamond|baskerville|serif|roman|bodoni|caslon|jenson|cardo|cinzel|faustina|vollkorn|spectral|crimson|lora|playfair|cormorant|fraunces|tinos|arvo|zilla|domine|josefin slab|roboto slab|pt serif/i.test(name);
+  return "'" + name + "', " + (isSerif ? 'Georgia, serif' : 'Arial, sans-serif');
+}
+
+function dlApplyPalette(vars) {
   var root = document.documentElement;
   Object.keys(vars).forEach(function(k) { root.style.setProperty(k, vars[k]); });
-  // Sync pickers + hex inputs
+  // Re-sync any rendered color pickers
   document.querySelectorAll('#dl-pickers input[type=color]').forEach(function(inp) {
     var v = vars[inp.dataset.key];
     if (v) {
       inp.value = v;
-      var hex = inp.parentElement.nextElementSibling.querySelector('input[type=text]');
-      if (hex) hex.value = v;
+      var row = inp.closest('div[style*="display:flex"]');
+      if (row) {
+        var hex = row.querySelector('input[type=text]');
+        if (hex) hex.value = v;
+      }
     }
   });
 }
 
-function dlApplyFont(f) {
-  document.documentElement.style.setProperty('--serif', "'" + f.serif + "', Georgia, serif");
-  document.documentElement.style.setProperty('--sans', "'" + f.sans + "', Arial, sans-serif");
-}
-
-function dlHighlight(activeBtn) {
-  document.querySelectorAll('#dl-swatches button').forEach(function(b) {
-    b._active = false; b.style.borderColor = '#3a3a3a'; b.style.background = '#2a2a2a';
-  });
-  activeBtn._active = true; activeBtn.style.borderColor = '#aaa'; activeBtn.style.background = '#333';
-}
-
-function dlHighlightFont(activeBtn) {
-  document.querySelectorAll('#dl-fonts button').forEach(function(b) {
+function dlActivate(activeBtn, containerSel) {
+  document.querySelectorAll(containerSel + ' button').forEach(function(b) {
     b._active = false; b.style.borderColor = '#3a3a3a'; b.style.background = '#2a2a2a';
   });
   activeBtn._active = true; activeBtn.style.borderColor = '#aaa'; activeBtn.style.background = '#333';
@@ -2637,7 +2794,7 @@ function dlHighlightFont(activeBtn) {
 function dlCopyCSS() {
   var root = document.documentElement;
   var style = getComputedStyle(root);
-  var allKeys = ['--serif','--sans','--steel','--steel-dk','--steel-dk2','--mid','--sky','--ice','--mist','--amber','--amber-dk','--honey','--pale-gold','--sage','--soft-sage','--pale-sage','--teal','--teal-light','--teal-pale','--slate','--slate-light','--slate-pale','--plum-light','--stone','--warm','--linen','--white','--border'];
+  var allKeys = ['--font-heading','--font-body','--font-ui','--serif','--sans','--steel','--steel-dk','--steel-dk2','--mid','--sky','--ice','--mist','--amber','--amber-dk','--honey','--pale-gold','--sage','--soft-sage','--pale-sage','--teal','--teal-light','--teal-pale','--slate','--slate-light','--slate-pale','--plum-light','--stone','--warm','--linen','--white','--charcoal','--gray','--text-muted','--border'];
   var lines = [':root {'];
   allKeys.forEach(function(k) {
     var v = root.style.getPropertyValue(k) || style.getPropertyValue(k).trim();
