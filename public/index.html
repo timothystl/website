@@ -386,6 +386,9 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     </div>
   </section>
 
+  <!-- Admin-managed home notice (set in admin → Pages → Home page notice) -->
+  <div id="home-notice-block" style="display:none;"></div>
+
   <div class="welcome">
     <div class="welcome-inner">
       <div class="welcome-quote">"A diverse city church serving as a bold witness to the saving grace of God through Jesus Christ."</div>
@@ -468,6 +471,8 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     <h1>About Timothy Lutheran</h1>
     <p>A diverse city church in Lindenwood Park, South City St. Louis — rooted in grace, sent to the world.</p>
   </div>
+  <!-- Admin-managed about notice (set in admin → Pages → About page notice) -->
+  <div id="about-notice-block" style="display:none;"></div>
   <section class="section section--white">
     <div class="wrap">
       <div class="about-grid">
@@ -705,6 +710,8 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       </div>
     </div>
   </section>
+  <!-- Admin-managed worship notice (set in admin → Pages → Worship notice) -->
+  <div id="worship-notice-block" style="display:none;"></div>
   <section class="section section--mist">
     <div class="wrap">
       <span class="eyebrow eyebrow--sky">First time visiting?</span>
@@ -1325,6 +1332,8 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       </div>
     </div>
   </section>
+  <!-- Admin-managed CTA button (set in admin → Ministries → Music → Edit) -->
+  <div id="music-admin-cta" style="display:none;"></div>
   <!-- ═══════════════════════════════════════════════════════════════════
        MUSIC PAGE — CTA BUTTON BAR
        To change a button: edit the text between > and <  (e.g. "Watch on YouTube →")
@@ -1380,6 +1389,8 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       <p style="color:var(--gray);">For more information about Stephen Ministry at Timothy, contact the church office at <a href="mailto:office@timothystl.org" style="color:var(--mid);font-weight:600;">office@timothystl.org</a> or call <a href="tel:+13148390563" style="color:var(--mid);font-weight:600;">(314) 839-0563</a>.</p>
     </div>
   </section>
+  <!-- Admin-managed CTA button (set in admin → Ministries → Stephen Ministry → Edit) -->
+  <div id="stephen-admin-cta" style="display:none;"></div>
   <!-- ═══════════════════════════════════════════════════════════════════
        STEPHEN MINISTRY PAGE — CTA BUTTON BAR
        To change a button: edit the text between > and <
@@ -1451,6 +1462,8 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       </div>
     </div>
   </section>
+  <!-- Admin-managed CTA button (set in admin → Ministries → Food Pantry → Edit) -->
+  <div id="foodpantry-admin-cta" style="display:none;"></div>
   <!-- ═══════════════════════════════════════════════════════════════════
        FOOD PANTRY PAGE — CTA BUTTON BAR
        To change a button: edit the text between > and <
@@ -1510,6 +1523,8 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       </div>
     </div>
   </section>
+  <!-- Admin-managed CTA button (set in admin → Ministries → Urban Beekeepers → Edit) -->
+  <div id="bees-admin-cta" style="display:none;"></div>
   <!-- ═══════════════════════════════════════════════════════════════════
        URBAN BEEKEEPERS PAGE — CTA BUTTON BAR
        To change a button: edit the text between > and <
@@ -1572,6 +1587,8 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       <p style="font-size:13px;color:var(--gray);margin-top:16px;">Vendor registration is handled via Google Form — link posted here when open.</p>
     </div>
   </section>
+  <!-- Admin-managed CTA button (set in admin → Ministries → Christmas Market → Edit) -->
+  <div id="christmasmarket-admin-cta" style="display:none;"></div>
   <!-- ═══════════════════════════════════════════════════════════════════
        CHRISTMAS MARKET PAGE — CTA BUTTON BAR
        UPDATE ANNUALLY — change these each fall when the market is announced:
@@ -2156,6 +2173,45 @@ async function loadYouthPage() {
   } catch(e) {}
 }
 
+// Load admin-managed page content block (home-notice, worship-notice, about-notice)
+var pageContentLoaded = {};
+async function loadPageContent(key, targetId) {
+  if (pageContentLoaded[key]) return;
+  pageContentLoaded[key] = true;
+  var el = document.getElementById(targetId);
+  if (!el) return;
+  try {
+    var res = await fetch('https://admin.timothystl.org/api/page-content/' + key);
+    if (!res.ok) return;
+    var data = await res.json();
+    if (data.value && data.value.trim()) {
+      el.innerHTML = '<div class="wrap" style="padding-top:28px;padding-bottom:28px;">' +
+        '<div style="background:#FFF8E7;border:1px solid var(--honey);border-left:4px solid var(--amber);border-radius:var(--r-md);padding:20px 24px;" class="rich-content">' +
+        data.value + '</div></div>';
+      el.style.display = '';
+    }
+  } catch(e) {}
+}
+
+// Load admin-managed CTA button for static ministry pages (music, stephen, etc.)
+var ministryCTALoaded = {};
+async function loadMinistryCta(slug) {
+  if (ministryCTALoaded[slug]) return;
+  ministryCTALoaded[slug] = true;
+  var ctaWrap = document.getElementById(slug + '-admin-cta');
+  if (!ctaWrap) return;
+  try {
+    var res = await fetch('https://admin.timothystl.org/api/ministry/' + slug);
+    if (!res.ok) return;
+    var data = await res.json();
+    if (data.cta_label && data.cta_url) {
+      ctaWrap.innerHTML = '<div style="text-align:center;padding:32px 16px;">' +
+        '<a href="' + data.cta_url.replace(/"/g,'&quot;') + '" target="_blank" class="btn btn-primary" style="font-size:16px;padding:14px 32px;">' + data.cta_label + '</a></div>';
+      ctaWrap.style.display = '';
+    }
+  } catch(e) {}
+}
+
 // Generic loader for ministry sub-pages (sundayschool, confirmation, vbs, egghunt, family)
 var ministryLoaded = {};
 async function loadMinistryPage(slug) {
@@ -2171,6 +2227,13 @@ async function loadMinistryPage(slug) {
         document.getElementById(slug + '-content').innerHTML = fixImgUrls(data.content);
       } else {
         document.getElementById(slug + '-content-section').style.display = 'none';
+      }
+      // Render admin-managed CTA button if set
+      var ctaWrap = document.getElementById(slug + '-admin-cta');
+      if (ctaWrap && data.cta_label && data.cta_url) {
+        ctaWrap.innerHTML = '<div style="text-align:center;padding:32px 16px;">' +
+          '<a href="' + data.cta_url.replace(/"/g,'&quot;') + '" target="_blank" class="btn btn-primary" style="font-size:16px;padding:14px 32px;">' + data.cta_label + '</a></div>';
+        ctaWrap.style.display = '';
       }
       if (!data.has_posts) return;
     } else {
@@ -2277,8 +2340,13 @@ window.showPage = function(id, addHistory) {
   if (id === 'events' && !volLoaded) { volLoaded = true; loadVolunteerEvents(); }
   if (id === 'sermons') { loadSermons(); }
   if (id === 'voters') { loadVotersPage(); }
+  if (id === 'home') { loadPageContent('home-notice', 'home-notice-block'); }
+  if (id === 'worship') { loadPageContent('worship-notice', 'worship-notice-block'); }
+  if (id === 'about') { loadPageContent('about-notice', 'about-notice-block'); }
   var ministrySubs = ['sundayschool','confirmation','vbs','egghunt','family'];
   if (ministrySubs.indexOf(id) !== -1) { loadMinistryPage(id); }
+  var staticMinistries = ['music','stephen','foodpantry','bees','christmasmarket'];
+  if (staticMinistries.indexOf(id) !== -1) { loadMinistryCta(id); }
 };
 // Load data if landing directly on a lazy-loaded page
 (function(){
@@ -2288,8 +2356,13 @@ window.showPage = function(id, addHistory) {
   if (path === 'events') { volLoaded = true; loadVolunteerEvents(); }
   if (path === 'sermons') { loadSermons(); }
   if (path === 'voters') { loadVotersPage(); }
+  if (path === '' || path === 'home') { loadPageContent('home-notice', 'home-notice-block'); }
+  if (path === 'worship') { loadPageContent('worship-notice', 'worship-notice-block'); }
+  if (path === 'about') { loadPageContent('about-notice', 'about-notice-block'); }
   var ministrySubs = ['sundayschool','confirmation','vbs','egghunt','family'];
   if (ministrySubs.indexOf(path) !== -1) { loadMinistryPage(path); }
+  var staticMinistries = ['music','stephen','foodpantry','bees','christmasmarket'];
+  if (staticMinistries.indexOf(path) !== -1) { loadMinistryCta(path); }
 })();
 
 // ── CONTACT FORM ──────────────────────────────────────────────
