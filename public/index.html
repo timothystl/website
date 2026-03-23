@@ -2373,5 +2373,193 @@ async function loadSermons() {
 loadSermons();
 </script>
 
+<!-- ═══════════════════════════════════════════════════════════
+     DESIGN LAB — test.timothystl.org only, palette preview tool
+     ═══════════════════════════════════════════════════════════ -->
+<div id="design-lab" style="position:fixed;bottom:20px;right:20px;z-index:9999;font-family:'Source Sans 3',Arial,sans-serif;">
+
+  <!-- Toggle button -->
+  <button id="dl-toggle" onclick="dlToggle()" style="display:flex;align-items:center;gap:8px;background:#111;color:#fff;border:none;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,.35);letter-spacing:.02em;">
+    <span style="font-size:16px;">🎨</span> Design Lab
+  </button>
+
+  <!-- Panel -->
+  <div id="dl-panel" style="display:none;position:absolute;bottom:52px;right:0;width:270px;background:#1a1a1a;border-radius:14px;padding:20px;box-shadow:0 8px 40px rgba(0,0,0,.5);">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#888;margin-bottom:14px;">Palette Presets</div>
+
+    <div id="dl-swatches" style="display:flex;flex-direction:column;gap:8px;"></div>
+
+    <div style="border-top:1px solid #333;margin:16px 0 14px;"></div>
+    <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#888;margin-bottom:10px;">Tweak Individual Colors</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;" id="dl-pickers"></div>
+
+    <div style="border-top:1px solid #333;margin:14px 0 12px;"></div>
+    <button onclick="dlCopyCSS()" style="width:100%;background:#2a2a2a;color:#ccc;border:1px solid #444;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;">Copy CSS Variables</button>
+    <div id="dl-copy-msg" style="display:none;color:#6fcf97;font-size:11px;text-align:center;margin-top:6px;">Copied to clipboard!</div>
+  </div>
+</div>
+
+<script>
+// ── DESIGN LAB ─────────────────────────────────────────────────
+var DL_PALETTES = [
+  {
+    name: 'Current — Navy & Gold',
+    dot: '#1E2D4A',
+    vars: {
+      '--steel':'#1E2D4A','--steel-dk':'#2A3F60','--steel-dk2':'#111E32',
+      '--amber':'#C9973A','--amber-dk':'#B0821E','--honey':'#E8C070','--pale-gold':'#F5E4C0',
+      '--sage':'#4A5E3A','--soft-sage':'#7A8F6A','--pale-sage':'#C2CEBC',
+      '--mid':'#2E7EA6','--sky':'#5BA3C4','--ice':'#C4CEDF','--mist':'#EDF2F7',
+      '--warm':'#F7F3EC','--linen':'#EDE9E0','--white':'#FBF8F3'
+    }
+  },
+  {
+    name: 'Burgundy & Cream',
+    dot: '#5C1A2A',
+    vars: {
+      '--steel':'#5C1A2A','--steel-dk':'#731E2E','--steel-dk2':'#3A0F1A',
+      '--amber':'#C9973A','--amber-dk':'#B0821E','--honey':'#E8C070','--pale-gold':'#F5E4C0',
+      '--sage':'#6B3A2A','--soft-sage':'#9A6A5A','--pale-sage':'#D4BEB8',
+      '--mid':'#A0522D','--sky':'#C47A50','--ice':'#E0C4B8','--mist':'#F5EDEA',
+      '--warm':'#FBF5F0','--linen':'#F2E8E0','--white':'#FFFAF6'
+    }
+  },
+  {
+    name: 'Forest Green',
+    dot: '#1E3D2A',
+    vars: {
+      '--steel':'#1E3D2A','--steel-dk':'#274F36','--steel-dk2':'#0F2016',
+      '--amber':'#C9973A','--amber-dk':'#B0821E','--honey':'#E8C070','--pale-gold':'#F5E4C0',
+      '--sage':'#2E5C3A','--soft-sage':'#5A8A68','--pale-sage':'#BED4C4',
+      '--mid':'#3A7A5C','--sky':'#5FAA88','--ice':'#BCDDD0','--mist':'#EAF4F0',
+      '--warm':'#F4F8F5','--linen':'#E8F0EC','--white':'#F8FBF9'
+    }
+  },
+  {
+    name: 'Slate Blue (Modern)',
+    dot: '#2A3F5C',
+    vars: {
+      '--steel':'#2A3F5C','--steel-dk':'#354F72','--steel-dk2':'#16243A',
+      '--amber':'#E89B2A','--amber-dk':'#CC8518','--honey':'#F0B84A','--pale-gold':'#FAE6B8',
+      '--sage':'#3A5C72','--soft-sage':'#6A8FA0','--pale-sage':'#B8D0DC',
+      '--mid':'#3498C8','--sky':'#60B8E0','--ice':'#B8DCEF','--mist':'#EAF4FA',
+      '--warm':'#F5F7FA','--linen':'#E8EDF5','--white':'#F8FAFC'
+    }
+  },
+  {
+    name: 'Warm Stone',
+    dot: '#4A3C2E',
+    vars: {
+      '--steel':'#4A3C2E','--steel-dk':'#5C4A38','--steel-dk2':'#2E251A',
+      '--amber':'#C9973A','--amber-dk':'#B0821E','--honey':'#E8C070','--pale-gold':'#F5E4C0',
+      '--sage':'#5C4A38','--soft-sage':'#8A7260','--pale-sage':'#D0C4B8',
+      '--mid':'#8A6A4A','--sky':'#B09070','--ice':'#D8C8B8','--mist':'#F4EFE8',
+      '--warm':'#FAF5EE','--linen':'#F0E8DC','--white':'#FDF9F4'
+    }
+  }
+];
+
+var DL_PICKERS = [
+  { label: 'Primary', key: '--steel' },
+  { label: 'Accent', key: '--amber' },
+  { label: 'Nav/Moss', key: '--sage' },
+  { label: 'Links', key: '--mid' },
+  { label: 'Bg Warm', key: '--warm' },
+  { label: 'Bg Linen', key: '--linen' }
+];
+
+var dlOpen = false;
+
+function dlToggle() {
+  dlOpen = !dlOpen;
+  document.getElementById('dl-panel').style.display = dlOpen ? 'block' : 'none';
+  if (dlOpen && !document.getElementById('dl-swatches').children.length) dlRender();
+}
+
+function dlRender() {
+  var sw = document.getElementById('dl-swatches');
+  DL_PALETTES.forEach(function(p, i) {
+    var btn = document.createElement('button');
+    btn.style.cssText = 'display:flex;align-items:center;gap:10px;width:100%;background:#2a2a2a;border:1.5px solid #3a3a3a;border-radius:8px;padding:9px 12px;color:#ccc;font-size:13px;font-weight:600;cursor:pointer;text-align:left;transition:border-color .15s;';
+    btn.innerHTML = '<span style="width:14px;height:14px;border-radius:50%;background:' + p.dot + ';border:2px solid rgba(255,255,255,.2);flex-shrink:0;"></span>' + p.name;
+    btn.onclick = function() { dlApply(p.vars); dlHighlight(btn); };
+    btn.onmouseenter = function(){ btn.style.borderColor='#666'; };
+    btn.onmouseleave = function(){ btn.style.borderColor = btn._active ? '#aaa' : '#3a3a3a'; };
+    sw.appendChild(btn);
+  });
+
+  var pk = document.getElementById('dl-pickers');
+  DL_PICKERS.forEach(function(p) {
+    var wrap = document.createElement('div');
+    var lbl = document.createElement('div');
+    lbl.style.cssText = 'font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;';
+    lbl.textContent = p.label;
+    var inp = document.createElement('input');
+    inp.type = 'color';
+    inp.value = rgbToHex(getComputedStyle(document.documentElement).getPropertyValue(p.key).trim());
+    inp.style.cssText = 'width:100%;height:32px;border:none;border-radius:6px;cursor:pointer;background:none;padding:0;';
+    inp.dataset.key = p.key;
+    inp.addEventListener('input', function() {
+      document.documentElement.style.setProperty(p.key, inp.value);
+    });
+    wrap.appendChild(lbl);
+    wrap.appendChild(inp);
+    pk.appendChild(wrap);
+  });
+}
+
+function dlApply(vars) {
+  var root = document.documentElement;
+  Object.keys(vars).forEach(function(k) { root.style.setProperty(k, vars[k]); });
+  // Sync pickers to new values
+  document.querySelectorAll('#dl-pickers input[type=color]').forEach(function(inp) {
+    var v = vars[inp.dataset.key];
+    if (v) inp.value = v;
+  });
+}
+
+function dlHighlight(activeBtn) {
+  document.querySelectorAll('#dl-swatches button').forEach(function(b) {
+    b._active = false; b.style.borderColor = '#3a3a3a'; b.style.background = '#2a2a2a';
+  });
+  activeBtn._active = true;
+  activeBtn.style.borderColor = '#aaa';
+  activeBtn.style.background = '#333';
+}
+
+function dlCopyCSS() {
+  var root = document.documentElement;
+  var style = getComputedStyle(root);
+  var allKeys = ['--steel','--steel-dk','--steel-dk2','--mid','--sky','--ice','--mist','--amber','--amber-dk','--honey','--pale-gold','--sage','--soft-sage','--pale-sage','--teal','--teal-light','--teal-pale','--slate','--slate-light','--slate-pale','--plum-light','--stone','--warm','--linen','--white','--border'];
+  var lines = [':root {'];
+  allKeys.forEach(function(k) {
+    var v = root.style.getPropertyValue(k) || style.getPropertyValue(k).trim();
+    if (v) lines.push('  ' + k + ':' + v + ';');
+  });
+  lines.push('}');
+  navigator.clipboard.writeText(lines.join('\n')).then(function() {
+    var msg = document.getElementById('dl-copy-msg');
+    msg.style.display = 'block';
+    setTimeout(function(){ msg.style.display = 'none'; }, 2500);
+  });
+}
+
+function rgbToHex(color) {
+  if (color.startsWith('#')) return color;
+  var m = color.match(/\d+/g);
+  if (!m || m.length < 3) return '#000000';
+  return '#' + [m[0],m[1],m[2]].map(function(x){ return parseInt(x).toString(16).padStart(2,'0'); }).join('');
+}
+
+// Close on outside click
+document.addEventListener('click', function(e) {
+  if (dlOpen && !document.getElementById('design-lab').contains(e.target)) {
+    dlOpen = false;
+    document.getElementById('dl-panel').style.display = 'none';
+  }
+});
+</script>
+
 </body>
 </html>
