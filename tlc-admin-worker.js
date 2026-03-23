@@ -60,6 +60,36 @@ const DB_INIT_MINISTRY_POSTS = `CREATE TABLE IF NOT EXISTS ministry_posts (
   created_at TEXT DEFAULT (datetime('now'))
 )`;
 
+const DB_INIT_VOTERS_PAGE = `CREATE TABLE IF NOT EXISTS voters_page (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  meeting_info TEXT,
+  zoom_link TEXT,
+  files_json TEXT DEFAULT '[]',
+  updated_at TEXT
+)`;
+
+const DB_INIT_SERMON_SERIES = `CREATE TABLE IF NOT EXISTS sermon_series (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  description TEXT,
+  date_range TEXT,
+  playlist_url TEXT,
+  active INTEGER DEFAULT 0,
+  sort_order INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now'))
+)`;
+
+const DB_INIT_SERMON_NOTES = `CREATE TABLE IF NOT EXISTS sermon_notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  series_id INTEGER,
+  date TEXT,
+  title TEXT NOT NULL,
+  scripture TEXT,
+  outline TEXT,
+  youtube_url TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+)`;
+
 const THEMES = ['Acceptance', 'Christian Education', 'Outreach', 'Worship'];
 const CONTENT_TYPES = ['Testimonial / Quote', 'Story', 'Explainer', 'Event Promo', 'Factoid / Trivia'];
 
@@ -371,6 +401,8 @@ function topbarHtml(activeTab, extraLinks = '') {
     <a href="/" class="tab${activeTab === 'newsletter' ? ' tab-active' : ''}">Newsletter</a>
     <a href="/newsitems" class="tab${activeTab === 'news' ? ' tab-active' : ''}">News &amp; Events</a>
     <a href="/ministries" class="tab${activeTab === 'ministries' ? ' tab-active' : ''}">Ministries</a>
+    <a href="/sermons" class="tab${activeTab === 'sermons' ? ' tab-active' : ''}">Sermons</a>
+    <a href="/voters" class="tab${activeTab === 'voters' ? ' tab-active' : ''}">Voters Page</a>
     <a href="https://volunteer.timothystl.org/scheduler" target="_blank" class="tab tab-external">Scheduler ↗</a>
     <a href="https://volunteer.timothystl.org/admin" target="_blank" class="tab tab-external">Volunteer Admin ↗</a>
   </div>
@@ -429,6 +461,24 @@ async function sendBrevoNewsletter(env, { subject, htmlContent, listIds }) {
   });
   if (!sendResp.ok) return { error: `Brevo send error: ${await sendResp.text()}` };
   return { success: true, campaignId: id };
+}
+
+// ── BREVO TRANSACTIONAL EMAIL ─────────────────────────────────
+async function sendTransactionalEmail(env, { subject, htmlContent, toEmails }) {
+  const apiKey = env.BREVO_API_KEY;
+  if (!apiKey) return { error: 'BREVO_API_KEY not configured' };
+  const resp = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'api-key': apiKey },
+    body: JSON.stringify({
+      sender: { name: 'Timothy Lutheran Website', email: env.BREVO_SENDER_EMAIL || 'dinger@timothystl.org' },
+      to: toEmails.map(e => ({ email: e })),
+      subject,
+      htmlContent
+    })
+  });
+  if (!resp.ok) return { error: `Brevo error: ${await resp.text()}` };
+  return { success: true };
 }
 
 // ── BUILD BEEHIIV HTML ───────────────────────────────────────
@@ -623,6 +673,20 @@ export default {
     }
     // Ensure youth always has has_posts=1 (unconditional — handles NULL from ALTER TABLE)
     try { await env.DB.prepare("UPDATE youth_pages SET has_posts = 1 WHERE slug = 'youth'").run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_VOTERS_PAGE).run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_SERMON_SERIES).run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_SERMON_NOTES).run(); } catch (_) {}
+
+    // ── PUBLIC: serve uploaded docs from R2 ──
+    if (path.startsWith('/docs/') && method === 'GET') {
+      const key = 'docs-' + path.slice('/docs/'.length);
+      const obj = await env.IMAGES.get(key);
+      if (!obj) return new Response('Not found', { status: 404 });
+      const headers = new Headers();
+      obj.writeHttpMetadata(headers);
+      headers.set('Cache-Control', 'public, max-age=3600');
+      return new Response(obj.body, { headers });
+    }
 
     // ── PUBLIC: serve uploaded images from R2 ──
     if (path.startsWith('/images/') && method === 'GET') {
@@ -780,6 +844,78 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
 </html>`, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
     }
 
+    // ── PUBLIC: contact form submission ──
+    if (path === '/api/contact' && method === 'POST') {
+      const corsHeaders = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' };
+      if (request.method === 'OPTIONS') return new Response('', { headers: corsHeaders });
+      try {
+        const form = await request.formData();
+        const name = (form.get('name') || '').trim();
+        const email = (form.get('email') || '').trim();
+        const message = (form.get('message') || '').trim();
+        if (!name || !message) return new Response(JSON.stringify({ error: 'Name and message are required' }), { status: 400, headers: corsHeaders });
+        const html = `<p><strong>Name:</strong> ${name}</p><p><strong>Email:</strong> ${email || '(not provided)'}</p><p><strong>Message:</strong></p><p style="white-space:pre-wrap">${message.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`;
+        const result = await sendTransactionalEmail(env, {
+          subject: `Contact Form — ${name}`,
+          htmlContent: html,
+          toEmails: ['dinger@timothystl.org', 'office@timothystl.org']
+        });
+        if (result.error) return new Response(JSON.stringify({ error: result.error }), { status: 500, headers: corsHeaders });
+        return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: corsHeaders });
+      }
+    }
+
+    // ── PUBLIC: prayer form submission ──
+    if (path === '/api/prayer' && method === 'POST') {
+      const corsHeaders = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' };
+      if (request.method === 'OPTIONS') return new Response('', { headers: corsHeaders });
+      try {
+        const form = await request.formData();
+        const name = (form.get('name') || '').trim();
+        const email = (form.get('email') || '').trim();
+        const message = (form.get('message') || '').trim();
+        if (!message) return new Response(JSON.stringify({ error: 'Prayer request is required' }), { status: 400, headers: corsHeaders });
+        const htmlContent = `<p><strong>Name:</strong> ${name || '(anonymous)'}</p><p><strong>Email:</strong> ${email || '(not provided)'}</p><p><strong>Prayer request:</strong></p><p style="white-space:pre-wrap">${message.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`;
+        const result = await sendTransactionalEmail(env, {
+          subject: `Prayer Request — ${name || 'Anonymous'}`,
+          htmlContent,
+          toEmails: ['dinger@timothystl.org', 'office@timothystl.org']
+        });
+        if (result.error) return new Response(JSON.stringify({ error: result.error }), { status: 500, headers: corsHeaders });
+        return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: corsHeaders });
+      }
+    }
+
+    // ── PUBLIC: voters page data ──
+    if (path === '/api/voters' && method === 'GET') {
+      const row = await env.DB.prepare('SELECT * FROM voters_page WHERE id = 1').first();
+      const data = row || { meeting_info: '', zoom_link: '', files_json: '[]' };
+      let files = [];
+      try { files = JSON.parse(data.files_json || '[]'); } catch(_) {}
+      return new Response(JSON.stringify({ meeting_info: data.meeting_info || '', zoom_link: data.zoom_link || '', files }), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      });
+    }
+
+    // ── PUBLIC: sermon series API ──
+    if (path === '/api/sermon-series' && method === 'GET') {
+      const series = await env.DB.prepare('SELECT * FROM sermon_series ORDER BY active DESC, sort_order ASC, id DESC').all();
+      const result = [];
+      for (const s of series.results) {
+        const notes = await env.DB.prepare('SELECT * FROM sermon_notes WHERE series_id = ? ORDER BY date DESC, id DESC').bind(s.id).all();
+        result.push({ ...s, notes: notes.results });
+      }
+      // Also get standalone notes (no series)
+      const standalone = await env.DB.prepare("SELECT * FROM sermon_notes WHERE series_id IS NULL OR series_id = 0 ORDER BY date DESC, id DESC LIMIT 20").all();
+      return new Response(JSON.stringify({ series: result, standalone: standalone.results }), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      });
+    }
+
     // ── LOGIN ──
     if (path === '/login' && method === 'POST') {
       const form = await request.formData();
@@ -823,6 +959,364 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
       });
       const url = `${new URL(request.url).origin}/images/${key}`;
       return new Response(JSON.stringify({ url, location: url }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
+    // ── UPLOAD VOTER DOCUMENT TO R2 ──
+    if (path === '/api/upload-doc' && method === 'POST') {
+      const form = await request.formData();
+      const file = form.get('file');
+      if (!file || typeof file === 'string') return new Response(JSON.stringify({ error: 'No file' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      if (file.size > 10485760) return new Response(JSON.stringify({ error: 'File too large (max 10MB)' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      const safeName = (file.name || 'document').replace(/[^a-zA-Z0-9._-]/g, '_');
+      const key = `docs-${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${safeName}`;
+      await env.IMAGES.put(key, file.stream(), {
+        httpMetadata: { contentType: file.type || 'application/octet-stream', contentDisposition: `attachment; filename="${safeName}"` }
+      });
+      const docUrl = `${new URL(request.url).origin}/docs/${key.slice('docs-'.length)}`;
+      return new Response(JSON.stringify({ url: docUrl, key, name: safeName }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
+    // ── VOTERS PAGE ADMIN ──
+    if (path === '/voters' && method === 'GET') {
+      const row = await env.DB.prepare('SELECT * FROM voters_page WHERE id = 1').first();
+      const meeting_info = row ? (row.meeting_info || '') : '';
+      const zoom_link = row ? (row.zoom_link || '') : '';
+      let files = [];
+      try { files = JSON.parse(row ? (row.files_json || '[]') : '[]'); } catch(_) {}
+      const alertHtml = url.searchParams.get('saved') ? `<div class="alert alert-success">Saved!</div>` : '';
+      const filesHtml = files.length === 0
+        ? `<div style="font-size:13px;color:var(--gray);padding:8px 0;">No files uploaded yet.</div>`
+        : files.map((f, i) => `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
+            <div style="flex:1;font-size:14px;color:var(--charcoal);">📄 <a href="${f.url}" target="_blank" style="color:var(--steel);">${f.name}</a></div>
+            <form method="POST" action="/voters-delete-file" onsubmit="return confirm('Remove this file?')">
+              <input type="hidden" name="index" value="${i}">
+              <button type="submit" class="btn btn-sm btn-danger">Remove</button>
+            </form>
+          </div>`).join('');
+      return html(`
+${topbarHtml('voters')}
+<div class="wrap">
+  <div class="page-title">Voters Page</div>
+  <div class="page-sub">Manage the members-only voters page content at timothystl.org/voters</div>
+  ${alertHtml}
+  <form method="POST" action="/voters">
+    <div class="card">
+      <div class="card-title">Meeting Info</div>
+      <div class="form-group">
+        <label>Date, time &amp; description</label>
+        <textarea name="meeting_info" style="min-height:120px;" placeholder="Example: Annual Voters Meeting — Sunday, June 15 at noon in the Fellowship Hall">${meeting_info}</textarea>
+        <div style="font-size:12px;color:var(--gray);margin-top:6px;">Plain text shown at the top of the voters page. Include date, time, location, agenda items, etc.</div>
+      </div>
+      <div class="form-group">
+        <label>Zoom link</label>
+        <input type="text" name="zoom_link" value="${zoom_link}" placeholder="https://us02web.zoom.us/j/...">
+        <div style="font-size:12px;color:var(--gray);margin-top:6px;">Leave blank if not meeting via Zoom.</div>
+      </div>
+      <button type="submit" class="btn btn-primary">Save changes</button>
+    </div>
+  </form>
+  <div class="card" style="margin-top:20px;">
+    <div class="card-title">Downloadable Files</div>
+    ${filesHtml}
+    <div style="margin-top:16px;">
+      <div style="font-family:var(--sans);font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:8px;">Upload a new file (PDF, Word, Excel — max 10MB)</div>
+      <form id="upload-form" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        <input type="file" id="doc-file" name="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" style="font-size:14px;flex:1;min-width:200px;">
+        <button type="submit" class="btn btn-secondary" id="upload-btn">Upload file</button>
+      </form>
+      <div id="upload-status" style="font-size:13px;margin-top:8px;"></div>
+    </div>
+  </div>
+</div>
+<script>
+document.getElementById('upload-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const file = document.getElementById('doc-file').files[0];
+  if (!file) { document.getElementById('upload-status').textContent = 'Please choose a file.'; return; }
+  document.getElementById('upload-btn').textContent = 'Uploading…';
+  document.getElementById('upload-btn').disabled = true;
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const r = await fetch('/api/upload-doc', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok || d.error) { document.getElementById('upload-status').textContent = 'Error: ' + (d.error || r.status); }
+    else {
+      // Save the file reference to voters page
+      const saveForm = new FormData();
+      saveForm.append('add_file_name', d.name);
+      saveForm.append('add_file_url', d.url);
+      saveForm.append('add_file_key', d.key);
+      await fetch('/voters-add-file', { method: 'POST', body: saveForm });
+      window.location.reload();
+    }
+  } catch(err) { document.getElementById('upload-status').textContent = 'Upload failed.'; }
+  document.getElementById('upload-btn').textContent = 'Upload file';
+  document.getElementById('upload-btn').disabled = false;
+});
+</script>`, 'Voters Page Admin');
+    }
+
+    if (path === '/voters' && method === 'POST') {
+      const form = await request.formData();
+      const meeting_info = form.get('meeting_info') || '';
+      const zoom_link = form.get('zoom_link') || '';
+      const existing = await env.DB.prepare('SELECT files_json FROM voters_page WHERE id = 1').first();
+      const files_json = existing ? (existing.files_json || '[]') : '[]';
+      const now = new Date().toISOString();
+      await env.DB.prepare('INSERT OR REPLACE INTO voters_page (id, meeting_info, zoom_link, files_json, updated_at) VALUES (1, ?, ?, ?, ?)')
+        .bind(meeting_info, zoom_link, files_json, now).run();
+      return new Response('', { status: 302, headers: { Location: '/voters?saved=1' } });
+    }
+
+    if (path === '/voters-add-file' && method === 'POST') {
+      const form = await request.formData();
+      const name = form.get('add_file_name') || 'document';
+      const fileUrl = form.get('add_file_url') || '';
+      const key = form.get('add_file_key') || '';
+      const existing = await env.DB.prepare('SELECT * FROM voters_page WHERE id = 1').first();
+      let files = [];
+      try { files = JSON.parse(existing ? (existing.files_json || '[]') : '[]'); } catch(_) {}
+      files.push({ name, url: fileUrl, key, uploaded_at: new Date().toISOString() });
+      const now = new Date().toISOString();
+      await env.DB.prepare('INSERT OR REPLACE INTO voters_page (id, meeting_info, zoom_link, files_json, updated_at) VALUES (1, ?, ?, ?, ?)')
+        .bind(existing ? (existing.meeting_info || '') : '', existing ? (existing.zoom_link || '') : '', JSON.stringify(files), now).run();
+      return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (path === '/voters-delete-file' && method === 'POST') {
+      const form = await request.formData();
+      const idx = parseInt(form.get('index') || '-1', 10);
+      const existing = await env.DB.prepare('SELECT * FROM voters_page WHERE id = 1').first();
+      let files = [];
+      try { files = JSON.parse(existing ? (existing.files_json || '[]') : '[]'); } catch(_) {}
+      if (idx >= 0 && idx < files.length) {
+        const removed = files.splice(idx, 1)[0];
+        if (removed && removed.key) {
+          try { await env.IMAGES.delete(removed.key); } catch(_) {}
+        }
+      }
+      const now = new Date().toISOString();
+      await env.DB.prepare('INSERT OR REPLACE INTO voters_page (id, meeting_info, zoom_link, files_json, updated_at) VALUES (1, ?, ?, ?, ?)')
+        .bind(existing ? (existing.meeting_info || '') : '', existing ? (existing.zoom_link || '') : '', JSON.stringify(files), now).run();
+      return new Response('', { status: 302, headers: { Location: '/voters' } });
+    }
+
+    // ── SERMONS ADMIN ──
+    if (path === '/sermons' && method === 'GET') {
+      const alertHtml = url.searchParams.get('saved') ? `<div class="alert alert-success">Saved!</div>` : '';
+      const series = await env.DB.prepare('SELECT * FROM sermon_series ORDER BY active DESC, sort_order ASC, id DESC').all();
+      const seriesHtml = series.results.length === 0
+        ? `<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No series yet. Add your first one below.</div>`
+        : series.results.map(s => `
+<div style="display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
+  <div style="flex:1;min-width:160px;">
+    ${s.active ? `<span class="badge badge-active" style="margin-bottom:4px;">Active</span><br>` : ''}
+    <div style="font-family:var(--serif);font-size:17px;color:var(--steel);">${s.title}</div>
+    ${s.date_range ? `<div style="font-size:12px;color:var(--gray);">${s.date_range}</div>` : ''}
+  </div>
+  <div style="display:flex;gap:8px;flex-shrink:0;">
+    <a href="/sermons/edit-series/${s.id}" class="btn btn-sm btn-secondary">Edit</a>
+    <a href="/sermons/notes/${s.id}" class="btn btn-sm" style="background:var(--mist);color:var(--steel);border:1px solid var(--border);">Notes (${s.id})</a>
+    <form method="POST" action="/sermons/delete-series/${s.id}" style="display:contents;" onsubmit="return confirm('Delete this series and all its notes?')">
+      <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+    </form>
+  </div>
+</div>`).join('');
+      return html(`
+${topbarHtml('sermons', `<a href="https://timothystl.org/sermons" target="_blank">View page →</a>`)}
+<div class="wrap">
+  <div class="page-title">Sermon Series &amp; Notes</div>
+  <div class="page-sub">Manage the current series and weekly sermon notes shown on timothystl.org/sermons</div>
+  ${alertHtml}
+  <div class="btn-row" style="margin-bottom:24px;">
+    <a href="/sermons/new-series" class="btn btn-primary">+ Add series</a>
+    <a href="/sermons/new-note" class="btn btn-secondary">+ Add note (no series)</a>
+  </div>
+  <div class="card">
+    <div class="card-title">Sermon series</div>
+    ${seriesHtml}
+  </div>
+</div>`, 'Sermons Admin');
+    }
+
+    if (path === '/sermons/new-series' && method === 'GET') {
+      return html(`
+${topbarHtml('sermons', `<a href="/sermons">← Back</a>`)}
+<div class="wrap">
+  <div class="page-title">New Sermon Series</div>
+  <form method="POST" action="/sermons/new-series">
+    <div class="card">
+      <div class="form-group"><label>Series title</label><input type="text" name="title" required placeholder="e.g. The Shepherd's Way"></div>
+      <div class="form-group"><label>Description</label><textarea name="description" placeholder="Brief description shown on the sermons page..."></textarea></div>
+      <div class="form-group"><label>Date range</label><input type="text" name="date_range" placeholder="e.g. Lent 2025 · March–April"></div>
+      <div class="form-group"><label>YouTube playlist URL</label><input type="text" name="playlist_url" placeholder="https://www.youtube.com/playlist?list=..."></div>
+      <div class="checkbox-row"><input type="checkbox" name="active" value="1" id="active"><label for="active" style="display:inline;text-transform:none;letter-spacing:0;font-size:14px;">Mark as active (current series)</label></div>
+      <div class="btn-row" style="margin-top:20px;"><button type="submit" class="btn btn-primary">Create series</button><a href="/sermons" class="btn" style="background:var(--linen);color:var(--charcoal);">Cancel</a></div>
+    </div>
+  </form>
+</div>`, 'New Series');
+    }
+
+    if (path === '/sermons/new-series' && method === 'POST') {
+      const form = await request.formData();
+      const title = (form.get('title') || '').trim();
+      if (!title) return new Response('', { status: 302, headers: { Location: '/sermons' } });
+      const active = form.get('active') === '1' ? 1 : 0;
+      if (active) await env.DB.prepare('UPDATE sermon_series SET active = 0').run();
+      await env.DB.prepare('INSERT INTO sermon_series (title, description, date_range, playlist_url, active) VALUES (?, ?, ?, ?, ?)')
+        .bind(title, form.get('description') || '', form.get('date_range') || '', form.get('playlist_url') || '', active).run();
+      return new Response('', { status: 302, headers: { Location: '/sermons?saved=1' } });
+    }
+
+    if (path.startsWith('/sermons/edit-series/') && method === 'GET') {
+      const id = path.split('/').pop();
+      const s = await env.DB.prepare('SELECT * FROM sermon_series WHERE id = ?').bind(id).first();
+      if (!s) return new Response('Not found', { status: 404 });
+      return html(`
+${topbarHtml('sermons', `<a href="/sermons">← Back</a>`)}
+<div class="wrap">
+  <div class="page-title">Edit Series</div>
+  <form method="POST" action="/sermons/edit-series/${id}">
+    <div class="card">
+      <div class="form-group"><label>Series title</label><input type="text" name="title" required value="${s.title}"></div>
+      <div class="form-group"><label>Description</label><textarea name="description">${s.description || ''}</textarea></div>
+      <div class="form-group"><label>Date range</label><input type="text" name="date_range" value="${s.date_range || ''}"></div>
+      <div class="form-group"><label>YouTube playlist URL</label><input type="text" name="playlist_url" value="${s.playlist_url || ''}"></div>
+      <div class="checkbox-row"><input type="checkbox" name="active" value="1" id="active" ${s.active ? 'checked' : ''}><label for="active" style="display:inline;text-transform:none;letter-spacing:0;font-size:14px;">Mark as active (current series)</label></div>
+      <div class="btn-row" style="margin-top:20px;"><button type="submit" class="btn btn-primary">Save changes</button><a href="/sermons/notes/${id}" class="btn btn-secondary">Manage notes</a><a href="/sermons" class="btn" style="background:var(--linen);color:var(--charcoal);">Cancel</a></div>
+    </div>
+  </form>
+</div>`, 'Edit Series');
+    }
+
+    if (path.startsWith('/sermons/edit-series/') && method === 'POST') {
+      const id = path.split('/').pop();
+      const form = await request.formData();
+      const title = (form.get('title') || '').trim();
+      const active = form.get('active') === '1' ? 1 : 0;
+      if (active) await env.DB.prepare('UPDATE sermon_series SET active = 0').run();
+      await env.DB.prepare('UPDATE sermon_series SET title=?, description=?, date_range=?, playlist_url=?, active=? WHERE id=?')
+        .bind(title, form.get('description') || '', form.get('date_range') || '', form.get('playlist_url') || '', active, id).run();
+      return new Response('', { status: 302, headers: { Location: '/sermons?saved=1' } });
+    }
+
+    if (path.startsWith('/sermons/delete-series/') && method === 'POST') {
+      const id = path.split('/').pop();
+      await env.DB.prepare('DELETE FROM sermon_notes WHERE series_id = ?').bind(id).run();
+      await env.DB.prepare('DELETE FROM sermon_series WHERE id = ?').bind(id).run();
+      return new Response('', { status: 302, headers: { Location: '/sermons' } });
+    }
+
+    if (path.startsWith('/sermons/notes/') && method === 'GET') {
+      const seriesId = path.split('/').pop();
+      const s = await env.DB.prepare('SELECT * FROM sermon_series WHERE id = ?').bind(seriesId).first();
+      if (!s) return new Response('Not found', { status: 404 });
+      const notes = await env.DB.prepare('SELECT * FROM sermon_notes WHERE series_id = ? ORDER BY date DESC, id DESC').bind(seriesId).all();
+      const notesHtml = notes.results.length === 0
+        ? `<div style="text-align:center;padding:24px;color:var(--gray);font-size:14px;">No notes for this series yet.</div>`
+        : notes.results.map(n => `
+<div style="display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
+  <div style="flex:1;">
+    ${n.date ? `<div style="font-size:11px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.06em;">${n.date}</div>` : ''}
+    <div style="font-family:var(--serif);font-size:16px;color:var(--steel);">${n.title}</div>
+    ${n.scripture ? `<div style="font-size:12px;color:var(--gray);">${n.scripture}</div>` : ''}
+  </div>
+  <div style="display:flex;gap:8px;">
+    <a href="/sermons/edit-note/${n.id}" class="btn btn-sm btn-secondary">Edit</a>
+    <form method="POST" action="/sermons/delete-note/${n.id}" style="display:contents;" onsubmit="return confirm('Delete this note?')">
+      <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+    </form>
+  </div>
+</div>`).join('');
+      return html(`
+${topbarHtml('sermons', `<a href="/sermons">← All series</a>`)}
+<div class="wrap">
+  <div class="page-title">${s.title}</div>
+  <div class="page-sub">${s.date_range || 'Sermon notes for this series'}</div>
+  <div class="btn-row" style="margin-bottom:20px;">
+    <a href="/sermons/new-note?series_id=${seriesId}" class="btn btn-primary">+ Add note</a>
+    <a href="/sermons/edit-series/${seriesId}" class="btn btn-secondary">Edit series</a>
+  </div>
+  <div class="card"><div class="card-title">Sermon notes</div>${notesHtml}</div>
+</div>`, 'Sermon Notes');
+    }
+
+    if (path === '/sermons/new-note' && method === 'GET') {
+      const seriesId = url.searchParams.get('series_id') || '';
+      const allSeries = await env.DB.prepare('SELECT id, title FROM sermon_series ORDER BY active DESC, id DESC').all();
+      const seriesOptions = allSeries.results.map(s => `<option value="${s.id}" ${s.id == seriesId ? 'selected' : ''}>${s.title}</option>`).join('');
+      return html(`
+${topbarHtml('sermons', `<a href="/sermons">← Back</a>`)}
+<div class="wrap">
+  <div class="page-title">Add Sermon Note</div>
+  <form method="POST" action="/sermons/new-note">
+    <input type="hidden" name="series_id" value="${seriesId}">
+    <div class="card">
+      <div class="form-group"><label>Series (optional)</label><select name="series_id"><option value="">— Standalone note —</option>${seriesOptions}</select></div>
+      <div class="form-group"><label>Date</label><input type="date" name="date"></div>
+      <div class="form-group"><label>Sermon title</label><input type="text" name="title" required placeholder="e.g. You prepare a table before me"></div>
+      <div class="form-group"><label>Scripture reference</label><input type="text" name="scripture" placeholder="e.g. Psalm 23:5"></div>
+      <div class="form-group"><label>Brief notes / outline</label><textarea name="outline" style="min-height:140px;" placeholder="Key points, quotes, discussion questions — plain text, short..."></textarea></div>
+      <div class="form-group"><label>YouTube link (optional)</label><input type="text" name="youtube_url" placeholder="Link to this specific service recording"></div>
+      <div class="btn-row" style="margin-top:20px;"><button type="submit" class="btn btn-primary">Add note</button><a href="/sermons" class="btn" style="background:var(--linen);color:var(--charcoal);">Cancel</a></div>
+    </div>
+  </form>
+</div>`, 'Add Sermon Note');
+    }
+
+    if (path === '/sermons/new-note' && method === 'POST') {
+      const form = await request.formData();
+      const title = (form.get('title') || '').trim();
+      if (!title) return new Response('', { status: 302, headers: { Location: '/sermons' } });
+      const seriesId = form.get('series_id') || null;
+      await env.DB.prepare('INSERT INTO sermon_notes (series_id, date, title, scripture, outline, youtube_url) VALUES (?, ?, ?, ?, ?, ?)')
+        .bind(seriesId || null, form.get('date') || null, title, form.get('scripture') || '', form.get('outline') || '', form.get('youtube_url') || '').run();
+      const redir = seriesId ? `/sermons/notes/${seriesId}` : '/sermons';
+      return new Response('', { status: 302, headers: { Location: redir + '?saved=1' } });
+    }
+
+    if (path.startsWith('/sermons/edit-note/') && method === 'GET') {
+      const id = path.split('/').pop();
+      const n = await env.DB.prepare('SELECT * FROM sermon_notes WHERE id = ?').bind(id).first();
+      if (!n) return new Response('Not found', { status: 404 });
+      const allSeries = await env.DB.prepare('SELECT id, title FROM sermon_series ORDER BY active DESC, id DESC').all();
+      const seriesOptions = allSeries.results.map(s => `<option value="${s.id}" ${s.id == n.series_id ? 'selected' : ''}>${s.title}</option>`).join('');
+      return html(`
+${topbarHtml('sermons', `<a href="/sermons">← Back</a>`)}
+<div class="wrap">
+  <div class="page-title">Edit Sermon Note</div>
+  <form method="POST" action="/sermons/edit-note/${id}">
+    <div class="card">
+      <div class="form-group"><label>Series (optional)</label><select name="series_id"><option value="">— Standalone note —</option>${seriesOptions}</select></div>
+      <div class="form-group"><label>Date</label><input type="date" name="date" value="${n.date || ''}"></div>
+      <div class="form-group"><label>Sermon title</label><input type="text" name="title" required value="${n.title}"></div>
+      <div class="form-group"><label>Scripture reference</label><input type="text" name="scripture" value="${n.scripture || ''}"></div>
+      <div class="form-group"><label>Brief notes / outline</label><textarea name="outline" style="min-height:140px;">${n.outline || ''}</textarea></div>
+      <div class="form-group"><label>YouTube link (optional)</label><input type="text" name="youtube_url" value="${n.youtube_url || ''}"></div>
+      <div class="btn-row" style="margin-top:20px;"><button type="submit" class="btn btn-primary">Save changes</button><a href="/sermons" class="btn" style="background:var(--linen);color:var(--charcoal);">Cancel</a></div>
+    </div>
+  </form>
+</div>`, 'Edit Note');
+    }
+
+    if (path.startsWith('/sermons/edit-note/') && method === 'POST') {
+      const id = path.split('/').pop();
+      const form = await request.formData();
+      const title = (form.get('title') || '').trim();
+      const seriesId = form.get('series_id') || null;
+      await env.DB.prepare('UPDATE sermon_notes SET series_id=?, date=?, title=?, scripture=?, outline=?, youtube_url=? WHERE id=?')
+        .bind(seriesId || null, form.get('date') || null, title, form.get('scripture') || '', form.get('outline') || '', form.get('youtube_url') || '', id).run();
+      const redir = seriesId ? `/sermons/notes/${seriesId}` : '/sermons';
+      return new Response('', { status: 302, headers: { Location: redir + '?saved=1' } });
+    }
+
+    if (path.startsWith('/sermons/delete-note/') && method === 'POST') {
+      const id = path.split('/').pop();
+      const n = await env.DB.prepare('SELECT series_id FROM sermon_notes WHERE id = ?').bind(id).first();
+      await env.DB.prepare('DELETE FROM sermon_notes WHERE id = ?').bind(id).run();
+      const redir = n && n.series_id ? `/sermons/notes/${n.series_id}` : '/sermons';
+      return new Response('', { status: 302, headers: { Location: redir } });
     }
 
     // ── NEW NEWSLETTER FORM ──

@@ -739,31 +739,26 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     <h1>Sunday Worship</h1>
     <p>Full worship services, live and archived — every Sunday on YouTube.</p>
   </div>
-  <section class="section section--white">
-    <div class="wrap">
+  <!-- CURRENT SERIES — loaded dynamically -->
+  <section class="section section--white" id="sermons-series-section">
+    <div class="wrap" id="sermons-series-content">
+      <!-- fallback shown until API responds -->
       <span class="eyebrow">Current series</span>
-      <h2>The Shepherd's Way</h2>
-      <p style="max-width:640px;color:var(--gray);">The Twenty-Third Psalm is six verses long and has been read at more bedsides and gravesites than almost any other text in human history. It is not a poem about easy comfort. It is a poem about a shepherd who walks his sheep through the valley of the shadow of death — and doesn't go around it. We are walking through it together this Lenten season.</p>
-      <div class="btn-row" style="margin-top:28px;">
-        <a href="https://www.youtube.com/@TimothySTL" target="_blank" class="btn btn-primary">Watch on YouTube →</a>
+      <div style="margin-top:12px;">
+        <div class="btn-row" style="margin-top:28px;">
+          <a href="https://www.youtube.com/@TimothySTL" target="_blank" class="btn btn-primary">Watch on YouTube →</a>
+        </div>
+        <div style="margin-top:16px;font-size:13px;color:var(--gray);">We stream each service live and keep the full recording available afterward. We don't clip individual sermons — you'll find complete worship services with music, liturgy, and preaching together.</div>
       </div>
-      <div style="margin-top:16px;font-size:13px;color:var(--gray);">We stream each service live and keep the full recording available afterward. We don't clip individual sermons — you'll find complete worship services with music, liturgy, and preaching together.</div>
     </div>
   </section>
-  <section class="section section--linen">
+  <!-- SERMON NOTES — loaded dynamically -->
+  <section class="section section--linen" id="sermons-notes-section" style="display:none;">
     <div class="wrap">
       <span class="eyebrow eyebrow--sage">Sermon notes</span>
       <h2>Notes &amp; outlines</h2>
       <p style="max-width:600px;color:var(--gray);">Brief outlines and key scripture references from recent services — a simple aid for following along, reviewing at home, or going deeper through the week.</p>
-      <div id="sermon-notes-list" style="margin-top:32px;">
-        <!-- Placeholder — notes will be posted here as the admin workflow develops -->
-        <div style="background:var(--white);border:1px solid var(--border);border-radius:var(--r-md);padding:28px;max-width:640px;">
-          <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mid);margin-bottom:6px;">March 16, 2025 · The Shepherd's Way #4</div>
-          <div style="font-family:var(--serif);font-size:20px;color:var(--steel);margin-bottom:4px;">You prepare a table before me</div>
-          <div style="font-family:var(--sans);font-size:12px;color:var(--gray);margin-bottom:16px;">Psalm 23:5</div>
-          <p style="font-size:14px;color:var(--charcoal);line-height:1.75;margin:0;">Sermon notes and outlines will be posted here each week. Check back after Sunday's service.</p>
-        </div>
-      </div>
+      <div id="sermon-notes-list" style="margin-top:32px;max-width:680px;"></div>
     </div>
   </section>
 </div>
@@ -951,10 +946,11 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
         <div>
           <span class="eyebrow">Send us a message</span>
           <h2>Get in touch</h2>
-          <form action="https://www.timothystl.org/contact" method="POST" target="_blank">
+          <form id="contact-form">
+            <div id="contact-alert" style="display:none;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:14px;"></div>
             <div class="form-group">
               <label class="form-label">Your name</label>
-              <input type="text" name="name" class="form-input" placeholder="First and last name">
+              <input type="text" name="name" class="form-input" placeholder="First and last name" required>
             </div>
             <div class="form-group">
               <label class="form-label">Email address</label>
@@ -962,11 +958,10 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
             </div>
             <div class="form-group">
               <label class="form-label">Message</label>
-              <textarea name="message" class="form-input" placeholder="How can we help you?"></textarea>
+              <textarea name="message" class="form-input" placeholder="How can we help you?" required></textarea>
             </div>
-            <button type="submit" class="btn btn-primary">Send message</button>
+            <button type="submit" class="btn btn-primary" id="contact-btn">Send message</button>
           </form>
-          <p style="margin-top:16px;font-size:12px;color:var(--gray);">Or use our full contact form at <a href="https://www.timothystl.org/contact" target="_blank">timothystl.org/contact</a></p>
         </div>
         <div>
           <span class="eyebrow eyebrow--sage">Find us</span>
@@ -1031,7 +1026,8 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
         <p style="font-size:16px;color:var(--gray);margin-top:12px;">Submit a request below and someone from our team will pray for you — and reach out if you'd like pastoral care. You can also reach us at <a href="https://www.timothystl.org/prayer" target="_blank">timothystl.org/prayer</a>.</p>
       </div>
       <div style="max-width:560px;margin:0 auto;">
-        <form action="https://www.timothystl.org/prayer" method="POST" target="_blank">
+        <form id="prayer-form">
+          <div id="prayer-alert" style="display:none;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:14px;"></div>
           <div class="form-group">
             <label class="form-label">Your name</label>
             <input type="text" name="name" class="form-input" placeholder="First name is fine">
@@ -1042,9 +1038,9 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
           </div>
           <div class="form-group">
             <label class="form-label">Prayer request</label>
-            <textarea name="message" class="form-input" style="min-height:160px;" placeholder="Share what's on your heart..."></textarea>
+            <textarea name="message" class="form-input" style="min-height:160px;" placeholder="Share what's on your heart..." required></textarea>
           </div>
-          <button type="submit" class="btn btn-primary">Submit prayer request</button>
+          <button type="submit" class="btn btn-primary" id="prayer-btn">Submit prayer request</button>
         </form>
       </div>
     </div>
@@ -1775,6 +1771,40 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
   </section>
 </div>
 
+<!-- VOTERS PAGE -->
+<div id="page-voters" class="page">
+  <div class="page-hero">
+    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Members of the congregation</span>
+    <h1>Voters Meeting</h1>
+    <p>Meeting information, Zoom access, and council documents.</p>
+  </div>
+  <section class="section section--white">
+    <div class="wrap" style="max-width:680px;">
+      <div id="voters-loading" style="text-align:center;padding:40px;color:var(--gray);">Loading…</div>
+      <div id="voters-content" style="display:none;">
+        <div id="voters-meeting-info" style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:28px;margin-bottom:32px;">
+          <span class="eyebrow">Meeting details</span>
+          <div id="voters-info-text" style="font-size:16px;color:var(--charcoal);line-height:1.85;white-space:pre-wrap;margin-top:8px;"></div>
+        </div>
+        <div id="voters-zoom-wrap" style="margin-bottom:40px;display:none;">
+          <span class="eyebrow eyebrow--sky">Join online</span>
+          <h2 style="margin-bottom:16px;">Zoom meeting</h2>
+          <a id="voters-zoom-link" href="#" target="_blank" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Join Zoom meeting →</a>
+          <p style="margin-top:12px;font-size:13px;color:var(--gray);">Click the button above to join. If prompted, allow your browser to open Zoom.</p>
+        </div>
+        <div id="voters-files-wrap" style="display:none;">
+          <span class="eyebrow eyebrow--sage">Council documents</span>
+          <h2 style="margin-bottom:20px;">Downloads</h2>
+          <div id="voters-files-list"></div>
+        </div>
+        <div id="voters-empty" style="display:none;text-align:center;padding:40px 0;color:var(--gray);">
+          <p>Meeting details will be posted here when available. Check back closer to the meeting date.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
 <!-- FOOTER -->
 <footer>
   <div class="footer-inner">
@@ -2154,6 +2184,8 @@ window.showPage = function(id, addHistory) {
   if (id === 'news') { loadNewsletters(); loadNewsItems(); }
   if (id === 'youth') { loadYouthPage(); }
   if (id === 'events' && !volLoaded) { volLoaded = true; loadVolunteerEvents(); }
+  if (id === 'sermons') { loadSermons(); }
+  if (id === 'voters') { loadVotersPage(); }
   var ministrySubs = ['sundayschool','confirmation','vbs','egghunt','family'];
   if (ministrySubs.indexOf(id) !== -1) { loadMinistryPage(id); }
 };
@@ -2163,9 +2195,141 @@ window.showPage = function(id, addHistory) {
   if (path === 'news') { loadNewsletters(); loadNewsItems(); }
   if (path === 'youth') { loadYouthPage(); }
   if (path === 'events') { volLoaded = true; loadVolunteerEvents(); }
+  if (path === 'sermons') { loadSermons(); }
+  if (path === 'voters') { loadVotersPage(); }
   var ministrySubs = ['sundayschool','confirmation','vbs','egghunt','family'];
   if (ministrySubs.indexOf(path) !== -1) { loadMinistryPage(path); }
 })();
+
+// ── CONTACT FORM ──────────────────────────────────────────────
+document.getElementById('contact-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const btn = document.getElementById('contact-btn');
+  const alert = document.getElementById('contact-alert');
+  btn.disabled = true; btn.textContent = 'Sending…';
+  alert.style.display = 'none';
+  try {
+    const fd = new FormData(this);
+    const r = await fetch('https://admin.timothystl.org/api/contact', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error || 'Server error');
+    this.reset();
+    alert.style.cssText = 'display:block;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:14px;background:#e8f5e9;border-left:3px solid #4a5e3a;color:#1a3d1f;';
+    alert.textContent = 'Message sent! We\'ll be in touch.';
+  } catch(err) {
+    alert.style.cssText = 'display:block;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:14px;background:#fce8e8;border-left:3px solid #B85C3A;color:#7a1f1f;';
+    alert.textContent = 'Something went wrong — please email us directly at office@timothystl.org';
+  }
+  btn.disabled = false; btn.textContent = 'Send message';
+});
+
+// ── PRAYER FORM ───────────────────────────────────────────────
+document.getElementById('prayer-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const btn = document.getElementById('prayer-btn');
+  const alert = document.getElementById('prayer-alert');
+  btn.disabled = true; btn.textContent = 'Sending…';
+  alert.style.display = 'none';
+  try {
+    const fd = new FormData(this);
+    const r = await fetch('https://admin.timothystl.org/api/prayer', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error || 'Server error');
+    this.reset();
+    alert.style.cssText = 'display:block;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:14px;background:#e8f5e9;border-left:3px solid #4a5e3a;color:#1a3d1f;';
+    alert.textContent = 'Your request has been received. Our pastoral staff will pray for you.';
+  } catch(err) {
+    alert.style.cssText = 'display:block;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:14px;background:#fce8e8;border-left:3px solid #B85C3A;color:#7a1f1f;';
+    alert.textContent = 'Something went wrong — please call the office at (314) 839-0563 or email office@timothystl.org';
+  }
+  btn.disabled = false; btn.textContent = 'Submit prayer request';
+});
+
+// ── VOTERS PAGE ───────────────────────────────────────────────
+async function loadVotersPage() {
+  try {
+    const r = await fetch('https://admin.timothystl.org/api/voters');
+    const d = await r.json();
+    document.getElementById('voters-loading').style.display = 'none';
+    document.getElementById('voters-content').style.display = 'block';
+    const hasInfo = d.meeting_info && d.meeting_info.trim();
+    const hasZoom = d.zoom_link && d.zoom_link.trim();
+    const hasFiles = d.files && d.files.length > 0;
+    if (!hasInfo && !hasZoom && !hasFiles) {
+      document.getElementById('voters-meeting-info').style.display = 'none';
+      document.getElementById('voters-empty').style.display = 'block';
+      return;
+    }
+    if (hasInfo) {
+      document.getElementById('voters-info-text').textContent = d.meeting_info;
+    } else {
+      document.getElementById('voters-meeting-info').style.display = 'none';
+    }
+    if (hasZoom) {
+      const zw = document.getElementById('voters-zoom-wrap');
+      zw.style.display = 'block';
+      document.getElementById('voters-zoom-link').href = d.zoom_link;
+    }
+    if (hasFiles) {
+      const fw = document.getElementById('voters-files-wrap');
+      fw.style.display = 'block';
+      document.getElementById('voters-files-list').innerHTML = d.files.map(function(f) {
+        return '<div style="display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid var(--border);">' +
+          '<span style="font-size:20px;">📄</span>' +
+          '<a href="' + f.url + '" target="_blank" style="font-family:var(--sans);font-size:15px;color:var(--mid);font-weight:600;">' + f.name + '</a>' +
+          '<span style="margin-left:auto;"><a href="' + f.url + '" download class="btn btn-sm" style="background:var(--mist);color:var(--steel);border:1px solid var(--border);">Download</a></span>' +
+          '</div>';
+      }).join('');
+    }
+  } catch(e) {
+    document.getElementById('voters-loading').textContent = 'Unable to load meeting information. Please try again later.';
+  }
+}
+
+// ── SERMONS ───────────────────────────────────────────────────
+async function loadSermons() {
+  try {
+    const r = await fetch('https://admin.timothystl.org/api/sermon-series');
+    if (!r.ok) return;
+    const d = await r.json();
+    const activeSeries = (d.series || []).find(function(s){ return s.active; });
+    const allNotes = [];
+    (d.series || []).forEach(function(s){ (s.notes || []).forEach(function(n){ allNotes.push(n); }); });
+    (d.standalone || []).forEach(function(n){ allNotes.push(n); });
+    allNotes.sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+    // Render active series
+    if (activeSeries) {
+      const sc = document.getElementById('sermons-series-content');
+      sc.innerHTML = '<span class="eyebrow">Current series</span>' +
+        '<h2 style="margin-top:4px;">' + activeSeries.title + '</h2>' +
+        (activeSeries.description ? '<p style="max-width:640px;color:var(--gray);">' + activeSeries.description + '</p>' : '') +
+        (activeSeries.date_range ? '<p style="font-size:13px;color:var(--gray);">' + activeSeries.date_range + '</p>' : '') +
+        '<div class="btn-row" style="margin-top:28px;">' +
+        (activeSeries.playlist_url ? '<a href="' + activeSeries.playlist_url + '" target="_blank" class="btn btn-primary">Watch the series →</a>' : '') +
+        '<a href="https://www.youtube.com/@TimothySTL" target="_blank" class="btn btn-outline">All services on YouTube</a>' +
+        '</div>' +
+        '<div style="margin-top:16px;font-size:13px;color:var(--gray);">We stream each service live and keep the full recording available afterward.</div>';
+    }
+    // Render notes
+    if (allNotes.length > 0) {
+      const ns = document.getElementById('sermons-notes-section');
+      ns.style.display = '';
+      document.getElementById('sermon-notes-list').innerHTML = allNotes.slice(0, 12).map(function(n) {
+        const dateLabel = n.date ? new Date(n.date + 'T12:00:00').toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'}) : '';
+        const hasOutline = n.outline && n.outline.trim();
+        const bodyId = 'sn-' + n.id;
+        return '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--r-md);padding:24px;margin-bottom:12px;">' +
+          (dateLabel ? '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mid);margin-bottom:6px;">' + dateLabel + '</div>' : '') +
+          '<div style="font-family:var(--serif);font-size:20px;color:var(--steel);margin-bottom:4px;">' + n.title + '</div>' +
+          (n.scripture ? '<div style="font-size:12px;color:var(--gray);margin-bottom:' + (hasOutline ? '14' : '0') + 'px;">' + n.scripture + '</div>' : '') +
+          (hasOutline ? '<div id="' + bodyId + '" style="font-size:14px;color:var(--charcoal);line-height:1.75;white-space:pre-wrap;margin-top:10px;border-top:1px solid var(--border);padding-top:12px;">' + n.outline + '</div>' : '') +
+          (n.youtube_url ? '<div style="margin-top:14px;"><a href="' + n.youtube_url + '" target="_blank" class="btn btn-sm" style="background:var(--mist);color:var(--steel);border:1px solid var(--border);">Watch this service →</a></div>' : '') +
+          '</div>';
+      }).join('');
+    }
+  } catch(e) { /* keep fallback content */ }
+}
+loadSermons();
 </script>
 
 </body>
