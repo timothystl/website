@@ -28,7 +28,7 @@
   --border:#DDE3ED;--charcoal:#1A1A2A;--gray:#4A4860;--text-muted:#8A8898;
   /* Fonts & shape */
   --serif:'Lora',Georgia,serif;--sans:'Source Sans 3',Arial,sans-serif;
-  --r-sm:6px;--r-md:12px;--r-lg:20px;
+  --r-sm:8px;--r-md:12px;--r-lg:20px;
   --shadow:0 2px 12px rgba(30,45,74,.08);--shadow-lift:0 6px 32px rgba(30,45,74,.14);
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
@@ -41,7 +41,7 @@ a:hover{color:var(--steel);}
 .page{display:none;}
 .page.active{display:block;}
 .wrap{max-width:1080px;margin:0 auto;padding:0 28px;}
-.section{padding:72px 0;}
+.section{padding:88px 0;}
 .section--linen{background:var(--linen);}
 .section--white{background:var(--white);}
 .section--mist{background:var(--mist);}
@@ -351,14 +351,18 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
         <h1>Whoever you are,<br>wherever you've been —<br><em>you are welcome here.</em></h1>
         <p class="hero-sub">We are a congregation shaped by grace — not by what we've done for God, but by what God has done for us in Jesus Christ. We gather every Sunday on Fyler Avenue to receive that grace together. And we scatter into the week to give it away.</p>
         <div class="btn-row">
-          <button class="btn btn-secondary" onclick="showPage('worship')">Plan your visit</button>
+          <button class="btn btn-secondary" onclick="showPage('worship')">New Here? Plan Your Visit →</button>
           <button class="btn btn-ghost" onclick="showPage('sermons')">Livestream worship</button>
         </div>
       </div>
       <div class="hero-card">
         <div class="hero-card-label">Join us Sunday</div>
         <div class="hero-card-time">8:00 &amp; 10:45 am</div>
-        <div class="hero-card-day">Sunday morning worship</div>
+        <div class="hero-card-day" style="margin-bottom:16px;">English worship</div>
+        <div style="border-top:1px solid rgba(255,255,255,.14);padding-top:14px;margin-bottom:16px;">
+          <div class="hero-card-time" style="font-size:20px;">9:30 am</div>
+          <div class="hero-card-day">Vietnamese worship · Hội Thánh Việt</div>
+        </div>
         <hr>
         <div class="hero-card-addr">
           6704 Fyler Ave<br>St. Louis, MO 63139<br>Corner of Fyler &amp; Ivanhoe
@@ -491,7 +495,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
           <p>Timothy Lutheran Church is a congregation alive to the Gospel of Jesus Christ. Gathered in worship around the Word and Sacraments of the risen Lord, we accept every person as one for whom Christ died. Growing in faith through Christian education and honest community, we go — from our neighborhood to the nations — bearing the tangible love of God to all.</p>
           <p style="font-size:14px;color:var(--gray);">We are a congregation of the Lutheran Church — Missouri Synod (LCMS), rooted in the Lindenwood Park neighborhood of St. Louis.</p>
           <div class="btn-row" style="margin-top:24px;">
-            <button class="btn btn-primary" onclick="showPage('worship')">Plan your visit</button>
+            <button class="btn btn-secondary" onclick="showPage('worship')">Plan your visit →</button>
             <button class="btn btn-outline" onclick="showPage('contact')">Contact us</button>
           </div>
         </div>
@@ -630,14 +634,21 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
             <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);">
               <div>
                 <div style="font-family:var(--serif);font-size:22px;color:var(--steel);">8:00 am</div>
-                <div style="font-family:var(--sans);font-size:12px;color:var(--charcoal);margin-top:2px;">Sunday morning worship</div>
+                <div style="font-family:var(--sans);font-size:12px;color:var(--charcoal);margin-top:2px;">English worship</div>
               </div>
               <span style="font-family:var(--sans);font-size:10px;font-weight:700;background:var(--pale-sage);color:#1a3d1f;padding:3px 10px;border-radius:999px;">Sunday</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);">
+              <div>
+                <div style="font-family:var(--serif);font-size:22px;color:var(--steel);">9:30 am</div>
+                <div style="font-family:var(--sans);font-size:12px;color:var(--charcoal);margin-top:2px;">Vietnamese worship · Hội Thánh Việt</div>
+              </div>
+              <span style="font-family:var(--sans);font-size:10px;font-weight:700;background:var(--teal-pale);color:#1a3d4a;padding:3px 10px;border-radius:999px;">Sunday</span>
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;">
               <div>
                 <div style="font-family:var(--serif);font-size:22px;color:var(--steel);">10:45 am</div>
-                <div style="font-family:var(--sans);font-size:12px;color:var(--charcoal);margin-top:2px;">Sunday morning worship</div>
+                <div style="font-family:var(--sans);font-size:12px;color:var(--charcoal);margin-top:2px;">English worship</div>
               </div>
               <span style="font-family:var(--sans);font-size:10px;font-weight:700;background:var(--pale-sage);color:#1a3d1f;padding:3px 10px;border-radius:999px;">Sunday</span>
             </div>
@@ -664,6 +675,36 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       </div>
     </div>
   </section>
+  <section class="section section--mist">
+    <div class="wrap">
+      <span class="eyebrow eyebrow--sky">First time visiting?</span>
+      <h2>Plan Your Visit</h2>
+      <p style="max-width:600px;color:var(--gray);">We want your first Sunday to be easy. Here's everything you need to know before you arrive.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px;margin-top:36px;">
+        <div style="background:var(--white);border-radius:var(--r-md);padding:24px;box-shadow:var(--shadow);">
+          <div style="font-size:26px;margin-bottom:12px;">🅿️</div>
+          <h3>Parking</h3>
+          <p style="font-size:14px;color:var(--gray);margin:0;">Free parking in the lot on Ivanhoe, directly across from the church office. Street parking is available on Fyler and surrounding streets.</p>
+        </div>
+        <div style="background:var(--white);border-radius:var(--r-md);padding:24px;box-shadow:var(--shadow);">
+          <div style="font-size:26px;margin-bottom:12px;">👶</div>
+          <h3>Kids &amp; Families</h3>
+          <p style="font-size:14px;color:var(--gray);margin:0;">Children are welcome in worship at any age. Sunday School meets during the 10:45 am service. Our volunteers are background-checked and trained. Nursery available for infants.</p>
+        </div>
+        <div style="background:var(--white);border-radius:var(--r-md);padding:24px;box-shadow:var(--shadow);">
+          <div style="font-size:26px;margin-bottom:12px;">👕</div>
+          <h3>What to Wear</h3>
+          <p style="font-size:14px;color:var(--gray);margin:0;">From suits to shorts — you're welcome here. Come as you are. We mean it. What matters is that you show up.</p>
+        </div>
+        <div style="background:var(--white);border-radius:var(--r-md);padding:24px;box-shadow:var(--shadow);">
+          <div style="font-size:26px;margin-bottom:12px;">❓</div>
+          <h3>Questions Before You Come?</h3>
+          <p style="font-size:14px;color:var(--gray);margin:0;">Our greeters are at the door before every service. Or reach us anytime: <a href="mailto:office@timothystl.org" style="color:var(--mid);font-weight:600;">office@timothystl.org</a> · <a href="tel:3148390563" style="color:var(--mid);font-weight:600;">(314) 839-0563</a></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section class="section section--linen">
     <div class="wrap">
       <span class="eyebrow eyebrow--sage">Wednesday evenings</span>
