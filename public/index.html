@@ -7,7 +7,7 @@
 <title>Timothy Lutheran Church — St. Louis, MO</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,700;1,400&family=Source+Sans+3:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,700;1,400&family=Source+Sans+3:wght@300;400;600;700;800&family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Raleway:wght@300;400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Nunito:wght@300;400;600;700&family=Crimson+Pro:ital,wght@0,400;0,600;1,400&family=Open+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
   /* Primary — Navy (deep, desaturated blue) */
@@ -69,6 +69,12 @@ p:last-child{margin-bottom:0;}
 .nav-links{display:flex;align-items:center;gap:4px;list-style:none;}
 .nav-links button,.nav-links a{font-family:var(--sans);font-size:13px;font-weight:700;color:rgba(255,255,255,.85);background:none;border:none;cursor:pointer;padding:6px 10px;border-radius:var(--r-sm);transition:background .15s,color .15s;text-decoration:none;}
 .nav-links button:hover,.nav-links a:hover{background:rgba(255,255,255,.12);color:white;}
+/* Dropdown */
+.nav-dropdown{position:relative;}
+.nav-dropdown-menu{display:none;position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--steel-dk);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:8px;min-width:200px;box-shadow:0 8px 32px rgba(0,0,0,.3);z-index:200;}
+.nav-dropdown:hover .nav-dropdown-menu,.nav-dropdown.open .nav-dropdown-menu{display:block;}
+.nav-dropdown-menu button,.nav-dropdown-menu a{display:block;width:100%;text-align:left;padding:9px 14px;border-radius:7px;font-size:13px;font-weight:600;color:rgba(255,255,255,.85);background:none;border:none;cursor:pointer;text-decoration:none;white-space:nowrap;}
+.nav-dropdown-menu button:hover,.nav-dropdown-menu a:hover{background:rgba(255,255,255,.1);color:white;}
 .nav-cta{background:var(--amber) !important;color:white !important;padding:7px 16px !important;font-weight:800 !important;}
 .nav-cta:hover{background:var(--amber-dk) !important;color:white !important;}
 .nav-toggle{display:none;background:none;border:none;cursor:pointer;color:white;font-size:22px;padding:8px;}
@@ -97,13 +103,13 @@ p:last-child{margin-bottom:0;}
 .hero-inner{max-width:1080px;margin:0 auto;display:grid;grid-template-columns:1fr 300px;gap:48px;align-items:center;position:relative;z-index:1;}
 .hero h1{color:white;margin-bottom:20px;}
 .hero-sub{font-size:17px;font-weight:300;color:rgba(255,255,255,.88);line-height:1.8;margin-bottom:32px;max-width:500px;}
-.hero-card{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.28);border-radius:var(--r-lg);padding:28px;}
-.hero-card-label{font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sage);margin-bottom:10px;}
-.hero-card-time{font-family:var(--serif);font-size:24px;color:white;margin-bottom:4px;}
-.hero-card-day{font-family:var(--sans);font-size:12px;font-weight:300;color:rgba(255,255,255,.6);margin-bottom:18px;}
-.hero-card hr{border:none;border-top:1px solid rgba(255,255,255,.12);margin-bottom:14px;}
-.hero-card-addr{font-family:var(--sans);font-size:12px;font-weight:300;color:rgba(255,255,255,.55);line-height:1.8;}
-.hero-card-addr a{color:var(--sky);font-weight:600;display:block;margin-top:10px;}
+.hero-card{background:white;border:none;border-radius:var(--r-lg);padding:28px;box-shadow:0 8px 40px rgba(0,0,0,.35);}
+.hero-card-label{font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:10px;}
+.hero-card-time{font-family:var(--serif);font-size:24px;color:var(--steel);margin-bottom:4px;}
+.hero-card-day{font-family:var(--sans);font-size:12px;font-weight:400;color:var(--charcoal);margin-bottom:18px;}
+.hero-card hr{border:none;border-top:1px solid var(--border);margin-bottom:14px;}
+.hero-card-addr{font-family:var(--sans);font-size:12px;font-weight:400;color:var(--gray);line-height:1.8;}
+.hero-card-addr a{color:var(--mid);font-weight:700;display:block;margin-top:10px;}
 .hero-live{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:6px 14px;font-family:var(--sans);font-size:11px;font-weight:700;color:white;text-decoration:none;margin-top:16px;}
 .hero-live:hover{background:rgba(255,255,255,.18);color:white;}
 .live-dot{width:8px;height:8px;border-radius:50%;background:#ff4444;animation:pulse 2s infinite;flex-shrink:0;}
@@ -320,10 +326,15 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     <button class="nav-toggle" id="navToggle">☰</button>
     <ul class="nav-links">
       <li><button onclick="showPage('about')">About</button></li>
-      <li><button onclick="showPage('worship')">Worship</button></li>
-      <li><a href="https://mdo.timothystl.org" target="_blank">MDO</a></li>
-      <li><button onclick="showPage('wol')">Word of Life</button></li>
-      <li><button onclick="showPage('ministries')">Ministries</button></li>
+      <li class="nav-dropdown" id="nav-min-dd">
+        <button class="nav-dropdown-toggle" onclick="showPage('ministries');document.getElementById('nav-min-dd').classList.remove('open')">Ministries ▾</button>
+        <div class="nav-dropdown-menu">
+          <button onclick="showPage('worship');document.getElementById('nav-min-dd').classList.remove('open')">Worship</button>
+          <button onclick="showPage('ministries');document.getElementById('nav-min-dd').classList.remove('open')">All Ministries</button>
+          <a href="https://wordoflifeschool.net" target="_blank" onclick="document.getElementById('nav-min-dd').classList.remove('open')">Word of Life School ↗</a>
+          <a href="https://mdo.timothystl.org" target="_blank" onclick="document.getElementById('nav-min-dd').classList.remove('open')">Mother's Day Out ↗</a>
+        </div>
+      </li>
       <li><button onclick="showPage('news')">News &amp; Events</button></li>
       <li><button onclick="showPage('contact')">Contact</button></li>
       <li><button onclick="showPage('give')" class="nav-cta">Give</button></li>
@@ -332,9 +343,9 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
   <div class="nav-mobile" id="navMobile">
     <button onclick="showPage('about');closeMobileNav()">About</button>
     <button onclick="showPage('worship');closeMobileNav()">Worship</button>
-    <a href="https://mdo.timothystl.org" target="_blank" onclick="closeMobileNav()">MDO</a>
-    <button onclick="showPage('wol');closeMobileNav()">Word of Life</button>
     <button onclick="showPage('ministries');closeMobileNav()">Ministries</button>
+    <a href="https://wordoflifeschool.net" target="_blank" onclick="closeMobileNav()">Word of Life School</a>
+    <a href="https://mdo.timothystl.org" target="_blank" onclick="closeMobileNav()">Mother's Day Out</a>
     <button onclick="showPage('news');closeMobileNav()">News &amp; Events</button>
     <button onclick="showPage('contact');closeMobileNav()">Contact</button>
     <button onclick="showPage('prayer');closeMobileNav()">Prayer Request</button>
@@ -349,17 +360,17 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       <div>
         <span class="eyebrow eyebrow--light">Lindenwood Park · St. Louis, Missouri</span>
         <h1>Whoever you are,<br>wherever you've been —<br><em>you are welcome here.</em></h1>
-        <p class="hero-sub">We are a congregation shaped by grace — not by what we've done for God, but by what God has done for us in Jesus Christ. We gather every Sunday on Fyler Avenue to receive that grace together. And we scatter into the week to give it away.</p>
+        <p class="hero-sub">We are a congregation shaped by grace — not by what we've done for God, but by what God has done for us in Jesus Christ. We gather every Sunday in South City St. Louis to receive that grace together. And we scatter into the week to give it away.</p>
         <div class="btn-row">
           <button class="btn btn-secondary" onclick="showPage('worship')">New Here? Plan Your Visit →</button>
-          <button class="btn btn-ghost" onclick="showPage('sermons')">Livestream worship</button>
+          <button class="btn btn-ghost" id="btn-watch-live" onclick="showPage('sermons')">Livestream worship</button>
         </div>
       </div>
       <div class="hero-card">
         <div class="hero-card-label">Join us Sunday</div>
         <div class="hero-card-time">8:00 &amp; 10:45 am</div>
         <div class="hero-card-day" style="margin-bottom:16px;">English worship</div>
-        <div style="border-top:1px solid rgba(255,255,255,.14);padding-top:14px;margin-bottom:16px;">
+        <div style="border-top:1px solid var(--border);padding-top:14px;margin-bottom:16px;">
           <div class="hero-card-time" style="font-size:20px;">9:30 am</div>
           <div class="hero-card-day">Vietnamese worship · Hội Thánh Việt</div>
         </div>
@@ -435,41 +446,12 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     </div>
   </section>
 
-  <section class="section section--linen">
-    <div class="wrap">
-      <span class="eyebrow eyebrow--sage">Life at Timothy</span>
-      <h2>Ministries &amp; connections</h2>
-      <div class="min-grid">
-        <div class="min-card">
-          <h3>Word of Life Lutheran School</h3>
-          <p>A Christ-centered school where academics and faith form together — providing high-quality education for students in our neighborhood from the earliest years.</p>
-          <a href="https://wordoflifeschool.net" target="_blank">Visit Word of Life School →</a>
-        </div>
-        <div class="min-card">
-          <h3>Music Ministry</h3>
-          <p>Music at Timothy is proclamation. From the ancient hymns of the Lutheran tradition to contemporary worship, our musicians lead the congregation into the presence of the living God.</p>
-          <a href="#" onclick="showPage('ministries')">Explore →</a>
-        </div>
-        <div class="min-card">
-          <h3>Stephen Ministry</h3>
-          <p>Trained, caring members who walk alongside people in difficult times — grief, illness, loneliness, or the particular weight of a season you can't explain to anyone around you.</p>
-          <a href="#" onclick="showPage('ministries')">Learn more →</a>
-        </div>
-        <div class="min-card">
-          <h3>Mother's Day Out</h3>
-          <p>For over twenty years, families in Lindenwood Park have trusted Mother's Day Out with the people they love most. Experienced staff, small classrooms, flexible scheduling.</p>
-          <a href="https://mdo.timothystl.org" target="_blank">Visit MDO site →</a>
-        </div>
-      </div>
-    </div>
-  </section>
-
   <div class="mdo-strip">
     <div class="mdo-inner">
       <div class="mdo-text">
         <div class="mdo-eye">Mother's Day Out</div>
         <div class="mdo-title">Now enrolling — join our community</div>
-        <div class="mdo-desc">Over twenty years of experienced, caring childcare for children from birth through preschool. Right here in the Fyler neighborhood.</div>
+        <div class="mdo-desc">Over twenty years of experienced, caring childcare for children from birth through preschool. Right here in Lindenwood Park.</div>
       </div>
       <a href="https://mdo.timothystl.org" target="_blank" class="btn btn-secondary">Learn about MDO →</a>
     </div>
@@ -481,7 +463,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
   <div class="page-hero">
     <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Who we are</span>
     <h1>About Timothy Lutheran</h1>
-    <p>A diverse city church on Fyler Avenue, rooted in grace, sent to the world.</p>
+    <p>A diverse city church in Lindenwood Park, South City St. Louis — rooted in grace, sent to the world.</p>
   </div>
   <section class="section section--white">
     <div class="wrap">
@@ -614,6 +596,51 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       </div>
     </div>
   </section>
+
+  <section class="section section--linen">
+    <div class="wrap">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:start;">
+        <div>
+          <span class="eyebrow eyebrow--sage">Find us</span>
+          <h2>Location &amp; service times</h2>
+          <p>We worship every Sunday at two morning services. Come as you are — children of all ages are welcome in worship.</p>
+          <div style="background:var(--white);border:1px solid var(--border);border-radius:var(--r-md);padding:24px;margin:24px 0;">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+              <div><div style="font-family:var(--serif);font-size:20px;color:var(--steel);">8:00 am</div><div style="font-size:12px;color:var(--gray);margin-top:2px;">English worship</div></div>
+              <span style="font-size:10px;font-weight:700;background:var(--pale-sage);color:#1a3d1f;padding:3px 10px;border-radius:999px;">Sunday</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+              <div><div style="font-family:var(--serif);font-size:20px;color:var(--steel);">9:30 am</div><div style="font-size:12px;color:var(--gray);margin-top:2px;">Vietnamese worship · Hội Thánh Việt</div></div>
+              <span style="font-size:10px;font-weight:700;background:var(--teal-pale);color:#1a3d4a;padding:3px 10px;border-radius:999px;">Sunday</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;">
+              <div><div style="font-family:var(--serif);font-size:20px;color:var(--steel);">10:45 am</div><div style="font-size:12px;color:var(--gray);margin-top:2px;">English worship</div></div>
+              <span style="font-size:10px;font-weight:700;background:var(--pale-sage);color:#1a3d1f;padding:3px 10px;border-radius:999px;">Sunday</span>
+            </div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-secondary" onclick="showPage('worship')">Plan your visit →</button>
+            <a href="https://www.youtube.com/@TimothySTL" target="_blank" class="btn btn-outline">Watch live stream</a>
+          </div>
+        </div>
+        <div>
+          <span class="eyebrow eyebrow--sky">Address</span>
+          <h2>Lindenwood Park, South City</h2>
+          <p>We are located at the corner of Ivanhoe and Fyler in Lindenwood Park — with a large parking lot on Ivanhoe directly across from the church office.</p>
+          <div style="background:var(--white);border:1px solid var(--border);border-radius:var(--r-md);padding:20px;margin:24px 0;">
+            <div style="font-size:13px;color:var(--charcoal);line-height:2;">
+              <strong>Timothy Lutheran Church</strong><br>
+              6704 Fyler Ave · St. Louis, MO 63139<br>
+              Corner of Ivanhoe &amp; Fyler<br>
+              <a href="https://maps.google.com/?q=6704+Fyler+Ave+St+Louis+MO+63139" target="_blank" style="font-weight:700;color:var(--mid);">Open in Google Maps →</a>
+            </div>
+          </div>
+          <p style="font-size:13px;color:var(--gray);">Free parking in the lot on Ivanhoe. Street parking available on Fyler and surrounding streets.</p>
+          <button class="btn btn-outline" onclick="showPage('contact')" style="margin-top:8px;">Contact us →</button>
+        </div>
+      </div>
+    </div>
+  </section>
 </div>
 
 <!-- WORSHIP -->
@@ -661,8 +688,8 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
         </div>
         <div>
           <span class="eyebrow eyebrow--sage">Location</span>
-          <h2>Find us on Fyler</h2>
-          <p>We are located at <strong>6704 Fyler Ave</strong>, on the corner of Fyler and Ivanhoe in Lindenwood Park.</p>
+          <h2>Location</h2>
+          <p>We are located at the corner of Ivanhoe and Fyler in Lindenwood Park, South City St. Louis.</p>
           <p>The church office is on Ivanhoe, across from the large parking lot. Parking is available in the lot and on surrounding streets.</p>
           <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:20px;margin-top:24px;">
             <div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);line-height:1.8;">
@@ -2376,7 +2403,7 @@ loadSermons();
 <!-- ═══════════════════════════════════════════════════════════
      DESIGN LAB — test.timothystl.org only, palette preview tool
      ═══════════════════════════════════════════════════════════ -->
-<div id="design-lab" style="position:fixed;bottom:20px;right:20px;z-index:9999;font-family:'Source Sans 3',Arial,sans-serif;">
+<div id="design-lab" style="position:fixed;bottom:20px;right:20px;z-index:9999;font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;">
 
   <!-- Toggle button -->
   <button id="dl-toggle" onclick="dlToggle()" style="display:flex;align-items:center;gap:8px;background:#111;color:#fff;border:none;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,.35);letter-spacing:.02em;">
@@ -2384,15 +2411,18 @@ loadSermons();
   </button>
 
   <!-- Panel -->
-  <div id="dl-panel" style="display:none;position:absolute;bottom:52px;right:0;width:270px;background:#1a1a1a;border-radius:14px;padding:20px;box-shadow:0 8px 40px rgba(0,0,0,.5);">
-    <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#888;margin-bottom:14px;">Palette Presets</div>
+  <div id="dl-panel" style="display:none;position:absolute;bottom:52px;right:0;width:300px;background:#1a1a1a;border-radius:14px;padding:18px;box-shadow:0 8px 40px rgba(0,0,0,.55);max-height:90vh;overflow-y:auto;">
 
-    <div id="dl-swatches" style="display:flex;flex-direction:column;gap:8px;"></div>
+    <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#888;margin-bottom:10px;">Palette Presets</div>
+    <div id="dl-swatches" style="display:flex;flex-direction:column;gap:6px;"></div>
 
-    <div style="border-top:1px solid #333;margin:16px 0 14px;"></div>
-    <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#888;margin-bottom:10px;">Tweak Individual Colors</div>
+    <div style="border-top:1px solid #333;margin:14px 0 12px;"></div>
+    <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#888;margin-bottom:10px;">Font Pairing</div>
+    <div id="dl-fonts" style="display:flex;flex-direction:column;gap:6px;"></div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;" id="dl-pickers"></div>
+    <div style="border-top:1px solid #333;margin:14px 0 12px;"></div>
+    <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#888;margin-bottom:10px;">Individual Colors</div>
+    <div id="dl-pickers" style="display:flex;flex-direction:column;gap:8px;"></div>
 
     <div style="border-top:1px solid #333;margin:14px 0 12px;"></div>
     <button onclick="dlCopyCSS()" style="width:100%;background:#2a2a2a;color:#ccc;border:1px solid #444;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;">Copy CSS Variables</button>
@@ -2405,7 +2435,7 @@ loadSermons();
 var DL_PALETTES = [
   {
     name: 'Current — Navy & Gold',
-    dot: '#1E2D4A',
+    dot: ['#1E2D4A','#C9973A','#4A5E3A'],
     vars: {
       '--steel':'#1E2D4A','--steel-dk':'#2A3F60','--steel-dk2':'#111E32',
       '--amber':'#C9973A','--amber-dk':'#B0821E','--honey':'#E8C070','--pale-gold':'#F5E4C0',
@@ -2415,58 +2445,76 @@ var DL_PALETTES = [
     }
   },
   {
-    name: 'Burgundy & Cream',
-    dot: '#5C1A2A',
+    name: 'Cathedral — Wine & Gold',
+    dot: ['#5C1835','#C9973A','#6B3040'],
     vars: {
-      '--steel':'#5C1A2A','--steel-dk':'#731E2E','--steel-dk2':'#3A0F1A',
+      '--steel':'#5C1835','--steel-dk':'#741E41','--steel-dk2':'#3A0F22',
       '--amber':'#C9973A','--amber-dk':'#B0821E','--honey':'#E8C070','--pale-gold':'#F5E4C0',
-      '--sage':'#6B3A2A','--soft-sage':'#9A6A5A','--pale-sage':'#D4BEB8',
-      '--mid':'#A0522D','--sky':'#C47A50','--ice':'#E0C4B8','--mist':'#F5EDEA',
-      '--warm':'#FBF5F0','--linen':'#F2E8E0','--white':'#FFFAF6'
+      '--sage':'#6B3040','--soft-sage':'#9A606A','--pale-sage':'#DBC4C8',
+      '--mid':'#A0405A','--sky':'#C47080','--ice':'#EACAD0','--mist':'#F8F0F2',
+      '--warm':'#FBF5F0','--linen':'#F4EAE4','--white':'#FFFAF6'
     }
   },
   {
-    name: 'Forest Green',
-    dot: '#1E3D2A',
+    name: 'Sanctuary — Royal Blue',
+    dot: ['#1C3A6B','#D4A435','#2A4E7A'],
     vars: {
-      '--steel':'#1E3D2A','--steel-dk':'#274F36','--steel-dk2':'#0F2016',
-      '--amber':'#C9973A','--amber-dk':'#B0821E','--honey':'#E8C070','--pale-gold':'#F5E4C0',
-      '--sage':'#2E5C3A','--soft-sage':'#5A8A68','--pale-sage':'#BED4C4',
-      '--mid':'#3A7A5C','--sky':'#5FAA88','--ice':'#BCDDD0','--mist':'#EAF4F0',
-      '--warm':'#F4F8F5','--linen':'#E8F0EC','--white':'#F8FBF9'
-    }
-  },
-  {
-    name: 'Slate Blue (Modern)',
-    dot: '#2A3F5C',
-    vars: {
-      '--steel':'#2A3F5C','--steel-dk':'#354F72','--steel-dk2':'#16243A',
-      '--amber':'#E89B2A','--amber-dk':'#CC8518','--honey':'#F0B84A','--pale-gold':'#FAE6B8',
-      '--sage':'#3A5C72','--soft-sage':'#6A8FA0','--pale-sage':'#B8D0DC',
-      '--mid':'#3498C8','--sky':'#60B8E0','--ice':'#B8DCEF','--mist':'#EAF4FA',
+      '--steel':'#1C3A6B','--steel-dk':'#254C8A','--steel-dk2':'#0F2040',
+      '--amber':'#D4A435','--amber-dk':'#B88820','--honey':'#EAC060','--pale-gold':'#F8E8B8',
+      '--sage':'#2A4E7A','--soft-sage':'#5C7EA8','--pale-sage':'#B8CCDE',
+      '--mid':'#1E6EA8','--sky':'#4A96CC','--ice':'#BADAF0','--mist':'#EBF4FB',
       '--warm':'#F5F7FA','--linen':'#E8EDF5','--white':'#F8FAFC'
     }
   },
   {
-    name: 'Warm Stone',
-    dot: '#4A3C2E',
+    name: 'Harvest — Forest & Amber',
+    dot: ['#1E4030','#C9973A','#2A5A40'],
     vars: {
-      '--steel':'#4A3C2E','--steel-dk':'#5C4A38','--steel-dk2':'#2E251A',
+      '--steel':'#1E4030','--steel-dk':'#285040','--steel-dk2':'#0F2418',
       '--amber':'#C9973A','--amber-dk':'#B0821E','--honey':'#E8C070','--pale-gold':'#F5E4C0',
-      '--sage':'#5C4A38','--soft-sage':'#8A7260','--pale-sage':'#D0C4B8',
-      '--mid':'#8A6A4A','--sky':'#B09070','--ice':'#D8C8B8','--mist':'#F4EFE8',
-      '--warm':'#FAF5EE','--linen':'#F0E8DC','--white':'#FDF9F4'
+      '--sage':'#2A5A40','--soft-sage':'#5A8A6A','--pale-sage':'#BAD4C4',
+      '--mid':'#2E8060','--sky':'#5CAA88','--ice':'#B8DDD0','--mist':'#EAF5F0',
+      '--warm':'#F4F8F4','--linen':'#E8F0EC','--white':'#F6FBF8'
+    }
+  },
+  {
+    name: 'Advent — Plum & Gold',
+    dot: ['#3A1F5C','#C9973A','#4A2870'],
+    vars: {
+      '--steel':'#3A1F5C','--steel-dk':'#4C2878','--steel-dk2':'#220F38',
+      '--amber':'#C9973A','--amber-dk':'#B0821E','--honey':'#E8C070','--pale-gold':'#F5E4C0',
+      '--sage':'#4A2870','--soft-sage':'#7A60A0','--pale-sage':'#CCC0E0',
+      '--mid':'#6A40A0','--sky':'#9470C8','--ice':'#D8C8F0','--mist':'#F4F0FA',
+      '--warm':'#FAF6FF','--linen':'#F0E8F8','--white':'#FBF8FF'
+    }
+  },
+  {
+    name: 'Stone — Warm Charcoal',
+    dot: ['#3A3530','#C9973A','#4A4540'],
+    vars: {
+      '--steel':'#3A3530','--steel-dk':'#4C453E','--steel-dk2':'#22201C',
+      '--amber':'#C9973A','--amber-dk':'#B0821E','--honey':'#E8C070','--pale-gold':'#F5E4C0',
+      '--sage':'#4A4540','--soft-sage':'#7A7268','--pale-sage':'#D0CAC4',
+      '--mid':'#7A6050','--sky':'#A08878','--ice':'#DDD4CC','--mist':'#F5F0EC',
+      '--warm':'#FAF5EE','--linen':'#F2ECE4','--white':'#FDF9F4'
     }
   }
 ];
 
+var DL_FONTS = [
+  { name: 'Current — Lora + Source Sans', serif: 'Lora', sans: 'Source Sans 3' },
+  { name: 'Classic — EB Garamond + Nunito', serif: 'EB Garamond', sans: 'Nunito' },
+  { name: 'Elegant — Playfair + Raleway', serif: 'Playfair Display', sans: 'Raleway' },
+  { name: 'Traditional — Crimson + Open Sans', serif: 'Crimson Pro', sans: 'Open Sans' }
+];
+
 var DL_PICKERS = [
-  { label: 'Primary', key: '--steel' },
-  { label: 'Accent', key: '--amber' },
-  { label: 'Nav/Moss', key: '--sage' },
-  { label: 'Links', key: '--mid' },
-  { label: 'Bg Warm', key: '--warm' },
-  { label: 'Bg Linen', key: '--linen' }
+  { label: 'Primary (--steel)', key: '--steel' },
+  { label: 'Accent / Gold (--amber)', key: '--amber' },
+  { label: 'Nav / Header (--sage)', key: '--sage' },
+  { label: 'Links / Teal (--mid)', key: '--mid' },
+  { label: 'Background (--warm)', key: '--warm' },
+  { label: 'Alt Background (--linen)', key: '--linen' }
 ];
 
 var dlOpen = false;
@@ -2478,64 +2526,122 @@ function dlToggle() {
 }
 
 function dlRender() {
+  // Palette swatches
   var sw = document.getElementById('dl-swatches');
-  DL_PALETTES.forEach(function(p, i) {
+  DL_PALETTES.forEach(function(p) {
     var btn = document.createElement('button');
-    btn.style.cssText = 'display:flex;align-items:center;gap:10px;width:100%;background:#2a2a2a;border:1.5px solid #3a3a3a;border-radius:8px;padding:9px 12px;color:#ccc;font-size:13px;font-weight:600;cursor:pointer;text-align:left;transition:border-color .15s;';
-    btn.innerHTML = '<span style="width:14px;height:14px;border-radius:50%;background:' + p.dot + ';border:2px solid rgba(255,255,255,.2);flex-shrink:0;"></span>' + p.name;
+    btn.style.cssText = 'display:flex;align-items:center;gap:10px;width:100%;background:#2a2a2a;border:1.5px solid #3a3a3a;border-radius:8px;padding:8px 12px;color:#ccc;font-size:12px;font-weight:600;cursor:pointer;text-align:left;';
+    var dots = p.dot.map(function(c){ return '<span style="width:12px;height:12px;border-radius:50%;background:'+c+';border:1.5px solid rgba(255,255,255,.2);flex-shrink:0;display:inline-block;"></span>'; }).join('');
+    btn.innerHTML = '<span style="display:flex;gap:3px;">' + dots + '</span>' + p.name;
     btn.onclick = function() { dlApply(p.vars); dlHighlight(btn); };
-    btn.onmouseenter = function(){ btn.style.borderColor='#666'; };
-    btn.onmouseleave = function(){ btn.style.borderColor = btn._active ? '#aaa' : '#3a3a3a'; };
+    btn.onmouseenter = function(){ if(!btn._active) btn.style.borderColor='#666'; };
+    btn.onmouseleave = function(){ if(!btn._active) btn.style.borderColor='#3a3a3a'; };
     sw.appendChild(btn);
   });
 
+  // Font pairings
+  var fc = document.getElementById('dl-fonts');
+  DL_FONTS.forEach(function(f) {
+    var btn = document.createElement('button');
+    btn.style.cssText = 'display:flex;align-items:center;gap:10px;width:100%;background:#2a2a2a;border:1.5px solid #3a3a3a;border-radius:8px;padding:8px 12px;color:#ccc;font-size:12px;font-weight:600;cursor:pointer;text-align:left;';
+    btn.innerHTML = '<span style="font-family:\''+f.serif+'\',serif;font-size:14px;color:#fff;flex-shrink:0;min-width:24px;">Aa</span>' + f.name;
+    btn.onclick = function() { dlApplyFont(f); dlHighlightFont(btn); };
+    btn.onmouseenter = function(){ if(!btn._active) btn.style.borderColor='#666'; };
+    btn.onmouseleave = function(){ if(!btn._active) btn.style.borderColor='#3a3a3a'; };
+    fc.appendChild(btn);
+  });
+
+  // Color pickers with hex inputs
   var pk = document.getElementById('dl-pickers');
   DL_PICKERS.forEach(function(p) {
-    var wrap = document.createElement('div');
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;';
+
+    var colorWrap = document.createElement('label');
+    colorWrap.style.cssText = 'position:relative;width:36px;height:36px;flex-shrink:0;border-radius:8px;overflow:hidden;border:1.5px solid #444;cursor:pointer;';
+    var colorInp = document.createElement('input');
+    colorInp.type = 'color';
+    colorInp.value = rgbToHex(getComputedStyle(document.documentElement).getPropertyValue(p.key).trim());
+    colorInp.style.cssText = 'position:absolute;width:150%;height:150%;top:-25%;left:-25%;border:none;cursor:pointer;padding:0;';
+    colorInp.dataset.key = p.key;
+    colorWrap.appendChild(colorInp);
+
+    var textWrap = document.createElement('div');
+    textWrap.style.cssText = 'flex:1;';
     var lbl = document.createElement('div');
-    lbl.style.cssText = 'font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;';
+    lbl.style.cssText = 'font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;';
     lbl.textContent = p.label;
-    var inp = document.createElement('input');
-    inp.type = 'color';
-    inp.value = rgbToHex(getComputedStyle(document.documentElement).getPropertyValue(p.key).trim());
-    inp.style.cssText = 'width:100%;height:32px;border:none;border-radius:6px;cursor:pointer;background:none;padding:0;';
-    inp.dataset.key = p.key;
-    inp.addEventListener('input', function() {
-      document.documentElement.style.setProperty(p.key, inp.value);
+    var hexInp = document.createElement('input');
+    hexInp.type = 'text';
+    hexInp.value = colorInp.value;
+    hexInp.maxLength = 7;
+    hexInp.placeholder = '#000000';
+    hexInp.style.cssText = 'width:100%;background:#2a2a2a;border:1px solid #444;border-radius:5px;padding:4px 7px;color:#ddd;font-size:12px;font-family:monospace;outline:none;';
+
+    // Sync color picker → hex input
+    colorInp.addEventListener('input', function() {
+      hexInp.value = colorInp.value;
+      document.documentElement.style.setProperty(p.key, colorInp.value);
     });
-    wrap.appendChild(lbl);
-    wrap.appendChild(inp);
-    pk.appendChild(wrap);
+    // Sync hex input → color picker
+    hexInp.addEventListener('input', function() {
+      if (/^#[0-9a-fA-F]{6}$/.test(hexInp.value)) {
+        colorInp.value = hexInp.value;
+        document.documentElement.style.setProperty(p.key, hexInp.value);
+      }
+    });
+    hexInp.addEventListener('focus', function(){ hexInp.style.borderColor='#888'; });
+    hexInp.addEventListener('blur', function(){ hexInp.style.borderColor='#444'; });
+
+    textWrap.appendChild(lbl);
+    textWrap.appendChild(hexInp);
+    row.appendChild(colorWrap);
+    row.appendChild(textWrap);
+    pk.appendChild(row);
   });
 }
 
 function dlApply(vars) {
   var root = document.documentElement;
   Object.keys(vars).forEach(function(k) { root.style.setProperty(k, vars[k]); });
-  // Sync pickers to new values
+  // Sync pickers + hex inputs
   document.querySelectorAll('#dl-pickers input[type=color]').forEach(function(inp) {
     var v = vars[inp.dataset.key];
-    if (v) inp.value = v;
+    if (v) {
+      inp.value = v;
+      var hex = inp.parentElement.nextElementSibling.querySelector('input[type=text]');
+      if (hex) hex.value = v;
+    }
   });
+}
+
+function dlApplyFont(f) {
+  document.documentElement.style.setProperty('--serif', "'" + f.serif + "', Georgia, serif");
+  document.documentElement.style.setProperty('--sans', "'" + f.sans + "', Arial, sans-serif");
 }
 
 function dlHighlight(activeBtn) {
   document.querySelectorAll('#dl-swatches button').forEach(function(b) {
     b._active = false; b.style.borderColor = '#3a3a3a'; b.style.background = '#2a2a2a';
   });
-  activeBtn._active = true;
-  activeBtn.style.borderColor = '#aaa';
-  activeBtn.style.background = '#333';
+  activeBtn._active = true; activeBtn.style.borderColor = '#aaa'; activeBtn.style.background = '#333';
+}
+
+function dlHighlightFont(activeBtn) {
+  document.querySelectorAll('#dl-fonts button').forEach(function(b) {
+    b._active = false; b.style.borderColor = '#3a3a3a'; b.style.background = '#2a2a2a';
+  });
+  activeBtn._active = true; activeBtn.style.borderColor = '#aaa'; activeBtn.style.background = '#333';
 }
 
 function dlCopyCSS() {
   var root = document.documentElement;
   var style = getComputedStyle(root);
-  var allKeys = ['--steel','--steel-dk','--steel-dk2','--mid','--sky','--ice','--mist','--amber','--amber-dk','--honey','--pale-gold','--sage','--soft-sage','--pale-sage','--teal','--teal-light','--teal-pale','--slate','--slate-light','--slate-pale','--plum-light','--stone','--warm','--linen','--white','--border'];
+  var allKeys = ['--serif','--sans','--steel','--steel-dk','--steel-dk2','--mid','--sky','--ice','--mist','--amber','--amber-dk','--honey','--pale-gold','--sage','--soft-sage','--pale-sage','--teal','--teal-light','--teal-pale','--slate','--slate-light','--slate-pale','--plum-light','--stone','--warm','--linen','--white','--border'];
   var lines = [':root {'];
   allKeys.forEach(function(k) {
     var v = root.style.getPropertyValue(k) || style.getPropertyValue(k).trim();
-    if (v) lines.push('  ' + k + ':' + v + ';');
+    if (v) lines.push('  ' + k + ': ' + v + ';');
   });
   lines.push('}');
   navigator.clipboard.writeText(lines.join('\n')).then(function() {
@@ -2546,6 +2652,7 @@ function dlCopyCSS() {
 }
 
 function rgbToHex(color) {
+  if (!color) return '#000000';
   if (color.startsWith('#')) return color;
   var m = color.match(/\d+/g);
   if (!m || m.length < 3) return '#000000';
@@ -2559,6 +2666,19 @@ document.addEventListener('click', function(e) {
     document.getElementById('dl-panel').style.display = 'none';
   }
 });
+
+// ── SUNDAY DETECTION: highlight Watch Live button ────────────────
+(function() {
+  var isSunday = new Date().getDay() === 0;
+  var btn = document.getElementById('btn-watch-live');
+  if (btn && isSunday) {
+    btn.innerHTML = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff4444;animation:pulse 2s infinite;margin-right:7px;vertical-align:middle;"></span>Watch Live Now →';
+    btn.style.background = 'rgba(255,68,68,.18)';
+    btn.style.borderColor = 'rgba(255,120,120,.6)';
+    btn.style.color = '#ffaaaa';
+    btn.style.fontWeight = '800';
+  }
+})();
 </script>
 
 </body>
