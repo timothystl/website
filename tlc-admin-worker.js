@@ -104,7 +104,7 @@ const MINISTRY_SLUGS = [
   { slug: 'stephen',        title: 'Stephen Ministry',       has_posts: 0 },
   { slug: 'foodpantry',     title: 'Food Pantry',            has_posts: 0 },
   { slug: 'bees',           title: 'Urban Beekeepers',       has_posts: 0 },
-  { slug: 'christmasmarket',title: 'Christmas Market',       has_posts: 0 },
+  { slug: 'christmasmarket',title: 'Christmas Market',       has_posts: 1 },
 ];
 
 // ── IMAGE HELPERS ───────────────────────────────────────────
@@ -346,6 +346,41 @@ document.querySelector('form').addEventListener('submit', function(e) {
 <\/script>`;
 }
 
+// TinyMCE editor for sermon notes / outline field
+function tinymceSermonSection(existingOutline = '') {
+  const safe = (existingOutline || '').replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+  return `<div class="form-group">
+  <label>Notes / outline</label>
+  <textarea id="sermon-editor" name="outline"></textarea>
+</div>
+<script>
+tinymce.init({
+  selector: '#sermon-editor',
+  plugins: 'link lists blockquote code',
+  toolbar: 'undo redo | blocks | bold italic underline | bullist numlist | link | code',
+  menubar: false,
+  min_height: 300,
+  skin: 'oxide',
+  content_css: 'default',
+  convert_urls: false,
+  setup: function(editor) {
+    editor.on('change input', function() { editor.save(); });
+  },
+  init_instance_callback: function(editor) {
+    var initial = \`${safe}\`;
+    if (initial.trim()) editor.setContent(initial);
+  }
+});
+document.querySelector('form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  var form = this;
+  var ed = tinymce.get('sermon-editor');
+  if (!ed) { form.submit(); return; }
+  ed.save(); form.submit();
+});
+<\/script>`;
+}
+
 // TinyMCE editor for youth page content field
 function tinymceYouthSection(existingContent = '') {
   const safe = (existingContent || '').replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
@@ -402,7 +437,6 @@ function topbarHtml(activeTab, extraLinks = '') {
     <a href="/newsitems" class="tab${activeTab === 'news' ? ' tab-active' : ''}">News &amp; Events</a>
     <a href="/ministries" class="tab${activeTab === 'ministries' ? ' tab-active' : ''}">Ministries</a>
     <a href="/sermons" class="tab${activeTab === 'sermons' ? ' tab-active' : ''}">Sermons</a>
-    <a href="/voters" class="tab${activeTab === 'voters' ? ' tab-active' : ''}">Voters Page</a>
     <a href="https://volunteer.timothystl.org/scheduler" target="_blank" class="tab tab-external">Scheduler ↗</a>
     <a href="https://volunteer.timothystl.org/admin" target="_blank" class="tab tab-external">Volunteer Admin ↗</a>
   </div>
@@ -1257,12 +1291,12 @@ ${topbarHtml('sermons', `<a href="/sermons">← Back</a>`)}
       <div class="form-group"><label>Date</label><input type="date" name="date"></div>
       <div class="form-group"><label>Sermon title</label><input type="text" name="title" required placeholder="e.g. You prepare a table before me"></div>
       <div class="form-group"><label>Scripture reference</label><input type="text" name="scripture" placeholder="e.g. Psalm 23:5"></div>
-      <div class="form-group"><label>Brief notes / outline</label><textarea name="outline" style="min-height:140px;" placeholder="Key points, quotes, discussion questions — plain text, short..."></textarea></div>
+      ${tinymceSermonSection()}
       <div class="form-group"><label>YouTube link (optional)</label><input type="text" name="youtube_url" placeholder="Link to this specific service recording"></div>
       <div class="btn-row" style="margin-top:20px;"><button type="submit" class="btn btn-primary">Add note</button><a href="/sermons" class="btn" style="background:var(--linen);color:var(--charcoal);">Cancel</a></div>
     </div>
   </form>
-</div>`, 'Add Sermon Note');
+</div>`, 'Add Sermon Note', TINYMCE_HEAD);
     }
 
     if (path === '/sermons/new-note' && method === 'POST') {
@@ -1292,12 +1326,18 @@ ${topbarHtml('sermons', `<a href="/sermons">← Back</a>`)}
       <div class="form-group"><label>Date</label><input type="date" name="date" value="${n.date || ''}"></div>
       <div class="form-group"><label>Sermon title</label><input type="text" name="title" required value="${n.title}"></div>
       <div class="form-group"><label>Scripture reference</label><input type="text" name="scripture" value="${n.scripture || ''}"></div>
-      <div class="form-group"><label>Brief notes / outline</label><textarea name="outline" style="min-height:140px;">${n.outline || ''}</textarea></div>
+      ${tinymceSermonSection(n.outline)}
       <div class="form-group"><label>YouTube link (optional)</label><input type="text" name="youtube_url" value="${n.youtube_url || ''}"></div>
-      <div class="btn-row" style="margin-top:20px;"><button type="submit" class="btn btn-primary">Save changes</button><a href="/sermons" class="btn" style="background:var(--linen);color:var(--charcoal);">Cancel</a></div>
+      <div class="btn-row" style="margin-top:20px;">
+        <button type="submit" class="btn btn-primary">Save changes</button>
+        <a href="/sermons" class="btn" style="background:var(--linen);color:var(--charcoal);">Cancel</a>
+        <form method="POST" action="/sermons/delete-note/${id}" style="margin:0;" onsubmit="return confirm('Delete this sermon note?')">
+          <button type="submit" class="btn btn-danger">Delete note</button>
+        </form>
+      </div>
     </div>
   </form>
-</div>`, 'Edit Note');
+</div>`, 'Edit Note', TINYMCE_HEAD);
     }
 
     if (path.startsWith('/sermons/edit-note/') && method === 'POST') {
@@ -2177,6 +2217,7 @@ ${topbarHtml('ministries')}
   ${alertHtml}
   <div class="btn-row" style="margin-bottom:28px;">
     <a href="/ministries/add" class="btn btn-primary">+ Add ministry page</a>
+    <a href="/voters" class="btn btn-secondary">Voters Page →</a>
   </div>
   <div class="card">
     ${listHtml}

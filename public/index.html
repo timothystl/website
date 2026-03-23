@@ -74,8 +74,8 @@ p:last-child{margin-bottom:0;}
 .nav-links button:hover,.nav-links a:hover{background:rgba(255,255,255,.12);color:white;}
 /* Dropdown */
 .nav-dropdown{position:relative;}
-.nav-dropdown-menu{display:none;position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--steel-dk);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:8px;min-width:200px;box-shadow:0 8px 32px rgba(0,0,0,.3);z-index:200;}
-.nav-dropdown:hover .nav-dropdown-menu,.nav-dropdown.open .nav-dropdown-menu{display:block;}
+.nav-dropdown-menu{display:none;position:absolute;top:calc(100% + 4px);left:50%;transform:translateX(-50%);background:var(--steel-dk);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:8px;min-width:200px;box-shadow:0 8px 32px rgba(0,0,0,.3);z-index:200;}
+.nav-dropdown.open .nav-dropdown-menu{display:block;}
 .nav-dropdown-menu button,.nav-dropdown-menu a{display:block;width:100%;text-align:left;padding:9px 14px;border-radius:7px;font-size:13px;font-weight:600;color:rgba(255,255,255,.85);background:none;border:none;cursor:pointer;text-decoration:none;white-space:nowrap;}
 .nav-dropdown-menu button:hover,.nav-dropdown-menu a:hover{background:rgba(255,255,255,.1);color:white;}
 .nav-cta{background:var(--amber) !important;color:white !important;padding:7px 16px !important;font-weight:800 !important;}
@@ -330,7 +330,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     <ul class="nav-links">
       <li><button onclick="showPage('about')">About</button></li>
       <li class="nav-dropdown" id="nav-min-dd">
-        <button class="nav-dropdown-toggle" onclick="showPage('ministries');document.getElementById('nav-min-dd').classList.remove('open')">Ministries ▾</button>
+        <button class="nav-dropdown-toggle" onclick="event.stopPropagation();document.getElementById('nav-min-dd').classList.toggle('open')">Ministries ▾</button>
         <div class="nav-dropdown-menu">
           <button onclick="showPage('worship');document.getElementById('nav-min-dd').classList.remove('open')">Worship</button>
           <button onclick="showPage('ministries');document.getElementById('nav-min-dd').classList.remove('open')">All Ministries</button>
@@ -1533,20 +1533,20 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
           <h2>A neighborhood tradition</h2>
           <p>The Timothy Christmas Market is an annual outdoor market bringing the Lindenwood Park community together each December. Local artisans and vendors set up in the church grounds — offering handmade goods, food, and festive fun for families and neighbors of all kinds.</p>
           <p>The market is free and open to the public. It's one of our favorite ways to be a blessing to the neighborhood God has planted us in.</p>
-          <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:20px;margin-top:24px;" id="xmas-details">
-            <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:10px;">2025 Market</div>
-            <div style="font-family:var(--sans);font-size:14px;color:var(--charcoal);line-height:2;">
-              <strong>Date &amp; Time:</strong> Check back for 2025 dates<br>
-              <strong>Location:</strong> Timothy Lutheran Church<br>
-              6704 Fyler Ave · St. Louis, MO 63139<br>
-              <strong>Admission:</strong> Free and open to the public
-            </div>
-          </div>
+          <!-- Admin-managed market info posts load here -->
+          <div id="xmas-posts-wrap"></div>
         </div>
         <div>
           <img src="/images/ministries/Christmas-MKT.jpg" alt="Timothy Christmas Market" style="width:100%;border-radius:var(--r-md);box-shadow:var(--shadow);">
         </div>
       </div>
+    </div>
+  </section>
+  <section class="section section--linen" id="xmas-announcements-section" style="display:none;">
+    <div class="wrap" style="max-width:720px;">
+      <span class="eyebrow eyebrow--sage">Announcements</span>
+      <h2>Market news &amp; updates</h2>
+      <div id="xmas-announcements-list"></div>
     </div>
   </section>
   <section class="section section--linen">
@@ -1950,6 +1950,11 @@ document.getElementById('navToggle').addEventListener('click',function(){
 function closeMobileNav(){
   document.getElementById('navMobile').classList.remove('open');
 }
+// Close nav dropdown when clicking anywhere outside it
+document.addEventListener('click', function() {
+  var dd = document.getElementById('nav-min-dd');
+  if (dd) dd.classList.remove('open');
+});
 function toggleBio(id, btn){
   var el = document.getElementById(id);
   var open = el.classList.toggle('expanded');
@@ -2401,6 +2406,43 @@ async function loadSermons() {
   } catch(e) { /* keep fallback content */ }
 }
 loadSermons();
+
+// ── CHRISTMAS MARKET POSTS ─────────────────────────────────────
+async function loadChristmasMarketPosts() {
+  try {
+    const r = await fetch('https://admin.timothystl.org/api/ministry/christmasmarket/posts');
+    if (!r.ok) return;
+    const posts = await r.json();
+    if (!posts || !posts.length) return;
+
+    // Pinned/first post → details panel in left column
+    const detail = posts.find(function(p){ return p.pinned; }) || posts[0];
+    if (detail) {
+      document.getElementById('xmas-posts-wrap').innerHTML =
+        '<div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:22px;margin-top:24px;">' +
+        '<div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:10px;">' +
+          (detail.event_date ? new Date(detail.event_date + 'T12:00:00').toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}) : 'Upcoming') +
+        '</div>' +
+        '<div style="font-family:var(--serif);font-size:18px;color:var(--steel);margin-bottom:10px;">' + detail.title + '</div>' +
+        (detail.body ? '<div style="font-size:14px;color:var(--charcoal);line-height:1.75;">' + detail.body + '</div>' : '') +
+        '</div>';
+    }
+
+    // Extra posts → announcements section below
+    if (posts.length > 1) {
+      document.getElementById('xmas-announcements-section').style.display = '';
+      document.getElementById('xmas-announcements-list').innerHTML = posts.slice(1).map(function(p) {
+        var dateStr = p.event_date ? new Date(p.event_date + 'T12:00:00').toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) : (p.post_date || '');
+        return '<div style="padding:20px 0;border-bottom:1px solid var(--border);">' +
+          (dateStr ? '<div style="font-size:11px;font-weight:700;color:var(--amber);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">' + dateStr + '</div>' : '') +
+          '<div style="font-family:var(--serif);font-size:17px;color:var(--steel);margin-bottom:8px;">' + p.title + '</div>' +
+          (p.body ? '<div style="font-size:14px;color:var(--charcoal);line-height:1.75;">' + p.body + '</div>' : '') +
+          '</div>';
+      }).join('');
+    }
+  } catch(e) { /* keep static fallback */ }
+}
+loadChristmasMarketPosts();
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════
