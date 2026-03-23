@@ -79,6 +79,13 @@ const DB_INIT_SERMON_SERIES = `CREATE TABLE IF NOT EXISTS sermon_series (
   created_at TEXT DEFAULT (datetime('now'))
 )`;
 
+const DB_INIT_PAGE_CONTENT = `CREATE TABLE IF NOT EXISTS page_content (
+  key TEXT PRIMARY KEY,
+  label TEXT NOT NULL,
+  value TEXT,
+  updated_at TEXT
+)`;
+
 const DB_INIT_SERMON_NOTES = `CREATE TABLE IF NOT EXISTS sermon_notes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   series_id INTEGER,
@@ -420,6 +427,41 @@ document.querySelector('form').addEventListener('submit', function(e) {
 <\/script>`;
 }
 
+// TinyMCE editor for page content blocks (no image upload)
+function tinymcePageSection(existingContent = '') {
+  const safe = (existingContent || '').replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+  return `<div class="form-group">
+  <label>Block content</label>
+  <textarea id="page-editor" name="content"></textarea>
+</div>
+<script>
+tinymce.init({
+  selector: '#page-editor',
+  plugins: 'link lists blockquote code',
+  toolbar: 'undo redo | blocks | bold italic underline | bullist numlist | link | code',
+  menubar: false,
+  min_height: 300,
+  skin: 'oxide',
+  content_css: 'default',
+  convert_urls: false,
+  setup: function(editor) {
+    editor.on('change input', function() { editor.save(); });
+  },
+  init_instance_callback: function(editor) {
+    var initial = \`${safe}\`;
+    if (initial.trim()) editor.setContent(initial);
+  }
+});
+document.querySelector('form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  var form = this;
+  var ed = tinymce.get('page-editor');
+  if (!ed) { form.submit(); return; }
+  ed.save(); form.submit();
+});
+<\/script>`;
+}
+
 // ── TOPBAR WITH TABS ─────────────────────────────────────────
 function topbarHtml(activeTab, extraLinks = '') {
   return `<div class="topbar">
@@ -437,6 +479,7 @@ function topbarHtml(activeTab, extraLinks = '') {
     <a href="/newsitems" class="tab${activeTab === 'news' ? ' tab-active' : ''}">News &amp; Events</a>
     <a href="/ministries" class="tab${activeTab === 'ministries' ? ' tab-active' : ''}">Ministries</a>
     <a href="/sermons" class="tab${activeTab === 'sermons' ? ' tab-active' : ''}">Sermons</a>
+    <a href="/pages" class="tab${activeTab === 'pages' ? ' tab-active' : ''}">Pages</a>
     <a href="https://volunteer.timothystl.org/scheduler" target="_blank" class="tab tab-external">Scheduler ↗</a>
     <a href="https://volunteer.timothystl.org/admin" target="_blank" class="tab tab-external">Volunteer Admin ↗</a>
   </div>
@@ -710,6 +753,21 @@ export default {
     try { await env.DB.prepare(DB_INIT_VOTERS_PAGE).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_SERMON_SERIES).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_SERMON_NOTES).run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_PAGE_CONTENT).run(); } catch (_) {}
+    // Migrate: add CTA fields to ministry pages (youth_pages)
+    try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN cta_label TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN cta_url TEXT').run(); } catch (_) {}
+    // Pre-populate editable page content blocks
+    const PAGE_BLOCKS = [
+      { key: 'home-notice',    label: 'Home page notice',   hint: 'Shown on the home page as a banner. Leave blank to hide.' },
+      { key: 'worship-notice', label: 'Worship notice',     hint: 'Shown on the Worship page (e.g. special service times, holiday changes). Leave blank to hide.' },
+      { key: 'about-notice',   label: 'About page notice',  hint: 'Shown on the About page. Leave blank to hide.' },
+    ];
+    for (const b of PAGE_BLOCKS) {
+      try {
+        await env.DB.prepare('INSERT OR IGNORE INTO page_content (key, label, value, updated_at) VALUES (?, ?, ?, ?)').bind(b.key, b.label, '', '').run();
+      } catch (_) {}
+    }
 
     // ── PUBLIC: serve uploaded docs from R2 ──
     if (path.startsWith('/docs/') && method === 'GET') {
@@ -776,10 +834,20 @@ export default {
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
         });
       }
-      const row = await env.DB.prepare('SELECT slug, title, content, has_posts, updated_at FROM youth_pages WHERE slug = ?').bind(slug).first();
+      const row = await env.DB.prepare('SELECT slug, title, content, has_posts, cta_label, cta_url, updated_at FROM youth_pages WHERE slug = ?').bind(slug).first();
       if (!row) return new Response('Not found', { status: 404 });
       const fixUrl = s => s ? s.replace(/src="\/images\//g, 'src="https://admin.timothystl.org/images/') : s;
       return new Response(JSON.stringify({ ...row, content: fixUrl(row.content) }), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      });
+    }
+
+    // ── PUBLIC: page content blocks API ──
+    if (path.startsWith('/api/page-content/') && method === 'GET') {
+      const key = path.slice('/api/page-content/'.length);
+      const row = await env.DB.prepare('SELECT key, label, value FROM page_content WHERE key = ?').bind(key).first();
+      if (!row) return new Response('Not found', { status: 404 });
+      return new Response(JSON.stringify(row), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
       });
     }
@@ -2289,6 +2357,20 @@ ${topbarHtml('ministries', `<a href="/ministries">← All ministries</a>`)}
         <input type="text" name="title" value="${(page.title || '').replace(/"/g, '&quot;')}" required>
       </div>
       ${tinymceYouthSection(page.content || '')}
+      <div class="card" style="margin-top:24px;background:var(--mist);border:1px solid var(--ice);">
+        <div class="card-title">CTA Button <span class="tag">Optional</span></div>
+        <div class="card-sub">Add a call-to-action button that appears at the bottom of this page. Visitors click it to take an action — sign up, learn more, donate, etc. Leave both fields blank to show no button.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
+          <div class="form-group" style="margin:0;">
+            <label>Button label</label>
+            <input type="text" name="cta_label" value="${(page.cta_label || '').replace(/"/g, '&quot;')}" placeholder="e.g. Sign up to volunteer →">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label>Button URL</label>
+            <input type="text" name="cta_url" value="${(page.cta_url || '').replace(/"/g, '&quot;')}" placeholder="https://...">
+          </div>
+        </div>
+      </div>
       <div class="btn-row" style="margin-top:24px;">
         <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save &amp; Publish →</button>
         <a href="/ministries" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
@@ -2304,10 +2386,12 @@ ${topbarHtml('ministries', `<a href="/ministries">← All ministries</a>`)}
         const form = await request.formData();
         const title = form.get('title') || '';
         const content = form.get('content') || '';
+        const ctaLabel = form.get('cta_label') || '';
+        const ctaUrl = form.get('cta_url') || '';
         const now = new Date().toISOString();
         await env.DB.prepare(
-          'UPDATE youth_pages SET title = ?, content = ?, updated_at = ? WHERE slug = ?'
-        ).bind(title, content, now, slug).run();
+          'UPDATE youth_pages SET title = ?, content = ?, cta_label = ?, cta_url = ?, updated_at = ? WHERE slug = ?'
+        ).bind(title, content, ctaLabel, ctaUrl, now, slug).run();
         return new Response('', { status: 302, headers: { Location: '/ministries?msg=saved' } });
       }
 
@@ -2521,6 +2605,93 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
       }
 
     } // end if (path.startsWith('/ministries'))
+
+    // ── PAGES TAB ──
+    if (path.startsWith('/pages')) {
+      // List all editable page blocks
+      if (path === '/pages' && method === 'GET') {
+        const blocks = await env.DB.prepare('SELECT key, label, value, updated_at FROM page_content ORDER BY rowid').all();
+        const msg = url.searchParams.get('msg');
+        const alertHtml = msg === 'saved' ? `<div class="alert alert-success">✓ Page block saved.</div>` : '';
+        const rows = blocks.results.map(b => {
+          const isEmpty = !b.value || !b.value.trim();
+          const updated = b.updated_at ? new Date(b.updated_at).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) : '—';
+          return `<tr>
+            <td><strong>${b.label}</strong><br><span style="font-size:12px;color:var(--gray);">${b.key}</span></td>
+            <td style="font-size:13px;color:var(--gray);">${isEmpty ? '<em style="color:var(--text-muted);">Not set — block hidden on site</em>' : '<span style="color:#2a5c2a;">✓ Published</span>'}</td>
+            <td style="font-size:12px;color:var(--gray);">${updated}</td>
+            <td><a href="/pages/edit/${b.key}" class="btn btn-sm btn-secondary">Edit</a></td>
+          </tr>`;
+        }).join('');
+        return html(`
+${topbarHtml('pages')}
+<div class="wrap">
+  <div class="page-title">Pages</div>
+  <div class="page-sub">Edit content blocks that appear on specific pages of the website. Leave a block blank to hide it.</div>
+  ${alertHtml}
+  <div class="card" style="padding:0;overflow:hidden;">
+    <table style="width:100%;border-collapse:collapse;">
+      <thead><tr style="background:var(--linen);border-bottom:1px solid var(--border);">
+        <th style="padding:12px 16px;text-align:left;font-family:var(--sans);font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);">Block</th>
+        <th style="padding:12px 16px;text-align:left;font-family:var(--sans);font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);">Status</th>
+        <th style="padding:12px 16px;text-align:left;font-family:var(--sans);font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);">Updated</th>
+        <th style="padding:12px 16px;"></th>
+      </tr></thead>
+      <tbody style="font-family:var(--sans);">
+        ${rows}
+      </tbody>
+    </table>
+  </div>
+</div>`, 'Pages');
+      }
+
+      // Edit a page block
+      if (path.startsWith('/pages/edit/') && method === 'GET') {
+        const key = path.slice('/pages/edit/'.length);
+        const block = await env.DB.prepare('SELECT * FROM page_content WHERE key = ?').bind(key).first();
+        if (!block) return new Response('Not found', { status: 404 });
+        const HINT_MAP = {
+          'home-notice': 'Appears on the home page as a highlighted notice box. Leave blank to hide.',
+          'worship-notice': 'Appears on the Worship page (e.g. special service times, holiday changes). Leave blank to hide.',
+          'about-notice': 'Appears on the About page. Leave blank to hide.',
+        };
+        const hint = HINT_MAP[key] || 'Appears on the site when content is set. Leave blank to hide.';
+        return html(`
+${topbarHtml('pages', `<a href="/pages">← All pages</a>`)}
+<div class="wrap">
+  <div class="page-title">${block.label}</div>
+  <div class="page-sub">${hint}</div>
+  <div class="card">
+    <form method="POST" action="/pages/update/${key}">
+      ${tinymcePageSection(block.value || '')}
+      <div class="btn-row" style="margin-top:24px;">
+        <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save &amp; Publish →</button>
+        <a href="/pages/update/${key}?clear=1" class="btn btn-sm" style="background:#fce8e8;color:#7a1f1f;border:1px solid #e8b4b4;" onclick="return confirm('Clear this block and hide it from the site?')">Clear &amp; hide</a>
+        <a href="/pages" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>`, `Edit — ${block.label}`, TINYMCE_HEAD);
+      }
+
+      // Clear a page block (GET with ?clear=1)
+      if (path.startsWith('/pages/update/') && method === 'GET' && url.searchParams.get('clear') === '1') {
+        const key = path.slice('/pages/update/'.length);
+        const now = new Date().toISOString();
+        await env.DB.prepare('UPDATE page_content SET value = ?, updated_at = ? WHERE key = ?').bind('', now, key).run();
+        return new Response('', { status: 302, headers: { Location: '/pages?msg=saved' } });
+      }
+
+      // Save a page block
+      if (path.startsWith('/pages/update/') && method === 'POST') {
+        const key = path.slice('/pages/update/'.length);
+        const form = await request.formData();
+        const value = form.get('content') || '';
+        const now = new Date().toISOString();
+        await env.DB.prepare('UPDATE page_content SET value = ?, updated_at = ? WHERE key = ?').bind(value, now, key).run();
+        return new Response('', { status: 302, headers: { Location: '/pages?msg=saved' } });
+      }
+    } // end pages tab
 
     // ── DASHBOARD ──
     const newsletters = await env.DB.prepare(
