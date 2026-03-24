@@ -258,6 +258,86 @@ function fmtBookingDate(d) {
   return dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
+function fmt12h(timeStr) {
+  if (!timeStr) return '';
+  const [h, m] = timeStr.split(':').map(Number);
+  return `${h === 0 ? 12 : h > 12 ? h - 12 : h}:${m === 0 ? '00' : m.toString().padStart(2,'0')} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
+function timeOptions(selected = '') {
+  const slots = [];
+  for (let h = 6; h < 24; h++) {
+    for (const m of [0, 30]) {
+      const val = `${h.toString().padStart(2,'0')}:${m === 0 ? '00' : '30'}`;
+      slots.push(`<option value="${val}"${selected === val ? ' selected' : ''}>${fmt12h(val)}</option>`);
+    }
+  }
+  return slots.join('');
+}
+
+function calcHours(startTime, endTime) {
+  const [sh, sm] = startTime.split(':').map(Number);
+  const [eh, em] = endTime.split(':').map(Number);
+  return ((eh * 60 + em) - (sh * 60 + sm)) / 60;
+}
+
+function buildGymInvoiceEmailHtml(inv, group, booking) {
+  const invNum = `GYM-${inv.id.toString().padStart(4,'0')}`;
+  const hours  = parseFloat(inv.total_hours  || 0);
+  const rate   = parseFloat(inv.rate         || 0);
+  const total  = parseFloat(inv.total_amount || 0);
+  return `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#F7F3EC;font-family:Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="padding:32px 0;background:#F7F3EC;">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #EDE9E0;">
+<tr><td style="background:#1E2D4A;padding:28px 36px;text-align:center;">
+  <div style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#C9973A;margin-bottom:6px;">Timothy Lutheran Church</div>
+  <div style="font-family:Georgia,serif;font-size:22px;color:white;margin-bottom:4px;">Gym Rental Invoice</div>
+  <div style="font-size:13px;color:rgba(255,255,255,.6);">#${invNum}</div>
+</td></tr>
+<tr><td style="padding:36px;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+    <tr>
+      <td style="vertical-align:top;">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#C9973A;margin-bottom:8px;">Billed To</div>
+        <div style="font-size:15px;font-weight:700;color:#1E2D4A;">${group.name}</div>
+        ${group.contact ? `<div style="font-size:13px;color:#4A4860;margin-top:3px;">${group.contact}</div>` : ''}
+        ${group.email   ? `<div style="font-size:13px;color:#4A4860;">${group.email}</div>` : ''}
+      </td>
+      <td style="vertical-align:top;text-align:right;">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#C9973A;margin-bottom:8px;">Invoice Date</div>
+        <div style="font-size:14px;color:#1A1A2A;">${formatDate(inv.invoice_date)}</div>
+        <div style="font-size:12px;font-weight:700;margin-top:4px;color:${inv.status==='paid'?'#1a3d1f':'#7a1f1f'};">${inv.status==='paid'?'✓ PAID':'UNPAID'}</div>
+      </td>
+    </tr>
+  </table>
+  <hr style="border:none;border-top:1px solid #EDE9E0;margin:0 0 24px;">
+  <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#C9973A;margin-bottom:16px;">Rental Details</div>
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr style="border-bottom:1px solid #EDE9E0;"><td style="padding:10px 0;font-size:14px;color:#4A4860;">Date</td><td style="padding:10px 0;font-size:14px;font-weight:600;color:#1A1A2A;text-align:right;">${formatDate(booking.booking_date)}</td></tr>
+    <tr style="border-bottom:1px solid #EDE9E0;"><td style="padding:10px 0;font-size:14px;color:#4A4860;">Time</td><td style="padding:10px 0;font-size:14px;font-weight:600;color:#1A1A2A;text-align:right;">${fmt12h(booking.start_time)} \u2013 ${fmt12h(booking.end_time)}</td></tr>
+    <tr style="border-bottom:1px solid #EDE9E0;"><td style="padding:10px 0;font-size:14px;color:#4A4860;">Duration</td><td style="padding:10px 0;font-size:14px;font-weight:600;color:#1A1A2A;text-align:right;">${hours} hr${hours !== 1 ? 's' : ''}</td></tr>
+    <tr style="border-bottom:1px solid #EDE9E0;"><td style="padding:10px 0;font-size:14px;color:#4A4860;">Rate</td><td style="padding:10px 0;font-size:14px;color:#1A1A2A;text-align:right;">$${rate.toFixed(2)}/hr</td></tr>
+    <tr><td style="padding:20px 0 0;font-size:18px;font-weight:700;color:#1E2D4A;">Amount Due</td><td style="padding:20px 0 0;font-size:24px;font-weight:700;color:#1E2D4A;text-align:right;">$${total.toFixed(2)}</td></tr>
+  </table>
+  <hr style="border:none;border-top:1px solid #EDE9E0;margin:24px 0;">
+  <div style="background:#F7F3EC;border-radius:8px;padding:18px 20px;">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#C9973A;margin-bottom:10px;">Payment</div>
+    <div style="font-size:14px;color:#4A4860;line-height:1.75;">Please make your check payable to <strong>Timothy Lutheran Church</strong> and bring it to the church office or mail to:<br><br>Timothy Lutheran Church<br>4666 Fyler Ave, St. Louis, MO 63116</div>
+    <div style="font-size:13px;color:#7A6E60;margin-top:12px;">Questions? <a href="mailto:office@timothystl.org" style="color:#2E7EA6;">office@timothystl.org</a></div>
+  </div>
+</td></tr>
+<tr><td style="background:#F7F3EC;padding:20px 36px;text-align:center;font-size:12px;color:#7A6E60;">
+  Timothy Lutheran Church · 4666 Fyler Ave, St. Louis, MO 63116
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body></html>`;
+}
+
 // Builds the TinyMCE rich-text editor section for the body field
 function tlcUploadHandler(blobInfo) {
   return new Promise(function(resolve, reject) {
@@ -3122,6 +3202,7 @@ ${topbarHtml('gym')}
   ${gymAlert}
   <div class="btn-row" style="margin-bottom:28px;">
     <a href="/gym-rentals/bookings/new" class="btn btn-primary">+ New Booking</a>
+    <a href="/gym-rentals/bookings" class="btn btn-secondary">All Bookings</a>
     <a href="/gym-rentals/groups" class="btn btn-secondary">Manage Groups</a>
     <a href="/gym-rentals/blocked" class="btn btn-sage">Blocked Dates</a>
     <a href="/gym-rentals/invoices" class="btn btn-secondary">Invoices</a>
@@ -3388,32 +3469,326 @@ ${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
         return new Response('', { status: 302, headers: { Location: '/gym-rentals?msg=saved' } });
       }
 
-      // ── NEW BOOKING placeholder (Phase 2) ─────────────────────
+      // ── NEW BOOKING FORM ──────────────────────────────────────
       if (path === '/gym-rentals/bookings/new' && method === 'GET') {
+        const groups = await env.DB.prepare('SELECT id, name FROM gym_groups WHERE active = 1 ORDER BY name').all();
+        const today = new Date().toISOString().split('T')[0];
+        const selGroup = url.searchParams.get('grp') || '';
+        const selDate  = url.searchParams.get('dt')  || '';
+        const selStart = url.searchParams.get('st')  || '';
+        const selEnd   = url.searchParams.get('et')  || '';
+        const selNotes = url.searchParams.get('notes') || '';
+        const errParam = url.searchParams.get('err');
+        const errAlert = errParam === 'conflict' ? `<div class="alert alert-error">That time slot overlaps with an existing booking or hold. Choose a different date or time.</div>`
+          : errParam === 'blocked' ? `<div class="alert alert-error">That date is blocked (gym unavailable). Choose a different date.</div>`
+          : errParam === 'invalid' ? `<div class="alert alert-error">End time must be after start time.</div>`
+          : errParam === 'nogroup' ? `<div class="alert alert-error">No active groups found. Add a group first.</div>`
+          : '';
+        const rateRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'gym_rate_per_hour'").first();
+        const rate = rateRow ? parseFloat(rateRow.value || '0').toFixed(2) : '0.00';
+        const groupOptions = groups.results.map(g =>
+          `<option value="${g.id}"${selGroup == g.id ? ' selected' : ''}>${g.name}</option>`).join('');
         return html(`
 ${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="wrap">
   <div class="page-title">New Booking</div>
-  <div class="page-sub">Admin booking creation is coming in Phase 2.</div>
+  <div class="page-sub">Admin-created bookings are confirmed immediately and generate an invoice emailed to the group.</div>
+  ${errAlert}
   <div class="card">
-    <div style="text-align:center;padding:40px;color:var(--gray);font-size:14px;">Direct booking creation with conflict detection is coming next. For now, groups can self-book via their portal link.</div>
-    <div style="text-align:center;margin-top:16px;"><a href="/gym-rentals" class="btn btn-secondary">← Back to dashboard</a></div>
+    <form method="POST" action="/gym-rentals/bookings/create">
+      <div class="form-group">
+        <label>Group *</label>
+        <select name="group_id" required>
+          <option value="">— select group —</option>
+          ${groupOptions}
+        </select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+        <div class="form-group">
+          <label>Date *</label>
+          <input type="date" name="booking_date" required min="${today}" value="${selDate}">
+        </div>
+        <div class="form-group">
+          <label>Start time *</label>
+          <select name="start_time" required>
+            <option value="">—</option>
+            ${timeOptions(selStart)}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>End time *</label>
+          <select name="end_time" required>
+            <option value="">—</option>
+            ${timeOptions(selEnd)}
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Notes <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— included on the invoice</span></label>
+        <textarea name="notes" placeholder="e.g. Basketball practice, weekly session">${selNotes.replace(/</g,'&lt;')}</textarea>
+      </div>
+      <div style="background:var(--mist);border-radius:8px;padding:14px 16px;margin-bottom:18px;font-family:var(--sans);font-size:13px;color:var(--charcoal);">
+        Current rate: <strong>$${rate}/hr</strong> — Invoice will be generated and emailed to the group automatically.
+      </div>
+      <div class="btn-row">
+        <button type="submit" class="btn btn-primary">Create Booking &amp; Send Invoice →</button>
+        <a href="/gym-rentals" class="btn btn-secondary">Cancel</a>
+      </div>
+    </form>
   </div>
 </div>`, 'New Booking');
       }
 
-      // ── INVOICES placeholder (Phase 2) ────────────────────────
+      // ── CREATE BOOKING ────────────────────────────────────────
+      if (path === '/gym-rentals/bookings/create' && method === 'POST') {
+        const form = await request.formData();
+        const group_id     = parseInt(form.get('group_id') || '0', 10);
+        const booking_date = form.get('booking_date') || '';
+        const start_time   = form.get('start_time')   || '';
+        const end_time     = form.get('end_time')     || '';
+        const notes        = form.get('notes')        || '';
+        const back = (err) => new Response('', { status: 302, headers: { Location: `/gym-rentals/bookings/new?err=${err}&grp=${group_id}&dt=${booking_date}&st=${encodeURIComponent(start_time)}&et=${encodeURIComponent(end_time)}` } });
+
+        if (!group_id || !booking_date || !start_time || !end_time) return back('invalid');
+        if (end_time <= start_time) return back('invalid');
+
+        const blocked = await env.DB.prepare('SELECT id FROM gym_blocked_dates WHERE date = ?').bind(booking_date).first();
+        if (blocked) return back('blocked');
+
+        const conflict = await env.DB.prepare(
+          `SELECT id FROM gym_bookings WHERE booking_date = ? AND status IN ('confirmed','hold') AND start_time < ? AND end_time > ?`
+        ).bind(booking_date, end_time, start_time).first();
+        if (conflict) return back('conflict');
+
+        // Create booking
+        const bRes = await env.DB.prepare(
+          `INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, notes, status, created_by) VALUES (?, ?, ?, ?, ?, 'confirmed', 'admin')`
+        ).bind(group_id, booking_date, start_time, end_time, notes).run();
+        const bookingId = bRes.meta.last_row_id;
+
+        // Fetch rate and calculate invoice
+        const rateRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'gym_rate_per_hour'").first();
+        const rate  = parseFloat(rateRow?.value || '25');
+        const hours = calcHours(start_time, end_time);
+        const total = Math.round(hours * rate * 100) / 100;
+        const invoiceDate = new Date().toISOString().split('T')[0];
+
+        const iRes = await env.DB.prepare(
+          `INSERT INTO gym_invoices (group_id, booking_id, invoice_date, period_start, period_end, total_hours, rate, total_amount, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'unpaid')`
+        ).bind(group_id, bookingId, invoiceDate, booking_date, booking_date, hours, rate, total).run();
+        const invoiceId = iRes.meta.last_row_id;
+
+        // Fetch records for email
+        const inv     = await env.DB.prepare('SELECT * FROM gym_invoices WHERE id = ?').bind(invoiceId).first();
+        const group   = await env.DB.prepare('SELECT * FROM gym_groups WHERE id = ?').bind(group_id).first();
+        const booking = { booking_date, start_time, end_time, notes };
+
+        const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, booking);
+        const subject   = `Gym Rental Invoice \u2014 ${group.name} \u2014 ${formatDate(booking_date)}`;
+        const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'gym_admin_email'").first();
+        const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
+        const toEmails = [adminEmail];
+        if (group.email) toEmails.push(group.email);
+        try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {}
+
+        return new Response('', { status: 302, headers: { Location: `/gym-rentals/invoices/view/${invoiceId}?msg=created` } });
+      }
+
+      // ── ALL BOOKINGS LIST ─────────────────────────────────────
+      if (path === '/gym-rentals/bookings' && method === 'GET') {
+        const today = new Date().toISOString().split('T')[0];
+        const [upcoming, past] = await Promise.all([
+          env.DB.prepare(`SELECT b.*, g.name as group_name FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id WHERE b.booking_date >= ? AND b.status IN ('confirmed','hold') ORDER BY b.booking_date, b.start_time`).bind(today).all(),
+          env.DB.prepare(`SELECT b.*, g.name as group_name FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id WHERE b.booking_date < ? ORDER BY b.booking_date DESC LIMIT 30`).bind(today).all(),
+        ]);
+        const statusBadge = s => s === 'confirmed' ? `<span class="badge badge-active">Confirmed</span>`
+          : s === 'hold'      ? `<span class="badge" style="background:#FFF3D6;color:#7A4F00;">Hold</span>`
+          : s === 'cancelled' ? `<span class="badge badge-expired">Cancelled</span>`
+          : s === 'released'  ? `<span class="badge badge-expired">Released</span>`
+          : s === 'expired'   ? `<span class="badge badge-expired">Expired</span>`
+          : `<span class="badge">${s}</span>`;
+        const bRow = (b, actions = true) => `
+<div class="ni-row">
+  <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--steel);min-width:100px;">${fmtBookingDate(b.booking_date)}</div>
+  <div style="font-family:var(--serif);font-size:15px;color:var(--charcoal);flex:1;">${b.group_name||'—'}</div>
+  <div class="ni-meta">${fmt12h(b.start_time)} \u2013 ${fmt12h(b.end_time)}</div>
+  ${statusBadge(b.status)}
+  ${actions && (b.status === 'confirmed' || b.status === 'hold') ? `<div class="ni-actions">
+    <form method="POST" action="/gym-rentals/bookings/cancel/${b.id}" style="display:contents;" onsubmit="return confirm('Cancel this booking?')">
+      <button type="submit" class="btn btn-sm btn-danger">Cancel</button>
+    </form>
+  </div>` : ''}
+</div>`;
+        const upHtml = upcoming.results.length === 0
+          ? `<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No upcoming bookings.</div>`
+          : upcoming.results.map(b => bRow(b)).join('');
+        const pastHtml = past.results.length === 0
+          ? `<div style="text-align:center;padding:24px;color:var(--gray);font-size:13px;">No past bookings on record.</div>`
+          : past.results.map(b => bRow(b, false)).join('');
+        return html(`
+${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
+<div class="wrap">
+  <div class="page-title">All Bookings</div>
+  <div class="page-sub">Upcoming and past gym rentals.</div>
+  ${gymAlert}
+  <div class="btn-row" style="margin-bottom:28px;">
+    <a href="/gym-rentals/bookings/new" class="btn btn-primary">+ New Booking</a>
+  </div>
+  <div class="card">
+    <div class="card-title">Upcoming</div>
+    ${upHtml}
+  </div>
+  <div class="card">
+    <div class="card-title">Recent Past (last 30)</div>
+    ${pastHtml}
+  </div>
+</div>`, 'All Bookings');
+      }
+
+      // ── CANCEL BOOKING ────────────────────────────────────────
+      if (path.startsWith('/gym-rentals/bookings/cancel/') && method === 'POST') {
+        const bid = parseInt(path.split('/').pop(), 10);
+        await env.DB.prepare("UPDATE gym_bookings SET status='cancelled' WHERE id=?").bind(bid).run();
+        return new Response('', { status: 302, headers: { Location: '/gym-rentals/bookings?msg=saved' } });
+      }
+
+      // ── INVOICES LIST ─────────────────────────────────────────
       if (path === '/gym-rentals/invoices' && method === 'GET') {
+        const invoices = await env.DB.prepare(
+          `SELECT i.*, g.name as group_name FROM gym_invoices i LEFT JOIN gym_groups g ON g.id = i.group_id ORDER BY i.created_at DESC LIMIT 100`
+        ).all();
+        const invRowHtml = invoices.results.length === 0
+          ? `<div style="text-align:center;padding:40px;color:var(--gray);font-size:14px;">No invoices yet. Invoices are generated automatically when a booking is created.</div>`
+          : invoices.results.map(inv => {
+              const invNum = `GYM-${inv.id.toString().padStart(4,'0')}`;
+              return `
+<div class="ni-row">
+  <div style="font-family:var(--sans);font-size:12px;font-weight:700;color:var(--gray);min-width:72px;">${invNum}</div>
+  <div style="flex:1;">
+    <div style="font-family:var(--serif);font-size:15px;color:var(--steel);">${inv.group_name||'—'}</div>
+    <div style="font-family:var(--sans);font-size:12px;color:var(--gray);">${formatDate(inv.invoice_date)}</div>
+  </div>
+  <div style="font-family:var(--sans);font-size:16px;font-weight:700;color:var(--charcoal);">$${parseFloat(inv.total_amount||0).toFixed(2)}</div>
+  <span class="badge ${inv.status==='paid'?'badge-active':'badge-pinned'}">${inv.status==='paid'?'Paid':'Unpaid'}</span>
+  <div class="ni-actions">
+    <a href="/gym-rentals/invoices/view/${inv.id}" class="btn btn-sm btn-secondary">View</a>
+    <form method="POST" action="/gym-rentals/invoices/toggle-paid/${inv.id}" style="display:contents;">
+      <button type="submit" class="btn btn-sm ${inv.status==='paid'?'btn-danger':'btn-sage'}">${inv.status==='paid'?'Mark Unpaid':'Mark Paid'}</button>
+    </form>
+  </div>
+</div>`; }).join('');
         return html(`
 ${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="wrap">
   <div class="page-title">Invoices</div>
   <div class="page-sub">Invoice history and payment tracking.</div>
-  <div class="card">
-    <div style="text-align:center;padding:40px;color:var(--gray);font-size:14px;">Invoices are generated automatically when bookings are confirmed. Coming in Phase 2.</div>
-    <div style="text-align:center;margin-top:16px;"><a href="/gym-rentals" class="btn btn-secondary">← Back to dashboard</a></div>
-  </div>
+  ${gymAlert}
+  <div class="card">${invRowHtml}</div>
 </div>`, 'Invoices');
+      }
+
+      // ── INVOICE VIEW / PRINT ──────────────────────────────────
+      if (path.startsWith('/gym-rentals/invoices/view/') && method === 'GET') {
+        const iid = parseInt(path.split('/').pop(), 10);
+        const inv = await env.DB.prepare('SELECT * FROM gym_invoices WHERE id = ?').bind(iid).first();
+        if (!inv) return new Response('Not found', { status: 404 });
+        const group   = await env.DB.prepare('SELECT * FROM gym_groups WHERE id = ?').bind(inv.group_id).first();
+        const booking = inv.booking_id ? await env.DB.prepare('SELECT * FROM gym_bookings WHERE id = ?').bind(inv.booking_id).first() : null;
+        const invNum  = `GYM-${iid.toString().padStart(4,'0')}`;
+        const hours   = parseFloat(inv.total_hours  || 0);
+        const rate    = parseFloat(inv.rate         || 0);
+        const total   = parseFloat(inv.total_amount || 0);
+        const vm = url.searchParams.get('msg');
+        const viewAlert = vm === 'created' ? `<div class="alert alert-success">✓ Booking confirmed. Invoice emailed to ${group?.email ? group.email : 'you and the group'}.</div>`
+          : vm === 'saved'   ? `<div class="alert alert-success">✓ Saved.</div>`
+          : '';
+        return html(`
+${topbarHtml('gym', `<a href="/gym-rentals/invoices">← Invoices</a>`)}
+<div class="wrap">
+  <div class="page-title">Invoice ${invNum}</div>
+  <div class="page-sub">${group?.name||'—'}</div>
+  ${viewAlert}
+  <div class="btn-row" style="margin-bottom:24px;">
+    <button type="button" onclick="window.print()" class="btn btn-secondary">Print / Save PDF</button>
+    <form method="POST" action="/gym-rentals/invoices/email/${iid}" style="display:contents;">
+      <button type="submit" class="btn btn-sage">Resend Email</button>
+    </form>
+    <form method="POST" action="/gym-rentals/invoices/toggle-paid/${iid}" style="display:contents;">
+      <button type="submit" class="btn ${inv.status==='paid'?'btn-danger':'btn-primary'}">${inv.status==='paid'?'Mark Unpaid':'Mark as Paid'}</button>
+    </form>
+  </div>
+  <div class="card" style="max-width:640px;margin:0 auto;" id="invoice-print">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;margin-bottom:28px;">
+      <div>
+        <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:4px;">Timothy Lutheran Church</div>
+        <div style="font-family:var(--serif);font-size:22px;color:var(--steel);">Gym Rental Invoice</div>
+        <div style="font-size:13px;color:var(--gray);margin-top:4px;">#${invNum}</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:12px;color:var(--gray);">Invoice date</div>
+        <div style="font-size:15px;font-weight:700;color:var(--charcoal);">${formatDate(inv.invoice_date)}</div>
+        <div style="margin-top:8px;font-size:12px;font-weight:700;padding:3px 12px;border-radius:999px;display:inline-block;${inv.status==='paid'?'background:#e8f5e9;color:#1a3d1f;':'background:#FFF3D6;color:#7A4F00;'}">${inv.status==='paid'?'PAID':'UNPAID'}</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:28px;">
+      <div>
+        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--amber);margin-bottom:8px;">Billed To</div>
+        <div style="font-size:16px;font-weight:700;color:var(--steel);">${group?.name||'—'}</div>
+        ${group?.contact ? `<div style="font-size:13px;color:var(--gray);margin-top:3px;">${group.contact}</div>` : ''}
+        ${group?.email   ? `<div style="font-size:13px;color:var(--gray);">${group.email}</div>` : ''}
+        ${group?.phone   ? `<div style="font-size:13px;color:var(--gray);">${group.phone}</div>` : ''}
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--amber);margin-bottom:8px;">From</div>
+        <div style="font-size:14px;font-weight:700;color:var(--steel);">Timothy Lutheran Church</div>
+        <div style="font-size:13px;color:var(--gray);margin-top:3px;">4666 Fyler Ave, St. Louis, MO 63116</div>
+        <div style="font-size:13px;color:var(--gray);">office@timothystl.org</div>
+      </div>
+    </div>
+    <hr style="border:none;border-top:1px solid var(--border);margin-bottom:24px;">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--amber);margin-bottom:16px;">Rental Details</div>
+    <table style="width:100%;border-collapse:collapse;">
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Date</td><td style="padding:10px 0;font-size:14px;font-weight:600;text-align:right;">${booking ? formatDate(booking.booking_date) : formatDate(inv.period_start)}</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Time</td><td style="padding:10px 0;font-size:14px;font-weight:600;text-align:right;">${booking ? `${fmt12h(booking.start_time)} \u2013 ${fmt12h(booking.end_time)}` : '\u2014'}</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Duration</td><td style="padding:10px 0;font-size:14px;font-weight:600;text-align:right;">${hours} hr${hours !== 1 ? 's' : ''}</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Rate</td><td style="padding:10px 0;font-size:14px;text-align:right;">$${rate.toFixed(2)}/hr</td></tr>
+      <tr><td style="padding:20px 0 0;font-size:18px;font-weight:700;color:var(--steel);">Amount Due</td><td style="padding:20px 0 0;font-size:24px;font-weight:700;color:var(--steel);text-align:right;">$${total.toFixed(2)}</td></tr>
+    </table>
+    <hr style="border:none;border-top:1px solid var(--border);margin:24px 0;">
+    <div style="background:var(--linen);border-radius:8px;padding:16px 20px;">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--amber);margin-bottom:8px;">Payment</div>
+      <div style="font-size:14px;color:var(--charcoal);line-height:1.75;">Please make check payable to <strong>Timothy Lutheran Church</strong> and bring to the office or mail to 4666 Fyler Ave, St. Louis, MO 63116.</div>
+    </div>
+  </div>
+</div>
+<style>@media print{.topbar,.tab-nav,.btn-row{display:none!important;}.wrap{padding:0!important;max-width:none!important;}#invoice-print{border:none!important;box-shadow:none!important;}}</style>`, `Invoice ${invNum}`);
+      }
+
+      // ── TOGGLE INVOICE PAID / UNPAID ──────────────────────────
+      if (path.startsWith('/gym-rentals/invoices/toggle-paid/') && method === 'POST') {
+        const iid = parseInt(path.split('/').pop(), 10);
+        const inv = await env.DB.prepare('SELECT status FROM gym_invoices WHERE id=?').bind(iid).first();
+        if (inv) await env.DB.prepare('UPDATE gym_invoices SET status=? WHERE id=?').bind(inv.status==='paid'?'unpaid':'paid', iid).run();
+        const ref = request.headers.get('Referer') || '';
+        return new Response('', { status: 302, headers: { Location: ref.includes('/view/') ? `/gym-rentals/invoices/view/${iid}?msg=saved` : `/gym-rentals/invoices?msg=saved` } });
+      }
+
+      // ── RESEND INVOICE EMAIL ──────────────────────────────────
+      if (path.startsWith('/gym-rentals/invoices/email/') && method === 'POST') {
+        const iid = parseInt(path.split('/').pop(), 10);
+        const inv = await env.DB.prepare('SELECT * FROM gym_invoices WHERE id=?').bind(iid).first();
+        if (inv) {
+          const group   = await env.DB.prepare('SELECT * FROM gym_groups WHERE id=?').bind(inv.group_id).first();
+          const booking = inv.booking_id ? await env.DB.prepare('SELECT * FROM gym_bookings WHERE id=?').bind(inv.booking_id).first() : { booking_date: inv.period_start, start_time: '', end_time: '' };
+          const emailHtml = buildGymInvoiceEmailHtml(inv, group, booking);
+          const subject   = `Gym Rental Invoice \u2014 ${group?.name||'Group'} \u2014 ${formatDate(inv.invoice_date)}`;
+          const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'gym_admin_email'").first();
+          const toEmails = [];
+          if (adminEmailRow?.value) toEmails.push(adminEmailRow.value);
+          if (group?.email) toEmails.push(group.email);
+          if (toEmails.length) try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {}
+        }
+        return new Response('', { status: 302, headers: { Location: `/gym-rentals/invoices/view/${iid}?msg=saved` } });
       }
 
       // Fallback: redirect to dashboard
