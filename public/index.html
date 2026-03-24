@@ -529,78 +529,8 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     <div class="wrap">
       <span class="eyebrow eyebrow--sage">Our team</span>
       <h2>Staff &amp; leadership</h2>
-      <div class="staff-grid">
-        <div class="staff-card">
-          <div class="staff-avatar"><img src="/images/staff/dinger.jpg" alt="Andrew Dinger" onerror="this.remove()">AD</div>
-          <div class="staff-name">Andrew Dinger</div>
-          <div class="staff-role">Lead Pastor</div>
-          <div class="staff-bio">
-            <div class="staff-bio-content" id="bio-dinger">
-              <p>Andrew Dinger has spent his life following the gospel into unexpected places — from social work in Washington, D.C. working among the homeless and ex-offenders community, to teaching English in Taiwan with LCMS World Mission. He served 12 years in parish ministry in NJ, serving in broad areas from District service to leadership of the FAITH Center for the Arts. He came to Timothy Lutheran in 2018.</p>
-              <p>Andrew holds a Master's in Philanthropic Studies from IUPUI and has a deep interest in the intersection of the church and civil society — how the body of Christ shows up not just on Sunday mornings, but in neighborhoods, schools, and the margins of public life. He's an unashamed lover of the lost, a student of Scripture, and a preacher who believes the gospel is still, as Paul said, <em>"the power of God for salvation to everyone who believes."</em></p>
-              <p>He and his wife are raising three boys and are grateful to call St. Louis home.</p>
-              <p class="staff-bio-quote">"For I am not ashamed of the gospel, for it is the power of God for salvation to everyone who believes…" — Romans 1:16</p>
-            </div>
-            <button class="bio-more" onclick="toggleBio('bio-dinger',this)">Read more ↓</button>
-          </div>
-          <a href="mailto:dinger@timothystl.org" class="staff-email">dinger@timothystl.org</a>
-        </div>
-        <div class="staff-card">
-          <div class="staff-avatar"><img src="/images/staff/matt.jpg" alt="Matt Gerzevske" onerror="this.remove()">MG</div>
-          <div class="staff-name">Matt Gerzevske</div>
-          <div class="staff-role">Assistant Pastor</div>
-          <div class="staff-bio"><!-- bio --></div>
-          <a href="mailto:pastormatt@timothystl.org" class="staff-email">pastormatt@timothystl.org</a>
-        </div>
-        <div class="staff-card">
-          <div class="staff-avatar"><img src="/images/staff/thompson.png" alt="Mark Thompson" onerror="this.remove()">MT</div>
-          <div class="staff-name">Mark Thompson</div>
-          <div class="staff-role">Director of Christian Education</div>
-          <div class="staff-bio"><!-- bio --></div>
-          <a href="mailto:dce@timothystl.org" class="staff-email">dce@timothystl.org</a>
-        </div>
-        <div class="staff-card">
-          <div class="staff-avatar"><img src="/images/staff/jinah.jpg" alt="Dr. Jinah Knapp" onerror="this.remove()">JK</div>
-          <div class="staff-name">Dr. Jinah Knapp</div>
-          <div class="staff-role">Music Director</div>
-          <div class="staff-bio">
-            <div class="staff-bio-content" id="bio-jinah">
-              <p>Dr. Jinah Yoo Knapp grew up in Seoul, South Korea, where she studied at the prestigious Seoul Arts High School. She completed studies in church music and organ at Yonsei University, and received the doctorate in organ from the University of Iowa.</p>
-              <p>Jinah served as professor of organ, organ literature, and the history of church music at Keimyung University and later at Yonsei University. As a competitor, she won honors at the Albert Schweitzer Organ Competition, the John D. Rodland Church Music Competition, and the St. Moritz (Switzerland) International Organ Competition. She has performed widely in Korea and the USA, and regularly performs in Germany.</p>
-              <p>From an early age, Jinah served as a church musician, directing ensembles and choirs. She has served as organist and directed ensembles in Iowa and South Korea.</p>
-            </div>
-            <button class="bio-more" onclick="toggleBio('bio-jinah',this)">Read more ↓</button>
-          </div>
-          <a href="mailto:jinah@timothystl.org" class="staff-email">jinah@timothystl.org</a>
-        </div>
-        <div class="staff-card">
-          <div class="staff-avatar"><img src="/images/staff/rall.png" alt="Ron Rall" onerror="this.remove()">RR</div>
-          <div class="staff-name">Ron Rall</div>
-          <div class="staff-role">Pastor Emeritus</div>
-          <div class="staff-bio"><!-- bio --></div>
-          <a href="mailto:pastorrall@timothystl.org" class="staff-email">pastorrall@timothystl.org</a>
-        </div>
-        <div class="staff-card">
-          <div class="staff-avatar"><img src="/images/staff/chauvо.jpg" alt="Chau Vo" onerror="this.remove()">CV</div>
-          <div class="staff-name">Chau Vo</div>
-          <div class="staff-role">Pastor to the Vietnamese Community</div>
-          <div class="staff-bio"><!-- bio --></div>
-          <span class="staff-email" style="color:var(--gray);cursor:default;">Contact via office</span>
-        </div>
-        <div class="staff-card">
-          <div class="staff-avatar">JV</div>
-          <div class="staff-name">James Vo</div>
-          <div class="staff-role">Office Assistant</div>
-          <div class="staff-bio"><!-- bio --></div>
-          <a href="mailto:office@timothystl.org" class="staff-email">office@timothystl.org</a>
-        </div>
-        <div class="staff-card">
-          <div class="staff-avatar"><img src="/images/staff/noah.jpg" alt="Noah" onerror="this.remove()">🐕</div>
-          <div class="staff-name">Noah</div>
-          <div class="staff-role">Comfort Dog</div>
-          <div class="staff-bio"><!-- bio --></div>
-          <a href="mailto:noah@timothystl.org" class="staff-email">noah@timothystl.org</a>
-        </div>
+      <div id="staff-grid" class="staff-grid">
+        <div style="grid-column:1/-1;text-align:center;padding:40px 0;color:var(--gray);font-family:var(--sans);font-size:14px;">Loading staff…</div>
       </div>
     </div>
   </section>
@@ -742,23 +672,9 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     </div>
   </section>
 
-  <section class="section section--linen">
-    <div class="wrap">
-      <span class="eyebrow eyebrow--sage">Wednesday evenings</span>
-      <h2>Midweek worship</h2>
-      <p style="max-width:600px;">During the Lenten season we gather on Wednesday evenings for midweek worship. This year we are walking through the Twenty-Third Psalm — <em>The Shepherd's Way</em>.</p>
-      <div class="sermon-card" style="margin-top:32px;">
-        <div class="sermon-icon">
-          <svg width="20" height="24" viewBox="0 0 20 24" fill="none"><rect x="8" y="0" width="4" height="24" rx="2" fill="#0A3C5C"/><rect x="0" y="7" width="20" height="4" rx="2" fill="#0A3C5C"/></svg>
-        </div>
-        <div>
-          <div class="sermon-series">The Shepherd's Way · Lenten Series</div>
-          <div class="sermon-title">Psalm 23 — six verses for the valley</div>
-          <div class="sermon-ref">Wednesday evenings through Lent · 6:30 pm</div>
-          <a href="https://www.youtube.com/@TimothySTL" target="_blank" class="btn btn-primary" style="font-size:13px;padding:9px 20px;margin-top:4px;display:inline-flex;">Watch on YouTube</a>
-        </div>
-      </div>
-    </div>
+  <!-- Admin-managed seasonal worship block (Lent midweek, Advent, special series — set in admin → Pages → Seasonal worship) -->
+  <section id="worship-seasonal-section" class="section section--linen" style="display:none;">
+    <div id="worship-seasonal-block" class="wrap rich-content" style="max-width:760px;"></div>
   </section>
   <section class="section section--white">
     <div class="wrap" style="max-width:760px;">
@@ -1989,7 +1905,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     </div>
   </div>
   <div class="footer-base">
-    <p>© 2026 Timothy Lutheran Church · St. Louis, Missouri</p>
+    <p>© <span id="footer-year"></span> Timothy Lutheran Church · St. Louis, Missouri</p>
     <p><a href="https://www.timothystl.org">timothystl.org</a></p>
   </div>
 </footer>
@@ -2014,6 +1930,7 @@ function showPage(id, addHistory){
 document.getElementById('navToggle').addEventListener('click',function(){
   document.getElementById('navMobile').classList.toggle('open');
 });
+document.getElementById('footer-year').textContent = new Date().getFullYear();
 function closeMobileNav(){
   document.getElementById('navMobile').classList.remove('open');
 }
@@ -2031,8 +1948,18 @@ function toggleBio(id, btn){
 (function(){
   var path = window.location.pathname.replace(/^\//, '').replace(/\/$/, '');
   // External redirects
-  if(path === 'zoom'){ window.location.replace('https://us02web.zoom.us/j/3147818673'); return; }
-  if(path === 'councilfiles'){ window.location.replace('https://drive.google.com/drive/folders/1pgqJ32H3HS7SNYnnf7rOswC5c87IAzA4?usp=drive_link'); return; }
+  if(path === 'zoom'){
+    fetch('https://admin.timothystl.org/api/settings/zoom_url').then(function(r){return r.json();}).then(function(d){
+      window.location.replace(d.value || 'https://us02web.zoom.us/j/3147818673');
+    }).catch(function(){ window.location.replace('https://us02web.zoom.us/j/3147818673'); });
+    return;
+  }
+  if(path === 'councilfiles'){
+    fetch('https://admin.timothystl.org/api/settings/councilfiles_url').then(function(r){return r.json();}).then(function(d){
+      window.location.replace(d.value || 'https://drive.google.com/drive/folders/1pgqJ32H3HS7SNYnnf7rOswC5c87IAzA4?usp=drive_link');
+    }).catch(function(){ window.location.replace('https://drive.google.com/drive/folders/1pgqJ32H3HS7SNYnnf7rOswC5c87IAzA4?usp=drive_link'); });
+    return;
+  }
   if(path && document.getElementById('page-'+path)){
     showPage(path, false);
   } else {
@@ -2229,6 +2156,64 @@ async function loadPageContent(key, targetId) {
   } catch(e) {}
 }
 
+// Load seasonal worship content (Lent, Advent, special series)
+var seasonalLoaded = false;
+async function loadSeasonalContent() {
+  if (seasonalLoaded) return;
+  seasonalLoaded = true;
+  try {
+    var res = await fetch('https://admin.timothystl.org/api/page-content/seasonal-worship');
+    if (!res.ok) return;
+    var data = await res.json();
+    if (data.value && data.value.trim() && data.published === 1) {
+      document.getElementById('worship-seasonal-block').innerHTML = fixImgUrls(data.value);
+      document.getElementById('worship-seasonal-section').style.display = '';
+    }
+  } catch(e) {}
+}
+
+// Load staff from admin API
+var staffLoaded = false;
+async function loadStaff() {
+  if (staffLoaded) return;
+  staffLoaded = true;
+  var grid = document.getElementById('staff-grid');
+  if (!grid) return;
+  try {
+    var res = await fetch('https://admin.timothystl.org/api/staff');
+    if (!res.ok) throw new Error('not ok');
+    var members = await res.json();
+    if (!members || members.length === 0) {
+      grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--gray);">Staff information coming soon.</div>';
+      return;
+    }
+    grid.innerHTML = members.map(function(m, i) {
+      var initials = (m.name || '').split(' ').map(function(w){return w[0]||'';}).join('').slice(0,2);
+      var bioId = 'bio-staff-' + m.id;
+      var bioHtml = '';
+      if (m.bio && m.bio.trim()) {
+        var paras = m.bio.split(/\n+/).filter(function(p){return p.trim();}).map(function(p){return '<p>' + p.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</p>';}).join('');
+        bioHtml = '<div class="staff-bio"><div class="staff-bio-content" id="' + bioId + '">' + paras + '</div><button class="bio-more" onclick="toggleBio(\'' + bioId + '\',this)">Read more ↓</button></div>';
+      }
+      var emailHtml = m.email
+        ? '<a href="mailto:' + m.email.replace(/"/g,'&quot;') + '" class="staff-email">' + m.email + '</a>'
+        : '<span class="staff-email" style="color:var(--gray);cursor:default;">Contact via office</span>';
+      var photoHtml = m.photo_url
+        ? '<img src="' + m.photo_url.replace(/"/g,'&quot;') + '" alt="' + (m.name||'').replace(/"/g,'&quot;') + '" onerror="this.remove()">'
+        : '';
+      return '<div class="staff-card">' +
+        '<div class="staff-avatar">' + photoHtml + initials + '</div>' +
+        '<div class="staff-name">' + (m.name||'').replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>' +
+        '<div class="staff-role">' + (m.title||'').replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>' +
+        bioHtml +
+        emailHtml +
+        '</div>';
+    }).join('');
+  } catch(e) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--gray);">Unable to load staff — please refresh or <button onclick="showPage(\'contact\')" style="background:none;border:none;cursor:pointer;color:var(--mid);font-weight:600;font-family:inherit;font-size:inherit;padding:0;">contact the office</button>.</div>';
+  }
+}
+
 // Load admin-managed content + CTA button for Christmas Market (other static pages use loadMinistryPage)
 var ministryCTALoaded = {};
 async function loadMinistryCta(slug) {
@@ -2248,10 +2233,15 @@ async function loadMinistryCta(slug) {
         contentSection.style.display = '';
       }
     }
-    if (ctaWrap && data.cta_label && data.cta_url) {
-      ctaWrap.innerHTML = '<div style="text-align:center;padding:32px 16px;">' +
-        '<a href="' + data.cta_url.replace(/"/g,'&quot;') + '" target="_blank" class="btn btn-primary" style="font-size:16px;padding:14px 32px;">' + data.cta_label + '</a></div>';
-      ctaWrap.style.display = '';
+    if (data.cta_label && data.cta_url) {
+      var hardBar2 = document.querySelector('#page-' + slug + ' .page-cta-bar');
+      if (hardBar2) hardBar2.style.display = 'none';
+      if (ctaWrap) {
+        var b1 = '<a href="' + data.cta_url.replace(/"/g,'&quot;') + '" target="_blank" class="btn btn-primary" style="font-size:16px;padding:14px 32px;">' + data.cta_label + '</a>';
+        var b2 = (data.cta_label_2 && data.cta_url_2) ? '<a href="' + data.cta_url_2.replace(/"/g,'&quot;') + '" target="_blank" class="btn btn-ghost" style="font-size:16px;padding:14px 32px;">' + data.cta_label_2 + '</a>' : '';
+        ctaWrap.innerHTML = '<div class="page-cta-bar"><div class="btn-row">' + b1 + b2 + '</div></div>';
+        ctaWrap.style.display = '';
+      }
     }
   } catch(e) {}
 }
@@ -2272,12 +2262,17 @@ async function loadMinistryPage(slug) {
       } else {
         document.getElementById(slug + '-content-section').style.display = 'none';
       }
-      // Render admin-managed CTA button if set
-      var ctaWrap = document.getElementById(slug + '-admin-cta');
-      if (ctaWrap && data.cta_label && data.cta_url) {
-        ctaWrap.innerHTML = '<div style="text-align:center;padding:32px 16px;">' +
-          '<a href="' + data.cta_url.replace(/"/g,'&quot;') + '" target="_blank" class="btn btn-primary" style="font-size:16px;padding:14px 32px;">' + data.cta_label + '</a></div>';
-        ctaWrap.style.display = '';
+      // If admin has set any CTA buttons, replace the hardcoded page-cta-bar
+      if (data.cta_label && data.cta_url) {
+        var hardBar = document.querySelector('#page-' + slug + ' .page-cta-bar');
+        if (hardBar) hardBar.style.display = 'none';
+        var ctaWrap = document.getElementById(slug + '-admin-cta');
+        if (ctaWrap) {
+          var btn1 = '<a href="' + data.cta_url.replace(/"/g,'&quot;') + '" target="_blank" class="btn btn-primary" style="font-size:16px;padding:14px 32px;">' + data.cta_label + '</a>';
+          var btn2 = (data.cta_label_2 && data.cta_url_2) ? '<a href="' + data.cta_url_2.replace(/"/g,'&quot;') + '" target="_blank" class="btn btn-ghost" style="font-size:16px;padding:14px 32px;">' + data.cta_label_2 + '</a>' : '';
+          ctaWrap.innerHTML = '<div class="page-cta-bar"><div class="btn-row">' + btn1 + btn2 + '</div></div>';
+          ctaWrap.style.display = '';
+        }
       }
       if (!data.has_posts) return;
     } else {
@@ -2390,8 +2385,8 @@ window.showPage = function(id, addHistory) {
   if (id === 'sermons') { loadSermons(); }
   if (id === 'voters') { loadVotersPage(); }
   if (id === 'home') { loadPageContent('home-notice', 'home-notice-block'); }
-  if (id === 'worship') { loadPageContent('worship-notice', 'worship-notice-block'); }
-  if (id === 'about') { loadPageContent('about-notice', 'about-notice-block'); }
+  if (id === 'worship') { loadPageContent('worship-notice', 'worship-notice-block'); loadSeasonalContent(); }
+  if (id === 'about') { loadPageContent('about-notice', 'about-notice-block'); loadStaff(); }
   var adminContentPages = ['sundayschool','confirmation','vbs','egghunt','family','music','stephen','foodpantry','bees'];
   if (adminContentPages.indexOf(id) !== -1) { loadMinistryPage(id); }
   if (id === 'christmasmarket') { loadMinistryCta(id); }
@@ -2405,8 +2400,8 @@ window.showPage = function(id, addHistory) {
   if (path === 'sermons') { loadSermons(); }
   if (path === 'voters') { loadVotersPage(); }
   if (path === '' || path === 'home') { loadPageContent('home-notice', 'home-notice-block'); }
-  if (path === 'worship') { loadPageContent('worship-notice', 'worship-notice-block'); }
-  if (path === 'about') { loadPageContent('about-notice', 'about-notice-block'); }
+  if (path === 'worship') { loadPageContent('worship-notice', 'worship-notice-block'); loadSeasonalContent(); }
+  if (path === 'about') { loadPageContent('about-notice', 'about-notice-block'); loadStaff(); }
   var adminContentPages = ['sundayschool','confirmation','vbs','egghunt','family','music','stephen','foodpantry','bees'];
   if (adminContentPages.indexOf(path) !== -1) { loadMinistryPage(path); }
   if (path === 'christmasmarket') { loadMinistryCta(path); }
