@@ -7,13 +7,7 @@ This file captures findings from the full technical audit. Cross off items as ad
 
 ## 🔴 Must-Do Before DNS Cutover
 
-- [ ] **Update Breeze giving URL** — owner has new URL but code still points to `timothystl.breezechms.com/give/online`. Update in three places:
-  - `public/index.html` — Give page button
-  - `tlc-admin-worker.js` line 640 — newsletter email footer
-  - `tlc-links-worker.js` — links page
-  - `public/manual.html` — staff manual documents the URL
-
-- [ ] **Verify Brevo secrets set on production Cloudflare worker** — newsletter sends will silently fail if these aren't configured:
+- [ ] **Verify Brevo secrets set on production Cloudflare worker** — newsletter was tested and working on test site. Confirm these are also set on the production admin worker before go-live:
   - `BREVO_API_KEY`
   - `BREVO_LIST_ID`
   - `BREVO_SENDER_EMAIL`

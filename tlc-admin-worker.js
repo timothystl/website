@@ -83,7 +83,25 @@ const DB_INIT_PAGE_CONTENT = `CREATE TABLE IF NOT EXISTS page_content (
   key TEXT PRIMARY KEY,
   label TEXT NOT NULL,
   value TEXT,
+  published INTEGER DEFAULT 1,
   updated_at TEXT
+)`;
+
+const DB_INIT_STAFF_MEMBERS = `CREATE TABLE IF NOT EXISTS staff_members (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  title TEXT,
+  email TEXT,
+  photo_url TEXT,
+  bio TEXT,
+  display_order INTEGER DEFAULT 0
+)`;
+
+const DB_INIT_SITE_SETTINGS = `CREATE TABLE IF NOT EXISTS site_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT,
+  label TEXT,
+  hint TEXT
 )`;
 
 const DB_INIT_SERMON_NOTES = `CREATE TABLE IF NOT EXISTS sermon_notes (
@@ -112,6 +130,23 @@ const MINISTRY_SLUGS = [
   { slug: 'foodpantry',     title: 'Food Pantry',            has_posts: 0 },
   { slug: 'bees',           title: 'Urban Beekeepers',       has_posts: 0 },
   { slug: 'christmasmarket',title: 'Christmas Market',       has_posts: 1 },
+];
+
+const INITIAL_STAFF = [
+  { name: 'Andrew Dinger',  title: 'Lead Pastor',                          email: 'dinger@timothystl.org',    photo_url: '/images/staff/dinger.jpg',    bio: `Andrew Dinger has spent his life following the gospel into unexpected places — from social work in Washington, D.C. working among the homeless and ex-offenders community, to teaching English in Taiwan with LCMS World Mission. He served 12 years in parish ministry in NJ, serving in broad areas from District service to leadership of the FAITH Center for the Arts. He came to Timothy Lutheran in 2018.\n\nAndrew holds a Master's in Philanthropic Studies from IUPUI and has a deep interest in the intersection of the church and civil society — how the body of Christ shows up not just on Sunday mornings, but in neighborhoods, schools, and the margins of public life. He's an unashamed lover of the lost, a student of Scripture, and a preacher who believes the gospel is still, as Paul said, "the power of God for salvation to everyone who believes."\n\nHe and his wife are raising three boys and are grateful to call St. Louis home.`, display_order: 10 },
+  { name: 'Matt Gerzevske', title: 'Assistant Pastor',                      email: 'pastormatt@timothystl.org', photo_url: '/images/staff/matt.jpg',      bio: '', display_order: 20 },
+  { name: 'Mark Thompson',  title: 'Director of Christian Education',       email: 'dce@timothystl.org',        photo_url: '/images/staff/thompson.png',  bio: '', display_order: 30 },
+  { name: 'Dr. Jinah Knapp',title: 'Music Director',                        email: 'jinah@timothystl.org',      photo_url: '/images/staff/jinah.jpg',     bio: `Dr. Jinah Yoo Knapp grew up in Seoul, South Korea, where she studied at the prestigious Seoul Arts High School. She completed studies in church music and organ at Yonsei University, and received the doctorate in organ from the University of Iowa.\n\nJinah served as professor of organ, organ literature, and the history of church music at Keimyung University and later at Yonsei University. As a competitor, she won honors at the Albert Schweitzer Organ Competition, the John D. Rodland Church Music Competition, and the St. Moritz (Switzerland) International Organ Competition. She has performed widely in Korea and the USA, and regularly performs in Germany.\n\nFrom an early age, Jinah served as a church musician, directing ensembles and choirs. She has served as organist and directed ensembles in Iowa and South Korea.`, display_order: 40 },
+  { name: 'Ron Rall',       title: 'Pastor Emeritus',                       email: 'pastorrall@timothystl.org', photo_url: '/images/staff/rall.png',      bio: '', display_order: 50 },
+  { name: 'Chau Vo',        title: 'Pastor to the Vietnamese Community',    email: '',                          photo_url: '/images/staff/chauvo.jpg',    bio: '', display_order: 60 },
+  { name: 'James Vo',       title: 'Office Assistant',                      email: 'office@timothystl.org',     photo_url: '',                            bio: '', display_order: 70 },
+  { name: 'Noah',           title: 'Comfort Dog',                           email: 'noah@timothystl.org',       photo_url: '/images/staff/noah.jpg',      bio: '', display_order: 80 },
+];
+
+const INITIAL_SETTINGS = [
+  { key: 'zoom_url',          value: 'https://us02web.zoom.us/j/3147818673',                                                                   label: 'Zoom meeting URL',      hint: 'Used for the /zoom redirect. Update when the Zoom link changes.' },
+  { key: 'councilfiles_url',  value: 'https://drive.google.com/drive/folders/1pgqJ32H3HS7SNYnnf7rOswC5c87IAzA4?usp=drive_link',              label: 'Council files URL',     hint: 'Used for the /councilfiles redirect. Update when the Google Drive folder changes.' },
+  { key: 'give_url',          value: 'https://timothystl.breezechms.com/give/online',                                                          label: 'Online giving URL',     hint: 'Used for the Give button and /give page. Update when the giving platform changes.' },
 ];
 
 // ── IMAGE HELPERS ───────────────────────────────────────────
@@ -480,6 +515,8 @@ function topbarHtml(activeTab, extraLinks = '') {
     <a href="/ministries" class="tab${activeTab === 'ministries' ? ' tab-active' : ''}">Ministries</a>
     <a href="/sermons" class="tab${activeTab === 'sermons' ? ' tab-active' : ''}">Sermons</a>
     <a href="/pages" class="tab${activeTab === 'pages' ? ' tab-active' : ''}">Pages</a>
+    <a href="/staff" class="tab${activeTab === 'staff' ? ' tab-active' : ''}">Staff</a>
+    <a href="/settings" class="tab${activeTab === 'settings' ? ' tab-active' : ''}">Settings</a>
     <a href="https://volunteer.timothystl.org/scheduler" target="_blank" class="tab tab-external">Scheduler ↗</a>
     <a href="https://volunteer.timothystl.org/admin" target="_blank" class="tab tab-external">Volunteer Admin ↗</a>
   </div>
@@ -525,6 +562,7 @@ async function sendBrevoNewsletter(env, { subject, htmlContent, listIds }) {
       name: `TLC Newsletter — ${subject}`,
       subject,
       sender: { name: 'Timothy Lutheran Church', email: env.BREVO_SENDER_EMAIL || 'dinger@timothystl.org' },
+      replyTo: env.BREVO_REPLY_TO || env.BREVO_SENDER_EMAIL || 'dinger@timothystl.org',
       htmlContent,
       recipients: { listIds }
     })
@@ -548,7 +586,8 @@ async function sendTransactionalEmail(env, { subject, htmlContent, toEmails }) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'api-key': apiKey },
     body: JSON.stringify({
-      sender: { name: 'Timothy Lutheran Website', email: env.BREVO_SENDER_EMAIL || 'dinger@timothystl.org' },
+      sender: { name: 'Timothy Lutheran Church', email: env.BREVO_SENDER_EMAIL || 'dinger@timothystl.org' },
+      replyTo: { email: env.BREVO_REPLY_TO || env.BREVO_SENDER_EMAIL || 'dinger@timothystl.org' },
       to: toEmails.map(e => ({ email: e })),
       subject,
       htmlContent
@@ -757,15 +796,40 @@ export default {
     // Migrate: add CTA fields to ministry pages (youth_pages)
     try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN cta_label TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN cta_url TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN cta_label_2 TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN cta_url_2 TEXT').run(); } catch (_) {}
+    // Migrate: add published flag to page_content
+    try { await env.DB.prepare('ALTER TABLE page_content ADD COLUMN published INTEGER DEFAULT 1').run(); } catch (_) {}
+    // New tables
+    try { await env.DB.prepare(DB_INIT_STAFF_MEMBERS).run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_SITE_SETTINGS).run(); } catch (_) {}
+    // Pre-populate staff members (only if table is empty)
+    try {
+      const staffCount = await env.DB.prepare('SELECT COUNT(*) as n FROM staff_members').first();
+      if (!staffCount || staffCount.n === 0) {
+        for (const s of INITIAL_STAFF) {
+          await env.DB.prepare(
+            'INSERT OR IGNORE INTO staff_members (name, title, email, photo_url, bio, display_order) VALUES (?, ?, ?, ?, ?, ?)'
+          ).bind(s.name, s.title, s.email, s.photo_url, s.bio, s.display_order).run();
+        }
+      }
+    } catch (_) {}
+    // Pre-populate site settings
+    for (const s of INITIAL_SETTINGS) {
+      try {
+        await env.DB.prepare('INSERT OR IGNORE INTO site_settings (key, value, label, hint) VALUES (?, ?, ?, ?)').bind(s.key, s.value, s.label, s.hint).run();
+      } catch (_) {}
+    }
     // Pre-populate editable page content blocks
     const PAGE_BLOCKS = [
-      { key: 'home-notice',    label: 'Home page notice',   hint: 'Shown on the home page as a banner. Leave blank to hide.' },
-      { key: 'worship-notice', label: 'Worship notice',     hint: 'Shown on the Worship page (e.g. special service times, holiday changes). Leave blank to hide.' },
-      { key: 'about-notice',   label: 'About page notice',  hint: 'Shown on the About page. Leave blank to hide.' },
+      { key: 'home-notice',       label: 'Home page notice',        hint: 'Shown on the home page as a banner. Leave blank to hide.' },
+      { key: 'worship-notice',    label: 'Worship notice',          hint: 'Shown on the Worship page (e.g. special service times, holiday changes). Leave blank to hide.' },
+      { key: 'about-notice',      label: 'About page notice',       hint: 'Shown on the About page. Leave blank to hide.' },
+      { key: 'seasonal-worship',  label: 'Seasonal worship block',  hint: 'Rich content section on the Worship page for midweek, Lenten, Advent, or other seasonal services. Toggle on/off without losing content.' },
     ];
     for (const b of PAGE_BLOCKS) {
       try {
-        await env.DB.prepare('INSERT OR IGNORE INTO page_content (key, label, value, updated_at) VALUES (?, ?, ?, ?)').bind(b.key, b.label, '', '').run();
+        await env.DB.prepare('INSERT OR IGNORE INTO page_content (key, label, value, published, updated_at) VALUES (?, ?, ?, ?, ?)').bind(b.key, b.label, '', 0, '').run();
       } catch (_) {}
     }
 
@@ -834,7 +898,7 @@ export default {
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
         });
       }
-      const row = await env.DB.prepare('SELECT slug, title, content, has_posts, cta_label, cta_url, updated_at FROM youth_pages WHERE slug = ?').bind(slug).first();
+      const row = await env.DB.prepare('SELECT slug, title, content, has_posts, cta_label, cta_url, cta_label_2, cta_url_2, updated_at FROM youth_pages WHERE slug = ?').bind(slug).first();
       if (!row) return new Response('Not found', { status: 404 });
       const fixUrl = s => s ? s.replace(/src="\/images\//g, 'src="https://admin.timothystl.org/images/') : s;
       return new Response(JSON.stringify({ ...row, content: fixUrl(row.content) }), {
@@ -845,7 +909,25 @@ export default {
     // ── PUBLIC: page content blocks API ──
     if (path.startsWith('/api/page-content/') && method === 'GET') {
       const key = path.slice('/api/page-content/'.length);
-      const row = await env.DB.prepare('SELECT key, label, value FROM page_content WHERE key = ?').bind(key).first();
+      const row = await env.DB.prepare('SELECT key, label, value, published FROM page_content WHERE key = ?').bind(key).first();
+      if (!row) return new Response('Not found', { status: 404 });
+      return new Response(JSON.stringify(row), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      });
+    }
+
+    // ── PUBLIC: staff API ──
+    if (path === '/api/staff' && method === 'GET') {
+      const rows = await env.DB.prepare('SELECT id, name, title, email, photo_url, bio, display_order FROM staff_members ORDER BY display_order, id').all();
+      return new Response(JSON.stringify(rows.results), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      });
+    }
+
+    // ── PUBLIC: site settings API ──
+    if (path.startsWith('/api/settings/') && method === 'GET') {
+      const key = path.slice('/api/settings/'.length);
+      const row = await env.DB.prepare('SELECT key, value FROM site_settings WHERE key = ?').bind(key).first();
       if (!row) return new Response('Not found', { status: 404 });
       return new Response(JSON.stringify(row), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
@@ -955,6 +1037,8 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
         const name = (form.get('name') || '').trim();
         const email = (form.get('email') || '').trim();
         const message = (form.get('message') || '').trim();
+        // Honeypot — bots fill this hidden field, humans never see it
+        if (form.get('website')) return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
         if (!name || !message) return new Response(JSON.stringify({ error: 'Name and message are required' }), { status: 400, headers: corsHeaders });
         const html = `<p><strong>Name:</strong> ${name}</p><p><strong>Email:</strong> ${email || '(not provided)'}</p><p><strong>Message:</strong></p><p style="white-space:pre-wrap">${message.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`;
         const result = await sendTransactionalEmail(env, {
@@ -963,6 +1047,14 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
           toEmails: ['dinger@timothystl.org', 'office@timothystl.org']
         });
         if (result.error) return new Response(JSON.stringify({ error: result.error }), { status: 500, headers: corsHeaders });
+        // Confirmation email to user
+        if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          await sendTransactionalEmail(env, {
+            subject: 'We received your message — Timothy Lutheran Church',
+            htmlContent: `<p>Hi ${name},</p><p>Thank you for reaching out to Timothy Lutheran Church. We received your message and will be in touch soon.</p><p>If you need immediate assistance, please call us at (314) 839-0563 or email <a href="mailto:office@timothystl.org">office@timothystl.org</a>.</p><p>Grace and peace,<br>The team at Timothy Lutheran Church</p>`,
+            toEmails: [email]
+          });
+        }
         return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
       } catch(e) {
         return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: corsHeaders });
@@ -978,6 +1070,8 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
         const name = (form.get('name') || '').trim();
         const email = (form.get('email') || '').trim();
         const message = (form.get('message') || '').trim();
+        // Honeypot — bots fill this hidden field, humans never see it
+        if (form.get('website')) return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
         if (!message) return new Response(JSON.stringify({ error: 'Prayer request is required' }), { status: 400, headers: corsHeaders });
         const htmlContent = `<p><strong>Name:</strong> ${name || '(anonymous)'}</p><p><strong>Email:</strong> ${email || '(not provided)'}</p><p><strong>Prayer request:</strong></p><p style="white-space:pre-wrap">${message.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`;
         const result = await sendTransactionalEmail(env, {
@@ -986,6 +1080,14 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
           toEmails: ['dinger@timothystl.org', 'office@timothystl.org']
         });
         if (result.error) return new Response(JSON.stringify({ error: result.error }), { status: 500, headers: corsHeaders });
+        // Confirmation email to user
+        if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          await sendTransactionalEmail(env, {
+            subject: "We're praying for you — Timothy Lutheran Church",
+            htmlContent: `<p>Hi ${name || 'friend'},</p><p>Thank you for sharing your prayer request with us. Our pastoral staff has received it and will be praying for you.</p><p>If you'd like to speak with someone, please reach out to our office at <a href="mailto:office@timothystl.org">office@timothystl.org</a> or call (314) 839-0563.</p><p>Grace and peace,<br>The pastoral staff at Timothy Lutheran Church</p>`,
+            toEmails: [email]
+          });
+        }
         return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
       } catch(e) {
         return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: corsHeaders });
@@ -2358,16 +2460,32 @@ ${topbarHtml('ministries', `<a href="/ministries">← All ministries</a>`)}
       </div>
       ${tinymceYouthSection(page.content || '')}
       <div class="card" style="margin-top:24px;background:var(--mist);border:1px solid var(--ice);">
-        <div class="card-title">CTA Button <span class="tag">Optional</span></div>
-        <div class="card-sub">Add a call-to-action button that appears at the bottom of this page. Visitors click it to take an action — sign up, learn more, donate, etc. Leave both fields blank to show no button.</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
-          <div class="form-group" style="margin:0;">
-            <label>Button label</label>
-            <input type="text" name="cta_label" value="${(page.cta_label || '').replace(/"/g, '&quot;')}" placeholder="e.g. Sign up to volunteer →">
+        <div class="card-title">CTA Buttons <span class="tag">Optional</span></div>
+        <div class="card-sub">Add up to two call-to-action buttons at the bottom of this page. When any button is set here, it <strong>replaces</strong> the default button bar. Leave both rows blank to keep the default buttons.</div>
+        <div style="margin-top:16px;">
+          <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:8px;">Primary button (navy/gold)</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div class="form-group" style="margin:0;">
+              <label>Button label</label>
+              <input type="text" name="cta_label" value="${(page.cta_label || '').replace(/"/g, '&quot;')}" placeholder="e.g. Sign up to volunteer →">
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label>Button URL</label>
+              <input type="text" name="cta_url" value="${(page.cta_url || '').replace(/"/g, '&quot;')}" placeholder="https://...">
+            </div>
           </div>
-          <div class="form-group" style="margin:0;">
-            <label>Button URL</label>
-            <input type="text" name="cta_url" value="${(page.cta_url || '').replace(/"/g, '&quot;')}" placeholder="https://...">
+        </div>
+        <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+          <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:8px;">Secondary button (outline/ghost)</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div class="form-group" style="margin:0;">
+              <label>Button label</label>
+              <input type="text" name="cta_label_2" value="${(page.cta_label_2 || '').replace(/"/g, '&quot;')}" placeholder="e.g. Email the office">
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label>Button URL</label>
+              <input type="text" name="cta_url_2" value="${(page.cta_url_2 || '').replace(/"/g, '&quot;')}" placeholder="https://... or mailto:...">
+            </div>
           </div>
         </div>
       </div>
@@ -2388,10 +2506,12 @@ ${topbarHtml('ministries', `<a href="/ministries">← All ministries</a>`)}
         const content = form.get('content') || '';
         const ctaLabel = form.get('cta_label') || '';
         const ctaUrl = form.get('cta_url') || '';
+        const ctaLabel2 = form.get('cta_label_2') || '';
+        const ctaUrl2 = form.get('cta_url_2') || '';
         const now = new Date().toISOString();
         await env.DB.prepare(
-          'UPDATE youth_pages SET title = ?, content = ?, cta_label = ?, cta_url = ?, updated_at = ? WHERE slug = ?'
-        ).bind(title, content, ctaLabel, ctaUrl, now, slug).run();
+          'UPDATE youth_pages SET title = ?, content = ?, cta_label = ?, cta_url = ?, cta_label_2 = ?, cta_url_2 = ?, updated_at = ? WHERE slug = ?'
+        ).bind(title, content, ctaLabel, ctaUrl, ctaLabel2, ctaUrl2, now, slug).run();
         return new Response('', { status: 302, headers: { Location: '/ministries?msg=saved' } });
       }
 
@@ -2610,15 +2730,20 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
     if (path.startsWith('/pages')) {
       // List all editable page blocks
       if (path === '/pages' && method === 'GET') {
-        const blocks = await env.DB.prepare('SELECT key, label, value, updated_at FROM page_content ORDER BY rowid').all();
+        const blocks = await env.DB.prepare('SELECT key, label, value, published, updated_at FROM page_content ORDER BY rowid').all();
         const msg = url.searchParams.get('msg');
         const alertHtml = msg === 'saved' ? `<div class="alert alert-success">✓ Page block saved.</div>` : '';
         const rows = blocks.results.map(b => {
           const isEmpty = !b.value || !b.value.trim();
+          const isHidden = b.published === 0;
           const updated = b.updated_at ? new Date(b.updated_at).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) : '—';
+          let statusHtml;
+          if (isEmpty) statusHtml = '<em style="color:var(--text-muted);">Not set — block hidden on site</em>';
+          else if (isHidden) statusHtml = '<span style="color:#8a6a00;">⏸ Hidden (content saved)</span>';
+          else statusHtml = '<span style="color:#2a5c2a;">✓ Published</span>';
           return `<tr>
             <td><strong>${b.label}</strong><br><span style="font-size:12px;color:var(--gray);">${b.key}</span></td>
-            <td style="font-size:13px;color:var(--gray);">${isEmpty ? '<em style="color:var(--text-muted);">Not set — block hidden on site</em>' : '<span style="color:#2a5c2a;">✓ Published</span>'}</td>
+            <td style="font-size:13px;color:var(--gray);">${statusHtml}</td>
             <td style="font-size:12px;color:var(--gray);">${updated}</td>
             <td><a href="/pages/edit/${b.key}" class="btn btn-sm btn-secondary">Edit</a></td>
           </tr>`;
@@ -2651,11 +2776,23 @@ ${topbarHtml('pages')}
         const block = await env.DB.prepare('SELECT * FROM page_content WHERE key = ?').bind(key).first();
         if (!block) return new Response('Not found', { status: 404 });
         const HINT_MAP = {
-          'home-notice': 'Appears on the home page as a highlighted notice box. Leave blank to hide.',
-          'worship-notice': 'Appears on the Worship page (e.g. special service times, holiday changes). Leave blank to hide.',
-          'about-notice': 'Appears on the About page. Leave blank to hide.',
+          'home-notice':      'Appears on the home page as a highlighted notice box. Leave blank to hide.',
+          'worship-notice':   'Appears on the Worship page (e.g. special service times, holiday changes). Leave blank to hide.',
+          'about-notice':     'Appears on the About page. Leave blank to hide.',
+          'seasonal-worship': 'Rich content section on the Worship page — use for Lenten midweek, Advent series, special seasonal services, etc. Toggle published on/off without losing your content.',
         };
         const hint = HINT_MAP[key] || 'Appears on the site when content is set. Leave blank to hide.';
+        const isSeasonal = key === 'seasonal-worship';
+        const publishedChecked = (block.published === 1 || block.published === null) ? 'checked' : '';
+        const publishToggleHtml = isSeasonal ? `
+        <div class="card" style="margin-bottom:24px;background:var(--mist);border:1px solid var(--ice);">
+          <div class="card-title">Visibility</div>
+          <label style="display:flex;align-items:center;gap:12px;font-family:var(--sans);font-size:14px;cursor:pointer;">
+            <input type="checkbox" name="published" value="1" ${publishedChecked} style="width:18px;height:18px;cursor:pointer;">
+            Show this block on the Worship page
+          </label>
+          <div style="font-size:12px;color:var(--gray);margin-top:8px;">Uncheck to hide the block without losing your content — useful when the seasonal series ends.</div>
+        </div>` : '';
         return html(`
 ${topbarHtml('pages', `<a href="/pages">← All pages</a>`)}
 <div class="wrap">
@@ -2663,10 +2800,11 @@ ${topbarHtml('pages', `<a href="/pages">← All pages</a>`)}
   <div class="page-sub">${hint}</div>
   <div class="card">
     <form method="POST" action="/pages/update/${key}">
+      ${publishToggleHtml}
       ${tinymcePageSection(block.value || '')}
       <div class="btn-row" style="margin-top:24px;">
         <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save &amp; Publish →</button>
-        <a href="/pages/update/${key}?clear=1" class="btn btn-sm" style="background:#fce8e8;color:#7a1f1f;border:1px solid #e8b4b4;" onclick="return confirm('Clear this block and hide it from the site?')">Clear &amp; hide</a>
+        ${!isSeasonal ? `<a href="/pages/update/${key}?clear=1" class="btn btn-sm" style="background:#fce8e8;color:#7a1f1f;border:1px solid #e8b4b4;" onclick="return confirm('Clear this block and hide it from the site?')">Clear &amp; hide</a>` : ''}
         <a href="/pages" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
       </div>
     </form>
@@ -2687,11 +2825,186 @@ ${topbarHtml('pages', `<a href="/pages">← All pages</a>`)}
         const key = path.slice('/pages/update/'.length);
         const form = await request.formData();
         const value = form.get('content') || '';
+        const published = form.has('published') ? 1 : 0;
         const now = new Date().toISOString();
-        await env.DB.prepare('UPDATE page_content SET value = ?, updated_at = ? WHERE key = ?').bind(value, now, key).run();
+        // Only save published flag for blocks that have the toggle (seasonal-worship)
+        if (key === 'seasonal-worship') {
+          await env.DB.prepare('UPDATE page_content SET value = ?, published = ?, updated_at = ? WHERE key = ?').bind(value, published, now, key).run();
+        } else {
+          await env.DB.prepare('UPDATE page_content SET value = ?, published = 1, updated_at = ? WHERE key = ?').bind(value, now, key).run();
+        }
         return new Response('', { status: 302, headers: { Location: '/pages?msg=saved' } });
       }
     } // end pages tab
+
+    // ── STAFF TAB ──────────────────────────────────────────────
+    if (path.startsWith('/staff')) {
+      const esc = s => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+      // Staff list
+      if (path === '/staff' && method === 'GET') {
+        const members = await env.DB.prepare('SELECT * FROM staff_members ORDER BY display_order, id').all();
+        const msg = url.searchParams.get('msg');
+        const alertHtml = msg === 'saved' ? `<div class="alert alert-success">✓ Staff member saved.</div>`
+          : msg === 'deleted' ? `<div class="alert alert-info">Staff member removed.</div>` : '';
+        const rows = members.results.map(m => `
+          <div class="ni-row" style="align-items:center;">
+            <div style="font-size:28px;width:44px;height:44px;border-radius:50%;background:var(--mist);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;">
+              ${m.photo_url ? `<img src="${esc(m.photo_url)}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'">` : ''}
+              <span style="font-family:var(--serif);font-size:14px;color:var(--steel);">${esc(m.name).split(' ').map(w=>w[0]).join('').slice(0,2)}</span>
+            </div>
+            <div style="flex:1;">
+              <div class="ni-title">${esc(m.name)}</div>
+              <div class="ni-meta">${esc(m.title || '')}${m.email ? ' · ' + esc(m.email) : ''} · Order: ${m.display_order}</div>
+            </div>
+            <div class="ni-actions">
+              <a href="/staff/edit/${m.id}" class="btn btn-sm btn-secondary">Edit</a>
+              <form method="POST" action="/staff/delete/${m.id}" onsubmit="return confirm('Remove ${esc(m.name)} from staff?')" style="margin:0;">
+                <button type="submit" class="btn btn-sm btn-danger">Remove</button>
+              </form>
+            </div>
+          </div>`).join('');
+        return html(`
+${topbarHtml('staff')}
+<div class="wrap">
+  <div class="page-title">Staff &amp; Leadership</div>
+  <div class="page-sub">Manage the staff cards shown on the About page. Drag to reorder by updating the Order number.</div>
+  ${alertHtml}
+  <div class="btn-row" style="margin-bottom:28px;">
+    <a href="/staff/new" class="btn btn-primary">+ Add staff member</a>
+  </div>
+  <div class="card" style="padding:0;overflow:hidden;">
+    ${members.results.length === 0 ? '<div style="padding:40px;text-align:center;color:var(--gray);">No staff members yet.</div>' : rows}
+  </div>
+</div>`, 'Staff');
+      }
+
+      // New staff form
+      if (path === '/staff/new' && method === 'GET') {
+        const nextOrder = 10;
+        return html(`
+${topbarHtml('staff', `<a href="/staff">← All staff</a>`)}
+<div class="wrap">
+  <div class="page-title">Add Staff Member</div>
+  <div class="card">
+    <form method="POST" action="/staff/create">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="form-group"><label>Name <span style="color:#B85C3A;">*</span></label><input type="text" name="name" required></div>
+        <div class="form-group"><label>Title / Role <span style="color:#B85C3A;">*</span></label><input type="text" name="title" required placeholder="e.g. Lead Pastor"></div>
+        <div class="form-group"><label>Email</label><input type="email" name="email" placeholder="name@timothystl.org"></div>
+        <div class="form-group"><label>Photo URL</label><input type="text" name="photo_url" placeholder="/images/staff/name.jpg"></div>
+        <div class="form-group"><label>Display order <span style="font-size:11px;color:var(--gray);">(lower = first)</span></label><input type="number" name="display_order" value="80" min="0" step="10"></div>
+      </div>
+      <div class="form-group"><label>Bio <span style="font-size:11px;color:var(--gray);">(optional)</span></label><textarea name="bio" rows="6" placeholder="Short biography..." style="width:100%;font-family:var(--sans);font-size:14px;padding:10px;border:1px solid var(--border);border-radius:var(--r-sm);resize:vertical;"></textarea></div>
+      <div class="btn-row" style="margin-top:16px;">
+        <button type="submit" class="btn btn-primary">Save →</button>
+        <a href="/staff" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>`, 'New Staff Member');
+      }
+
+      // Create staff member
+      if (path === '/staff/create' && method === 'POST') {
+        const form = await request.formData();
+        const name = form.get('name') || '';
+        if (!name.trim()) return new Response('', { status: 302, headers: { Location: '/staff' } });
+        await env.DB.prepare(
+          'INSERT INTO staff_members (name, title, email, photo_url, bio, display_order) VALUES (?, ?, ?, ?, ?, ?)'
+        ).bind(name, form.get('title')||'', form.get('email')||'', form.get('photo_url')||'', form.get('bio')||'', parseInt(form.get('display_order')||'80')).run();
+        return new Response('', { status: 302, headers: { Location: '/staff?msg=saved' } });
+      }
+
+      // Edit staff form
+      if (path.match(/^\/staff\/edit\/\d+$/) && method === 'GET') {
+        const id = path.split('/').pop();
+        const m = await env.DB.prepare('SELECT * FROM staff_members WHERE id = ?').bind(id).first();
+        if (!m) return new Response('Not found', { status: 404 });
+        return html(`
+${topbarHtml('staff', `<a href="/staff">← All staff</a>`)}
+<div class="wrap">
+  <div class="page-title">Edit — ${esc(m.name)}</div>
+  <div class="card">
+    <form method="POST" action="/staff/update/${m.id}">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="form-group"><label>Name <span style="color:#B85C3A;">*</span></label><input type="text" name="name" value="${esc(m.name)}" required></div>
+        <div class="form-group"><label>Title / Role</label><input type="text" name="title" value="${esc(m.title||'')}"></div>
+        <div class="form-group"><label>Email</label><input type="email" name="email" value="${esc(m.email||'')}"></div>
+        <div class="form-group"><label>Photo URL</label><input type="text" name="photo_url" value="${esc(m.photo_url||'')}" placeholder="/images/staff/name.jpg"></div>
+        <div class="form-group"><label>Display order <span style="font-size:11px;color:var(--gray);">(lower = first)</span></label><input type="number" name="display_order" value="${m.display_order||0}" min="0" step="10"></div>
+      </div>
+      <div class="form-group"><label>Bio</label><textarea name="bio" rows="8" style="width:100%;font-family:var(--sans);font-size:14px;padding:10px;border:1px solid var(--border);border-radius:var(--r-sm);resize:vertical;">${esc(m.bio||'')}</textarea></div>
+      <div class="btn-row" style="margin-top:16px;">
+        <button type="submit" class="btn btn-primary">Save →</button>
+        <a href="/staff" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>`, `Edit — ${m.name}`);
+      }
+
+      // Update staff member
+      if (path.match(/^\/staff\/update\/\d+$/) && method === 'POST') {
+        const id = path.split('/').pop();
+        const form = await request.formData();
+        await env.DB.prepare(
+          'UPDATE staff_members SET name=?, title=?, email=?, photo_url=?, bio=?, display_order=? WHERE id=?'
+        ).bind(form.get('name')||'', form.get('title')||'', form.get('email')||'', form.get('photo_url')||'', form.get('bio')||'', parseInt(form.get('display_order')||'0'), id).run();
+        return new Response('', { status: 302, headers: { Location: '/staff?msg=saved' } });
+      }
+
+      // Delete staff member
+      if (path.match(/^\/staff\/delete\/\d+$/) && method === 'POST') {
+        const id = path.split('/').pop();
+        await env.DB.prepare('DELETE FROM staff_members WHERE id = ?').bind(id).run();
+        return new Response('', { status: 302, headers: { Location: '/staff?msg=deleted' } });
+      }
+    } // end staff tab
+
+    // ── SETTINGS TAB ───────────────────────────────────────────
+    if (path.startsWith('/settings')) {
+      // Show settings form
+      if (path === '/settings' && method === 'GET') {
+        const settings = await env.DB.prepare('SELECT key, value, label, hint FROM site_settings ORDER BY rowid').all();
+        const msg = url.searchParams.get('msg');
+        const alertHtml = msg === 'saved' ? `<div class="alert alert-success">✓ Settings saved.</div>` : '';
+        const fields = settings.results.map(s => `
+          <div class="form-group" style="border-bottom:1px solid var(--border);padding-bottom:20px;margin-bottom:20px;">
+            <label>${(s.label||s.key).replace(/&/g,'&amp;')}</label>
+            ${s.hint ? `<div style="font-size:12px;color:var(--gray);margin-bottom:8px;">${s.hint.replace(/&/g,'&amp;')}</div>` : ''}
+            <input type="text" name="${s.key.replace(/"/g,'&quot;')}" value="${(s.value||'').replace(/"/g,'&quot;').replace(/&/g,'&amp;')}" style="font-family:var(--mono,monospace);font-size:13px;">
+          </div>`).join('');
+        return html(`
+${topbarHtml('settings')}
+<div class="wrap">
+  <div class="page-title">Site Settings</div>
+  <div class="page-sub">Update redirect URLs and other site-wide settings. Changes take effect immediately.</div>
+  ${alertHtml}
+  <div class="card">
+    <form method="POST" action="/settings/update">
+      ${fields}
+      <div class="btn-row">
+        <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save settings →</button>
+      </div>
+    </form>
+  </div>
+</div>`, 'Site Settings');
+      }
+
+      // Save settings
+      if (path === '/settings/update' && method === 'POST') {
+        const form = await request.formData();
+        const settings = await env.DB.prepare('SELECT key FROM site_settings').all();
+        for (const s of settings.results) {
+          const val = form.get(s.key);
+          if (val !== null) {
+            await env.DB.prepare('UPDATE site_settings SET value = ? WHERE key = ?').bind(val, s.key).run();
+          }
+        }
+        return new Response('', { status: 302, headers: { Location: '/settings?msg=saved' } });
+      }
+    } // end settings tab
 
     // ── DASHBOARD ──
     const newsletters = await env.DB.prepare(
