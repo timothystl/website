@@ -3,8 +3,78 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="Timothy Lutheran Church — A diverse city church serving as a bold witness to the saving grace of God through Jesus Christ. From our Neighborhood to the Nations.">
 <title>Timothy Lutheran Church — St. Louis, MO</title>
+<meta name="description" content="Timothy Lutheran Church is a congregation alive to the Gospel of Jesus Christ in Lindenwood Park, South City St. Louis. Come as you are — two Sunday services, Wednesday worship, and a community open to all.">
+<meta name="keywords" content="Lutheran church St. Louis, LCMS church St. Louis, Lutheran church Lindenwood Park, church near me St. Louis, Mother's Day Out St. Louis, Sunday school St. Louis, food pantry St. Louis, Christmas market St. Louis">
+
+<!-- Open Graph / Facebook -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Timothy Lutheran Church">
+<meta property="og:title" content="Timothy Lutheran Church — St. Louis, MO">
+<meta property="og:description" content="A congregation alive to the Gospel. Planted in Lindenwood Park, South City St. Louis. Two Sunday services. Welcoming all people as ones for whom Christ died.">
+<meta property="og:url" content="https://www.timothystl.org/">
+<meta property="og:image" content="https://www.timothystl.org/images/logo.png">
+<meta property="og:locale" content="en_US">
+
+<!-- Twitter / X Cards -->
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Timothy Lutheran Church — St. Louis, MO">
+<meta name="twitter:description" content="A congregation alive to the Gospel. Planted in Lindenwood Park, South City St. Louis.">
+<meta name="twitter:image" content="https://www.timothystl.org/images/logo.png">
+
+<!-- Canonical -->
+<link rel="canonical" href="https://www.timothystl.org/">
+
+<!-- Schema.org: Church (LocalBusiness subtype) -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Church",
+  "name": "Timothy Lutheran Church",
+  "alternateName": "Timothy Lutheran",
+  "url": "https://www.timothystl.org",
+  "logo": "https://www.timothystl.org/images/logo.png",
+  "image": "https://www.timothystl.org/images/logo.png",
+  "description": "Timothy Lutheran Church is a congregation alive to the Gospel of Jesus Christ, gathered in worship and sent in love. Located in Lindenwood Park, South City St. Louis.",
+  "address": {
+    "@type": "PostalAddress",
+    "streetAddress": "6704 Fyler Ave",
+    "addressLocality": "St. Louis",
+    "addressRegion": "MO",
+    "postalCode": "63139",
+    "addressCountry": "US"
+  },
+  "geo": {
+    "@type": "GeoCoordinates",
+    "latitude": 38.5936,
+    "longitude": -90.2987
+  },
+  "telephone": "+13148390563",
+  "email": "office@timothystl.org",
+  "openingHoursSpecification": [
+    {
+      "@type": "OpeningHoursSpecification",
+      "dayOfWeek": "Sunday",
+      "opens": "08:00",
+      "closes": "12:00"
+    }
+  ],
+  "servesCuisine": null,
+  "priceRange": null,
+  "currenciesAccepted": "USD",
+  "paymentAccepted": "Cash, Check",
+  "sameAs": [
+    "https://www.facebook.com/timothystl",
+    "https://www.instagram.com/timothystl",
+    "https://www.youtube.com/@TimothySTL"
+  ],
+  "memberOf": {
+    "@type": "Organization",
+    "name": "Lutheran Church—Missouri Synod",
+    "url": "https://www.lcms.org"
+  }
+}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,700;1,400&family=Source+Sans+3:wght@300;400;600;700;800&family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Raleway:wght@300;400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Nunito:wght@300;400;600;700&family=Crimson+Pro:ital,wght@0,400;0,600;1,400&family=Open+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -314,6 +384,9 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
   .about-values{grid-template-columns:1fr;}
 }
 </style>
+<!-- Cloudflare Web Analytics — no cookies, no GDPR issues, free -->
+<!-- Token: get from Cloudflare dashboard → Web Analytics → Add a site → copy the token below -->
+<script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "REPLACE_WITH_CF_ANALYTICS_TOKEN"}'></script>
 </head>
 <body>
 
@@ -529,6 +602,8 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     <div class="wrap">
       <span class="eyebrow eyebrow--sage">Our team</span>
       <h2>Staff &amp; leadership</h2>
+      <!-- Admin-managed intro (set in admin → Pages → Staff section intro) -->
+      <div id="staff-intro-block" style="display:none;max-width:680px;margin-bottom:28px;font-family:var(--sans);font-size:15px;color:var(--gray);line-height:1.75;"></div>
       <div id="staff-grid" class="staff-grid">
         <div style="grid-column:1/-1;text-align:center;padding:40px 0;color:var(--gray);font-family:var(--sans);font-size:14px;">Loading staff…</div>
       </div>
@@ -2368,6 +2443,47 @@ async function loadVolunteerEvents() {
   }
 }
 
+// Per-page SEO meta: title + description
+var PAGE_META = {
+  'home':         { title: 'Timothy Lutheran Church — St. Louis, MO',                                    desc: 'A congregation alive to the Gospel in Lindenwood Park, South City St. Louis. Two Sunday services. Come as you are.' },
+  'about':        { title: 'About — Timothy Lutheran Church',                                             desc: 'Meet our staff, learn our vision and values, and find out what makes Timothy Lutheran a community alive to the Gospel.' },
+  'worship':      { title: 'Worship — Timothy Lutheran Church',                                           desc: 'Sunday services at 8:00 am, 9:30 am (Vietnamese), and 10:45 am. Plan your visit, watch the live stream, or join midweek worship.' },
+  'sermons':      { title: 'Sermons — Timothy Lutheran Church',                                           desc: 'Watch and listen to recent sermons from Timothy Lutheran Church on YouTube.' },
+  'ministries':   { title: 'Ministries — Timothy Lutheran Church',                                       desc: 'Music, Stephen Ministry, Food Pantry, Urban Beekeepers, Christmas Market, and more. Find your place at Timothy.' },
+  'news':         { title: 'News & Events — Timothy Lutheran Church',                                     desc: 'Stay up to date with the latest news, events, and newsletter archive from Timothy Lutheran Church in St. Louis.' },
+  'contact':      { title: 'Contact — Timothy Lutheran Church',                                           desc: 'Reach Timothy Lutheran Church at 6704 Fyler Ave, St. Louis, MO 63139 · (314) 839-0563 · office@timothystl.org' },
+  'prayer':       { title: 'Prayer Request — Timothy Lutheran Church',                                    desc: 'Submit a prayer request to the pastors and prayer team at Timothy Lutheran Church.' },
+  'give':         { title: 'Give — Timothy Lutheran Church',                                              desc: 'Support the ministry of Timothy Lutheran Church through a secure online gift.' },
+  'events':       { title: 'Volunteer Events — Timothy Lutheran Church',                                  desc: 'Upcoming volunteer opportunities at Timothy Lutheran Church in St. Louis.' },
+  'music':        { title: 'Music Ministry — Timothy Lutheran Church',                                    desc: 'Pipe organ, handbells, steel drums, African choir, and more. A worship soundscape as wide as grace.' },
+  'stephen':      { title: 'Stephen Ministry — Timothy Lutheran Church',                                  desc: 'Trained lay caregivers offering confidential one-to-one Christian care for people in life\'s hardest seasons.' },
+  'foodpantry':   { title: 'Food Pantry — Timothy Lutheran Church',                                       desc: 'Monthly food pantry serving Lindenwood Park and surrounding communities. All are welcome, no appointment needed.' },
+  'bees':         { title: 'Urban Beekeepers — Timothy Lutheran Church',                                  desc: 'Creation care in the city. Join Timothy\'s Urban Beekeepers ministry in Lindenwood Park.' },
+  'christmasmarket': { title: 'Christmas Market — Timothy Lutheran Church',                               desc: 'Timothy\'s annual Christmas Market in Lindenwood Park, St. Louis — vendors, community, and holiday cheer.' },
+  'youth':        { title: 'Youth & Family — Timothy Lutheran Church',                                    desc: 'Youth ministry, Sunday School, Confirmation, VBS, and more at Timothy Lutheran Church.' },
+  'wol':          { title: 'Word of Life School — Timothy Lutheran Church',                               desc: 'Word of Life Lutheran School serves families through faith-based education in St. Louis.' },
+  'calendar':     { title: 'Calendar — Timothy Lutheran Church',                                          desc: 'Upcoming events and services at Timothy Lutheran Church in St. Louis.' },
+  'manual':       { title: 'Staff Manual — Timothy Lutheran Church',                                      desc: 'Internal staff reference for managing the Timothy Lutheran Church website.' },
+};
+function updatePageMeta(id) {
+  var m = PAGE_META[id] || PAGE_META['home'];
+  document.title = m.title;
+  var desc = document.querySelector('meta[name="description"]');
+  if (desc) desc.setAttribute('content', m.desc);
+  var ogTitle = document.querySelector('meta[property="og:title"]');
+  if (ogTitle) ogTitle.setAttribute('content', m.title);
+  var ogDesc = document.querySelector('meta[property="og:description"]');
+  if (ogDesc) ogDesc.setAttribute('content', m.desc);
+  var ogUrl = document.querySelector('meta[property="og:url"]');
+  if (ogUrl) ogUrl.setAttribute('content', 'https://www.timothystl.org' + (id === 'home' ? '/' : '/' + id));
+  var twTitle = document.querySelector('meta[name="twitter:title"]');
+  if (twTitle) twTitle.setAttribute('content', m.title);
+  var twDesc = document.querySelector('meta[name="twitter:description"]');
+  if (twDesc) twDesc.setAttribute('content', m.desc);
+  var canon = document.querySelector('link[rel="canonical"]');
+  if (canon) canon.setAttribute('href', 'https://www.timothystl.org' + (id === 'home' ? '/' : '/' + id));
+}
+
 // Load when news page is shown; also handles pushState history
 window.showPage = function(id, addHistory) {
   document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
@@ -2379,6 +2495,7 @@ window.showPage = function(id, addHistory) {
   } else {
     history.pushState({page:id},'',url);
   }
+  updatePageMeta(id);
   if (id === 'news') { loadNewsletters(); loadNewsItems(); }
   if (id === 'youth') { loadYouthPage(); }
   if (id === 'events' && !volLoaded) { volLoaded = true; loadVolunteerEvents(); }
@@ -2386,7 +2503,7 @@ window.showPage = function(id, addHistory) {
   if (id === 'voters') { loadVotersPage(); }
   if (id === 'home') { loadPageContent('home-notice', 'home-notice-block'); }
   if (id === 'worship') { loadPageContent('worship-notice', 'worship-notice-block'); loadSeasonalContent(); }
-  if (id === 'about') { loadPageContent('about-notice', 'about-notice-block'); loadStaff(); }
+  if (id === 'about') { loadPageContent('about-notice', 'about-notice-block'); loadPageContent('staff-intro', 'staff-intro-block'); loadStaff(); }
   var adminContentPages = ['sundayschool','confirmation','vbs','egghunt','family','music','stephen','foodpantry','bees'];
   if (adminContentPages.indexOf(id) !== -1) { loadMinistryPage(id); }
   if (id === 'christmasmarket') { loadMinistryCta(id); }
@@ -2401,7 +2518,7 @@ window.showPage = function(id, addHistory) {
   if (path === 'voters') { loadVotersPage(); }
   if (path === '' || path === 'home') { loadPageContent('home-notice', 'home-notice-block'); }
   if (path === 'worship') { loadPageContent('worship-notice', 'worship-notice-block'); loadSeasonalContent(); }
-  if (path === 'about') { loadPageContent('about-notice', 'about-notice-block'); loadStaff(); }
+  if (path === 'about') { loadPageContent('about-notice', 'about-notice-block'); loadPageContent('staff-intro', 'staff-intro-block'); loadStaff(); }
   var adminContentPages = ['sundayschool','confirmation','vbs','egghunt','family','music','stephen','foodpantry','bees'];
   if (adminContentPages.indexOf(path) !== -1) { loadMinistryPage(path); }
   if (path === 'christmasmarket') { loadMinistryCta(path); }
