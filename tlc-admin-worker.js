@@ -441,9 +441,9 @@ function buildMonthCalendar(year, month, busyDates, blockedDates, token) {
     if (isPast || isBlocked) {
       cell = `<span class="cal-day-num ${isPast ? 'past' : 'blocked'}">${d}</span>`;
     } else if (isBusy) {
-      cell = `<a href="/gym/book/${token}/new?dt=${ds}" class="cal-day-num busy">${d}</a>`;
+      cell = `<a href="/gym/book/${token}/day?dt=${ds}" class="cal-day-num busy">${d}</a>`;
     } else {
-      cell = `<a href="/gym/book/${token}/new?dt=${ds}" class="cal-day-num">${d}</a>`;
+      cell = `<a href="/gym/book/${token}/day?dt=${ds}" class="cal-day-num">${d}</a>`;
     }
 
     out += `<td>${cell}</td>`;
@@ -1483,6 +1483,49 @@ ${portalHeader}
   </div>
   <div style="font-size:13px;color:var(--gray);text-align:center;margin-top:8px;">Questions? Contact us at <a href="mailto:office@timothystl.org" style="color:var(--steel);">office@timothystl.org</a></div>
 </div>`, `${group.name} — Gym Rental`);
+      }
+
+      // ── DAY AVAILABILITY VIEW ─────────────────────────────────
+      if (sub === 'day' && method === 'GET') {
+        const selDate = url.searchParams.get('dt') || '';
+        if (!selDate) return new Response('', { status: 302, headers: { Location: `/gym/book/${token}` } });
+
+        const isBlocked = await env.DB.prepare('SELECT id FROM gym_blocked_dates WHERE date = ?').bind(selDate).first();
+        if (isBlocked) return new Response('', { status: 302, headers: { Location: `/gym/book/${token}` } });
+
+        const dayBookings = await env.DB.prepare(
+          "SELECT start_time, end_time FROM gym_bookings WHERE booking_date = ? AND status IN ('confirmed','hold') ORDER BY start_time"
+        ).bind(selDate).all();
+
+        const friendlyDate = fmtBookingDate(selDate);
+
+        const takenBlocksHtml = dayBookings.results.length === 0
+          ? `<div style="display:flex;align-items:center;gap:10px;padding:14px;background:#f0faf4;border-radius:8px;border:1px solid #a8d5b5;">
+               <span style="font-size:20px;">✓</span>
+               <span style="font-size:15px;font-weight:600;color:#1a5c2e;">Fully open — no existing bookings</span>
+             </div>`
+          : `<div style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:10px;">Times already booked:</div>
+             ${dayBookings.results.map(b => `
+             <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:#fce8e8;border-radius:8px;margin-bottom:8px;">
+               <span style="font-size:16px;">🚫</span>
+               <span style="font-size:15px;font-weight:600;color:#7a1f1f;">${fmt12h(b.start_time)} – ${fmt12h(b.end_time)}</span>
+             </div>`).join('')}`;
+
+        return portalHtml(`
+${portalHeader}
+<div class="wrap">
+  ${portalNav('cal')}
+  <div class="card">
+    <div class="card-title" style="margin-bottom:4px;">${friendlyDate}</div>
+    <div style="font-size:13px;color:var(--gray);margin-bottom:20px;">Check availability before submitting your request.</div>
+    ${takenBlocksHtml}
+    <div style="margin-top:24px;display:flex;gap:12px;flex-wrap:wrap;">
+      <a href="/gym/book/${token}/new?dt=${selDate}" class="btn btn-primary" style="text-decoration:none;">Request this date →</a>
+      <a href="/gym/book/${token}" class="btn btn-secondary" style="text-decoration:none;">← Back to calendar</a>
+    </div>
+  </div>
+  <div style="font-size:13px;color:var(--gray);text-align:center;margin-top:8px;">Questions? Contact us at <a href="mailto:office@timothystl.org" style="color:var(--steel);">office@timothystl.org</a></div>
+</div>`, `${friendlyDate} — Availability`);
       }
 
       // ── NEW BOOKING FORM ──────────────────────────────────────
@@ -3888,50 +3931,161 @@ ${topbarHtml('gym', `<a href="/gym-rentals/groups">← Groups</a>`)}
         return new Response('', { status: 302, headers: { Location: `/gym-rentals/groups/edit/${gid}?msg=regen` } });
       }
 
-      // ── BLOCKED DATES LIST ────────────────────────────────────
+      // ── BLOCKED DATES CALENDAR ───────────────────────────────
       if (path === '/gym-rentals/blocked' && method === 'GET') {
-        const today = new Date().toISOString().split('T')[0];
-        const blocked = await env.DB.prepare('SELECT * FROM gym_blocked_dates ORDER BY date').all();
-        const blockedHtml = blocked.results.length === 0
-          ? `<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No blocked dates set.</div>`
-          : blocked.results.map(b => `
-<div class="ni-row" style="${b.date < today ? 'opacity:.5;' : ''}">
-  <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--steel);min-width:140px;">${formatDate(b.date)}</div>
-  <div style="font-family:var(--sans);font-size:14px;color:var(--charcoal);flex:1;">${b.reason||'—'}</div>
-  ${b.date < today ? '<span class="badge badge-expired">Past</span>' : ''}
-  <div class="ni-actions">
-    <form method="POST" action="/gym-rentals/blocked/delete/${b.id}" style="display:contents;" onsubmit="return confirm('Remove this blocked date?')">
-      <button type="submit" class="btn btn-sm btn-danger">Remove</button>
-    </form>
-  </div>
-</div>`).join('');
+        const today = new Date();
+        const todayStr = today.toISOString().split('T')[0];
+        const sixMonthsOut = new Date(today.getFullYear(), today.getMonth() + 6, 1).toISOString().split('T')[0];
+
+        const [blocked, bookings] = await Promise.all([
+          env.DB.prepare('SELECT date FROM gym_blocked_dates WHERE date >= ?').bind(todayStr).all(),
+          env.DB.prepare("SELECT DISTINCT booking_date FROM gym_bookings WHERE status IN ('confirmed','hold') AND booking_date >= ?").bind(todayStr).all(),
+        ]);
+        const blockedSet = new Set(blocked.results.map(b => b.date));
+        const bookingSet = new Set(bookings.results.map(b => b.booking_date));
+
+        // Build 3-month admin block calendar
+        const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        let calHtml = '<div class="cal-grid">';
+        for (let i = 0; i < 3; i++) {
+          const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+          const yr = d.getFullYear(), mo = d.getMonth();
+          const lastDay = new Date(yr, mo + 1, 0);
+          const startDow = d.getDay();
+          calHtml += `<div class="cal-month"><div class="cal-month-name">${MONTHS[mo]} ${yr}</div>
+<table class="cal-table"><tr><th>Su</th><th>Mo</th><th>Tu</th><th>We</th><th>Th</th><th>Fr</th><th>Sa</th></tr><tr>`;
+          for (let s = 0; s < startDow; s++) calHtml += '<td></td>';
+          let dow = startDow;
+          for (let day = 1; day <= lastDay.getDate(); day++) {
+            const mm = (mo + 1).toString().padStart(2, '0');
+            const dd = day.toString().padStart(2, '0');
+            const ds = `${yr}-${mm}-${dd}`;
+            const isPast = ds < todayStr;
+            const isBlocked = blockedSet.has(ds);
+            const hasBooking = bookingSet.has(ds);
+            let cls = 'bcal-day';
+            if (isPast) cls += ' bcal-past';
+            else if (isBlocked) cls += ' bcal-blocked';
+            else if (hasBooking) cls += ' bcal-has-booking';
+            const dot = hasBooking && !isBlocked ? `<span class="bcal-dot"></span>` : '';
+            const attrs = isPast ? '' : `data-date="${ds}" data-blocked="${isBlocked ? '1' : '0'}"`;
+            calHtml += `<td><span class="${cls}" ${attrs}>${day}${dot}</span></td>`;
+            dow++;
+            if (dow === 7 && day < lastDay.getDate()) { calHtml += '</tr><tr>'; dow = 0; }
+          }
+          while (dow > 0 && dow < 7) { calHtml += '<td></td>'; dow++; }
+          calHtml += '</tr></table></div>';
+        }
+        calHtml += '</div>';
+
         return html(`
 ${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
+<style>
+.bcal-day{display:block;width:34px;height:34px;line-height:34px;border-radius:50%;margin:0 auto;font-size:13px;font-weight:600;text-align:center;position:relative;cursor:pointer;color:var(--steel);}
+.bcal-past{color:#CBD5E1;cursor:default;}
+.bcal-blocked{background:#fce8e8;color:#7a1f1f;cursor:pointer;}
+.bcal-blocked.bcal-pending-unblock{background:transparent;color:#CBD5E1;text-decoration:line-through;}
+.bcal-has-booking{color:var(--steel);}
+.bcal-selected{background:var(--amber);color:white;}
+.bcal-dot{display:block;width:5px;height:5px;border-radius:50%;background:var(--amber);position:absolute;bottom:2px;left:50%;transform:translateX(-50%);}
+.bcal-selected .bcal-dot{background:white;}
+.bcal-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--gray);margin-top:12px;}
+.bcal-legend span{display:flex;align-items:center;gap:6px;}
+</style>
 <div class="wrap">
   <div class="page-title">Blocked Dates</div>
-  <div class="page-sub">Dates when the gym is unavailable for rental. Groups cannot book these dates.</div>
+  <div class="page-sub">Click dates to select them, then save. Already-blocked dates (red) can be clicked to unblock.</div>
   ${gymAlert}
   <div class="card">
-    <div class="card-title">Block a date</div>
-    <form method="POST" action="/gym-rentals/blocked/add" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
-      <div class="form-group" style="flex:0 0 160px;margin-bottom:0;">
-        <label>Date</label>
-        <input type="date" name="date" required min="${today}">
+    <div class="card-title">Select dates to block or unblock</div>
+    ${calHtml}
+    <div class="bcal-legend" style="margin-bottom:16px;">
+      <span><span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:#fce8e8;border:1px solid #e8a0a0;"></span> Currently blocked</span>
+      <span><span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:var(--amber);"></span> Selected to block</span>
+      <span><span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--amber);vertical-align:middle;margin:0 4px;"></span> Has booking (still blockable)</span>
+    </div>
+    <form id="block-form" method="POST" action="/gym-rentals/blocked/batch">
+      <div id="block-inputs"></div>
+      <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:4px;">
+        <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0;">
+          <label>Reason for new blocked dates (optional)</label>
+          <input type="text" name="reason" placeholder="e.g. Church event, Holiday">
+        </div>
+        <button type="submit" class="btn btn-primary" style="flex-shrink:0;" id="save-btn">Save changes</button>
+        <a href="/gym-rentals/blocked" class="btn btn-secondary" style="flex-shrink:0;text-decoration:none;">Reset</a>
       </div>
-      <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0;">
-        <label>Reason (optional)</label>
-        <input type="text" name="reason" placeholder="e.g. Church event, Holiday">
-      </div>
-      <button type="submit" class="btn btn-primary" style="flex-shrink:0;">Block date</button>
+      <div id="selection-summary" style="font-size:13px;color:var(--gray);margin-top:10px;"></div>
     </form>
   </div>
-  <div class="card">
-    <div class="card-title">Blocked dates</div>
-    ${blockedHtml}
-  </div>
-</div>`, 'Blocked Dates');
+</div>
+<script>
+const toBlock = new Set();
+const toUnblock = new Set();
+
+document.querySelectorAll('.bcal-day[data-date]').forEach(el => {
+  el.addEventListener('click', function() {
+    const date = this.dataset.date;
+    const wasBlocked = this.dataset.blocked === '1';
+    if (wasBlocked) {
+      if (toUnblock.has(date)) {
+        toUnblock.delete(date);
+        this.classList.remove('bcal-pending-unblock');
+      } else {
+        toUnblock.add(date);
+        this.classList.add('bcal-pending-unblock');
+      }
+    } else {
+      if (toBlock.has(date)) {
+        toBlock.delete(date);
+        this.classList.remove('bcal-selected');
+      } else {
+        toBlock.add(date);
+        this.classList.add('bcal-selected');
+      }
+    }
+    updateSummary();
+  });
+});
+
+function updateSummary() {
+  const inp = document.getElementById('block-inputs');
+  inp.innerHTML = '';
+  toBlock.forEach(d => {
+    const h = document.createElement('input');
+    h.type = 'hidden'; h.name = 'to_block'; h.value = d;
+    inp.appendChild(h);
+  });
+  toUnblock.forEach(d => {
+    const h = document.createElement('input');
+    h.type = 'hidden'; h.name = 'to_unblock'; h.value = d;
+    inp.appendChild(h);
+  });
+  const parts = [];
+  if (toBlock.size) parts.push(toBlock.size + ' date(s) to block');
+  if (toUnblock.size) parts.push(toUnblock.size + ' date(s) to unblock');
+  document.getElementById('selection-summary').textContent = parts.length ? parts.join(' · ') : 'No changes selected.';
+  document.getElementById('save-btn').disabled = !parts.length;
+}
+updateSummary();
+</script>
+`, 'Blocked Dates');
       }
 
+      if (path === '/gym-rentals/blocked/batch' && method === 'POST') {
+        const form = await request.formData();
+        const reason = form.get('reason') || '';
+        const toBlock   = form.getAll('to_block');
+        const toUnblock = form.getAll('to_unblock');
+        for (const d of toBlock) {
+          try { await env.DB.prepare('INSERT OR REPLACE INTO gym_blocked_dates (date, reason) VALUES (?, ?)').bind(d, reason).run(); } catch (_) {}
+        }
+        for (const d of toUnblock) {
+          try { await env.DB.prepare('DELETE FROM gym_blocked_dates WHERE date = ?').bind(d).run(); } catch (_) {}
+        }
+        return new Response('', { status: 302, headers: { Location: '/gym-rentals/blocked?msg=saved' } });
+      }
+
+      // Keep single-date add/delete for backward compatibility
       if (path === '/gym-rentals/blocked/add' && method === 'POST') {
         const form = await request.formData();
         const bdate = form.get('date');
