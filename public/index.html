@@ -1048,6 +1048,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
               <label class="form-label">Message</label>
               <textarea name="message" class="form-input" placeholder="How can we help you?" required></textarea>
             </div>
+            <input type="text" name="website" style="display:none;" tabindex="-1" autocomplete="off" aria-hidden="true">
             <button type="submit" class="btn btn-primary" id="contact-btn">Send message</button>
           </form>
         </div>
@@ -1128,6 +1129,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
             <label class="form-label">Prayer request</label>
             <textarea name="message" class="form-input" style="min-height:160px;" placeholder="Share what's on your heart..." required></textarea>
           </div>
+          <input type="text" name="website" style="display:none;" tabindex="-1" autocomplete="off" aria-hidden="true">
           <button type="submit" class="btn btn-primary" id="prayer-btn">Submit prayer request</button>
         </form>
       </div>
@@ -1332,6 +1334,13 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       </div>
     </div>
   </section>
+  <!-- Admin-managed content (set in admin → Ministries → Music → Edit body field) -->
+  <section id="music-content-section" class="section section--white" style="display:none;">
+    <div class="wrap" style="max-width:760px;"><div id="music-content" class="rich-content"></div></div>
+  </section>
+  <!-- Admin-managed posts (upcoming / past announcements) -->
+  <div id="music-upcoming-section" style="display:none;"><section class="section section--linen"><div class="wrap" style="max-width:720px;"><span class="eyebrow eyebrow--sage">Announcements</span><div id="music-upcoming-list"></div></div></section></div>
+  <div id="music-past-section" style="display:none;"><section class="section section--linen"><div class="wrap" style="max-width:720px;"><div id="music-past-list"></div></div></section></div>
   <!-- Admin-managed CTA button (set in admin → Ministries → Music → Edit) -->
   <div id="music-admin-cta" style="display:none;"></div>
   <!-- ═══════════════════════════════════════════════════════════════════
@@ -1389,6 +1398,13 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       <p style="color:var(--gray);">For more information about Stephen Ministry at Timothy, contact the church office at <a href="mailto:office@timothystl.org" style="color:var(--mid);font-weight:600;">office@timothystl.org</a> or call <a href="tel:+13148390563" style="color:var(--mid);font-weight:600;">(314) 839-0563</a>.</p>
     </div>
   </section>
+  <!-- Admin-managed content (set in admin → Ministries → Stephen Ministry → Edit body field) -->
+  <section id="stephen-content-section" class="section section--white" style="display:none;">
+    <div class="wrap" style="max-width:760px;"><div id="stephen-content" class="rich-content"></div></div>
+  </section>
+  <!-- Admin-managed posts (upcoming / past announcements) -->
+  <div id="stephen-upcoming-section" style="display:none;"><section class="section section--linen"><div class="wrap" style="max-width:720px;"><span class="eyebrow eyebrow--sage">Announcements</span><div id="stephen-upcoming-list"></div></div></section></div>
+  <div id="stephen-past-section" style="display:none;"><section class="section section--linen"><div class="wrap" style="max-width:720px;"><div id="stephen-past-list"></div></div></section></div>
   <!-- Admin-managed CTA button (set in admin → Ministries → Stephen Ministry → Edit) -->
   <div id="stephen-admin-cta" style="display:none;"></div>
   <!-- ═══════════════════════════════════════════════════════════════════
@@ -1462,6 +1478,13 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       </div>
     </div>
   </section>
+  <!-- Admin-managed content (set in admin → Ministries → Food Pantry → Edit body field) -->
+  <section id="foodpantry-content-section" class="section section--white" style="display:none;">
+    <div class="wrap" style="max-width:760px;"><div id="foodpantry-content" class="rich-content"></div></div>
+  </section>
+  <!-- Admin-managed posts (upcoming / past announcements) -->
+  <div id="foodpantry-upcoming-section" style="display:none;"><section class="section section--linen"><div class="wrap" style="max-width:720px;"><span class="eyebrow eyebrow--sage">Announcements</span><div id="foodpantry-upcoming-list"></div></div></section></div>
+  <div id="foodpantry-past-section" style="display:none;"><section class="section section--linen"><div class="wrap" style="max-width:720px;"><div id="foodpantry-past-list"></div></div></section></div>
   <!-- Admin-managed CTA button (set in admin → Ministries → Food Pantry → Edit) -->
   <div id="foodpantry-admin-cta" style="display:none;"></div>
   <!-- ═══════════════════════════════════════════════════════════════════
@@ -1523,6 +1546,13 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       </div>
     </div>
   </section>
+  <!-- Admin-managed content (set in admin → Ministries → Urban Beekeepers → Edit body field) -->
+  <section id="bees-content-section" class="section section--white" style="display:none;">
+    <div class="wrap" style="max-width:760px;"><div id="bees-content" class="rich-content"></div></div>
+  </section>
+  <!-- Admin-managed posts (upcoming / past announcements) -->
+  <div id="bees-upcoming-section" style="display:none;"><section class="section section--linen"><div class="wrap" style="max-width:720px;"><span class="eyebrow eyebrow--sage">Announcements</span><div id="bees-upcoming-list"></div></div></section></div>
+  <div id="bees-past-section" style="display:none;"><section class="section section--linen"><div class="wrap" style="max-width:720px;"><div id="bees-past-list"></div></div></section></div>
   <!-- Admin-managed CTA button (set in admin → Ministries → Urban Beekeepers → Edit) -->
   <div id="bees-admin-cta" style="display:none;"></div>
   <!-- ═══════════════════════════════════════════════════════════════════
@@ -1586,6 +1616,10 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       </div>
       <p style="font-size:13px;color:var(--gray);margin-top:16px;">Vendor registration is handled via Google Form — link posted here when open.</p>
     </div>
+  </section>
+  <!-- Admin-managed content (set in admin → Ministries → Christmas Market → Edit body field) -->
+  <section id="christmasmarket-admin-content-section" class="section section--white" style="display:none;">
+    <div class="wrap" style="max-width:760px;"><div id="christmasmarket-admin-content" class="rich-content"></div></div>
   </section>
   <!-- Admin-managed CTA button (set in admin → Ministries → Christmas Market → Edit) -->
   <div id="christmasmarket-admin-cta" style="display:none;"></div>
@@ -2128,7 +2162,8 @@ async function loadYouthPage() {
       document.getElementById('youth-content-section').style.display = 'none';
     }
   } catch(e) {
-    document.getElementById('youth-content-section').style.display = 'none';
+    var _yc = document.getElementById('youth-content');
+    if (_yc) _yc.innerHTML = '<p style="color:var(--gray);font-style:italic;">Content temporarily unavailable — please check back or <button onclick="showPage(\'contact\')" style="background:none;border:none;cursor:pointer;color:var(--mid);font-weight:600;font-size:inherit;padding:0;font-family:inherit;">contact the office</button>.</p>';
   }
 
   // Posts
@@ -2193,18 +2228,26 @@ async function loadPageContent(key, targetId) {
   } catch(e) {}
 }
 
-// Load admin-managed CTA button for static ministry pages (music, stephen, etc.)
+// Load admin-managed content + CTA button for Christmas Market (other static pages use loadMinistryPage)
 var ministryCTALoaded = {};
 async function loadMinistryCta(slug) {
   if (ministryCTALoaded[slug]) return;
   ministryCTALoaded[slug] = true;
   var ctaWrap = document.getElementById(slug + '-admin-cta');
-  if (!ctaWrap) return;
   try {
     var res = await fetch('https://admin.timothystl.org/api/ministry/' + slug);
     if (!res.ok) return;
     var data = await res.json();
-    if (data.cta_label && data.cta_url) {
+    // Load admin body content if present
+    if (data.content && data.content.trim()) {
+      var contentEl = document.getElementById(slug + '-admin-content');
+      var contentSection = document.getElementById(slug + '-admin-content-section');
+      if (contentEl && contentSection) {
+        contentEl.innerHTML = fixImgUrls(data.content);
+        contentSection.style.display = '';
+      }
+    }
+    if (ctaWrap && data.cta_label && data.cta_url) {
       ctaWrap.innerHTML = '<div style="text-align:center;padding:32px 16px;">' +
         '<a href="' + data.cta_url.replace(/"/g,'&quot;') + '" target="_blank" class="btn btn-primary" style="font-size:16px;padding:14px 32px;">' + data.cta_label + '</a></div>';
       ctaWrap.style.display = '';
@@ -2241,7 +2284,12 @@ async function loadMinistryPage(slug) {
       return;
     }
   } catch(e) {
-    document.getElementById(slug + '-content-section').style.display = 'none';
+    var _cs = document.getElementById(slug + '-content-section');
+    if (_cs && _cs.style.display !== 'none') {
+      // Dynamic page — show friendly error since there's no static fallback
+      var _c = document.getElementById(slug + '-content');
+      if (_c) _c.innerHTML = '<p style="color:var(--gray);font-style:italic;">Content temporarily unavailable — please check back or <button onclick="showPage(\'contact\')" style="background:none;border:none;cursor:pointer;color:var(--mid);font-weight:600;font-size:inherit;padding:0;font-family:inherit;">contact the office</button>.</p>';
+    }
     return;
   }
 
@@ -2343,10 +2391,9 @@ window.showPage = function(id, addHistory) {
   if (id === 'home') { loadPageContent('home-notice', 'home-notice-block'); }
   if (id === 'worship') { loadPageContent('worship-notice', 'worship-notice-block'); }
   if (id === 'about') { loadPageContent('about-notice', 'about-notice-block'); }
-  var ministrySubs = ['sundayschool','confirmation','vbs','egghunt','family'];
-  if (ministrySubs.indexOf(id) !== -1) { loadMinistryPage(id); }
-  var staticMinistries = ['music','stephen','foodpantry','bees','christmasmarket'];
-  if (staticMinistries.indexOf(id) !== -1) { loadMinistryCta(id); }
+  var adminContentPages = ['sundayschool','confirmation','vbs','egghunt','family','music','stephen','foodpantry','bees'];
+  if (adminContentPages.indexOf(id) !== -1) { loadMinistryPage(id); }
+  if (id === 'christmasmarket') { loadMinistryCta(id); }
 };
 // Load data if landing directly on a lazy-loaded page
 (function(){
@@ -2359,10 +2406,9 @@ window.showPage = function(id, addHistory) {
   if (path === '' || path === 'home') { loadPageContent('home-notice', 'home-notice-block'); }
   if (path === 'worship') { loadPageContent('worship-notice', 'worship-notice-block'); }
   if (path === 'about') { loadPageContent('about-notice', 'about-notice-block'); }
-  var ministrySubs = ['sundayschool','confirmation','vbs','egghunt','family'];
-  if (ministrySubs.indexOf(path) !== -1) { loadMinistryPage(path); }
-  var staticMinistries = ['music','stephen','foodpantry','bees','christmasmarket'];
-  if (staticMinistries.indexOf(path) !== -1) { loadMinistryCta(path); }
+  var adminContentPages = ['sundayschool','confirmation','vbs','egghunt','family','music','stephen','foodpantry','bees'];
+  if (adminContentPages.indexOf(path) !== -1) { loadMinistryPage(path); }
+  if (path === 'christmasmarket') { loadMinistryCta(path); }
 })();
 
 // ── CONTACT FORM ──────────────────────────────────────────────
@@ -2370,6 +2416,16 @@ document.getElementById('contact-form').addEventListener('submit', async functio
   e.preventDefault();
   const btn = document.getElementById('contact-btn');
   const alert = document.getElementById('contact-alert');
+  const errStyle = 'display:block;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:14px;background:#fce8e8;border-left:3px solid #B85C3A;color:#7a1f1f;';
+  // Honeypot — if filled, silently succeed
+  if (this.querySelector('[name="website"]').value) { this.reset(); return; }
+  // Validate
+  const nameVal = this.querySelector('[name="name"]').value.trim();
+  const msgVal = this.querySelector('[name="message"]').value.trim();
+  const emailVal = this.querySelector('[name="email"]').value.trim();
+  if (!nameVal) { alert.style.cssText = errStyle; alert.textContent = 'Please enter your name.'; return; }
+  if (!msgVal) { alert.style.cssText = errStyle; alert.textContent = 'Please enter a message.'; return; }
+  if (emailVal && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) { alert.style.cssText = errStyle; alert.textContent = 'Please enter a valid email address.'; return; }
   btn.disabled = true; btn.textContent = 'Sending…';
   alert.style.display = 'none';
   try {
@@ -2392,6 +2448,14 @@ document.getElementById('prayer-form').addEventListener('submit', async function
   e.preventDefault();
   const btn = document.getElementById('prayer-btn');
   const alert = document.getElementById('prayer-alert');
+  const errStyle = 'display:block;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:14px;background:#fce8e8;border-left:3px solid #B85C3A;color:#7a1f1f;';
+  // Honeypot — if filled, silently succeed
+  if (this.querySelector('[name="website"]').value) { this.reset(); return; }
+  // Validate
+  const msgVal = this.querySelector('[name="message"]').value.trim();
+  const emailVal = this.querySelector('[name="email"]').value.trim();
+  if (!msgVal) { alert.style.cssText = errStyle; alert.textContent = 'Please share your prayer request.'; return; }
+  if (emailVal && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) { alert.style.cssText = errStyle; alert.textContent = 'Please enter a valid email address.'; return; }
   btn.disabled = true; btn.textContent = 'Sending…';
   alert.style.display = 'none';
   try {

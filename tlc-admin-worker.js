@@ -955,6 +955,8 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
         const name = (form.get('name') || '').trim();
         const email = (form.get('email') || '').trim();
         const message = (form.get('message') || '').trim();
+        // Honeypot — bots fill this hidden field, humans never see it
+        if (form.get('website')) return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
         if (!name || !message) return new Response(JSON.stringify({ error: 'Name and message are required' }), { status: 400, headers: corsHeaders });
         const html = `<p><strong>Name:</strong> ${name}</p><p><strong>Email:</strong> ${email || '(not provided)'}</p><p><strong>Message:</strong></p><p style="white-space:pre-wrap">${message.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`;
         const result = await sendTransactionalEmail(env, {
@@ -963,6 +965,14 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
           toEmails: ['dinger@timothystl.org', 'office@timothystl.org']
         });
         if (result.error) return new Response(JSON.stringify({ error: result.error }), { status: 500, headers: corsHeaders });
+        // Confirmation email to user
+        if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          await sendTransactionalEmail(env, {
+            subject: 'We received your message — Timothy Lutheran Church',
+            htmlContent: `<p>Hi ${name},</p><p>Thank you for reaching out to Timothy Lutheran Church. We received your message and will be in touch soon.</p><p>If you need immediate assistance, please call us at (314) 839-0563 or email <a href="mailto:office@timothystl.org">office@timothystl.org</a>.</p><p>Grace and peace,<br>The team at Timothy Lutheran Church</p>`,
+            toEmails: [email]
+          });
+        }
         return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
       } catch(e) {
         return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: corsHeaders });
@@ -978,6 +988,8 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
         const name = (form.get('name') || '').trim();
         const email = (form.get('email') || '').trim();
         const message = (form.get('message') || '').trim();
+        // Honeypot — bots fill this hidden field, humans never see it
+        if (form.get('website')) return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
         if (!message) return new Response(JSON.stringify({ error: 'Prayer request is required' }), { status: 400, headers: corsHeaders });
         const htmlContent = `<p><strong>Name:</strong> ${name || '(anonymous)'}</p><p><strong>Email:</strong> ${email || '(not provided)'}</p><p><strong>Prayer request:</strong></p><p style="white-space:pre-wrap">${message.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`;
         const result = await sendTransactionalEmail(env, {
@@ -986,6 +998,14 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
           toEmails: ['dinger@timothystl.org', 'office@timothystl.org']
         });
         if (result.error) return new Response(JSON.stringify({ error: result.error }), { status: 500, headers: corsHeaders });
+        // Confirmation email to user
+        if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          await sendTransactionalEmail(env, {
+            subject: "We're praying for you — Timothy Lutheran Church",
+            htmlContent: `<p>Hi ${name || 'friend'},</p><p>Thank you for sharing your prayer request with us. Our pastoral staff has received it and will be praying for you.</p><p>If you'd like to speak with someone, please reach out to our office at <a href="mailto:office@timothystl.org">office@timothystl.org</a> or call (314) 839-0563.</p><p>Grace and peace,<br>The pastoral staff at Timothy Lutheran Church</p>`,
+            toEmails: [email]
+          });
+        }
         return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
       } catch(e) {
         return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: corsHeaders });
