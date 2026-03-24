@@ -104,6 +104,70 @@ const DB_INIT_SITE_SETTINGS = `CREATE TABLE IF NOT EXISTS site_settings (
   hint TEXT
 )`;
 
+// ── GYM RENTAL DB TABLES ─────────────────────────────────────
+const DB_INIT_GYM_GROUPS = `CREATE TABLE IF NOT EXISTS gym_groups (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  name             TEXT NOT NULL,
+  contact          TEXT,
+  email            TEXT,
+  phone            TEXT,
+  notes            TEXT,
+  access_token     TEXT UNIQUE,
+  max_active_holds INTEGER DEFAULT 3,
+  active           INTEGER DEFAULT 1,
+  created_at       TEXT DEFAULT (datetime('now'))
+)`;
+
+const DB_INIT_GYM_BOOKINGS = `CREATE TABLE IF NOT EXISTS gym_bookings (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  group_id         INTEGER NOT NULL,
+  booking_date     TEXT NOT NULL,
+  start_time       TEXT NOT NULL,
+  end_time         TEXT NOT NULL,
+  recurrence_id    INTEGER,
+  status           TEXT DEFAULT 'confirmed',
+  hold_expires_at  TEXT,
+  notes            TEXT,
+  created_by       TEXT DEFAULT 'admin',
+  created_at       TEXT DEFAULT (datetime('now'))
+)`;
+
+const DB_INIT_GYM_RECURRENCES = `CREATE TABLE IF NOT EXISTS gym_recurrences (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  group_id     INTEGER NOT NULL,
+  day_of_week  INTEGER NOT NULL,
+  start_time   TEXT NOT NULL,
+  end_time     TEXT NOT NULL,
+  start_date   TEXT NOT NULL,
+  end_date     TEXT NOT NULL,
+  status       TEXT DEFAULT 'pending_review',
+  notes        TEXT,
+  created_by   TEXT DEFAULT 'admin',
+  created_at   TEXT DEFAULT (datetime('now'))
+)`;
+
+const DB_INIT_GYM_BLOCKED = `CREATE TABLE IF NOT EXISTS gym_blocked_dates (
+  id      INTEGER PRIMARY KEY AUTOINCREMENT,
+  date    TEXT NOT NULL UNIQUE,
+  reason  TEXT
+)`;
+
+const DB_INIT_GYM_INVOICES = `CREATE TABLE IF NOT EXISTS gym_invoices (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  group_id      INTEGER NOT NULL,
+  recurrence_id INTEGER,
+  booking_id    INTEGER,
+  invoice_date  TEXT NOT NULL,
+  period_start  TEXT,
+  period_end    TEXT,
+  total_hours   REAL,
+  rate          REAL,
+  total_amount  REAL,
+  notes         TEXT,
+  status        TEXT DEFAULT 'unpaid',
+  created_at    TEXT DEFAULT (datetime('now'))
+)`;
+
 const DB_INIT_SERMON_NOTES = `CREATE TABLE IF NOT EXISTS sermon_notes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   series_id INTEGER,
@@ -147,6 +211,10 @@ const INITIAL_SETTINGS = [
   { key: 'zoom_url',          value: 'https://us02web.zoom.us/j/3147818673',                                                                   label: 'Zoom meeting URL',      hint: 'Used for the /zoom redirect. Update when the Zoom link changes.' },
   { key: 'councilfiles_url',  value: 'https://drive.google.com/drive/folders/1pgqJ32H3HS7SNYnnf7rOswC5c87IAzA4?usp=drive_link',              label: 'Council files URL',     hint: 'Used for the /councilfiles redirect. Update when the Google Drive folder changes.' },
   { key: 'give_url',          value: 'https://timothystl.breezechms.com/give/online',                                                          label: 'Online giving URL',     hint: 'Used for the Give button and /give page. Update when the giving platform changes.' },
+  { key: 'gym_rate_per_hour', value: '25.00',                   label: 'Gym rental rate (per hour, $)',  hint: 'Hourly rate charged for gym rentals. Shown to groups when they confirm a booking.' },
+  { key: 'gym_hold_hours',    value: '48',                      label: 'Gym hold duration (hours)',      hint: 'How many hours a tentative hold lasts before auto-expiring. Default: 48.' },
+  { key: 'gym_ical_token',    value: '',                        label: 'Gym iCal feed token',            hint: 'Secret token for the janitor\'s calendar subscription URL. Leave blank to disable.' },
+  { key: 'gym_admin_email',   value: 'office@timothystl.org',  label: 'Gym booking notification email', hint: 'Email notified when a group places a hold, confirms a booking, or submits a recurring request.' },
 ];
 
 // ── IMAGE HELPERS ───────────────────────────────────────────
@@ -173,6 +241,21 @@ async function sweepExpiredItems(env, origin) {
       await env.DB.prepare('DELETE FROM news_items WHERE id = ?').bind(item.id).run();
     }
   } catch (_) {}
+}
+
+async function sweepExpiredHolds(env) {
+  const now = new Date().toISOString();
+  try {
+    await env.DB.prepare(
+      "UPDATE gym_bookings SET status = 'expired' WHERE status = 'hold' AND hold_expires_at IS NOT NULL AND hold_expires_at < ?"
+    ).bind(now).run();
+  } catch (_) {}
+}
+
+function fmtBookingDate(d) {
+  if (!d) return '';
+  const dt = new Date(d + 'T12:00:00');
+  return dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
 // Builds the TinyMCE rich-text editor section for the body field
@@ -517,6 +600,7 @@ function topbarHtml(activeTab, extraLinks = '') {
     <a href="/pages" class="tab${activeTab === 'pages' ? ' tab-active' : ''}">Pages</a>
     <a href="/staff" class="tab${activeTab === 'staff' ? ' tab-active' : ''}">Staff</a>
     <a href="/settings" class="tab${activeTab === 'settings' ? ' tab-active' : ''}">Settings</a>
+    <a href="/gym-rentals" class="tab${activeTab === 'gym' ? ' tab-active' : ''}">Gym Rentals</a>
     <a href="https://volunteer.timothystl.org/scheduler" target="_blank" class="tab tab-external">Scheduler ↗</a>
     <a href="https://volunteer.timothystl.org/admin" target="_blank" class="tab tab-external">Volunteer Admin ↗</a>
   </div>
@@ -803,6 +887,12 @@ export default {
     // New tables
     try { await env.DB.prepare(DB_INIT_STAFF_MEMBERS).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_SITE_SETTINGS).run(); } catch (_) {}
+    // Gym rental tables
+    try { await env.DB.prepare(DB_INIT_GYM_GROUPS).run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_GYM_BOOKINGS).run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_GYM_RECURRENCES).run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_GYM_BLOCKED).run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_GYM_INVOICES).run(); } catch (_) {}
     // Pre-populate staff members (only if table is empty)
     try {
       const staffCount = await env.DB.prepare('SELECT COUNT(*) as n FROM staff_members').first();
@@ -2965,6 +3055,371 @@ ${topbarHtml('staff', `<a href="/staff">← All staff</a>`)}
     } // end staff tab
 
     // ── SETTINGS TAB ───────────────────────────────────────────
+    // ── GYM RENTALS ─────────────────────────────────────────────
+    if (path.startsWith('/gym-rentals')) {
+      await sweepExpiredHolds(env);
+
+      const gymMsg = url.searchParams.get('msg');
+      const gymAlert = gymMsg === 'saved'   ? `<div class="alert alert-success">✓ Saved.</div>`
+        : gymMsg === 'created' ? `<div class="alert alert-success">✓ Group created.</div>`
+        : gymMsg === 'deleted' ? `<div class="alert alert-success">✓ Deleted.</div>`
+        : '';
+
+      // ── DASHBOARD ──────────────────────────────────────────────
+      if (path === '/gym-rentals' && method === 'GET') {
+        const today = new Date().toISOString().split('T')[0];
+        const sevenDays = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
+        const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        const [upcoming, holds, pending] = await Promise.all([
+          env.DB.prepare(`SELECT b.*, g.name as group_name FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id WHERE b.status = 'confirmed' AND b.booking_date >= ? AND b.booking_date <= ? ORDER BY b.booking_date, b.start_time`).bind(today, sevenDays).all(),
+          env.DB.prepare(`SELECT b.*, g.name as group_name FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id WHERE b.status = 'hold' ORDER BY b.hold_expires_at`).all(),
+          env.DB.prepare(`SELECT r.*, g.name as group_name FROM gym_recurrences r LEFT JOIN gym_groups g ON g.id = r.group_id WHERE r.status = 'pending_review' ORDER BY r.created_at`).all(),
+        ]);
+        const upHtml = upcoming.results.length === 0
+          ? `<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No confirmed bookings in the next 7 days.</div>`
+          : upcoming.results.map(b => `
+<div class="ni-row">
+  <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--steel);min-width:100px;">${fmtBookingDate(b.booking_date)}</div>
+  <div style="font-family:var(--serif);font-size:15px;color:var(--charcoal);flex:1;">${b.group_name||'—'}</div>
+  <div class="ni-meta">${b.start_time}–${b.end_time}</div>
+  <span class="badge badge-active">Confirmed</span>
+</div>`).join('');
+        const holdsHtml = holds.results.length === 0
+          ? `<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No pending holds.</div>`
+          : holds.results.map(b => {
+              const exp = b.hold_expires_at ? new Date(b.hold_expires_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '?';
+              return `
+<div class="ni-row">
+  <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--steel);min-width:100px;">${fmtBookingDate(b.booking_date)}</div>
+  <div style="font-family:var(--serif);font-size:15px;color:var(--charcoal);flex:1;">${b.group_name||'—'}</div>
+  <div class="ni-meta">${b.start_time}–${b.end_time}</div>
+  <div class="ni-meta" style="color:#7A4F00;">Exp ${exp}</div>
+  <span class="badge" style="background:#FFF3D6;color:#7A4F00;">Hold</span>
+  <div class="ni-actions">
+    <form method="POST" action="/gym-rentals/bookings/release/${b.id}" style="display:contents;" onsubmit="return confirm('Release this hold? The slot will open back up.')">
+      <button type="submit" class="btn btn-sm btn-danger">Release</button>
+    </form>
+  </div>
+</div>`; }).join('');
+        const recHtml = pending.results.length === 0
+          ? `<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No pending recurring requests.</div>`
+          : pending.results.map(r => `
+<div class="ni-row">
+  <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--steel);min-width:100px;">${DOW[r.day_of_week]}s</div>
+  <div style="font-family:var(--serif);font-size:15px;color:var(--charcoal);flex:1;">${r.group_name||'—'}</div>
+  <div class="ni-meta">${r.start_time}–${r.end_time}</div>
+  <div class="ni-meta">${r.start_date} → ${r.end_date}</div>
+  <span class="badge badge-upcoming">Pending</span>
+  <div class="ni-actions">
+    <a href="/gym-rentals/recurring/review/${r.id}" class="btn btn-sm btn-primary">Review</a>
+  </div>
+</div>`).join('');
+        return html(`
+${topbarHtml('gym')}
+<div class="wrap">
+  <div class="page-title">Gym Rentals</div>
+  <div class="page-sub">Manage rental groups, bookings, and schedules.</div>
+  ${gymAlert}
+  <div class="btn-row" style="margin-bottom:28px;">
+    <a href="/gym-rentals/bookings/new" class="btn btn-primary">+ New Booking</a>
+    <a href="/gym-rentals/groups" class="btn btn-secondary">Manage Groups</a>
+    <a href="/gym-rentals/blocked" class="btn btn-sage">Blocked Dates</a>
+    <a href="/gym-rentals/invoices" class="btn btn-secondary">Invoices</a>
+  </div>
+  <div class="card">
+    <div class="card-title">Confirmed — Next 7 Days</div>
+    ${upHtml}
+  </div>
+  <div class="card">
+    <div class="card-title">Pending Holds</div>
+    ${holdsHtml}
+  </div>
+  <div class="card">
+    <div class="card-title">Recurring Requests — Awaiting Your Review</div>
+    ${recHtml}
+  </div>
+</div>`, 'Gym Rentals');
+      }
+
+      // ── GROUPS LIST ──────────────────────────────────────────
+      if (path === '/gym-rentals/groups' && method === 'GET') {
+        const groups = await env.DB.prepare('SELECT * FROM gym_groups ORDER BY name').all();
+        const groupsHtml = groups.results.length === 0
+          ? `<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No groups yet. Add your first rental group.</div>`
+          : groups.results.map(g => `
+<div class="ni-row">
+  <div style="flex:1;">
+    <div style="font-family:var(--serif);font-size:16px;color:var(--steel);">${g.name}</div>
+    <div style="font-family:var(--sans);font-size:12px;color:var(--gray);margin-top:3px;">${[g.contact,g.email,g.phone].filter(Boolean).join(' · ')}</div>
+  </div>
+  <div class="ni-meta">Max ${g.max_active_holds||3} holds</div>
+  <span class="badge ${g.active ? 'badge-active' : 'badge-expired'}">${g.active ? 'Active' : 'Inactive'}</span>
+  <div class="ni-actions">
+    <a href="/gym-rentals/groups/edit/${g.id}" class="btn btn-sm btn-secondary">Edit</a>
+  </div>
+</div>`).join('');
+        return html(`
+${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
+<div class="wrap">
+  <div class="page-title">Rental Groups</div>
+  <div class="page-sub">Each group gets a private booking link. Share it with them — no login required.</div>
+  ${gymAlert}
+  <div class="btn-row" style="margin-bottom:28px;">
+    <a href="/gym-rentals/groups/new" class="btn btn-primary">+ Add Group</a>
+  </div>
+  <div class="card">${groupsHtml}</div>
+</div>`, 'Rental Groups');
+      }
+
+      // ── NEW GROUP FORM ───────────────────────────────────────
+      if (path === '/gym-rentals/groups/new' && method === 'GET') {
+        return html(`
+${topbarHtml('gym', `<a href="/gym-rentals/groups">← Groups</a>`)}
+<div class="wrap">
+  <div class="page-title">Add Rental Group</div>
+  <div class="page-sub">After saving, you'll see their private booking link to share.</div>
+  <div class="card">
+    <form method="POST" action="/gym-rentals/groups/create">
+      <div class="form-group">
+        <label>Group name *</label>
+        <input type="text" name="name" required placeholder="e.g. St. Francis Basketball League">
+      </div>
+      <div class="form-group">
+        <label>Contact person</label>
+        <input type="text" name="contact" placeholder="John Smith">
+      </div>
+      <div class="form-group">
+        <label>Contact email *</label>
+        <input type="email" name="email" required placeholder="contact@example.com">
+      </div>
+      <div class="form-group">
+        <label>Phone</label>
+        <input type="text" name="phone" placeholder="314-555-0100">
+      </div>
+      <div class="form-group">
+        <label>Max simultaneous holds <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— prevents a group from holding too many dates at once (default: 3)</span></label>
+        <input type="number" name="max_active_holds" value="3" min="1" max="20">
+      </div>
+      <div class="form-group">
+        <label>Notes <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— internal only, not shown to group</span></label>
+        <textarea name="notes" placeholder="Internal notes about this group…"></textarea>
+      </div>
+      <div class="btn-row">
+        <button type="submit" class="btn btn-primary">Save &amp; Get Link →</button>
+        <a href="/gym-rentals/groups" class="btn btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>`, 'Add Group');
+      }
+
+      // ── CREATE GROUP ─────────────────────────────────────────
+      if (path === '/gym-rentals/groups/create' && method === 'POST') {
+        const form = await request.formData();
+        const token = crypto.randomUUID().replace(/-/g, '');
+        await env.DB.prepare(
+          'INSERT INTO gym_groups (name, contact, email, phone, notes, access_token, max_active_holds) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        ).bind(
+          form.get('name')||'', form.get('contact')||'', form.get('email')||'',
+          form.get('phone')||'', form.get('notes')||'', token,
+          parseInt(form.get('max_active_holds')||'3', 10)
+        ).run();
+        const row = await env.DB.prepare('SELECT id FROM gym_groups WHERE access_token = ?').bind(token).first();
+        return new Response('', { status: 302, headers: { Location: `/gym-rentals/groups/edit/${row.id}?msg=created` } });
+      }
+
+      // ── EDIT GROUP ───────────────────────────────────────────
+      if (path.startsWith('/gym-rentals/groups/edit/') && method === 'GET') {
+        const gid = parseInt(path.split('/').pop(), 10);
+        const g = await env.DB.prepare('SELECT * FROM gym_groups WHERE id = ?').bind(gid).first();
+        if (!g) return new Response('Not found', { status: 404 });
+        const portalLink = `${url.origin}/gym/book/${g.access_token}`;
+        const em = url.searchParams.get('msg');
+        const editAlert = em === 'created' ? `<div class="alert alert-success">✓ Group created! Share the booking link below with the group.</div>`
+          : em === 'saved' ? `<div class="alert alert-success">✓ Changes saved.</div>`
+          : em === 'regen' ? `<div class="alert alert-success">✓ New token generated. Old link no longer works — share the new one.</div>`
+          : '';
+        const esc = v => (v||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+        return html(`
+${topbarHtml('gym', `<a href="/gym-rentals/groups">← Groups</a>`)}
+<div class="wrap">
+  <div class="page-title">${g.name}</div>
+  <div class="page-sub">Edit group details and manage their booking link.</div>
+  ${editAlert}
+  <div class="card" style="background:var(--mist);border-color:var(--steel);">
+    <div class="card-title">📋 Private Booking Link</div>
+    <div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);margin-bottom:12px;">Share this link with the group. The token in the URL is their key — no login needed.</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <input type="text" id="portal-link" value="${portalLink}" readonly style="font-family:monospace;font-size:12px;background:white;flex:1;min-width:200px;">
+      <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('portal-link').value).then(()=>{this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',2000)})" class="btn btn-secondary btn-sm">Copy</button>
+    </div>
+    <div style="margin-top:14px;">
+      <form method="POST" action="/gym-rentals/groups/regen-token/${g.id}" onsubmit="return confirm('This invalidates their current link. They will need the new URL to book. Continue?')">
+        <button type="submit" class="btn btn-sm btn-danger">Regenerate token (old link stops working)</button>
+      </form>
+    </div>
+  </div>
+  <div class="card">
+    <form method="POST" action="/gym-rentals/groups/update/${g.id}">
+      <div class="form-group">
+        <label>Group name *</label>
+        <input type="text" name="name" required value="${esc(g.name)}">
+      </div>
+      <div class="form-group">
+        <label>Contact person</label>
+        <input type="text" name="contact" value="${esc(g.contact)}">
+      </div>
+      <div class="form-group">
+        <label>Contact email</label>
+        <input type="email" name="email" value="${esc(g.email)}">
+      </div>
+      <div class="form-group">
+        <label>Phone</label>
+        <input type="text" name="phone" value="${esc(g.phone)}">
+      </div>
+      <div class="form-group">
+        <label>Max simultaneous holds</label>
+        <input type="number" name="max_active_holds" value="${g.max_active_holds||3}" min="1" max="20">
+      </div>
+      <div class="form-group">
+        <label>Notes <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— internal only</span></label>
+        <textarea name="notes">${(g.notes||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</textarea>
+      </div>
+      <div class="btn-row">
+        <button type="submit" class="btn btn-primary">Save changes →</button>
+      </div>
+    </form>
+    <hr style="border:none;border-top:1px solid var(--border);margin:24px 0;">
+    <form method="POST" action="/gym-rentals/groups/toggle/${g.id}" style="display:inline;">
+      <button type="submit" class="btn ${g.active ? 'btn-danger' : 'btn-sage'}">${g.active ? 'Deactivate group (disables portal access)' : 'Reactivate group'}</button>
+    </form>
+  </div>
+</div>`, `Edit — ${g.name}`);
+      }
+
+      // ── UPDATE GROUP ─────────────────────────────────────────
+      if (path.startsWith('/gym-rentals/groups/update/') && method === 'POST') {
+        const gid = parseInt(path.split('/').pop(), 10);
+        const form = await request.formData();
+        await env.DB.prepare('UPDATE gym_groups SET name=?,contact=?,email=?,phone=?,notes=?,max_active_holds=? WHERE id=?')
+          .bind(form.get('name')||'', form.get('contact')||'', form.get('email')||'', form.get('phone')||'', form.get('notes')||'', parseInt(form.get('max_active_holds')||'3',10), gid).run();
+        return new Response('', { status: 302, headers: { Location: `/gym-rentals/groups/edit/${gid}?msg=saved` } });
+      }
+
+      // ── TOGGLE GROUP ACTIVE ───────────────────────────────────
+      if (path.startsWith('/gym-rentals/groups/toggle/') && method === 'POST') {
+        const gid = parseInt(path.split('/').pop(), 10);
+        const g = await env.DB.prepare('SELECT active FROM gym_groups WHERE id=?').bind(gid).first();
+        if (g) await env.DB.prepare('UPDATE gym_groups SET active=? WHERE id=?').bind(g.active ? 0 : 1, gid).run();
+        return new Response('', { status: 302, headers: { Location: `/gym-rentals/groups/edit/${gid}?msg=saved` } });
+      }
+
+      // ── REGENERATE TOKEN ──────────────────────────────────────
+      if (path.startsWith('/gym-rentals/groups/regen-token/') && method === 'POST') {
+        const gid = parseInt(path.split('/').pop(), 10);
+        const token = crypto.randomUUID().replace(/-/g, '');
+        await env.DB.prepare('UPDATE gym_groups SET access_token=? WHERE id=?').bind(token, gid).run();
+        return new Response('', { status: 302, headers: { Location: `/gym-rentals/groups/edit/${gid}?msg=regen` } });
+      }
+
+      // ── BLOCKED DATES LIST ────────────────────────────────────
+      if (path === '/gym-rentals/blocked' && method === 'GET') {
+        const today = new Date().toISOString().split('T')[0];
+        const blocked = await env.DB.prepare('SELECT * FROM gym_blocked_dates ORDER BY date').all();
+        const blockedHtml = blocked.results.length === 0
+          ? `<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No blocked dates set.</div>`
+          : blocked.results.map(b => `
+<div class="ni-row" style="${b.date < today ? 'opacity:.5;' : ''}">
+  <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--steel);min-width:140px;">${formatDate(b.date)}</div>
+  <div style="font-family:var(--sans);font-size:14px;color:var(--charcoal);flex:1;">${b.reason||'—'}</div>
+  ${b.date < today ? '<span class="badge badge-expired">Past</span>' : ''}
+  <div class="ni-actions">
+    <form method="POST" action="/gym-rentals/blocked/delete/${b.id}" style="display:contents;" onsubmit="return confirm('Remove this blocked date?')">
+      <button type="submit" class="btn btn-sm btn-danger">Remove</button>
+    </form>
+  </div>
+</div>`).join('');
+        return html(`
+${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
+<div class="wrap">
+  <div class="page-title">Blocked Dates</div>
+  <div class="page-sub">Dates when the gym is unavailable for rental. Groups cannot book these dates.</div>
+  ${gymAlert}
+  <div class="card">
+    <div class="card-title">Block a date</div>
+    <form method="POST" action="/gym-rentals/blocked/add" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+      <div class="form-group" style="flex:0 0 160px;margin-bottom:0;">
+        <label>Date</label>
+        <input type="date" name="date" required min="${today}">
+      </div>
+      <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0;">
+        <label>Reason (optional)</label>
+        <input type="text" name="reason" placeholder="e.g. Church event, Holiday">
+      </div>
+      <button type="submit" class="btn btn-primary" style="flex-shrink:0;">Block date</button>
+    </form>
+  </div>
+  <div class="card">
+    <div class="card-title">Blocked dates</div>
+    ${blockedHtml}
+  </div>
+</div>`, 'Blocked Dates');
+      }
+
+      if (path === '/gym-rentals/blocked/add' && method === 'POST') {
+        const form = await request.formData();
+        const bdate = form.get('date');
+        if (bdate) {
+          try { await env.DB.prepare('INSERT OR REPLACE INTO gym_blocked_dates (date, reason) VALUES (?, ?)').bind(bdate, form.get('reason')||'').run(); } catch (_) {}
+        }
+        return new Response('', { status: 302, headers: { Location: '/gym-rentals/blocked?msg=saved' } });
+      }
+
+      if (path.startsWith('/gym-rentals/blocked/delete/') && method === 'POST') {
+        const bid = parseInt(path.split('/').pop(), 10);
+        await env.DB.prepare('DELETE FROM gym_blocked_dates WHERE id=?').bind(bid).run();
+        return new Response('', { status: 302, headers: { Location: '/gym-rentals/blocked?msg=deleted' } });
+      }
+
+      // ── RELEASE HOLD (admin action from dashboard) ────────────
+      if (path.startsWith('/gym-rentals/bookings/release/') && method === 'POST') {
+        const bid = parseInt(path.split('/').pop(), 10);
+        await env.DB.prepare("UPDATE gym_bookings SET status='released' WHERE id=? AND status='hold'").bind(bid).run();
+        return new Response('', { status: 302, headers: { Location: '/gym-rentals?msg=saved' } });
+      }
+
+      // ── NEW BOOKING placeholder (Phase 2) ─────────────────────
+      if (path === '/gym-rentals/bookings/new' && method === 'GET') {
+        return html(`
+${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
+<div class="wrap">
+  <div class="page-title">New Booking</div>
+  <div class="page-sub">Admin booking creation is coming in Phase 2.</div>
+  <div class="card">
+    <div style="text-align:center;padding:40px;color:var(--gray);font-size:14px;">Direct booking creation with conflict detection is coming next. For now, groups can self-book via their portal link.</div>
+    <div style="text-align:center;margin-top:16px;"><a href="/gym-rentals" class="btn btn-secondary">← Back to dashboard</a></div>
+  </div>
+</div>`, 'New Booking');
+      }
+
+      // ── INVOICES placeholder (Phase 2) ────────────────────────
+      if (path === '/gym-rentals/invoices' && method === 'GET') {
+        return html(`
+${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
+<div class="wrap">
+  <div class="page-title">Invoices</div>
+  <div class="page-sub">Invoice history and payment tracking.</div>
+  <div class="card">
+    <div style="text-align:center;padding:40px;color:var(--gray);font-size:14px;">Invoices are generated automatically when bookings are confirmed. Coming in Phase 2.</div>
+    <div style="text-align:center;margin-top:16px;"><a href="/gym-rentals" class="btn btn-secondary">← Back to dashboard</a></div>
+  </div>
+</div>`, 'Invoices');
+      }
+
+      // Fallback: redirect to dashboard
+      return new Response('', { status: 302, headers: { Location: '/gym-rentals' } });
+    } // end /gym-rentals
+
     if (path.startsWith('/settings')) {
       // Show settings form
       if (path === '/settings' && method === 'GET') {
