@@ -525,6 +525,7 @@ async function sendBrevoNewsletter(env, { subject, htmlContent, listIds }) {
       name: `TLC Newsletter — ${subject}`,
       subject,
       sender: { name: 'Timothy Lutheran Church', email: env.BREVO_SENDER_EMAIL || 'dinger@timothystl.org' },
+      replyTo: env.BREVO_REPLY_TO || env.BREVO_SENDER_EMAIL || 'dinger@timothystl.org',
       htmlContent,
       recipients: { listIds }
     })
@@ -548,7 +549,8 @@ async function sendTransactionalEmail(env, { subject, htmlContent, toEmails }) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'api-key': apiKey },
     body: JSON.stringify({
-      sender: { name: 'Timothy Lutheran Website', email: env.BREVO_SENDER_EMAIL || 'dinger@timothystl.org' },
+      sender: { name: 'Timothy Lutheran Church', email: env.BREVO_SENDER_EMAIL || 'dinger@timothystl.org' },
+      replyTo: { email: env.BREVO_REPLY_TO || env.BREVO_SENDER_EMAIL || 'dinger@timothystl.org' },
       to: toEmails.map(e => ({ email: e })),
       subject,
       htmlContent
