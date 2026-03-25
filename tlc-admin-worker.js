@@ -385,38 +385,32 @@ input:focus,select:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(201
 .booking-row:last-child{border-bottom:none;}
 .booking-date{font-size:13px;font-weight:700;color:var(--steel);min-width:100px;}
 .booking-time{font-size:13px;color:var(--gray);}
-/* Calendar */
-.cal-grid{display:flex;gap:24px;flex-wrap:wrap;}
-.cal-month{flex:1;min-width:260px;}
-.cal-month-name{font-family:var(--serif);font-size:17px;color:var(--steel);margin-bottom:10px;text-align:center;}
-.cal-table{width:100%;border-collapse:collapse;}
-.cal-table th{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:4px 0;text-align:center;}
-.cal-table td{padding:2px;text-align:center;}
-.cal-day-cell{display:block;width:40px;margin:0 auto;border-radius:8px;padding:4px 0 5px;text-align:center;text-decoration:none;cursor:default;}
-a.cal-day-cell{cursor:pointer;}
-a.cal-day-cell:hover{background:rgba(201,151,58,.12);}
-.cal-num{display:block;font-size:13px;font-weight:600;line-height:22px;color:var(--steel);}
-a.cal-day-cell:hover .cal-num{color:var(--steel);}
-.cal-day-cell.cal-past .cal-num,.cal-day-cell.cal-blocked .cal-num,.cal-day-cell.cal-full .cal-num{color:#CBD5E1;}
-.slot-pips{display:flex;gap:2px;justify-content:center;margin-top:3px;}
-.slot-pip{width:7px;height:7px;border-radius:2px;flex-shrink:0;}
-.slot-open{background:#5A9E6F;}
-.slot-taken{background:#D17070;}
-.slot-na{background:#E8EDF3;}
-.cal-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--gray);margin-top:14px;}
-.cal-legend span{display:flex;align-items:center;gap:6px;}
-.legend-pip{width:10px;height:10px;border-radius:3px;flex-shrink:0;}
-/* Day slot blocks */
-.slot-block{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-radius:10px;margin-bottom:10px;text-decoration:none;gap:12px;}
-.slot-block-open{background:#edf7f1;border:1.5px solid #5A9E6F;cursor:pointer;}
-.slot-block-open:hover{background:#d8f0e2;}
-.slot-block-taken{background:#fdf0f0;border:1.5px solid #D17070;cursor:default;}
-.slot-block-time{font-size:16px;font-weight:700;color:var(--steel);}
-.slot-block-open .slot-block-time{color:#2d6e45;}
-.slot-block-taken .slot-block-time{color:#7a1f1f;}
-.slot-block-status{font-size:13px;font-weight:600;}
-.slot-block-open .slot-block-status{color:#2d6e45;}
-.slot-block-taken .slot-block-status{color:#a05050;}
+/* Selection calendar */
+.scal-grid{display:flex;gap:20px;flex-wrap:wrap;}
+.scal-month{flex:1;min-width:270px;}
+.scal-month-name{font-family:var(--serif);font-size:17px;color:var(--steel);margin-bottom:10px;text-align:center;}
+.scal-table{width:100%;border-collapse:collapse;table-layout:fixed;}
+.scal-table th{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:4px 0;text-align:center;}
+.scal-table td{padding:2px;vertical-align:top;}
+.scal-cell{border-radius:6px;overflow:hidden;border:1px solid transparent;}
+.scal-num{font-size:11px;font-weight:700;text-align:center;padding:3px 0;line-height:1.3;color:var(--steel);}
+.scal-cell.scal-past .scal-num,.scal-cell.scal-blocked .scal-num{color:#CBD5E1;}
+.scal-slots{display:flex;flex-direction:column;}
+.scal-slot{height:12px;display:block;width:100%;border:none;padding:0;cursor:default;transition:filter .1s;}
+.scal-slot.open{background:#5A9E6F;cursor:pointer;}
+.scal-slot.open:hover{filter:brightness(1.15);}
+.scal-slot.taken{background:#D17070;}
+.scal-slot.na{background:#E8EDF3;}
+.scal-slot.selected{background:var(--amber) !important;cursor:pointer;}
+.scal-cell.has-selection{border-color:var(--amber);}
+/* Legend */
+.scal-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--gray);margin-top:14px;}
+.scal-legend span{display:flex;align-items:center;gap:6px;}
+.legend-swatch{width:24px;height:10px;border-radius:2px;flex-shrink:0;}
+/* Request bar */
+.req-bar{position:sticky;bottom:0;left:0;right:0;background:var(--steel);color:white;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:3px solid var(--amber);z-index:100;}
+.req-bar-count{font-size:15px;font-weight:700;}
+.req-bar-detail{font-size:12px;opacity:.75;margin-top:2px;}
 /* Agreement card */
 .agree-card{border:2px solid var(--steel);border-radius:10px;padding:18px 20px;margin-bottom:18px;background:var(--mist);}
 .agree-card .total{font-size:22px;font-weight:700;color:var(--steel);margin-bottom:10px;}
@@ -1480,21 +1474,25 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
 </div>`;
 
       const portalNav = (active) => `<div style="display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;">
-  <a href="/gym/book/${token}" class="btn btn-sm ${active==='cal'?'btn-primary':'btn-sage'}" style="text-decoration:none;">📅 Calendar</a>
-  <a href="/gym/book/${token}/new" class="btn btn-sm ${active==='new'?'btn-primary':'btn-sage'}" style="text-decoration:none;">+ One-Time Request</a>
-  <a href="/gym/book/${token}/recurring" class="btn btn-sm ${active==='rec'?'btn-primary':'btn-sage'}" style="text-decoration:none;">🔁 Recurring Request</a>
+  <a href="/gym/book/${token}" class="btn btn-sm ${active==='cal'?'btn-primary':'btn-sage'}" style="text-decoration:none;">📅 Select Dates</a>
   <a href="/gym/book/${token}/history" class="btn btn-sm ${active==='hist'?'btn-primary':'btn-sage'}" style="text-decoration:none;">My Bookings</a>
 </div>`;
 
       const portalMsg = url.searchParams.get('msg');
-      const portalAlert = portalMsg === 'hold' ? `<div class="alert alert-success">✓ Hold placed! It expires in 48 hours. Visit "My Bookings" to confirm it.</div>`
+      const _pc = parseInt(url.searchParams.get('created') || '0', 10);
+      const _ps = parseInt(url.searchParams.get('skipped') || '0', 10);
+      const portalAlert = (portalMsg || '').startsWith('holds') ? `<div class="alert alert-success">✓ ${_pc} hold${_pc===1?'':'s'} placed! They expire in 48 hours — confirm them below to lock in your booking.${_ps > 0 ? ` (${_ps} slot${_ps===1?'':'s'} were already taken and skipped.)` : ''}</div>`
+        : portalMsg === 'nohold' ? `<div class="alert alert-error">No slots could be booked — they may have been taken or blocked. Please choose different times.</div>`
+        : portalMsg === 'hold' ? `<div class="alert alert-success">✓ Hold placed! It expires in 48 hours. Confirm it below to lock in your booking.</div>`
         : portalMsg === 'confirmed' ? `<div class="alert alert-success">✓ Booking confirmed. You'll receive an invoice by email.</div>`
         : portalMsg === 'released' ? `<div class="alert alert-success">✓ Hold released.</div>`
         : portalMsg === 'converted' ? `<div class="alert alert-success">✓ Hold confirmed. Invoice emailed to you.</div>`
         : portalMsg === 'recurring' ? `<div class="alert alert-success">✓ Recurring request submitted! The church office will review it and follow up with you.</div>`
+        : portalMsg === 'err' ? `<div class="alert alert-error">Please check the payment agreement box.</div>`
+        : portalMsg === 'ratelimit' ? `<div class="alert alert-error">Too many holds at once. Please contact the office if you need to book more than 20 slots.</div>`
         : '';
 
-      // ── CALENDAR ──────────────────────────────────────────────
+      // ── SELECTION CALENDAR ────────────────────────────────────
       if (!sub || sub === '') {
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
@@ -1505,86 +1503,174 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
           env.DB.prepare('SELECT date FROM gym_blocked_dates WHERE date >= ? AND date <= ?').bind(todayStr, ninetyOut).all(),
         ]);
         const slotMap      = buildSlotMap(bookings.results);
-        const blockedDates = new Set(blocked.results.map(b => b.date));
+        const blockedSet   = new Set(blocked.results.map(b => b.date));
 
-        const months = [];
-        for (let i = 0; i < 3; i++) {
-          const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
-          months.push(buildMonthCalendar(d.getFullYear(), d.getMonth(), slotMap, blockedDates, token));
+        // Build 3-month interactive selection calendar
+        const MNAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        let calHtml = '<div class="scal-grid">';
+        for (let mi = 0; mi < 3; mi++) {
+          const d = new Date(today.getFullYear(), today.getMonth() + mi, 1);
+          const yr = d.getFullYear(), mo = d.getMonth();
+          const lastDay = new Date(yr, mo + 1, 0).getDate();
+          const startDow = d.getDay();
+          calHtml += `<div class="scal-month"><div class="scal-month-name">${MNAMES[mo]} ${yr}</div>
+<table class="scal-table"><tr><th>Su</th><th>Mo</th><th>Tu</th><th>We</th><th>Th</th><th>Fr</th><th>Sa</th></tr><tr>`;
+          for (let s = 0; s < startDow; s++) calHtml += '<td></td>';
+          let dow = startDow;
+          for (let day = 1; day <= lastDay; day++) {
+            const mm = (mo + 1).toString().padStart(2, '0');
+            const dd = day.toString().padStart(2, '0');
+            const ds = `${yr}-${mm}-${dd}`;
+            const isPast = ds < todayStr;
+            const isBlocked = blockedSet.has(ds);
+            const slots = slotMap.get(ds) || [false,false,false,false];
+            let numCls = 'scal-cell';
+            if (isPast) numCls += ' scal-past';
+            else if (isBlocked) numCls += ' scal-blocked';
+            const slotDivs = GYM_SLOTS.map(([h, label], i) => {
+              if (isPast || isBlocked) return `<span class="scal-slot na" title="${label}"></span>`;
+              if (slots[i]) return `<span class="scal-slot taken" title="${label} — Booked"></span>`;
+              const st = `${h.toString().padStart(2,'0')}:00`;
+              const et = `${(h+1).toString().padStart(2,'0')}:00`;
+              return `<span class="scal-slot open" data-date="${ds}" data-st="${st}" data-et="${et}" title="${label}"></span>`;
+            }).join('');
+            calHtml += `<td><div class="${numCls}" id="cell-${ds}"><div class="scal-num">${day}</div><div class="scal-slots">${slotDivs}</div></div></td>`;
+            dow++;
+            if (dow === 7 && day < lastDay) { calHtml += '</tr><tr>'; dow = 0; }
+          }
+          while (dow > 0 && dow < 7) { calHtml += '<td></td>'; dow++; }
+          calHtml += '</tr></table></div>';
         }
+        calHtml += '</div>';
+
+        const rateRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_rate_per_hour'").first();
+        const rate = parseFloat(rateRow?.value || '25').toFixed(2);
 
         return portalHtml(`
 ${portalHeader}
-<div class="wrap">
+<div class="wrap" style="padding-bottom:100px;">
   ${portalAlert}
   ${portalNav('cal')}
   <div class="card">
-    <div class="card-title">Availability — Next 3 Months</div>
-    <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">Gym rentals are available <strong>5–9 PM</strong>. Each square shows one hour slot.</div>
-    <div class="cal-grid">${months.join('')}</div>
-    <div class="cal-legend">
-      <span><span class="legend-pip slot-open"></span> Available</span>
-      <span><span class="legend-pip slot-taken"></span> Booked</span>
-      <span><span class="legend-pip slot-na"></span> Unavailable</span>
+    <div class="card-title" style="margin-bottom:6px;">Select Your Dates &amp; Times</div>
+    <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">Tap any green slot to select it. Tap again to deselect. You can pick slots across multiple dates.</div>
+    ${calHtml}
+    <div class="scal-legend">
+      <span><span class="legend-swatch" style="background:#5A9E6F;"></span> Available (tap to select)</span>
+      <span><span class="legend-swatch" style="background:var(--amber);"></span> Selected</span>
+      <span><span class="legend-swatch" style="background:#D17070;"></span> Already booked</span>
+      <span><span class="legend-swatch" style="background:#E8EDF3;"></span> Unavailable</span>
+    </div>
+    <div style="font-size:12px;color:var(--gray);margin-top:10px;">Each slot = 1 hour ($${rate}/hr). Rentals available 5–9 PM. Need the same slot every week? <a href="/gym/book/${token}/recurring" style="color:var(--steel);">Use recurring request →</a></div>
+  </div>
+
+  <!-- Request form — shown after slots selected -->
+  <div id="req-form-wrap" style="display:none;">
+    <div class="card">
+      <div class="card-title">Your Request</div>
+      <div id="sel-summary-list" style="font-size:13px;color:var(--charcoal);margin-bottom:16px;line-height:1.8;"></div>
+      <form method="POST" action="/gym/book/${token}/request-slots" id="req-form">
+        <div id="slot-inputs"></div>
+        <div class="form-group">
+          <label>Notes <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional — activity type, etc.)</span></label>
+          <textarea name="notes" rows="2" placeholder="e.g. Basketball practice"></textarea>
+        </div>
+        <div class="agree-card">
+          <label class="agree-check">
+            <input type="checkbox" name="agree" id="agree-box" required>
+            <span>I agree to pay the rental fee ($${rate}/hr) to Timothy Lutheran Church upon confirmation of my booking.</span>
+          </label>
+        </div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+          <button type="submit" class="btn btn-primary">Place Holds →</button>
+          <button type="button" class="btn btn-secondary" style="background:var(--linen);color:var(--steel);" onclick="clearAll()">Clear selection</button>
+        </div>
+      </form>
     </div>
   </div>
-  <div style="font-size:13px;color:var(--gray);text-align:center;margin-top:8px;">Questions? Contact us at <a href="mailto:office@timothystl.org" style="color:var(--steel);">office@timothystl.org</a></div>
-</div>`, `${group.name} — Gym Rental`);
-      }
+  <div style="font-size:13px;color:var(--gray);text-align:center;margin-top:8px;">Questions? <a href="mailto:office@timothystl.org" style="color:var(--steel);">office@timothystl.org</a></div>
+</div>
 
-      // ── DAY AVAILABILITY VIEW ─────────────────────────────────
-      if (sub === 'day' && method === 'GET') {
-        const selDate = url.searchParams.get('dt') || '';
-        if (!selDate) return new Response('', { status: 302, headers: { Location: `/gym/book/${token}` } });
-
-        const isBlocked = await env.DB.prepare('SELECT id FROM gym_blocked_dates WHERE date = ?').bind(selDate).first();
-        if (isBlocked) return new Response('', { status: 302, headers: { Location: `/gym/book/${token}` } });
-
-        const dayBookings = await env.DB.prepare(
-          "SELECT start_time, end_time FROM gym_bookings WHERE booking_date = ? AND status IN ('confirmed','hold') ORDER BY start_time"
-        ).bind(selDate).all();
-
-        const friendlyDate = fmtBookingDate(selDate);
-        const daySlots = buildSlotMap(dayBookings.results.map(b => ({ ...b, booking_date: selDate }))).get(selDate) || [false,false,false,false];
-        const anyOpen = daySlots.some(s => !s);
-
-        const slotBlocksHtml = GYM_SLOTS.map(([h, label], i) => {
-          const taken = daySlots[i];
-          const st = `${h.toString().padStart(2,'0')}:00`;
-          const et = `${(h+1).toString().padStart(2,'0')}:00`;
-          if (taken) {
-            return `<div class="slot-block slot-block-taken">
+<!-- Sticky request bar -->
+<div class="req-bar" id="req-bar" style="display:none;">
   <div>
-    <div class="slot-block-time">${label}</div>
-    <div class="slot-block-status">Already booked</div>
+    <div class="req-bar-count" id="req-bar-count">0 slots selected</div>
+    <div class="req-bar-detail" id="req-bar-detail"></div>
   </div>
-  <span style="font-size:20px;">✗</span>
-</div>`;
-          }
-          return `<a href="/gym/book/${token}/new?dt=${selDate}&st=${st}&et=${et}" class="slot-block slot-block-open" style="text-decoration:none;">
-  <div>
-    <div class="slot-block-time">${label}</div>
-    <div class="slot-block-status">Available — tap to request</div>
-  </div>
-  <span style="font-size:20px;">→</span>
-</a>`;
-        }).join('');
+  <button class="btn btn-amber" onclick="scrollToForm()">Review &amp; Submit →</button>
+</div>
 
-        return portalHtml(`
-${portalHeader}
-<div class="wrap">
-  ${portalNav('cal')}
-  <div class="card">
-    <div class="card-title" style="margin-bottom:4px;">${friendlyDate}</div>
-    <div style="font-size:13px;color:var(--gray);margin-bottom:20px;">Tap an available slot to start your request, or use a custom time below.</div>
-    ${slotBlocksHtml}
-    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
-      ${anyOpen ? `<a href="/gym/book/${token}/new?dt=${selDate}" class="btn btn-sage" style="text-decoration:none;font-size:13px;">Custom time request</a>` : ''}
-      <a href="/gym/book/${token}" class="btn btn-secondary" style="text-decoration:none;font-size:13px;background:var(--linen);color:var(--steel);">← Back to calendar</a>
-    </div>
-  </div>
-  <div style="font-size:13px;color:var(--gray);text-align:center;margin-top:8px;">Questions? Contact us at <a href="mailto:office@timothystl.org" style="color:var(--steel);">office@timothystl.org</a></div>
-</div>`, `${friendlyDate} — Availability`);
+<script>
+const selected = new Map(); // key "DATE|ST|ET" -> {date, st, et, label}
+const SLOT_LABELS = {'17:00':'5–6 PM','18:00':'6–7 PM','19:00':'7–8 PM','20:00':'8–9 PM'};
+
+document.querySelectorAll('.scal-slot.open').forEach(el => {
+  el.addEventListener('click', function() {
+    const {date, st, et} = this.dataset;
+    const key = date + '|' + st + '|' + et;
+    if (selected.has(key)) {
+      selected.delete(key);
+      this.classList.remove('selected');
+    } else {
+      selected.set(key, {date, st, et});
+      this.classList.add('selected');
+    }
+    // update cell border
+    const anyInCell = [...selected.keys()].some(k => k.startsWith(date + '|'));
+    const cell = document.getElementById('cell-' + date);
+    if (cell) cell.classList.toggle('has-selection', anyInCell);
+    update();
+  });
+});
+
+function update() {
+  const n = selected.size;
+  const bar = document.getElementById('req-bar');
+  bar.style.display = n > 0 ? '' : 'none';
+  document.getElementById('req-bar-count').textContent = n + ' slot' + (n===1?'':'s') + ' selected';
+
+  // Group by date for detail line
+  const byDate = {};
+  selected.forEach(({date, st}) => {
+    if (!byDate[date]) byDate[date] = [];
+    byDate[date].push(SLOT_LABELS[st] || st);
+  });
+  const dates = Object.keys(byDate).sort();
+  document.getElementById('req-bar-detail').textContent = dates.length <= 3
+    ? dates.map(d => new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})).join(', ')
+    : dates.length + ' dates';
+
+  // Sync hidden inputs
+  const inp = document.getElementById('slot-inputs');
+  inp.innerHTML = '';
+  selected.forEach((_, key) => {
+    const h = document.createElement('input');
+    h.type='hidden'; h.name='slots'; h.value=key;
+    inp.appendChild(h);
+  });
+
+  // Summary list
+  const summaryHtml = dates.map(d => {
+    const dn = new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+    return '<strong>' + dn + '</strong>: ' + byDate[d].join(', ');
+  }).join('<br>');
+  document.getElementById('sel-summary-list').innerHTML = summaryHtml || '';
+}
+
+function scrollToForm() {
+  document.getElementById('req-form-wrap').style.display = '';
+  document.getElementById('req-form-wrap').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function clearAll() {
+  selected.clear();
+  document.querySelectorAll('.scal-slot.selected').forEach(el => el.classList.remove('selected'));
+  document.querySelectorAll('.scal-cell.has-selection').forEach(el => el.classList.remove('has-selection'));
+  document.getElementById('req-form-wrap').style.display = 'none';
+  update();
+}
+</script>
+`, `${group.name} — Gym Rental`);
       }
 
       // ── NEW BOOKING FORM ──────────────────────────────────────
@@ -1872,6 +1958,57 @@ ${portalHeader}
     ${pastHtml}
   </div>
 </div>`, `My Bookings — ${group.name}`);
+      }
+
+      // ── BATCH SLOT REQUEST ────────────────────────────────────
+      if (sub === 'request-slots' && method === 'POST') {
+        const form   = await request.formData();
+        const slots  = form.getAll('slots');   // each "DATE|ST|ET"
+        const notes  = form.get('notes') || '';
+        const agree  = form.get('agree');
+        const today  = new Date().toISOString().split('T')[0];
+
+        if (!agree || !slots.length)
+          return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?err=agree` } });
+
+        // Rate limit: max 20 new holds per submission, 8 per 24h per group
+        if (slots.length > 20)
+          return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?err=ratelimit` } });
+        const recentCount = await env.DB.prepare("SELECT COUNT(*) as n FROM gym_bookings WHERE group_id=? AND created_at > datetime('now','-24 hours')").bind(group.id).first();
+        if ((recentCount?.n || 0) + slots.length > 20)
+          return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?err=ratelimit` } });
+
+        const holdExpires = new Date(Date.now() + 48 * 3600000).toISOString().replace('T',' ').slice(0,19);
+        let created = 0, skipped = 0;
+        for (const slot of slots) {
+          const [date, st, et] = slot.split('|');
+          if (!date || !st || !et || date < today) { skipped++; continue; }
+          const isBlocked = await env.DB.prepare('SELECT id FROM gym_blocked_dates WHERE date=?').bind(date).first();
+          if (isBlocked) { skipped++; continue; }
+          const conflict = await env.DB.prepare("SELECT id FROM gym_bookings WHERE booking_date=? AND status IN ('confirmed','hold') AND start_time < ? AND end_time > ?").bind(date, et, st).first();
+          if (conflict) { skipped++; continue; }
+          try {
+            await env.DB.prepare("INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, notes, status, hold_expires_at, created_by) VALUES (?, ?, ?, ?, ?, 'hold', ?, 'group')")
+              .bind(group.id, date, st, et, notes, holdExpires).run();
+            created++;
+          } catch (_) { skipped++; }
+        }
+
+        // Notify admin
+        if (created > 0) {
+          const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_admin_email'").first();
+          const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
+          try {
+            await sendTransactionalEmail(env, {
+              subject: `${created} hold(s) placed — ${group.name}`,
+              htmlContent: `<p><strong>${group.name}</strong> placed ${created} hold(s) via the booking portal.</p><p>${skipped > 0 ? `(${skipped} slot(s) skipped due to conflicts.)` : ''}</p><p>Notes: ${notes || '—'}</p><p><a href="https://admin.timothystl.org/gym-rentals">Review at admin.timothystl.org/gym-rentals</a></p>`,
+              toEmails: [adminEmail],
+            });
+          } catch (_) {}
+        }
+
+        const msg = created > 0 ? `holds${created}` : 'nohold';
+        return new Response('', { status: 302, headers: { Location: `/gym/book/${token}/history?msg=${msg}&created=${created}&skipped=${skipped}` } });
       }
 
       // ── RECURRING REQUEST FORM ────────────────────────────────
