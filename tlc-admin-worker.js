@@ -1481,7 +1481,8 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
 
       const portalNav = (active) => `<div style="display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;">
   <a href="/gym/book/${token}" class="btn btn-sm ${active==='cal'?'btn-primary':'btn-sage'}" style="text-decoration:none;">📅 Calendar</a>
-  <a href="/gym/book/${token}/new" class="btn btn-sm ${active==='new'?'btn-primary':'btn-sage'}" style="text-decoration:none;">+ New Request</a>
+  <a href="/gym/book/${token}/new" class="btn btn-sm ${active==='new'?'btn-primary':'btn-sage'}" style="text-decoration:none;">+ One-Time Request</a>
+  <a href="/gym/book/${token}/recurring" class="btn btn-sm ${active==='rec'?'btn-primary':'btn-sage'}" style="text-decoration:none;">🔁 Recurring Request</a>
   <a href="/gym/book/${token}/history" class="btn btn-sm ${active==='hist'?'btn-primary':'btn-sage'}" style="text-decoration:none;">My Bookings</a>
 </div>`;
 
@@ -1490,6 +1491,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
         : portalMsg === 'confirmed' ? `<div class="alert alert-success">✓ Booking confirmed. You'll receive an invoice by email.</div>`
         : portalMsg === 'released' ? `<div class="alert alert-success">✓ Hold released.</div>`
         : portalMsg === 'converted' ? `<div class="alert alert-success">✓ Hold confirmed. Invoice emailed to you.</div>`
+        : portalMsg === 'recurring' ? `<div class="alert alert-success">✓ Recurring request submitted! The church office will review it and follow up with you.</div>`
         : '';
 
       // ── CALENDAR ──────────────────────────────────────────────
@@ -1870,6 +1872,104 @@ ${portalHeader}
     ${pastHtml}
   </div>
 </div>`, `My Bookings — ${group.name}`);
+      }
+
+      // ── RECURRING REQUEST FORM ────────────────────────────────
+      if (sub === 'recurring' && method === 'GET') {
+        const DOW_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+        const dowOpts = DOW_NAMES.map((n, i) => `<option value="${i}">${n}</option>`).join('');
+        const timeOpts5to9 = ['17:00','18:00','19:00','20:00','21:00'].map(t => `<option value="${t}">${fmt12h(t)}</option>`).join('');
+        const today = new Date().toISOString().split('T')[0];
+        const errParam = url.searchParams.get('err');
+        const errAlert = errParam === 'invalid' ? `<div class="alert alert-error">Please fill in all required fields and ensure end time is after start time.</div>`
+          : errParam === 'dates' ? `<div class="alert alert-error">Start date must be today or later, and end date must be after start date.</div>`
+          : '';
+        return portalHtml(`
+${portalHeader}
+<div class="wrap">
+  ${portalNav('rec')}
+  <div class="card">
+    <div class="card-title" style="margin-bottom:4px;">Recurring Rental Request</div>
+    <div style="font-size:14px;color:var(--gray);margin-bottom:20px;line-height:1.6;">Request the same time slot every week for a season. The church office will review your request and confirm the dates.</div>
+    ${errAlert}
+    <form method="POST" action="/gym/book/${token}/recurring">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="form-group" style="grid-column:1/-1;">
+          <label>Day of the week</label>
+          <select name="day_of_week" required>${dowOpts}</select>
+        </div>
+        <div class="form-group">
+          <label>Start time</label>
+          <select name="start_time" required>${timeOpts5to9}</select>
+        </div>
+        <div class="form-group">
+          <label>End time</label>
+          <select name="end_time" required>${timeOpts5to9}</select>
+        </div>
+        <div class="form-group">
+          <label>First date</label>
+          <input type="date" name="start_date" required min="${today}">
+        </div>
+        <div class="form-group">
+          <label>Last date</label>
+          <input type="date" name="end_date" required min="${today}">
+        </div>
+        <div class="form-group" style="grid-column:1/-1;">
+          <label>Notes <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional — activity type, special needs, etc.)</span></label>
+          <textarea name="notes" rows="3" placeholder="e.g. Basketball practice for youth group"></textarea>
+        </div>
+      </div>
+      <div style="margin-top:8px;padding:14px 16px;background:var(--mist);border-radius:8px;font-size:13px;color:var(--steel);line-height:1.6;">
+        Rental rate is $${(await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_rate_per_hour'").first())?.value||'25'}/hr. You will receive a monthly invoice once your request is approved.
+      </div>
+      <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;">
+        <button type="submit" class="btn btn-primary">Submit Request →</button>
+        <a href="/gym/book/${token}" class="btn btn-secondary" style="text-decoration:none;background:var(--linen);color:var(--steel);">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>`, 'Recurring Request');
+      }
+
+      if (sub === 'recurring' && method === 'POST') {
+        const form    = await request.formData();
+        const dow     = parseInt(form.get('day_of_week') || '1', 10);
+        const st      = form.get('start_time') || '';
+        const et      = form.get('end_time')   || '';
+        const sd      = form.get('start_date') || '';
+        const ed      = form.get('end_date')   || '';
+        const notes   = form.get('notes') || '';
+        const today   = new Date().toISOString().split('T')[0];
+
+        if (!st || !et || !sd || !ed || et <= st)
+          return new Response('', { status: 302, headers: { Location: `/gym/book/${token}/recurring?err=invalid` } });
+        if (sd < today || ed <= sd)
+          return new Response('', { status: 302, headers: { Location: `/gym/book/${token}/recurring?err=dates` } });
+
+        await env.DB.prepare(
+          `INSERT INTO gym_recurrences (group_id, day_of_week, start_time, end_time, start_date, end_date, status, notes, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, 'pending_review', ?, 'group')`
+        ).bind(group.id, dow, st, et, sd, ed, notes).run();
+
+        const DOW_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+        const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_admin_email'").first();
+        const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
+        try {
+          await sendTransactionalEmail(env, {
+            subject: `Recurring rental request — ${group.name}`,
+            htmlContent: `<p><strong>${group.name}</strong> submitted a recurring rental request:</p>
+<ul>
+  <li><strong>Day:</strong> ${DOW_NAMES[dow]}s</li>
+  <li><strong>Time:</strong> ${fmt12h(st)} – ${fmt12h(et)}</li>
+  <li><strong>Date range:</strong> ${formatDate(sd)} – ${formatDate(ed)}</li>
+  ${notes ? `<li><strong>Notes:</strong> ${notes}</li>` : ''}
+</ul>
+<p><a href="https://admin.timothystl.org/gym-rentals">Review at admin.timothystl.org/gym-rentals</a></p>`,
+            toEmails: [adminEmail],
+          });
+        } catch (_) {}
+
+        return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?msg=recurring` } });
       }
 
       // Fallback: redirect to calendar
@@ -3788,6 +3888,7 @@ ${topbarHtml('gym')}
   <div class="btn-row" style="margin-bottom:28px;">
     <a href="/gym-rentals/bookings/new" class="btn btn-primary">+ New Booking</a>
     <a href="/gym-rentals/bookings" class="btn btn-secondary">All Bookings</a>
+    <a href="/gym-rentals/recurring" class="btn btn-secondary">Recurring</a>
     <a href="/gym-rentals/groups" class="btn btn-secondary">Manage Groups</a>
     <a href="/gym-rentals/blocked" class="btn btn-sage">Blocked Dates</a>
     <a href="/gym-rentals/invoices" class="btn btn-secondary">Invoices</a>
@@ -4485,6 +4586,187 @@ ${topbarHtml('gym', `<a href="/gym-rentals/invoices">← Invoices</a>`)}
           if (toEmails.length) try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {}
         }
         return new Response('', { status: 302, headers: { Location: `/gym-rentals/invoices/view/${iid}?msg=saved` } });
+      }
+
+      // ── RECURRING LIST ────────────────────────────────────────
+      if (path === '/gym-rentals/recurring' && method === 'GET') {
+        const DOW_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        const recs = await env.DB.prepare(
+          `SELECT r.*, g.name as group_name FROM gym_recurrences r LEFT JOIN gym_groups g ON g.id = r.group_id ORDER BY r.created_at DESC`
+        ).all();
+        const statusBadge = s => s === 'approved' ? `<span class="badge badge-confirmed">Approved</span>`
+          : s === 'rejected' ? `<span class="badge badge-expired">Rejected</span>`
+          : `<span class="badge badge-upcoming">Pending</span>`;
+        const recsHtml = recs.results.length === 0
+          ? `<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No recurring requests yet.</div>`
+          : recs.results.map(r => `
+<div class="ni-row">
+  <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--steel);min-width:80px;">${DOW_NAMES[r.day_of_week]}s</div>
+  <div style="font-family:var(--serif);font-size:15px;color:var(--charcoal);flex:1;">${r.group_name||'—'}</div>
+  <div class="ni-meta">${fmt12h(r.start_time)} – ${fmt12h(r.end_time)}</div>
+  <div class="ni-meta">${formatDate(r.start_date)} – ${formatDate(r.end_date)}</div>
+  ${statusBadge(r.status)}
+  <div class="ni-actions">
+    <a href="/gym-rentals/recurring/review/${r.id}" class="btn btn-sm btn-secondary">View</a>
+  </div>
+</div>`).join('');
+        return html(`
+${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
+<div class="wrap">
+  <div class="page-title">Recurring Requests</div>
+  <div class="page-sub">All recurring rental requests from groups.</div>
+  ${gymAlert}
+  <div class="card">
+    ${recsHtml}
+  </div>
+</div>`, 'Recurring Requests');
+      }
+
+      // ── RECURRING REVIEW / APPROVE / REJECT ───────────────────
+      if (path.startsWith('/gym-rentals/recurring/review/') && method === 'GET') {
+        const rid = parseInt(path.split('/').pop(), 10);
+        const rec = await env.DB.prepare(
+          `SELECT r.*, g.name as group_name, g.contact_email FROM gym_recurrences r LEFT JOIN gym_groups g ON g.id = r.group_id WHERE r.id = ?`
+        ).bind(rid).first();
+        if (!rec) return new Response('Not found', { status: 404 });
+
+        const DOW_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+        const rateRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_rate_per_hour'").first();
+        const rate = parseFloat(rateRow?.value || '25');
+        const hours = calcHours(rec.start_time, rec.end_time);
+
+        // Generate all dates in range matching day_of_week
+        const dates = [];
+        const cur = new Date(rec.start_date + 'T12:00:00');
+        const endD = new Date(rec.end_date + 'T12:00:00');
+        while (cur <= endD) {
+          if (cur.getDay() === rec.day_of_week) dates.push(cur.toISOString().split('T')[0]);
+          cur.setDate(cur.getDate() + 1);
+        }
+
+        // Check conflicts and blocked for each date
+        const [blockedRows, conflictRows] = await Promise.all([
+          env.DB.prepare('SELECT date FROM gym_blocked_dates').all(),
+          env.DB.prepare(`SELECT booking_date FROM gym_bookings WHERE booking_date >= ? AND booking_date <= ? AND status IN ('confirmed','hold') AND start_time < ? AND end_time > ?`).bind(rec.start_date, rec.end_date, rec.end_time, rec.start_time).all(),
+        ]);
+        const blockedSet  = new Set(blockedRows.results.map(b => b.date));
+        const conflictSet = new Set(conflictRows.results.map(b => b.booking_date));
+
+        let okCount = 0;
+        const dateRowsHtml = dates.map(d => {
+          const isBlocked  = blockedSet.has(d);
+          const isConflict = conflictSet.has(d);
+          const skip = isBlocked || isConflict;
+          if (!skip) okCount++;
+          const badge = isBlocked  ? `<span class="badge badge-expired">Blocked</span>`
+            : isConflict ? `<span class="badge" style="background:#FFF3D6;color:#7A4F00;">Conflict</span>`
+            : `<span class="badge badge-confirmed">OK</span>`;
+          return `<div class="ni-row" style="${skip ? 'opacity:.5;' : ''}">
+  <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--steel);min-width:160px;">${fmtBookingDate(d)}</div>
+  <div style="font-size:13px;color:var(--gray);">${fmt12h(rec.start_time)} – ${fmt12h(rec.end_time)}</div>
+  ${badge}
+</div>`;
+        }).join('');
+
+        const isPending = rec.status === 'pending_review';
+        const msgAlert = url.searchParams.get('msg') === 'approved' ? `<div class="alert alert-success">✓ Approved — ${okCount} bookings created.</div>`
+          : url.searchParams.get('msg') === 'rejected' ? `<div class="alert alert-error">Request rejected.</div>` : '';
+
+        return html(`
+${topbarHtml('gym', `<a href="/gym-rentals/recurring">← Recurring</a>`)}
+<div class="wrap">
+  <div class="page-title">Recurring Request</div>
+  ${msgAlert}
+  <div class="card">
+    <div class="card-title">Request Details</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;font-size:14px;">
+      <div><div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:4px;">Group</div><div style="font-weight:600;">${rec.group_name||'—'}</div></div>
+      <div><div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:4px;">Day</div><div style="font-weight:600;">${DOW_NAMES[rec.day_of_week]}s</div></div>
+      <div><div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:4px;">Time</div><div style="font-weight:600;">${fmt12h(rec.start_time)} – ${fmt12h(rec.end_time)}</div></div>
+      <div><div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:4px;">Date Range</div><div style="font-weight:600;">${formatDate(rec.start_date)} – ${formatDate(rec.end_date)}</div></div>
+      <div><div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:4px;">Rate</div><div style="font-weight:600;">$${(hours * rate).toFixed(2)}/session (${hours}h × $${rate}/hr)</div></div>
+      <div><div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:4px;">Status</div><div style="font-weight:600;">${rec.status}</div></div>
+      ${rec.notes ? `<div style="grid-column:1/-1;"><div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:4px;">Notes</div><div>${rec.notes}</div></div>` : ''}
+    </div>
+    ${isPending ? `
+    <div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);">
+      <div style="font-size:14px;color:var(--charcoal);margin-bottom:16px;"><strong>${okCount}</strong> of ${dates.length} dates will be booked (${dates.length - okCount} skipped due to conflicts or blocked dates).</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;">
+        <form method="POST" action="/gym-rentals/recurring/approve/${rec.id}">
+          <button type="submit" class="btn btn-primary" onclick="return confirm('Approve and create ${okCount} bookings?')">Approve (${okCount} bookings)</button>
+        </form>
+        <form method="POST" action="/gym-rentals/recurring/reject/${rec.id}" onsubmit="return confirm('Reject this request?')">
+          <button type="submit" class="btn btn-danger">Reject</button>
+        </form>
+      </div>
+    </div>` : ''}
+  </div>
+  <div class="card">
+    <div class="card-title">Dates (${dates.length} total)</div>
+    ${dateRowsHtml || `<div style="padding:20px;text-align:center;color:var(--gray);">No dates in range.</div>`}
+  </div>
+</div>`, 'Review Recurring Request');
+      }
+
+      if (path.startsWith('/gym-rentals/recurring/approve/') && method === 'POST') {
+        const rid = parseInt(path.split('/').pop(), 10);
+        const rec = await env.DB.prepare('SELECT * FROM gym_recurrences WHERE id = ?').bind(rid).first();
+        if (!rec || rec.status !== 'pending_review') return new Response('', { status: 302, headers: { Location: '/gym-rentals/recurring' } });
+
+        const dates = [];
+        const cur = new Date(rec.start_date + 'T12:00:00');
+        const endD = new Date(rec.end_date + 'T12:00:00');
+        while (cur <= endD) {
+          if (cur.getDay() === rec.day_of_week) dates.push(cur.toISOString().split('T')[0]);
+          cur.setDate(cur.getDate() + 1);
+        }
+
+        const [blockedRows, conflictRows] = await Promise.all([
+          env.DB.prepare('SELECT date FROM gym_blocked_dates').all(),
+          env.DB.prepare(`SELECT booking_date FROM gym_bookings WHERE booking_date >= ? AND booking_date <= ? AND status IN ('confirmed','hold') AND start_time < ? AND end_time > ?`).bind(rec.start_date, rec.end_date, rec.end_time, rec.start_time).all(),
+        ]);
+        const blockedSet  = new Set(blockedRows.results.map(b => b.date));
+        const conflictSet = new Set(conflictRows.results.map(b => b.booking_date));
+
+        let created = 0;
+        for (const d of dates) {
+          if (blockedSet.has(d) || conflictSet.has(d)) continue;
+          try {
+            await env.DB.prepare(
+              `INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, notes, status, created_by, recurrence_id) VALUES (?, ?, ?, ?, ?, 'confirmed', 'admin', ?)`
+            ).bind(rec.group_id, d, rec.start_time, rec.end_time, rec.notes||'', rec.id).run();
+            created++;
+          } catch (_) {}
+        }
+        await env.DB.prepare("UPDATE gym_recurrences SET status='approved' WHERE id=?").bind(rid).run();
+
+        // Notify group
+        const group = await env.DB.prepare('SELECT * FROM gym_groups WHERE id=?').bind(rec.group_id).first();
+        const DOW_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+        if (group?.contact_email) {
+          try {
+            await sendTransactionalEmail(env, {
+              subject: `Recurring rental approved — ${DOW_NAMES[rec.day_of_week]}s ${fmt12h(rec.start_time)}–${fmt12h(rec.end_time)}`,
+              htmlContent: `<p>Hi ${group.name},</p>
+<p>Your recurring gym rental request has been approved. We've created <strong>${created} bookings</strong>:</p>
+<ul>
+  <li><strong>Day:</strong> ${DOW_NAMES[rec.day_of_week]}s</li>
+  <li><strong>Time:</strong> ${fmt12h(rec.start_time)} – ${fmt12h(rec.end_time)}</li>
+  <li><strong>Date range:</strong> ${formatDate(rec.start_date)} – ${formatDate(rec.end_date)}</li>
+</ul>
+<p>You can view your bookings at your portal link. Invoices will be sent monthly. Questions? Reply to this email or contact <a href="mailto:office@timothystl.org">office@timothystl.org</a>.</p>`,
+              toEmails: [group.contact_email],
+            });
+          } catch (_) {}
+        }
+
+        return new Response('', { status: 302, headers: { Location: `/gym-rentals/recurring/review/${rid}?msg=approved` } });
+      }
+
+      if (path.startsWith('/gym-rentals/recurring/reject/') && method === 'POST') {
+        const rid = parseInt(path.split('/').pop(), 10);
+        await env.DB.prepare("UPDATE gym_recurrences SET status='rejected' WHERE id=?").bind(rid).run();
+        return new Response('', { status: 302, headers: { Location: `/gym-rentals/recurring/review/${rid}?msg=rejected` } });
       }
 
       // Fallback: redirect to dashboard
