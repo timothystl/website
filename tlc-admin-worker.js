@@ -1767,7 +1767,7 @@ function patternSelect(doSelect) {
     document.getElementById('pat-result').textContent = 'Please set a valid date range.';
     return;
   }
-  const slots = document.querySelectorAll(`.scal-slot.open[data-st="${time}"]`);
+  const slots = document.querySelectorAll('.scal-slot.open[data-st="' + time + '"]');
   let matched = 0;
   slots.forEach(el => {
     const date = el.dataset.date;
@@ -1782,8 +1782,8 @@ function patternSelect(doSelect) {
   const DOW_NAMES = ['Sundays','Mondays','Tuesdays','Wednesdays','Thursdays','Fridays','Saturdays'];
   const action = doSelect ? 'Selected' : 'Deselected';
   document.getElementById('pat-result').textContent = matched > 0
-    ? `${action} ${matched} slot${matched===1?'':'s'} — ${DOW_NAMES[dow]} at ${SLOT_LABELS[time]} between ${new Date(start+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})} and ${new Date(end+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}.`
-    : `No available slots matched in that range.`;
+    ? action + ' ' + matched + ' slot' + (matched===1?'':'s') + ' \u2014 ' + DOW_NAMES[dow] + ' at ' + (SLOT_LABELS[time]||time) + ' between ' + new Date(start+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' and ' + new Date(end+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) + '.'
+    : 'No available slots matched in that range.';
 }
 </script>
 `, `${group.name} — Gym Rental`);
