@@ -4545,6 +4545,7 @@ ${topbarHtml('gym')}
     <a href="/gym-rentals/groups" class="btn btn-secondary">Manage Groups</a>
     <a href="/gym-rentals/blocked" class="btn btn-sage">Blocked Dates</a>
     <a href="/gym-rentals/invoices" class="btn btn-secondary">Invoices</a>
+    <a href="/gym-rentals/test-gcal" class="btn btn-secondary" style="margin-left:auto;">Test GCal →</a>
   </div>
   <div style="background:var(--mist);border:1px solid var(--border);border-radius:10px;padding:12px 18px;margin-bottom:24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
     <div style="font-size:14px;color:var(--charcoal);">Rental rate: <strong>$${rateRow?.value || '25.00'}/hr</strong></div>
@@ -4745,6 +4746,65 @@ ${topbarHtml('gym', `<a href="/gym-rentals/groups">← Groups</a>`)}
         const token = crypto.randomUUID().replace(/-/g, '');
         await env.DB.prepare('UPDATE gym_groups SET access_token=? WHERE id=?').bind(token, gid).run();
         return new Response('', { status: 302, headers: { Location: `/gym-rentals/groups/edit/${gid}?msg=regen` } });
+      }
+
+      // ── GCAL TEST ────────────────────────────────────────────
+      if (path === '/gym-rentals/test-gcal' && method === 'GET') {
+        const steps = [];
+        // Step 1: check secrets
+        const hasEmail = !!env.GCAL_SERVICE_ACCOUNT_EMAIL;
+        const hasKey   = !!env.GCAL_PRIVATE_KEY;
+        steps.push({ ok: hasEmail, label: 'GCAL_SERVICE_ACCOUNT_EMAIL secret', detail: hasEmail ? env.GCAL_SERVICE_ACCOUNT_EMAIL : 'NOT SET' });
+        steps.push({ ok: hasKey,   label: 'GCAL_PRIVATE_KEY secret',           detail: hasKey   ? '(set — ' + env.GCAL_PRIVATE_KEY.length + ' chars)' : 'NOT SET' });
+        // Step 2: calendar ID in settings
+        const calRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gcal_calendar_id'").first();
+        const calId  = calRow?.value || '';
+        steps.push({ ok: !!calId, label: 'Google Calendar ID (in Settings tab)', detail: calId || 'EMPTY — set this in Settings before continuing' });
+        // Step 3: get access token
+        let token = null;
+        if (hasEmail && hasKey) {
+          token = await getGCalAccessToken(env);
+          steps.push({ ok: !!token, label: 'OAuth access token from Google', detail: token ? '(received)' : 'FAILED — check service account email and private key format' });
+        }
+        // Step 4: create test event
+        let eventCreated = false, eventError = '';
+        if (token && calId) {
+          const today = new Date().toISOString().split('T')[0];
+          const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              summary: 'TLC Admin — GCal Test Event (safe to delete)',
+              description: 'Created by the admin test page. You can delete this.',
+              start: { dateTime: `${today}T10:00:00`, timeZone: 'America/Chicago' },
+              end:   { dateTime: `${today}T11:00:00`, timeZone: 'America/Chicago' },
+            }),
+          });
+          if (res.ok) {
+            eventCreated = true;
+          } else {
+            const body = await res.json().catch(() => ({}));
+            eventError = body?.error?.message || `HTTP ${res.status}`;
+          }
+          steps.push({ ok: eventCreated, label: 'Create test event on calendar', detail: eventCreated ? 'Event created — check your calendar' : `FAILED: ${eventError}` });
+        }
+        const stepsHtml = steps.map(s => `
+<div style="display:flex;align-items:flex-start;gap:14px;padding:12px 0;border-bottom:1px solid var(--border);">
+  <span style="font-size:18px;flex-shrink:0;">${s.ok ? '✅' : '❌'}</span>
+  <div>
+    <div style="font-family:var(--sans);font-size:14px;font-weight:700;color:var(--charcoal);">${s.label}</div>
+    <div style="font-family:var(--sans);font-size:13px;color:${s.ok ? 'var(--gray)' : '#B85C3A'};margin-top:2px;">${s.detail}</div>
+  </div>
+</div>`).join('');
+        return html(`
+${topbarHtml('gym', `<a href="/gym-rentals">← Gym Rentals</a>`)}
+<div class="wrap">
+  <div class="page-title">Google Calendar — Connection Test</div>
+  <div class="page-sub">Checks secrets, access token, and creates a test event on your calendar.</div>
+  <div class="card">${stepsHtml}</div>
+  ${eventCreated ? `<div class="alert alert-success">✓ Everything is working. A test event was added to your calendar — check it and delete it.</div>` : ''}
+  <div style="margin-top:8px;"><a href="/gym-rentals/test-gcal" class="btn btn-secondary">Run test again</a></div>
+</div>`, 'GCal Test');
       }
 
       // ── BLOCKED DATES CALENDAR ───────────────────────────────
