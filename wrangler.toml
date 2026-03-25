@@ -5,7 +5,7 @@ compatibility_date = "2024-01-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "tlc-newsletter-db"
-database_id = "REPLACE_WITH_DATABASE_ID"
+database_id = "7feda7f2-abf5-4756-9c15-9bb1c9a6c331"
 
 [[r2_buckets]]
 binding = "IMAGES"
