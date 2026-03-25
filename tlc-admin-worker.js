@@ -1227,7 +1227,12 @@ export default {
       { key: 'home-notice',       label: 'Home page notice',        hint: 'Shown on the home page as a banner. Leave blank to hide.' },
       { key: 'worship-notice',    label: 'Worship notice',          hint: 'Shown on the Worship page (e.g. special service times, holiday changes). Leave blank to hide.' },
       { key: 'about-notice',      label: 'About page notice',       hint: 'Shown on the About page. Leave blank to hide.' },
-      { key: 'seasonal-worship',  label: 'Seasonal worship block',  hint: 'Rich content section on the Worship page for midweek, Lenten, Advent, or other seasonal services. Toggle on/off without losing content.' },
+      { key: 'seasonal-lent',         label: 'Lent / Midweek worship',        hint: 'Shown on the Worship page during Lent. Toggle on/off without losing content.' },
+      { key: 'seasonal-easter',        label: 'Holy Week &amp; Easter',            hint: 'Shown on the Worship page for Holy Week and Easter services. Toggle on/off without losing content.' },
+      { key: 'seasonal-thanksgiving',  label: 'Thanksgiving worship',          hint: 'Shown on the Worship page around Thanksgiving. Toggle on/off without losing content.' },
+      { key: 'seasonal-advent',        label: 'Advent worship',                hint: 'Shown on the Worship page during Advent. Toggle on/off without losing content.' },
+      { key: 'seasonal-christmas',     label: 'Christmas services',            hint: 'Shown on the Worship page for Christmas Eve / Christmas Day services. Toggle on/off without losing content.' },
+      { key: 'community-concert',      label: 'Community Concert announcement', hint: 'Shown on the Music Ministry page. Edit with performer name, date, and details. Toggle off between concerts.' },
     ];
     for (const b of PAGE_BLOCKS) {
       try {
@@ -4084,22 +4089,27 @@ ${topbarHtml('pages')}
         const block = await env.DB.prepare('SELECT * FROM page_content WHERE key = ?').bind(key).first();
         if (!block) return new Response('Not found', { status: 404 });
         const HINT_MAP = {
-          'home-notice':      'Appears on the home page as a highlighted notice box. Leave blank to hide.',
-          'worship-notice':   'Appears on the Worship page (e.g. special service times, holiday changes). Leave blank to hide.',
-          'about-notice':     'Appears on the About page. Leave blank to hide.',
-          'seasonal-worship': 'Rich content section on the Worship page — use for Lenten midweek, Advent series, special seasonal services, etc. Toggle published on/off without losing your content.',
+          'home-notice':           'Appears on the home page as a highlighted notice box. Leave blank to hide.',
+          'worship-notice':        'Appears on the Worship page (e.g. special service times, holiday changes). Leave blank to hide.',
+          'about-notice':          'Appears on the About page. Leave blank to hide.',
+          'seasonal-lent':         'Shown on the Worship page during Lent / midweek services. Toggle published on/off without losing your content.',
+          'seasonal-easter':       'Shown on the Worship page for Holy Week and Easter services. Toggle published on/off without losing your content.',
+          'seasonal-thanksgiving': 'Shown on the Worship page around Thanksgiving. Toggle published on/off without losing your content.',
+          'seasonal-advent':       'Shown on the Worship page during Advent. Toggle published on/off without losing your content.',
+          'seasonal-christmas':    'Shown on the Worship page for Christmas Eve and Christmas Day services. Toggle published on/off without losing your content.',
+          'community-concert':     'Shown on the Music Ministry page. Enter the performer name, date, time, and any details. Toggle off between concerts.',
         };
         const hint = HINT_MAP[key] || 'Appears on the site when content is set. Leave blank to hide.';
-        const isSeasonal = key === 'seasonal-worship';
+        const isSeasonal = key.startsWith('seasonal-') || key === 'community-concert';
         const publishedChecked = (block.published === 1 || block.published === null) ? 'checked' : '';
         const publishToggleHtml = isSeasonal ? `
         <div class="card" style="margin-bottom:24px;background:var(--mist);border:1px solid var(--ice);">
           <div class="card-title">Visibility</div>
           <label style="display:flex;align-items:center;gap:12px;font-family:var(--sans);font-size:14px;cursor:pointer;">
             <input type="checkbox" name="published" value="1" ${publishedChecked} style="width:18px;height:18px;cursor:pointer;">
-            Show this block on the Worship page
+            Show this block on the website
           </label>
-          <div style="font-size:12px;color:var(--gray);margin-top:8px;">Uncheck to hide the block without losing your content — useful when the seasonal series ends.</div>
+          <div style="font-size:12px;color:var(--gray);margin-top:8px;">Uncheck to hide without losing your content — useful between seasons or concerts.</div>
         </div>` : '';
         return html(`
 ${topbarHtml('pages', `<a href="/pages">← All pages</a>`)}
@@ -4135,8 +4145,8 @@ ${topbarHtml('pages', `<a href="/pages">← All pages</a>`)}
         const value = form.get('content') || '';
         const published = form.has('published') ? 1 : 0;
         const now = new Date().toISOString();
-        // Only save published flag for blocks that have the toggle (seasonal-worship)
-        if (key === 'seasonal-worship') {
+        // Only save published flag for blocks that have the toggle (seasonal and concert blocks)
+        if (key.startsWith('seasonal-') || key === 'community-concert') {
           await env.DB.prepare('UPDATE page_content SET value = ?, published = ?, updated_at = ? WHERE key = ?').bind(value, published, now, key).run();
         } else {
           await env.DB.prepare('UPDATE page_content SET value = ?, published = 1, updated_at = ? WHERE key = ?').bind(value, now, key).run();

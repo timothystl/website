@@ -751,9 +751,21 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     </div>
   </section>
 
-  <!-- Admin-managed seasonal worship block (Lent midweek, Advent, special series — set in admin → Pages → Seasonal worship) -->
-  <section id="worship-seasonal-section" class="section section--linen" style="display:none;">
-    <div id="worship-seasonal-block" class="wrap rich-content" style="max-width:760px;"></div>
+  <!-- Admin-managed seasonal worship blocks (set in admin → Pages → Seasonal worship) -->
+  <section id="worship-seasonal-lent" class="section section--linen" style="display:none;">
+    <div id="worship-seasonal-lent-block" class="wrap rich-content" style="max-width:760px;"></div>
+  </section>
+  <section id="worship-seasonal-easter" class="section section--linen" style="display:none;">
+    <div id="worship-seasonal-easter-block" class="wrap rich-content" style="max-width:760px;"></div>
+  </section>
+  <section id="worship-seasonal-thanksgiving" class="section section--linen" style="display:none;">
+    <div id="worship-seasonal-thanksgiving-block" class="wrap rich-content" style="max-width:760px;"></div>
+  </section>
+  <section id="worship-seasonal-advent" class="section section--linen" style="display:none;">
+    <div id="worship-seasonal-advent-block" class="wrap rich-content" style="max-width:760px;"></div>
+  </section>
+  <section id="worship-seasonal-christmas" class="section section--linen" style="display:none;">
+    <div id="worship-seasonal-christmas-block" class="wrap rich-content" style="max-width:760px;"></div>
   </section>
   <section class="section section--white">
     <div class="wrap" style="max-width:760px;">
@@ -891,11 +903,6 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
           <h3>Youth &amp; Family Ministry</h3>
           <p>Families of all kinds are welcome here. Formation for children, confirmation for middle schoolers, and community for parents and families at every stage.</p>
           <a href="/youthfamily" onclick="event.preventDefault();showPage('youthfamily')">Explore →</a>
-        </div>
-        <div class="min-card">
-          <h3>Growing in Christ</h3>
-          <p>Christian education opportunities for adults — Bible study, small groups, and formation that goes as deep as you want to go.</p>
-          <a href="#" onclick="showPage('contact')">Explore →</a>
         </div>
         <div class="min-card">
           <img src="/images/ministries/LWML.png" alt="LWML" class="min-card-img">
@@ -1279,15 +1286,6 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
           <h2>Traditional with eclectic music</h2>
           <p>We are a congregation shaped by the Lutheran liturgical tradition — and deeply open to the full range of musical gifts God has placed in our community. On any given Sunday you might hear a pipe organ prelude, a handbell choir, a drum kit, a hammer dulcimer, a steel drum ensemble, or an African choir. Sometimes all in the same service.</p>
           <p>The music here is wide-ranging because the grace we celebrate is wide-ranging. <em>A unique — but familiar — worship experience.</em></p>
-          <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:20px;">
-            <span style="font-family:var(--sans);font-size:13px;background:var(--mist);border:1px solid var(--ice);border-radius:999px;padding:5px 14px;color:var(--charcoal);">Pipe Organ</span>
-            <span style="font-family:var(--sans);font-size:13px;background:var(--mist);border:1px solid var(--ice);border-radius:999px;padding:5px 14px;color:var(--charcoal);">Handbell Choir</span>
-            <span style="font-family:var(--sans);font-size:13px;background:var(--mist);border:1px solid var(--ice);border-radius:999px;padding:5px 14px;color:var(--charcoal);">Guitar</span>
-            <span style="font-family:var(--sans);font-size:13px;background:var(--mist);border:1px solid var(--ice);border-radius:999px;padding:5px 14px;color:var(--charcoal);">Drums</span>
-            <span style="font-family:var(--sans);font-size:13px;background:var(--mist);border:1px solid var(--ice);border-radius:999px;padding:5px 14px;color:var(--charcoal);">Hammer Dulcimer</span>
-            <span style="font-family:var(--sans);font-size:13px;background:var(--mist);border:1px solid var(--ice);border-radius:999px;padding:5px 14px;color:var(--charcoal);">Steel Drums</span>
-            <span style="font-family:var(--sans);font-size:13px;background:var(--mist);border:1px solid var(--ice);border-radius:999px;padding:5px 14px;color:var(--charcoal);">African Choir</span>
-          </div>
         </div>
         <div>
           <!-- Photo: replace with <img> when ministry photo is available -->
@@ -1318,6 +1316,14 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       <p style="font-size:13px;color:var(--gray);margin-top:20px;"><a href="https://www.youtube.com/@TimothySTL" target="_blank" style="color:var(--mid);font-weight:600;">See all videos on YouTube →</a></p>
     </div>
   </section>
+  <!-- Admin-managed community concert announcement (set in admin → Pages → Community Concert) -->
+  <section id="music-concert-section" class="section section--linen" style="display:none;">
+    <div class="wrap" style="max-width:760px;">
+      <span class="eyebrow eyebrow--sky">Community Concert</span>
+      <div id="music-concert-block" class="rich-content"></div>
+    </div>
+  </section>
+
   <section class="section section--white">
     <div class="wrap" style="max-width:720px;text-align:center;">
       <span class="eyebrow eyebrow--sage">Share your gift</span>
@@ -1435,20 +1441,20 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
           <span class="eyebrow">About the pantry</span>
           <h2>Serving our neighborhood</h2>
           <p>Timothy's food pantry serves members and neighbors in Lindenwood Park and the surrounding community. We believe that caring for the hungry is not a program — it is a natural expression of what it means to be the church in a neighborhood.</p>
-          <p>The pantry is open monthly. No appointments are required. All are welcome.</p>
+          <p>No residency requirement. No appointment needed. All are welcome.</p>
           <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:24px;margin-top:24px;">
             <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sage);margin-bottom:12px;">Pantry Details</div>
             <div style="font-family:var(--sans);font-size:14px;color:var(--charcoal);line-height:2;">
               <strong>Location:</strong> Timothy Lutheran Church<br>
               6704 Fyler Ave · St. Louis, MO 63139<br>
-              <strong>Schedule:</strong> Monthly — check the News &amp; Events page for dates<br>
+              <strong>Hours:</strong> 9:00–10:00 am<br>
+              <strong>Schedule:</strong> 1st &amp; 3rd Saturday of every month<br>
               <strong>Questions:</strong> <a href="mailto:dinger@timothystl.org" style="color:var(--mid);font-weight:600;">dinger@timothystl.org</a>
             </div>
           </div>
         </div>
         <div>
-          <!-- Photo: replace with <img> when ministry photo is available -->
-          <div class="img-placeholder" style="min-height:280px;">📷 Ministry photo coming soon</div>
+          <img src="/images/ministries/food%20pantry.png" alt="Timothy Food Pantry" style="width:100%;border-radius:var(--r-md);box-shadow:var(--shadow-lift);">
         </div>
       </div>
     </div>
@@ -1459,8 +1465,8 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
         <div>
           <span class="eyebrow eyebrow--sage">Receive food</span>
           <h2>How to get help</h2>
-          <p>The pantry is open to anyone in need. Come during pantry hours — no appointment, no paperwork, no questions asked. Bring a bag or box if you have one.</p>
-          <p style="font-size:14px;color:var(--gray);">Check the <button onclick="showPage('news')" style="background:none;border:none;cursor:pointer;color:var(--mid);font-weight:700;font-size:14px;padding:0;">News &amp; Events page</button> for upcoming pantry dates.</p>
+          <p>The pantry is open to anyone in need — no residency requirement, no appointment, no paperwork. Just come during pantry hours. Bring a bag or box if you have one.</p>
+          <p style="font-size:14px;color:var(--gray);">Open the <strong>1st &amp; 3rd Saturday</strong> of every month, <strong>9:00–10:00 am</strong>.</p>
         </div>
         <div>
           <span class="eyebrow eyebrow--sky">Give &amp; serve</span>
@@ -2326,20 +2332,40 @@ async function loadPageContent(key, targetId) {
   } catch(e) {}
 }
 
-// Load seasonal worship content (Lent, Advent, special series)
+// Load community concert announcement on Music page
+var concertLoaded = false;
+async function loadConcertBlock() {
+  if (concertLoaded) return;
+  concertLoaded = true;
+  try {
+    var res = await fetch('https://admin.timothystl.org/api/page-content/community-concert');
+    if (!res.ok) return;
+    var data = await res.json();
+    if (data.value && data.value.trim() && data.published === 1) {
+      document.getElementById('music-concert-block').innerHTML = fixImgUrls(data.value);
+      document.getElementById('music-concert-section').style.display = '';
+    }
+  } catch(e) {}
+}
+
+// Load seasonal worship content (Lent, Easter, Thanksgiving, Advent, Christmas)
 var seasonalLoaded = false;
 async function loadSeasonalContent() {
   if (seasonalLoaded) return;
   seasonalLoaded = true;
-  try {
-    var res = await fetch('https://admin.timothystl.org/api/page-content/seasonal-worship');
-    if (!res.ok) return;
-    var data = await res.json();
-    if (data.value && data.value.trim() && data.published === 1) {
-      document.getElementById('worship-seasonal-block').innerHTML = fixImgUrls(data.value);
-      document.getElementById('worship-seasonal-section').style.display = '';
-    }
-  } catch(e) {}
+  var seasons = ['lent','easter','thanksgiving','advent','christmas'];
+  for (var i = 0; i < seasons.length; i++) {
+    try {
+      var key = 'seasonal-' + seasons[i];
+      var res = await fetch('https://admin.timothystl.org/api/page-content/' + key);
+      if (!res.ok) continue;
+      var data = await res.json();
+      if (data.value && data.value.trim() && data.published === 1) {
+        document.getElementById('worship-seasonal-' + seasons[i] + '-block').innerHTML = fixImgUrls(data.value);
+        document.getElementById('worship-seasonal-' + seasons[i]).style.display = '';
+      }
+    } catch(e) {}
+  }
 }
 
 // Load staff from admin API
@@ -2600,6 +2626,7 @@ window.showPage = function(id, addHistory) {
   if (id === 'home') { loadPageContent('home-notice', 'home-notice-block'); }
   if (id === 'worship') { loadPageContent('worship-notice', 'worship-notice-block'); loadSeasonalContent(); }
   if (id === 'about') { loadPageContent('about-notice', 'about-notice-block'); loadStaff(); }
+  if (id === 'music') { loadConcertBlock(); }
   var adminContentPages = ['sundayschool','confirmation','vbs','egghunt','family','music','stephen','foodpantry','bees'];
   if (adminContentPages.indexOf(id) !== -1) { loadMinistryPage(id); }
   if (id === 'christmasmarket') { loadMinistryCta(id); }
@@ -2615,6 +2642,7 @@ window.showPage = function(id, addHistory) {
   if (path === '' || path === 'home') { loadPageContent('home-notice', 'home-notice-block'); }
   if (path === 'worship') { loadPageContent('worship-notice', 'worship-notice-block'); loadSeasonalContent(); }
   if (path === 'about') { loadPageContent('about-notice', 'about-notice-block'); loadStaff(); }
+  if (path === 'music') { loadConcertBlock(); }
   var adminContentPages = ['sundayschool','confirmation','vbs','egghunt','family','music','stephen','foodpantry','bees'];
   if (adminContentPages.indexOf(path) !== -1) { loadMinistryPage(path); }
   if (path === 'christmasmarket') { loadMinistryCta(path); }
