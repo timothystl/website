@@ -210,10 +210,11 @@ const INITIAL_STAFF = [
 const INITIAL_SETTINGS = [
   { key: 'zoom_url',          value: 'https://us02web.zoom.us/j/3147818673',                                                                   label: 'Zoom meeting URL',      hint: 'Used for the /zoom redirect. Update when the Zoom link changes.' },
   { key: 'councilfiles_url',  value: 'https://drive.google.com/drive/folders/1pgqJ32H3HS7SNYnnf7rOswC5c87IAzA4?usp=drive_link',              label: 'Council files URL',     hint: 'Used for the /councilfiles redirect. Update when the Google Drive folder changes.' },
-  { key: 'give_url',          value: 'https://timothystl.breezechms.com/give/online',                                                          label: 'Online giving URL',     hint: 'Used for the Give button and /give page. Update when the giving platform changes.' },
+  { key: 'give_url',          value: 'https://timothystl.breezechms.com/give/online',                                                          label: 'Online giving URL',        hint: 'Used for the Give link in emails and invoices. Update when the giving platform changes.' },
+  { key: 'give_embed_code',   value: '<button class="tithely-give-button" data-form=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8 data-location=fe6ddef2-d6d2-4c85-adfd-f19eac997d38 data-fund="51451abb-a7e4-435a-8fc3-cb061b0ab1d7" style="background-color:#00DB72;font-family:inherit;font-weight:bold;font-size:19px;padding:15px 70px;border-radius:4px;cursor:pointer;background-image:none;color:white;text-shadow:none;display:inline-block;float:none;border:none;">Give</button><script src="https://static.tithely.com/give/give.js" defer><\/script>', label: 'Online giving embed code', hint: 'Embed button for the /give web page. Update when the giving platform changes. (Not used in emails — emails use the URL above.)' },
   { key: 'gym_rate_per_hour', value: '25.00',                   label: 'Gym rental rate (per hour, $)',  hint: 'Hourly rate charged for gym rentals. Shown to groups when they confirm a booking.' },
   { key: 'gym_hold_hours',    value: '48',                      label: 'Gym hold duration (hours)',      hint: 'How many hours a tentative hold lasts before auto-expiring. Default: 48.' },
-  { key: 'gym_ical_token',    value: '',                        label: 'Gym iCal feed token',            hint: 'Secret token for the janitor\'s calendar subscription URL. When set, the feed URL is: https://admin.timothystl.org/gym/cal/TOKEN.ics — paste that into Google Calendar or Apple Calendar to subscribe.' },
+  { key: 'gcal_calendar_id',  value: '',                        label: 'Google Calendar ID (gym rentals)', hint: 'Calendar ID that confirmed gym bookings are automatically added to. Format: xxxxx@group.calendar.google.com or your Gmail address for a personal calendar. Also requires GCAL_SERVICE_ACCOUNT_EMAIL and GCAL_PRIVATE_KEY set as Cloudflare Worker secrets.' },
   { key: 'gym_admin_email',   value: 'office@timothystl.org',  label: 'Gym booking notification email', hint: 'Email notified when a group places a hold, confirms a booking, or submits a recurring request.' },
 ];
 
@@ -344,6 +345,52 @@ function buildGymInvoiceEmailHtml(inv, group, booking) {
 </body></html>`;
 }
 
+// ── GOOGLE CALENDAR INTEGRATION ──────────────────────────────
+// Requires Worker secrets: GCAL_SERVICE_ACCOUNT_EMAIL, GCAL_PRIVATE_KEY
+// The service account must be granted "Make changes to events" on the target calendar.
+async function getGCalAccessToken(env) {
+  const email  = env.GCAL_SERVICE_ACCOUNT_EMAIL;
+  const rawKey = env.GCAL_PRIVATE_KEY;
+  if (!email || !rawKey) return null;
+  try {
+    const now  = Math.floor(Date.now() / 1000);
+    const b64u = obj => btoa(JSON.stringify(obj)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    const hdr  = b64u({ alg:'RS256', typ:'JWT' });
+    const pay  = b64u({ iss: email, scope:'https://www.googleapis.com/auth/calendar.events', aud:'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600 });
+    const sigInput = `${hdr}.${pay}`;
+    const pem  = rawKey.replace(/-----[^-]+-----/g,'').replace(/\s/g,'');
+    const keyBuf = Uint8Array.from(atob(pem), c => c.charCodeAt(0));
+    const key  = await crypto.subtle.importKey('pkcs8', keyBuf.buffer, { name:'RSASSA-PKCS1-v1_5', hash:'SHA-256' }, false, ['sign']);
+    const sig  = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(sigInput));
+    const jwt  = `${sigInput}.${btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}`;
+    const res  = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST', headers: { 'Content-Type':'application/x-www-form-urlencoded' },
+      body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
+    });
+    return (await res.json()).access_token || null;
+  } catch (_) { return null; }
+}
+
+async function addGymBookingToGCal(env, { booking_date, start_time, end_time, group_name, notes }) {
+  try {
+    const calId = (await env.DB.prepare("SELECT value FROM site_settings WHERE key='gcal_calendar_id'").first())?.value;
+    if (!calId) return;
+    const token = await getGCalAccessToken(env);
+    if (!token) return;
+    await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        summary:  `Gym Rental — ${group_name}`,
+        description: notes || '',
+        location: 'Timothy Lutheran Church, 4666 Fyler Ave, St. Louis, MO 63116',
+        start: { dateTime: `${booking_date}T${start_time}:00`, timeZone: 'America/Chicago' },
+        end:   { dateTime: `${booking_date}T${end_time}:00`,   timeZone: 'America/Chicago' },
+      }),
+    });
+  } catch (_) {} // never block booking flow
+}
+
 // ── GROUP BOOKING PORTAL ─────────────────────────────────────
 function portalHtml(body, title = 'Gym Rental Portal') {
   return new Response(`<!DOCTYPE html>
@@ -407,11 +454,11 @@ input:focus,select:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(201
 .scal-num{font-size:12px;font-weight:700;text-align:center;padding:4px 0;line-height:1.3;color:var(--steel);}
 .scal-cell.scal-past .scal-num,.scal-cell.scal-blocked .scal-num{color:#CBD5E1;}
 .scal-slots{display:flex;flex-direction:column;gap:2px;padding:2px;}
-.scal-slot{height:18px;display:block;width:100%;border:none;padding:0;cursor:default;transition:filter .1s;border-radius:3px;position:relative;}
+.scal-slot{height:18px;display:flex;align-items:center;padding:0 4px;width:100%;box-sizing:border-box;border:none;cursor:default;transition:filter .1s;border-radius:3px;position:relative;font-size:9px;font-weight:700;color:white;overflow:hidden;white-space:nowrap;letter-spacing:.01em;}
 .scal-slot.open{background:#5A9E6F;cursor:pointer;}
 .scal-slot.open:hover{filter:brightness(1.12);}
 .scal-slot.taken{background:#D17070;}
-.scal-slot.na{background:#E8EDF3;}
+.scal-slot.na{background:#E8EDF3;color:transparent;}
 .scal-slot.selected{background:var(--amber) !important;cursor:pointer;}
 .scal-cell.has-selection{border-color:var(--amber);}
 .scal-slot[data-label]:hover::after{content:attr(data-label);position:absolute;bottom:calc(100% + 5px);left:50%;transform:translateX(-50%);background:#1E2D4A;color:white;font-size:11px;white-space:nowrap;padding:3px 8px;border-radius:4px;pointer-events:none;z-index:300;font-family:var(--sans);font-weight:600;box-shadow:0 2px 6px rgba(0,0,0,.25);}
@@ -1568,10 +1615,10 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
             else if (isBlocked) numCls += ' scal-blocked';
             const slotDivs = GYM_SLOTS.map(([h, label], i) => {
               if (isPast || isBlocked || !validHours.has(h)) return `<span class="scal-slot na"></span>`;
-              if (slots[i]) return `<span class="scal-slot taken" data-label="${label} \u2014 Booked"></span>`;
+              if (slots[i]) return `<span class="scal-slot taken" data-label="${label} \u2014 Booked">${label}</span>`;
               const st = `${h.toString().padStart(2,'0')}:00`;
               const et = `${(h+1).toString().padStart(2,'0')}:00`;
-              return `<span class="scal-slot open" data-date="${ds}" data-st="${st}" data-et="${et}" data-label="${label}"></span>`;
+              return `<span class="scal-slot open" data-date="${ds}" data-st="${st}" data-et="${et}" data-label="${label}">${label}</span>`;
             }).join('');
             calHtml += `<td><div class="${numCls}" id="cell-${ds}"><div class="scal-num">${day}</div><div class="scal-slots">${slotDivs}</div></div></td>`;
             dow++;
@@ -2019,6 +2066,7 @@ function calcTotal() {
         if (adminEmailRow?.value) toEmails.push(adminEmailRow.value);
         if (group.email) toEmails.push(group.email);
         try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {}
+        await addGymBookingToGCal(env, { ...fields, group_name: group.name });
 
         return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?msg=confirmed` } });
       }
@@ -2052,6 +2100,7 @@ function calcTotal() {
         if (adminEmailRow?.value) toEmails.push(adminEmailRow.value);
         if (group.email) toEmails.push(group.email);
         try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {}
+        await addGymBookingToGCal(env, { ...booking, group_name: group.name });
 
         return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?msg=converted` } });
       }
@@ -2227,6 +2276,7 @@ ${portalHeader}
             const toEmails = [adminEmail];
             if (group.contact_email) toEmails.push(group.contact_email);
             try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {}
+            await addGymBookingToGCal(env, { booking_date: date, start_time: st, end_time: et, group_name: group.name, notes });
             created++;
           } catch (_) { skipped++; }
         }
@@ -4804,6 +4854,7 @@ ${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
         const toEmails = [adminEmail];
         if (group.email) toEmails.push(group.email);
         try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {}
+        await addGymBookingToGCal(env, { booking_date, start_time, end_time, group_name: group.name, notes });
 
         return new Response('', { status: 302, headers: { Location: `/gym-rentals/invoices/view/${invoiceId}?msg=created` } });
       }
@@ -4885,6 +4936,7 @@ ${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
           const toEmails = [adminEmailRow?.value || 'office@timothystl.org'];
           if (group.contact_email) toEmails.push(group.contact_email);
           try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {}
+          await addGymBookingToGCal(env, { ...booking, group_name: group.name });
         }
         return new Response('', { status: 302, headers: { Location: `/gym-rentals/invoices/view/${invoiceId}?msg=created` } });
       }
@@ -4914,6 +4966,7 @@ ${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
             const toEmails = [adminEmail];
             if (group.contact_email) toEmails.push(group.contact_email);
             try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {}
+            await addGymBookingToGCal(env, { ...booking, group_name: group.name });
           }
           confirmed++;
         }
@@ -5244,6 +5297,7 @@ ${topbarHtml('gym', `<a href="/gym-rentals/recurring">← Recurring</a>`)}
         const blockedSet  = new Set(blockedRows.results.map(b => b.date));
         const conflictSet = new Set(conflictRows.results.map(b => b.booking_date));
 
+        const recGroup = await env.DB.prepare('SELECT * FROM gym_groups WHERE id=?').bind(rec.group_id).first();
         let created = 0;
         for (const d of dates) {
           if (blockedSet.has(d) || conflictSet.has(d)) continue;
@@ -5251,13 +5305,14 @@ ${topbarHtml('gym', `<a href="/gym-rentals/recurring">← Recurring</a>`)}
             await env.DB.prepare(
               `INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, notes, status, created_by, recurrence_id) VALUES (?, ?, ?, ?, ?, 'confirmed', 'admin', ?)`
             ).bind(rec.group_id, d, rec.start_time, rec.end_time, rec.notes||'', rec.id).run();
+            await addGymBookingToGCal(env, { booking_date: d, start_time: rec.start_time, end_time: rec.end_time, group_name: recGroup?.name || '', notes: rec.notes||'' });
             created++;
           } catch (_) {}
         }
         await env.DB.prepare("UPDATE gym_recurrences SET status='approved' WHERE id=?").bind(rid).run();
 
         // Notify group
-        const group = await env.DB.prepare('SELECT * FROM gym_groups WHERE id=?').bind(rec.group_id).first();
+        const group = recGroup;
         const DOW_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
         if (group?.contact_email) {
           try {
