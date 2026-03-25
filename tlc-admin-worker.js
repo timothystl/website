@@ -4760,11 +4760,32 @@ ${topbarHtml('gym', `<a href="/gym-rentals/groups">← Groups</a>`)}
         const calRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gcal_calendar_id'").first();
         const calId  = calRow?.value || '';
         steps.push({ ok: !!calId, label: 'Google Calendar ID (in Settings tab)', detail: calId || 'EMPTY — set this in Settings before continuing' });
-        // Step 3: get access token
-        let token = null;
+        // Step 3: JWT build + sign
+        let token = null, jwtError = '';
         if (hasEmail && hasKey) {
-          token = await getGCalAccessToken(env);
-          steps.push({ ok: !!token, label: 'OAuth access token from Google', detail: token ? '(received)' : 'FAILED — check service account email and private key format' });
+          try {
+            const now  = Math.floor(Date.now() / 1000);
+            const b64u = obj => btoa(JSON.stringify(obj)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+            const hdr  = b64u({ alg:'RS256', typ:'JWT' });
+            const pay  = b64u({ iss: env.GCAL_SERVICE_ACCOUNT_EMAIL, scope:'https://www.googleapis.com/auth/calendar.events', aud:'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600 });
+            const sigInput = `${hdr}.${pay}`;
+            const pem  = env.GCAL_PRIVATE_KEY.replace(/\\n/g,'\n').replace(/-----[^-]+-----/g,'').replace(/\s/g,'');
+            const keyBuf = Uint8Array.from(atob(pem), c => c.charCodeAt(0));
+            const key  = await crypto.subtle.importKey('pkcs8', keyBuf.buffer, { name:'RSASSA-PKCS1-v1_5', hash:'SHA-256' }, false, ['sign']);
+            const sig  = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(sigInput));
+            const jwt  = `${sigInput}.${btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}`;
+            steps.push({ ok: true, label: 'JWT built and signed (crypto.subtle)', detail: 'Key parsed and signed successfully' });
+            // Step 4: exchange JWT for token
+            const tokenRes  = await fetch('https://oauth2.googleapis.com/token', {
+              method: 'POST', headers: { 'Content-Type':'application/x-www-form-urlencoded' },
+              body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
+            });
+            const tokenBody = await tokenRes.json();
+            token = tokenBody.access_token || null;
+            steps.push({ ok: !!token, label: 'OAuth access token from Google', detail: token ? '(received)' : `FAILED (${tokenRes.status}): ${tokenBody.error || ''} — ${tokenBody.error_description || JSON.stringify(tokenBody)}` });
+          } catch (e) {
+            steps.push({ ok: false, label: 'JWT built and signed (crypto.subtle)', detail: `ERROR: ${e.message}` });
+          }
         }
         // Step 4: create test event
         let eventCreated = false, eventError = '';
