@@ -401,11 +401,17 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     <button class="nav-toggle" id="navToggle">☰</button>
     <ul class="nav-links">
       <li><button onclick="showPage('about')">About</button></li>
+      <li><button onclick="showPage('worship')">Worship</button></li>
       <li class="nav-dropdown" id="nav-min-dd">
         <button class="nav-dropdown-toggle" onclick="event.stopPropagation();document.getElementById('nav-min-dd').classList.toggle('open')">Ministries ▾</button>
         <div class="nav-dropdown-menu">
-          <button onclick="showPage('worship');document.getElementById('nav-min-dd').classList.remove('open')">Worship</button>
           <button onclick="showPage('ministries');document.getElementById('nav-min-dd').classList.remove('open')">All Ministries</button>
+          <button onclick="showPage('music');document.getElementById('nav-min-dd').classList.remove('open')">Music Ministry</button>
+          <button onclick="showPage('stephen');document.getElementById('nav-min-dd').classList.remove('open')">Stephen Ministry</button>
+          <button onclick="showPage('foodpantry');document.getElementById('nav-min-dd').classList.remove('open')">Food Pantry</button>
+          <button onclick="showPage('bees');document.getElementById('nav-min-dd').classList.remove('open')">Urban Beekeepers</button>
+          <button onclick="showPage('christmasmarket');document.getElementById('nav-min-dd').classList.remove('open')">Christmas Market</button>
+          <button onclick="showPage('youthfamily');document.getElementById('nav-min-dd').classList.remove('open')">Youth &amp; Family</button>
           <a href="https://wordoflifeschool.net" target="_blank" onclick="document.getElementById('nav-min-dd').classList.remove('open')">Word of Life School ↗</a>
           <a href="https://mdo.timothystl.org" target="_blank" onclick="document.getElementById('nav-min-dd').classList.remove('open')">Mother's Day Out ↗</a>
         </div>
@@ -419,6 +425,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     <button onclick="showPage('about');closeMobileNav()">About</button>
     <button onclick="showPage('worship');closeMobileNav()">Worship</button>
     <button onclick="showPage('ministries');closeMobileNav()">Ministries</button>
+    <button onclick="showPage('youthfamily');closeMobileNav()">Youth &amp; Family</button>
     <a href="https://wordoflifeschool.net" target="_blank" onclick="closeMobileNav()">Word of Life School</a>
     <a href="https://mdo.timothystl.org" target="_blank" onclick="closeMobileNav()">Mother's Day Out</a>
     <button onclick="showPage('news');closeMobileNav()">News &amp; Events</button>
@@ -601,8 +608,6 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     <div class="wrap">
       <span class="eyebrow eyebrow--sage">Our team</span>
       <h2>Staff &amp; leadership</h2>
-      <!-- Admin-managed intro (set in admin → Pages → Staff section intro) -->
-      <div id="staff-intro-block" style="display:none;max-width:680px;margin-bottom:28px;font-family:var(--sans);font-size:15px;color:var(--gray);line-height:1.75;"></div>
       <div id="staff-grid" class="staff-grid">
         <div style="grid-column:1/-1;text-align:center;padding:40px 0;color:var(--gray);font-family:var(--sans);font-size:14px;">Loading staff…</div>
       </div>
@@ -885,7 +890,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
         <div class="min-card">
           <h3>Youth &amp; Family Ministry</h3>
           <p>Families of all kinds are welcome here. Formation for children, confirmation for middle schoolers, and community for parents and families at every stage.</p>
-          <a href="/youth" onclick="event.preventDefault();showPage('youth')">Explore →</a>
+          <a href="/youthfamily" onclick="event.preventDefault();showPage('youthfamily')">Explore →</a>
         </div>
         <div class="min-card">
           <h3>Growing in Christ</h3>
@@ -1321,7 +1326,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       <p style="max-width:580px;margin:0 auto 28px;color:var(--gray);font-size:15px;">Check the volunteer page to see current openings — choir rehearsals, special services, seasonal events, and more.</p>
       <div class="btn-row" style="justify-content:center;">
         <a href="https://volunteer.timothystl.org" target="_blank" class="btn btn-primary">Browse music volunteer opportunities →</a>
-        <a href="mailto:office@timothystl.org" class="btn btn-outline">Email the office</a>
+        <a href="mailto:jinah@timothystl.org" class="btn btn-outline">Email our Music Director</a>
       </div>
     </div>
   </section>
@@ -1349,7 +1354,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       <!-- Button 2: YouTube channel -->
       <a href="https://www.youtube.com/@TimothySTL" target="_blank" class="btn btn-ghost">Watch on YouTube</a>
       <!-- Button 3: Contact -->
-      <a href="mailto:office@timothystl.org" class="btn btn-ghost">Email the office</a>
+      <a href="mailto:jinah@timothystl.org" class="btn btn-ghost">Email our Music Director</a>
     </div>
   </div>
 </div>
@@ -1372,12 +1377,12 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
         <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:28px;">
           <div style="font-family:var(--serif);font-size:20px;color:var(--steel);margin-bottom:10px;">Request a Caregiver</div>
           <p style="font-size:14px;color:var(--gray);margin-bottom:16px;">If you or someone you know is going through a difficult time, reaching out is the first step. Everything is kept strictly confidential.</p>
-          <a href="mailto:office@timothystl.org" class="btn btn-primary" style="font-size:14px;padding:10px 20px;">Contact the office →</a>
+          <a href="mailto:dinger@timothystl.org" class="btn btn-primary" style="font-size:14px;padding:10px 20px;">Contact the office →</a>
         </div>
         <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:28px;">
           <div style="font-family:var(--serif);font-size:20px;color:var(--steel);margin-bottom:10px;">Become a Stephen Minister</div>
           <p style="font-size:14px;color:var(--gray);margin-bottom:16px;">Stephen Ministers complete approximately 50 hours of training before being commissioned. New training cohorts form periodically.</p>
-          <a href="mailto:office@timothystl.org" class="btn btn-outline" style="font-size:14px;padding:10px 20px;">Inquire about training →</a>
+          <a href="mailto:dinger@timothystl.org" class="btn btn-outline" style="font-size:14px;padding:10px 20px;">Inquire about training →</a>
         </div>
       </div>
     </div>
@@ -1386,7 +1391,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     <div class="wrap" style="max-width:720px;text-align:center;">
       <div style="font-family:var(--serif);font-size:clamp(20px,3vw,28px);color:var(--steel);font-style:italic;line-height:1.5;margin-bottom:20px;">"Bear one another's burdens, and so fulfill the law of Christ."</div>
       <div style="font-family:var(--sans);font-size:13px;color:var(--gray);margin-bottom:28px;">Galatians 6:2</div>
-      <p style="color:var(--gray);">For more information about Stephen Ministry at Timothy, contact the church office at <a href="mailto:office@timothystl.org" style="color:var(--mid);font-weight:600;">office@timothystl.org</a> or call <a href="tel:+13148390563" style="color:var(--mid);font-weight:600;">(314) 839-0563</a>.</p>
+      <p style="color:var(--gray);">For more information about Stephen Ministry at Timothy, contact the church office at <a href="mailto:dinger@timothystl.org" style="color:var(--mid);font-weight:600;">dinger@timothystl.org</a> or call <a href="tel:+13148390563" style="color:var(--mid);font-weight:600;">(314) 839-0563</a>.</p>
     </div>
   </section>
   <!-- Admin-managed content (set in admin → Ministries → Stephen Ministry → Edit body field) -->
@@ -1408,9 +1413,9 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     <p>Reaching out is the first step. Everything is kept strictly confidential.</p>
     <div class="btn-row">
       <!-- Button 1: Request a caregiver -->
-      <a href="mailto:office@timothystl.org?subject=Stephen Ministry - Request a Caregiver" class="btn btn-primary">Request a caregiver →</a>
+      <a href="mailto:dinger@timothystl.org?subject=Stephen Ministry - Request a Caregiver" class="btn btn-primary">Request a caregiver →</a>
       <!-- Button 2: Training inquiry -->
-      <a href="mailto:office@timothystl.org?subject=Stephen Ministry - Training Interest" class="btn btn-ghost">Learn about training</a>
+      <a href="mailto:dinger@timothystl.org?subject=Stephen Ministry - Training Interest" class="btn btn-ghost">Learn about training</a>
     </div>
   </div>
 </div>
@@ -1437,7 +1442,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
               <strong>Location:</strong> Timothy Lutheran Church<br>
               6704 Fyler Ave · St. Louis, MO 63139<br>
               <strong>Schedule:</strong> Monthly — check the News &amp; Events page for dates<br>
-              <strong>Questions:</strong> <a href="mailto:office@timothystl.org" style="color:var(--mid);font-weight:600;">office@timothystl.org</a>
+              <strong>Questions:</strong> <a href="mailto:dinger@timothystl.org" style="color:var(--mid);font-weight:600;">dinger@timothystl.org</a>
             </div>
           </div>
         </div>
@@ -1463,7 +1468,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
           <p>There are two ways to support the pantry: donate non-perishable food items, or volunteer to help on pantry day with setup, sorting, and distribution.</p>
           <div class="btn-row" style="margin-top:20px;">
             <a href="https://volunteer.timothystl.org" target="_blank" class="btn btn-primary">Volunteer sign-up →</a>
-            <a href="mailto:office@timothystl.org" class="btn btn-outline">Donate food</a>
+            <a href="mailto:dinger@timothystl.org" class="btn btn-outline">Donate food</a>
           </div>
         </div>
       </div>
@@ -1492,7 +1497,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       <!-- Button 2: Pantry dates (links to news/events page) -->
       <button onclick="showPage('news')" class="btn btn-ghost">See pantry dates</button>
       <!-- Button 3: Contact -->
-      <a href="mailto:office@timothystl.org" class="btn btn-ghost">Email the office</a>
+      <a href="mailto:dinger@timothystl.org" class="btn btn-ghost">Email the office</a>
     </div>
   </div>
 </div>
@@ -1533,7 +1538,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       <p style="max-width:560px;margin:0 auto 28px;">Whether you want to learn about bees, help with the hives, or just show up for the honey harvest — we'd love to have you. Contact the church office to find out when the next gathering is.</p>
       <div class="btn-row" style="justify-content:center;">
         <a href="https://volunteer.timothystl.org" target="_blank" class="btn btn-primary">Volunteer opportunities →</a>
-        <a href="mailto:office@timothystl.org" class="btn btn-outline">Email the office</a>
+        <a href="mailto:dinger@timothystl.org" class="btn btn-outline">Email the office</a>
       </div>
     </div>
   </section>
@@ -1558,7 +1563,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       <!-- Button 1: Volunteer -->
       <a href="https://volunteer.timothystl.org" target="_blank" class="btn btn-primary">Volunteer sign-up →</a>
       <!-- Button 2: Contact -->
-      <a href="mailto:office@timothystl.org" class="btn btn-ghost">Email the office</a>
+      <a href="mailto:dinger@timothystl.org" class="btn btn-ghost">Email the office</a>
     </div>
   </div>
 </div>
@@ -1602,8 +1607,8 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       <p style="max-width:600px;">Are you a local artisan, crafter, or small business? We'd love to have you at the market. Vendor applications open in the fall — check back here for the application link or contact the office to be notified when registration opens.</p>
       <div class="btn-row" style="margin-top:28px;">
         <!-- Vendor form link: update this href each year with the Google Form URL -->
-        <a href="mailto:office@timothystl.org?subject=Christmas Market Vendor Interest" class="btn btn-primary">Express vendor interest →</a>
-        <a href="mailto:office@timothystl.org" class="btn btn-outline">Contact the office</a>
+        <a href="mailto:dinger@timothystl.org?subject=Christmas Market Vendor Interest" class="btn btn-primary">Express vendor interest →</a>
+        <a href="mailto:dinger@timothystl.org" class="btn btn-outline">Contact the office</a>
       </div>
       <p style="font-size:13px;color:var(--gray);margin-top:16px;">Vendor registration is handled via Google Form — link posted here when open.</p>
     </div>
@@ -1627,13 +1632,79 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     <p>Free and open to the public — vendors, volunteers, and neighbors all welcome.</p>
     <div class="btn-row">
       <!-- Button 1: Vendor application — UPDATE href each year with the Google Form link -->
-      <a href="mailto:office@timothystl.org?subject=Christmas Market Vendor Interest" class="btn btn-primary">Apply to be a vendor →</a>
+      <a href="mailto:dinger@timothystl.org?subject=Christmas Market Vendor Interest" class="btn btn-primary">Apply to be a vendor →</a>
       <!-- Button 2: Volunteer at the market -->
       <a href="https://volunteer.timothystl.org" target="_blank" class="btn btn-ghost">Volunteer at the market</a>
       <!-- Button 3: Contact -->
-      <a href="mailto:office@timothystl.org" class="btn btn-ghost">Email the office</a>
+      <a href="mailto:dinger@timothystl.org" class="btn btn-ghost">Email the office</a>
     </div>
   </div>
+</div>
+
+<!-- YOUTH & FAMILY HUB -->
+<div id="page-youthfamily" class="page">
+  <div class="page-hero">
+    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Children, Youth &amp; Families</span>
+    <h1>Youth &amp; Family Ministry</h1>
+    <p>Formation, community, and belonging for children and families at every stage of life.</p>
+  </div>
+  <section class="section section--white">
+    <div class="wrap">
+      <span class="eyebrow eyebrow--sage">Programs</span>
+      <h2>Find your place</h2>
+      <p style="max-width:640px;color:var(--gray);margin-bottom:8px;">Whether your kids are just starting Sunday School or your teenager is working through Confirmation, there's a place here for every family.</p>
+      <div class="min-grid" style="margin-top:32px;">
+        <div class="min-card" style="border-top-color:var(--amber);">
+          <div style="font-size:32px;margin-bottom:14px;">🎒</div>
+          <h3>Youth Ministry</h3>
+          <p>Faith formation, community, and service for students in grades 7–12. Events, retreats, and a place to belong.</p>
+          <a href="/youth" onclick="event.preventDefault();showPage('youth')">Learn more →</a>
+        </div>
+        <div class="min-card" style="border-top-color:var(--sage);">
+          <div style="font-size:32px;margin-bottom:14px;">📖</div>
+          <h3>Sunday School</h3>
+          <p>Bible stories, community, and faith formation for children every Sunday morning during the 10:45 am service.</p>
+          <a href="/sundayschool" onclick="event.preventDefault();showPage('sundayschool')">Learn more →</a>
+        </div>
+        <div class="min-card" style="border-top-color:var(--teal);">
+          <div style="font-size:32px;margin-bottom:14px;">✝️</div>
+          <h3>Confirmation</h3>
+          <p>A two-year journey for middle schoolers to explore and own their faith — rooted in Scripture and Lutheran tradition.</p>
+          <a href="/confirmation" onclick="event.preventDefault();showPage('confirmation')">Learn more →</a>
+        </div>
+        <div class="min-card" style="border-top-color:var(--amber);">
+          <div style="font-size:32px;margin-bottom:14px;">⛺</div>
+          <h3>Vacation Bible School</h3>
+          <p>An unforgettable week of faith, fun, and community for children each summer. All are welcome.</p>
+          <a href="/vbs" onclick="event.preventDefault();showPage('vbs')">Learn more →</a>
+        </div>
+        <div class="min-card" style="border-top-color:var(--sage);">
+          <div style="font-size:32px;margin-bottom:14px;">🥚</div>
+          <h3>Easter Egg Hunt</h3>
+          <p>An annual Easter celebration for families in Lindenwood Park — a free gift to our neighborhood every spring.</p>
+          <a href="/egghunt" onclick="event.preventDefault();showPage('egghunt')">Learn more →</a>
+        </div>
+        <div class="min-card" style="border-top-color:var(--teal);">
+          <div style="font-size:32px;margin-bottom:14px;">🏠</div>
+          <h3>Family Ministry</h3>
+          <p>Families of all kinds are welcome here. Formation, community, and support for parents and children at every stage.</p>
+          <a href="/family" onclick="event.preventDefault();showPage('family')">Learn more →</a>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section class="section section--linen">
+    <div class="wrap" style="max-width:620px;text-align:center;">
+      <span class="eyebrow eyebrow--sage">Get connected</span>
+      <h2>Questions about Youth &amp; Family?</h2>
+      <p style="color:var(--gray);margin-bottom:28px;">Reach out to our DCE (Director of Christian Education) — we'd love to connect your family with what's happening here.</p>
+      <div class="btn-row" style="justify-content:center;">
+        <a href="mailto:dce@timothystl.org" class="btn btn-primary">Email our DCE →</a>
+        <button class="btn btn-outline" onclick="showPage('contact')">Contact form →</button>
+      </div>
+      <p style="font-size:13px;color:var(--gray);margin-top:12px;"><a href="mailto:dce@timothystl.org" style="color:var(--mid);font-weight:600;">dce@timothystl.org</a></p>
+    </div>
+  </section>
 </div>
 
 <div id="page-youth" class="page">
@@ -1652,7 +1723,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
         </div>
         <aside style="flex:0 0 210px;">
           <div style="background:var(--linen);border:1px solid var(--border);border-radius:14px;padding:20px 22px;position:sticky;top:80px;">
-            <div style="font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gray);margin-bottom:14px;">Youth &amp; Family Ministries</div>
+            <a href="/youthfamily" onclick="event.preventDefault();showPage('youthfamily')" style="display:block;font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sage);margin-bottom:14px;text-decoration:none;">← Youth &amp; Family</a>
             <div style="display:flex;flex-direction:column;gap:2px;">
               <a href="/youth" onclick="event.preventDefault();showPage('youth')" style="display:block;font-family:var(--sans);font-size:14px;font-weight:600;color:var(--steel);padding:7px 10px;border-radius:8px;text-decoration:none;background:white;border:1px solid var(--border);">Youth Ministry</a>
               <a href="/sundayschool" onclick="event.preventDefault();showPage('sundayschool')" style="display:block;font-family:var(--sans);font-size:14px;font-weight:600;color:var(--steel);padding:7px 10px;border-radius:8px;text-decoration:none;margin-top:4px;">Sunday School →</a>
@@ -1707,6 +1778,11 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     <h1>Sunday School</h1>
     <p>Growing in faith together — Bible stories, community, and formation for children every Sunday morning.</p>
   </div>
+  <div style="background:var(--linen);border-bottom:1px solid var(--border);padding:10px 28px;">
+    <div style="max-width:1080px;margin:0 auto;font-family:var(--sans);font-size:13px;color:var(--gray);">
+      <a href="/youthfamily" onclick="event.preventDefault();showPage('youthfamily')" style="color:var(--sage);font-weight:600;text-decoration:none;">← Youth &amp; Family</a>
+    </div>
+  </div>
   <section class="section section--white" id="sundayschool-content-section">
     <div class="wrap" style="max-width:760px;">
       <div id="sundayschool-content" class="rich-content"></div>
@@ -1746,6 +1822,11 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Middle school</span>
     <h1>Confirmation</h1>
     <p>A two-year journey for middle schoolers — rooted in the faith, preparing for a lifetime with Christ.</p>
+  </div>
+  <div style="background:var(--linen);border-bottom:1px solid var(--border);padding:10px 28px;">
+    <div style="max-width:1080px;margin:0 auto;font-family:var(--sans);font-size:13px;color:var(--gray);">
+      <a href="/youthfamily" onclick="event.preventDefault();showPage('youthfamily')" style="color:var(--sage);font-weight:600;text-decoration:none;">← Youth &amp; Family</a>
+    </div>
   </div>
   <section class="section section--white" id="confirmation-content-section">
     <div class="wrap" style="max-width:760px;">
@@ -1787,6 +1868,11 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     <h1>Vacation Bible School</h1>
     <p>A week of adventure, music, friendship, and the Good News — open to every child in our neighborhood.</p>
   </div>
+  <div style="background:var(--linen);border-bottom:1px solid var(--border);padding:10px 28px;">
+    <div style="max-width:1080px;margin:0 auto;font-family:var(--sans);font-size:13px;color:var(--gray);">
+      <a href="/youthfamily" onclick="event.preventDefault();showPage('youthfamily')" style="color:var(--sage);font-weight:600;text-decoration:none;">← Youth &amp; Family</a>
+    </div>
+  </div>
   <section class="section section--white" id="vbs-content-section">
     <div class="wrap" style="max-width:760px;">
       <div id="vbs-content" class="rich-content"></div>
@@ -1827,6 +1913,11 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     <h1>Easter Egg Hunt</h1>
     <p>An Easter celebration for families in Lindenwood Park — a gift to our neighborhood every spring.</p>
   </div>
+  <div style="background:var(--linen);border-bottom:1px solid var(--border);padding:10px 28px;">
+    <div style="max-width:1080px;margin:0 auto;font-family:var(--sans);font-size:13px;color:var(--gray);">
+      <a href="/youthfamily" onclick="event.preventDefault();showPage('youthfamily')" style="color:var(--sage);font-weight:600;text-decoration:none;">← Youth &amp; Family</a>
+    </div>
+  </div>
   <section class="section section--white" id="egghunt-content-section">
     <div class="wrap" style="max-width:760px;">
       <div id="egghunt-content" class="rich-content"></div>
@@ -1852,7 +1943,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       <h2>Questions about the Egg Hunt?</h2>
       <p style="color:var(--gray);margin-bottom:28px;">Reach out to our office — we'd love to see you there.</p>
       <div class="btn-row" style="justify-content:center;">
-        <a href="mailto:office@timothystl.org" class="btn btn-primary">Email the office →</a>
+        <a href="mailto:dinger@timothystl.org" class="btn btn-primary">Email the office →</a>
         <button class="btn btn-outline" onclick="showPage('contact')">Contact form →</button>
       </div>
     </div>
@@ -1865,6 +1956,11 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">All ages, all stages</span>
     <h1>Family Ministry</h1>
     <p>Families are welcome at every stage here. Formation, community, and support for parents and children together.</p>
+  </div>
+  <div style="background:var(--linen);border-bottom:1px solid var(--border);padding:10px 28px;">
+    <div style="max-width:1080px;margin:0 auto;font-family:var(--sans);font-size:13px;color:var(--gray);">
+      <a href="/youthfamily" onclick="event.preventDefault();showPage('youthfamily')" style="color:var(--sage);font-weight:600;text-decoration:none;">← Youth &amp; Family</a>
+    </div>
   </div>
   <section class="section section--white" id="family-content-section">
     <div class="wrap" style="max-width:760px;">
@@ -2459,7 +2555,8 @@ var PAGE_META = {
   'foodpantry':   { title: 'Food Pantry — Timothy Lutheran Church',                                       desc: 'Monthly food pantry serving Lindenwood Park and surrounding communities. All are welcome, no appointment needed.' },
   'bees':         { title: 'Urban Beekeepers — Timothy Lutheran Church',                                  desc: 'Creation care in the city. Join Timothy\'s Urban Beekeepers ministry in Lindenwood Park.' },
   'christmasmarket': { title: 'Christmas Market — Timothy Lutheran Church',                               desc: 'Timothy\'s annual Christmas Market in Lindenwood Park, St. Louis — vendors, community, and holiday cheer.' },
-  'youth':        { title: 'Youth & Family — Timothy Lutheran Church',                                    desc: 'Youth ministry, Sunday School, Confirmation, VBS, and more at Timothy Lutheran Church.' },
+  'youthfamily':  { title: 'Youth & Family — Timothy Lutheran Church',                                    desc: 'Youth ministry, Sunday School, Confirmation, VBS, Easter Egg Hunt, and Family Ministry at Timothy Lutheran Church.' },
+  'youth':        { title: 'Youth Ministry — Timothy Lutheran Church',                                    desc: 'Faith formation, community, and service for students in grades 7–12 at Timothy Lutheran Church.' },
   'wol':          { title: 'Word of Life School — Timothy Lutheran Church',                               desc: 'Word of Life Lutheran School serves families through faith-based education in St. Louis.' },
   'calendar':     { title: 'Calendar — Timothy Lutheran Church',                                          desc: 'Upcoming events and services at Timothy Lutheran Church in St. Louis.' },
   'manual':       { title: 'Staff Manual — Timothy Lutheran Church',                                      desc: 'Internal staff reference for managing the Timothy Lutheran Church website.' },
@@ -2502,7 +2599,7 @@ window.showPage = function(id, addHistory) {
   if (id === 'voters') { loadVotersPage(); }
   if (id === 'home') { loadPageContent('home-notice', 'home-notice-block'); }
   if (id === 'worship') { loadPageContent('worship-notice', 'worship-notice-block'); loadSeasonalContent(); }
-  if (id === 'about') { loadPageContent('about-notice', 'about-notice-block'); loadPageContent('staff-intro', 'staff-intro-block'); loadStaff(); }
+  if (id === 'about') { loadPageContent('about-notice', 'about-notice-block'); loadStaff(); }
   var adminContentPages = ['sundayschool','confirmation','vbs','egghunt','family','music','stephen','foodpantry','bees'];
   if (adminContentPages.indexOf(id) !== -1) { loadMinistryPage(id); }
   if (id === 'christmasmarket') { loadMinistryCta(id); }
@@ -2517,7 +2614,7 @@ window.showPage = function(id, addHistory) {
   if (path === 'voters') { loadVotersPage(); }
   if (path === '' || path === 'home') { loadPageContent('home-notice', 'home-notice-block'); }
   if (path === 'worship') { loadPageContent('worship-notice', 'worship-notice-block'); loadSeasonalContent(); }
-  if (path === 'about') { loadPageContent('about-notice', 'about-notice-block'); loadPageContent('staff-intro', 'staff-intro-block'); loadStaff(); }
+  if (path === 'about') { loadPageContent('about-notice', 'about-notice-block'); loadStaff(); }
   var adminContentPages = ['sundayschool','confirmation','vbs','egghunt','family','music','stephen','foodpantry','bees'];
   if (adminContentPages.indexOf(path) !== -1) { loadMinistryPage(path); }
   if (path === 'christmasmarket') { loadMinistryCta(path); }

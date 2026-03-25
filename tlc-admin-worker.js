@@ -1228,7 +1228,6 @@ export default {
       { key: 'worship-notice',    label: 'Worship notice',          hint: 'Shown on the Worship page (e.g. special service times, holiday changes). Leave blank to hide.' },
       { key: 'about-notice',      label: 'About page notice',       hint: 'Shown on the About page. Leave blank to hide.' },
       { key: 'seasonal-worship',  label: 'Seasonal worship block',  hint: 'Rich content section on the Worship page for midweek, Lenten, Advent, or other seasonal services. Toggle on/off without losing content.' },
-      { key: 'staff-intro',       label: 'Staff section intro',      hint: 'Optional intro paragraph shown above the staff grid on the About page. Leave blank to hide.' },
     ];
     for (const b of PAGE_BLOCKS) {
       try {
@@ -4089,7 +4088,6 @@ ${topbarHtml('pages')}
           'worship-notice':   'Appears on the Worship page (e.g. special service times, holiday changes). Leave blank to hide.',
           'about-notice':     'Appears on the About page. Leave blank to hide.',
           'seasonal-worship': 'Rich content section on the Worship page — use for Lenten midweek, Advent series, special seasonal services, etc. Toggle published on/off without losing your content.',
-          'staff-intro':      'Optional intro paragraph shown above the staff grid on the About page. Leave blank to hide.',
         };
         const hint = HINT_MAP[key] || 'Appears on the site when content is set. Leave blank to hide.';
         const isSeasonal = key === 'seasonal-worship';
