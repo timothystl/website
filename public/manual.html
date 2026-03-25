@@ -89,10 +89,13 @@ li{margin-bottom:6px;}
 
 <div class="layout">
   <nav class="sidebar">
-    <h3>Ministry Pages</h3>
+    <h3>Editing Pages</h3>
+    <a href="#static-content">Editing static page text</a>
     <a href="#header-photos">Adding a header photo</a>
     <a href="#cta-buttons">Editing page buttons</a>
     <a href="#christmas-market-annual">Christmas Market (annual)</a>
+    <a href="#seasonal-worship">Seasonal worship blocks</a>
+    <a href="#community-concerts">Community Concerts</a>
     <h3>Admin Portal</h3>
     <a href="#admin-portal">admin.timothystl.org</a>
     <a href="#news-events">News &amp; Events</a>
@@ -106,6 +109,61 @@ li{margin-bottom:6px;}
   </nav>
 
   <main class="content">
+
+    <!-- ═══ STATIC CONTENT ══════════════════════════════════════════════ -->
+    <span class="toc-anchor" id="static-content"></span>
+    <h2>Editing Static Text on Pages</h2>
+    <p>Most of the text on the site — page titles, descriptions, service times, the "About" paragraphs, ministry page copy — lives directly in <code>public/index.html</code>. This file contains the entire site.</p>
+
+    <div class="callout">
+      <p><strong>Easiest way:</strong> Describe the change to Claude. E.g. <em>"Change the Food Pantry page headline from 'Caring for Neighbors' to 'Feeding Our Neighbors'"</em>. Claude will find the exact spot and make the edit.</p>
+    </div>
+
+    <h3>If you want to find it yourself</h3>
+    <p>Open <code>public/index.html</code> and search (Ctrl+F / Cmd+F) for a unique phrase from the page you're editing — for example a few words from the heading or paragraph you want to change. Each page section starts with a comment like:</p>
+
+    <div class="code-block">
+<span class="hl-comment">&lt;!-- FOOD PANTRY --&gt;</span><br>
+<span class="hl-tag">&lt;div</span> <span class="hl-attr">id</span>=<span class="hl-val">"page-foodpantry"</span> <span class="hl-attr">class</span>=<span class="hl-val">"page"</span><span class="hl-tag">&gt;</span>
+    </div>
+
+    <p>Page IDs for each section of the site:</p>
+    <table style="width:100%;border-collapse:collapse;font-size:14px;margin-top:8px;">
+      <thead>
+        <tr style="background:var(--steel);color:white;">
+          <th style="padding:8px 12px;text-align:left;font-family:var(--sans);">Search for this</th>
+          <th style="padding:8px 12px;text-align:left;font-family:var(--sans);">What page it is</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="background:var(--white);border-bottom:1px solid var(--border);"><td style="padding:8px 12px;font-family:monospace;color:var(--mid);">id="page-home"</td><td style="padding:8px 12px;">Home page</td></tr>
+        <tr style="background:var(--mist);border-bottom:1px solid var(--border);"><td style="padding:8px 12px;font-family:monospace;color:var(--mid);">id="page-worship"</td><td style="padding:8px 12px;">Worship page</td></tr>
+        <tr style="background:var(--white);border-bottom:1px solid var(--border);"><td style="padding:8px 12px;font-family:monospace;color:var(--mid);">id="page-about"</td><td style="padding:8px 12px;">About page (vision, mission, staff)</td></tr>
+        <tr style="background:var(--mist);border-bottom:1px solid var(--border);"><td style="padding:8px 12px;font-family:monospace;color:var(--mid);">id="page-ministries"</td><td style="padding:8px 12px;">Ministries hub (all ministry cards)</td></tr>
+        <tr style="background:var(--white);border-bottom:1px solid var(--border);"><td style="padding:8px 12px;font-family:monospace;color:var(--mid);">id="page-music"</td><td style="padding:8px 12px;">Music Ministry</td></tr>
+        <tr style="background:var(--mist);border-bottom:1px solid var(--border);"><td style="padding:8px 12px;font-family:monospace;color:var(--mid);">id="page-stephen"</td><td style="padding:8px 12px;">Stephen Ministry</td></tr>
+        <tr style="background:var(--white);border-bottom:1px solid var(--border);"><td style="padding:8px 12px;font-family:monospace;color:var(--mid);">id="page-foodpantry"</td><td style="padding:8px 12px;">Food Pantry</td></tr>
+        <tr style="background:var(--mist);border-bottom:1px solid var(--border);"><td style="padding:8px 12px;font-family:monospace;color:var(--mid);">id="page-bees"</td><td style="padding:8px 12px;">Urban Beekeepers</td></tr>
+        <tr style="background:var(--white);border-bottom:1px solid var(--border);"><td style="padding:8px 12px;font-family:monospace;color:var(--mid);">id="page-christmasmarket"</td><td style="padding:8px 12px;">Christmas Market</td></tr>
+        <tr style="background:var(--mist);border-bottom:1px solid var(--border);"><td style="padding:8px 12px;font-family:monospace;color:var(--mid);">id="page-youthfamily"</td><td style="padding:8px 12px;">Youth &amp; Family hub page</td></tr>
+        <tr style="background:var(--white);border-bottom:1px solid var(--border);"><td style="padding:8px 12px;font-family:monospace;color:var(--mid);">id="page-youth"</td><td style="padding:8px 12px;">Youth Ministry (grades 7–12)</td></tr>
+        <tr style="background:var(--mist);border-bottom:1px solid var(--border);"><td style="padding:8px 12px;font-family:monospace;color:var(--mid);">id="page-contact"</td><td style="padding:8px 12px;">Contact page</td></tr>
+        <tr style="background:var(--white);"><td style="padding:8px 12px;font-family:monospace;color:var(--mid);">id="page-give"</td><td style="padding:8px 12px;">Give page</td></tr>
+      </tbody>
+    </table>
+
+    <h3>What you can safely edit vs. what to avoid</h3>
+    <ul>
+      <li><strong>Safe to edit:</strong> Any visible text between <code>&gt;</code> and <code>&lt;</code> tags — headings, paragraphs, labels.</li>
+      <li><strong>Safe to edit:</strong> URLs in <code>href="..."</code> values — links, email addresses.</li>
+      <li><strong>Be careful with:</strong> Any line that has <code>style="..."</code>, <code>class="..."</code>, or JavaScript (<code>onclick="..."</code>) — changing these can break layouts or navigation.</li>
+      <li><strong>Don't touch:</strong> Lines that start with <code>&lt;script&gt;</code>, <code>function</code>, or contain <code>fetch(</code> — that's the code that makes the page work.</li>
+    </ul>
+
+    <div class="callout callout--sage">
+      <p><strong>Note on admin-managed sections:</strong> Some parts of ministry pages show content from the admin portal (volunteer posts, seasonal blocks, ministry announcements). These are separate from the static HTML text. The static text is the "always-there" foundation; admin-managed content layers on top.</p>
+    </div>
+
 
     <!-- ═══ HEADER PHOTOS ═══════════════════════════════════════════════ -->
     <span class="toc-anchor" id="header-photos"></span>
@@ -239,6 +297,67 @@ li{margin-bottom:6px;}
 
     <div class="callout">
       <p><strong>After the market is over:</strong> Change Button 1 back to the email address so it doesn't link to an expired form. You can do this right away or wait until next fall.</p>
+    </div>
+
+
+    <!-- ═══ SEASONAL WORSHIP ═════════════════════════════════════════════ -->
+    <span class="toc-anchor" id="seasonal-worship"></span>
+    <h2>Seasonal Worship Blocks</h2>
+    <p>Seasonal worship blocks are optional content sections that appear on the <strong>Worship page</strong> (<code>/worship</code>). There are five, one for each major season. Each can be written once and then toggled on or off — so you can set up the Advent block in November, turn it on, then turn it off in January without losing your content.</p>
+
+    <h3>Where to find them</h3>
+    <p>Go to <a href="https://admin.timothystl.org/pages" target="_blank">admin.timothystl.org/pages</a> and look for:</p>
+    <ul>
+      <li><strong>Lent / Midweek worship</strong> — Midweek Lenten services, extra services during Lent</li>
+      <li><strong>Holy Week &amp; Easter</strong> — Palm Sunday, Maundy Thursday, Good Friday, Easter services</li>
+      <li><strong>Thanksgiving worship</strong> — Thanksgiving Eve or Day service</li>
+      <li><strong>Advent worship</strong> — Midweek Advent services, special series</li>
+      <li><strong>Christmas services</strong> — Christmas Eve and Christmas Day service times</li>
+    </ul>
+
+    <h3>How to use them</h3>
+    <div class="step">
+      <div class="step-num">Step 1 — Write the content</div>
+      <p>Click Edit on the seasonal block. Enter the service times, dates, and any description. You can use the rich text editor to add headings, bold text, or a simple table of service times. Click <strong>Save &amp; Publish</strong> and check the "Show this block on the website" box.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">Step 2 — Turn it on</div>
+      <p>Make sure the <strong>"Show this block on the website"</strong> checkbox is checked when you save. The block will appear on the Worship page immediately.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">Step 3 — Turn it off when the season ends</div>
+      <p>Go back to the block, uncheck "Show this block on the website," and save. The content stays saved — ready for next year. The block disappears from the site.</p>
+    </div>
+
+    <div class="callout callout--sky">
+      <p><strong>Where does the block appear on the Worship page?</strong> It shows up between the "Service Times" section and the "Where Tradition Meets the Unexpected" section — right in the middle of the page where visitors will see it easily.</p>
+    </div>
+
+
+    <!-- ═══ COMMUNITY CONCERTS ════════════════════════════════════════════ -->
+    <span class="toc-anchor" id="community-concerts"></span>
+    <h2>Community Concerts</h2>
+    <p>The Music Ministry page has a dedicated <strong>Community Concert announcement section</strong> that appears when a concert is coming up. It is hidden between concerts and shown when one is scheduled.</p>
+
+    <h3>Where to find it</h3>
+    <p>Go to <a href="https://admin.timothystl.org/pages" target="_blank">admin.timothystl.org/pages</a> and click Edit on <strong>Community Concert announcement</strong>.</p>
+
+    <h3>What to put in the content</h3>
+    <p>Write the concert details in the rich text editor. Include:</p>
+    <ul>
+      <li>The performer's name and a brief description</li>
+      <li>Date and time</li>
+      <li>Location (if different from the sanctuary)</li>
+      <li>Admission info (free? donations appreciated?)</li>
+      <li>Any other details</li>
+    </ul>
+    <p>You can add a heading, bold text, and links (e.g. to the performer's website) using the editor toolbar.</p>
+
+    <h3>Turning it on and off</h3>
+    <p>Check <strong>"Show this block on the website"</strong> when you save to make it visible on the Music Ministry page. Uncheck it (and save) when the concert is over — your content stays saved for reference.</p>
+
+    <div class="callout callout--sage">
+      <p><strong>Updating for each new concert:</strong> Just go back to admin → Pages → Community Concert announcement, replace the content with the new performer's info, make sure the checkbox is checked, and save. No code changes needed.</p>
     </div>
 
 
