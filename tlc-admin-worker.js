@@ -1239,6 +1239,10 @@ export default {
         await env.DB.prepare('INSERT OR IGNORE INTO page_content (key, label, value, published, updated_at) VALUES (?, ?, ?, ?, ?)').bind(b.key, b.label, '', 0, '').run();
       } catch (_) {}
     }
+    // Remove legacy page content keys that have been replaced or retired
+    for (const oldKey of ['seasonal-worship', 'staff-intro']) {
+      try { await env.DB.prepare('DELETE FROM page_content WHERE key = ?').bind(oldKey).run(); } catch (_) {}
+    }
 
     // ── PUBLIC: serve uploaded docs from R2 ──
     if (path.startsWith('/docs/') && method === 'GET') {
