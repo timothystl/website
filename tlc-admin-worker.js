@@ -213,7 +213,7 @@ const INITIAL_SETTINGS = [
   { key: 'give_url',          value: 'https://timothystl.breezechms.com/give/online',                                                          label: 'Online giving URL',     hint: 'Used for the Give button and /give page. Update when the giving platform changes.' },
   { key: 'gym_rate_per_hour', value: '25.00',                   label: 'Gym rental rate (per hour, $)',  hint: 'Hourly rate charged for gym rentals. Shown to groups when they confirm a booking.' },
   { key: 'gym_hold_hours',    value: '48',                      label: 'Gym hold duration (hours)',      hint: 'How many hours a tentative hold lasts before auto-expiring. Default: 48.' },
-  { key: 'gym_ical_token',    value: '',                        label: 'Gym iCal feed token',            hint: 'Secret token for the janitor\'s calendar subscription URL. Leave blank to disable.' },
+  { key: 'gym_ical_token',    value: '',                        label: 'Gym iCal feed token',            hint: 'Secret token for the janitor\'s calendar subscription URL. When set, the feed URL is: https://admin.timothystl.org/gym/cal/TOKEN.ics — paste that into Google Calendar or Apple Calendar to subscribe.' },
   { key: 'gym_admin_email',   value: 'office@timothystl.org',  label: 'Gym booking notification email', hint: 'Email notified when a group places a hold, confirms a booking, or submits a recurring request.' },
 ];
 
@@ -2113,6 +2113,48 @@ ${portalHeader}
       return new Response('', { status: 302, headers: { Location: `/gym/book/${token}` } });
     } // end /gym/book
 
+    // ── GYM ICAL FEED (public, token-protected) ──────────────────
+    if (path.startsWith('/gym/cal/') && path.endsWith('.ics')) {
+      const feedToken = path.slice('/gym/cal/'.length, -'.ics'.length);
+      const tokenRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_ical_token'").first();
+      const validToken = tokenRow?.value || '';
+      if (!feedToken || feedToken !== validToken) {
+        return new Response('Not found', { status: 404 });
+      }
+      const bookings = await env.DB.prepare(
+        `SELECT b.*, g.name as group_name FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id WHERE b.status = 'confirmed' ORDER BY b.booking_date, b.start_time`
+      ).all();
+      const now = new Date();
+      const stamp = now.toISOString().replace(/[-:]/g,'').replace(/\.\d{3}/,'');
+      const toIcalDt = (dateStr, timeStr) => {
+        const [y,m,d] = dateStr.split('-');
+        const [h,min] = timeStr.split(':');
+        return `${y}${m}${d}T${h}${min}00`;
+      };
+      const events = bookings.results.map(b => [
+        'BEGIN:VEVENT',
+        `UID:gym-booking-${b.id}@timothystl.org`,
+        `DTSTAMP:${stamp}`,
+        `DTSTART:${toIcalDt(b.booking_date, b.start_time)}`,
+        `DTEND:${toIcalDt(b.booking_date, b.end_time)}`,
+        `SUMMARY:${(b.group_name || 'Rental').replace(/[,;\\]/g,' ')} — ${fmt12h(b.start_time)}–${fmt12h(b.end_time)}`,
+        b.notes ? `DESCRIPTION:${b.notes.replace(/\n/g,'\\n').replace(/[,;\\]/g,' ')}` : '',
+        'LOCATION:Timothy Lutheran Church Gym',
+        'END:VEVENT',
+      ].filter(Boolean).join('\r\n')).join('\r\n');
+      const ical = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//Timothy Lutheran Church//Gym Rentals//EN',
+        'X-WR-CALNAME:TLC Gym Rentals',
+        'X-WR-TIMEZONE:America/Chicago',
+        'CALSCALE:GREGORIAN',
+        events,
+        'END:VCALENDAR',
+      ].join('\r\n');
+      return new Response(ical, { headers: { 'Content-Type': 'text/calendar; charset=utf-8', 'Content-Disposition': 'attachment; filename="gym-rentals.ics"' } });
+    }
+
     // ── LOGIN ──
     if (path === '/login' && method === 'POST') {
       const form = await request.formData();
@@ -3997,7 +4039,10 @@ ${topbarHtml('staff', `<a href="/staff">← All staff</a>`)}
   <div class="ni-meta">${b.start_time}–${b.end_time}</div>
   <div class="ni-meta" style="color:#7A4F00;">Exp ${exp}</div>
   <span class="badge" style="background:#FFF3D6;color:#7A4F00;">Hold</span>
-  <div class="ni-actions">
+  <div class="ni-actions" style="display:flex;gap:6px;flex-wrap:wrap;">
+    <form method="POST" action="/gym-rentals/bookings/confirm-admin/${b.id}" style="display:contents;" onsubmit="return confirm('Confirm this hold and generate an invoice?')">
+      <button type="submit" class="btn btn-sm btn-primary">Confirm</button>
+    </form>
     <form method="POST" action="/gym-rentals/bookings/release/${b.id}" style="display:contents;" onsubmit="return confirm('Release this hold? The slot will open back up.')">
       <button type="submit" class="btn btn-sm btn-danger">Release</button>
     </form>
@@ -4547,8 +4592,9 @@ ${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
   <div style="font-family:var(--serif);font-size:15px;color:var(--charcoal);flex:1;">${b.group_name||'—'}</div>
   <div class="ni-meta">${fmt12h(b.start_time)} \u2013 ${fmt12h(b.end_time)}</div>
   ${statusBadge(b.status)}
-  ${actions && (b.status === 'confirmed' || b.status === 'hold') ? `<div class="ni-actions">
-    <form method="POST" action="/gym-rentals/bookings/cancel/${b.id}" style="display:contents;" onsubmit="return confirm('Cancel this booking?')">
+  ${actions && (b.status === 'confirmed' || b.status === 'hold') ? `<div class="ni-actions" style="display:flex;gap:6px;flex-wrap:wrap;">
+    ${b.status === 'hold' ? `<form method="POST" action="/gym-rentals/bookings/confirm-admin/${b.id}" style="display:contents;" onsubmit="return confirm('Confirm this hold and generate an invoice?')"><button type="submit" class="btn btn-sm btn-primary">Confirm</button></form>` : ''}
+    <form method="POST" action="/gym-rentals/bookings/cancel/${b.id}" style="display:contents;" onsubmit="return confirm('Cancel this booking? The group will be notified.')">
       <button type="submit" class="btn btn-sm btn-danger">Cancel</button>
     </form>
   </div>` : ''}
@@ -4579,10 +4625,53 @@ ${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
 </div>`, 'All Bookings');
       }
 
+      // ── ADMIN CONFIRM HOLD ────────────────────────────────────
+      if (path.startsWith('/gym-rentals/bookings/confirm-admin/') && method === 'POST') {
+        const bid = parseInt(path.split('/').pop(), 10);
+        const booking = await env.DB.prepare('SELECT * FROM gym_bookings WHERE id=? AND status=\'hold\'').bind(bid).first();
+        if (!booking) return new Response('', { status: 302, headers: { Location: '/gym-rentals/bookings?msg=saved' } });
+        await env.DB.prepare("UPDATE gym_bookings SET status='confirmed', hold_expires_at=NULL WHERE id=?").bind(bid).run();
+        // Generate invoice
+        const rateRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_rate_per_hour'").first();
+        const rate  = parseFloat(rateRow?.value || '25');
+        const hours = calcHours(booking.start_time, booking.end_time);
+        const total = Math.round(hours * rate * 100) / 100;
+        const invoiceDate = new Date().toISOString().split('T')[0];
+        const iRes = await env.DB.prepare(
+          `INSERT INTO gym_invoices (group_id, booking_id, invoice_date, period_start, period_end, total_hours, rate, total_amount, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'unpaid')`
+        ).bind(booking.group_id, bid, invoiceDate, booking.booking_date, booking.booking_date, hours, rate, total).run();
+        const invoiceId = iRes.meta.last_row_id;
+        const inv   = await env.DB.prepare('SELECT * FROM gym_invoices WHERE id=?').bind(invoiceId).first();
+        const group = await env.DB.prepare('SELECT * FROM gym_groups WHERE id=?').bind(booking.group_id).first();
+        if (group) {
+          const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, booking);
+          const subject = `Gym Rental Confirmed — ${group.name} — ${formatDate(booking.booking_date)}`;
+          const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_admin_email'").first();
+          const toEmails = [adminEmailRow?.value || 'office@timothystl.org'];
+          if (group.contact_email) toEmails.push(group.contact_email);
+          try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {}
+        }
+        return new Response('', { status: 302, headers: { Location: `/gym-rentals/invoices/view/${invoiceId}?msg=created` } });
+      }
+
       // ── CANCEL BOOKING ────────────────────────────────────────
       if (path.startsWith('/gym-rentals/bookings/cancel/') && method === 'POST') {
         const bid = parseInt(path.split('/').pop(), 10);
+        const booking = await env.DB.prepare('SELECT * FROM gym_bookings WHERE id=?').bind(bid).first();
         await env.DB.prepare("UPDATE gym_bookings SET status='cancelled' WHERE id=?").bind(bid).run();
+        // Notify group
+        if (booking) {
+          const group = await env.DB.prepare('SELECT * FROM gym_groups WHERE id=?').bind(booking.group_id).first();
+          if (group?.contact_email) {
+            try {
+              await sendTransactionalEmail(env, {
+                subject: `Gym rental cancelled — ${formatDate(booking.booking_date)}`,
+                htmlContent: `<p>Hi ${group.name},</p><p>Your gym rental booking has been cancelled by the church office:</p><ul><li><strong>Date:</strong> ${formatDate(booking.booking_date)}</li><li><strong>Time:</strong> ${fmt12h(booking.start_time)} – ${fmt12h(booking.end_time)}</li></ul><p>If you have questions, please contact <a href="mailto:office@timothystl.org">office@timothystl.org</a>.</p>`,
+                toEmails: [group.contact_email],
+              });
+            } catch (_) {}
+          }
+        }
         return new Response('', { status: 302, headers: { Location: '/gym-rentals/bookings?msg=saved' } });
       }
 
@@ -4806,8 +4895,11 @@ ${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
         }).join('');
 
         const isPending = rec.status === 'pending_review';
-        const msgAlert = url.searchParams.get('msg') === 'approved' ? `<div class="alert alert-success">✓ Approved — ${okCount} bookings created.</div>`
-          : url.searchParams.get('msg') === 'rejected' ? `<div class="alert alert-error">Request rejected.</div>` : '';
+        const _rmsg = url.searchParams.get('msg');
+        const msgAlert = _rmsg === 'approved' ? `<div class="alert alert-success">✓ Approved — ${okCount} bookings created.</div>`
+          : _rmsg === 'rejected'  ? `<div class="alert alert-error">Request rejected.</div>`
+          : _rmsg === 'noinvoice' ? `<div class="alert alert-info">All sessions in that month are already invoiced.</div>`
+          : '';
 
         return html(`
 ${topbarHtml('gym', `<a href="/gym-rentals/recurring">← Recurring</a>`)}
@@ -4842,6 +4934,27 @@ ${topbarHtml('gym', `<a href="/gym-rentals/recurring">← Recurring</a>`)}
     <div class="card-title">Dates (${dates.length} total)</div>
     ${dateRowsHtml || `<div style="padding:20px;text-align:center;color:var(--gray);">No dates in range.</div>`}
   </div>
+  ${rec.status === 'approved' ? (() => {
+    // Build month selector for invoicing
+    const monthSet = new Set(dates.map(d => d.slice(0,7)));
+    const months = [...monthSet].sort();
+    const monthOpts = months.map(m => {
+      const [y, mo] = m.split('-');
+      const label = new Date(`${m}-15`).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+      return `<option value="${m}">${label}</option>`;
+    }).join('');
+    return `<div class="card">
+    <div class="card-title">Generate Monthly Invoice</div>
+    <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">Creates one invoice covering all sessions in the selected month. Only sessions not already invoiced will be included.</div>
+    <form method="POST" action="/gym-rentals/recurring/invoice/${rec.id}" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+      <div class="form-group" style="flex:0 0 200px;margin-bottom:0;">
+        <label>Month</label>
+        <select name="month" required>${monthOpts}</select>
+      </div>
+      <button type="submit" class="btn btn-primary" style="flex-shrink:0;">Generate Invoice →</button>
+    </form>
+  </div>`;
+  })() : ''}
 </div>`, 'Review Recurring Request');
       }
 
@@ -4904,6 +5017,72 @@ ${topbarHtml('gym', `<a href="/gym-rentals/recurring">← Recurring</a>`)}
         const rid = parseInt(path.split('/').pop(), 10);
         await env.DB.prepare("UPDATE gym_recurrences SET status='rejected' WHERE id=?").bind(rid).run();
         return new Response('', { status: 302, headers: { Location: `/gym-rentals/recurring/review/${rid}?msg=rejected` } });
+      }
+
+      // ── RECURRING MONTHLY INVOICE ─────────────────────────────
+      if (path.startsWith('/gym-rentals/recurring/invoice/') && method === 'POST') {
+        const rid   = parseInt(path.split('/').pop(), 10);
+        const form  = await request.formData();
+        const month = form.get('month') || ''; // "YYYY-MM"
+        if (!month) return new Response('', { status: 302, headers: { Location: `/gym-rentals/recurring/review/${rid}` } });
+
+        const rec = await env.DB.prepare('SELECT * FROM gym_recurrences WHERE id=? AND status=\'approved\'').bind(rid).first();
+        if (!rec) return new Response('', { status: 302, headers: { Location: '/gym-rentals/recurring' } });
+
+        // Find all confirmed bookings for this recurrence in the selected month, not yet invoiced
+        const periodStart = `${month}-01`;
+        const periodEnd   = `${month}-31`;
+        const alreadyInvoiced = await env.DB.prepare(
+          'SELECT booking_id FROM gym_invoices WHERE recurrence_id=? AND period_start >= ? AND period_start <= ?'
+        ).bind(rid, periodStart, periodEnd).all();
+        const invoicedIds = new Set(alreadyInvoiced.results.map(r => r.booking_id));
+
+        const sessions = await env.DB.prepare(
+          `SELECT * FROM gym_bookings WHERE recurrence_id=? AND status='confirmed' AND booking_date >= ? AND booking_date <= ? ORDER BY booking_date`
+        ).bind(rid, periodStart, periodEnd).all();
+
+        const newSessions = sessions.results.filter(b => !invoicedIds.has(b.id));
+        if (newSessions.length === 0)
+          return new Response('', { status: 302, headers: { Location: `/gym-rentals/recurring/review/${rid}?msg=noinvoice` } });
+
+        const rateRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_rate_per_hour'").first();
+        const rate = parseFloat(rateRow?.value || '25');
+        const hours = calcHours(rec.start_time, rec.end_time);
+        const totalHours  = hours * newSessions.length;
+        const totalAmount = Math.round(totalHours * rate * 100) / 100;
+        const invoiceDate = new Date().toISOString().split('T')[0];
+
+        const iRes = await env.DB.prepare(
+          `INSERT INTO gym_invoices (group_id, recurrence_id, invoice_date, period_start, period_end, total_hours, rate, total_amount, notes, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid')`
+        ).bind(rec.group_id, rid, invoiceDate, newSessions[0].booking_date, newSessions[newSessions.length-1].booking_date, totalHours, rate, totalAmount,
+          `${newSessions.length} sessions — ${new Date(`${month}-15`).toLocaleDateString('en-US',{month:'long',year:'numeric'})}`
+        ).run();
+        const invoiceId = iRes.meta.last_row_id;
+
+        // Mark each session's booking_id on the invoice (link first session; others via recurrence_id)
+        const inv   = await env.DB.prepare('SELECT * FROM gym_invoices WHERE id=?').bind(invoiceId).first();
+        const group = await env.DB.prepare('SELECT * FROM gym_groups WHERE id=?').bind(rec.group_id).first();
+        const DOW_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+        if (group) {
+          const sessionList = newSessions.map(b => `<li>${formatDate(b.booking_date)} — ${fmt12h(b.start_time)}–${fmt12h(b.end_time)}</li>`).join('');
+          const emailHtml = `<h2 style="font-family:Georgia,serif;color:#1E2D4A;">Gym Rental Invoice — ${new Date(`${month}-15`).toLocaleDateString('en-US',{month:'long',year:'numeric'})}</h2>
+<p>Hi ${group.name},</p>
+<p>Your monthly gym rental invoice is attached for ${new Date(`${month}-15`).toLocaleDateString('en-US',{month:'long',year:'numeric'})}.</p>
+<ul>${sessionList}</ul>
+<p><strong>Total: $${totalAmount.toFixed(2)}</strong> (${totalHours}h × $${rate}/hr)</p>
+<p>Please remit payment to Timothy Lutheran Church. Questions? <a href="mailto:office@timothystl.org">office@timothystl.org</a></p>`;
+          const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_admin_email'").first();
+          const toEmails = [adminEmailRow?.value || 'office@timothystl.org'];
+          if (group.contact_email) toEmails.push(group.contact_email);
+          try {
+            await sendTransactionalEmail(env, {
+              subject: `Gym Rental Invoice — ${group.name} — ${new Date(`${month}-15`).toLocaleDateString('en-US',{month:'long',year:'numeric'})}`,
+              htmlContent: emailHtml,
+              toEmails,
+            });
+          } catch (_) {}
+        }
+        return new Response('', { status: 302, headers: { Location: `/gym-rentals/invoices/view/${invoiceId}?msg=created` } });
       }
 
       // Fallback: redirect to dashboard
