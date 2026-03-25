@@ -391,17 +391,32 @@ input:focus,select:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(201
 .cal-month-name{font-family:var(--serif);font-size:17px;color:var(--steel);margin-bottom:10px;text-align:center;}
 .cal-table{width:100%;border-collapse:collapse;}
 .cal-table th{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:4px 0;text-align:center;}
-.cal-table td{padding:3px;text-align:center;}
-.cal-day-num{display:block;width:34px;height:34px;line-height:34px;border-radius:50%;margin:0 auto;font-size:13px;font-weight:600;}
-a.cal-day-num{text-decoration:none;color:var(--steel);}
-a.cal-day-num:hover{background:var(--amber);color:white;}
-a.cal-day-num.busy{position:relative;}
-a.cal-day-num.busy::after{content:'';display:block;width:5px;height:5px;border-radius:50%;background:var(--amber);position:absolute;bottom:2px;left:50%;transform:translateX(-50%);}
-.cal-day-num.past{color:#CBD5E1;}
-.cal-day-num.blocked{color:#CBD5E1;cursor:not-allowed;}
-.cal-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--gray);margin-top:12px;}
+.cal-table td{padding:2px;text-align:center;}
+.cal-day-cell{display:block;width:40px;margin:0 auto;border-radius:8px;padding:4px 0 5px;text-align:center;text-decoration:none;cursor:default;}
+a.cal-day-cell{cursor:pointer;}
+a.cal-day-cell:hover{background:rgba(201,151,58,.12);}
+.cal-num{display:block;font-size:13px;font-weight:600;line-height:22px;color:var(--steel);}
+a.cal-day-cell:hover .cal-num{color:var(--steel);}
+.cal-day-cell.cal-past .cal-num,.cal-day-cell.cal-blocked .cal-num,.cal-day-cell.cal-full .cal-num{color:#CBD5E1;}
+.slot-pips{display:flex;gap:2px;justify-content:center;margin-top:3px;}
+.slot-pip{width:7px;height:7px;border-radius:2px;flex-shrink:0;}
+.slot-open{background:#5A9E6F;}
+.slot-taken{background:#D17070;}
+.slot-na{background:#E8EDF3;}
+.cal-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--gray);margin-top:14px;}
 .cal-legend span{display:flex;align-items:center;gap:6px;}
-.legend-dot{width:10px;height:10px;border-radius:50%;}
+.legend-pip{width:10px;height:10px;border-radius:3px;flex-shrink:0;}
+/* Day slot blocks */
+.slot-block{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-radius:10px;margin-bottom:10px;text-decoration:none;gap:12px;}
+.slot-block-open{background:#edf7f1;border:1.5px solid #5A9E6F;cursor:pointer;}
+.slot-block-open:hover{background:#d8f0e2;}
+.slot-block-taken{background:#fdf0f0;border:1.5px solid #D17070;cursor:default;}
+.slot-block-time{font-size:16px;font-weight:700;color:var(--steel);}
+.slot-block-open .slot-block-time{color:#2d6e45;}
+.slot-block-taken .slot-block-time{color:#7a1f1f;}
+.slot-block-status{font-size:13px;font-weight:600;}
+.slot-block-open .slot-block-status{color:#2d6e45;}
+.slot-block-taken .slot-block-status{color:#a05050;}
 /* Agreement card */
 .agree-card{border:2px solid var(--steel);border-radius:10px;padding:18px 20px;margin-bottom:18px;background:var(--mist);}
 .agree-card .total{font-size:22px;font-weight:700;color:var(--steel);margin-bottom:10px;}
@@ -413,12 +428,33 @@ a.cal-day-num.busy::after{content:'';display:block;width:5px;height:5px;border-r
 </html>`, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
-function buildMonthCalendar(year, month, busyDates, blockedDates, token) {
+// GYM_SLOTS: the four rentable hour slots (5–9 PM), each [startHour, label]
+const GYM_SLOTS = [[17,'5–6 PM'],[18,'6–7 PM'],[19,'7–8 PM'],[20,'8–9 PM']];
+
+// Build a slotMap from a booking results array: date -> [h17taken, h18taken, h19taken, h20taken]
+function buildSlotMap(bookings) {
+  const map = new Map();
+  for (const b of bookings) {
+    const [sh, sm] = b.start_time.split(':').map(Number);
+    const [eh, em] = b.end_time.split(':').map(Number);
+    const startMins = sh * 60 + sm;
+    const endMins   = eh * 60 + em;
+    if (!map.has(b.booking_date)) map.set(b.booking_date, [false,false,false,false]);
+    const slots = map.get(b.booking_date);
+    GYM_SLOTS.forEach(([h], i) => {
+      if (startMins < (h + 1) * 60 && endMins > h * 60) slots[i] = true;
+    });
+  }
+  return map;
+}
+
+function buildMonthCalendar(year, month, slotMap, blockedDates, token) {
   const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const today = new Date().toISOString().split('T')[0];
   const firstDay = new Date(year, month, 1);
   const lastDay  = new Date(year, month + 1, 0);
   const startDow = firstDay.getDay();
+  const naPips   = GYM_SLOTS.map(() => `<span class="slot-pip slot-na"></span>`).join('');
 
   let out = `<div class="cal-month">
 <div class="cal-month-name">${MONTH_NAMES[month]} ${year}</div>
@@ -435,15 +471,23 @@ function buildMonthCalendar(year, month, busyDates, blockedDates, token) {
     const ds = `${year}-${mm}-${dd}`;
     const isPast    = ds < today;
     const isBlocked = blockedDates.has(ds);
-    const isBusy    = busyDates.has(ds);
+    const slots     = slotMap.get(ds) || [false,false,false,false];
+    const allTaken  = slots.every(s => s);
 
     let cell;
     if (isPast || isBlocked) {
-      cell = `<span class="cal-day-num ${isPast ? 'past' : 'blocked'}">${d}</span>`;
-    } else if (isBusy) {
-      cell = `<a href="/gym/book/${token}/day?dt=${ds}" class="cal-day-num busy">${d}</a>`;
+      cell = `<span class="cal-day-cell ${isPast ? 'cal-past' : 'cal-blocked'}">
+  <span class="cal-num">${d}</span>
+  <div class="slot-pips">${naPips}</div>
+</span>`;
     } else {
-      cell = `<a href="/gym/book/${token}/day?dt=${ds}" class="cal-day-num">${d}</a>`;
+      const pips = slots.map((taken, i) =>
+        `<span class="slot-pip ${taken ? 'slot-taken' : 'slot-open'}" title="${GYM_SLOTS[i][1]}"></span>`
+      ).join('');
+      cell = `<a href="/gym/book/${token}/day?dt=${ds}" class="cal-day-cell${allTaken ? ' cal-full' : ''}">
+  <span class="cal-num">${d}</span>
+  <div class="slot-pips">${pips}</div>
+</a>`;
     }
 
     out += `<td>${cell}</td>`;
@@ -1455,16 +1499,16 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
         const ninetyOut = new Date(Date.now() + 91 * 86400000).toISOString().split('T')[0];
 
         const [bookings, blocked] = await Promise.all([
-          env.DB.prepare("SELECT booking_date FROM gym_bookings WHERE status IN ('confirmed','hold') AND booking_date >= ? AND booking_date <= ?").bind(todayStr, ninetyOut).all(),
+          env.DB.prepare("SELECT booking_date, start_time, end_time FROM gym_bookings WHERE status IN ('confirmed','hold') AND booking_date >= ? AND booking_date <= ?").bind(todayStr, ninetyOut).all(),
           env.DB.prepare('SELECT date FROM gym_blocked_dates WHERE date >= ? AND date <= ?').bind(todayStr, ninetyOut).all(),
         ]);
-        const busyDates    = new Set(bookings.results.map(b => b.booking_date));
+        const slotMap      = buildSlotMap(bookings.results);
         const blockedDates = new Set(blocked.results.map(b => b.date));
 
         const months = [];
         for (let i = 0; i < 3; i++) {
           const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
-          months.push(buildMonthCalendar(d.getFullYear(), d.getMonth(), busyDates, blockedDates, token));
+          months.push(buildMonthCalendar(d.getFullYear(), d.getMonth(), slotMap, blockedDates, token));
         }
 
         return portalHtml(`
@@ -1474,11 +1518,12 @@ ${portalHeader}
   ${portalNav('cal')}
   <div class="card">
     <div class="card-title">Availability — Next 3 Months</div>
+    <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">Gym rentals are available <strong>5–9 PM</strong>. Each square shows one hour slot.</div>
     <div class="cal-grid">${months.join('')}</div>
     <div class="cal-legend">
-      <span><span class="legend-dot" style="background:var(--steel);"></span> Available (click to book)</span>
-      <span><span class="legend-dot" style="background:var(--amber);"></span> Has appointment (time may still be open)</span>
-      <span><span class="legend-dot" style="background:#CBD5E1;"></span> Unavailable</span>
+      <span><span class="legend-pip slot-open"></span> Available</span>
+      <span><span class="legend-pip slot-taken"></span> Booked</span>
+      <span><span class="legend-pip slot-na"></span> Unavailable</span>
     </div>
   </div>
   <div style="font-size:13px;color:var(--gray);text-align:center;margin-top:8px;">Questions? Contact us at <a href="mailto:office@timothystl.org" style="color:var(--steel);">office@timothystl.org</a></div>
@@ -1498,18 +1543,30 @@ ${portalHeader}
         ).bind(selDate).all();
 
         const friendlyDate = fmtBookingDate(selDate);
+        const daySlots = buildSlotMap(dayBookings.results.map(b => ({ ...b, booking_date: selDate }))).get(selDate) || [false,false,false,false];
+        const anyOpen = daySlots.some(s => !s);
 
-        const takenBlocksHtml = dayBookings.results.length === 0
-          ? `<div style="display:flex;align-items:center;gap:10px;padding:14px;background:#f0faf4;border-radius:8px;border:1px solid #a8d5b5;">
-               <span style="font-size:20px;">✓</span>
-               <span style="font-size:15px;font-weight:600;color:#1a5c2e;">Fully open — no existing bookings</span>
-             </div>`
-          : `<div style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:10px;">Times already booked:</div>
-             ${dayBookings.results.map(b => `
-             <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:#fce8e8;border-radius:8px;margin-bottom:8px;">
-               <span style="font-size:16px;">🚫</span>
-               <span style="font-size:15px;font-weight:600;color:#7a1f1f;">${fmt12h(b.start_time)} – ${fmt12h(b.end_time)}</span>
-             </div>`).join('')}`;
+        const slotBlocksHtml = GYM_SLOTS.map(([h, label], i) => {
+          const taken = daySlots[i];
+          const st = `${h.toString().padStart(2,'0')}:00`;
+          const et = `${(h+1).toString().padStart(2,'0')}:00`;
+          if (taken) {
+            return `<div class="slot-block slot-block-taken">
+  <div>
+    <div class="slot-block-time">${label}</div>
+    <div class="slot-block-status">Already booked</div>
+  </div>
+  <span style="font-size:20px;">✗</span>
+</div>`;
+          }
+          return `<a href="/gym/book/${token}/new?dt=${selDate}&st=${st}&et=${et}" class="slot-block slot-block-open" style="text-decoration:none;">
+  <div>
+    <div class="slot-block-time">${label}</div>
+    <div class="slot-block-status">Available — tap to request</div>
+  </div>
+  <span style="font-size:20px;">→</span>
+</a>`;
+        }).join('');
 
         return portalHtml(`
 ${portalHeader}
@@ -1517,11 +1574,11 @@ ${portalHeader}
   ${portalNav('cal')}
   <div class="card">
     <div class="card-title" style="margin-bottom:4px;">${friendlyDate}</div>
-    <div style="font-size:13px;color:var(--gray);margin-bottom:20px;">Check availability before submitting your request.</div>
-    ${takenBlocksHtml}
-    <div style="margin-top:24px;display:flex;gap:12px;flex-wrap:wrap;">
-      <a href="/gym/book/${token}/new?dt=${selDate}" class="btn btn-primary" style="text-decoration:none;">Request this date →</a>
-      <a href="/gym/book/${token}" class="btn btn-secondary" style="text-decoration:none;">← Back to calendar</a>
+    <div style="font-size:13px;color:var(--gray);margin-bottom:20px;">Tap an available slot to start your request, or use a custom time below.</div>
+    ${slotBlocksHtml}
+    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+      ${anyOpen ? `<a href="/gym/book/${token}/new?dt=${selDate}" class="btn btn-sage" style="text-decoration:none;font-size:13px;">Custom time request</a>` : ''}
+      <a href="/gym/book/${token}" class="btn btn-secondary" style="text-decoration:none;font-size:13px;background:var(--linen);color:var(--steel);">← Back to calendar</a>
     </div>
   </div>
   <div style="font-size:13px;color:var(--gray);text-align:center;margin-top:8px;">Questions? Contact us at <a href="mailto:office@timothystl.org" style="color:var(--steel);">office@timothystl.org</a></div>
