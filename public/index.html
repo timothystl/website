@@ -1201,9 +1201,9 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       <!-- Online -->
       <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:32px;margin-top:40px;">
         <span class="eyebrow eyebrow--sky">Online giving</span>
-        <h3 style="margin-bottom:8px;">Give securely through Breeze</h3>
+        <h3 style="margin-bottom:8px;">Give securely online</h3>
         <p style="font-size:14px;color:var(--gray);line-height:1.7;margin-bottom:24px;">One-time or recurring. Weekly, monthly, or whatever works for you. Accepts all major debit and credit cards. No account required for one-time gifts.</p>
-        <div id="breeze_giving_embed" data-subdomain="timothystl"></div>
+        <button class="tithely-give-button" data-form="e1769a0f-65b3-455f-933d-bfcf6a6ed6a8" style="background-color:#2E7EA6;font-family:inherit;font-weight:bold;font-size:19px;padding:15px 70px;border-radius:4px;cursor:pointer;background-image:none;color:white;text-shadow:none;display:inline-block;float:none;border:none;">Give</button>
       </div>
 
       <!-- Other ways grid -->
@@ -2107,10 +2107,10 @@ function showPage(id, addHistory){
     if (frame && !frame.src) { frame.src = frame.dataset.src; }
   }
   if (id === 'give') {
-    if (!document.getElementById('breeze-give-script')) {
+    if (!document.getElementById('tithely-give-script')) {
       var s = document.createElement('script');
-      s.id = 'breeze-give-script';
-      s.src = 'https://app.breezechms.com/js/give.js';
+      s.id = 'tithely-give-script';
+      s.src = 'https://static.tithely.com/give/give.js';
       document.body.appendChild(s);
     }
   }
