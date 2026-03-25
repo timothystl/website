@@ -4456,12 +4456,18 @@ ${topbarHtml('staff', `<a href="/staff">← All staff</a>`)}
         };
 
         // Render a single booking line
-        const bookingLine = (b, holdButtons = false) => {
+        const bookingLine = (b, holdButtons = false, deleteButton = false) => {
           const timeRange = `${fmt12h(b.start_time)}–${fmt12h(b.end_time)}`;
+          const deleteAction = b.isRecurring
+            ? `/gym-rentals/bookings/delete-recurring/${b.recurrence_id}`
+            : `/gym-rentals/bookings/delete/${b.id}`;
+          const deleteConfirm = b.isRecurring
+            ? `Delete all future bookings in this recurring series?`
+            : `Delete this confirmed booking on ${fmtShort(b.booking_date)}?`;
           const actions = holdButtons ? `<div style="display:flex;gap:5px;flex-shrink:0;">
     <form method="POST" action="/gym-rentals/bookings/confirm-admin/${b.id}" style="display:contents;" onsubmit="return confirm('Confirm this hold and generate an invoice?')"><button type="submit" class="btn btn-sm btn-primary">Confirm</button></form>
     <form method="POST" action="/gym-rentals/bookings/release/${b.id}" style="display:contents;" onsubmit="return confirm('Release this hold?')"><button type="submit" class="btn btn-sm btn-danger">Release</button></form>
-  </div>` : '';
+  </div>` : deleteButton ? `<form method="POST" action="${deleteAction}" style="display:contents;" onsubmit="return confirm('${deleteConfirm}')"><button type="submit" class="btn btn-sm btn-danger">Delete</button></form>` : '';
           if (b.isRecurring) {
             const label = `${DOW_FULL[b.rec_dow]}s, ${fmtShort(b.rec_start)} – ${fmtShort(b.rec_end)}`;
             return `<div style="display:flex;align-items:center;gap:12px;padding:9px 18px;border-bottom:1px solid var(--border);">
@@ -4483,13 +4489,13 @@ ${topbarHtml('staff', `<a href="/staff">← All staff</a>`)}
         };
 
         // Render an org accordion
-        const orgAccordion = (orgName, items, holdButtons) => `
+        const orgAccordion = (orgName, items, holdButtons, deleteButton = false) => `
 <details open style="margin-bottom:8px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
   <summary style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:11px 18px;background:var(--mist);font-family:var(--sans);font-size:14px;font-weight:700;color:var(--charcoal);list-style:none;-webkit-appearance:none;">
     <span>${orgName}</span>
     <span style="font-size:12px;font-weight:400;color:var(--gray);">${items.length} booking${items.length !== 1 ? 's' : ''}</span>
   </summary>
-  ${items.map(b => bookingLine(b, holdButtons)).join('')}
+  ${items.map(b => bookingLine(b, holdButtons, deleteButton)).join('')}
 </details>`;
 
         // Build holds HTML (grouped by org)
@@ -4531,7 +4537,7 @@ ${topbarHtml('staff', `<a href="/staff">← All staff</a>`)}
             if (!groups[n]) { groups[n] = []; order.push(n); }
             groups[n].push(b);
           }
-          confirmedHtml = order.map(n => orgAccordion(n, groups[n], false)).join('');
+          confirmedHtml = order.map(n => orgAccordion(n, groups[n], false, true)).join('');
         }
 
         const confirmAllBtn = holdsRes.results.length > 1
@@ -4721,9 +4727,14 @@ ${topbarHtml('gym', `<a href="/gym-rentals/groups">← Groups</a>`)}
       </div>
     </form>
     <hr style="border:none;border-top:1px solid var(--border);margin:24px 0;">
-    <form method="POST" action="/gym-rentals/groups/toggle/${g.id}" style="display:inline;">
-      <button type="submit" class="btn ${g.active ? 'btn-danger' : 'btn-sage'}">${g.active ? 'Deactivate group (disables portal access)' : 'Reactivate group'}</button>
-    </form>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      <form method="POST" action="/gym-rentals/groups/toggle/${g.id}" style="display:inline;">
+        <button type="submit" class="btn ${g.active ? 'btn-danger' : 'btn-sage'}">${g.active ? 'Deactivate group (disables portal access)' : 'Reactivate group'}</button>
+      </form>
+      <form method="POST" action="/gym-rentals/groups/delete/${g.id}" style="display:inline;" onsubmit="return confirm('Permanently delete ${g.name.replace(/'/g,"\\'")} and all their bookings and invoices? This cannot be undone.')">
+        <button type="submit" class="btn btn-danger">Delete group permanently</button>
+      </form>
+    </div>
   </div>
 </div>`, `Edit — ${g.name}`);
       }
@@ -4751,6 +4762,16 @@ ${topbarHtml('gym', `<a href="/gym-rentals/groups">← Groups</a>`)}
         const token = crypto.randomUUID().replace(/-/g, '');
         await env.DB.prepare('UPDATE gym_groups SET access_token=? WHERE id=?').bind(token, gid).run();
         return new Response('', { status: 302, headers: { Location: `/gym-rentals/groups/edit/${gid}?msg=regen` } });
+      }
+
+      // ── DELETE GROUP ──────────────────────────────────────────
+      if (path.startsWith('/gym-rentals/groups/delete/') && method === 'POST') {
+        const gid = parseInt(path.split('/').pop(), 10);
+        await env.DB.prepare('DELETE FROM gym_invoices WHERE group_id=?').bind(gid).run();
+        await env.DB.prepare('DELETE FROM gym_bookings WHERE group_id=?').bind(gid).run();
+        await env.DB.prepare('DELETE FROM gym_recurrences WHERE group_id=?').bind(gid).run();
+        await env.DB.prepare('DELETE FROM gym_groups WHERE id=?').bind(gid).run();
+        return new Response('', { status: 302, headers: { Location: '/gym-rentals/groups?msg=deleted' } });
       }
 
       // ── GCAL TEST ────────────────────────────────────────────
@@ -5012,6 +5033,22 @@ updateSummary();
         const bid = parseInt(path.split('/').pop(), 10);
         await env.DB.prepare("UPDATE gym_bookings SET status='released' WHERE id=? AND status='hold'").bind(bid).run();
         return new Response('', { status: 302, headers: { Location: '/gym-rentals?msg=saved' } });
+      }
+
+      // ── DELETE CONFIRMED BOOKING ──────────────────────────────
+      if (path.startsWith('/gym-rentals/bookings/delete/') && method === 'POST') {
+        const bid = parseInt(path.split('/').pop(), 10);
+        await env.DB.prepare("DELETE FROM gym_bookings WHERE id=? AND status='confirmed'").bind(bid).run();
+        return new Response('', { status: 302, headers: { Location: '/gym-rentals?msg=deleted' } });
+      }
+
+      // ── DELETE RECURRING CONFIRMED BOOKINGS ───────────────────
+      if (path.startsWith('/gym-rentals/bookings/delete-recurring/') && method === 'POST') {
+        const rid = parseInt(path.split('/').pop(), 10);
+        const today = new Date().toISOString().split('T')[0];
+        await env.DB.prepare("DELETE FROM gym_bookings WHERE recurrence_id=? AND status='confirmed' AND booking_date >= ?").bind(rid, today).run();
+        await env.DB.prepare("UPDATE gym_recurrences SET status='cancelled' WHERE id=?").bind(rid).run();
+        return new Response('', { status: 302, headers: { Location: '/gym-rentals?msg=deleted' } });
       }
 
       // ── NEW BOOKING FORM ──────────────────────────────────────
@@ -5315,6 +5352,9 @@ ${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
     <form method="POST" action="/gym-rentals/invoices/toggle-paid/${inv.id}" style="display:contents;">
       <button type="submit" class="btn btn-sm ${inv.status==='paid'?'btn-danger':'btn-sage'}">${inv.status==='paid'?'Mark Unpaid':'Mark Paid'}</button>
     </form>
+    <form method="POST" action="/gym-rentals/invoices/delete/${inv.id}" style="display:contents;" onsubmit="return confirm('Delete invoice ${invNum}? This cannot be undone.')">
+      <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+    </form>
   </div>
 </div>`; }).join('');
         return html(`
@@ -5411,6 +5451,13 @@ ${topbarHtml('gym', `<a href="/gym-rentals/invoices">← Invoices</a>`)}
         if (inv) await env.DB.prepare('UPDATE gym_invoices SET status=? WHERE id=?').bind(inv.status==='paid'?'unpaid':'paid', iid).run();
         const ref = request.headers.get('Referer') || '';
         return new Response('', { status: 302, headers: { Location: ref.includes('/view/') ? `/gym-rentals/invoices/view/${iid}?msg=saved` : `/gym-rentals/invoices?msg=saved` } });
+      }
+
+      // ── DELETE INVOICE ────────────────────────────────────────
+      if (path.startsWith('/gym-rentals/invoices/delete/') && method === 'POST') {
+        const iid = parseInt(path.split('/').pop(), 10);
+        await env.DB.prepare('DELETE FROM gym_invoices WHERE id=?').bind(iid).run();
+        return new Response('', { status: 302, headers: { Location: '/gym-rentals/invoices?msg=deleted' } });
       }
 
       // ── RESEND INVOICE EMAIL ──────────────────────────────────
