@@ -348,7 +348,7 @@ function buildGymInvoiceEmailHtml(inv, group, booking) {
 // Requires Worker secrets: GCAL_SERVICE_ACCOUNT_EMAIL, GCAL_PRIVATE_KEY
 // The service account must be granted "Make changes to events" on the target calendar.
 async function getGCalAccessToken(env) {
-  const email  = env.GCAL_SERVICE_ACCOUNT_EMAIL;
+  const email  = (env.GCAL_SERVICE_ACCOUNT_EMAIL || '').trim();
   const rawKey = env.GCAL_PRIVATE_KEY;
   if (!email || !rawKey) return null;
   try {
@@ -4752,10 +4752,14 @@ ${topbarHtml('gym', `<a href="/gym-rentals/groups">← Groups</a>`)}
       if (path === '/gym-rentals/test-gcal' && method === 'GET') {
         const steps = [];
         // Step 1: check secrets
-        const hasEmail = !!env.GCAL_SERVICE_ACCOUNT_EMAIL;
-        const hasKey   = !!env.GCAL_PRIVATE_KEY;
-        steps.push({ ok: hasEmail, label: 'GCAL_SERVICE_ACCOUNT_EMAIL secret', detail: hasEmail ? env.GCAL_SERVICE_ACCOUNT_EMAIL : 'NOT SET' });
-        steps.push({ ok: hasKey,   label: 'GCAL_PRIVATE_KEY secret',           detail: hasKey   ? '(set — ' + env.GCAL_PRIVATE_KEY.length + ' chars)' : 'NOT SET' });
+        const rawEmail = env.GCAL_SERVICE_ACCOUNT_EMAIL || '';
+        const hasEmail = !!rawEmail;
+        const cleanEmail = rawEmail.trim();
+        const emailOk = hasEmail && cleanEmail === rawEmail && cleanEmail.endsWith('.gserviceaccount.com');
+        steps.push({ ok: emailOk, label: 'GCAL_SERVICE_ACCOUNT_EMAIL secret', detail: hasEmail ? `"${cleanEmail}" (${rawEmail.length} chars${rawEmail !== cleanEmail ? ' — WARNING: has leading/trailing whitespace' : ''})` : 'NOT SET' });
+        const hasKey = !!env.GCAL_PRIVATE_KEY;
+        const keyHasHeader = hasKey && (env.GCAL_PRIVATE_KEY.includes('BEGIN PRIVATE KEY') || env.GCAL_PRIVATE_KEY.includes('BEGIN RSA PRIVATE KEY'));
+        steps.push({ ok: hasKey && keyHasHeader, label: 'GCAL_PRIVATE_KEY secret', detail: hasKey ? `(${env.GCAL_PRIVATE_KEY.length} chars${keyHasHeader ? ', header found ✓' : ' — WARNING: missing -----BEGIN PRIVATE KEY----- header'})` : 'NOT SET' });
         // Step 2: calendar ID in settings
         const calRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gcal_calendar_id'").first();
         const calId  = calRow?.value || '';
