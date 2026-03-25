@@ -433,10 +433,21 @@ input:focus,select:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(201
 </html>`, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
-// GYM_SLOTS: the four rentable hour slots (5–9 PM), each [startHour, label]
-const GYM_SLOTS = [[17,'5–6 PM'],[18,'6–7 PM'],[19,'7–8 PM'],[20,'8–9 PM']];
+// GYM_SLOTS: all possible rentable hour slots (8 AM–9 PM), each [startHour, label]
+const GYM_SLOTS = [
+  [8,'8–9 AM'],[9,'9–10 AM'],[10,'10–11 AM'],[11,'11 AM–12 PM'],
+  [12,'12–1 PM'],[13,'1–2 PM'],[14,'2–3 PM'],[15,'3–4 PM'],
+  [16,'4–5 PM'],[17,'5–6 PM'],[18,'6–7 PM'],[19,'7–8 PM'],[20,'8–9 PM']
+];
 
-// Build a slotMap from a booking results array: date -> [h17taken, h18taken, h19taken, h20taken]
+// Valid start hours per day of week: 0=Sun, 6=Sat, 1-5=weekday
+function getValidHoursForDow(dow) {
+  if (dow === 6) return new Set([8,9,10,11,12,13,14,15,16,17,18,19]); // Sat: 8am–8pm
+  if (dow === 0) return new Set([13,14,15,16,17,18,19]);               // Sun: 1pm–8pm
+  return new Set([17,18,19,20]);                                        // Mon–Fri: 5–9pm
+}
+
+// Build a slotMap from a booking results array: date -> bool[] indexed by GYM_SLOTS
 function buildSlotMap(bookings) {
   const map = new Map();
   for (const b of bookings) {
@@ -444,7 +455,7 @@ function buildSlotMap(bookings) {
     const [eh, em] = b.end_time.split(':').map(Number);
     const startMins = sh * 60 + sm;
     const endMins   = eh * 60 + em;
-    if (!map.has(b.booking_date)) map.set(b.booking_date, [false,false,false,false]);
+    if (!map.has(b.booking_date)) map.set(b.booking_date, Array(GYM_SLOTS.length).fill(false));
     const slots = map.get(b.booking_date);
     GYM_SLOTS.forEach(([h], i) => {
       if (startMins < (h + 1) * 60 && endMins > h * 60) slots[i] = true;
@@ -459,8 +470,6 @@ function buildMonthCalendar(year, month, slotMap, blockedDates, token) {
   const firstDay = new Date(year, month, 1);
   const lastDay  = new Date(year, month + 1, 0);
   const startDow = firstDay.getDay();
-  const naPips   = GYM_SLOTS.map(() => `<span class="slot-pip slot-na"></span>`).join('');
-
   let out = `<div class="cal-month">
 <div class="cal-month-name">${MONTH_NAMES[month]} ${year}</div>
 <table class="cal-table">
@@ -476,18 +485,22 @@ function buildMonthCalendar(year, month, slotMap, blockedDates, token) {
     const ds = `${year}-${mm}-${dd}`;
     const isPast    = ds < today;
     const isBlocked = blockedDates.has(ds);
-    const slots     = slotMap.get(ds) || [false,false,false,false];
-    const allTaken  = slots.every(s => s);
+    const dowForDay = new Date(ds + 'T12:00:00').getDay();
+    const validH    = getValidHoursForDow(dowForDay);
+    const slots     = slotMap.get(ds) || Array(GYM_SLOTS.length).fill(false);
+    const validTaken = GYM_SLOTS.map(([h], i) => validH.has(h) ? slots[i] : null).filter(s => s !== null);
+    const allTaken  = validTaken.length > 0 && validTaken.every(s => s);
 
     let cell;
     if (isPast || isBlocked) {
+      const naPips = GYM_SLOTS.map(([h]) => validH.has(h) ? `<span class="slot-pip slot-na"></span>` : '').join('');
       cell = `<span class="cal-day-cell ${isPast ? 'cal-past' : 'cal-blocked'}">
   <span class="cal-num">${d}</span>
   <div class="slot-pips">${naPips}</div>
 </span>`;
     } else {
-      const pips = slots.map((taken, i) =>
-        `<span class="slot-pip ${taken ? 'slot-taken' : 'slot-open'}" title="${GYM_SLOTS[i][1]}"></span>`
+      const pips = GYM_SLOTS.map(([h, label], i) =>
+        validH.has(h) ? `<span class="slot-pip ${slots[i] ? 'slot-taken' : 'slot-open'}" title="${label}"></span>` : ''
       ).join('');
       cell = `<a href="/gym/book/${token}/day?dt=${ds}" class="cal-day-cell${allTaken ? ' cal-full' : ''}">
   <span class="cal-num">${d}</span>
@@ -1540,13 +1553,15 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
             const ds = `${yr}-${mm}-${dd}`;
             const isPast = ds < todayStr;
             const isBlocked = blockedSet.has(ds);
-            const slots = slotMap.get(ds) || [false,false,false,false];
+            const dowForDate = new Date(ds + 'T12:00:00').getDay();
+            const validHours = getValidHoursForDow(dowForDate);
+            const slots = slotMap.get(ds) || Array(GYM_SLOTS.length).fill(false);
             let numCls = 'scal-cell';
             if (isPast) numCls += ' scal-past';
             else if (isBlocked) numCls += ' scal-blocked';
             const slotDivs = GYM_SLOTS.map(([h, label], i) => {
-              if (isPast || isBlocked) return `<span class="scal-slot na"></span>`;
-              if (slots[i]) return `<span class="scal-slot taken" data-label="${label} — Booked"></span>`;
+              if (isPast || isBlocked || !validHours.has(h)) return `<span class="scal-slot na"></span>`;
+              if (slots[i]) return `<span class="scal-slot taken" data-label="${label} \u2014 Booked"></span>`;
               const st = `${h.toString().padStart(2,'0')}:00`;
               const et = `${(h+1).toString().padStart(2,'0')}:00`;
               return `<span class="scal-slot open" data-date="${ds}" data-st="${st}" data-et="${et}" data-label="${label}"></span>`;
@@ -1578,7 +1593,7 @@ ${portalHeader}
       <span><span class="legend-swatch" style="background:#D17070;"></span> Already booked</span>
       <span><span class="legend-swatch" style="background:#E8EDF3;"></span> Unavailable</span>
     </div>
-    <div style="font-size:12px;color:var(--gray);margin-top:10px;">Each slot = 1 hour ($${rate}/hr). Rentals available 5–9 PM.</div>
+    <div style="font-size:12px;color:var(--gray);margin-top:10px;">Each slot = 1 hour ($${rate}/hr). &nbsp;Mon–Fri: 5–9 PM &nbsp;·&nbsp; Sat: 8 AM–8 PM &nbsp;·&nbsp; Sun: 1–8 PM</div>
 
     <!-- Pattern selector -->
     <div class="pattern-card">
@@ -1600,6 +1615,15 @@ ${portalHeader}
         <div class="form-group">
           <label>Time slot</label>
           <select id="pat-time">
+            <option value="08:00">8–9 AM</option>
+            <option value="09:00">9–10 AM</option>
+            <option value="10:00">10–11 AM</option>
+            <option value="11:00">11 AM–12 PM</option>
+            <option value="12:00">12–1 PM</option>
+            <option value="13:00">1–2 PM</option>
+            <option value="14:00">2–3 PM</option>
+            <option value="15:00">3–4 PM</option>
+            <option value="16:00">4–5 PM</option>
             <option value="17:00">5–6 PM</option>
             <option value="18:00">6–7 PM</option>
             <option value="19:00">7–8 PM</option>
@@ -1662,7 +1686,7 @@ ${portalHeader}
 
 <script>
 const selected = new Map(); // key "DATE|ST|ET" -> {date, st, et}
-const SLOT_LABELS = {'17:00':'5–6 PM','18:00':'6–7 PM','19:00':'7–8 PM','20:00':'8–9 PM'};
+const SLOT_LABELS = {'08:00':'8–9 AM','09:00':'9–10 AM','10:00':'10–11 AM','11:00':'11 AM–12 PM','12:00':'12–1 PM','13:00':'1–2 PM','14:00':'2–3 PM','15:00':'3–4 PM','16:00':'4–5 PM','17:00':'5–6 PM','18:00':'6–7 PM','19:00':'7–8 PM','20:00':'8–9 PM'};
 let curMonth = 0;
 const NUM_MONTHS = 6;
 
@@ -2098,6 +2122,9 @@ ${portalHeader}
         for (const slot of slots) {
           const [date, st, et] = slot.split('|');
           if (!date || !st || !et || date < today) { skipped++; continue; }
+          const slotDow  = new Date(date + 'T12:00:00').getDay();
+          const validH   = getValidHoursForDow(slotDow);
+          if (!validH.has(parseInt(st.split(':')[0], 10))) { skipped++; continue; }
           const isBlocked = await env.DB.prepare('SELECT id FROM gym_blocked_dates WHERE date=?').bind(date).first();
           if (isBlocked) { skipped++; continue; }
           const conflict = await env.DB.prepare("SELECT id FROM gym_bookings WHERE booking_date=? AND status IN ('confirmed','hold') AND start_time < ? AND end_time > ?").bind(date, et, st).first();
