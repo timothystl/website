@@ -357,7 +357,7 @@ async function getGCalAccessToken(env) {
     const hdr  = b64u({ alg:'RS256', typ:'JWT' });
     const pay  = b64u({ iss: email, scope:'https://www.googleapis.com/auth/calendar.events', aud:'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600 });
     const sigInput = `${hdr}.${pay}`;
-    const pem  = rawKey.replace(/-----[^-]+-----/g,'').replace(/\s/g,'');
+    const pem  = rawKey.replace(/\\n/g,'\n').replace(/-----[^-]+-----/g,'').replace(/\s/g,'');
     const keyBuf = Uint8Array.from(atob(pem), c => c.charCodeAt(0));
     const key  = await crypto.subtle.importKey('pkcs8', keyBuf.buffer, { name:'RSASSA-PKCS1-v1_5', hash:'SHA-256' }, false, ['sign']);
     const sig  = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(sigInput));
