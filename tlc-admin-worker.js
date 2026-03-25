@@ -210,8 +210,7 @@ const INITIAL_STAFF = [
 const INITIAL_SETTINGS = [
   { key: 'zoom_url',          value: 'https://us02web.zoom.us/j/3147818673',                                                                   label: 'Zoom meeting URL',      hint: 'Used for the /zoom redirect. Update when the Zoom link changes.' },
   { key: 'councilfiles_url',  value: 'https://drive.google.com/drive/folders/1pgqJ32H3HS7SNYnnf7rOswC5c87IAzA4?usp=drive_link',              label: 'Council files URL',     hint: 'Used for the /councilfiles redirect. Update when the Google Drive folder changes.' },
-  { key: 'give_url',          value: 'https://timothystl.breezechms.com/give/online',                                                          label: 'Online giving URL',        hint: 'Used for the Give link in emails and invoices. Update when the giving platform changes.' },
-  { key: 'give_embed_code',   value: '<button class="tithely-give-button" data-form=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8 data-location=fe6ddef2-d6d2-4c85-adfd-f19eac997d38 data-fund="51451abb-a7e4-435a-8fc3-cb061b0ab1d7" style="background-color:#00DB72;font-family:inherit;font-weight:bold;font-size:19px;padding:15px 70px;border-radius:4px;cursor:pointer;background-image:none;color:white;text-shadow:none;display:inline-block;float:none;border:none;">Give</button><script src="https://static.tithely.com/give/give.js" defer><\/script>', label: 'Online giving embed code', hint: 'Embed button for the /give web page. Update when the giving platform changes. (Not used in emails — emails use the URL above.)' },
+  { key: 'give_url',          value: 'https://timothystl.breezechms.com/give/online',                                                          label: 'Online giving URL',        hint: 'Used for the Give link in emails and invoices. Update when the giving platform changes. (The /give page embed is hardcoded in public/index.html — update that file when switching platforms.)' },
   { key: 'gym_rate_per_hour', value: '25.00',                   label: 'Gym rental rate (per hour, $)',  hint: 'Hourly rate charged for gym rentals. Shown to groups when they confirm a booking.' },
   { key: 'gym_hold_hours',    value: '48',                      label: 'Gym hold duration (hours)',      hint: 'How many hours a tentative hold lasts before auto-expiring. Default: 48.' },
   { key: 'gcal_calendar_id',  value: '',                        label: 'Google Calendar ID (gym rentals)', hint: 'Calendar ID that confirmed gym bookings are automatically added to. Format: xxxxx@group.calendar.google.com or your Gmail address for a personal calendar. Also requires GCAL_SERVICE_ACCOUNT_EMAIL and GCAL_PRIVATE_KEY set as Cloudflare Worker secrets.' },
@@ -1241,6 +1240,10 @@ export default {
     // Remove legacy page content keys that have been replaced or retired
     for (const oldKey of ['seasonal-worship', 'staff-intro']) {
       try { await env.DB.prepare('DELETE FROM page_content WHERE key = ?').bind(oldKey).run(); } catch (_) {}
+    }
+    // Remove legacy site_settings keys no longer shown in UI
+    for (const oldKey of ['give_embed_code', 'gym_ical_token']) {
+      try { await env.DB.prepare('DELETE FROM site_settings WHERE key = ?').bind(oldKey).run(); } catch (_) {}
     }
 
     // ── PUBLIC: serve uploaded docs from R2 ──
@@ -4421,69 +4424,128 @@ ${topbarHtml('staff', `<a href="/staff">← All staff</a>`)}
       // ── DASHBOARD ──────────────────────────────────────────────
       if (path === '/gym-rentals' && method === 'GET') {
         const today = new Date().toISOString().split('T')[0];
-        const sevenDays = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
-        const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-        const [upcoming, holds, pending, rateRow] = await Promise.all([
-          env.DB.prepare(`SELECT b.*, g.name as group_name FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id WHERE b.status = 'confirmed' AND b.booking_date >= ? AND b.booking_date <= ? ORDER BY b.booking_date, b.start_time`).bind(today, sevenDays).all(),
-          env.DB.prepare(`SELECT b.*, g.name as group_name FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id WHERE b.status = 'hold' ORDER BY b.hold_expires_at`).all(),
+        const DOW_FULL = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+        const fmtShort = d => d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+
+        const [holdsRes, pendingRes, confirmedRes, rateRow] = await Promise.all([
+          env.DB.prepare(`SELECT b.*, g.name as group_name, r.day_of_week as rec_dow, r.start_date as rec_start, r.end_date as rec_end FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id LEFT JOIN gym_recurrences r ON r.id = b.recurrence_id WHERE b.status = 'hold' ORDER BY b.group_id, b.hold_expires_at`).all(),
           env.DB.prepare(`SELECT r.*, g.name as group_name FROM gym_recurrences r LEFT JOIN gym_groups g ON g.id = r.group_id WHERE r.status = 'pending_review' ORDER BY r.created_at`).all(),
+          env.DB.prepare(`SELECT b.*, g.name as group_name, r.day_of_week as rec_dow, r.start_date as rec_start, r.end_date as rec_end FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id LEFT JOIN gym_recurrences r ON r.id = b.recurrence_id WHERE b.status = 'confirmed' AND b.booking_date >= ? ORDER BY b.group_id, b.recurrence_id, b.booking_date`).bind(today).all(),
           env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_rate_per_hour'").first(),
         ]);
-        const upHtml = upcoming.results.length === 0
-          ? `<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No confirmed bookings in the next 7 days.</div>`
-          : upcoming.results.map(b => `
-<div class="ni-row">
-  <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--steel);min-width:100px;">${fmtBookingDate(b.booking_date)}</div>
-  <div style="font-family:var(--serif);font-size:15px;color:var(--charcoal);flex:1;">${b.group_name||'—'}</div>
-  <div class="ni-meta">${b.start_time}–${b.end_time}</div>
-  <span class="badge badge-active">Confirmed</span>
-</div>`).join('');
-        const holdsHtml = holds.results.length === 0
-          ? `<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No pending holds.</div>`
-          : holds.results.map(b => {
-              const exp = b.hold_expires_at ? new Date(b.hold_expires_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '?';
-              return `
-<div class="ni-row">
-  <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--steel);min-width:100px;">${fmtBookingDate(b.booking_date)}</div>
-  <div style="font-family:var(--serif);font-size:15px;color:var(--charcoal);flex:1;">${b.group_name||'—'}</div>
-  <div class="ni-meta">${b.start_time}–${b.end_time}</div>
-  <div class="ni-meta" style="color:#7A4F00;">Exp ${exp}</div>
-  <span class="badge" style="background:#FFF3D6;color:#7A4F00;">Hold</span>
-  <div class="ni-actions" style="display:flex;gap:6px;flex-wrap:wrap;">
-    <form method="POST" action="/gym-rentals/bookings/confirm-admin/${b.id}" style="display:contents;" onsubmit="return confirm('Confirm this hold and generate an invoice?')">
-      <button type="submit" class="btn btn-sm btn-primary">Confirm</button>
-    </form>
-    <form method="POST" action="/gym-rentals/bookings/release/${b.id}" style="display:contents;" onsubmit="return confirm('Release this hold? The slot will open back up.')">
-      <button type="submit" class="btn btn-sm btn-danger">Release</button>
-    </form>
+
+        // De-duplicate recurring bookings — show one row per recurrence_id
+        const buildItems = (rows) => {
+          const seen = new Set();
+          const items = [];
+          for (const b of rows) {
+            if (b.recurrence_id) {
+              if (seen.has(b.recurrence_id)) continue;
+              seen.add(b.recurrence_id);
+              items.push({ ...b, isRecurring: true });
+            } else {
+              items.push({ ...b, isRecurring: false });
+            }
+          }
+          return items;
+        };
+
+        // Render a single booking line
+        const bookingLine = (b, holdButtons = false) => {
+          const timeRange = `${fmt12h(b.start_time)}–${fmt12h(b.end_time)}`;
+          const actions = holdButtons ? `<div style="display:flex;gap:5px;flex-shrink:0;">
+    <form method="POST" action="/gym-rentals/bookings/confirm-admin/${b.id}" style="display:contents;" onsubmit="return confirm('Confirm this hold and generate an invoice?')"><button type="submit" class="btn btn-sm btn-primary">Confirm</button></form>
+    <form method="POST" action="/gym-rentals/bookings/release/${b.id}" style="display:contents;" onsubmit="return confirm('Release this hold?')"><button type="submit" class="btn btn-sm btn-danger">Release</button></form>
+  </div>` : '';
+          if (b.isRecurring) {
+            const label = `${DOW_FULL[b.rec_dow]}s, ${fmtShort(b.rec_start)} – ${fmtShort(b.rec_end)}`;
+            return `<div style="display:flex;align-items:center;gap:12px;padding:9px 18px;border-bottom:1px solid var(--border);">
+  <div style="flex:1;font-family:var(--sans);font-size:13px;font-weight:600;color:var(--charcoal);">${label}</div>
+  <div style="font-family:var(--sans);font-size:13px;color:var(--steel);">${timeRange}</div>
+  <span class="badge" style="background:#e8f0fe;color:#1a3060;font-size:10px;">Recurring</span>
+  ${actions}
+</div>`;
+          } else {
+            const exp = holdButtons && b.hold_expires_at
+              ? ` <span style="color:#7A4F00;font-size:11px;">exp ${new Date(b.hold_expires_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</span>`
+              : '';
+            return `<div style="display:flex;align-items:center;gap:12px;padding:9px 18px;border-bottom:1px solid var(--border);">
+  <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--steel);min-width:110px;">${fmtBookingDate(b.booking_date)}</div>
+  <div style="flex:1;font-family:var(--sans);font-size:13px;color:var(--charcoal);">${timeRange}${exp}</div>
+  ${actions}
+</div>`;
+          }
+        };
+
+        // Render an org accordion
+        const orgAccordion = (orgName, items, holdButtons) => `
+<details open style="margin-bottom:8px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+  <summary style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:11px 18px;background:var(--mist);font-family:var(--sans);font-size:14px;font-weight:700;color:var(--charcoal);list-style:none;-webkit-appearance:none;">
+    <span>${orgName}</span>
+    <span style="font-size:12px;font-weight:400;color:var(--gray);">${items.length} booking${items.length !== 1 ? 's' : ''}</span>
+  </summary>
+  ${items.map(b => bookingLine(b, holdButtons)).join('')}
+</details>`;
+
+        // Build holds HTML (grouped by org)
+        const holdItems = buildItems(holdsRes.results);
+        let holdsHtml = `<div style="text-align:center;padding:24px;color:var(--gray);font-size:14px;">No pending holds.</div>`;
+        if (holdItems.length > 0) {
+          const groups = {}, order = [];
+          for (const b of holdItems) {
+            const n = b.group_name || '— Unassigned —';
+            if (!groups[n]) { groups[n] = []; order.push(n); }
+            groups[n].push(b);
+          }
+          holdsHtml = order.map(n => orgAccordion(n, groups[n], true)).join('');
+        }
+
+        // Pending recurring requests (awaiting review)
+        const pendingRecHtml = pendingRes.results.length === 0 ? '' : `
+<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+  <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gray);margin-bottom:8px;">Recurring requests — awaiting review</div>
+  ${pendingRes.results.map(r => `<div style="display:flex;align-items:center;gap:12px;padding:9px 14px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;background:var(--linen);">
+  <div style="flex:1;font-family:var(--sans);font-size:13px;">
+    <span style="font-weight:700;color:var(--charcoal);">${r.group_name || '—'}</span>
+    <span style="color:var(--gray);margin:0 5px;">·</span>
+    <span style="color:var(--charcoal);">${DOW_FULL[r.day_of_week]}s, ${fmtShort(r.start_date)} – ${fmtShort(r.end_date)}</span>
+    <span style="color:var(--gray);margin:0 5px;">·</span>
+    <span style="color:var(--steel);">${fmt12h(r.start_time)}–${fmt12h(r.end_time)}</span>
   </div>
-</div>`; }).join('');
-        const recHtml = pending.results.length === 0
-          ? `<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No pending recurring requests.</div>`
-          : pending.results.map(r => `
-<div class="ni-row">
-  <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--steel);min-width:100px;">${DOW[r.day_of_week]}s</div>
-  <div style="font-family:var(--serif);font-size:15px;color:var(--charcoal);flex:1;">${r.group_name||'—'}</div>
-  <div class="ni-meta">${r.start_time}–${r.end_time}</div>
-  <div class="ni-meta">${r.start_date} → ${r.end_date}</div>
-  <span class="badge badge-upcoming">Pending</span>
-  <div class="ni-actions">
-    <a href="/gym-rentals/recurring/review/${r.id}" class="btn btn-sm btn-primary">Review</a>
-  </div>
-</div>`).join('');
+  <a href="/gym-rentals/recurring/review/${r.id}" class="btn btn-sm btn-primary">Review</a>
+</div>`).join('')}
+</div>`;
+
+        // Build confirmed HTML (grouped by org)
+        const confirmedItems = buildItems(confirmedRes.results);
+        let confirmedHtml = `<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No upcoming confirmed bookings.</div>`;
+        if (confirmedItems.length > 0) {
+          const groups = {}, order = [];
+          for (const b of confirmedItems) {
+            const n = b.group_name || '— Unassigned —';
+            if (!groups[n]) { groups[n] = []; order.push(n); }
+            groups[n].push(b);
+          }
+          confirmedHtml = order.map(n => orgAccordion(n, groups[n], false)).join('');
+        }
+
+        const confirmAllBtn = holdsRes.results.length > 1
+          ? `<form method="POST" action="/gym-rentals/bookings/confirm-all-holds" onsubmit="return confirm('Confirm all ${holdsRes.results.length} holds and generate invoices?')" style="display:inline;"><button type="submit" class="btn btn-sm btn-primary">Confirm All (${holdsRes.results.length})</button></form>`
+          : '';
+
         return html(`
 ${topbarHtml('gym')}
+<style>details > summary { list-style: none; } details > summary::-webkit-details-marker { display: none; }</style>
 <div class="wrap">
   <div class="page-title">Gym Rentals</div>
   <div class="page-sub">Manage rental groups, bookings, and schedules.</div>
   ${gymAlert}
   <div class="btn-row" style="margin-bottom:16px;">
     <a href="/gym-rentals/bookings/new" class="btn btn-primary">+ New Booking</a>
-    <a href="/gym-rentals/bookings" class="btn btn-secondary">All Bookings</a>
-    <a href="/gym-rentals/recurring" class="btn btn-secondary">Recurring</a>
     <a href="/gym-rentals/groups" class="btn btn-secondary">Manage Groups</a>
     <a href="/gym-rentals/blocked" class="btn btn-sage">Blocked Dates</a>
     <a href="/gym-rentals/invoices" class="btn btn-secondary">Invoices</a>
+    <a href="/gym-rentals/test-gcal" class="btn btn-secondary" style="margin-left:auto;">Test GCal →</a>
   </div>
   <div style="background:var(--mist);border:1px solid var(--border);border-radius:10px;padding:12px 18px;margin-bottom:24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
     <div style="font-size:14px;color:var(--charcoal);">Rental rate: <strong>$${rateRow?.value || '25.00'}/hr</strong></div>
@@ -4491,19 +4553,16 @@ ${topbarHtml('gym')}
     <div style="margin-left:auto;font-size:12px;color:var(--gray);">Mon–Fri 5–9 PM &nbsp;·&nbsp; Sat 8 AM–8 PM &nbsp;·&nbsp; Sun 1–8 PM</div>
   </div>
   <div class="card">
-    <div class="card-title">Confirmed — Next 7 Days</div>
-    ${upHtml}
-  </div>
-  <div class="card">
     <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
       <span>Pending Holds</span>
-      ${holds.results.length > 1 ? `<form method="POST" action="/gym-rentals/bookings/confirm-all-holds" onsubmit="return confirm('Confirm all ${holds.results.length} pending holds and generate invoices for each?')"><button type="submit" class="btn btn-sm btn-primary">Confirm All (${holds.results.length})</button></form>` : ''}
+      ${confirmAllBtn}
     </div>
     ${holdsHtml}
+    ${pendingRecHtml}
   </div>
-  <div class="card">
-    <div class="card-title">Recurring Requests — Awaiting Your Review</div>
-    ${recHtml}
+  <div class="card" style="margin-top:16px;">
+    <div class="card-title">Confirmed Bookings</div>
+    ${confirmedHtml}
   </div>
 </div>`, 'Gym Rentals');
       }
@@ -4687,6 +4746,65 @@ ${topbarHtml('gym', `<a href="/gym-rentals/groups">← Groups</a>`)}
         const token = crypto.randomUUID().replace(/-/g, '');
         await env.DB.prepare('UPDATE gym_groups SET access_token=? WHERE id=?').bind(token, gid).run();
         return new Response('', { status: 302, headers: { Location: `/gym-rentals/groups/edit/${gid}?msg=regen` } });
+      }
+
+      // ── GCAL TEST ────────────────────────────────────────────
+      if (path === '/gym-rentals/test-gcal' && method === 'GET') {
+        const steps = [];
+        // Step 1: check secrets
+        const hasEmail = !!env.GCAL_SERVICE_ACCOUNT_EMAIL;
+        const hasKey   = !!env.GCAL_PRIVATE_KEY;
+        steps.push({ ok: hasEmail, label: 'GCAL_SERVICE_ACCOUNT_EMAIL secret', detail: hasEmail ? env.GCAL_SERVICE_ACCOUNT_EMAIL : 'NOT SET' });
+        steps.push({ ok: hasKey,   label: 'GCAL_PRIVATE_KEY secret',           detail: hasKey   ? '(set — ' + env.GCAL_PRIVATE_KEY.length + ' chars)' : 'NOT SET' });
+        // Step 2: calendar ID in settings
+        const calRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gcal_calendar_id'").first();
+        const calId  = calRow?.value || '';
+        steps.push({ ok: !!calId, label: 'Google Calendar ID (in Settings tab)', detail: calId || 'EMPTY — set this in Settings before continuing' });
+        // Step 3: get access token
+        let token = null;
+        if (hasEmail && hasKey) {
+          token = await getGCalAccessToken(env);
+          steps.push({ ok: !!token, label: 'OAuth access token from Google', detail: token ? '(received)' : 'FAILED — check service account email and private key format' });
+        }
+        // Step 4: create test event
+        let eventCreated = false, eventError = '';
+        if (token && calId) {
+          const today = new Date().toISOString().split('T')[0];
+          const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              summary: 'TLC Admin — GCal Test Event (safe to delete)',
+              description: 'Created by the admin test page. You can delete this.',
+              start: { dateTime: `${today}T10:00:00`, timeZone: 'America/Chicago' },
+              end:   { dateTime: `${today}T11:00:00`, timeZone: 'America/Chicago' },
+            }),
+          });
+          if (res.ok) {
+            eventCreated = true;
+          } else {
+            const body = await res.json().catch(() => ({}));
+            eventError = body?.error?.message || `HTTP ${res.status}`;
+          }
+          steps.push({ ok: eventCreated, label: 'Create test event on calendar', detail: eventCreated ? 'Event created — check your calendar' : `FAILED: ${eventError}` });
+        }
+        const stepsHtml = steps.map(s => `
+<div style="display:flex;align-items:flex-start;gap:14px;padding:12px 0;border-bottom:1px solid var(--border);">
+  <span style="font-size:18px;flex-shrink:0;">${s.ok ? '✅' : '❌'}</span>
+  <div>
+    <div style="font-family:var(--sans);font-size:14px;font-weight:700;color:var(--charcoal);">${s.label}</div>
+    <div style="font-family:var(--sans);font-size:13px;color:${s.ok ? 'var(--gray)' : '#B85C3A'};margin-top:2px;">${s.detail}</div>
+  </div>
+</div>`).join('');
+        return html(`
+${topbarHtml('gym', `<a href="/gym-rentals">← Gym Rentals</a>`)}
+<div class="wrap">
+  <div class="page-title">Google Calendar — Connection Test</div>
+  <div class="page-sub">Checks secrets, access token, and creates a test event on your calendar.</div>
+  <div class="card">${stepsHtml}</div>
+  ${eventCreated ? `<div class="alert alert-success">✓ Everything is working. A test event was added to your calendar — check it and delete it.</div>` : ''}
+  <div style="margin-top:8px;"><a href="/gym-rentals/test-gcal" class="btn btn-secondary">Run test again</a></div>
+</div>`, 'GCal Test');
       }
 
       // ── BLOCKED DATES CALENDAR ───────────────────────────────
