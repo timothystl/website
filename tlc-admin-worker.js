@@ -210,8 +210,7 @@ const INITIAL_STAFF = [
 const INITIAL_SETTINGS = [
   { key: 'zoom_url',          value: 'https://us02web.zoom.us/j/3147818673',                                                                   label: 'Zoom meeting URL',      hint: 'Used for the /zoom redirect. Update when the Zoom link changes.' },
   { key: 'councilfiles_url',  value: 'https://drive.google.com/drive/folders/1pgqJ32H3HS7SNYnnf7rOswC5c87IAzA4?usp=drive_link',              label: 'Council files URL',     hint: 'Used for the /councilfiles redirect. Update when the Google Drive folder changes.' },
-  { key: 'give_url',          value: 'https://timothystl.breezechms.com/give/online',                                                          label: 'Online giving URL',        hint: 'Used for the Give link in emails and invoices. Update when the giving platform changes.' },
-  { key: 'give_embed_code',   value: '<button class="tithely-give-button" data-form=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8 data-location=fe6ddef2-d6d2-4c85-adfd-f19eac997d38 data-fund="51451abb-a7e4-435a-8fc3-cb061b0ab1d7" style="background-color:#00DB72;font-family:inherit;font-weight:bold;font-size:19px;padding:15px 70px;border-radius:4px;cursor:pointer;background-image:none;color:white;text-shadow:none;display:inline-block;float:none;border:none;">Give</button><script src="https://static.tithely.com/give/give.js" defer><\/script>', label: 'Online giving embed code', hint: 'Embed button for the /give web page. Update when the giving platform changes. (Not used in emails — emails use the URL above.)' },
+  { key: 'give_url',          value: 'https://timothystl.breezechms.com/give/online',                                                          label: 'Online giving URL',        hint: 'Used for the Give link in emails and invoices. Update when the giving platform changes. (The /give page embed is hardcoded in public/index.html — update that file when switching platforms.)' },
   { key: 'gym_rate_per_hour', value: '25.00',                   label: 'Gym rental rate (per hour, $)',  hint: 'Hourly rate charged for gym rentals. Shown to groups when they confirm a booking.' },
   { key: 'gym_hold_hours',    value: '48',                      label: 'Gym hold duration (hours)',      hint: 'How many hours a tentative hold lasts before auto-expiring. Default: 48.' },
   { key: 'gcal_calendar_id',  value: '',                        label: 'Google Calendar ID (gym rentals)', hint: 'Calendar ID that confirmed gym bookings are automatically added to. Format: xxxxx@group.calendar.google.com or your Gmail address for a personal calendar. Also requires GCAL_SERVICE_ACCOUNT_EMAIL and GCAL_PRIVATE_KEY set as Cloudflare Worker secrets.' },
@@ -1241,6 +1240,10 @@ export default {
     // Remove legacy page content keys that have been replaced or retired
     for (const oldKey of ['seasonal-worship', 'staff-intro']) {
       try { await env.DB.prepare('DELETE FROM page_content WHERE key = ?').bind(oldKey).run(); } catch (_) {}
+    }
+    // Remove legacy site_settings keys no longer shown in UI
+    for (const oldKey of ['give_embed_code', 'gym_ical_token']) {
+      try { await env.DB.prepare('DELETE FROM site_settings WHERE key = ?').bind(oldKey).run(); } catch (_) {}
     }
 
     // ── PUBLIC: serve uploaded docs from R2 ──
