@@ -4727,9 +4727,14 @@ ${topbarHtml('gym', `<a href="/gym-rentals/groups">← Groups</a>`)}
       </div>
     </form>
     <hr style="border:none;border-top:1px solid var(--border);margin:24px 0;">
-    <form method="POST" action="/gym-rentals/groups/toggle/${g.id}" style="display:inline;">
-      <button type="submit" class="btn ${g.active ? 'btn-danger' : 'btn-sage'}">${g.active ? 'Deactivate group (disables portal access)' : 'Reactivate group'}</button>
-    </form>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      <form method="POST" action="/gym-rentals/groups/toggle/${g.id}" style="display:inline;">
+        <button type="submit" class="btn ${g.active ? 'btn-danger' : 'btn-sage'}">${g.active ? 'Deactivate group (disables portal access)' : 'Reactivate group'}</button>
+      </form>
+      <form method="POST" action="/gym-rentals/groups/delete/${g.id}" style="display:inline;" onsubmit="return confirm('Permanently delete ${g.name.replace(/'/g,"\\'")} and all their bookings and invoices? This cannot be undone.')">
+        <button type="submit" class="btn btn-danger">Delete group permanently</button>
+      </form>
+    </div>
   </div>
 </div>`, `Edit — ${g.name}`);
       }
@@ -4757,6 +4762,16 @@ ${topbarHtml('gym', `<a href="/gym-rentals/groups">← Groups</a>`)}
         const token = crypto.randomUUID().replace(/-/g, '');
         await env.DB.prepare('UPDATE gym_groups SET access_token=? WHERE id=?').bind(token, gid).run();
         return new Response('', { status: 302, headers: { Location: `/gym-rentals/groups/edit/${gid}?msg=regen` } });
+      }
+
+      // ── DELETE GROUP ──────────────────────────────────────────
+      if (path.startsWith('/gym-rentals/groups/delete/') && method === 'POST') {
+        const gid = parseInt(path.split('/').pop(), 10);
+        await env.DB.prepare('DELETE FROM gym_invoices WHERE group_id=?').bind(gid).run();
+        await env.DB.prepare('DELETE FROM gym_bookings WHERE group_id=?').bind(gid).run();
+        await env.DB.prepare('DELETE FROM gym_recurrences WHERE group_id=?').bind(gid).run();
+        await env.DB.prepare('DELETE FROM gym_groups WHERE id=?').bind(gid).run();
+        return new Response('', { status: 302, headers: { Location: '/gym-rentals/groups?msg=deleted' } });
       }
 
       // ── GCAL TEST ────────────────────────────────────────────
