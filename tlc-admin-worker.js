@@ -1622,7 +1622,6 @@ ${portalHeader}
       <div id="pat-result" style="font-size:12px;color:var(--gray);margin-top:10px;"></div>
     </div>
 
-    <div style="font-size:12px;color:var(--gray);margin-top:10px;">Need the same slot every week long-term? <a href="/gym/book/${token}/recurring" style="color:var(--steel);">Submit a recurring request →</a></div>
   </div>
 
   <!-- Request form — shown after slots selected -->
@@ -1649,7 +1648,7 @@ ${portalHeader}
       </form>
     </div>
   </div>
-  <div style="font-size:13px;color:var(--gray);text-align:center;margin-top:8px;">Questions? <a href="mailto:office@timothystl.org" style="color:var(--steel);">office@timothystl.org</a></div>
+
 </div>
 
 <!-- Sticky request bar -->
