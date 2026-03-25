@@ -905,7 +905,6 @@ function topbarHtml(activeTab, extraLinks = '') {
 </div>
 <nav class="tab-nav">
   <div class="tab-nav-inner">
-    <a href="/" class="tab${activeTab === 'newsletter' ? ' tab-active' : ''}">Newsletter</a>
     <a href="/newsitems" class="tab${activeTab === 'news' ? ' tab-active' : ''}">News &amp; Events</a>
     <a href="/ministries" class="tab${activeTab === 'ministries' ? ' tab-active' : ''}">Ministries</a>
     <a href="/sermons" class="tab${activeTab === 'sermons' ? ' tab-active' : ''}">Sermons</a>
@@ -2868,7 +2867,7 @@ ${topbarHtml('sermons', `<a href="/sermons">← Back</a>`)}
             </div>
           </label>`).join('');
       return html(`
-${topbarHtml('newsletter', `<a href="/">← All newsletters</a>`)}
+${topbarHtml('news', `<a href="/newsitems">← News &amp; Events</a>`)}
 <div class="wrap">
   <div class="page-title">New newsletter</div>
   <div class="page-sub">Write your update, add events, and publish to the website.</div>
@@ -3145,7 +3144,7 @@ addEvent();
 
       return new Response('', {
         status: 302,
-        headers: { Location: `/?msg=${encodeURIComponent(action === 'publish' ? 'published' : 'draft')}&subject=${encodeURIComponent(subject)}${emailSuffix}` }
+        headers: { Location: `/newsitems?msg=${encodeURIComponent(action === 'publish' ? 'published' : 'draft')}&subject=${encodeURIComponent(subject)}${emailSuffix}` }
       });
     }
 
@@ -3180,7 +3179,7 @@ addEvent();
       const ministryChecked = (t) => (row.ministry_type || 'text') === t ? ' checked' : '';
 
       return html(`
-${topbarHtml('newsletter', `<a href="/">← All newsletters</a>`)}
+${topbarHtml('news', `<a href="/newsitems">← News &amp; Events</a>`)}
 <div class="wrap">
   <div class="page-title">Edit newsletter</div>
   <div class="page-sub" style="color:var(--amber);font-weight:700;">You are editing a ${row.status === 'draft' ? 'draft' : 'published'} newsletter. Changes will go live immediately when you publish.</div>
@@ -3343,7 +3342,7 @@ ${eventsJs}
         : `&emailerr=${encodeURIComponent(result.error)}`;
       return new Response('', {
         status: 302,
-        headers: { Location: `/?msg=emailed&subject=${encodeURIComponent(row.subject)}${suffix}` }
+        headers: { Location: `/newsitems?msg=emailed&subject=${encodeURIComponent(row.subject)}${suffix}` }
       });
     }
 
@@ -3352,24 +3351,80 @@ ${eventsJs}
       const id = path.split('/').pop();
       await env.DB.prepare('DELETE FROM events WHERE newsletter_id = ?').bind(id).run();
       await env.DB.prepare('DELETE FROM newsletters WHERE id = ?').bind(id).run();
-      return new Response('', { status: 302, headers: { Location: '/' } });
+      return new Response('', { status: 302, headers: { Location: '/newsitems' } });
     }
 
-    // ── NEWS ITEMS: LIST ──
+    // ── NEWS & EVENTS: COMBINED LIST (Newsletter + News Posts) ──
     if (path === '/newsitems' && method === 'GET') {
       await sweepExpiredItems(env, new URL(request.url).origin);
-      const items = await env.DB.prepare(
-        'SELECT * FROM news_items ORDER BY pinned DESC, COALESCE(event_date, publish_date) ASC'
-      ).all();
+      const [itemsRes, nlRes] = await Promise.all([
+        env.DB.prepare('SELECT * FROM news_items ORDER BY pinned DESC, COALESCE(event_date, publish_date) ASC').all(),
+        env.DB.prepare("SELECT id, subject, published_at, format, status, created_at FROM newsletters ORDER BY CASE WHEN status = 'draft' THEN 0 ELSE 1 END, published_at DESC").all(),
+      ]);
       const today = new Date().toISOString().split('T')[0];
       const msgParam = url.searchParams.get('msg');
+      const subjectParam = decodeURIComponent(url.searchParams.get('subject') || '');
+      const emailedParam = url.searchParams.get('emailed');
+      const emailErrParam = url.searchParams.get('emailerr');
       let alertHtml = '';
       if (msgParam === 'saved') alertHtml = `<div class="alert alert-success">✓ News item saved.</div>`;
       if (msgParam === 'deleted') alertHtml = `<div class="alert alert-info">Item deleted.</div>`;
+      if (msgParam === 'published') {
+        const siteNewsUrl = 'https://timothystl.org/news';
+        const fbShareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(siteNewsUrl)}`;
+        const tweetText = subjectParam
+          ? `📖 ${subjectParam} — read our latest update at ${siteNewsUrl}`
+          : `Our latest update from Timothy Lutheran Church: ${siteNewsUrl}`;
+        const twitterShareUrl = `https://x.com/intent/post?text=${encodeURIComponent(tweetText)}`;
+        const bskyText = subjectParam
+          ? `📖 ${subjectParam}\n\nOur weekly update from Timothy Lutheran Church:\n${siteNewsUrl}`
+          : `Our latest update from Timothy Lutheran Church:\n${siteNewsUrl}`;
+        const bskyShareUrl = `https://bsky.app/intent/compose?text=${encodeURIComponent(bskyText)}`;
+        const igCaption = subjectParam
+          ? `📖 ${subjectParam}\n\nOur weekly update is live — read it at timothystl.org/news\n\n@timothystl\n#TimothyLutheran #LindenwoordPark #StLouis #church`
+          : `Our latest newsletter is live at timothystl.org/news\n\n@timothystl\n#TimothyLutheran #LindenwoordPark #StLouis #church`;
+        const igCaptionJs = igCaption.replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$/g,'\\$');
+        alertHtml = `
+<div class="alert alert-success" style="margin-bottom:0;border-radius:10px 10px 0 0;">
+  ✓ Newsletter published to website archive.${emailedParam === 'test' ? ' Email sent to test list.' : emailedParam === 'all' ? ' Email sent to all subscribers.' : ''}${emailErrParam ? ` ⚠️ Email error: ${emailErrParam}` : ''}
+</div>
+<div style="background:#f0f7f0;border:1px solid #b8d4b8;border-top:none;border-radius:0 0 10px 10px;padding:18px 20px;margin-bottom:20px;">
+  <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#2a4d2a;margin-bottom:14px;">📣 Share to social media</div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;">
+    <a href="${fbShareUrl}" target="_blank" style="display:inline-flex;align-items:center;gap:7px;font-family:var(--sans);font-size:13px;font-weight:700;background:#1877F2;color:white;padding:9px 18px;border-radius:6px;text-decoration:none;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M24 12.07C24 5.41 18.63 0 12 0S0 5.41 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.04V9.41c0-3.02 1.8-4.7 4.54-4.7 1.31 0 2.68.24 2.68.24v2.97h-1.5c-1.5 0-1.96.93-1.96 1.89v2.26h3.32l-.53 3.49h-2.79V24C19.61 23.1 24 18.1 24 12.07z"/></svg>
+      Share on Facebook
+    </a>
+    <a href="${twitterShareUrl}" target="_blank" style="display:inline-flex;align-items:center;gap:7px;font-family:var(--sans);font-size:13px;font-weight:700;background:#000;color:white;padding:9px 18px;border-radius:6px;text-decoration:none;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="white"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.748l7.73-8.835L1.254 2.25H8.08l4.259 5.63 5.905-5.63zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+      Post on X
+    </a>
+    <a href="${bskyShareUrl}" target="_blank" style="display:inline-flex;align-items:center;gap:7px;font-family:var(--sans);font-size:13px;font-weight:700;background:#0085ff;color:white;padding:9px 18px;border-radius:6px;text-decoration:none;">
+      <svg width="16" height="14" viewBox="0 0 360 320" fill="white"><path d="M180 142c-16.3-31.1-60.7-89.4-102-120C38 0 0 5 0 72c0 29 15.6 121.3 26.2 144C85.4 342 153.9 310.4 180 310.4c26 0 94.6 31.6 153.8-94.4C344.4 193.3 360 101 360 72c0-67-38-72-78-50C240.7 52.6 196.3 110.9 180 142z"/></svg>
+      Post on Bluesky
+    </a>
+    <a href="https://www.instagram.com" target="_blank" style="display:inline-flex;align-items:center;gap:7px;font-family:var(--sans);font-size:13px;font-weight:700;background:linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);color:white;padding:9px 18px;border-radius:6px;text-decoration:none;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+      Open Instagram
+    </a>
+  </div>
+  <div style="font-family:var(--sans);font-size:12px;font-weight:600;color:var(--gray);margin-bottom:6px;">Caption for Instagram — copy and paste:</div>
+  <div id="ig-cap" style="font-family:var(--sans);font-size:13px;background:white;border:1px solid #ccd4cc;border-radius:6px;padding:12px 14px;line-height:1.8;white-space:pre-wrap;color:var(--charcoal);">${igCaption.replace(/</g,'&lt;')}</div>
+  <button onclick="navigator.clipboard.writeText(\`${igCaptionJs}\`).then(()=>{this.textContent='✓ Copied!';this.style.background='#e8f5e9';setTimeout(()=>{this.textContent='Copy caption';this.style.background='';},2000)})" style="margin-top:8px;font-family:var(--sans);font-size:12px;font-weight:700;background:white;border:1px solid #aab8aa;border-radius:6px;padding:6px 16px;cursor:pointer;transition:background .2s;">Copy caption</button>
+</div>`;
+      } else if (msgParam === 'draft') {
+        alertHtml = `<div class="alert alert-info">Draft saved. Use "Send test" or "Send to all" below to email it when ready.</div>`;
+      } else if (msgParam === 'emailed') {
+        const sentTo = emailedParam === 'test' ? 'test list' : 'all subscribers';
+        alertHtml = emailErrParam
+          ? `<div class="alert alert-error">Email failed: ${emailErrParam}</div>`
+          : `<div class="alert alert-success">✓ "${subjectParam}" sent to ${sentTo}.</div>`;
+      }
 
-      const listHtml = items.results.length === 0
+      // ── News items HTML ──
+      const listHtml = itemsRes.results.length === 0
         ? `<div style="text-align:center;padding:40px;color:var(--gray);font-size:14px;">No news items yet. Add your first announcement.</div>`
-        : items.results.map(item => {
+        : itemsRes.results.map(item => {
             let status = 'active';
             if (item.publish_date && item.publish_date > today) status = 'upcoming';
             else if (item.expire_date && item.expire_date < today) status = 'expired';
@@ -3387,26 +3442,92 @@ ${eventsJs}
 </div>`;
           }).join('');
 
+      // ── Newsletter HTML ──
+      const nRows = nlRes.results;
+      const drafts = nRows.filter(r => r.status === 'draft');
+      const published = nRows.filter(r => r.status !== 'draft');
+      const fmtLabel = (r) => r.format === 'quick'
+        ? `<span class="badge" style="background:#e8f0fe;color:#1a3060;margin-left:8px;">⚡ Quick</span>`
+        : '';
+      const draftSectionHtml = drafts.length === 0 ? '' : `<div style="margin-bottom:16px;border:1px solid var(--amber);border-radius:8px;overflow:hidden;">
+  <div style="background:#FFF8EC;padding:8px 16px;border-bottom:1px solid var(--amber);">
+    <span style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#A07010;">Drafts — ${drafts.length}</span>
+  </div>
+  ${drafts.map(r => `<div class="newsletter-row">
+  <div class="newsletter-date">${r.published_at || r.created_at || ''}</div>
+  <div class="newsletter-subject">${r.subject}${fmtLabel(r)}</div>
+  <div class="newsletter-actions">
+    <a href="/edit/${r.id}" class="btn btn-sm btn-secondary">Edit</a>
+    <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Send to test list?')">
+      <input type="hidden" name="list_type" value="test">
+      <button type="submit" class="btn btn-sm" style="background:var(--mist);color:var(--steel);border:1px solid var(--border);">Send test</button>
+    </form>
+    <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Send to ALL subscribers? This cannot be undone.')">
+      <input type="hidden" name="list_type" value="all">
+      <button type="submit" class="btn btn-sm btn-primary">Send to all</button>
+    </form>
+    <form method="POST" action="/delete/${r.id}" style="display:contents;" onsubmit="return confirm('Delete this draft?')">
+      <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+    </form>
+  </div>
+</div>`).join('')}
+</div>`;
+      const publishedHtml = published.length === 0
+        ? `<div style="text-align:center;padding:40px;color:var(--gray);font-family:var(--sans);font-size:14px;">No newsletters published yet.</div>`
+        : published.map(r => `<div class="newsletter-row">
+  <div class="newsletter-date">${r.published_at || ''}</div>
+  <div class="newsletter-subject">${r.subject}${fmtLabel(r)}</div>
+  <div class="newsletter-actions">
+    <a href="/edit/${r.id}" class="btn btn-sm btn-secondary">Edit</a>
+    <form method="POST" action="/delete/${r.id}" style="display:contents;" onsubmit="return confirm('Delete this newsletter?')">
+      <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+    </form>
+  </div>
+</div>`).join('');
+
       return html(`
 ${topbarHtml('news', `<a href="https://timothystl.org/news" target="_blank">View site →</a>`)}
+<style>details > summary { list-style: none; } details > summary::-webkit-details-marker { display: none; }</style>
 <div class="wrap">
   <div class="page-title">News &amp; Events</div>
-  <div class="page-sub">Manage announcements shown on the website homepage and news page.</div>
+  <div class="page-sub">Manage newsletters and website announcements.</div>
   ${alertHtml}
-  <div class="btn-row" style="margin-bottom:28px;">
-    <a href="/newsitems/new" class="btn btn-primary">+ Add news item</a>
-  </div>
-  <div class="card">
-    <div class="card-title">All items</div>
-    ${listHtml}
-  </div>
-  <div style="margin-top:20px;padding:16px 20px;background:var(--mist);border-radius:10px;border-left:3px solid var(--steel);">
-    <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--steel);margin-bottom:6px;">How it works</div>
-    <div style="font-size:13px;color:var(--charcoal);line-height:1.9;">
-      Items appear on the homepage and /news page automatically.<br>
-      <strong>Pinned</strong> items always show first. Items auto-hide after their expire date.
+  <details open style="margin-bottom:16px;border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+    <summary style="cursor:pointer;display:flex;align-items:center;padding:14px 20px;background:var(--steel);color:white;font-family:var(--sans);font-size:14px;font-weight:700;letter-spacing:.04em;">
+      Newsletter
+    </summary>
+    <div style="padding:20px;">
+      <div class="btn-row" style="margin-bottom:20px;">
+        <a href="/new" class="btn btn-primary">+ Write newsletter</a>
+      </div>
+      ${draftSectionHtml}
+      <div class="card" style="margin-bottom:0;">
+        <div class="card-title">Past newsletters</div>
+        ${publishedHtml}
+      </div>
     </div>
-  </div>
+  </details>
+  <details open style="margin-bottom:16px;border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+    <summary style="cursor:pointer;display:flex;align-items:center;padding:14px 20px;background:var(--steel);color:white;font-family:var(--sans);font-size:14px;font-weight:700;letter-spacing:.04em;">
+      News Posts
+    </summary>
+    <div style="padding:20px;">
+      <div class="btn-row" style="margin-bottom:20px;">
+        <a href="/newsitems/new" class="btn btn-primary">+ Add news item</a>
+      </div>
+      <div class="card" style="margin-bottom:0;">
+        <div class="card-title">All items</div>
+        ${listHtml}
+      </div>
+      <div style="margin-top:16px;padding:14px 18px;background:var(--mist);border-radius:8px;border-left:3px solid var(--steel);">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--steel);margin-bottom:5px;">How it works</div>
+        <div style="font-size:13px;color:var(--charcoal);line-height:1.9;">
+          Items appear on the homepage and /news page automatically.<br>
+          <strong>Pinned</strong> items always show first. Items auto-hide after their expire date.
+        </div>
+      </div>
+    </div>
+  </details>
 </div>`, 'TLC Admin — News & Events');
     }
 
@@ -4897,12 +5018,29 @@ ${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
     </form>
   </div>` : ''}
 </div>`;
+        const groupByOrg = (rows, showActions) => {
+          const groups = {};
+          const order = [];
+          for (const b of rows) {
+            const name = b.group_name || '— Unassigned —';
+            if (!groups[name]) { groups[name] = []; order.push(name); }
+            groups[name].push(b);
+          }
+          return order.map(name => `
+<details open style="margin-bottom:10px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+  <summary style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:11px 16px;background:var(--mist);font-family:var(--sans);font-size:13px;font-weight:700;color:var(--steel);list-style:none;-webkit-appearance:none;">
+    <span>${name}</span>
+    <span style="font-size:12px;font-weight:400;color:var(--gray);">${groups[name].length} booking${groups[name].length !== 1 ? 's' : ''}</span>
+  </summary>
+  ${groups[name].map(b => bRow(b, showActions)).join('')}
+</details>`).join('');
+        };
         const upHtml = upcoming.results.length === 0
           ? `<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No upcoming bookings.</div>`
-          : upcoming.results.map(b => bRow(b)).join('');
+          : groupByOrg(upcoming.results, true);
         const pastHtml = past.results.length === 0
           ? `<div style="text-align:center;padding:24px;color:var(--gray);font-size:13px;">No past bookings on record.</div>`
-          : past.results.map(b => bRow(b, false)).join('');
+          : groupByOrg(past.results, false);
         return html(`
 ${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="wrap">
@@ -5464,6 +5602,11 @@ ${topbarHtml('settings')}
         return new Response('', { status: 302, headers: { Location: '/settings?msg=saved' } });
       }
     } // end settings tab
+
+    // Redirect old newsletter root to combined page
+    if (path === '/') {
+      return new Response('', { status: 302, headers: { Location: '/newsitems' } });
+    }
 
     // ── DASHBOARD ──
     const newsletters = await env.DB.prepare(
