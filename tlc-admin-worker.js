@@ -386,27 +386,38 @@ input:focus,select:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(201
 .booking-date{font-size:13px;font-weight:700;color:var(--steel);min-width:100px;}
 .booking-time{font-size:13px;color:var(--gray);}
 /* Selection calendar */
-.scal-grid{display:flex;gap:20px;flex-wrap:wrap;}
-.scal-month{flex:1;min-width:270px;}
-.scal-month-name{font-family:var(--serif);font-size:17px;color:var(--steel);margin-bottom:10px;text-align:center;}
+.scal-wrap{position:relative;}
+.scal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:8px;}
+.scal-nav-btn{background:var(--mist);border:1px solid var(--border);cursor:pointer;padding:6px 16px;border-radius:6px;font-size:18px;line-height:1;color:var(--steel);font-weight:700;transition:background .15s;flex-shrink:0;}
+.scal-nav-btn:hover{background:var(--border);}
+.scal-nav-btn:disabled{opacity:.35;cursor:default;}
+.scal-nav-label{font-family:var(--serif);font-size:18px;color:var(--steel);font-weight:700;text-align:center;flex:1;}
+.scal-month{display:none;}
+.scal-month.active{display:block;}
 .scal-table{width:100%;border-collapse:collapse;table-layout:fixed;}
-.scal-table th{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:4px 0;text-align:center;}
-.scal-table td{padding:2px;vertical-align:top;}
-.scal-cell{border-radius:6px;overflow:hidden;border:1px solid transparent;}
-.scal-num{font-size:11px;font-weight:700;text-align:center;padding:3px 0;line-height:1.3;color:var(--steel);}
+.scal-table th{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:7px 0;text-align:center;}
+.scal-table td{padding:3px;vertical-align:top;}
+.scal-cell{border-radius:8px;overflow:visible;border:2px solid transparent;position:relative;}
+.scal-num{font-size:12px;font-weight:700;text-align:center;padding:4px 0;line-height:1.3;color:var(--steel);}
 .scal-cell.scal-past .scal-num,.scal-cell.scal-blocked .scal-num{color:#CBD5E1;}
-.scal-slots{display:flex;flex-direction:column;}
-.scal-slot{height:12px;display:block;width:100%;border:none;padding:0;cursor:default;transition:filter .1s;}
+.scal-slots{display:flex;flex-direction:column;gap:2px;padding:2px;}
+.scal-slot{height:18px;display:block;width:100%;border:none;padding:0;cursor:default;transition:filter .1s;border-radius:3px;position:relative;}
 .scal-slot.open{background:#5A9E6F;cursor:pointer;}
-.scal-slot.open:hover{filter:brightness(1.15);}
+.scal-slot.open:hover{filter:brightness(1.12);}
 .scal-slot.taken{background:#D17070;}
 .scal-slot.na{background:#E8EDF3;}
 .scal-slot.selected{background:var(--amber) !important;cursor:pointer;}
 .scal-cell.has-selection{border-color:var(--amber);}
+.scal-slot[data-label]:hover::after{content:attr(data-label);position:absolute;bottom:calc(100% + 5px);left:50%;transform:translateX(-50%);background:#1E2D4A;color:white;font-size:11px;white-space:nowrap;padding:3px 8px;border-radius:4px;pointer-events:none;z-index:300;font-family:var(--sans);font-weight:600;box-shadow:0 2px 6px rgba(0,0,0,.25);}
 /* Legend */
 .scal-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--gray);margin-top:14px;}
 .scal-legend span{display:flex;align-items:center;gap:6px;}
 .legend-swatch{width:24px;height:10px;border-radius:2px;flex-shrink:0;}
+/* Pattern selector */
+.pattern-card{background:var(--mist);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-top:16px;}
+.pattern-card-title{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:12px;}
+.pattern-fields{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;}
+.pattern-fields .form-group{margin-bottom:0;flex:1;min-width:130px;}
 /* Request bar */
 .req-bar{position:sticky;bottom:0;left:0;right:0;background:var(--steel);color:white;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:3px solid var(--amber);z-index:100;}
 .req-bar-count{font-size:15px;font-weight:700;}
@@ -1496,24 +1507,30 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
       if (!sub || sub === '') {
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
-        const ninetyOut = new Date(Date.now() + 91 * 86400000).toISOString().split('T')[0];
+        const sixMonOut = new Date(today.getFullYear(), today.getMonth() + 6, 28).toISOString().split('T')[0];
 
         const [bookings, blocked] = await Promise.all([
-          env.DB.prepare("SELECT booking_date, start_time, end_time FROM gym_bookings WHERE status IN ('confirmed','hold') AND booking_date >= ? AND booking_date <= ?").bind(todayStr, ninetyOut).all(),
-          env.DB.prepare('SELECT date FROM gym_blocked_dates WHERE date >= ? AND date <= ?').bind(todayStr, ninetyOut).all(),
+          env.DB.prepare("SELECT booking_date, start_time, end_time FROM gym_bookings WHERE status IN ('confirmed','hold') AND booking_date >= ? AND booking_date <= ?").bind(todayStr, sixMonOut).all(),
+          env.DB.prepare('SELECT date FROM gym_blocked_dates WHERE date >= ? AND date <= ?').bind(todayStr, sixMonOut).all(),
         ]);
         const slotMap      = buildSlotMap(bookings.results);
         const blockedSet   = new Set(blocked.results.map(b => b.date));
 
-        // Build 3-month interactive selection calendar
+        // Build 6-month interactive selection calendar (month navigator)
         const MNAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-        let calHtml = '<div class="scal-grid">';
-        for (let mi = 0; mi < 3; mi++) {
+        const NUM_MONTHS = 6;
+        let calHtml = '<div class="scal-wrap">';
+        calHtml += `<div class="scal-nav">
+  <button class="scal-nav-btn" id="scal-prev" onclick="navMonth(-1)" disabled>&#8249;</button>
+  <div class="scal-nav-label" id="scal-nav-label"></div>
+  <button class="scal-nav-btn" id="scal-next" onclick="navMonth(1)">&#8250;</button>
+</div>`;
+        for (let mi = 0; mi < NUM_MONTHS; mi++) {
           const d = new Date(today.getFullYear(), today.getMonth() + mi, 1);
           const yr = d.getFullYear(), mo = d.getMonth();
           const lastDay = new Date(yr, mo + 1, 0).getDate();
           const startDow = d.getDay();
-          calHtml += `<div class="scal-month"><div class="scal-month-name">${MNAMES[mo]} ${yr}</div>
+          calHtml += `<div class="scal-month${mi === 0 ? ' active' : ''}" id="scal-month-${mi}" data-label="${MNAMES[mo]} ${yr}">
 <table class="scal-table"><tr><th>Su</th><th>Mo</th><th>Tu</th><th>We</th><th>Th</th><th>Fr</th><th>Sa</th></tr><tr>`;
           for (let s = 0; s < startDow; s++) calHtml += '<td></td>';
           let dow = startDow;
@@ -1528,11 +1545,11 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
             if (isPast) numCls += ' scal-past';
             else if (isBlocked) numCls += ' scal-blocked';
             const slotDivs = GYM_SLOTS.map(([h, label], i) => {
-              if (isPast || isBlocked) return `<span class="scal-slot na" title="${label}"></span>`;
-              if (slots[i]) return `<span class="scal-slot taken" title="${label} — Booked"></span>`;
+              if (isPast || isBlocked) return `<span class="scal-slot na"></span>`;
+              if (slots[i]) return `<span class="scal-slot taken" data-label="${label} — Booked"></span>`;
               const st = `${h.toString().padStart(2,'0')}:00`;
               const et = `${(h+1).toString().padStart(2,'0')}:00`;
-              return `<span class="scal-slot open" data-date="${ds}" data-st="${st}" data-et="${et}" title="${label}"></span>`;
+              return `<span class="scal-slot open" data-date="${ds}" data-st="${st}" data-et="${et}" data-label="${label}"></span>`;
             }).join('');
             calHtml += `<td><div class="${numCls}" id="cell-${ds}"><div class="scal-num">${day}</div><div class="scal-slots">${slotDivs}</div></div></td>`;
             dow++;
@@ -1561,7 +1578,51 @@ ${portalHeader}
       <span><span class="legend-swatch" style="background:#D17070;"></span> Already booked</span>
       <span><span class="legend-swatch" style="background:#E8EDF3;"></span> Unavailable</span>
     </div>
-    <div style="font-size:12px;color:var(--gray);margin-top:10px;">Each slot = 1 hour ($${rate}/hr). Rentals available 5–9 PM. Need the same slot every week? <a href="/gym/book/${token}/recurring" style="color:var(--steel);">Use recurring request →</a></div>
+    <div style="font-size:12px;color:var(--gray);margin-top:10px;">Each slot = 1 hour ($${rate}/hr). Rentals available 5–9 PM.</div>
+
+    <!-- Pattern selector -->
+    <div class="pattern-card">
+      <div class="pattern-card-title">Quick-select by pattern</div>
+      <div style="font-size:12px;color:var(--gray);margin-bottom:12px;">e.g. "Every Monday at 5–6 PM from March 1 to May 5"</div>
+      <div class="pattern-fields">
+        <div class="form-group">
+          <label>Day of week</label>
+          <select id="pat-dow">
+            <option value="0">Sundays</option>
+            <option value="1">Mondays</option>
+            <option value="2">Tuesdays</option>
+            <option value="3">Wednesdays</option>
+            <option value="4">Thursdays</option>
+            <option value="5">Fridays</option>
+            <option value="6">Saturdays</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Time slot</label>
+          <select id="pat-time">
+            <option value="17:00">5–6 PM</option>
+            <option value="18:00">6–7 PM</option>
+            <option value="19:00">7–8 PM</option>
+            <option value="20:00">8–9 PM</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>From</label>
+          <input type="date" id="pat-start" style="font-size:13px;padding:7px 10px;">
+        </div>
+        <div class="form-group">
+          <label>To</label>
+          <input type="date" id="pat-end" style="font-size:13px;padding:7px 10px;">
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button type="button" class="btn btn-primary btn-sm" onclick="patternSelect(true)">Select all matching</button>
+          <button type="button" class="btn btn-secondary btn-sm" style="background:var(--linen);color:var(--steel);" onclick="patternSelect(false)">Deselect matching</button>
+        </div>
+      </div>
+      <div id="pat-result" style="font-size:12px;color:var(--gray);margin-top:10px;"></div>
+    </div>
+
+    <div style="font-size:12px;color:var(--gray);margin-top:10px;">Need the same slot every week long-term? <a href="/gym/book/${token}/recurring" style="color:var(--steel);">Submit a recurring request →</a></div>
   </div>
 
   <!-- Request form — shown after slots selected -->
@@ -1601,26 +1662,47 @@ ${portalHeader}
 </div>
 
 <script>
-const selected = new Map(); // key "DATE|ST|ET" -> {date, st, et, label}
+const selected = new Map(); // key "DATE|ST|ET" -> {date, st, et}
 const SLOT_LABELS = {'17:00':'5–6 PM','18:00':'6–7 PM','19:00':'7–8 PM','20:00':'8–9 PM'};
+let curMonth = 0;
+const NUM_MONTHS = 6;
+
+// Month navigation
+function navMonth(dir) {
+  const next = curMonth + dir;
+  if (next < 0 || next >= NUM_MONTHS) return;
+  document.getElementById('scal-month-' + curMonth).classList.remove('active');
+  curMonth = next;
+  document.getElementById('scal-month-' + curMonth).classList.add('active');
+  updateNav();
+}
+function updateNav() {
+  document.getElementById('scal-prev').disabled = curMonth === 0;
+  document.getElementById('scal-next').disabled = curMonth === NUM_MONTHS - 1;
+  document.getElementById('scal-nav-label').textContent =
+    document.getElementById('scal-month-' + curMonth).dataset.label;
+}
+updateNav();
+
+// Slot click handler
+function toggleSlot(el, doSelect) {
+  const {date, st, et} = el.dataset;
+  const key = date + '|' + st + '|' + et;
+  const shouldSelect = (doSelect === undefined) ? !selected.has(key) : doSelect;
+  if (shouldSelect) {
+    selected.set(key, {date, st, et});
+    el.classList.add('selected');
+  } else {
+    selected.delete(key);
+    el.classList.remove('selected');
+  }
+  const anyInCell = [...selected.keys()].some(k => k.startsWith(date + '|'));
+  const cell = document.getElementById('cell-' + date);
+  if (cell) cell.classList.toggle('has-selection', anyInCell);
+}
 
 document.querySelectorAll('.scal-slot.open').forEach(el => {
-  el.addEventListener('click', function() {
-    const {date, st, et} = this.dataset;
-    const key = date + '|' + st + '|' + et;
-    if (selected.has(key)) {
-      selected.delete(key);
-      this.classList.remove('selected');
-    } else {
-      selected.set(key, {date, st, et});
-      this.classList.add('selected');
-    }
-    // update cell border
-    const anyInCell = [...selected.keys()].some(k => k.startsWith(date + '|'));
-    const cell = document.getElementById('cell-' + date);
-    if (cell) cell.classList.toggle('has-selection', anyInCell);
-    update();
-  });
+  el.addEventListener('click', function() { toggleSlot(this); update(); });
 });
 
 function update() {
@@ -1629,7 +1711,6 @@ function update() {
   bar.style.display = n > 0 ? '' : 'none';
   document.getElementById('req-bar-count').textContent = n + ' slot' + (n===1?'':'s') + ' selected';
 
-  // Group by date for detail line
   const byDate = {};
   selected.forEach(({date, st}) => {
     if (!byDate[date]) byDate[date] = [];
@@ -1640,7 +1721,6 @@ function update() {
     ? dates.map(d => new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})).join(', ')
     : dates.length + ' dates';
 
-  // Sync hidden inputs
   const inp = document.getElementById('slot-inputs');
   inp.innerHTML = '';
   selected.forEach((_, key) => {
@@ -1649,7 +1729,6 @@ function update() {
     inp.appendChild(h);
   });
 
-  // Summary list
   const summaryHtml = dates.map(d => {
     const dn = new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
     return '<strong>' + dn + '</strong>: ' + byDate[d].join(', ');
@@ -1668,6 +1747,43 @@ function clearAll() {
   document.querySelectorAll('.scal-cell.has-selection').forEach(el => el.classList.remove('has-selection'));
   document.getElementById('req-form-wrap').style.display = 'none';
   update();
+}
+
+// Pattern selector
+(function initPatternDates() {
+  const today = new Date();
+  const fmt = d => d.toISOString().split('T')[0];
+  document.getElementById('pat-start').value = fmt(today);
+  const end = new Date(today); end.setMonth(end.getMonth() + 1);
+  document.getElementById('pat-end').value = fmt(end);
+})();
+
+function patternSelect(doSelect) {
+  const dow   = parseInt(document.getElementById('pat-dow').value, 10);
+  const time  = document.getElementById('pat-time').value;
+  const start = document.getElementById('pat-start').value;
+  const end   = document.getElementById('pat-end').value;
+  if (!start || !end || start > end) {
+    document.getElementById('pat-result').textContent = 'Please set a valid date range.';
+    return;
+  }
+  const slots = document.querySelectorAll(`.scal-slot.open[data-st="${time}"]`);
+  let matched = 0;
+  slots.forEach(el => {
+    const date = el.dataset.date;
+    if (date < start || date > end) return;
+    const d = new Date(date + 'T12:00:00');
+    if (d.getDay() !== dow) return;
+    toggleSlot(el, doSelect);
+    matched++;
+    // If slot is now visible in a different month, navigate to show first match
+  });
+  update();
+  const DOW_NAMES = ['Sundays','Mondays','Tuesdays','Wednesdays','Thursdays','Fridays','Saturdays'];
+  const action = doSelect ? 'Selected' : 'Deselected';
+  document.getElementById('pat-result').textContent = matched > 0
+    ? `${action} ${matched} slot${matched===1?'':'s'} — ${DOW_NAMES[dow]} at ${SLOT_LABELS[time]} between ${new Date(start+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})} and ${new Date(end+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}.`
+    : `No available slots matched in that range.`;
 }
 </script>
 `, `${group.name} — Gym Rental`);
