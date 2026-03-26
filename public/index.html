@@ -948,6 +948,11 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
           <p>Preparing pastors and church workers for service in the Lutheran Church — Missouri Synod and beyond.</p>
           <a href="https://www.csl.edu" target="_blank" style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--mid);">Visit site →</a>
         </div>
+        <div class="partner-card">
+          <h3>Concordia Children's Services</h3>
+          <p>A Christian children's home in the Philippines providing care, education, and the love of Christ to vulnerable children.</p>
+          <button onclick="showPage('ccs')" style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--mid);background:none;border:none;cursor:pointer;padding:0;">Learn more →</button>
+        </div>
       </div>
     </div>
   </section>
@@ -1643,6 +1648,41 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       <a href="https://volunteer.timothystl.org" target="_blank" class="btn btn-ghost">Volunteer at the market</a>
       <!-- Button 3: Contact -->
       <a href="mailto:dinger@timothystl.org" class="btn btn-ghost">Email the office</a>
+    </div>
+  </div>
+</div>
+
+<!-- CONCORDIA CHILDREN'S SERVICES -->
+<div id="page-ccs" class="page">
+  <div class="page-hero">
+    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Mission Partner</span>
+    <h1>Concordia Children's Services</h1>
+    <p>Caring for vulnerable children in the Philippines through the love of Christ.</p>
+  </div>
+  <section class="section section--white">
+    <div class="wrap" style="max-width:760px;">
+      <span class="eyebrow">About the ministry</span>
+      <h2>A home for children in the Philippines</h2>
+      <p>Concordia Children's Services in the Philippines is a Christian home providing care, shelter, education, and the Gospel of Jesus Christ to vulnerable and orphaned children. Rooted in the Lutheran faith, the ministry offers a family environment where children experience safety, dignity, and hope.</p>
+      <p>Timothy Lutheran Church has a long-standing connection to this ministry and is grateful to support its work through prayer and giving.</p>
+    </div>
+  </section>
+  <section class="section section--linen">
+    <div class="wrap" style="max-width:720px;text-align:center;">
+      <span class="eyebrow eyebrow--sage">Give to CCS</span>
+      <h2>Support children in the Philippines</h2>
+      <p style="max-width:560px;margin:0 auto 28px;">Your gift helps provide food, shelter, education, and Christian care for children at Concordia Children's Services.</p>
+      <div class="btn-row" style="justify-content:center;">
+        <a href="https://give.tithe.ly/?formId=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8&locationId=fe6ddef2-d6d2-4c85-adfd-f19eac997d38&fundId=49cdc381-ff0e-4b7e-b029-091f206850c1&frequency=one-time" target="_blank" class="btn btn-primary">Give to CCS →</a>
+        <button onclick="showPage('ministries')" class="btn btn-outline">Back to Ministries</button>
+      </div>
+    </div>
+  </section>
+  <div class="page-cta-bar">
+    <h3>Support children in the Philippines.</h3>
+    <p>Your giving makes a difference in the lives of vulnerable children through Concordia Children's Services.</p>
+    <div class="btn-row">
+      <a href="https://give.tithe.ly/?formId=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8&locationId=fe6ddef2-d6d2-4c85-adfd-f19eac997d38&fundId=49cdc381-ff0e-4b7e-b029-091f206850c1&frequency=one-time" target="_blank" class="btn btn-primary">Give to CCS →</a>
     </div>
   </div>
 </div>
@@ -2586,6 +2626,7 @@ var PAGE_META = {
   'foodpantry':   { title: 'Food Pantry — Timothy Lutheran Church',                                       desc: 'Monthly food pantry serving Lindenwood Park and surrounding communities. All are welcome, no appointment needed.' },
   'bees':         { title: 'Urban Beekeepers — Timothy Lutheran Church',                                  desc: 'Creation care in the city. Join Timothy\'s Urban Beekeepers ministry in Lindenwood Park.' },
   'christmasmarket': { title: 'Christmas Market — Timothy Lutheran Church',                               desc: 'Timothy\'s annual Christmas Market in Lindenwood Park, St. Louis — vendors, community, and holiday cheer.' },
+  'ccs':             { title: 'Concordia Children\'s Services — Timothy Lutheran Church',                 desc: 'Supporting Concordia Children\'s Services in the Philippines — a Christian home caring for vulnerable children.' },
   'youthfamily':  { title: 'Youth & Family — Timothy Lutheran Church',                                    desc: 'Youth ministry, Sunday School, Confirmation, VBS, Easter Egg Hunt, and Family Ministry at Timothy Lutheran Church.' },
   'youth':        { title: 'Youth Ministry — Timothy Lutheran Church',                                    desc: 'Faith formation, community, and service for students in grades 7–12 at Timothy Lutheran Church.' },
   'wol':          { title: 'Word of Life School — Timothy Lutheran Church',                               desc: 'Word of Life Lutheran School serves families through faith-based education in St. Louis.' },
