@@ -402,21 +402,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     <ul class="nav-links">
       <li><button onclick="showPage('about')">About</button></li>
       <li><button onclick="showPage('worship')">Worship</button></li>
-      <li class="nav-dropdown" id="nav-min-dd">
-        <button class="nav-dropdown-toggle" onclick="event.stopPropagation();document.getElementById('nav-min-dd').classList.toggle('open')">Ministries ▾</button>
-        <div class="nav-dropdown-menu">
-          <button onclick="showPage('ministries');document.getElementById('nav-min-dd').classList.remove('open')">All Ministries</button>
-          <button onclick="showPage('music');document.getElementById('nav-min-dd').classList.remove('open')">Music Ministry</button>
-          <button onclick="showPage('stephen');document.getElementById('nav-min-dd').classList.remove('open')">Stephen Ministry</button>
-          <button onclick="showPage('foodpantry');document.getElementById('nav-min-dd').classList.remove('open')">Food Pantry</button>
-          <button onclick="showPage('bees');document.getElementById('nav-min-dd').classList.remove('open')">Urban Beekeepers</button>
-          <button onclick="showPage('christmasmarket');document.getElementById('nav-min-dd').classList.remove('open')">Christmas Market</button>
-          <button onclick="showPage('youthfamily');document.getElementById('nav-min-dd').classList.remove('open')">Youth &amp; Family</button>
-          <a href="https://wordoflifeschool.net" target="_blank" onclick="document.getElementById('nav-min-dd').classList.remove('open')">Word of Life School ↗</a>
-          <a href="https://mdo.timothystl.org" target="_blank" onclick="document.getElementById('nav-min-dd').classList.remove('open')">Mother's Day Out ↗</a>
-          <a href="https://volunteer.timothystl.org" target="_blank" onclick="document.getElementById('nav-min-dd').classList.remove('open')">Volunteer Sign-up ↗</a>
-        </div>
-      </li>
+      <li><button onclick="showPage('ministries')">Ministries</button></li>
       <li><button onclick="showPage('news')">News &amp; Events</button></li>
       <li><button onclick="showPage('contact')">Contact</button></li>
       <li><button onclick="showPage('give')" class="nav-cta">Give</button></li>
@@ -550,7 +536,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
   <div class="page-hero">
     <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Who we are</span>
     <h1>About Timothy Lutheran</h1>
-    <p>A diverse city church in Lindenwood Park, South City St. Louis — rooted in grace, sent to the world.</p>
+    <p>A diverse city church in St. Louis — rooted in grace, sent to the world.</p>
   </div>
   <!-- Admin-managed about notice (set in admin → Pages → About page notice) -->
   <div id="about-notice-block" style="display:none;"></div>
@@ -584,39 +570,6 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
   </section>
 
   <section class="section section--mist">
-    <div class="wrap">
-      <span class="eyebrow eyebrow--sky">Where God has planted us</span>
-      <h2>Our Mission Field</h2>
-      <div class="partner-grid" style="margin-top:32px;">
-        <div class="partner-card" style="border-top:3px solid var(--amber);">
-          <h3>Lindenwood Park</h3>
-          <p>The neighborhood where God has planted us — our front door to the city of St. Louis.</p>
-        </div>
-        <div class="partner-card" style="border-top:3px solid var(--sage);">
-          <h3>Word of Life School</h3>
-          <p>Families formed together through Lutheran education, community, and care.</p>
-          <a href="https://wordoflifeschool.net" target="_blank" style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--mid);">Visit wordoflifeschool.net →</a>
-        </div>
-        <div class="partner-card" style="border-top:3px solid var(--sky);">
-          <h3>Timothy's Mother's Day Out</h3>
-          <p>Young families in their most open and searching season of life.</p>
-          <a href="https://mdo.timothystl.org" target="_blank" style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--mid);">Visit mdo.timothystl.org →</a>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="section section--linen">
-    <div class="wrap">
-      <span class="eyebrow eyebrow--sage">Our team</span>
-      <h2>Staff &amp; leadership</h2>
-      <div id="staff-grid" class="staff-grid">
-        <div style="grid-column:1/-1;text-align:center;padding:40px 0;color:var(--gray);font-family:var(--sans);font-size:14px;">Loading staff…</div>
-      </div>
-    </div>
-  </section>
-
-  <section class="section section--linen">
     <div class="wrap">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:start;">
         <div>
@@ -660,6 +613,18 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       </div>
     </div>
   </section>
+
+  <section class="section section--linen">
+    <div class="wrap">
+      <span class="eyebrow eyebrow--sage">Our team</span>
+      <h2>Staff &amp; leadership</h2>
+      <div id="staff-grid" class="staff-grid">
+        <div style="grid-column:1/-1;text-align:center;padding:40px 0;color:var(--gray);font-family:var(--sans);font-size:14px;">Loading staff…</div>
+      </div>
+    </div>
+  </section>
+
+
 </div>
 
 <!-- WORSHIP -->
@@ -2153,7 +2118,7 @@ function showPage(id, addHistory){
     history.pushState({page:id},'',url);
   }
   // Lazy-load embeds only when their page is first visited
-  if (id === 'calendar') {
+  if (id === 'news') {
     var frame = document.getElementById('gcal-frame');
     if (frame && !frame.src) { frame.src = frame.dataset.src; }
   }
