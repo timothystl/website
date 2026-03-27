@@ -472,10 +472,10 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       <h2>What's happening at Timothy</h2>
       <div class="this-week-grid">
 
-        <!-- SERMON SERIES — updated manually until admin tab is built -->
+        <!-- SERMON SERIES — populated by loadSermons() from admin API -->
         <div>
           <div class="this-week-col-label">Current series</div>
-          <div class="sermon-card">
+          <div id="home-sermon-card" class="sermon-card">
             <div class="sermon-icon">
               <svg width="20" height="24" viewBox="0 0 20 24" fill="none"><rect x="8" y="0" width="4" height="24" rx="2" fill="#0A3C5C"/><rect x="0" y="7" width="20" height="4" rx="2" fill="#0A3C5C"/></svg>
             </div>
@@ -2795,6 +2795,22 @@ async function loadSermons() {
         '<a href="https://www.youtube.com/@TimothySTL" target="_blank" class="btn btn-outline">All services on YouTube</a>' +
         '</div>' +
         '<div style="margin-top:16px;font-size:13px;color:var(--gray);">We stream each service live and keep the full recording available afterward.</div>';
+      // Also update the home page "This Week" card
+      const hc = document.getElementById('home-sermon-card');
+      if (hc) {
+        const watchBtn = activeSeries.playlist_url
+          ? '<a href="' + activeSeries.playlist_url + '" target="_blank" class="btn btn-primary" style="font-size:13px;padding:9px 20px;">Watch the series</a>'
+          : '<a href="https://www.youtube.com/@TimothySTL" target="_blank" class="btn btn-primary" style="font-size:13px;padding:9px 20px;">Watch on YouTube</a>';
+        hc.innerHTML =
+          '<div class="sermon-icon"><svg width="20" height="24" viewBox="0 0 20 24" fill="none"><rect x="8" y="0" width="4" height="24" rx="2" fill="#0A3C5C"/><rect x="0" y="7" width="20" height="4" rx="2" fill="#0A3C5C"/></svg></div>' +
+          '<div>' +
+          '<div class="sermon-series">' + activeSeries.title + '</div>' +
+          (activeSeries.description ? '<div class="sermon-title">' + activeSeries.description + '</div>' : '') +
+          (activeSeries.date_range ? '<div class="sermon-ref">' + activeSeries.date_range + '</div>' : '') +
+          '<div class="btn-row">' + watchBtn +
+          '<button class="btn btn-outline" onclick="showPage(\'sermons\')" style="font-size:13px;padding:9px 20px;">Watch &amp; notes</button>' +
+          '</div></div>';
+      }
     }
     // Render notes
     if (allNotes.length > 0) {
