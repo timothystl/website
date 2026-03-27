@@ -991,52 +991,89 @@ async function sendTransactionalEmail(env, { subject, htmlContent, toEmails }) {
   return { success: true };
 }
 
-// ── BUILD BEEHIIV HTML ───────────────────────────────────────
-function buildEmailHtml(subject, pastorNote, events, ministryContent, ministryType, publishedAt, newsItems = []) {
+// ── BUILD EMAIL HTML ─────────────────────────────────────────
+// Layout: header · 2/3 pastor note + 1/3 events · main news · secondary news · WOL+LASM · additional posts · footer
+function buildEmailHtml(subject, pastorNote, events, wolContent, lasmContent, publishedAt, newsItems = []) {
   const dateStr = formatDate(publishedAt);
-  let eventsHtml = '';
-  if (events && events.length) {
-    eventsHtml = `
-<table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0;">
-  <tr><td style="padding-bottom:12px;font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#D4922A;">Upcoming Events</td></tr>
-  ${events.map(e => `
-  <tr>
-    <td style="padding:12px 0;border-top:1px solid #E8E0D0;">
-      <table width="100%" cellpadding="0" cellspacing="0">
-        <tr>
-          <td width="60" style="vertical-align:top;">
-            <div style="background:#0A3C5C;color:white;border-radius:6px;padding:6px 8px;text-align:center;width:48px;">
-              <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.65;">${e.event_date ? new Date(e.event_date+'T12:00:00').toLocaleDateString('en-US',{month:'short'}) : ''}</div>
-              <div style="font-family:'Lora',Georgia,serif;font-size:20px;line-height:1.1;">${e.event_date ? new Date(e.event_date+'T12:00:00').getDate() : ''}</div>
-            </div>
-          </td>
-          <td style="padding-left:14px;vertical-align:top;">
-            <div style="font-family:'Lora',Georgia,serif;font-size:15px;color:#0A3C5C;margin-bottom:3px;">${e.event_name || ''}</div>
-            <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;color:#7A6E60;">${e.event_time || ''}${e.event_desc ? ' · ' + e.event_desc : ''}</div>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>`).join('')}
-</table>`;
+
+  function truncate(text, limit) {
+    if (!text) return '';
+    const stripped = (text + '').replace(/<[^>]+>/g, '');
+    if (stripped.length <= limit) return stripped;
+    return stripped.substring(0, limit).trimEnd() + '…';
   }
 
-  let ministryHtml = '';
-  if (ministryContent) {
-    if (ministryType === 'image') {
-      ministryHtml = `
-<table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0;">
-  <tr><td style="padding-bottom:12px;font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6B8F71;">From Our Ministries</td></tr>
-  <tr><td><img src="${ministryContent}" style="max-width:100%;border-radius:10px;" alt="Ministry update"></td></tr>
-</table>`;
-    } else {
-      ministryHtml = `
-<table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0;">
-  <tr><td style="padding-bottom:12px;font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6B8F71;">From Our Ministries</td></tr>
-  <tr><td style="background:#EEF5EF;border-left:3px solid #6B8F71;border-radius:0 8px 8px 0;padding:14px 16px;font-family:'Source Sans 3',Arial,sans-serif;font-size:14px;color:#3D3530;line-height:1.7;">${ministryContent.replace(/\n/g,'<br>')}</td></tr>
-</table>`;
-    }
-  }
+  // Events sidebar rows
+  const eventsRowsHtml = (events && events.length) ? events.map(e => `
+<tr><td style="padding:9px 0;border-bottom:1px solid #E0D8CC;">
+  <table width="100%" cellpadding="0" cellspacing="0"><tr>
+    <td width="42" valign="top">
+      <div style="background:#0A3C5C;color:white;border-radius:5px;padding:5px 6px;text-align:center;width:34px;">
+        <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:8px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;opacity:.7;">${e.event_date ? new Date(e.event_date+'T12:00:00').toLocaleDateString('en-US',{month:'short'}) : ''}</div>
+        <div style="font-family:'Lora',Georgia,serif;font-size:16px;line-height:1.1;color:white;">${e.event_date ? new Date(e.event_date+'T12:00:00').getDate() : ''}</div>
+      </div>
+    </td>
+    <td style="padding-left:9px;vertical-align:top;">
+      <div style="font-family:'Lora',Georgia,serif;font-size:13px;color:#0A3C5C;">${e.event_name || ''}</div>
+      <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;color:#7A6E60;">${e.event_time || ''}${e.event_desc ? ' · ' + e.event_desc : ''}</div>
+    </td>
+  </tr></table>
+</td></tr>`).join('') : '';
+
+  const eventsSidebar = eventsRowsHtml ? `
+<div style="background:#F7F3EC;border-radius:8px;padding:14px;">
+  <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#D4922A;margin-bottom:10px;">Upcoming</div>
+  <table width="100%" cellpadding="0" cellspacing="0">${eventsRowsHtml}</table>
+</div>` : '';
+
+  // Main news (first item — featured)
+  const mainNews = newsItems[0] || null;
+  const secondaryNews = newsItems[1] || null;
+  const additionalNews = newsItems.slice(2);
+
+  const mainNewsHtml = mainNews ? `
+<tr><td style="padding:22px 0 0;border-top:2px solid #D4922A;">
+  <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#D4922A;margin-bottom:8px;">Featured</div>
+  <div style="font-family:'Lora',Georgia,serif;font-size:20px;color:#0A3C5C;margin-bottom:8px;">${mainNews.title}</div>
+  ${mainNews.summary ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:14px;color:#3D3530;line-height:1.75;margin-bottom:10px;">${truncate(mainNews.summary, 280)}</div>` : ''}
+  <a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#D4922A;text-decoration:none;">Read more →</a>
+</td></tr>` : '';
+
+  const secondaryNewsHtml = secondaryNews ? `
+<tr><td style="padding:18px 0 0;border-top:1px solid #E8E0D0;">
+  <div style="font-family:'Lora',Georgia,serif;font-size:17px;color:#0A3C5C;margin-bottom:6px;">${secondaryNews.title}</div>
+  ${secondaryNews.summary ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;color:#3D3530;line-height:1.7;margin-bottom:8px;">${truncate(secondaryNews.summary, 200)}</div>` : ''}
+  <a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#D4922A;text-decoration:none;">Read more →</a>
+</td></tr>` : '';
+
+  // WOL + LASM side by side
+  const ministryRowHtml = (wolContent || lasmContent) ? `
+<tr><td style="padding-top:22px;border-top:1px solid #E8E0D0;">
+  <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6B8F71;margin-bottom:12px;">From Our Ministries</div>
+  <table width="100%" cellpadding="0" cellspacing="0"><tr>
+    <td width="48%" valign="top" style="${wolContent ? 'background:#EEF5EF;border-left:3px solid #6B8F71;border-radius:0 6px 6px 0;padding:13px;' : ''}">
+      ${wolContent ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6B8F71;margin-bottom:7px;">Word of Life</div><div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;color:#3D3530;line-height:1.7;">${truncate(wolContent, 300)}</div>` : ''}
+    </td>
+    <td width="4%"></td>
+    <td width="48%" valign="top" style="${lasmContent ? 'background:#EEF5EF;border-left:3px solid #6B8F71;border-radius:0 6px 6px 0;padding:13px;' : ''}">
+      ${lasmContent ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6B8F71;margin-bottom:7px;">LASM</div><div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;color:#3D3530;line-height:1.7;">${truncate(lasmContent, 300)}</div>` : ''}
+    </td>
+  </tr></table>
+</td></tr>` : '';
+
+  // Additional posts (3rd item onward — compact)
+  const additionalNewsHtml = additionalNews.length ? `
+<tr><td style="padding-top:20px;border-top:1px solid #E8E0D0;">
+  <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#D4922A;margin-bottom:12px;">More from Timothy</div>
+  <table width="100%" cellpadding="0" cellspacing="0">
+    ${additionalNews.map(item => `
+    <tr><td style="padding:11px 0;border-bottom:1px solid #F0E8DC;">
+      <div style="font-family:'Lora',Georgia,serif;font-size:15px;color:#0A3C5C;margin-bottom:4px;">${item.title}</div>
+      ${item.summary ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;color:#3D3530;line-height:1.65;margin-bottom:6px;">${truncate(item.summary, 150)}</div>` : ''}
+      <a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;color:#D4922A;text-decoration:none;">Read more →</a>
+    </td></tr>`).join('')}
+  </table>
+</td></tr>` : '';
 
   return `<!DOCTYPE html>
 <html>
@@ -1050,33 +1087,40 @@ function buildEmailHtml(subject, pastorNote, events, ministryContent, ministryTy
         <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:14px;font-weight:800;color:white;">Timothy Lutheran Church</div>
         <div style="font-family:'Lora',Georgia,serif;font-size:11px;font-style:italic;color:#D4922A;margin-top:2px;">from our Neighborhood to the Nations</div>
       </td></tr>
-      <!-- BODY -->
-      <tr><td style="background:white;padding:32px 28px;border-radius:0 0 14px 14px;border:1px solid #E8E0D0;border-top:none;">
-        <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#D4922A;margin-bottom:8px;">${dateStr}</div>
-        <div style="font-family:'Lora',Georgia,serif;font-size:22px;color:#0A3C5C;margin-bottom:20px;">${subject}</div>
-        ${pastorNote ? `
-        <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:15px;color:#3D3530;line-height:1.8;margin-bottom:24px;padding-bottom:24px;border-bottom:1px solid #E8E0D0;">${pastorNote}</div>` : ''}
-        ${newsItems.length ? `
-        <table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0;">
-          <tr><td style="padding-bottom:12px;font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#D4922A;">News &amp; Updates</td></tr>
-          ${newsItems.map(item => `
-          <tr><td style="padding:14px 0;border-top:1px solid #E8E0D0;">
-            <div style="font-family:'Lora',Georgia,serif;font-size:16px;color:#0A3C5C;margin-bottom:6px;">${item.title}</div>
-            ${item.summary ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;color:#3D3530;line-height:1.7;margin-bottom:8px;">${item.summary}</div>` : ''}
-            <a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#D4922A;text-decoration:none;">Read more →</a>
-          </td></tr>`).join('')}
-        </table>` : ''}
-        ${eventsHtml}
-        ${ministryHtml}
-        <div style="margin-top:32px;padding-top:20px;border-top:1px solid #E8E0D0;text-align:center;">
-          <a href="https://timothystl.org" style="display:inline-block;background:#0A3C5C;color:white;font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;font-weight:700;padding:11px 24px;border-radius:6px;text-decoration:none;margin-right:10px;">Visit our website</a>
-          <a href="https://timothystl.breezechms.com/give/online" style="display:inline-block;background:#D4922A;color:#0A3C5C;font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;font-weight:700;padding:11px 24px;border-radius:6px;text-decoration:none;">Give online</a>
-        </div>
-        <div style="margin-top:24px;text-align:center;font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;color:#7A6E60;line-height:1.8;">
-          6704 Fyler Ave · St. Louis, MO 63139<br>
-          Sunday worship · 8:00 &amp; 10:45 am
-        </div>
+      <!-- DATE + SUBJECT -->
+      <tr><td style="background:white;padding:24px 28px 0;border-left:1px solid #E8E0D0;border-right:1px solid #E8E0D0;">
+        <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#D4922A;margin-bottom:6px;">${dateStr}</div>
+        <div style="font-family:'Lora',Georgia,serif;font-size:22px;color:#0A3C5C;margin-bottom:18px;">${subject}</div>
+        <!-- 2/3 pastor note + 1/3 events -->
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td width="390" valign="top" style="padding-right:18px;border-right:1px solid #E8E0D0;">
+              ${pastorNote ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:15px;color:#3D3530;line-height:1.85;">${pastorNote}</div>` : ''}
+            </td>
+            <td width="16"></td>
+            <td width="165" valign="top">${eventsSidebar}</td>
+          </tr>
+        </table>
+        <!-- news + ministry sections -->
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:4px;">
+          ${mainNewsHtml}
+          ${secondaryNewsHtml}
+          ${ministryRowHtml}
+          ${additionalNewsHtml}
+        </table>
+        <!-- FOOTER -->
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;">
+          <tr><td style="border-top:1px solid #E8E0D0;padding:20px 0;text-align:center;">
+            <a href="https://timothystl.org" style="display:inline-block;background:#0A3C5C;color:white;font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;font-weight:700;padding:11px 24px;border-radius:6px;text-decoration:none;margin-right:10px;">Visit our website</a>
+            <a href="https://timothystl.breezechms.com/give/online" style="display:inline-block;background:#D4922A;color:#0A3C5C;font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;font-weight:700;padding:11px 24px;border-radius:6px;text-decoration:none;">Give online</a>
+          </td></tr>
+          <tr><td style="text-align:center;font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;color:#7A6E60;line-height:1.8;padding-bottom:20px;">
+            6704 Fyler Ave · St. Louis, MO 63139<br>
+            Sunday worship · 8:00 &amp; 10:45 am
+          </td></tr>
+        </table>
       </td></tr>
+      <tr><td style="background:white;border:1px solid #E8E0D0;border-top:none;border-radius:0 0 14px 14px;height:10px;"></td></tr>
     </table>
   </td></tr>
 </table>
@@ -1173,6 +1217,8 @@ export default {
     try { await env.DB.prepare("ALTER TABLE newsletters ADD COLUMN format TEXT DEFAULT 'weekly'").run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN cta_url TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN cta_label TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN wol_content TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN lasm_content TEXT').run(); } catch (_) {}
     // Pre-populate ministry page slugs so they're always editable
     for (const p of MINISTRY_SLUGS) {
       try {
@@ -2920,7 +2966,7 @@ ${topbarHtml('news', `<a href="/newsitems">← News &amp; Events</a>`)}
 
       <div class="card">
         <div class="card-title">News &amp; Events <span class="tag">Pick from your posts</span></div>
-        <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">Check items to include in this newsletter. They appear as brief cards with a "Read more" link to the website.</div>
+        <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">Check items to include. The <strong>first checked item</strong> appears as the featured story, the <strong>second</strong> as secondary news, and the rest as compact cards — all with a "Read more" link. Long text is automatically trimmed.</div>
         ${newsPickerHtml}
       </div>
 
@@ -2931,24 +2977,17 @@ ${topbarHtml('news', `<a href="/newsitems">← News &amp; Events</a>`)}
       </div>
 
       <div class="card">
-        <div class="card-title">From our ministries <span class="tag">Optional</span></div>
-        <div class="form-group">
-          <label>Content type</label>
-          <div class="radio-row">
-            <label><input type="radio" name="ministry_type" value="text" checked onchange="toggleMinistry(this)"> Text or link</label>
-            <label><input type="radio" name="ministry_type" value="image" onchange="toggleMinistry(this)"> Image</label>
-            <label><input type="radio" name="ministry_type" value="none" onchange="toggleMinistry(this)"> None this week</label>
+        <div class="card-title">Word of Life &amp; LASM <span class="tag">Optional</span></div>
+        <div style="font-size:12px;color:var(--gray);margin-bottom:14px;">These appear side by side in the email — left half Word of Life, right half LASM. Leave either blank to omit it.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div class="form-group" style="margin:0;">
+            <label>Word of Life</label>
+            <textarea name="wol_content" style="min-height:120px;" placeholder="News or update from Word of Life School…"></textarea>
           </div>
-        </div>
-        <div id="ministry-text" class="form-group">
-          <label>Text, link, or paste content</label>
-          <textarea name="ministry_content" style="min-height:100px;" placeholder="Paste text from Word of Life, MDO, LWML, or any ministry. Or paste a URL and we'll note it."></textarea>
-        </div>
-        <div id="ministry-image" class="form-group" style="display:none;">
-          <label>Upload image</label>
-          <input type="file" name="ministry_image" accept="image/*" style="border:none;padding:0;background:none;">
-          <div style="margin-top:6px;font-size:12px;color:var(--gray);">Or paste an image URL:</div>
-          <input type="text" name="ministry_image_url" placeholder="https://..." style="margin-top:6px;">
+          <div class="form-group" style="margin:0;">
+            <label>LASM</label>
+            <textarea name="lasm_content" style="min-height:120px;" placeholder="News or update from LASM…"></textarea>
+          </div>
         </div>
       </div>
     </div>
@@ -2983,6 +3022,9 @@ ${topbarHtml('news', `<a href="/newsitems">← News &amp; Events</a>`)}
         <label><input type="radio" name="email_send" value="none" checked> Don't send email</label>
         <label><input type="radio" name="email_send" value="test"> Test list only <span style="font-weight:400;font-size:11px;color:var(--gray);">(Your first list)</span></label>
         <label><input type="radio" name="email_send" value="all"> All subscribers</label>
+      </div>
+      <div style="margin-top:14px;padding:12px 14px;background:var(--mist);border-radius:8px;border:1px solid var(--ice);font-family:var(--sans);font-size:12px;color:var(--charcoal);line-height:1.7;">
+        📊 <strong>Email is sent via Brevo.</strong> To see open rates, clicks, and delivery stats after sending, log in at <a href="https://app.brevo.com" target="_blank" style="color:var(--mid);font-weight:700;">app.brevo.com</a> → Campaigns.
       </div>
     </div>
 
@@ -3039,10 +3081,6 @@ function addEvent() {
 function removeEvent(id) {
   document.getElementById('event-'+id).remove();
 }
-function toggleMinistry(radio) {
-  document.getElementById('ministry-text').style.display = radio.value === 'text' ? 'block' : 'none';
-  document.getElementById('ministry-image').style.display = radio.value === 'image' ? 'block' : 'none';
-}
 function pickFormat(fmt) {
   document.getElementById('format-input').value = fmt;
   document.getElementById('fmt-weekly').classList.toggle('active', fmt === 'weekly');
@@ -3067,13 +3105,11 @@ addEvent();
 
       // Weekly-specific fields
       const pastorNote = form.get('pastor_note') || '';
-      const ministryType = form.get('ministry_type') || 'none';
-      let ministryContent = '';
-      if (ministryType === 'text') {
-        ministryContent = form.get('ministry_content') || '';
-      } else if (ministryType === 'image') {
-        ministryContent = form.get('ministry_image_url') || '';
-      }
+      const wolContent = fmt === 'weekly' ? form.get('wol_content') || '' : '';
+      const lasmContent = fmt === 'weekly' ? form.get('lasm_content') || '' : '';
+      // Legacy fields kept for DB compat but no longer used in the form
+      const ministryContent = '';
+      const ministryType = 'text';
 
       // Quick-announcement-specific fields
       const quickBody = form.get('quick_body') || '';
@@ -3116,16 +3152,16 @@ addEvent();
       if (editId) {
         // Update existing newsletter
         await env.DB.prepare(
-          'UPDATE newsletters SET subject=?, pastor_note=?, ministry_content=?, ministry_type=?, published_at=?, format=?, cta_url=?, cta_label=?, status=? WHERE id=?'
-        ).bind(subject, savedNote, ministryContent, ministryType === 'none' ? 'text' : ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, editId).run();
+          'UPDATE newsletters SET subject=?, pastor_note=?, ministry_content=?, ministry_type=?, published_at=?, format=?, cta_url=?, cta_label=?, status=?, wol_content=?, lasm_content=? WHERE id=?'
+        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, editId).run();
         newsletterId = parseInt(editId, 10);
         // Replace events
         await env.DB.prepare('DELETE FROM events WHERE newsletter_id = ?').bind(newsletterId).run();
       } else {
         // Insert new newsletter
         const result = await env.DB.prepare(
-          'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        ).bind(subject, savedNote, ministryContent, ministryType === 'none' ? 'text' : ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status).run();
+          'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent).run();
         newsletterId = result.meta.last_row_id;
       }
 
@@ -3142,7 +3178,7 @@ addEvent();
       if (action === 'publish' && emailSend !== 'none') {
         const listId = emailSend === 'test' ? 2 : parseInt(env.BREVO_LIST_ID || '0', 10);
         if (listId) {
-          const emailHtml = buildEmailHtml(subject, savedNote, events, ministryContent, ministryType, publishedAt, selectedNewsItems);
+          const emailHtml = buildEmailHtml(subject, savedNote, events, wolContent, lasmContent, publishedAt, selectedNewsItems);
           const result = await sendBrevoNewsletter(env, { subject, htmlContent: emailHtml, listIds: [listId] });
           emailSuffix = result.success
             ? `&emailed=${emailSend}`
@@ -3237,20 +3273,17 @@ ${topbarHtml('news', `<a href="/newsitems">← News &amp; Events</a>`)}
         <button type="button" class="add-event-btn" onclick="addEvent()">+ Add an event</button>
       </div>
       <div class="card">
-        <div class="card-title">From our ministries <span class="tag">Optional</span></div>
-        <div class="form-group">
-          <label>Content type</label>
-          <div class="radio-row">
-            <label><input type="radio" name="ministry_type" value="text"${ministryChecked('text')} onchange="toggleMinistry(this)"> Text or link</label>
-            <label><input type="radio" name="ministry_type" value="image"${ministryChecked('image')} onchange="toggleMinistry(this)"> Image</label>
-            <label><input type="radio" name="ministry_type" value="none"${ministryChecked('none')} onchange="toggleMinistry(this)"> None this week</label>
+        <div class="card-title">Word of Life &amp; LASM <span class="tag">Optional</span></div>
+        <div style="font-size:12px;color:var(--gray);margin-bottom:14px;">These appear side by side in the email — left half Word of Life, right half LASM. Leave either blank to omit it.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div class="form-group" style="margin:0;">
+            <label>Word of Life</label>
+            <textarea name="wol_content" style="min-height:120px;">${(row.wol_content||'').replace(/</g,'&lt;')}</textarea>
           </div>
-        </div>
-        <div id="ministry-text" class="form-group" style="display:${(row.ministry_type||'text')==='text'?'block':'none'}">
-          <textarea name="ministry_content" style="min-height:100px;">${(row.ministry_content||'').replace(/</g,'&lt;')}</textarea>
-        </div>
-        <div id="ministry-image" class="form-group" style="display:${row.ministry_type==='image'?'block':'none'}">
-          <input type="text" name="ministry_image_url" value="${(row.ministry_content||'').replace(/"/g,'&quot;')}" placeholder="https://...">
+          <div class="form-group" style="margin:0;">
+            <label>LASM</label>
+            <textarea name="lasm_content" style="min-height:120px;">${(row.lasm_content||'').replace(/</g,'&lt;')}</textarea>
+          </div>
         </div>
       </div>
     </div>
@@ -3283,6 +3316,9 @@ ${topbarHtml('news', `<a href="/newsitems">← News &amp; Events</a>`)}
         <label><input type="radio" name="email_send" value="test"> Test list only</label>
         <label><input type="radio" name="email_send" value="all"> All subscribers</label>
       </div>
+      <div style="margin-top:14px;padding:12px 14px;background:var(--mist);border-radius:8px;border:1px solid var(--ice);font-family:var(--sans);font-size:12px;color:var(--charcoal);line-height:1.7;">
+        📊 <strong>Email is sent via Brevo.</strong> To see open rates, clicks, and delivery stats after sending, log in at <a href="https://app.brevo.com" target="_blank" style="color:var(--mid);font-weight:700;">app.brevo.com</a> → Campaigns.
+      </div>
     </div>
 
     <div class="btn-row" style="margin-top:8px;">
@@ -3311,10 +3347,6 @@ function addEvent() {
   c.appendChild(div);
 }
 function removeEvent(id) { document.getElementById('event-'+id).remove(); }
-function toggleMinistry(radio) {
-  document.getElementById('ministry-text').style.display = radio.value === 'text' ? 'block' : 'none';
-  document.getElementById('ministry-image').style.display = radio.value === 'image' ? 'block' : 'none';
-}
 function pickFormat(fmt) {
   document.getElementById('format-input').value = fmt;
   document.getElementById('fmt-weekly').classList.toggle('active', fmt === 'weekly');
@@ -3334,7 +3366,7 @@ ${eventsJs}
       const listId = listType === 'test' ? 2 : parseInt(env.BREVO_LIST_ID || '0', 10);
 
       const row = await env.DB.prepare(
-        'SELECT subject, pastor_note, ministry_content, ministry_type, published_at FROM newsletters WHERE id = ?'
+        'SELECT subject, pastor_note, wol_content, lasm_content, published_at FROM newsletters WHERE id = ?'
       ).bind(id).first();
       if (!row) return new Response('Not found', { status: 404 });
 
@@ -3342,7 +3374,7 @@ ${eventsJs}
         'SELECT event_date, event_name, event_time, event_desc FROM events WHERE newsletter_id = ? ORDER BY sort_order'
       ).bind(id).all();
 
-      const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.ministry_content, row.ministry_type, row.published_at);
+      const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at);
       const result = await sendBrevoNewsletter(env, { subject: row.subject, htmlContent: emailHtml, listIds: [listId] });
 
       const suffix = result.success
