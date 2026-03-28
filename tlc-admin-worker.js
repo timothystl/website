@@ -1237,6 +1237,7 @@ export default {
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN wol_content TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN lasm_content TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN secondary_note TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('CREATE TABLE IF NOT EXISTS redirects (path TEXT PRIMARY KEY, url TEXT NOT NULL, label TEXT)').run(); } catch (_) {}
     // Pre-populate ministry page slugs so they're always editable
     for (const p of MINISTRY_SLUGS) {
       try {
@@ -1584,6 +1585,14 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
       try { files = JSON.parse(data.files_json || '[]'); } catch(_) {}
       return new Response(JSON.stringify({ meeting_info: data.meeting_info || '', zoom_link: data.zoom_link || '', files }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      });
+    }
+
+    // ── PUBLIC: custom redirects API ──
+    if (path === '/api/redirects' && method === 'GET') {
+      const rows = await env.DB.prepare('SELECT path, url, label FROM redirects ORDER BY path').all();
+      return new Response(JSON.stringify({ redirects: rows.results }), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=60' }
       });
     }
 
@@ -3889,7 +3898,13 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
     ${!CORE_SLUGS.includes(p.slug) ? `<form method="POST" action="/ministries/delete/${p.slug}" onsubmit="return confirm('Delete this ministry page?')" style="margin:0;"><button type="submit" class="btn btn-sm btn-danger">Delete</button></form>` : ''}
   </div>
 </div>`;
-        }).join('');
+        }).join('') + `<div class="ni-row">
+  <div class="ni-title">Voters Assembly Page</div>
+  <div class="ni-meta">Zoom link &amp; council report downloads · /voters</div>
+  <div class="ni-actions">
+    <a href="/voters" class="btn btn-sm btn-secondary">Edit</a>
+  </div>
+</div>`;
 
         return html(`
 ${topbarHtml('ministries')}
@@ -3899,7 +3914,6 @@ ${topbarHtml('ministries')}
   ${alertHtml}
   <div class="btn-row" style="margin-bottom:28px;">
     <a href="/ministries/add" class="btn btn-primary">+ Add ministry page</a>
-    <a href="/voters" class="btn btn-secondary">Voters Page →</a>
   </div>
   <div class="card">
     ${listHtml}
@@ -5821,12 +5835,32 @@ ${topbarHtml('gym', `<a href="/gym-rentals/recurring">← Recurring</a>`)}
       return new Response('', { status: 302, headers: { Location: '/gym-rentals' } });
     } // end /gym-rentals
 
+    // ── CUSTOM REDIRECTS (add/delete, inside Settings page) ──
+    if (path === '/redirects/add' && method === 'POST') {
+      const form = await request.formData();
+      const rPath = (form.get('path') || '').trim().replace(/^\/+/, '').toLowerCase();
+      const rUrl  = (form.get('url')  || '').trim();
+      const rLabel= (form.get('label')|| '').trim();
+      if (!rPath || !rUrl) return new Response('', { status: 302, headers: { Location: '/settings?msg=redirect-error' } });
+      await env.DB.prepare('INSERT OR REPLACE INTO redirects (path, url, label) VALUES (?, ?, ?)').bind(rPath, rUrl, rLabel).run();
+      return new Response('', { status: 302, headers: { Location: '/settings?msg=redirect-added' } });
+    }
+    if (path.startsWith('/redirects/delete/') && method === 'POST') {
+      const rPath = path.slice('/redirects/delete/'.length);
+      await env.DB.prepare('DELETE FROM redirects WHERE path = ?').bind(rPath).run();
+      return new Response('', { status: 302, headers: { Location: '/settings?msg=redirect-deleted' } });
+    }
+
     if (path.startsWith('/settings')) {
       // Show settings form
       if (path === '/settings' && method === 'GET') {
         const settings = await env.DB.prepare('SELECT key, value, label, hint FROM site_settings ORDER BY rowid').all();
+        const customRedirects = await env.DB.prepare('SELECT path, url, label FROM redirects ORDER BY path').all();
         const msg = url.searchParams.get('msg');
-        const alertHtml = msg === 'saved' ? `<div class="alert alert-success">✓ Settings saved.</div>` : '';
+        const alertHtml = msg === 'saved' ? `<div class="alert alert-success">✓ Settings saved.</div>`
+          : msg === 'redirect-added'   ? `<div class="alert alert-success">✓ Redirect added.</div>`
+          : msg === 'redirect-deleted' ? `<div class="alert alert-info">Redirect deleted.</div>`
+          : msg === 'redirect-error'   ? `<div class="alert alert-error">Path and URL are both required.</div>` : '';
 
         const REDIRECT_KEYS = ['zoom_url', 'councilfiles_url', 'give_url'];
         const renderField = s => `
@@ -5838,6 +5872,19 @@ ${topbarHtml('gym', `<a href="/gym-rentals/recurring">← Recurring</a>`)}
         const redirectFields = settings.results.filter(s => REDIRECT_KEYS.includes(s.key)).map(renderField).join('');
         const configFields   = settings.results.filter(s => !REDIRECT_KEYS.includes(s.key)).map(renderField).join('');
 
+        const customRowsHtml = customRedirects.results.length === 0
+          ? `<div style="font-size:13px;color:var(--gray);padding:12px 0;">No custom redirects yet.</div>`
+          : customRedirects.results.map(r => `
+            <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
+              <code style="background:var(--mist);padding:3px 8px;border-radius:4px;font-size:13px;flex-shrink:0;">/${r.path.replace(/&/g,'&amp;')}</code>
+              <span style="font-size:12px;color:var(--gray);">→</span>
+              <span style="font-size:13px;color:var(--mid);flex:1;word-break:break-all;">${(r.url||'').replace(/&/g,'&amp;')}</span>
+              ${r.label ? `<span style="font-size:12px;color:var(--gray);">${r.label.replace(/&/g,'&amp;')}</span>` : ''}
+              <form method="POST" action="/redirects/delete/${encodeURIComponent(r.path)}" onsubmit="return confirm('Delete /${r.path}?')" style="margin:0;">
+                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+              </form>
+            </div>`).join('');
+
         return html(`
 ${topbarHtml('settings')}
 <div class="wrap">
@@ -5846,16 +5893,48 @@ ${topbarHtml('settings')}
   ${alertHtml}
   <form method="POST" action="/settings/update">
     <div class="card">
-      <div class="card-title">Redirects</div>
-      <div style="font-size:13px;color:var(--gray);margin-bottom:18px;">These are the URLs that short links on the site point to. Edit here — no code change required.</div>
+      <div class="card-title">Built-in Redirects</div>
+      <div style="font-size:13px;color:var(--gray);margin-bottom:18px;">These are the URLs that short links on the site point to (<code>/zoom</code>, <code>/councilfiles</code>, <code>/give</code>). Edit here — no code change required.</div>
       ${redirectFields}
+      <div class="btn-row" style="margin-top:4px;">
+        <button type="submit" class="btn btn-primary">Save redirect URLs →</button>
+      </div>
     </div>
+  </form>
+
+  <div class="card" style="margin-top:20px;">
+    <div class="card-title">Custom Redirects</div>
+    <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">Add short links that redirect visitors to any URL. Example: <code>/mdo</code> → <code>https://mdo.timothystl.org</code>. Works when someone types the URL directly in the browser.</div>
+    ${customRowsHtml}
+    <form method="POST" action="/redirects/add" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+      <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sage);margin-bottom:12px;">Add new redirect</div>
+      <div style="display:grid;grid-template-columns:1fr 2fr 1fr;gap:12px;align-items:end;">
+        <div class="form-group" style="margin:0;">
+          <label>Path (no slash)</label>
+          <input type="text" name="path" placeholder="e.g. mdo" style="font-family:var(--mono,monospace);">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Destination URL</label>
+          <input type="url" name="url" placeholder="https://...">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Label (optional)</label>
+          <input type="text" name="label" placeholder="e.g. Mother's Day Out">
+        </div>
+      </div>
+      <div class="btn-row" style="margin-top:12px;">
+        <button type="submit" class="btn btn-primary">Add redirect →</button>
+      </div>
+    </form>
+  </div>
+
+  <form method="POST" action="/settings/update">
     <div class="card" style="margin-top:20px;">
       <div class="card-title">Site Configuration</div>
       ${configFields}
-    </div>
-    <div class="btn-row" style="margin-top:12px;">
-      <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save settings →</button>
+      <div class="btn-row" style="margin-top:4px;">
+        <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save configuration →</button>
+      </div>
     </div>
   </form>
 </div>`, 'Site Settings');
