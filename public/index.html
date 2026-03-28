@@ -2165,6 +2165,13 @@ function toggleBio(id, btn){
   }
   if(path && document.getElementById('page-'+path)){
     showPage(path, false);
+  } else if (path) {
+    // Unknown path — check custom redirects before falling back to home
+    fetch('https://admin.timothystl.org/api/redirects').then(function(r){return r.json();}).then(function(d){
+      var match = (d.redirects||[]).find(function(r){return r.path===path;});
+      if(match){ window.location.replace(match.url); }
+      else { history.replaceState({page:'home'},'','/'); }
+    }).catch(function(){ history.replaceState({page:'home'},'','/'); });
   } else {
     history.replaceState({page:'home'},'','/');
   }
@@ -2646,7 +2653,16 @@ window.showPage = function(id, addHistory) {
     history.pushState({page:id},'',url);
   }
   updatePageMeta(id);
-  if (id === 'news') { loadNewsletters(); loadNewsItems(); }
+  if (id === 'news') {
+    loadNewsletters(); loadNewsItems();
+    // Lazy-load Google Calendar iframe on first visit to the news page
+    var gcalFrame = document.getElementById('gcal-frame');
+    if (gcalFrame && !gcalFrame.src) { gcalFrame.src = gcalFrame.dataset.src; }
+  }
+  if (id === 'wol') {
+    var wolFrame = document.getElementById('wol-yt-frame');
+    if (wolFrame && !wolFrame.src) { wolFrame.src = wolFrame.dataset.src; }
+  }
   if (id === 'youth') { loadYouthPage(); }
   if (id === 'events' && !volLoaded) { volLoaded = true; loadVolunteerEvents(); }
   if (id === 'sermons') { loadSermons(); }
@@ -2662,7 +2678,11 @@ window.showPage = function(id, addHistory) {
 // Load data if landing directly on a lazy-loaded page
 (function(){
   var path = window.location.pathname.replace(/^\//, '').replace(/\/$/, '');
-  if (path === 'news') { loadNewsletters(); loadNewsItems(); }
+  if (path === 'news') {
+    loadNewsletters(); loadNewsItems();
+    var gcalFrame = document.getElementById('gcal-frame');
+    if (gcalFrame && !gcalFrame.src) { gcalFrame.src = gcalFrame.dataset.src; }
+  }
   if (path === 'youth') { loadYouthPage(); }
   if (path === 'events') { volLoaded = true; loadVolunteerEvents(); }
   if (path === 'sermons') { loadSermons(); }
