@@ -37,7 +37,7 @@ Deploys automatically from any `claude/**` branch push. Use this for all develop
 - `RSVP_STORE` — Cloudflare KV namespace
 
 ### Auth
-- Admin password: `6704fyler` (used by admin.timothystl.org and volunteer.timothystl.org/admin)
+- Admin password: stored in Cloudflare Worker secret — do not commit here
 
 ---
 
