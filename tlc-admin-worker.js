@@ -1,6 +1,8 @@
 // Timothy Lutheran Church — Newsletter Admin Worker
-// Deploy to: admin.timothystl.org
-// Cloudflare Worker + D1 Database
+// Purpose: Serves admin.timothystl.org — newsletter, news, sermons, youth pages, gym rentals, voter pages
+// Deploy: Cloudflare Worker + D1 (tlc-newsletter-db) + KV (RSVP_STORE)
+// Dependencies: Brevo API (email sending), TinyMCE CDN (WYSIWYG), Google Calendar API (gym bookings)
+// Last modified: 2026-03-27
 
 const ADMIN_PASSWORD = '6704fyler';
 

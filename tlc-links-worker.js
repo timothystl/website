@@ -1,6 +1,8 @@
 // Timothy Lutheran Church — Links Worker
-// Serves the links page at links.timothystl.org
-// Mirrors the static content from public/links/index.html
+// Purpose: Serves the social/links landing page at links.timothystl.org
+// Deploy: Cloudflare Worker (no database — fully self-contained static response)
+// Dependencies: None (logo embedded inline as base64; no external requests)
+// Last modified: 2026-03-27
 
 export default {
   async fetch(request) {
