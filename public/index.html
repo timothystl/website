@@ -844,7 +844,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
           <img src="/images/ministries/WOL-logo-square.jpg?v=20260328" alt="Word of Life Lutheran School" class="min-card-img" loading="lazy">
           <h3>Word of Life Lutheran School</h3>
           <p>Providing a high-quality educational program in an environment where Christ prevails. A Christ-centered school for students in our neighborhood.</p>
-          <a href="https://wordoflifeschool.net" target="_blank">Visit Word of Life School →</a>
+          <a href="/wol" onclick="event.preventDefault();showPage('wol')">Learn more →</a>
         </div>
         <div class="min-card">
           <img src="/images/ministries/mdo.png?v=20260328" alt="Mother's Day Out" class="min-card-img" loading="lazy">
@@ -2121,13 +2121,14 @@ function showPage(id, addHistory){
     history.pushState({page:id},'',url);
   }
   // Lazy-load embeds only when their page is first visited
+  // Note: use getAttribute('src') not .src — browser resolves src="" to current page URL
   if (id === 'news') {
     var frame = document.getElementById('gcal-frame');
-    if (frame && !frame.src) { frame.src = frame.dataset.src; }
+    if (frame && !frame.getAttribute('src')) { frame.src = frame.dataset.src; }
   }
   if (id === 'wol') {
     var yt = document.getElementById('wol-yt-frame');
-    if (yt && !yt.src) { yt.src = yt.dataset.src; }
+    if (yt && !yt.getAttribute('src')) { yt.src = yt.dataset.src; }
   }
 }
 document.getElementById('navToggle').addEventListener('click',function(){
@@ -2657,11 +2658,11 @@ window.showPage = function(id, addHistory) {
     loadNewsletters(); loadNewsItems();
     // Lazy-load Google Calendar iframe on first visit to the news page
     var gcalFrame = document.getElementById('gcal-frame');
-    if (gcalFrame && !gcalFrame.src) { gcalFrame.src = gcalFrame.dataset.src; }
+    if (gcalFrame && !gcalFrame.getAttribute('src')) { gcalFrame.src = gcalFrame.dataset.src; }
   }
   if (id === 'wol') {
     var wolFrame = document.getElementById('wol-yt-frame');
-    if (wolFrame && !wolFrame.src) { wolFrame.src = wolFrame.dataset.src; }
+    if (wolFrame && !wolFrame.getAttribute('src')) { wolFrame.src = wolFrame.dataset.src; }
   }
   if (id === 'youth') { loadYouthPage(); }
   if (id === 'events' && !volLoaded) { volLoaded = true; loadVolunteerEvents(); }
@@ -2681,7 +2682,7 @@ window.showPage = function(id, addHistory) {
   if (path === 'news') {
     loadNewsletters(); loadNewsItems();
     var gcalFrame = document.getElementById('gcal-frame');
-    if (gcalFrame && !gcalFrame.src) { gcalFrame.src = gcalFrame.dataset.src; }
+    if (gcalFrame && !gcalFrame.getAttribute('src')) { gcalFrame.src = gcalFrame.dataset.src; }
   }
   if (path === 'youth') { loadYouthPage(); }
   if (path === 'events') { volLoaded = true; loadVolunteerEvents(); }
