@@ -72,6 +72,27 @@ function json(data, status = 200) {
     status,
     headers: { 'Content-Type': 'application/json' }
   });
+
+// ── CHRISTMAS MARKET DATE HELPERS ────────────────────────────────────
+// Market is always the first Saturday of December.
+// Friday is setup day; Saturday is market day.
+function xmasDates(year) {
+  const dec1 = new Date(Date.UTC(year, 11, 1)); // Dec 1 of given year (UTC)
+  const daysUntilSat = (6 - dec1.getUTCDay() + 7) % 7;
+  const satDay = 1 + daysUntilSat;
+  const pad = n => String(n).padStart(2, '0');
+  return {
+    friday:   `${year}-12-${pad(satDay - 1)}`,
+    saturday: `${year}-12-${pad(satDay)}`
+  };
+}
+// Returns the year of the upcoming Christmas Market.
+// If this year's market has already passed, returns next year.
+function upcomingXmasYear() {
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const { saturday } = xmasDates(year);
+  return new Date(saturday + 'T23:59:59Z') < now ? year + 1 : year;
 }
 function redirect(url) {
   return new Response('', { status: 302, headers: { Location: url } });
@@ -105,9 +126,8 @@ async function initDb(db) {
 // 20 roles it means it was seeded with the old simple role list — replace
 // it with the full time-slotted schedule.
 async function migrateChristmasMarketRoles(db) {
-  // ⚠️  UPDATE THESE TWO DATES EACH YEAR before the market (typically first Fri/Sat of December)
-  const XMAS_FRIDAY   = '2026-12-04';
-  const XMAS_SATURDAY = '2026-12-05';
+  // Dates are computed automatically — first Saturday of December for the upcoming year.
+  const { friday: XMAS_FRIDAY, saturday: XMAS_SATURDAY } = xmasDates(upcomingXmasYear());
 
   const XMAS_ROLES = [
     // ── Friday Dec 4 — Setup Day ─────────────────────────────────────────
@@ -175,11 +195,26 @@ async function migrateChristmasMarketRoles(db) {
   if (!ev) return;
   const count = await db.prepare('SELECT COUNT(*) as n FROM serve_roles WHERE event_id=?').bind(ev.id).first();
   if (count && count.n >= 20) {
-    // Roles exist — check if start_time needs populating (added after initial seeding)
+    // Roles exist. Check two migration cases, both update in place to preserve existing signups.
+    // Match by sort_order (set to insertion index) to avoid clobbering duplicate-named roles.
+
+    // Case 1: Dates are from a past year — update role_dates to the computed upcoming year.
+    const wrongYear = await db.prepare(
+      'SELECT COUNT(*) as n FROM serve_roles WHERE event_id=? AND role_date NOT IN (?,?)'
+    ).bind(ev.id, XMAS_FRIDAY, XMAS_SATURDAY).first();
+    if (wrongYear && wrongYear.n > 0) {
+      // Also update the parent event's display date
+      await db.prepare('UPDATE serve_events SET event_date=? WHERE id=?').bind(XMAS_FRIDAY, ev.id).run();
+      for (let i = 0; i < XMAS_ROLES.length; i++) {
+        const r = XMAS_ROLES[i];
+        await db.prepare('UPDATE serve_roles SET role_date=? WHERE event_id=? AND sort_order=?')
+          .bind(r.role_date, ev.id, i).run();
+      }
+    }
+
+    // Case 2: start_time missing (added after initial seeding on older installs)
     const needsFix = await db.prepare('SELECT COUNT(*) as n FROM serve_roles WHERE event_id=? AND (start_time="" OR start_time IS NULL)').bind(ev.id).first();
     if (needsFix && needsFix.n > 0) {
-      // UPDATE in place so existing signups are preserved.
-      // Match by sort_order (set to insertion index) to avoid clobbering duplicate-named roles.
       for (let i = 0; i < XMAS_ROLES.length; i++) {
         const r = XMAS_ROLES[i];
         await db.prepare('UPDATE serve_roles SET role_date=?, start_time=?, end_time=? WHERE event_id=? AND sort_order=?')
@@ -242,7 +277,7 @@ async function seedEvents(db) {
     {
       name: 'Christmas Market',
       description: 'A beloved community market with food, drinks, music, and holiday cheer. Two-day event — setup Friday, market Saturday.',
-      event_date: '2026-12-04', sort_order: 3, // ⚠️ Update date each year (matches XMAS_FRIDAY in migrateChristmasMarketRoles)
+      event_date: xmasDates(upcomingXmasYear()).friday, sort_order: 3,
       roles: [
         // ── Friday Dec 4 — Setup Day ─────────────────────────────────
         { name: 'Move stuff out of storage room', description: 'Bring items from basement storage room up to kitchen or over to parking lot as instructed.', slots: 4,  role_date: XMAS_FRIDAY, start_time: '9:00 AM',  end_time: '11:00 AM' },
