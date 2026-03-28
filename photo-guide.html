@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Timothy Lutheran Church — Website Photo Collection Guide</title>
+<style>
+  /* ── Print setup ─────────────────────────────────────── */
+  @page {
+    size: letter;
+    margin: 0.75in 0.85in;
+  }
+  @media print {
+    .no-print { display: none; }
+    body { font-size: 10pt; }
+    h1 { font-size: 20pt; }
+    h2 { font-size: 13pt; }
+    h3 { font-size: 11pt; }
+    .section { page-break-inside: avoid; }
+    table { page-break-inside: avoid; }
+    .note-box { page-break-inside: avoid; }
+  }
+
+  /* ── Base ─────────────────────────────────────────────── */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Georgia', serif;
+    font-size: 11pt;
+    color: #1A1A2A;
+    background: #fff;
+    line-height: 1.6;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 40px 48px;
+  }
+
+  /* ── Header ───────────────────────────────────────────── */
+  .doc-header {
+    border-bottom: 3px solid #1E2D4A;
+    padding-bottom: 18px;
+    margin-bottom: 28px;
+  }
+  .doc-header .church {
+    font-family: 'Georgia', serif;
+    font-size: 11pt;
+    font-weight: normal;
+    color: #C9973A;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .doc-header h1 {
+    font-family: 'Georgia', serif;
+    font-size: 22pt;
+    font-weight: bold;
+    color: #1E2D4A;
+    line-height: 1.2;
+    margin-bottom: 8px;
+  }
+  .doc-header .subtitle {
+    font-family: Arial, sans-serif;
+    font-size: 10pt;
+    color: #5A5878;
+    font-style: italic;
+  }
+
+  /* ── Section headings ─────────────────────────────────── */
+  .section {
+    margin-bottom: 32px;
+  }
+  .priority-badge {
+    display: inline-block;
+    background: #1E2D4A;
+    color: white;
+    font-family: Arial, sans-serif;
+    font-size: 8pt;
+    font-weight: bold;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 3px;
+    margin-bottom: 8px;
+  }
+  .priority-badge.p1 { background: #1E2D4A; }
+  .priority-badge.p2 { background: #2E7EA6; }
+  .priority-badge.p3 { background: #4A5E3A; }
+  .priority-badge.p4 { background: #8A6A8A; }
+  .priority-badge.p5 { background: #C9973A; color: #1E2D4A; }
+
+  h2 {
+    font-family: 'Georgia', serif;
+    font-size: 14pt;
+    color: #1E2D4A;
+    margin-bottom: 6px;
+    line-height: 1.3;
+  }
+  .section-intro {
+    font-family: Arial, sans-serif;
+    font-size: 9.5pt;
+    color: #5A5878;
+    margin-bottom: 14px;
+    font-style: italic;
+  }
+
+  /* ── Tables ───────────────────────────────────────────── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: Arial, sans-serif;
+    font-size: 9.5pt;
+    margin-bottom: 6px;
+  }
+  thead th {
+    background: #F0EDE8;
+    color: #1E2D4A;
+    font-weight: bold;
+    text-align: left;
+    padding: 7px 10px;
+    border-bottom: 2px solid #1E2D4A;
+    font-size: 8.5pt;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  tbody td {
+    padding: 7px 10px;
+    border-bottom: 1px solid #E8E0D0;
+    vertical-align: top;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) td { background: #FAFAF7; }
+  code {
+    font-family: 'Courier New', monospace;
+    font-size: 8.5pt;
+    background: #F0EDE8;
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: #1E2D4A;
+  }
+
+  /* ── Note boxes ───────────────────────────────────────── */
+  .note-box {
+    background: #FBF8F3;
+    border-left: 4px solid #C9973A;
+    padding: 14px 16px;
+    margin: 16px 0;
+    font-family: Arial, sans-serif;
+    font-size: 9.5pt;
+    color: #3A3A50;
+    line-height: 1.65;
+  }
+  .note-box strong { color: #1E2D4A; }
+
+  /* ── Who-to-ask list ──────────────────────────────────── */
+  .who-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 12px;
+  }
+  .who-item {
+    background: #F0EDE8;
+    border-radius: 5px;
+    padding: 10px 13px;
+    font-family: Arial, sans-serif;
+    font-size: 9pt;
+  }
+  .who-item .role {
+    font-weight: bold;
+    color: #1E2D4A;
+    display: block;
+    margin-bottom: 2px;
+  }
+  .who-item .contact {
+    color: #5A5878;
+  }
+
+  /* ── Footer ───────────────────────────────────────────── */
+  .doc-footer {
+    margin-top: 40px;
+    padding-top: 16px;
+    border-top: 1px solid #E8E0D0;
+    font-family: Arial, sans-serif;
+    font-size: 8.5pt;
+    color: #9A9AB0;
+    text-align: center;
+  }
+
+  /* ── Print button (screen only) ───────────────────────── */
+  .print-btn {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #1E2D4A;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-family: Arial, sans-serif;
+    font-size: 13px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  }
+  .print-btn:hover { background: #2E7EA6; }
+  @media print { .print-btn { display: none; } }
+
+  /* ── Divider ──────────────────────────────────────────── */
+  hr { border: none; border-top: 1px solid #E8E0D0; margin: 28px 0; }
+</style>
+</head>
+<body>
+
+<button class="print-btn no-print" onclick="window.print()">Save as PDF ↓</button>
+
+<!-- HEADER -->
+<div class="doc-header">
+  <div class="church">Timothy Lutheran Church</div>
+  <h1>Website Photo Collection Guide</h1>
+  <div class="subtitle">Prepared for ministry leaders — March 2026</div>
+</div>
+
+<!-- INTRO -->
+<div class="note-box">
+  We are building a new church website at <strong>timothystl.org</strong>. Many of the pages are complete, but need real photos to bring them to life. This guide tells you exactly what kinds of photos we need, where each one goes, and what to aim for when you collect them. <strong>Phone photos are fine</strong> — modern smartphones take excellent photos. No professional photographer required.
+</div>
+
+<!-- SECTION 1 -->
+<div class="section">
+  <div class="priority-badge p1">Priority 1</div>
+  <h2>Page Header (Hero) Photos</h2>
+  <p class="section-intro">These are the large banner images at the top of each page — the first thing a visitor sees. The code is already waiting for these files. Once you drop a photo in, I can activate it with one change. Wide, landscape-orientation photos work best.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:16%">Page</th>
+        <th style="width:22%">File to Deliver</th>
+        <th>What to Photograph</th>
+        <th style="width:22%">Tips</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>/music</code></td>
+        <td><code>music-hero.jpg</code></td>
+        <td>Choir, handbells, or the organ during a service or rehearsal</td>
+        <td>Wide shot. Include people, not just instruments.</td>
+      </tr>
+      <tr>
+        <td><code>/stephen</code></td>
+        <td><code>stephen-hero.jpg</code></td>
+        <td>Two people in a caring conversation — warm and personal</td>
+        <td>Candid is better than posed. Coffee or a table setting adds warmth.</td>
+      </tr>
+      <tr>
+        <td><code>/foodpantry</code></td>
+        <td><code>foodpantry-hero.jpg</code></td>
+        <td>Volunteers actively working in the pantry</td>
+        <td>Action shot — sorting produce, stocking shelves, handing off bags.</td>
+      </tr>
+      <tr>
+        <td><code>/bees</code></td>
+        <td><code>bees-hero.jpg</code></td>
+        <td>Beekeepers in gear at the hives, preferably outdoors</td>
+        <td>Wide exterior if possible. Two people together is more inviting than solo.</td>
+      </tr>
+      <tr>
+        <td><code>/worship</code></td>
+        <td><code>worship-hero.jpg</code></td>
+        <td>Full sanctuary from the back — congregation + lit altar</td>
+        <td>Shoot during a service. Natural light plus sanctuary lighting is ideal.</td>
+      </tr>
+      <tr>
+        <td><code>/home</code> <em>(optional)</em></td>
+        <td><code>home-hero.jpg</code></td>
+        <td>Exterior of the building, or a neighborhood street scene on Fyler</td>
+        <td>Golden hour (early morning or evening) gives the building warmth.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note-box">
+    <strong>Technical note:</strong> Photos will have a dark color overlay applied on top, so the text "Timothy Lutheran Church" can be read over them. This means slightly underexposed or moody photos work well. Very bright, high-contrast white scenes don't work as well. Aim for at least 1,200 pixels wide — larger is always better.
+  </div>
+</div>
+
+<hr>
+
+<!-- SECTION 2 -->
+<div class="section">
+  <div class="priority-badge p2">Priority 2</div>
+  <h2>Ministry Page Content Photos</h2>
+  <p class="section-intro">These sit inside the page body as featured images — larger format, higher detail than a hero shot. They help visitors understand what the ministry actually looks like in practice.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:16%">Page</th>
+        <th>What to Photograph</th>
+        <th style="width:30%">Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>/music</code></td>
+        <td>Close-up of choir or a specific instrument — organ pipes, handbells on a table, guitarist mid-song</td>
+        <td>Individual musician at work. Detail and texture are good here.</td>
+      </tr>
+      <tr>
+        <td><code>/stephen</code></td>
+        <td>Stephen minister with a care receiver in conversation, or volunteers in a training session</td>
+        <td>Authenticity matters more than production quality.</td>
+      </tr>
+      <tr>
+        <td><code>/foodpantry</code></td>
+        <td>Volunteers packing bags, produce on tables, the pantry shelves stocked, families receiving food</td>
+        <td>Aim for 2–3 photos. The pantry logo image already exists — this supplements it.</td>
+      </tr>
+      <tr>
+        <td><code>/bees</code></td>
+        <td>Close-up of honeycomb or bees on a frame; someone lifting a frame; honey being harvested</td>
+        <td>You already have a photo — collect 1–2 additional angles if possible.</td>
+      </tr>
+      <tr>
+        <td><code>/christmasmarket</code></td>
+        <td>Market day crowd, vendor booths, festive lighting, children at the market</td>
+        <td>You already have one photo. Collect 2–3 more for a future gallery addition.</td>
+      </tr>
+      <tr>
+        <td><code>/wol</code></td>
+        <td>School hallway, classroom with students, kids working at desks</td>
+        <td>A real building/student photo would strengthen this page. Coordinate with Word of Life administration.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<hr>
+
+<!-- SECTION 3 -->
+<div class="section">
+  <div class="priority-badge p3">Priority 3</div>
+  <h2>Staff Photos</h2>
+  <p class="section-intro">Staff photos appear on the About page. Most are already in the system — check quality and fill the gap below.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Title</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Pastor Andrew Dinger</td>
+        <td>Lead Pastor</td>
+        <td>✓ Photo on file</td>
+      </tr>
+      <tr>
+        <td>Pastor Matt Gerzevske</td>
+        <td>Assistant Pastor</td>
+        <td>✓ Photo on file</td>
+      </tr>
+      <tr>
+        <td>Mark Thompson</td>
+        <td>Director of Christian Education</td>
+        <td>✓ Photo on file</td>
+      </tr>
+      <tr>
+        <td>Dr. Jinah Knapp</td>
+        <td>Music Director</td>
+        <td>✓ Photo on file</td>
+      </tr>
+      <tr>
+        <td>Pastor Ron Rall</td>
+        <td>Pastor Emeritus</td>
+        <td>✓ Photo on file</td>
+      </tr>
+      <tr>
+        <td>Pastor Chau Vo</td>
+        <td>Pastor to the Vietnamese Community</td>
+        <td>✓ Photo on file</td>
+      </tr>
+      <tr>
+        <td>James Vo</td>
+        <td>Office Assistant</td>
+        <td style="color:#B85C3A; font-weight:bold;">⚠ Photo needed</td>
+      </tr>
+      <tr>
+        <td>Noah</td>
+        <td>Comfort Dog</td>
+        <td>✓ Photo on file</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note-box">
+    <strong>Ideal staff photo:</strong> Head-and-shoulders, good natural light, plain or simple background. A well-lit phone photo is perfectly fine — no studio required. Aim for square or portrait orientation.
+  </div>
+</div>
+
+<hr>
+
+<!-- SECTION 4 -->
+<div class="section">
+  <div class="priority-badge p4">Priority 4</div>
+  <h2>Video Content</h2>
+  <p class="section-intro">Short videos can replace or complement text on several pages. These don't need to be produced — a steady phone video with decent audio is enough for most uses.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:18%">Page</th>
+        <th>What to Record</th>
+        <th style="width:20%">Target Length</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>/worship</code></td>
+        <td>"What to expect" walkthrough — show the sanctuary, someone being greeted, a brief clip of the service in action. A first-time visitor should feel like they know what Sunday morning looks like.</td>
+        <td>60–90 seconds</td>
+      </tr>
+      <tr>
+        <td><code>/foodpantry</code></td>
+        <td>Short clip of volunteers working — powerful for donors and potential volunteers. Even 30 seconds of authentic activity is compelling.</td>
+        <td>30–60 seconds</td>
+      </tr>
+      <tr>
+        <td><code>/christmasmarket</code></td>
+        <td>Reel of the market in action — crowd, booths, music, kids. Collect footage this December for the 2026 page update.</td>
+        <td>60–90 seconds</td>
+      </tr>
+      <tr>
+        <td><code>/sermons</code></td>
+        <td>Already links to your YouTube channel — ensure the channel is current and playlists are organized by series.</td>
+        <td>Ongoing</td>
+      </tr>
+      <tr>
+        <td><code>/wol</code></td>
+        <td>A YouTube embed from the Word of Life school already exists — confirm with WOL administration that the video is current and appropriate.</td>
+        <td>Existing video</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<hr>
+
+<!-- SECTION 5 -->
+<div class="section">
+  <div class="priority-badge p5">Priority 5</div>
+  <h2>Congregation &amp; Community Photos</h2>
+  <p class="section-intro">These aren't assigned to a specific page yet, but they're the most powerful photos on any church website — they answer the question every first-time visitor asks: "What kind of people go here?" Collect these over several Sundays.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:30%">Subject</th>
+        <th>What to Capture</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Sunday morning life</strong></td>
+        <td>People arriving, greeting each other in the narthex, coffee hour conversations, children in the hallway</td>
+      </tr>
+      <tr>
+        <td><strong>Intergenerational moments</strong></td>
+        <td>Older members with children and young families together; multi-ethnic groups — reflect the actual congregation</td>
+      </tr>
+      <tr>
+        <td><strong>Worship moments</strong></td>
+        <td>Communion, baptism (with permission), confirmation, candlelight service</td>
+      </tr>
+      <tr>
+        <td><strong>The neighborhood</strong></td>
+        <td>Fyler Ave exterior, Lindenwood Park street scenes, the building in its context</td>
+      </tr>
+      <tr>
+        <td><strong>Seasonal</strong></td>
+        <td>Easter, Advent, Lenten services — the sanctuary changes throughout the year and photos should reflect that</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<hr>
+
+<!-- WHO TO ASK -->
+<div class="section">
+  <h2>Who to Ask</h2>
+  <p class="section-intro">Assign photo collection to the person closest to each ministry — they know the people and the rhythms.</p>
+  <div class="who-list">
+    <div class="who-item">
+      <span class="role">Music photos</span>
+      <span class="contact">Dr. Jinah Knapp — Music Director</span>
+    </div>
+    <div class="who-item">
+      <span class="role">Stephen Ministry photos</span>
+      <span class="contact">DCE or Stephen Ministry leader</span>
+    </div>
+    <div class="who-item">
+      <span class="role">Food Pantry photos</span>
+      <span class="contact">Pantry coordinator</span>
+    </div>
+    <div class="who-item">
+      <span class="role">Bees photos</span>
+      <span class="contact">Beekeeper lead</span>
+    </div>
+    <div class="who-item">
+      <span class="role">Christmas Market photos</span>
+      <span class="contact">Market event coordinator</span>
+    </div>
+    <div class="who-item">
+      <span class="role">Word of Life photos/video</span>
+      <span class="contact">WOL school administration</span>
+    </div>
+    <div class="who-item">
+      <span class="role">Sunday morning / congregation</span>
+      <span class="contact">Designate a volunteer photographer for 2–3 Sundays</span>
+    </div>
+    <div class="who-item">
+      <span class="role">Staff photo (James Vo)</span>
+      <span class="contact">Office — any Sunday or office day</span>
+    </div>
+  </div>
+</div>
+
+<hr>
+
+<!-- SUBMISSION NOTE -->
+<div class="note-box">
+  <strong>How to submit photos:</strong> Share photos via Google Drive, AirDrop, email, or text to the office. Label them with the ministry name (e.g., "music-hero" or "foodpantry-volunteers"). Once received, they can be added to the website the same day — no technical knowledge required from you.
+</div>
+
+<!-- FOOTER -->
+<div class="doc-footer">
+  Timothy Lutheran Church · timothystl.org · Internal use — website project, March 2026
+</div>
+
+</body>
+</html>
