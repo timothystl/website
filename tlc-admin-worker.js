@@ -995,7 +995,7 @@ async function sendTransactionalEmail(env, { subject, htmlContent, toEmails }) {
 
 // ── BUILD EMAIL HTML ─────────────────────────────────────────
 // Layout: header · 2/3 pastor note + 1/3 events · main news · secondary news · WOL+LASM · additional posts · footer
-function buildEmailHtml(subject, pastorNote, events, wolContent, lasmContent, publishedAt, newsItems = []) {
+function buildEmailHtml(subject, pastorNote, events, wolContent, lasmContent, publishedAt, newsItems = [], secondaryNote = '') {
   const dateStr = formatDate(publishedAt);
 
   function truncate(text, limit) {
@@ -1053,11 +1053,11 @@ function buildEmailHtml(subject, pastorNote, events, wolContent, lasmContent, pu
 <tr><td style="padding-top:22px;border-top:1px solid #E8E0D0;">
   <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6B8F71;margin-bottom:12px;">From Our Ministries</div>
   <table width="100%" cellpadding="0" cellspacing="0"><tr>
-    <td width="48%" valign="top" style="${wolContent ? 'background:#EEF5EF;border-left:3px solid #6B8F71;border-radius:0 6px 6px 0;padding:13px;' : ''}">
+    <td class="min-col" width="48%" valign="top" style="${wolContent ? 'background:#EEF5EF;border-left:3px solid #6B8F71;border-radius:0 6px 6px 0;padding:13px;' : ''}">
       ${wolContent ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6B8F71;margin-bottom:7px;">Word of Life</div><div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;color:#3D3530;line-height:1.7;">${truncate(wolContent, 300)}</div>` : ''}
     </td>
-    <td width="4%"></td>
-    <td width="48%" valign="top" style="${lasmContent ? 'background:#EEF5EF;border-left:3px solid #6B8F71;border-radius:0 6px 6px 0;padding:13px;' : ''}">
+    <td class="min-gap" width="4%"></td>
+    <td class="min-col" width="48%" valign="top" style="${lasmContent ? 'background:#EEF5EF;border-left:3px solid #6B8F71;border-radius:0 6px 6px 0;padding:13px;' : ''}">
       ${lasmContent ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6B8F71;margin-bottom:7px;">LASM</div><div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;color:#3D3530;line-height:1.7;">${truncate(lasmContent, 300)}</div>` : ''}
     </td>
   </tr></table>
@@ -1079,7 +1079,20 @@ function buildEmailHtml(subject, pastorNote, events, wolContent, lasmContent, pu
 
   return `<!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+/* Responsive email — works in Gmail/iOS/Android/Apple Mail; Outlook desktop ignores and shows readable fixed layout */
+@media (max-width:600px){
+  .pastor-col{display:block !important;width:100% !important;padding-right:0 !important;border-right:none !important;}
+  .spacer-col{display:none !important;}
+  .events-col{display:block !important;width:100% !important;margin-top:16px !important;}
+  .min-col{display:block !important;width:100% !important;margin-bottom:12px !important;}
+  .min-gap{display:none !important;}
+}
+</style>
+</head>
 <body style="margin:0;padding:0;background:#FAF7F0;font-family:'Source Sans 3',Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#FAF7F0;padding:24px 0;">
   <tr><td align="center">
@@ -1096,13 +1109,15 @@ function buildEmailHtml(subject, pastorNote, events, wolContent, lasmContent, pu
         <!-- 2/3 pastor note + 1/3 events -->
         <table width="100%" cellpadding="0" cellspacing="0">
           <tr>
-            <td width="390" valign="top" style="padding-right:18px;border-right:1px solid #E8E0D0;">
-              ${pastorNote ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:15px;color:#3D3530;line-height:1.85;">${pastorNote}</div>` : ''}
+            <td class="pastor-col" width="390" valign="top" style="padding-right:18px;border-right:1px solid #E8E0D0;">
+              ${pastorNote ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:15px;color:#3D3530;line-height:1.85;">${truncate(pastorNote, 400)}</div><div style="margin-top:10px;"><a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#D4922A;text-decoration:none;">Read the full letter →</a></div>` : ''}
             </td>
-            <td width="16"></td>
-            <td width="165" valign="top">${eventsSidebar}</td>
+            <td class="spacer-col" width="16"></td>
+            <td class="events-col" width="165" valign="top">${eventsSidebar}</td>
           </tr>
         </table>
+        <!-- secondary note (typed) -->
+        ${secondaryNote ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:0;"><tr><td style="padding:18px 0 0;border-top:1px solid #E8E0D0;"><div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:14px;color:#3D3530;line-height:1.8;">${truncate(secondaryNote, 500)}</div></td></tr></table>` : ''}
         <!-- news + ministry sections -->
         <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:4px;">
           ${mainNewsHtml}
@@ -1221,6 +1236,7 @@ export default {
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN cta_label TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN wol_content TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN lasm_content TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN secondary_note TEXT').run(); } catch (_) {}
     // Pre-populate ministry page slugs so they're always editable
     for (const p of MINISTRY_SLUGS) {
       try {
@@ -1576,11 +1592,11 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
       const series = await env.DB.prepare('SELECT * FROM sermon_series ORDER BY active DESC, sort_order ASC, id DESC').all();
       const result = [];
       for (const s of series.results) {
-        const notes = await env.DB.prepare('SELECT * FROM sermon_notes WHERE series_id = ? ORDER BY date DESC, id DESC').bind(s.id).all();
+        const notes = await env.DB.prepare("SELECT * FROM sermon_notes WHERE series_id = ? AND (date IS NULL OR date >= date('now', '-1 year')) ORDER BY date DESC, id DESC").bind(s.id).all();
         result.push({ ...s, notes: notes.results });
       }
-      // Also get standalone notes (no series)
-      const standalone = await env.DB.prepare("SELECT * FROM sermon_notes WHERE series_id IS NULL OR series_id = 0 ORDER BY date DESC, id DESC LIMIT 20").all();
+      // Also get standalone notes (no series) — exclude notes older than 1 year
+      const standalone = await env.DB.prepare("SELECT * FROM sermon_notes WHERE (series_id IS NULL OR series_id = 0) AND (date IS NULL OR date >= date('now', '-1 year')) ORDER BY date DESC, id DESC LIMIT 20").all();
       return new Response(JSON.stringify({ series: result, standalone: standalone.results }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
       });
@@ -2967,6 +2983,14 @@ ${topbarHtml('news', `<a href="/newsitems">← News &amp; Events</a>`)}
       </div>
 
       <div class="card">
+        <div class="card-title">Secondary note <span class="tag">Optional</span></div>
+        <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">A second free-form text block that appears in the email below the pastor's note. Leave blank to omit.</div>
+        <div class="form-group">
+          <textarea name="secondary_note" style="min-height:140px;" placeholder="Additional message, reflection, or update…"></textarea>
+        </div>
+      </div>
+
+      <div class="card">
         <div class="card-title">News &amp; Events <span class="tag">Pick from your posts</span></div>
         <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">Check items to include. The <strong>first checked item</strong> appears as the featured story, the <strong>second</strong> as secondary news, and the rest as compact cards — all with a "Read more" link. Long text is automatically trimmed.</div>
         ${newsPickerHtml}
@@ -3107,6 +3131,7 @@ addEvent();
 
       // Weekly-specific fields
       const pastorNote = form.get('pastor_note') || '';
+      const secondaryNote = fmt === 'weekly' ? form.get('secondary_note') || '' : '';
       const wolContent = fmt === 'weekly' ? form.get('wol_content') || '' : '';
       const lasmContent = fmt === 'weekly' ? form.get('lasm_content') || '' : '';
       // Legacy fields kept for DB compat but no longer used in the form
@@ -3154,16 +3179,16 @@ addEvent();
       if (editId) {
         // Update existing newsletter
         await env.DB.prepare(
-          'UPDATE newsletters SET subject=?, pastor_note=?, ministry_content=?, ministry_type=?, published_at=?, format=?, cta_url=?, cta_label=?, status=?, wol_content=?, lasm_content=? WHERE id=?'
-        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, editId).run();
+          'UPDATE newsletters SET subject=?, pastor_note=?, ministry_content=?, ministry_type=?, published_at=?, format=?, cta_url=?, cta_label=?, status=?, wol_content=?, lasm_content=?, secondary_note=? WHERE id=?'
+        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, editId).run();
         newsletterId = parseInt(editId, 10);
         // Replace events
         await env.DB.prepare('DELETE FROM events WHERE newsletter_id = ?').bind(newsletterId).run();
       } else {
         // Insert new newsletter
         const result = await env.DB.prepare(
-          'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent).run();
+          'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote).run();
         newsletterId = result.meta.last_row_id;
       }
 
@@ -3180,7 +3205,7 @@ addEvent();
       if (action === 'publish' && emailSend !== 'none') {
         const listId = emailSend === 'test' ? 2 : parseInt(env.BREVO_LIST_ID || '0', 10);
         if (listId) {
-          const emailHtml = buildEmailHtml(subject, savedNote, events, wolContent, lasmContent, publishedAt, selectedNewsItems);
+          const emailHtml = buildEmailHtml(subject, savedNote, events, wolContent, lasmContent, publishedAt, selectedNewsItems, secondaryNote);
           const result = await sendBrevoNewsletter(env, { subject, htmlContent: emailHtml, listIds: [listId] });
           emailSuffix = result.success
             ? `&emailed=${emailSend}`
@@ -3267,6 +3292,13 @@ ${topbarHtml('news', `<a href="/newsitems">← News &amp; Events</a>`)}
         <div class="card-title">Pastor's note</div>
         <div class="form-group">
           <textarea name="pastor_note" style="min-height:180px;">${pastorNoteVal.replace(/</g,'&lt;')}</textarea>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Secondary note <span class="tag">Optional</span></div>
+        <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">A second free-form text block that appears in the email below the pastor's note. Leave blank to omit.</div>
+        <div class="form-group">
+          <textarea name="secondary_note" style="min-height:140px;">${(row.secondary_note||'').replace(/</g,'&lt;')}</textarea>
         </div>
       </div>
       <div class="card">
@@ -3368,7 +3400,7 @@ ${eventsJs}
       const listId = listType === 'test' ? 2 : parseInt(env.BREVO_LIST_ID || '0', 10);
 
       const row = await env.DB.prepare(
-        'SELECT subject, pastor_note, wol_content, lasm_content, published_at FROM newsletters WHERE id = ?'
+        'SELECT subject, pastor_note, wol_content, lasm_content, secondary_note, published_at FROM newsletters WHERE id = ?'
       ).bind(id).first();
       if (!row) return new Response('Not found', { status: 404 });
 
@@ -3376,7 +3408,7 @@ ${eventsJs}
         'SELECT event_date, event_name, event_time, event_desc FROM events WHERE newsletter_id = ? ORDER BY sort_order'
       ).bind(id).all();
 
-      const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at);
+      const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at, [], row.secondary_note || '');
       const result = await sendBrevoNewsletter(env, { subject: row.subject, htmlContent: emailHtml, listIds: [listId] });
 
       const suffix = result.success
@@ -5795,26 +5827,37 @@ ${topbarHtml('gym', `<a href="/gym-rentals/recurring">← Recurring</a>`)}
         const settings = await env.DB.prepare('SELECT key, value, label, hint FROM site_settings ORDER BY rowid').all();
         const msg = url.searchParams.get('msg');
         const alertHtml = msg === 'saved' ? `<div class="alert alert-success">✓ Settings saved.</div>` : '';
-        const fields = settings.results.map(s => `
+
+        const REDIRECT_KEYS = ['zoom_url', 'councilfiles_url', 'give_url'];
+        const renderField = s => `
           <div class="form-group" style="border-bottom:1px solid var(--border);padding-bottom:20px;margin-bottom:20px;">
             <label>${(s.label||s.key).replace(/&/g,'&amp;')}</label>
             ${s.hint ? `<div style="font-size:12px;color:var(--gray);margin-bottom:8px;">${s.hint.replace(/&/g,'&amp;')}</div>` : ''}
             <input type="text" name="${s.key.replace(/"/g,'&quot;')}" value="${(s.value||'').replace(/"/g,'&quot;').replace(/&/g,'&amp;')}" style="font-family:var(--mono,monospace);font-size:13px;">
-          </div>`).join('');
+          </div>`;
+        const redirectFields = settings.results.filter(s => REDIRECT_KEYS.includes(s.key)).map(renderField).join('');
+        const configFields   = settings.results.filter(s => !REDIRECT_KEYS.includes(s.key)).map(renderField).join('');
+
         return html(`
 ${topbarHtml('settings')}
 <div class="wrap">
   <div class="page-title">Site Settings</div>
-  <div class="page-sub">Update redirect URLs and other site-wide settings. Changes take effect immediately.</div>
+  <div class="page-sub">Update redirect URLs and site-wide configuration. Changes take effect immediately.</div>
   ${alertHtml}
-  <div class="card">
-    <form method="POST" action="/settings/update">
-      ${fields}
-      <div class="btn-row">
-        <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save settings →</button>
-      </div>
-    </form>
-  </div>
+  <form method="POST" action="/settings/update">
+    <div class="card">
+      <div class="card-title">Redirects</div>
+      <div style="font-size:13px;color:var(--gray);margin-bottom:18px;">These are the URLs that short links on the site point to. Edit here — no code change required.</div>
+      ${redirectFields}
+    </div>
+    <div class="card" style="margin-top:20px;">
+      <div class="card-title">Site Configuration</div>
+      ${configFields}
+    </div>
+    <div class="btn-row" style="margin-top:12px;">
+      <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save settings →</button>
+    </div>
+  </form>
 </div>`, 'Site Settings');
       }
 
