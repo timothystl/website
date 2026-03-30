@@ -2707,6 +2707,8 @@ document.getElementById('upload-form').addEventListener('submit', async function
     if (path === '/sermons' && method === 'GET') {
       const alertHtml = url.searchParams.get('saved') ? `<div class="alert alert-success">Saved!</div>` : '';
       const series = await env.DB.prepare('SELECT * FROM sermon_series ORDER BY active DESC, sort_order ASC, id DESC').all();
+      const standaloneNotes = await env.DB.prepare('SELECT * FROM sermon_notes WHERE series_id IS NULL OR series_id = 0 ORDER BY date DESC, id DESC').all();
+
       const seriesHtml = series.results.length === 0
         ? `<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No series yet. Add your first one below.</div>`
         : series.results.map(s => `
@@ -2724,6 +2726,23 @@ document.getElementById('upload-form').addEventListener('submit', async function
     </form>
   </div>
 </div>`).join('');
+
+      const standaloneHtml = standaloneNotes.results.length === 0
+        ? `<div style="text-align:center;padding:24px;color:var(--gray);font-size:14px;">No standalone notes.</div>`
+        : standaloneNotes.results.map(n => `
+<div style="display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
+  <div style="flex:1;min-width:160px;">
+    <div style="font-family:var(--serif);font-size:15px;color:var(--steel);">${n.title || '(untitled)'}</div>
+    ${n.date ? `<div style="font-size:12px;color:var(--gray);">${n.date}</div>` : ''}
+  </div>
+  <div style="display:flex;gap:8px;flex-shrink:0;">
+    <a href="/sermons/edit-note/${n.id}" class="btn btn-sm btn-secondary">Edit</a>
+    <form method="POST" action="/sermons/delete-note/${n.id}" style="display:contents;" onsubmit="return confirm('Delete this note?')">
+      <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+    </form>
+  </div>
+</div>`).join('');
+
       return html(`
 ${topbarHtml('sermons', `<a href="https://timothystl.org/sermons" target="_blank">View page →</a>`)}
 <div class="wrap">
@@ -2737,6 +2756,11 @@ ${topbarHtml('sermons', `<a href="https://timothystl.org/sermons" target="_blank
   <div class="card">
     <div class="card-title">Sermon series</div>
     ${seriesHtml}
+  </div>
+  <div class="card" style="margin-top:20px;">
+    <div class="card-title">Standalone notes <span class="tag">${standaloneNotes.results.length} total</span></div>
+    <div style="font-size:12px;color:var(--gray);margin-bottom:12px;">Notes not attached to any series. These appear on the public sermons page.</div>
+    ${standaloneHtml}
   </div>
 </div>`, 'Sermons Admin');
     }
