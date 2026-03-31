@@ -475,22 +475,11 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       <h2>What's happening at Timothy</h2>
       <div class="this-week-grid">
 
-        <!-- SERMON SERIES — populated by loadSermons() from admin API -->
+        <!-- SERMON SERIES — populated dynamically from admin API -->
         <div>
           <div class="this-week-col-label">Current series</div>
           <div id="home-sermon-card" class="sermon-card">
-            <div class="sermon-icon">
-              <svg width="20" height="24" viewBox="0 0 20 24" fill="none"><rect x="8" y="0" width="4" height="24" rx="2" fill="#0A3C5C"/><rect x="0" y="7" width="20" height="4" rx="2" fill="#0A3C5C"/></svg>
-            </div>
-            <div>
-              <div class="sermon-series">The Shepherd's Way · Lenten Wednesday Series</div>
-              <div class="sermon-title">Following through shadow into light</div>
-              <div class="sermon-ref">Psalm 23 · Wednesday evenings through Lent</div>
-              <div class="btn-row">
-                <a href="https://www.youtube.com/@TimothySTL" target="_blank" class="btn btn-primary" style="font-size:13px;padding:9px 20px;">Watch on YouTube</a>
-                <button class="btn btn-outline" onclick="showPage('sermons')" style="font-size:13px;padding:9px 20px;">Watch &amp; notes</button>
-              </div>
-            </div>
+            <div style="color:var(--gray);font-size:14px;padding:4px 0;">Loading…</div>
           </div>
         </div>
 
@@ -2179,18 +2168,54 @@ async function fetchHomeNews() {
       list.innerHTML = '<div style="color:var(--gray);font-size:14px;padding:4px 0;">Check back soon for news and announcements.</div>';
       return;
     }
-    list.innerHTML = items.map(item => `
-      <div class="news-item">
-        <div class="news-item-date">${item.event_date || item.publish_date || ''}</div>
+    list.innerHTML = items.map((item, i) => {
+      const hasBody = item.body && item.body.trim();
+      const bodyId = 'hni-' + i;
+      const dateRaw = item.event_date || item.publish_date || '';
+      const dateLabel = dateRaw ? new Date(dateRaw + 'T12:00:00').toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'}) : '';
+      return `<div class="news-item" style="${hasBody ? 'cursor:pointer;' : ''}" ${hasBody ? `onclick="var b=document.getElementById('${bodyId}');var more=this.querySelector('.ni-more');if(b.style.display==='none'){b.style.display='block';if(more)more.textContent='Read less ↑';}else{b.style.display='none';if(more)more.textContent='Read more ↓';}"` : ''}>
+        <div class="news-item-date">${dateLabel}</div>
         <div class="news-item-title">${item.title}</div>
         <div class="news-item-summary">${item.summary || ''}</div>
-      </div>`).join('');
+        ${hasBody ? `<div id="${bodyId}" style="display:none;margin-top:10px;font-size:13px;color:var(--charcoal);line-height:1.7;border-top:1px solid var(--border);padding-top:10px;">${item.body}</div><div class="ni-more" style="font-size:12px;font-weight:700;color:var(--mid);margin-top:6px;">Read more ↓</div>` : ''}
+      </div>`;
+    }).join('');
   } catch(e) {
     const list = document.getElementById('home-news-list');
     if (list) list.innerHTML = '<div style="color:var(--gray);font-size:14px;padding:4px 0;">Check back soon for news and announcements.</div>';
   }
 }
 fetchHomeNews();
+
+// Load sermon series for home page card
+async function loadHomeSermonCard() {
+  try {
+    const res = await fetch('https://admin.timothystl.org/api/sermon-series');
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    const hc = document.getElementById('home-sermon-card');
+    if (!hc) return;
+    const active = (data.series || []).find(s => s.active);
+    if (!active) {
+      hc.innerHTML = '<div><a href="https://www.youtube.com/@TimothySTL" target="_blank" class="btn btn-primary" style="font-size:13px;padding:9px 20px;">Watch on YouTube</a></div>';
+      return;
+    }
+    const watchBtn = active.playlist_url
+      ? `<a href="${active.playlist_url}" target="_blank" class="btn btn-primary" style="font-size:13px;padding:9px 20px;">Watch the series</a>`
+      : `<a href="https://www.youtube.com/@TimothySTL" target="_blank" class="btn btn-primary" style="font-size:13px;padding:9px 20px;">Watch on YouTube</a>`;
+    hc.innerHTML = `<div class="sermon-icon"><svg width="20" height="24" viewBox="0 0 20 24" fill="none"><rect x="8" y="0" width="4" height="24" rx="2" fill="#0A3C5C"/><rect x="0" y="7" width="20" height="4" rx="2" fill="#0A3C5C"/></svg></div>
+      <div>
+        <div class="sermon-series">${active.title}</div>
+        ${active.description ? `<div class="sermon-title">${active.description}</div>` : ''}
+        ${active.date_range ? `<div class="sermon-ref">${active.date_range}</div>` : ''}
+        <div class="btn-row">${watchBtn}<button class="btn btn-outline" onclick="showPage('sermons')" style="font-size:13px;padding:9px 20px;">Watch &amp; notes</button></div>
+      </div>`;
+  } catch(e) {
+    const hc = document.getElementById('home-sermon-card');
+    if (hc) hc.innerHTML = '<div><a href="https://www.youtube.com/@TimothySTL" target="_blank" class="btn btn-primary" style="font-size:13px;padding:9px 20px;">Watch on YouTube</a></div>';
+  }
+}
+loadHomeSermonCard();
 
 // Load news items from admin worker API (for /news page)
 async function loadNewsItems() {
