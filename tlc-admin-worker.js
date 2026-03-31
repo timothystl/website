@@ -127,8 +127,12 @@ export default {
     for (const oldKey of ['give_embed_code', 'gym_ical_token']) {
       try { await env.DB.prepare('DELETE FROM site_settings WHERE key = ?').bind(oldKey).run(); } catch (_) {}
     }
+    // Migrate staff photos from .jpg/.png to .webp (files converted in 18905d0)
+    try {
+      await env.DB.prepare("UPDATE staff_members SET photo_url = REPLACE(REPLACE(photo_url, '.jpg', '.webp'), '.png', '.webp') WHERE photo_url LIKE '%.jpg' OR photo_url LIKE '%.png'").run();
+    } catch (_) {}
     // Fix missing photo for Chau Vo (chauvo.jpg never existed)
-    try { await env.DB.prepare("UPDATE staff_members SET photo_url = '' WHERE name = 'Chau Vo' AND photo_url LIKE '%chauvo.jpg'").run(); } catch (_) {}
+    try { await env.DB.prepare("UPDATE staff_members SET photo_url = '' WHERE name = 'Chau Vo' AND photo_url LIKE '%chauvo%'").run(); } catch (_) {}
     // Migrate give_url from Breeze to Tithely
     try {
       await env.DB.prepare("UPDATE site_settings SET value = ? WHERE key = 'give_url' AND value LIKE '%breezechms%'")
