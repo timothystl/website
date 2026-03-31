@@ -394,7 +394,7 @@ export default {
       return handleAdminApi(req, env, url, method);
     }
     if (path.startsWith('/scheduler')) {
-      const rawUrl = 'https://raw.githubusercontent.com/timothystl/volunteer/main/scheduler/index.html';
+      const rawUrl = 'https://www.timothystl.org/scheduler.html';
       const resp = await fetch(rawUrl);
       if (!resp.ok) return new Response('Scheduler not available', { status: 502 });
       const html = await resp.text();
