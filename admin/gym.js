@@ -368,48 +368,6 @@ function tlcUploadHandler(blobInfo) {
   });
 }
 
-function tinymceEditorSection(existingBody = '') {
-  const safe = (existingBody || '').replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
-  return `<div class="form-group">
-  <label>Full text <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, shown when reader clicks "Read more"</span></label>
-  <textarea id="body-editor" name="body"></textarea>
-</div>
-<script>
-tinymce.init({
-  selector: '#body-editor',
-  plugins: 'image link lists blockquote table code',
-  toolbar: 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image | table | code',
-  menubar: false,
-  min_height: 320,
-  skin: 'oxide',
-  content_css: 'default',
-  convert_urls: false,
-  image_advtab: false,
-  image_caption: false,
-  object_resizing: true,
-  resize_img_proportional: true,
-  automatic_uploads: true,
-  images_upload_handler: ${tlcUploadHandler},
-  paste_data_images: true,
-  setup: function(editor) {
-    editor.on('change input', function() { editor.save(); });
-  },
-  init_instance_callback: function(editor) {
-    var initialBody = \`${safe}\`;
-    if (initialBody.trim()) editor.setContent(initialBody);
-  }
-});
-document.querySelector('form').addEventListener('submit', function(e) {
-  e.preventDefault();
-  var form = this;
-  var ed = tinymce.get('body-editor');
-  if (!ed) { form.submit(); return; }
-  ed.uploadImages().then(function() { ed.save(); form.submit(); });
-});
-<\/script>`;
-}
-
-
 // ── MAIN GYM ROUTE HANDLER ─────────────────────────────────
 export async function handleGymRoutes(path, method, url, request, env) {
 
