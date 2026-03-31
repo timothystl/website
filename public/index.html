@@ -45,7 +45,7 @@
     "latitude": 38.5936,
     "longitude": -90.2987
   },
-  "telephone": "+13148390563",
+  "telephone": "+13147818673",
   "email": "office@timothystl.org",
   "openingHoursSpecification": [
     {
@@ -103,7 +103,6 @@
    100   — sticky nav bar
    200   — nav dropdown menus
    1000  — noise texture overlay (body::before, non-interactive)
-   9999  — Design Lab dev tool (test.timothystl.org only)
 */
 html{scroll-behavior:smooth;}
 body{font-family:var(--font-body);color:var(--charcoal);background:var(--warm);line-height:1.65;font-size:16px;}
@@ -1057,6 +1056,15 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
               <div>
                 <div class="ci-label">Email</div>
                 <div class="ci-val"><a href="mailto:office@timothystl.org">office@timothystl.org</a></div>
+              </div>
+            </div>
+            <div class="contact-info-row">
+              <div class="contact-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0A3C5C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.18h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 8.77a16 16 0 0 0 6 6l.85-.85a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21.73 16z"/></svg>
+              </div>
+              <div>
+                <div class="ci-label">Phone</div>
+                <div class="ci-val"><a href="tel:+13147818673">(314) 781-8673</a></div>
               </div>
             </div>
             <div class="contact-info-row">
@@ -2059,7 +2067,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     <div>
       <div class="footer-brand-name">Timothy Lutheran Church</div>
       <div class="footer-brand-tag">from our Neighborhood to the Nations</div>
-      <div class="footer-brand-addr">6704 Fyler Ave · St. Louis, MO 63139<br>Sunday worship · 8:00 &amp; 10:45 am<br>office@timothystl.org</div>
+      <div class="footer-brand-addr">6704 Fyler Ave · St. Louis, MO 63139<br>Sunday worship · 8:00 &amp; 10:45 am<br>(314) 781-8673 · office@timothystl.org</div>
       <div class="footer-social">
         <a href="https://www.facebook.com/timothystl" target="_blank" style="display:inline-flex;align-items:center;gap:6px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>Facebook</a>
         <a href="https://www.instagram.com/timothystl" target="_blank" style="display:inline-flex;align-items:center;gap:6px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1.5" fill="currentColor" stroke="none"/></svg>Instagram</a>
@@ -2607,7 +2615,7 @@ var PAGE_META = {
   'sermons':      { title: 'Sermons — Timothy Lutheran Church',                                           desc: 'Watch and listen to recent sermons from Timothy Lutheran Church on YouTube.' },
   'ministries':   { title: 'Ministries — Timothy Lutheran Church',                                       desc: 'Music, Stephen Ministry, Food Pantry, Urban Beekeepers, Christmas Market, and more. Find your place at Timothy.' },
   'news':         { title: 'News & Events — Timothy Lutheran Church',                                     desc: 'Stay up to date with the latest news, events, and newsletter archive from Timothy Lutheran Church in St. Louis.' },
-  'contact':      { title: 'Contact — Timothy Lutheran Church',                                           desc: 'Reach Timothy Lutheran Church at 6704 Fyler Ave, St. Louis, MO 63139 · (314) 839-0563 · office@timothystl.org' },
+  'contact':      { title: 'Contact — Timothy Lutheran Church',                                           desc: 'Reach Timothy Lutheran Church at 6704 Fyler Ave, St. Louis, MO 63139 · (314) 781-8673 · office@timothystl.org' },
   'prayer':       { title: 'Prayer Request — Timothy Lutheran Church',                                    desc: 'Submit a prayer request to the pastors and prayer team at Timothy Lutheran Church.' },
   'give':         { title: 'Give — Timothy Lutheran Church',                                              desc: 'Support the ministry of Timothy Lutheran Church through a secure online gift.' },
   'events':       { title: 'Volunteer Events — Timothy Lutheran Church',                                  desc: 'Upcoming volunteer opportunities at Timothy Lutheran Church in St. Louis.' },
@@ -2898,427 +2906,7 @@ async function loadChristmasMarketPosts() {
 }
 loadChristmasMarketPosts();
 </script>
-
-<!-- ═══════════════════════════════════════════════════════════
-     DESIGN LAB — test.timothystl.org only, palette preview tool
-     ═══════════════════════════════════════════════════════════ -->
-<div id="design-lab" style="position:fixed;bottom:20px;right:20px;z-index:9999;font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;">
-
-  <!-- Toggle button -->
-  <button id="dl-toggle" onclick="dlToggle()" style="display:flex;align-items:center;gap:8px;background:#111;color:#fff;border:none;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,.35);letter-spacing:.02em;">
-    <span style="font-size:16px;">🎨</span> Design Lab
-  </button>
-
-  <!-- Panel -->
-  <div id="dl-panel" style="display:none;position:absolute;bottom:52px;right:0;width:300px;background:#1a1a1a;border-radius:14px;padding:18px;box-shadow:0 8px 40px rgba(0,0,0,.55);max-height:90vh;overflow-y:auto;">
-
-    <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#888;margin-bottom:10px;">Palette Presets</div>
-    <div id="dl-swatches" style="display:flex;flex-direction:column;gap:6px;"></div>
-
-    <div style="border-top:1px solid #333;margin:14px 0 12px;"></div>
-    <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#888;margin-bottom:10px;">Fonts by Role</div>
-    <div id="dl-fonts" style="display:flex;flex-direction:column;gap:8px;"></div>
-
-    <div style="border-top:1px solid #333;margin:14px 0 10px;"></div>
-    <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#888;margin-bottom:10px;">Colors — All Variables</div>
-    <div id="dl-pickers" style="display:flex;flex-direction:column;gap:0;"></div>
-
-    <div style="border-top:1px solid #333;margin:14px 0 12px;"></div>
-    <button onclick="dlCopyCSS()" style="width:100%;background:#2a2a2a;color:#ccc;border:1px solid #444;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;">Copy CSS Variables</button>
-    <div id="dl-copy-msg" style="display:none;color:#6fcf97;font-size:11px;text-align:center;margin-top:6px;">Copied to clipboard!</div>
-  </div>
-</div>
-
 <script>
-// ── DESIGN LAB ─────────────────────────────────────────────────────────────
-
-// All Google Font families loaded in the <head>
-// ~50 curated Google Fonts — loaded on demand when selected
-// User can also type any Google Font name not in this list
-var DL_ALL_FONTS = {
-  serif: [
-    'Lora','Playfair Display','EB Garamond','Crimson Pro','Merriweather',
-    'Libre Baskerville','Cormorant Garamond','Spectral','Vollkorn','Cardo',
-    'Arvo','Zilla Slab','Roboto Slab','PT Serif','Cinzel','Tinos','Domine',
-    'Josefin Slab','Faustina','Fraunces'
-  ],
-  sans: [
-    'Source Sans 3','Open Sans','Lato','Roboto','Montserrat','Inter',
-    'Poppins','Raleway','Work Sans','DM Sans','Nunito','Mulish','Barlow',
-    'Karla','Jost','Outfit','Figtree','Plus Jakarta Sans','Cabin','PT Sans',
-    'Josefin Sans','Noto Sans','Quicksand','Rubik','Manrope','IBM Plex Sans'
-  ]
-};
-
-// Flat sorted list for the datalist (both groups)
-var DL_FONT_NAMES = DL_ALL_FONTS.serif.concat(DL_ALL_FONTS.sans).sort();
-
-// Font roles — each sets these CSS vars
-var DL_FONT_ROLES = [
-  { label: 'Headings (h1–h4)',  vars: ['--font-heading', '--serif'],  current: 'Lora' },
-  { label: 'Body text',         vars: ['--font-body'],                current: 'Source Sans 3' },
-  { label: 'Buttons & UI',      vars: ['--font-ui', '--sans'],        current: 'Source Sans 3' }
-];
-
-// Color groups — all variables organized
-var DL_COLOR_GROUPS = [
-  { label: 'Primary', open: true, colors: [
-    { label: '--steel',     key: '--steel'    },
-    { label: '--steel-dk',  key: '--steel-dk' },
-    { label: '--steel-dk2', key: '--steel-dk2'}
-  ]},
-  { label: 'Accent / Gold', open: true, colors: [
-    { label: '--amber',     key: '--amber'    },
-    { label: '--amber-dk',  key: '--amber-dk' },
-    { label: '--honey',     key: '--honey'    },
-    { label: '--pale-gold', key: '--pale-gold'}
-  ]},
-  { label: 'Nav / Moss', open: true, colors: [
-    { label: '--sage',      key: '--sage'     },
-    { label: '--soft-sage', key: '--soft-sage'},
-    { label: '--pale-sage', key: '--pale-sage'}
-  ]},
-  { label: 'Links / Teal', open: true, colors: [
-    { label: '--mid',  key: '--mid' },
-    { label: '--sky',  key: '--sky' },
-    { label: '--ice',  key: '--ice' },
-    { label: '--mist', key: '--mist'}
-  ]},
-  { label: 'Backgrounds', open: true, colors: [
-    { label: '--warm',  key: '--warm'  },
-    { label: '--linen', key: '--linen' },
-    { label: '--white', key: '--white' }
-  ]},
-  { label: 'Text & Borders', open: false, colors: [
-    { label: '--charcoal',   key: '--charcoal'   },
-    { label: '--gray',       key: '--gray'       },
-    { label: '--text-muted', key: '--text-muted' },
-    { label: '--border',     key: '--border'     }
-  ]},
-  { label: 'Ministry Accents', open: false, colors: [
-    { label: '--teal',        key: '--teal'       },
-    { label: '--teal-light',  key: '--teal-light' },
-    { label: '--teal-pale',   key: '--teal-pale'  },
-    { label: '--slate',       key: '--slate'      },
-    { label: '--slate-light', key: '--slate-light'},
-    { label: '--slate-pale',  key: '--slate-pale' },
-    { label: '--plum-light',  key: '--plum-light' },
-    { label: '--stone',       key: '--stone'      }
-  ]}
-];
-
-var DL_PALETTES = [
-  {
-    name: 'Current — Navy & Gold',
-    dot: ['#1E2D4A','#C9973A','#4A5E3A'],
-    vars: {
-      '--steel':'#1E2D4A','--steel-dk':'#2A3F60','--steel-dk2':'#111E32',
-      '--amber':'#C9973A','--amber-dk':'#B0821E','--honey':'#E8C070','--pale-gold':'#F5E4C0',
-      '--sage':'#4A5E3A','--soft-sage':'#7A8F6A','--pale-sage':'#C2CEBC',
-      '--mid':'#2E7EA6','--sky':'#5BA3C4','--ice':'#C4CEDF','--mist':'#EDF2F7',
-      '--warm':'#F7F3EC','--linen':'#EDE9E0','--white':'#FBF8F3'
-    }
-  },
-  {
-    name: 'Cathedral — Wine & Gold',
-    dot: ['#5C1835','#C9973A','#6B3040'],
-    vars: {
-      '--steel':'#5C1835','--steel-dk':'#741E41','--steel-dk2':'#3A0F22',
-      '--amber':'#C9973A','--amber-dk':'#B0821E','--honey':'#E8C070','--pale-gold':'#F5E4C0',
-      '--sage':'#6B3040','--soft-sage':'#9A606A','--pale-sage':'#DBC4C8',
-      '--mid':'#A0405A','--sky':'#C47080','--ice':'#EACAD0','--mist':'#F8F0F2',
-      '--warm':'#FBF5F0','--linen':'#F4EAE4','--white':'#FFFAF6'
-    }
-  },
-  {
-    name: 'Sanctuary — Royal Blue',
-    dot: ['#1C3A6B','#D4A435','#2A4E7A'],
-    vars: {
-      '--steel':'#1C3A6B','--steel-dk':'#254C8A','--steel-dk2':'#0F2040',
-      '--amber':'#D4A435','--amber-dk':'#B88820','--honey':'#EAC060','--pale-gold':'#F8E8B8',
-      '--sage':'#2A4E7A','--soft-sage':'#5C7EA8','--pale-sage':'#B8CCDE',
-      '--mid':'#1E6EA8','--sky':'#4A96CC','--ice':'#BADAF0','--mist':'#EBF4FB',
-      '--warm':'#F5F7FA','--linen':'#E8EDF5','--white':'#F8FAFC'
-    }
-  },
-  {
-    name: 'Harvest — Forest & Amber',
-    dot: ['#1E4030','#C9973A','#2A5A40'],
-    vars: {
-      '--steel':'#1E4030','--steel-dk':'#285040','--steel-dk2':'#0F2418',
-      '--amber':'#C9973A','--amber-dk':'#B0821E','--honey':'#E8C070','--pale-gold':'#F5E4C0',
-      '--sage':'#2A5A40','--soft-sage':'#5A8A6A','--pale-sage':'#BAD4C4',
-      '--mid':'#2E8060','--sky':'#5CAA88','--ice':'#B8DDD0','--mist':'#EAF5F0',
-      '--warm':'#F4F8F4','--linen':'#E8F0EC','--white':'#F6FBF8'
-    }
-  },
-  {
-    name: 'Advent — Plum & Gold',
-    dot: ['#3A1F5C','#C9973A','#4A2870'],
-    vars: {
-      '--steel':'#3A1F5C','--steel-dk':'#4C2878','--steel-dk2':'#220F38',
-      '--amber':'#C9973A','--amber-dk':'#B0821E','--honey':'#E8C070','--pale-gold':'#F5E4C0',
-      '--sage':'#4A2870','--soft-sage':'#7A60A0','--pale-sage':'#CCC0E0',
-      '--mid':'#6A40A0','--sky':'#9470C8','--ice':'#D8C8F0','--mist':'#F4F0FA',
-      '--warm':'#FAF6FF','--linen':'#F0E8F8','--white':'#FBF8FF'
-    }
-  },
-  {
-    name: 'Stone — Warm Charcoal',
-    dot: ['#3A3530','#C9973A','#4A4540'],
-    vars: {
-      '--steel':'#3A3530','--steel-dk':'#4C453E','--steel-dk2':'#22201C',
-      '--amber':'#C9973A','--amber-dk':'#B0821E','--honey':'#E8C070','--pale-gold':'#F5E4C0',
-      '--sage':'#4A4540','--soft-sage':'#7A7268','--pale-sage':'#D0CAC4',
-      '--mid':'#7A6050','--sky':'#A08878','--ice':'#DDD4CC','--mist':'#F5F0EC',
-      '--warm':'#FAF5EE','--linen':'#F2ECE4','--white':'#FDF9F4'
-    }
-  }
-];
-
-var DL_FONTS = [
-  { name: 'Current — Lora + Source Sans', serif: 'Lora', sans: 'Source Sans 3' },
-  { name: 'Classic — EB Garamond + Nunito', serif: 'EB Garamond', sans: 'Nunito' },
-  { name: 'Elegant — Playfair + Raleway', serif: 'Playfair Display', sans: 'Raleway' },
-  { name: 'Traditional — Crimson + Open Sans', serif: 'Crimson Pro', sans: 'Open Sans' }
-];
-
-var DL_PICKERS = [
-  { label: 'Primary (--steel)', key: '--steel' },
-  { label: 'Accent / Gold (--amber)', key: '--amber' },
-  { label: 'Nav / Header (--sage)', key: '--sage' },
-  { label: 'Links / Teal (--mid)', key: '--mid' },
-  { label: 'Background (--warm)', key: '--warm' },
-  { label: 'Alt Background (--linen)', key: '--linen' }
-];
-
-var dlOpen = false;
-var dlRendered = false;
-
-function dlToggle() {
-  dlOpen = !dlOpen;
-  document.getElementById('dl-panel').style.display = dlOpen ? 'block' : 'none';
-  if (dlOpen && !dlRendered) { dlRender(); dlRendered = true; }
-}
-
-function dlRender() {
-  // ── Palette swatches ──────────────────────────────────────────
-  var sw = document.getElementById('dl-swatches');
-  DL_PALETTES.forEach(function(p) {
-    var btn = document.createElement('button');
-    btn.style.cssText = 'display:flex;align-items:center;gap:10px;width:100%;background:#2a2a2a;border:1.5px solid #3a3a3a;border-radius:8px;padding:8px 12px;color:#ccc;font-size:12px;font-weight:600;cursor:pointer;text-align:left;';
-    var dots = p.dot.map(function(c){ return '<span style="width:12px;height:12px;border-radius:50%;background:'+c+';border:1.5px solid rgba(255,255,255,.18);flex-shrink:0;display:inline-block;"></span>'; }).join('');
-    btn.innerHTML = '<span style="display:flex;gap:3px;">' + dots + '</span>' + p.name;
-    btn.onclick = function() { dlApplyPalette(p.vars); dlActivate(btn, '#dl-swatches'); };
-    btn.onmouseenter = function(){ if(!btn._active) btn.style.borderColor='#666'; };
-    btn.onmouseleave = function(){ if(!btn._active) btn.style.borderColor='#3a3a3a'; };
-    sw.appendChild(btn);
-  });
-
-  // ── Shared datalist for all font inputs ──────────────────────
-  if (!document.getElementById('dl-font-datalist')) {
-    var dl = document.createElement('datalist');
-    dl.id = 'dl-font-datalist';
-    // Grouped: serifs first, then sans (optgroup not supported in datalist, so add visual marker)
-    ['── Serif ──'].concat(DL_ALL_FONTS.serif, ['── Sans-Serif ──'], DL_ALL_FONTS.sans).forEach(function(name) {
-      var opt = document.createElement('option');
-      opt.value = name;
-      dl.appendChild(opt);
-    });
-    document.body.appendChild(dl);
-  }
-
-  // ── Per-role font selectors ───────────────────────────────────
-  var fc = document.getElementById('dl-fonts');
-  DL_FONT_ROLES.forEach(function(role) {
-    var wrap = document.createElement('div');
-    wrap.style.cssText = 'margin-bottom:10px;';
-
-    var lbl = document.createElement('div');
-    lbl.style.cssText = 'font-size:10px;font-weight:700;color:#777;text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px;';
-    lbl.textContent = role.label;
-
-    var inp = document.createElement('input');
-    inp.type = 'text';
-    inp.setAttribute('list', 'dl-font-datalist');
-    inp.value = role.current;
-    inp.placeholder = 'Type any Google Font name…';
-    inp.style.cssText = 'width:100%;background:#2a2a2a;border:1px solid #444;border-radius:6px;padding:7px 10px;color:#ddd;font-size:13px;outline:none;font-family:"' + role.current + '",sans-serif;';
-
-    // Live preview line
-    var preview = document.createElement('div');
-    preview.style.cssText = 'font-size:14px;color:#bbb;padding:5px 2px 0;font-family:"' + role.current + '",sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-    preview.textContent = 'Gathered Around Grace — The quick brown fox';
-
-    function applyFont(name) {
-      name = name.trim();
-      if (!name || name.startsWith('──')) return;
-      dlLoadFont(name);
-      var stack = dlFontStack(name);
-      role.vars.forEach(function(v) {
-        document.documentElement.style.setProperty(v, stack);
-      });
-      inp.style.fontFamily = '"' + name + '",sans-serif';
-      preview.style.fontFamily = '"' + name + '",sans-serif';
-      role.current = name;
-    }
-
-    inp.addEventListener('change', function() { applyFont(inp.value); });
-    inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); applyFont(inp.value); } });
-    inp.addEventListener('focus', function(){ inp.style.borderColor='#888'; });
-    inp.addEventListener('blur', function(){ inp.style.borderColor='#444'; });
-
-    wrap.appendChild(lbl);
-    wrap.appendChild(inp);
-    wrap.appendChild(preview);
-    fc.appendChild(wrap);
-  });
-
-  // ── Color groups ─────────────────────────────────────────────
-  var pk = document.getElementById('dl-pickers');
-  DL_COLOR_GROUPS.forEach(function(grp) {
-    // Group header (toggle)
-    var hdr = document.createElement('button');
-    hdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;width:100%;background:none;border:none;border-bottom:1px solid #333;padding:5px 0;color:#aaa;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;';
-    var arrow = document.createElement('span');
-    arrow.textContent = grp.open ? '▾' : '▸';
-    hdr.innerHTML = grp.label;
-    hdr.appendChild(arrow);
-
-    var body = document.createElement('div');
-    body.style.display = grp.open ? 'block' : 'none';
-    body.style.marginBottom = '4px';
-
-    hdr.onclick = function() {
-      var open = body.style.display !== 'none';
-      body.style.display = open ? 'none' : 'block';
-      arrow.textContent = open ? '▸' : '▾';
-    };
-
-    pk.appendChild(hdr);
-    pk.appendChild(body);
-
-    // Color rows within group
-    grp.colors.forEach(function(c) {
-      var row = document.createElement('div');
-      row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #2a2a2a;';
-
-      // Color swatch (native color picker)
-      var swatchLabel = document.createElement('label');
-      swatchLabel.style.cssText = 'position:relative;width:28px;height:28px;flex-shrink:0;border-radius:6px;overflow:hidden;border:1.5px solid #555;cursor:pointer;';
-      var colorInp = document.createElement('input');
-      colorInp.type = 'color';
-      colorInp.value = rgbToHex(getComputedStyle(document.documentElement).getPropertyValue(c.key).trim());
-      colorInp.style.cssText = 'position:absolute;width:160%;height:160%;top:-30%;left:-30%;border:none;cursor:pointer;padding:0;';
-      colorInp.dataset.key = c.key;
-      swatchLabel.appendChild(colorInp);
-
-      // Var name label
-      var varLbl = document.createElement('div');
-      varLbl.style.cssText = 'flex:0 0 108px;font-size:10px;font-family:monospace;color:#888;';
-      varLbl.textContent = c.key;
-
-      // Hex text input
-      var hexInp = document.createElement('input');
-      hexInp.type = 'text';
-      hexInp.value = colorInp.value;
-      hexInp.maxLength = 7;
-      hexInp.placeholder = '#000000';
-      hexInp.style.cssText = 'flex:1;background:#222;border:1px solid #3a3a3a;border-radius:5px;padding:4px 6px;color:#ddd;font-size:11px;font-family:monospace;outline:none;min-width:0;';
-
-      colorInp.addEventListener('input', function() {
-        hexInp.value = colorInp.value;
-        document.documentElement.style.setProperty(c.key, colorInp.value);
-      });
-      hexInp.addEventListener('input', function() {
-        if (/^#[0-9a-fA-F]{6}$/.test(hexInp.value)) {
-          colorInp.value = hexInp.value;
-          document.documentElement.style.setProperty(c.key, hexInp.value);
-        }
-      });
-      hexInp.addEventListener('focus', function(){ hexInp.style.borderColor='#777'; });
-      hexInp.addEventListener('blur', function(){ hexInp.style.borderColor='#3a3a3a'; });
-
-      row.appendChild(swatchLabel);
-      row.appendChild(varLbl);
-      row.appendChild(hexInp);
-      body.appendChild(row);
-    });
-  });
-}
-
-function dlLoadFont(name) {
-  var id = 'gf-' + name.toLowerCase().replace(/[^a-z0-9]/g, '-');
-  if (document.getElementById(id)) return;
-  var link = document.createElement('link');
-  link.id = id;
-  link.rel = 'stylesheet';
-  link.href = 'https://fonts.googleapis.com/css2?family=' + encodeURIComponent(name).replace(/%20/g, '+') + ':ital,wght@0,400;0,600;0,700;1,400&display=swap';
-  document.head.appendChild(link);
-}
-
-function dlFontStack(name) {
-  var isSerif = DL_ALL_FONTS.serif.indexOf(name) !== -1 ||
-    /garamond|baskerville|serif|roman|bodoni|caslon|jenson|cardo|cinzel|faustina|vollkorn|spectral|crimson|lora|playfair|cormorant|fraunces|tinos|arvo|zilla|domine|josefin slab|roboto slab|pt serif/i.test(name);
-  return "'" + name + "', " + (isSerif ? 'Georgia, serif' : 'Arial, sans-serif');
-}
-
-function dlApplyPalette(vars) {
-  var root = document.documentElement;
-  Object.keys(vars).forEach(function(k) { root.style.setProperty(k, vars[k]); });
-  // Re-sync any rendered color pickers
-  document.querySelectorAll('#dl-pickers input[type=color]').forEach(function(inp) {
-    var v = vars[inp.dataset.key];
-    if (v) {
-      inp.value = v;
-      var row = inp.closest('div[style*="display:flex"]');
-      if (row) {
-        var hex = row.querySelector('input[type=text]');
-        if (hex) hex.value = v;
-      }
-    }
-  });
-}
-
-function dlActivate(activeBtn, containerSel) {
-  document.querySelectorAll(containerSel + ' button').forEach(function(b) {
-    b._active = false; b.style.borderColor = '#3a3a3a'; b.style.background = '#2a2a2a';
-  });
-  activeBtn._active = true; activeBtn.style.borderColor = '#aaa'; activeBtn.style.background = '#333';
-}
-
-function dlCopyCSS() {
-  var root = document.documentElement;
-  var style = getComputedStyle(root);
-  var allKeys = ['--font-heading','--font-body','--font-ui','--serif','--sans','--steel','--steel-dk','--steel-dk2','--mid','--sky','--ice','--mist','--amber','--amber-dk','--honey','--pale-gold','--sage','--soft-sage','--pale-sage','--teal','--teal-light','--teal-pale','--slate','--slate-light','--slate-pale','--plum-light','--stone','--warm','--linen','--white','--charcoal','--gray','--text-muted','--border'];
-  var lines = [':root {'];
-  allKeys.forEach(function(k) {
-    var v = root.style.getPropertyValue(k) || style.getPropertyValue(k).trim();
-    if (v) lines.push('  ' + k + ': ' + v + ';');
-  });
-  lines.push('}');
-  navigator.clipboard.writeText(lines.join('\n')).then(function() {
-    var msg = document.getElementById('dl-copy-msg');
-    msg.style.display = 'block';
-    setTimeout(function(){ msg.style.display = 'none'; }, 2500); // Hide "Copied!" confirmation after 2.5s
-  });
-}
-
-function rgbToHex(color) {
-  if (!color) return '#000000';
-  if (color.startsWith('#')) return color;
-  var m = color.match(/\d+/g);
-  if (!m || m.length < 3) return '#000000';
-  return '#' + [m[0],m[1],m[2]].map(function(x){ return parseInt(x).toString(16).padStart(2,'0'); }).join('');
-}
-
-// Close on outside click
-document.addEventListener('click', function(e) {
-  if (dlOpen && !document.getElementById('design-lab').contains(e.target)) {
-    dlOpen = false;
-    document.getElementById('dl-panel').style.display = 'none';
-  }
-});
 
 // ── SUNDAY DETECTION: highlight Watch Live button ────────────────
 (function() {
