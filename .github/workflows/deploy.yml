@@ -100,24 +100,9 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: wrangler deploy --config wrangler-links.toml
 
-  deploy-volunteer:
-    name: Deploy volunteer sign-up (volunteer.timothystl.org)
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install wrangler
-        run: npm install -g wrangler
-
-      - name: Deploy volunteer worker
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: wrangler deploy --config wrangler-volunteer.toml
-
   done:
     name: All done
-    needs: [deploy-site, deploy-admin, deploy-links, deploy-volunteer]
+    needs: [deploy-site, deploy-admin, deploy-links]
     if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
