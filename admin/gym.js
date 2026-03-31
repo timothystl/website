@@ -15,7 +15,7 @@ function extractImageKeys(body, origin) {
   return keys;
 }
 
-async function sweepExpiredItems(env, origin) {
+export async function sweepExpiredItems(env, origin) {
   const today = new Date().toISOString().split('T')[0];
   try {
     const expired = await env.DB.prepare(

@@ -72,6 +72,7 @@ function json(data, status = 200) {
     status,
     headers: { 'Content-Type': 'application/json' }
   });
+}
 
 // ── CHRISTMAS MARKET DATE HELPERS ────────────────────────────────────
 // Market is always the first Saturday of December.
