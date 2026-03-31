@@ -494,26 +494,11 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
           </div>
         </div>
 
-        <!-- NEWS — populated by fetchHomeNews() from admin worker API (Phase 2) -->
+        <!-- NEWS — populated dynamically from admin API -->
         <div>
           <div class="this-week-col-label">News &amp; announcements</div>
           <div id="home-news-list">
-            <!-- static placeholders shown until Phase 2 API is wired up -->
-            <div class="news-item">
-              <div class="news-item-date">March 2025</div>
-              <div class="news-item-title">Lenten Wednesday worship continues</div>
-              <div class="news-item-summary">Join us at 6:30 pm each Wednesday through Lent as we walk through the Twenty-Third Psalm together.</div>
-            </div>
-            <div class="news-item">
-              <div class="news-item-date">Ongoing</div>
-              <div class="news-item-title">Food Pantry open Saturdays</div>
-              <div class="news-item-summary">Our food pantry serves neighbors every Saturday morning. Volunteers and donations always welcome.</div>
-            </div>
-            <div class="news-item">
-              <div class="news-item-date">Ongoing</div>
-              <div class="news-item-title">Mother's Day Out — now enrolling</div>
-              <div class="news-item-summary">MDO serves young families Tuesday and Thursday mornings. Spots are available for the spring session.</div>
-            </div>
+            <div style="color:var(--gray);font-size:14px;padding:12px 0;">Loading…</div>
           </div>
           <button class="btn btn-outline" onclick="showPage('news')" style="font-size:13px;padding:9px 20px;margin-top:16px;">All news &amp; events →</button>
         </div>
@@ -949,18 +934,6 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       <span class="eyebrow">Upcoming</span>
       <h2>On the calendar</h2>
       <div class="event-list">
-        <div class="event-row">
-          <div class="event-date"><div class="event-month">Mar</div><div class="event-day">19</div></div>
-          <div class="event-name">Wednesday Lenten Service — Psalm 23:4</div>
-          <div class="event-time">6:30 pm</div>
-          <span class="event-tag" style="background:var(--mist);color:var(--steel);">Worship</span>
-        </div>
-        <div class="event-row">
-          <div class="event-date"><div class="event-month">Mar</div><div class="event-day">23</div></div>
-          <div class="event-name">Sunday Worship — Laetare Sunday</div>
-          <div class="event-time">8:00 &amp; 10:45 am</div>
-          <span class="event-tag" style="background:var(--mist);color:var(--steel);">Worship</span>
-        </div>
         <div class="event-row">
           <div class="event-date"><div class="event-month">Apr</div><div class="event-day">13</div></div>
           <div class="event-name">Palm Sunday</div>
@@ -2202,14 +2175,20 @@ async function fetchHomeNews() {
     if (!res.ok) throw new Error('not ok');
     const items = await res.json();
     const list = document.getElementById('home-news-list');
-    if (!items || items.length === 0) return; // keep placeholders
+    if (!items || items.length === 0) {
+      list.innerHTML = '<div style="color:var(--gray);font-size:14px;padding:4px 0;">Check back soon for news and announcements.</div>';
+      return;
+    }
     list.innerHTML = items.map(item => `
       <div class="news-item">
         <div class="news-item-date">${item.event_date || item.publish_date || ''}</div>
         <div class="news-item-title">${item.title}</div>
         <div class="news-item-summary">${item.summary || ''}</div>
       </div>`).join('');
-  } catch(e) { /* keep static placeholders on error */ }
+  } catch(e) {
+    const list = document.getElementById('home-news-list');
+    if (list) list.innerHTML = '<div style="color:var(--gray);font-size:14px;padding:4px 0;">Check back soon for news and announcements.</div>';
+  }
 }
 fetchHomeNews();
 
