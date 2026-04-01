@@ -366,11 +366,14 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
 .footer-base p{font-family:var(--sans);font-size:11px;color:rgba(255,255,255,.3);}
 .footer-base a{color:rgba(255,255,255,.4);}
 
+/* TWO-COL UTILITY — replaces inline 1fr 1fr grids, stacks on mobile */
+.two-col{display:grid;grid-template-columns:1fr 1fr;}
 /* RESPONSIVE */
 @media(max-width:900px){
   .hero-inner,.about-grid,.contact-grid,.welcome-inner{grid-template-columns:1fr;}
   .hero-card{margin-top:8px;}
   .footer-inner{grid-template-columns:1fr 1fr;}
+  .two-col{grid-template-columns:1fr;}
 }
 @media(max-width:620px){
   .nav-links{display:none;}
@@ -379,9 +382,16 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
   .section{padding:48px 0;}
   .hero{padding:48px 16px 56px;}
   h1{font-size:28px;}
+  .hero-sub{font-size:15px;}
+  .hero-card-time{font-size:20px;}
+  .welcome-quote{font-size:18px;}
+  .page-hero p{font-size:15px;}
   .footer-inner{grid-template-columns:1fr;}
   .footer-base{flex-direction:column;text-align:center;}
   .about-values{grid-template-columns:1fr;}
+  .two-col{grid-template-columns:1fr;}
+  .nav-mobile button,.nav-mobile a{padding:13px 0;}
+  .bio-more{padding:10px 0 0;font-size:12px;}
 }
 </style>
 <!-- Cloudflare Web Analytics — no cookies, no GDPR issues, free -->
@@ -548,7 +558,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
 
   <section class="section section--mist">
     <div class="wrap">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:start;">
+      <div class="two-col" style="gap:48px;align-items:start;">
         <div>
           <span class="eyebrow eyebrow--sage">Find us</span>
           <h2>Location &amp; service times</h2>
@@ -613,7 +623,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
   </div>
   <section class="section section--white">
     <div class="wrap">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:48px;">
+      <div class="two-col" style="gap:48px;">
         <div>
           <span class="eyebrow">Service times</span>
           <h2>Join us Sunday</h2>
@@ -1162,7 +1172,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       </div>
 
       <!-- Other ways grid -->
-      <div style="margin-top:32px;display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div class="two-col" style="gap:16px;margin-top:32px;">
         <div style="background:var(--warm);border:1px solid var(--border);border-radius:var(--r-md);padding:24px;">
           <div style="font-family:var(--serif);font-size:17px;color:var(--steel);margin-bottom:8px;">On Sunday morning</div>
           <p style="font-size:13px;color:var(--gray);line-height:1.7;margin:0;">Offering plates are passed at both services. Cash or check (payable to <strong>Timothy Lutheran Church</strong>) are both welcome. You are always welcome to give — or simply to receive that Sunday's grace.</p>
@@ -1234,7 +1244,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
   </div>
   <section class="section section--white">
     <div class="wrap">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:start;">
+      <div class="two-col" style="gap:56px;align-items:start;">
         <div>
           <span class="eyebrow eyebrow--sky">A unique — but familiar — sound</span>
           <h2>Traditional with eclectic music</h2>
@@ -1333,7 +1343,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
       <h2>One-to-one Christian care</h2>
       <p>Stephen Ministry equips congregation members to provide confidential, one-to-one Christian care to people going through difficult times — grief, illness, job loss, divorce, loneliness, or any of life's challenges. A trained Stephen Minister walks alongside you as a caring presence for as long as you need.</p>
       <p>Stephen Ministers are not counselors or therapists. They are listeners — people who have been trained to be fully present, to keep confidence, and to bring the compassion of Christ to someone who is hurting.</p>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-top:40px;">
+      <div class="two-col" style="gap:32px;margin-top:40px;">
         <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:28px;">
           <div style="font-family:var(--serif);font-size:20px;color:var(--steel);margin-bottom:10px;">Request a Caregiver</div>
           <p style="font-size:14px;color:var(--gray);margin-bottom:16px;">If you or someone you know is going through a difficult time, reaching out is the first step. Everything is kept strictly confidential.</p>
@@ -1390,7 +1400,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
   </div>
   <section class="section section--white">
     <div class="wrap">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:start;">
+      <div class="two-col" style="gap:56px;align-items:start;">
         <div>
           <span class="eyebrow">About the pantry</span>
           <h2>Serving our neighborhood</h2>
@@ -1415,7 +1425,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
   </section>
   <section class="section section--linen">
     <div class="wrap">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;">
+      <div class="two-col" style="gap:32px;">
         <div>
           <span class="eyebrow eyebrow--sage">Receive food</span>
           <h2>How to get help</h2>
@@ -1472,7 +1482,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
   </div>
   <section class="section section--white">
     <div class="wrap">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:start;">
+      <div class="two-col" style="gap:56px;align-items:start;">
         <div>
           <span class="eyebrow">About the ministry</span>
           <h2>Beekeeping in Lindenwood Park</h2>
@@ -1538,7 +1548,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
   </div>
   <section class="section section--white">
     <div class="wrap">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:start;">
+      <div class="two-col" style="gap:56px;align-items:start;">
         <div>
           <span class="eyebrow">About the market</span>
           <h2>A neighborhood tradition</h2>
