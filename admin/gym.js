@@ -5,7 +5,7 @@ import { html, topbarHtml, authCookie, formatDate, tinymceEditorSection } from '
 import { sendTransactionalEmail } from './email.js';
 
 // ── IMAGE HELPERS ───────────────────────────────────────────
-function extractImageKeys(body, origin) {
+export function extractImageKeys(body, origin) {
   if (!body) return [];
   const escaped = origin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const re = new RegExp(escaped + '/images/([^"\'\\s<>]+)', 'g');
