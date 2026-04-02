@@ -52,7 +52,7 @@ export async function sendTransactionalEmail(env, { subject, htmlContent, toEmai
 
 // ── BUILD EMAIL HTML ─────────────────────────────────────────
 // Layout: header · 2/3 pastor note + 1/3 events · main news · secondary news · WOL+LASM · additional posts · footer
-export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmContent, publishedAt, newsItems = [], secondaryNote = '') {
+export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmContent, publishedAt, newsItems = [], secondaryNote = '', newsletterId = null) {
   const dateStr = formatDate(publishedAt);
 
   function truncate(text, limit) {
@@ -79,11 +79,13 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
   </tr></table>
 </td></tr>`).join('') : '';
 
+  const calendarLink = `<a href="https://timothystl.org/calendar" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;color:#D4922A;text-decoration:none;">View full calendar →</a>`;
   const eventsSidebar = eventsRowsHtml ? `
 <div style="background:#F7F3EC;border-radius:8px;padding:14px;">
   <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#D4922A;margin-bottom:10px;">Upcoming</div>
   <table width="100%" cellpadding="0" cellspacing="0">${eventsRowsHtml}</table>
-</div>` : '';
+  <div style="margin-top:12px;text-align:center;">${calendarLink}</div>
+</div>` : `<div style="background:#F7F3EC;border-radius:8px;padding:14px 14px 12px;text-align:center;">${calendarLink}</div>`;
 
   // Main news (first item — featured)
   const mainNews = newsItems[0] || null;
@@ -167,7 +169,7 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
         <table width="100%" cellpadding="0" cellspacing="0">
           <tr>
             <td class="pastor-col" width="390" valign="top" style="padding-right:18px;border-right:1px solid #E8E0D0;">
-              ${pastorNote ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:15px;color:#3D3530;line-height:1.85;">${truncate(pastorNote, 400)}</div><div style="margin-top:10px;"><a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#D4922A;text-decoration:none;">Read the full letter →</a></div>` : ''}
+              ${pastorNote ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:15px;color:#3D3530;line-height:1.85;">${truncate(pastorNote, 600)}</div><div style="margin-top:10px;"><a href="https://timothystl.org/${newsletterId ? 'news/' + newsletterId : 'news'}" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#D4922A;text-decoration:none;">Read the full letter →</a></div>` : ''}
             </td>
             <td class="spacer-col" width="16"></td>
             <td class="events-col" width="165" valign="top">${eventsSidebar}</td>

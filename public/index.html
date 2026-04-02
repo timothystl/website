@@ -1113,40 +1113,53 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
     <p>Announcements, upcoming events, and weekly letters from our congregation.</p>
   </div>
 
-  <!-- NEWS ITEMS (from admin portal) -->
-  <section class="section section--linen" id="news-items-section" style="display:none;">
+  <!-- NEWSLETTER DETAIL — shown when navigating to /news/:id -->
+  <section id="newsletter-detail" style="display:none;" class="section section--white">
     <div class="wrap" style="max-width:760px;">
-      <span class="eyebrow">Announcements</span>
-      <h2>Current news</h2>
-      <div id="news-items-list"></div>
+      <div style="margin-bottom:24px;">
+        <button onclick="showPage('news')" style="background:none;border:none;color:var(--teal);font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;padding:0;text-decoration:none;">← All newsletters</button>
+      </div>
+      <div id="newsletter-detail-content"></div>
     </div>
   </section>
 
-  <!-- UPCOMING EVENTS (Google Calendar) -->
-  <section class="section section--white">
-    <div class="wrap">
-      <span class="eyebrow eyebrow--sky">Upcoming events</span>
-      <h2>What's on the calendar</h2>
-      <p style="color:var(--gray);margin-bottom:24px;">Events, services, and gatherings at Timothy Lutheran. Worship services are every Sunday at 8:00 and 10:45 am.</p>
-      <div style="border-radius:var(--r-md);overflow:hidden;border:1px solid var(--border);">
-        <iframe id="gcal-frame" src="" data-src="https://calendar.google.com/calendar/embed?src=calendar%40timothystl.org&src=c_7f6d3db77b48c01af48592e21b2743d22fdf2b221d9d3c4e0c02680b73b89041%40group.calendar.google.com&ctz=America%2FChicago&mode=MONTH&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0" style="border:0;display:block;width:100%;height:600px;" frameborder="0" scrolling="no" title="Timothy Lutheran Church calendar"></iframe>
+  <!-- NEWS ARCHIVE — hidden when viewing newsletter detail -->
+  <div id="news-archive">
+    <!-- NEWS ITEMS (from admin portal) -->
+    <section class="section section--linen" id="news-items-section" style="display:none;">
+      <div class="wrap" style="max-width:760px;">
+        <span class="eyebrow">Announcements</span>
+        <h2>Current news</h2>
+        <div id="news-items-list"></div>
       </div>
-      <div style="margin-top:12px;">
-        <a href="https://calendar.google.com/calendar/embed?src=calendar%40timothystl.org&ctz=America%2FChicago" target="_blank" style="font-family:var(--sans);font-size:13px;color:var(--mid);font-weight:600;">View full calendar →</a>
-      </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- NEWSLETTERS -->
-  <section class="section section--linen">
-    <div class="wrap" style="max-width:760px;">
-      <span class="eyebrow">From the pastor</span>
-      <h2>Weekly newsletters</h2>
-      <div id="news-loading" style="text-align:center;padding:40px;color:var(--gray);font-family:var(--sans);font-size:14px;">Loading newsletters...</div>
-      <div id="news-list" style="display:none;"></div>
-      <div id="news-empty" style="display:none;text-align:center;padding:40px;color:var(--gray);font-family:var(--sans);font-size:14px;">No newsletters yet — check back soon.</div>
-    </div>
-  </section>
+    <!-- UPCOMING EVENTS (Google Calendar) -->
+    <section class="section section--white">
+      <div class="wrap">
+        <span class="eyebrow eyebrow--sky">Upcoming events</span>
+        <h2>What's on the calendar</h2>
+        <p style="color:var(--gray);margin-bottom:24px;">Events, services, and gatherings at Timothy Lutheran. Worship services are every Sunday at 8:00 and 10:45 am.</p>
+        <div style="border-radius:var(--r-md);overflow:hidden;border:1px solid var(--border);">
+          <iframe id="gcal-frame" src="" data-src="https://calendar.google.com/calendar/embed?src=calendar%40timothystl.org&src=c_7f6d3db77b48c01af48592e21b2743d22fdf2b221d9d3c4e0c02680b73b89041%40group.calendar.google.com&ctz=America%2FChicago&mode=MONTH&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0" style="border:0;display:block;width:100%;height:600px;" frameborder="0" scrolling="no" title="Timothy Lutheran Church calendar"></iframe>
+        </div>
+        <div style="margin-top:12px;">
+          <a href="https://calendar.google.com/calendar/embed?src=calendar%40timothystl.org&ctz=America%2FChicago" target="_blank" style="font-family:var(--sans);font-size:13px;color:var(--mid);font-weight:600;">View full calendar →</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- NEWSLETTERS -->
+    <section class="section section--linen">
+      <div class="wrap" style="max-width:760px;">
+        <span class="eyebrow">From the pastor</span>
+        <h2>Weekly newsletters</h2>
+        <div id="news-loading" style="text-align:center;padding:40px;color:var(--gray);font-family:var(--sans);font-size:14px;">Loading newsletters...</div>
+        <div id="news-list" style="display:none;"></div>
+        <div id="news-empty" style="display:none;text-align:center;padding:40px;color:var(--gray);font-family:var(--sans);font-size:14px;">No newsletters yet — check back soon.</div>
+      </div>
+    </section>
+  </div>
 </div>
 
 <!-- GIVE -->
@@ -2146,6 +2159,13 @@ function toggleBio(id, btn){
     }).catch(function(){ window.location.replace('https://drive.google.com/drive/folders/1pgqJ32H3HS7SNYnnf7rOswC5c87IAzA4?usp=drive_link'); });
     return;
   }
+  var nlDetailMatch = path.match(/^news\/(\d+)$/);
+  if (nlDetailMatch) {
+    showPage('news', false);
+    history.replaceState({page:'news'},'','/news/'+nlDetailMatch[1]);
+    window._pendingNlDetail = nlDetailMatch[1];
+    return;
+  }
   if(path && document.getElementById('page-'+path)){
     showPage(path, false);
   } else if (path) {
@@ -2296,11 +2316,57 @@ async function loadNewsletters() {
       return '<div style="background:white;border:1px solid var(--border);border-radius:14px;padding:28px;margin-bottom:16px;box-shadow:var(--shadow);">' +
         '<div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:6px;">' + date + '</div>' +
         '<div style="font-family:var(--serif);font-size:22px;color:var(--steel);margin-bottom:12px;">' + n.subject + '</div>' +
-        (n.pastor_note ? '<div style="font-family:var(--sans);font-size:15px;color:var(--charcoal);line-height:1.8;padding-bottom:16px;border-bottom:1px solid var(--border);">' + n.pastor_note.replace(/\n/g,'<br>') + '</div>' : '') +
+        (n.pastor_note ? '<div style="font-family:var(--sans);font-size:15px;color:var(--charcoal);line-height:1.8;padding-bottom:12px;border-bottom:1px solid var(--border);">' + n.pastor_note + '</div>' : '') +
+        '<div style="margin-top:12px;"><button onclick="loadNewsletterDetail(' + n.id + ')" style="background:none;border:none;color:var(--teal);font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;padding:0;">Read this letter →</button></div>' +
         eventsHtml + ministryHtml + '</div>';
     }).join('');
   } catch(e) {
     document.getElementById('news-loading').textContent = 'Unable to load newsletters. Please check back later.';
+  }
+}
+
+// Load a single newsletter by ID and show the detail view
+async function loadNewsletterDetail(id) {
+  var archive = document.getElementById('news-archive');
+  var detail = document.getElementById('newsletter-detail');
+  var content = document.getElementById('newsletter-detail-content');
+  if (archive) archive.style.display = 'none';
+  if (detail) detail.style.display = '';
+  history.replaceState({page:'news'},'','/news/'+id);
+  content.innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--gray);font-family:var(--sans);font-size:14px;">Loading…</div>';
+  try {
+    const res = await fetch('https://admin.timothystl.org/api/newsletter/'+id);
+    if (!res.ok) throw new Error('not found');
+    const n = await res.json();
+    const date = new Date(n.published_at+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+    let evHtml = '';
+    if (n.events && n.events.length) {
+      evHtml = '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);">' +
+        '<div style="font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:10px;">Upcoming Events</div>' +
+        n.events.map(e => {
+          const eDate = e.event_date ? new Date(e.event_date+'T12:00:00') : null;
+          return '<div style="display:flex;align-items:center;gap:14px;padding:10px 0;border-top:1px solid var(--border);">' +
+            (eDate ? '<div style="background:var(--steel);color:white;border-radius:6px;padding:5px 8px;text-align:center;min-width:44px;flex-shrink:0;"><div style=\'font-family:var(--sans);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.65;\'>' + eDate.toLocaleDateString('en-US',{month:'short'}) + '</div><div style=\'font-family:var(--serif);font-size:18px;line-height:1;\'>' + eDate.getDate() + '</div></div>' : '') +
+            '<div><div style="font-family:var(--serif);font-size:15px;color:var(--steel);">'+(e.event_name||'')+'</div><div style="font-family:var(--sans);font-size:12px;color:var(--gray);">'+(e.event_time||'')+(e.event_desc?' · '+e.event_desc:'')+'</div></div></div>';
+        }).join('') + '</div>';
+    }
+    let secHtml = n.secondary_note ? '<div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border);font-family:var(--sans);font-size:15px;color:var(--charcoal);line-height:1.85;">'+n.secondary_note+'</div>' : '';
+    let wolLasmHtml = '';
+    if (n.wol_content || n.lasm_content) {
+      wolLasmHtml = '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:16px;">' +
+        (n.wol_content ? '<div style="background:var(--linen);border-left:3px solid var(--sage);border-radius:0 8px 8px 0;padding:14px;"><div style=\'font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sage);margin-bottom:8px;\'>Word of Life</div><div style="font-family:var(--sans);font-size:14px;color:var(--charcoal);line-height:1.7;">'+n.wol_content+'</div></div>' : '<div></div>') +
+        (n.lasm_content ? '<div style="background:var(--linen);border-left:3px solid var(--sage);border-radius:0 8px 8px 0;padding:14px;"><div style=\'font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sage);margin-bottom:8px;\'>LASM</div><div style="font-family:var(--sans);font-size:14px;color:var(--charcoal);line-height:1.7;">'+n.lasm_content+'</div></div>' : '<div></div>') +
+        '</div>';
+    }
+    content.innerHTML =
+      '<div style="background:white;border:1px solid var(--border);border-radius:14px;padding:36px;box-shadow:var(--shadow);">' +
+        '<div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:6px;">'+date+'</div>' +
+        '<h2 style="font-family:var(--serif);font-size:26px;color:var(--steel);margin:0 0 20px;font-weight:600;">'+n.subject+'</h2>' +
+        (n.pastor_note ? '<div style="font-family:var(--sans);font-size:16px;color:var(--charcoal);line-height:1.85;">'+n.pastor_note+'</div>' : '') +
+        secHtml + evHtml + wolLasmHtml +
+      '</div>';
+  } catch(e) {
+    content.innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--gray);font-family:var(--sans);font-size:14px;">Newsletter not found.</div>';
   }
 }
 
@@ -2679,6 +2745,11 @@ window.showPage = function(id, addHistory) {
   }
   updatePageMeta(id);
   if (id === 'news') {
+    // Reset to archive view (in case coming back from newsletter detail)
+    var nlArchive = document.getElementById('news-archive');
+    var nlDetail = document.getElementById('newsletter-detail');
+    if (nlArchive) nlArchive.style.display = '';
+    if (nlDetail) nlDetail.style.display = 'none';
     loadNewsletters(); loadNewsItems();
     // Lazy-load Google Calendar iframe on first visit to the news page
     var gcalFrame = document.getElementById('gcal-frame');
@@ -2703,6 +2774,13 @@ window.showPage = function(id, addHistory) {
 // Load data if landing directly on a lazy-loaded page
 (function(){
   var path = window.location.pathname.replace(/^\//, '').replace(/\/$/, '');
+  // Handle /news/:id direct navigation (deferred from first script block)
+  if (window._pendingNlDetail) {
+    var nlId = window._pendingNlDetail;
+    delete window._pendingNlDetail;
+    loadNewsletterDetail(nlId);
+    return;
+  }
   if (path === 'news') {
     loadNewsletters(); loadNewsItems();
     var gcalFrame = document.getElementById('gcal-frame');
