@@ -10,9 +10,7 @@ async function getRedirects() {
   const now = Date.now();
   if (redirectCache && now - redirectCacheTime < CACHE_TTL) return redirectCache;
   try {
-    const res = await fetch('https://admin.timothystl.org/api/redirects', {
-      cf: { cacheTtl: 60 }
-    });
+    const res = await fetch('https://admin.timothystl.org/api/redirects');
     if (res.ok) {
       const data = await res.json();
       redirectCache = data.redirects || [];
@@ -31,7 +29,10 @@ export default {
       const redirects = await getRedirects();
       const match = redirects.find(r => r.path === path);
       if (match) {
-        return Response.redirect(match.url, 302);
+        return new Response(null, {
+          status: 302,
+          headers: { 'Location': match.url }
+        });
       }
     }
 
