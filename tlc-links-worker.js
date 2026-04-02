@@ -65,10 +65,10 @@ const HTML = `<!DOCTYPE html>
 body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-height:100vh;display:flex;flex-direction:column;align-items:center;}
 
 /* Header */
-.header{width:100%;background:var(--steel);border-bottom:3px solid var(--amber);padding:28px 24px 22px;text-align:center;}
-.header-logo{width:96px;height:96px;border-radius:50%;margin:0 auto 14px;display:block;}
-.header-name{font-family:var(--sans);font-size:18px;font-weight:800;color:white;letter-spacing:.01em;line-height:1.2;}
-.header-tag{font-family:var(--sans);font-size:11px;font-weight:600;color:var(--amber);margin-top:5px;letter-spacing:.04em;}
+.header{width:100%;background:var(--steel);border-bottom:3px solid var(--amber);padding:16px 24px;display:flex;align-items:center;justify-content:center;gap:14px;}
+.header-logo{width:48px;height:48px;border-radius:50%;flex-shrink:0;}
+.header-name{font-family:var(--sans);font-size:17px;font-weight:800;color:white;letter-spacing:.01em;line-height:1.2;}
+.header-tag{font-family:var(--sans);font-size:11px;font-weight:600;color:var(--amber);margin-top:3px;letter-spacing:.04em;}
 
 /* Main */
 .main{width:100%;max-width:480px;padding:16px 20px 32px;display:flex;flex-direction:column;gap:12px;}
@@ -103,8 +103,10 @@ body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-he
 
 <div class="header">
   <img class="header-logo" src="https://timothystl.org/logo.png" alt="Timothy Lutheran Church">
-  <div class="header-name">Timothy Lutheran Church</div>
-  <div class="header-tag">from our Neighborhood to the Nations</div>
+  <div>
+    <div class="header-name">Timothy Lutheran Church</div>
+    <div class="header-tag">from our Neighborhood to the Nations</div>
+  </div>
 </div>
 
 <div class="main">
