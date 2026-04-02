@@ -378,6 +378,31 @@ document.querySelector('form').addEventListener('submit', function(e) {
 <\/script>`;
 }
 
+// Simple TinyMCE editor for short text notes (no image upload, no submit handler)
+export function tinymceNoteSection(id, name, existingContent = '', minHeight = 140) {
+  const safe = (existingContent || '').replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+  return `<textarea id="${id}" name="${name}"></textarea>
+<script>
+tinymce.init({
+  selector: '#${id}',
+  plugins: 'link lists blockquote',
+  toolbar: 'bold italic underline | bullist numlist | link | removeformat',
+  menubar: false,
+  min_height: ${minHeight},
+  skin: 'oxide',
+  content_css: 'default',
+  convert_urls: false,
+  setup: function(editor) {
+    editor.on('change input', function() { editor.save(); });
+  },
+  init_instance_callback: function(editor) {
+    var initial = \`${safe}\`;
+    if (initial.trim()) editor.setContent(initial);
+  }
+});
+<\/script>`;
+}
+
 // TinyMCE editor for pastor's note
 export function tinymcePastorSection(existingBody = '') {
   const safe = (existingBody || '').replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
@@ -415,7 +440,8 @@ document.querySelector('form').addEventListener('submit', function(e) {
   e.preventDefault();
   var form = this;
   var ed = tinymce.get('pastor-editor');
-  if (!ed) { form.submit(); return; }
+  if (!ed) { tinymce.editors.forEach(function(e2){e2.save();}); form.submit(); return; }
+  tinymce.editors.forEach(function(e2){if(e2!==ed)e2.save();});
   ed.uploadImages().then(function() { ed.save(); form.submit(); });
 });
 <\/script>`;
