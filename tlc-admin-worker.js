@@ -630,6 +630,8 @@ document.getElementById('upload-form').addEventListener('submit', async function
       const alertHtml = url.searchParams.get('saved') ? `<div class="alert alert-success">Saved!</div>` : '';
       const series = await env.DB.prepare('SELECT * FROM sermon_series ORDER BY active DESC, sort_order ASC, id DESC').all();
       const standaloneNotes = await env.DB.prepare('SELECT * FROM sermon_notes WHERE series_id IS NULL OR series_id = 0 ORDER BY date DESC, id DESC').all();
+      const noteCounts = await env.DB.prepare('SELECT series_id, COUNT(*) as cnt FROM sermon_notes WHERE series_id IS NOT NULL GROUP BY series_id').all();
+      const noteCountMap = Object.fromEntries(noteCounts.results.map(r => [r.series_id, r.cnt]));
 
       const seriesHtml = series.results.length === 0
         ? `<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No series yet. Add your first one below.</div>`
@@ -640,17 +642,18 @@ document.getElementById('upload-form').addEventListener('submit', async function
     <div style="font-family:var(--serif);font-size:17px;color:var(--steel);">${s.title}</div>
     ${s.date_range ? `<div style="font-size:12px;color:var(--gray);">${s.date_range}</div>` : ''}
   </div>
-  <div style="display:flex;gap:8px;flex-shrink:0;">
+  <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;">
+    <a href="/sermons/new-note?series_id=${s.id}" class="btn btn-sm btn-primary">+ Add sermon</a>
     <a href="/sermons/edit-series/${s.id}" class="btn btn-sm btn-secondary">Edit</a>
-    <a href="/sermons/notes/${s.id}" class="btn btn-sm" style="background:var(--mist);color:var(--steel);border:1px solid var(--border);">Notes (${s.id})</a>
-    <form method="POST" action="/sermons/delete-series/${s.id}" style="display:contents;" onsubmit="return confirm('Delete this series and all its notes?')">
+    <a href="/sermons/notes/${s.id}" class="btn btn-sm" style="background:var(--mist);color:var(--steel);border:1px solid var(--border);">Sermons (${noteCountMap[s.id] || 0})</a>
+    <form method="POST" action="/sermons/delete-series/${s.id}" style="display:contents;" onsubmit="return confirm('Delete this series and all its sermons?')">
       <button type="submit" class="btn btn-sm btn-danger">Delete</button>
     </form>
   </div>
 </div>`).join('');
 
       const standaloneHtml = standaloneNotes.results.length === 0
-        ? `<div style="text-align:center;padding:24px;color:var(--gray);font-size:14px;">No standalone notes.</div>`
+        ? `<div style="text-align:center;padding:24px;color:var(--gray);font-size:14px;">No standalone sermons.</div>`
         : standaloneNotes.results.map(n => `
 <div style="display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
   <div style="flex:1;min-width:160px;">
@@ -659,7 +662,7 @@ document.getElementById('upload-form').addEventListener('submit', async function
   </div>
   <div style="display:flex;gap:8px;flex-shrink:0;">
     <a href="/sermons/edit-note/${n.id}" class="btn btn-sm btn-secondary">Edit</a>
-    <form method="POST" action="/sermons/delete-note/${n.id}" style="display:contents;" onsubmit="return confirm('Delete this note?')">
+    <form method="POST" action="/sermons/delete-note/${n.id}" style="display:contents;" onsubmit="return confirm('Delete this sermon?')">
       <button type="submit" class="btn btn-sm btn-danger">Delete</button>
     </form>
   </div>
@@ -668,20 +671,20 @@ document.getElementById('upload-form').addEventListener('submit', async function
       return html(`
 ${topbarHtml('sermons', `<a href="https://timothystl.org/sermons" target="_blank">View page →</a>`)}
 <div class="wrap">
-  <div class="page-title">Sermon Series &amp; Notes</div>
-  <div class="page-sub">Manage the current series and weekly sermon notes shown on timothystl.org/sermons</div>
+  <div class="page-title">Sermon Series</div>
+  <div class="page-sub">Manage the current series and individual sermons shown on timothystl.org/sermons</div>
   ${alertHtml}
   <div class="btn-row" style="margin-bottom:24px;">
     <a href="/sermons/new-series" class="btn btn-primary">+ Add series</a>
-    <a href="/sermons/new-note" class="btn btn-secondary">+ Add note (no series)</a>
+    <a href="/sermons/new-note" class="btn btn-secondary">+ Add standalone sermon</a>
   </div>
   <div class="card">
     <div class="card-title">Sermon series</div>
     ${seriesHtml}
   </div>
   <div class="card" style="margin-top:20px;">
-    <div class="card-title">Standalone notes <span class="tag">${standaloneNotes.results.length} total</span></div>
-    <div style="font-size:12px;color:var(--gray);margin-bottom:12px;">Notes not attached to any series. These appear on the public sermons page.</div>
+    <div class="card-title">Standalone sermons <span class="tag">${standaloneNotes.results.length} total</span></div>
+    <div style="font-size:12px;color:var(--gray);margin-bottom:12px;">Sermons not attached to any series. These appear on the public sermons page.</div>
     ${standaloneHtml}
   </div>
 </div>`, 'Sermons Admin');
@@ -731,7 +734,7 @@ ${topbarHtml('sermons', `<a href="/sermons">← Back</a>`)}
       <div class="form-group"><label>Date range</label><input type="text" name="date_range" value="${s.date_range || ''}"></div>
       <div class="form-group"><label>YouTube playlist URL</label><input type="text" name="playlist_url" value="${s.playlist_url || ''}"></div>
       <div class="checkbox-row"><input type="checkbox" name="active" value="1" id="active" ${s.active ? 'checked' : ''}><label for="active" style="display:inline;text-transform:none;letter-spacing:0;font-size:14px;">Mark as active (current series)</label></div>
-      <div class="btn-row" style="margin-top:20px;"><button type="submit" class="btn btn-primary">Save changes</button><a href="/sermons/notes/${id}" class="btn btn-secondary">Manage notes</a><a href="/sermons" class="btn" style="background:var(--linen);color:var(--charcoal);">Cancel</a></div>
+      <div class="btn-row" style="margin-top:20px;"><button type="submit" class="btn btn-primary">Save changes</button><a href="/sermons/notes/${id}" class="btn btn-secondary">Manage sermons</a><a href="/sermons" class="btn" style="background:var(--linen);color:var(--charcoal);">Cancel</a></div>
     </div>
   </form>
 </div>`, 'Edit Series');
@@ -761,7 +764,7 @@ ${topbarHtml('sermons', `<a href="/sermons">← Back</a>`)}
       if (!s) return new Response('Not found', { status: 404 });
       const notes = await env.DB.prepare('SELECT * FROM sermon_notes WHERE series_id = ? ORDER BY date DESC, id DESC').bind(seriesId).all();
       const notesHtml = notes.results.length === 0
-        ? `<div style="text-align:center;padding:24px;color:var(--gray);font-size:14px;">No notes for this series yet.</div>`
+        ? `<div style="text-align:center;padding:24px;color:var(--gray);font-size:14px;">No sermons in this series yet.</div>`
         : notes.results.map(n => `
 <div style="display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
   <div style="flex:1;">
@@ -771,7 +774,7 @@ ${topbarHtml('sermons', `<a href="/sermons">← Back</a>`)}
   </div>
   <div style="display:flex;gap:8px;">
     <a href="/sermons/edit-note/${n.id}" class="btn btn-sm btn-secondary">Edit</a>
-    <form method="POST" action="/sermons/delete-note/${n.id}" style="display:contents;" onsubmit="return confirm('Delete this note?')">
+    <form method="POST" action="/sermons/delete-note/${n.id}" style="display:contents;" onsubmit="return confirm('Delete this sermon?')">
       <button type="submit" class="btn btn-sm btn-danger">Delete</button>
     </form>
   </div>
@@ -780,13 +783,13 @@ ${topbarHtml('sermons', `<a href="/sermons">← Back</a>`)}
 ${topbarHtml('sermons', `<a href="/sermons">← All series</a>`)}
 <div class="wrap">
   <div class="page-title">${s.title}</div>
-  <div class="page-sub">${s.date_range || 'Sermon notes for this series'}</div>
+  <div class="page-sub">${s.date_range || 'Sermons in this series'}</div>
   <div class="btn-row" style="margin-bottom:20px;">
-    <a href="/sermons/new-note?series_id=${seriesId}" class="btn btn-primary">+ Add note</a>
+    <a href="/sermons/new-note?series_id=${seriesId}" class="btn btn-primary">+ Add sermon</a>
     <a href="/sermons/edit-series/${seriesId}" class="btn btn-secondary">Edit series</a>
   </div>
-  <div class="card"><div class="card-title">Sermon notes</div>${notesHtml}</div>
-</div>`, 'Sermon Notes');
+  <div class="card"><div class="card-title">Sermons in this series</div>${notesHtml}</div>
+</div>`, 'Sermon Series');
     }
 
     if (path === '/sermons/new-note' && method === 'GET') {
@@ -794,22 +797,22 @@ ${topbarHtml('sermons', `<a href="/sermons">← All series</a>`)}
       const allSeries = await env.DB.prepare('SELECT id, title FROM sermon_series ORDER BY active DESC, id DESC').all();
       const seriesOptions = allSeries.results.map(s => `<option value="${s.id}" ${s.id == seriesId ? 'selected' : ''}>${s.title}</option>`).join('');
       return html(`
-${topbarHtml('sermons', `<a href="/sermons">← Back</a>`)}
+${topbarHtml('sermons', `<a href="${seriesId ? '/sermons/notes/' + seriesId : '/sermons'}">← Back</a>`)}
 <div class="wrap">
-  <div class="page-title">Add Sermon Note</div>
+  <div class="page-title">Add Sermon</div>
   <form method="POST" action="/sermons/new-note">
     <input type="hidden" name="series_id" value="${seriesId}">
     <div class="card">
-      <div class="form-group"><label>Series (optional)</label><select name="series_id"><option value="">— Standalone note —</option>${seriesOptions}</select></div>
+      <div class="form-group"><label>Series (optional)</label><select name="series_id"><option value="">— Standalone sermon —</option>${seriesOptions}</select></div>
       <div class="form-group"><label>Date</label><input type="date" name="date"></div>
       <div class="form-group"><label>Sermon title</label><input type="text" name="title" required placeholder="e.g. You prepare a table before me"></div>
       <div class="form-group"><label>Scripture reference</label><input type="text" name="scripture" placeholder="e.g. Psalm 23:5"></div>
       ${tinymceSermonSection()}
       <div class="form-group"><label>YouTube link (optional)</label><input type="text" name="youtube_url" placeholder="Link to this specific service recording"></div>
-      <div class="btn-row" style="margin-top:20px;"><button type="submit" class="btn btn-primary">Add note</button><a href="/sermons" class="btn" style="background:var(--linen);color:var(--charcoal);">Cancel</a></div>
+      <div class="btn-row" style="margin-top:20px;"><button type="submit" class="btn btn-primary">Add sermon</button><a href="${seriesId ? '/sermons/notes/' + seriesId : '/sermons'}" class="btn" style="background:var(--linen);color:var(--charcoal);">Cancel</a></div>
     </div>
   </form>
-</div>`, 'Add Sermon Note', TINYMCE_HEAD);
+</div>`, 'Add Sermon', TINYMCE_HEAD);
     }
 
     if (path === '/sermons/new-note' && method === 'POST') {
@@ -830,12 +833,12 @@ ${topbarHtml('sermons', `<a href="/sermons">← Back</a>`)}
       const allSeries = await env.DB.prepare('SELECT id, title FROM sermon_series ORDER BY active DESC, id DESC').all();
       const seriesOptions = allSeries.results.map(s => `<option value="${s.id}" ${s.id == n.series_id ? 'selected' : ''}>${s.title}</option>`).join('');
       return html(`
-${topbarHtml('sermons', `<a href="/sermons">← Back</a>`)}
+${topbarHtml('sermons', `<a href="${n.series_id ? '/sermons/notes/' + n.series_id : '/sermons'}">← Back</a>`)}
 <div class="wrap">
-  <div class="page-title">Edit Sermon Note</div>
+  <div class="page-title">Edit Sermon</div>
   <form method="POST" action="/sermons/edit-note/${id}">
     <div class="card">
-      <div class="form-group"><label>Series (optional)</label><select name="series_id"><option value="">— Standalone note —</option>${seriesOptions}</select></div>
+      <div class="form-group"><label>Series (optional)</label><select name="series_id"><option value="">— Standalone sermon —</option>${seriesOptions}</select></div>
       <div class="form-group"><label>Date</label><input type="date" name="date" value="${n.date || ''}"></div>
       <div class="form-group"><label>Sermon title</label><input type="text" name="title" required value="${n.title}"></div>
       <div class="form-group"><label>Scripture reference</label><input type="text" name="scripture" value="${n.scripture || ''}"></div>
@@ -843,14 +846,14 @@ ${topbarHtml('sermons', `<a href="/sermons">← Back</a>`)}
       <div class="form-group"><label>YouTube link (optional)</label><input type="text" name="youtube_url" value="${n.youtube_url || ''}"></div>
       <div class="btn-row" style="margin-top:20px;">
         <button type="submit" class="btn btn-primary">Save changes</button>
-        <a href="/sermons" class="btn" style="background:var(--linen);color:var(--charcoal);">Cancel</a>
-        <form method="POST" action="/sermons/delete-note/${id}" style="margin:0;" onsubmit="return confirm('Delete this sermon note?')">
-          <button type="submit" class="btn btn-danger">Delete note</button>
+        <a href="${n.series_id ? '/sermons/notes/' + n.series_id : '/sermons'}" class="btn" style="background:var(--linen);color:var(--charcoal);">Cancel</a>
+        <form method="POST" action="/sermons/delete-note/${id}" style="margin:0;" onsubmit="return confirm('Delete this sermon?')">
+          <button type="submit" class="btn btn-danger">Delete sermon</button>
         </form>
       </div>
     </div>
   </form>
-</div>`, 'Edit Note', TINYMCE_HEAD);
+</div>`, 'Edit Sermon', TINYMCE_HEAD);
     }
 
     if (path.startsWith('/sermons/edit-note/') && method === 'POST') {
