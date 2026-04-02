@@ -6,7 +6,31 @@
 
 export default {
   async fetch(request) {
-    // All paths serve the links page
+    const url = new URL(request.url);
+
+    // Serve vCard for "Save Contact"
+    if (url.pathname === '/contact.vcf') {
+      return new Response(
+`BEGIN:VCARD
+VERSION:3.0
+FN:Timothy Lutheran Church
+ORG:Timothy Lutheran Church
+ADR;TYPE=WORK:;;6704 Fyler Ave;St. Louis;MO;63139;USA
+TEL;TYPE=WORK,VOICE:(314) 781-8673
+EMAIL;TYPE=WORK:office@timothystl.org
+URL:https://timothystl.org
+END:VCARD`,
+        {
+          headers: {
+            'Content-Type': 'text/vcard; charset=utf-8',
+            'Content-Disposition': 'attachment; filename="timothy-lutheran.vcf"',
+            'Cache-Control': 'public, max-age=86400',
+          },
+        }
+      );
+    }
+
+    // All other paths serve the links page
     return new Response(HTML, {
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
@@ -85,13 +109,13 @@ body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-he
 
 <div class="main">
 
-  <a class="link-card" href="https://timothystl.org/worship" target="_blank" rel="noopener">
+  <a class="link-card" href="https://timothystl.org/contact" target="_blank" rel="noopener">
     <div class="card-icon icon--sage">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B8F71" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
     </div>
     <div class="card-text">
-      <div class="card-title">I'm new here</div>
-      <div class="card-desc">Whoever you are, wherever you've been — welcome</div>
+      <div class="card-title">Get Connected</div>
+      <div class="card-desc">We'd love to know you — say hello</div>
     </div>
     <span class="card-arrow">&#x203A;</span>
   </a>
@@ -107,7 +131,7 @@ body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-he
     <span class="card-arrow">&#x203A;</span>
   </a>
 
-  <a class="link-card" href="https://timothystl.breezechms.com/give/online" target="_blank" rel="noopener">
+  <a class="link-card" href="https://give.tithe.ly/?formId=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8" target="_blank" rel="noopener">
     <div class="card-icon icon--amber">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D4922A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
     </div>
@@ -151,11 +175,22 @@ body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-he
     <span class="card-arrow">&#x203A;</span>
   </a>
 
+  <a class="link-card" href="/contact.vcf">
+    <div class="card-icon icon--mist">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3D627C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M9 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/><path d="M15 8h2M15 12h2M9 14c-2 0-4 1-4 2v0h8v0c0-1-2-2-4-2z"/></svg>
+    </div>
+    <div class="card-text">
+      <div class="card-title">Save Our Contact</div>
+      <div class="card-desc">Add Timothy Lutheran to your phone contacts</div>
+    </div>
+    <span class="card-arrow">&#x203A;</span>
+  </a>
+
 </div>
 
 <div class="footer">
   <div class="footer-address">6704 Fyler Ave · St. Louis, MO 63139</div>
-  <div class="footer-detail"><a href="https://timothystl.org">timothystl.org</a></div>
+  <div class="footer-detail"><a href="tel:+13147818673">(314) 781-8673</a> · <a href="https://timothystl.org">timothystl.org</a></div>
 </div>
 
 </body>
