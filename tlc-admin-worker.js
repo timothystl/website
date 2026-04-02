@@ -1163,7 +1163,7 @@ addEvent();
         if (!listId && emailSend === 'all') {
           emailSuffix = `&emailerr=${encodeURIComponent('BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}`;
         } else if (listId) {
-          const emailHtml = buildEmailHtml(subject, savedNote, events, wolContent, lasmContent, publishedAt, selectedNewsItems, secondaryNote);
+          const emailHtml = buildEmailHtml(subject, savedNote, events, wolContent, lasmContent, publishedAt, selectedNewsItems, secondaryNote, newsletterId);
           const result = await sendBrevoNewsletter(env, { subject, htmlContent: emailHtml, listIds: [listId] });
           emailSuffix = result.success
             ? `&emailed=${emailSend}`
@@ -1395,7 +1395,7 @@ ${eventsJs}
         'SELECT event_date, event_name, event_time, event_desc FROM events WHERE newsletter_id = ? ORDER BY sort_order'
       ).bind(id).all();
 
-      const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at, [], row.secondary_note || '');
+      const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at, [], row.secondary_note || '', id);
       const result = await sendBrevoNewsletter(env, { subject: row.subject, htmlContent: emailHtml, listIds: [listId] });
 
       const suffix = result.success
