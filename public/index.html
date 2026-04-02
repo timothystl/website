@@ -2969,7 +2969,13 @@ async function loadSermons() {
 
     // Build sections: active series → other series → standalone
     var sections = [];
-    var sortNotes = function(arr){ return arr.slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); }); };
+    var today = new Date().toISOString().slice(0, 10);
+    // Sort: upcoming sermons (nearest first), then past sermons (most recent first)
+    var sortNotes = function(arr) {
+      var upcoming = arr.filter(function(n){ return n.date && n.date >= today; }).sort(function(a,b){ return a.date.localeCompare(b.date); });
+      var past = arr.filter(function(n){ return !n.date || n.date < today; }).sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+      return upcoming.concat(past);
+    };
     if (activeSeries && (activeSeries.notes||[]).length > 0) {
       sections.push({ label: activeSeries.title, dateRange: activeSeries.date_range, isActive: true, notes: sortNotes(activeSeries.notes) });
     }
