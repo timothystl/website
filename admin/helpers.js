@@ -196,6 +196,7 @@ export function tinymceEditorSection(existingBody = '') {
   <textarea id="body-editor" name="body"></textarea>
 </div>
 <script>
+_onTinymce(function(){
 tinymce.init({
   selector: '#body-editor',
   plugins: 'image link lists blockquote table code',
@@ -220,12 +221,14 @@ tinymce.init({
     if (initialBody.trim()) editor.setContent(initialBody);
   }
 });
+});
 document.querySelector('form').addEventListener('submit', function(e) {
   e.preventDefault();
   var form = this;
   var ed = tinymce.get('body-editor');
   if (!ed) { form.submit(); return; }
   ed.uploadImages().then(function() { ed.save(); form.submit(); });
+});
 });
 <\/script>`;
 }
@@ -238,6 +241,7 @@ export function tinymcePostSection(existingBody = '') {
   <textarea id="post-editor" name="body"></textarea>
 </div>
 <script>
+_onTinymce(function(){
 tinymce.init({
   selector: '#post-editor',
   plugins: 'image link lists blockquote table code',
@@ -259,12 +263,14 @@ tinymce.init({
     if (initial.trim()) editor.setContent(initial);
   }
 });
+});
 document.querySelector('form').addEventListener('submit', function(e) {
   e.preventDefault();
   var form = this;
   var ed = tinymce.get('post-editor');
   if (!ed) { form.submit(); return; }
   ed.uploadImages().then(function() { ed.save(); form.submit(); });
+});
 });
 <\/script>`;
 }
@@ -277,6 +283,7 @@ export function tinymceSermonSection(existingOutline = '') {
   <textarea id="sermon-editor" name="outline"></textarea>
 </div>
 <script>
+_onTinymce(function(){
 tinymce.init({
   selector: '#sermon-editor',
   plugins: 'link lists blockquote code',
@@ -294,12 +301,14 @@ tinymce.init({
     if (initial.trim()) editor.setContent(initial);
   }
 });
+});
 document.querySelector('form').addEventListener('submit', function(e) {
   e.preventDefault();
   var form = this;
   var ed = tinymce.get('sermon-editor');
   if (!ed) { form.submit(); return; }
   ed.save(); form.submit();
+});
 });
 <\/script>`;
 }
@@ -312,6 +321,7 @@ export function tinymceYouthSection(existingContent = '') {
   <textarea id="youth-editor" name="content"></textarea>
 </div>
 <script>
+_onTinymce(function(){
 tinymce.init({
   selector: '#youth-editor',
   plugins: 'image link lists blockquote table code',
@@ -333,12 +343,14 @@ tinymce.init({
     if (initial.trim()) editor.setContent(initial);
   }
 });
+});
 document.querySelector('form').addEventListener('submit', function(e) {
   e.preventDefault();
   var form = this;
   var ed = tinymce.get('youth-editor');
   if (!ed) { form.submit(); return; }
   ed.uploadImages().then(function() { ed.save(); form.submit(); });
+});
 });
 <\/script>`;
 }
@@ -351,6 +363,7 @@ export function tinymcePageSection(existingContent = '') {
   <textarea id="page-editor" name="content"></textarea>
 </div>
 <script>
+_onTinymce(function(){
 tinymce.init({
   selector: '#page-editor',
   plugins: 'link lists blockquote code',
@@ -368,12 +381,14 @@ tinymce.init({
     if (initial.trim()) editor.setContent(initial);
   }
 });
+});
 document.querySelector('form').addEventListener('submit', function(e) {
   e.preventDefault();
   var form = this;
   var ed = tinymce.get('page-editor');
   if (!ed) { form.submit(); return; }
   ed.save(); form.submit();
+});
 });
 <\/script>`;
 }
@@ -383,6 +398,7 @@ export function tinymceNoteSection(id, name, existingContent = '', minHeight = 1
   const safe = (existingContent || '').replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
   return `<textarea id="${id}" name="${name}"></textarea>
 <script>
+_onTinymce(function(){
 tinymce.init({
   selector: '#${id}',
   plugins: 'link lists blockquote',
@@ -400,6 +416,7 @@ tinymce.init({
     if (initial.trim()) editor.setContent(initial);
   }
 });
+});
 <\/script>`;
 }
 
@@ -412,6 +429,7 @@ export function tinymcePastorSection(existingBody = '') {
   <textarea id="pastor-editor" name="pastor_note"></textarea>
 </div>
 <script>
+_onTinymce(function(){
 tinymce.init({
   selector: '#pastor-editor',
   plugins: 'image link lists blockquote table code',
@@ -436,6 +454,7 @@ tinymce.init({
     if (initialBody.trim()) editor.setContent(initialBody);
   }
 });
+});
 document.querySelector('form').addEventListener('submit', function(e) {
   e.preventDefault();
   var form = this;
@@ -443,6 +462,7 @@ document.querySelector('form').addEventListener('submit', function(e) {
   if (!ed) { tinymce.editors.forEach(function(e2){e2.save();}); form.submit(); return; }
   tinymce.editors.forEach(function(e2){if(e2!==ed)e2.save();});
   ed.uploadImages().then(function() { ed.save(); form.submit(); });
+});
 });
 <\/script>`;
 }

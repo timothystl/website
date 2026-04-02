@@ -175,7 +175,7 @@ export default {
          LIMIT ?`
       ).bind(today, today, limit).all();
       return new Response(JSON.stringify(rows.results), {
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
       });
     }
 
@@ -185,7 +185,7 @@ export default {
       const row = await env.DB.prepare('SELECT slug, title, content, updated_at FROM youth_pages WHERE slug = ?').bind(slug).first();
       if (!row) return new Response('Not found', { status: 404 });
       return new Response(JSON.stringify(row), {
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
       });
     }
 
@@ -202,14 +202,14 @@ export default {
         const fixUrl = s => s ? s.replace(/src="\/images\//g, 'src="https://admin.timothystl.org/images/') : s;
         const fixed = rows.results.map(r => ({ ...r, body: fixUrl(r.body) }));
         return new Response(JSON.stringify(fixed), {
-          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
         });
       }
       const row = await env.DB.prepare('SELECT slug, title, content, has_posts, cta_label, cta_url, cta_label_2, cta_url_2, updated_at FROM youth_pages WHERE slug = ?').bind(slug).first();
       if (!row) return new Response('Not found', { status: 404 });
       const fixUrl = s => s ? s.replace(/src="\/images\//g, 'src="https://admin.timothystl.org/images/') : s;
       return new Response(JSON.stringify({ ...row, content: fixUrl(row.content) }), {
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
       });
     }
 
@@ -219,7 +219,7 @@ export default {
       const row = await env.DB.prepare('SELECT key, label, value, published FROM page_content WHERE key = ?').bind(key).first();
       if (!row) return new Response('Not found', { status: 404 });
       return new Response(JSON.stringify(row), {
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
       });
     }
 
@@ -227,7 +227,7 @@ export default {
     if (path === '/api/staff' && method === 'GET') {
       const rows = await env.DB.prepare('SELECT id, name, title, email, photo_url, bio, display_order FROM staff_members ORDER BY display_order, id').all();
       return new Response(JSON.stringify(rows.results), {
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=3600' }
       });
     }
 
@@ -237,22 +237,24 @@ export default {
       const row = await env.DB.prepare('SELECT key, value FROM site_settings WHERE key = ?').bind(key).first();
       if (!row) return new Response('Not found', { status: 404 });
       return new Response(JSON.stringify(row), {
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
       });
     }
 
     // ── PUBLIC: newsletter archive API ──
     if (path === '/api/newsletters' && method === 'GET') {
-      const rows = await env.DB.prepare(
-        "SELECT id, subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, created_at FROM newsletters WHERE (status IS NULL OR status = 'published') ORDER BY published_at DESC"
-      ).all();
-      const newsletters = [];
-      for (const row of rows.results) {
-        const evts = await env.DB.prepare('SELECT * FROM events WHERE newsletter_id = ? ORDER BY event_date, sort_order').bind(row.id).all();
-        newsletters.push({ ...row, events: evts.results });
+      const [rows, allEvts] = await Promise.all([
+        env.DB.prepare("SELECT id, subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, created_at FROM newsletters WHERE (status IS NULL OR status = 'published') ORDER BY published_at DESC").all(),
+        env.DB.prepare('SELECT * FROM events ORDER BY event_date, sort_order').all()
+      ]);
+      const evtsByNewsletter = {};
+      for (const e of allEvts.results) {
+        if (!evtsByNewsletter[e.newsletter_id]) evtsByNewsletter[e.newsletter_id] = [];
+        evtsByNewsletter[e.newsletter_id].push(e);
       }
+      const newsletters = rows.results.map(row => ({ ...row, events: evtsByNewsletter[row.id] || [] }));
       return new Response(JSON.stringify(newsletters), {
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
       });
     }
 
@@ -408,7 +410,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
       let files = [];
       try { files = JSON.parse(data.files_json || '[]'); } catch(_) {}
       return new Response(JSON.stringify({ meeting_info: data.meeting_info || '', zoom_link: data.zoom_link || '', files }), {
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=60' }
       });
     }
 
@@ -416,22 +418,29 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
     if (path === '/api/redirects' && method === 'GET') {
       const rows = await env.DB.prepare('SELECT path, url, label FROM redirects ORDER BY path').all();
       return new Response(JSON.stringify({ redirects: rows.results }), {
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=60' }
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
       });
     }
 
     // ── PUBLIC: sermon series API ──
     if (path === '/api/sermon-series' && method === 'GET') {
-      const series = await env.DB.prepare('SELECT * FROM sermon_series ORDER BY active DESC, sort_order ASC, id DESC').all();
-      const result = [];
-      for (const s of series.results) {
-        const notes = await env.DB.prepare("SELECT * FROM sermon_notes WHERE series_id = ? AND (date IS NULL OR date >= date('now', '-1 year')) ORDER BY date DESC, id DESC").bind(s.id).all();
-        result.push({ ...s, notes: notes.results });
+      const [seriesRows, notesRows] = await Promise.all([
+        env.DB.prepare('SELECT * FROM sermon_series ORDER BY active DESC, sort_order ASC, id DESC').all(),
+        env.DB.prepare("SELECT * FROM sermon_notes WHERE (date IS NULL OR date >= date('now', '-1 year')) ORDER BY date DESC, id DESC").all()
+      ]);
+      const notesBySeries = {};
+      const standalone = [];
+      for (const n of notesRows.results) {
+        if (n.series_id) {
+          if (!notesBySeries[n.series_id]) notesBySeries[n.series_id] = [];
+          notesBySeries[n.series_id].push(n);
+        } else {
+          if (standalone.length < 20) standalone.push(n);
+        }
       }
-      // Also get standalone notes (no series) — exclude notes older than 1 year
-      const standalone = await env.DB.prepare("SELECT * FROM sermon_notes WHERE (series_id IS NULL OR series_id = 0) AND (date IS NULL OR date >= date('now', '-1 year')) ORDER BY date DESC, id DESC LIMIT 20").all();
-      return new Response(JSON.stringify({ series: result, standalone: standalone.results }), {
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      const result = seriesRows.results.map(s => ({ ...s, notes: notesBySeries[s.id] || [] }));
+      return new Response(JSON.stringify({ series: result, standalone }), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
       });
     }
 
