@@ -2868,17 +2868,30 @@ async function loadSermons() {
     if (allNotes.length > 0) {
       const ns = document.getElementById('sermons-notes-section');
       ns.style.display = '';
-      document.getElementById('sermon-notes-list').innerHTML = allNotes.slice(0, 12).map(function(n) { // Show up to 12 most recent sermon notes
+      document.getElementById('sermon-notes-list').innerHTML = allNotes.slice(0, 12).map(function(n, i) {
         const dateLabel = n.date ? new Date(n.date + 'T12:00:00').toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'}) : '';
         const hasOutline = n.outline && n.outline.trim();
         const bodyId = 'sn-' + n.id;
-        return '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--r-md);padding:24px;margin-bottom:12px;">' +
-          (dateLabel ? '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mid);margin-bottom:6px;">' + dateLabel + '</div>' : '') +
-          '<div style="font-family:var(--serif);font-size:20px;color:var(--steel);margin-bottom:4px;">' + n.title + '</div>' +
-          (n.scripture ? '<div style="font-size:12px;color:var(--gray);margin-bottom:' + (hasOutline ? '14' : '0') + 'px;">' + n.scripture + '</div>' : '') +
-          (hasOutline ? '<div id="' + bodyId + '" style="font-size:14px;color:var(--charcoal);line-height:1.75;white-space:pre-wrap;margin-top:10px;border-top:1px solid var(--border);padding-top:12px;">' + n.outline + '</div>' : '') +
-          (n.youtube_url ? '<div style="margin-top:14px;"><a href="' + n.youtube_url + '" target="_blank" class="btn btn-sm" style="background:var(--mist);color:var(--steel);border:1px solid var(--border);">Watch this service →</a></div>' : '') +
-          '</div>';
+        const isFirst = i === 0;
+        // Convert newlines to paragraphs for clean mobile rendering
+        const outlineHtml = hasOutline
+          ? n.outline.split(/\n+/).filter(function(l){return l.trim();}).map(function(l){return '<p style="margin:0 0 10px;">' + l.trim() + '</p>';}).join('')
+          : '';
+        const header = '<button onclick="(function(b,c,a){var open=b.style.display===\'none\';b.style.display=open?\'block\':\'none\';a.textContent=open?\'▲\':\'▼\';})(document.getElementById(\'' + bodyId + '\'),this,this.querySelector(\'.sn-chevron\'))" style="width:100%;text-align:left;background:none;border:none;cursor:pointer;padding:20px 20px ' + (isFirst && hasOutline ? '0' : '20px') + ';display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">' +
+          '<div>' +
+          (isFirst ? '<div style="font-family:var(--sans);font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--amber);margin-bottom:6px;">This Sunday</div>' : (dateLabel ? '<div style="font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gray);margin-bottom:5px;">' + dateLabel + '</div>' : '')) +
+          '<div style="font-family:var(--serif);font-size:20px;color:var(--steel);line-height:1.25;">' + n.title + '</div>' +
+          (n.scripture ? '<div style="font-family:var(--sans);font-size:13px;color:var(--mid);margin-top:4px;">' + n.scripture + '</div>' : '') +
+          '</div>' +
+          (hasOutline ? '<span class="sn-chevron" style="color:var(--gray);font-size:12px;padding-top:4px;flex-shrink:0;">' + (isFirst ? '▲' : '▼') + '</span>' : '') +
+          '</button>';
+        const body = hasOutline
+          ? '<div id="' + bodyId + '" style="display:' + (isFirst ? 'block' : 'none') + ';padding:0 20px 20px;border-top:1px solid var(--border);margin:0 20px;">' +
+            '<div style="font-family:var(--sans);font-size:16px;color:var(--charcoal);line-height:1.8;padding-top:16px;">' + outlineHtml + '</div>' +
+            (n.youtube_url ? '<a href="' + n.youtube_url + '" target="_blank" class="btn btn-sm" style="margin-top:16px;background:var(--mist);color:var(--steel);border:1px solid var(--border);">Watch this service →</a>' : '') +
+            '</div>'
+          : (n.youtube_url ? '<div style="padding:0 20px 20px;"><a href="' + n.youtube_url + '" target="_blank" class="btn btn-sm" style="background:var(--mist);color:var(--steel);border:1px solid var(--border);">Watch this service →</a></div>' : '');
+        return '<div style="background:var(--white);border:' + (isFirst ? '2px solid var(--amber)' : '1px solid var(--border)') + ';border-radius:var(--r-md);margin-bottom:10px;overflow:hidden;">' + header + body + '</div>';
       }).join('');
     }
   } catch(e) { /* keep fallback content */ }
