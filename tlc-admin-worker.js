@@ -6,7 +6,7 @@
 
 
 import { ADMIN_PASSWORD, TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS } from './admin/db.js';
-import { authCookie, setCookieHeader, html, topbarHtml, loginPage, formatDate, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection } from './admin/helpers.js';
+import { authCookie, setCookieHeader, html, topbarHtml, loginPage, formatDate, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection } from './admin/helpers.js';
 import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHtml } from './admin/email.js';
 import { handleGymRoutes, sweepExpiredItems, extractImageKeys } from './admin/gym.js';
 
@@ -54,6 +54,7 @@ export default {
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN wol_content TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN lasm_content TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN secondary_note TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN news_item_ids TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('CREATE TABLE IF NOT EXISTS redirects (path TEXT PRIMARY KEY, url TEXT NOT NULL, label TEXT)').run(); } catch (_) {}
     // Pre-populate ministry page slugs so they're always editable
     for (const p of MINISTRY_SLUGS) {
@@ -879,7 +880,7 @@ ${topbarHtml('sermons', `<a href="/sermons">← Back</a>`)}
         `SELECT id, title, summary, publish_date FROM news_items
          WHERE publish_date <= ? AND (expire_date IS NULL OR expire_date >= ?)
            AND (channels IS NULL OR channels LIKE '%email%')
-         ORDER BY COALESCE(event_date, publish_date) DESC LIMIT 20`
+         ORDER BY COALESCE(event_date, publish_date) ASC LIMIT 20`
       ).bind(today, today).all();
       const newsPickerHtml = emailItems.results.length === 0
         ? `<div style="font-size:13px;color:var(--gray);padding:10px 0;">No news items available. Add items in the News &amp; Events tab first.</div>`
@@ -940,7 +941,7 @@ ${topbarHtml('news', `<a href="/newsitems">← News &amp; Events</a>`)}
         <div class="card-title">Secondary note <span class="tag">Optional</span></div>
         <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">A second free-form text block that appears in the email below the pastor's note. Leave blank to omit.</div>
         <div class="form-group">
-          <textarea name="secondary_note" style="min-height:140px;" placeholder="Additional message, reflection, or update…"></textarea>
+          ${tinymceNoteSection('secondary-editor', 'secondary_note', '', 140)}
         </div>
       </div>
 
@@ -962,11 +963,11 @@ ${topbarHtml('news', `<a href="/newsitems">← News &amp; Events</a>`)}
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
           <div class="form-group" style="margin:0;">
             <label>Word of Life</label>
-            <textarea name="wol_content" style="min-height:120px;" placeholder="News or update from Word of Life School…"></textarea>
+            ${tinymceNoteSection('wol-editor', 'wol_content', '', 120)}
           </div>
           <div class="form-group" style="margin:0;">
             <label>LASM</label>
-            <textarea name="lasm_content" style="min-height:120px;" placeholder="News or update from LASM…"></textarea>
+            ${tinymceNoteSection('lasm-editor', 'lasm_content', '', 120)}
           </div>
         </div>
       </div>
@@ -1129,20 +1130,21 @@ addEvent();
         selectedNewsItems = selectedNewsIds.map(id => newsMap[id]).filter(Boolean);
       }
 
+      const newsIdsStr = selectedNewsIds.join(',');
       let newsletterId;
       if (editId) {
         // Update existing newsletter
         await env.DB.prepare(
-          'UPDATE newsletters SET subject=?, pastor_note=?, ministry_content=?, ministry_type=?, published_at=?, format=?, cta_url=?, cta_label=?, status=?, wol_content=?, lasm_content=?, secondary_note=? WHERE id=?'
-        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, editId).run();
+          'UPDATE newsletters SET subject=?, pastor_note=?, ministry_content=?, ministry_type=?, published_at=?, format=?, cta_url=?, cta_label=?, status=?, wol_content=?, lasm_content=?, secondary_note=?, news_item_ids=? WHERE id=?'
+        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, editId).run();
         newsletterId = parseInt(editId, 10);
         // Replace events
         await env.DB.prepare('DELETE FROM events WHERE newsletter_id = ?').bind(newsletterId).run();
       } else {
         // Insert new newsletter
         const result = await env.DB.prepare(
-          'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote).run();
+          'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr).run();
         newsletterId = result.meta.last_row_id;
       }
 
@@ -1158,7 +1160,9 @@ addEvent();
       let emailSuffix = '';
       if (action === 'publish' && emailSend !== 'none') {
         const listId = emailSend === 'test' ? 2 : parseInt(env.BREVO_LIST_ID || '0', 10);
-        if (listId) {
+        if (!listId && emailSend === 'all') {
+          emailSuffix = `&emailerr=${encodeURIComponent('BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}`;
+        } else if (listId) {
           const emailHtml = buildEmailHtml(subject, savedNote, events, wolContent, lasmContent, publishedAt, selectedNewsItems, secondaryNote);
           const result = await sendBrevoNewsletter(env, { subject, htmlContent: emailHtml, listIds: [listId] });
           emailSuffix = result.success
@@ -1180,6 +1184,25 @@ addEvent();
       if (!row) return new Response('Not found', { status: 404 });
       const eventsRows = await env.DB.prepare('SELECT * FROM events WHERE newsletter_id = ? ORDER BY sort_order').bind(editId).all();
       const fmt = row.format || 'weekly';
+      const today2 = new Date().toISOString().split('T')[0];
+      const savedNewsIds = (row.news_item_ids || '').split(',').map(s => s.trim()).filter(Boolean);
+      const editEmailItems = await env.DB.prepare(
+        `SELECT id, title, summary, publish_date FROM news_items
+         WHERE publish_date <= ? AND (expire_date IS NULL OR expire_date >= ?)
+           AND (channels IS NULL OR channels LIKE '%email%')
+         ORDER BY COALESCE(event_date, publish_date) ASC LIMIT 20`
+      ).bind(today2, today2).all();
+      const editNewsPickerHtml = editEmailItems.results.length === 0
+        ? `<div style="font-size:13px;color:var(--gray);padding:10px 0;">No news items available. Add items in the News &amp; Events tab first.</div>`
+        : editEmailItems.results.map(item => `
+          <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;">
+            <input type="checkbox" name="news_item_ids" value="${item.id}"${savedNewsIds.includes(String(item.id)) ? ' checked' : ''} style="margin-top:3px;flex-shrink:0;">
+            <div>
+              <div style="font-size:14px;font-weight:600;color:var(--charcoal);">${item.title}</div>
+              ${item.summary ? `<div style="font-size:12px;color:var(--gray);margin-top:2px;">${item.summary.substring(0, 100)}${item.summary.length > 100 ? '…' : ''}</div>` : ''}
+              <div style="font-size:11px;color:var(--gray);margin-top:2px;">${item.publish_date}</div>
+            </div>
+          </label>`).join('');
 
       // Build prefilled events JS
       const eventsJs = eventsRows.results.map((e, i) => `
@@ -1244,16 +1267,19 @@ ${topbarHtml('news', `<a href="/newsitems">← News &amp; Events</a>`)}
     <div id="weekly-fields" style="display:${fmt==='weekly'?'':'none'}">
       <div class="card">
         <div class="card-title">Pastor's note</div>
-        <div class="form-group">
-          <textarea name="pastor_note" style="min-height:180px;">${pastorNoteVal.replace(/</g,'&lt;')}</textarea>
-        </div>
+        ${tinymcePastorSection(pastorNoteVal)}
       </div>
       <div class="card">
         <div class="card-title">Secondary note <span class="tag">Optional</span></div>
         <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">A second free-form text block that appears in the email below the pastor's note. Leave blank to omit.</div>
         <div class="form-group">
-          <textarea name="secondary_note" style="min-height:140px;">${(row.secondary_note||'').replace(/</g,'&lt;')}</textarea>
+          ${tinymceNoteSection('secondary-editor', 'secondary_note', row.secondary_note || '', 140)}
         </div>
+      </div>
+      <div class="card">
+        <div class="card-title">News &amp; Events <span class="tag">Pick from your posts</span></div>
+        <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">Check items to include. The <strong>first checked item</strong> appears as the featured story, the <strong>second</strong> as secondary news, and the rest as compact cards — all with a "Read more" link. Long text is automatically trimmed.</div>
+        ${editNewsPickerHtml}
       </div>
       <div class="card">
         <div class="card-title">Upcoming events</div>
@@ -1266,11 +1292,11 @@ ${topbarHtml('news', `<a href="/newsitems">← News &amp; Events</a>`)}
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
           <div class="form-group" style="margin:0;">
             <label>Word of Life</label>
-            <textarea name="wol_content" style="min-height:120px;">${(row.wol_content||'').replace(/</g,'&lt;')}</textarea>
+            ${tinymceNoteSection('wol-editor', 'wol_content', row.wol_content || '', 120)}
           </div>
           <div class="form-group" style="margin:0;">
             <label>LASM</label>
-            <textarea name="lasm_content" style="min-height:120px;">${(row.lasm_content||'').replace(/</g,'&lt;')}</textarea>
+            ${tinymceNoteSection('lasm-editor', 'lasm_content', row.lasm_content || '', 120)}
           </div>
         </div>
       </div>
@@ -1343,7 +1369,7 @@ function pickFormat(fmt) {
   document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : 'none';
 }
 ${eventsJs}
-</script>`, 'Edit Newsletter');
+</script>`, 'Edit Newsletter', TINYMCE_HEAD);
     }
 
     // ── SEND EMAIL (for saved newsletters) ──
@@ -1352,6 +1378,13 @@ ${eventsJs}
       const form = await request.formData();
       const listType = form.get('list_type') || 'test';
       const listId = listType === 'test' ? 2 : parseInt(env.BREVO_LIST_ID || '0', 10);
+
+      if (!listId && listType === 'all') {
+        return new Response('', {
+          status: 302,
+          headers: { Location: `/newsitems?msg=emailed&emailerr=${encodeURIComponent('BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}` }
+        });
+      }
 
       const row = await env.DB.prepare(
         'SELECT subject, pastor_note, wol_content, lasm_content, secondary_note, published_at FROM newsletters WHERE id = ?'
