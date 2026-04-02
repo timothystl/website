@@ -2316,7 +2316,7 @@ async function loadNewsletters() {
       return '<div style="background:white;border:1px solid var(--border);border-radius:14px;padding:28px;margin-bottom:16px;box-shadow:var(--shadow);">' +
         '<div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:6px;">' + date + '</div>' +
         '<div style="font-family:var(--serif);font-size:22px;color:var(--steel);margin-bottom:12px;">' + n.subject + '</div>' +
-        (n.pastor_note ? '<div style="font-family:var(--sans);font-size:15px;color:var(--charcoal);line-height:1.8;padding-bottom:12px;border-bottom:1px solid var(--border);">' + n.pastor_note + '</div>' : '') +
+        (n.pastor_note ? '<div style="font-family:var(--sans);font-size:15px;color:var(--charcoal);line-height:1.8;padding-bottom:12px;border-bottom:1px solid var(--border);">' + (n.pastor_note.includes('<') ? n.pastor_note : n.pastor_note.replace(/\n/g,'<br>')) + '</div>' : '') +
         '<div style="margin-top:12px;"><button onclick="loadNewsletterDetail(' + n.id + ')" style="background:none;border:none;color:var(--teal);font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;padding:0;">Read this letter →</button></div>' +
         eventsHtml + ministryHtml + '</div>';
     }).join('');
