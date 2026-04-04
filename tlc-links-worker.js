@@ -202,9 +202,9 @@ body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-he
       <span class="card-arrow" id="signup-chevron">&#x203A;</span>
     </div>
     <div class="signup-form-wrap" id="signup-form-wrap">
-      <form id="signup-form" onsubmit="submitSignup(event)">
-        <input class="signup-input" type="text" name="name" placeholder="Your name (optional)" autocomplete="given-name">
-        <input class="signup-input" type="email" name="email" placeholder="Email address" required autocomplete="email">
+      <form id="signup-form" onsubmit="submitSignup(event)" autocomplete="off">
+        <input class="signup-input" type="text" name="name" placeholder="Your name (optional)" autocomplete="off" data-lpignore="true" data-1p-ignore data-bwignore>
+        <input class="signup-input" type="email" name="email" placeholder="Email address" required autocomplete="off" data-lpignore="true" data-1p-ignore data-bwignore>
         <input type="text" name="website" style="display:none" tabindex="-1" autocomplete="off">
         <button class="signup-btn" type="submit" id="signup-btn">Subscribe →</button>
       </form>
