@@ -91,6 +91,19 @@ body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-he
 .card-arrow{color:var(--ice);font-size:20px;flex-shrink:0;transition:color .15s;}
 .link-card:hover .card-arrow{color:var(--sky);}
 
+/* Newsletter signup card */
+.signup-card{background:var(--white);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);overflow:hidden;}
+.signup-card-header{display:flex;align-items:center;gap:16px;padding:18px 20px;cursor:pointer;transition:background .15s;}
+.signup-card-header:hover{background:var(--mist);}
+.signup-form-wrap{display:none;padding:0 20px 20px;}
+.signup-form-wrap.open{display:block;}
+.signup-input{width:100%;background:#F9F6F0;border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-family:var(--sans);font-size:15px;color:var(--charcoal);margin-bottom:10px;outline:none;transition:border-color .2s;}
+.signup-input:focus{border-color:var(--amber);}
+.signup-btn{width:100%;background:var(--steel);color:white;font-family:var(--sans);font-size:15px;font-weight:700;border:none;border-radius:10px;padding:13px;cursor:pointer;transition:background .15s;}
+.signup-btn:hover{background:#0D3050;}
+.signup-btn:disabled{opacity:.6;cursor:default;}
+.signup-msg{margin-top:12px;font-family:var(--sans);font-size:14px;text-align:center;}
+
 /* Footer */
 .footer{width:100%;max-width:480px;padding:0 20px 40px;text-align:center;display:flex;flex-direction:column;gap:4px;}
 .footer-address{font-family:var(--sans);font-size:13px;color:var(--charcoal);font-weight:600;}
@@ -177,16 +190,27 @@ body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-he
     <span class="card-arrow">&#x203A;</span>
   </a>
 
-  <a class="link-card" href="/contact.vcf">
-    <div class="card-icon icon--mist">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3D627C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M9 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/><path d="M15 8h2M15 12h2M9 14c-2 0-4 1-4 2v0h8v0c0-1-2-2-4-2z"/></svg>
+  <div class="signup-card" id="signup-card">
+    <div class="signup-card-header" onclick="toggleSignup()" role="button" aria-expanded="false" id="signup-header">
+      <div class="card-icon icon--amber">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D4922A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+      </div>
+      <div class="card-text">
+        <div class="card-title">Get the Newsletter</div>
+        <div class="card-desc">Weekly news &amp; a word from Pastor Dinger</div>
+      </div>
+      <span class="card-arrow" id="signup-chevron">&#x203A;</span>
     </div>
-    <div class="card-text">
-      <div class="card-title">Save Our Contact</div>
-      <div class="card-desc">Add Timothy Lutheran to your phone contacts</div>
+    <div class="signup-form-wrap" id="signup-form-wrap">
+      <form id="signup-form" onsubmit="submitSignup(event)">
+        <input class="signup-input" type="text" name="name" placeholder="Your name (optional)" autocomplete="given-name">
+        <input class="signup-input" type="email" name="email" placeholder="Email address" required autocomplete="email">
+        <input type="text" name="website" style="display:none" tabindex="-1" autocomplete="off">
+        <button class="signup-btn" type="submit" id="signup-btn">Subscribe →</button>
+      </form>
+      <div class="signup-msg" id="signup-msg"></div>
     </div>
-    <span class="card-arrow">&#x203A;</span>
-  </a>
+  </div>
 
 </div>
 
@@ -195,5 +219,36 @@ body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-he
   <div class="footer-detail"><a href="tel:+13147818673">(314) 781-8673</a> · <a href="https://timothystl.org">timothystl.org</a></div>
 </div>
 
+<script>
+function toggleSignup() {
+  var wrap = document.getElementById('signup-form-wrap');
+  var chevron = document.getElementById('signup-chevron');
+  var header = document.getElementById('signup-header');
+  var open = wrap.classList.toggle('open');
+  chevron.innerHTML = open ? '&#x2039;' : '&#x203A;';
+  header.setAttribute('aria-expanded', open);
+  if (open) wrap.querySelector('input[type="email"]').focus();
+}
+async function submitSignup(e) {
+  e.preventDefault();
+  var btn = document.getElementById('signup-btn');
+  var msg = document.getElementById('signup-msg');
+  btn.disabled = true; btn.textContent = 'Subscribing…';
+  msg.style.color = ''; msg.textContent = '';
+  try {
+    var fd = new FormData(e.target);
+    var r = await fetch('https://admin.timothystl.org/api/subscribe', { method: 'POST', body: fd });
+    var d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error || 'Error');
+    document.getElementById('signup-form').style.display = 'none';
+    msg.style.color = '#2E7D32';
+    msg.textContent = "You're on the list! 🎉 Look for us in your inbox.";
+  } catch(err) {
+    msg.style.color = '#B00020';
+    msg.textContent = err.message || 'Something went wrong. Please try again.';
+    btn.disabled = false; btn.textContent = 'Subscribe →';
+  }
+}
+</script>
 </body>
 </html>`;
