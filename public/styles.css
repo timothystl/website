@@ -320,3 +320,7 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
   .nav-mobile button,.nav-mobile a{padding:13px 0;}
   .bio-more{padding:10px 0 0;font-size:12px;}
 }
+
+/* Newsletter signup — white-on-dark input placeholders */
+#newsletter-signup-form input::placeholder { color: rgba(255,255,255,.45); }
+#newsletter-signup-form input:focus { border-color: var(--amber) !important; box-shadow: 0 0 0 3px rgba(201,151,58,.25); }

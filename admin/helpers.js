@@ -143,6 +143,7 @@ export function topbarHtml(activeTab, extraLinks = '') {
     <a href="/pages" class="tab${activeTab === 'pages' ? ' tab-active' : ''}">Pages</a>
     <a href="/staff" class="tab${activeTab === 'staff' ? ' tab-active' : ''}">Staff</a>
     <a href="/settings" class="tab${activeTab === 'settings' ? ' tab-active' : ''}">Settings</a>
+    <a href="/subscribers" class="tab${activeTab === 'subscribers' ? ' tab-active' : ''}">Subscribers</a>
     <a href="/gym-rentals" class="tab${activeTab === 'gym' ? ' tab-active' : ''}">Gym Rentals</a>
     <a href="https://volunteer.timothystl.org/scheduler" target="_blank" class="tab tab-external">Scheduler ↗</a>
     <a href="https://volunteer.timothystl.org/admin" target="_blank" class="tab tab-external">Volunteer Admin ↗</a>

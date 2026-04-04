@@ -178,6 +178,14 @@ export const DB_INIT_SERMON_NOTES = `CREATE TABLE IF NOT EXISTS sermon_notes (
   created_at TEXT DEFAULT (datetime('now'))
 )`;
 
+export const DB_INIT_SUBSCRIBERS = `CREATE TABLE IF NOT EXISTS newsletter_subscribers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT NOT NULL UNIQUE,
+  name TEXT,
+  source TEXT DEFAULT 'website',
+  subscribed_at TEXT DEFAULT (datetime('now'))
+)`;
+
 export const THEMES = ['Acceptance', 'Christian Education', 'Outreach', 'Worship'];
 export const CONTENT_TYPES = ['Testimonial / Quote', 'Story', 'Explainer', 'Event Promo', 'Factoid / Trivia'];
 

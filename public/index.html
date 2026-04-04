@@ -1726,6 +1726,28 @@
 </div>
 
 <!-- FOOTER -->
+<!-- ── NEWSLETTER SIGNUP ── -->
+<section style="background:var(--steel);padding:56px 28px;">
+  <div style="max-width:640px;margin:0 auto;text-align:center;">
+    <div class="eyebrow eyebrow--light">Stay Connected</div>
+    <h2 style="color:white;margin-bottom:10px;">Get our weekly newsletter</h2>
+    <p style="color:rgba(255,255,255,.72);font-size:16px;margin-bottom:32px;">News, upcoming events, and a word from Pastor Dinger — delivered to your inbox each week.</p>
+    <div id="newsletter-signup-wrap">
+      <form id="newsletter-signup-form" onsubmit="handleNewsletterSignup(event)" style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
+        <input type="text" name="name" placeholder="Your name (optional)" class="form-input" style="flex:1;min-width:160px;max-width:220px;background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.25);color:white;" autocomplete="given-name">
+        <input type="email" name="email" placeholder="Email address" required class="form-input" style="flex:1;min-width:200px;max-width:280px;background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.25);color:white;" autocomplete="email">
+        <input type="text" name="website" style="display:none;" tabindex="-1" autocomplete="off">
+        <button type="submit" id="newsletter-signup-btn" class="btn btn-secondary">Subscribe →</button>
+      </form>
+      <div id="newsletter-signup-alert" style="display:none;margin-top:16px;font-size:14px;color:rgba(255,255,255,.85);"></div>
+    </div>
+    <div id="newsletter-signup-success" style="display:none;padding:20px;background:rgba(255,255,255,.1);border-radius:var(--r-md);border:1px solid rgba(255,255,255,.2);">
+      <div style="font-family:var(--serif);font-size:22px;color:white;margin-bottom:8px;">You're on the list!</div>
+      <div style="color:rgba(255,255,255,.75);font-size:15px;">Thanks for signing up. Look for our newsletter in your inbox soon.</div>
+    </div>
+  </div>
+</section>
+
 <footer>
   <div class="footer-inner">
     <div>
@@ -2537,6 +2559,27 @@ document.getElementById('prayer-form').addEventListener('submit', async function
   }
   btn.disabled = false; btn.textContent = 'Submit prayer request';
 });
+
+// ── NEWSLETTER SIGNUP ─────────────────────────────────────────
+async function handleNewsletterSignup(e) {
+  e.preventDefault();
+  const btn = document.getElementById('newsletter-signup-btn');
+  const alert = document.getElementById('newsletter-signup-alert');
+  btn.disabled = true; btn.textContent = 'Subscribing…';
+  alert.style.display = 'none';
+  try {
+    const fd = new FormData(e.target);
+    const r = await fetch('https://admin.timothystl.org/api/subscribe', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error || 'Server error');
+    document.getElementById('newsletter-signup-wrap').style.display = 'none';
+    document.getElementById('newsletter-signup-success').style.display = 'block';
+  } catch(err) {
+    alert.style.display = 'block';
+    alert.textContent = err.message || 'Something went wrong. Please try again.';
+    btn.disabled = false; btn.textContent = 'Subscribe →';
+  }
+}
 
 // ── VOTERS PAGE ───────────────────────────────────────────────
 async function loadVotersPage() {

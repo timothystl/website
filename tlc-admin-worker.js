@@ -5,7 +5,7 @@
 // Last modified: 2026-03-27
 
 
-import { ADMIN_PASSWORD, TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS } from './admin/db.js';
+import { ADMIN_PASSWORD, TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS } from './admin/db.js';
 import { authCookie, setCookieHeader, html, topbarHtml, loginPage, formatDate, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection } from './admin/helpers.js';
 import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHtml } from './admin/email.js';
 import { handleGymRoutes, sweepExpiredItems, extractImageKeys } from './admin/gym.js';
@@ -69,6 +69,7 @@ export default {
     try { await env.DB.prepare(DB_INIT_VOTERS_PAGE).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_SERMON_SERIES).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_SERMON_NOTES).run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_SUBSCRIBERS).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_PAGE_CONTENT).run(); } catch (_) {}
     // Migrate: add CTA fields to ministry pages (youth_pages)
     try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN cta_label TEXT').run(); } catch (_) {}
@@ -400,6 +401,39 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
         return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
       } catch(e) {
         return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: corsHeaders });
+      }
+    }
+
+    // ── PUBLIC: newsletter subscribe API ──
+    if (path === '/api/subscribe' && method === 'POST') {
+      const corsH = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
+      try {
+        const form = await request.formData();
+        if (form.get('website')) return new Response(JSON.stringify({ success: true }), { headers: corsH }); // honeypot
+        const email = (form.get('email') || '').trim().toLowerCase();
+        const name = (form.get('name') || '').trim();
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          return new Response(JSON.stringify({ error: 'Please enter a valid email address.' }), { status: 400, headers: corsH });
+        }
+        // Add to Brevo contacts list
+        const listId = parseInt(env.BREVO_LIST_ID || '2');
+        const brevoRes = await fetch('https://api.brevo.com/v3/contacts', {
+          method: 'POST',
+          headers: { 'api-key': env.BREVO_API_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, attributes: { FIRSTNAME: name }, listIds: [listId], updateEnabled: true })
+        });
+        if (!brevoRes.ok && brevoRes.status !== 204) {
+          const err = await brevoRes.json().catch(() => ({}));
+          // Status 400 with code "duplicate_parameter" means already on list — treat as success
+          if (!(err.code === 'duplicate_parameter' || brevoRes.status === 400)) {
+            throw new Error(err.message || 'Email service error');
+          }
+        }
+        // Log to D1 (ignore duplicate emails)
+        await env.DB.prepare('INSERT OR IGNORE INTO newsletter_subscribers (email, name) VALUES (?, ?)').bind(email, name || null).run();
+        return new Response(JSON.stringify({ success: true }), { headers: corsH });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Something went wrong. Please try again or contact us directly.' }), { status: 500, headers: corsH });
       }
     }
 
@@ -2500,6 +2534,36 @@ ${topbarHtml('staff', `<a href="/staff">← All staff</a>`)}
       const rPath = path.slice('/redirects/delete/'.length);
       await env.DB.prepare('DELETE FROM redirects WHERE path = ?').bind(rPath).run();
       return new Response('', { status: 302, headers: { Location: '/settings?msg=redirect-deleted' } });
+    }
+
+    // ── SUBSCRIBERS ADMIN ──
+    if (path === '/subscribers' && method === 'GET') {
+      const total = await env.DB.prepare('SELECT COUNT(*) as cnt FROM newsletter_subscribers').first();
+      const recent = await env.DB.prepare('SELECT email, name, subscribed_at FROM newsletter_subscribers ORDER BY subscribed_at DESC LIMIT 100').all();
+      const rowsHtml = recent.results.length === 0
+        ? `<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No subscribers yet.</div>`
+        : recent.results.map(s => `
+<div style="display:flex;align-items:center;gap:16px;padding:10px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
+  <div style="flex:1;min-width:200px;">
+    <div style="font-size:14px;color:var(--charcoal);">${s.email}</div>
+    ${s.name ? `<div style="font-size:12px;color:var(--gray);">${s.name}</div>` : ''}
+  </div>
+  <div style="font-size:12px;color:var(--gray);flex-shrink:0;">${s.subscribed_at ? s.subscribed_at.slice(0,10) : ''}</div>
+</div>`).join('');
+      return html(`
+${topbarHtml('subscribers')}
+<div class="wrap">
+  <div class="page-title">Newsletter Subscribers</div>
+  <div class="page-sub">People who signed up via the website. Full list is managed in <a href="https://app.brevo.com" target="_blank" style="color:var(--steel);">Brevo ↗</a>.</div>
+  <div class="card" style="margin-bottom:20px;">
+    <div style="font-family:var(--serif);font-size:36px;color:var(--steel);font-weight:700;">${total ? total.cnt : 0}</div>
+    <div style="font-size:13px;color:var(--gray);margin-top:4px;">Total signups via website</div>
+  </div>
+  <div class="card">
+    <div class="card-title">Recent signups</div>
+    ${rowsHtml}
+  </div>
+</div>`, 'Subscribers');
     }
 
     if (path.startsWith('/settings')) {
