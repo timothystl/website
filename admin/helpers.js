@@ -236,14 +236,12 @@ tinymce.init({
   }
 });
 });
-document.querySelector('form').addEventListener('submit', function(e) {
-  e.preventDefault();
-  var form = this;
-  var ed = tinymce.get('body-editor');
-  if (!ed) { form.submit(); return; }
-  ed.uploadImages().then(function() { ed.save(); form.submit(); });
-});
-});
+if (!window._tlcSubmitWired) {
+  window._tlcSubmitWired = true;
+  document.querySelector('form').addEventListener('submit', function() {
+    (window.tinymce ? tinymce.editors : []).forEach(function(ed) { ed.save(); });
+  });
+}
 <\/script>`;
 }
 
@@ -278,14 +276,12 @@ tinymce.init({
   }
 });
 });
-document.querySelector('form').addEventListener('submit', function(e) {
-  e.preventDefault();
-  var form = this;
-  var ed = tinymce.get('post-editor');
-  if (!ed) { form.submit(); return; }
-  ed.uploadImages().then(function() { ed.save(); form.submit(); });
-});
-});
+if (!window._tlcSubmitWired) {
+  window._tlcSubmitWired = true;
+  document.querySelector('form').addEventListener('submit', function() {
+    (window.tinymce ? tinymce.editors : []).forEach(function(ed) { ed.save(); });
+  });
+}
 <\/script>`;
 }
 
@@ -316,14 +312,12 @@ tinymce.init({
   }
 });
 });
-document.querySelector('form').addEventListener('submit', function(e) {
-  e.preventDefault();
-  var form = this;
-  var ed = tinymce.get('sermon-editor');
-  if (!ed) { form.submit(); return; }
-  ed.save(); form.submit();
-});
-});
+if (!window._tlcSubmitWired) {
+  window._tlcSubmitWired = true;
+  document.querySelector('form').addEventListener('submit', function() {
+    (window.tinymce ? tinymce.editors : []).forEach(function(ed) { ed.save(); });
+  });
+}
 <\/script>`;
 }
 
@@ -358,14 +352,12 @@ tinymce.init({
   }
 });
 });
-document.querySelector('form').addEventListener('submit', function(e) {
-  e.preventDefault();
-  var form = this;
-  var ed = tinymce.get('youth-editor');
-  if (!ed) { form.submit(); return; }
-  ed.uploadImages().then(function() { ed.save(); form.submit(); });
-});
-});
+if (!window._tlcSubmitWired) {
+  window._tlcSubmitWired = true;
+  document.querySelector('form').addEventListener('submit', function() {
+    (window.tinymce ? tinymce.editors : []).forEach(function(ed) { ed.save(); });
+  });
+}
 <\/script>`;
 }
 
@@ -396,14 +388,12 @@ tinymce.init({
   }
 });
 });
-document.querySelector('form').addEventListener('submit', function(e) {
-  e.preventDefault();
-  var form = this;
-  var ed = tinymce.get('page-editor');
-  if (!ed) { form.submit(); return; }
-  ed.save(); form.submit();
-});
-});
+if (!window._tlcSubmitWired) {
+  window._tlcSubmitWired = true;
+  document.querySelector('form').addEventListener('submit', function() {
+    (window.tinymce ? tinymce.editors : []).forEach(function(ed) { ed.save(); });
+  });
+}
 <\/script>`;
 }
 
@@ -469,13 +459,11 @@ tinymce.init({
   }
 });
 });
-document.querySelector('form').addEventListener('submit', function(e) {
-  e.preventDefault();
-  var form = this;
-  var ed = tinymce.get('pastor-editor');
-  if (!ed) { tinymce.editors.forEach(function(e2){e2.save();}); form.submit(); return; }
-  tinymce.editors.forEach(function(e2){if(e2!==ed)e2.save();});
-  ed.uploadImages().then(function() { ed.save(); form.submit(); });
-});
+if (!window._tlcSubmitWired) {
+  window._tlcSubmitWired = true;
+  document.querySelector('form').addEventListener('submit', function() {
+    (window.tinymce ? tinymce.editors : []).forEach(function(ed) { ed.save(); });
+  });
+}
 <\/script>`;
 }
