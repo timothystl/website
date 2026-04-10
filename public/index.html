@@ -1011,7 +1011,7 @@
     <p>There's a place for every voice and every instrument at Timothy.</p>
     <div class="btn-row">
       <!-- Button 1: Volunteer signup -->
-      <a href="https://volunteer.timothystl.org" target="_blank" class="btn btn-primary">Volunteer sign-up →</a>
+      <a href="https://volunteer.timothystl.org" target="_blank" class="btn btn-secondary">Volunteer sign-up →</a>
       <!-- Button 2: YouTube channel -->
       <a href="https://www.youtube.com/@TimothySTL" target="_blank" class="btn btn-ghost">Watch on YouTube</a>
       <!-- Button 3: Contact -->
@@ -1074,7 +1074,7 @@
     <p>Reaching out is the first step. Everything is kept strictly confidential.</p>
     <div class="btn-row">
       <!-- Button 1: Request a caregiver -->
-      <a href="mailto:dinger@timothystl.org?subject=Stephen Ministry - Request a Caregiver" class="btn btn-primary">Request a caregiver →</a>
+      <a href="mailto:dinger@timothystl.org?subject=Stephen Ministry - Request a Caregiver" class="btn btn-secondary">Request a caregiver →</a>
       <!-- Button 2: Training inquiry -->
       <a href="mailto:dinger@timothystl.org?subject=Stephen Ministry - Training Interest" class="btn btn-ghost">Learn about training</a>
     </div>
@@ -1154,7 +1154,7 @@
     <p>Volunteer on pantry day, donate non-perishables, or spread the word.</p>
     <div class="btn-row">
       <!-- Button 1: Volunteer -->
-      <a href="https://volunteer.timothystl.org" target="_blank" class="btn btn-primary">Volunteer sign-up →</a>
+      <a href="https://volunteer.timothystl.org" target="_blank" class="btn btn-secondary">Volunteer sign-up →</a>
       <!-- Button 2: Pantry dates (links to news/events page) -->
       <button onclick="showPage('news')" class="btn btn-ghost">See pantry dates</button>
       <!-- Button 3: Contact -->
@@ -1222,7 +1222,7 @@
     <p>Beginners welcome — no experience necessary, just curiosity.</p>
     <div class="btn-row">
       <!-- Button 1: Volunteer -->
-      <a href="https://volunteer.timothystl.org" target="_blank" class="btn btn-primary">Volunteer sign-up →</a>
+      <a href="https://volunteer.timothystl.org" target="_blank" class="btn btn-secondary">Volunteer sign-up →</a>
       <!-- Button 2: Contact -->
       <a href="mailto:dinger@timothystl.org" class="btn btn-ghost">Email the office</a>
     </div>
@@ -1293,7 +1293,7 @@
     <p>Free and open to the public — vendors, volunteers, and neighbors all welcome.</p>
     <div class="btn-row">
       <!-- Button 1: Vendor application — UPDATE href each year with the Google Form link -->
-      <a href="mailto:dinger@timothystl.org?subject=Christmas Market Vendor Interest" class="btn btn-primary">Apply to be a vendor →</a>
+      <a href="mailto:dinger@timothystl.org?subject=Christmas Market Vendor Interest" class="btn btn-secondary">Apply to be a vendor →</a>
       <!-- Button 2: Volunteer at the market -->
       <a href="https://volunteer.timothystl.org" target="_blank" class="btn btn-ghost">Volunteer at the market</a>
       <!-- Button 3: Contact -->
@@ -1332,7 +1332,7 @@
     <h3>Support children in the Philippines.</h3>
     <p>Your giving makes a difference in the lives of vulnerable children through Concordia Children's Services.</p>
     <div class="btn-row">
-      <a href="https://give.tithe.ly/?formId=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8&locationId=fe6ddef2-d6d2-4c85-adfd-f19eac997d38&fundId=49cdc381-ff0e-4b7e-b029-091f206850c1&frequency=one-time" target="_blank" class="btn btn-primary">Give to CCS →</a>
+      <a href="https://give.tithe.ly/?formId=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8&locationId=fe6ddef2-d6d2-4c85-adfd-f19eac997d38&fundId=49cdc381-ff0e-4b7e-b029-091f206850c1&frequency=one-time" target="_blank" class="btn btn-secondary">Give to CCS →</a>
     </div>
   </div>
 </div>
@@ -2103,7 +2103,7 @@ async function loadYouthPage() {
         if (hardBar) hardBar.style.display = 'none';
         var ctaWrap = document.getElementById('youth-admin-cta');
         if (ctaWrap) {
-          var btn1 = '<a href="' + data.cta_url.replace(/"/g,'&quot;') + '" target="_blank" class="btn btn-primary" style="font-size:16px;padding:14px 32px;">' + data.cta_label + '</a>';
+          var btn1 = '<a href="' + data.cta_url.replace(/"/g,'&quot;') + '" target="_blank" class="btn btn-secondary" style="font-size:16px;padding:14px 32px;">' + data.cta_label + '</a>';
           var btn2 = (data.cta_label_2 && data.cta_url_2) ? '<a href="' + data.cta_url_2.replace(/"/g,'&quot;') + '" target="_blank" class="btn btn-ghost" style="font-size:16px;padding:14px 32px;">' + data.cta_label_2 + '</a>' : '';
           ctaWrap.innerHTML = '<div class="page-cta-bar"><div class="btn-row">' + btn1 + btn2 + '</div></div>';
           ctaWrap.style.display = '';
@@ -2280,7 +2280,7 @@ async function loadMinistryCta(slug) {
       var hardBar2 = document.querySelector('#page-' + slug + ' .page-cta-bar');
       if (hardBar2) hardBar2.style.display = 'none';
       if (ctaWrap) {
-        var b1 = '<a href="' + data.cta_url.replace(/"/g,'&quot;') + '" target="_blank" class="btn btn-primary" style="font-size:16px;padding:14px 32px;">' + data.cta_label + '</a>';
+        var b1 = '<a href="' + data.cta_url.replace(/"/g,'&quot;') + '" target="_blank" class="btn btn-secondary" style="font-size:16px;padding:14px 32px;">' + data.cta_label + '</a>';
         var b2 = (data.cta_label_2 && data.cta_url_2) ? '<a href="' + data.cta_url_2.replace(/"/g,'&quot;') + '" target="_blank" class="btn btn-ghost" style="font-size:16px;padding:14px 32px;">' + data.cta_label_2 + '</a>' : '';
         ctaWrap.innerHTML = '<div class="page-cta-bar"><div class="btn-row">' + b1 + b2 + '</div></div>';
         ctaWrap.style.display = '';
@@ -2311,7 +2311,7 @@ async function loadMinistryPage(slug) {
         if (hardBar) hardBar.style.display = 'none';
         var ctaWrap = document.getElementById(slug + '-admin-cta');
         if (ctaWrap) {
-          var btn1 = '<a href="' + data.cta_url.replace(/"/g,'&quot;') + '" target="_blank" class="btn btn-primary" style="font-size:16px;padding:14px 32px;">' + data.cta_label + '</a>';
+          var btn1 = '<a href="' + data.cta_url.replace(/"/g,'&quot;') + '" target="_blank" class="btn btn-secondary" style="font-size:16px;padding:14px 32px;">' + data.cta_label + '</a>';
           var btn2 = (data.cta_label_2 && data.cta_url_2) ? '<a href="' + data.cta_url_2.replace(/"/g,'&quot;') + '" target="_blank" class="btn btn-ghost" style="font-size:16px;padding:14px 32px;">' + data.cta_label_2 + '</a>' : '';
           ctaWrap.innerHTML = '<div class="page-cta-bar"><div class="btn-row">' + btn1 + btn2 + '</div></div>';
           ctaWrap.style.display = '';
