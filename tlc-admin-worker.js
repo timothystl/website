@@ -486,16 +486,16 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
     if (path === '/login' && method === 'POST') {
       const form = await request.formData();
       const pw = form.get('password');
-      if (pw === env.ADMIN_PASSWORD) {
+      if (pw && pw === env.ADMIN_PASSWORD) {
         return new Response('', {
           status: 302,
-          headers: { Location: '/', 'Set-Cookie': setCookieHeader() }
+          headers: { Location: '/', 'Set-Cookie': await setCookieHeader(env.ADMIN_PASSWORD) }
         });
       }
       return loginPage('Incorrect password. Please try again.');
     }
 
-    if (!authCookie(request)) {
+    if (!await authCookie(request, env.ADMIN_PASSWORD)) {
       if (path === '/login') return loginPage();
       return loginPage();
     }

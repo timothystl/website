@@ -4,14 +4,27 @@
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 
 // ── HELPERS ─────────────────────────────────────────────────
-export function authCookie(req) {
-  const cookie = req.headers.get('cookie') || '';
-  return cookie.includes('tlc_auth=authenticated');
+async function cookieToken(secret) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode('tlc_admin_auth'));
+  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-export function setCookieHeader() {
+export async function authCookie(req, secret) {
+  const cookie = req.headers.get('cookie') || '';
+  const match = cookie.match(/tlc_auth=([a-f0-9]+)/);
+  if (!match) return false;
+  const expected = await cookieToken(secret);
+  return match[1] === expected;
+}
+
+export async function setCookieHeader(secret) {
+  const token = await cookieToken(secret);
   const exp = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toUTCString();
-  return `tlc_auth=authenticated; Path=/; Expires=${exp}; HttpOnly; SameSite=Strict`;
+  return `tlc_auth=${token}; Path=/; Expires=${exp}; HttpOnly; SameSite=Strict`;
 }
 
 
