@@ -1,8 +1,6 @@
 // ── CONSTANTS & INITIAL DATA ─────────────────────────────────
 // Extracted from tlc-admin-worker.js
 
-export const ADMIN_PASSWORD = '6704fyler';
-
 // TinyMCE rich-text editor — loaded only on news item form pages
 export const TINYMCE_API_KEY = '5wrsrinqxeqvej5slykwic6rgpfb0v8wvj0f21fgk1r4nhs0';
 export const TINYMCE_HEAD = `<script>window._tinyQ=[];function _onTinymce(fn){if(window.tinymce){fn();}else{window._tinyQ.push(fn);}}<\/script><script async src="https://cdn.tiny.cloud/1/${TINYMCE_API_KEY}/tinymce/7/tinymce.min.js" referrerpolicy="origin" onload="window._tinyQ.forEach(function(fn){fn();});window._tinyQ=[]"><\/script>`;
