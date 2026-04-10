@@ -1452,8 +1452,10 @@
     </div>
   </section>
 
+  <!-- Admin-managed CTA button (set in admin → Ministries → Youth → Edit) -->
+  <div id="youth-admin-cta" style="display:none;"></div>
   <!-- Contact -->
-  <section class="section section--white">
+  <section class="section section--white page-cta-bar">
     <div class="wrap" style="max-width:620px;text-align:center;">
       <span class="eyebrow eyebrow--sage">Get connected</span>
       <h2>Questions about youth ministry?</h2>
@@ -1498,7 +1500,9 @@
       <div id="sundayschool-past-list"></div>
     </div>
   </section>
-  <section class="section section--linen">
+  <!-- Admin-managed CTA button (set in admin → Ministries → Sunday School → Edit) -->
+  <div id="sundayschool-admin-cta" style="display:none;"></div>
+  <section class="section section--linen page-cta-bar">
     <div class="wrap" style="max-width:620px;text-align:center;">
       <span class="eyebrow eyebrow--sage">Get connected</span>
       <h2>Questions about Sunday School?</h2>
@@ -1543,7 +1547,9 @@
       <div id="confirmation-past-list"></div>
     </div>
   </section>
-  <section class="section section--linen">
+  <!-- Admin-managed CTA button (set in admin → Ministries → Confirmation → Edit) -->
+  <div id="confirmation-admin-cta" style="display:none;"></div>
+  <section class="section section--linen page-cta-bar">
     <div class="wrap" style="max-width:620px;text-align:center;">
       <span class="eyebrow eyebrow--sage">Get connected</span>
       <h2>Questions about Confirmation?</h2>
@@ -1588,7 +1594,9 @@
       <div id="vbs-past-list"></div>
     </div>
   </section>
-  <section class="section section--linen">
+  <!-- Admin-managed CTA button (set in admin → Ministries → VBS → Edit) -->
+  <div id="vbs-admin-cta" style="display:none;"></div>
+  <section class="section section--linen page-cta-bar">
     <div class="wrap" style="max-width:620px;text-align:center;">
       <span class="eyebrow eyebrow--sage">Get connected</span>
       <h2>Questions about VBS?</h2>
@@ -1633,7 +1641,9 @@
       <div id="egghunt-past-list"></div>
     </div>
   </section>
-  <section class="section section--linen">
+  <!-- Admin-managed CTA button (set in admin → Ministries → Egg Hunt → Edit) -->
+  <div id="egghunt-admin-cta" style="display:none;"></div>
+  <section class="section section--linen page-cta-bar">
     <div class="wrap" style="max-width:620px;text-align:center;">
       <span class="eyebrow eyebrow--sage">Get connected</span>
       <h2>Questions about the Egg Hunt?</h2>
@@ -1677,7 +1687,9 @@
       <div id="family-past-list"></div>
     </div>
   </section>
-  <section class="section section--linen">
+  <!-- Admin-managed CTA button (set in admin → Ministries → Family Ministry → Edit) -->
+  <div id="family-admin-cta" style="display:none;"></div>
+  <section class="section section--linen page-cta-bar">
     <div class="wrap" style="max-width:620px;text-align:center;">
       <span class="eyebrow eyebrow--sage">Get connected</span>
       <h2>Questions about Family Ministry?</h2>
@@ -2085,6 +2097,17 @@ async function loadYouthPage() {
         document.getElementById('youth-content').innerHTML = fixImgUrls(data.content);
       } else {
         document.getElementById('youth-content-section').style.display = 'none';
+      }
+      if (data.cta_label && data.cta_url) {
+        var hardBar = document.querySelector('#page-youth .page-cta-bar');
+        if (hardBar) hardBar.style.display = 'none';
+        var ctaWrap = document.getElementById('youth-admin-cta');
+        if (ctaWrap) {
+          var btn1 = '<a href="' + data.cta_url.replace(/"/g,'&quot;') + '" target="_blank" class="btn btn-primary" style="font-size:16px;padding:14px 32px;">' + data.cta_label + '</a>';
+          var btn2 = (data.cta_label_2 && data.cta_url_2) ? '<a href="' + data.cta_url_2.replace(/"/g,'&quot;') + '" target="_blank" class="btn btn-ghost" style="font-size:16px;padding:14px 32px;">' + data.cta_label_2 + '</a>' : '';
+          ctaWrap.innerHTML = '<div class="page-cta-bar"><div class="btn-row">' + btn1 + btn2 + '</div></div>';
+          ctaWrap.style.display = '';
+        }
       }
     } else {
       document.getElementById('youth-content-section').style.display = 'none';
