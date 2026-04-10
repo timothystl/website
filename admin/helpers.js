@@ -227,13 +227,20 @@ tinymce.init({
   automatic_uploads: true,
   images_upload_handler: ${tlcUploadHandler},
   paste_data_images: true,
+  content_style: 'img { margin: 8px; max-width: 100%; height: auto; }',
   setup: function(editor) {
     editor.on('change input', function() { editor.save(); });
+    editor.on('NodeChange', function() {
+      editor.dom.select('img').forEach(function(img) {
+        if (!img.style.margin) { img.style.margin = '8px'; img.style.maxWidth = '100%'; img.style.height = 'auto'; }
+      });
+    });
   },
   init_instance_callback: function(editor) {
     var initialBody = \`${safe}\`;
     if (initialBody.trim()) editor.setContent(initialBody);
   }
+
 });
 });
 if (!window._tlcSubmitWired) {
@@ -267,8 +274,14 @@ tinymce.init({
   automatic_uploads: true,
   images_upload_handler: ${tlcUploadHandler},
   paste_data_images: true,
+  content_style: 'img { margin: 8px; max-width: 100%; height: auto; }',
   setup: function(editor) {
     editor.on('change input', function() { editor.save(); });
+    editor.on('NodeChange', function() {
+      editor.dom.select('img').forEach(function(img) {
+        if (!img.style.margin) { img.style.margin = '8px'; img.style.maxWidth = '100%'; img.style.height = 'auto'; }
+      });
+    });
   },
   init_instance_callback: function(editor) {
     var initial = \`${safe}\`;
@@ -343,8 +356,14 @@ tinymce.init({
   automatic_uploads: true,
   images_upload_handler: ${tlcUploadHandler},
   paste_data_images: true,
+  content_style: 'img { margin: 8px; max-width: 100%; height: auto; }',
   setup: function(editor) {
     editor.on('change input', function() { editor.save(); });
+    editor.on('NodeChange', function() {
+      editor.dom.select('img').forEach(function(img) {
+        if (!img.style.margin) { img.style.margin = '8px'; img.style.maxWidth = '100%'; img.style.height = 'auto'; }
+      });
+    });
   },
   init_instance_callback: function(editor) {
     var initial = \`${safe}\`;
@@ -450,8 +469,14 @@ tinymce.init({
   automatic_uploads: true,
   images_upload_handler: ${tlcUploadHandler},
   paste_data_images: true,
+  content_style: 'img { margin: 8px; max-width: 100%; height: auto; }',
   setup: function(editor) {
     editor.on('change input', function() { editor.save(); });
+    editor.on('NodeChange', function() {
+      editor.dom.select('img').forEach(function(img) {
+        if (!img.style.margin) { img.style.margin = '8px'; img.style.maxWidth = '100%'; img.style.height = 'auto'; }
+      });
+    });
   },
   init_instance_callback: function(editor) {
     var initialBody = \`${safe}\`;
