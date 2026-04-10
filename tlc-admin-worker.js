@@ -2538,11 +2538,58 @@ ${topbarHtml('staff', `<a href="/staff">← All staff</a>`)}
 
     // ── SUBSCRIBERS ADMIN ──
     if (path === '/subscribers' && method === 'GET') {
-      const total = await env.DB.prepare('SELECT COUNT(*) as cnt FROM newsletter_subscribers').first();
-      const recent = await env.DB.prepare('SELECT email, name, subscribed_at FROM newsletter_subscribers ORDER BY subscribed_at DESC LIMIT 100').all();
-      const rowsHtml = recent.results.length === 0
-        ? `<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No subscribers yet.</div>`
-        : recent.results.map(s => `
+      // Fetch Brevo contacts from the newsletter list
+      let brevoContacts = [];
+      let brevoTotal = null;
+      let brevoError = null;
+      const listId = env.BREVO_LIST_ID;
+      if (!env.BREVO_API_KEY) {
+        brevoError = 'BREVO_API_KEY secret not configured.';
+      } else if (!listId) {
+        brevoError = 'BREVO_LIST_ID secret not configured.';
+      } else {
+        try {
+          let offset = 0;
+          const limit = 500;
+          while (true) {
+            const resp = await fetch(`https://api.brevo.com/v3/contacts/lists/${listId}/contacts?limit=${limit}&offset=${offset}`, {
+              headers: { 'api-key': env.BREVO_API_KEY, 'Accept': 'application/json' }
+            });
+            if (!resp.ok) { brevoError = `Brevo API error: ${resp.status}`; break; }
+            const data = await resp.json();
+            brevoContacts = brevoContacts.concat(data.contacts || []);
+            brevoTotal = data.count;
+            if (brevoContacts.length >= data.count) break;
+            offset += limit;
+          }
+        } catch (e) {
+          brevoError = `Failed to fetch from Brevo: ${e.message}`;
+        }
+      }
+
+      // Local website signups
+      const localTotal = await env.DB.prepare('SELECT COUNT(*) as cnt FROM newsletter_subscribers').first();
+      const localRecent = await env.DB.prepare('SELECT email, name, subscribed_at FROM newsletter_subscribers ORDER BY subscribed_at DESC LIMIT 50').all();
+
+      const brevoRowsHtml = brevoError
+        ? `<div style="padding:16px;color:#B85C3A;font-size:14px;">⚠ ${brevoError} <a href="https://app.brevo.com" target="_blank" style="color:var(--steel);">Open Brevo ↗</a></div>`
+        : brevoContacts.length === 0
+          ? `<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No contacts found in this Brevo list.</div>`
+          : brevoContacts.map(c => {
+              const name = [c.attributes?.FIRSTNAME, c.attributes?.LASTNAME].filter(Boolean).join(' ');
+              return `
+<div style="display:flex;align-items:center;gap:16px;padding:10px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
+  <div style="flex:1;min-width:200px;">
+    <div style="font-size:14px;color:var(--charcoal);">${c.email}</div>
+    ${name ? `<div style="font-size:12px;color:var(--gray);">${name}</div>` : ''}
+  </div>
+  <div style="font-size:11px;padding:2px 8px;border-radius:20px;background:${c.emailBlacklisted ? '#f5e6e6' : '#e6f5ea'};color:${c.emailBlacklisted ? '#B85C3A' : '#2E7A4A'};flex-shrink:0;">${c.emailBlacklisted ? 'unsubscribed' : 'active'}</div>
+</div>`;
+            }).join('');
+
+      const localRowsHtml = localRecent.results.length === 0
+        ? `<div style="text-align:center;padding:24px;color:var(--gray);font-size:14px;">No website signups yet.</div>`
+        : localRecent.results.map(s => `
 <div style="display:flex;align-items:center;gap:16px;padding:10px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
   <div style="flex:1;min-width:200px;">
     <div style="font-size:14px;color:var(--charcoal);">${s.email}</div>
@@ -2550,18 +2597,30 @@ ${topbarHtml('staff', `<a href="/staff">← All staff</a>`)}
   </div>
   <div style="font-size:12px;color:var(--gray);flex-shrink:0;">${s.subscribed_at ? s.subscribed_at.slice(0,10) : ''}</div>
 </div>`).join('');
+
       return html(`
 ${topbarHtml('subscribers')}
 <div class="wrap">
   <div class="page-title">Newsletter Subscribers</div>
-  <div class="page-sub">People who signed up via the website. Full list is managed in <a href="https://app.brevo.com" target="_blank" style="color:var(--steel);">Brevo ↗</a>.</div>
-  <div class="card" style="margin-bottom:20px;">
-    <div style="font-family:var(--serif);font-size:36px;color:var(--steel);font-weight:700;">${total ? total.cnt : 0}</div>
-    <div style="font-size:13px;color:var(--gray);margin-top:4px;">Total signups via website</div>
+  <div class="page-sub">All subscribers from your Brevo list. Manage full list at <a href="https://app.brevo.com" target="_blank" style="color:var(--steel);">app.brevo.com ↗</a></div>
+  <div class="card" style="margin-bottom:20px;display:flex;gap:32px;flex-wrap:wrap;">
+    <div>
+      <div style="font-family:var(--serif);font-size:36px;color:var(--steel);font-weight:700;">${brevoTotal !== null ? brevoTotal : '—'}</div>
+      <div style="font-size:13px;color:var(--gray);margin-top:4px;">Total in Brevo list</div>
+    </div>
+    <div>
+      <div style="font-family:var(--serif);font-size:36px;color:var(--steel);font-weight:700;">${localTotal ? localTotal.cnt : 0}</div>
+      <div style="font-size:13px;color:var(--gray);margin-top:4px;">Signed up via website</div>
+    </div>
   </div>
   <div class="card">
-    <div class="card-title">Recent signups</div>
-    ${rowsHtml}
+    <div class="card-title">All Brevo subscribers</div>
+    ${brevoRowsHtml}
+  </div>
+  <div class="card">
+    <div class="card-title">Website signups (recent 50)</div>
+    <div style="font-size:12px;color:var(--gray);margin-bottom:12px;">These are automatically added to Brevo when they sign up.</div>
+    ${localRowsHtml}
   </div>
 </div>`, 'Subscribers');
     }
