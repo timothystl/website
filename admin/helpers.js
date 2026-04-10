@@ -477,6 +477,5 @@ document.querySelector('form').addEventListener('submit', function(e) {
   tinymce.editors.forEach(function(e2){if(e2!==ed)e2.save();});
   ed.uploadImages().then(function() { ed.save(); form.submit(); });
 });
-});
 <\/script>`;
 }
