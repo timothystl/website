@@ -1025,7 +1025,7 @@ ${topbarHtml('news', `<a href="/newsitems">← News &amp; Events</a>`)}
         <div class="card-title">Message</div>
         <div class="form-group">
           <label>Your announcement <span style="color:#B85C3A;">*</span></label>
-          <textarea name="quick_body" style="min-height:140px;" placeholder="Type your announcement here. Keep it short and clear."></textarea>
+          ${tinymceNoteSection('quick-editor', 'quick_body', '', 140)}
         </div>
       </div>
       <div class="card">
@@ -1352,7 +1352,7 @@ ${topbarHtml('news', `<a href="/newsitems">← News &amp; Events</a>`)}
       <div class="card">
         <div class="card-title">Message</div>
         <div class="form-group">
-          <textarea name="quick_body" style="min-height:140px;">${bodyVal.replace(/</g,'&lt;')}</textarea>
+          ${tinymceNoteSection('quick-editor', 'quick_body', bodyVal, 140)}
         </div>
       </div>
       <div class="card">

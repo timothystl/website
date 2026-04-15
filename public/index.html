@@ -90,6 +90,7 @@
     <ul class="nav-links">
       <li><button onclick="showPage('about')">About</button></li>
       <li><button onclick="showPage('worship')">Worship</button></li>
+      <li><button onclick="showPage('education')">Learn</button></li>
       <li><button onclick="showPage('sermons')">Sermons</button></li>
       <li><button onclick="showPage('ministries')">Ministries</button></li>
       <li><button onclick="showPage('news')">News &amp; Events</button></li>
@@ -100,6 +101,7 @@
   <div class="nav-mobile" id="navMobile">
     <button onclick="showPage('about');closeMobileNav()">About</button>
     <button onclick="showPage('worship');closeMobileNav()">Worship</button>
+    <button onclick="showPage('education');closeMobileNav()">Learn / Christian Ed</button>
     <button onclick="showPage('sermons');closeMobileNav()">Sermons</button>
     <button onclick="showPage('ministries');closeMobileNav()">Ministries</button>
     <button onclick="showPage('youthfamily');closeMobileNav()">Youth &amp; Family</button>
@@ -459,6 +461,83 @@
   </section>
 </div>
 
+<!-- CHRISTIAN EDUCATION -->
+<div id="page-education" class="page">
+  <div class="page-hero">
+    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Growing in faith</span>
+    <h1>Christian Education at Timothy</h1>
+    <p>Equipping people for a lifelong journey with Christ — from the nursery to the pew.</p>
+  </div>
+  <section class="section section--white">
+    <div class="wrap">
+      <div style="text-align:center;max-width:640px;margin:0 auto 48px;">
+        <span class="eyebrow eyebrow--sky">What we offer</span>
+        <h2>Something for Every Season of Faith</h2>
+        <p style="color:var(--gray);">Christian Education is one of Timothy's four core values. Whether you are new to the faith, returning after years away, or have followed Christ your whole life, we have a place for you to keep growing.</p>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px;">
+        <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:28px;">
+          <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--mid);margin-bottom:8px;">Sunday Morning</div>
+          <h3 style="margin:0 0 10px;">Adult Bible Class</h3>
+          <p style="font-size:14px;color:var(--gray);margin:0 0 12px;">Join us between services for an in-depth look at Scripture, the Lutheran Confessions, and living the Christian life in today's world. All are welcome — no prior Bible knowledge required.</p>
+          <div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);font-weight:600;">Sunday · Between services</div>
+        </div>
+        <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:28px;">
+          <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sage);margin-bottom:8px;">Children &amp; Youth</div>
+          <h3 style="margin:0 0 10px;">Sunday School</h3>
+          <p style="font-size:14px;color:var(--gray);margin:0 0 12px;">Sunday School meets during the 10:45 am service for children through 6th grade. Kids hear God's Word, build friendships, and grow in faith through age-appropriate teaching and activities.</p>
+          <div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);font-weight:600;">Sunday · During 10:45 am service</div>
+        </div>
+        <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:28px;">
+          <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:8px;">Middle &amp; High School</div>
+          <h3 style="margin:0 0 10px;">Confirmation</h3>
+          <p style="font-size:14px;color:var(--gray);margin:0 0 12px;">A two-year journey through the Lutheran catechism for students in grades 7–8. Confirmation prepares young people to make a mature public confession of faith and receive Holy Communion.</p>
+          <div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);font-weight:600;">Contact the office for current schedule</div>
+        </div>
+        <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:28px;">
+          <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--steel);margin-bottom:8px;">New to Timothy?</div>
+          <h3 style="margin:0 0 10px;">Adult Instruction</h3>
+          <p style="font-size:14px;color:var(--gray);margin:0 0 12px;">Interested in joining Timothy or learning more about the Lutheran faith? Our pastors offer adult instruction classes covering Scripture, the Apostles' Creed, and what we believe. Offered periodically — contact us to get started.</p>
+          <div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);font-weight:600;"><a href="mailto:office@timothystl.org" style="color:var(--mid);">office@timothystl.org</a></div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section class="section section--linen">
+    <div class="wrap">
+      <div class="two-col" style="gap:48px;align-items:start;">
+        <div>
+          <span class="eyebrow eyebrow--sky">Weekly Bible study</span>
+          <h2>Go deeper in the Word</h2>
+          <p>Beyond Sunday morning, Timothy offers opportunities throughout the week to dig into Scripture together. Our Bible studies are open to everyone — bring your questions, your doubts, and your Bible.</p>
+          <p style="font-size:14px;color:var(--gray);">Check the <a href="#" onclick="showPage('news');return false;" style="color:var(--mid);font-weight:600;">News &amp; Events page</a> or contact the office for current Bible study schedules and locations.</p>
+          <div class="btn-row" style="margin-top:24px;">
+            <button onclick="showPage('news')" class="btn btn-primary">See upcoming events →</button>
+            <a href="mailto:office@timothystl.org" class="btn btn-outline">Contact the office</a>
+          </div>
+        </div>
+        <div>
+          <span class="eyebrow eyebrow--sage">Core value</span>
+          <h2>Why Christian Education matters</h2>
+          <p>At Timothy, we believe Christian Education is not just a program — it is how the Gospel takes root and grows in a community across generations. We want every person who walks through our doors to leave more equipped to follow Jesus in their daily life.</p>
+          <blockquote style="border-left:3px solid var(--amber);padding:16px 20px;margin:24px 0 0;background:var(--warm-white);border-radius:0 var(--r-md) var(--r-md) 0;">
+            <p style="font-family:var(--serif);font-size:16px;font-style:italic;color:var(--steel);margin:0;">"Growing in faith through Christian education and honest community."</p>
+            <cite style="font-family:var(--sans);font-size:12px;color:var(--gray);margin-top:8px;display:block;">— Timothy Lutheran Mission Statement</cite>
+          </blockquote>
+        </div>
+      </div>
+    </div>
+  </section>
+  <div class="page-cta-bar">
+    <h3>Ready to grow?</h3>
+    <p>Join a class, ask a question, or just show up. We'll take it from there.</p>
+    <div class="btn-row">
+      <button onclick="showPage('worship')" class="btn btn-secondary">Plan your visit →</button>
+      <button onclick="showPage('contact')" class="btn btn-ghost">Contact us</button>
+    </div>
+  </div>
+</div>
+
 <!-- SERMONS -->
 <div id="page-sermons" class="page">
   <div class="page-hero">
@@ -526,7 +605,7 @@
           <a href="/stephen" onclick="event.preventDefault();showPage('stephen')">Learn more →</a>
         </div>
         <div class="min-card">
-          <img src="/images/ministries/food%20pantry.png?v=20260328" alt="Food Pantry" class="min-card-img" loading="lazy">
+          <img src="/images/ministries/food-pantry.webp" alt="Food Pantry" class="min-card-img" loading="lazy">
           <h3>Food Pantry</h3>
           <p>Timothy operates a food pantry for members and neighbors. Open monthly, serving families in Lindenwood Park with practical care in the name of Christ.</p>
           <a href="/foodpantry" onclick="event.preventDefault();showPage('foodpantry')">Get details →</a>
@@ -1109,7 +1188,7 @@
           </div>
         </div>
         <div>
-          <img src="/images/ministries/food%20pantry.png?v=20260328" alt="Timothy Food Pantry" loading="lazy" style="width:100%;border-radius:var(--r-md);box-shadow:var(--shadow-lift);">
+          <img src="/images/ministries/food-pantry.webp" alt="Timothy Food Pantry" loading="lazy" style="width:100%;border-radius:var(--r-md);box-shadow:var(--shadow-lift);">
         </div>
       </div>
     </div>
@@ -2416,6 +2495,7 @@ var PAGE_META = {
   'home':         { title: 'Timothy Lutheran Church — St. Louis, MO',                                    desc: 'A congregation alive to the Gospel in Lindenwood Park, South City St. Louis. Two Sunday services. Come as you are.' },
   'about':        { title: 'About — Timothy Lutheran Church',                                             desc: 'Meet our staff, learn our vision and values, and find out what makes Timothy Lutheran a community alive to the Gospel.' },
   'worship':      { title: 'Worship — Timothy Lutheran Church',                                           desc: 'Sunday services at 8:00 am, 9:30 am (Vietnamese), and 10:45 am. Plan your visit, watch the live stream, or join midweek worship.' },
+  'education':    { title: 'Christian Education — Timothy Lutheran Church',                               desc: 'Adult Bible class, Sunday school, confirmation, and Bible studies at Timothy Lutheran Church in St. Louis.' },
   'sermons':      { title: 'Sermons — Timothy Lutheran Church',                                           desc: 'Watch and listen to recent sermons from Timothy Lutheran Church on YouTube.' },
   'ministries':   { title: 'Ministries — Timothy Lutheran Church',                                       desc: 'Music, Stephen Ministry, Food Pantry, Urban Beekeepers, Christmas Market, and more. Find your place at Timothy.' },
   'news':         { title: 'News & Events — Timothy Lutheran Church',                                     desc: 'Stay up to date with the latest news, events, and newsletter archive from Timothy Lutheran Church in St. Louis.' },
