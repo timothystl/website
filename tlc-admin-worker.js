@@ -115,6 +115,7 @@ export default {
       { key: 'seasonal-advent',        label: 'Advent worship',                hint: 'Shown on the Worship page during Advent. Toggle on/off without losing content.' },
       { key: 'seasonal-christmas',     label: 'Christmas services',            hint: 'Shown on the Worship page for Christmas Eve / Christmas Day services. Toggle on/off without losing content.' },
       { key: 'community-concert',      label: 'Community Concert announcement', hint: 'Shown on the Music Ministry page. Edit with performer name, date, and details. Toggle off between concerts.' },
+      { key: 'education-schedule',     label: 'Christian Education schedule &amp; topics', hint: 'Shown on the Learn / Christian Education page. Add current class topics, semester schedule, or special events. Leave blank to hide.' },
     ];
     for (const b of PAGE_BLOCKS) {
       try {
@@ -2335,6 +2336,7 @@ ${topbarHtml('pages')}
           'seasonal-advent':       'Shown on the Worship page during Advent. Toggle published on/off without losing your content.',
           'seasonal-christmas':    'Shown on the Worship page for Christmas Eve and Christmas Day services. Toggle published on/off without losing your content.',
           'community-concert':     'Shown on the Music Ministry page. Enter the performer name, date, time, and any details. Toggle off between concerts.',
+          'education-schedule':    'Shown on the Christian Education (Learn) page. Add current Bible study topics, class schedules, or upcoming events. Leave blank to hide.',
         };
         const hint = HINT_MAP[key] || 'Appears on the site when content is set. Leave blank to hide.';
         const isSeasonal = key.startsWith('seasonal-') || key === 'community-concert';
