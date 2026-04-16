@@ -78,6 +78,8 @@ export default {
     try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN cta_url_2 TEXT').run(); } catch (_) {}
     // Migrate: add published flag to page_content
     try { await env.DB.prepare('ALTER TABLE page_content ADD COLUMN published INTEGER DEFAULT 1').run(); } catch (_) {}
+    // Migrate: add tertiary_note to newsletters
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN tertiary_note TEXT').run(); } catch (_) {}
     // New tables
     try { await env.DB.prepare(DB_INIT_STAFF_MEMBERS).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_SITE_SETTINGS).run(); } catch (_) {}
@@ -1018,6 +1020,14 @@ ${topbarHtml('news', `<a href="/newsitems">← News &amp; Events</a>`)}
           </div>
         </div>
       </div>
+
+      <div class="card">
+        <div class="card-title">Tertiary note / CTA <span class="tag">Optional</span></div>
+        <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">A full-width block below Word of Life &amp; LASM. Use it for a call-to-action, an announcement, a sign-up link, or anything else that doesn't fit the pastor's note. Leave blank to omit.</div>
+        <div class="form-group">
+          ${tinymceNoteSection('tertiary-editor', 'tertiary_note', '', 140)}
+        </div>
+      </div>
     </div>
 
     <!-- QUICK ANNOUNCEMENT FIELDS -->
@@ -1136,6 +1146,7 @@ addEvent();
       const secondaryNote = fmt === 'weekly' ? form.get('secondary_note') || '' : '';
       const wolContent = fmt === 'weekly' ? form.get('wol_content') || '' : '';
       const lasmContent = fmt === 'weekly' ? form.get('lasm_content') || '' : '';
+      const tertiaryNote = fmt === 'weekly' ? form.get('tertiary_note') || '' : '';
       // Legacy fields kept for DB compat but no longer used in the form
       const ministryContent = '';
       const ministryType = 'text';
@@ -1182,16 +1193,16 @@ addEvent();
       if (editId) {
         // Update existing newsletter
         await env.DB.prepare(
-          'UPDATE newsletters SET subject=?, pastor_note=?, ministry_content=?, ministry_type=?, published_at=?, format=?, cta_url=?, cta_label=?, status=?, wol_content=?, lasm_content=?, secondary_note=?, news_item_ids=? WHERE id=?'
-        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, editId).run();
+          'UPDATE newsletters SET subject=?, pastor_note=?, ministry_content=?, ministry_type=?, published_at=?, format=?, cta_url=?, cta_label=?, status=?, wol_content=?, lasm_content=?, secondary_note=?, news_item_ids=?, tertiary_note=? WHERE id=?'
+        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, editId).run();
         newsletterId = parseInt(editId, 10);
         // Replace events
         await env.DB.prepare('DELETE FROM events WHERE newsletter_id = ?').bind(newsletterId).run();
       } else {
         // Insert new newsletter
         const result = await env.DB.prepare(
-          'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr).run();
+          'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote).run();
         newsletterId = result.meta.last_row_id;
       }
 
@@ -1210,7 +1221,7 @@ addEvent();
         if (!listId && emailSend === 'all') {
           emailSuffix = `&emailerr=${encodeURIComponent('BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}`;
         } else if (listId) {
-          const emailHtml = buildEmailHtml(subject, savedNote, events, wolContent, lasmContent, publishedAt, selectedNewsItems, secondaryNote, newsletterId, fmt, ctaUrl, ctaLabel);
+          const emailHtml = buildEmailHtml(subject, savedNote, events, wolContent, lasmContent, publishedAt, selectedNewsItems, secondaryNote, newsletterId, fmt, ctaUrl, ctaLabel, tertiaryNote);
           const result = await sendBrevoNewsletter(env, { subject, htmlContent: emailHtml, listIds: [listId] });
           emailSuffix = result.success
             ? `&emailed=${emailSend}`
@@ -1347,6 +1358,14 @@ ${topbarHtml('news', `<a href="/newsitems">← News &amp; Events</a>`)}
           </div>
         </div>
       </div>
+
+      <div class="card">
+        <div class="card-title">Tertiary note / CTA <span class="tag">Optional</span></div>
+        <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">A full-width block below Word of Life &amp; LASM. Use it for a call-to-action, an announcement, or a sign-up link. Leave blank to omit.</div>
+        <div class="form-group">
+          ${tinymceNoteSection('tertiary-editor', 'tertiary_note', row.tertiary_note || '', 140)}
+        </div>
+      </div>
     </div>
 
     <div id="quick-fields" style="display:${fmt==='quick'?'':'none'}">
@@ -1442,7 +1461,7 @@ ${eventsJs}
         'SELECT event_date, event_name, event_time, event_desc FROM events WHERE newsletter_id = ? ORDER BY sort_order'
       ).bind(id).all();
 
-      const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at, [], row.secondary_note || '', id, row.format || 'weekly', row.cta_url || '', row.cta_label || '');
+      const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at, [], row.secondary_note || '', id, row.format || 'weekly', row.cta_url || '', row.cta_label || '', row.tertiary_note || '');
       const result = await sendBrevoNewsletter(env, { subject: row.subject, htmlContent: emailHtml, listIds: [listId] });
 
       const suffix = result.success

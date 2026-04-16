@@ -52,7 +52,7 @@ export async function sendTransactionalEmail(env, { subject, htmlContent, toEmai
 
 // ── BUILD EMAIL HTML ─────────────────────────────────────────
 // Layout: header · 2/3 pastor note + 1/3 events · main news · secondary news · WOL+LASM · additional posts · footer
-export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmContent, publishedAt, newsItems = [], secondaryNote = '', newsletterId = null, format = 'weekly', ctaUrl = '', ctaLabel = '') {
+export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmContent, publishedAt, newsItems = [], secondaryNote = '', newsletterId = null, format = 'weekly', ctaUrl = '', ctaLabel = '', tertiaryNote = '') {
   const dateStr = formatDate(publishedAt);
   const isQuick = format === 'quick';
 
@@ -171,6 +171,14 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
   </tr></table>
 </td></tr>` : '';
 
+  // Tertiary note / CTA block
+  const tertiaryNoteHtml = tertiaryNote ? `
+<tr><td style="padding-top:20px;border-top:1px solid #E8E0D0;">
+  <div style="background:#F4EFE8;border-left:3px solid #D4922A;border-radius:0 8px 8px 0;padding:16px 18px;">
+    <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;color:#3D3530;line-height:1.8;">${truncate(tertiaryNote, 600)}</div>
+  </div>
+</td></tr>` : '';
+
   // Additional posts (3rd item onward — compact)
   const additionalNewsHtml = additionalNews.length ? `
 <tr><td style="padding-top:20px;border-top:1px solid #E8E0D0;">
@@ -231,6 +239,7 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
           ${mainNewsHtml}
           ${secondaryNewsHtml}
           ${ministryRowHtml}
+          ${tertiaryNoteHtml}
           ${additionalNewsHtml}
         </table>
         <!-- FOOTER -->
