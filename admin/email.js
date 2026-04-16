@@ -52,8 +52,9 @@ export async function sendTransactionalEmail(env, { subject, htmlContent, toEmai
 
 // ── BUILD EMAIL HTML ─────────────────────────────────────────
 // Layout: header · 2/3 pastor note + 1/3 events · main news · secondary news · WOL+LASM · additional posts · footer
-export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmContent, publishedAt, newsItems = [], secondaryNote = '', newsletterId = null) {
+export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmContent, publishedAt, newsItems = [], secondaryNote = '', newsletterId = null, format = 'weekly', ctaUrl = '', ctaLabel = '') {
   const dateStr = formatDate(publishedAt);
+  const isQuick = format === 'quick';
 
   function truncate(text, limit) {
     if (!text) return '';
@@ -61,6 +62,54 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
     if (stripped.length <= limit) return stripped;
     return stripped.substring(0, limit).trimEnd() + '…';
   }
+
+  // ── QUICK ANNOUNCEMENT layout (full-width, no events column) ──
+  if (isQuick) {
+    const ctaButtonHtml = (ctaLabel && ctaUrl)
+      ? `<div style="text-align:center;margin:22px 0 0;"><a href="${ctaUrl}" style="display:inline-block;background:#0A3C5C;color:white;font-family:'Source Sans 3',Arial,sans-serif;font-size:14px;font-weight:700;padding:12px 28px;border-radius:6px;text-decoration:none;">${ctaLabel}</a></div>`
+      : '';
+    return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+</head>
+<body style="margin:0;padding:0;background:#FAF7F0;font-family:'Source Sans 3',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#FAF7F0;padding:24px 0;">
+  <tr><td align="center">
+    <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+      <!-- HEADER -->
+      <tr><td style="background:#0A3C5C;border-bottom:3px solid #D4922A;padding:20px 28px;border-radius:14px 14px 0 0;">
+        <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:14px;font-weight:800;color:white;">Timothy Lutheran Church</div>
+        <div style="font-family:'Lora',Georgia,serif;font-size:11px;font-style:italic;color:#D4922A;margin-top:2px;">from our Neighborhood to the Nations</div>
+      </td></tr>
+      <!-- DATE + SUBJECT + FULL-WIDTH BODY -->
+      <tr><td style="background:white;padding:24px 28px 28px;border-left:1px solid #E8E0D0;border-right:1px solid #E8E0D0;">
+        <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#D4922A;margin-bottom:6px;">${dateStr}</div>
+        <div style="font-family:'Lora',Georgia,serif;font-size:22px;color:#0A3C5C;margin-bottom:18px;padding-bottom:16px;border-bottom:2px solid #D4922A;">${subject}</div>
+        <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:15px;color:#3D3530;line-height:1.85;">${pastorNote || ''}</div>
+        ${ctaButtonHtml}
+        <!-- FOOTER -->
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;">
+          <tr><td style="border-top:1px solid #E8E0D0;padding:20px 0;text-align:center;">
+            <a href="https://timothystl.org" style="display:inline-block;background:#0A3C5C;color:white;font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;font-weight:700;padding:11px 24px;border-radius:6px;text-decoration:none;margin-right:10px;">Visit our website</a>
+            <a href="https://timothystl.breezechms.com/give/online" style="display:inline-block;background:#D4922A;color:#0A3C5C;font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;font-weight:700;padding:11px 24px;border-radius:6px;text-decoration:none;">Give online</a>
+          </td></tr>
+          <tr><td style="text-align:center;font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;color:#7A6E60;line-height:1.8;padding-bottom:20px;">
+            6704 Fyler Ave · St. Louis, MO 63139<br>
+            Sunday worship · 8:00 &amp; 10:45 am
+          </td></tr>
+        </table>
+      </td></tr>
+      <tr><td style="background:white;border:1px solid #E8E0D0;border-top:none;border-radius:0 0 14px 14px;height:10px;"></td></tr>
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>`;
+  }
+
+  // ── WEEKLY NEWSLETTER layout ──
 
   // Events sidebar rows
   const eventsRowsHtml = (events && events.length) ? events.map(e => `
