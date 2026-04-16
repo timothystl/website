@@ -1587,6 +1587,14 @@ ${eventsJs}
   <div class="newsletter-subject">${r.subject}${fmtLabel(r)}</div>
   <div class="newsletter-actions">
     <a href="/edit/${r.id}" class="btn btn-sm btn-secondary">Edit</a>
+    <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Resend to test list?')">
+      <input type="hidden" name="list_type" value="test">
+      <button type="submit" class="btn btn-sm" style="background:var(--mist);color:var(--steel);border:1px solid var(--border);">Resend test</button>
+    </form>
+    <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Resend to ALL subscribers? This will send again to everyone.')">
+      <input type="hidden" name="list_type" value="all">
+      <button type="submit" class="btn btn-sm btn-primary">Resend to all</button>
+    </form>
     <form method="POST" action="/delete/${r.id}" style="display:contents;" onsubmit="return confirm('Delete this newsletter?')">
       <button type="submit" class="btn btn-sm btn-danger">Delete</button>
     </form>
@@ -2837,6 +2845,14 @@ ${topbarHtml('settings')}
   <div class="newsletter-subject">${r.subject}${fmtLabel(r)}</div>
   <div class="newsletter-actions">
     <a href="/edit/${r.id}" class="btn btn-sm btn-secondary">Edit</a>
+    <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Resend to test list?')">
+      <input type="hidden" name="list_type" value="test">
+      <button type="submit" class="btn btn-sm" style="background:var(--mist);color:var(--steel);border:1px solid var(--border);">Resend test</button>
+    </form>
+    <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Resend to ALL subscribers? This will send again to everyone.')">
+      <input type="hidden" name="list_type" value="all">
+      <button type="submit" class="btn btn-sm btn-primary">Resend to all</button>
+    </form>
     <form method="POST" action="/delete/${r.id}" style="display:contents;" onsubmit="return confirm('Delete this newsletter?')">
       <button type="submit" class="btn btn-sm btn-danger">Delete</button>
     </form>
