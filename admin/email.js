@@ -52,7 +52,7 @@ export async function sendTransactionalEmail(env, { subject, htmlContent, toEmai
 
 // ── BUILD EMAIL HTML ─────────────────────────────────────────
 // Layout: header · 2/3 pastor note + 1/3 events · main news · secondary news · WOL+LASM · additional posts · footer
-export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmContent, publishedAt, newsItems = [], secondaryNote = '', newsletterId = null, format = 'weekly', ctaUrl = '', ctaLabel = '', tertiaryNote = '') {
+export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmContent, publishedAt, newsItems = [], secondaryNote = '', newsletterId = null, format = 'weekly', ctaUrl = '', ctaLabel = '', tertiaryNote = '', tertiaryCtaLabel = '', tertiaryCtaUrl = '') {
   const dateStr = formatDate(publishedAt);
   const isQuick = format === 'quick';
 
@@ -162,20 +162,24 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
   <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6B8F71;margin-bottom:12px;">From Our Ministries</div>
   <table width="100%" cellpadding="0" cellspacing="0"><tr>
     <td class="min-col" width="48%" valign="top" style="${wolContent ? 'background:#EEF5EF;border-left:3px solid #6B8F71;border-radius:0 6px 6px 0;padding:13px;' : ''}">
-      ${wolContent ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6B8F71;margin-bottom:7px;">Word of Life</div><div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;color:#3D3530;line-height:1.7;">${truncate(wolContent, 300)}</div>` : ''}
+      ${wolContent ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6B8F71;margin-bottom:7px;">Word of Life</div><div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;color:#3D3530;line-height:1.7;">${wolContent}</div>` : ''}
     </td>
     <td class="min-gap" width="4%"></td>
     <td class="min-col" width="48%" valign="top" style="${lasmContent ? 'background:#EEF5EF;border-left:3px solid #6B8F71;border-radius:0 6px 6px 0;padding:13px;' : ''}">
-      ${lasmContent ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6B8F71;margin-bottom:7px;">LASM</div><div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;color:#3D3530;line-height:1.7;">${truncate(lasmContent, 300)}</div>` : ''}
+      ${lasmContent ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6B8F71;margin-bottom:7px;">LASM</div><div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;color:#3D3530;line-height:1.7;">${lasmContent}</div>` : ''}
     </td>
   </tr></table>
 </td></tr>` : '';
 
   // Tertiary note / CTA block
+  const tertiaryCta = (tertiaryCtaLabel && tertiaryCtaUrl)
+    ? `<div style="text-align:center;margin-top:14px;"><a href="${tertiaryCtaUrl}" style="display:inline-block;background:#D4922A;color:#0A3C5C;font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;font-weight:700;padding:10px 24px;border-radius:6px;text-decoration:none;">${tertiaryCtaLabel}</a></div>`
+    : '';
   const tertiaryNoteHtml = tertiaryNote ? `
 <tr><td style="padding-top:20px;border-top:1px solid #E8E0D0;">
   <div style="background:#F4EFE8;border-left:3px solid #D4922A;border-radius:0 8px 8px 0;padding:16px 18px;">
-    <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;color:#3D3530;line-height:1.8;">${truncate(tertiaryNote, 600)}</div>
+    <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;color:#3D3530;line-height:1.8;">${tertiaryNote}</div>
+    ${tertiaryCta}
   </div>
 </td></tr>` : '';
 
@@ -207,6 +211,7 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
   .min-col{display:block !important;width:100% !important;margin-bottom:12px !important;}
   .min-gap{display:none !important;}
 }
+img{max-width:100% !important;height:auto !important;}
 </style>
 </head>
 <body style="margin:0;padding:0;background:#FAF7F0;font-family:'Source Sans 3',Arial,sans-serif;">
@@ -226,14 +231,14 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
         <table width="100%" cellpadding="0" cellspacing="0">
           <tr>
             <td class="pastor-col" width="390" valign="top" style="padding-right:18px;border-right:1px solid #E8E0D0;">
-              ${pastorNote ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:15px;color:#3D3530;line-height:1.85;">${truncate(pastorNote, 600)}</div><div style="margin-top:10px;"><a href="https://timothystl.org/${newsletterId ? 'news/' + newsletterId : 'news'}" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#D4922A;text-decoration:none;">Read the full letter →</a></div>` : ''}
+              ${pastorNote ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:15px;color:#3D3530;line-height:1.85;">${pastorNote}</div><div style="margin-top:10px;"><a href="https://timothystl.org/${newsletterId ? 'news/' + newsletterId : 'news'}" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#D4922A;text-decoration:none;">Read the full letter →</a></div>` : ''}
             </td>
             <td class="spacer-col" width="16"></td>
             <td class="events-col" width="165" valign="top">${eventsSidebar}</td>
           </tr>
         </table>
         <!-- secondary note (typed) -->
-        ${secondaryNote ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:0;"><tr><td style="padding:18px 0 0;border-top:1px solid #E8E0D0;"><div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:14px;color:#3D3530;line-height:1.8;">${truncate(secondaryNote, 500)}</div></td></tr></table>` : ''}
+        ${secondaryNote ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:0;"><tr><td style="padding:18px 0 0;border-top:1px solid #E8E0D0;"><div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:14px;color:#3D3530;line-height:1.8;">${secondaryNote}</div></td></tr></table>` : ''}
         <!-- news + ministry sections -->
         <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:4px;">
           ${mainNewsHtml}

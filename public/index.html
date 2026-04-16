@@ -2180,12 +2180,19 @@ async function loadNewsletterDetail(id) {
         (n.lasm_content ? '<div style="background:var(--linen);border-left:3px solid var(--sage);border-radius:0 8px 8px 0;padding:14px;"><div style=\'font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sage);margin-bottom:8px;\'>LASM</div><div style="font-family:var(--sans);font-size:14px;color:var(--charcoal);line-height:1.7;">'+n.lasm_content+'</div></div>' : '<div></div>') +
         '</div>';
     }
+    let tertiaryHtml = '';
+    if (n.tertiary_note) {
+      const ctaBtn = (n.tertiary_cta_label && n.tertiary_cta_url)
+        ? '<div style="margin-top:14px;"><a href="'+n.tertiary_cta_url+'" style="display:inline-block;background:var(--amber);color:var(--steel);font-family:var(--sans);font-size:13px;font-weight:700;padding:10px 22px;border-radius:6px;text-decoration:none;">'+n.tertiary_cta_label+'</a></div>'
+        : '';
+      tertiaryHtml = '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);"><div style="background:var(--linen);border-left:3px solid var(--amber);border-radius:0 8px 8px 0;padding:16px 18px;"><div style="font-family:var(--sans);font-size:14px;color:var(--charcoal);line-height:1.8;">'+n.tertiary_note+'</div>'+ctaBtn+'</div></div>';
+    }
     content.innerHTML =
       '<div style="background:white;border:1px solid var(--border);border-radius:14px;padding:36px;box-shadow:var(--shadow);">' +
         '<div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:6px;">'+date+'</div>' +
         '<h2 style="font-family:var(--serif);font-size:26px;color:var(--steel);margin:0 0 20px;font-weight:600;">'+n.subject+'</h2>' +
         (n.pastor_note ? '<div style="font-family:var(--sans);font-size:16px;color:var(--charcoal);line-height:1.85;">'+n.pastor_note+'</div>' : '') +
-        secHtml + evHtml + wolLasmHtml +
+        secHtml + evHtml + wolLasmHtml + tertiaryHtml +
       '</div>';
   } catch(e) {
     content.innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--gray);font-family:var(--sans);font-size:14px;">Newsletter not found.</div>';
