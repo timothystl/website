@@ -2099,7 +2099,7 @@ async function loadYouthPage() {
         document.getElementById('youth-content-section').style.display = 'none';
       }
       if (data.cta_label && data.cta_url) {
-        var hardBar = document.querySelector('#page-youth .page-cta-bar');
+        var hardBar = document.querySelector('#page-youth > section.page-cta-bar, #page-youth > div.page-cta-bar');
         if (hardBar) hardBar.style.display = 'none';
         var ctaWrap = document.getElementById('youth-admin-cta');
         if (ctaWrap) {
@@ -2277,7 +2277,7 @@ async function loadMinistryCta(slug) {
       }
     }
     if (data.cta_label && data.cta_url) {
-      var hardBar2 = document.querySelector('#page-' + slug + ' .page-cta-bar');
+      var hardBar2 = document.querySelector('#page-' + slug + ' > div.page-cta-bar, #page-' + slug + ' > section.page-cta-bar');
       if (hardBar2) hardBar2.style.display = 'none';
       if (ctaWrap) {
         var b1 = '<a href="' + data.cta_url.replace(/"/g,'&quot;') + '" target="_blank" class="btn btn-primary" style="font-size:16px;padding:14px 32px;">' + data.cta_label + '</a>';
@@ -2307,7 +2307,7 @@ async function loadMinistryPage(slug) {
       }
       // If admin has set any CTA buttons, replace the hardcoded page-cta-bar
       if (data.cta_label && data.cta_url) {
-        var hardBar = document.querySelector('#page-' + slug + ' .page-cta-bar');
+        var hardBar = document.querySelector('#page-' + slug + ' > div.page-cta-bar, #page-' + slug + ' > section.page-cta-bar');
         if (hardBar) hardBar.style.display = 'none';
         var ctaWrap = document.getElementById(slug + '-admin-cta');
         if (ctaWrap) {
