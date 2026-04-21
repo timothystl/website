@@ -9,8 +9,10 @@ This file captures the full project context so any Claude session can be resumed
 We are rebuilding the Timothy Lutheran Church website (timothystl.org) to replace the current Tithely/Breeze-hosted site (~$50/month). The new site runs on Cloudflare Workers, is fully custom, and will be tested at `test.timothystl.org` before DNS cutover.
 
 **Repo:** `timothystl/website`
-**Primary branch for development:** `claude/*` branches (auto-deploys to test.timothystl.org)
-**Production branch:** `master` (deploys to timothystl.org and all subdomain workers)
+**Primary branch for development:** `master` (deploys to timothystl.org, admin.timothystl.org, and all subdomain workers)
+**Test branch:** `claude/*` branches (auto-deploys to test.timothystl.org for the public site only)
+
+> **Note:** Admin portal changes (`tlc-admin-worker.js`) should be committed and pushed to `master` — the test site does not run the admin worker. Always target `master` for admin work.
 
 ---
 
