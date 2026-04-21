@@ -2,30 +2,7 @@
 // Extracted from tlc-admin-worker.js
 
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
-
-// ── HELPERS ─────────────────────────────────────────────────
-async function cookieToken(secret) {
-  const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    'raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
-  );
-  const sig = await crypto.subtle.sign('HMAC', key, enc.encode('tlc_admin_auth'));
-  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-export async function authCookie(req, secret) {
-  const cookie = req.headers.get('cookie') || '';
-  const match = cookie.match(/tlc_auth=([a-f0-9]+)/);
-  if (!match) return false;
-  const expected = await cookieToken(secret);
-  return match[1] === expected;
-}
-
-export async function setCookieHeader(secret) {
-  const token = await cookieToken(secret);
-  const exp = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toUTCString();
-  return `tlc_auth=${token}; Path=/; Expires=${exp}; HttpOnly; SameSite=Strict`;
-}
+import { PERMISSIONS, hasPermission } from './auth.js';
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
@@ -123,8 +100,24 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
 .format-card-desc{font-family:var(--sans);font-size:12px;color:var(--gray);margin-top:4px;line-height:1.5;}
 .badge-draft{background:#FFF3D6;color:#7A4F00;}
 .badge-published{background:#e8f5e9;color:#1a3d1f;}
+.badge-pending{background:#FFF0E6;color:#7A3D00;}
+.badge-approved{background:#e8f5e9;color:#1a3d1f;}
 .nl-section-head{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gray);padding:10px 0 6px;border-top:2px solid var(--border);margin-top:4px;}
 .nl-section-head:first-child{border-top:none;margin-top:0;}
+.perm-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;margin-top:10px;}
+.perm-row{display:flex;align-items:center;gap:8px;}
+.perm-row input[type=checkbox]{width:auto;margin:0;}
+.perm-row label{font-family:var(--sans);font-size:13px;font-weight:600;color:var(--charcoal);letter-spacing:0;text-transform:none;cursor:pointer;margin:0;}
+.user-row{display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;}
+.user-row:last-child{border-bottom:none;}
+.user-name{font-family:var(--serif);font-size:16px;color:var(--steel);flex:1;}
+.user-meta{font-family:var(--sans);font-size:11px;color:var(--gray);}
+.audit-row{display:grid;grid-template-columns:140px 80px 90px 1fr auto;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);font-family:var(--sans);font-size:13px;}
+.audit-row:last-child{border-bottom:none;}
+.audit-who{color:var(--steel);font-weight:700;}
+.audit-action{text-transform:capitalize;}
+.audit-entity{color:var(--gray);}
+.pending-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#D4922A;margin-left:6px;vertical-align:middle;}
 </style>
 </head>
 <body>${body}</body>
@@ -138,26 +131,34 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
 }
 
 // ── TOPBAR WITH TABS ─────────────────────────────────────────
-export function topbarHtml(activeTab, extraLinks = '') {
+// pendingCount: number of newsletters awaiting approval (shown as dot on News tab)
+export function topbarHtml(activeTab, user, extraLinks = '', pendingCount = 0) {
+  const hp = (p) => hasPermission(user, p);
+  const newsActive = activeTab === 'news' || activeTab === 'newsletter';
+  const showNewsTab = hp('news_edit') || hp('newsletter_edit') || hp('newsletter_approve');
+  const pendingDot = pendingCount > 0 && hp('newsletter_approve') ? `<span class="pending-dot" title="${pendingCount} newsletter(s) awaiting approval"></span>` : '';
   return `<div class="topbar">
   <div>
     <div class="topbar-brand">Timothy Lutheran · Admin</div>
+    <div style="font-size:11px;color:rgba(255,255,255,.55);margin-top:1px;">${user ? user.username : ''}</div>
   </div>
   <div class="topbar-links">
     ${extraLinks}
+    ${hp('users_manage') ? `<a href="/users">Users</a>` : ''}
+    ${hp('audit_view') ? `<a href="/audit-log">Audit Log</a>` : ''}
     <a href="/logout">Sign out</a>
   </div>
 </div>
 <nav class="tab-nav">
   <div class="tab-nav-inner">
-    <a href="/newsitems" class="tab${activeTab === 'news' ? ' tab-active' : ''}">News &amp; Events</a>
-    <a href="/ministries" class="tab${activeTab === 'ministries' ? ' tab-active' : ''}">Ministries</a>
-    <a href="/sermons" class="tab${activeTab === 'sermons' ? ' tab-active' : ''}">Sermons</a>
-    <a href="/pages" class="tab${activeTab === 'pages' ? ' tab-active' : ''}">Pages</a>
-    <a href="/staff" class="tab${activeTab === 'staff' ? ' tab-active' : ''}">Staff</a>
-    <a href="/settings" class="tab${activeTab === 'settings' ? ' tab-active' : ''}">Settings</a>
-    <a href="/subscribers" class="tab${activeTab === 'subscribers' ? ' tab-active' : ''}">Subscribers</a>
-    <a href="/gym-rentals" class="tab${activeTab === 'gym' ? ' tab-active' : ''}">Gym Rentals</a>
+    ${showNewsTab        ? `<a href="/newsitems" class="tab${newsActive ? ' tab-active' : ''}">News &amp; Events${pendingDot}</a>` : ''}
+    ${hp('ministries_edit') ? `<a href="/ministries" class="tab${activeTab === 'ministries' ? ' tab-active' : ''}">Ministries</a>` : ''}
+    ${hp('sermons_edit')    ? `<a href="/sermons" class="tab${activeTab === 'sermons' ? ' tab-active' : ''}">Sermons</a>` : ''}
+    ${hp('pages_edit')      ? `<a href="/pages" class="tab${activeTab === 'pages' ? ' tab-active' : ''}">Pages</a>` : ''}
+    ${hp('staff_edit')      ? `<a href="/staff" class="tab${activeTab === 'staff' ? ' tab-active' : ''}">Staff</a>` : ''}
+    ${hp('settings_manage') ? `<a href="/settings" class="tab${activeTab === 'settings' ? ' tab-active' : ''}">Settings</a>` : ''}
+    ${hp('settings_manage') ? `<a href="/subscribers" class="tab${activeTab === 'subscribers' ? ' tab-active' : ''}">Subscribers</a>` : ''}
+    ${hp('gym_manage')      ? `<a href="/gym-rentals" class="tab${activeTab === 'gym' ? ' tab-active' : ''}">Gym Rentals</a>` : ''}
     <a href="https://volunteer.timothystl.org/scheduler" target="_blank" class="tab tab-external">Scheduler ↗</a>
     <a href="https://volunteer.timothystl.org/admin" target="_blank" class="tab tab-external">Volunteer Admin ↗</a>
   </div>
@@ -170,18 +171,61 @@ export function loginPage(error = '') {
 <div class="login-wrap">
   <div class="login-card">
     <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#D4922A;margin-bottom:8px;">Timothy Lutheran Church</div>
-    <div class="login-title">Newsletter Admin</div>
-    <div class="login-sub">Sign in to manage news &amp; events</div>
+    <div class="login-title">Admin Portal</div>
+    <div class="login-sub">Sign in to manage the website</div>
     ${error ? `<div class="alert alert-error">${error}</div>` : ''}
     <form method="POST" action="/login">
       <div class="form-group">
+        <label>Username</label>
+        <input type="text" name="username" autofocus autocomplete="username" placeholder="Username">
+      </div>
+      <div class="form-group">
         <label>Password</label>
-        <input type="password" name="password" autofocus placeholder="Enter admin password">
+        <input type="password" name="password" autocomplete="current-password" placeholder="Password">
       </div>
       <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:8px;">Sign in</button>
     </form>
   </div>
 </div>`, 'TLC Admin — Sign In');
+}
+
+// ── SETUP PAGE (first-run only) ───────────────────────────────
+export function setupPage(error = '') {
+  return html(`
+<div class="login-wrap">
+  <div class="login-card" style="max-width:420px;">
+    <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#D4922A;margin-bottom:8px;">Timothy Lutheran Church</div>
+    <div class="login-title">Admin Setup</div>
+    <div class="login-sub">Create your admin account to get started. This screen only appears once.</div>
+    ${error ? `<div class="alert alert-error">${error}</div>` : ''}
+    <form method="POST" action="/setup">
+      <div class="form-group" style="text-align:left;">
+        <label>Username</label>
+        <input type="text" name="username" autofocus autocomplete="off" placeholder="e.g. admin">
+      </div>
+      <div class="form-group" style="text-align:left;">
+        <label>Password</label>
+        <input type="password" name="password" autocomplete="new-password" placeholder="Choose a strong password">
+      </div>
+      <div class="form-group" style="text-align:left;">
+        <label>Confirm password</label>
+        <input type="password" name="password2" autocomplete="new-password" placeholder="Repeat password">
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:8px;">Create admin account →</button>
+    </form>
+  </div>
+</div>`, 'TLC Admin — Setup');
+}
+
+// ── PERMISSION CHECKBOXES ─────────────────────────────────────
+export function permissionCheckboxes(selectedPerms = []) {
+  const selected = Array.isArray(selectedPerms) ? selectedPerms : JSON.parse(selectedPerms || '[]');
+  return `<div class="perm-grid">${Object.entries(PERMISSIONS).map(([key, label]) =>
+    `<div class="perm-row">
+      <input type="checkbox" id="perm_${key}" name="perm_${key}" value="1"${selected.includes(key) ? ' checked' : ''}>
+      <label for="perm_${key}">${label}</label>
+    </div>`
+  ).join('')}</div>`;
 }
 
 // ── FORMAT DATE ──────────────────────────────────────────────

@@ -184,6 +184,38 @@ export const DB_INIT_SUBSCRIBERS = `CREATE TABLE IF NOT EXISTS newsletter_subscr
   subscribed_at TEXT DEFAULT (datetime('now'))
 )`;
 
+export const DB_INIT_USERS = `CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  permissions TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL,
+  last_login TEXT,
+  active INTEGER NOT NULL DEFAULT 1
+)`;
+
+export const DB_INIT_SESSIONS = `CREATE TABLE IF NOT EXISTS sessions (
+  token TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  username TEXT NOT NULL,
+  permissions TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
+)`;
+
+export const DB_INIT_AUDIT_LOG = `CREATE TABLE IF NOT EXISTS audit_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  username TEXT NOT NULL,
+  action TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT,
+  entity_label TEXT,
+  before_state TEXT,
+  after_state TEXT,
+  created_at TEXT NOT NULL
+)`;
+
 export const THEMES = ['Acceptance', 'Christian Education', 'Outreach', 'Worship'];
 export const CONTENT_TYPES = ['Testimonial / Quote', 'Story', 'Explainer', 'Event Promo', 'Factoid / Trivia'];
 
