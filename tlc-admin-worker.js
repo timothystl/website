@@ -5,8 +5,9 @@
 // Last modified: 2026-03-27
 
 
-import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS } from './admin/db.js';
-import { authCookie, setCookieHeader, html, topbarHtml, loginPage, formatDate, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection } from './admin/helpers.js';
+import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS } from './admin/db.js';
+import { html, topbarHtml, loginPage, setupPage, permissionCheckboxes, formatDate, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection } from './admin/helpers.js';
+import { hashPassword, verifyPassword, createSession, getSession, deleteSession, sessionCookieHeader, clearSessionCookieHeader, logAudit, hasPermission, ALL_PERMISSIONS, PERMISSIONS } from './admin/auth.js';
 import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHtml } from './admin/email.js';
 import { handleGymRoutes, sweepExpiredItems, extractImageKeys } from './admin/gym.js';
 
@@ -145,6 +146,13 @@ export default {
       await env.DB.prepare("UPDATE site_settings SET value = ? WHERE key = 'give_url' AND value LIKE '%breezechms%'")
         .bind('https://give.tithe.ly/?formId=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8').run();
     } catch (_) {}
+    // Auth tables
+    try { await env.DB.prepare(DB_INIT_USERS).run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_SESSIONS).run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_AUDIT_LOG).run(); } catch (_) {}
+    // Migrate: newsletter approval workflow
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN approval_status TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN approved_by_username TEXT').run(); } catch (_) {}
 
     // ── PUBLIC: serve uploaded docs from R2 ──
     if (path.startsWith('/docs/') && method === 'GET') {
@@ -487,29 +495,62 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
     const gymResult = await handleGymRoutes(path, method, url, request, env);
     if (gymResult) return gymResult;
 
+    // ── SETUP (first-run, no users exist yet) ──
+    if (path === '/setup') {
+      const userCount = await env.DB.prepare('SELECT COUNT(*) as n FROM users').first().catch(() => ({ n: 0 }));
+      if (userCount && userCount.n > 0) return new Response('', { status: 302, headers: { Location: '/login' } });
+      if (method === 'GET') return setupPage();
+      if (method === 'POST') {
+        const form = await request.formData();
+        const username = (form.get('username') || '').trim();
+        const password = form.get('password') || '';
+        const password2 = form.get('password2') || '';
+        if (!username || !password) return setupPage('Username and password are required.');
+        if (password !== password2) return setupPage('Passwords do not match.');
+        if (password.length < 8) return setupPage('Password must be at least 8 characters.');
+        const hash = await hashPassword(password);
+        await env.DB.prepare(
+          'INSERT INTO users (username, password_hash, permissions, created_at, active) VALUES (?, ?, ?, ?, 1)'
+        ).bind(username, hash, JSON.stringify(ALL_PERMISSIONS), new Date().toISOString()).run();
+        return new Response('', { status: 302, headers: { Location: '/login' } });
+      }
+    }
+
     // ── LOGIN ──
     if (path === '/login' && method === 'POST') {
       const form = await request.formData();
-      const pw = form.get('password');
-      if (pw && pw === env.ADMIN_PASSWORD) {
+      const username = (form.get('username') || '').trim();
+      const password = form.get('password') || '';
+      const user = username
+        ? await env.DB.prepare('SELECT * FROM users WHERE username = ? AND active = 1').bind(username).first().catch(() => null)
+        : null;
+      if (user && await verifyPassword(password, user.password_hash)) {
+        const token = await createSession(env.DB, user);
         return new Response('', {
           status: 302,
-          headers: { Location: '/', 'Set-Cookie': await setCookieHeader(env.ADMIN_PASSWORD) }
+          headers: { Location: '/', 'Set-Cookie': sessionCookieHeader(token) }
         });
       }
-      return loginPage('Incorrect password. Please try again.');
+      return loginPage('Incorrect username or password.');
     }
 
-    if (!await authCookie(request, env.ADMIN_PASSWORD)) {
+    // ── AUTH GATE ──
+    const setupCheck = await env.DB.prepare('SELECT COUNT(*) as n FROM users').first().catch(() => ({ n: 1 }));
+    if (!setupCheck || setupCheck.n === 0) {
+      return new Response('', { status: 302, headers: { Location: '/setup' } });
+    }
+    const currentUser = await getSession(env.DB, request);
+    if (!currentUser) {
       if (path === '/login') return loginPage();
       return loginPage();
     }
 
     // ── LOGOUT ──
     if (path === '/logout') {
+      await deleteSession(env.DB, request);
       return new Response('', {
         status: 302,
-        headers: { Location: '/login', 'Set-Cookie': 'tlc_auth=; Path=/; Max-Age=0' }
+        headers: { Location: '/login', 'Set-Cookie': clearSessionCookieHeader() }
       });
     }
 
@@ -548,6 +589,9 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
     }
 
     // ── VOTERS PAGE ADMIN ──
+    if ((path === '/voters' || path === '/voters-add-file' || path === '/voters-delete-file') && !hasPermission(currentUser, 'pages_edit')) {
+      return new Response('Access denied.', { status: 403 });
+    }
     if (path === '/voters' && method === 'GET') {
       const row = await env.DB.prepare('SELECT * FROM voters_page WHERE id = 1').first();
       const meeting_info = row ? (row.meeting_info || '') : '';
@@ -565,7 +609,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
             </form>
           </div>`).join('');
       return html(`
-${topbarHtml('voters')}
+${topbarHtml('voters', currentUser)}
 <div class="wrap">
   <div class="page-title">Voters Page</div>
   <div class="page-sub">Manage the members-only voters page content at timothystl.org/voters</div>
@@ -674,6 +718,9 @@ document.getElementById('upload-form').addEventListener('submit', async function
     }
 
     // ── SERMONS ADMIN ──
+    if (path.startsWith('/sermons') && !hasPermission(currentUser, 'sermons_edit')) {
+      return new Response('Access denied.', { status: 403 });
+    }
     if (path === '/sermons' && method === 'GET') {
       const alertHtml = url.searchParams.get('saved') ? `<div class="alert alert-success">Saved!</div>` : '';
       const series = await env.DB.prepare('SELECT * FROM sermon_series ORDER BY active DESC, sort_order ASC, id DESC').all();
@@ -717,7 +764,7 @@ document.getElementById('upload-form').addEventListener('submit', async function
 </div>`).join('');
 
       return html(`
-${topbarHtml('sermons', `<a href="https://timothystl.org/sermons" target="_blank">View page →</a>`)}
+${topbarHtml('sermons', currentUser, `<a href="https://timothystl.org/sermons" target="_blank">View page →</a>`)}
 <div class="wrap">
   <div class="page-title">Sermon Series</div>
   <div class="page-sub">Manage the current series and individual sermons shown on timothystl.org/sermons</div>
@@ -740,7 +787,7 @@ ${topbarHtml('sermons', `<a href="https://timothystl.org/sermons" target="_blank
 
     if (path === '/sermons/new-series' && method === 'GET') {
       return html(`
-${topbarHtml('sermons', `<a href="/sermons">← Back</a>`)}
+${topbarHtml('sermons', currentUser, `<a href="/sermons">← Back</a>`)}
 <div class="wrap">
   <div class="page-title">New Sermon Series</div>
   <form method="POST" action="/sermons/new-series">
@@ -772,7 +819,7 @@ ${topbarHtml('sermons', `<a href="/sermons">← Back</a>`)}
       const s = await env.DB.prepare('SELECT * FROM sermon_series WHERE id = ?').bind(id).first();
       if (!s) return new Response('Not found', { status: 404 });
       return html(`
-${topbarHtml('sermons', `<a href="/sermons">← Back</a>`)}
+${topbarHtml('sermons', currentUser, `<a href="/sermons">← Back</a>`)}
 <div class="wrap">
   <div class="page-title">Edit Series</div>
   <form method="POST" action="/sermons/edit-series/${id}">
@@ -828,7 +875,7 @@ ${topbarHtml('sermons', `<a href="/sermons">← Back</a>`)}
   </div>
 </div>`).join('');
       return html(`
-${topbarHtml('sermons', `<a href="/sermons">← All series</a>`)}
+${topbarHtml('sermons', currentUser, `<a href="/sermons">← All series</a>`)}
 <div class="wrap">
   <div class="page-title">${s.title}</div>
   <div class="page-sub">${s.date_range || 'Sermons in this series'}</div>
@@ -845,7 +892,7 @@ ${topbarHtml('sermons', `<a href="/sermons">← All series</a>`)}
       const allSeries = await env.DB.prepare('SELECT id, title FROM sermon_series ORDER BY active DESC, id DESC').all();
       const seriesOptions = allSeries.results.map(s => `<option value="${s.id}" ${s.id == seriesId ? 'selected' : ''}>${s.title}</option>`).join('');
       return html(`
-${topbarHtml('sermons', `<a href="${seriesId ? '/sermons/notes/' + seriesId : '/sermons'}">← Back</a>`)}
+${topbarHtml('sermons', currentUser, `<a href="${seriesId ? '/sermons/notes/' + seriesId : '/sermons'}">← Back</a>`)}
 <div class="wrap">
   <div class="page-title">Add Sermon</div>
   <form method="POST" action="/sermons/new-note">
@@ -881,7 +928,7 @@ ${topbarHtml('sermons', `<a href="${seriesId ? '/sermons/notes/' + seriesId : '/
       const allSeries = await env.DB.prepare('SELECT id, title FROM sermon_series ORDER BY active DESC, id DESC').all();
       const seriesOptions = allSeries.results.map(s => `<option value="${s.id}" ${s.id == n.series_id ? 'selected' : ''}>${s.title}</option>`).join('');
       return html(`
-${topbarHtml('sermons', `<a href="${n.series_id ? '/sermons/notes/' + n.series_id : '/sermons'}">← Back</a>`)}
+${topbarHtml('sermons', currentUser, `<a href="${n.series_id ? '/sermons/notes/' + n.series_id : '/sermons'}">← Back</a>`)}
 <div class="wrap">
   <div class="page-title">Edit Sermon</div>
   <form method="POST" action="/sermons/edit-note/${id}">
@@ -923,6 +970,17 @@ ${topbarHtml('sermons', `<a href="${n.series_id ? '/sermons/notes/' + n.series_i
       return new Response('', { status: 302, headers: { Location: redir } });
     }
 
+    // ── NEWSLETTER + NEWS PERMISSION GUARD ──
+    // Routes under /new, /publish, /edit/, /delete/, /send-email/, /newsitems require news or newsletter permission
+    const isNewsletterRoute = ['/new', '/publish'].includes(path) || path.startsWith('/edit/') || path.startsWith('/send-email/') || path.startsWith('/delete/');
+    const isNewsItemRoute = path === '/newsitems' || path.startsWith('/newsitems/');
+    if (isNewsletterRoute && !hasPermission(currentUser, 'newsletter_edit') && !hasPermission(currentUser, 'newsletter_approve')) {
+      return new Response('Access denied.', { status: 403 });
+    }
+    if (isNewsItemRoute && !hasPermission(currentUser, 'news_edit')) {
+      return new Response('Access denied.', { status: 403 });
+    }
+
     // ── NEW NEWSLETTER FORM ──
     if (path === '/new' && method === 'GET') {
       const today = new Date().toISOString().split('T')[0];
@@ -945,7 +1003,7 @@ ${topbarHtml('sermons', `<a href="${n.series_id ? '/sermons/notes/' + n.series_i
             </div>
           </label>`).join('');
       return html(`
-${topbarHtml('news', `<a href="/newsitems">← News &amp; Events</a>`)}
+${topbarHtml('news', currentUser, `<a href="/newsitems">← News &amp; Events</a>`)}
 <div class="wrap">
   <div class="page-title">New newsletter</div>
   <div class="page-sub">Write your update, add events, and publish to the website.</div>
@@ -1227,10 +1285,19 @@ addEvent();
         ).bind(newsletterId, e.event_date, e.event_name, e.event_time, e.event_desc, e.sort_order).run();
       }
 
-      // Send via Brevo if requested (only when publishing, not drafting)
+      // Approval workflow: editors without newsletter_approve submit for approval
+      if (action === 'publish' && !hasPermission(currentUser, 'newsletter_approve')) {
+        await env.DB.prepare("UPDATE newsletters SET status = 'draft', approval_status = 'pending' WHERE id = ?").bind(newsletterId).run();
+        return new Response('', {
+          status: 302,
+          headers: { Location: `/newsitems?msg=submitted&subject=${encodeURIComponent(subject)}` }
+        });
+      }
+
+      // Send via Brevo if requested (only when publishing with newsletter_approve permission)
       const emailSend = form.get('email_send') || 'none';
       let emailSuffix = '';
-      if (action === 'publish' && emailSend !== 'none') {
+      if (action === 'publish' && emailSend !== 'none' && hasPermission(currentUser, 'newsletter_approve')) {
         const listId = emailSend === 'test' ? 2 : parseInt(env.BREVO_LIST_ID || '0', 10);
         if (!listId && emailSend === 'all') {
           emailSuffix = `&emailerr=${encodeURIComponent('BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}`;
@@ -1243,10 +1310,29 @@ addEvent();
         }
       }
 
+      if (action === 'publish') {
+        await env.DB.prepare("UPDATE newsletters SET approval_status = 'approved', approved_by_username = ? WHERE id = ?").bind(currentUser.username, newsletterId).run();
+      }
+
       return new Response('', {
         status: 302,
         headers: { Location: `/newsitems?msg=${encodeURIComponent(action === 'publish' ? 'published' : 'draft')}&subject=${encodeURIComponent(subject)}${emailSuffix}` }
       });
+    }
+
+    // ── NEWSLETTER APPROVE / REJECT (requires newsletter_approve) ──
+    if (path.startsWith('/newsletter/approve/') && method === 'POST') {
+      if (!hasPermission(currentUser, 'newsletter_approve')) return new Response('Access denied.', { status: 403 });
+      const id = path.split('/').pop();
+      await env.DB.prepare("UPDATE newsletters SET status = 'published', approval_status = 'approved', approved_by_username = ? WHERE id = ?").bind(currentUser.username, id).run();
+      return new Response('', { status: 302, headers: { Location: '/newsitems?msg=approved' } });
+    }
+
+    if (path.startsWith('/newsletter/reject/') && method === 'POST') {
+      if (!hasPermission(currentUser, 'newsletter_approve')) return new Response('Access denied.', { status: 403 });
+      const id = path.split('/').pop();
+      await env.DB.prepare("UPDATE newsletters SET status = 'draft', approval_status = NULL WHERE id = ?").bind(id).run();
+      return new Response('', { status: 302, headers: { Location: '/newsitems?msg=rejected' } });
     }
 
     // ── EDIT EXISTING NEWSLETTER (GET) ──
@@ -1299,7 +1385,7 @@ addEvent();
       const ministryChecked = (t) => (row.ministry_type || 'text') === t ? ' checked' : '';
 
       return html(`
-${topbarHtml('news', `<a href="/newsitems">← News &amp; Events</a>`)}
+${topbarHtml('news', currentUser, `<a href="/newsitems">← News &amp; Events</a>`)}
 <div class="wrap">
   <div class="page-title">Edit newsletter</div>
   <div class="page-sub" style="color:var(--amber);font-weight:700;">You are editing a ${row.status === 'draft' ? 'draft' : 'published'} newsletter. Changes will go live immediately when you publish.</div>
@@ -1464,6 +1550,7 @@ ${eventsJs}
 
     // ── SEND EMAIL (for saved newsletters) ──
     if (path.startsWith('/send-email/') && method === 'POST') {
+      if (!hasPermission(currentUser, 'newsletter_approve')) return new Response('Access denied.', { status: 403 });
       const id = path.split('/').pop();
       const form = await request.formData();
       const listType = form.get('list_type') || 'test';
@@ -1510,7 +1597,7 @@ ${eventsJs}
       await sweepExpiredItems(env, new URL(request.url).origin);
       const [itemsRes, nlRes] = await Promise.all([
         env.DB.prepare('SELECT * FROM news_items ORDER BY pinned DESC, COALESCE(event_date, publish_date) ASC').all(),
-        env.DB.prepare("SELECT id, subject, published_at, format, status, created_at FROM newsletters ORDER BY CASE WHEN status = 'draft' THEN 0 ELSE 1 END, published_at DESC").all(),
+        env.DB.prepare("SELECT id, subject, published_at, format, status, approval_status, created_at FROM newsletters ORDER BY CASE WHEN status = 'draft' THEN 0 ELSE 1 END, published_at DESC").all(),
       ]);
       const today = new Date().toISOString().split('T')[0];
       const msgParam = url.searchParams.get('msg');
@@ -1563,8 +1650,14 @@ ${eventsJs}
   <div id="ig-cap" style="font-family:var(--sans);font-size:13px;background:white;border:1px solid #ccd4cc;border-radius:6px;padding:12px 14px;line-height:1.8;white-space:pre-wrap;color:var(--charcoal);">${igCaption.replace(/</g,'&lt;')}</div>
   <button onclick="navigator.clipboard.writeText(\`${igCaptionJs}\`).then(()=>{this.textContent='✓ Copied!';this.style.background='#e8f5e9';setTimeout(()=>{this.textContent='Copy caption';this.style.background='';},2000)})" style="margin-top:8px;font-family:var(--sans);font-size:12px;font-weight:700;background:white;border:1px solid #aab8aa;border-radius:6px;padding:6px 16px;cursor:pointer;transition:background .2s;">Copy caption</button>
 </div>`;
+      } else if (msgParam === 'submitted') {
+        alertHtml = `<div class="alert alert-info">Newsletter submitted for approval. An approver will review it before it goes live.</div>`;
+      } else if (msgParam === 'approved') {
+        alertHtml = `<div class="alert alert-success">✓ Newsletter approved and published.</div>`;
+      } else if (msgParam === 'rejected') {
+        alertHtml = `<div class="alert alert-info">Newsletter returned to draft for revisions.</div>`;
       } else if (msgParam === 'draft') {
-        alertHtml = `<div class="alert alert-info">Draft saved. Use "Send test" or "Send to all" below to email it when ready.</div>`;
+        alertHtml = `<div class="alert alert-info">Draft saved.</div>`;
       } else if (msgParam === 'emailed') {
         const sentTo = emailedParam === 'test' ? 'test list' : 'all subscribers';
         alertHtml = emailErrParam
@@ -1595,11 +1688,31 @@ ${eventsJs}
 
       // ── Newsletter HTML ──
       const nRows = nlRes.results;
-      const drafts = nRows.filter(r => r.status === 'draft');
+      const canApprove = hasPermission(currentUser, 'newsletter_approve');
+      const pending = nRows.filter(r => r.status === 'draft' && r.approval_status === 'pending');
+      const drafts = nRows.filter(r => r.status === 'draft' && r.approval_status !== 'pending');
       const published = nRows.filter(r => r.status !== 'draft');
       const fmtLabel = (r) => r.format === 'quick'
         ? `<span class="badge" style="background:#e8f0fe;color:#1a3060;margin-left:8px;">⚡ Quick</span>`
         : '';
+      const pendingSectionHtml = (pending.length === 0 || !canApprove) ? '' : `<div style="margin-bottom:16px;border:2px solid #D4922A;border-radius:8px;overflow:hidden;">
+  <div style="background:#FFF3D6;padding:8px 16px;border-bottom:1px solid #D4922A;">
+    <span style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7A4F00;">⏳ Awaiting Approval — ${pending.length}</span>
+  </div>
+  ${pending.map(r => `<div class="newsletter-row">
+  <div class="newsletter-date">${r.published_at || r.created_at || ''}</div>
+  <div class="newsletter-subject">${r.subject}${fmtLabel(r)} <span class="badge badge-pending">Pending</span></div>
+  <div class="newsletter-actions">
+    <a href="/edit/${r.id}" class="btn btn-sm btn-secondary">Preview</a>
+    <form method="POST" action="/newsletter/approve/${r.id}" style="display:contents;" onsubmit="return confirm('Approve and publish this newsletter?')">
+      <button type="submit" class="btn btn-sm btn-sage">Approve</button>
+    </form>
+    <form method="POST" action="/newsletter/reject/${r.id}" style="display:contents;" onsubmit="return confirm('Return this newsletter to draft?')">
+      <button type="submit" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Return to draft</button>
+    </form>
+  </div>
+</div>`).join('')}
+</div>`;
       const draftSectionHtml = drafts.length === 0 ? '' : `<div style="margin-bottom:16px;border:1px solid var(--amber);border-radius:8px;overflow:hidden;">
   <div style="background:#FFF8EC;padding:8px 16px;border-bottom:1px solid var(--amber);">
     <span style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#A07010;">Drafts — ${drafts.length}</span>
@@ -1609,14 +1722,14 @@ ${eventsJs}
   <div class="newsletter-subject">${r.subject}${fmtLabel(r)}</div>
   <div class="newsletter-actions">
     <a href="/edit/${r.id}" class="btn btn-sm btn-secondary">Edit</a>
-    <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Send to test list?')">
+    ${canApprove ? `<form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Send to test list?')">
       <input type="hidden" name="list_type" value="test">
       <button type="submit" class="btn btn-sm" style="background:var(--mist);color:var(--steel);border:1px solid var(--border);">Send test</button>
     </form>
     <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Send to ALL subscribers? This cannot be undone.')">
       <input type="hidden" name="list_type" value="all">
       <button type="submit" class="btn btn-sm btn-primary">Send to all</button>
-    </form>
+    </form>` : ''}
     <form method="POST" action="/delete/${r.id}" style="display:contents;" onsubmit="return confirm('Delete this draft?')">
       <button type="submit" class="btn btn-sm btn-danger">Delete</button>
     </form>
@@ -1645,7 +1758,7 @@ ${eventsJs}
 </div>`).join('');
 
       return html(`
-${topbarHtml('news', `<a href="https://timothystl.org/news" target="_blank">View site →</a>`)}
+${topbarHtml('news', currentUser, `<a href="https://timothystl.org/news" target="_blank">View site →</a>`, pending.length)}
 <style>details > summary { list-style: none; } details > summary::-webkit-details-marker { display: none; }</style>
 <div class="wrap">
   <div class="page-title">News &amp; Events</div>
@@ -1659,6 +1772,7 @@ ${topbarHtml('news', `<a href="https://timothystl.org/news" target="_blank">View
       <div class="btn-row" style="margin-bottom:20px;">
         <a href="/new" class="btn btn-primary">+ Write newsletter</a>
       </div>
+      ${pendingSectionHtml}
       ${draftSectionHtml}
       <div class="card" style="margin-bottom:0;">
         <div class="card-title">Past newsletters</div>
@@ -1695,7 +1809,7 @@ ${topbarHtml('news', `<a href="https://timothystl.org/news" target="_blank">View
       const today = new Date().toISOString().split('T')[0];
       const expire = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       return html(`
-${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
+${topbarHtml('news', currentUser, `<a href="/newsitems">← Back</a>`)}
 <div class="wrap">
   <div class="page-title">New news item</div>
   <div class="page-sub">This will appear on the website homepage and news page immediately.</div>
@@ -1795,9 +1909,10 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
         form.get('ch_bulletin') === '1' && 'bulletin',
         form.get('ch_social') === '1' && 'social',
       ].filter(Boolean).join(',') || 'web';
-      await env.DB.prepare(
+      const newItemResult = await env.DB.prepare(
         'INSERT INTO news_items (title, summary, body, image_url, publish_date, event_date, expire_date, pinned, theme, content_type, channels) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       ).bind(title, summary, body, image_url, publish_date, event_date || null, expire_date || null, pinned, theme || null, content_type || null, channels).run();
+      await logAudit(env.DB, currentUser, 'create', 'news_item', newItemResult.meta.last_row_id, title, null, { title, summary, publish_date, expire_date, pinned });
       return new Response('', { status: 302, headers: { Location: '/newsitems?msg=saved' } });
     }
 
@@ -1808,7 +1923,7 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
       if (!item) return new Response('Not found', { status: 404 });
       const v = (val) => (val || '').replace(/"/g, '&quot;');
       return html(`
-${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
+${topbarHtml('news', currentUser, `<a href="/newsitems">← Back</a>`)}
 <div class="wrap">
   <div class="page-title">Edit news item</div>
   <div class="page-sub">Changes go live immediately when you save.</div>
@@ -1909,9 +2024,11 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
         form.get('ch_bulletin') === '1' && 'bulletin',
         form.get('ch_social') === '1' && 'social',
       ].filter(Boolean).join(',') || 'web';
+      const beforeItem = await env.DB.prepare('SELECT title, summary, body, image_url, publish_date, event_date, expire_date, pinned FROM news_items WHERE id = ?').bind(id).first();
       await env.DB.prepare(
         'UPDATE news_items SET title=?, summary=?, body=?, image_url=?, publish_date=?, event_date=?, expire_date=?, pinned=?, theme=?, content_type=?, channels=? WHERE id=?'
       ).bind(title, summary, body, image_url, publish_date, event_date || null, expire_date || null, pinned, theme || null, content_type || null, channels, id).run();
+      await logAudit(env.DB, currentUser, 'update', 'news_item', id, title, beforeItem, { title, summary, publish_date, expire_date, pinned });
       return new Response('', { status: 302, headers: { Location: '/newsitems?msg=saved' } });
     }
 
@@ -1919,19 +2036,24 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
     if (path.startsWith('/newsitems/delete/') && method === 'POST') {
       const id = path.split('/').pop();
       const origin = new URL(request.url).origin;
-      const item = await env.DB.prepare('SELECT body FROM news_items WHERE id = ?').bind(id).first();
+      const item = await env.DB.prepare('SELECT title, body FROM news_items WHERE id = ?').bind(id).first();
       if (item) {
         for (const key of extractImageKeys(item.body || '', origin)) {
           try { await env.IMAGES.delete(key); } catch (_) {}
         }
       }
       await env.DB.prepare('DELETE FROM news_items WHERE id = ?').bind(id).run();
+      await logAudit(env.DB, currentUser, 'delete', 'news_item', id, item ? item.title : id, item, null);
       return new Response('', { status: 302, headers: { Location: '/newsitems?msg=deleted' } });
     }
 
     // ════════════════════════════════════════════════════════
     // ── MINISTRIES ──────────────────────────────────────────
     // ════════════════════════════════════════════════════════
+
+    if ((path.startsWith('/ministries') || path === '/youth' || path.startsWith('/youth/')) && !hasPermission(currentUser, 'ministries_edit')) {
+      return new Response('Access denied.', { status: 403 });
+    }
 
     // Compat: redirect old /youth/* admin URLs to /ministries/*
     if (path === '/youth' && method === 'GET') {
@@ -1983,7 +2105,7 @@ ${topbarHtml('news', `<a href="/newsitems">← Back</a>`)}
 </div>`;
 
         return html(`
-${topbarHtml('ministries')}
+${topbarHtml('ministries', currentUser)}
 <div class="wrap">
   <div class="page-title">Ministries</div>
   <div class="page-sub">Edit ministry pages and manage posts. Changes appear on the website immediately.</div>
@@ -2000,7 +2122,7 @@ ${topbarHtml('ministries')}
       // ── Add ministry form (GET) ──
       if (path === '/ministries/add' && method === 'GET') {
         return html(`
-${topbarHtml('ministries', `<a href="/ministries">← All ministries</a>`)}
+${topbarHtml('ministries', currentUser, `<a href="/ministries">← All ministries</a>`)}
 <div class="wrap">
   <div class="page-title">New ministry page</div>
   <div class="page-sub">Create a new ministry landing page.</div>
@@ -2050,7 +2172,7 @@ ${topbarHtml('ministries', `<a href="/ministries">← All ministries</a>`)}
         const page = await env.DB.prepare('SELECT * FROM youth_pages WHERE slug = ?').bind(slug).first();
         if (!page) return new Response('Not found', { status: 404 });
         return html(`
-${topbarHtml('ministries', `<a href="/ministries">← All ministries</a>`)}
+${topbarHtml('ministries', currentUser, `<a href="/ministries">← All ministries</a>`)}
 <div class="wrap">
   <div class="page-title">${page.title}</div>
   <div class="page-sub">Edit this page and click Save &amp; Publish when done.</div>
@@ -2111,9 +2233,11 @@ ${topbarHtml('ministries', `<a href="/ministries">← All ministries</a>`)}
         const ctaLabel2 = form.get('cta_label_2') || '';
         const ctaUrl2 = form.get('cta_url_2') || '';
         const now = new Date().toISOString();
+        const beforePage = await env.DB.prepare('SELECT title, content, cta_label, cta_url FROM youth_pages WHERE slug = ?').bind(slug).first();
         await env.DB.prepare(
           'UPDATE youth_pages SET title = ?, content = ?, cta_label = ?, cta_url = ?, cta_label_2 = ?, cta_url_2 = ?, updated_at = ? WHERE slug = ?'
         ).bind(title, content, ctaLabel, ctaUrl, ctaLabel2, ctaUrl2, now, slug).run();
+        await logAudit(env.DB, currentUser, 'update', 'ministry_page', slug, title, beforePage, { title, content: content.substring(0, 200), ctaLabel, ctaUrl });
         return new Response('', { status: 302, headers: { Location: '/ministries?msg=saved' } });
       }
 
@@ -2123,8 +2247,10 @@ ${topbarHtml('ministries', `<a href="/ministries">← All ministries</a>`)}
         if (CORE_SLUGS.includes(slug)) {
           return new Response('Cannot delete a built-in ministry page.', { status: 403 });
         }
+        const delPage = await env.DB.prepare('SELECT title FROM youth_pages WHERE slug = ?').bind(slug).first();
         await env.DB.prepare('DELETE FROM ministry_posts WHERE ministry_slug = ?').bind(slug).run();
         await env.DB.prepare('DELETE FROM youth_pages WHERE slug = ?').bind(slug).run();
+        await logAudit(env.DB, currentUser, 'delete', 'ministry_page', slug, delPage ? delPage.title : slug, delPage, null);
         return new Response('', { status: 302, headers: { Location: '/ministries?msg=deleted' } });
       }
 
@@ -2170,7 +2296,7 @@ ${topbarHtml('ministries', `<a href="/ministries">← All ministries</a>`)}
             }).join('');
 
         return html(`
-${topbarHtml('ministries', `<a href="/ministries">← All ministries</a>`)}
+${topbarHtml('ministries', currentUser, `<a href="/ministries">← All ministries</a>`)}
 <div class="wrap">
   <div class="page-title">${page.title} — Posts</div>
   <div class="page-sub">Upcoming posts show at top. Past posts roll down automatically by date.</div>
@@ -2194,7 +2320,7 @@ ${topbarHtml('ministries', `<a href="/ministries">← All ministries</a>`)}
         if (!page) return new Response('Not found', { status: 404 });
         const today = new Date().toISOString().split('T')[0];
         return html(`
-${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
+${topbarHtml('ministries', currentUser, `<a href="/ministries/${slug}/posts">← Posts</a>`)}
 <div class="wrap">
   <div class="page-title">New post — ${page.title}</div>
   <form method="POST" action="/ministries/${slug}/posts/create">
@@ -2244,9 +2370,10 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
         const expire_date = form.get('expire_date') || null;
         const body = form.get('body') || '';
         const pinned = form.get('pinned') === '1' ? 1 : 0;
-        await env.DB.prepare(
+        const newPostResult = await env.DB.prepare(
           'INSERT INTO ministry_posts (ministry_slug, title, post_date, event_date, expire_date, body, pinned) VALUES (?, ?, ?, ?, ?, ?, ?)'
         ).bind(slug, title, post_date, event_date, expire_date, body, pinned).run();
+        await logAudit(env.DB, currentUser, 'create', 'ministry_post', newPostResult.meta.last_row_id, title, null, { title, post_date, event_date, expire_date, ministry_slug: slug });
         return new Response('', { status: 302, headers: { Location: `/ministries/${slug}/posts?msg=postsaved` } });
       }
 
@@ -2259,7 +2386,7 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
         const post = await env.DB.prepare('SELECT * FROM ministry_posts WHERE id = ? AND ministry_slug = ?').bind(id, slug).first();
         if (!post || !page) return new Response('Not found', { status: 404 });
         return html(`
-${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
+${topbarHtml('ministries', currentUser, `<a href="/ministries/${slug}/posts">← Posts</a>`)}
 <div class="wrap">
   <div class="page-title">Edit post — ${page.title}</div>
   <form method="POST" action="/ministries/${slug}/posts/update/${id}">
@@ -2311,9 +2438,11 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
         const expire_date = form.get('expire_date') || null;
         const body = form.get('body') || '';
         const pinned = form.get('pinned') === '1' ? 1 : 0;
+        const beforePost = await env.DB.prepare('SELECT title, post_date, event_date, expire_date, body, pinned FROM ministry_posts WHERE id = ? AND ministry_slug = ?').bind(id, slug).first();
         await env.DB.prepare(
           'UPDATE ministry_posts SET title = ?, post_date = ?, event_date = ?, expire_date = ?, body = ?, pinned = ? WHERE id = ? AND ministry_slug = ?'
         ).bind(title, post_date, event_date, expire_date, body, pinned, id, slug).run();
+        await logAudit(env.DB, currentUser, 'update', 'ministry_post', id, title, beforePost ? { ...beforePost, body: (beforePost.body || '').substring(0, 200) } : null, { title, post_date, event_date, expire_date, pinned });
         return new Response('', { status: 302, headers: { Location: `/ministries/${slug}/posts?msg=postsaved` } });
       }
 
@@ -2322,13 +2451,18 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
         const parts = path.split('/');
         const slug = parts[2];
         const id = parts[5];
+        const delPost = await env.DB.prepare('SELECT title FROM ministry_posts WHERE id = ? AND ministry_slug = ?').bind(id, slug).first();
         await env.DB.prepare('DELETE FROM ministry_posts WHERE id = ? AND ministry_slug = ?').bind(id, slug).run();
+        await logAudit(env.DB, currentUser, 'delete', 'ministry_post', id, delPost ? delPost.title : id, delPost, null);
         return new Response('', { status: 302, headers: { Location: `/ministries/${slug}/posts?msg=postdeleted` } });
       }
 
     } // end if (path.startsWith('/ministries'))
 
     // ── PAGES TAB ──
+    if (path.startsWith('/pages') && !hasPermission(currentUser, 'pages_edit')) {
+      return new Response('Access denied.', { status: 403 });
+    }
     if (path.startsWith('/pages')) {
       // List all editable page blocks
       if (path === '/pages' && method === 'GET') {
@@ -2351,7 +2485,7 @@ ${topbarHtml('ministries', `<a href="/ministries/${slug}/posts">← Posts</a>`)}
           </tr>`;
         }).join('');
         return html(`
-${topbarHtml('pages')}
+${topbarHtml('pages', currentUser)}
 <div class="wrap">
   <div class="page-title">Pages</div>
   <div class="page-sub">Edit content blocks that appear on specific pages of the website. Leave a block blank to hide it.</div>
@@ -2402,7 +2536,7 @@ ${topbarHtml('pages')}
           <div style="font-size:12px;color:var(--gray);margin-top:8px;">Uncheck to hide without losing your content — useful between seasons or concerts.</div>
         </div>` : '';
         return html(`
-${topbarHtml('pages', `<a href="/pages">← All pages</a>`)}
+${topbarHtml('pages', currentUser, `<a href="/pages">← All pages</a>`)}
 <div class="wrap">
   <div class="page-title">${block.label}</div>
   <div class="page-sub">${hint}</div>
@@ -2446,6 +2580,9 @@ ${topbarHtml('pages', `<a href="/pages">← All pages</a>`)}
     } // end pages tab
 
     // ── STAFF TAB ──────────────────────────────────────────────
+    if (path.startsWith('/staff') && !hasPermission(currentUser, 'staff_edit')) {
+      return new Response('Access denied.', { status: 403 });
+    }
     if (path.startsWith('/staff')) {
       const esc = s => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
@@ -2473,7 +2610,7 @@ ${topbarHtml('pages', `<a href="/pages">← All pages</a>`)}
             </div>
           </div>`).join('');
         return html(`
-${topbarHtml('staff')}
+${topbarHtml('staff', currentUser)}
 <div class="wrap">
   <div class="page-title">Staff &amp; Leadership</div>
   <div class="page-sub">Manage the staff cards shown on the About page. Drag to reorder by updating the Order number.</div>
@@ -2491,7 +2628,7 @@ ${topbarHtml('staff')}
       if (path === '/staff/new' && method === 'GET') {
         const nextOrder = 10;
         return html(`
-${topbarHtml('staff', `<a href="/staff">← All staff</a>`)}
+${topbarHtml('staff', currentUser, `<a href="/staff">← All staff</a>`)}
 <div class="wrap">
   <div class="page-title">Add Staff Member</div>
   <div class="card">
@@ -2530,7 +2667,7 @@ ${topbarHtml('staff', `<a href="/staff">← All staff</a>`)}
         const m = await env.DB.prepare('SELECT * FROM staff_members WHERE id = ?').bind(id).first();
         if (!m) return new Response('Not found', { status: 404 });
         return html(`
-${topbarHtml('staff', `<a href="/staff">← All staff</a>`)}
+${topbarHtml('staff', currentUser, `<a href="/staff">← All staff</a>`)}
 <div class="wrap">
   <div class="page-title">Edit — ${esc(m.name)}</div>
   <div class="card">
@@ -2574,6 +2711,9 @@ ${topbarHtml('staff', `<a href="/staff">← All staff</a>`)}
     // ── GYM RENTALS ─────────────────────────────────────────────
 
     // ── CUSTOM REDIRECTS (add/delete, inside Settings page) ──
+    if ((path === '/redirects/add' || path.startsWith('/redirects/delete/') || path === '/settings' || path === '/settings/update') && !hasPermission(currentUser, 'settings_manage')) {
+      return new Response('Access denied.', { status: 403 });
+    }
     if (path === '/redirects/add' && method === 'POST') {
       const form = await request.formData();
       const rPath = (form.get('path') || '').trim().replace(/^\/+/, '').toLowerCase();
@@ -2590,6 +2730,9 @@ ${topbarHtml('staff', `<a href="/staff">← All staff</a>`)}
     }
 
     // ── SUBSCRIBERS ADMIN ──
+    if ((path === '/subscribers' || path === '/subscribers/delete') && !hasPermission(currentUser, 'settings_manage')) {
+      return new Response('Access denied.', { status: 403 });
+    }
     if (path === '/subscribers' && method === 'GET') {
       // Fetch Brevo contacts from the newsletter list
       let brevoContacts = [];
@@ -2652,7 +2795,7 @@ ${topbarHtml('staff', `<a href="/staff">← All staff</a>`)}
 </div>`).join('');
 
       return html(`
-${topbarHtml('subscribers')}
+${topbarHtml('subscribers', currentUser)}
 <div class="wrap">
   <div class="page-title">Newsletter Subscribers</div>
   <div class="page-sub">All subscribers from your Brevo list. Manage full list at <a href="https://app.brevo.com" target="_blank" style="color:var(--steel);">app.brevo.com ↗</a></div>
@@ -2713,7 +2856,7 @@ ${topbarHtml('subscribers')}
             </div>`).join('');
 
         return html(`
-${topbarHtml('settings')}
+${topbarHtml('settings', currentUser)}
 <div class="wrap">
   <div class="page-title">Site Settings</div>
   <div class="page-sub">Update redirect URLs and site-wide configuration. Changes take effect immediately.</div>
@@ -2780,6 +2923,232 @@ ${topbarHtml('settings')}
         return new Response('', { status: 302, headers: { Location: '/settings?msg=saved' } });
       }
     } // end settings tab
+
+    // ── USER MANAGEMENT ────────────────────────────────────────
+    if (path.startsWith('/users') && !hasPermission(currentUser, 'users_manage')) {
+      return new Response('Access denied.', { status: 403 });
+    }
+
+    if (path === '/users' && method === 'GET') {
+      const users = await env.DB.prepare('SELECT id, username, permissions, last_login, active, created_at FROM users ORDER BY created_at').all();
+      const msg = url.searchParams.get('msg');
+      const alertHtml = msg === 'created' ? `<div class="alert alert-success">✓ User created.</div>`
+        : msg === 'updated' ? `<div class="alert alert-success">✓ User updated.</div>`
+        : msg === 'deleted' ? `<div class="alert alert-info">User deleted.</div>` : '';
+      const listHtml = users.results.map(u => {
+        let perms = [];
+        try { perms = JSON.parse(u.permissions || '[]'); } catch(_) {}
+        const permLabels = perms.map(p => (PERMISSIONS[p] || p)).join(', ') || 'None';
+        return `<div class="user-row">
+  <div class="user-name">${u.username}${!u.active ? ' <span class="badge badge-expired">Inactive</span>' : ''}</div>
+  <div class="user-meta">${permLabels}</div>
+  <div class="user-meta">${u.last_login ? 'Last login: ' + u.last_login.split('T')[0] : 'Never logged in'}</div>
+  <div class="ni-actions">
+    <a href="/users/edit/${u.id}" class="btn btn-sm btn-secondary">Edit</a>
+    ${u.id !== currentUser.id ? `<form method="POST" action="/users/delete/${u.id}" style="display:contents;" onsubmit="return confirm('Delete this user? This cannot be undone.')">
+      <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+    </form>` : ''}
+  </div>
+</div>`;
+      }).join('') || '<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No users yet.</div>';
+      return html(`
+${topbarHtml('users', currentUser)}
+<div class="wrap">
+  <div class="page-title">User Management</div>
+  <div class="page-sub">Manage admin portal accounts and permissions.</div>
+  ${alertHtml}
+  <div class="btn-row" style="margin-bottom:24px;">
+    <a href="/users/new" class="btn btn-primary">+ Add user</a>
+  </div>
+  <div class="card">${listHtml}</div>
+</div>`, 'Users');
+    }
+
+    if (path === '/users/new' && method === 'GET') {
+      return html(`
+${topbarHtml('users', currentUser)}
+<div class="wrap">
+  <div class="page-title">New user</div>
+  <form method="POST" action="/users/new">
+    <div class="card">
+      <div class="form-group"><label>Username <span style="color:#B85C3A;">*</span></label><input type="text" name="username" required autocomplete="off"></div>
+      <div class="form-group"><label>Password <span style="color:#B85C3A;">*</span></label><input type="password" name="password" autocomplete="new-password" placeholder="Min 8 characters"></div>
+      <div class="form-group"><label>Confirm password</label><input type="password" name="password2" autocomplete="new-password"></div>
+      <div class="form-group"><label>Permissions</label>${permissionCheckboxes([])}</div>
+    </div>
+    <div class="btn-row">
+      <button type="submit" class="btn btn-primary">Create user →</button>
+      <a href="/users" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
+    </div>
+  </form>
+</div>`, 'New User');
+    }
+
+    if (path === '/users/new' && method === 'POST') {
+      if (!hasPermission(currentUser, 'users_manage')) return new Response('Access denied.', { status: 403 });
+      const form = await request.formData();
+      const username = (form.get('username') || '').trim();
+      const password = form.get('password') || '';
+      const password2 = form.get('password2') || '';
+      if (!username || !password) return new Response('Username and password required.', { status: 400 });
+      if (password !== password2) return new Response('Passwords do not match.', { status: 400 });
+      if (password.length < 8) return new Response('Password must be at least 8 characters.', { status: 400 });
+      const existing = await env.DB.prepare('SELECT id FROM users WHERE username = ?').bind(username).first();
+      if (existing) return new Response('Username already taken.', { status: 400 });
+      const perms = Object.keys(PERMISSIONS).filter(k => form.get('perm_' + k) === '1');
+      const hash = await hashPassword(password);
+      await env.DB.prepare('INSERT INTO users (username, password_hash, permissions, created_at, active) VALUES (?, ?, ?, ?, 1)')
+        .bind(username, hash, JSON.stringify(perms), new Date().toISOString()).run();
+      return new Response('', { status: 302, headers: { Location: '/users?msg=created' } });
+    }
+
+    if (path.startsWith('/users/edit/') && method === 'GET') {
+      const uid = path.split('/').pop();
+      const u = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(uid).first();
+      if (!u) return new Response('Not found', { status: 404 });
+      let selectedPerms = [];
+      try { selectedPerms = JSON.parse(u.permissions || '[]'); } catch(_) {}
+      return html(`
+${topbarHtml('users', currentUser)}
+<div class="wrap">
+  <div class="page-title">Edit user: ${u.username}</div>
+  <form method="POST" action="/users/edit/${u.id}">
+    <div class="card">
+      <div class="form-group"><label>Username</label><input type="text" name="username" value="${(u.username || '').replace(/"/g,'&quot;')}" required autocomplete="off"></div>
+      <div class="form-group">
+        <label>New password <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— leave blank to keep current</span></label>
+        <input type="password" name="password" autocomplete="new-password" placeholder="Leave blank to keep current password">
+      </div>
+      <div class="form-group"><label>Confirm new password</label><input type="password" name="password2" autocomplete="new-password"></div>
+      <div class="form-group"><label>Permissions</label>${permissionCheckboxes(selectedPerms)}</div>
+      <div class="form-group">
+        <label>Status</label>
+        <div class="radio-row">
+          <label><input type="radio" name="active" value="1"${u.active ? ' checked' : ''}> Active</label>
+          <label><input type="radio" name="active" value="0"${!u.active ? ' checked' : ''}> Inactive</label>
+        </div>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button type="submit" class="btn btn-primary">Save changes →</button>
+      <a href="/users" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
+    </div>
+  </form>
+</div>`, `Edit User`);
+    }
+
+    if (path.startsWith('/users/edit/') && method === 'POST') {
+      if (!hasPermission(currentUser, 'users_manage')) return new Response('Access denied.', { status: 403 });
+      const uid = path.split('/').pop();
+      const form = await request.formData();
+      const username = (form.get('username') || '').trim();
+      const password = form.get('password') || '';
+      const password2 = form.get('password2') || '';
+      const active = form.get('active') === '1' ? 1 : 0;
+      const perms = Object.keys(PERMISSIONS).filter(k => form.get('perm_' + k) === '1');
+      if (!username) return new Response('Username required.', { status: 400 });
+      if (password && password !== password2) return new Response('Passwords do not match.', { status: 400 });
+      if (password && password.length < 8) return new Response('Password must be at least 8 characters.', { status: 400 });
+      if (password) {
+        const hash = await hashPassword(password);
+        await env.DB.prepare('UPDATE users SET username = ?, password_hash = ?, permissions = ?, active = ? WHERE id = ?')
+          .bind(username, hash, JSON.stringify(perms), active, uid).run();
+      } else {
+        await env.DB.prepare('UPDATE users SET username = ?, permissions = ?, active = ? WHERE id = ?')
+          .bind(username, JSON.stringify(perms), active, uid).run();
+      }
+      // Invalidate sessions if deactivated or permissions changed
+      if (!active || parseInt(uid, 10) !== currentUser.id) {
+        await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(uid).run();
+      }
+      return new Response('', { status: 302, headers: { Location: '/users?msg=updated' } });
+    }
+
+    if (path.startsWith('/users/delete/') && method === 'POST') {
+      if (!hasPermission(currentUser, 'users_manage')) return new Response('Access denied.', { status: 403 });
+      const uid = path.split('/').pop();
+      if (parseInt(uid, 10) === currentUser.id) return new Response('Cannot delete your own account.', { status: 400 });
+      await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(uid).run();
+      await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(uid).run();
+      return new Response('', { status: 302, headers: { Location: '/users?msg=deleted' } });
+    }
+
+    // ── AUDIT LOG ──────────────────────────────────────────────
+    if (path.startsWith('/audit-log') || path.startsWith('/rollback/')) {
+      if (!hasPermission(currentUser, 'audit_view')) return new Response('Access denied.', { status: 403 });
+    }
+
+    if (path === '/audit-log' && method === 'GET') {
+      const pageNum = parseInt(url.searchParams.get('page') || '1', 10);
+      const limit = 50;
+      const offset = (pageNum - 1) * limit;
+      const [rows, total] = await Promise.all([
+        env.DB.prepare('SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ? OFFSET ?').bind(limit, offset).all(),
+        env.DB.prepare('SELECT COUNT(*) as n FROM audit_log').first()
+      ]);
+      const totalPages = Math.ceil((total ? total.n : 0) / limit);
+      const canRollback = (row) => (row.entity_type === 'news_item' || row.entity_type === 'ministry_page' || row.entity_type === 'ministry_post') && row.action === 'update' && row.before_state;
+      const listHtml = rows.results.length === 0
+        ? '<div style="text-align:center;padding:40px;color:var(--gray);font-size:14px;">No audit log entries yet.</div>'
+        : rows.results.map(row => {
+            let before = null;
+            try { before = JSON.parse(row.before_state || 'null'); } catch(_) {}
+            return `<div class="audit-row">
+  <div class="audit-who" style="font-size:12px;">${row.created_at ? row.created_at.replace('T',' ').slice(0,16) : ''}<br><span style="color:var(--amber);">${row.username}</span></div>
+  <div class="audit-action"><span class="badge ${row.action === 'delete' ? 'badge-expired' : row.action === 'create' ? 'badge-active' : 'badge-upcoming'}">${row.action}</span></div>
+  <div class="audit-entity" style="font-size:12px;">${row.entity_type}<br>${row.entity_id}</div>
+  <div style="font-size:13px;color:var(--charcoal);">${row.entity_label || ''}</div>
+  <div>${canRollback(row) ? `<form method="POST" action="/rollback/${row.id}" onsubmit="return confirm('Restore this item to its previous state?')" style="display:inline;">
+    <button type="submit" class="btn btn-sm btn-danger">Rollback</button>
+  </form>` : ''}</div>
+</div>`;
+          }).join('');
+      const pagination = totalPages > 1 ? `<div style="display:flex;gap:8px;justify-content:center;padding:24px 0;">${
+        Array.from({length:totalPages},(_,i)=>i+1).map(p=>`<a href="/audit-log?page=${p}" class="btn btn-sm ${p===pageNum?'btn-primary':''}" style="${p===pageNum?'':'background:var(--linen);color:var(--charcoal);border:1px solid var(--border);'}">${p}</a>`).join('')
+      }</div>` : '';
+      return html(`
+${topbarHtml('audit', currentUser)}
+<div class="wrap">
+  <div class="page-title">Audit Log</div>
+  <div class="page-sub">A record of all content changes made by admin users.</div>
+  <div class="card">
+    <div style="display:grid;grid-template-columns:140px 80px 90px 1fr auto;gap:12px;padding:0 0 10px;border-bottom:2px solid var(--border);font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gray);">
+      <div>When / Who</div><div>Action</div><div>Type / ID</div><div>Item</div><div></div>
+    </div>
+    ${listHtml}
+  </div>
+  ${pagination}
+</div>`, 'Audit Log');
+    }
+
+    if (path.startsWith('/rollback/') && method === 'POST') {
+      if (!hasPermission(currentUser, 'audit_view')) return new Response('Access denied.', { status: 403 });
+      const logId = path.split('/').pop();
+      const entry = await env.DB.prepare('SELECT * FROM audit_log WHERE id = ?').bind(logId).first();
+      if (!entry || !entry.before_state) return new Response('Cannot rollback: no previous state recorded.', { status: 400 });
+      let before = null;
+      try { before = JSON.parse(entry.before_state); } catch(_) { return new Response('Invalid state data.', { status: 400 }); }
+      if (entry.entity_type === 'news_item') {
+        await env.DB.prepare(
+          'UPDATE news_items SET title=?, summary=?, body=?, image_url=?, publish_date=?, event_date=?, expire_date=?, pinned=? WHERE id=?'
+        ).bind(before.title, before.summary, before.body, before.image_url, before.publish_date, before.event_date, before.expire_date, before.pinned, entry.entity_id).run();
+        await logAudit(env.DB, currentUser, 'rollback', 'news_item', entry.entity_id, entry.entity_label, null, before);
+        return new Response('', { status: 302, headers: { Location: '/audit-log?msg=rolledback' } });
+      } else if (entry.entity_type === 'ministry_page') {
+        await env.DB.prepare(
+          'UPDATE youth_pages SET title=?, content=?, cta_label=?, cta_url=? WHERE slug=?'
+        ).bind(before.title, before.content, before.cta_label, before.cta_url, entry.entity_id).run();
+        await logAudit(env.DB, currentUser, 'rollback', 'ministry_page', entry.entity_id, entry.entity_label, null, before);
+        return new Response('', { status: 302, headers: { Location: '/audit-log?msg=rolledback' } });
+      } else if (entry.entity_type === 'ministry_post') {
+        await env.DB.prepare(
+          'UPDATE ministry_posts SET title=?, post_date=?, event_date=?, expire_date=?, body=?, pinned=? WHERE id=?'
+        ).bind(before.title, before.post_date, before.event_date, before.expire_date, before.body, before.pinned, entry.entity_id).run();
+        await logAudit(env.DB, currentUser, 'rollback', 'ministry_post', entry.entity_id, entry.entity_label, null, before);
+        return new Response('', { status: 302, headers: { Location: '/audit-log?msg=rolledback' } });
+      }
+      return new Response('Rollback not supported for this entity type.', { status: 400 });
+    }
 
     // Redirect old newsletter root to combined page
     if (path === '/') {
@@ -2903,7 +3272,7 @@ ${topbarHtml('settings')}
 </div>`).join('');
 
     return html(`
-${topbarHtml('newsletter', `<a href="https://timothystl.org/news" target="_blank">View archive →</a>`)}
+${topbarHtml('newsletter', currentUser, `<a href="https://timothystl.org/news" target="_blank">View archive →</a>`)}
 <div class="wrap">
   <div class="page-title">Newsletters</div>
   <div class="page-sub">Write your weekly update and publish to the website.</div>
