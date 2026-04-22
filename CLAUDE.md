@@ -6,11 +6,10 @@ This file captures the full project context so any Claude session can be resumed
 
 ## Project Overview
 
-We are rebuilding the Timothy Lutheran Church website (timothystl.org) to replace the current Tithely/Breeze-hosted site (~$50/month). The new site runs on Cloudflare Workers, is fully custom, and will be tested at `test.timothystl.org` before DNS cutover.
+We are rebuilding the Timothy Lutheran Church website (timothystl.org) to replace the current Tithely/Breeze-hosted site (~$50/month). The new site runs on Cloudflare Workers, is fully custom.
 
 **Repo:** `timothystl/website`
 **Primary branch for development:** `main` (deploys to timothystl.org, admin.timothystl.org, and all subdomain workers)
-**Test branch:** `claude/*` branches (auto-deploys to test.timothystl.org for the public site only)
 
 > **Note:** Admin portal changes (`tlc-admin-worker.js`) should be committed and pushed to `main` — the test site does not run the admin worker. Always target `main` for admin work.
 
@@ -25,13 +24,6 @@ We are rebuilding the Timothy Lutheran Church website (timothystl.org) to replac
 | tlc-newsletter-admin | admin.timothystl.org | `tlc-admin-worker.js` |
 | tlc-links | links.timothystl.org | `tlc-links-worker.js` |
 | breeze-proxy-worker | volunteer.timothystl.org | `tlc-volunteer-worker.js` |
-
-### Test Worker
-| Worker | Domain | Config |
-|--------|--------|--------|
-| timothystl-test-site | test.timothystl.org | `wrangler-test-site.toml` |
-
-Deploys automatically from any `claude/**` branch push. Use this for all development — never touch production directly.
 
 ### Databases (Cloudflare D1)
 - `tlc-newsletter-db` — tables: `newsletters`, `events`, (planned: `news_items`, `youth_pages`)
@@ -340,7 +332,6 @@ The actual SPA is **`public/index.html`**. All HTML edits go there.
 
 ## Decisions Made (Do Not Re-litigate)
 
-- Single-file SPA approach is intentional — don't suggest frameworks or bundlers
 - Cloudflare Workers (not Netlify, Vercel, etc.) — already deployed and working
 - No WordPress — too complex for this owner and the youth director
 - Custom admin portal over Netlify CMS / Decap CMS — matches existing pattern in the repo
