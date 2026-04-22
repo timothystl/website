@@ -228,6 +228,13 @@ export function permissionCheckboxes(selectedPerms = []) {
   ).join('')}</div>`;
 }
 
+// ── ESCAPE HTML ──────────────────────────────────────────────
+// Prevents XSS when user-controlled strings are rendered in template literals.
+export function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 // ── FORMAT DATE ──────────────────────────────────────────────
 export function formatDate(d) {
   if (!d) return '';

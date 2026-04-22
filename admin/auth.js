@@ -38,12 +38,20 @@ export async function hashPassword(password) {
   return `pbkdf2:100000:${salt}:${hash}`;
 }
 
+// Constant-time string comparison to prevent timing attacks on password verification.
+function timingSafeEqual(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
 export async function verifyPassword(password, stored) {
   const parts = (stored || '').split(':');
   if (parts.length !== 4 || parts[0] !== 'pbkdf2') return false;
   const [, iters, salt, expected] = parts;
   const hash = await pbkdf2(password, salt, parseInt(iters, 10));
-  return hash === expected;
+  return timingSafeEqual(hash, expected);
 }
 
 // ── SESSION MANAGEMENT ────────────────────────────────────────
@@ -74,8 +82,10 @@ export async function createSession(db, user) {
 export async function getSession(db, request) {
   const token = getTokenFromRequest(request);
   if (!token) return null;
+  // Read permissions from the users table (not the session row) so permission
+  // changes take effect on the next request instead of requiring re-login.
   const row = await db.prepare(
-    `SELECT s.user_id, s.username, s.permissions, s.expires_at, u.active
+    `SELECT s.user_id, s.username, u.permissions AS permissions, s.expires_at, u.active
      FROM sessions s JOIN users u ON u.id = s.user_id
      WHERE s.token = ?`
   ).bind(token).first();

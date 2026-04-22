@@ -6,7 +6,7 @@
 
 
 import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS } from './admin/db.js';
-import { html, topbarHtml, loginPage, setupPage, permissionCheckboxes, formatDate, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection } from './admin/helpers.js';
+import { html, topbarHtml, loginPage, setupPage, permissionCheckboxes, formatDate, escapeHtml, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection } from './admin/helpers.js';
 import { hashPassword, verifyPassword, createSession, getSession, deleteSession, sessionCookieHeader, clearSessionCookieHeader, logAudit, hasPermission, ALL_PERMISSIONS, PERMISSIONS } from './admin/auth.js';
 import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHtml } from './admin/email.js';
 import { handleGymRoutes, sweepExpiredItems, extractImageKeys } from './admin/gym.js';
@@ -509,9 +509,17 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
         if (password !== password2) return setupPage('Passwords do not match.');
         if (password.length < 8) return setupPage('Password must be at least 8 characters.');
         const hash = await hashPassword(password);
-        await env.DB.prepare(
-          'INSERT INTO users (username, password_hash, permissions, created_at, active) VALUES (?, ?, ?, ?, 1)'
-        ).bind(username, hash, JSON.stringify(ALL_PERMISSIONS), new Date().toISOString()).run();
+        // Re-check inside the critical section to guard against two parallel
+        // /setup POSTs both passing the initial count check.
+        const recheck = await env.DB.prepare('SELECT COUNT(*) as n FROM users').first().catch(() => ({ n: 1 }));
+        if (recheck && recheck.n > 0) return new Response('', { status: 302, headers: { Location: '/login' } });
+        try {
+          await env.DB.prepare(
+            'INSERT INTO users (username, password_hash, permissions, created_at, active) VALUES (?, ?, ?, ?, 1)'
+          ).bind(username, hash, JSON.stringify(ALL_PERMISSIONS), new Date().toISOString()).run();
+        } catch (_) {
+          // UNIQUE(username) constraint — another request beat us. Fall through to login.
+        }
         return new Response('', { status: 302, headers: { Location: '/login' } });
       }
     }
@@ -1312,6 +1320,9 @@ addEvent();
 
       if (action === 'publish') {
         await env.DB.prepare("UPDATE newsletters SET approval_status = 'approved', approved_by_username = ? WHERE id = ?").bind(currentUser.username, newsletterId).run();
+      } else {
+        // Saving as draft clears any prior approval state
+        await env.DB.prepare("UPDATE newsletters SET approval_status = NULL, approved_by_username = NULL WHERE id = ?").bind(newsletterId).run();
       }
 
       return new Response('', {
@@ -1331,7 +1342,7 @@ addEvent();
     if (path.startsWith('/newsletter/reject/') && method === 'POST') {
       if (!hasPermission(currentUser, 'newsletter_approve')) return new Response('Access denied.', { status: 403 });
       const id = path.split('/').pop();
-      await env.DB.prepare("UPDATE newsletters SET status = 'draft', approval_status = NULL WHERE id = ?").bind(id).run();
+      await env.DB.prepare("UPDATE newsletters SET status = 'draft', approval_status = NULL, approved_by_username = NULL WHERE id = ?").bind(id).run();
       return new Response('', { status: 302, headers: { Location: '/newsitems?msg=rejected' } });
     }
 
@@ -2940,7 +2951,7 @@ ${topbarHtml('settings', currentUser)}
         try { perms = JSON.parse(u.permissions || '[]'); } catch(_) {}
         const permLabels = perms.map(p => (PERMISSIONS[p] || p)).join(', ') || 'None';
         return `<div class="user-row">
-  <div class="user-name">${u.username}${!u.active ? ' <span class="badge badge-expired">Inactive</span>' : ''}</div>
+  <div class="user-name">${escapeHtml(u.username)}${!u.active ? ' <span class="badge badge-expired">Inactive</span>' : ''}</div>
   <div class="user-meta">${permLabels}</div>
   <div class="user-meta">${u.last_login ? 'Last login: ' + u.last_login.split('T')[0] : 'Never logged in'}</div>
   <div class="ni-actions">
@@ -3011,7 +3022,7 @@ ${topbarHtml('users', currentUser)}
       return html(`
 ${topbarHtml('users', currentUser)}
 <div class="wrap">
-  <div class="page-title">Edit user: ${u.username}</div>
+  <div class="page-title">Edit user: ${escapeHtml(u.username)}</div>
   <form method="POST" action="/users/edit/${u.id}">
     <div class="card">
       <div class="form-group"><label>Username</label><input type="text" name="username" value="${(u.username || '').replace(/"/g,'&quot;')}" required autocomplete="off"></div>
@@ -3049,16 +3060,23 @@ ${topbarHtml('users', currentUser)}
       if (!username) return new Response('Username required.', { status: 400 });
       if (password && password !== password2) return new Response('Passwords do not match.', { status: 400 });
       if (password && password.length < 8) return new Response('Password must be at least 8 characters.', { status: 400 });
+      // Fetch existing user to detect permission or password changes
+      const existingUser = await env.DB.prepare('SELECT permissions, active FROM users WHERE id = ?').bind(uid).first();
+      const oldPerms = existingUser ? existingUser.permissions : '[]';
+      const newPermsJson = JSON.stringify(perms);
+      const permsChanged = oldPerms !== newPermsJson;
+      const passwordChanged = !!password;
+      const deactivated = existingUser && existingUser.active && !active;
       if (password) {
         const hash = await hashPassword(password);
         await env.DB.prepare('UPDATE users SET username = ?, password_hash = ?, permissions = ?, active = ? WHERE id = ?')
-          .bind(username, hash, JSON.stringify(perms), active, uid).run();
+          .bind(username, hash, newPermsJson, active, uid).run();
       } else {
         await env.DB.prepare('UPDATE users SET username = ?, permissions = ?, active = ? WHERE id = ?')
-          .bind(username, JSON.stringify(perms), active, uid).run();
+          .bind(username, newPermsJson, active, uid).run();
       }
-      // Invalidate sessions if deactivated or permissions changed
-      if (!active || parseInt(uid, 10) !== currentUser.id) {
+      // Invalidate sessions only when something relevant changed
+      if (deactivated || passwordChanged || permsChanged) {
         await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(uid).run();
       }
       return new Response('', { status: 302, headers: { Location: '/users?msg=updated' } });
@@ -3094,10 +3112,10 @@ ${topbarHtml('users', currentUser)}
             let before = null;
             try { before = JSON.parse(row.before_state || 'null'); } catch(_) {}
             return `<div class="audit-row">
-  <div class="audit-who" style="font-size:12px;">${row.created_at ? row.created_at.replace('T',' ').slice(0,16) : ''}<br><span style="color:var(--amber);">${row.username}</span></div>
-  <div class="audit-action"><span class="badge ${row.action === 'delete' ? 'badge-expired' : row.action === 'create' ? 'badge-active' : 'badge-upcoming'}">${row.action}</span></div>
-  <div class="audit-entity" style="font-size:12px;">${row.entity_type}<br>${row.entity_id}</div>
-  <div style="font-size:13px;color:var(--charcoal);">${row.entity_label || ''}</div>
+  <div class="audit-who" style="font-size:12px;">${row.created_at ? escapeHtml(row.created_at.replace('T',' ').slice(0,16)) : ''}<br><span style="color:var(--amber);">${escapeHtml(row.username)}</span></div>
+  <div class="audit-action"><span class="badge ${row.action === 'delete' ? 'badge-expired' : row.action === 'create' ? 'badge-active' : 'badge-upcoming'}">${escapeHtml(row.action)}</span></div>
+  <div class="audit-entity" style="font-size:12px;">${escapeHtml(row.entity_type)}<br>${escapeHtml(row.entity_id)}</div>
+  <div style="font-size:13px;color:var(--charcoal);">${escapeHtml(row.entity_label || '')}</div>
   <div>${canRollback(row) ? `<form method="POST" action="/rollback/${row.id}" onsubmit="return confirm('Restore this item to its previous state?')" style="display:inline;">
     <button type="submit" class="btn btn-sm btn-danger">Rollback</button>
   </form>` : ''}</div>
