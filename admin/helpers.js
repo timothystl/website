@@ -144,8 +144,6 @@ export function topbarHtml(activeTab, user, extraLinks = '', pendingCount = 0) {
   </div>
   <div class="topbar-links">
     ${extraLinks}
-    ${hp('users_manage') ? `<a href="/users">Users</a>` : ''}
-    ${hp('audit_view') ? `<a href="/audit-log">Audit Log</a>` : ''}
     <a href="/logout">Sign out</a>
   </div>
 </div>
@@ -159,6 +157,8 @@ export function topbarHtml(activeTab, user, extraLinks = '', pendingCount = 0) {
     ${hp('settings_manage') ? `<a href="/settings" class="tab${activeTab === 'settings' ? ' tab-active' : ''}">Settings</a>` : ''}
     ${hp('settings_manage') ? `<a href="/subscribers" class="tab${activeTab === 'subscribers' ? ' tab-active' : ''}">Subscribers</a>` : ''}
     ${hp('gym_manage')      ? `<a href="/gym-rentals" class="tab${activeTab === 'gym' ? ' tab-active' : ''}">Gym Rentals</a>` : ''}
+    ${hp('users_manage')    ? `<a href="/users" class="tab${activeTab === 'users' ? ' tab-active' : ''}">Users</a>` : ''}
+    ${hp('audit_view')      ? `<a href="/audit-log" class="tab${activeTab === 'audit' ? ' tab-active' : ''}">Audit Log</a>` : ''}
     <a href="https://volunteer.timothystl.org/scheduler" target="_blank" class="tab tab-external">Scheduler ↗</a>
     <a href="https://volunteer.timothystl.org/admin" target="_blank" class="tab tab-external">Volunteer Admin ↗</a>
   </div>
