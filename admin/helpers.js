@@ -4,6 +4,8 @@
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, hasPermission } from './auth.js';
 
+export const VERSION = 'v1.0';
+
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
   return new Response(`<!DOCTYPE html>
@@ -139,7 +141,7 @@ export function topbarHtml(activeTab, user, extraLinks = '', pendingCount = 0) {
   const pendingDot = pendingCount > 0 && hp('newsletter_approve') ? `<span class="pending-dot" title="${pendingCount} newsletter(s) awaiting approval"></span>` : '';
   return `<div class="topbar">
   <div>
-    <div class="topbar-brand">Timothy Lutheran · Admin</div>
+    <div class="topbar-brand">Timothy Lutheran · Admin <span style="font-size:10px;font-weight:400;opacity:.5;margin-left:6px;">${VERSION}</span></div>
     <div style="font-size:11px;color:rgba(255,255,255,.55);margin-top:1px;">${user ? user.username : ''}</div>
   </div>
   <div class="topbar-links">
