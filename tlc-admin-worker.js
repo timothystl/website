@@ -1151,6 +1151,7 @@ ${topbarHtml('news', currentUser, `<a href="/newsitems">← News &amp; Events</a
       </div>
     </div>
 
+    ${hasPermission(currentUser, 'newsletter_approve') ? `
     <div class="card" style="background:var(--mist);border-color:var(--ice);">
       <div class="card-title" style="color:var(--sage);">What happens when you publish</div>
       <div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);line-height:1.8;">
@@ -1158,10 +1159,10 @@ ${topbarHtml('news', currentUser, `<a href="/newsitems">← News &amp; Events</a
         <strong>2.</strong> It goes live immediately on timothystl.org/news<br>
         <strong>3.</strong> If you selected an email list above, it is sent via Brevo
       </div>
-    </div>
+    </div>` : ''}
 
     <div class="btn-row" style="margin-top:8px;">
-      <button type="submit" name="action" value="publish" class="btn btn-primary">Publish →</button>
+      ${hasPermission(currentUser, 'newsletter_approve') ? `<button type="submit" name="action" value="publish" class="btn btn-primary">Publish →</button>` : ''}
       <button type="submit" name="action" value="draft" class="btn btn-secondary">Save as draft</button>
       <a href="/" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
     </div>
@@ -1516,6 +1517,7 @@ ${topbarHtml('news', currentUser, `<a href="/newsitems">← News &amp; Events</a
       </div>
     </div>
 
+    ${hasPermission(currentUser, 'newsletter_approve') ? `
     <div class="card" style="border-color:var(--amber);">
       <div class="card-title">Send email</div>
       <div style="font-family:var(--sans);font-size:12px;color:var(--gray);margin-bottom:12px;">Choose who gets this in their inbox. You can save without sending.</div>
@@ -1527,10 +1529,10 @@ ${topbarHtml('news', currentUser, `<a href="/newsitems">← News &amp; Events</a
       <div style="margin-top:14px;padding:12px 14px;background:var(--mist);border-radius:8px;border:1px solid var(--ice);font-family:var(--sans);font-size:12px;color:var(--charcoal);line-height:1.7;">
         📊 <strong>Email is sent via Brevo.</strong> To see open rates, clicks, and delivery stats after sending, log in at <a href="https://app.brevo.com" target="_blank" style="color:var(--mid);font-weight:700;">app.brevo.com</a> → Campaigns.
       </div>
-    </div>
+    </div>` : ''}
 
     <div class="btn-row" style="margin-top:8px;">
-      <button type="submit" name="action" value="publish" class="btn btn-primary">Publish →</button>
+      ${hasPermission(currentUser, 'newsletter_approve') ? `<button type="submit" name="action" value="publish" class="btn btn-primary">Publish →</button>` : ''}
       <button type="submit" name="action" value="draft" class="btn btn-secondary">Save as draft</button>
       <a href="/" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
     </div>
@@ -1761,6 +1763,7 @@ ${eventsJs}
   <div class="newsletter-subject">${r.subject}${fmtLabel(r)}</div>
   <div class="newsletter-actions">
     <a href="/edit/${r.id}" class="btn btn-sm btn-secondary">Edit</a>
+    ${hasPermission(currentUser, 'newsletter_approve') ? `
     <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Resend to test list?')">
       <input type="hidden" name="list_type" value="test">
       <button type="submit" class="btn btn-sm" style="background:var(--mist);color:var(--steel);border:1px solid var(--border);">Resend test</button>
@@ -1768,7 +1771,7 @@ ${eventsJs}
     <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Resend to ALL subscribers? This will send again to everyone.')">
       <input type="hidden" name="list_type" value="all">
       <button type="submit" class="btn btn-sm btn-primary">Resend to all</button>
-    </form>
+    </form>` : ''}
     <form method="POST" action="/delete/${r.id}" style="display:contents;" onsubmit="return confirm('Delete this newsletter?')">
       <button type="submit" class="btn btn-sm btn-danger">Delete</button>
     </form>
@@ -3282,6 +3285,7 @@ ${topbarHtml('audit', currentUser)}
   <div class="newsletter-subject">${r.subject}${fmtLabel(r)}</div>
   <div class="newsletter-actions">
     <a href="/edit/${r.id}" class="btn btn-sm btn-secondary">Edit</a>
+    ${hasPermission(currentUser, 'newsletter_approve') ? `
     <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Resend to test list?')">
       <input type="hidden" name="list_type" value="test">
       <button type="submit" class="btn btn-sm" style="background:var(--mist);color:var(--steel);border:1px solid var(--border);">Resend test</button>
@@ -3289,7 +3293,7 @@ ${topbarHtml('audit', currentUser)}
     <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Resend to ALL subscribers? This will send again to everyone.')">
       <input type="hidden" name="list_type" value="all">
       <button type="submit" class="btn btn-sm btn-primary">Resend to all</button>
-    </form>
+    </form>` : ''}
     <form method="POST" action="/delete/${r.id}" style="display:contents;" onsubmit="return confirm('Delete this newsletter?')">
       <button type="submit" class="btn btn-sm btn-danger">Delete</button>
     </form>
