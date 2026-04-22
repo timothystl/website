@@ -144,8 +144,6 @@ export function topbarHtml(activeTab, user, extraLinks = '', pendingCount = 0) {
   </div>
   <div class="topbar-links">
     ${extraLinks}
-    ${hp('users_manage') ? `<a href="/users">Users</a>` : ''}
-    ${hp('audit_view') ? `<a href="/audit-log">Audit Log</a>` : ''}
     <a href="/logout">Sign out</a>
   </div>
 </div>
@@ -159,6 +157,8 @@ export function topbarHtml(activeTab, user, extraLinks = '', pendingCount = 0) {
     ${hp('settings_manage') ? `<a href="/settings" class="tab${activeTab === 'settings' ? ' tab-active' : ''}">Settings</a>` : ''}
     ${hp('settings_manage') ? `<a href="/subscribers" class="tab${activeTab === 'subscribers' ? ' tab-active' : ''}">Subscribers</a>` : ''}
     ${hp('gym_manage')      ? `<a href="/gym-rentals" class="tab${activeTab === 'gym' ? ' tab-active' : ''}">Gym Rentals</a>` : ''}
+    ${hp('users_manage')    ? `<a href="/users" class="tab${activeTab === 'users' ? ' tab-active' : ''}">Users</a>` : ''}
+    ${hp('audit_view')      ? `<a href="/audit-log" class="tab${activeTab === 'audit' ? ' tab-active' : ''}">Audit Log</a>` : ''}
     <a href="https://volunteer.timothystl.org/scheduler" target="_blank" class="tab tab-external">Scheduler ↗</a>
     <a href="https://volunteer.timothystl.org/admin" target="_blank" class="tab tab-external">Volunteer Admin ↗</a>
   </div>
@@ -353,15 +353,25 @@ export function tinymceSermonSection(existingOutline = '') {
 _onTinymce(function(){
 tinymce.init({
   selector: '#sermon-editor',
-  plugins: 'link lists blockquote code',
-  toolbar: 'undo redo | blocks | bold italic underline | bullist numlist | link | code',
+  plugins: 'image link lists blockquote table code',
+  toolbar: 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image | table | code',
   menubar: false,
   min_height: 300,
   skin: 'oxide',
   content_css: 'default',
   convert_urls: false,
+  image_advtab: false,
+  automatic_uploads: true,
+  images_upload_handler: ${tlcUploadHandler},
+  paste_data_images: true,
+  content_style: 'img { margin: 8px; max-width: 100%; height: auto; }',
   setup: function(editor) {
     editor.on('change input', function() { editor.save(); });
+    editor.on('NodeChange', function() {
+      editor.dom.select('img').forEach(function(img) {
+        if (!img.style.margin) { img.style.margin = '8px'; img.style.maxWidth = '100%'; img.style.height = 'auto'; }
+      });
+    });
   },
   init_instance_callback: function(editor) {
     var initial = \`${safe}\`;
@@ -424,7 +434,7 @@ if (!window._tlcSubmitWired) {
 <\/script>`;
 }
 
-// TinyMCE editor for page content blocks (no image upload)
+// TinyMCE editor for page content blocks
 export function tinymcePageSection(existingContent = '') {
   const safe = (existingContent || '').replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
   return `<div class="form-group">
@@ -435,15 +445,25 @@ export function tinymcePageSection(existingContent = '') {
 _onTinymce(function(){
 tinymce.init({
   selector: '#page-editor',
-  plugins: 'link lists blockquote code',
-  toolbar: 'undo redo | blocks | bold italic underline | bullist numlist | link | code',
+  plugins: 'image link lists blockquote table code',
+  toolbar: 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image | table | code',
   menubar: false,
   min_height: 300,
   skin: 'oxide',
   content_css: 'default',
   convert_urls: false,
+  image_advtab: false,
+  automatic_uploads: true,
+  images_upload_handler: ${tlcUploadHandler},
+  paste_data_images: true,
+  content_style: 'img { margin: 8px; max-width: 100%; height: auto; }',
   setup: function(editor) {
     editor.on('change input', function() { editor.save(); });
+    editor.on('NodeChange', function() {
+      editor.dom.select('img').forEach(function(img) {
+        if (!img.style.margin) { img.style.margin = '8px'; img.style.maxWidth = '100%'; img.style.height = 'auto'; }
+      });
+    });
   },
   init_instance_callback: function(editor) {
     var initial = \`${safe}\`;
@@ -460,7 +480,7 @@ if (!window._tlcSubmitWired) {
 <\/script>`;
 }
 
-// Simple TinyMCE editor for short text notes (no image upload, no submit handler)
+// Simple TinyMCE editor for short text notes
 export function tinymceNoteSection(id, name, existingContent = '', minHeight = 140) {
   const safe = (existingContent || '').replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
   return `<textarea id="${id}" name="${name}"></textarea>
@@ -468,15 +488,25 @@ export function tinymceNoteSection(id, name, existingContent = '', minHeight = 1
 _onTinymce(function(){
 tinymce.init({
   selector: '#${id}',
-  plugins: 'link lists blockquote',
-  toolbar: 'bold italic underline | bullist numlist | link | removeformat',
+  plugins: 'image link lists blockquote table code',
+  toolbar: 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image | table | code',
   menubar: false,
   min_height: ${minHeight},
   skin: 'oxide',
   content_css: 'default',
   convert_urls: false,
+  image_advtab: false,
+  automatic_uploads: true,
+  images_upload_handler: ${tlcUploadHandler},
+  paste_data_images: true,
+  content_style: 'img { margin: 8px; max-width: 100%; height: auto; }',
   setup: function(editor) {
     editor.on('change input', function() { editor.save(); });
+    editor.on('NodeChange', function() {
+      editor.dom.select('img').forEach(function(img) {
+        if (!img.style.margin) { img.style.margin = '8px'; img.style.maxWidth = '100%'; img.style.height = 'auto'; }
+      });
+    });
   },
   init_instance_callback: function(editor) {
     var initial = \`${safe}\`;

@@ -90,6 +90,7 @@
     <ul class="nav-links">
       <li><button onclick="showPage('about')">About</button></li>
       <li><button onclick="showPage('worship')">Worship</button></li>
+      <li><button onclick="showPage('education')">Learn</button></li>
       <li><button onclick="showPage('sermons')">Sermons</button></li>
       <li><button onclick="showPage('ministries')">Ministries</button></li>
       <li><button onclick="showPage('news')">News &amp; Events</button></li>
@@ -100,6 +101,7 @@
   <div class="nav-mobile" id="navMobile">
     <button onclick="showPage('about');closeMobileNav()">About</button>
     <button onclick="showPage('worship');closeMobileNav()">Worship</button>
+    <button onclick="showPage('education');closeMobileNav()">Learn / Christian Ed</button>
     <button onclick="showPage('sermons');closeMobileNav()">Sermons</button>
     <button onclick="showPage('ministries');closeMobileNav()">Ministries</button>
     <button onclick="showPage('youthfamily');closeMobileNav()">Youth &amp; Family</button>
@@ -459,6 +461,115 @@
   </section>
 </div>
 
+<!-- CHRISTIAN EDUCATION -->
+<div id="page-education" class="page">
+  <div class="page-hero">
+    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Growing in faith</span>
+    <h1>Christian Education at Timothy</h1>
+    <p>Equipping people for a lifelong journey with Christ — from the nursery to the pew.</p>
+  </div>
+
+  <!-- Class offerings grid -->
+  <section class="section section--white">
+    <div class="wrap">
+      <div style="text-align:center;max-width:640px;margin:0 auto 48px;">
+        <span class="eyebrow eyebrow--sky">What we offer</span>
+        <h2>Something for Every Season of Faith</h2>
+        <p style="color:var(--gray);">Christian Education is one of Timothy's four core values. Whether you are new to the faith, returning after years away, or have followed Christ your whole life, there is a place for you to keep growing.</p>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px;">
+
+        <!-- Sunday adult Bible class -->
+        <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:28px;">
+          <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--mid);margin-bottom:8px;">Sunday Morning</div>
+          <h3 style="margin:0 0 10px;">Adult Bible Class</h3>
+          <p style="font-size:14px;color:var(--gray);margin:0 0 14px;">An in-depth look at Scripture and living the Christian life in today's world. We rotate through different biblical studies and theological topics — from deep dives into a single book of Scripture to thematic explorations of faith and culture. All are welcome, no prior Bible knowledge required.</p>
+          <div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);font-weight:600;">Sunday · 9:30 AM</div>
+        </div>
+
+        <!-- Wednesday morning Bible study + sing-along -->
+        <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:28px;">
+          <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--teal);margin-bottom:8px;">Wednesday Morning</div>
+          <h3 style="margin:0 0 10px;">Bible Study &amp; Sing-Along</h3>
+          <p style="font-size:14px;color:var(--gray);margin:0 0 14px;">Gather for study, discussion, and community — then close the morning with a sing-along at 11:00 AM, singing hymns and contemporary songs together before heading into your day.</p>
+          <div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);font-weight:600;">Wednesday · 10:00 AM<br><span style="font-weight:400;">Sing-along at 11:00 AM</span></div>
+        </div>
+
+        <!-- Men's Bible class -->
+        <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:28px;">
+          <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--steel);margin-bottom:8px;">1st &amp; 3rd Saturdays</div>
+          <h3 style="margin:0 0 10px;">Men's Bible Class</h3>
+          <p style="font-size:14px;color:var(--gray);margin:0 0 14px;">Men of all ages are invited for coffee, Scripture, and brotherhood. No registration needed — just show up.</p>
+          <div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);font-weight:600;">1st &amp; 3rd Saturdays · 8:00 AM<br><span style="font-weight:400;color:var(--gray);">Panera Bread on Chippewa</span></div>
+        </div>
+
+        <!-- Middle & high school Bible class -->
+        <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:28px;">
+          <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sage);margin-bottom:8px;">Sunday Morning · Grades 7–12</div>
+          <h3 style="margin:0 0 10px;">Middle &amp; High School Bible Class</h3>
+          <p style="font-size:14px;color:var(--gray);margin:0 0 14px;">High school students dive deep into Scripture — exploring God's Word together, asking hard questions, and discovering what faith means in daily life.</p>
+          <div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);font-weight:600;">Sunday · 9:30 AM</div>
+        </div>
+
+        <!-- Sunday school children -->
+        <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:28px;">
+          <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sage);margin-bottom:8px;">Sunday · Children through 6th Grade</div>
+          <h3 style="margin:0 0 10px;">Sunday School</h3>
+          <p style="font-size:14px;color:var(--gray);margin:0 0 14px;">Kids hear God's Word, build friendships, and grow in faith through age-appropriate teaching. We close each week with a <strong>parent-child time (10:00–10:15 AM)</strong> — parents join to hear their child review the lesson, sing together, and pray.</p>
+          <div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);font-weight:600;">Sunday · 9:30–10:15 AM<br><span style="font-weight:400;">(includes parent-child closing)</span></div>
+        </div>
+
+        <!-- Confirmation -->
+        <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:28px;">
+          <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:8px;">Grades 7–8 · School Year</div>
+          <h3 style="margin:0 0 10px;">Confirmation</h3>
+          <p style="font-size:14px;color:var(--gray);margin:0 0 14px;">A two-year journey through the Lutheran catechism, preparing young people to make a mature public confession of faith and receive Holy Communion.</p>
+          <div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);font-weight:600;">Sundays during the school year<br><span style="font-weight:400;">12:30–1:30 PM</span></div>
+        </div>
+
+        <!-- Adult instruction -->
+        <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:28px;">
+          <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--plum-light);margin-bottom:8px;">New to Timothy?</div>
+          <h3 style="margin:0 0 10px;">Adult Instruction</h3>
+          <p style="font-size:14px;color:var(--gray);margin:0 0 14px;">Interested in joining Timothy or learning more about the Lutheran faith? Our pastors offer adult instruction covering Scripture, the Apostles' Creed, and what we believe. Classes are by arrangement — contact Pastor Dinger to get started.</p>
+          <div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);font-weight:600;">By arrangement with the pastor<br><a href="mailto:office@timothystl.org" style="color:var(--mid);font-weight:400;">office@timothystl.org</a></div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Admin-managed schedule & topics block (hidden until populated in admin → Pages) -->
+  <section id="education-schedule-section" class="section section--linen" style="display:none;">
+    <div class="wrap" style="max-width:760px;">
+      <span class="eyebrow eyebrow--sky">Current schedule &amp; topics</span>
+      <div id="education-schedule-content" class="rich-content" style="margin-top:24px;"></div>
+    </div>
+  </section>
+
+  <!-- Why it matters -->
+  <section class="section section--white">
+    <div class="wrap" style="max-width:760px;">
+      <span class="eyebrow eyebrow--sage">Core value</span>
+      <h2>Why Christian Education matters</h2>
+      <p>At Timothy, we believe Christian Education is not just a program — it is how the Gospel takes root and grows in a community across generations. We want every person who walks through our doors to leave more equipped to follow Jesus in their daily life.</p>
+      <blockquote style="border-left:3px solid var(--amber);padding:16px 20px;margin:32px 0 0;background:var(--white);border-radius:0 var(--r-md) var(--r-md) 0;">
+        <p style="font-family:var(--serif);font-size:17px;font-style:italic;color:var(--steel);margin:0;">"Growing in faith through Christian education and honest community."</p>
+        <cite style="font-family:var(--sans);font-size:12px;color:var(--gray);margin-top:8px;display:block;">— Timothy Lutheran Mission Statement</cite>
+      </blockquote>
+    </div>
+  </section>
+
+  <div class="page-cta-bar">
+    <h3>Ready to grow?</h3>
+    <p>Join a class, ask a question, or just show up. We'll take it from there.</p>
+    <div class="btn-row">
+      <button onclick="showPage('worship')" class="btn btn-secondary">Plan your visit →</button>
+      <button onclick="showPage('contact')" class="btn btn-ghost">Contact us</button>
+    </div>
+  </div>
+</div>
+
 <!-- SERMONS -->
 <div id="page-sermons" class="page">
   <div class="page-hero">
@@ -526,7 +637,7 @@
           <a href="/stephen" onclick="event.preventDefault();showPage('stephen')">Learn more →</a>
         </div>
         <div class="min-card">
-          <img src="/images/ministries/food%20pantry.png?v=20260328" alt="Food Pantry" class="min-card-img" loading="lazy">
+          <img src="/images/ministries/food-pantry.webp" alt="Food Pantry" class="min-card-img" loading="lazy">
           <h3>Food Pantry</h3>
           <p>Timothy operates a food pantry for members and neighbors. Open monthly, serving families in Lindenwood Park with practical care in the name of Christ.</p>
           <a href="/foodpantry" onclick="event.preventDefault();showPage('foodpantry')">Get details →</a>
@@ -1109,7 +1220,7 @@
           </div>
         </div>
         <div>
-          <img src="/images/ministries/food%20pantry.png?v=20260328" alt="Timothy Food Pantry" loading="lazy" style="width:100%;border-radius:var(--r-md);box-shadow:var(--shadow-lift);">
+          <img src="/images/ministries/food-pantry.webp" alt="Timothy Food Pantry" loading="lazy" style="width:100%;border-radius:var(--r-md);box-shadow:var(--shadow-lift);">
         </div>
       </div>
     </div>
@@ -2069,12 +2180,19 @@ async function loadNewsletterDetail(id) {
         (n.lasm_content ? '<div style="background:var(--linen);border-left:3px solid var(--sage);border-radius:0 8px 8px 0;padding:14px;"><div style=\'font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sage);margin-bottom:8px;\'>LASM</div><div style="font-family:var(--sans);font-size:14px;color:var(--charcoal);line-height:1.7;">'+n.lasm_content+'</div></div>' : '<div></div>') +
         '</div>';
     }
+    let tertiaryHtml = '';
+    if (n.tertiary_note) {
+      const ctaBtn = (n.tertiary_cta_label && n.tertiary_cta_url)
+        ? '<div style="margin-top:14px;"><a href="'+n.tertiary_cta_url+'" style="display:inline-block;background:var(--amber);color:var(--steel);font-family:var(--sans);font-size:13px;font-weight:700;padding:10px 22px;border-radius:6px;text-decoration:none;">'+n.tertiary_cta_label+'</a></div>'
+        : '';
+      tertiaryHtml = '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);"><div style="background:var(--linen);border-left:3px solid var(--amber);border-radius:0 8px 8px 0;padding:16px 18px;"><div style="font-family:var(--sans);font-size:14px;color:var(--charcoal);line-height:1.8;">'+n.tertiary_note+'</div>'+ctaBtn+'</div></div>';
+    }
     content.innerHTML =
       '<div style="background:white;border:1px solid var(--border);border-radius:14px;padding:36px;box-shadow:var(--shadow);">' +
         '<div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:6px;">'+date+'</div>' +
         '<h2 style="font-family:var(--serif);font-size:26px;color:var(--steel);margin:0 0 20px;font-weight:600;">'+n.subject+'</h2>' +
         (n.pastor_note ? '<div style="font-family:var(--sans);font-size:16px;color:var(--charcoal);line-height:1.85;">'+n.pastor_note+'</div>' : '') +
-        secHtml + evHtml + wolLasmHtml +
+        secHtml + evHtml + wolLasmHtml + tertiaryHtml +
       '</div>';
   } catch(e) {
     content.innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--gray);font-family:var(--sans);font-size:14px;">Newsletter not found.</div>';
@@ -2175,6 +2293,22 @@ async function loadPageContent(key, targetId) {
         '<div style="background:#FFF8E7;border:1px solid var(--honey);border-left:4px solid var(--amber);border-radius:var(--r-md);padding:20px 24px;" class="rich-content">' +
         data.value + '</div></div>';
       el.style.display = '';
+    }
+  } catch(e) {}
+}
+
+// Load admin-managed Christian Education schedule block
+var educationScheduleLoaded = false;
+async function loadEducationSchedule() {
+  if (educationScheduleLoaded) return;
+  educationScheduleLoaded = true;
+  try {
+    var res = await fetch('https://admin.timothystl.org/api/page-content/education-schedule');
+    if (!res.ok) return;
+    var data = await res.json();
+    if (data.value && data.value.trim()) {
+      document.getElementById('education-schedule-content').innerHTML = fixImgUrls(data.value);
+      document.getElementById('education-schedule-section').style.display = '';
     }
   } catch(e) {}
 }
@@ -2416,6 +2550,7 @@ var PAGE_META = {
   'home':         { title: 'Timothy Lutheran Church — St. Louis, MO',                                    desc: 'A congregation alive to the Gospel in Lindenwood Park, South City St. Louis. Two Sunday services. Come as you are.' },
   'about':        { title: 'About — Timothy Lutheran Church',                                             desc: 'Meet our staff, learn our vision and values, and find out what makes Timothy Lutheran a community alive to the Gospel.' },
   'worship':      { title: 'Worship — Timothy Lutheran Church',                                           desc: 'Sunday services at 8:00 am, 9:30 am (Vietnamese), and 10:45 am. Plan your visit, watch the live stream, or join midweek worship.' },
+  'education':    { title: 'Christian Education — Timothy Lutheran Church',                               desc: 'Adult Bible class, Sunday school, confirmation, and Bible studies at Timothy Lutheran Church in St. Louis.' },
   'sermons':      { title: 'Sermons — Timothy Lutheran Church',                                           desc: 'Watch and listen to recent sermons from Timothy Lutheran Church on YouTube.' },
   'ministries':   { title: 'Ministries — Timothy Lutheran Church',                                       desc: 'Music, Stephen Ministry, Food Pantry, Urban Beekeepers, Christmas Market, and more. Find your place at Timothy.' },
   'news':         { title: 'News & Events — Timothy Lutheran Church',                                     desc: 'Stay up to date with the latest news, events, and newsletter archive from Timothy Lutheran Church in St. Louis.' },
@@ -2488,6 +2623,7 @@ window.showPage = function(id, addHistory) {
   if (id === 'home') { loadPageContent('home-notice', 'home-notice-block'); }
   if (id === 'worship') { loadPageContent('worship-notice', 'worship-notice-block'); loadSeasonalContent(); }
   if (id === 'about') { loadPageContent('about-notice', 'about-notice-block'); loadStaff(); }
+  if (id === 'education') { loadEducationSchedule(); }
   if (id === 'music') { loadConcertBlock(); }
   var adminContentPages = ['sundayschool','confirmation','vbs','egghunt','family','music','stephen','foodpantry','bees'];
   if (adminContentPages.indexOf(id) !== -1) { loadMinistryPage(id); }
@@ -2515,6 +2651,7 @@ window.showPage = function(id, addHistory) {
   if (path === '' || path === 'home') { loadPageContent('home-notice', 'home-notice-block'); }
   if (path === 'worship') { loadPageContent('worship-notice', 'worship-notice-block'); loadSeasonalContent(); }
   if (path === 'about') { loadPageContent('about-notice', 'about-notice-block'); loadStaff(); }
+  if (path === 'education') { loadEducationSchedule(); }
   if (path === 'music') { loadConcertBlock(); }
   var adminContentPages = ['sundayschool','confirmation','vbs','egghunt','family','music','stephen','foodpantry','bees'];
   if (adminContentPages.indexOf(path) !== -1) { loadMinistryPage(path); }

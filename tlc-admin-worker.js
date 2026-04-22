@@ -79,6 +79,10 @@ export default {
     try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN cta_url_2 TEXT').run(); } catch (_) {}
     // Migrate: add published flag to page_content
     try { await env.DB.prepare('ALTER TABLE page_content ADD COLUMN published INTEGER DEFAULT 1').run(); } catch (_) {}
+    // Migrate: add tertiary_note to newsletters
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN tertiary_note TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN tertiary_cta_label TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN tertiary_cta_url TEXT').run(); } catch (_) {}
     // New tables
     try { await env.DB.prepare(DB_INIT_STAFF_MEMBERS).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_SITE_SETTINGS).run(); } catch (_) {}
@@ -116,6 +120,7 @@ export default {
       { key: 'seasonal-advent',        label: 'Advent worship',                hint: 'Shown on the Worship page during Advent. Toggle on/off without losing content.' },
       { key: 'seasonal-christmas',     label: 'Christmas services',            hint: 'Shown on the Worship page for Christmas Eve / Christmas Day services. Toggle on/off without losing content.' },
       { key: 'community-concert',      label: 'Community Concert announcement', hint: 'Shown on the Music Ministry page. Edit with performer name, date, and details. Toggle off between concerts.' },
+      { key: 'education-schedule',     label: 'Christian Education schedule &amp; topics', hint: 'Shown on the Learn / Christian Education page. Add current class topics, semester schedule, or special events. Leave blank to hide.' },
     ];
     for (const b of PAGE_BLOCKS) {
       try {
@@ -1075,6 +1080,24 @@ ${topbarHtml('news', currentUser, `<a href="/newsitems">← News &amp; Events</a
           </div>
         </div>
       </div>
+
+      <div class="card">
+        <div class="card-title">Tertiary note / CTA <span class="tag">Optional</span></div>
+        <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">A full-width block below Word of Life &amp; LASM. Use it for a call-to-action, an announcement, a sign-up link, or anything else that doesn't fit the pastor's note. Leave blank to omit.</div>
+        <div class="form-group">
+          ${tinymceNoteSection('tertiary-editor', 'tertiary_note', '', 140)}
+        </div>
+        <div style="display:flex;gap:12px;margin-top:8px;">
+          <div class="form-group" style="flex:1;margin:0;">
+            <label>Button label <span style="font-weight:400;color:var(--gray);">(optional)</span></label>
+            <input type="text" name="tertiary_cta_label" placeholder="e.g. Sign Up, RSVP, Learn More">
+          </div>
+          <div class="form-group" style="flex:1;margin:0;">
+            <label>Button link (URL) <span style="font-weight:400;color:var(--gray);">(optional)</span></label>
+            <input type="url" name="tertiary_cta_url" placeholder="https://...">
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- QUICK ANNOUNCEMENT FIELDS -->
@@ -1083,7 +1106,7 @@ ${topbarHtml('news', currentUser, `<a href="/newsitems">← News &amp; Events</a
         <div class="card-title">Message</div>
         <div class="form-group">
           <label>Your announcement <span style="color:#B85C3A;">*</span></label>
-          <textarea name="quick_body" style="min-height:140px;" placeholder="Type your announcement here. Keep it short and clear."></textarea>
+          ${tinymceNoteSection('quick-editor', 'quick_body', '', 140)}
         </div>
       </div>
       <div class="card">
@@ -1193,6 +1216,9 @@ addEvent();
       const secondaryNote = fmt === 'weekly' ? form.get('secondary_note') || '' : '';
       const wolContent = fmt === 'weekly' ? form.get('wol_content') || '' : '';
       const lasmContent = fmt === 'weekly' ? form.get('lasm_content') || '' : '';
+      const tertiaryNote = fmt === 'weekly' ? form.get('tertiary_note') || '' : '';
+      const tertiaryCtaLabel = fmt === 'weekly' ? form.get('tertiary_cta_label') || '' : '';
+      const tertiaryCtaUrl = fmt === 'weekly' ? form.get('tertiary_cta_url') || '' : '';
       // Legacy fields kept for DB compat but no longer used in the form
       const ministryContent = '';
       const ministryType = 'text';
@@ -1239,16 +1265,16 @@ addEvent();
       if (editId) {
         // Update existing newsletter
         await env.DB.prepare(
-          'UPDATE newsletters SET subject=?, pastor_note=?, ministry_content=?, ministry_type=?, published_at=?, format=?, cta_url=?, cta_label=?, status=?, wol_content=?, lasm_content=?, secondary_note=?, news_item_ids=? WHERE id=?'
-        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, editId).run();
+          'UPDATE newsletters SET subject=?, pastor_note=?, ministry_content=?, ministry_type=?, published_at=?, format=?, cta_url=?, cta_label=?, status=?, wol_content=?, lasm_content=?, secondary_note=?, news_item_ids=?, tertiary_note=?, tertiary_cta_label=?, tertiary_cta_url=? WHERE id=?'
+        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, editId).run();
         newsletterId = parseInt(editId, 10);
         // Replace events
         await env.DB.prepare('DELETE FROM events WHERE newsletter_id = ?').bind(newsletterId).run();
       } else {
         // Insert new newsletter
         const result = await env.DB.prepare(
-          'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr).run();
+          'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl).run();
         newsletterId = result.meta.last_row_id;
       }
 
@@ -1276,7 +1302,7 @@ addEvent();
         if (!listId && emailSend === 'all') {
           emailSuffix = `&emailerr=${encodeURIComponent('BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}`;
         } else if (listId) {
-          const emailHtml = buildEmailHtml(subject, savedNote, events, wolContent, lasmContent, publishedAt, selectedNewsItems, secondaryNote, newsletterId);
+          const emailHtml = buildEmailHtml(subject, savedNote, events, wolContent, lasmContent, publishedAt, selectedNewsItems, secondaryNote, newsletterId, fmt, ctaUrl, ctaLabel, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl);
           const result = await sendBrevoNewsletter(env, { subject, htmlContent: emailHtml, listIds: [listId] });
           emailSuffix = result.success
             ? `&emailed=${emailSend}`
@@ -1432,13 +1458,31 @@ ${topbarHtml('news', currentUser, `<a href="/newsitems">← News &amp; Events</a
           </div>
         </div>
       </div>
+
+      <div class="card">
+        <div class="card-title">Tertiary note / CTA <span class="tag">Optional</span></div>
+        <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">A full-width block below Word of Life &amp; LASM. Use it for a call-to-action, an announcement, or a sign-up link. Leave blank to omit.</div>
+        <div class="form-group">
+          ${tinymceNoteSection('tertiary-editor', 'tertiary_note', row.tertiary_note || '', 140)}
+        </div>
+        <div style="display:flex;gap:12px;margin-top:8px;">
+          <div class="form-group" style="flex:1;margin:0;">
+            <label>Button label <span style="font-weight:400;color:var(--gray);">(optional)</span></label>
+            <input type="text" name="tertiary_cta_label" value="${(row.tertiary_cta_label||'').replace(/"/g,'&quot;')}" placeholder="e.g. Sign Up, RSVP, Learn More">
+          </div>
+          <div class="form-group" style="flex:1;margin:0;">
+            <label>Button link (URL) <span style="font-weight:400;color:var(--gray);">(optional)</span></label>
+            <input type="url" name="tertiary_cta_url" value="${(row.tertiary_cta_url||'').replace(/"/g,'&quot;')}" placeholder="https://...">
+          </div>
+        </div>
+      </div>
     </div>
 
     <div id="quick-fields" style="display:${fmt==='quick'?'':'none'}">
       <div class="card">
         <div class="card-title">Message</div>
         <div class="form-group">
-          <textarea name="quick_body" style="min-height:140px;">${bodyVal.replace(/</g,'&lt;')}</textarea>
+          ${tinymceNoteSection('quick-editor', 'quick_body', bodyVal, 140)}
         </div>
       </div>
       <div class="card">
@@ -1528,7 +1572,7 @@ ${eventsJs}
         'SELECT event_date, event_name, event_time, event_desc FROM events WHERE newsletter_id = ? ORDER BY sort_order'
       ).bind(id).all();
 
-      const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at, [], row.secondary_note || '', id);
+      const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at, [], row.secondary_note || '', id, row.format || 'weekly', row.cta_url || '', row.cta_label || '', row.tertiary_note || '', row.tertiary_cta_label || '', row.tertiary_cta_url || '');
       const result = await sendBrevoNewsletter(env, { subject: row.subject, htmlContent: emailHtml, listIds: [listId] });
 
       const suffix = result.success
@@ -1699,6 +1743,14 @@ ${eventsJs}
   <div class="newsletter-subject">${r.subject}${fmtLabel(r)}</div>
   <div class="newsletter-actions">
     <a href="/edit/${r.id}" class="btn btn-sm btn-secondary">Edit</a>
+    <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Resend to test list?')">
+      <input type="hidden" name="list_type" value="test">
+      <button type="submit" class="btn btn-sm" style="background:var(--mist);color:var(--steel);border:1px solid var(--border);">Resend test</button>
+    </form>
+    <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Resend to ALL subscribers? This will send again to everyone.')">
+      <input type="hidden" name="list_type" value="all">
+      <button type="submit" class="btn btn-sm btn-primary">Resend to all</button>
+    </form>
     <form method="POST" action="/delete/${r.id}" style="display:contents;" onsubmit="return confirm('Delete this newsletter?')">
       <button type="submit" class="btn btn-sm btn-danger">Delete</button>
     </form>
@@ -2469,6 +2521,7 @@ ${topbarHtml('pages', currentUser)}
           'seasonal-advent':       'Shown on the Worship page during Advent. Toggle published on/off without losing your content.',
           'seasonal-christmas':    'Shown on the Worship page for Christmas Eve and Christmas Day services. Toggle published on/off without losing your content.',
           'community-concert':     'Shown on the Music Ministry page. Enter the performer name, date, time, and any details. Toggle off between concerts.',
+          'education-schedule':    'Shown on the Christian Education (Learn) page. Add current Bible study topics, class schedules, or upcoming events. Leave blank to hide.',
         };
         const hint = HINT_MAP[key] || 'Appears on the site when content is set. Leave blank to hide.';
         const isSeasonal = key.startsWith('seasonal-') || key === 'community-concert';
@@ -3204,6 +3257,14 @@ ${topbarHtml('audit', currentUser)}
   <div class="newsletter-subject">${r.subject}${fmtLabel(r)}</div>
   <div class="newsletter-actions">
     <a href="/edit/${r.id}" class="btn btn-sm btn-secondary">Edit</a>
+    <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Resend to test list?')">
+      <input type="hidden" name="list_type" value="test">
+      <button type="submit" class="btn btn-sm" style="background:var(--mist);color:var(--steel);border:1px solid var(--border);">Resend test</button>
+    </form>
+    <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Resend to ALL subscribers? This will send again to everyone.')">
+      <input type="hidden" name="list_type" value="all">
+      <button type="submit" class="btn btn-sm btn-primary">Resend to all</button>
+    </form>
     <form method="POST" action="/delete/${r.id}" style="display:contents;" onsubmit="return confirm('Delete this newsletter?')">
       <button type="submit" class="btn btn-sm btn-danger">Delete</button>
     </form>
