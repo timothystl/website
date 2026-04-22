@@ -1,7 +1,7 @@
 // ── GYM RENTAL HELPERS & ROUTE HANDLER ──────────────────────
 // Extracted from tlc-admin-worker.js
 
-import { html, topbarHtml, authCookie, formatDate, tinymceEditorSection } from './helpers.js';
+import { html, topbarHtml, formatDate, tinymceEditorSection } from './helpers.js';
 import { sendTransactionalEmail } from './email.js';
 
 // ── IMAGE HELPERS ───────────────────────────────────────────
