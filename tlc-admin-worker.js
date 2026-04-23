@@ -1648,6 +1648,13 @@ ${eventsJs}
       const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at, [], row.secondary_note || '', id, row.format || 'weekly', row.cta_url || '', row.cta_label || '', row.tertiary_note || '', row.tertiary_cta_label || '', row.tertiary_cta_url || '');
       const result = await sendBrevoNewsletter(env, { subject: row.subject, htmlContent: emailHtml, listIds: [listId] });
 
+      // Sending to all = publish the newsletter so it appears on the website
+      if (listType === 'all' && result.success) {
+        await env.DB.prepare(
+          "UPDATE newsletters SET status = 'published', approval_status = 'approved', approved_by_username = ?, published_at = COALESCE(published_at, ?) WHERE id = ?"
+        ).bind(currentUser.username, new Date().toISOString().split('T')[0], id).run();
+      }
+
       const suffix = result.success
         ? `&emailed=${listType}`
         : `&emailerr=${encodeURIComponent(result.error)}`;
