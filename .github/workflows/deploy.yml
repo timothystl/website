@@ -5,54 +5,14 @@ on:
   push:
     branches:
       - main
-      - 'claude/**'
 
 jobs:
 
-  # ── TEST ENVIRONMENT ──────────────────────────────────────────────────────
-  # Deploys to test.timothystl.org on any non-main branch push.
-  # Production is never touched until code merges to main.
-
-  deploy-test-site:
-    name: Deploy test site (test.timothystl.org)
-    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install wrangler
-        run: npm install -g wrangler
-
-      - name: Deploy test site worker
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: wrangler deploy --config wrangler-test-site.toml
-
-      - name: Create R2 image bucket (if not exists)
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: wrangler r2 bucket create tlc-news-images 2>&1 || true
-
-      - name: Deploy admin worker
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: wrangler deploy
-
-      - name: Done
-        run: |
-          echo ""
-          echo "Test site deployed!"
-          echo "  Branch : ${{ github.ref_name }}"
-          echo "  Worker : timothystl-test-site"
-          echo "  URL    : https://test.timothystl.org"
-          echo ""
-
   # ── PRODUCTION ────────────────────────────────────────────────────────────
-  # Deploys all four production workers on push to main or manual trigger.
+  # Deploys all production workers on push to main or manual trigger.
 
   deploy-site:
     name: Deploy main site (timothystl.org)
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -67,7 +27,6 @@ jobs:
 
   deploy-admin:
     name: Deploy newsletter admin (admin.timothystl.org)
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -87,7 +46,6 @@ jobs:
 
   deploy-links:
     name: Deploy links page (links.timothystl.org)
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -103,11 +61,7 @@ jobs:
   done:
     name: All done
     needs: [deploy-site, deploy-admin, deploy-links]
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Done
-        run: |
-          echo ""
-          echo "All production workers deployed!"
-          echo ""
+        run: echo "All production workers deployed!"
