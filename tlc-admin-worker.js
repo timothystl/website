@@ -13,9 +13,9 @@ import { handleGymRoutes, sweepExpiredItems, extractImageKeys } from './admin/gy
 
 // ── MAIN HANDLER ─────────────────────────────────────────────
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     try {
-      return await this._fetch(request, env);
+      return await this._fetch(request, env, ctx);
     } catch (e) {
       return new Response(`Worker error: ${e.message}\n\nStack: ${e.stack}`, {
         status: 500, headers: { 'Content-Type': 'text/plain' }
@@ -23,7 +23,7 @@ export default {
     }
   },
 
-  async _fetch(request, env) {
+  async _fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
     const method = request.method;
@@ -385,6 +385,26 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
             toEmails: [email]
           });
         }
+        ctx.waitUntil((async () => {
+          try {
+            await fetch('https://volunteer.timothystl.org/api/intake/connect-card', {
+              method: 'POST',
+              headers: {
+                'X-Intake-Key': env.CHMS_INTAKE_API_KEY || '',
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                name: name,
+                email: email,
+                message: message,
+                source: 'timothystl.org/contact',
+                submitted_at: new Date().toISOString()
+              })
+            });
+          } catch (e) {
+            console.error('ChMS intake forward failed (contact):', e?.message);
+          }
+        })());
         return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
       } catch(e) {
         return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: corsHeaders });
@@ -418,6 +438,26 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
             toEmails: [email]
           });
         }
+        ctx.waitUntil((async () => {
+          try {
+            await fetch('https://volunteer.timothystl.org/api/intake/prayer', {
+              method: 'POST',
+              headers: {
+                'X-Intake-Key': env.CHMS_INTAKE_API_KEY || '',
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                name: name,
+                email: email,
+                message: message,
+                source: 'timothystl.org/prayer',
+                submitted_at: new Date().toISOString()
+              })
+            });
+          } catch (e) {
+            console.error('ChMS intake forward failed (prayer):', e?.message);
+          }
+        })());
         return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
       } catch(e) {
         return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: corsHeaders });
