@@ -381,7 +381,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
         if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
           await sendTransactionalEmail(env, {
             subject: 'We received your message — Timothy Lutheran Church',
-            htmlContent: `<p>Hi ${name},</p><p>Thank you for reaching out to Timothy Lutheran Church. We received your message and will be in touch soon.</p><p>If you need immediate assistance, please call us at (314) 839-0563 or email <a href="mailto:office@timothystl.org">office@timothystl.org</a>.</p><p>Grace and peace,<br>The team at Timothy Lutheran Church</p>`,
+            htmlContent: `<p>Hi ${name},</p><p>Thank you for reaching out to Timothy Lutheran Church. We received your message and will be in touch soon.</p><p>If you need immediate assistance, please call us at (314) 781-8673 or email <a href="mailto:dinger@timothystl.org">dinger@timothystl.org</a>.</p><p>Grace and peace,<br>The team at Timothy Lutheran Church</p>`,
             toEmails: [email]
           });
         }
@@ -434,7 +434,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
         if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
           await sendTransactionalEmail(env, {
             subject: "We're praying for you — Timothy Lutheran Church",
-            htmlContent: `<p>Hi ${name || 'friend'},</p><p>Thank you for sharing your prayer request with us. Our pastoral staff has received it and will be praying for you.</p><p>If you'd like to speak with someone, please reach out to our office at <a href="mailto:office@timothystl.org">office@timothystl.org</a> or call (314) 839-0563.</p><p>Grace and peace,<br>The pastoral staff at Timothy Lutheran Church</p>`,
+            htmlContent: `<p>Hi ${name || 'friend'},</p><p>Thank you for sharing your prayer request with us. Our pastoral staff has received it and will be praying for you.</p><p>If you'd like to speak with someone, please reach out to our office at <a href="mailto:dinger@timothystl.org">dinger@timothystl.org</a> or call (314) 781-8673.</p><p>Grace and peace,<br>The pastoral staff at Timothy Lutheran Church</p>`,
             toEmails: [email]
           });
         }
