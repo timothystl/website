@@ -358,6 +358,36 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
 </html>`, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
     }
 
+    // ── DIAGNOSTIC: test ChMS service binding (remove after confirming) ──
+    if (path === '/api/test-chms' && method === 'GET') {
+      const key = request.headers.get('X-Test-Key') || '';
+      if (!key || key !== (env.CHMS_INTAKE_API_KEY || '')) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401, headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      try {
+        const intakeReq = new Request('https://volunteer.timothystl.org/api/intake/connect-card', {
+          method: 'POST',
+          headers: { 'X-Intake-Key': env.CHMS_INTAKE_API_KEY || '', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'Diagnostic Test', email: 'diagnostic@timothystl.org', message: 'Diagnostic test — safe to delete', source: 'diagnostic' })
+        });
+        const res = env.VOLUNTEER_WORKER
+          ? await env.VOLUNTEER_WORKER.fetch(intakeReq)
+          : await fetch(intakeReq);
+        const body = await res.text();
+        return new Response(JSON.stringify({
+          binding: !!env.VOLUNTEER_WORKER,
+          status: res.status,
+          body: body,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500, headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     // ── PUBLIC: contact form submission ──
     if (path === '/api/contact' && method === 'POST') {
       const corsHeaders = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' };
