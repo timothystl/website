@@ -387,7 +387,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
         }
         ctx.waitUntil((async () => {
           try {
-            await fetch('https://volunteer.timothystl.org/api/intake/connect-card', {
+            const chmsRes = await fetch('https://volunteer.timothystl.org/api/intake/connect-card', {
               method: 'POST',
               headers: {
                 'X-Intake-Key': env.CHMS_INTAKE_API_KEY || '',
@@ -401,6 +401,10 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
                 submitted_at: new Date().toISOString()
               })
             });
+            if (!chmsRes.ok) {
+              const body = await chmsRes.text().catch(() => '');
+              console.error(`ChMS intake forward failed (contact): HTTP ${chmsRes.status} — ${body}`);
+            }
           } catch (e) {
             console.error('ChMS intake forward failed (contact):', e?.message);
           }
@@ -440,7 +444,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
         }
         ctx.waitUntil((async () => {
           try {
-            await fetch('https://volunteer.timothystl.org/api/intake/prayer', {
+            const chmsRes = await fetch('https://volunteer.timothystl.org/api/intake/prayer', {
               method: 'POST',
               headers: {
                 'X-Intake-Key': env.CHMS_INTAKE_API_KEY || '',
@@ -454,6 +458,10 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
                 submitted_at: new Date().toISOString()
               })
             });
+            if (!chmsRes.ok) {
+              const body = await chmsRes.text().catch(() => '');
+              console.error(`ChMS intake forward failed (prayer): HTTP ${chmsRes.status} — ${body}`);
+            }
           } catch (e) {
             console.error('ChMS intake forward failed (prayer):', e?.message);
           }
