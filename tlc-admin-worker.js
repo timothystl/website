@@ -397,8 +397,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
                 name: name,
                 email: email,
                 message: message,
-                source: 'timothystl.org/contact',
-                submitted_at: new Date().toISOString()
+                source: 'website-contact',
               })
             });
             if (!chmsRes.ok) {
@@ -454,8 +453,8 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
                 name: name,
                 email: email,
                 message: message,
-                source: 'timothystl.org/prayer',
-                submitted_at: new Date().toISOString()
+                source: 'website-prayer',
+                is_urgent: 0,
               })
             });
             if (!chmsRes.ok) {
