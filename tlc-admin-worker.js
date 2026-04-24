@@ -33,6 +33,16 @@ export default {
     const path = url.pathname;
     const method = request.method;
 
+    // Reject obviously oversized requests up front. 25MB is a generous ceiling
+    // for image/PDF uploads; text-only forms are well under 1MB. Without this,
+    // a single malicious POST could push tens of MB into D1 / R2 / memory.
+    if (method !== 'GET' && method !== 'HEAD') {
+      const contentLength = parseInt(request.headers.get('content-length') || '0', 10);
+      if (contentLength > 25 * 1024 * 1024) {
+        return new Response('Request too large.', { status: 413 });
+      }
+    }
+
     // Init DB
     try { await env.DB.prepare(DB_INIT_NEWSLETTERS).run(); } catch (e) {}
     try { await env.DB.prepare(DB_INIT_EVENTS).run(); } catch (e) {}
