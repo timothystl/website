@@ -6,7 +6,7 @@ This file captures the full project context so any Claude session can be resumed
 
 ## Project Overview
 
-We are rebuilding the Timothy Lutheran Church website (timothystl.org) to replace the current Tithely/Breeze-hosted site (~$50/month). The new site runs on Cloudflare Workers, is fully custom.
+The Timothy Lutheran Church website (timothystl.org) is live on Cloudflare Workers. DNS cutover is complete as of April 2026. The site replaced the previous Tithely/Breeze-hosted site.
 
 **Repo:** `timothystl/website`
 **Primary branch for development:** `main` (deploys to timothystl.org, admin.timothystl.org, and all subdomain workers)
@@ -37,17 +37,17 @@ We are rebuilding the Timothy Lutheran Church website (timothystl.org) to replac
 
 ## Tech Stack
 
-- **Frontend:** Vanilla JS + HTML/CSS, single-page SPA (`timothystl-site.html`)
+- **Frontend:** Vanilla JS + HTML/CSS, single-page SPA (`public/index.html`)
 - **Backend:** Cloudflare Workers + D1 (SQLite) + KV
 - **CI/CD:** GitHub Actions (`.github/workflows/deploy.yml`)
 - **Newsletter:** Brevo email sending + website archive (Beehiiv removed)
 - **Calendar:** Google Calendar RSS embed at `/calendar`
-- **Giving:** Still pointing to Breeze (`timothystl.breezechms.com/give/online`) — owner has new URL, code update pending
+- **Giving:** Tithely (`give.tithe.ly`) — displayed on site and in emails. Breeze is still used internally for people management and automated giving (some members have recurring giving set up via their bank to Breeze). Tithely and Breeze are the same company so this coexistence is not an issue. Do not prompt to "cancel Breeze."
 - **Volunteer signups:** Separate worker at volunteer.timothystl.org (already complete)
 
 ---
 
-## Current Site Pages (SPA page IDs in `timothystl-site.html`)
+## Current Site Pages (SPA page IDs in `public/index.html`)
 
 | Page ID | URL/Nav | Status |
 |---------|---------|--------|
@@ -60,7 +60,8 @@ We are rebuilding the Timothy Lutheran Church website (timothystl.org) to replac
 | page-events | /events | Exists |
 | page-contact | /contact | Exists |
 | page-prayer | /prayer | Exists |
-| page-news | /news | Exists (stub — needs Beehiiv/events feed wired up) |
+| page-news | /news | Exists — fetches live from admin API + newsletter archive |
+| page-404 | (any unknown path) | Exists — shown for unrecognized URLs |
 
 ---
 
@@ -75,7 +76,7 @@ We are rebuilding the Timothy Lutheran Church website (timothystl.org) to replac
 /ministries     All ministry cards hub
 /contact        Address → Maps, phone → call, email, map
 /prayer         Prayer request form
-/give           → redirect to Breeze giving (update when Breeze cancelled)
+/give           → redirect to Tithely giving (give.tithe.ly)
 /news           News & events feed (brief cards, auto-expire)
 /calendar       Google Calendar embed
 ```
@@ -107,7 +108,7 @@ We are rebuilding the Timothy Lutheran Church website (timothystl.org) to replac
 /councilfiles   → Google Drive folder
 /zoom           → Zoom meeting URL
 /voters         → Special page: Zoom link + downloadable reports (admin-managed)
-/give           → Breeze giving URL
+/give           → Tithely giving URL
 /mdo            → mdo.timothystl.org
 ```
 
@@ -125,7 +126,7 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Youth Pages | Youth director | **DONE** — TinyMCE editor, youth_pages DB table live |
 | Scheduler | Link to volunteer scheduler | **DONE** — external link tab |
 | Volunteer Admin | Link to volunteer.timothystl.org/admin | **DONE** — external link tab |
-| Special Pages (`/voters`) | Office staff | **TO BUILD** |
+| Special Pages (`/voters`) | Office staff | **DONE** — Zoom link + file upload, admin-managed |
 
 ### News & Events Data Model
 ```sql
@@ -255,78 +256,66 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 | 3 | Admin portal: Youth Pages tab (WYSIWYG, for youth director) | **DONE** — TinyMCE editor, DB wired, youth_pages table live |
 | 4 | Wire /news and /youth/* on main site | **DONE** — /news fetches /api/news + newsletter archive; /youth/* loads dynamically from admin API |
 | 5 | Ministry landing pages with photos | **DONE** — /music /stephen /foodpantry /bees /christmasmarket built with real photos. Admin Ministries tab live. |
-| 6 | Static page audit: migrate from Tithely/Breeze | TO DO |
+| 6 | Static page audit: migrate from Tithely/Breeze | **DONE** — site is live, DNS cutover complete April 2026 |
 | 7 | SEO: Schema.org, OG tags, meta descriptions | TO DO |
 | 8 | Design reference / staff manual | **DONE** — /manual documents header photos, button editing, Christmas Market, color reference |
-| 9 | DNS cutover. Cancel Tithely/Breeze. | LAST STEP |
+| 9 | DNS cutover | **DONE** — April 2026. Breeze retained for internal people/giving management (same company as Tithely). |
 
 ---
 
 ## Pending / Deferred Items
 
-### Waiting on Code Update
-- **Give platform URL** — Owner provided new link but code still points to Breeze (`timothystl.breezechms.com/give/online`). Update in `public/index.html` and `tlc-links-worker.js` when ready. Also update `/manual` when changed.
-
 ### Still Needs to Be Built
-- **`/voters` page** — Admin-managed special page with Zoom link + downloadable council reports. Currently just a redirect in SPA routing. Needs its own page with file upload support in admin.
-- **`/confirmation`, `/sundayschool`, `/vbs`, `/egghunt`, `/family`** — Youth sub-pages. Admin portal has the youth_pages table, but these slugs need content entered by youth director.
-- **Christmas Market annual content** — Page structure is built. Needs dates, description, photos, and Google Form link for vendors entered (admin-managed).
-- **Prayer + Contact form delivery** — Confirm these forms actually send/deliver somewhere (email? DB?). Check they're wired to a real endpoint.
-- **Sermons page** — YouTube embed page exists; confirm it's pulling correct channel or confirm it's manually maintained.
-
-### Pre-DNS-Cutover Checklist (flagged 2026-03-22 — do not skip)
-- **Sermons page** — Confirm it's pulling correct YouTube channel or is manually maintained.
-- **Mobile nav audit** — Ministry + youth pages added many routes; confirm mobile menu is complete and nothing is orphaned.
-- **404 handling** — Cloudflare Worker should return the SPA for all unknown paths (needed for pushState routing on direct links). Verify this works.
-- **Breeze cancellation checklist** — Volunteer signups, giving, and any other Breeze-tied features must ALL be replaced before cancelling. Make a checklist before pulling the trigger.
-- **DNS cutover map** — Every subdomain (admin, volunteer, links, mdo, test) must have its worker deployed to prod before flipping DNS.
-- **`/manual` update when give platform changes** — Staff manual documents the Breeze link; update both together.
+- **`/confirmation`, `/sundayschool`, `/vbs`, `/egghunt`, `/family`** — Youth sub-pages. Admin portal has the youth_pages table, but these slugs need content entered by the youth director.
+- **Christmas Market annual content** — Page structure is built. Needs dates, description, photos, and Google Form link for vendors entered via the admin Ministries tab each year.
+- **Prayer + Contact form delivery** — Confirm these forms send/deliver somewhere (email? DB?). Verify they're wired to a real endpoint.
+- **Sermons page** — YouTube embed page exists; confirm it's pulling the correct channel or that it's manually maintained.
 
 ### Pinned / Low Priority
 - **Newsletter Format 3** — Single-event announcement (date, time, location, RSVP). Skipped for now, add if needed.
 - **SEO refinements** — Schema.org markup, OG tags per page, meta descriptions. Phase 7.
 - **R2 image uploads** — Cloudflare R2 for news items and youth pages image upload. Currently using URL-based images.
-- **WOL page** — Was accidentally removed and restored. Worth a visual check on test site.
+- **KV-gate startup migrations** — ~130 D1 queries run on every admin request (no-ops after first deploy). Gate behind a KV schema-version key to reduce to 1 KV read per cold start. Low urgency.
+- **Session idle timeout** — Admin sessions expire after 7 days fixed. Could add idle timeout (~24h) via a `last_activity` column on the sessions table.
+- **EXIF metadata in uploaded images** — Staff photos uploaded via admin may contain GPS/device EXIF data. Consider documenting that staff should strip EXIF before uploading, or add Cloudflare Images processing.
 
 ---
 
 ## CRITICAL: The Deployed File is `public/index.html`
 
-**DO NOT edit `timothystl-site.html`** — it is a stale duplicate and is NOT deployed anywhere.
-
 Both `wrangler-site.toml` (production) and `wrangler-test-site.toml` (test) deploy from `./public/`.
 The actual SPA is **`public/index.html`**. All HTML edits go there.
 
-`timothystl-site.html` in the repo root is outdated and should be ignored (or deleted eventually).
+`timothystl-site.html` in the repo root no longer exists — it was deleted.
 
 ---
 
-## Session State (as of 2026-03-22)
+## Session State (as of 2026-04-24)
 
-### What's in `public/index.html` (current deployed content):
+### What's live on timothystl.org:
+- **DNS cutover complete** — site is live at timothystl.org
 - Nav: About → Worship → MDO (external) → Word of Life → Ministries → News & Events → Contact → Give
-- **Color system:** Matches volunteer page — Navy #1E2D4A, Gold #C9973A, Moss #4A5E3A, Teal #2E7EA6, Slate #3A4E5C, Plum #8A6A8A. Background texture added.
+- **Color system:** Navy #1E2D4A, Gold #C9973A, Moss #4A5E3A, Teal #2E7EA6, Slate #3A4E5C, Plum #8A6A8A. Background texture added.
 - **Nav header:** Moss green (--sage), logo in white circle
 - **Logo:** `logo.png`, `logo-bw.png`, `logo-teal.png` in `/public/images/`
-- WOL page (`/wol`) — links out to wordoflifeschool.net
-- About page: correct vision/mission text, Mission Field section, correct staff emails + staff photos in `/public/images/staff/`
-- Events page: volunteer events loaded from volunteer.timothystl.org API
-- **News page (`/news`):** Fetches live from admin.timothystl.org/api/news + newsletter archive
-- **Ministry landing pages:** /music /stephen /foodpantry /bees /christmasmarket — all built with real photos. Admin Ministries tab live.
-- **Youth pages:** /youth and sub-pages load dynamically from admin API. TinyMCE editor in admin.
-- **Calendar (`/calendar`):** Google Calendar iframe embed wired with real calendar URL
-- **Zoom redirect (`/zoom`):** Wired to us02web.zoom.us/j/3147818673
-- **Council files redirect (`/councilfiles`):** Wired to Google Drive folder
-- **Give page (`/give`):** Still pointing to Breeze — awaiting URL swap
-- URL routing (pushState — direct URLs like /about work)
-- Footer: no LCMS in copyright line
-- **Staff manual:** `/manual` — documents header photos, button editing, Christmas Market annual update, color reference
-- **Newsletter:** Format picker (Weekly / Quick Announcement), draft/published split, Brevo email sending, website archive
+- About page: vision/mission text, Mission Field section, staff photos in `/public/images/staff/`
+- News page (`/news`): fetches live from admin API + newsletter archive
+- Ministry landing pages: /music /stephen /foodpantry /bees /christmasmarket — built with real photos
+- Youth pages: /youth and sub-pages load dynamically from admin API
+- Calendar (`/calendar`): Google Calendar iframe embed
+- Zoom redirect (`/zoom`): admin-managed URL via Settings tab
+- Council files redirect (`/councilfiles`): admin-managed URL via Settings tab
+- Give page (`/give`): points to Tithely — `give.tithe.ly`
+- Voters page (`/voters`): admin-managed Zoom link + downloadable council file uploads
+- 404 page: unknown URLs show a friendly 404 with nav buttons (not a silent home redirect)
+- URL routing: pushState — direct URLs like /about work on reload
+- Staff manual: `/manual` — documents header photos, button editing, Christmas Market, color reference
+- Newsletter: Weekly / Quick Announcement formats, draft/published split, Brevo email, website archive
 
-### What's next (Phase 6):
-- Static page audit: compare every page against current Tithely/Breeze site — anything missing?
-- Then Phase 7: SEO (Schema.org, OG tags, meta descriptions)
-- Then: DNS cutover, cancel Tithely/Breeze
+### What's next:
+- Phase 7: SEO (Schema.org, OG tags, meta descriptions)
+- Youth director content entry for /confirmation, /sundayschool, /vbs, /egghunt, /family
+- Christmas Market content update each year (via admin Ministries tab)
 
 ---
 
