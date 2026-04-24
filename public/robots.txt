@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /manual
+Disallow: /voters
+
+Sitemap: https://www.timothystl.org/sitemap.xml

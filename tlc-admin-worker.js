@@ -41,7 +41,8 @@ export default {
     try {
       return await this._fetch(request, env, ctx);
     } catch (e) {
-      return new Response(`Worker error: ${e.message}\n\nStack: ${e.stack}`, {
+      console.error('Admin worker error:', e.stack || e.message);
+      return new Response('Something went wrong. Please try again or contact the site administrator.', {
         status: 500, headers: { 'Content-Type': 'text/plain' }
       });
     }

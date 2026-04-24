@@ -7,18 +7,23 @@
 <meta name="description" content="Timothy Lutheran Church is a congregation alive to the Gospel of Jesus Christ in Lindenwood Park, South City St. Louis. Come as you are — two Sunday services, Wednesday worship, and a community open to all.">
 <meta name="keywords" content="Lutheran church St. Louis, LCMS church St. Louis, Lutheran church Lindenwood Park, church near me St. Louis, Mother's Day Out St. Louis, Sunday school St. Louis, food pantry St. Louis, Christmas market St. Louis">
 
+<link rel="icon" href="/images/logo.png" type="image/png">
+
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Timothy Lutheran Church">
 <meta property="og:title" content="Timothy Lutheran Church — St. Louis, MO">
 <meta property="og:description" content="A congregation alive to the Gospel. Planted in Lindenwood Park, South City St. Louis. Two Sunday services. Welcoming all people as ones for whom Christ died.">
 <meta property="og:url" content="https://www.timothystl.org/">
 <meta property="og:image" content="https://www.timothystl.org/images/logo.png">
+<meta property="og:image:alt" content="Timothy Lutheran Church logo">
 <meta property="og:locale" content="en_US">
 
 <meta name="twitter:card" content="summary">
+<meta name="twitter:site" content="@timothystl">
 <meta name="twitter:title" content="Timothy Lutheran Church — St. Louis, MO">
 <meta name="twitter:description" content="A congregation alive to the Gospel. Planted in Lindenwood Park, South City St. Louis.">
 <meta name="twitter:image" content="https://www.timothystl.org/images/logo.png">
+<meta name="twitter:image:alt" content="Timothy Lutheran Church logo">
 
 <link rel="canonical" href="https://www.timothystl.org/">
 
@@ -2587,7 +2592,14 @@ var PAGE_META = {
   'youth':        { title: 'Youth Ministry — Timothy Lutheran Church',                                    desc: 'Faith formation, community, and service for students in grades 7–12 at Timothy Lutheran Church.' },
   'wol':          { title: 'Word of Life School — Timothy Lutheran Church',                               desc: 'Word of Life Lutheran School serves families through faith-based education in St. Louis.' },
   'calendar':     { title: 'Calendar — Timothy Lutheran Church',                                          desc: 'Upcoming events and services at Timothy Lutheran Church in St. Louis.' },
-  'manual':       { title: 'Staff Manual — Timothy Lutheran Church',                                      desc: 'Internal staff reference for managing the Timothy Lutheran Church website.' },
+  'sundayschool': { title: 'Sunday School — Timothy Lutheran Church',                                     desc: 'Sunday School at Timothy Lutheran Church in Lindenwood Park, St. Louis.' },
+  'confirmation': { title: 'Confirmation — Timothy Lutheran Church',                                      desc: 'Confirmation program at Timothy Lutheran Church for students exploring and affirming their faith.' },
+  'vbs':          { title: 'Vacation Bible School — Timothy Lutheran Church',                             desc: 'Vacation Bible School at Timothy Lutheran Church in St. Louis — fun, faith, and community for kids.' },
+  'egghunt':      { title: 'Easter Egg Hunt — Timothy Lutheran Church',                                   desc: 'Annual Easter Egg Hunt at Timothy Lutheran Church in Lindenwood Park, St. Louis.' },
+  'family':       { title: 'Family Ministry — Timothy Lutheran Church',                                   desc: 'Family ministry and resources at Timothy Lutheran Church in St. Louis.' },
+  'manual':       { title: 'Staff Manual — Timothy Lutheran Church',                                      desc: 'Internal staff reference for managing the Timothy Lutheran Church website.', noindex: true },
+  'voters':       { title: 'Voters Assembly — Timothy Lutheran Church',                                   desc: 'Voters Assembly information for Timothy Lutheran Church members.', noindex: true },
+  '404':          { title: 'Page Not Found — Timothy Lutheran Church',                                    desc: 'The page you were looking for could not be found.', noindex: true },
 };
 function updatePageMeta(id) {
   var m = PAGE_META[id] || PAGE_META['home'];
@@ -2606,6 +2618,13 @@ function updatePageMeta(id) {
   if (twDesc) twDesc.setAttribute('content', m.desc);
   var canon = document.querySelector('link[rel="canonical"]');
   if (canon) canon.setAttribute('href', 'https://www.timothystl.org' + (id === 'home' ? '/' : '/' + id));
+  var robots = document.querySelector('meta[name="robots"]');
+  if (m.noindex) {
+    if (!robots) { robots = document.createElement('meta'); robots.name = 'robots'; document.head.appendChild(robots); }
+    robots.setAttribute('content', 'noindex,nofollow');
+  } else if (robots) {
+    robots.setAttribute('content', 'index,follow');
+  }
 }
 
 // Load when news page is shown; also handles pushState history
