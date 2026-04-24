@@ -85,7 +85,7 @@
 <nav class="nav">
   <div class="nav-inner">
     <div class="nav-brand" onclick="showPage('home')">
-      <img src="/logo.png?v=20260328" alt="Timothy Lutheran Church" class="nav-logo-img">
+      <img src="/logo.png?v=20260328" alt="Timothy Lutheran Church" class="nav-logo-img" fetchpriority="high">
       <div>
         <span class="nav-brand-name">Timothy Lutheran Church</span>
         <span class="nav-brand-sub">from our Neighborhood to the Nations</span>
@@ -716,62 +716,6 @@
 
 
 <!-- EVENTS -->
-<div id="page-events" class="page">
-  <div class="page-hero">
-    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">What's coming up</span>
-    <h1>Events</h1>
-    <p>Worship, community, and life together at Timothy Lutheran.</p>
-  </div>
-  <section class="section section--white">
-    <div class="wrap">
-      <span class="eyebrow">Upcoming</span>
-      <h2>On the calendar</h2>
-      <div class="event-list">
-        <div class="event-row">
-          <div class="event-date"><div class="event-month">Apr</div><div class="event-day">13</div></div>
-          <div class="event-name">Palm Sunday</div>
-          <div class="event-time">8:00 &amp; 10:45 am</div>
-          <span class="event-tag" style="background:var(--pale-gold);color:#5a3a00;">Holy Week</span>
-        </div>
-        <div class="event-row">
-          <div class="event-date"><div class="event-month">Apr</div><div class="event-day">17</div></div>
-          <div class="event-name">Maundy Thursday</div>
-          <div class="event-time">7:00 pm</div>
-          <span class="event-tag" style="background:var(--pale-gold);color:#5a3a00;">Holy Week</span>
-        </div>
-        <div class="event-row">
-          <div class="event-date"><div class="event-month">Apr</div><div class="event-day">18</div></div>
-          <div class="event-name">Good Friday</div>
-          <div class="event-time">7:00 pm</div>
-          <span class="event-tag" style="background:var(--pale-gold);color:#5a3a00;">Holy Week</span>
-        </div>
-        <div class="event-row">
-          <div class="event-date"><div class="event-month">Apr</div><div class="event-day">20</div></div>
-          <div class="event-name">Easter Sunday — He is risen!</div>
-          <div class="event-time">8:00 &amp; 10:45 am</div>
-          <span class="event-tag" style="background:var(--amber);color:white;">Easter</span>
-        </div>
-      </div>
-      <p style="margin-top:24px;font-size:13px;color:var(--gray);">For the most current listings visit our <a href="https://timothystl.org/news" target="_blank">news page</a> or contact the church office.</p>
-    </div>
-  </section>
-  <section class="section section--linen">
-    <div class="wrap">
-      <span class="eyebrow eyebrow--sage">Serve with us</span>
-      <h2>Volunteer Opportunities</h2>
-      <p style="color:var(--gray);margin-bottom:28px;">Want to make a difference in our neighborhood? Sign up to serve at an upcoming event.</p>
-      <div id="vol-loading" style="text-align:center;padding:32px;color:var(--gray);font-family:var(--sans);font-size:14px;">Loading volunteer opportunities...</div>
-      <div id="vol-list" class="event-list" style="display:none;"></div>
-      <div id="vol-empty" style="display:none;padding:4px 0 20px;">
-        <p style="color:var(--gray);font-size:14px;margin-bottom:0;">Visit our volunteer page to see current opportunities and sign up to serve.</p>
-      </div>
-      <div style="margin-top:24px;">
-        <a href="https://volunteer.timothystl.org" target="_blank" class="btn btn-secondary">Volunteer sign-up page →</a>
-      </div>
-    </div>
-  </section>
-</div>
-
 <!-- CONTACT -->
 <div id="page-contact" class="page">
   <div class="page-hero">
@@ -1916,7 +1860,7 @@
         <li><button onclick="showPage('worship')">Service times</button></li>
         <li><a href="https://www.youtube.com/@TimothySTL" target="_blank">Live stream</a></li>
         <li><button onclick="showPage('sermons')">Sunday Worship</button></li>
-        <li><button onclick="showPage('events')">Events</button></li>
+        <li><button onclick="showPage('news')">News &amp; Events</button></li>
       </ul>
     </div>
     <div class="footer-col">
@@ -2120,7 +2064,7 @@ async function loadNewsItems() {
     ${hasContent ? `<span class="ni-chevron" style="font-size:14px;color:var(--mid);flex-shrink:0;">↓</span>` : ''}
   </button>
   <div id="${bodyId}" style="display:none;padding:0 22px 20px;">
-    ${hasImage ? `<img src="${item.image_url}" alt="" style="width:100%;max-height:240px;object-fit:cover;border-radius:10px;margin-bottom:14px;">` : ''}
+    ${hasImage ? `<img src="${item.image_url}" alt="" loading="lazy" style="width:100%;max-height:240px;object-fit:cover;border-radius:10px;margin-bottom:14px;">` : ''}
     ${item.summary ? `<div style="font-family:var(--sans);font-size:15px;color:var(--charcoal);line-height:1.75;margin-bottom:12px;">${item.summary}</div>` : ''}
     ${item.body && item.body.trim() ? `<div class="rich-content">${fixImgUrls(item.body)}</div>` : ''}
   </div>
@@ -2400,7 +2344,7 @@ async function loadStaff() {
         ? '<a href="mailto:' + m.email.replace(/"/g,'&quot;') + '" class="staff-email">' + m.email + '</a>'
         : '<span class="staff-email" style="color:var(--gray);cursor:default;">Contact via office</span>';
       var photoHtml = m.photo_url
-        ? '<img src="' + m.photo_url.replace(/"/g,'&quot;') + '" alt="' + (m.name||'').replace(/"/g,'&quot;') + '" onerror="this.remove()">'
+        ? '<img src="' + m.photo_url.replace(/"/g,'&quot;') + '" alt="' + (m.name||'').replace(/"/g,'&quot;') + '" loading="lazy" onerror="this.remove()">'
         : '';
       return '<div class="staff-card">' +
         '<div class="staff-avatar">' + photoHtml + initials + '</div>' +
@@ -2581,7 +2525,6 @@ var PAGE_META = {
   'contact':      { title: 'Contact — Timothy Lutheran Church',                                           desc: 'Reach Timothy Lutheran Church at 6704 Fyler Ave, St. Louis, MO 63139 · (314) 781-8673 · office@timothystl.org' },
   'prayer':       { title: 'Prayer Request — Timothy Lutheran Church',                                    desc: 'Submit a prayer request to the pastors and prayer team at Timothy Lutheran Church.' },
   'give':         { title: 'Give — Timothy Lutheran Church',                                              desc: 'Support the ministry of Timothy Lutheran Church through a secure online gift.' },
-  'events':       { title: 'Volunteer Events — Timothy Lutheran Church',                                  desc: 'Upcoming volunteer opportunities at Timothy Lutheran Church in St. Louis.' },
   'music':        { title: 'Music Ministry — Timothy Lutheran Church',                                    desc: 'Pipe organ, handbells, steel drums, African choir, and more. A worship soundscape as wide as grace.' },
   'stephen':      { title: 'Stephen Ministry — Timothy Lutheran Church',                                  desc: 'Trained lay caregivers offering confidential one-to-one Christian care for people in life\'s hardest seasons.' },
   'foodpantry':   { title: 'Food Pantry — Timothy Lutheran Church',                                       desc: 'Monthly food pantry serving Lindenwood Park and surrounding communities. All are welcome, no appointment needed.' },
