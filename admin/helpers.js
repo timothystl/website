@@ -4,7 +4,7 @@
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, hasPermission } from './auth.js';
 
-export const VERSION = 'v1.3';
+export const VERSION = 'v1.4';
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
