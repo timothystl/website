@@ -58,6 +58,15 @@ async function getSettingUrl(key, fallback) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    // Canonical redirect: www → apex (301 = permanent, cached by browsers/crawlers)
+    if (url.hostname === 'www.timothystl.org') {
+      return new Response(null, {
+        status: 301,
+        headers: { 'Location': 'https://timothystl.org' + url.pathname + url.search }
+      });
+    }
+
     const path = url.pathname.replace(/^\//, '').replace(/\/$/, '');
 
     if (path) {
