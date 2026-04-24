@@ -23,7 +23,7 @@ The Timothy Lutheran Church website (timothystl.org) is live on Cloudflare Worke
 | timothystl-site | timothystl.org | `public/index.html` (SPA) |
 | tlc-newsletter-admin | admin.timothystl.org | `tlc-admin-worker.js` |
 | tlc-links | links.timothystl.org | `tlc-links-worker.js` |
-| breeze-proxy-worker | volunteer.timothystl.org | `tlc-volunteer-worker.js` |
+| tlc-chms | volunteer.timothystl.org | `tlc-volunteer-worker.js` |
 
 ### Databases (Cloudflare D1)
 - `tlc-newsletter-db` — tables: `newsletters`, `events`, (planned: `news_items`, `youth_pages`)

@@ -4,7 +4,7 @@ compatibility_date = "2024-01-01"
 
 [[services]]
 binding = "VOLUNTEER_WORKER"
-service = "breeze-proxy-worker"
+service = "tlc-chms"
 
 [[d1_databases]]
 binding = "DB"

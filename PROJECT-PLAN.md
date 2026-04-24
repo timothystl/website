@@ -241,7 +241,7 @@ CLOUDFLARE NETWORK
 │     Handles: image uploads to Cloudflare R2
 │
 ├── volunteer.timothystl.org
-│     Worker: breeze-proxy-worker (UNCHANGED)
+│     Worker: tlc-chms (UNCHANGED)
 │     Owns: D1 database "tlc-volunteer-db"
 │
 ├── links.timothystl.org
