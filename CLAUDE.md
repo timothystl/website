@@ -278,6 +278,9 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 - **KV-gate startup migrations** — ~130 D1 queries run on every admin request (no-ops after first deploy). Gate behind a KV schema-version key to reduce to 1 KV read per cold start. Low urgency.
 - **Session idle timeout** — Admin sessions expire after 7 days fixed. Could add idle timeout (~24h) via a `last_activity` column on the sessions table.
 - **EXIF metadata in uploaded images** — Staff photos uploaded via admin may contain GPS/device EXIF data. Consider documenting that staff should strip EXIF before uploading, or add Cloudflare Images processing.
+- **Session idle timeout** — Admin sessions expire after 7 days fixed. Could add idle timeout (~24h) via a `last_activity` column on the sessions table.
+- **Social preview image** — `og:image` currently uses the logo. A proper 1200×630 photo of the church/congregation would improve click-through when the site is shared on Facebook/Twitter. Drop a photo in `/public/images/` and update `og:image`, `twitter:image`, and `og:image:alt` in `public/index.html` head section.
+- **Mobile touch targets** — do a tap-through on a real phone to verify button/link sizes feel comfortable, especially on ministry and youth sub-pages added since launch.
 
 ---
 
@@ -313,9 +316,17 @@ The actual SPA is **`public/index.html`**. All HTML edits go there.
 - Newsletter: Weekly / Quick Announcement formats, draft/published split, Brevo email, website archive
 
 ### What's next:
-- Phase 7: SEO (Schema.org, OG tags, meta descriptions)
 - Youth director content entry for /confirmation, /sundayschool, /vbs, /egghunt, /family
 - Christmas Market content update each year (via admin Ministries tab)
+
+### SEO — completed April 2026
+- Schema.org JSON-LD (Church type) with address, phone, hours, social links
+- Per-page title + description + OG + Twitter tags (updated dynamically via `updatePageMeta()`)
+- `robots.txt` — disallows /manual and /voters, points to sitemap
+- `sitemap.xml` — 25 pages submitted to Google Search Console April 24 2026
+- Canonical URLs use `timothystl.org` (no www) consistently
+- www → apex 301 redirect in `site-worker.js`
+- noindex on /manual, /voters, /404
 
 ---
 
