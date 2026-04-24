@@ -1848,6 +1848,25 @@
   </section>
 </div>
 
+<div id="page-404" class="page">
+  <div class="page-hero">
+    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Page not found</span>
+    <h1>404</h1>
+    <p>We couldn't find that page. It may have moved or the link may be broken.</p>
+  </div>
+  <section class="section section--white">
+    <div class="wrap" style="text-align:center;max-width:600px;margin:0 auto;padding-top:0;">
+      <p style="font-size:16px;color:var(--gray);margin-bottom:32px;">Try one of these instead, or use the navigation above to find what you're looking for.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center;">
+        <button onclick="showPage('home')" class="btn btn-primary">Home</button>
+        <button onclick="showPage('worship')" class="btn btn-secondary">Worship</button>
+        <button onclick="showPage('about')" class="btn btn-secondary">About Us</button>
+        <button onclick="showPage('contact')" class="btn btn-secondary">Contact</button>
+      </div>
+    </div>
+  </section>
+</div>
+
 <!-- FOOTER -->
 <!-- ── NEWSLETTER SIGNUP ── -->
 <section style="background:var(--steel);padding:56px 28px;">
@@ -1991,12 +2010,12 @@ function toggleBio(id, btn){
   if(path && document.getElementById('page-'+path)){
     showPage(path, false);
   } else if (path) {
-    // Unknown path — check custom redirects before falling back to home
+    // Unknown path — check custom redirects, then show 404 (keep URL intact)
     fetch('https://admin.timothystl.org/api/redirects').then(function(r){return r.json();}).then(function(d){
       var match = (d.redirects||[]).find(function(r){return r.path===path;});
       if(match){ window.location.replace(match.url); }
-      else { history.replaceState({page:'home'},'','/'); }
-    }).catch(function(){ history.replaceState({page:'home'},'','/'); });
+      else { showPage('404', false); }
+    }).catch(function(){ showPage('404', false); });
   } else {
     history.replaceState({page:'home'},'','/');
   }
