@@ -22,6 +22,19 @@ const PUBLIC_SETTINGS_KEYS = new Set(['zoom_url', 'councilfiles_url', 'give_url'
 const ADMIN_ORIGIN = 'https://admin.timothystl.org';
 const PUBLIC_CROSS_ORIGIN_POSTS = new Set(['/api/contact', '/api/prayer', '/api/subscribe']);
 
+// Allowlists for file uploads. Extensions are derived from MIME type —
+// never from the client-supplied filename — so the stored file always
+// matches what it actually is.
+const ALLOWED_IMAGE_TYPES = new Map([
+  ['image/jpeg', 'jpg'],
+  ['image/png',  'png'],
+  ['image/webp', 'webp'],
+  ['image/gif',  'gif'],
+]);
+const ALLOWED_DOC_TYPES = new Map([
+  ['application/pdf', 'pdf'],
+]);
+
 // ── MAIN HANDLER ─────────────────────────────────────────────
 export default {
   async fetch(request, env, ctx) {
@@ -630,6 +643,17 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
 
     // ── LOGIN ──
     if (path === '/login' && method === 'POST') {
+      const ip = request.headers.get('CF-Connecting-IP') || '';
+      // Rate limit: block after 10 failures from the same IP in 15 minutes.
+      // Reuses audit_log rows written on each failure — no extra table needed.
+      if (ip) {
+        const recent = await env.DB.prepare(
+          `SELECT COUNT(*) as n FROM audit_log WHERE action = 'login_failed' AND entity_label = ? AND created_at > datetime('now', '-15 minutes')`
+        ).bind(ip).first().catch(() => ({ n: 0 }));
+        if ((recent?.n || 0) >= 10) {
+          return loginPage('Too many failed attempts. Please wait 15 minutes before trying again.');
+        }
+      }
       const form = await request.formData();
       const username = (form.get('username') || '').trim();
       const password = form.get('password') || '';
@@ -643,7 +667,6 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
           headers: { Location: '/', 'Set-Cookie': sessionCookieHeader(token) }
         });
       }
-      const ip = request.headers.get('CF-Connecting-IP') || '';
       await logAudit(env.DB, { id: null, username: username || '(empty)' }, 'login_failed', 'auth', '', ip, null, null);
       return loginPage('Incorrect username or password.');
     }
@@ -678,11 +701,13 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
       if (file.size > 2097152) {
         return new Response(JSON.stringify({ error: 'File too large (max 2MB)' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
       }
-      const ext = (file.name || 'image').split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+      const mimeType = (file.type || '').split(';')[0].trim().toLowerCase();
+      if (!ALLOWED_IMAGE_TYPES.has(mimeType)) {
+        return new Response(JSON.stringify({ error: 'Invalid file type. Only JPEG, PNG, WebP, and GIF images are allowed.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }
+      const ext = ALLOWED_IMAGE_TYPES.get(mimeType);
       const key = `news-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      await env.IMAGES.put(key, file.stream(), {
-        httpMetadata: { contentType: file.type || 'image/jpeg' }
-      });
+      await env.IMAGES.put(key, file.stream(), { httpMetadata: { contentType: mimeType } });
       const url = `${new URL(request.url).origin}/images/${key}`;
       return new Response(JSON.stringify({ url, location: url }), { headers: { 'Content-Type': 'application/json' } });
     }
@@ -693,10 +718,14 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
       const file = form.get('file');
       if (!file || typeof file === 'string') return new Response(JSON.stringify({ error: 'No file' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
       if (file.size > 10485760) return new Response(JSON.stringify({ error: 'File too large (max 10MB)' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      const docMime = (file.type || '').split(';')[0].trim().toLowerCase();
+      if (!ALLOWED_DOC_TYPES.has(docMime)) {
+        return new Response(JSON.stringify({ error: 'Invalid file type. Only PDF documents are allowed.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }
       const safeName = (file.name || 'document').replace(/[^a-zA-Z0-9._-]/g, '_');
       const key = `docs-${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${safeName}`;
       await env.IMAGES.put(key, file.stream(), {
-        httpMetadata: { contentType: file.type || 'application/octet-stream', contentDisposition: `attachment; filename="${safeName}"` }
+        httpMetadata: { contentType: docMime, contentDisposition: `attachment; filename="${safeName}"` }
       });
       const docUrl = `${new URL(request.url).origin}/docs/${key.slice('docs-'.length)}`;
       return new Response(JSON.stringify({ url: docUrl, key, name: safeName }), { headers: { 'Content-Type': 'application/json' } });
