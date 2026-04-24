@@ -129,8 +129,8 @@ export async function logAudit(db, user, action, entityType, entityId, entityLab
          (user_id, username, action, entity_type, entity_id, entity_label, before_state, after_state, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
-      user.id,
-      user.username,
+      user?.id ?? null,
+      user?.username ?? '',
       action,
       entityType,
       String(entityId ?? ''),

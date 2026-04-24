@@ -11,6 +11,11 @@ import { hashPassword, verifyPassword, createSession, getSession, deleteSession,
 import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHtml } from './admin/email.js';
 import { handleGymRoutes, sweepExpiredItems, extractImageKeys } from './admin/gym.js';
 
+// Allowlist of site_settings keys readable via the public /api/settings/{key}
+// endpoint. Everything else returns 404 — keeps internal config (gym admin
+// email, Brevo keys, etc.) from leaking to anyone who can guess a key name.
+const PUBLIC_SETTINGS_KEYS = new Set(['zoom_url', 'councilfiles_url', 'give_url']);
+
 // ── MAIN HANDLER ─────────────────────────────────────────────
 export default {
   async fetch(request, env, ctx) {
@@ -258,8 +263,12 @@ export default {
     }
 
     // ── PUBLIC: site settings API ──
+    // Only a small allowlist of keys is exposed publicly. Internal config
+    // (gym rates, calendar IDs, admin emails) and any future *_key/*_secret
+    // values must NEVER be readable without auth.
     if (path.startsWith('/api/settings/') && method === 'GET') {
       const key = path.slice('/api/settings/'.length);
+      if (!PUBLIC_SETTINGS_KEYS.has(key)) return new Response('Not found', { status: 404 });
       const row = await env.DB.prepare('SELECT key, value FROM site_settings WHERE key = ?').bind(key).first();
       if (!row) return new Response('Not found', { status: 404 });
       return new Response(JSON.stringify(row), {
@@ -604,6 +613,8 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
           headers: { Location: '/', 'Set-Cookie': sessionCookieHeader(token) }
         });
       }
+      const ip = request.headers.get('CF-Connecting-IP') || '';
+      await logAudit(env.DB, { id: null, username: username || '(empty)' }, 'login_failed', 'auth', '', ip, null, null);
       return loginPage('Incorrect username or password.');
     }
 
@@ -2810,6 +2821,11 @@ ${topbarHtml('staff', currentUser, `<a href="/staff">← All staff</a>`)}
       const rUrl  = (form.get('url')  || '').trim();
       const rLabel= (form.get('label')|| '').trim();
       if (!rPath || !rUrl) return new Response('', { status: 302, headers: { Location: '/settings?msg=redirect-error' } });
+      let parsedProtocol = '';
+      try { parsedProtocol = new URL(rUrl).protocol; } catch (_) {}
+      if (parsedProtocol !== 'http:' && parsedProtocol !== 'https:') {
+        return new Response('', { status: 302, headers: { Location: '/settings?msg=redirect-error' } });
+      }
       await env.DB.prepare('INSERT OR REPLACE INTO redirects (path, url, label) VALUES (?, ?, ?)').bind(rPath, rUrl, rLabel).run();
       return new Response('', { status: 302, headers: { Location: '/settings?msg=redirect-added' } });
     }

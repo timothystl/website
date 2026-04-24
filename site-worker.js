@@ -14,6 +14,16 @@ const SETTINGS_REDIRECTS = {
   'councilfiles': { key: 'councilfiles_url', fallback: 'https://drive.google.com/drive/folders/1pgqJ32H3HS7SNYnnf7rOswC5c87IAzA4?usp=drive_link' },
 };
 
+// Reject anything that isn't an http(s) URL — guards against javascript:,
+// data:, or relative-path payloads sneaking in via admin settings.
+function isSafeRedirectUrl(value) {
+  if (typeof value !== 'string' || !value) return false;
+  try {
+    const u = new URL(value);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch { return false; }
+}
+
 async function getRedirects() {
   const now = Date.now();
   if (redirectCache && now - redirectCacheTime < CACHE_TTL) return redirectCache;
@@ -55,16 +65,17 @@ export default {
       if (SETTINGS_REDIRECTS[path]) {
         const { key, fallback } = SETTINGS_REDIRECTS[path];
         const location = await getSettingUrl(key, fallback);
+        const safeLocation = isSafeRedirectUrl(location) ? location : fallback;
         return new Response(null, {
           status: 302,
-          headers: { 'Location': location }
+          headers: { 'Location': safeLocation }
         });
       }
 
       // Custom redirects from DB
       const redirects = await getRedirects();
       const match = redirects.find(r => r.path === path);
-      if (match) {
+      if (match && isSafeRedirectUrl(match.url)) {
         return new Response(null, {
           status: 302,
           headers: { 'Location': match.url }
