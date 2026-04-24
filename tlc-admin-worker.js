@@ -16,6 +16,12 @@ import { handleGymRoutes, sweepExpiredItems, extractImageKeys } from './admin/gy
 // email, Brevo keys, etc.) from leaking to anyone who can guess a key name.
 const PUBLIC_SETTINGS_KEYS = new Set(['zoom_url', 'councilfiles_url', 'give_url']);
 
+// CSRF defense: only these POST paths are reachable from outside the admin
+// origin (the public site at timothystl.org POSTs to them). Every other
+// state-changing request must originate from admin.timothystl.org itself.
+const ADMIN_ORIGIN = 'https://admin.timothystl.org';
+const PUBLIC_CROSS_ORIGIN_POSTS = new Set(['/api/contact', '/api/prayer', '/api/subscribe']);
+
 // ── MAIN HANDLER ─────────────────────────────────────────────
 export default {
   async fetch(request, env, ctx) {
@@ -40,6 +46,20 @@ export default {
       const contentLength = parseInt(request.headers.get('content-length') || '0', 10);
       if (contentLength > 25 * 1024 * 1024) {
         return new Response('Request too large.', { status: 413 });
+      }
+    }
+
+    // CSRF defense: state-changing requests must originate from the admin
+    // itself (Origin header set by the browser). The three /api/* form
+    // endpoints below are intentionally cross-origin (called from
+    // timothystl.org), so they're allowed through.
+    if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS' && !PUBLIC_CROSS_ORIGIN_POSTS.has(path)) {
+      const origin = request.headers.get('Origin') || '';
+      const referer = request.headers.get('Referer') || '';
+      const ok = origin === ADMIN_ORIGIN
+        || (!origin && referer.startsWith(ADMIN_ORIGIN + '/'));
+      if (!ok) {
+        return new Response('Cross-origin request blocked.', { status: 403 });
       }
     }
 
