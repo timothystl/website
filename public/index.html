@@ -13,8 +13,8 @@
 <meta property="og:site_name" content="Timothy Lutheran Church">
 <meta property="og:title" content="Timothy Lutheran Church — St. Louis, MO">
 <meta property="og:description" content="A congregation alive to the Gospel. Planted in Lindenwood Park, South City St. Louis. Two Sunday services. Welcoming all people as ones for whom Christ died.">
-<meta property="og:url" content="https://www.timothystl.org/">
-<meta property="og:image" content="https://www.timothystl.org/images/logo.png">
+<meta property="og:url" content="https://timothystl.org/">
+<meta property="og:image" content="https://timothystl.org/images/logo.png">
 <meta property="og:image:alt" content="Timothy Lutheran Church logo">
 <meta property="og:locale" content="en_US">
 
@@ -22,10 +22,10 @@
 <meta name="twitter:site" content="@timothystl">
 <meta name="twitter:title" content="Timothy Lutheran Church — St. Louis, MO">
 <meta name="twitter:description" content="A congregation alive to the Gospel. Planted in Lindenwood Park, South City St. Louis.">
-<meta name="twitter:image" content="https://www.timothystl.org/images/logo.png">
+<meta name="twitter:image" content="https://timothystl.org/images/logo.png">
 <meta name="twitter:image:alt" content="Timothy Lutheran Church logo">
 
-<link rel="canonical" href="https://www.timothystl.org/">
+<link rel="canonical" href="https://timothystl.org/">
 
 <script type="application/ld+json">
 {
@@ -33,9 +33,9 @@
   "@type": "Church",
   "name": "Timothy Lutheran Church",
   "alternateName": "Timothy Lutheran",
-  "url": "https://www.timothystl.org",
-  "logo": "https://www.timothystl.org/images/logo.png",
-  "image": "https://www.timothystl.org/images/logo.png",
+  "url": "https://timothystl.org",
+  "logo": "https://timothystl.org/images/logo.png",
+  "image": "https://timothystl.org/images/logo.png",
   "description": "Timothy Lutheran Church is a congregation alive to the Gospel of Jesus Christ, gathered in worship and sent in love. Located in Lindenwood Park, South City St. Louis.",
   "address": {
     "@type": "PostalAddress",
@@ -752,7 +752,7 @@
           <span class="event-tag" style="background:var(--amber);color:white;">Easter</span>
         </div>
       </div>
-      <p style="margin-top:24px;font-size:13px;color:var(--gray);">For the most current listings visit our <a href="https://www.timothystl.org/news" target="_blank">news page</a> or contact the church office.</p>
+      <p style="margin-top:24px;font-size:13px;color:var(--gray);">For the most current listings visit our <a href="https://timothystl.org/news" target="_blank">news page</a> or contact the church office.</p>
     </div>
   </section>
   <section class="section section--linen">
@@ -872,7 +872,7 @@
     <div class="wrap">
       <div style="max-width:600px;margin:0 auto;text-align:center;margin-bottom:48px;">
         <p style="font-size:16px;color:var(--gray);">The pastoral staff wants to know how to pray for you and walk alongside you in the joys and struggles of life. We can't care well if we don't know what's happening.</p>
-        <p style="font-size:16px;color:var(--gray);margin-top:12px;">Submit a request below and someone from our team will pray for you — and reach out if you'd like pastoral care. You can also reach us at <a href="https://www.timothystl.org/prayer" target="_blank">timothystl.org/prayer</a>.</p>
+        <p style="font-size:16px;color:var(--gray);margin-top:12px;">Submit a request below and someone from our team will pray for you — and reach out if you'd like pastoral care. You can also reach us at <a href="https://timothystl.org/prayer" target="_blank">timothystl.org/prayer</a>.</p>
       </div>
       <div style="max-width:560px;margin:0 auto;">
         <form id="prayer-form">
@@ -1941,7 +1941,7 @@
   </div>
   <div class="footer-base">
     <p>© <span id="footer-year"></span> Timothy Lutheran Church · St. Louis, Missouri</p>
-    <p><a href="https://www.timothystl.org">timothystl.org</a></p>
+    <p><a href="https://timothystl.org">timothystl.org</a></p>
   </div>
 </footer>
 
@@ -2611,13 +2611,13 @@ function updatePageMeta(id) {
   var ogDesc = document.querySelector('meta[property="og:description"]');
   if (ogDesc) ogDesc.setAttribute('content', m.desc);
   var ogUrl = document.querySelector('meta[property="og:url"]');
-  if (ogUrl) ogUrl.setAttribute('content', 'https://www.timothystl.org' + (id === 'home' ? '/' : '/' + id));
+  if (ogUrl) ogUrl.setAttribute('content', 'https://timothystl.org' + (id === 'home' ? '/' : '/' + id));
   var twTitle = document.querySelector('meta[name="twitter:title"]');
   if (twTitle) twTitle.setAttribute('content', m.title);
   var twDesc = document.querySelector('meta[name="twitter:description"]');
   if (twDesc) twDesc.setAttribute('content', m.desc);
   var canon = document.querySelector('link[rel="canonical"]');
-  if (canon) canon.setAttribute('href', 'https://www.timothystl.org' + (id === 'home' ? '/' : '/' + id));
+  if (canon) canon.setAttribute('href', 'https://timothystl.org' + (id === 'home' ? '/' : '/' + id));
   var robots = document.querySelector('meta[name="robots"]');
   if (m.noindex) {
     if (!robots) { robots = document.createElement('meta'); robots.name = 'robots'; document.head.appendChild(robots); }
