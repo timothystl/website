@@ -160,6 +160,11 @@ export default {
          WHERE permissions LIKE '%"gym_manage"%' AND permissions NOT LIKE '%"users_manage"%'`
       ).run();
     } catch (_) {}
+    // Performance indexes
+    try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)').run(); } catch (_) {}
+    try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_news_items_publish_date ON news_items(publish_date)').run(); } catch (_) {}
+    try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_ministry_posts_slug ON ministry_posts(ministry_slug)').run(); } catch (_) {}
+    try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_events_newsletter_id ON events(newsletter_id)').run(); } catch (_) {}
 
     // ── PUBLIC: serve uploaded docs from R2 ──
     if (path.startsWith('/docs/') && method === 'GET') {
@@ -1667,6 +1672,10 @@ ${eventsJs}
     // ── DELETE ──
     if (path.startsWith('/delete/') && method === 'POST') {
       const id = path.split('/').pop();
+      const toDelete = await env.DB.prepare('SELECT status FROM newsletters WHERE id = ?').bind(id).first();
+      if (toDelete && toDelete.status !== 'draft' && !hasPermission(currentUser, 'newsletter_approve')) {
+        return new Response('Access denied. Only admins can delete published newsletters.', { status: 403 });
+      }
       await env.DB.prepare('DELETE FROM events WHERE newsletter_id = ?').bind(id).run();
       await env.DB.prepare('DELETE FROM newsletters WHERE id = ?').bind(id).run();
       return new Response('', { status: 302, headers: { Location: '/newsitems' } });
@@ -1832,9 +1841,9 @@ ${eventsJs}
       <input type="hidden" name="list_type" value="all">
       <button type="submit" class="btn btn-sm btn-primary">Resend to all</button>
     </form>` : ''}
-    <form method="POST" action="/delete/${r.id}" style="display:contents;" onsubmit="return confirm('Delete this newsletter?')">
+    ${hasPermission(currentUser, 'newsletter_approve') ? `<form method="POST" action="/delete/${r.id}" style="display:contents;" onsubmit="return confirm('Delete this newsletter?')">
       <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-    </form>
+    </form>` : ''}
   </div>
 </div>`).join('');
 
@@ -3354,9 +3363,9 @@ ${topbarHtml('audit', currentUser)}
       <input type="hidden" name="list_type" value="all">
       <button type="submit" class="btn btn-sm btn-primary">Resend to all</button>
     </form>` : ''}
-    <form method="POST" action="/delete/${r.id}" style="display:contents;" onsubmit="return confirm('Delete this newsletter?')">
+    ${hasPermission(currentUser, 'newsletter_approve') ? `<form method="POST" action="/delete/${r.id}" style="display:contents;" onsubmit="return confirm('Delete this newsletter?')">
       <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-    </form>
+    </form>` : ''}
   </div>
 </div>`).join('');
 
