@@ -272,6 +272,7 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 - **Sermons page** — YouTube embed page exists; confirm it's pulling the correct channel or that it's manually maintained.
 
 ### Pinned / Low Priority
+- **manual.html** — Keep this updated whenever new features, pages, or admin tabs are added. It is the staff reference guide at `/manual` and should always reflect the current state of the site and admin portal.
 - **Newsletter Format 3** — Single-event announcement (date, time, location, RSVP). Skipped for now, add if needed.
 - **SEO refinements** — Schema.org markup, OG tags per page, meta descriptions. Phase 7.
 - **R2 image uploads** — Cloudflare R2 for news items and youth pages image upload. Currently using URL-based images.
