@@ -113,6 +113,7 @@ li{margin-bottom:6px;}
     <a href="#volunteer-site">volunteer.timothystl.org</a>
     <h3>Getting Help</h3>
     <a href="#asking-claude">Asking Claude to make changes</a>
+    <a href="#seo">SEO &amp; search visibility</a>
     <a href="#file-reference">Key file reference</a>
     <a href="#color-reference">Color reference</a>
   </nav>
@@ -457,6 +458,31 @@ li{margin-bottom:6px;}
 
     <div class="callout callout--sky">
       <p><strong>Tip:</strong> When asking Claude to update something on a specific page, always name the page (e.g. "Christmas Market page", "Food Pantry page"). This helps Claude find the right section quickly.</p>
+    </div>
+
+
+    <!-- ═══ SEO ═════════════════════════════════════════════════════════ -->
+    <span class="toc-anchor" id="seo"></span>
+    <h2>SEO &amp; Search Visibility</h2>
+    <p>Search engine optimization was completed in April 2026. The following are already in place — no action needed unless something changes.</p>
+
+    <h3>What's set up</h3>
+    <ul>
+      <li><strong>Schema.org JSON-LD</strong> — Church structured data on the homepage with address, phone, hours, and social media links. Helps Google show a knowledge panel.</li>
+      <li><strong>Per-page meta tags</strong> — Each page has its own title, description, Open Graph tags (Facebook/link previews), and Twitter Card tags. These update automatically when you navigate between pages.</li>
+      <li><strong>Canonical URLs</strong> — All pages use <code>timothystl.org</code> (no www). The www version redirects automatically.</li>
+      <li><strong>robots.txt</strong> — Tells search engines to index the site but skip <code>/manual</code> and <code>/voters</code>.</li>
+      <li><strong>sitemap.xml</strong> — Lists all 25+ public pages; submitted to Google Search Console April 2026.</li>
+      <li><strong>noindex</strong> — Applied to <code>/manual</code>, <code>/voters</code>, and the 404 page so they don't appear in search results.</li>
+    </ul>
+
+    <h3>Still pending (low priority)</h3>
+    <ul>
+      <li><strong>Social preview photo</strong> — The <code>og:image</code> currently uses the logo. A proper 1200×630 photo of the church would improve how the site looks when shared on Facebook or iMessage. Drop a photo in <code>/public/images/</code> and ask Claude to update the <code>og:image</code> tag.</li>
+    </ul>
+
+    <div class="callout callout--sky">
+      <p><strong>If you add a new page</strong> that should appear in search results, ask Claude to add it to <code>sitemap.xml</code> and wire up its meta tags in the <code>updatePageMeta()</code> function in <code>public/index.html</code>.</p>
     </div>
 
 
