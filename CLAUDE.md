@@ -257,7 +257,7 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 | 4 | Wire /news and /youth/* on main site | **DONE** — /news fetches /api/news + newsletter archive; /youth/* loads dynamically from admin API |
 | 5 | Ministry landing pages with photos | **DONE** — /music /stephen /foodpantry /bees /christmasmarket built with real photos. Admin Ministries tab live. |
 | 6 | Static page audit: migrate from Tithely/Breeze | **DONE** — site is live, DNS cutover complete April 2026 |
-| 7 | SEO: Schema.org, OG tags, meta descriptions | TO DO |
+| 7 | SEO: Schema.org, OG tags, meta descriptions | **DONE** — completed April 2026 |
 | 8 | Design reference / staff manual | **DONE** — /manual documents header photos, button editing, Christmas Market, color reference |
 | 9 | DNS cutover | **DONE** — April 2026. Breeze retained for internal people/giving management (same company as Tithely). |
 
@@ -274,8 +274,7 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 ### Pinned / Low Priority
 - **manual.html** — Keep this updated whenever new features, pages, or admin tabs are added. It is the staff reference guide at `/manual` and should always reflect the current state of the site and admin portal.
 - **Newsletter Format 3** — Single-event announcement (date, time, location, RSVP). Skipped for now, add if needed.
-- **SEO refinements** — Schema.org markup, OG tags per page, meta descriptions. Phase 7.
-- **R2 image uploads** — Cloudflare R2 for news items and youth pages image upload. Currently using URL-based images.
+- **R2 image uploads (card thumbnail)** — Body editors (TinyMCE) across News, Youth Pages, Pages, and Posts all have R2 upload fully wired via `tlcUploadHandler` — drag/drop or paste images and they upload automatically. The only remaining URL-only field is the News item card thumbnail (`image_url` text input). A file-picker button for that field could be added if needed.
 - **KV-gate startup migrations** — ~130 D1 queries run on every admin request (no-ops after first deploy). Gate behind a KV schema-version key to reduce to 1 KV read per cold start. Low urgency.
 - **Session idle timeout** — Admin sessions expire after 7 days fixed. Could add idle timeout (~24h) via a `last_activity` column on the sessions table.
 - **EXIF metadata in uploaded images** — Staff photos uploaded via admin may contain GPS/device EXIF data. Consider documenting that staff should strip EXIF before uploading, or add Cloudflare Images processing.
