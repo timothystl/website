@@ -5,8 +5,8 @@
 // Last modified: 2026-03-27
 
 
-import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS } from './admin/db.js';
-import { html, topbarHtml, loginPage, setupPage, permissionCheckboxes, formatDate, escapeHtml, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection } from './admin/helpers.js';
+import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS } from './admin/db.js';
+import { html, topbarHtml, loginPage, setupPage, forgotPasswordPage, resetPasswordPage, permissionCheckboxes, formatDate, escapeHtml, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection } from './admin/helpers.js';
 import { hashPassword, verifyPassword, createSession, getSession, deleteSession, sessionCookieHeader, clearSessionCookieHeader, logAudit, hasPermission, ALL_PERMISSIONS, PERMISSIONS } from './admin/auth.js';
 import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHtml } from './admin/email.js';
 import { handleGymRoutes, sweepExpiredItems, extractImageKeys } from './admin/gym.js';
@@ -199,6 +199,8 @@ export default {
     try { await env.DB.prepare(DB_INIT_USERS).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_SESSIONS).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_AUDIT_LOG).run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_PASSWORD_RESETS).run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE users ADD COLUMN email TEXT').run(); } catch (_) {}
     // Migrate: newsletter approval workflow
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN approval_status TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN approved_by_username TEXT').run(); } catch (_) {}
@@ -612,6 +614,63 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
     // ── GYM ROUTES ─────────────────────────────────────────────
     const gymResult = await handleGymRoutes(path, method, url, request, env);
     if (gymResult) return gymResult;
+
+    // ── FORGOT / RESET PASSWORD ────────────────────────────────
+    if (path === '/forgot-password') {
+      if (method === 'GET') return forgotPasswordPage();
+      if (method === 'POST') {
+        const form = await request.formData();
+        const email = (form.get('email') || '').trim().toLowerCase();
+        if (email) {
+          const user = await env.DB.prepare('SELECT id FROM users WHERE LOWER(email) = ? AND active = 1').bind(email).first().catch(() => null);
+          if (user) {
+            const token = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, '0')).join('');
+            const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+            await env.DB.prepare('INSERT INTO password_resets (token, user_id, expires_at, used, created_at) VALUES (?, ?, ?, 0, ?)')
+              .bind(token, user.id, expiresAt, new Date().toISOString()).run();
+            const origin = new URL(request.url).origin;
+            const resetLink = `${origin}/reset-password?token=${token}`;
+            await sendTransactionalEmail(env, {
+              subject: 'Reset your TLC Admin password',
+              toEmails: [email],
+              htmlContent: `<p>Hi,</p><p>Someone requested a password reset for your Timothy Lutheran Church admin account. Click the link below to set a new password. This link expires in 1 hour.</p><p><a href="${resetLink}">${resetLink}</a></p><p>If you didn't request this, you can ignore this email — your password has not been changed.</p><p>Grace and peace,<br>Timothy Lutheran Church</p>`
+            });
+          }
+        }
+        // Always show the same message to avoid revealing whether an email is on file
+        return forgotPasswordPage('If that email is on file, you\'ll receive a reset link shortly. Check your spam folder if it doesn\'t arrive within a few minutes.');
+      }
+    }
+
+    if (path === '/reset-password') {
+      const token = url.searchParams.get('token') || '';
+      if (method === 'GET') {
+        if (!token) return new Response('', { status: 302, headers: { Location: '/forgot-password' } });
+        const row = await env.DB.prepare('SELECT * FROM password_resets WHERE token = ? AND used = 0').bind(token).first().catch(() => null);
+        if (!row || new Date(row.expires_at) < new Date()) {
+          return forgotPasswordPage('', 'That reset link has expired or already been used. Request a new one below.');
+        }
+        return resetPasswordPage(token);
+      }
+      if (method === 'POST') {
+        const form = await request.formData();
+        const formToken = (form.get('token') || '').trim();
+        const password = form.get('password') || '';
+        const password2 = form.get('password2') || '';
+        if (!formToken) return new Response('', { status: 302, headers: { Location: '/forgot-password' } });
+        const row = await env.DB.prepare('SELECT * FROM password_resets WHERE token = ? AND used = 0').bind(formToken).first().catch(() => null);
+        if (!row || new Date(row.expires_at) < new Date()) {
+          return forgotPasswordPage('', 'That reset link has expired or already been used. Request a new one below.');
+        }
+        if (!password || password.length < 8) return resetPasswordPage(formToken, 'Password must be at least 8 characters.');
+        if (password !== password2) return resetPasswordPage(formToken, 'Passwords do not match.');
+        const hash = await hashPassword(password);
+        await env.DB.prepare('UPDATE users SET password_hash = ? WHERE id = ?').bind(hash, row.user_id).run();
+        await env.DB.prepare('UPDATE password_resets SET used = 1 WHERE token = ?').bind(formToken).run();
+        await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(row.user_id).run();
+        return loginPage('', 'Password updated. Please sign in with your new password.');
+      }
+    }
 
     // ── SETUP (first-run, no users exist yet) ──
     if (path === '/setup') {
@@ -3096,7 +3155,7 @@ ${topbarHtml('settings', currentUser)}
     }
 
     if (path === '/users' && method === 'GET') {
-      const users = await env.DB.prepare('SELECT id, username, permissions, last_login, active, created_at FROM users ORDER BY created_at').all();
+      const users = await env.DB.prepare('SELECT id, username, email, permissions, last_login, active, created_at FROM users ORDER BY created_at').all();
       const msg = url.searchParams.get('msg');
       const alertHtml = msg === 'created' ? `<div class="alert alert-success">✓ User created.</div>`
         : msg === 'updated' ? `<div class="alert alert-success">✓ User updated.</div>`
@@ -3108,6 +3167,7 @@ ${topbarHtml('settings', currentUser)}
         return `<div class="user-row">
   <div class="user-name">${escapeHtml(u.username)}${!u.active ? ' <span class="badge badge-expired">Inactive</span>' : ''}</div>
   <div class="user-meta">${permLabels}</div>
+  <div class="user-meta">${u.email ? escapeHtml(u.email) : '<span style="color:#B85C3A;font-size:12px;">No email — can\'t reset password</span>'}</div>
   <div class="user-meta">${u.last_login ? 'Last login: ' + u.last_login.split('T')[0] : 'Never logged in'}</div>
   <div class="ni-actions">
     <a href="/users/edit/${u.id}" class="btn btn-sm btn-secondary">Edit</a>
@@ -3138,6 +3198,7 @@ ${topbarHtml('users', currentUser)}
   <form method="POST" action="/users/new">
     <div class="card">
       <div class="form-group"><label>Username <span style="color:#B85C3A;">*</span></label><input type="text" name="username" required autocomplete="off"></div>
+      <div class="form-group"><label>Email <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— used for password reset</span></label><input type="email" name="email" autocomplete="email" placeholder="user@timothystl.org"></div>
       <div class="form-group"><label>Password <span style="color:#B85C3A;">*</span></label><input type="password" name="password" autocomplete="new-password" placeholder="Min 8 characters"></div>
       <div class="form-group"><label>Confirm password</label><input type="password" name="password2" autocomplete="new-password"></div>
       <div class="form-group"><label>Permissions</label>${permissionCheckboxes([])}</div>
@@ -3154,6 +3215,7 @@ ${topbarHtml('users', currentUser)}
       if (!hasPermission(currentUser, 'users_manage')) return new Response('Access denied.', { status: 403 });
       const form = await request.formData();
       const username = (form.get('username') || '').trim();
+      const email = (form.get('email') || '').trim().toLowerCase() || null;
       const password = form.get('password') || '';
       const password2 = form.get('password2') || '';
       if (!username || !password) return new Response('Username and password required.', { status: 400 });
@@ -3163,8 +3225,8 @@ ${topbarHtml('users', currentUser)}
       if (existing) return new Response('Username already taken.', { status: 400 });
       const perms = Object.keys(PERMISSIONS).filter(k => form.get('perm_' + k) === '1');
       const hash = await hashPassword(password);
-      await env.DB.prepare('INSERT INTO users (username, password_hash, permissions, created_at, active) VALUES (?, ?, ?, ?, 1)')
-        .bind(username, hash, JSON.stringify(perms), new Date().toISOString()).run();
+      await env.DB.prepare('INSERT INTO users (username, password_hash, permissions, created_at, active, email) VALUES (?, ?, ?, ?, 1, ?)')
+        .bind(username, hash, JSON.stringify(perms), new Date().toISOString(), email).run();
       return new Response('', { status: 302, headers: { Location: '/users?msg=created' } });
     }
 
@@ -3181,6 +3243,7 @@ ${topbarHtml('users', currentUser)}
   <form method="POST" action="/users/edit/${u.id}">
     <div class="card">
       <div class="form-group"><label>Username</label><input type="text" name="username" value="${(u.username || '').replace(/"/g,'&quot;')}" required autocomplete="off"></div>
+      <div class="form-group"><label>Email <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— used for password reset</span></label><input type="email" name="email" value="${(u.email || '').replace(/"/g,'&quot;')}" autocomplete="email" placeholder="user@timothystl.org"></div>
       <div class="form-group">
         <label>New password <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— leave blank to keep current</span></label>
         <input type="password" name="password" autocomplete="new-password" placeholder="Leave blank to keep current password">
@@ -3208,6 +3271,7 @@ ${topbarHtml('users', currentUser)}
       const uid = path.split('/').pop();
       const form = await request.formData();
       const username = (form.get('username') || '').trim();
+      const email = (form.get('email') || '').trim().toLowerCase() || null;
       const password = form.get('password') || '';
       const password2 = form.get('password2') || '';
       const active = form.get('active') === '1' ? 1 : 0;
@@ -3224,11 +3288,11 @@ ${topbarHtml('users', currentUser)}
       const deactivated = existingUser && existingUser.active && !active;
       if (password) {
         const hash = await hashPassword(password);
-        await env.DB.prepare('UPDATE users SET username = ?, password_hash = ?, permissions = ?, active = ? WHERE id = ?')
-          .bind(username, hash, newPermsJson, active, uid).run();
+        await env.DB.prepare('UPDATE users SET username = ?, email = ?, password_hash = ?, permissions = ?, active = ? WHERE id = ?')
+          .bind(username, email, hash, newPermsJson, active, uid).run();
       } else {
-        await env.DB.prepare('UPDATE users SET username = ?, permissions = ?, active = ? WHERE id = ?')
-          .bind(username, newPermsJson, active, uid).run();
+        await env.DB.prepare('UPDATE users SET username = ?, email = ?, permissions = ?, active = ? WHERE id = ?')
+          .bind(username, email, newPermsJson, active, uid).run();
       }
       // Invalidate sessions only when something relevant changed
       if (deactivated || passwordChanged || permsChanged) {
