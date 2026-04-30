@@ -194,6 +194,14 @@ export const DB_INIT_USERS = `CREATE TABLE IF NOT EXISTS users (
   active INTEGER NOT NULL DEFAULT 1
 )`;
 
+export const DB_INIT_PASSWORD_RESETS = `CREATE TABLE IF NOT EXISTS password_resets (
+  token TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  expires_at TEXT NOT NULL,
+  used INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+)`;
+
 export const DB_INIT_SESSIONS = `CREATE TABLE IF NOT EXISTS sessions (
   token TEXT PRIMARY KEY,
   user_id INTEGER NOT NULL,

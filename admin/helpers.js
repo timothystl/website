@@ -168,13 +168,14 @@ export function topbarHtml(activeTab, user, extraLinks = '', pendingCount = 0) {
 }
 
 // ── LOGIN PAGE ───────────────────────────────────────────────
-export function loginPage(error = '') {
+export function loginPage(error = '', success = '') {
   return html(`
 <div class="login-wrap">
   <div class="login-card">
     <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#D4922A;margin-bottom:8px;">Timothy Lutheran Church</div>
     <div class="login-title">Admin Portal</div>
     <div class="login-sub">Sign in to manage the website</div>
+    ${success ? `<div class="alert alert-success">${success}</div>` : ''}
     ${error ? `<div class="alert alert-error">${error}</div>` : ''}
     <form method="POST" action="/login">
       <div class="form-group">
@@ -187,8 +188,61 @@ export function loginPage(error = '') {
       </div>
       <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:8px;">Sign in</button>
     </form>
+    <div style="margin-top:18px;text-align:center;">
+      <a href="/forgot-password" style="font-size:13px;color:var(--gray);text-decoration:none;">Forgot your password?</a>
+    </div>
   </div>
 </div>`, 'TLC Admin — Sign In');
+}
+
+// ── FORGOT PASSWORD PAGE ──────────────────────────────────────
+export function forgotPasswordPage(msg = '', error = '') {
+  return html(`
+<div class="login-wrap">
+  <div class="login-card">
+    <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#D4922A;margin-bottom:8px;">Timothy Lutheran Church</div>
+    <div class="login-title">Reset Password</div>
+    <div class="login-sub">Enter your email and we'll send you a reset link.</div>
+    ${error ? `<div class="alert alert-error">${error}</div>` : ''}
+    ${msg ? `<div class="alert alert-success">${msg}</div>` : `
+    <form method="POST" action="/forgot-password">
+      <div class="form-group" style="text-align:left;">
+        <label>Email address</label>
+        <input type="email" name="email" autofocus autocomplete="email" placeholder="your@email.com">
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:8px;">Send reset link</button>
+    </form>`}
+    <div style="margin-top:18px;text-align:center;">
+      <a href="/login" style="font-size:13px;color:var(--gray);text-decoration:none;">Back to sign in</a>
+    </div>
+  </div>
+</div>`, 'TLC Admin — Reset Password');
+}
+
+// ── RESET PASSWORD PAGE ───────────────────────────────────────
+export function resetPasswordPage(token, error = '') {
+  const safeToken = (token || '').replace(/"/g, '&quot;');
+  return html(`
+<div class="login-wrap">
+  <div class="login-card">
+    <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#D4922A;margin-bottom:8px;">Timothy Lutheran Church</div>
+    <div class="login-title">Set New Password</div>
+    <div class="login-sub">Choose a new password for your account.</div>
+    ${error ? `<div class="alert alert-error">${error}</div>` : ''}
+    <form method="POST" action="/reset-password">
+      <input type="hidden" name="token" value="${safeToken}">
+      <div class="form-group" style="text-align:left;">
+        <label>New password</label>
+        <input type="password" name="password" autofocus autocomplete="new-password" placeholder="Min 8 characters">
+      </div>
+      <div class="form-group" style="text-align:left;">
+        <label>Confirm new password</label>
+        <input type="password" name="password2" autocomplete="new-password">
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:8px;">Set new password</button>
+    </form>
+  </div>
+</div>`, 'TLC Admin — Set New Password');
 }
 
 // ── SETUP PAGE (first-run only) ───────────────────────────────
