@@ -2,6 +2,72 @@
 // Handles server-side redirects before falling through to static assets.
 // Custom redirects are fetched from the admin API and cached in memory for 60s.
 
+const ERROR_PAGE_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Something went wrong — Timothy Lutheran Church</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Lora:wght@600&family=Source+Sans+3:wght@400;600&display=swap');
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #F7F3EC;
+      font-family: 'Source Sans 3', Arial, sans-serif;
+      color: #1A1A2A;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 24px;
+      text-align: center;
+    }
+    .eyebrow {
+      display: block;
+      font-family: 'Source Sans 3', Arial, sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #C9973A;
+      margin-bottom: 16px;
+    }
+    h1 {
+      font-family: Lora, Georgia, serif;
+      font-size: clamp(36px, 6vw, 64px);
+      color: #1E2D4A;
+      line-height: 1.1;
+      margin-bottom: 20px;
+    }
+    p {
+      font-size: 18px;
+      color: #4A4860;
+      max-width: 520px;
+      line-height: 1.6;
+      margin-bottom: 36px;
+    }
+    .btn {
+      display: inline-block;
+      background: #1E2D4A;
+      color: #fff;
+      font-family: 'Source Sans 3', Arial, sans-serif;
+      font-size: 16px;
+      font-weight: 600;
+      text-decoration: none;
+      padding: 14px 32px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <span class="eyebrow">500 Error</span>
+  <h1>Something went wrong</h1>
+  <p>We're sorry — something on our end broke. Please try again in a moment, or go back to the home page.</p>
+  <a href="/" class="btn">Go to Home Page</a>
+</body>
+</html>`;
+
 let redirectCache = null;
 let redirectCacheTime = 0;
 const settingsCache = {};
@@ -57,6 +123,7 @@ async function getSettingUrl(key, fallback) {
 
 export default {
   async fetch(request, env) {
+    try {
     const url = new URL(request.url);
 
     // Canonical redirect: www → apex (301 = permanent, cached by browsers/crawlers)
@@ -94,5 +161,11 @@ export default {
 
     // Fall through to static assets (SPA)
     return env.ASSETS.fetch(request);
+    } catch (err) {
+      return new Response(ERROR_PAGE_HTML, {
+        status: 500,
+        headers: { 'Content-Type': 'text/html;charset=UTF-8' }
+      });
+    }
   },
 };
