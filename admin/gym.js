@@ -369,7 +369,7 @@ function tlcUploadHandler(blobInfo) {
 }
 
 // ── MAIN GYM ROUTE HANDLER ─────────────────────────────────
-export async function handleGymRoutes(path, method, url, request, env) {
+export async function handleGymRoutes(path, method, url, request, env, currentUser = null) {
 
     // ── GROUP BOOKING PORTAL (/gym/book/:token/*) ───────────────
     if (path.startsWith('/gym/book/')) {
@@ -1407,7 +1407,7 @@ ${portalHeader}
           : '';
 
         return html(`
-${topbarHtml('gym')}
+${topbarHtml('gym', currentUser)}
 <style>details > summary { list-style: none; } details > summary::-webkit-details-marker { display: none; }</style>
 <div class="wrap">
   <div class="page-title">Gym Rentals</div>
@@ -1458,7 +1458,7 @@ ${topbarHtml('gym')}
   </div>
 </div>`).join('');
         return html(`
-${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
+${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="wrap">
   <div class="page-title">Rental Groups</div>
   <div class="page-sub">Each group gets a private booking link. Share it with them — no login required.</div>
@@ -1473,7 +1473,7 @@ ${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
       // ── NEW GROUP FORM ───────────────────────────────────────
       if (path === '/gym-rentals/groups/new' && method === 'GET') {
         return html(`
-${topbarHtml('gym', `<a href="/gym-rentals/groups">← Groups</a>`)}
+${topbarHtml('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>`)}
 <div class="wrap">
   <div class="page-title">Add Rental Group</div>
   <div class="page-sub">After saving, you'll see their private booking link to share.</div>
@@ -1540,7 +1540,7 @@ ${topbarHtml('gym', `<a href="/gym-rentals/groups">← Groups</a>`)}
           : '';
         const esc = v => (v||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
         return html(`
-${topbarHtml('gym', `<a href="/gym-rentals/groups">← Groups</a>`)}
+${topbarHtml('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>`)}
 <div class="wrap">
   <div class="page-title">${g.name}</div>
   <div class="page-sub">Edit group details and manage their booking link.</div>
@@ -1710,7 +1710,7 @@ ${topbarHtml('gym', `<a href="/gym-rentals/groups">← Groups</a>`)}
   </div>
 </div>`).join('');
         return html(`
-${topbarHtml('gym', `<a href="/gym-rentals">← Gym Rentals</a>`)}
+${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Gym Rentals</a>`)}
 <div class="wrap">
   <div class="page-title">Google Calendar — Connection Test</div>
   <div class="page-sub">Checks secrets, access token, and creates a test event on your calendar.</div>
@@ -1768,7 +1768,7 @@ ${topbarHtml('gym', `<a href="/gym-rentals">← Gym Rentals</a>`)}
         calHtml += '</div>';
 
         return html(`
-${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
+${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <style>
 .bcal-day{display:block;width:34px;height:34px;line-height:34px;border-radius:50%;margin:0 auto;font-size:13px;font-weight:600;text-align:center;position:relative;cursor:pointer;color:var(--steel);}
 .bcal-past{color:#CBD5E1;cursor:default;}
@@ -1933,7 +1933,7 @@ updateSummary();
         const groupOptions = groups.results.map(g =>
           `<option value="${g.id}"${selGroup == g.id ? ' selected' : ''}>${g.name}</option>`).join('');
         return html(`
-${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
+${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="wrap">
   <div class="page-title">New Booking</div>
   <div class="page-sub">Admin-created bookings are confirmed immediately and generate an invoice emailed to the group.</div>
@@ -2089,7 +2089,7 @@ ${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
           ? `<div style="text-align:center;padding:24px;color:var(--gray);font-size:13px;">No past bookings on record.</div>`
           : groupByOrg(past.results, false);
         return html(`
-${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
+${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="wrap">
   <div class="page-title">All Bookings</div>
   <div class="page-sub">Upcoming and past gym rentals.</div>
@@ -2220,7 +2220,7 @@ ${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
   </div>
 </div>`; }).join('');
         return html(`
-${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
+${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="wrap">
   <div class="page-title">Invoices</div>
   <div class="page-sub">Invoice history and payment tracking.</div>
@@ -2245,7 +2245,7 @@ ${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
           : vm === 'saved'   ? `<div class="alert alert-success">✓ Saved.</div>`
           : '';
         return html(`
-${topbarHtml('gym', `<a href="/gym-rentals/invoices">← Invoices</a>`)}
+${topbarHtml('gym', currentUser, `<a href="/gym-rentals/invoices">← Invoices</a>`)}
 <div class="wrap">
   <div class="page-title">Invoice ${invNum}</div>
   <div class="page-sub">${group?.name||'—'}</div>
@@ -2363,7 +2363,7 @@ ${topbarHtml('gym', `<a href="/gym-rentals/invoices">← Invoices</a>`)}
   </div>
 </div>`).join('');
         return html(`
-${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
+${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="wrap">
   <div class="page-title">Recurring Requests</div>
   <div class="page-sub">All recurring rental requests from groups.</div>
@@ -2428,7 +2428,7 @@ ${topbarHtml('gym', `<a href="/gym-rentals">← Dashboard</a>`)}
           : '';
 
         return html(`
-${topbarHtml('gym', `<a href="/gym-rentals/recurring">← Recurring</a>`)}
+${topbarHtml('gym', currentUser, `<a href="/gym-rentals/recurring">← Recurring</a>`)}
 <div class="wrap">
   <div class="page-title">Recurring Request</div>
   ${msgAlert}
