@@ -1420,12 +1420,16 @@ addEvent();
       const editId = form.get('newsletter_id') || null; // present when editing an existing newsletter
       const status = action === 'publish' ? 'published' : 'draft';
 
+      // Strip <img src="blob:..."> tags — these are temporary in-browser URLs
+      // that render as broken icons in email if the upload didn't finish.
+      const stripBlobImgs = s => (s || '').replace(/<img[^>]*src=["']blob:[^"']*["'][^>]*>/gi, '');
+
       // Weekly-specific fields
-      const pastorNote = form.get('pastor_note') || '';
-      const secondaryNote = fmt === 'weekly' ? form.get('secondary_note') || '' : '';
-      const wolContent = fmt === 'weekly' ? form.get('wol_content') || '' : '';
-      const lasmContent = fmt === 'weekly' ? form.get('lasm_content') || '' : '';
-      const tertiaryNote = fmt === 'weekly' ? form.get('tertiary_note') || '' : '';
+      const pastorNote = stripBlobImgs(form.get('pastor_note') || '');
+      const secondaryNote = fmt === 'weekly' ? stripBlobImgs(form.get('secondary_note') || '') : '';
+      const wolContent = fmt === 'weekly' ? stripBlobImgs(form.get('wol_content') || '') : '';
+      const lasmContent = fmt === 'weekly' ? stripBlobImgs(form.get('lasm_content') || '') : '';
+      const tertiaryNote = fmt === 'weekly' ? stripBlobImgs(form.get('tertiary_note') || '') : '';
       const tertiaryCtaLabel = fmt === 'weekly' ? form.get('tertiary_cta_label') || '' : '';
       const tertiaryCtaUrl = fmt === 'weekly' ? form.get('tertiary_cta_url') || '' : '';
       // Legacy fields kept for DB compat but no longer used in the form
@@ -1433,7 +1437,7 @@ addEvent();
       const ministryType = 'text';
 
       // Quick-announcement-specific fields
-      const quickBody = form.get('quick_body') || '';
+      const quickBody = stripBlobImgs(form.get('quick_body') || '');
       const ctaUrl = form.get('cta_url') || '';
       const ctaLabel = form.get('cta_label') || '';
 

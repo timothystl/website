@@ -352,8 +352,33 @@ tinymce.init({
 });
 if (!window._tlcSubmitWired) {
   window._tlcSubmitWired = true;
-  document.querySelector('form').addEventListener('submit', function() {
-    (window.tinymce ? tinymce.editors : []).forEach(function(ed) { ed.save(); });
+  document.querySelector('form').addEventListener('submit', function(e) {
+    if (window._tlcSubmitting) return;
+    var eds = window.tinymce ? tinymce.editors : [];
+    if (!eds.length) return;
+    e.preventDefault();
+    window._tlcSubmitting = true;
+    var form = e.target;
+    var submitter = e.submitter;
+    if (submitter && submitter.name) {
+      var hid = document.createElement('input');
+      hid.type = 'hidden';
+      hid.name = submitter.name;
+      hid.value = submitter.value;
+      form.appendChild(hid);
+    }
+    var done = function() {
+      eds.forEach(function(ed) { ed.save(); });
+      // Strip any remaining blob: image references that failed to upload —
+      // they'd render as broken icons in the sent email.
+      form.querySelectorAll('textarea').forEach(function(t) {
+        if (t.value && t.value.indexOf('blob:') !== -1) {
+          t.value = t.value.replace(/<img[^>]*src=["']blob:[^"']*["'][^>]*>/gi, '');
+        }
+      });
+      form.submit();
+    };
+    Promise.all(eds.map(function(ed) { return ed.uploadImages(); })).then(done, done);
   });
 }
 <\/script>`;
@@ -398,8 +423,33 @@ tinymce.init({
 });
 if (!window._tlcSubmitWired) {
   window._tlcSubmitWired = true;
-  document.querySelector('form').addEventListener('submit', function() {
-    (window.tinymce ? tinymce.editors : []).forEach(function(ed) { ed.save(); });
+  document.querySelector('form').addEventListener('submit', function(e) {
+    if (window._tlcSubmitting) return;
+    var eds = window.tinymce ? tinymce.editors : [];
+    if (!eds.length) return;
+    e.preventDefault();
+    window._tlcSubmitting = true;
+    var form = e.target;
+    var submitter = e.submitter;
+    if (submitter && submitter.name) {
+      var hid = document.createElement('input');
+      hid.type = 'hidden';
+      hid.name = submitter.name;
+      hid.value = submitter.value;
+      form.appendChild(hid);
+    }
+    var done = function() {
+      eds.forEach(function(ed) { ed.save(); });
+      // Strip any remaining blob: image references that failed to upload —
+      // they'd render as broken icons in the sent email.
+      form.querySelectorAll('textarea').forEach(function(t) {
+        if (t.value && t.value.indexOf('blob:') !== -1) {
+          t.value = t.value.replace(/<img[^>]*src=["']blob:[^"']*["'][^>]*>/gi, '');
+        }
+      });
+      form.submit();
+    };
+    Promise.all(eds.map(function(ed) { return ed.uploadImages(); })).then(done, done);
   });
 }
 <\/script>`;
@@ -444,8 +494,33 @@ tinymce.init({
 });
 if (!window._tlcSubmitWired) {
   window._tlcSubmitWired = true;
-  document.querySelector('form').addEventListener('submit', function() {
-    (window.tinymce ? tinymce.editors : []).forEach(function(ed) { ed.save(); });
+  document.querySelector('form').addEventListener('submit', function(e) {
+    if (window._tlcSubmitting) return;
+    var eds = window.tinymce ? tinymce.editors : [];
+    if (!eds.length) return;
+    e.preventDefault();
+    window._tlcSubmitting = true;
+    var form = e.target;
+    var submitter = e.submitter;
+    if (submitter && submitter.name) {
+      var hid = document.createElement('input');
+      hid.type = 'hidden';
+      hid.name = submitter.name;
+      hid.value = submitter.value;
+      form.appendChild(hid);
+    }
+    var done = function() {
+      eds.forEach(function(ed) { ed.save(); });
+      // Strip any remaining blob: image references that failed to upload —
+      // they'd render as broken icons in the sent email.
+      form.querySelectorAll('textarea').forEach(function(t) {
+        if (t.value && t.value.indexOf('blob:') !== -1) {
+          t.value = t.value.replace(/<img[^>]*src=["']blob:[^"']*["'][^>]*>/gi, '');
+        }
+      });
+      form.submit();
+    };
+    Promise.all(eds.map(function(ed) { return ed.uploadImages(); })).then(done, done);
   });
 }
 <\/script>`;
@@ -490,8 +565,33 @@ tinymce.init({
 });
 if (!window._tlcSubmitWired) {
   window._tlcSubmitWired = true;
-  document.querySelector('form').addEventListener('submit', function() {
-    (window.tinymce ? tinymce.editors : []).forEach(function(ed) { ed.save(); });
+  document.querySelector('form').addEventListener('submit', function(e) {
+    if (window._tlcSubmitting) return;
+    var eds = window.tinymce ? tinymce.editors : [];
+    if (!eds.length) return;
+    e.preventDefault();
+    window._tlcSubmitting = true;
+    var form = e.target;
+    var submitter = e.submitter;
+    if (submitter && submitter.name) {
+      var hid = document.createElement('input');
+      hid.type = 'hidden';
+      hid.name = submitter.name;
+      hid.value = submitter.value;
+      form.appendChild(hid);
+    }
+    var done = function() {
+      eds.forEach(function(ed) { ed.save(); });
+      // Strip any remaining blob: image references that failed to upload —
+      // they'd render as broken icons in the sent email.
+      form.querySelectorAll('textarea').forEach(function(t) {
+        if (t.value && t.value.indexOf('blob:') !== -1) {
+          t.value = t.value.replace(/<img[^>]*src=["']blob:[^"']*["'][^>]*>/gi, '');
+        }
+      });
+      form.submit();
+    };
+    Promise.all(eds.map(function(ed) { return ed.uploadImages(); })).then(done, done);
   });
 }
 <\/script>`;
@@ -536,8 +636,33 @@ tinymce.init({
 });
 if (!window._tlcSubmitWired) {
   window._tlcSubmitWired = true;
-  document.querySelector('form').addEventListener('submit', function() {
-    (window.tinymce ? tinymce.editors : []).forEach(function(ed) { ed.save(); });
+  document.querySelector('form').addEventListener('submit', function(e) {
+    if (window._tlcSubmitting) return;
+    var eds = window.tinymce ? tinymce.editors : [];
+    if (!eds.length) return;
+    e.preventDefault();
+    window._tlcSubmitting = true;
+    var form = e.target;
+    var submitter = e.submitter;
+    if (submitter && submitter.name) {
+      var hid = document.createElement('input');
+      hid.type = 'hidden';
+      hid.name = submitter.name;
+      hid.value = submitter.value;
+      form.appendChild(hid);
+    }
+    var done = function() {
+      eds.forEach(function(ed) { ed.save(); });
+      // Strip any remaining blob: image references that failed to upload —
+      // they'd render as broken icons in the sent email.
+      form.querySelectorAll('textarea').forEach(function(t) {
+        if (t.value && t.value.indexOf('blob:') !== -1) {
+          t.value = t.value.replace(/<img[^>]*src=["']blob:[^"']*["'][^>]*>/gi, '');
+        }
+      });
+      form.submit();
+    };
+    Promise.all(eds.map(function(ed) { return ed.uploadImages(); })).then(done, done);
   });
 }
 <\/script>`;
@@ -623,8 +748,33 @@ tinymce.init({
 });
 if (!window._tlcSubmitWired) {
   window._tlcSubmitWired = true;
-  document.querySelector('form').addEventListener('submit', function() {
-    (window.tinymce ? tinymce.editors : []).forEach(function(ed) { ed.save(); });
+  document.querySelector('form').addEventListener('submit', function(e) {
+    if (window._tlcSubmitting) return;
+    var eds = window.tinymce ? tinymce.editors : [];
+    if (!eds.length) return;
+    e.preventDefault();
+    window._tlcSubmitting = true;
+    var form = e.target;
+    var submitter = e.submitter;
+    if (submitter && submitter.name) {
+      var hid = document.createElement('input');
+      hid.type = 'hidden';
+      hid.name = submitter.name;
+      hid.value = submitter.value;
+      form.appendChild(hid);
+    }
+    var done = function() {
+      eds.forEach(function(ed) { ed.save(); });
+      // Strip any remaining blob: image references that failed to upload —
+      // they'd render as broken icons in the sent email.
+      form.querySelectorAll('textarea').forEach(function(t) {
+        if (t.value && t.value.indexOf('blob:') !== -1) {
+          t.value = t.value.replace(/<img[^>]*src=["']blob:[^"']*["'][^>]*>/gi, '');
+        }
+      });
+      form.submit();
+    };
+    Promise.all(eds.map(function(ed) { return ed.uploadImages(); })).then(done, done);
   });
 }
 <\/script>`;
