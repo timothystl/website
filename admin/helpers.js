@@ -76,11 +76,24 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
 .tab-nav{background:var(--linen);border-bottom:2px solid var(--border);overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin;}
 .tab-nav-inner{max-width:860px;margin:0 auto;padding:0 28px;display:flex;flex-wrap:nowrap;width:max-content;min-width:100%;}
 .tab{font-family:var(--sans);font-size:13px;font-weight:700;color:var(--gray);padding:12px 20px;text-decoration:none;border-bottom:3px solid transparent;margin-bottom:-2px;display:inline-block;white-space:nowrap;flex-shrink:0;transition:color .15s;}
-@media (max-width:600px){.tab-nav-inner{padding:0 12px;}.tab{padding:12px 14px;font-size:12px;}}
 .tab:hover{color:var(--steel);}
 .tab-active{color:var(--steel);border-bottom-color:var(--amber);}
 .tab-external{color:var(--gray);font-weight:600;border-left:1px solid var(--border);margin-left:8px;padding-left:24px;}
 .tab-external:hover{color:var(--steel);}
+.nav-toggle{display:none;background:transparent;border:0;padding:8px;margin-right:-8px;cursor:pointer;color:white;}
+.nav-toggle svg{display:block;width:24px;height:24px;}
+@media (max-width:720px){
+  .topbar{padding:0 16px;}
+  .topbar-links{display:none;}
+  .nav-toggle{display:inline-flex;align-items:center;}
+  .tab-nav{display:none;overflow:visible;border-bottom:2px solid var(--border);}
+  .tab-nav.is-open{display:block;}
+  .tab-nav-inner{display:block;width:auto;min-width:0;padding:6px 0;}
+  .tab{display:block;padding:12px 20px;border-bottom:1px solid var(--border);border-left:3px solid transparent;margin-bottom:0;}
+  .tab:last-child{border-bottom:none;}
+  .tab-active{border-left-color:var(--amber);background:rgba(212,146,42,.08);}
+  .tab-external{border-left:3px solid transparent;margin-left:0;padding-left:20px;}
+}
 .ni-row{display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;}
 .ni-row:last-child{border-bottom:none;}
 .ni-title{font-family:var(--serif);font-size:16px;color:var(--steel);flex:1;min-width:160px;}
@@ -149,6 +162,9 @@ export function topbarHtml(activeTab, user, extraLinks = '', pendingCount = 0) {
     ${extraLinks}
     <a href="/logout">Sign out</a>
   </div>
+  <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Open navigation" aria-expanded="false" aria-controls="tab-nav-scroll">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+  </button>
 </div>
 <nav class="tab-nav" id="tab-nav-scroll">
   <div class="tab-nav-inner">
@@ -166,7 +182,12 @@ export function topbarHtml(activeTab, user, extraLinks = '', pendingCount = 0) {
     <a href="https://volunteer.timothystl.org/admin" target="_blank" class="tab tab-external">Volunteer Admin ↗</a>
   </div>
 </nav>
-<script>(function(){var n=document.getElementById('tab-nav-scroll');if(!n)return;var a=n.querySelector('.tab-active');if(!a)return;var l=a.offsetLeft-(n.clientWidth-a.offsetWidth)/2;n.scrollLeft=Math.max(0,l);})();</script>`;
+<script>(function(){
+var n=document.getElementById('tab-nav-scroll');
+if(n){var a=n.querySelector('.tab-active');if(a){var l=a.offsetLeft-(n.clientWidth-a.offsetWidth)/2;n.scrollLeft=Math.max(0,l);}}
+var btn=document.getElementById('nav-toggle');
+if(btn&&n){btn.addEventListener('click',function(){var open=n.classList.toggle('is-open');btn.setAttribute('aria-expanded',open?'true':'false');});}
+})();</script>`;
 }
 
 // ── LOGIN PAGE ───────────────────────────────────────────────
