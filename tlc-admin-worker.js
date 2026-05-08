@@ -41,10 +41,15 @@ export default {
     try {
       return await this._fetch(request, env, ctx);
     } catch (e) {
-      console.error('Admin worker error:', e.stack || e.message);
-      return new Response('Something went wrong. Please try again or contact the site administrator.', {
-        status: 500, headers: { 'Content-Type': 'text/plain' }
-      });
+      const detail = e && (e.stack || e.message) ? (e.stack || e.message) : String(e);
+      console.error('Admin worker error:', detail);
+      // Admin portal is staff-only — surface the underlying error so it can
+      // actually be debugged without digging through Cloudflare tail logs.
+      return new Response(
+        'Something went wrong. Please try again or contact the site administrator.\n\n' +
+        '--- Error detail (share this with the developer) ---\n' + detail,
+        { status: 500, headers: { 'Content-Type': 'text/plain' } }
+      );
     }
   },
 
