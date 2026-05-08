@@ -200,6 +200,10 @@ export default {
       await env.DB.prepare("UPDATE site_settings SET value = ? WHERE key = 'give_url' AND value LIKE '%breezechms%'")
         .bind('https://give.tithe.ly/?formId=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8').run();
     } catch (_) {}
+    // Migrate gym_admin_email from old default to dinger@
+    try {
+      await env.DB.prepare("UPDATE site_settings SET value = 'dinger@timothystl.org' WHERE key = 'gym_admin_email' AND value = 'office@timothystl.org'").run();
+    } catch (_) {}
     // Auth tables
     try { await env.DB.prepare(DB_INIT_USERS).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_SESSIONS).run(); } catch (_) {}
