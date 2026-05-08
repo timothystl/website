@@ -73,9 +73,10 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
 .divider{border:none;border-top:1px solid var(--border);margin:24px 0;}
 .tag{font-family:var(--sans);font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--mist);color:var(--steel);}
 .preview-box{background:var(--linen);border:1px solid var(--border);border-radius:10px;padding:20px;margin-top:16px;font-size:13px;color:var(--gray);font-style:italic;}
-.tab-nav{background:var(--linen);border-bottom:2px solid var(--border);}
-.tab-nav-inner{max-width:860px;margin:0 auto;padding:0 28px;display:flex;}
-.tab{font-family:var(--sans);font-size:13px;font-weight:700;color:var(--gray);padding:12px 20px;text-decoration:none;border-bottom:3px solid transparent;margin-bottom:-2px;display:inline-block;transition:color .15s;}
+.tab-nav{background:var(--linen);border-bottom:2px solid var(--border);overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin;}
+.tab-nav-inner{max-width:860px;margin:0 auto;padding:0 28px;display:flex;flex-wrap:nowrap;width:max-content;min-width:100%;}
+.tab{font-family:var(--sans);font-size:13px;font-weight:700;color:var(--gray);padding:12px 20px;text-decoration:none;border-bottom:3px solid transparent;margin-bottom:-2px;display:inline-block;white-space:nowrap;flex-shrink:0;transition:color .15s;}
+@media (max-width:600px){.tab-nav-inner{padding:0 12px;}.tab{padding:12px 14px;font-size:12px;}}
 .tab:hover{color:var(--steel);}
 .tab-active{color:var(--steel);border-bottom-color:var(--amber);}
 .tab-external{color:var(--gray);font-weight:600;border-left:1px solid var(--border);margin-left:8px;padding-left:24px;}
@@ -149,7 +150,7 @@ export function topbarHtml(activeTab, user, extraLinks = '', pendingCount = 0) {
     <a href="/logout">Sign out</a>
   </div>
 </div>
-<nav class="tab-nav">
+<nav class="tab-nav" id="tab-nav-scroll">
   <div class="tab-nav-inner">
     ${showNewsTab        ? `<a href="/newsitems" class="tab${newsActive ? ' tab-active' : ''}">News &amp; Events${pendingDot}</a>` : ''}
     ${hp('ministries_edit') ? `<a href="/ministries" class="tab${activeTab === 'ministries' ? ' tab-active' : ''}">Ministries</a>` : ''}
@@ -164,7 +165,8 @@ export function topbarHtml(activeTab, user, extraLinks = '', pendingCount = 0) {
     <a href="https://volunteer.timothystl.org/scheduler" target="_blank" class="tab tab-external">Scheduler ↗</a>
     <a href="https://volunteer.timothystl.org/admin" target="_blank" class="tab tab-external">Volunteer Admin ↗</a>
   </div>
-</nav>`;
+</nav>
+<script>(function(){var n=document.getElementById('tab-nav-scroll');if(!n)return;var a=n.querySelector('.tab-active');if(!a)return;var l=a.offsetLeft-(n.clientWidth-a.offsetWidth)/2;n.scrollLeft=Math.max(0,l);})();</script>`;
 }
 
 // ── LOGIN PAGE ───────────────────────────────────────────────

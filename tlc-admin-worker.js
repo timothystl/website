@@ -616,9 +616,12 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
       });
     }
 
-    // ── GYM ROUTES ─────────────────────────────────────────────
-    const gymResult = await handleGymRoutes(path, method, url, request, env);
-    if (gymResult) return gymResult;
+    // ── PUBLIC GYM ROUTES (no auth) ────────────────────────────
+    // Group booking portal (/gym/book/:token/*) and iCal feeds (/gym/cal/*.ics)
+    if (path.startsWith('/gym/book/') || path.startsWith('/gym/cal/')) {
+      const r = await handleGymRoutes(path, method, url, request, env, null);
+      if (r) return r;
+    }
 
     // ── FORGOT / RESET PASSWORD ────────────────────────────────
     if (path === '/forgot-password') {
@@ -745,6 +748,15 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
     if (!currentUser) {
       if (path === '/login') return loginPage();
       return loginPage();
+    }
+
+    // ── GYM ADMIN ROUTES (auth + gym_manage) ───────────────────
+    if (path.startsWith('/gym-rentals')) {
+      if (!hasPermission(currentUser, 'gym_manage')) {
+        return new Response('Access denied.', { status: 403 });
+      }
+      const r = await handleGymRoutes(path, method, url, request, env, currentUser);
+      if (r) return r;
     }
 
     // ── LOGOUT ──
