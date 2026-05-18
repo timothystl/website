@@ -213,6 +213,7 @@ export default {
     // Migrate: newsletter approval workflow
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN approval_status TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN approved_by_username TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE gym_invoices ADD COLUMN booking_ids TEXT').run(); } catch (_) {}
     // Migrate: grant users_manage + audit_view to existing full-admin accounts that predate those permissions
     try {
       await env.DB.prepare(
