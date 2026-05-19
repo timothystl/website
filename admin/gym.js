@@ -1283,7 +1283,7 @@ ${portalHeader}
         `DTSTART:${toIcalDt(b.booking_date, b.start_time)}`,
         `DTEND:${toIcalDt(b.booking_date, b.end_time)}`,
         `SUMMARY:${(b.group_name || 'Rental').replace(/[,;\\]/g,' ')} — ${fmt12h(b.start_time)}–${fmt12h(b.end_time)}`,
-        b.notes ? `DESCRIPTION:${b.notes.replace(/\n/g,'\\n').replace(/[,;\\]/g,' ')}` : '',
+        b.notes ? `DESCRIPTION:${b.notes.replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/:/g,'\\:').replace(/\n/g,'\\n')}` : '',
         'LOCATION:Timothy Lutheran Church Gym',
         'END:VEVENT',
       ].filter(Boolean).join('\r\n')).join('\r\n');
@@ -1433,7 +1433,7 @@ ${portalHeader}
           confirmedHtml = order.map(n => orgAccordion(n, groups[n], 'confirmed')).join('');
         }
 
-        const confirmAllBtn = holdsRes.results.length > 1
+        const confirmAllBtn = holdsRes.results.length >= 1
           ? `<form method="POST" action="/gym-rentals/bookings/confirm-all-holds" onsubmit="return confirm('Confirm all ${holdsRes.results.length} holds and generate invoices?')" style="display:inline;"><button type="submit" class="btn btn-sm btn-primary">Confirm All (${holdsRes.results.length})</button></form>`
           : '';
 
@@ -2203,7 +2203,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
           const subject = `Gym Rental Confirmed — ${group.name} — ${formatDate(booking.booking_date)}`;
           const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_admin_email'").first();
           const toEmails = [adminEmailRow?.value || 'office@timothystl.org'];
-          if (group.contact_email) toEmails.push(group.contact_email);
+          if (group.email) toEmails.push(group.email);
           try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {}
           await addGymBookingToGCal(env, { ...booking, group_name: group.name });
         }
@@ -2337,12 +2337,12 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         // Notify group
         if (booking) {
           const group = await env.DB.prepare('SELECT * FROM gym_groups WHERE id=?').bind(booking.group_id).first();
-          if (group?.contact_email) {
+          if (group?.email) {
             try {
               await sendTransactionalEmail(env, {
                 subject: `Gym rental cancelled — ${formatDate(booking.booking_date)}`,
                 htmlContent: `<p>Hi ${group.name},</p><p>Your gym rental booking has been cancelled by the church office:</p><ul><li><strong>Date:</strong> ${formatDate(booking.booking_date)}</li><li><strong>Time:</strong> ${fmt12h(booking.start_time)} – ${fmt12h(booking.end_time)}</li></ul><p>If you have questions, please contact <a href="mailto:office@timothystl.org">office@timothystl.org</a>.</p>`,
-                toEmails: [group.contact_email],
+                toEmails: [group.email],
               });
             } catch (_) {}
           }
@@ -2590,7 +2590,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
       if (path.startsWith('/gym-rentals/recurring/review/') && method === 'GET') {
         const rid = parseInt(path.split('/').pop(), 10);
         const rec = await env.DB.prepare(
-          `SELECT r.*, g.name as group_name, g.contact_email FROM gym_recurrences r LEFT JOIN gym_groups g ON g.id = r.group_id WHERE r.id = ?`
+          `SELECT r.*, g.name as group_name, g.email as group_email FROM gym_recurrences r LEFT JOIN gym_groups g ON g.id = r.group_id WHERE r.id = ?`
         ).bind(rid).first();
         if (!rec) return new Response('Not found', { status: 404 });
 
@@ -2733,7 +2733,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals/recurring">← Recurring
         // Notify group
         const group = recGroup;
         const DOW_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-        if (group?.contact_email) {
+        if (group?.email) {
           try {
             await sendTransactionalEmail(env, {
               subject: `Recurring rental approved — ${DOW_NAMES[rec.day_of_week]}s ${fmt12h(rec.start_time)}–${fmt12h(rec.end_time)}`,
@@ -2745,7 +2745,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals/recurring">← Recurring
   <li><strong>Date range:</strong> ${formatDate(rec.start_date)} – ${formatDate(rec.end_date)}</li>
 </ul>
 <p>You can view your bookings at your portal link. Invoices will be sent monthly. Questions? Reply to this email or contact <a href="mailto:office@timothystl.org">office@timothystl.org</a>.</p>`,
-              toEmails: [group.contact_email],
+              toEmails: [group.email],
             });
           } catch (_) {}
         }
@@ -2813,7 +2813,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals/recurring">← Recurring
 <p>Please remit payment to Timothy Lutheran Church. Questions? <a href="mailto:office@timothystl.org">office@timothystl.org</a></p>`;
           const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_admin_email'").first();
           const toEmails = [adminEmailRow?.value || 'office@timothystl.org'];
-          if (group.contact_email) toEmails.push(group.contact_email);
+          if (group.email) toEmails.push(group.email);
           try {
             await sendTransactionalEmail(env, {
               subject: `Gym Rental Invoice — ${group.name} — ${new Date(`${month}-15`).toLocaleDateString('en-US',{month:'long',year:'numeric'})}`,
