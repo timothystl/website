@@ -634,7 +634,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
     // ── PUBLIC GYM ROUTES (no auth) ────────────────────────────
     // Group booking portal (/gym/book/:token/*) and iCal feeds (/gym/cal/*.ics)
     if (path.startsWith('/gym/book/') || path.startsWith('/gym/cal/')) {
-      const r = await handleGymRoutes(path, method, url, request, env, null);
+      const r = await handleGymRoutes(path, method, url, request, env, null, ctx);
       if (r) return r;
     }
 
@@ -770,7 +770,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
       if (!hasPermission(currentUser, 'gym_manage')) {
         return new Response('Access denied.', { status: 403 });
       }
-      const r = await handleGymRoutes(path, method, url, request, env, currentUser);
+      const r = await handleGymRoutes(path, method, url, request, env, currentUser, ctx);
       if (r) return r;
     }
 
