@@ -74,11 +74,19 @@ async function getPaymentLink(env) {
   return (await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_payment_link'").first())?.value || PAYMENT_LINK_DEFAULT;
 }
 
+async function getGroupRate(env, group) {
+  if (group?.rate) return parseFloat(group.rate);
+  const row = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_rate_per_hour'").first();
+  return parseFloat(row?.value || '25');
+}
+
 function buildGymInvoiceEmailHtml(inv, group, bookingOrBookings, paymentLink = PAYMENT_LINK_DEFAULT) {
   const invNum   = `GYM-${inv.id.toString().padStart(4,'0')}`;
   const hours    = parseFloat(inv.total_hours  || 0);
   const rate     = parseFloat(inv.rate         || 0);
   const total    = parseFloat(inv.total_amount || 0);
+  const amountCents = Math.round(total * 100);
+  const payLink  = amountCents > 0 ? `${paymentLink}&amount=${amountCents}` : paymentLink;
   const bookings = Array.isArray(bookingOrBookings) ? bookingOrBookings : [bookingOrBookings];
   const isMulti  = bookings.length > 1;
 
@@ -143,7 +151,7 @@ function buildGymInvoiceEmailHtml(inv, group, bookingOrBookings, paymentLink = P
     <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#C9973A;margin-bottom:10px;">Payment</div>
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
       <tr><td align="center">
-        <a href="${paymentLink}" style="display:inline-block;background:#00DB72;color:white;font-weight:700;font-size:16px;padding:14px 48px;border-radius:6px;text-decoration:none;letter-spacing:.01em;">Pay Online →</a>
+        <a href="${payLink}" style="display:inline-block;background:#00DB72;color:white;font-weight:700;font-size:16px;padding:14px 48px;border-radius:6px;text-decoration:none;letter-spacing:.01em;">Pay Online →</a>
       </td></tr>
     </table>
     <div style="font-size:13px;color:#7A6E60;text-align:center;margin-bottom:16px;">— or —</div>
@@ -444,7 +452,9 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
       const _pc = parseInt(url.searchParams.get('created') || '0', 10);
       const _ps = parseInt(url.searchParams.get('skipped') || '0', 10);
       const paymentLink = await getPaymentLink(env);
-      const _payBtn = `<div style="margin-top:12px;"><a href="${paymentLink}" target="_blank" style="display:inline-block;background:#00DB72;color:white;font-weight:700;font-size:14px;padding:10px 28px;border-radius:6px;text-decoration:none;">Pay Invoice Online →</a></div>`;
+      const _alertAmt = url.searchParams.get('amount');
+      const _payLink = _alertAmt ? `${paymentLink}&amount=${_alertAmt}` : paymentLink;
+      const _payBtn = `<div style="margin-top:12px;"><a href="${_payLink}" target="_blank" style="display:inline-block;background:#00DB72;color:white;font-weight:700;font-size:14px;padding:10px 28px;border-radius:6px;text-decoration:none;">Pay Invoice Online →</a></div>`;
       const portalAlert = (portalMsg || '').startsWith('holds') ? `<div class="alert alert-success">✓ ${_pc} hold${_pc===1?'':'s'} placed! The church office will review and confirm your dates — you'll receive an invoice by email once confirmed.${_ps > 0 ? ` (${_ps} slot${_ps===1?'':'s'} were already taken and skipped.)` : ''}</div>`
         : portalMsg === 'nohold' ? `<div class="alert alert-error">No slots could be booked — they may have been taken or blocked. Please choose different times.</div>`
         : portalMsg === 'hold' ? `<div class="alert alert-success">✓ Hold placed! The church office will review and confirm your date — you'll receive an invoice by email.</div>`
@@ -515,8 +525,7 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
         }
         calHtml += '</div>';
 
-        const rateRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_rate_per_hour'").first();
-        const rate = parseFloat(rateRow?.value || '25').toFixed(2);
+        const rate = (await getGroupRate(env, group)).toFixed(2);
 
         return portalHtml(`
 ${portalHeader}
@@ -775,8 +784,7 @@ function patternSelect(doSelect) {
           : errParam === 'agree'     ? `<div class="alert alert-error">Please check the payment agreement box to confirm a booking.</div>`
           : '';
 
-        const rateRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'gym_rate_per_hour'").first();
-        const rate = parseFloat(rateRow?.value || '25').toFixed(2);
+        const rate = (await getGroupRate(env, group)).toFixed(2);
 
         return portalHtml(`
 ${portalHeader}
@@ -926,8 +934,7 @@ function calcTotal() {
         const bookingId = bRes.meta.last_row_id;
 
         // Invoice
-        const rateRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'gym_rate_per_hour'").first();
-        const rate    = parseFloat(rateRow?.value || '25');
+        const rate    = await getGroupRate(env, group);
         const hours   = calcHours(fields.start_time, fields.end_time);
         const total   = Math.round(hours * rate * 100) / 100;
         const invoiceDate = new Date().toISOString().split('T')[0];
@@ -946,7 +953,7 @@ function calcTotal() {
         try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {}
         await addGymBookingToGCal(env, { ...fields, group_name: group.name });
 
-        return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?msg=confirmed` } });
+        return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?msg=confirmed&amount=${Math.round(total * 100)}` } });
       }
 
       // ── CONVERT HOLD → CONFIRMED ──────────────────────────────
@@ -961,8 +968,7 @@ function calcTotal() {
         await env.DB.prepare("UPDATE gym_bookings SET status='confirmed', hold_expires_at=NULL WHERE id=?").bind(bid).run();
 
         // Invoice
-        const rateRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'gym_rate_per_hour'").first();
-        const rate    = parseFloat(rateRow?.value || '25');
+        const rate    = await getGroupRate(env, group);
         const hours   = calcHours(booking.start_time, booking.end_time);
         const total   = Math.round(hours * rate * 100) / 100;
         const invoiceDate = new Date().toISOString().split('T')[0];
@@ -980,7 +986,7 @@ function calcTotal() {
         try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {}
         await addGymBookingToGCal(env, { ...booking, group_name: group.name });
 
-        return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?msg=converted` } });
+        return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?msg=converted&amount=${Math.round(total * 100)}` } });
       }
 
       // ── RELEASE OWN HOLD ──────────────────────────────────────
@@ -999,16 +1005,31 @@ function calcTotal() {
         ]);
         const histErr = url.searchParams.get('err') === 'agree' ? `<div class="alert alert-error">Please check the payment agreement box to confirm your hold.</div>` : '';
 
+        // Build invoice amount map for confirmed bookings (so pay link can pre-fill amount)
+        const unpaidInvoices = await env.DB.prepare(
+          "SELECT booking_id, booking_ids, total_amount FROM gym_invoices WHERE group_id=? AND status='unpaid'"
+        ).bind(group.id).all();
+        const invoiceAmtMap = new Map();
+        for (const inv of unpaidInvoices.results) {
+          const cents = Math.round(parseFloat(inv.total_amount || 0) * 100);
+          if (inv.booking_id) invoiceAmtMap.set(inv.booking_id, cents);
+          if (inv.booking_ids) {
+            try { for (const bid of JSON.parse(inv.booking_ids)) invoiceAmtMap.set(bid, cents); } catch (_) {}
+          }
+        }
+
         const upHtml = upcoming.results.length === 0
           ? `<div style="padding:24px;text-align:center;color:var(--gray);font-size:14px;">No upcoming bookings.</div>`
           : upcoming.results.map(b => {
               const isHold = b.status === 'hold';
               const exp = b.hold_expires_at ? new Date(b.hold_expires_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '';
+              const bAmt = invoiceAmtMap.get(b.id);
+              const payHref = bAmt ? `${paymentLink}&amount=${bAmt}` : paymentLink;
               return `
 <div class="booking-row">
   <div style="flex:1;">
     <div class="booking-date">${fmtBookingDate(b.booking_date)}</div>
-    <div class="booking-time">${fmt12h(b.start_time)} \u2013 ${fmt12h(b.end_time)}</div>
+    <div class="booking-time">${fmt12h(b.start_time)} – ${fmt12h(b.end_time)}</div>
     ${isHold ? `<div style="font-size:11px;color:#7A4F00;margin-top:2px;">Hold expires ${exp}</div>` : ''}
   </div>
   <span class="badge ${isHold ? 'badge-hold' : 'badge-confirmed'}">${isHold ? 'Pending Review' : 'Confirmed'}</span>
@@ -1017,7 +1038,7 @@ function calcTotal() {
     <form method="POST" action="/gym/book/${token}/release-hold/${b.id}" onsubmit="return confirm('Release this hold?')">
       <button type="submit" class="btn btn-sm btn-danger">Cancel Request</button>
     </form>
-  </div>` : `<a href="${paymentLink}" target="_blank" class="btn btn-sm btn-sage" style="text-decoration:none;">Pay Online →</a>`}
+  </div>` : `<a href="${payHref}" target="_blank" class="btn btn-sm btn-sage" style="text-decoration:none;">Pay Online →</a>`}
 </div>`;
             }).join('');
 
@@ -1117,8 +1138,7 @@ ${portalHeader}
         if (slots.length > 20)
           return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?err=ratelimit` } });
 
-        const rateRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_rate_per_hour'").first();
-        const rate    = parseFloat(rateRow?.value || '25');
+        const rate    = await getGroupRate(env, group);
         const invoiceDate = new Date().toISOString().split('T')[0];
         const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_admin_email'").first();
         const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
@@ -1215,7 +1235,7 @@ ${portalHeader}
         </div>
       </div>
       <div style="margin-top:8px;padding:14px 16px;background:var(--mist);border-radius:8px;font-size:13px;color:var(--steel);line-height:1.6;">
-        Rental rate is $${(await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_rate_per_hour'").first())?.value||'25'}/hr. You will receive a monthly invoice once your request is approved.
+        Rental rate is $${(await getGroupRate(env, group)).toFixed(2)}/hr. You will receive a monthly invoice once your request is approved.
       </div>
       <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;">
         <button type="submit" class="btn btn-primary">Submit Request →</button>
@@ -1587,6 +1607,10 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>`)
         <input type="number" name="max_active_holds" value="3" min="1" max="20">
       </div>
       <div class="form-group">
+        <label>Custom rate ($/hr) <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— leave blank to use global default</span></label>
+        <input type="number" name="rate" step="0.01" min="0" placeholder="e.g. 20.00">
+      </div>
+      <div class="form-group">
         <label>Notes <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— internal only, not shown to group</span></label>
         <textarea name="notes" maxlength="1000" placeholder="Internal notes about this group…"></textarea>
       </div>
@@ -1603,12 +1627,13 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>`)
       if (path === '/gym-rentals/groups/create' && method === 'POST') {
         const form = await request.formData();
         const token = crypto.randomUUID().replace(/-/g, '');
+        const customRate = parseFloat(form.get('rate') || '') || null;
         await env.DB.prepare(
-          'INSERT INTO gym_groups (name, contact, email, phone, notes, access_token, max_active_holds) VALUES (?, ?, ?, ?, ?, ?, ?)'
+          'INSERT INTO gym_groups (name, contact, email, phone, notes, access_token, max_active_holds, rate) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
         ).bind(
           form.get('name')||'', form.get('contact')||'', form.get('email')||'',
           form.get('phone')||'', form.get('notes')||'', token,
-          parseInt(form.get('max_active_holds')||'3', 10)
+          parseInt(form.get('max_active_holds')||'3', 10), customRate
         ).run();
         const row = await env.DB.prepare('SELECT id FROM gym_groups WHERE access_token = ?').bind(token).first();
         return new Response('', { status: 302, headers: { Location: `/gym-rentals/groups/edit/${row.id}?msg=created` } });
@@ -1668,6 +1693,10 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>`)
         <input type="number" name="max_active_holds" value="${g.max_active_holds||3}" min="1" max="20">
       </div>
       <div class="form-group">
+        <label>Custom rate ($/hr) <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— leave blank to use global default</span></label>
+        <input type="number" name="rate" step="0.01" min="0" value="${g.rate != null ? g.rate : ''}" placeholder="e.g. 20.00">
+      </div>
+      <div class="form-group">
         <label>Notes <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— internal only</span></label>
         <textarea name="notes" maxlength="1000">${(g.notes||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</textarea>
       </div>
@@ -1692,8 +1721,9 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>`)
       if (path.startsWith('/gym-rentals/groups/update/') && method === 'POST') {
         const gid = parseInt(path.split('/').pop(), 10);
         const form = await request.formData();
-        await env.DB.prepare('UPDATE gym_groups SET name=?,contact=?,email=?,phone=?,notes=?,max_active_holds=? WHERE id=?')
-          .bind(form.get('name')||'', form.get('contact')||'', form.get('email')||'', form.get('phone')||'', form.get('notes')||'', parseInt(form.get('max_active_holds')||'3',10), gid).run();
+        const updatedRate = parseFloat(form.get('rate') || '') || null;
+        await env.DB.prepare('UPDATE gym_groups SET name=?,contact=?,email=?,phone=?,notes=?,max_active_holds=?,rate=? WHERE id=?')
+          .bind(form.get('name')||'', form.get('contact')||'', form.get('email')||'', form.get('phone')||'', form.get('notes')||'', parseInt(form.get('max_active_holds')||'3',10), updatedRate, gid).run();
         return new Response('', { status: 302, headers: { Location: `/gym-rentals/groups/edit/${gid}?msg=saved` } });
       }
 
@@ -2059,7 +2089,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         <textarea name="notes" maxlength="1000" placeholder="e.g. Basketball practice, weekly session">${selNotes.replace(/</g,'&lt;')}</textarea>
       </div>
       <div style="background:var(--mist);border-radius:8px;padding:14px 16px;margin-bottom:18px;font-family:var(--sans);font-size:13px;color:var(--charcoal);">
-        Current rate: <strong>$${rate}/hr</strong> — Invoice will be generated and emailed to the group automatically.
+        Global rate: <strong>$${rate}/hr</strong> — Invoice will use the group's custom rate if set, otherwise this rate. Invoice emailed to the group automatically.
       </div>
       <div class="btn-row">
         <button type="submit" class="btn btn-primary">Create Booking &amp; Send Invoice →</button>
@@ -2097,9 +2127,9 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         ).bind(group_id, booking_date, start_time, end_time, notes).run();
         const bookingId = bRes.meta.last_row_id;
 
-        // Fetch rate and calculate invoice
-        const rateRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'gym_rate_per_hour'").first();
-        const rate  = parseFloat(rateRow?.value || '25');
+        // Fetch group and calculate invoice using per-group rate
+        const group   = await env.DB.prepare('SELECT * FROM gym_groups WHERE id = ?').bind(group_id).first();
+        const rate  = await getGroupRate(env, group);
         const hours = calcHours(start_time, end_time);
         const total = Math.round(hours * rate * 100) / 100;
         const invoiceDate = new Date().toISOString().split('T')[0];
@@ -2109,9 +2139,8 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         ).bind(group_id, bookingId, invoiceDate, booking_date, booking_date, hours, rate, total).run();
         const invoiceId = iRes.meta.last_row_id;
 
-        // Fetch records for email
+        // Fetch invoice for email
         const inv     = await env.DB.prepare('SELECT * FROM gym_invoices WHERE id = ?').bind(invoiceId).first();
-        const group   = await env.DB.prepare('SELECT * FROM gym_groups WHERE id = ?').bind(group_id).first();
         const booking = { booking_date, start_time, end_time, notes };
 
         const pymtLink  = await getPaymentLink(env);
@@ -2203,8 +2232,8 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         if (!booking) return new Response('', { status: 302, headers: { Location: '/gym-rentals/bookings?msg=saved' } });
         await env.DB.prepare("UPDATE gym_bookings SET status='confirmed', hold_expires_at=NULL WHERE id=?").bind(bid).run();
         // Generate invoice
-        const rateRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_rate_per_hour'").first();
-        const rate  = parseFloat(rateRow?.value || '25');
+        const group = await env.DB.prepare('SELECT * FROM gym_groups WHERE id=?').bind(booking.group_id).first();
+        const rate  = await getGroupRate(env, group);
         const hours = calcHours(booking.start_time, booking.end_time);
         const total = Math.round(hours * rate * 100) / 100;
         const invoiceDate = new Date().toISOString().split('T')[0];
@@ -2213,7 +2242,6 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         ).bind(booking.group_id, bid, invoiceDate, booking.booking_date, booking.booking_date, hours, rate, total).run();
         const invoiceId = iRes.meta.last_row_id;
         const inv   = await env.DB.prepare('SELECT * FROM gym_invoices WHERE id=?').bind(invoiceId).first();
-        const group = await env.DB.prepare('SELECT * FROM gym_groups WHERE id=?').bind(booking.group_id).first();
         if (group) {
           const pymtLink  = await getPaymentLink(env);
           const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, booking, pymtLink);
@@ -2230,8 +2258,6 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
       // ── CONFIRM ALL HOLDS ─────────────────────────────────────
       if (path === '/gym-rentals/bookings/confirm-all-holds' && method === 'POST') {
         const allHolds = await env.DB.prepare("SELECT * FROM gym_bookings WHERE status='hold'").all();
-        const rateRow  = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_rate_per_hour'").first();
-        const rate     = parseFloat(rateRow?.value || '25');
         const invoiceDate = new Date().toISOString().split('T')[0];
         const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_admin_email'").first();
         const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
@@ -2254,6 +2280,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
           if (group) {
             for (const b of bookings) b.group_name = group.name;
           }
+          const rate = await getGroupRate(env, group);
           const totalHours = bookings.reduce((s, b) => s + calcHours(b.start_time, b.end_time), 0);
           const totalAmount = Math.round(totalHours * rate * 100) / 100;
           const allDates = bookings.map(b => b.booking_date).sort();
@@ -2283,8 +2310,6 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         const ids = form.getAll('ids').map(id => parseInt(id, 10)).filter(Boolean);
         if (!ids.length) return new Response('', { status: 302, headers: { Location: '/gym-rentals' } });
 
-        const rateRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_rate_per_hour'").first();
-        const rate    = parseFloat(rateRow?.value || '25');
         const invoiceDate = new Date().toISOString().split('T')[0];
         const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_admin_email'").first();
         const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
@@ -2305,6 +2330,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
             await addGymBookingToGCal(env, { ...booking, group_name: '' });
           }
           const group = await env.DB.prepare('SELECT * FROM gym_groups WHERE id=?').bind(groupId).first();
+          const rate = await getGroupRate(env, group);
           const totalHours = bookings.reduce((s, b) => s + calcHours(b.start_time, b.end_time), 0);
           const totalAmount = Math.round(totalHours * rate * 100) / 100;
           const allDates = bookings.map(b => b.booking_date).sort();
@@ -2514,13 +2540,26 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals/invoices">\u2190 Invoice
     <hr style="border:none;border-top:1px solid var(--border);margin:24px 0;">
     <div style="background:var(--linen);border-radius:8px;padding:16px 20px;">
       <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--amber);margin-bottom:10px;">Payment</div>
-      <div style="text-align:center;margin-bottom:14px;"><a href="${paymentLink}" target="_blank" style="display:inline-block;background:#00DB72;color:white;font-weight:700;font-size:15px;padding:12px 36px;border-radius:6px;text-decoration:none;">Pay Online \u2192</a></div>
+      <div style="text-align:center;margin-bottom:14px;"><a href="${paymentLink}&amount=${Math.round(total * 100)}" target="_blank" style="display:inline-block;background:#00DB72;color:white;font-weight:700;font-size:15px;padding:12px 36px;border-radius:6px;text-decoration:none;">Pay Online \u2192</a></div>
       <div style="font-size:13px;color:var(--gray);text-align:center;margin-bottom:10px;">\u2014 or \u2014</div>
       <div style="font-size:14px;color:var(--charcoal);line-height:1.75;">Make check payable to <strong>Timothy Lutheran Church</strong> and bring to the office or mail to 4666 Fyler Ave, St. Louis, MO 63116.</div>
     </div>
+    <hr style="border:none;border-top:1px solid var(--border);margin:20px 0 16px;">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:10px;">Adjust Invoice</div>
+    <form method="POST" action="/gym-rentals/invoices/edit-amount/${iid}" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+      <div class="form-group" style="margin:0;">
+        <label style="font-size:11px;margin-bottom:4px;">Total ($)</label>
+        <input type="number" name="total_amount" step="0.01" min="0" value="${total.toFixed(2)}" style="width:110px;">
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label style="font-size:11px;margin-bottom:4px;">Rate ($/hr)</label>
+        <input type="number" name="rate" step="0.01" min="0" value="${rate.toFixed(2)}" style="width:90px;">
+      </div>
+      <button type="submit" class="btn btn-sm btn-secondary" style="margin-bottom:1px;">Save &amp; Update</button>
+    </form>
   </div>
 </div>
-<style>@media print{.topbar,.tab-nav,.btn-row{display:none!important;}.wrap{padding:0!important;max-width:none!important;}#invoice-print{border:none!important;box-shadow:none!important;}}</style>`, `Invoice ${invNum}`);
+<style>@media print{.topbar,.tab-nav,.btn-row{display:none!important;}.wrap{padding:0!important;max-width:none!important;}#invoice-print{border:none!important;box-shadow:none!important;}.form-group,form[action*="edit-amount"]{display:none!important;}}</style>`, `Invoice ${invNum}`);
       }
 
             // ── TOGGLE INVOICE PAID / UNPAID ──────────────────────────
@@ -2530,6 +2569,18 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals/invoices">\u2190 Invoice
         if (inv) await env.DB.prepare('UPDATE gym_invoices SET status=? WHERE id=?').bind(inv.status==='paid'?'unpaid':'paid', iid).run();
         const ref = request.headers.get('Referer') || '';
         return new Response('', { status: 302, headers: { Location: ref.includes('/view/') ? `/gym-rentals/invoices/view/${iid}?msg=saved` : `/gym-rentals/invoices?msg=saved` } });
+      }
+
+      // ── EDIT INVOICE AMOUNT ───────────────────────────────────
+      if (path.startsWith('/gym-rentals/invoices/edit-amount/') && method === 'POST') {
+        const iid = parseInt(path.split('/').pop(), 10);
+        const form = await request.formData();
+        const newTotal = parseFloat(form.get('total_amount') || '0');
+        const newRate  = parseFloat(form.get('rate') || '0');
+        if (!isNaN(newTotal) && newTotal >= 0) {
+          await env.DB.prepare('UPDATE gym_invoices SET total_amount=?, rate=? WHERE id=?').bind(newTotal, newRate, iid).run();
+        }
+        return new Response('', { status: 302, headers: { Location: `/gym-rentals/invoices/view/${iid}?msg=saved` } });
       }
 
       // ── DELETE INVOICE ────────────────────────────────────────
@@ -2806,8 +2857,8 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals/recurring">← Recurring
         if (newSessions.length === 0)
           return new Response('', { status: 302, headers: { Location: `/gym-rentals/recurring/review/${rid}?msg=noinvoice` } });
 
-        const rateRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_rate_per_hour'").first();
-        const rate = parseFloat(rateRow?.value || '25');
+        const group = await env.DB.prepare('SELECT * FROM gym_groups WHERE id=?').bind(rec.group_id).first();
+        const rate = await getGroupRate(env, group);
         const hours = calcHours(rec.start_time, rec.end_time);
         const totalHours  = hours * newSessions.length;
         const totalAmount = Math.round(totalHours * rate * 100) / 100;
@@ -2820,9 +2871,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals/recurring">← Recurring
         ).run();
         const invoiceId = iRes.meta.last_row_id;
 
-        // Mark each session's booking_id on the invoice (link first session; others via recurrence_id)
         const inv   = await env.DB.prepare('SELECT * FROM gym_invoices WHERE id=?').bind(invoiceId).first();
-        const group = await env.DB.prepare('SELECT * FROM gym_groups WHERE id=?').bind(rec.group_id).first();
         const DOW_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
         if (group) {
           const sessionList = newSessions.map(b => `<li>${formatDate(b.booking_date)} — ${fmt12h(b.start_time)}–${fmt12h(b.end_time)}</li>`).join('');
