@@ -85,6 +85,8 @@ function buildGymInvoiceEmailHtml(inv, group, bookingOrBookings, paymentLink = P
   const hours    = parseFloat(inv.total_hours  || 0);
   const rate     = parseFloat(inv.rate         || 0);
   const total    = parseFloat(inv.total_amount || 0);
+  const rateType = inv.rate_type || 'hourly';
+  const rateLabel = rateType === 'daily' ? '/day' : '/hr';
   const amountCents = Math.round(total * 100);
   const payLink  = amountCents > 0 ? `${paymentLink}&amount=${amountCents}` : paymentLink;
   const bookings = Array.isArray(bookingOrBookings) ? bookingOrBookings : [bookingOrBookings];
@@ -93,24 +95,32 @@ function buildGymInvoiceEmailHtml(inv, group, bookingOrBookings, paymentLink = P
   let rentalRows;
   if (!isMulti) {
     const b = bookings[0] || {};
+    const durationRow = rateType === 'daily' ? '' :
+      `<tr style="border-bottom:1px solid #EDE9E0;"><td style="padding:10px 0;font-size:14px;color:#4A4860;">Duration</td><td style="padding:10px 0;font-size:14px;font-weight:600;color:#1A1A2A;text-align:right;">${hours} hr${hours !== 1 ? 's' : ''}</td></tr>`;
     rentalRows = `
     <tr style="border-bottom:1px solid #EDE9E0;"><td style="padding:10px 0;font-size:14px;color:#4A4860;">Date</td><td style="padding:10px 0;font-size:14px;font-weight:600;color:#1A1A2A;text-align:right;">${formatDate(b.booking_date)}</td></tr>
     <tr style="border-bottom:1px solid #EDE9E0;"><td style="padding:10px 0;font-size:14px;color:#4A4860;">Time</td><td style="padding:10px 0;font-size:14px;font-weight:600;color:#1A1A2A;text-align:right;">${fmt12h(b.start_time)} – ${fmt12h(b.end_time)}</td></tr>
-    <tr style="border-bottom:1px solid #EDE9E0;"><td style="padding:10px 0;font-size:14px;color:#4A4860;">Duration</td><td style="padding:10px 0;font-size:14px;font-weight:600;color:#1A1A2A;text-align:right;">${hours} hr${hours !== 1 ? 's' : ''}</td></tr>
-    <tr style="border-bottom:1px solid #EDE9E0;"><td style="padding:10px 0;font-size:14px;color:#4A4860;">Rate</td><td style="padding:10px 0;font-size:14px;color:#1A1A2A;text-align:right;">$${rate.toFixed(2)}/hr</td></tr>`;
+    ${durationRow}
+    <tr style="border-bottom:1px solid #EDE9E0;"><td style="padding:10px 0;font-size:14px;color:#4A4860;">Rate</td><td style="padding:10px 0;font-size:14px;color:#1A1A2A;text-align:right;">$${rate.toFixed(2)}${rateLabel}</td></tr>`;
   } else {
     const dateRows = bookings.map(b => {
       const bh = calcHours(b.start_time, b.end_time);
+      const subtotal = rateType === 'daily' ? rate : bh * rate;
+      const detail = rateType === 'daily'
+        ? `${fmt12h(b.start_time)}&ndash;${fmt12h(b.end_time)} &middot; $${subtotal.toFixed(2)}`
+        : `${fmt12h(b.start_time)}&ndash;${fmt12h(b.end_time)} &middot; ${bh} hr${bh !== 1 ? 's' : ''} &middot; $${subtotal.toFixed(2)}`;
       return `<tr style="border-bottom:1px solid #EDE9E0;">
         <td style="padding:8px 0;font-size:13px;color:#1A1A2A;font-weight:600;">${formatDate(b.booking_date)}</td>
-        <td style="padding:8px 0;font-size:13px;color:#4A4860;text-align:right;">${fmt12h(b.start_time)}&ndash;${fmt12h(b.end_time)} &middot; ${bh} hr${bh !== 1 ? 's' : ''} &middot; $${(bh * rate).toFixed(2)}</td>
+        <td style="padding:8px 0;font-size:13px;color:#4A4860;text-align:right;">${detail}</td>
       </tr>`;
     }).join('');
+    const totalHoursRow = rateType === 'daily' ? '' :
+      `<tr style="border-bottom:1px solid #EDE9E0;"><td style="padding:10px 0;font-size:14px;color:#4A4860;">Total Hours</td><td style="padding:10px 0;font-size:14px;font-weight:600;color:#1A1A2A;text-align:right;">${hours} hrs</td></tr>`;
     rentalRows = `
     <tr><td colspan="2" style="padding:4px 0 8px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#C9973A;">Rental Dates</td></tr>
     ${dateRows}
-    <tr style="border-bottom:1px solid #EDE9E0;"><td style="padding:10px 0;font-size:14px;color:#4A4860;">Rate</td><td style="padding:10px 0;font-size:14px;color:#1A1A2A;text-align:right;">$${rate.toFixed(2)}/hr</td></tr>
-    <tr style="border-bottom:1px solid #EDE9E0;"><td style="padding:10px 0;font-size:14px;color:#4A4860;">Total Hours</td><td style="padding:10px 0;font-size:14px;font-weight:600;color:#1A1A2A;text-align:right;">${hours} hrs</td></tr>`;
+    <tr style="border-bottom:1px solid #EDE9E0;"><td style="padding:10px 0;font-size:14px;color:#4A4860;">Rate</td><td style="padding:10px 0;font-size:14px;color:#1A1A2A;text-align:right;">$${rate.toFixed(2)}${rateLabel}</td></tr>
+    ${totalHoursRow}`;
   }
 
   return `<!DOCTYPE html>
@@ -2042,10 +2052,11 @@ updateSummary();
       // ── NEW BOOKING FORM ──────────────────────────────────────
       if (path === '/gym-rentals/bookings/new' && method === 'GET') {
         const groups = await env.DB.prepare('SELECT id, name, rate FROM gym_groups WHERE active = 1 ORDER BY name').all();
-        const selGroup    = url.searchParams.get('grp')   || '';
-        const selNotes    = url.searchParams.get('notes') || '';
-        const selRate     = url.searchParams.get('rate')  || '';
-        const selSlotsRaw = url.searchParams.get('slots') || '';
+        const selGroup     = url.searchParams.get('grp')       || '';
+        const selNotes     = url.searchParams.get('notes')     || '';
+        const selRate      = url.searchParams.get('rate')      || '';
+        const selRateType  = url.searchParams.get('rate_type') || 'hourly';
+        const selSlotsRaw  = url.searchParams.get('slots')     || '';
         const errParam    = url.searchParams.get('err');
         const errAlert    = errParam === 'nodates'  ? `<div class="alert alert-error">Please select at least one date and set its times.</div>`
           : errParam === 'times'    ? `<div class="alert alert-error">Each selected date needs a valid start and end time (end must be after start).</div>`
@@ -2166,7 +2177,18 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
       </div>
 
       <div class="form-group" style="margin-top:18px;">
-        <label>Rate override ($/hr) <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;" id="rate-hint">— leave blank to use group/global rate ($${globalRate}/hr)</span></label>
+        <label>Rate type</label>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-top:6px;">
+          <label style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:0;font-size:14px;cursor:pointer;">
+            <input type="radio" name="rate_type" value="hourly"${selRateType !== 'daily' ? ' checked' : ''}> Per hour
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:0;font-size:14px;cursor:pointer;">
+            <input type="radio" name="rate_type" value="daily"${selRateType === 'daily' ? ' checked' : ''}> Per day (flat rate)
+          </label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Rate override <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;" id="rate-hint">— leave blank to use group/global rate ($${globalRate}/hr)</span></label>
         <input type="number" name="rate_override" id="rate-override" step="0.01" min="0" placeholder="${globalRate}" value="${selRate}" style="max-width:140px;">
       </div>
       <div class="form-group">
@@ -2412,24 +2434,47 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
     document.getElementById('nbf').submit();
   });
 
+  /* Rate hint helpers */
+  function getRateUnit() {
+    var rt = document.querySelector('input[name="rate_type"]:checked');
+    return rt && rt.value === 'daily' ? '/day' : '/hr';
+  }
+  function updateRateHint(rateVal, isGlobal) {
+    var unit = getRateUnit();
+    var label = isGlobal ? 'group/global' : 'group';
+    document.getElementById('rate-hint').textContent = '— leave blank to use '+label+' rate ($'+parseFloat(rateVal).toFixed(2)+unit+')';
+    var ov = document.getElementById('rate-override');
+    if (!ov.value) ov.placeholder = parseFloat(rateVal).toFixed(2);
+  }
+  var _lastRate = null, _lastRateIsGlobal = true;
+
   /* Rate hint on group change */
   document.getElementById('group-sel').addEventListener('change', function() {
     var opt = this.options[this.selectedIndex];
     var grpRate = parseFloat(opt.getAttribute('data-rate') || '');
     if (!isNaN(grpRate) && grpRate > 0) {
-      document.getElementById('rate-hint').textContent = '— leave blank to use group rate ($'+grpRate.toFixed(2)+'/hr)';
-      var ov = document.getElementById('rate-override');
-      if (!ov.value) ov.placeholder = grpRate.toFixed(2);
+      _lastRate = grpRate.toFixed(2); _lastRateIsGlobal = false;
+      updateRateHint(_lastRate, false);
     } else if (this.value) {
       fetch('/gym-rentals/api/group-rate?id='+this.value)
         .then(function(r){ return r.json(); })
         .then(function(data) {
-          var r = parseFloat(data.rate || 25).toFixed(2);
-          document.getElementById('rate-hint').textContent = '— leave blank to use group/global rate ($'+r+'/hr)';
-          var ov = document.getElementById('rate-override');
-          if (!ov.value) ov.placeholder = r;
+          _lastRate = parseFloat(data.rate || 25).toFixed(2); _lastRateIsGlobal = true;
+          updateRateHint(_lastRate, true);
         }).catch(function(){});
     }
+  });
+
+  /* Rate hint on rate_type change */
+  document.querySelectorAll('input[name="rate_type"]').forEach(function(radio) {
+    radio.addEventListener('change', function() {
+      if (_lastRate) updateRateHint(_lastRate, _lastRateIsGlobal);
+      else {
+        var hint = document.getElementById('rate-hint');
+        var unit = getRateUnit();
+        hint.textContent = hint.textContent.replace(/\/hr|\/day/, unit);
+      }
+    });
   });
 
   /* Restore pre-filled slots from back-navigation (read from DOM, no JS injection) */
@@ -2464,10 +2509,11 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         const group_id     = parseInt(form.get('group_id') || '0', 10);
         const slotsRaw     = form.get('slots') || '';
         const rate_override = parseFloat(form.get('rate_override') || '') || null;
+        const rate_type    = form.get('rate_type') === 'daily' ? 'daily' : 'hourly';
         const notes        = form.get('notes') || '';
 
         const backUrl = (err) => {
-          const p = new URLSearchParams({ err, grp: group_id, notes });
+          const p = new URLSearchParams({ err, grp: group_id, notes, rate_type });
           if (rate_override) p.set('rate', rate_override);
           if (slotsRaw) p.set('slots', slotsRaw);
           return `/gym-rentals/bookings/new?${p}`;
@@ -2499,7 +2545,10 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         const validRows   = rows.filter(r => !r.blocked && !r.conflict);
         const skippedRows = rows.filter(r => r.blocked || r.conflict);
         const totalHours  = Math.round(validRows.reduce((a, r) => a + r.hours, 0) * 100) / 100;
-        const grandTotal  = Math.round(totalHours * rate * 100) / 100;
+        const grandTotal  = rate_type === 'daily'
+          ? Math.round(validRows.length * rate * 100) / 100
+          : Math.round(totalHours * rate * 100) / 100;
+        const rateLabel   = rate_type === 'daily' ? '/day' : '/hr';
 
         const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
         const reviewLabel = (d) => { const dt = new Date(d + 'T12:00:00'); return DAYS[dt.getDay()] + ' ' + dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); };
@@ -2508,8 +2557,8 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <tr>
   <td style="padding:10px 12px;font-family:var(--sans);font-size:14px;font-weight:600;color:var(--steel);">${reviewLabel(r.date)}</td>
   <td style="padding:10px 12px;font-size:13px;color:var(--charcoal);">${fmt12h(r.start_time)} – ${fmt12h(r.end_time)}</td>
-  <td style="padding:10px 12px;font-size:13px;color:var(--charcoal);text-align:right;">${r.hours} hr${r.hours !== 1 ? 's' : ''}</td>
-  <td style="padding:10px 12px;font-size:13px;font-weight:600;color:var(--charcoal);text-align:right;">$${(r.hours * rate).toFixed(2)}</td>
+  <td style="padding:10px 12px;font-size:13px;color:var(--charcoal);text-align:right;">${rate_type === 'daily' ? '—' : `${r.hours} hr${r.hours !== 1 ? 's' : ''}`}</td>
+  <td style="padding:10px 12px;font-size:13px;font-weight:600;color:var(--charcoal);text-align:right;">$${(rate_type === 'daily' ? rate : r.hours * rate).toFixed(2)}</td>
 </tr>`).join('');
 
         const skippedAlert = skippedRows.length > 0 ? `
@@ -2524,13 +2573,13 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
           `<input type="hidden" name="slot" value="${encodeURIComponent(JSON.stringify({date:r.date,start_time:r.start_time,end_time:r.end_time}))}">`
         ).join('');
 
-        const editBack = `/gym-rentals/bookings/new?grp=${group_id}&slots=${encodeURIComponent(slotsRaw)}&notes=${encodeURIComponent(notes)}${rate_override ? '&rate=' + rate_override : ''}`;
+        const editBack = `/gym-rentals/bookings/new?grp=${group_id}&slots=${encodeURIComponent(slotsRaw)}&notes=${encodeURIComponent(notes)}&rate_type=${rate_type}${rate_override ? '&rate=' + rate_override : ''}`;
 
         return html(`
 ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
 <div class="wrap">
   <div class="page-title">Review Booking</div>
-  <div class="page-sub">${group.name} — $${rate.toFixed(2)}/hr</div>
+  <div class="page-sub">${group.name} — $${rate.toFixed(2)}${rateLabel}</div>
   ${skippedAlert}
   ${validRows.length === 0 ? `<div class="alert alert-error">No valid dates remain. <a href="${editBack}">Go back</a>.</div>` : `
   <div class="card">
@@ -2539,7 +2588,7 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
         <tr style="border-bottom:2px solid var(--border);">
           <th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);">Date</th>
           <th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);">Time</th>
-          <th style="padding:8px 12px;text-align:right;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);">Hours</th>
+          <th style="padding:8px 12px;text-align:right;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);">${rate_type === 'daily' ? 'Rate' : 'Hours'}</th>
           <th style="padding:8px 12px;text-align:right;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);">Subtotal</th>
         </tr>
       </thead>
@@ -2547,7 +2596,7 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
       <tfoot>
         <tr style="border-top:2px solid var(--border);background:var(--mist);">
           <td colspan="2" style="padding:12px;font-family:var(--sans);font-size:14px;font-weight:700;color:var(--steel);">Total (${validRows.length} date${validRows.length !== 1 ? 's' : ''})</td>
-          <td style="padding:12px;text-align:right;font-size:14px;font-weight:700;color:var(--steel);">${totalHours} hrs</td>
+          <td style="padding:12px;text-align:right;font-size:14px;font-weight:700;color:var(--steel);">${rate_type === 'daily' ? `$${rate.toFixed(2)}/day` : `${totalHours} hrs`}</td>
           <td style="padding:12px;text-align:right;font-size:16px;font-weight:700;color:var(--steel);">$${grandTotal.toFixed(2)}</td>
         </tr>
       </tfoot>
@@ -2557,6 +2606,7 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
       <input type="hidden" name="group_id" value="${group_id}">
       ${hiddenSlots}
       <input type="hidden" name="rate" value="${rate}">
+      <input type="hidden" name="rate_type" value="${rate_type}">
       <input type="hidden" name="notes" value="${notes.replace(/"/g,'&quot;')}">
       <div class="btn-row">
         <button type="submit" class="btn btn-primary" onclick="this.disabled=true;this.textContent='Creating…';return true;">Confirm &amp; Send Invoice →</button>
@@ -2572,6 +2622,7 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
         const form      = await request.formData();
         const group_id  = parseInt(form.get('group_id') || '0', 10);
         const rate      = parseFloat(form.get('rate') || '25');
+        const rate_type = form.get('rate_type') === 'daily' ? 'daily' : 'hourly';
         const notes     = form.get('notes') || '';
         const slotStrs  = form.getAll('slot').filter(Boolean);
 
@@ -2609,12 +2660,14 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
 
         const sortedDates = bookings.map(b => b.booking_date).sort();
         const totalHours  = Math.round(bookings.reduce((a, b) => a + calcHours(b.start_time, b.end_time), 0) * 100) / 100;
-        const totalAmount = Math.round(totalHours * rate * 100) / 100;
+        const totalAmount = rate_type === 'daily'
+          ? Math.round(bookings.length * rate * 100) / 100
+          : Math.round(totalHours * rate * 100) / 100;
         const invoiceDate = new Date().toISOString().split('T')[0];
 
         const iRes = await env.DB.prepare(
-          `INSERT INTO gym_invoices (group_id, booking_ids, invoice_date, period_start, period_end, total_hours, rate, total_amount, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'unpaid')`
-        ).bind(group_id, JSON.stringify(bookingIds), invoiceDate, sortedDates[0], sortedDates[sortedDates.length - 1], totalHours, rate, totalAmount).run();
+          `INSERT INTO gym_invoices (group_id, booking_ids, invoice_date, period_start, period_end, total_hours, rate, rate_type, total_amount, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid')`
+        ).bind(group_id, JSON.stringify(bookingIds), invoiceDate, sortedDates[0], sortedDates[sortedDates.length - 1], totalHours, rate, rate_type, totalAmount).run();
         const invoiceId = iRes.meta.last_row_id;
 
         const inv       = await env.DB.prepare('SELECT * FROM gym_invoices WHERE id = ?').bind(invoiceId).first();
@@ -2934,10 +2987,12 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
           const b = await env.DB.prepare('SELECT * FROM gym_bookings WHERE id = ?').bind(inv.booking_id).first();
           if (b) viewBookings = [b];
         }
-        const invNum  = `GYM-${iid.toString().padStart(4,'0')}`;
-        const hours   = parseFloat(inv.total_hours  || 0);
-        const rate    = parseFloat(inv.rate         || 0);
-        const total   = parseFloat(inv.total_amount || 0);
+        const invNum    = `GYM-${iid.toString().padStart(4,'0')}`;
+        const hours     = parseFloat(inv.total_hours  || 0);
+        const rate      = parseFloat(inv.rate         || 0);
+        const total     = parseFloat(inv.total_amount || 0);
+        const rateType  = inv.rate_type || 'hourly';
+        const rateLabel = rateType === 'daily' ? '/day' : '/hr';
         const paymentLink = await getPaymentLink(env);
         const vm = url.searchParams.get('msg');
         const viewAlert = vm === 'created' ? `<div class="alert alert-success">&#10003; Booking confirmed. Invoice emailed to ${group?.email ? group.email : 'you and the group'}.</div>`
@@ -2948,23 +3003,31 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         if (viewBookings.length > 1) {
           const dateRows = viewBookings.map(b => {
             const bh = calcHours(b.start_time, b.end_time);
+            const sub = rateType === 'daily' ? rate : bh * rate;
+            const detail = rateType === 'daily'
+              ? `${fmt12h(b.start_time)} &ndash; ${fmt12h(b.end_time)} &middot; $${sub.toFixed(2)}`
+              : `${fmt12h(b.start_time)} &ndash; ${fmt12h(b.end_time)} &middot; ${bh} hr${bh !== 1 ? 's' : ''} &middot; $${sub.toFixed(2)}`;
             return `<tr style="border-bottom:1px solid var(--border);">
               <td style="padding:8px 0;font-size:14px;color:var(--charcoal);font-weight:600;">${formatDate(b.booking_date)}</td>
-              <td style="padding:8px 0;font-size:13px;color:var(--gray);text-align:right;">${fmt12h(b.start_time)} &ndash; ${fmt12h(b.end_time)} &middot; ${bh} hr${bh !== 1 ? 's' : ''} &middot; $${(bh * rate).toFixed(2)}</td>
+              <td style="padding:8px 0;font-size:13px;color:var(--gray);text-align:right;">${detail}</td>
             </tr>`;
           }).join('');
+          const totalHoursRow = rateType === 'daily' ? '' :
+            `<tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Total Hours</td><td style="padding:10px 0;font-size:14px;font-weight:600;text-align:right;">${hours} hrs</td></tr>`;
           rentalDetailsRows = `
             <tr><td colspan="2" style="padding:4px 0 8px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--amber);">Rental Dates (${viewBookings.length})</td></tr>
             ${dateRows}
-            <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Rate</td><td style="padding:10px 0;font-size:14px;text-align:right;">$${rate.toFixed(2)}/hr</td></tr>
-            <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Total Hours</td><td style="padding:10px 0;font-size:14px;font-weight:600;text-align:right;">${hours} hrs</td></tr>`;
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Rate</td><td style="padding:10px 0;font-size:14px;text-align:right;">$${rate.toFixed(2)}${rateLabel}</td></tr>
+            ${totalHoursRow}`;
         } else {
           const booking = viewBookings[0];
+          const durationRow = rateType === 'daily' ? '' :
+            `<tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Duration</td><td style="padding:10px 0;font-size:14px;font-weight:600;text-align:right;">${hours} hr${hours !== 1 ? 's' : ''}</td></tr>`;
           rentalDetailsRows = `
             <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Date</td><td style="padding:10px 0;font-size:14px;font-weight:600;text-align:right;">${booking ? formatDate(booking.booking_date) : formatDate(inv.period_start)}</td></tr>
             <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Time</td><td style="padding:10px 0;font-size:14px;font-weight:600;text-align:right;">${booking ? `${fmt12h(booking.start_time)} \u2013 ${fmt12h(booking.end_time)}` : '\u2014'}</td></tr>
-            <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Duration</td><td style="padding:10px 0;font-size:14px;font-weight:600;text-align:right;">${hours} hr${hours !== 1 ? 's' : ''}</td></tr>
-            <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Rate</td><td style="padding:10px 0;font-size:14px;text-align:right;">$${rate.toFixed(2)}/hr</td></tr>`;
+            ${durationRow}
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Rate</td><td style="padding:10px 0;font-size:14px;text-align:right;">$${rate.toFixed(2)}${rateLabel}</td></tr>`;
         }
 
         return html(`
