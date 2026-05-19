@@ -2075,9 +2075,9 @@ updateSummary();
         const DNAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
         const NUM_MONTHS = 6;
         let calHtml = '<div class="scal-wrap"><div class="scal-nav">'
-          + `<button type="button" class="scal-nav-btn" id="scal-prev" onclick="admNav(-1)" disabled>&#8249;</button>`
+          + `<button type="button" class="scal-nav-btn" id="scal-prev" disabled>&#8249;</button>`
           + `<div class="scal-nav-label" id="scal-nav-label"></div>`
-          + `<button type="button" class="scal-nav-btn" id="scal-next" onclick="admNav(1)">&#8250;</button>`
+          + `<button type="button" class="scal-nav-btn" id="scal-next">&#8250;</button>`
           + '</div>';
         for (let mi = 0; mi < NUM_MONTHS; mi++) {
           const d = new Date(today.getFullYear(), today.getMonth() + mi, 1);
@@ -2101,8 +2101,8 @@ updateSummary();
             if      (isPast)    { cls += ' adm-past';    extra = ` title="Past"`; }
             else if (isBlocked) { cls += ' adm-blocked'; extra = ` title="Blocked"`; }
             else if (isBooked)  { cls += ' adm-booked';  extra = ` title="Already booked"`; }
-            else                { cls += ' adm-avail';   extra = ` onclick="admToggle('${ds}','${dayLabel}')" style="cursor:pointer;"`; }
-            calHtml += `<td><div class="${cls}" id="adm-cell-${ds}"${extra}><div class="scal-num">${day}</div></div></td>`;
+            else                { cls += ' adm-avail'; }
+            calHtml += `<td><div class="${cls}" id="adm-cell-${ds}" data-date="${ds}" data-label="${dayLabel}"${extra}><div class="scal-num">${day}</div></div></td>`;
             dow++;
             if (dow === 7 && day < lastDay) { calHtml += '</tr><tr>'; dow = 0; }
           }
@@ -2121,7 +2121,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
   <div class="page-sub">Click dates on the calendar, set times for each, then review before sending an invoice.</div>
   ${errAlert}
   <div class="card">
-    <form id="nbf" method="POST" action="/gym-rentals/bookings/review" onsubmit="return serializeSlots(event)">
+    <form id="nbf" method="POST" action="/gym-rentals/bookings/review">
       <div class="form-group">
         <label>Group *</label>
         <select name="group_id" id="group-sel" required>
@@ -2157,150 +2157,169 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
   </div>
 </div>
 <style>
-.scal-wrap{position:relative;}.scal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:8px;}.scal-nav-btn{background:var(--mist,#EDF5F8);border:1px solid var(--border,#E8E0D0);cursor:pointer;padding:6px 16px;border-radius:6px;font-size:18px;line-height:1;font-weight:700;transition:background .15s;flex-shrink:0;}.scal-nav-btn:hover{background:var(--border,#E8E0D0);}.scal-nav-btn:disabled{opacity:.35;cursor:default;}.scal-nav-label{font-family:var(--serif,Georgia,serif);font-size:18px;font-weight:700;text-align:center;flex:1;}.scal-month{display:none;}.scal-month.active{display:block;}.scal-table{width:100%;border-collapse:collapse;table-layout:fixed;}.scal-table th{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray,#6B7280);padding:7px 0;text-align:center;}.scal-table td{padding:3px;vertical-align:top;}.scal-num{font-size:12px;font-weight:700;text-align:center;padding:6px 0;line-height:1.3;}
+.scal-wrap{position:relative;}.scal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:8px;}.scal-nav-btn{background:var(--mist,#EDF5F8);border:1px solid var(--border,#E8E0D0);cursor:pointer;padding:6px 16px;border-radius:6px;font-size:18px;line-height:1;font-weight:700;transition:background .15s;flex-shrink:0;color:var(--steel,#1E2D4A);}.scal-nav-btn:hover{background:var(--border,#E8E0D0);}.scal-nav-btn:disabled{opacity:.35;cursor:default;}.scal-nav-label{font-family:var(--serif,Georgia,serif);font-size:18px;font-weight:700;text-align:center;flex:1;color:var(--steel,#1E2D4A);}.scal-month{display:none;}.scal-month.active{display:block;}.scal-table{width:100%;border-collapse:collapse;table-layout:fixed;}.scal-table th{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray,#6B7280);padding:7px 0;text-align:center;}.scal-table td{padding:3px;vertical-align:top;}.scal-num{font-size:12px;font-weight:700;text-align:center;padding:6px 0;line-height:1.3;color:var(--steel,#1E2D4A);}
 .adm-cell{border-radius:6px;text-align:center;padding:4px 2px;border:2px solid transparent;transition:background .12s,border-color .12s;}
-.adm-avail:hover{background:#D4EDDA;border-color:#5A9E6F;}
-.adm-cell.adm-selected{background:var(--amber) !important;border-color:#A07020 !important;}
+.adm-avail{cursor:pointer;}.adm-avail:hover{background:#D4EDDA;border-color:#5A9E6F;}
+.adm-cell.adm-selected{background:#C9973A !important;border-color:#A07020 !important;}
 .adm-cell.adm-selected .scal-num{color:white !important;}
-.adm-booked{background:#F7D0D0;}
-.adm-booked .scal-num{color:#9B4040;}
-.adm-blocked{background:#E8EDF3;}
-.adm-blocked .scal-num{color:#aaa;}
-.adm-past .scal-num{color:#CBD5E1;}
-.date-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;}
+.adm-booked{background:#F7D0D0;}.adm-booked .scal-num{color:#9B4040;}
+.adm-blocked{background:#E8EDF3;}.adm-blocked .scal-num,.adm-past .scal-num{color:#CBD5E1;}
+.date-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border,#E8E0D0);flex-wrap:wrap;}
 .date-row:last-child{border-bottom:none;}
-.date-row-label{font-family:var(--sans);font-size:13px;font-weight:700;color:var(--steel);min-width:160px;}
-.date-row select{font-size:13px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:white;color:var(--charcoal);min-width:100px;}
+.date-row-label{font-family:var(--sans,Arial,sans-serif);font-size:13px;font-weight:700;color:var(--steel,#1E2D4A);min-width:160px;}
+.date-row select{font-size:13px;padding:6px 10px;border:1px solid var(--border,#E8E0D0);border-radius:6px;background:white;color:var(--charcoal,#1A1A2A);min-width:110px;}
 .date-row .btn-rm{background:none;border:1px solid #ddd;border-radius:4px;color:#999;cursor:pointer;font-size:14px;padding:4px 8px;line-height:1;}
 .date-row .btn-rm:hover{background:#fce8e8;border-color:#B85C3A;color:#B85C3A;}
 </style>
 <script>
 (function(){
-  const TIME_OPTS = ${JSON.stringify('<option value="">—</option>' + timeOptsBase)};
-  let slots = [];
-  let curMonth = 0;
-  const NUM_MONTHS = 6;
+  /* Build time options in pure JS — no server-side string injection */
+  function buildTimeOpts(selected) {
+    var opts = '<option value="">&#x2014;</option>';
+    for (var h = 6; h < 24; h++) {
+      for (var mi = 0; mi < 2; mi++) {
+        var m = mi === 0 ? 0 : 30;
+        var hh = h < 10 ? '0'+h : ''+h;
+        var mm = m === 0 ? '00' : '30';
+        var val = hh+':'+mm;
+        var disp = (h===0?12:h>12?h-12:h)+':'+(m===0?'00':'30')+' '+(h<12?'AM':'PM');
+        opts += '<option value="'+val+'"'+(selected===val?' selected':'')+'>'+disp+'</option>';
+      }
+    }
+    return opts;
+  }
 
-  function admNav(dir){
+  var slots = [];
+  var curMonth = 0;
+  var NUM_MONTHS = 6;
+
+  /* Month navigation via addEventListener — no onclick attributes needed */
+  function setMonth(idx) {
     document.getElementById('adm-month-'+curMonth).classList.remove('active');
-    curMonth = Math.max(0, Math.min(NUM_MONTHS-1, curMonth+dir));
+    curMonth = idx;
     document.getElementById('adm-month-'+curMonth).classList.add('active');
-    updateNavLabel();
-  }
-  function updateNavLabel(){
     document.getElementById('scal-nav-label').textContent = document.getElementById('adm-month-'+curMonth).dataset.label;
-    document.getElementById('scal-prev').disabled = curMonth===0;
-    document.getElementById('scal-next').disabled = curMonth===NUM_MONTHS-1;
+    document.getElementById('scal-prev').disabled = curMonth === 0;
+    document.getElementById('scal-next').disabled = curMonth === NUM_MONTHS - 1;
   }
-  window.admNav = admNav;
+  document.getElementById('scal-prev').addEventListener('click', function(){ if(curMonth > 0) setMonth(curMonth-1); });
+  document.getElementById('scal-next').addEventListener('click', function(){ if(curMonth < NUM_MONTHS-1) setMonth(curMonth+1); });
 
-  window.admToggle = function(dateStr, label){
-    const idx = slots.findIndex(s=>s.date===dateStr);
-    if(idx>=0){
-      slots.splice(idx,1);
-      document.getElementById('adm-cell-'+dateStr).classList.remove('adm-selected');
+  /* Date click via event delegation — no per-cell onclick attributes needed */
+  document.getElementById('adm-cal').addEventListener('click', function(e) {
+    var cell = e.target.closest ? e.target.closest('.adm-avail') : null;
+    if (!cell) {
+      /* Fallback for browsers without closest */
+      var t = e.target;
+      while (t && t !== this) {
+        if (t.classList && t.classList.contains('adm-avail')) { cell = t; break; }
+        t = t.parentNode;
+      }
+    }
+    if (!cell) return;
+    var dateStr = cell.getAttribute('data-date');
+    var label   = cell.getAttribute('data-label');
+    if (!dateStr) return;
+    var found = false;
+    for (var i = 0; i < slots.length; i++) {
+      if (slots[i].date === dateStr) { slots.splice(i, 1); found = true; break; }
+    }
+    if (found) {
+      cell.classList.remove('adm-selected');
     } else {
       slots.push({date:dateStr, label:label, start:'', end:''});
-      slots.sort((a,b)=>a.date.localeCompare(b.date));
-      document.getElementById('adm-cell-'+dateStr).classList.add('adm-selected');
+      slots.sort(function(a,b){ return a.date < b.date ? -1 : 1; });
+      cell.classList.add('adm-selected');
     }
     renderList();
     updateCounter();
-  };
+  });
 
-  window.admRemove = function(dateStr){
-    slots = slots.filter(s=>s.date!==dateStr);
-    const cell = document.getElementById('adm-cell-'+dateStr);
-    if(cell) cell.classList.remove('adm-selected');
-    renderList();
-    updateCounter();
-  };
-
-  window.updateSlot = function(dateStr, field, val){
-    const s = slots.find(s=>s.date===dateStr);
-    if(s) s[field]=val;
-  };
-
-  function renderList(){
-    const el = document.getElementById('date-list');
-    if(slots.length===0){
-      el.innerHTML = '<div style="font-size:13px;color:var(--gray);font-style:italic;">No dates selected — click days on the calendar above.</div>';
+  function renderList() {
+    var el = document.getElementById('date-list');
+    if (slots.length === 0) {
+      el.innerHTML = '<div style="font-size:13px;color:#6B7280;font-style:italic;">No dates selected — click days on the calendar above.</div>';
+      checkReview();
       return;
     }
-    el.innerHTML = slots.map(s=>{
-      const startSel = '<select class="date-sel" onchange="updateSlot(\''+s.date+'\',\'start\',this.value);checkReview()">'+TIME_OPTS+'</select>';
-      const endSel   = '<select class="date-sel" onchange="updateSlot(\''+s.date+'\',\'end\',this.value);checkReview()">'+TIME_OPTS+'</select>';
-      return '<div class="date-row" id="row-'+s.date+'">'
+    var html = '';
+    slots.forEach(function(s) {
+      html += '<div class="date-row" id="row-'+s.date+'">'
         +'<span class="date-row-label">'+s.label+'</span>'
-        +'<span style="font-size:12px;color:var(--gray);">Start:</span>'+startSel
-        +'<span style="font-size:12px;color:var(--gray);">End:</span>'+endSel
-        +'<button type="button" class="btn-rm" onclick="admRemove(\''+s.date+'\')">✕</button>'
+        +'<span style="font-size:12px;color:#6B7280;white-space:nowrap;">Start:</span>'
+        +'<select id="start-'+s.date+'">'+buildTimeOpts(s.start)+'</select>'
+        +'<span style="font-size:12px;color:#6B7280;white-space:nowrap;">End:</span>'
+        +'<select id="end-'+s.date+'">'+buildTimeOpts(s.end)+'</select>'
+        +'<button type="button" class="btn-rm" data-rm="'+s.date+'">&#x2715;</button>'
         +'</div>';
-    }).join('');
-    // Restore select values
-    slots.forEach(s=>{
-      const row = document.getElementById('row-'+s.date);
-      if(!row) return;
-      const sels = row.querySelectorAll('select');
-      if(sels[0]) sels[0].value = s.start||'';
-      if(sels[1]) sels[1].value = s.end||'';
+    });
+    el.innerHTML = html;
+    /* Wire change + remove listeners */
+    slots.forEach(function(s) {
+      var ss = document.getElementById('start-'+s.date);
+      var ee = document.getElementById('end-'+s.date);
+      if (ss) ss.addEventListener('change', function(){ s.start = this.value; checkReview(); });
+      if (ee) ee.addEventListener('change', function(){ s.end   = this.value; checkReview(); });
+    });
+    el.querySelectorAll('[data-rm]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var d = this.getAttribute('data-rm');
+        slots = slots.filter(function(s){ return s.date !== d; });
+        var cell2 = document.getElementById('adm-cell-'+d);
+        if (cell2) cell2.classList.remove('adm-selected');
+        renderList();
+        updateCounter();
+      });
     });
     checkReview();
   }
 
-  function updateCounter(){
-    const n = slots.length;
-    document.getElementById('date-count').textContent = n>0?'('+n+' date'+(n===1?'':'s')+' selected)':'';
+  function updateCounter() {
+    var n = slots.length;
+    document.getElementById('date-count').textContent = n > 0 ? '('+n+' date'+(n===1?'':'s')+' selected)' : '';
     checkReview();
   }
 
-  function checkReview(){
-    const ok = slots.length>0 && slots.every(s=>s.start && s.end && s.end>s.start);
+  function checkReview() {
+    var ok = slots.length > 0 && slots.every(function(s){ return s.start && s.end && s.end > s.start; });
     document.getElementById('review-btn').disabled = !ok;
   }
 
-  window.serializeSlots = function(e){
-    if(slots.length===0){ alert('Please select at least one date.'); e.preventDefault(); return false; }
-    const bad = slots.find(s=>!s.start||!s.end||s.end<=s.start);
-    if(bad){ alert('Each date needs a valid start and end time.'); e.preventDefault(); return false; }
-    document.getElementById('slots-json').value = JSON.stringify(slots.map(s=>({date:s.date,start_time:s.start,end_time:s.end})));
-    return true;
-  };
+  /* Review button click — serialize slots then submit */
+  document.getElementById('review-btn').addEventListener('click', function() {
+    if (slots.length === 0) { alert('Please select at least one date.'); return; }
+    var bad = null;
+    for (var i = 0; i < slots.length; i++) {
+      if (!slots[i].start || !slots[i].end || slots[i].end <= slots[i].start) { bad = slots[i]; break; }
+    }
+    if (bad) { alert('Each date needs a valid start time and end time (end must be after start).'); return; }
+    var payload = slots.map(function(s){ return {date:s.date, start_time:s.start, end_time:s.end}; });
+    document.getElementById('slots-json').value = JSON.stringify(payload);
+    document.getElementById('nbf').submit();
+  });
 
-  // Rate hint on group change
-  document.getElementById('group-sel').addEventListener('change', function(){
-    const opt = this.options[this.selectedIndex];
-    const grpRate = parseFloat(opt.dataset.rate||'');
-    if(!isNaN(grpRate) && grpRate>0){
+  /* Rate hint on group change */
+  document.getElementById('group-sel').addEventListener('change', function() {
+    var opt = this.options[this.selectedIndex];
+    var grpRate = parseFloat(opt.getAttribute('data-rate') || '');
+    if (!isNaN(grpRate) && grpRate > 0) {
       document.getElementById('rate-hint').textContent = '— leave blank to use group rate ($'+grpRate.toFixed(2)+'/hr)';
-      const ov = document.getElementById('rate-override');
-      if(!ov.value) ov.placeholder = grpRate.toFixed(2);
-    } else {
-      fetch('/gym-rentals/api/group-rate?id='+this.value).then(r=>r.json()).then(data=>{
-        const r = parseFloat(data.rate||25).toFixed(2);
-        document.getElementById('rate-hint').textContent = '— leave blank to use group/global rate ($'+r+'/hr)';
-        const ov = document.getElementById('rate-override');
-        if(!ov.value) ov.placeholder = r;
-      }).catch(()=>{});
+      var ov = document.getElementById('rate-override');
+      if (!ov.value) ov.placeholder = grpRate.toFixed(2);
+    } else if (this.value) {
+      fetch('/gym-rentals/api/group-rate?id='+this.value)
+        .then(function(r){ return r.json(); })
+        .then(function(data) {
+          var r = parseFloat(data.rate || 25).toFixed(2);
+          document.getElementById('rate-hint').textContent = '— leave blank to use group/global rate ($'+r+'/hr)';
+          var ov = document.getElementById('rate-override');
+          if (!ov.value) ov.placeholder = r;
+        }).catch(function(){});
     }
   });
 
-  // Restore pre-filled slots (on back-navigation)
-  try {
-    const pre = ${JSON.stringify(selSlotsRaw)};
-    if(pre){
-      const parsed = JSON.parse(pre);
-      parsed.forEach(s=>{
-        slots.push({date:s.date, label:s.date, start:s.start_time, end:s.end_time});
-        const cell = document.getElementById('adm-cell-'+s.date);
-        if(cell) cell.classList.add('adm-selected');
-      });
-      renderList();
-      updateCounter();
-    }
-  } catch(e){}
-
-  updateNavLabel();
+  /* Init: set nav label */
+  document.getElementById('scal-nav-label').textContent = document.getElementById('adm-month-0').dataset.label;
 })();
 </script>
 `, 'New Booking');
