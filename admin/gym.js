@@ -424,7 +424,7 @@ function tlcUploadHandler(blobInfo) {
 }
 
 // ── MAIN GYM ROUTE HANDLER ─────────────────────────────────
-export async function handleGymRoutes(path, method, url, request, env, currentUser = null) {
+export async function handleGymRoutes(path, method, url, request, env, currentUser = null, ctx = null) {
 
     // ── GROUP BOOKING PORTAL (/gym/book/:token/*) ───────────────
     if (path.startsWith('/gym/book/')) {
@@ -2158,7 +2158,10 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
       </div>
 
       <div style="margin-bottom:6px;">
-        <label style="display:block;font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:10px;">Select Dates * <span id="date-count" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--amber);font-size:13px;"></span></label>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <label style="display:block;font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:0;">Select Dates * <span id="date-count" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--amber);font-size:13px;"></span></label>
+          <button type="button" id="clear-all-btn" class="btn btn-sm btn-secondary" style="display:none;">Clear all</button>
+        </div>
         ${calHtml}
       </div>
 
@@ -2412,7 +2415,23 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
   function updateCounter() {
     var n = slots.length;
     document.getElementById('date-count').textContent = n > 0 ? '('+n+' date'+(n===1?'':'s')+' selected)' : '';
+    var clearBtn = document.getElementById('clear-all-btn');
+    if (clearBtn) clearBtn.style.display = n > 0 ? 'inline-flex' : 'none';
     checkReview();
+  }
+
+  /* Clear all dates */
+  var clearAllBtn = document.getElementById('clear-all-btn');
+  if (clearAllBtn) {
+    clearAllBtn.addEventListener('click', function() {
+      slots.forEach(function(s) {
+        var cell = document.getElementById('adm-cell-'+s.date);
+        if (cell) { cell.classList.remove('adm-selected'); }
+      });
+      slots = [];
+      renderList();
+      updateCounter();
+    });
   }
 
   function checkReview() {
@@ -2672,7 +2691,7 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
 
         const inv       = await env.DB.prepare('SELECT * FROM gym_invoices WHERE id = ?').bind(invoiceId).first();
         const pymtLink  = await getPaymentLink(env);
-        const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, bookings, pymtLink);
+        const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId, rate_type }, group, bookings, pymtLink);
         const subject   = bookings.length === 1
           ? `Gym Rental Invoice — ${group.name} — ${formatDate(sortedDates[0])}`
           : `Gym Rental Invoice — ${group.name} — ${bookings.length} dates`;
@@ -2680,10 +2699,15 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
         const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
         const toEmails = [adminEmail];
         if (group.email) toEmails.push(group.email);
-        try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {}
-        for (const b of bookings) {
-          await addGymBookingToGCal(env, { booking_date: b.booking_date, start_time: b.start_time, end_time: b.end_time, group_name: group.name, notes });
-        }
+
+        // Run email + GCal in the background so the redirect is instant
+        const bgWork = async () => {
+          try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {}
+          await Promise.all(bookings.map(b =>
+            addGymBookingToGCal(env, { booking_date: b.booking_date, start_time: b.start_time, end_time: b.end_time, group_name: group.name, notes })
+          ));
+        };
+        if (ctx?.waitUntil) ctx.waitUntil(bgWork()); else await bgWork();
 
         return new Response('', { status: 302, headers: { Location: `/gym-rentals/invoices/view/${invoiceId}?msg=created` } });
       }
