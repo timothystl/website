@@ -2118,7 +2118,7 @@ updateSummary();
 ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="wrap">
   <div class="page-title">New Booking</div>
-  <div class="page-sub">Click dates on the calendar, set times for each, then review before sending an invoice.</div>
+  <div class="page-sub">Click dates, set times, then review before sending an invoice.</div>
   ${errAlert}
   <div class="card">
     <form id="nbf" method="POST" action="/gym-rentals/bookings/review">
@@ -2130,13 +2130,38 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         </select>
       </div>
 
+      <!-- Pattern picker: add every Mon/Tue/etc -->
+      <div style="margin-bottom:14px;padding:12px 14px;background:var(--mist);border-radius:8px;">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:8px;">Quick-add by day of week</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+          <button type="button" class="pat-btn" data-dow="0">Sun</button>
+          <button type="button" class="pat-btn" data-dow="1">Mon</button>
+          <button type="button" class="pat-btn" data-dow="2">Tue</button>
+          <button type="button" class="pat-btn" data-dow="3">Wed</button>
+          <button type="button" class="pat-btn" data-dow="4">Thu</button>
+          <button type="button" class="pat-btn" data-dow="5">Fri</button>
+          <button type="button" class="pat-btn" data-dow="6">Sat</button>
+          <button type="button" id="add-pattern-btn" class="btn btn-sm btn-secondary" style="margin-left:6px;" disabled>Add selected days</button>
+          <span id="pat-count" style="font-size:12px;color:var(--gray);"></span>
+        </div>
+      </div>
+
       <div style="margin-bottom:6px;">
         <label style="display:block;font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:10px;">Select Dates * <span id="date-count" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--amber);font-size:13px;"></span></label>
         ${calHtml}
       </div>
 
+      <!-- Default time + apply-to-all + date list -->
       <div style="margin:16px 0 6px;padding:14px 16px;background:var(--mist);border-radius:8px;">
-        <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:10px;">Selected Dates &amp; Times</div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border);">
+          <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);white-space:nowrap;">Default time:</span>
+          <select id="def-start" style="font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;min-width:100px;background:white;"></select>
+          <span style="font-size:12px;color:var(--gray);">to</span>
+          <select id="def-end"   style="font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;min-width:100px;background:white;"></select>
+          <button type="button" id="apply-all-btn" class="btn btn-sm btn-secondary">Apply to all</button>
+          <span style="font-size:11px;color:var(--gray);">— new dates auto-use this time</span>
+        </div>
+        <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:8px;">Selected Dates &amp; Times</div>
         <div id="date-list"><div style="font-size:13px;color:var(--gray);font-style:italic;">No dates selected — click days on the calendar above.</div></div>
       </div>
 
@@ -2148,6 +2173,8 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         <label>Notes <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— included on the invoice</span></label>
         <textarea name="notes" maxlength="1000" placeholder="e.g. Basketball practice, weekly session">${selNotes.replace(/</g,'&lt;')}</textarea>
       </div>
+      <!-- Pre-filled slots from back-navigation (read by JS via DOM, no injection) -->
+      <input type="hidden" id="initial-slots" value="${selSlotsRaw.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}">
       <input type="hidden" name="slots" id="slots-json">
       <div class="btn-row">
         <button type="submit" class="btn btn-primary" id="review-btn" disabled>Review →</button>
@@ -2170,12 +2197,13 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 .date-row select{font-size:13px;padding:6px 10px;border:1px solid var(--border,#E8E0D0);border-radius:6px;background:white;color:var(--charcoal,#1A1A2A);min-width:110px;}
 .date-row .btn-rm{background:none;border:1px solid #ddd;border-radius:4px;color:#999;cursor:pointer;font-size:14px;padding:4px 8px;line-height:1;}
 .date-row .btn-rm:hover{background:#fce8e8;border-color:#B85C3A;color:#B85C3A;}
+.pat-btn{font-family:var(--sans,Arial,sans-serif);font-size:12px;font-weight:700;padding:5px 10px;border-radius:6px;border:1px solid var(--border,#E8E0D0);background:white;cursor:pointer;color:var(--steel,#1E2D4A);transition:background .12s,border-color .12s;}
+.pat-btn.active{background:#1E2D4A;color:white;border-color:#1E2D4A;}
 </style>
 <script>
 (function(){
-  /* Build time options in pure JS — no server-side string injection */
   function buildTimeOpts(selected) {
-    var opts = '<option value="">&#x2014;</option>';
+    var opts = '<option value="">—</option>';
     for (var h = 6; h < 24; h++) {
       for (var mi = 0; mi < 2; mi++) {
         var m = mi === 0 ? 0 : 30;
@@ -2189,11 +2217,18 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
     return opts;
   }
 
+  /* Populate default-time selects */
+  var defStart = document.getElementById('def-start');
+  var defEnd   = document.getElementById('def-end');
+  defStart.innerHTML = buildTimeOpts('');
+  defEnd.innerHTML   = buildTimeOpts('');
+
   var slots = [];
   var curMonth = 0;
   var NUM_MONTHS = 6;
+  var selectedDows = {};  /* day-of-week toggles */
 
-  /* Month navigation via addEventListener — no onclick attributes needed */
+  /* Month navigation */
   function setMonth(idx) {
     document.getElementById('adm-month-'+curMonth).classList.remove('active');
     curMonth = idx;
@@ -2205,11 +2240,55 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
   document.getElementById('scal-prev').addEventListener('click', function(){ if(curMonth > 0) setMonth(curMonth-1); });
   document.getElementById('scal-next').addEventListener('click', function(){ if(curMonth < NUM_MONTHS-1) setMonth(curMonth+1); });
 
-  /* Date click via event delegation — no per-cell onclick attributes needed */
+  /* Day-of-week pattern picker */
+  document.querySelectorAll('.pat-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var dow = this.getAttribute('data-dow');
+      if (selectedDows[dow]) {
+        delete selectedDows[dow];
+        this.classList.remove('active');
+      } else {
+        selectedDows[dow] = true;
+        this.classList.add('active');
+      }
+      var count = Object.keys(selectedDows).length;
+      document.getElementById('add-pattern-btn').disabled = count === 0;
+      document.getElementById('pat-count').textContent = count > 0 ? count+' day'+(count===1?'':'s')+' selected' : '';
+    });
+  });
+
+  document.getElementById('add-pattern-btn').addEventListener('click', function() {
+    var dows = Object.keys(selectedDows).map(Number);
+    if (!dows.length) return;
+    var defSt = defStart.value;
+    var defEt = defEnd.value;
+    /* Find all available cells and check their day-of-week */
+    var cells = document.querySelectorAll('.adm-avail[data-date]');
+    var added = 0;
+    cells.forEach(function(cell) {
+      var ds = cell.getAttribute('data-date');
+      /* day of week from date string */
+      var dt = new Date(ds + 'T12:00:00');
+      if (dows.indexOf(dt.getDay()) === -1) return;
+      /* Skip already selected */
+      var already = false;
+      for (var i = 0; i < slots.length; i++) { if (slots[i].date === ds) { already = true; break; } }
+      if (already) return;
+      slots.push({date:ds, label:cell.getAttribute('data-label'), start:defSt, end:defEt});
+      cell.classList.add('adm-selected');
+      added++;
+    });
+    if (added) {
+      slots.sort(function(a,b){ return a.date < b.date ? -1 : 1; });
+      renderList();
+      updateCounter();
+    }
+  });
+
+  /* Date click via event delegation */
   document.getElementById('adm-cal').addEventListener('click', function(e) {
     var cell = e.target.closest ? e.target.closest('.adm-avail') : null;
     if (!cell) {
-      /* Fallback for browsers without closest */
       var t = e.target;
       while (t && t !== this) {
         if (t.classList && t.classList.contains('adm-avail')) { cell = t; break; }
@@ -2227,13 +2306,25 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
     if (found) {
       cell.classList.remove('adm-selected');
     } else {
-      slots.push({date:dateStr, label:label, start:'', end:''});
+      slots.push({date:dateStr, label:label, start:defStart.value, end:defEnd.value});
       slots.sort(function(a,b){ return a.date < b.date ? -1 : 1; });
       cell.classList.add('adm-selected');
     }
     renderList();
     updateCounter();
   });
+
+  /* Apply default times to all slots */
+  document.getElementById('apply-all-btn').addEventListener('click', function() {
+    var st = defStart.value;
+    var et = defEnd.value;
+    slots.forEach(function(s) { s.start = st; s.end = et; });
+    renderList();
+    checkReview();
+  });
+
+  var DOW_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  function getDow(dateStr) { return new Date(dateStr+'T12:00:00').getDay(); }
 
   function renderList() {
     var el = document.getElementById('date-list');
@@ -2244,17 +2335,24 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
     }
     var html = '';
     slots.forEach(function(s) {
+      var dow = getDow(s.date);
+      var dowName = DOW_NAMES[dow];
+      /* Count how many other slots share this day-of-week */
+      var sameCount = slots.filter(function(x){ return x.date!==s.date && getDow(x.date)===dow; }).length;
+      var copyBtn = sameCount > 0
+        ? '<button type="button" class="btn-rm copy-dow-btn" data-copy="'+s.date+'" title="Copy these times to all other '+dowName+'s" style="font-size:11px;padding:3px 7px;color:var(--steel,#1E2D4A);border-color:#bbb;">Copy to all '+dowName+'s</button>'
+        : '';
       html += '<div class="date-row" id="row-'+s.date+'">'
         +'<span class="date-row-label">'+s.label+'</span>'
         +'<span style="font-size:12px;color:#6B7280;white-space:nowrap;">Start:</span>'
         +'<select id="start-'+s.date+'">'+buildTimeOpts(s.start)+'</select>'
         +'<span style="font-size:12px;color:#6B7280;white-space:nowrap;">End:</span>'
         +'<select id="end-'+s.date+'">'+buildTimeOpts(s.end)+'</select>'
+        +copyBtn
         +'<button type="button" class="btn-rm" data-rm="'+s.date+'">&#x2715;</button>'
         +'</div>';
     });
     el.innerHTML = html;
-    /* Wire change + remove listeners */
     slots.forEach(function(s) {
       var ss = document.getElementById('start-'+s.date);
       var ee = document.getElementById('end-'+s.date);
@@ -2265,10 +2363,25 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
       btn.addEventListener('click', function() {
         var d = this.getAttribute('data-rm');
         slots = slots.filter(function(s){ return s.date !== d; });
-        var cell2 = document.getElementById('adm-cell-'+d);
-        if (cell2) cell2.classList.remove('adm-selected');
+        var c2 = document.getElementById('adm-cell-'+d);
+        if (c2) c2.classList.remove('adm-selected');
         renderList();
         updateCounter();
+      });
+    });
+    el.querySelectorAll('.copy-dow-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var srcDate = this.getAttribute('data-copy');
+        var src = slots.find(function(s){ return s.date===srcDate; });
+        if (!src) return;
+        var srcDow = getDow(srcDate);
+        slots.forEach(function(s) {
+          if (s.date !== srcDate && getDow(s.date) === srcDow) {
+            s.start = src.start; s.end = src.end;
+          }
+        });
+        renderList();
+        checkReview();
       });
     });
     checkReview();
@@ -2285,7 +2398,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
     document.getElementById('review-btn').disabled = !ok;
   }
 
-  /* Review button click — serialize slots then submit */
+  /* Review button click */
   document.getElementById('review-btn').addEventListener('click', function() {
     if (slots.length === 0) { alert('Please select at least one date.'); return; }
     var bad = null;
@@ -2293,8 +2406,9 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
       if (!slots[i].start || !slots[i].end || slots[i].end <= slots[i].start) { bad = slots[i]; break; }
     }
     if (bad) { alert('Each date needs a valid start time and end time (end must be after start).'); return; }
-    var payload = slots.map(function(s){ return {date:s.date, start_time:s.start, end_time:s.end}; });
-    document.getElementById('slots-json').value = JSON.stringify(payload);
+    document.getElementById('slots-json').value = JSON.stringify(slots.map(function(s){
+      return {date:s.date, start_time:s.start, end_time:s.end};
+    }));
     document.getElementById('nbf').submit();
   });
 
@@ -2318,7 +2432,26 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
     }
   });
 
-  /* Init: set nav label */
+  /* Restore pre-filled slots from back-navigation (read from DOM, no JS injection) */
+  var initEl = document.getElementById('initial-slots');
+  if (initEl && initEl.value) {
+    try {
+      var parsed = JSON.parse(initEl.value);
+      parsed.forEach(function(s) {
+        slots.push({date:s.date, label:s.date, start:s.start_time||'', end:s.end_time||''});
+        var cell = document.getElementById('adm-cell-'+s.date);
+        if (cell) {
+          cell.classList.add('adm-selected');
+          /* Recover label from data attribute */
+          var lbl = cell.getAttribute('data-label');
+          if (lbl) slots[slots.length-1].label = lbl;
+        }
+      });
+      if (slots.length) { slots.sort(function(a,b){ return a.date<b.date?-1:1; }); renderList(); updateCounter(); }
+    } catch(e) {}
+  }
+
+  /* Init nav label */
   document.getElementById('scal-nav-label').textContent = document.getElementById('adm-month-0').dataset.label;
 })();
 </script>
