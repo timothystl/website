@@ -987,8 +987,8 @@
 
 <!-- MUSIC MINISTRY -->
 <div id="page-music" class="page">
-  <!-- Hero: add style="background-image:url('/images/ministries/music-hero.jpg')" to the div below when photo is available -->
-  <div class="page-hero page-hero--photo">
+  <!-- Hero: background-image is set dynamically from admin portal → Ministries → Music Ministry → Hero banner image -->
+  <div id="music-hero" class="page-hero page-hero--photo">
     <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Music Ministry</span>
     <h1>Praise the Lord with Every Gift</h1>
     <p>Rooted in the Lutheran tradition. Wide open to every sound God's people bring.</p>
@@ -1003,8 +1003,10 @@
           <p>The music here is wide-ranging because the grace we celebrate is wide-ranging. <em>A unique — but familiar — worship experience.</em></p>
         </div>
         <div>
-          <!-- Photo: replace with <img> when ministry photo is available -->
-          <div class="img-placeholder" style="min-height:280px;">📷 Ministry photo coming soon</div>
+          <!-- Photo: filled dynamically from admin portal → Ministries → Music Ministry → Ministry photo -->
+          <div id="music-ministry-photo-wrap">
+            <div class="img-placeholder" style="min-height:280px;">📷 Ministry photo coming soon</div>
+          </div>
         </div>
       </div>
     </div>
@@ -1014,7 +1016,7 @@
       <span class="eyebrow eyebrow--sky">Special music</span>
       <h2>Moments from worship</h2>
       <p style="max-width:600px;color:var(--gray);">Special music moments are captured on video and posted to our YouTube channel — choirs, handbells, guest musicians, and seasonal celebrations.</p>
-      <div class="vid-grid">
+      <div class="vid-grid" id="music-vid-grid">
         <a href="https://www.youtube.com/@TimothySTL" target="_blank" class="vid-card" style="background:linear-gradient(135deg,var(--steel),var(--mid));">
           <div class="vid-play"><svg width="18" height="20" viewBox="0 0 18 20" fill="none"><path d="M2 1.5l14 8.5-14 8.5V1.5z" fill="#0A3C5C"/></svg></div>
           <div class="vid-label">Handbell Choir</div>
@@ -1082,8 +1084,8 @@
 
 <!-- STEPHEN MINISTRY -->
 <div id="page-stephen" class="page">
-  <!-- Hero: add style="background-image:url('/images/ministries/stephen-hero.jpg')" when photo is available -->
-  <div class="page-hero page-hero--photo">
+  <!-- Hero: background-image is set dynamically from admin portal → Ministries → Stephen Ministry → Hero banner image -->
+  <div id="stephen-hero" class="page-hero page-hero--photo">
     <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Stephen Ministry</span>
     <h1>You Don't Have to Face This Alone</h1>
     <p>Trained lay caregivers walking alongside people in life's hardest seasons.</p>
@@ -1143,8 +1145,8 @@
 
 <!-- FOOD PANTRY -->
 <div id="page-foodpantry" class="page">
-  <!-- Hero: add style="background-image:url('/images/ministries/foodpantry-hero.jpg')" when photo is available -->
-  <div class="page-hero page-hero--photo">
+  <!-- Hero: background-image is set dynamically from admin portal → Ministries → Food Pantry → Hero banner image -->
+  <div id="foodpantry-hero" class="page-hero page-hero--photo">
     <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Food Pantry</span>
     <h1>Caring for Neighbors in Jesus' Name</h1>
     <p>Practical love for families in Lindenwood Park, offered freely and without condition.</p>
@@ -1225,8 +1227,8 @@
 
 <!-- URBAN BEEKEEPERS -->
 <div id="page-bees" class="page">
-  <!-- Hero: add style="background-image:url('/images/ministries/bees-hero.jpg')" when photo is available -->
-  <div class="page-hero page-hero--photo">
+  <!-- Hero: background-image is set dynamically from admin portal → Ministries → Urban Beekeepers → Hero banner image -->
+  <div id="bees-hero" class="page-hero page-hero--photo">
     <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">Urban Beekeepers</span>
     <h1>Creation Care in the City</h1>
     <p>St. Louis neighbors tending hives, learning together, and celebrating the gift of creation.</p>
@@ -2406,6 +2408,40 @@ async function loadMinistryPage(slug) {
         document.getElementById(slug + '-content').innerHTML = fixImgUrls(data.content);
       } else {
         document.getElementById(slug + '-content-section').style.display = 'none';
+      }
+      // Hero image
+      var heroEl = document.getElementById(slug + '-hero');
+      if (heroEl && data.hero_image_url) {
+        heroEl.style.backgroundImage = 'url(' + data.hero_image_url + ')';
+      }
+      // Ministry photo (music page only)
+      if (slug === 'music' && data.ministry_image_url) {
+        var photoWrap = document.getElementById('music-ministry-photo-wrap');
+        if (photoWrap) {
+          photoWrap.innerHTML = '<img src="' + data.ministry_image_url + '" style="width:100%;border-radius:12px;display:block;" alt="Music Ministry">';
+        }
+      }
+      // Video cards (music page only)
+      if (slug === 'music') {
+        var vidGrid = document.getElementById('music-vid-grid');
+        if (vidGrid) {
+          var vids = [
+            { url: data.vid_1_url, title: data.vid_1_title },
+            { url: data.vid_2_url, title: data.vid_2_title },
+            { url: data.vid_3_url, title: data.vid_3_title }
+          ].filter(function(v) { return v.url && v.url.trim(); });
+          if (vids.length > 0) {
+            var playIcon = '<div class="vid-play"><svg width="18" height="20" viewBox="0 0 18 20" fill="none"><path d="M2 1.5l14 8.5-14 8.5V1.5z" fill="#0A3C5C"/></svg></div>';
+            vidGrid.innerHTML = vids.map(function(v) {
+              var vidId = (v.url.match(/(?:youtu\.be\/|v=|\/embed\/)([A-Za-z0-9_-]{11})/) || [])[1];
+              var thumb = vidId ? 'url(https://img.youtube.com/vi/' + vidId + '/mqdefault.jpg)' : 'linear-gradient(135deg,var(--steel),var(--mid))';
+              return '<a href="' + v.url.replace(/"/g,'&quot;') + '" target="_blank" class="vid-card" style="background:' + thumb + ';background-size:cover;background-position:center;">' +
+                playIcon +
+                '<div class="vid-label">' + (v.title || '') + '</div>' +
+              '</a>';
+            }).join('');
+          }
+        }
       }
       // If admin has set any CTA buttons, replace the hardcoded page-cta-bar
       if (data.cta_label && data.cta_url) {

@@ -210,6 +210,14 @@ export default {
     try { await env.DB.prepare(DB_INIT_AUDIT_LOG).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_PASSWORD_RESETS).run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE users ADD COLUMN email TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN hero_image_url TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN ministry_image_url TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN vid_1_url TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN vid_1_title TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN vid_2_url TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN vid_2_title TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN vid_3_url TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN vid_3_title TEXT').run(); } catch (_) {}
     // Migrate: newsletter approval workflow
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN approval_status TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN approved_by_username TEXT').run(); } catch (_) {}
@@ -292,7 +300,7 @@ export default {
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
         });
       }
-      const row = await env.DB.prepare('SELECT slug, title, content, has_posts, cta_label, cta_url, cta_label_2, cta_url_2, updated_at FROM youth_pages WHERE slug = ?').bind(slug).first();
+      const row = await env.DB.prepare('SELECT slug, title, content, has_posts, cta_label, cta_url, cta_label_2, cta_url_2, hero_image_url, ministry_image_url, vid_1_url, vid_1_title, vid_2_url, vid_2_title, vid_3_url, vid_3_title, updated_at FROM youth_pages WHERE slug = ?').bind(slug).first();
       if (!row) return new Response('Not found', { status: 404 });
       const fixUrl = s => s ? s.replace(/src="\/images\//g, 'src="https://admin.timothystl.org/images/') : s;
       return new Response(JSON.stringify({ ...row, content: fixUrl(row.content) }), {
@@ -2417,6 +2425,22 @@ ${topbarHtml('ministries', currentUser, `<a href="/ministries">← All ministrie
         const slug = path.slice('/ministries/edit/'.length);
         const page = await env.DB.prepare('SELECT * FROM youth_pages WHERE slug = ?').bind(slug).first();
         if (!page) return new Response('Not found', { status: 404 });
+        const videoSectionHtml = slug === 'music' ? `
+<div class="card" style="margin-top:24px;">
+  <div class="card-title">Video highlights <span class="tag">Music page only</span></div>
+  <div class="card-sub" style="font-size:13px;color:var(--gray);margin-bottom:16px;">Paste YouTube video URLs for up to 3 highlight clips shown on the Music page. Use the full URL (e.g. https://youtu.be/ABC123 or https://www.youtube.com/watch?v=ABC123).</div>
+  ${[1,2,3].map(i => `
+  <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border);">
+    <div class="form-group" style="margin:0;">
+      <label>Video ${i} — YouTube URL</label>
+      <input type="text" name="vid_${i}_url" value="${escapeHtml(page['vid_' + i + '_url'] || '')}" placeholder="https://youtu.be/...">
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label>Label</label>
+      <input type="text" name="vid_${i}_title" value="${escapeHtml(page['vid_' + i + '_title'] || '')}" placeholder="e.g. Handbell Choir">
+    </div>
+  </div>`).join('')}
+</div>` : '';
         return html(`
 ${topbarHtml('ministries', currentUser, `<a href="/ministries">← All ministries</a>`)}
 <div class="wrap">
@@ -2429,6 +2453,32 @@ ${topbarHtml('ministries', currentUser, `<a href="/ministries">← All ministrie
         <input type="text" name="title" value="${(page.title || '').replace(/"/g, '&quot;')}" required>
       </div>
       ${tinymceYouthSection(page.content || '')}
+      <div class="card" style="margin-top:24px;">
+  <div class="card-title">Ministry Images</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+    <div class="form-group" style="margin:0;">
+      <label>Hero banner image <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— shown at top of page (1200×500px ideal)</span></label>
+      <input type="hidden" name="hero_image_url" id="hero_image_url_val" value="${escapeHtml(page.hero_image_url || '')}">
+      <div id="hero-img-preview" style="${page.hero_image_url ? '' : 'display:none;'}margin-bottom:8px;">
+        ${page.hero_image_url ? `<img src="${escapeHtml(page.hero_image_url)}" style="width:100%;height:120px;object-fit:cover;border-radius:6px;">` : ''}
+      </div>
+      <input type="file" id="hero_image_file" accept="image/jpeg,image/png,image/webp" style="font-size:13px;">
+      <div id="hero-upload-status" style="font-size:12px;color:var(--gray);margin-top:4px;"></div>
+      ${page.hero_image_url ? `<button type="button" onclick="document.getElementById('hero_image_url_val').value='';document.getElementById('hero-img-preview').style.display='none';this.style.display='none';" class="btn btn-sm btn-danger" style="margin-top:8px;font-size:11px;padding:5px 12px;">Remove image</button>` : ''}
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label>Ministry photo <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— shown in the content area (800×600px ideal)</span></label>
+      <input type="hidden" name="ministry_image_url" id="ministry_image_url_val" value="${escapeHtml(page.ministry_image_url || '')}">
+      <div id="ministry-img-preview" style="${page.ministry_image_url ? '' : 'display:none;'}margin-bottom:8px;">
+        ${page.ministry_image_url ? `<img src="${escapeHtml(page.ministry_image_url)}" style="width:100%;height:120px;object-fit:cover;border-radius:6px;">` : ''}
+      </div>
+      <input type="file" id="ministry_image_file" accept="image/jpeg,image/png,image/webp" style="font-size:13px;">
+      <div id="ministry-upload-status" style="font-size:12px;color:var(--gray);margin-top:4px;"></div>
+      ${page.ministry_image_url ? `<button type="button" onclick="document.getElementById('ministry_image_url_val').value='';document.getElementById('ministry-img-preview').style.display='none';this.style.display='none';" class="btn btn-sm btn-danger" style="margin-top:8px;font-size:11px;padding:5px 12px;">Remove image</button>` : ''}
+    </div>
+  </div>
+</div>
+      ${videoSectionHtml}
       <div class="card" style="margin-top:24px;background:var(--mist);border:1px solid var(--ice);">
         <div class="card-title">CTA Buttons <span class="tag">Optional</span></div>
         <div class="card-sub">Add up to two call-to-action buttons at the bottom of this page. When any button is set here, it <strong>replaces</strong> the default button bar. Leave both rows blank to keep the default buttons.</div>
@@ -2465,6 +2515,40 @@ ${topbarHtml('ministries', currentUser, `<a href="/ministries">← All ministrie
       </div>
     </form>
   </div>
+<script>
+(function() {
+  function wireUpload(fileInputId, hiddenId, previewId, statusId) {
+    document.getElementById(fileInputId).addEventListener('change', async function() {
+      var file = this.files[0];
+      if (!file) return;
+      var status = document.getElementById(statusId);
+      status.textContent = 'Uploading…';
+      var fd = new FormData();
+      fd.append('file', file);
+      try {
+        var r = await fetch('/api/upload-image', { method: 'POST', body: fd });
+        var j = await r.json();
+        if (j.url) {
+          document.getElementById(hiddenId).value = j.url;
+          var prev = document.getElementById(previewId);
+          prev.innerHTML = '<img src="' + j.url + '" style="width:100%;height:120px;object-fit:cover;border-radius:6px;">';
+          prev.style.display = '';
+          status.textContent = '✓ Uploaded';
+          status.style.color = 'var(--sage)';
+        } else {
+          status.textContent = j.error || 'Upload failed';
+          status.style.color = '#B85C3A';
+        }
+      } catch(e) {
+        status.textContent = 'Upload failed — try again';
+        status.style.color = '#B85C3A';
+      }
+    });
+  }
+  wireUpload('hero_image_file', 'hero_image_url_val', 'hero-img-preview', 'hero-upload-status');
+  wireUpload('ministry_image_file', 'ministry_image_url_val', 'ministry-img-preview', 'ministry-upload-status');
+})();
+</script>
 </div>`, `Edit — ${page.title}`, TINYMCE_HEAD);
       }
 
@@ -2478,11 +2562,19 @@ ${topbarHtml('ministries', currentUser, `<a href="/ministries">← All ministrie
         const ctaUrl = form.get('cta_url') || '';
         const ctaLabel2 = form.get('cta_label_2') || '';
         const ctaUrl2 = form.get('cta_url_2') || '';
+        const heroImageUrl = form.get('hero_image_url') || '';
+        const ministryImageUrl = form.get('ministry_image_url') || '';
+        const vid1Url = form.get('vid_1_url') || '';
+        const vid1Title = form.get('vid_1_title') || '';
+        const vid2Url = form.get('vid_2_url') || '';
+        const vid2Title = form.get('vid_2_title') || '';
+        const vid3Url = form.get('vid_3_url') || '';
+        const vid3Title = form.get('vid_3_title') || '';
         const now = new Date().toISOString();
         const beforePage = await env.DB.prepare('SELECT title, content, cta_label, cta_url FROM youth_pages WHERE slug = ?').bind(slug).first();
         await env.DB.prepare(
-          'UPDATE youth_pages SET title = ?, content = ?, cta_label = ?, cta_url = ?, cta_label_2 = ?, cta_url_2 = ?, updated_at = ? WHERE slug = ?'
-        ).bind(title, content, ctaLabel, ctaUrl, ctaLabel2, ctaUrl2, now, slug).run();
+          'UPDATE youth_pages SET title = ?, content = ?, cta_label = ?, cta_url = ?, cta_label_2 = ?, cta_url_2 = ?, hero_image_url = ?, ministry_image_url = ?, vid_1_url = ?, vid_1_title = ?, vid_2_url = ?, vid_2_title = ?, vid_3_url = ?, vid_3_title = ?, updated_at = ? WHERE slug = ?'
+        ).bind(title, content, ctaLabel, ctaUrl, ctaLabel2, ctaUrl2, heroImageUrl, ministryImageUrl, vid1Url, vid1Title, vid2Url, vid2Title, vid3Url, vid3Title, now, slug).run();
         await logAudit(env.DB, currentUser, 'update', 'ministry_page', slug, title, beforePage, { title, content: content.substring(0, 200), ctaLabel, ctaUrl });
         return new Response('', { status: 302, headers: { Location: '/ministries?msg=saved' } });
       }
