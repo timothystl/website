@@ -2074,7 +2074,7 @@ updateSummary();
         const MNAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
         const DNAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
         const NUM_MONTHS = 6;
-        let calHtml = '<div class="scal-wrap"><div class="scal-nav">'
+        let calHtml = '<div class="scal-wrap" id="adm-cal"><div class="scal-nav">'
           + `<button type="button" class="scal-nav-btn" id="scal-prev" disabled>&#8249;</button>`
           + `<div class="scal-nav-label" id="scal-nav-label"></div>`
           + `<button type="button" class="scal-nav-btn" id="scal-next">&#8250;</button>`
