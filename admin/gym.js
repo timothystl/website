@@ -2030,45 +2030,80 @@ updateSummary();
         return new Response('', { status: 302, headers: { Location: '/gym-rentals?msg=deleted' } });
       }
 
+      // ── API: GROUP RATE ──────────────────────────────────────
+      if (path === '/gym-rentals/api/group-rate' && method === 'GET') {
+        const gid = parseInt(url.searchParams.get('id') || '0', 10);
+        if (!gid) return new Response(JSON.stringify({ rate: 25 }), { headers: { 'Content-Type': 'application/json' } });
+        const g = await env.DB.prepare('SELECT rate FROM gym_groups WHERE id = ?').bind(gid).first();
+        const r = await getGroupRate(env, g || {});
+        return new Response(JSON.stringify({ rate: r }), { headers: { 'Content-Type': 'application/json' } });
+      }
+
       // ── NEW BOOKING FORM ──────────────────────────────────────
       if (path === '/gym-rentals/bookings/new' && method === 'GET') {
         const groups = await env.DB.prepare('SELECT id, name FROM gym_groups WHERE active = 1 ORDER BY name').all();
-        const today = new Date().toISOString().split('T')[0];
         const selGroup = url.searchParams.get('grp') || '';
-        const selDate  = url.searchParams.get('dt')  || '';
         const selStart = url.searchParams.get('st')  || '';
         const selEnd   = url.searchParams.get('et')  || '';
         const selNotes = url.searchParams.get('notes') || '';
+        const selDates = url.searchParams.get('dates') || '';
+        const selRate  = url.searchParams.get('rate')  || '';
         const errParam = url.searchParams.get('err');
-        const errAlert = errParam === 'conflict' ? `<div class="alert alert-error">That time slot overlaps with an existing booking or hold. Choose a different date or time.</div>`
-          : errParam === 'blocked' ? `<div class="alert alert-error">That date is blocked (gym unavailable). Choose a different date.</div>`
-          : errParam === 'invalid' ? `<div class="alert alert-error">End time must be after start time.</div>`
-          : errParam === 'nogroup' ? `<div class="alert alert-error">No active groups found. Add a group first.</div>`
+        const errAlert = errParam === 'nodates'  ? `<div class="alert alert-error">Please select at least one date.</div>`
+          : errParam === 'invalid'  ? `<div class="alert alert-error">End time must be after start time.</div>`
+          : errParam === 'nogroup'  ? `<div class="alert alert-error">Please select a group.</div>`
           : '';
+
         const rateRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'gym_rate_per_hour'").first();
-        const rate = rateRow ? parseFloat(rateRow.value || '0').toFixed(2) : '0.00';
+        const globalRate = rateRow ? parseFloat(rateRow.value || '25').toFixed(2) : '25.00';
+
         const groupOptions = groups.results.map(g =>
           `<option value="${g.id}"${selGroup == g.id ? ' selected' : ''}>${g.name}</option>`).join('');
+
+        // Fetch booked dates (confirmed/hold) for next 6 months for calendar display
+        const today = new Date();
+        const sixMonthsOut = new Date(today); sixMonthsOut.setMonth(today.getMonth() + 6);
+        const todayStr = today.toISOString().split('T')[0];
+        const sixMonStr = sixMonthsOut.toISOString().split('T')[0];
+        const bookedRows = await env.DB.prepare(
+          `SELECT booking_date FROM gym_bookings WHERE booking_date >= ? AND booking_date <= ? AND status IN ('confirmed','hold')`
+        ).bind(todayStr, sixMonStr).all();
+        const blockedRows = await env.DB.prepare(
+          `SELECT date FROM gym_blocked_dates WHERE date >= ? AND date <= ?`
+        ).bind(todayStr, sixMonStr).all();
+        const bookedDates = [...new Set(bookedRows.results.map(r => r.booking_date))];
+        const blockedDates = blockedRows.results.map(r => r.date);
+
         return html(`
 ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="wrap">
   <div class="page-title">New Booking</div>
-  <div class="page-sub">Admin-created bookings are confirmed immediately and generate an invoice emailed to the group.</div>
+  <div class="page-sub">Select dates, set times, and review before sending an invoice. Admin-created bookings are confirmed immediately.</div>
   ${errAlert}
   <div class="card">
-    <form method="POST" action="/gym-rentals/bookings/create">
+    <form id="new-booking-form" method="POST" action="/gym-rentals/bookings/review">
       <div class="form-group">
         <label>Group *</label>
-        <select name="group_id" required>
+        <select name="group_id" id="group-select" required>
           <option value="">— select group —</option>
           ${groupOptions}
         </select>
       </div>
-      <div class="time-grid">
-        <div class="form-group">
-          <label>Date *</label>
-          <input type="date" name="booking_date" required min="${today}" value="${selDate}">
+
+      <div style="margin-bottom:18px;">
+        <label style="display:block;font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:10px;">Select Dates * <span id="date-count-label" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--amber);"></span></label>
+        <div class="scal-wrap" id="adm-cal">
+          <div class="scal-nav">
+            <button type="button" class="scal-nav-btn" id="scal-prev" onclick="admNavMonth(-1)" disabled>&#8249;</button>
+            <div class="scal-nav-label" id="scal-nav-label"></div>
+            <button type="button" class="scal-nav-btn" id="scal-next" onclick="admNavMonth(1)">&#8250;</button>
+          </div>
+          <div id="adm-cal-months"></div>
         </div>
+        <input type="hidden" name="dates" id="selected-dates-input" value="${selDates}">
+      </div>
+
+      <div class="time-grid">
         <div class="form-group">
           <label>Start time *</label>
           <select name="start_time" required>
@@ -2084,74 +2119,318 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
           </select>
         </div>
       </div>
+
+      <div class="form-group">
+        <label>Rate override ($/hr) <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;" id="rate-hint">— leave blank to use group/global rate ($${globalRate}/hr)</span></label>
+        <input type="number" name="rate_override" id="rate-override" step="0.01" min="0" placeholder="${globalRate}" value="${selRate}" style="max-width:140px;">
+      </div>
+
       <div class="form-group">
         <label>Notes <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— included on the invoice</span></label>
         <textarea name="notes" maxlength="1000" placeholder="e.g. Basketball practice, weekly session">${selNotes.replace(/</g,'&lt;')}</textarea>
       </div>
-      <div style="background:var(--mist);border-radius:8px;padding:14px 16px;margin-bottom:18px;font-family:var(--sans);font-size:13px;color:var(--charcoal);">
-        Global rate: <strong>$${rate}/hr</strong> — Invoice will use the group's custom rate if set, otherwise this rate. Invoice emailed to the group automatically.
-      </div>
+
       <div class="btn-row">
-        <button type="submit" class="btn btn-primary">Create Booking &amp; Send Invoice →</button>
+        <button type="submit" class="btn btn-primary">Review →</button>
         <a href="/gym-rentals" class="btn btn-secondary">Cancel</a>
       </div>
     </form>
   </div>
-</div>`, 'New Booking');
+</div>
+<style>
+.adm-day{border-radius:6px;cursor:pointer;padding:6px 2px;text-align:center;transition:background .12s,border-color .12s;border:2px solid transparent;font-family:var(--sans);font-size:13px;font-weight:700;color:var(--steel);}
+.adm-day.available:hover{background:#D4EDDA;border-color:#5A9E6F;}
+.adm-day.selected{background:var(--amber) !important;border-color:#A07020 !important;color:white !important;}
+.adm-day.booked{background:#F7D0D0;color:#9B4040;cursor:not-allowed;}
+.adm-day.blocked{background:#E8EDF3;color:#aaa;cursor:not-allowed;}
+.adm-day.past{color:#CBD5E1;cursor:not-allowed;}
+</style>
+<script>
+(function(){
+  const BOOKED  = ${JSON.stringify(bookedDates)};
+  const BLOCKED = ${JSON.stringify(blockedDates)};
+  const MNAMES  = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const NUM_MONTHS = 6;
+  let curMonth = 0;
+  let selectedDates = new Set(${JSON.stringify(selDates ? selDates.split(',').filter(Boolean) : [])});
+
+  const today = new Date();
+  today.setHours(0,0,0,0);
+
+  function pad(n){ return n.toString().padStart(2,'0'); }
+  function ds(y,m,d){ return y+'-'+pad(m+1)+'-'+pad(d); }
+
+  function buildCalendar(){
+    const container = document.getElementById('adm-cal-months');
+    container.innerHTML = '';
+    for(let mi=0; mi<NUM_MONTHS; mi++){
+      const d = new Date(today.getFullYear(), today.getMonth()+mi, 1);
+      const yr = d.getFullYear(), mo = d.getMonth();
+      const daysInMonth = new Date(yr, mo+1, 0).getDate();
+      const startDow = d.getDay();
+
+      let html = '<div class="scal-month'+(mi===0?' active':'')+'" id="adm-month-'+mi+'" data-label="'+MNAMES[mo]+' '+yr+'">';
+      html += '<table class="scal-table"><tr><th>Su</th><th>Mo</th><th>Tu</th><th>We</th><th>Th</th><th>Fr</th><th>Sa</th></tr><tr>';
+      for(let i=0;i<startDow;i++) html += '<td></td>';
+      let dow = startDow;
+      for(let day=1; day<=daysInMonth; day++){
+        const dateStr = ds(yr,mo,day);
+        const dt = new Date(yr,mo,day);
+        const isPast = dt < today;
+        const isBooked = BOOKED.includes(dateStr);
+        const isBlocked = BLOCKED.includes(dateStr);
+        const isSelected = selectedDates.has(dateStr);
+        let cls = 'adm-day';
+        let title = '';
+        if(isPast) cls += ' past';
+        else if(isBlocked){ cls += ' blocked'; title = ' title="Blocked"'; }
+        else if(isBooked){ cls += ' booked'; title = ' title="Already booked"'; }
+        else { cls += ' available'; }
+        if(isSelected && !isPast && !isBlocked) cls += ' selected';
+        const clickable = !isPast && !isBlocked && !isBooked;
+        const onclick = clickable ? ' onclick="toggleDate(\''+dateStr+'\')"' : '';
+        html += '<td><div class="'+cls+'"'+title+onclick+'>'+day+'</div></td>';
+        dow++;
+        if(dow===7 && day<daysInMonth){ html += '</tr><tr>'; dow=0; }
+      }
+      html += '</tr></table></div>';
+      container.innerHTML += html;
+    }
+    updateNavLabel();
+    updateCounter();
+  }
+
+  function updateNavLabel(){
+    document.getElementById('scal-nav-label').textContent = document.getElementById('adm-month-'+curMonth).dataset.label;
+    document.getElementById('scal-prev').disabled = curMonth===0;
+    document.getElementById('scal-next').disabled = curMonth===NUM_MONTHS-1;
+  }
+
+  window.admNavMonth = function(dir){
+    document.getElementById('adm-month-'+curMonth).classList.remove('active');
+    curMonth = Math.max(0, Math.min(NUM_MONTHS-1, curMonth+dir));
+    document.getElementById('adm-month-'+curMonth).classList.add('active');
+    updateNavLabel();
+  };
+
+  window.toggleDate = function(dateStr){
+    if(selectedDates.has(dateStr)) selectedDates.delete(dateStr);
+    else selectedDates.add(dateStr);
+    document.getElementById('selected-dates-input').value = Array.from(selectedDates).sort().join(',');
+    // Update visual
+    document.querySelectorAll('.adm-day.available, .adm-day.selected').forEach(el => {
+      const onclick = el.getAttribute('onclick');
+      if(!onclick) return;
+      const m = onclick.match(/'([^']+)'/);
+      if(m && m[1]===dateStr){
+        if(selectedDates.has(dateStr)) el.classList.add('selected');
+        else el.classList.remove('selected');
+      }
+    });
+    updateCounter();
+  };
+
+  function updateCounter(){
+    const n = selectedDates.size;
+    document.getElementById('date-count-label').textContent = n > 0 ? '('+n+' date'+(n===1?'':'s')+' selected)' : '';
+  }
+
+  // Rate hint update on group change
+  document.getElementById('group-select').addEventListener('change', function(){
+    const gid = this.value;
+    if(!gid) return;
+    fetch('/gym-rentals/api/group-rate?id='+gid)
+      .then(r=>r.json())
+      .then(data=>{
+        const r = parseFloat(data.rate||25).toFixed(2);
+        document.getElementById('rate-hint').textContent = '— leave blank to use group/global rate ($'+r+'/hr)';
+        const ov = document.getElementById('rate-override');
+        if(!ov.value) ov.placeholder = r;
+      }).catch(()=>{});
+  });
+
+  buildCalendar();
+  // Restore selections from pre-filled dates param
+  if(selectedDates.size > 0) updateCounter();
+})();
+</script>
+`, 'New Booking');
       }
 
-      // ── CREATE BOOKING ────────────────────────────────────────
-      if (path === '/gym-rentals/bookings/create' && method === 'POST') {
+      // ── BOOKING REVIEW ────────────────────────────────────────
+      if (path === '/gym-rentals/bookings/review' && method === 'POST') {
         const form = await request.formData();
         const group_id     = parseInt(form.get('group_id') || '0', 10);
-        const booking_date = form.get('booking_date') || '';
-        const start_time   = form.get('start_time')   || '';
-        const end_time     = form.get('end_time')     || '';
-        const notes        = form.get('notes')        || '';
-        const back = (err) => new Response('', { status: 302, headers: { Location: `/gym-rentals/bookings/new?err=${err}&grp=${group_id}&dt=${booking_date}&st=${encodeURIComponent(start_time)}&et=${encodeURIComponent(end_time)}` } });
+        const datesRaw     = form.get('dates') || '';
+        const start_time   = form.get('start_time') || '';
+        const end_time     = form.get('end_time') || '';
+        const rate_override = parseFloat(form.get('rate_override') || '') || null;
+        const notes        = form.get('notes') || '';
 
-        if (!group_id || !booking_date || !start_time || !end_time) return back('invalid');
-        if (end_time <= start_time) return back('invalid');
+        const backUrl = (err) => {
+          const p = new URLSearchParams({ err, grp: group_id, st: start_time, et: end_time, notes, dates: datesRaw });
+          if (rate_override) p.set('rate', rate_override);
+          return `/gym-rentals/bookings/new?${p}`;
+        };
 
-        const blocked = await env.DB.prepare('SELECT id FROM gym_blocked_dates WHERE date = ?').bind(booking_date).first();
-        if (blocked) return back('blocked');
+        if (!group_id) return new Response('', { status: 302, headers: { Location: backUrl('nogroup') } });
+        if (!start_time || !end_time || end_time <= start_time) return new Response('', { status: 302, headers: { Location: backUrl('invalid') } });
+        const dates = datesRaw.split(',').map(s => s.trim()).filter(Boolean).sort();
+        if (dates.length === 0) return new Response('', { status: 302, headers: { Location: backUrl('nodates') } });
 
-        const conflict = await env.DB.prepare(
-          `SELECT id FROM gym_bookings WHERE booking_date = ? AND status IN ('confirmed','hold') AND start_time < ? AND end_time > ?`
-        ).bind(booking_date, end_time, start_time).first();
-        if (conflict) return back('conflict');
-
-        // Create booking
-        const bRes = await env.DB.prepare(
-          `INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, notes, status, created_by) VALUES (?, ?, ?, ?, ?, 'confirmed', 'admin')`
-        ).bind(group_id, booking_date, start_time, end_time, notes).run();
-        const bookingId = bRes.meta.last_row_id;
-
-        // Fetch group and calculate invoice using per-group rate
-        const group   = await env.DB.prepare('SELECT * FROM gym_groups WHERE id = ?').bind(group_id).first();
-        const rate  = await getGroupRate(env, group);
+        const group = await env.DB.prepare('SELECT * FROM gym_groups WHERE id = ?').bind(group_id).first();
+        if (!group) return new Response('', { status: 302, headers: { Location: backUrl('nogroup') } });
+        const rate = rate_override !== null ? rate_override : await getGroupRate(env, group);
         const hours = calcHours(start_time, end_time);
-        const total = Math.round(hours * rate * 100) / 100;
+
+        // Check each date for conflicts/blocked
+        const rows = [];
+        for (const dt of dates) {
+          const blocked = await env.DB.prepare('SELECT id FROM gym_blocked_dates WHERE date = ?').bind(dt).first();
+          const conflict = !blocked && await env.DB.prepare(
+            `SELECT id FROM gym_bookings WHERE booking_date = ? AND status IN ('confirmed','hold') AND start_time < ? AND end_time > ?`
+          ).bind(dt, end_time, start_time).first();
+          rows.push({ dt, blocked: !!blocked, conflict: !!conflict });
+        }
+
+        const validRows = rows.filter(r => !r.blocked && !r.conflict);
+        const skippedRows = rows.filter(r => r.blocked || r.conflict);
+
+        const totalHours = hours * validRows.length;
+        const grandTotal = Math.round(totalHours * rate * 100) / 100;
+
+        const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        function reviewDateLabel(d) {
+          const dt = new Date(d + 'T12:00:00');
+          return DAYS[dt.getDay()] + ' ' + dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+
+        const validTableRows = validRows.map(r => `
+<tr>
+  <td style="padding:10px 12px;font-family:var(--sans);font-size:14px;font-weight:600;color:var(--steel);">${reviewDateLabel(r.dt)}</td>
+  <td style="padding:10px 12px;font-size:13px;color:var(--charcoal);">${fmt12h(start_time)} – ${fmt12h(end_time)}</td>
+  <td style="padding:10px 12px;font-size:13px;color:var(--charcoal);text-align:right;">${hours} hr${hours !== 1 ? 's' : ''}</td>
+  <td style="padding:10px 12px;font-size:13px;font-weight:600;color:var(--charcoal);text-align:right;">$${(hours * rate).toFixed(2)}</td>
+</tr>`).join('');
+
+        const skippedAlert = skippedRows.length > 0 ? `
+<div class="alert alert-error" style="margin-bottom:18px;">
+  <strong>${skippedRows.length} date${skippedRows.length > 1 ? 's' : ''} skipped</strong> — already booked or blocked and will not be included:
+  <ul style="margin:6px 0 0 16px;padding:0;">
+    ${skippedRows.map(r => `<li>${reviewDateLabel(r.dt)} — ${r.blocked ? 'blocked' : 'conflict with existing booking'}</li>`).join('')}
+  </ul>
+</div>` : '';
+
+        const hiddenDates = validRows.map(r => `<input type="hidden" name="date" value="${r.dt}">`).join('');
+
+        return html(`
+${topbarHtml('gym', currentUser, `<a href="/gym-rentals/bookings/new">← Edit</a>`)}
+<div class="wrap">
+  <div class="page-title">Review Booking</div>
+  <div class="page-sub">${group.name} — ${fmt12h(start_time)} to ${fmt12h(end_time)} — $${rate.toFixed(2)}/hr</div>
+  ${skippedAlert}
+  ${validRows.length === 0 ? `<div class="alert alert-error">No valid dates remain after filtering conflicts and blocked dates. <a href="/gym-rentals/bookings/new">Go back</a>.</div>` : `
+  <div class="card">
+    <table style="width:100%;border-collapse:collapse;margin-bottom:18px;">
+      <thead>
+        <tr style="border-bottom:2px solid var(--border);">
+          <th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);">Date</th>
+          <th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);">Time</th>
+          <th style="padding:8px 12px;text-align:right;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);">Hours</th>
+          <th style="padding:8px 12px;text-align:right;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);">Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>${validTableRows}</tbody>
+      <tfoot>
+        <tr style="border-top:2px solid var(--border);background:var(--mist);">
+          <td colspan="2" style="padding:12px;font-family:var(--sans);font-size:14px;font-weight:700;color:var(--steel);">Total (${validRows.length} date${validRows.length !== 1 ? 's' : ''})</td>
+          <td style="padding:12px;text-align:right;font-size:14px;font-weight:700;color:var(--steel);">${totalHours} hrs</td>
+          <td style="padding:12px;text-align:right;font-size:16px;font-weight:700;color:var(--steel);">$${grandTotal.toFixed(2)}</td>
+        </tr>
+      </tfoot>
+    </table>
+    ${notes ? `<div style="font-size:13px;color:var(--charcoal);margin-bottom:18px;"><strong>Notes:</strong> ${notes.replace(/</g,'&lt;')}</div>` : ''}
+    <form method="POST" action="/gym-rentals/bookings/confirm">
+      <input type="hidden" name="group_id" value="${group_id}">
+      ${hiddenDates}
+      <input type="hidden" name="start_time" value="${start_time}">
+      <input type="hidden" name="end_time" value="${end_time}">
+      <input type="hidden" name="rate" value="${rate}">
+      <input type="hidden" name="notes" value="${notes.replace(/"/g,'&quot;')}">
+      <div class="btn-row">
+        <button type="submit" class="btn btn-primary" onclick="this.disabled=true;this.textContent='Creating…';return true;">Confirm &amp; Send Invoice →</button>
+        <a href="/gym-rentals/bookings/new?grp=${group_id}&st=${encodeURIComponent(start_time)}&et=${encodeURIComponent(end_time)}&dates=${encodeURIComponent(datesRaw)}&notes=${encodeURIComponent(notes)}${rate_override ? '&rate='+rate_override : ''}" class="btn btn-secondary">← Edit</a>
+      </div>
+    </form>
+  </div>`}
+</div>`, 'Review Booking');
+      }
+
+      // ── CONFIRM BOOKING ───────────────────────────────────────
+      if (path === '/gym-rentals/bookings/confirm' && method === 'POST') {
+        const form = await request.formData();
+        const group_id   = parseInt(form.get('group_id') || '0', 10);
+        const dates      = form.getAll('date').filter(Boolean).sort();
+        const start_time = form.get('start_time') || '';
+        const end_time   = form.get('end_time')   || '';
+        const rate       = parseFloat(form.get('rate') || '25');
+        const notes      = form.get('notes') || '';
+
+        if (!group_id || dates.length === 0 || !start_time || !end_time) {
+          return new Response('', { status: 302, headers: { Location: '/gym-rentals/bookings/new?err=invalid' } });
+        }
+
+        const group = await env.DB.prepare('SELECT * FROM gym_groups WHERE id = ?').bind(group_id).first();
+        if (!group) return new Response('', { status: 302, headers: { Location: '/gym-rentals/bookings/new?err=nogroup' } });
+
+        const bookingIds = [];
+        const bookings = [];
+        const hours = calcHours(start_time, end_time);
+
+        for (const dt of dates) {
+          // Re-check conflict/blocked before inserting
+          const blocked = await env.DB.prepare('SELECT id FROM gym_blocked_dates WHERE date = ?').bind(dt).first();
+          const conflict = !blocked && await env.DB.prepare(
+            `SELECT id FROM gym_bookings WHERE booking_date = ? AND status IN ('confirmed','hold') AND start_time < ? AND end_time > ?`
+          ).bind(dt, end_time, start_time).first();
+          if (blocked || conflict) continue;
+
+          const bRes = await env.DB.prepare(
+            `INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, notes, status, created_by) VALUES (?, ?, ?, ?, ?, 'confirmed', 'admin')`
+          ).bind(group_id, dt, start_time, end_time, notes).run();
+          bookingIds.push(bRes.meta.last_row_id);
+          bookings.push({ booking_date: dt, start_time, end_time, notes });
+        }
+
+        if (bookingIds.length === 0) {
+          return new Response('', { status: 302, headers: { Location: '/gym-rentals/bookings/new?err=conflict' } });
+        }
+
+        const totalHours = Math.round(hours * bookingIds.length * 100) / 100;
+        const totalAmount = Math.round(totalHours * rate * 100) / 100;
         const invoiceDate = new Date().toISOString().split('T')[0];
+        const periodStart = dates[0];
+        const periodEnd   = dates[dates.length - 1];
 
         const iRes = await env.DB.prepare(
-          `INSERT INTO gym_invoices (group_id, booking_id, invoice_date, period_start, period_end, total_hours, rate, total_amount, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'unpaid')`
-        ).bind(group_id, bookingId, invoiceDate, booking_date, booking_date, hours, rate, total).run();
+          `INSERT INTO gym_invoices (group_id, booking_ids, invoice_date, period_start, period_end, total_hours, rate, total_amount, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'unpaid')`
+        ).bind(group_id, JSON.stringify(bookingIds), invoiceDate, periodStart, periodEnd, totalHours, rate, totalAmount).run();
         const invoiceId = iRes.meta.last_row_id;
 
-        // Fetch invoice for email
-        const inv     = await env.DB.prepare('SELECT * FROM gym_invoices WHERE id = ?').bind(invoiceId).first();
-        const booking = { booking_date, start_time, end_time, notes };
-
-        const pymtLink  = await getPaymentLink(env);
-        const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, booking, pymtLink);
-        const subject   = `Gym Rental Invoice \u2014 ${group.name} \u2014 ${formatDate(booking_date)}`;
+        const inv      = await env.DB.prepare('SELECT * FROM gym_invoices WHERE id = ?').bind(invoiceId).first();
+        const pymtLink = await getPaymentLink(env);
+        const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, bookings, pymtLink);
+        const subject   = bookings.length === 1
+          ? `Gym Rental Invoice — ${group.name} — ${formatDate(periodStart)}`
+          : `Gym Rental Invoice — ${group.name} — ${bookings.length} dates`;
         const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'gym_admin_email'").first();
         const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
         const toEmails = [adminEmail];
         if (group.email) toEmails.push(group.email);
         try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {}
-        await addGymBookingToGCal(env, { booking_date, start_time, end_time, group_name: group.name, notes });
+        for (const b of bookings) {
+          await addGymBookingToGCal(env, { booking_date: b.booking_date, start_time, end_time, group_name: group.name, notes });
+        }
 
         return new Response('', { status: 302, headers: { Location: `/gym-rentals/invoices/view/${invoiceId}?msg=created` } });
       }
