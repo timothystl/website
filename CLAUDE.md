@@ -127,6 +127,7 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Scheduler | Link to volunteer scheduler | **DONE** — external link tab |
 | Volunteer Admin | Link to volunteer.timothystl.org/admin | **DONE** — external link tab |
 | Special Pages (`/voters`) | Office staff | **DONE** — Zoom link + file upload, admin-managed |
+| Gym Rentals | Office staff (Dinger) | **DONE** — full rental management at /gym-rentals |
 
 ### News & Events Data Model
 ```sql
@@ -152,8 +153,38 @@ CREATE TABLE youth_pages (
 );
 ```
 
+### Gym Rentals Data Model
+```sql
+CREATE TABLE gym_groups (id, name, contact, email, phone, notes, access_token, max_active_holds, active);
+CREATE TABLE gym_bookings (id, group_id, booking_date, start_time, end_time, notes, status, hold_expires_at, recurrence_id, created_by, created_at);
+  -- status: 'hold' | 'confirmed' | 'released' | 'expired' | 'cancelled'
+CREATE TABLE gym_invoices (id, group_id, booking_id, booking_ids TEXT, invoice_date, period_start, period_end, total_hours, rate, total_amount, notes, status, recurrence_id, created_at);
+  -- booking_ids: JSON array of booking IDs for multi-date invoices (booking_id = NULL when set)
+CREATE TABLE gym_recurrences (id, group_id, day_of_week, start_time, end_time, start_date, end_date, notes, status, created_at);
+CREATE TABLE gym_blocked_dates (id, date, reason);
+```
+
+**Gym Rental Flow:**
+- Groups get a private portal link (`/gym/book/:token`) — no login needed
+- Renters select dates on a 6-month calendar and submit a hold request (holds only — no self-confirm)
+- Admin reviews holds at `/gym-rentals`, confirms or releases individually or in bulk
+- On confirmation: booking pushed to Google Calendar + one invoice per group emailed (Tithely pay link included)
+- Multi-date requests produce one combined invoice listing all dates as line items
+
+**Gym Admin Features (as of May 2026):**
+- Dashboard grouped by org with checkboxes for bulk Confirm / Release / Delete
+- "Confirm All" confirms all pending holds, grouped by org (one invoice per group)
+- "Confirm Selected" / "Release Selected" — act on checked holds without page reload
+- "Delete Selected" — bulk delete confirmed bookings
+- Invoice view shows all dates when a multi-booking invoice
+- Resend email re-sends the correct single/multi-booking invoice
+- iCal feed at `/gym/cal/:token.ics` (admin-set token) for calendar subscriptions
+- Blocked dates, recurring requests, group management all in the admin tab
+- Rate configured in Settings tab (`gym_rate_per_hour`)
+- Google Calendar integration via service account (secrets: `GCAL_SERVICE_ACCOUNT_EMAIL`, `GCAL_PRIVATE_KEY`, setting: `gcal_calendar_id`)
+
 ### Access Control
-- Staff admin password: full access (News, Special Pages, Redirects, Newsletter)
+- Staff admin password: full access (News, Special Pages, Redirects, Newsletter, Gym Rentals)
 - Youth director password: Youth Pages tab only (separate password so it can be changed independently)
 
 ---
@@ -293,7 +324,7 @@ The actual SPA is **`public/index.html`**. All HTML edits go there.
 
 ---
 
-## Session State (as of 2026-04-24)
+## Session State (as of 2026-05-19)
 
 ### What's live on timothystl.org:
 - **DNS cutover complete** — site is live at timothystl.org
@@ -314,6 +345,7 @@ The actual SPA is **`public/index.html`**. All HTML edits go there.
 - URL routing: pushState — direct URLs like /about work on reload
 - Staff manual: `/manual` — documents header photos, button editing, Christmas Market, color reference
 - Newsletter: Weekly / Quick Announcement formats, draft/published split, Brevo email, website archive
+- Gym Rental Scheduler: full system at `/gym-rentals` — groups, bookings, holds, invoices, GCal, iCal, recurring requests
 
 ### What's next:
 - Youth director content entry for /confirmation, /sundayschool, /vbs, /egghunt, /family
