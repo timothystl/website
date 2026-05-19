@@ -2041,16 +2041,14 @@ updateSummary();
 
       // ── NEW BOOKING FORM ──────────────────────────────────────
       if (path === '/gym-rentals/bookings/new' && method === 'GET') {
-        const groups = await env.DB.prepare('SELECT id, name FROM gym_groups WHERE active = 1 ORDER BY name').all();
-        const selGroup = url.searchParams.get('grp') || '';
-        const selStart = url.searchParams.get('st')  || '';
-        const selEnd   = url.searchParams.get('et')  || '';
-        const selNotes = url.searchParams.get('notes') || '';
-        const selDates = url.searchParams.get('dates') || '';
-        const selRate  = url.searchParams.get('rate')  || '';
-        const errParam = url.searchParams.get('err');
-        const errAlert = errParam === 'nodates'  ? `<div class="alert alert-error">Please select at least one date.</div>`
-          : errParam === 'invalid'  ? `<div class="alert alert-error">End time must be after start time.</div>`
+        const groups = await env.DB.prepare('SELECT id, name, rate FROM gym_groups WHERE active = 1 ORDER BY name').all();
+        const selGroup    = url.searchParams.get('grp')   || '';
+        const selNotes    = url.searchParams.get('notes') || '';
+        const selRate     = url.searchParams.get('rate')  || '';
+        const selSlotsRaw = url.searchParams.get('slots') || '';
+        const errParam    = url.searchParams.get('err');
+        const errAlert    = errParam === 'nodates'  ? `<div class="alert alert-error">Please select at least one date and set its times.</div>`
+          : errParam === 'times'    ? `<div class="alert alert-error">Each selected date needs a valid start and end time (end must be after start).</div>`
           : errParam === 'nogroup'  ? `<div class="alert alert-error">Please select a group.</div>`
           : '';
 
@@ -2058,200 +2056,251 @@ updateSummary();
         const globalRate = rateRow ? parseFloat(rateRow.value || '25').toFixed(2) : '25.00';
 
         const groupOptions = groups.results.map(g =>
-          `<option value="${g.id}"${selGroup == g.id ? ' selected' : ''}>${g.name}</option>`).join('');
+          `<option value="${g.id}" data-rate="${g.rate || ''}"${selGroup == g.id ? ' selected' : ''}>${g.name}</option>`).join('');
 
-        // Fetch booked dates (confirmed/hold) for next 6 months for calendar display
+        // Build calendar server-side
         const today = new Date();
-        const sixMonthsOut = new Date(today); sixMonthsOut.setMonth(today.getMonth() + 6);
         const todayStr = today.toISOString().split('T')[0];
+        const sixMonthsOut = new Date(today); sixMonthsOut.setMonth(today.getMonth() + 6);
         const sixMonStr = sixMonthsOut.toISOString().split('T')[0];
-        const bookedRows = await env.DB.prepare(
-          `SELECT booking_date FROM gym_bookings WHERE booking_date >= ? AND booking_date <= ? AND status IN ('confirmed','hold')`
-        ).bind(todayStr, sixMonStr).all();
-        const blockedRows = await env.DB.prepare(
-          `SELECT date FROM gym_blocked_dates WHERE date >= ? AND date <= ?`
-        ).bind(todayStr, sixMonStr).all();
-        const bookedDates = [...new Set(bookedRows.results.map(r => r.booking_date))];
-        const blockedDates = blockedRows.results.map(r => r.date);
+
+        const [bookedRows, blockedRows] = await Promise.all([
+          env.DB.prepare(`SELECT booking_date FROM gym_bookings WHERE booking_date >= ? AND booking_date <= ? AND status IN ('confirmed','hold')`).bind(todayStr, sixMonStr).all(),
+          env.DB.prepare(`SELECT date FROM gym_blocked_dates WHERE date >= ? AND date <= ?`).bind(todayStr, sixMonStr).all(),
+        ]);
+        const bookedSet  = new Set(bookedRows.results.map(r => r.booking_date));
+        const blockedSet = new Set(blockedRows.results.map(r => r.date));
+
+        const MNAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        const DNAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        const NUM_MONTHS = 6;
+        let calHtml = '<div class="scal-wrap"><div class="scal-nav">'
+          + `<button type="button" class="scal-nav-btn" id="scal-prev" onclick="admNav(-1)" disabled>&#8249;</button>`
+          + `<div class="scal-nav-label" id="scal-nav-label"></div>`
+          + `<button type="button" class="scal-nav-btn" id="scal-next" onclick="admNav(1)">&#8250;</button>`
+          + '</div>';
+        for (let mi = 0; mi < NUM_MONTHS; mi++) {
+          const d = new Date(today.getFullYear(), today.getMonth() + mi, 1);
+          const yr = d.getFullYear(), mo = d.getMonth();
+          const lastDay = new Date(yr, mo + 1, 0).getDate();
+          const startDow = d.getDay();
+          calHtml += `<div class="scal-month${mi === 0 ? ' active' : ''}" id="adm-month-${mi}" data-label="${MNAMES[mo]} ${yr}">`;
+          calHtml += `<table class="scal-table"><tr><th>Su</th><th>Mo</th><th>Tu</th><th>We</th><th>Th</th><th>Fr</th><th>Sa</th></tr><tr>`;
+          for (let s = 0; s < startDow; s++) calHtml += '<td></td>';
+          let dow = startDow;
+          for (let day = 1; day <= lastDay; day++) {
+            const mm = (mo + 1).toString().padStart(2, '0');
+            const dd = day.toString().padStart(2, '0');
+            const ds = `${yr}-${mm}-${dd}`;
+            const isPast    = ds < todayStr;
+            const isBooked  = bookedSet.has(ds);
+            const isBlocked = blockedSet.has(ds);
+            const dayLabel  = DNAMES[new Date(ds + 'T12:00:00').getDay()] + ' ' + MNAMES[mo] + ' ' + day + ', ' + yr;
+            let cls = 'adm-cell';
+            let extra = '';
+            if      (isPast)    { cls += ' adm-past';    extra = ` title="Past"`; }
+            else if (isBlocked) { cls += ' adm-blocked'; extra = ` title="Blocked"`; }
+            else if (isBooked)  { cls += ' adm-booked';  extra = ` title="Already booked"`; }
+            else                { cls += ' adm-avail';   extra = ` onclick="admToggle('${ds}','${dayLabel}')" style="cursor:pointer;"`; }
+            calHtml += `<td><div class="${cls}" id="adm-cell-${ds}"${extra}><div class="scal-num">${day}</div></div></td>`;
+            dow++;
+            if (dow === 7 && day < lastDay) { calHtml += '</tr><tr>'; dow = 0; }
+          }
+          while (dow > 0 && dow < 7) { calHtml += '<td></td>'; dow++; }
+          calHtml += '</tr></table></div>';
+        }
+        calHtml += '</div>';
+
+        // Pre-render time options for JS injection
+        const timeOptsBase = timeOptions('');
 
         return html(`
 ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="wrap">
   <div class="page-title">New Booking</div>
-  <div class="page-sub">Select dates, set times, and review before sending an invoice. Admin-created bookings are confirmed immediately.</div>
+  <div class="page-sub">Click dates on the calendar, set times for each, then review before sending an invoice.</div>
   ${errAlert}
   <div class="card">
-    <form id="new-booking-form" method="POST" action="/gym-rentals/bookings/review">
+    <form id="nbf" method="POST" action="/gym-rentals/bookings/review" onsubmit="return serializeSlots(event)">
       <div class="form-group">
         <label>Group *</label>
-        <select name="group_id" id="group-select" required>
+        <select name="group_id" id="group-sel" required>
           <option value="">— select group —</option>
           ${groupOptions}
         </select>
       </div>
 
-      <div style="margin-bottom:18px;">
-        <label style="display:block;font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:10px;">Select Dates * <span id="date-count-label" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--amber);"></span></label>
-        <div class="scal-wrap" id="adm-cal">
-          <div class="scal-nav">
-            <button type="button" class="scal-nav-btn" id="scal-prev" onclick="admNavMonth(-1)" disabled>&#8249;</button>
-            <div class="scal-nav-label" id="scal-nav-label"></div>
-            <button type="button" class="scal-nav-btn" id="scal-next" onclick="admNavMonth(1)">&#8250;</button>
-          </div>
-          <div id="adm-cal-months"></div>
-        </div>
-        <input type="hidden" name="dates" id="selected-dates-input" value="${selDates}">
+      <div style="margin-bottom:6px;">
+        <label style="display:block;font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:10px;">Select Dates * <span id="date-count" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--amber);font-size:13px;"></span></label>
+        ${calHtml}
       </div>
 
-      <div class="time-grid">
-        <div class="form-group">
-          <label>Start time *</label>
-          <select name="start_time" required>
-            <option value="">—</option>
-            ${timeOptions(selStart)}
-          </select>
-        </div>
-        <div class="form-group">
-          <label>End time *</label>
-          <select name="end_time" required>
-            <option value="">—</option>
-            ${timeOptions(selEnd)}
-          </select>
-        </div>
+      <div style="margin:16px 0 6px;padding:14px 16px;background:var(--mist);border-radius:8px;">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:10px;">Selected Dates &amp; Times</div>
+        <div id="date-list"><div style="font-size:13px;color:var(--gray);font-style:italic;">No dates selected — click days on the calendar above.</div></div>
       </div>
 
-      <div class="form-group">
+      <div class="form-group" style="margin-top:18px;">
         <label>Rate override ($/hr) <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;" id="rate-hint">— leave blank to use group/global rate ($${globalRate}/hr)</span></label>
         <input type="number" name="rate_override" id="rate-override" step="0.01" min="0" placeholder="${globalRate}" value="${selRate}" style="max-width:140px;">
       </div>
-
       <div class="form-group">
         <label>Notes <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— included on the invoice</span></label>
         <textarea name="notes" maxlength="1000" placeholder="e.g. Basketball practice, weekly session">${selNotes.replace(/</g,'&lt;')}</textarea>
       </div>
-
+      <input type="hidden" name="slots" id="slots-json">
       <div class="btn-row">
-        <button type="submit" class="btn btn-primary">Review →</button>
+        <button type="submit" class="btn btn-primary" id="review-btn" disabled>Review →</button>
         <a href="/gym-rentals" class="btn btn-secondary">Cancel</a>
       </div>
     </form>
   </div>
 </div>
 <style>
-.adm-day{border-radius:6px;cursor:pointer;padding:6px 2px;text-align:center;transition:background .12s,border-color .12s;border:2px solid transparent;font-family:var(--sans);font-size:13px;font-weight:700;color:var(--steel);}
-.adm-day.available:hover{background:#D4EDDA;border-color:#5A9E6F;}
-.adm-day.selected{background:var(--amber) !important;border-color:#A07020 !important;color:white !important;}
-.adm-day.booked{background:#F7D0D0;color:#9B4040;cursor:not-allowed;}
-.adm-day.blocked{background:#E8EDF3;color:#aaa;cursor:not-allowed;}
-.adm-day.past{color:#CBD5E1;cursor:not-allowed;}
+.scal-wrap{position:relative;}.scal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:8px;}.scal-nav-btn{background:var(--mist,#EDF5F8);border:1px solid var(--border,#E8E0D0);cursor:pointer;padding:6px 16px;border-radius:6px;font-size:18px;line-height:1;font-weight:700;transition:background .15s;flex-shrink:0;}.scal-nav-btn:hover{background:var(--border,#E8E0D0);}.scal-nav-btn:disabled{opacity:.35;cursor:default;}.scal-nav-label{font-family:var(--serif,Georgia,serif);font-size:18px;font-weight:700;text-align:center;flex:1;}.scal-month{display:none;}.scal-month.active{display:block;}.scal-table{width:100%;border-collapse:collapse;table-layout:fixed;}.scal-table th{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray,#6B7280);padding:7px 0;text-align:center;}.scal-table td{padding:3px;vertical-align:top;}.scal-num{font-size:12px;font-weight:700;text-align:center;padding:6px 0;line-height:1.3;}
+.adm-cell{border-radius:6px;text-align:center;padding:4px 2px;border:2px solid transparent;transition:background .12s,border-color .12s;}
+.adm-avail:hover{background:#D4EDDA;border-color:#5A9E6F;}
+.adm-cell.adm-selected{background:var(--amber) !important;border-color:#A07020 !important;}
+.adm-cell.adm-selected .scal-num{color:white !important;}
+.adm-booked{background:#F7D0D0;}
+.adm-booked .scal-num{color:#9B4040;}
+.adm-blocked{background:#E8EDF3;}
+.adm-blocked .scal-num{color:#aaa;}
+.adm-past .scal-num{color:#CBD5E1;}
+.date-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;}
+.date-row:last-child{border-bottom:none;}
+.date-row-label{font-family:var(--sans);font-size:13px;font-weight:700;color:var(--steel);min-width:160px;}
+.date-row select{font-size:13px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:white;color:var(--charcoal);min-width:100px;}
+.date-row .btn-rm{background:none;border:1px solid #ddd;border-radius:4px;color:#999;cursor:pointer;font-size:14px;padding:4px 8px;line-height:1;}
+.date-row .btn-rm:hover{background:#fce8e8;border-color:#B85C3A;color:#B85C3A;}
 </style>
 <script>
 (function(){
-  const BOOKED  = ${JSON.stringify(bookedDates)};
-  const BLOCKED = ${JSON.stringify(blockedDates)};
-  const MNAMES  = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  const NUM_MONTHS = 6;
+  const TIME_OPTS = ${JSON.stringify('<option value="">—</option>' + timeOptsBase)};
+  let slots = [];
   let curMonth = 0;
-  let selectedDates = new Set(${JSON.stringify(selDates ? selDates.split(',').filter(Boolean) : [])});
+  const NUM_MONTHS = 6;
 
-  const today = new Date();
-  today.setHours(0,0,0,0);
-
-  function pad(n){ return n.toString().padStart(2,'0'); }
-  function ds(y,m,d){ return y+'-'+pad(m+1)+'-'+pad(d); }
-
-  function buildCalendar(){
-    const container = document.getElementById('adm-cal-months');
-    container.innerHTML = '';
-    for(let mi=0; mi<NUM_MONTHS; mi++){
-      const d = new Date(today.getFullYear(), today.getMonth()+mi, 1);
-      const yr = d.getFullYear(), mo = d.getMonth();
-      const daysInMonth = new Date(yr, mo+1, 0).getDate();
-      const startDow = d.getDay();
-
-      let html = '<div class="scal-month'+(mi===0?' active':'')+'" id="adm-month-'+mi+'" data-label="'+MNAMES[mo]+' '+yr+'">';
-      html += '<table class="scal-table"><tr><th>Su</th><th>Mo</th><th>Tu</th><th>We</th><th>Th</th><th>Fr</th><th>Sa</th></tr><tr>';
-      for(let i=0;i<startDow;i++) html += '<td></td>';
-      let dow = startDow;
-      for(let day=1; day<=daysInMonth; day++){
-        const dateStr = ds(yr,mo,day);
-        const dt = new Date(yr,mo,day);
-        const isPast = dt < today;
-        const isBooked = BOOKED.includes(dateStr);
-        const isBlocked = BLOCKED.includes(dateStr);
-        const isSelected = selectedDates.has(dateStr);
-        let cls = 'adm-day';
-        let title = '';
-        if(isPast) cls += ' past';
-        else if(isBlocked){ cls += ' blocked'; title = ' title="Blocked"'; }
-        else if(isBooked){ cls += ' booked'; title = ' title="Already booked"'; }
-        else { cls += ' available'; }
-        if(isSelected && !isPast && !isBlocked) cls += ' selected';
-        const clickable = !isPast && !isBlocked && !isBooked;
-        const onclick = clickable ? ' onclick="toggleDate(\''+dateStr+'\')"' : '';
-        html += '<td><div class="'+cls+'"'+title+onclick+'>'+day+'</div></td>';
-        dow++;
-        if(dow===7 && day<daysInMonth){ html += '</tr><tr>'; dow=0; }
-      }
-      html += '</tr></table></div>';
-      container.innerHTML += html;
-    }
+  function admNav(dir){
+    document.getElementById('adm-month-'+curMonth).classList.remove('active');
+    curMonth = Math.max(0, Math.min(NUM_MONTHS-1, curMonth+dir));
+    document.getElementById('adm-month-'+curMonth).classList.add('active');
     updateNavLabel();
-    updateCounter();
   }
-
   function updateNavLabel(){
     document.getElementById('scal-nav-label').textContent = document.getElementById('adm-month-'+curMonth).dataset.label;
     document.getElementById('scal-prev').disabled = curMonth===0;
     document.getElementById('scal-next').disabled = curMonth===NUM_MONTHS-1;
   }
+  window.admNav = admNav;
 
-  window.admNavMonth = function(dir){
-    document.getElementById('adm-month-'+curMonth).classList.remove('active');
-    curMonth = Math.max(0, Math.min(NUM_MONTHS-1, curMonth+dir));
-    document.getElementById('adm-month-'+curMonth).classList.add('active');
-    updateNavLabel();
-  };
-
-  window.toggleDate = function(dateStr){
-    if(selectedDates.has(dateStr)) selectedDates.delete(dateStr);
-    else selectedDates.add(dateStr);
-    document.getElementById('selected-dates-input').value = Array.from(selectedDates).sort().join(',');
-    // Update visual
-    document.querySelectorAll('.adm-day.available, .adm-day.selected').forEach(el => {
-      const onclick = el.getAttribute('onclick');
-      if(!onclick) return;
-      const m = onclick.match(/'([^']+)'/);
-      if(m && m[1]===dateStr){
-        if(selectedDates.has(dateStr)) el.classList.add('selected');
-        else el.classList.remove('selected');
-      }
-    });
+  window.admToggle = function(dateStr, label){
+    const idx = slots.findIndex(s=>s.date===dateStr);
+    if(idx>=0){
+      slots.splice(idx,1);
+      document.getElementById('adm-cell-'+dateStr).classList.remove('adm-selected');
+    } else {
+      slots.push({date:dateStr, label:label, start:'', end:''});
+      slots.sort((a,b)=>a.date.localeCompare(b.date));
+      document.getElementById('adm-cell-'+dateStr).classList.add('adm-selected');
+    }
+    renderList();
     updateCounter();
   };
 
-  function updateCounter(){
-    const n = selectedDates.size;
-    document.getElementById('date-count-label').textContent = n > 0 ? '('+n+' date'+(n===1?'':'s')+' selected)' : '';
+  window.admRemove = function(dateStr){
+    slots = slots.filter(s=>s.date!==dateStr);
+    const cell = document.getElementById('adm-cell-'+dateStr);
+    if(cell) cell.classList.remove('adm-selected');
+    renderList();
+    updateCounter();
+  };
+
+  window.updateSlot = function(dateStr, field, val){
+    const s = slots.find(s=>s.date===dateStr);
+    if(s) s[field]=val;
+  };
+
+  function renderList(){
+    const el = document.getElementById('date-list');
+    if(slots.length===0){
+      el.innerHTML = '<div style="font-size:13px;color:var(--gray);font-style:italic;">No dates selected — click days on the calendar above.</div>';
+      return;
+    }
+    el.innerHTML = slots.map(s=>{
+      const startSel = '<select class="date-sel" onchange="updateSlot(\''+s.date+'\',\'start\',this.value);checkReview()">'+TIME_OPTS+'</select>';
+      const endSel   = '<select class="date-sel" onchange="updateSlot(\''+s.date+'\',\'end\',this.value);checkReview()">'+TIME_OPTS+'</select>';
+      return '<div class="date-row" id="row-'+s.date+'">'
+        +'<span class="date-row-label">'+s.label+'</span>'
+        +'<span style="font-size:12px;color:var(--gray);">Start:</span>'+startSel
+        +'<span style="font-size:12px;color:var(--gray);">End:</span>'+endSel
+        +'<button type="button" class="btn-rm" onclick="admRemove(\''+s.date+'\')">✕</button>'
+        +'</div>';
+    }).join('');
+    // Restore select values
+    slots.forEach(s=>{
+      const row = document.getElementById('row-'+s.date);
+      if(!row) return;
+      const sels = row.querySelectorAll('select');
+      if(sels[0]) sels[0].value = s.start||'';
+      if(sels[1]) sels[1].value = s.end||'';
+    });
+    checkReview();
   }
 
-  // Rate hint update on group change
-  document.getElementById('group-select').addEventListener('change', function(){
-    const gid = this.value;
-    if(!gid) return;
-    fetch('/gym-rentals/api/group-rate?id='+gid)
-      .then(r=>r.json())
-      .then(data=>{
+  function updateCounter(){
+    const n = slots.length;
+    document.getElementById('date-count').textContent = n>0?'('+n+' date'+(n===1?'':'s')+' selected)':'';
+    checkReview();
+  }
+
+  function checkReview(){
+    const ok = slots.length>0 && slots.every(s=>s.start && s.end && s.end>s.start);
+    document.getElementById('review-btn').disabled = !ok;
+  }
+
+  window.serializeSlots = function(e){
+    if(slots.length===0){ alert('Please select at least one date.'); e.preventDefault(); return false; }
+    const bad = slots.find(s=>!s.start||!s.end||s.end<=s.start);
+    if(bad){ alert('Each date needs a valid start and end time.'); e.preventDefault(); return false; }
+    document.getElementById('slots-json').value = JSON.stringify(slots.map(s=>({date:s.date,start_time:s.start,end_time:s.end})));
+    return true;
+  };
+
+  // Rate hint on group change
+  document.getElementById('group-sel').addEventListener('change', function(){
+    const opt = this.options[this.selectedIndex];
+    const grpRate = parseFloat(opt.dataset.rate||'');
+    if(!isNaN(grpRate) && grpRate>0){
+      document.getElementById('rate-hint').textContent = '— leave blank to use group rate ($'+grpRate.toFixed(2)+'/hr)';
+      const ov = document.getElementById('rate-override');
+      if(!ov.value) ov.placeholder = grpRate.toFixed(2);
+    } else {
+      fetch('/gym-rentals/api/group-rate?id='+this.value).then(r=>r.json()).then(data=>{
         const r = parseFloat(data.rate||25).toFixed(2);
         document.getElementById('rate-hint').textContent = '— leave blank to use group/global rate ($'+r+'/hr)';
         const ov = document.getElementById('rate-override');
         if(!ov.value) ov.placeholder = r;
       }).catch(()=>{});
+    }
   });
 
-  buildCalendar();
-  // Restore selections from pre-filled dates param
-  if(selectedDates.size > 0) updateCounter();
+  // Restore pre-filled slots (on back-navigation)
+  try {
+    const pre = ${JSON.stringify(selSlotsRaw)};
+    if(pre){
+      const parsed = JSON.parse(pre);
+      parsed.forEach(s=>{
+        slots.push({date:s.date, label:s.date, start:s.start_time, end:s.end_time});
+        const cell = document.getElementById('adm-cell-'+s.date);
+        if(cell) cell.classList.add('adm-selected');
+      });
+      renderList();
+      updateCounter();
+    }
+  } catch(e){}
+
+  updateNavLabel();
 })();
 </script>
 `, 'New Booking');
@@ -2259,77 +2308,79 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 
       // ── BOOKING REVIEW ────────────────────────────────────────
       if (path === '/gym-rentals/bookings/review' && method === 'POST') {
-        const form = await request.formData();
+        const form         = await request.formData();
         const group_id     = parseInt(form.get('group_id') || '0', 10);
-        const datesRaw     = form.get('dates') || '';
-        const start_time   = form.get('start_time') || '';
-        const end_time     = form.get('end_time') || '';
+        const slotsRaw     = form.get('slots') || '';
         const rate_override = parseFloat(form.get('rate_override') || '') || null;
         const notes        = form.get('notes') || '';
 
         const backUrl = (err) => {
-          const p = new URLSearchParams({ err, grp: group_id, st: start_time, et: end_time, notes, dates: datesRaw });
+          const p = new URLSearchParams({ err, grp: group_id, notes });
           if (rate_override) p.set('rate', rate_override);
+          if (slotsRaw) p.set('slots', slotsRaw);
           return `/gym-rentals/bookings/new?${p}`;
         };
 
         if (!group_id) return new Response('', { status: 302, headers: { Location: backUrl('nogroup') } });
-        if (!start_time || !end_time || end_time <= start_time) return new Response('', { status: 302, headers: { Location: backUrl('invalid') } });
-        const dates = datesRaw.split(',').map(s => s.trim()).filter(Boolean).sort();
-        if (dates.length === 0) return new Response('', { status: 302, headers: { Location: backUrl('nodates') } });
+
+        let slots;
+        try { slots = JSON.parse(slotsRaw); } catch (_) { slots = []; }
+        if (!slots.length) return new Response('', { status: 302, headers: { Location: backUrl('nodates') } });
+        const badSlot = slots.find(s => !s.start_time || !s.end_time || s.end_time <= s.start_time);
+        if (badSlot) return new Response('', { status: 302, headers: { Location: backUrl('times') } });
 
         const group = await env.DB.prepare('SELECT * FROM gym_groups WHERE id = ?').bind(group_id).first();
         if (!group) return new Response('', { status: 302, headers: { Location: backUrl('nogroup') } });
         const rate = rate_override !== null ? rate_override : await getGroupRate(env, group);
-        const hours = calcHours(start_time, end_time);
 
-        // Check each date for conflicts/blocked
+        // Check each slot for conflicts/blocked
         const rows = [];
-        for (const dt of dates) {
-          const blocked = await env.DB.prepare('SELECT id FROM gym_blocked_dates WHERE date = ?').bind(dt).first();
+        for (const s of slots) {
+          const blocked = await env.DB.prepare('SELECT id FROM gym_blocked_dates WHERE date = ?').bind(s.date).first();
           const conflict = !blocked && await env.DB.prepare(
             `SELECT id FROM gym_bookings WHERE booking_date = ? AND status IN ('confirmed','hold') AND start_time < ? AND end_time > ?`
-          ).bind(dt, end_time, start_time).first();
-          rows.push({ dt, blocked: !!blocked, conflict: !!conflict });
+          ).bind(s.date, s.end_time, s.start_time).first();
+          const hours = calcHours(s.start_time, s.end_time);
+          rows.push({ ...s, hours, blocked: !!blocked, conflict: !!conflict });
         }
 
-        const validRows = rows.filter(r => !r.blocked && !r.conflict);
+        const validRows   = rows.filter(r => !r.blocked && !r.conflict);
         const skippedRows = rows.filter(r => r.blocked || r.conflict);
-
-        const totalHours = hours * validRows.length;
-        const grandTotal = Math.round(totalHours * rate * 100) / 100;
+        const totalHours  = Math.round(validRows.reduce((a, r) => a + r.hours, 0) * 100) / 100;
+        const grandTotal  = Math.round(totalHours * rate * 100) / 100;
 
         const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-        function reviewDateLabel(d) {
-          const dt = new Date(d + 'T12:00:00');
-          return DAYS[dt.getDay()] + ' ' + dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        }
+        const reviewLabel = (d) => { const dt = new Date(d + 'T12:00:00'); return DAYS[dt.getDay()] + ' ' + dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); };
 
         const validTableRows = validRows.map(r => `
 <tr>
-  <td style="padding:10px 12px;font-family:var(--sans);font-size:14px;font-weight:600;color:var(--steel);">${reviewDateLabel(r.dt)}</td>
-  <td style="padding:10px 12px;font-size:13px;color:var(--charcoal);">${fmt12h(start_time)} – ${fmt12h(end_time)}</td>
-  <td style="padding:10px 12px;font-size:13px;color:var(--charcoal);text-align:right;">${hours} hr${hours !== 1 ? 's' : ''}</td>
-  <td style="padding:10px 12px;font-size:13px;font-weight:600;color:var(--charcoal);text-align:right;">$${(hours * rate).toFixed(2)}</td>
+  <td style="padding:10px 12px;font-family:var(--sans);font-size:14px;font-weight:600;color:var(--steel);">${reviewLabel(r.date)}</td>
+  <td style="padding:10px 12px;font-size:13px;color:var(--charcoal);">${fmt12h(r.start_time)} – ${fmt12h(r.end_time)}</td>
+  <td style="padding:10px 12px;font-size:13px;color:var(--charcoal);text-align:right;">${r.hours} hr${r.hours !== 1 ? 's' : ''}</td>
+  <td style="padding:10px 12px;font-size:13px;font-weight:600;color:var(--charcoal);text-align:right;">$${(r.hours * rate).toFixed(2)}</td>
 </tr>`).join('');
 
         const skippedAlert = skippedRows.length > 0 ? `
 <div class="alert alert-error" style="margin-bottom:18px;">
-  <strong>${skippedRows.length} date${skippedRows.length > 1 ? 's' : ''} skipped</strong> — already booked or blocked and will not be included:
+  <strong>${skippedRows.length} date${skippedRows.length > 1 ? 's' : ''} skipped</strong> — conflict or blocked:
   <ul style="margin:6px 0 0 16px;padding:0;">
-    ${skippedRows.map(r => `<li>${reviewDateLabel(r.dt)} — ${r.blocked ? 'blocked' : 'conflict with existing booking'}</li>`).join('')}
+    ${skippedRows.map(r => `<li>${reviewLabel(r.date)} — ${r.blocked ? 'blocked' : 'conflict with existing booking'}</li>`).join('')}
   </ul>
 </div>` : '';
 
-        const hiddenDates = validRows.map(r => `<input type="hidden" name="date" value="${r.dt}">`).join('');
+        const hiddenSlots = validRows.map(r =>
+          `<input type="hidden" name="slot" value="${encodeURIComponent(JSON.stringify({date:r.date,start_time:r.start_time,end_time:r.end_time}))}">`
+        ).join('');
+
+        const editBack = `/gym-rentals/bookings/new?grp=${group_id}&slots=${encodeURIComponent(slotsRaw)}&notes=${encodeURIComponent(notes)}${rate_override ? '&rate=' + rate_override : ''}`;
 
         return html(`
-${topbarHtml('gym', currentUser, `<a href="/gym-rentals/bookings/new">← Edit</a>`)}
+${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
 <div class="wrap">
   <div class="page-title">Review Booking</div>
-  <div class="page-sub">${group.name} — ${fmt12h(start_time)} to ${fmt12h(end_time)} — $${rate.toFixed(2)}/hr</div>
+  <div class="page-sub">${group.name} — $${rate.toFixed(2)}/hr</div>
   ${skippedAlert}
-  ${validRows.length === 0 ? `<div class="alert alert-error">No valid dates remain after filtering conflicts and blocked dates. <a href="/gym-rentals/bookings/new">Go back</a>.</div>` : `
+  ${validRows.length === 0 ? `<div class="alert alert-error">No valid dates remain. <a href="${editBack}">Go back</a>.</div>` : `
   <div class="card">
     <table style="width:100%;border-collapse:collapse;margin-bottom:18px;">
       <thead>
@@ -2352,14 +2403,12 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals/bookings/new">← Edit</
     ${notes ? `<div style="font-size:13px;color:var(--charcoal);margin-bottom:18px;"><strong>Notes:</strong> ${notes.replace(/</g,'&lt;')}</div>` : ''}
     <form method="POST" action="/gym-rentals/bookings/confirm">
       <input type="hidden" name="group_id" value="${group_id}">
-      ${hiddenDates}
-      <input type="hidden" name="start_time" value="${start_time}">
-      <input type="hidden" name="end_time" value="${end_time}">
+      ${hiddenSlots}
       <input type="hidden" name="rate" value="${rate}">
       <input type="hidden" name="notes" value="${notes.replace(/"/g,'&quot;')}">
       <div class="btn-row">
         <button type="submit" class="btn btn-primary" onclick="this.disabled=true;this.textContent='Creating…';return true;">Confirm &amp; Send Invoice →</button>
-        <a href="/gym-rentals/bookings/new?grp=${group_id}&st=${encodeURIComponent(start_time)}&et=${encodeURIComponent(end_time)}&dates=${encodeURIComponent(datesRaw)}&notes=${encodeURIComponent(notes)}${rate_override ? '&rate='+rate_override : ''}" class="btn btn-secondary">← Edit</a>
+        <a href="${editBack}" class="btn btn-secondary">← Edit</a>
       </div>
     </form>
   </div>`}
@@ -2368,27 +2417,27 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals/bookings/new">← Edit</
 
       // ── CONFIRM BOOKING ───────────────────────────────────────
       if (path === '/gym-rentals/bookings/confirm' && method === 'POST') {
-        const form = await request.formData();
-        const group_id   = parseInt(form.get('group_id') || '0', 10);
-        const dates      = form.getAll('date').filter(Boolean).sort();
-        const start_time = form.get('start_time') || '';
-        const end_time   = form.get('end_time')   || '';
-        const rate       = parseFloat(form.get('rate') || '25');
-        const notes      = form.get('notes') || '';
+        const form      = await request.formData();
+        const group_id  = parseInt(form.get('group_id') || '0', 10);
+        const rate      = parseFloat(form.get('rate') || '25');
+        const notes     = form.get('notes') || '';
+        const slotStrs  = form.getAll('slot').filter(Boolean);
 
-        if (!group_id || dates.length === 0 || !start_time || !end_time) {
-          return new Response('', { status: 302, headers: { Location: '/gym-rentals/bookings/new?err=invalid' } });
+        if (!group_id || slotStrs.length === 0) {
+          return new Response('', { status: 302, headers: { Location: '/gym-rentals/bookings/new?err=nodates' } });
         }
-
         const group = await env.DB.prepare('SELECT * FROM gym_groups WHERE id = ?').bind(group_id).first();
         if (!group) return new Response('', { status: 302, headers: { Location: '/gym-rentals/bookings/new?err=nogroup' } });
 
         const bookingIds = [];
-        const bookings = [];
-        const hours = calcHours(start_time, end_time);
+        const bookings   = [];
 
-        for (const dt of dates) {
-          // Re-check conflict/blocked before inserting
+        for (const slotStr of slotStrs) {
+          let s;
+          try { s = JSON.parse(decodeURIComponent(slotStr)); } catch (_) { continue; }
+          const { date: dt, start_time, end_time } = s;
+          if (!dt || !start_time || !end_time) continue;
+          // Re-check conflict/blocked
           const blocked = await env.DB.prepare('SELECT id FROM gym_blocked_dates WHERE date = ?').bind(dt).first();
           const conflict = !blocked && await env.DB.prepare(
             `SELECT id FROM gym_bookings WHERE booking_date = ? AND status IN ('confirmed','hold') AND start_time < ? AND end_time > ?`
@@ -2406,22 +2455,21 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals/bookings/new">← Edit</
           return new Response('', { status: 302, headers: { Location: '/gym-rentals/bookings/new?err=conflict' } });
         }
 
-        const totalHours = Math.round(hours * bookingIds.length * 100) / 100;
+        const sortedDates = bookings.map(b => b.booking_date).sort();
+        const totalHours  = Math.round(bookings.reduce((a, b) => a + calcHours(b.start_time, b.end_time), 0) * 100) / 100;
         const totalAmount = Math.round(totalHours * rate * 100) / 100;
         const invoiceDate = new Date().toISOString().split('T')[0];
-        const periodStart = dates[0];
-        const periodEnd   = dates[dates.length - 1];
 
         const iRes = await env.DB.prepare(
           `INSERT INTO gym_invoices (group_id, booking_ids, invoice_date, period_start, period_end, total_hours, rate, total_amount, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'unpaid')`
-        ).bind(group_id, JSON.stringify(bookingIds), invoiceDate, periodStart, periodEnd, totalHours, rate, totalAmount).run();
+        ).bind(group_id, JSON.stringify(bookingIds), invoiceDate, sortedDates[0], sortedDates[sortedDates.length - 1], totalHours, rate, totalAmount).run();
         const invoiceId = iRes.meta.last_row_id;
 
-        const inv      = await env.DB.prepare('SELECT * FROM gym_invoices WHERE id = ?').bind(invoiceId).first();
-        const pymtLink = await getPaymentLink(env);
+        const inv       = await env.DB.prepare('SELECT * FROM gym_invoices WHERE id = ?').bind(invoiceId).first();
+        const pymtLink  = await getPaymentLink(env);
         const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, bookings, pymtLink);
         const subject   = bookings.length === 1
-          ? `Gym Rental Invoice — ${group.name} — ${formatDate(periodStart)}`
+          ? `Gym Rental Invoice — ${group.name} — ${formatDate(sortedDates[0])}`
           : `Gym Rental Invoice — ${group.name} — ${bookings.length} dates`;
         const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'gym_admin_email'").first();
         const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
@@ -2429,7 +2477,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals/bookings/new">← Edit</
         if (group.email) toEmails.push(group.email);
         try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {}
         for (const b of bookings) {
-          await addGymBookingToGCal(env, { booking_date: b.booking_date, start_time, end_time, group_name: group.name, notes });
+          await addGymBookingToGCal(env, { booking_date: b.booking_date, start_time: b.start_time, end_time: b.end_time, group_name: group.name, notes });
         }
 
         return new Response('', { status: 302, headers: { Location: `/gym-rentals/invoices/view/${invoiceId}?msg=created` } });
