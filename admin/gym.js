@@ -68,9 +68,13 @@ function calcHours(startTime, endTime) {
   return ((eh * 60 + em) - (sh * 60 + sm)) / 60;
 }
 
-const PAYMENT_LINK = 'https://give.tithe.ly/?formId=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8&locationId=fe6ddef2-d6d2-4c85-adfd-f19eac997d38&fundId=51451abb-a7e4-435a-8fc3-cb061b0ab1d7';
+const PAYMENT_LINK_DEFAULT = 'https://give.tithe.ly/?formId=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8&locationId=fe6ddef2-d6d2-4c85-adfd-f19eac997d38&fundId=51451abb-a7e4-435a-8fc3-cb061b0ab1d7';
 
-function buildGymInvoiceEmailHtml(inv, group, bookingOrBookings) {
+async function getPaymentLink(env) {
+  return (await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_payment_link'").first())?.value || PAYMENT_LINK_DEFAULT;
+}
+
+function buildGymInvoiceEmailHtml(inv, group, bookingOrBookings, paymentLink = PAYMENT_LINK_DEFAULT) {
   const invNum   = `GYM-${inv.id.toString().padStart(4,'0')}`;
   const hours    = parseFloat(inv.total_hours  || 0);
   const rate     = parseFloat(inv.rate         || 0);
@@ -139,7 +143,7 @@ function buildGymInvoiceEmailHtml(inv, group, bookingOrBookings) {
     <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#C9973A;margin-bottom:10px;">Payment</div>
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
       <tr><td align="center">
-        <a href="${PAYMENT_LINK}" style="display:inline-block;background:#00DB72;color:white;font-weight:700;font-size:16px;padding:14px 48px;border-radius:6px;text-decoration:none;letter-spacing:.01em;">Pay Online →</a>
+        <a href="${paymentLink}" style="display:inline-block;background:#00DB72;color:white;font-weight:700;font-size:16px;padding:14px 48px;border-radius:6px;text-decoration:none;letter-spacing:.01em;">Pay Online →</a>
       </td></tr>
     </table>
     <div style="font-size:13px;color:#7A6E60;text-align:center;margin-bottom:16px;">— or —</div>
@@ -265,7 +269,7 @@ input:focus,select:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(201
 .scal-num{font-size:12px;font-weight:700;text-align:center;padding:4px 0;line-height:1.3;color:var(--steel);}
 .scal-cell.scal-past .scal-num,.scal-cell.scal-blocked .scal-num{color:#CBD5E1;}
 .scal-slots{display:flex;flex-direction:column;gap:2px;padding:2px;}
-.scal-slot{height:18px;display:flex;align-items:center;padding:0 4px;width:100%;box-sizing:border-box;border:none;cursor:default;transition:filter .1s;border-radius:3px;position:relative;font-size:9px;font-weight:700;color:white;overflow:hidden;white-space:nowrap;letter-spacing:.01em;}
+.scal-slot{min-height:28px;display:flex;align-items:center;padding:0 4px;width:100%;box-sizing:border-box;border:none;cursor:default;transition:filter .1s;border-radius:3px;position:relative;font-size:9px;font-weight:700;color:white;overflow:hidden;white-space:nowrap;letter-spacing:.01em;}
 .scal-slot.open{background:#5A9E6F;cursor:pointer;}
 .scal-slot.open:hover{filter:brightness(1.12);}
 .scal-slot.taken{background:#D17070;}
@@ -283,7 +287,7 @@ input:focus,select:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(201
 .pattern-fields{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;}
 .pattern-fields .form-group{margin-bottom:0;flex:1;min-width:130px;}
 /* Request bar */
-.req-bar{position:sticky;bottom:0;left:0;right:0;background:var(--steel);color:white;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:3px solid var(--amber);z-index:100;}
+.req-bar{position:sticky;bottom:0;left:0;right:0;background:var(--steel);color:white;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:3px solid var(--amber);z-index:100;max-height:30vh;overflow-y:auto;}
 .req-bar-count{font-size:15px;font-weight:700;}
 .req-bar-detail{font-size:12px;opacity:.75;margin-top:2px;}
 /* Agreement card */
@@ -291,6 +295,14 @@ input:focus,select:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(201
 .agree-card .total{font-size:22px;font-weight:700;color:var(--steel);margin-bottom:10px;}
 .agree-check{display:flex;align-items:flex-start;gap:10px;font-size:14px;color:var(--charcoal);line-height:1.5;cursor:pointer;}
 .agree-check input{width:auto;margin-top:2px;flex-shrink:0;}
+/* Mobile responsive */
+.time-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;}
+@media(max-width:480px){
+  .time-grid{grid-template-columns:1fr;}
+  .scal-slot{min-height:44px;display:flex;align-items:center;justify-content:center;font-size:12px;padding:4px 2px;}
+  .req-bar{padding:10px 14px;}
+  .req-bar-count{font-size:14px;}
+}
 </style>
 </head>
 <body>${body}</body>
@@ -431,7 +443,8 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
       const portalMsg = url.searchParams.get('msg');
       const _pc = parseInt(url.searchParams.get('created') || '0', 10);
       const _ps = parseInt(url.searchParams.get('skipped') || '0', 10);
-      const _payBtn = `<div style="margin-top:12px;"><a href="${PAYMENT_LINK}" target="_blank" style="display:inline-block;background:#00DB72;color:white;font-weight:700;font-size:14px;padding:10px 28px;border-radius:6px;text-decoration:none;">Pay Invoice Online →</a></div>`;
+      const paymentLink = await getPaymentLink(env);
+      const _payBtn = `<div style="margin-top:12px;"><a href="${paymentLink}" target="_blank" style="display:inline-block;background:#00DB72;color:white;font-weight:700;font-size:14px;padding:10px 28px;border-radius:6px;text-decoration:none;">Pay Invoice Online →</a></div>`;
       const portalAlert = (portalMsg || '').startsWith('holds') ? `<div class="alert alert-success">✓ ${_pc} hold${_pc===1?'':'s'} placed! The church office will review and confirm your dates — you'll receive an invoice by email once confirmed.${_ps > 0 ? ` (${_ps} slot${_ps===1?'':'s'} were already taken and skipped.)` : ''}</div>`
         : portalMsg === 'nohold' ? `<div class="alert alert-error">No slots could be booked — they may have been taken or blocked. Please choose different times.</div>`
         : portalMsg === 'hold' ? `<div class="alert alert-success">✓ Hold placed! The church office will review and confirm your date — you'll receive an invoice by email.</div>`
@@ -584,7 +597,7 @@ ${portalHeader}
         <div id="slot-inputs"></div>
         <div class="form-group">
           <label>Notes <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional — activity type, etc.)</span></label>
-          <textarea name="notes" rows="2" placeholder="e.g. Basketball practice"></textarea>
+          <textarea name="notes" rows="2" maxlength="500" placeholder="e.g. Basketball practice"></textarea>
         </div>
         <div class="agree-card">
           <div style="background:#FFF8EC;border:1px solid #E8C87A;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#5A4200;">
@@ -773,7 +786,7 @@ ${portalHeader}
   <div class="card">
     <div class="card-title">Request a Booking</div>
     <form method="POST" id="booking-form">
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+      <div class="time-grid">
         <div class="form-group">
           <label>Date *</label>
           <input type="date" name="booking_date" required min="${today}" value="${selDate}" id="f-date">
@@ -795,7 +808,7 @@ ${portalHeader}
       </div>
       <div class="form-group">
         <label>Notes <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, e.g. "Basketball practice"</span></label>
-        <textarea name="notes" placeholder="Brief description of your use…" rows="2"></textarea>
+        <textarea name="notes" placeholder="Brief description of your use…" rows="2" maxlength="500"></textarea>
       </div>
       <div class="agree-card">
         <div style="background:#FFF8EC;border:1px solid #E8C87A;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#5A4200;">
@@ -924,7 +937,7 @@ function calcTotal() {
 
         // Email invoice
         const inv = await env.DB.prepare('SELECT * FROM gym_invoices WHERE id = ?').bind(invoiceId).first();
-        const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, fields);
+        const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, fields, paymentLink);
         const subject   = `Gym Rental Invoice \u2014 ${group.name} \u2014 ${formatDate(fields.booking_date)}`;
         const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'gym_admin_email'").first();
         const toEmails = [];
@@ -958,7 +971,7 @@ function calcTotal() {
         const invoiceId = iRes.meta.last_row_id;
 
         const inv = await env.DB.prepare('SELECT * FROM gym_invoices WHERE id = ?').bind(invoiceId).first();
-        const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, booking);
+        const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, booking, paymentLink);
         const subject   = `Gym Rental Invoice \u2014 ${group.name} \u2014 ${formatDate(booking.booking_date)}`;
         const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'gym_admin_email'").first();
         const toEmails = [];
@@ -1004,7 +1017,7 @@ function calcTotal() {
     <form method="POST" action="/gym/book/${token}/release-hold/${b.id}" onsubmit="return confirm('Release this hold?')">
       <button type="submit" class="btn btn-sm btn-danger">Cancel Request</button>
     </form>
-  </div>` : `<a href="${PAYMENT_LINK}" target="_blank" class="btn btn-sm btn-sage" style="text-decoration:none;">Pay Online →</a>`}
+  </div>` : `<a href="${paymentLink}" target="_blank" class="btn btn-sm btn-sage" style="text-decoration:none;">Pay Online →</a>`}
 </div>`;
             }).join('');
 
@@ -1145,7 +1158,7 @@ ${portalHeader}
           const subject = createdBookings.length === 1
             ? `Gym Rental Invoice — ${group.name} — ${formatDate(createdBookings[0].booking_date)}`
             : `Gym Rental Invoice — ${group.name} — ${createdBookings.length} dates`;
-          const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, createdBookings);
+          const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, createdBookings, paymentLink);
           const toEmails = [adminEmail];
           if (group.email) toEmails.push(group.email);
           try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {}
@@ -1198,7 +1211,7 @@ ${portalHeader}
         </div>
         <div class="form-group" style="grid-column:1/-1;">
           <label>Notes <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional — activity type, special needs, etc.)</span></label>
-          <textarea name="notes" rows="3" placeholder="e.g. Basketball practice for youth group"></textarea>
+          <textarea name="notes" rows="3" maxlength="500" placeholder="e.g. Basketball practice for youth group"></textarea>
         </div>
       </div>
       <div style="margin-top:8px;padding:14px 16px;background:var(--mist);border-radius:8px;font-size:13px;color:var(--steel);line-height:1.6;">
@@ -1223,6 +1236,8 @@ ${portalHeader}
         const notes   = form.get('notes') || '';
         const today   = new Date().toISOString().split('T')[0];
 
+        if (isNaN(dow) || dow < 0 || dow > 6)
+          return new Response('', { status: 302, headers: { Location: `/gym/book/${token}/recurring?err=invalid` } });
         if (!st || !et || !sd || !ed || et <= st)
           return new Response('', { status: 302, headers: { Location: `/gym/book/${token}/recurring?err=invalid` } });
         if (sd < today || ed <= sd)
@@ -1573,7 +1588,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>`)
       </div>
       <div class="form-group">
         <label>Notes <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— internal only, not shown to group</span></label>
-        <textarea name="notes" placeholder="Internal notes about this group…"></textarea>
+        <textarea name="notes" maxlength="1000" placeholder="Internal notes about this group…"></textarea>
       </div>
       <div class="btn-row">
         <button type="submit" class="btn btn-primary">Save &amp; Get Link →</button>
@@ -1654,7 +1669,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>`)
       </div>
       <div class="form-group">
         <label>Notes <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— internal only</span></label>
-        <textarea name="notes">${(g.notes||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</textarea>
+        <textarea name="notes" maxlength="1000">${(g.notes||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</textarea>
       </div>
       <div class="btn-row">
         <button type="submit" class="btn btn-primary">Save changes →</button>
@@ -2019,7 +2034,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
           ${groupOptions}
         </select>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+      <div class="time-grid">
         <div class="form-group">
           <label>Date *</label>
           <input type="date" name="booking_date" required min="${today}" value="${selDate}">
@@ -2041,7 +2056,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
       </div>
       <div class="form-group">
         <label>Notes <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— included on the invoice</span></label>
-        <textarea name="notes" placeholder="e.g. Basketball practice, weekly session">${selNotes.replace(/</g,'&lt;')}</textarea>
+        <textarea name="notes" maxlength="1000" placeholder="e.g. Basketball practice, weekly session">${selNotes.replace(/</g,'&lt;')}</textarea>
       </div>
       <div style="background:var(--mist);border-radius:8px;padding:14px 16px;margin-bottom:18px;font-family:var(--sans);font-size:13px;color:var(--charcoal);">
         Current rate: <strong>$${rate}/hr</strong> — Invoice will be generated and emailed to the group automatically.
@@ -2099,7 +2114,8 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         const group   = await env.DB.prepare('SELECT * FROM gym_groups WHERE id = ?').bind(group_id).first();
         const booking = { booking_date, start_time, end_time, notes };
 
-        const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, booking);
+        const pymtLink  = await getPaymentLink(env);
+        const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, booking, pymtLink);
         const subject   = `Gym Rental Invoice \u2014 ${group.name} \u2014 ${formatDate(booking_date)}`;
         const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'gym_admin_email'").first();
         const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
@@ -2199,7 +2215,8 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         const inv   = await env.DB.prepare('SELECT * FROM gym_invoices WHERE id=?').bind(invoiceId).first();
         const group = await env.DB.prepare('SELECT * FROM gym_groups WHERE id=?').bind(booking.group_id).first();
         if (group) {
-          const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, booking);
+          const pymtLink  = await getPaymentLink(env);
+          const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, booking, pymtLink);
           const subject = `Gym Rental Confirmed — ${group.name} — ${formatDate(booking.booking_date)}`;
           const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_admin_email'").first();
           const toEmails = [adminEmailRow?.value || 'office@timothystl.org'];
@@ -2218,6 +2235,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         const invoiceDate = new Date().toISOString().split('T')[0];
         const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_admin_email'").first();
         const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
+        const pymtLink = await getPaymentLink(env);
 
         // Group holds by group_id so each group gets one invoice
         const byGroup = new Map();
@@ -2249,7 +2267,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
             const subject = bookings.length === 1
               ? `Gym Rental Confirmed — ${group.name} — ${formatDate(bookings[0].booking_date)}`
               : `Gym Rental Confirmed — ${group.name} — ${bookings.length} dates`;
-            const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, bookings);
+            const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, bookings, pymtLink);
             const toEmails = [adminEmail];
             if (group.email) toEmails.push(group.email);
             try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {}
@@ -2270,6 +2288,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         const invoiceDate = new Date().toISOString().split('T')[0];
         const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_admin_email'").first();
         const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
+        const pymtLink = await getPaymentLink(env);
 
         const byGroup = new Map();
         for (const bid of ids) {
@@ -2299,7 +2318,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
             const subject = bookings.length === 1
               ? `Gym Rental Confirmed — ${group.name} — ${formatDate(bookings[0].booking_date)}`
               : `Gym Rental Confirmed — ${group.name} — ${bookings.length} dates`;
-            const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, bookings);
+            const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, bookings, pymtLink);
             const toEmails = [adminEmail];
             if (group.email) toEmails.push(group.email);
             try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {}
@@ -2414,6 +2433,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         const hours   = parseFloat(inv.total_hours  || 0);
         const rate    = parseFloat(inv.rate         || 0);
         const total   = parseFloat(inv.total_amount || 0);
+        const paymentLink = await getPaymentLink(env);
         const vm = url.searchParams.get('msg');
         const viewAlert = vm === 'created' ? `<div class="alert alert-success">&#10003; Booking confirmed. Invoice emailed to ${group?.email ? group.email : 'you and the group'}.</div>`
           : vm === 'saved'   ? `<div class="alert alert-success">&#10003; Saved.</div>`
@@ -2494,7 +2514,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals/invoices">\u2190 Invoice
     <hr style="border:none;border-top:1px solid var(--border);margin:24px 0;">
     <div style="background:var(--linen);border-radius:8px;padding:16px 20px;">
       <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--amber);margin-bottom:10px;">Payment</div>
-      <div style="text-align:center;margin-bottom:14px;"><a href="${PAYMENT_LINK}" target="_blank" style="display:inline-block;background:#00DB72;color:white;font-weight:700;font-size:15px;padding:12px 36px;border-radius:6px;text-decoration:none;">Pay Online \u2192</a></div>
+      <div style="text-align:center;margin-bottom:14px;"><a href="${paymentLink}" target="_blank" style="display:inline-block;background:#00DB72;color:white;font-weight:700;font-size:15px;padding:12px 36px;border-radius:6px;text-decoration:none;">Pay Online \u2192</a></div>
       <div style="font-size:13px;color:var(--gray);text-align:center;margin-bottom:10px;">\u2014 or \u2014</div>
       <div style="font-size:14px;color:var(--charcoal);line-height:1.75;">Make check payable to <strong>Timothy Lutheran Church</strong> and bring to the office or mail to 4666 Fyler Ave, St. Louis, MO 63116.</div>
     </div>
@@ -2540,7 +2560,8 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals/invoices">\u2190 Invoice
             resendBookings = b ? [b] : [{ booking_date: inv.period_start, start_time: '', end_time: '' }];
           }
           if (!resendBookings.length) resendBookings = [{ booking_date: inv.period_start, start_time: '', end_time: '' }];
-          const emailHtml = buildGymInvoiceEmailHtml(inv, group, resendBookings.length === 1 ? resendBookings[0] : resendBookings);
+          const pymtLink  = await getPaymentLink(env);
+          const emailHtml = buildGymInvoiceEmailHtml(inv, group, resendBookings.length === 1 ? resendBookings[0] : resendBookings, pymtLink);
           const subject = resendBookings.length > 1
             ? `Gym Rental Invoice — ${group?.name||'Group'} — ${resendBookings.length} dates`
             : `Gym Rental Invoice — ${group?.name||'Group'} — ${formatDate(inv.invoice_date)}`;          const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'gym_admin_email'").first();
@@ -2660,7 +2681,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals/recurring">← Recurring
       <div style="font-size:14px;color:var(--charcoal);margin-bottom:16px;"><strong>${okCount}</strong> of ${dates.length} dates will be booked (${dates.length - okCount} skipped due to conflicts or blocked dates).</div>
       <div style="display:flex;gap:12px;flex-wrap:wrap;">
         <form method="POST" action="/gym-rentals/recurring/approve/${rec.id}">
-          <button type="submit" class="btn btn-primary" onclick="return confirm('Approve and create ${okCount} bookings?')">Approve (${okCount} bookings)</button>
+          <button type="submit" class="btn btn-primary" onclick="if(!confirm('Approve and create ${okCount} bookings?'))return false;this.disabled=true;this.textContent='Approving…';return true;">Approve (${okCount} bookings)</button>
         </form>
         <form method="POST" action="/gym-rentals/recurring/reject/${rec.id}" onsubmit="return confirm('Reject this request?')">
           <button type="submit" class="btn btn-danger">Reject</button>
