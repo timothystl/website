@@ -2089,19 +2089,9 @@ updateSummary();
         return html(`
 ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="wrap">
-  <div class="page-title">New Booking <span style="font-size:11px;font-weight:400;color:var(--gray);font-family:monospace;">build 211 · ${new Date().toISOString().slice(11,19)}Z</span> <span id="js-alive" style="font-size:11px;font-weight:400;color:#bbb;font-family:monospace;">js:?</span></div>
+  <div class="page-title">New Booking</div>
   <div class="page-sub">Click dates, set times, then review before sending an invoice.</div>
   ${errAlert}
-  <script>
-    // Early error handler — registered before main IIFE so it catches that script's errors
-    window.addEventListener('error', function(e){
-      var d = document.createElement('div');
-      d.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#B85C3A;color:#fff;padding:10px;z-index:9999;font-size:12px;font-family:monospace;line-height:1.4;word-wrap:break-word;';
-      d.textContent = 'JS ERR: ' + (e.message||'?') + ' @ line ' + (e.lineno||'?') + ' col ' + (e.colno||'?');
-      document.body.appendChild(d);
-    });
-    document.getElementById('js-alive').textContent = 'js:OK';
-  </script>
   <div class="card">
     <form id="nbf" method="POST" action="/gym-rentals/bookings/review">
       <div class="form-group">
@@ -2206,8 +2196,6 @@ div.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020 !i
 .pat-btn.active{background:#1E2D4A;color:white;border-color:#1E2D4A;}
 </style>
 <script>
-function _mark(s){ var el=document.getElementById('js-alive'); if(el) el.textContent='js:'+s; }
-_mark('start');
 (function(){
   function buildTimeOpts(selected) {
     var opts = '<option value="">—</option>';
@@ -2224,14 +2212,11 @@ _mark('start');
     return opts;
   }
 
-  _mark('iife');
   /* Populate default-time selects */
   var defStart = document.getElementById('def-start');
   var defEnd   = document.getElementById('def-end');
   defStart.innerHTML = buildTimeOpts('');
   defEnd.innerHTML   = buildTimeOpts('');
-  _mark('times');
-
   var slots = [];
   var selectedDows = {};  /* day-of-week toggles */
   var DOW_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -2239,8 +2224,6 @@ _mark('start');
   var TODAY_STR = document.getElementById('today-str').value;
   var BOOKED  = new Set(JSON.parse(document.getElementById('booked-dates').value  || '[]'));
   var BLOCKED = new Set(JSON.parse(document.getElementById('blocked-dates').value || '[]'));
-  _mark('data');
-
   /* Parse today to seed the calendar date */
   var _tp    = TODAY_STR.split('-');
   var calDate = new Date(+_tp[0], +_tp[1]-1, 1);  /* first of current month */
@@ -2312,7 +2295,6 @@ _mark('start');
             renderCalendar();
             renderList();
             updateCounter();
-            document.getElementById('date-list').scrollIntoView({behavior:'smooth', block:'nearest'});
           };
         })(ds, lbl));
       } else {
@@ -2554,11 +2536,8 @@ _mark('start');
     } catch(e) {}
   }
 
-  /* Initial render */
-  _mark('pre-render');
   renderCalendar();
   if (slots.length) { renderList(); updateCounter(); }
-  _mark('done');
 })();
 </script>
 `, 'New Booking');
