@@ -2249,12 +2249,15 @@ div.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020 !i
     var year  = calDate.getFullYear();
     var month = calDate.getMonth();
     var grid  = document.getElementById('adm-cal-grid');
+    if (!grid) return;
     grid.innerHTML = '';
 
-    document.getElementById('scal-nav-label').textContent =
-      new Date(year, month, 1).toLocaleDateString('en-US', {month:'long', year:'numeric'});
-    document.getElementById('scal-prev').disabled = monthOffset <= 0;
-    document.getElementById('scal-next').disabled = monthOffset >= NUM_MONTHS - 1;
+    var navLabel = document.getElementById('scal-nav-label');
+    if (navLabel) navLabel.textContent = MNAMES[month] + ' ' + year;
+    var prevBtn = document.getElementById('scal-prev');
+    var nextBtn = document.getElementById('scal-next');
+    if (prevBtn) prevBtn.disabled = monthOffset <= 0;
+    if (nextBtn) nextBtn.disabled = monthOffset >= NUM_MONTHS - 1;
 
     /* Day-of-week headers */
     ['Su','Mo','Tu','We','Th','Fr','Sa'].forEach(function(d) {
@@ -2306,13 +2309,15 @@ div.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020 !i
   }
 
   /* Month navigation */
-  document.getElementById('scal-prev').addEventListener('click', function() {
+  var _prevBtn = document.getElementById('scal-prev');
+  var _nextBtn = document.getElementById('scal-next');
+  if (_prevBtn) _prevBtn.addEventListener('click', function() {
     if (monthOffset <= 0) return;
     monthOffset--;
     calDate.setMonth(calDate.getMonth() - 1);
     renderCalendar();
   });
-  document.getElementById('scal-next').addEventListener('click', function() {
+  if (_nextBtn) _nextBtn.addEventListener('click', function() {
     if (monthOffset >= NUM_MONTHS - 1) return;
     monthOffset++;
     calDate.setMonth(calDate.getMonth() + 1);
@@ -2535,8 +2540,13 @@ div.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020 !i
   }
 
   /* Initial render */
-  renderCalendar();
-  if (slots.length) { renderList(); updateCounter(); }
+  try {
+    renderCalendar();
+    if (slots.length) { renderList(); updateCounter(); }
+  } catch(e) {
+    var g = document.getElementById('adm-cal-grid');
+    if (g) g.innerHTML = '<div style="color:red;font-size:12px;padding:8px;grid-column:1/-1;">Calendar error: '+e.message+'</div>';
+  }
 })();
 </script>
 `, 'New Booking');
