@@ -2644,14 +2644,14 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
       </tfoot>
     </table>
     ${notes ? `<div style="font-size:13px;color:var(--charcoal);margin-bottom:18px;"><strong>Notes:</strong> ${notes.replace(/</g,'&lt;')}</div>` : ''}
-    <form method="POST" action="/gym-rentals/bookings/confirm">
+    <form method="POST" action="/gym-rentals/bookings/confirm" onsubmit="var b=this.querySelector('button[type=submit]');if(b){b.textContent='Creating…';setTimeout(function(){b.disabled=true;},10);}return true;">
       <input type="hidden" name="group_id" value="${group_id}">
       ${hiddenSlots}
       <input type="hidden" name="rate" value="${rate}">
       <input type="hidden" name="rate_type" value="${rate_type}">
       <input type="hidden" name="notes" value="${notes.replace(/"/g,'&quot;')}">
       <div class="btn-row">
-        <button type="submit" class="btn btn-primary" onclick="this.disabled=true;this.textContent='Creating…';return true;">Confirm &amp; Send Invoice →</button>
+        <button type="submit" class="btn btn-primary">Confirm &amp; Send Invoice →</button>
         <a href="${editBack}" class="btn btn-secondary">← Edit</a>
       </div>
     </form>
@@ -2765,24 +2765,26 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
           const invoiceId = iRes.meta.last_row_id;
           step = 'respond';
 
-          // DEBUG MODE: respond with plain HTML directly (no 302, no email,
-          // no view-page hop). This isolates the hang: if this response
-          // arrives, the bug was the redirect target or the email — not
-          // the booking/invoice creation itself.
-          return new Response(
-            `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Invoice created</title>
-<style>body{font-family:system-ui,sans-serif;max-width:640px;margin:40px auto;padding:0 20px;color:#1A1A2A;}
-.ok{background:#e8f5e9;border-left:3px solid #4A5E3A;padding:14px 18px;border-radius:8px;margin-bottom:20px;}
-.btn{display:inline-block;background:#1E2D4A;color:white;font-weight:700;padding:10px 20px;border-radius:6px;text-decoration:none;margin-right:8px;}
-.btn-amber{background:#C9973A;}</style></head><body>
-<h1 style="font-family:Georgia,serif;color:#1E2D4A;">Invoice created</h1>
-<div class="ok">Booking confirmed — Invoice <strong>GYM-${String(invoiceId).padStart(4,'0')}</strong> for <strong>${group.name}</strong> (${bookings.length} date${bookings.length===1?'':'s'}, $${totalAmount.toFixed(2)}).<br><br>
-<em>No email sent yet — manually resend from the invoice page when you're ready.</em></div>
-<a href="/gym-rentals/invoices/view/${invoiceId}" class="btn">View invoice →</a>
-<a href="/gym-rentals" class="btn btn-amber">Back to gym rentals</a>
-</body></html>`,
-            { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-          );
+          // Background: send invoice email. No Google Calendar push (dropped
+          // by request). Wrapped in waitUntil so the response ships first.
+          const bgWork = async () => {
+            const [pymtLink, adminEmailRow] = await Promise.all([
+              getPaymentLink(env).catch(() => PAYMENT_LINK_DEFAULT),
+              env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_admin_email'").first().catch(() => null),
+            ]);
+            const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
+            const invForEmail = { id: invoiceId, invoice_date: invoiceDate, total_hours: totalHours, rate, rate_type, total_amount: totalAmount, status: 'unpaid' };
+            const emailHtml = buildGymInvoiceEmailHtml(invForEmail, group, bookings, pymtLink);
+            const subject = bookings.length === 1
+              ? `Gym Rental Invoice — ${group.name} — ${formatDate(sortedDates[0])}`
+              : `Gym Rental Invoice — ${group.name} — ${bookings.length} dates`;
+            const toEmails = [adminEmail];
+            if (group.email) toEmails.push(group.email);
+            await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }).catch(() => null);
+          };
+          if (ctx?.waitUntil) ctx.waitUntil(bgWork().catch(() => {})); else bgWork().catch(() => {});
+
+          return new Response('', { status: 302, headers: { Location: `/gym-rentals/invoices/view/${invoiceId}?msg=created` } });
         } catch (e) {
           return errPage(e?.stack || e?.message || String(e));
         }
@@ -3383,7 +3385,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals/recurring">← Recurring
       <div style="font-size:14px;color:var(--charcoal);margin-bottom:16px;"><strong>${okCount}</strong> of ${dates.length} dates will be booked (${dates.length - okCount} skipped due to conflicts or blocked dates).</div>
       <div style="display:flex;gap:12px;flex-wrap:wrap;">
         <form method="POST" action="/gym-rentals/recurring/approve/${rec.id}">
-          <button type="submit" class="btn btn-primary" onclick="if(!confirm('Approve and create ${okCount} bookings?'))return false;this.disabled=true;this.textContent='Approving…';return true;">Approve (${okCount} bookings)</button>
+          <button type="submit" class="btn btn-primary" onclick="if(!confirm('Approve and create ${okCount} bookings?'))return false;var b=this;b.textContent='Approving…';setTimeout(function(){b.disabled=true;},10);return true;">Approve (${okCount} bookings)</button>
         </form>
         <form method="POST" action="/gym-rentals/recurring/reject/${rec.id}" onsubmit="return confirm('Reject this request?')">
           <button type="submit" class="btn btn-danger">Reject</button>
