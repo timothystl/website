@@ -2672,31 +2672,36 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
         const group = await env.DB.prepare('SELECT * FROM gym_groups WHERE id = ?').bind(group_id).first();
         if (!group) return new Response('', { status: 302, headers: { Location: '/gym-rentals/bookings/new?err=nogroup' } });
 
-        const bookingIds = [];
-        const bookings   = [];
+        // Parse all slots up front
+        const parsedSlots = slotStrs.flatMap(slotStr => {
+          try {
+            const s = JSON.parse(decodeURIComponent(slotStr));
+            return (s.date && s.start_time && s.end_time) ? [s] : [];
+          } catch (_) { return []; }
+        });
 
-        for (const slotStr of slotStrs) {
-          let s;
-          try { s = JSON.parse(decodeURIComponent(slotStr)); } catch (_) { continue; }
-          const { date: dt, start_time, end_time } = s;
-          if (!dt || !start_time || !end_time) continue;
-          // Re-check conflict/blocked
-          const blocked = await env.DB.prepare('SELECT id FROM gym_blocked_dates WHERE date = ?').bind(dt).first();
-          const conflict = !blocked && await env.DB.prepare(
-            `SELECT id FROM gym_bookings WHERE booking_date = ? AND status IN ('confirmed','hold') AND start_time < ? AND end_time > ?`
-          ).bind(dt, end_time, start_time).first();
-          if (blocked || conflict) continue;
+        // Check all dates in parallel (blocked + conflict per date)
+        const checkResults = await Promise.all(parsedSlots.map(async s => {
+          const [blocked, conflict] = await Promise.all([
+            env.DB.prepare('SELECT id FROM gym_blocked_dates WHERE date = ?').bind(s.date).first(),
+            env.DB.prepare(`SELECT id FROM gym_bookings WHERE booking_date = ? AND status IN ('confirmed','hold') AND start_time < ? AND end_time > ?`).bind(s.date, s.end_time, s.start_time).first()
+          ]);
+          return (blocked || conflict) ? null : s;
+        }));
+        const validSlots = checkResults.filter(Boolean);
 
-          const bRes = await env.DB.prepare(
-            `INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, notes, status, created_by) VALUES (?, ?, ?, ?, ?, 'confirmed', 'admin')`
-          ).bind(group_id, dt, start_time, end_time, notes).run();
-          bookingIds.push(bRes.meta.last_row_id);
-          bookings.push({ booking_date: dt, start_time, end_time, notes });
-        }
-
-        if (bookingIds.length === 0) {
+        if (validSlots.length === 0) {
           return new Response('', { status: 302, headers: { Location: '/gym-rentals/bookings/new?err=conflict' } });
         }
+
+        // Insert all bookings in one batch
+        const insertStmts = validSlots.map(s =>
+          env.DB.prepare(`INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, notes, status, created_by) VALUES (?, ?, ?, ?, ?, 'confirmed', 'admin')`)
+            .bind(group_id, s.date, s.start_time, s.end_time, notes)
+        );
+        const insertResults = await env.DB.batch(insertStmts);
+        const bookingIds = insertResults.map(r => r.meta.last_row_id);
+        const bookings   = validSlots.map(s => ({ booking_date: s.date, start_time: s.start_time, end_time: s.end_time, notes }));
 
         const sortedDates = bookings.map(b => b.booking_date).sort();
         const totalHours  = Math.round(bookings.reduce((a, b) => a + calcHours(b.start_time, b.end_time), 0) * 100) / 100;
@@ -2710,14 +2715,16 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
         ).bind(group_id, JSON.stringify(bookingIds), invoiceDate, sortedDates[0], sortedDates[sortedDates.length - 1], totalHours, rate, rate_type, totalAmount).run();
         const invoiceId = iRes.meta.last_row_id;
 
-        const inv       = await env.DB.prepare('SELECT * FROM gym_invoices WHERE id = ?').bind(invoiceId).first();
-        const pymtLink  = await getPaymentLink(env);
+        const [inv, pymtLink, adminEmailRow] = await Promise.all([
+          env.DB.prepare('SELECT * FROM gym_invoices WHERE id = ?').bind(invoiceId).first(),
+          getPaymentLink(env),
+          env.DB.prepare("SELECT value FROM site_settings WHERE key = 'gym_admin_email'").first(),
+        ]);
+        const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
         const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId, rate_type }, group, bookings, pymtLink);
         const subject   = bookings.length === 1
           ? `Gym Rental Invoice — ${group.name} — ${formatDate(sortedDates[0])}`
           : `Gym Rental Invoice — ${group.name} — ${bookings.length} dates`;
-        const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'gym_admin_email'").first();
-        const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
         const toEmails = [adminEmail];
         if (group.email) toEmails.push(group.email);
 
