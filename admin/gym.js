@@ -2196,6 +2196,13 @@ div.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020 !i
 .pat-btn.active{background:#1E2D4A;color:white;border-color:#1E2D4A;}
 </style>
 <script>
+window.addEventListener('error', function(e){
+  var d = document.createElement('div');
+  d.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#B85C3A;color:#fff;padding:10px;z-index:9999;font-size:12px;font-family:monospace;line-height:1.4;';
+  d.textContent = 'JS ERR: ' + (e.message||'?') + ' @ ' + (e.filename||'inline').split('/').pop() + ':' + (e.lineno||'?');
+  document.body.appendChild(d);
+});
+try {
 (function(){
   function buildTimeOpts(selected) {
     var opts = '<option value="">—</option>';
@@ -2548,6 +2555,12 @@ div.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020 !i
     if (g) g.innerHTML = '<div style="color:red;font-size:12px;padding:8px;grid-column:1/-1;">Calendar error: '+e.message+'</div>';
   }
 })();
+} catch(outerErr) {
+  var d2 = document.createElement('div');
+  d2.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#B85C3A;color:#fff;padding:10px;z-index:9999;font-size:12px;font-family:monospace;line-height:1.4;';
+  d2.textContent = 'IIFE THREW: ' + (outerErr && outerErr.message ? outerErr.message : String(outerErr));
+  document.body.appendChild(d2);
+}
 </script>
 `, 'New Booking');
       }
