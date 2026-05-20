@@ -231,7 +231,7 @@ img{max-width:100% !important;height:auto !important;}
         <table width="100%" cellpadding="0" cellspacing="0">
           <tr>
             <td class="pastor-col" width="390" valign="top" style="padding-right:18px;border-right:1px solid #E8E0D0;">
-              ${pastorNote ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:15px;color:#3D3530;line-height:1.85;">${pastorNote}</div><div style="margin-top:10px;"><a href="https://timothystl.org/${newsletterId ? 'news/' + newsletterId : 'news'}" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#D4922A;text-decoration:none;">Read the full letter →</a></div>` : ''}
+              ${pastorNote ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:15px;color:#3D3530;line-height:1.85;">${truncate(pastorNote, 500)}</div><div style="margin-top:10px;"><a href="https://timothystl.org/${newsletterId ? 'news/' + newsletterId : 'news'}" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#D4922A;text-decoration:none;">Read the full letter →</a></div>` : ''}
             </td>
             <td class="spacer-col" width="16"></td>
             <td class="events-col" width="165" valign="top">${eventsSidebar}</td>
