@@ -2263,13 +2263,8 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
     document.getElementById('scal-prev').disabled = curMonth === 0;
     document.getElementById('scal-next').disabled = curMonth === NUM_MONTHS - 1;
   }
-  function addNavListener(id, fn) {
-    var el = document.getElementById(id);
-    el.addEventListener('touchend', function(e){ e.preventDefault(); fn(); }, { passive: false });
-    el.addEventListener('click', fn);
-  }
-  addNavListener('scal-prev', function(){ if(curMonth > 0) setMonth(curMonth-1); });
-  addNavListener('scal-next', function(){ if(curMonth < NUM_MONTHS-1) setMonth(curMonth+1); });
+  document.getElementById('scal-prev').addEventListener('click', function(){ if(curMonth > 0) setMonth(curMonth-1); });
+  document.getElementById('scal-next').addEventListener('click', function(){ if(curMonth < NUM_MONTHS-1) setMonth(curMonth+1); });
 
   /* Day-of-week pattern picker */
   document.querySelectorAll('.pat-btn').forEach(function(btn) {
@@ -2316,7 +2311,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
     }
   });
 
-  /* Date toggle — shared logic for click and touchend */
+  /* Date toggle */
   function findAvailCell(target, root) {
     if (target.closest) return target.closest('.adm-avail');
     var t = target;
@@ -2326,7 +2321,10 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
     }
     return null;
   }
-  function toggleDate(cell) {
+
+  document.getElementById('adm-cal').addEventListener('click', function(e) {
+    var cell = findAvailCell(e.target, this);
+    if (!cell) return;
     var dateStr = cell.getAttribute('data-date');
     var label   = cell.getAttribute('data-label');
     if (!dateStr) return;
@@ -2343,23 +2341,6 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
     }
     renderList();
     updateCounter();
-  }
-
-  var calEl = document.getElementById('adm-cal');
-
-  /* touchend fires reliably on old iOS where click on non-interactive elements can be missed */
-  calEl.addEventListener('touchend', function(e) {
-    var cell = findAvailCell(e.target, this);
-    if (!cell) return;
-    e.preventDefault(); // prevent the ghost click that follows
-    toggleDate(cell);
-  }, { passive: false });
-
-  /* click covers desktop and any mobile that didn't already handle via touchend */
-  calEl.addEventListener('click', function(e) {
-    var cell = findAvailCell(e.target, this);
-    if (!cell) return;
-    toggleDate(cell);
   });
 
   /* Apply default times to all slots */
