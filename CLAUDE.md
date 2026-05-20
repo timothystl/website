@@ -12,6 +12,8 @@ The Timothy Lutheran Church website (timothystl.org) is live on Cloudflare Worke
 **Primary branch for development:** `main` (deploys to timothystl.org, admin.timothystl.org, and all subdomain workers)
 
 > **Note:** Admin portal changes (`tlc-admin-worker.js`) should be committed and pushed to `main` — the test site does not run the admin worker. Always target `main` for admin work.
+>
+> **PR workflow:** When working in a cloud session (feature branch required by session config), create the PR using the GitHub MCP tool and immediately merge it — do not leave it as a draft for the user to merge. Always paste the PR URL in the chat so it's visible.
 
 ---
 
