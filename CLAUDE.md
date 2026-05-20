@@ -326,6 +326,21 @@ The actual SPA is **`public/index.html`**. All HTML edits go there.
 
 ---
 
+## CRITICAL: Bump `SCHEMA_VERSION` when admin DB migrations change
+
+The admin worker (`tlc-admin-worker.js`) has a startup migration block
+(`CREATE TABLE` / `ALTER TABLE` / `INSERT OR IGNORE` / `CREATE INDEX`)
+gated behind a `_schema_version` row. On stable schemas this block is
+skipped after the first post-deploy request, which is what keeps admin
+POSTs under 1s instead of 5–10s.
+
+**If you add, change, or remove ANY statement in that block — bump the
+`SCHEMA_VERSION` constant** (just above the block, near the top of the
+`_fetch` handler). Without bumping it, the new migration never runs on
+the live DB. The format is a date plus a counter, e.g. `2026-05-20-1`.
+
+---
+
 ## Session State (as of 2026-05-19)
 
 ### What's live on timothystl.org:
