@@ -2311,32 +2311,58 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
     }
   });
 
-  /* Attach click directly to each available cell (delegation through table elements
-     doesn't bubble reliably on iOS Safari) */
+  /* Attach touch + click directly to each available cell.
+     iOS Safari does not reliably fire click inside table elements;
+     touchstart/touchend always fires. We use touchend with a movement
+     check to distinguish taps from scrolls, then call preventDefault
+     to suppress the ghost click so the action doesn't run twice. */
   function attachCellListeners() {
     document.querySelectorAll('.adm-avail').forEach(function(cell) {
+      var touchStartX = 0, touchStartY = 0;
+
+      cell.addEventListener('touchstart', function(e) {
+        var t = e.touches[0];
+        touchStartX = t.clientX;
+        touchStartY = t.clientY;
+      }, { passive: true });
+
+      cell.addEventListener('touchend', function(e) {
+        var t = e.changedTouches[0];
+        var dx = Math.abs(t.clientX - touchStartX);
+        var dy = Math.abs(t.clientY - touchStartY);
+        if (dx > 10 || dy > 10) return; // scroll, not a tap
+        e.preventDefault(); // suppress ghost click
+        handleCellTap(this);
+      }, { passive: false });
+
+      /* Desktop fallback */
       cell.addEventListener('click', function() {
-        var dateStr = this.getAttribute('data-date');
-        var label   = this.getAttribute('data-label');
-        if (!dateStr) return;
-        var found = false;
-        for (var i = 0; i < slots.length; i++) {
-          if (slots[i].date === dateStr) { slots.splice(i, 1); found = true; break; }
-        }
-        if (found) {
-          this.classList.remove('adm-selected');
-        } else {
-          slots.push({date:dateStr, label:label, start:defStart.value, end:defEnd.value});
-          slots.sort(function(a,b){ return a.date < b.date ? -1 : 1; });
-          this.classList.add('adm-selected');
-        }
-        renderList();
-        updateCounter();
-        var dl = document.getElementById('date-list');
-        if (dl) dl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        handleCellTap(this);
       });
     });
   }
+
+  function handleCellTap(cell) {
+    var dateStr = cell.getAttribute('data-date');
+    var label   = cell.getAttribute('data-label');
+    if (!dateStr) return;
+    var found = false;
+    for (var i = 0; i < slots.length; i++) {
+      if (slots[i].date === dateStr) { slots.splice(i, 1); found = true; break; }
+    }
+    if (found) {
+      cell.classList.remove('adm-selected');
+    } else {
+      slots.push({date:dateStr, label:label, start:defStart.value, end:defEnd.value});
+      slots.sort(function(a,b){ return a.date < b.date ? -1 : 1; });
+      cell.classList.add('adm-selected');
+    }
+    renderList();
+    updateCounter();
+    var dl = document.getElementById('date-list');
+    if (dl) dl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
   attachCellListeners();
 
   /* Apply default times to all slots */
