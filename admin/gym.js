@@ -2058,9 +2058,11 @@ updateSummary();
         const selRateType  = url.searchParams.get('rate_type') || 'hourly';
         const selSlotsRaw  = url.searchParams.get('slots')     || '';
         const errParam    = url.searchParams.get('err');
+        const errDetail   = url.searchParams.get('detail') || '';
         const errAlert    = errParam === 'nodates'  ? `<div class="alert alert-error">Please select at least one date and set its times.</div>`
           : errParam === 'times'    ? `<div class="alert alert-error">Each selected date needs a valid start and end time (end must be after start).</div>`
           : errParam === 'nogroup'  ? `<div class="alert alert-error">Please select a group.</div>`
+          : errParam === 'confirm'  ? `<div class="alert alert-error">Booking failed: ${errDetail ? errDetail.replace(/</g,'&lt;') : 'unknown error'}. Please try again or contact support.</div>`
           : '';
 
         const rateRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'gym_rate_per_hour'").first();
@@ -2659,6 +2661,7 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
 
       // ── CONFIRM BOOKING ───────────────────────────────────────
       if (path === '/gym-rentals/bookings/confirm' && method === 'POST') {
+        try {
         const form      = await request.formData();
         const group_id  = parseInt(form.get('group_id') || '0', 10);
         const rate      = parseFloat(form.get('rate') || '25');
@@ -2694,12 +2697,11 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
           return new Response('', { status: 302, headers: { Location: '/gym-rentals/bookings/new?err=conflict' } });
         }
 
-        // Insert all bookings in one batch
-        const insertStmts = validSlots.map(s =>
+        // Insert all bookings concurrently (Promise.all avoids relying on .batch() which may not be available)
+        const insertResults = await Promise.all(validSlots.map(s =>
           env.DB.prepare(`INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, notes, status, created_by) VALUES (?, ?, ?, ?, ?, 'confirmed', 'admin')`)
-            .bind(group_id, s.date, s.start_time, s.end_time, notes)
-        );
-        const insertResults = await env.DB.batch(insertStmts);
+            .bind(group_id, s.date, s.start_time, s.end_time, notes).run()
+        ));
         const bookingIds = insertResults.map(r => r.meta.last_row_id);
         const bookings   = validSlots.map(s => ({ booking_date: s.date, start_time: s.start_time, end_time: s.end_time, notes }));
 
@@ -2738,6 +2740,10 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
         if (ctx?.waitUntil) ctx.waitUntil(bgWork()); else await bgWork();
 
         return new Response('', { status: 302, headers: { Location: `/gym-rentals/invoices/view/${invoiceId}?msg=created` } });
+        } catch (e) {
+          const msg = encodeURIComponent(e?.message || 'unknown error');
+          return new Response('', { status: 302, headers: { Location: `/gym-rentals/bookings/new?err=confirm&detail=${msg}` } });
+        }
       }
 
       // ── ALL BOOKINGS LIST ─────────────────────────────────────
