@@ -2228,6 +2228,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 </style>
 <script>
 (function(){
+  try {
   function buildTimeOpts(selected) {
     var opts = '<option value="">—</option>';
     for (var h = 6; h < 24; h++) {
@@ -2543,6 +2544,13 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 
   /* Init nav label */
   document.getElementById('scal-nav-label').textContent = document.getElementById('adm-month-0').dataset.label;
+
+  } catch(initErr) {
+    var errDiv = document.createElement('div');
+    errDiv.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#c00;color:#fff;padding:12px;font-size:13px;z-index:9999;word-break:break-all;';
+    errDiv.textContent = 'JS ERROR: ' + (initErr.message || initErr);
+    document.body.appendChild(errDiv);
+  }
 })();
 </script>
 `, 'New Booking');
