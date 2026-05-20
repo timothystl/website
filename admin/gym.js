@@ -2082,44 +2082,6 @@ updateSummary();
         const bookedSet  = new Set(bookedRows.results.map(r => r.booking_date));
         const blockedSet = new Set(blockedRows.results.map(r => r.date));
 
-        const MNAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-        const DNAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-        const NUM_MONTHS = 6;
-        let calHtml = '<div class="scal-wrap" id="adm-cal"><div class="scal-nav">'
-          + `<button type="button" class="scal-nav-btn" id="scal-prev" disabled>&#8249;</button>`
-          + `<div class="scal-nav-label" id="scal-nav-label"></div>`
-          + `<button type="button" class="scal-nav-btn" id="scal-next">&#8250;</button>`
-          + '</div>';
-        for (let mi = 0; mi < NUM_MONTHS; mi++) {
-          const d = new Date(today.getFullYear(), today.getMonth() + mi, 1);
-          const yr = d.getFullYear(), mo = d.getMonth();
-          const lastDay = new Date(yr, mo + 1, 0).getDate();
-          const startDow = d.getDay();
-          calHtml += `<div class="scal-month${mi === 0 ? ' active' : ''}" id="adm-month-${mi}" data-label="${MNAMES[mo]} ${yr}">`;
-          // Day-of-week header row
-          calHtml += `<div class="scal-grid"><div class="scal-dow">Su</div><div class="scal-dow">Mo</div><div class="scal-dow">Tu</div><div class="scal-dow">We</div><div class="scal-dow">Th</div><div class="scal-dow">Fr</div><div class="scal-dow">Sa</div>`;
-          // Empty cells before first day
-          for (let s = 0; s < startDow; s++) calHtml += '<div></div>';
-          for (let day = 1; day <= lastDay; day++) {
-            const mm = (mo + 1).toString().padStart(2, '0');
-            const dd = day.toString().padStart(2, '0');
-            const ds = `${yr}-${mm}-${dd}`;
-            const isPast    = ds < todayStr;
-            const isBooked  = bookedSet.has(ds);
-            const isBlocked = blockedSet.has(ds);
-            const dayLabel  = DNAMES[new Date(ds + 'T12:00:00').getDay()] + ' ' + MNAMES[mo] + ' ' + day + ', ' + yr;
-            if (!isPast && !isBooked && !isBlocked) {
-              calHtml += `<button type="button" class="adm-cell adm-avail" id="adm-cell-${ds}" data-date="${ds}" data-label="${dayLabel}">${day}</button>`;
-            } else {
-              let cls = 'adm-cell ' + (isPast ? 'adm-past' : isBlocked ? 'adm-blocked' : 'adm-booked');
-              let title = isPast ? 'Past' : isBlocked ? 'Blocked' : 'Already booked';
-              calHtml += `<div class="${cls}" title="${title}">${day}</div>`;
-            }
-          }
-          calHtml += '</div></div>';
-        }
-        calHtml += '</div>';
-
         // Pre-render time options for JS injection
         const timeOptsBase = timeOptions('');
 
@@ -2140,31 +2102,31 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
       </div>
 
       <!-- Pattern picker: add every Mon/Tue/etc -->
-      <div style="margin-bottom:14px;padding:12px 14px;background:var(--mist);border-radius:8px;">
-        <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:8px;">Quick-add by day of week</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-          <button type="button" class="pat-btn" data-dow="0">Sun</button>
-          <button type="button" class="pat-btn" data-dow="1">Mon</button>
-          <button type="button" class="pat-btn" data-dow="2">Tue</button>
-          <button type="button" class="pat-btn" data-dow="3">Wed</button>
-          <button type="button" class="pat-btn" data-dow="4">Thu</button>
-          <button type="button" class="pat-btn" data-dow="5">Fri</button>
-          <button type="button" class="pat-btn" data-dow="6">Sat</button>
-          <button type="button" id="add-pattern-btn" class="btn btn-sm btn-secondary" style="margin-left:6px;" disabled>Add selected days</button>
-          <span id="pat-count" style="font-size:12px;color:var(--gray);"></span>
+      <!-- Date picker: native input for reliable mobile support -->
+      <div class="form-group">
+        <label>Dates * <span id="date-count" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--amber);font-size:13px;"></span></label>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+          <input type="date" id="date-picker" style="font-size:15px;padding:9px 12px;border:1px solid var(--border);border-radius:6px;background:white;flex:1;min-width:160px;" min="${todayStr}">
+          <button type="button" id="add-date-btn" class="btn btn-secondary" style="white-space:nowrap;">+ Add date</button>
+        </div>
+        <div style="margin-bottom:8px;">
+          <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);">Quick-add by day of week:</span>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;">
+            <button type="button" class="pat-btn" data-dow="0">Sun</button>
+            <button type="button" class="pat-btn" data-dow="1">Mon</button>
+            <button type="button" class="pat-btn" data-dow="2">Tue</button>
+            <button type="button" class="pat-btn" data-dow="3">Wed</button>
+            <button type="button" class="pat-btn" data-dow="4">Thu</button>
+            <button type="button" class="pat-btn" data-dow="5">Fri</button>
+            <button type="button" class="pat-btn" data-dow="6">Sat</button>
+            <button type="button" id="add-pattern-btn" class="btn btn-sm btn-secondary" style="margin-left:6px;" disabled>Add selected days</button>
+            <button type="button" id="clear-all-btn" class="btn btn-sm btn-secondary" style="display:none;">Clear all</button>
+          </div>
         </div>
       </div>
 
-      <div style="margin-bottom:6px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-          <label style="display:block;font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:0;">Select Dates * <span id="date-count" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--amber);font-size:13px;"></span></label>
-          <button type="button" id="clear-all-btn" class="btn btn-sm btn-secondary" style="display:none;">Clear all</button>
-        </div>
-        ${calHtml}
-      </div>
-
-      <!-- Default time + apply-to-all + date list -->
-      <div style="margin:16px 0 6px;padding:14px 16px;background:var(--mist);border-radius:8px;">
+      <!-- Times + date list -->
+      <div style="margin:0 0 16px;padding:14px 16px;background:var(--mist);border-radius:8px;">
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border);">
           <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);white-space:nowrap;">Default time:</span>
           <select id="def-start" style="font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;min-width:100px;background:white;"></select>
@@ -2174,7 +2136,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
           <span style="font-size:11px;color:var(--gray);">— new dates auto-use this time</span>
         </div>
         <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:8px;">Selected Dates &amp; Times</div>
-        <div id="date-list"><div style="font-size:13px;color:var(--gray);font-style:italic;">No dates selected — click days on the calendar above.</div></div>
+        <div id="date-list"><div style="font-size:13px;color:var(--gray);font-style:italic;">No dates added yet.</div></div>
       </div>
 
       <div class="form-group" style="margin-top:18px;">
@@ -2198,6 +2160,9 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
       </div>
       <!-- Pre-filled slots from back-navigation (read by JS via DOM, no injection) -->
       <input type="hidden" id="initial-slots" value="${selSlotsRaw.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}">
+      <input type="hidden" id="booked-dates" value="${JSON.stringify([...bookedSet]).replace(/"/g,'&quot;')}">
+      <input type="hidden" id="blocked-dates" value="${JSON.stringify([...blockedSet]).replace(/"/g,'&quot;')}">
+      <input type="hidden" id="today-str" value="${todayStr}">
       <input type="hidden" name="slots" id="slots-json">
       <div class="btn-row">
         <button type="submit" class="btn btn-primary" id="review-btn" disabled>Review →</button>
@@ -2254,21 +2219,32 @@ button.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020
   defEnd.innerHTML   = buildTimeOpts('');
 
   var slots = [];
-  var curMonth = 0;
-  var NUM_MONTHS = 6;
   var selectedDows = {};  /* day-of-week toggles */
+  var MNAMES   = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var DOW_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var TODAY_STR = document.getElementById('today-str').value;
+  var BOOKED  = new Set(JSON.parse(document.getElementById('booked-dates').value  || '[]'));
+  var BLOCKED = new Set(JSON.parse(document.getElementById('blocked-dates').value || '[]'));
 
-  /* Month navigation */
-  function setMonth(idx) {
-    document.getElementById('adm-month-'+curMonth).classList.remove('active');
-    curMonth = idx;
-    document.getElementById('adm-month-'+curMonth).classList.add('active');
-    document.getElementById('scal-nav-label').textContent = document.getElementById('adm-month-'+curMonth).dataset.label;
-    document.getElementById('scal-prev').disabled = curMonth === 0;
-    document.getElementById('scal-next').disabled = curMonth === NUM_MONTHS - 1;
-  }
-  document.getElementById('scal-prev').addEventListener('click', function(){ if(curMonth > 0) setMonth(curMonth-1); });
-  document.getElementById('scal-next').addEventListener('click', function(){ if(curMonth < NUM_MONTHS-1) setMonth(curMonth+1); });
+  /* Add-date button */
+  document.getElementById('add-date-btn').addEventListener('click', function() {
+    var val = document.getElementById('date-picker').value;
+    if (!val) { alert('Please select a date.'); return; }
+    if (val < TODAY_STR) { alert('Please select a future date.'); return; }
+    if (BOOKED.has(val))  { alert('That date already has a booking.'); return; }
+    if (BLOCKED.has(val)) { alert('That date is blocked.'); return; }
+    for (var i = 0; i < slots.length; i++) {
+      if (slots[i].date === val) { alert('That date is already in the list.'); return; }
+    }
+    var dt = new Date(val + 'T12:00:00');
+    var label = DOW_NAMES[dt.getDay()] + ', ' + MNAMES[dt.getMonth()] + ' ' + dt.getDate() + ', ' + dt.getFullYear();
+    slots.push({date: val, label: label, start: defStart.value, end: defEnd.value});
+    slots.sort(function(a,b){ return a.date < b.date ? -1 : 1; });
+    document.getElementById('date-picker').value = '';
+    renderList();
+    updateCounter();
+    document.getElementById('date-list').scrollIntoView({behavior:'smooth', block:'nearest'});
+  });
 
   /* Day-of-week pattern picker */
   document.querySelectorAll('.pat-btn').forEach(function(btn) {
@@ -2283,7 +2259,7 @@ button.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020
       }
       var count = Object.keys(selectedDows).length;
       document.getElementById('add-pattern-btn').disabled = count === 0;
-      document.getElementById('pat-count').textContent = count > 0 ? count+' day'+(count===1?'':'s')+' selected' : '';
+      var pc = document.getElementById('pat-count'); if (pc) pc.textContent = count > 0 ? count+' day'+(count===1?'':'s')+' selected' : '';
     });
   });
 
@@ -2292,22 +2268,29 @@ button.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020
     if (!dows.length) return;
     var defSt = defStart.value;
     var defEt = defEnd.value;
-    /* Find all available cells and check their day-of-week */
-    var cells = document.querySelectorAll('.adm-avail[data-date]');
+    /* Iterate over the next 6 months and add matching days */
     var added = 0;
-    cells.forEach(function(cell) {
-      var ds = cell.getAttribute('data-date');
-      /* day of week from date string */
-      var dt = new Date(ds + 'T12:00:00');
-      if (dows.indexOf(dt.getDay()) === -1) return;
-      /* Skip already selected */
-      var already = false;
-      for (var i = 0; i < slots.length; i++) { if (slots[i].date === ds) { already = true; break; } }
-      if (already) return;
-      slots.push({date:ds, label:cell.getAttribute('data-label'), start:defSt, end:defEt});
-      cell.classList.add('adm-selected');
-      added++;
-    });
+    var d = new Date(TODAY_STR + 'T12:00:00');
+    var endD = new Date(TODAY_STR + 'T12:00:00');
+    endD.setMonth(endD.getMonth() + 6);
+    while (d <= endD) {
+      if (dows.indexOf(d.getDay()) !== -1) {
+        var yr  = d.getFullYear();
+        var mo  = (d.getMonth()+1).toString().padStart(2,'0');
+        var dy  = d.getDate().toString().padStart(2,'0');
+        var ds  = yr+'-'+mo+'-'+dy;
+        if (!BOOKED.has(ds) && !BLOCKED.has(ds)) {
+          var already = false;
+          for (var i = 0; i < slots.length; i++) { if (slots[i].date === ds) { already = true; break; } }
+          if (!already) {
+            var label = DOW_NAMES[d.getDay()] + ', ' + MNAMES[d.getMonth()] + ' ' + d.getDate() + ', ' + yr;
+            slots.push({date: ds, label: label, start: defSt, end: defEt});
+            added++;
+          }
+        }
+      }
+      d.setDate(d.getDate() + 1);
+    }
     if (added) {
       slots.sort(function(a,b){ return a.date < b.date ? -1 : 1; });
       renderList();
@@ -2315,29 +2298,6 @@ button.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020
     }
   });
 
-  /* Day cells are now <button> elements — click always fires on iOS and Android */
-  document.querySelectorAll('button.adm-avail').forEach(function(cell) {
-    cell.addEventListener('click', function() {
-      var dateStr = this.getAttribute('data-date');
-      var label   = this.getAttribute('data-label');
-      if (!dateStr) return;
-      var found = false;
-      for (var i = 0; i < slots.length; i++) {
-        if (slots[i].date === dateStr) { slots.splice(i, 1); found = true; break; }
-      }
-      if (found) {
-        this.classList.remove('adm-selected');
-      } else {
-        slots.push({date:dateStr, label:label, start:defStart.value, end:defEnd.value});
-        slots.sort(function(a,b){ return a.date < b.date ? -1 : 1; });
-        this.classList.add('adm-selected');
-      }
-      renderList();
-      updateCounter();
-      var dl = document.getElementById('date-list');
-      if (dl) dl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    });
-  });
 
   /* Apply default times to all slots */
   document.getElementById('apply-all-btn').addEventListener('click', function() {
@@ -2348,13 +2308,12 @@ button.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020
     checkReview();
   });
 
-  var DOW_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   function getDow(dateStr) { return new Date(dateStr+'T12:00:00').getDay(); }
 
   function renderList() {
     var el = document.getElementById('date-list');
     if (slots.length === 0) {
-      el.innerHTML = '<div style="font-size:13px;color:#6B7280;font-style:italic;">No dates selected — click days on the calendar above.</div>';
+      el.innerHTML = '<div style="font-size:13px;color:#6B7280;font-style:italic;">No dates added yet.</div>';
       checkReview();
       return;
     }
@@ -2388,8 +2347,6 @@ button.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020
       btn.addEventListener('click', function() {
         var d = this.getAttribute('data-rm');
         slots = slots.filter(function(s){ return s.date !== d; });
-        var c2 = document.getElementById('adm-cell-'+d);
-        if (c2) c2.classList.remove('adm-selected');
         renderList();
         updateCounter();
       });
@@ -2424,10 +2381,6 @@ button.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020
   var clearAllBtn = document.getElementById('clear-all-btn');
   if (clearAllBtn) {
     clearAllBtn.addEventListener('click', function() {
-      slots.forEach(function(s) {
-        var cell = document.getElementById('adm-cell-'+s.date);
-        if (cell) { cell.classList.remove('adm-selected'); }
-      });
       slots = [];
       renderList();
       updateCounter();
@@ -2502,21 +2455,13 @@ button.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020
     try {
       var parsed = JSON.parse(initEl.value);
       parsed.forEach(function(s) {
-        slots.push({date:s.date, label:s.date, start:s.start_time||'', end:s.end_time||''});
-        var cell = document.getElementById('adm-cell-'+s.date);
-        if (cell) {
-          cell.classList.add('adm-selected');
-          /* Recover label from data attribute */
-          var lbl = cell.getAttribute('data-label');
-          if (lbl) slots[slots.length-1].label = lbl;
-        }
+        var dt = new Date(s.date + 'T12:00:00');
+        var label = DOW_NAMES[dt.getDay()] + ', ' + MNAMES[dt.getMonth()] + ' ' + dt.getDate() + ', ' + dt.getFullYear();
+        slots.push({date:s.date, label:label, start:s.start_time||'', end:s.end_time||''});
       });
       if (slots.length) { slots.sort(function(a,b){ return a.date<b.date?-1:1; }); renderList(); updateCounter(); }
     } catch(e) {}
   }
-
-  /* Init nav label */
-  document.getElementById('scal-nav-label').textContent = document.getElementById('adm-month-0').dataset.label;
 })();
 </script>
 `, 'New Booking');
