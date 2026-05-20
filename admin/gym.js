@@ -2826,8 +2826,11 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
           const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_admin_email'").first();
           const toEmails = [adminEmailRow?.value || 'office@timothystl.org'];
           if (group.email) toEmails.push(group.email);
-          try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {}
-          await addGymBookingToGCal(env, { ...booking, group_name: group.name });
+          const bg = async () => {
+            try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {}
+            await addGymBookingToGCal(env, { ...booking, group_name: group.name });
+          };
+          if (ctx?.waitUntil) ctx.waitUntil(bg()); else await bg();
         }
         return new Response('', { status: 302, headers: { Location: `/gym-rentals/invoices/view/${invoiceId}?msg=created` } });
       }
@@ -2839,6 +2842,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_admin_email'").first();
         const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
         const pymtLink = await getPaymentLink(env);
+        const bgTasks = [];
 
         // Group holds by group_id so each group gets one invoice
         const byGroup = new Map();
@@ -2851,7 +2855,6 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         for (const [groupId, bookings] of byGroup) {
           for (const booking of bookings) {
             await env.DB.prepare("UPDATE gym_bookings SET status='confirmed', hold_expires_at=NULL WHERE id=?").bind(booking.id).run();
-            await addGymBookingToGCal(env, { ...booking, group_name: '' });
           }
           const group = await env.DB.prepare('SELECT * FROM gym_groups WHERE id=?').bind(groupId).first();
           if (group) {
@@ -2874,10 +2877,13 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
             const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, bookings, pymtLink);
             const toEmails = [adminEmail];
             if (group.email) toEmails.push(group.email);
-            try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {}
+            bgTasks.push(async () => { try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {} });
           }
+          bgTasks.push(...bookings.map(b => () => addGymBookingToGCal(env, { ...b, group_name: group?.name || '' })));
           confirmed += bookings.length;
         }
+        const runAll = () => Promise.all(bgTasks.map(t => t()));
+        if (ctx?.waitUntil) ctx.waitUntil(runAll()); else await runAll();
         return new Response('', { status: 302, headers: { Location: `/gym-rentals?msg=confirmed-all&n=${confirmed}` } });
       }
 
@@ -2891,6 +2897,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_admin_email'").first();
         const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
         const pymtLink = await getPaymentLink(env);
+        const bgTasks = [];
 
         const byGroup = new Map();
         for (const bid of ids) {
@@ -2904,7 +2911,6 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         for (const [groupId, bookings] of byGroup) {
           for (const booking of bookings) {
             await env.DB.prepare("UPDATE gym_bookings SET status='confirmed', hold_expires_at=NULL WHERE id=?").bind(booking.id).run();
-            await addGymBookingToGCal(env, { ...booking, group_name: '' });
           }
           const group = await env.DB.prepare('SELECT * FROM gym_groups WHERE id=?').bind(groupId).first();
           const rate = await getGroupRate(env, group);
@@ -2924,10 +2930,13 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
             const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, bookings, pymtLink);
             const toEmails = [adminEmail];
             if (group.email) toEmails.push(group.email);
-            try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {}
+            bgTasks.push(async () => { try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {} });
           }
+          bgTasks.push(...bookings.map(b => () => addGymBookingToGCal(env, { ...b, group_name: group?.name || '' })));
           confirmed += bookings.length;
         }
+        const runAll = () => Promise.all(bgTasks.map(t => t()));
+        if (ctx?.waitUntil) ctx.waitUntil(runAll()); else await runAll();
         return new Response('', { status: 302, headers: { Location: `/gym-rentals?msg=confirmed-all&n=${confirmed}` } });
       }
 
