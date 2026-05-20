@@ -140,7 +140,7 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
 </html>`, {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
-      'Cache-Control': 'private, max-age=10',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Content-Security-Policy': "default-src 'self'; script-src 'self' https://cdn.tiny.cloud 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://cdn.tiny.cloud; font-src https://cdn.tiny.cloud; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.tiny.cloud; frame-src 'self' https://cdn.tiny.cloud;"
     }
   });
