@@ -2660,18 +2660,23 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
       }
 
       // ── CONFIRM BOOKING ───────────────────────────────────────
-      // Hot path is intentionally minimal: parse → validate → batch-insert
-      // bookings → insert invoice → 302. Everything else (email, Google
-      // Calendar pushes, lookups needed only for those) runs in the
-      // background via ctx.waitUntil so the response ships immediately.
+      // Hot path is intentionally minimal: parse → validate → insert
+      // bookings (sequential .run, not .batch) → insert invoice → 302.
+      // Email + Google Calendar pushes are deferred to ctx.waitUntil so
+      // the response ships before any external HTTP happens.
+      // We track a `step` string so that if anything throws, the error
+      // page tells us WHICH stage failed — silent hangs are otherwise
+      // impossible to diagnose without CF tail logs.
       if (path === '/gym-rentals/bookings/confirm' && method === 'POST') {
+        let step = 'init';
         const errPage = (msg) => new Response(
           `<html><body style="font-family:monospace;padding:20px;background:#fff3f3;color:#900;">
-          <h2>Confirm Error</h2><pre>${String(msg).replace(/</g,'&lt;')}</pre>
+          <h2>Confirm Error (step: ${step})</h2><pre>${String(msg).replace(/</g,'&lt;')}</pre>
           <p><a href="/gym-rentals/bookings/new">← Back</a></p>
           </body></html>`, { status: 500, headers: {'Content-Type':'text/html'} }
         );
         try {
+          step = 'parse-form';
           const form      = await request.formData();
           const group_id  = parseInt(form.get('group_id') || '0', 10);
           const rate      = parseFloat(form.get('rate') || '25');
@@ -2683,6 +2688,7 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
             return new Response('', { status: 302, headers: { Location: '/gym-rentals/bookings/new?err=nodates' } });
           }
 
+          step = 'parse-slots';
           const parsedSlots = slotStrs.flatMap(slotStr => {
             try {
               const s = JSON.parse(decodeURIComponent(slotStr));
@@ -2696,6 +2702,7 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
           const dates = parsedSlots.map(s => s.date);
           const ph    = dates.map(() => '?').join(',');
 
+          step = 'lookup-group-blocked-conflicts';
           const [group, blockedRows, conflictRows] = await Promise.all([
             env.DB.prepare('SELECT * FROM gym_groups WHERE id = ?').bind(group_id).first(),
             env.DB.prepare(`SELECT date FROM gym_blocked_dates WHERE date IN (${ph})`).bind(...dates).all(),
@@ -2710,12 +2717,21 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
             return new Response('', { status: 302, headers: { Location: '/gym-rentals/bookings/new?err=conflict' } });
           }
 
-          const insertResults = await env.DB.batch(validSlots.map(s =>
-            env.DB.prepare(`INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, notes, status, created_by) VALUES (?, ?, ?, ?, ?, 'confirmed', 'admin')`)
-              .bind(group_id, s.date, s.start_time, s.end_time, notes)
-          ));
-          const bookingIds = insertResults.map(r => r.meta.last_row_id);
-          const bookings   = validSlots.map(s => ({ booking_date: s.date, start_time: s.start_time, end_time: s.end_time, notes }));
+          // Insert bookings sequentially. env.DB.batch() has historically hung
+          // on multi-statement payloads in this codebase (see PR #217); a
+          // simple await-loop is ~1s for 31 rows and never wedges.
+          const insertStmt = env.DB.prepare(
+            `INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, notes, status, created_by)
+             VALUES (?, ?, ?, ?, ?, 'confirmed', 'admin')`
+          );
+          const bookingIds = [];
+          for (let i = 0; i < validSlots.length; i++) {
+            step = `insert-booking-${i + 1}/${validSlots.length}`;
+            const s = validSlots[i];
+            const r = await insertStmt.bind(group_id, s.date, s.start_time, s.end_time, notes).run();
+            bookingIds.push(r.meta.last_row_id);
+          }
+          const bookings = validSlots.map(s => ({ booking_date: s.date, start_time: s.start_time, end_time: s.end_time, notes }));
 
           const sortedDates = bookings.map(b => b.booking_date).sort();
           const totalHours  = Math.round(bookings.reduce((a, b) => a + calcHours(b.start_time, b.end_time), 0) * 100) / 100;
@@ -2724,10 +2740,12 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
             : Math.round(totalHours * rate * 100) / 100;
           const invoiceDate = new Date().toISOString().split('T')[0];
 
+          step = 'insert-invoice';
           const iRes = await env.DB.prepare(
             `INSERT INTO gym_invoices (group_id, booking_ids, invoice_date, period_start, period_end, total_hours, rate, rate_type, total_amount, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid')`
           ).bind(group_id, JSON.stringify(bookingIds), invoiceDate, sortedDates[0], sortedDates[sortedDates.length - 1], totalHours, rate, rate_type, totalAmount).run();
           const invoiceId = iRes.meta.last_row_id;
+          step = 'schedule-bg-and-redirect';
 
           // Background: send invoice email + push events to Google Calendar.
           // Token is fetched once and GCal inserts run in parallel.
