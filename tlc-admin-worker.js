@@ -82,6 +82,22 @@ export default {
       }
     }
 
+    // ── SCHEMA GATE ──
+    // The block below runs ~140 idempotent CREATE/ALTER/INSERT statements.
+    // On a stable schema each one is a no-op, but they're still ~140 D1
+    // subrequests per admin request — that's where the 5–10s "slow but
+    // works" latency comes from. Gate the whole block behind a single
+    // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
+    // migrations below change so the next request after deploy re-runs
+    // them and rewrites the marker.
+    const SCHEMA_VERSION = '2026-05-20-1';
+    let schemaOk = false;
+    try {
+      const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
+      if (row?.value === SCHEMA_VERSION) schemaOk = true;
+    } catch (_) { /* _schema_version table may not exist yet */ }
+
+    if (!schemaOk) {
     // Init DB
     try { await env.DB.prepare(DB_INIT_NEWSLETTERS).run(); } catch (e) {}
     try { await env.DB.prepare(DB_INIT_EVENTS).run(); } catch (e) {}
@@ -236,6 +252,11 @@ export default {
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_news_items_publish_date ON news_items(publish_date)').run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_ministry_posts_slug ON ministry_posts(ministry_slug)').run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_events_newsletter_id ON events(newsletter_id)').run(); } catch (_) {}
+
+    // Mark schema as current so subsequent requests skip the whole block.
+    try { await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run(); } catch (_) {}
+    try { await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES ('version', ?)").bind(SCHEMA_VERSION).run(); } catch (_) {}
+    } // end if (!schemaOk)
 
     // ── PUBLIC: serve uploaded docs from R2 ──
     if (path.startsWith('/docs/') && method === 'GET') {
