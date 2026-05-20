@@ -2082,42 +2082,9 @@ updateSummary();
         const bookedSet  = new Set(bookedRows.results.map(r => r.booking_date));
         const blockedSet = new Set(blockedRows.results.map(r => r.date));
 
-        // Build 6-month interactive calendar — day cells use label+checkbox for reliable iOS tap handling
-        const MNAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-        const DNAMES  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-        const NUM_MONTHS = 6;
-        let calHtml = '<div class="scal-wrap" id="adm-cal"><div class="scal-nav">'
-          + `<button type="button" class="scal-nav-btn" id="scal-prev" disabled>&#8249;</button>`
-          + `<div class="scal-nav-label" id="scal-nav-label"></div>`
-          + `<button type="button" class="scal-nav-btn" id="scal-next">&#8250;</button>`
-          + '</div>';
-        for (let mi = 0; mi < NUM_MONTHS; mi++) {
-          const d = new Date(today.getFullYear(), today.getMonth() + mi, 1);
-          const yr = d.getFullYear(), mo = d.getMonth();
-          const lastDay = new Date(yr, mo + 1, 0).getDate();
-          const startDow = d.getDay();
-          calHtml += `<div class="scal-month${mi === 0 ? ' active' : ''}" id="adm-month-${mi}" data-label="${MNAMES[mo]} ${yr}">`;
-          calHtml += '<div class="scal-grid"><div class="scal-dow">Su</div><div class="scal-dow">Mo</div><div class="scal-dow">Tu</div><div class="scal-dow">We</div><div class="scal-dow">Th</div><div class="scal-dow">Fr</div><div class="scal-dow">Sa</div>';
-          for (let s = 0; s < startDow; s++) calHtml += '<div></div>';
-          for (let day = 1; day <= lastDay; day++) {
-            const mm = (mo + 1).toString().padStart(2, '0');
-            const dd = day.toString().padStart(2, '0');
-            const ds = `${yr}-${mm}-${dd}`;
-            const isPast    = ds < todayStr;
-            const isBooked  = bookedSet.has(ds);
-            const isBlocked = blockedSet.has(ds);
-            const dayLabel  = DNAMES[new Date(ds + 'T12:00:00').getDay()] + ' ' + MNAMES[mo] + ' ' + day + ', ' + yr;
-            if (!isPast && !isBooked && !isBlocked) {
-              calHtml += `<label class="adm-cell adm-avail" id="adm-cell-${ds}"><input type="checkbox" class="day-check" data-date="${ds}" data-label="${dayLabel}" id="chk-${ds}">${day}</label>`;
-            } else {
-              const cls = 'adm-cell ' + (isPast ? 'adm-past' : isBlocked ? 'adm-blocked' : 'adm-booked');
-              const title = isPast ? '' : isBlocked ? 'Blocked' : 'Already booked';
-              calHtml += `<div class="${cls}"${title ? ` title="${title}"` : ''}>${day}</div>`;
-            }
-          }
-          calHtml += '</div></div>';
-        }
-        calHtml += '</div>';
+        // Calendar container — cells are built by JS renderCalendar() using createElement + addEventListener
+        // (matching the pattern from the childcare portal: create element, wire click, then append)
+
 
         return html(`
 ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
@@ -2138,7 +2105,14 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
       <div class="form-group">
         <label>Dates * <span id="date-count" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--amber);font-size:13px;"></span></label>
         <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">Tap any date to select it. Tap again to deselect.</div>
-        ${calHtml}
+        <div class="scal-wrap" id="adm-cal">
+          <div class="scal-nav">
+            <button type="button" class="scal-nav-btn" id="scal-prev" disabled>&#8249;</button>
+            <div class="scal-nav-label" id="scal-nav-label"></div>
+            <button type="button" class="scal-nav-btn" id="scal-next">&#8250;</button>
+          </div>
+          <div class="scal-grid" id="adm-cal-grid"></div>
+        </div>
         <div style="margin-top:12px;margin-bottom:4px;">
           <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);">Quick-add by day of week:</span>
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;">
@@ -2205,11 +2179,10 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 .scal-wrap{position:relative;}.scal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:8px;}.scal-nav-btn{background:var(--mist,#EDF5F8);border:1px solid var(--border,#E8E0D0);cursor:pointer;padding:8px 18px;border-radius:6px;font-size:18px;line-height:1;font-weight:700;transition:background .15s;flex-shrink:0;color:var(--steel,#1E2D4A);touch-action:manipulation;}.scal-nav-btn:hover{background:var(--border,#E8E0D0);}.scal-nav-btn:disabled{opacity:.35;cursor:default;}.scal-nav-label{font-family:var(--serif,Georgia,serif);font-size:18px;font-weight:700;text-align:center;flex:1;color:var(--steel,#1E2D4A);}.scal-month{display:none;}.scal-month.active{display:block;}
 .scal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
 .scal-dow{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray,#6B7280);padding:6px 0;text-align:center;}
-.adm-cell{border-radius:6px;text-align:center;padding:8px 2px;font-size:13px;font-weight:700;border:2px solid transparent;transition:background .12s,border-color .12s;line-height:1;font-family:inherit;color:var(--steel,#1E2D4A);}
-label.adm-avail{cursor:pointer;display:block;background:none;user-select:none;-webkit-user-select:none;position:relative;}
-label.adm-avail input[type="checkbox"]{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;top:0;left:0;}
-label.adm-avail:active{background:#D4EDDA;border-color:#5A9E6F;}
-label.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020 !important;color:white !important;}
+.adm-cell{border-radius:6px;text-align:center;padding:10px 2px;font-size:13px;font-weight:700;border:2px solid transparent;transition:background .12s,border-color .12s,transform .1s;line-height:1;font-family:inherit;color:var(--steel,#1E2D4A);min-width:0;overflow:hidden;}
+div.adm-avail{cursor:pointer;background:#fff;border-color:#ddd;}
+div.adm-avail:hover{background:#D4EDDA;border-color:#5A9E6F;transform:scale(1.06);}
+div.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020 !important;color:white !important;}
 .adm-booked{background:#F7D0D0;color:#9B4040;}
 .adm-blocked{background:#E8EDF3;color:#CBD5E1;}
 .adm-past{color:#CBD5E1;}
@@ -2253,49 +2226,97 @@ label.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020 
   var BOOKED  = new Set(JSON.parse(document.getElementById('booked-dates').value  || '[]'));
   var BLOCKED = new Set(JSON.parse(document.getElementById('blocked-dates').value || '[]'));
 
-  /* Calendar month navigation */
-  var curMonth = 0;
-  var NUM_MONTHS = 6;
-  function setMonth(idx) {
-    document.getElementById('adm-month-'+curMonth).classList.remove('active');
-    curMonth = idx;
-    document.getElementById('adm-month-'+curMonth).classList.add('active');
-    document.getElementById('scal-nav-label').textContent = document.getElementById('adm-month-'+curMonth).dataset.label;
-    document.getElementById('scal-prev').disabled = curMonth === 0;
-    document.getElementById('scal-next').disabled = curMonth === NUM_MONTHS - 1;
-  }
-  document.getElementById('scal-prev').addEventListener('click', function(){ if(curMonth > 0) setMonth(curMonth-1); });
-  document.getElementById('scal-next').addEventListener('click', function(){ if(curMonth < NUM_MONTHS-1) setMonth(curMonth+1); });
-  setMonth(0);
+  /* Parse today to seed the calendar date */
+  var _tp    = TODAY_STR.split('-');
+  var calDate = new Date(+_tp[0], +_tp[1]-1, 1);  /* first of current month */
+  var monthOffset = 0;
+  var NUM_MONTHS  = 6;
 
-  /* Add/remove slot helpers — keep slots array + calendar visual in sync */
+  function isInSlots(ds) {
+    for (var i = 0; i < slots.length; i++) { if (slots[i].date === ds) return true; }
+    return false;
+  }
   function addToSlots(ds, label) {
-    for (var i = 0; i < slots.length; i++) { if (slots[i].date === ds) return; }
+    if (isInSlots(ds)) return;
     slots.push({date: ds, label: label, start: defStart.value, end: defEnd.value});
-    var cell = document.getElementById('adm-cell-'+ds);
-    if (cell) cell.classList.add('adm-selected');
-    var cb = document.getElementById('chk-'+ds);
-    if (cb && !cb.checked) cb.checked = true;
   }
   function removeFromSlots(ds) {
     slots = slots.filter(function(s){ return s.date !== ds; });
-    var cell = document.getElementById('adm-cell-'+ds);
-    if (cell) cell.classList.remove('adm-selected');
-    var cb = document.getElementById('chk-'+ds);
-    if (cb && cb.checked) cb.checked = false;
   }
 
-  /* Day cell checkbox change — fires reliably on all mobile browsers */
-  document.querySelectorAll('.day-check').forEach(function(cb) {
-    cb.addEventListener('change', function() {
-      var ds    = this.getAttribute('data-date');
-      var label = this.getAttribute('data-label');
-      if (this.checked) { addToSlots(ds, label); } else { removeFromSlots(ds); }
-      slots.sort(function(a,b){ return a.date < b.date ? -1 : 1; });
-      renderList();
-      updateCounter();
-      document.getElementById('date-list').scrollIntoView({behavior:'smooth', block:'nearest'});
+  /* renderCalendar — builds cells with createElement + addEventListener (iOS-safe) */
+  function renderCalendar() {
+    var year  = calDate.getFullYear();
+    var month = calDate.getMonth();
+    var grid  = document.getElementById('adm-cal-grid');
+    grid.innerHTML = '';
+
+    document.getElementById('scal-nav-label').textContent =
+      new Date(year, month, 1).toLocaleDateString('en-US', {month:'long', year:'numeric'});
+    document.getElementById('scal-prev').disabled = monthOffset <= 0;
+    document.getElementById('scal-next').disabled = monthOffset >= NUM_MONTHS - 1;
+
+    /* Day-of-week headers */
+    ['Su','Mo','Tu','We','Th','Fr','Sa'].forEach(function(d) {
+      var h = document.createElement('div');
+      h.className = 'scal-dow';
+      h.textContent = d;
+      grid.appendChild(h);
     });
+
+    /* Leading empty cells */
+    var firstDow = new Date(year, month, 1).getDay();
+    for (var i = 0; i < firstDow; i++) { grid.appendChild(document.createElement('div')); }
+
+    var daysInMonth = new Date(year, month + 1, 0).getDate();
+    for (var day = 1; day <= daysInMonth; day++) {
+      var mm  = (month + 1).toString().padStart(2, '0');
+      var dd  = day.toString().padStart(2, '0');
+      var ds  = year + '-' + mm + '-' + dd;
+      var isPast    = ds < TODAY_STR;
+      var isBooked  = BOOKED.has(ds);
+      var isBlocked = BLOCKED.has(ds);
+      var selected  = isInSlots(ds);
+
+      var cell = document.createElement('div');
+      cell.textContent = day;
+
+      if (!isPast && !isBooked && !isBlocked) {
+        var lbl = DOW_NAMES[new Date(ds+'T12:00:00').getDay()] + ', ' + MNAMES[month] + ' ' + day + ', ' + year;
+        cell.className = 'adm-cell adm-avail' + (selected ? ' adm-selected' : '');
+        cell.id = 'adm-cell-' + ds;
+        /* Create element, wire click, then append — this is the pattern that works on iOS */
+        cell.addEventListener('click', (function(dateStr, label) {
+          return function(e) {
+            e.stopPropagation();
+            if (isInSlots(dateStr)) { removeFromSlots(dateStr); } else { addToSlots(dateStr, label); }
+            slots.sort(function(a,b){ return a.date < b.date ? -1 : 1; });
+            renderCalendar();
+            renderList();
+            updateCounter();
+            document.getElementById('date-list').scrollIntoView({behavior:'smooth', block:'nearest'});
+          };
+        })(ds, lbl));
+      } else {
+        cell.className = 'adm-cell ' + (isPast ? 'adm-past' : isBlocked ? 'adm-blocked' : 'adm-booked');
+        if (!isPast) cell.title = isBlocked ? 'Blocked' : 'Already booked';
+      }
+      grid.appendChild(cell);
+    }
+  }
+
+  /* Month navigation */
+  document.getElementById('scal-prev').addEventListener('click', function() {
+    if (monthOffset <= 0) return;
+    monthOffset--;
+    calDate.setMonth(calDate.getMonth() - 1);
+    renderCalendar();
+  });
+  document.getElementById('scal-next').addEventListener('click', function() {
+    if (monthOffset >= NUM_MONTHS - 1) return;
+    monthOffset++;
+    calDate.setMonth(calDate.getMonth() + 1);
+    renderCalendar();
   });
 
   /* Day-of-week pattern picker */
@@ -2318,21 +2339,28 @@ label.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020 
   document.getElementById('add-pattern-btn').addEventListener('click', function() {
     var dows = Object.keys(selectedDows).map(Number);
     if (!dows.length) return;
-    /* Find all available calendar cells and add matching day-of-week ones */
     var added = 0;
-    document.querySelectorAll('.day-check').forEach(function(cb) {
-      var ds = cb.getAttribute('data-date');
-      var dt = new Date(ds + 'T12:00:00');
-      if (dows.indexOf(dt.getDay()) === -1) return;
-      var already = false;
-      for (var i = 0; i < slots.length; i++) { if (slots[i].date === ds) { already = true; break; } }
-      if (!already) {
-        addToSlots(ds, cb.getAttribute('data-label'));
-        added++;
+    /* Iterate over the 6-month window and add matching available days */
+    var d = new Date(TODAY_STR + 'T12:00:00');
+    var endD = new Date(TODAY_STR + 'T12:00:00');
+    endD.setMonth(endD.getMonth() + NUM_MONTHS);
+    while (d <= endD) {
+      if (dows.indexOf(d.getDay()) !== -1) {
+        var yr = d.getFullYear();
+        var mo = (d.getMonth()+1).toString().padStart(2,'0');
+        var dy = d.getDate().toString().padStart(2,'0');
+        var ds = yr+'-'+mo+'-'+dy;
+        if (!BOOKED.has(ds) && !BLOCKED.has(ds) && !isInSlots(ds)) {
+          var lbl = DOW_NAMES[d.getDay()] + ', ' + MNAMES[d.getMonth()] + ' ' + d.getDate() + ', ' + yr;
+          addToSlots(ds, lbl);
+          added++;
+        }
       }
-    });
+      d.setDate(d.getDate() + 1);
+    }
     if (added) {
       slots.sort(function(a,b){ return a.date < b.date ? -1 : 1; });
+      renderCalendar();
       renderList();
       updateCounter();
     }
@@ -2386,6 +2414,7 @@ label.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020 
     el.querySelectorAll('[data-rm]').forEach(function(btn) {
       btn.addEventListener('click', function() {
         removeFromSlots(this.getAttribute('data-rm'));
+        renderCalendar();
         renderList();
         updateCounter();
       });
@@ -2420,8 +2449,8 @@ label.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020 
   var clearAllBtn = document.getElementById('clear-all-btn');
   if (clearAllBtn) {
     clearAllBtn.addEventListener('click', function() {
-      slots.slice().forEach(function(s){ removeFromSlots(s.date); });
       slots = [];
+      renderCalendar();
       renderList();
       updateCounter();
     });
@@ -2489,22 +2518,25 @@ label.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020 
     });
   });
 
-  /* Restore pre-filled slots from back-navigation (read from DOM, no JS injection) */
+  /* Restore pre-filled slots from back-navigation */
   var initEl = document.getElementById('initial-slots');
   if (initEl && initEl.value) {
     try {
       var parsed = JSON.parse(initEl.value);
       parsed.forEach(function(s) {
-        var cb = document.getElementById('chk-'+s.date);
-        var label = cb ? cb.getAttribute('data-label') : s.date;
-        addToSlots(s.date, label);
-        /* restore times on the slot we just pushed */
+        var dt  = new Date(s.date + 'T12:00:00');
+        var lbl = DOW_NAMES[dt.getDay()] + ', ' + MNAMES[dt.getMonth()] + ' ' + dt.getDate() + ', ' + dt.getFullYear();
+        addToSlots(s.date, lbl);
         var slot = slots[slots.length-1];
         if (slot && slot.date === s.date) { slot.start = s.start_time||''; slot.end = s.end_time||''; }
       });
-      if (slots.length) { slots.sort(function(a,b){ return a.date<b.date?-1:1; }); renderList(); updateCounter(); }
+      if (slots.length) { slots.sort(function(a,b){ return a.date<b.date?-1:1; }); }
     } catch(e) {}
   }
+
+  /* Initial render */
+  renderCalendar();
+  if (slots.length) { renderList(); updateCounter(); }
 })();
 </script>
 `, 'New Booking');
