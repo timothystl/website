@@ -2747,16 +2747,16 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
           const invoiceId = iRes.meta.last_row_id;
           step = 'schedule-bg-and-redirect';
 
-          // Background: send invoice email + push events to Google Calendar.
-          // Token is fetched once and GCal inserts run in parallel.
+          // Background: send invoice email only. Google Calendar push was
+          // dropped from the confirm flow — it can be re-added later or
+          // done manually. Keeping the bgWork small minimizes anything
+          // that could keep the worker alive past the 302.
           const bgWork = async () => {
-            const [pymtLink, adminEmailRow, calIdRow] = await Promise.all([
+            const [pymtLink, adminEmailRow] = await Promise.all([
               getPaymentLink(env).catch(() => PAYMENT_LINK_DEFAULT),
               env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_admin_email'").first().catch(() => null),
-              env.DB.prepare("SELECT value FROM site_settings WHERE key='gcal_calendar_id'").first().catch(() => null),
             ]);
             const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
-            const calId      = calIdRow?.value || '';
 
             const invForEmail = {
               id: invoiceId,
@@ -2774,30 +2774,7 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
             const toEmails = [adminEmail];
             if (group.email) toEmails.push(group.email);
 
-            const emailP = sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }).catch(() => null);
-
-            let gcalP = Promise.resolve();
-            if (calId) {
-              gcalP = (async () => {
-                const token = await getGCalAccessToken(env).catch(() => null);
-                if (!token) return;
-                const calUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`;
-                await Promise.all(bookings.map(b =>
-                  fetch(calUrl, {
-                    method: 'POST',
-                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      summary: `Gym Rental — ${group.name}`,
-                      description: notes || '',
-                      location: 'Timothy Lutheran Church, 4666 Fyler Ave, St. Louis, MO 63116',
-                      start: { dateTime: `${b.booking_date}T${b.start_time}:00`, timeZone: 'America/Chicago' },
-                      end:   { dateTime: `${b.booking_date}T${b.end_time}:00`,   timeZone: 'America/Chicago' },
-                    }),
-                  }).catch(() => null)
-                ));
-              })();
-            }
-            await Promise.all([emailP, gcalP]);
+            await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }).catch(() => null);
           };
           if (ctx?.waitUntil) ctx.waitUntil(bgWork().catch(() => {})); else bgWork().catch(() => {});
 
