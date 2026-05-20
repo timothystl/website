@@ -218,6 +218,7 @@ CREATE TABLE gym_blocked_dates (id, date, reason);
 
 ### Identity
 - **Full name:** Timothy Lutheran Church
+- **Address:** 6704 Fyler Ave, St. Louis, MO 63139 *(use this everywhere — there is NO 4666 Fyler / 63116 anywhere)*
 - **Location:** Lindenwood Park, South City St. Louis
 - **Denomination:** LCMS (mention once, quietly — not a focal point)
 

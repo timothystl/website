@@ -165,12 +165,12 @@ function buildGymInvoiceEmailHtml(inv, group, bookingOrBookings, paymentLink = P
       </td></tr>
     </table>
     <div style="font-size:13px;color:#7A6E60;text-align:center;margin-bottom:16px;">— or —</div>
-    <div style="font-size:14px;color:#4A4860;line-height:1.75;">Make your check payable to <strong>Timothy Lutheran Church</strong> and bring it to the church office or mail to:<br><br>Timothy Lutheran Church<br>4666 Fyler Ave, St. Louis, MO 63116</div>
+    <div style="font-size:14px;color:#4A4860;line-height:1.75;">Make your check payable to <strong>Timothy Lutheran Church</strong> and bring it to the church office or mail to:<br><br>Timothy Lutheran Church<br>6704 Fyler Ave, St. Louis, MO 63139</div>
     <div style="font-size:13px;color:#7A6E60;margin-top:12px;">Questions? <a href="mailto:office@timothystl.org" style="color:#2E7EA6;">office@timothystl.org</a></div>
   </div>
 </td></tr>
 <tr><td style="background:#F7F3EC;padding:20px 36px;text-align:center;font-size:12px;color:#7A6E60;">
-  Timothy Lutheran Church · 4666 Fyler Ave, St. Louis, MO 63116
+  Timothy Lutheran Church · 6704 Fyler Ave, St. Louis, MO 63139
 </td></tr>
 </table>
 </td></tr>
@@ -216,7 +216,7 @@ async function addGymBookingToGCal(env, { booking_date, start_time, end_time, gr
       body: JSON.stringify({
         summary:  `Gym Rental — ${group_name}`,
         description: notes || '',
-        location: 'Timothy Lutheran Church, 4666 Fyler Ave, St. Louis, MO 63116',
+        location: 'Timothy Lutheran Church, 6704 Fyler Ave, St. Louis, MO 63139',
         start: { dateTime: `${booking_date}T${start_time}:00`, timeZone: 'America/Chicago' },
         end:   { dateTime: `${booking_date}T${end_time}:00`,   timeZone: 'America/Chicago' },
       }),
@@ -2747,22 +2747,72 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
           const invoiceId = iRes.meta.last_row_id;
           step = 'respond';
 
-          // Background: send invoice email. No Google Calendar push (dropped
-          // by request). Wrapped in waitUntil so the response ships first.
+          // Background: send invoice email to renter (or admin if no renter
+          // email), push events to Google Calendar in parallel, and send a
+          // short notification to admin confirming the system fired the
+          // invoice. All in waitUntil so the response ships immediately.
           const bgWork = async () => {
-            const [pymtLink, adminEmailRow] = await Promise.all([
+            const [pymtLink, adminEmailRow, calIdRow] = await Promise.all([
               getPaymentLink(env).catch(() => PAYMENT_LINK_DEFAULT),
               env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_admin_email'").first().catch(() => null),
+              env.DB.prepare("SELECT value FROM site_settings WHERE key='gcal_calendar_id'").first().catch(() => null),
             ]);
             const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
+            const calId      = calIdRow?.value || '';
+
             const invForEmail = { id: invoiceId, invoice_date: invoiceDate, total_hours: totalHours, rate, rate_type, total_amount: totalAmount, status: 'unpaid' };
             const emailHtml = buildGymInvoiceEmailHtml(invForEmail, group, bookings, pymtLink);
+            const invNum = `GYM-${String(invoiceId).padStart(4,'0')}`;
             const subject = bookings.length === 1
               ? `Gym Rental Invoice — ${group.name} — ${formatDate(sortedDates[0])}`
               : `Gym Rental Invoice — ${group.name} — ${bookings.length} dates`;
-            const toEmails = [adminEmail];
-            if (group.email) toEmails.push(group.email);
-            await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }).catch(() => null);
+
+            // Invoice goes to the renter if we have their email, otherwise
+            // straight to admin so the invoice still exists in someone's
+            // inbox.
+            const invoiceTo = group.email ? [group.email] : [adminEmail];
+            const invoiceP = sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails: invoiceTo }).catch(() => null);
+
+            // Short, plain-text-ish confirmation notice to admin so the
+            // staff knows the system actually fired the invoice.
+            const datesList = bookings.map(b => `<li>${formatDate(b.booking_date)} &middot; ${fmt12h(b.start_time)} – ${fmt12h(b.end_time)}</li>`).join('');
+            const adminBody = `<div style="font-family:system-ui,sans-serif;color:#1A1A2A;line-height:1.5;">
+              <p><strong>Invoice ${invNum}</strong> was just emailed${group.email ? ` to <strong>${group.email}</strong>` : ' <em>(no renter email on file — invoice went to admin only)</em>'}.</p>
+              <p>Group: <strong>${group.name}</strong><br>
+              Amount: <strong>$${totalAmount.toFixed(2)}</strong><br>
+              Dates (${bookings.length}):</p>
+              <ul>${datesList}</ul>
+              <p><a href="https://admin.timothystl.org/gym-rentals/invoices/view/${invoiceId}">View invoice in admin →</a></p>
+            </div>`;
+            const adminSubject = group.email
+              ? `[Gym] Invoice ${invNum} sent → ${group.name}`
+              : `[Gym] Invoice ${invNum} ready (no renter email) — ${group.name}`;
+            const adminP = sendTransactionalEmail(env, { subject: adminSubject, htmlContent: adminBody, toEmails: [adminEmail] }).catch(() => null);
+
+            // Google Calendar push — fetch token once, fire events in parallel
+            let gcalP = Promise.resolve();
+            if (calId) {
+              gcalP = (async () => {
+                const token = await getGCalAccessToken(env).catch(() => null);
+                if (!token) return;
+                const calUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`;
+                await Promise.all(bookings.map(b =>
+                  fetch(calUrl, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      summary: `Gym Rental — ${group.name}`,
+                      description: notes || '',
+                      location: 'Timothy Lutheran Church, 6704 Fyler Ave, St. Louis, MO 63139',
+                      start: { dateTime: `${b.booking_date}T${b.start_time}:00`, timeZone: 'America/Chicago' },
+                      end:   { dateTime: `${b.booking_date}T${b.end_time}:00`,   timeZone: 'America/Chicago' },
+                    }),
+                  }).catch(() => null)
+                ));
+              })();
+            }
+
+            await Promise.all([invoiceP, adminP, gcalP]);
           };
           if (ctx?.waitUntil) ctx.waitUntil(bgWork().catch(() => {})); else bgWork().catch(() => {});
 
@@ -3162,7 +3212,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals/invoices">\u2190 Invoice
       <div>
         <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--amber);margin-bottom:8px;">From</div>
         <div style="font-size:14px;font-weight:700;color:var(--steel);">Timothy Lutheran Church</div>
-        <div style="font-size:13px;color:var(--gray);margin-top:3px;">4666 Fyler Ave, St. Louis, MO 63116</div>
+        <div style="font-size:13px;color:var(--gray);margin-top:3px;">6704 Fyler Ave, St. Louis, MO 63139</div>
         <div style="font-size:13px;color:var(--gray);">office@timothystl.org</div>
       </div>
     </div>
@@ -3177,7 +3227,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals/invoices">\u2190 Invoice
       <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--amber);margin-bottom:10px;">Payment</div>
       <div style="text-align:center;margin-bottom:14px;"><a href="${paymentLink}&amount=${Math.round(total * 100)}" target="_blank" style="display:inline-block;background:#00DB72;color:white;font-weight:700;font-size:15px;padding:12px 36px;border-radius:6px;text-decoration:none;">Pay Online \u2192</a></div>
       <div style="font-size:13px;color:var(--gray);text-align:center;margin-bottom:10px;">\u2014 or \u2014</div>
-      <div style="font-size:14px;color:var(--charcoal);line-height:1.75;">Make check payable to <strong>Timothy Lutheran Church</strong> and bring to the office or mail to 4666 Fyler Ave, St. Louis, MO 63116.</div>
+      <div style="font-size:14px;color:var(--charcoal);line-height:1.75;">Make check payable to <strong>Timothy Lutheran Church</strong> and bring to the office or mail to 6704 Fyler Ave, St. Louis, MO 63139.</div>
     </div>
     <hr style="border:none;border-top:1px solid var(--border);margin:20px 0 16px;">
     <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:10px;">Adjust Invoice</div>
