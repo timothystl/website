@@ -2162,7 +2162,6 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
           <label style="display:block;font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:0;">Select Dates * <span id="date-count" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--amber);font-size:13px;"></span></label>
           <button type="button" id="clear-all-btn" class="btn btn-sm btn-secondary" style="display:none;">Clear all</button>
         </div>
-        <div id="dbg" style="font-size:11px;font-family:monospace;color:#666;padding:4px 8px;background:#f0f0f0;border-radius:4px;margin-bottom:8px;min-height:20px;"></div>
         ${calHtml}
       </div>
 
@@ -2312,45 +2311,33 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
     }
   });
 
-  /* Date toggle */
-  function findAvailCell(target, root) {
-    if (target.closest) return target.closest('.adm-avail');
-    var t = target;
-    while (t && t !== root) {
-      if (t.classList && t.classList.contains('adm-avail')) return t;
-      t = t.parentNode;
-    }
-    return null;
+  /* Attach click directly to each available cell (delegation through table elements
+     doesn't bubble reliably on iOS Safari) */
+  function attachCellListeners() {
+    document.querySelectorAll('.adm-avail').forEach(function(cell) {
+      cell.addEventListener('click', function() {
+        var dateStr = this.getAttribute('data-date');
+        var label   = this.getAttribute('data-label');
+        if (!dateStr) return;
+        var found = false;
+        for (var i = 0; i < slots.length; i++) {
+          if (slots[i].date === dateStr) { slots.splice(i, 1); found = true; break; }
+        }
+        if (found) {
+          this.classList.remove('adm-selected');
+        } else {
+          slots.push({date:dateStr, label:label, start:defStart.value, end:defEnd.value});
+          slots.sort(function(a,b){ return a.date < b.date ? -1 : 1; });
+          this.classList.add('adm-selected');
+        }
+        renderList();
+        updateCounter();
+        var dl = document.getElementById('date-list');
+        if (dl) dl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      });
+    });
   }
-
-  document.getElementById('adm-cal').addEventListener('click', function(e) {
-    var cell = findAvailCell(e.target, this);
-    if (!cell) {
-      /* DEBUG: tapped but no avail cell found */
-      document.getElementById('dbg').textContent = 'tap: no cell (target='+e.target.className+')';
-      return;
-    }
-    var dateStr = cell.getAttribute('data-date');
-    var label   = cell.getAttribute('data-label');
-    document.getElementById('dbg').textContent = 'tap: '+dateStr+' slots='+slots.length;
-    if (!dateStr) return;
-    var found = false;
-    for (var i = 0; i < slots.length; i++) {
-      if (slots[i].date === dateStr) { slots.splice(i, 1); found = true; break; }
-    }
-    if (found) {
-      cell.classList.remove('adm-selected');
-    } else {
-      slots.push({date:dateStr, label:label, start:defStart.value, end:defEnd.value});
-      slots.sort(function(a,b){ return a.date < b.date ? -1 : 1; });
-      cell.classList.add('adm-selected');
-    }
-    renderList();
-    updateCounter();
-    /* Scroll the date list into view on mobile so the user sees the row appear */
-    var dl = document.getElementById('date-list');
-    if (dl) dl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  });
+  attachCellListeners();
 
   /* Apply default times to all slots */
   document.getElementById('apply-all-btn').addEventListener('click', function() {
