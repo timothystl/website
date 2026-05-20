@@ -2089,7 +2089,7 @@ updateSummary();
         return html(`
 ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="wrap">
-  <div class="page-title">New Booking</div>
+  <div class="page-title">New Booking <span style="font-size:11px;font-weight:400;color:var(--gray);font-family:monospace;">build 210 · ${new Date().toISOString().slice(11,19)}Z</span></div>
   <div class="page-sub">Click dates, set times, then review before sending an invoice.</div>
   ${errAlert}
   <div class="card">
