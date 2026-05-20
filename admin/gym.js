@@ -2085,7 +2085,7 @@ updateSummary();
         const MNAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
         const DNAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
         const NUM_MONTHS = 6;
-        let calHtml = '<div class="scal-wrap" id="adm-cal" onclick="void(0)"><div class="scal-nav">'
+        let calHtml = '<div class="scal-wrap" id="adm-cal"><div class="scal-nav">'
           + `<button type="button" class="scal-nav-btn" id="scal-prev" disabled>&#8249;</button>`
           + `<div class="scal-nav-label" id="scal-nav-label"></div>`
           + `<button type="button" class="scal-nav-btn" id="scal-next">&#8250;</button>`
@@ -2096,9 +2096,10 @@ updateSummary();
           const lastDay = new Date(yr, mo + 1, 0).getDate();
           const startDow = d.getDay();
           calHtml += `<div class="scal-month${mi === 0 ? ' active' : ''}" id="adm-month-${mi}" data-label="${MNAMES[mo]} ${yr}">`;
-          calHtml += `<table class="scal-table"><tr><th>Su</th><th>Mo</th><th>Tu</th><th>We</th><th>Th</th><th>Fr</th><th>Sa</th></tr><tr>`;
-          for (let s = 0; s < startDow; s++) calHtml += '<td></td>';
-          let dow = startDow;
+          // Day-of-week header row
+          calHtml += `<div class="scal-grid"><div class="scal-dow">Su</div><div class="scal-dow">Mo</div><div class="scal-dow">Tu</div><div class="scal-dow">We</div><div class="scal-dow">Th</div><div class="scal-dow">Fr</div><div class="scal-dow">Sa</div>`;
+          // Empty cells before first day
+          for (let s = 0; s < startDow; s++) calHtml += '<div></div>';
           for (let day = 1; day <= lastDay; day++) {
             const mm = (mo + 1).toString().padStart(2, '0');
             const dd = day.toString().padStart(2, '0');
@@ -2107,18 +2108,15 @@ updateSummary();
             const isBooked  = bookedSet.has(ds);
             const isBlocked = blockedSet.has(ds);
             const dayLabel  = DNAMES[new Date(ds + 'T12:00:00').getDay()] + ' ' + MNAMES[mo] + ' ' + day + ', ' + yr;
-            let cls = 'adm-cell';
-            let extra = '';
-            if      (isPast)    { cls += ' adm-past';    extra = ` title="Past"`; }
-            else if (isBlocked) { cls += ' adm-blocked'; extra = ` title="Blocked"`; }
-            else if (isBooked)  { cls += ' adm-booked';  extra = ` title="Already booked"`; }
-            else                { cls += ' adm-avail'; extra = ` onclick="void(0)"`; }
-            calHtml += `<td><div class="${cls}" id="adm-cell-${ds}" data-date="${ds}" data-label="${dayLabel}"${extra}><div class="scal-num">${day}</div></div></td>`;
-            dow++;
-            if (dow === 7 && day < lastDay) { calHtml += '</tr><tr>'; dow = 0; }
+            if (!isPast && !isBooked && !isBlocked) {
+              calHtml += `<button type="button" class="adm-cell adm-avail" id="adm-cell-${ds}" data-date="${ds}" data-label="${dayLabel}">${day}</button>`;
+            } else {
+              let cls = 'adm-cell ' + (isPast ? 'adm-past' : isBlocked ? 'adm-blocked' : 'adm-booked');
+              let title = isPast ? 'Past' : isBlocked ? 'Blocked' : 'Already booked';
+              calHtml += `<div class="${cls}" title="${title}">${day}</div>`;
+            }
           }
-          while (dow > 0 && dow < 7) { calHtml += '<td></td>'; dow++; }
-          calHtml += '</tr></table></div>';
+          calHtml += '</div></div>';
         }
         calHtml += '</div>';
 
@@ -2209,10 +2207,16 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
   </div>
 </div>
 <style>
-.scal-wrap{position:relative;}.scal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:8px;}.scal-nav-btn{background:var(--mist,#EDF5F8);border:1px solid var(--border,#E8E0D0);cursor:pointer;padding:6px 16px;border-radius:6px;font-size:18px;line-height:1;font-weight:700;transition:background .15s;flex-shrink:0;color:var(--steel,#1E2D4A);touch-action:manipulation;user-select:none;-webkit-user-select:none;}.scal-nav-btn:hover{background:var(--border,#E8E0D0);}.scal-nav-btn:disabled{opacity:.35;cursor:default;}.scal-nav-label{font-family:var(--serif,Georgia,serif);font-size:18px;font-weight:700;text-align:center;flex:1;color:var(--steel,#1E2D4A);}.scal-month{display:none;}.scal-month.active{display:block;}.scal-table{width:100%;border-collapse:collapse;table-layout:fixed;}.scal-table th{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray,#6B7280);padding:7px 0;text-align:center;}.scal-table td{padding:2px;vertical-align:top;}.scal-num{font-size:12px;font-weight:700;text-align:center;padding:6px 2px;line-height:1.3;color:var(--steel,#1E2D4A);pointer-events:none;}
-.adm-cell{border-radius:6px;text-align:center;padding:4px 2px;border:2px solid transparent;transition:background .12s,border-color .12s;}
-.adm-avail{cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none;}.adm-avail:hover{background:#D4EDDA;border-color:#5A9E6F;}
-@media(max-width:600px){.scal-table td{padding:1px;}.adm-cell{padding:6px 1px;border-radius:4px;}.scal-num{font-size:13px;padding:8px 1px;}.scal-table th{font-size:10px;padding:5px 0;}}
+.scal-wrap{position:relative;}.scal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:8px;}.scal-nav-btn{background:var(--mist,#EDF5F8);border:1px solid var(--border,#E8E0D0);cursor:pointer;padding:8px 18px;border-radius:6px;font-size:18px;line-height:1;font-weight:700;transition:background .15s;flex-shrink:0;color:var(--steel,#1E2D4A);touch-action:manipulation;}.scal-nav-btn:hover{background:var(--border,#E8E0D0);}.scal-nav-btn:disabled{opacity:.35;cursor:default;}.scal-nav-label{font-family:var(--serif,Georgia,serif);font-size:18px;font-weight:700;text-align:center;flex:1;color:var(--steel,#1E2D4A);}.scal-month{display:none;}.scal-month.active{display:block;}
+.scal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
+.scal-dow{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray,#6B7280);padding:6px 0;text-align:center;}
+.adm-cell{border-radius:6px;text-align:center;padding:8px 2px;font-size:13px;font-weight:700;border:2px solid transparent;transition:background .12s,border-color .12s;line-height:1;background:none;font-family:inherit;color:var(--steel,#1E2D4A);}
+button.adm-avail{cursor:pointer;touch-action:manipulation;display:block;width:100%;}
+button.adm-avail:hover,button.adm-avail:focus{background:#D4EDDA;border-color:#5A9E6F;outline:none;}
+button.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020 !important;color:white !important;}
+.adm-booked{background:#F7D0D0;color:#9B4040;}
+.adm-blocked{background:#E8EDF3;color:#CBD5E1;}
+.adm-past{color:#CBD5E1;}
 .adm-cell.adm-selected{background:#C9973A !important;border-color:#A07020 !important;}
 .adm-cell.adm-selected .scal-num{color:white !important;}
 .adm-booked{background:#F7D0D0;}.adm-booked .scal-num{color:#9B4040;}
@@ -2228,7 +2232,6 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 </style>
 <script>
 (function(){
-  try {
   function buildTimeOpts(selected) {
     var opts = '<option value="">—</option>';
     for (var h = 6; h < 24; h++) {
@@ -2312,59 +2315,29 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
     }
   });
 
-  /* Attach touch + click directly to each available cell.
-     iOS Safari does not reliably fire click inside table elements;
-     touchstart/touchend always fires. We use touchend with a movement
-     check to distinguish taps from scrolls, then call preventDefault
-     to suppress the ghost click so the action doesn't run twice. */
-  function attachCellListeners() {
-    document.querySelectorAll('.adm-avail').forEach(function(cell) {
-      var touchStartX = 0, touchStartY = 0;
-
-      cell.addEventListener('touchstart', function(e) {
-        var t = e.touches[0];
-        touchStartX = t.clientX;
-        touchStartY = t.clientY;
-      }, { passive: true });
-
-      cell.addEventListener('touchend', function(e) {
-        var t = e.changedTouches[0];
-        var dx = Math.abs(t.clientX - touchStartX);
-        var dy = Math.abs(t.clientY - touchStartY);
-        if (dx > 10 || dy > 10) return; // scroll, not a tap
-        e.preventDefault(); // suppress ghost click
-        handleCellTap(this);
-      }, { passive: false });
-
-      /* Desktop fallback */
-      cell.addEventListener('click', function() {
-        handleCellTap(this);
-      });
+  /* Day cells are now <button> elements — click always fires on iOS and Android */
+  document.querySelectorAll('button.adm-avail').forEach(function(cell) {
+    cell.addEventListener('click', function() {
+      var dateStr = this.getAttribute('data-date');
+      var label   = this.getAttribute('data-label');
+      if (!dateStr) return;
+      var found = false;
+      for (var i = 0; i < slots.length; i++) {
+        if (slots[i].date === dateStr) { slots.splice(i, 1); found = true; break; }
+      }
+      if (found) {
+        this.classList.remove('adm-selected');
+      } else {
+        slots.push({date:dateStr, label:label, start:defStart.value, end:defEnd.value});
+        slots.sort(function(a,b){ return a.date < b.date ? -1 : 1; });
+        this.classList.add('adm-selected');
+      }
+      renderList();
+      updateCounter();
+      var dl = document.getElementById('date-list');
+      if (dl) dl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     });
-  }
-
-  function handleCellTap(cell) {
-    var dateStr = cell.getAttribute('data-date');
-    var label   = cell.getAttribute('data-label');
-    if (!dateStr) return;
-    var found = false;
-    for (var i = 0; i < slots.length; i++) {
-      if (slots[i].date === dateStr) { slots.splice(i, 1); found = true; break; }
-    }
-    if (found) {
-      cell.classList.remove('adm-selected');
-    } else {
-      slots.push({date:dateStr, label:label, start:defStart.value, end:defEnd.value});
-      slots.sort(function(a,b){ return a.date < b.date ? -1 : 1; });
-      cell.classList.add('adm-selected');
-    }
-    renderList();
-    updateCounter();
-    var dl = document.getElementById('date-list');
-    if (dl) dl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }
-
-  attachCellListeners();
+  });
 
   /* Apply default times to all slots */
   document.getElementById('apply-all-btn').addEventListener('click', function() {
@@ -2544,13 +2517,6 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 
   /* Init nav label */
   document.getElementById('scal-nav-label').textContent = document.getElementById('adm-month-0').dataset.label;
-
-  } catch(initErr) {
-    var errDiv = document.createElement('div');
-    errDiv.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#c00;color:#fff;padding:12px;font-size:13px;z-index:9999;word-break:break-all;';
-    errDiv.textContent = 'JS ERROR: ' + (initErr.message || initErr);
-    document.body.appendChild(errDiv);
-  }
 })();
 </script>
 `, 'New Booking');
