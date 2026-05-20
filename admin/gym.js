@@ -2082,8 +2082,42 @@ updateSummary();
         const bookedSet  = new Set(bookedRows.results.map(r => r.booking_date));
         const blockedSet = new Set(blockedRows.results.map(r => r.date));
 
-        // Pre-render time options for JS injection
-        const timeOptsBase = timeOptions('');
+        // Build 6-month interactive calendar — day cells use label+checkbox for reliable iOS tap handling
+        const MNAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        const DNAMES  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        const NUM_MONTHS = 6;
+        let calHtml = '<div class="scal-wrap" id="adm-cal"><div class="scal-nav">'
+          + `<button type="button" class="scal-nav-btn" id="scal-prev" disabled>&#8249;</button>`
+          + `<div class="scal-nav-label" id="scal-nav-label"></div>`
+          + `<button type="button" class="scal-nav-btn" id="scal-next">&#8250;</button>`
+          + '</div>';
+        for (let mi = 0; mi < NUM_MONTHS; mi++) {
+          const d = new Date(today.getFullYear(), today.getMonth() + mi, 1);
+          const yr = d.getFullYear(), mo = d.getMonth();
+          const lastDay = new Date(yr, mo + 1, 0).getDate();
+          const startDow = d.getDay();
+          calHtml += `<div class="scal-month${mi === 0 ? ' active' : ''}" id="adm-month-${mi}" data-label="${MNAMES[mo]} ${yr}">`;
+          calHtml += '<div class="scal-grid"><div class="scal-dow">Su</div><div class="scal-dow">Mo</div><div class="scal-dow">Tu</div><div class="scal-dow">We</div><div class="scal-dow">Th</div><div class="scal-dow">Fr</div><div class="scal-dow">Sa</div>';
+          for (let s = 0; s < startDow; s++) calHtml += '<div></div>';
+          for (let day = 1; day <= lastDay; day++) {
+            const mm = (mo + 1).toString().padStart(2, '0');
+            const dd = day.toString().padStart(2, '0');
+            const ds = `${yr}-${mm}-${dd}`;
+            const isPast    = ds < todayStr;
+            const isBooked  = bookedSet.has(ds);
+            const isBlocked = blockedSet.has(ds);
+            const dayLabel  = DNAMES[new Date(ds + 'T12:00:00').getDay()] + ' ' + MNAMES[mo] + ' ' + day + ', ' + yr;
+            if (!isPast && !isBooked && !isBlocked) {
+              calHtml += `<label class="adm-cell adm-avail" id="adm-cell-${ds}"><input type="checkbox" class="day-check" data-date="${ds}" data-label="${dayLabel}" id="chk-${ds}">${day}</label>`;
+            } else {
+              const cls = 'adm-cell ' + (isPast ? 'adm-past' : isBlocked ? 'adm-blocked' : 'adm-booked');
+              const title = isPast ? '' : isBlocked ? 'Blocked' : 'Already booked';
+              calHtml += `<div class="${cls}"${title ? ` title="${title}"` : ''}>${day}</div>`;
+            }
+          }
+          calHtml += '</div></div>';
+        }
+        calHtml += '</div>';
 
         return html(`
 ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
@@ -2101,15 +2135,11 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         </select>
       </div>
 
-      <!-- Pattern picker: add every Mon/Tue/etc -->
-      <!-- Date picker: native input for reliable mobile support -->
       <div class="form-group">
         <label>Dates * <span id="date-count" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--amber);font-size:13px;"></span></label>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
-          <input type="date" id="date-picker" style="font-size:15px;padding:9px 12px;border:1px solid var(--border);border-radius:6px;background:white;flex:1;min-width:160px;" min="${todayStr}">
-          <button type="button" id="add-date-btn" class="btn btn-secondary" style="white-space:nowrap;">+ Add date</button>
-        </div>
-        <div style="margin-bottom:8px;">
+        <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">Tap any date to select it. Tap again to deselect.</div>
+        ${calHtml}
+        <div style="margin-top:12px;margin-bottom:4px;">
           <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);">Quick-add by day of week:</span>
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;">
             <button type="button" class="pat-btn" data-dow="0">Sun</button>
@@ -2175,17 +2205,14 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 .scal-wrap{position:relative;}.scal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:8px;}.scal-nav-btn{background:var(--mist,#EDF5F8);border:1px solid var(--border,#E8E0D0);cursor:pointer;padding:8px 18px;border-radius:6px;font-size:18px;line-height:1;font-weight:700;transition:background .15s;flex-shrink:0;color:var(--steel,#1E2D4A);touch-action:manipulation;}.scal-nav-btn:hover{background:var(--border,#E8E0D0);}.scal-nav-btn:disabled{opacity:.35;cursor:default;}.scal-nav-label{font-family:var(--serif,Georgia,serif);font-size:18px;font-weight:700;text-align:center;flex:1;color:var(--steel,#1E2D4A);}.scal-month{display:none;}.scal-month.active{display:block;}
 .scal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
 .scal-dow{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray,#6B7280);padding:6px 0;text-align:center;}
-.adm-cell{border-radius:6px;text-align:center;padding:8px 2px;font-size:13px;font-weight:700;border:2px solid transparent;transition:background .12s,border-color .12s;line-height:1;background:none;font-family:inherit;color:var(--steel,#1E2D4A);}
-button.adm-avail{cursor:pointer;touch-action:manipulation;display:block;width:100%;}
-button.adm-avail:hover,button.adm-avail:focus{background:#D4EDDA;border-color:#5A9E6F;outline:none;}
-button.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020 !important;color:white !important;}
+.adm-cell{border-radius:6px;text-align:center;padding:8px 2px;font-size:13px;font-weight:700;border:2px solid transparent;transition:background .12s,border-color .12s;line-height:1;font-family:inherit;color:var(--steel,#1E2D4A);}
+label.adm-avail{cursor:pointer;display:block;background:none;user-select:none;-webkit-user-select:none;}
+label.adm-avail input[type="checkbox"]{display:none;}
+label.adm-avail:active{background:#D4EDDA;border-color:#5A9E6F;}
+label.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020 !important;color:white !important;}
 .adm-booked{background:#F7D0D0;color:#9B4040;}
 .adm-blocked{background:#E8EDF3;color:#CBD5E1;}
 .adm-past{color:#CBD5E1;}
-.adm-cell.adm-selected{background:#C9973A !important;border-color:#A07020 !important;}
-.adm-cell.adm-selected .scal-num{color:white !important;}
-.adm-booked{background:#F7D0D0;}.adm-booked .scal-num{color:#9B4040;}
-.adm-blocked{background:#E8EDF3;}.adm-blocked .scal-num,.adm-past .scal-num{color:#CBD5E1;}
 .date-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border,#E8E0D0);flex-wrap:wrap;}
 .date-row:last-child{border-bottom:none;}
 .date-row-label{font-family:var(--sans,Arial,sans-serif);font-size:13px;font-weight:700;color:var(--steel,#1E2D4A);min-width:160px;}
@@ -2220,30 +2247,55 @@ button.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020
 
   var slots = [];
   var selectedDows = {};  /* day-of-week toggles */
-  var MNAMES   = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   var DOW_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var MNAMES    = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   var TODAY_STR = document.getElementById('today-str').value;
   var BOOKED  = new Set(JSON.parse(document.getElementById('booked-dates').value  || '[]'));
   var BLOCKED = new Set(JSON.parse(document.getElementById('blocked-dates').value || '[]'));
 
-  /* Add-date button */
-  document.getElementById('add-date-btn').addEventListener('click', function() {
-    var val = document.getElementById('date-picker').value;
-    if (!val) { alert('Please select a date.'); return; }
-    if (val < TODAY_STR) { alert('Please select a future date.'); return; }
-    if (BOOKED.has(val))  { alert('That date already has a booking.'); return; }
-    if (BLOCKED.has(val)) { alert('That date is blocked.'); return; }
-    for (var i = 0; i < slots.length; i++) {
-      if (slots[i].date === val) { alert('That date is already in the list.'); return; }
-    }
-    var dt = new Date(val + 'T12:00:00');
-    var label = DOW_NAMES[dt.getDay()] + ', ' + MNAMES[dt.getMonth()] + ' ' + dt.getDate() + ', ' + dt.getFullYear();
-    slots.push({date: val, label: label, start: defStart.value, end: defEnd.value});
-    slots.sort(function(a,b){ return a.date < b.date ? -1 : 1; });
-    document.getElementById('date-picker').value = '';
-    renderList();
-    updateCounter();
-    document.getElementById('date-list').scrollIntoView({behavior:'smooth', block:'nearest'});
+  /* Calendar month navigation */
+  var curMonth = 0;
+  var NUM_MONTHS = 6;
+  function setMonth(idx) {
+    document.getElementById('adm-month-'+curMonth).classList.remove('active');
+    curMonth = idx;
+    document.getElementById('adm-month-'+curMonth).classList.add('active');
+    document.getElementById('scal-nav-label').textContent = document.getElementById('adm-month-'+curMonth).dataset.label;
+    document.getElementById('scal-prev').disabled = curMonth === 0;
+    document.getElementById('scal-next').disabled = curMonth === NUM_MONTHS - 1;
+  }
+  document.getElementById('scal-prev').addEventListener('click', function(){ if(curMonth > 0) setMonth(curMonth-1); });
+  document.getElementById('scal-next').addEventListener('click', function(){ if(curMonth < NUM_MONTHS-1) setMonth(curMonth+1); });
+  setMonth(0);
+
+  /* Add/remove slot helpers — keep slots array + calendar visual in sync */
+  function addToSlots(ds, label) {
+    for (var i = 0; i < slots.length; i++) { if (slots[i].date === ds) return; }
+    slots.push({date: ds, label: label, start: defStart.value, end: defEnd.value});
+    var cell = document.getElementById('adm-cell-'+ds);
+    if (cell) cell.classList.add('adm-selected');
+    var cb = document.getElementById('chk-'+ds);
+    if (cb && !cb.checked) cb.checked = true;
+  }
+  function removeFromSlots(ds) {
+    slots = slots.filter(function(s){ return s.date !== ds; });
+    var cell = document.getElementById('adm-cell-'+ds);
+    if (cell) cell.classList.remove('adm-selected');
+    var cb = document.getElementById('chk-'+ds);
+    if (cb && cb.checked) cb.checked = false;
+  }
+
+  /* Day cell checkbox change — fires reliably on all mobile browsers */
+  document.querySelectorAll('.day-check').forEach(function(cb) {
+    cb.addEventListener('change', function() {
+      var ds    = this.getAttribute('data-date');
+      var label = this.getAttribute('data-label');
+      if (this.checked) { addToSlots(ds, label); } else { removeFromSlots(ds); }
+      slots.sort(function(a,b){ return a.date < b.date ? -1 : 1; });
+      renderList();
+      updateCounter();
+      document.getElementById('date-list').scrollIntoView({behavior:'smooth', block:'nearest'});
+    });
   });
 
   /* Day-of-week pattern picker */
@@ -2266,31 +2318,19 @@ button.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020
   document.getElementById('add-pattern-btn').addEventListener('click', function() {
     var dows = Object.keys(selectedDows).map(Number);
     if (!dows.length) return;
-    var defSt = defStart.value;
-    var defEt = defEnd.value;
-    /* Iterate over the next 6 months and add matching days */
+    /* Find all available calendar cells and add matching day-of-week ones */
     var added = 0;
-    var d = new Date(TODAY_STR + 'T12:00:00');
-    var endD = new Date(TODAY_STR + 'T12:00:00');
-    endD.setMonth(endD.getMonth() + 6);
-    while (d <= endD) {
-      if (dows.indexOf(d.getDay()) !== -1) {
-        var yr  = d.getFullYear();
-        var mo  = (d.getMonth()+1).toString().padStart(2,'0');
-        var dy  = d.getDate().toString().padStart(2,'0');
-        var ds  = yr+'-'+mo+'-'+dy;
-        if (!BOOKED.has(ds) && !BLOCKED.has(ds)) {
-          var already = false;
-          for (var i = 0; i < slots.length; i++) { if (slots[i].date === ds) { already = true; break; } }
-          if (!already) {
-            var label = DOW_NAMES[d.getDay()] + ', ' + MNAMES[d.getMonth()] + ' ' + d.getDate() + ', ' + yr;
-            slots.push({date: ds, label: label, start: defSt, end: defEt});
-            added++;
-          }
-        }
+    document.querySelectorAll('.day-check').forEach(function(cb) {
+      var ds = cb.getAttribute('data-date');
+      var dt = new Date(ds + 'T12:00:00');
+      if (dows.indexOf(dt.getDay()) === -1) return;
+      var already = false;
+      for (var i = 0; i < slots.length; i++) { if (slots[i].date === ds) { already = true; break; } }
+      if (!already) {
+        addToSlots(ds, cb.getAttribute('data-label'));
+        added++;
       }
-      d.setDate(d.getDate() + 1);
-    }
+    });
     if (added) {
       slots.sort(function(a,b){ return a.date < b.date ? -1 : 1; });
       renderList();
@@ -2345,8 +2385,7 @@ button.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020
     });
     el.querySelectorAll('[data-rm]').forEach(function(btn) {
       btn.addEventListener('click', function() {
-        var d = this.getAttribute('data-rm');
-        slots = slots.filter(function(s){ return s.date !== d; });
+        removeFromSlots(this.getAttribute('data-rm'));
         renderList();
         updateCounter();
       });
@@ -2381,6 +2420,7 @@ button.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020
   var clearAllBtn = document.getElementById('clear-all-btn');
   if (clearAllBtn) {
     clearAllBtn.addEventListener('click', function() {
+      slots.slice().forEach(function(s){ removeFromSlots(s.date); });
       slots = [];
       renderList();
       updateCounter();
@@ -2455,9 +2495,12 @@ button.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020
     try {
       var parsed = JSON.parse(initEl.value);
       parsed.forEach(function(s) {
-        var dt = new Date(s.date + 'T12:00:00');
-        var label = DOW_NAMES[dt.getDay()] + ', ' + MNAMES[dt.getMonth()] + ' ' + dt.getDate() + ', ' + dt.getFullYear();
-        slots.push({date:s.date, label:label, start:s.start_time||'', end:s.end_time||''});
+        var cb = document.getElementById('chk-'+s.date);
+        var label = cb ? cb.getAttribute('data-label') : s.date;
+        addToSlots(s.date, label);
+        /* restore times on the slot we just pushed */
+        var slot = slots[slots.length-1];
+        if (slot && slot.date === s.date) { slot.start = s.start_time||''; slot.end = s.end_time||''; }
       });
       if (slots.length) { slots.sort(function(a,b){ return a.date<b.date?-1:1; }); renderList(); updateCounter(); }
     } catch(e) {}
