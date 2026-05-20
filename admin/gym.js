@@ -2085,7 +2085,7 @@ updateSummary();
         const MNAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
         const DNAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
         const NUM_MONTHS = 6;
-        let calHtml = '<div class="scal-wrap" id="adm-cal"><div class="scal-nav">'
+        let calHtml = '<div class="scal-wrap" id="adm-cal" onclick="void(0)"><div class="scal-nav">'
           + `<button type="button" class="scal-nav-btn" id="scal-prev" disabled>&#8249;</button>`
           + `<div class="scal-nav-label" id="scal-nav-label"></div>`
           + `<button type="button" class="scal-nav-btn" id="scal-next">&#8250;</button>`
@@ -2112,7 +2112,7 @@ updateSummary();
             if      (isPast)    { cls += ' adm-past';    extra = ` title="Past"`; }
             else if (isBlocked) { cls += ' adm-blocked'; extra = ` title="Blocked"`; }
             else if (isBooked)  { cls += ' adm-booked';  extra = ` title="Already booked"`; }
-            else                { cls += ' adm-avail'; }
+            else                { cls += ' adm-avail'; extra = ` onclick="void(0)"`; }
             calHtml += `<td><div class="${cls}" id="adm-cell-${ds}" data-date="${ds}" data-label="${dayLabel}"${extra}><div class="scal-num">${day}</div></div></td>`;
             dow++;
             if (dow === 7 && day < lastDay) { calHtml += '</tr><tr>'; dow = 0; }
@@ -2263,8 +2263,13 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
     document.getElementById('scal-prev').disabled = curMonth === 0;
     document.getElementById('scal-next').disabled = curMonth === NUM_MONTHS - 1;
   }
-  document.getElementById('scal-prev').addEventListener('click', function(){ if(curMonth > 0) setMonth(curMonth-1); });
-  document.getElementById('scal-next').addEventListener('click', function(){ if(curMonth < NUM_MONTHS-1) setMonth(curMonth+1); });
+  function addNavListener(id, fn) {
+    var el = document.getElementById(id);
+    el.addEventListener('touchend', function(e){ e.preventDefault(); fn(); }, { passive: false });
+    el.addEventListener('click', fn);
+  }
+  addNavListener('scal-prev', function(){ if(curMonth > 0) setMonth(curMonth-1); });
+  addNavListener('scal-next', function(){ if(curMonth < NUM_MONTHS-1) setMonth(curMonth+1); });
 
   /* Day-of-week pattern picker */
   document.querySelectorAll('.pat-btn').forEach(function(btn) {
@@ -2311,17 +2316,17 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
     }
   });
 
-  /* Date click via event delegation */
-  document.getElementById('adm-cal').addEventListener('click', function(e) {
-    var cell = e.target.closest ? e.target.closest('.adm-avail') : null;
-    if (!cell) {
-      var t = e.target;
-      while (t && t !== this) {
-        if (t.classList && t.classList.contains('adm-avail')) { cell = t; break; }
-        t = t.parentNode;
-      }
+  /* Date toggle — shared logic for click and touchend */
+  function findAvailCell(target, root) {
+    if (target.closest) return target.closest('.adm-avail');
+    var t = target;
+    while (t && t !== root) {
+      if (t.classList && t.classList.contains('adm-avail')) return t;
+      t = t.parentNode;
     }
-    if (!cell) return;
+    return null;
+  }
+  function toggleDate(cell) {
     var dateStr = cell.getAttribute('data-date');
     var label   = cell.getAttribute('data-label');
     if (!dateStr) return;
@@ -2338,6 +2343,23 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
     }
     renderList();
     updateCounter();
+  }
+
+  var calEl = document.getElementById('adm-cal');
+
+  /* touchend fires reliably on old iOS where click on non-interactive elements can be missed */
+  calEl.addEventListener('touchend', function(e) {
+    var cell = findAvailCell(e.target, this);
+    if (!cell) return;
+    e.preventDefault(); // prevent the ghost click that follows
+    toggleDate(cell);
+  }, { passive: false });
+
+  /* click covers desktop and any mobile that didn't already handle via touchend */
+  calEl.addEventListener('click', function(e) {
+    var cell = findAvailCell(e.target, this);
+    if (!cell) return;
+    toggleDate(cell);
   });
 
   /* Apply default times to all slots */
