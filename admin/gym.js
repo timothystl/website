@@ -2668,6 +2668,24 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
       // page tells us WHICH stage failed — silent hangs are otherwise
       // impossible to diagnose without CF tail logs.
       if (path === '/gym-rentals/bookings/confirm' && method === 'POST') {
+        // ── DEBUG PROBE ────────────────────────────────────────
+        // Return IMMEDIATELY before touching formData / DB. If the
+        // browser receives this response, then the confirm handler is
+        // being reached and the hang is downstream (formData / DB /
+        // response handling). If it STILL hangs, the bug is upstream
+        // of this route — almost certainly the ~140 startup migrations
+        // that run on every admin request blocking POSTs specifically.
+        return new Response(
+          `<!DOCTYPE html><html><body style="font-family:system-ui;padding:40px;max-width:600px;margin:auto;">
+<h1 style="color:#1E2D4A;">Confirm probe OK</h1>
+<p>The confirm handler was reached. No bookings or invoice were created in this build — this is a diagnostic only.</p>
+<p>If you see this page, the hang was downstream (formData / DB / response). I'll re-enable booking creation in the next deploy.</p>
+<p>If you DO NOT see this page (still stuck on Creating…), the hang is upstream of this route. Most likely culprit: the ~140 startup migrations that run on every admin request.</p>
+<p><a href="/gym-rentals/bookings/new" style="background:#1E2D4A;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:700;">← Back</a></p>
+</body></html>`,
+          { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+        );
+        // eslint-disable-next-line no-unreachable
         let step = 'init';
         const errPage = (msg) => new Response(
           `<html><body style="font-family:monospace;padding:20px;background:#fff3f3;color:#900;">
@@ -2745,7 +2763,7 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
             `INSERT INTO gym_invoices (group_id, booking_ids, invoice_date, period_start, period_end, total_hours, rate, rate_type, total_amount, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid')`
           ).bind(group_id, JSON.stringify(bookingIds), invoiceDate, sortedDates[0], sortedDates[sortedDates.length - 1], totalHours, rate, rate_type, totalAmount).run();
           const invoiceId = iRes.meta.last_row_id;
-          step = 'schedule-bg-and-redirect';
+          step = 'respond';
 
           // Background: send invoice email. No Google Calendar push (dropped
           // by request). Wrapped in waitUntil so the response ships first.
