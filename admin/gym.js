@@ -2661,19 +2661,24 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
 
       // ── CONFIRM BOOKING ───────────────────────────────────────
       if (path === '/gym-rentals/bookings/confirm' && method === 'POST') {
+        const dbgStep = (s) => console.log('[gym-confirm]', s);
         try {
+        dbgStep('A: parsing form');
         const form      = await request.formData();
         const group_id  = parseInt(form.get('group_id') || '0', 10);
         const rate      = parseFloat(form.get('rate') || '25');
         const rate_type = form.get('rate_type') === 'daily' ? 'daily' : 'hourly';
         const notes     = form.get('notes') || '';
         const slotStrs  = form.getAll('slot').filter(Boolean);
+        dbgStep(`B: group_id=${group_id} slots=${slotStrs.length} rate=${rate} rate_type=${rate_type}`);
 
         if (!group_id || slotStrs.length === 0) {
           return new Response('', { status: 302, headers: { Location: '/gym-rentals/bookings/new?err=nodates' } });
         }
+        dbgStep('C: fetching group');
         const group = await env.DB.prepare('SELECT * FROM gym_groups WHERE id = ?').bind(group_id).first();
         if (!group) return new Response('', { status: 302, headers: { Location: '/gym-rentals/bookings/new?err=nogroup' } });
+        dbgStep(`D: group=${group.name}`);
 
         // Parse all slots up front
         const parsedSlots = slotStrs.flatMap(slotStr => {
@@ -2683,6 +2688,7 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
           } catch (_) { return []; }
         });
 
+        dbgStep(`E: checking ${parsedSlots.length} dates for conflicts`);
         // Check all dates in parallel (blocked + conflict per date)
         const checkResults = await Promise.all(parsedSlots.map(async s => {
           const [blocked, conflict] = await Promise.all([
@@ -2692,18 +2698,21 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
           return (blocked || conflict) ? null : s;
         }));
         const validSlots = checkResults.filter(Boolean);
+        dbgStep(`F: ${validSlots.length} valid slots`);
 
         if (validSlots.length === 0) {
           return new Response('', { status: 302, headers: { Location: '/gym-rentals/bookings/new?err=conflict' } });
         }
 
-        // Insert all bookings concurrently (Promise.all avoids relying on .batch() which may not be available)
+        dbgStep('G: inserting bookings');
+        // Insert all bookings concurrently
         const insertResults = await Promise.all(validSlots.map(s =>
           env.DB.prepare(`INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, notes, status, created_by) VALUES (?, ?, ?, ?, ?, 'confirmed', 'admin')`)
             .bind(group_id, s.date, s.start_time, s.end_time, notes).run()
         ));
         const bookingIds = insertResults.map(r => r.meta.last_row_id);
         const bookings   = validSlots.map(s => ({ booking_date: s.date, start_time: s.start_time, end_time: s.end_time, notes }));
+        dbgStep(`H: inserted bookingIds=${JSON.stringify(bookingIds)}`);
 
         const sortedDates = bookings.map(b => b.booking_date).sort();
         const totalHours  = Math.round(bookings.reduce((a, b) => a + calcHours(b.start_time, b.end_time), 0) * 100) / 100;
@@ -2712,16 +2721,19 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
           : Math.round(totalHours * rate * 100) / 100;
         const invoiceDate = new Date().toISOString().split('T')[0];
 
+        dbgStep(`I: inserting invoice totalHours=${totalHours} totalAmount=${totalAmount}`);
         const iRes = await env.DB.prepare(
           `INSERT INTO gym_invoices (group_id, booking_ids, invoice_date, period_start, period_end, total_hours, rate, rate_type, total_amount, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid')`
         ).bind(group_id, JSON.stringify(bookingIds), invoiceDate, sortedDates[0], sortedDates[sortedDates.length - 1], totalHours, rate, rate_type, totalAmount).run();
         const invoiceId = iRes.meta.last_row_id;
+        dbgStep(`J: invoiceId=${invoiceId}`);
 
         const [inv, pymtLink, adminEmailRow] = await Promise.all([
           env.DB.prepare('SELECT * FROM gym_invoices WHERE id = ?').bind(invoiceId).first(),
           getPaymentLink(env),
           env.DB.prepare("SELECT value FROM site_settings WHERE key = 'gym_admin_email'").first(),
         ]);
+        dbgStep('K: building email');
         const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
         const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId, rate_type }, group, bookings, pymtLink);
         const subject   = bookings.length === 1
@@ -2737,12 +2749,18 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
             addGymBookingToGCal(env, { booking_date: b.booking_date, start_time: b.start_time, end_time: b.end_time, group_name: group.name, notes })
           ));
         };
+        dbgStep(`L: firing bgWork via ${ctx?.waitUntil ? 'waitUntil' : 'await'}, redirecting to invoice ${invoiceId}`);
         if (ctx?.waitUntil) ctx.waitUntil(bgWork()); else await bgWork();
 
         return new Response('', { status: 302, headers: { Location: `/gym-rentals/invoices/view/${invoiceId}?msg=created` } });
         } catch (e) {
-          const msg = encodeURIComponent(e?.message || 'unknown error');
-          return new Response('', { status: 302, headers: { Location: `/gym-rentals/bookings/new?err=confirm&detail=${msg}` } });
+          console.error('[gym-confirm] CAUGHT ERROR:', e?.message, e?.stack);
+          return new Response(`<!DOCTYPE html><html><body style="font-family:monospace;padding:32px;">
+<h2 style="color:red;">Gym Confirm Error</h2>
+<p><strong>${(e?.message||'unknown').replace(/</g,'&lt;')}</strong></p>
+<pre style="background:#f5f5f5;padding:16px;overflow:auto;">${(e?.stack||'').replace(/</g,'&lt;')}</pre>
+<p><a href="/gym-rentals/bookings/new">← Back to new booking</a></p>
+</body></html>`, { status: 500, headers: { 'Content-Type': 'text/html' } });
         }
       }
 
