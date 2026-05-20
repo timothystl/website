@@ -2745,40 +2745,26 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
             `INSERT INTO gym_invoices (group_id, booking_ids, invoice_date, period_start, period_end, total_hours, rate, rate_type, total_amount, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid')`
           ).bind(group_id, JSON.stringify(bookingIds), invoiceDate, sortedDates[0], sortedDates[sortedDates.length - 1], totalHours, rate, rate_type, totalAmount).run();
           const invoiceId = iRes.meta.last_row_id;
-          step = 'schedule-bg-and-redirect';
+          step = 'respond';
 
-          // Background: send invoice email only. Google Calendar push was
-          // dropped from the confirm flow — it can be re-added later or
-          // done manually. Keeping the bgWork small minimizes anything
-          // that could keep the worker alive past the 302.
-          const bgWork = async () => {
-            const [pymtLink, adminEmailRow] = await Promise.all([
-              getPaymentLink(env).catch(() => PAYMENT_LINK_DEFAULT),
-              env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_admin_email'").first().catch(() => null),
-            ]);
-            const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
-
-            const invForEmail = {
-              id: invoiceId,
-              invoice_date: invoiceDate,
-              total_hours: totalHours,
-              rate,
-              rate_type,
-              total_amount: totalAmount,
-              status: 'unpaid',
-            };
-            const emailHtml = buildGymInvoiceEmailHtml(invForEmail, group, bookings, pymtLink);
-            const subject = bookings.length === 1
-              ? `Gym Rental Invoice — ${group.name} — ${formatDate(sortedDates[0])}`
-              : `Gym Rental Invoice — ${group.name} — ${bookings.length} dates`;
-            const toEmails = [adminEmail];
-            if (group.email) toEmails.push(group.email);
-
-            await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }).catch(() => null);
-          };
-          if (ctx?.waitUntil) ctx.waitUntil(bgWork().catch(() => {})); else bgWork().catch(() => {});
-
-          return new Response('', { status: 302, headers: { Location: `/gym-rentals/invoices/view/${invoiceId}?msg=created` } });
+          // DEBUG MODE: respond with plain HTML directly (no 302, no email,
+          // no view-page hop). This isolates the hang: if this response
+          // arrives, the bug was the redirect target or the email — not
+          // the booking/invoice creation itself.
+          return new Response(
+            `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Invoice created</title>
+<style>body{font-family:system-ui,sans-serif;max-width:640px;margin:40px auto;padding:0 20px;color:#1A1A2A;}
+.ok{background:#e8f5e9;border-left:3px solid #4A5E3A;padding:14px 18px;border-radius:8px;margin-bottom:20px;}
+.btn{display:inline-block;background:#1E2D4A;color:white;font-weight:700;padding:10px 20px;border-radius:6px;text-decoration:none;margin-right:8px;}
+.btn-amber{background:#C9973A;}</style></head><body>
+<h1 style="font-family:Georgia,serif;color:#1E2D4A;">Invoice created</h1>
+<div class="ok">Booking confirmed — Invoice <strong>GYM-${String(invoiceId).padStart(4,'0')}</strong> for <strong>${group.name}</strong> (${bookings.length} date${bookings.length===1?'':'s'}, $${totalAmount.toFixed(2)}).<br><br>
+<em>No email sent yet — manually resend from the invoice page when you're ready.</em></div>
+<a href="/gym-rentals/invoices/view/${invoiceId}" class="btn">View invoice →</a>
+<a href="/gym-rentals" class="btn btn-amber">Back to gym rentals</a>
+</body></html>`,
+            { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+          );
         } catch (e) {
           return errPage(e?.stack || e?.message || String(e));
         }
