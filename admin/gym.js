@@ -2533,7 +2533,7 @@ _mark('start');
       else {
         var hint = document.getElementById('rate-hint');
         var unit = getRateUnit();
-        hint.textContent = hint.textContent.replace(/\/hr|\/day/, unit);
+        hint.textContent = hint.textContent.replace(/[/]hr|[/]day/, unit);
       }
     });
   });
