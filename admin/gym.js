@@ -2661,71 +2661,60 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
 
       // ── CONFIRM BOOKING ───────────────────────────────────────
       if (path === '/gym-rentals/bookings/confirm' && method === 'POST') {
-        const _steps = [];
-        const step = (s) => { _steps.push(s + ' @' + Date.now()); };
         const errPage = (msg) => new Response(
           `<html><body style="font-family:monospace;padding:20px;background:#fff3f3;color:#900;">
-          <h2>Confirm Error</h2><pre>${msg}</pre>
-          <hr><pre>Steps reached:\n${_steps.join('\n')}</pre>
+          <h2>Confirm Error</h2><pre>${String(msg).replace(/</g,'&lt;')}</pre>
           <p><a href="/gym-rentals/bookings/new">← Back</a></p>
           </body></html>`, { status: 500, headers: {'Content-Type':'text/html'} }
         );
         try {
-        step('start');
         const form      = await request.formData();
         const group_id  = parseInt(form.get('group_id') || '0', 10);
         const rate      = parseFloat(form.get('rate') || '25');
         const rate_type = form.get('rate_type') === 'daily' ? 'daily' : 'hourly';
         const notes     = form.get('notes') || '';
         const slotStrs  = form.getAll('slot').filter(Boolean);
-        step('form slots=' + slotStrs.length);
 
         if (!group_id || slotStrs.length === 0) {
           return new Response('', { status: 302, headers: { Location: '/gym-rentals/bookings/new?err=nodates' } });
         }
-        step('group-lookup');
-        const group = await env.DB.prepare('SELECT * FROM gym_groups WHERE id = ?').bind(group_id).first();
-        if (!group) return new Response('', { status: 302, headers: { Location: '/gym-rentals/bookings/new?err=nogroup' } });
-        step('group-ok');
 
-        // Parse all slots up front
         const parsedSlots = slotStrs.flatMap(slotStr => {
           try {
             const s = JSON.parse(decodeURIComponent(slotStr));
             return (s.date && s.start_time && s.end_time) ? [s] : [];
           } catch (_) { return []; }
         });
-        step('parsed=' + parsedSlots.length);
-
-        // Check dates sequentially to stay well under D1 subrequest limits
-        step('checks-start');
-        const validSlots = [];
-        for (const s of parsedSlots) {
-          const blocked  = await env.DB.prepare('SELECT id FROM gym_blocked_dates WHERE date = ?').bind(s.date).first();
-          if (blocked) continue;
-          const conflict = await env.DB.prepare(
-            `SELECT id FROM gym_bookings WHERE booking_date = ? AND status IN ('confirmed','hold') AND start_time < ? AND end_time > ?`
-          ).bind(s.date, s.end_time, s.start_time).first();
-          if (!conflict) validSlots.push(s);
+        if (parsedSlots.length === 0) {
+          return new Response('', { status: 302, headers: { Location: '/gym-rentals/bookings/new?err=nodates' } });
         }
-        step('valid=' + validSlots.length);
+
+        const dates = parsedSlots.map(s => s.date);
+        const ph    = dates.map(() => '?').join(',');
+
+        // 3 queries total regardless of how many dates
+        const [group, blockedRows, conflictRows] = await Promise.all([
+          env.DB.prepare('SELECT * FROM gym_groups WHERE id = ?').bind(group_id).first(),
+          env.DB.prepare(`SELECT date FROM gym_blocked_dates WHERE date IN (${ph})`).bind(...dates).all(),
+          env.DB.prepare(`SELECT DISTINCT booking_date FROM gym_bookings WHERE booking_date IN (${ph}) AND status IN ('confirmed','hold')`).bind(...dates).all(),
+        ]);
+        if (!group) return new Response('', { status: 302, headers: { Location: '/gym-rentals/bookings/new?err=nogroup' } });
+
+        const blockedSet  = new Set((blockedRows.results  || []).map(r => r.date));
+        const conflictSet = new Set((conflictRows.results || []).map(r => r.booking_date));
+        const validSlots  = parsedSlots.filter(s => !blockedSet.has(s.date) && !conflictSet.has(s.date));
 
         if (validSlots.length === 0) {
           return new Response('', { status: 302, headers: { Location: '/gym-rentals/bookings/new?err=conflict' } });
         }
 
-        // Insert bookings sequentially
-        step('inserts-start');
-        const bookingIds = [];
-        const bookings   = [];
-        for (const s of validSlots) {
-          const r = await env.DB.prepare(
-            `INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, notes, status, created_by) VALUES (?, ?, ?, ?, ?, 'confirmed', 'admin')`
-          ).bind(group_id, s.date, s.start_time, s.end_time, notes).run();
-          bookingIds.push(r.meta.last_row_id);
-          bookings.push({ booking_date: s.date, start_time: s.start_time, end_time: s.end_time, notes });
-        }
-        step('inserts-done count=' + bookingIds.length);
+        // Batch-insert all bookings in one round-trip
+        const insertResults = await env.DB.batch(validSlots.map(s =>
+          env.DB.prepare(`INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, notes, status, created_by) VALUES (?, ?, ?, ?, ?, 'confirmed', 'admin')`)
+            .bind(group_id, s.date, s.start_time, s.end_time, notes)
+        ));
+        const bookingIds = insertResults.map(r => r.meta.last_row_id);
+        const bookings   = validSlots.map(s => ({ booking_date: s.date, start_time: s.start_time, end_time: s.end_time, notes }));
 
         const sortedDates = bookings.map(b => b.booking_date).sort();
         const totalHours  = Math.round(bookings.reduce((a, b) => a + calcHours(b.start_time, b.end_time), 0) * 100) / 100;
@@ -2734,25 +2723,22 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
           : Math.round(totalHours * rate * 100) / 100;
         const invoiceDate = new Date().toISOString().split('T')[0];
 
-        step('invoice-insert');
         const iRes = await env.DB.prepare(
           `INSERT INTO gym_invoices (group_id, booking_ids, invoice_date, period_start, period_end, total_hours, rate, rate_type, total_amount, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid')`
         ).bind(group_id, JSON.stringify(bookingIds), invoiceDate, sortedDates[0], sortedDates[sortedDates.length - 1], totalHours, rate, rate_type, totalAmount).run();
         const invoiceId = iRes.meta.last_row_id;
-        step('invoice-id=' + invoiceId);
 
         const [inv, pymtLink, adminEmailRow] = await Promise.all([
           env.DB.prepare('SELECT * FROM gym_invoices WHERE id = ?').bind(invoiceId).first(),
           getPaymentLink(env),
           env.DB.prepare("SELECT value FROM site_settings WHERE key = 'gym_admin_email'").first(),
         ]);
-        step('post-lookups-done');
         const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
         const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId, rate_type }, group, bookings, pymtLink);
         const subject   = bookings.length === 1
           ? `Gym Rental Invoice — ${group.name} — ${formatDate(sortedDates[0])}`
           : `Gym Rental Invoice — ${group.name} — ${bookings.length} dates`;
-        const toEmails = [adminEmail];
+        const toEmails  = [adminEmail];
         if (group.email) toEmails.push(group.email);
 
         const bgWork = async () => {
@@ -2762,11 +2748,10 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
           }
         };
         if (ctx?.waitUntil) ctx.waitUntil(bgWork()); else bgWork();
-        step('redirecting to invoice=' + invoiceId);
 
         return new Response('', { status: 302, headers: { Location: `/gym-rentals/invoices/view/${invoiceId}?msg=created` } });
         } catch (e) {
-          return errPage((e?.stack || e?.message || String(e)));
+          return errPage(e?.stack || e?.message || String(e));
         }
       }
 
