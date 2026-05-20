@@ -2089,9 +2089,19 @@ updateSummary();
         return html(`
 ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="wrap">
-  <div class="page-title">New Booking <span style="font-size:11px;font-weight:400;color:var(--gray);font-family:monospace;">build 210 · ${new Date().toISOString().slice(11,19)}Z</span></div>
+  <div class="page-title">New Booking <span style="font-size:11px;font-weight:400;color:var(--gray);font-family:monospace;">build 211 · ${new Date().toISOString().slice(11,19)}Z</span> <span id="js-alive" style="font-size:11px;font-weight:400;color:#bbb;font-family:monospace;">js:?</span></div>
   <div class="page-sub">Click dates, set times, then review before sending an invoice.</div>
   ${errAlert}
+  <script>
+    // Early error handler — registered before main IIFE so it catches that script's errors
+    window.addEventListener('error', function(e){
+      var d = document.createElement('div');
+      d.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#B85C3A;color:#fff;padding:10px;z-index:9999;font-size:12px;font-family:monospace;line-height:1.4;word-wrap:break-word;';
+      d.textContent = 'JS ERR: ' + (e.message||'?') + ' @ line ' + (e.lineno||'?') + ' col ' + (e.colno||'?');
+      document.body.appendChild(d);
+    });
+    document.getElementById('js-alive').textContent = 'js:OK';
+  </script>
   <div class="card">
     <form id="nbf" method="POST" action="/gym-rentals/bookings/review">
       <div class="form-group">
@@ -2196,13 +2206,8 @@ div.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020 !i
 .pat-btn.active{background:#1E2D4A;color:white;border-color:#1E2D4A;}
 </style>
 <script>
-window.addEventListener('error', function(e){
-  var d = document.createElement('div');
-  d.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#B85C3A;color:#fff;padding:10px;z-index:9999;font-size:12px;font-family:monospace;line-height:1.4;';
-  d.textContent = 'JS ERR: ' + (e.message||'?') + ' @ ' + (e.filename||'inline').split('/').pop() + ':' + (e.lineno||'?');
-  document.body.appendChild(d);
-});
-try {
+function _mark(s){ var el=document.getElementById('js-alive'); if(el) el.textContent='js:'+s; }
+_mark('start');
 (function(){
   function buildTimeOpts(selected) {
     var opts = '<option value="">—</option>';
@@ -2219,11 +2224,13 @@ try {
     return opts;
   }
 
+  _mark('iife');
   /* Populate default-time selects */
   var defStart = document.getElementById('def-start');
   var defEnd   = document.getElementById('def-end');
   defStart.innerHTML = buildTimeOpts('');
   defEnd.innerHTML   = buildTimeOpts('');
+  _mark('times');
 
   var slots = [];
   var selectedDows = {};  /* day-of-week toggles */
@@ -2232,6 +2239,7 @@ try {
   var TODAY_STR = document.getElementById('today-str').value;
   var BOOKED  = new Set(JSON.parse(document.getElementById('booked-dates').value  || '[]'));
   var BLOCKED = new Set(JSON.parse(document.getElementById('blocked-dates').value || '[]'));
+  _mark('data');
 
   /* Parse today to seed the calendar date */
   var _tp    = TODAY_STR.split('-');
@@ -2547,20 +2555,11 @@ try {
   }
 
   /* Initial render */
-  try {
-    renderCalendar();
-    if (slots.length) { renderList(); updateCounter(); }
-  } catch(e) {
-    var g = document.getElementById('adm-cal-grid');
-    if (g) g.innerHTML = '<div style="color:red;font-size:12px;padding:8px;grid-column:1/-1;">Calendar error: '+e.message+'</div>';
-  }
+  _mark('pre-render');
+  renderCalendar();
+  if (slots.length) { renderList(); updateCounter(); }
+  _mark('done');
 })();
-} catch(outerErr) {
-  var d2 = document.createElement('div');
-  d2.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#B85C3A;color:#fff;padding:10px;z-index:9999;font-size:12px;font-family:monospace;line-height:1.4;';
-  d2.textContent = 'IIFE THREW: ' + (outerErr && outerErr.message ? outerErr.message : String(outerErr));
-  document.body.appendChild(d2);
-}
 </script>
 `, 'New Booking');
       }
