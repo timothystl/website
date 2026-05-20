@@ -2162,6 +2162,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
           <label style="display:block;font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:0;">Select Dates * <span id="date-count" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--amber);font-size:13px;"></span></label>
           <button type="button" id="clear-all-btn" class="btn btn-sm btn-secondary" style="display:none;">Clear all</button>
         </div>
+        <div id="dbg" style="font-size:11px;font-family:monospace;color:#666;padding:4px 8px;background:#f0f0f0;border-radius:4px;margin-bottom:8px;min-height:20px;"></div>
         ${calHtml}
       </div>
 
@@ -2324,9 +2325,14 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 
   document.getElementById('adm-cal').addEventListener('click', function(e) {
     var cell = findAvailCell(e.target, this);
-    if (!cell) return;
+    if (!cell) {
+      /* DEBUG: tapped but no avail cell found */
+      document.getElementById('dbg').textContent = 'tap: no cell (target='+e.target.className+')';
+      return;
+    }
     var dateStr = cell.getAttribute('data-date');
     var label   = cell.getAttribute('data-label');
+    document.getElementById('dbg').textContent = 'tap: '+dateStr+' slots='+slots.length;
     if (!dateStr) return;
     var found = false;
     for (var i = 0; i < slots.length; i++) {
@@ -2341,6 +2347,9 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
     }
     renderList();
     updateCounter();
+    /* Scroll the date list into view on mobile so the user sees the row appear */
+    var dl = document.getElementById('date-list');
+    if (dl) dl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   });
 
   /* Apply default times to all slots */
