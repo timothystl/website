@@ -2206,8 +2206,8 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 .scal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
 .scal-dow{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray,#6B7280);padding:6px 0;text-align:center;}
 .adm-cell{border-radius:6px;text-align:center;padding:8px 2px;font-size:13px;font-weight:700;border:2px solid transparent;transition:background .12s,border-color .12s;line-height:1;font-family:inherit;color:var(--steel,#1E2D4A);}
-label.adm-avail{cursor:pointer;display:block;background:none;user-select:none;-webkit-user-select:none;}
-label.adm-avail input[type="checkbox"]{display:none;}
+label.adm-avail{cursor:pointer;display:block;background:none;user-select:none;-webkit-user-select:none;position:relative;}
+label.adm-avail input[type="checkbox"]{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;top:0;left:0;}
 label.adm-avail:active{background:#D4EDDA;border-color:#5A9E6F;}
 label.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020 !important;color:white !important;}
 .adm-booked{background:#F7D0D0;color:#9B4040;}
