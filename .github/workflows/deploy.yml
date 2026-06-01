@@ -76,12 +76,21 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          # Read current version from helpers.js (e.g. 'v1.1')
+          # Read current version from helpers.js (e.g. 'v1.76.3').
+          # Auto-bump is patch-only; major and minor are intentionally manual
+          # so the version number means something. To cut a minor or major
+          # release, edit admin/helpers.js by hand before merging.
           CURRENT=$(grep "export const VERSION = " admin/helpers.js | sed "s/.*'\(.*\)'.*/\1/")
-          MAJOR=$(echo "$CURRENT" | sed 's/v\([0-9]*\)\..*/\1/')
-          MINOR=$(echo "$CURRENT" | sed 's/v[0-9]*\.\([0-9]*\)/\1/')
-          NEW_MINOR=$((MINOR + 1))
-          NEW_VERSION="v${MAJOR}.${NEW_MINOR}"
+
+          # Strip leading 'v' and split on '.'. If the current version is
+          # still in the old two-segment form (e.g. 'v1.76'), treat it as
+          # 'v1.76.0' so we land on 'v1.76.1' the first run.
+          STRIPPED=${CURRENT#v}
+          MAJOR=$(echo "$STRIPPED" | awk -F. '{print $1+0}')
+          MINOR=$(echo "$STRIPPED" | awk -F. '{print $2+0}')
+          PATCH=$(echo "$STRIPPED" | awk -F. '{print ($3=="" ? 0 : $3+0)}')
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="v${MAJOR}.${MINOR}.${NEW_PATCH}"
 
           sed -i "s/export const VERSION = '${CURRENT}'/export const VERSION = '${NEW_VERSION}'/" admin/helpers.js
 

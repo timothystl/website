@@ -327,6 +327,18 @@ The actual SPA is **`public/index.html`**. All HTML edits go there.
 
 ---
 
+## Versioning: `vMAJOR.MINOR.PATCH`
+
+The admin worker version (`admin/helpers.js`) follows semver:
+
+- **PATCH** is auto-bumped on every successful deploy to `main`. Don't touch it by hand.
+- **MINOR** is manual — bump it (and reset PATCH to 0) when shipping a meaningful new feature.
+- **MAJOR** is manual — bump it (and reset MINOR and PATCH to 0) for a release worth marketing internally to staff (UI overhaul, new permission model, etc.).
+
+To cut a minor or major release, edit `admin/helpers.js` in the same PR as the feature; the CI bump will pick up from there.
+
+---
+
 ## CRITICAL: Bump `SCHEMA_VERSION` when admin DB migrations change
 
 The admin worker (`tlc-admin-worker.js`) has a startup migration block
