@@ -327,8 +327,11 @@ function tlcUploadHandler(blobInfo) {
     var fd = new FormData();
     fd.append('file', blobInfo.blob(), blobInfo.filename());
     fetch('/api/upload-image', { method: 'POST', body: fd })
-      .then(function(r) { return r.ok ? r.json() : Promise.reject('HTTP ' + r.status); })
-      .then(function(d) { d && d.location ? resolve(d.location) : reject('Bad response'); })
+      .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, d: d }; }); })
+      .then(function(res) {
+        if (!res.ok) { reject(res.d && res.d.error ? res.d.error : 'Upload failed'); return; }
+        res.d && res.d.location ? resolve(res.d.location) : reject('Bad response');
+      })
       .catch(function(err) { reject('Upload failed: ' + err); });
   });
 }
