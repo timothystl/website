@@ -27,6 +27,7 @@ const PUBLIC_CROSS_ORIGIN_POSTS = new Set(['/api/contact', '/api/prayer', '/api/
 // matches what it actually is.
 const ALLOWED_IMAGE_TYPES = new Map([
   ['image/jpeg', 'jpg'],
+  ['image/jpg',  'jpg'],
   ['image/png',  'png'],
   ['image/webp', 'webp'],
   ['image/gif',  'gif'],
