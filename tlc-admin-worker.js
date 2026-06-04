@@ -1385,7 +1385,7 @@ ${topbarHtml('news', currentUser, `<a href="/newsitems">← News &amp; Events</a
       <div style="font-family:var(--sans);font-size:12px;color:var(--gray);margin-bottom:12px;">Choose who gets this in their inbox. You can always save as draft without sending.</div>
       <div class="radio-row">
         <label><input type="radio" name="email_send" value="none" checked> Don't send email</label>
-        <label><input type="radio" name="email_send" value="test"> Test list only <span style="font-weight:400;font-size:11px;color:var(--gray);">(Your first list)</span></label>
+        <label><input type="radio" name="email_send" value="test"> Test list only <span style="font-weight:400;font-size:11px;color:var(--gray);">(BREVO_TEST_LIST_ID)</span></label>
         <label><input type="radio" name="email_send" value="all"> All subscribers</label>
       </div>
       <div style="margin-top:14px;padding:12px 14px;background:var(--mist);border-radius:8px;border:1px solid var(--ice);font-family:var(--sans);font-size:12px;color:var(--charcoal);line-height:1.7;">
@@ -1560,7 +1560,7 @@ addEvent();
       const emailSend = form.get('email_send') || 'none';
       let emailSuffix = '';
       if (action === 'publish' && emailSend !== 'none' && hasPermission(currentUser, 'newsletter_approve')) {
-        const listId = emailSend === 'test' ? 2 : parseInt(env.BREVO_LIST_ID || '0', 10);
+        const listId = emailSend === 'test' ? parseInt(env.BREVO_TEST_LIST_ID || '2', 10) : parseInt(env.BREVO_LIST_ID || '0', 10);
         if (!listId && emailSend === 'all') {
           emailSuffix = `&emailerr=${encodeURIComponent('BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}`;
         } else if (listId) {
@@ -1820,7 +1820,7 @@ ${eventsJs}
       const id = path.split('/').pop();
       const form = await request.formData();
       const listType = form.get('list_type') || 'test';
-      const listId = listType === 'test' ? 2 : parseInt(env.BREVO_LIST_ID || '0', 10);
+      const listId = listType === 'test' ? parseInt(env.BREVO_TEST_LIST_ID || '2', 10) : parseInt(env.BREVO_LIST_ID || '0', 10);
 
       if (!listId && listType === 'all') {
         return new Response('', {
