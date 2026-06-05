@@ -276,7 +276,18 @@ export default {
         method, headers: request.headers,
         body: ['GET', 'HEAD'].includes(method) ? undefined : request.body,
       });
-      const supabaseRes = await fetch(proxyReq);
+      let supabaseRes;
+      try {
+        supabaseRes = await Promise.race([
+          fetch(proxyReq),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase proxy timeout')), 20000)),
+        ]);
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message, code: 'PROXY_ERROR' }), {
+          status: 504,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': ADMIN_ORIGIN },
+        });
+      }
       const resHeaders = new Headers(supabaseRes.headers);
       resHeaders.set('Access-Control-Allow-Origin', ADMIN_ORIGIN);
       return new Response(supabaseRes.body, { status: supabaseRes.status, headers: resHeaders });

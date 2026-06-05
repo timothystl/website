@@ -843,17 +843,24 @@ function periodLabel(start, end) {
 // STAFF MANAGEMENT
 // ============================================================
 async function loadStaff() {
-    const { data, error } = await sb.from('church_staff')
-        .select('*')
-        .eq('active', true)
-        .order('name');
-
+    const tbody = document.getElementById('staffTableBody');
+    let result;
+    try {
+        result = await Promise.race([
+            sb.from('church_staff').select('*').eq('active', true).order('name'),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Request timed out after 15s')), 15000)),
+        ]);
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--red);padding:20px;">
+            Network error: ${err.message}<br><small style="color:var(--text-muted)">Check that Supabase is reachable from the admin worker</small></td></tr>`;
+        return;
+    }
+    const { data, error } = result;
     if (error) {
         console.error('loadStaff error:', error);
-        const tbody = document.getElementById('staffTableBody');
         tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--red);padding:20px;">
             Error loading staff: ${error.message || JSON.stringify(error)}<br>
-            <small style="color:var(--text-muted)">Code: ${error.code || '—'} · Check browser console for details</small>
+            <small style="color:var(--text-muted)">Code: ${error.code || '—'} · Hint: ${error.hint || 'none'}</small>
         </td></tr>`;
         return;
     }
