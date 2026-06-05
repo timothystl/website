@@ -848,7 +848,15 @@ async function loadStaff() {
         .eq('active', true)
         .order('name');
 
-    if (error) { console.error(error); return; }
+    if (error) {
+        console.error('loadStaff error:', error);
+        const tbody = document.getElementById('staffTableBody');
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--red);padding:20px;">
+            Error loading staff: ${error.message || JSON.stringify(error)}<br>
+            <small style="color:var(--text-muted)">Code: ${error.code || '—'} · Check browser console for details</small>
+        </td></tr>`;
+        return;
+    }
     churchStaff = data || [];
     renderStaffTable();
 }
