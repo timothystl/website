@@ -260,6 +260,28 @@ export default {
     try { await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES ('version', ?)").bind(SCHEMA_VERSION).run(); } catch (_) {}
     } // end if (!schemaOk)
 
+    // ── PUBLIC: Supabase proxy for /payroll page ──
+    const MDO_SUPABASE_URL = 'https://dahdstopsumxnqvdclmy.supabase.co';
+    if (path.startsWith('/sb/')) {
+      if (method === 'OPTIONS') {
+        return new Response(null, { status: 204, headers: {
+          'Access-Control-Allow-Origin': ADMIN_ORIGIN,
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'apikey, Authorization, Content-Type, Prefer, X-Client-Info',
+          'Access-Control-Max-Age': '86400',
+        }});
+      }
+      const targetUrl = MDO_SUPABASE_URL + path.slice(3) + url.search;
+      const proxyReq = new Request(targetUrl, {
+        method, headers: request.headers,
+        body: ['GET', 'HEAD'].includes(method) ? undefined : request.body,
+      });
+      const supabaseRes = await fetch(proxyReq);
+      const resHeaders = new Headers(supabaseRes.headers);
+      resHeaders.set('Access-Control-Allow-Origin', ADMIN_ORIGIN);
+      return new Response(supabaseRes.body, { status: supabaseRes.status, headers: resHeaders });
+    }
+
     // ── PUBLIC: serve uploaded docs from R2 ──
     if (path.startsWith('/docs/') && method === 'GET') {
       const key = 'docs-' + path.slice('/docs/'.length);
