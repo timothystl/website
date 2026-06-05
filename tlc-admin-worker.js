@@ -60,6 +60,41 @@ export default {
     const path = url.pathname;
     const method = request.method;
 
+    // ── Supabase proxy for /payroll page — runs before schema gate and auth ──
+    // Must be first: the MDO worker has no D1 dependency in its proxy path.
+    // If the schema gate ran first, slow D1 reads would stall every API call.
+    const MDO_SUPABASE_URL = 'https://dahdstopsumxnqvdclmy.supabase.co';
+    if (path.startsWith('/sb/')) {
+      if (method === 'OPTIONS') {
+        return new Response(null, { status: 204, headers: {
+          'Access-Control-Allow-Origin': ADMIN_ORIGIN,
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'apikey, Authorization, Content-Type, Prefer, X-Client-Info',
+          'Access-Control-Max-Age': '86400',
+        }});
+      }
+      const targetUrl = MDO_SUPABASE_URL + path.slice(3) + url.search;
+      const proxyReq = new Request(targetUrl, {
+        method, headers: request.headers,
+        body: ['GET', 'HEAD'].includes(method) ? undefined : request.body,
+      });
+      let supabaseRes;
+      try {
+        supabaseRes = await Promise.race([
+          fetch(proxyReq),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase proxy timeout')), 20000)),
+        ]);
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message, code: 'PROXY_ERROR' }), {
+          status: 504,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': ADMIN_ORIGIN },
+        });
+      }
+      const resHeaders = new Headers(supabaseRes.headers);
+      resHeaders.set('Access-Control-Allow-Origin', ADMIN_ORIGIN);
+      return new Response(supabaseRes.body, { status: supabaseRes.status, headers: resHeaders });
+    }
+
     // Reject obviously oversized requests up front. 25MB is a generous ceiling
     // for image/PDF uploads; text-only forms are well under 1MB. Without this,
     // a single malicious POST could push tens of MB into D1 / R2 / memory.
@@ -259,39 +294,6 @@ export default {
     try { await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run(); } catch (_) {}
     try { await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES ('version', ?)").bind(SCHEMA_VERSION).run(); } catch (_) {}
     } // end if (!schemaOk)
-
-    // ── PUBLIC: Supabase proxy for /payroll page ──
-    const MDO_SUPABASE_URL = 'https://dahdstopsumxnqvdclmy.supabase.co';
-    if (path.startsWith('/sb/')) {
-      if (method === 'OPTIONS') {
-        return new Response(null, { status: 204, headers: {
-          'Access-Control-Allow-Origin': ADMIN_ORIGIN,
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'apikey, Authorization, Content-Type, Prefer, X-Client-Info',
-          'Access-Control-Max-Age': '86400',
-        }});
-      }
-      const targetUrl = MDO_SUPABASE_URL + path.slice(3) + url.search;
-      const proxyReq = new Request(targetUrl, {
-        method, headers: request.headers,
-        body: ['GET', 'HEAD'].includes(method) ? undefined : request.body,
-      });
-      let supabaseRes;
-      try {
-        supabaseRes = await Promise.race([
-          fetch(proxyReq),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase proxy timeout')), 20000)),
-        ]);
-      } catch (err) {
-        return new Response(JSON.stringify({ error: err.message, code: 'PROXY_ERROR' }), {
-          status: 504,
-          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': ADMIN_ORIGIN },
-        });
-      }
-      const resHeaders = new Headers(supabaseRes.headers);
-      resHeaders.set('Access-Control-Allow-Origin', ADMIN_ORIGIN);
-      return new Response(supabaseRes.body, { status: supabaseRes.status, headers: resHeaders });
-    }
 
     // ── PUBLIC: serve uploaded docs from R2 ──
     if (path.startsWith('/docs/') && method === 'GET') {
