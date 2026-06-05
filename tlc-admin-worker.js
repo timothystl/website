@@ -10,6 +10,7 @@ import { html, topbarHtml, loginPage, setupPage, forgotPasswordPage, resetPasswo
 import { hashPassword, verifyPassword, createSession, getSession, deleteSession, sessionCookieHeader, clearSessionCookieHeader, logAudit, hasPermission, ALL_PERMISSIONS, PERMISSIONS } from './admin/auth.js';
 import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHtml } from './admin/email.js';
 import { handleGymRoutes, sweepExpiredItems, extractImageKeys } from './admin/gym.js';
+import PAYROLL_HTML from './admin/payroll.html';
 
 // Allowlist of site_settings keys readable via the public /api/settings/{key}
 // endpoint. Everything else returns 404 — keeps internal config (gym admin
@@ -777,6 +778,13 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
     }
 
     // ── AUTH GATE ──
+    // ── PUBLIC: standalone payroll page (uses its own Supabase auth) ──
+    if (path === '/payroll' && method === 'GET') {
+      return new Response(PAYROLL_HTML, {
+        headers: { 'Content-Type': 'text/html; charset=utf-8', 'X-Robots-Tag': 'noindex, nofollow' }
+      });
+    }
+
     const setupCheck = await env.DB.prepare('SELECT COUNT(*) as n FROM users').first().catch(() => ({ n: 1 }));
     if (!setupCheck || setupCheck.n === 0) {
       return new Response('', { status: 302, headers: { Location: '/setup' } });
