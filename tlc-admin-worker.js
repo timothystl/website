@@ -777,14 +777,6 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
       return loginPage('Incorrect username or password.');
     }
 
-    // ── AUTH GATE ──
-    // ── PUBLIC: standalone payroll page (uses its own Supabase auth) ──
-    if (path === '/payroll' && method === 'GET') {
-      return new Response(PAYROLL_HTML, {
-        headers: { 'Content-Type': 'text/html; charset=utf-8', 'X-Robots-Tag': 'noindex, nofollow' }
-      });
-    }
-
     const setupCheck = await env.DB.prepare('SELECT COUNT(*) as n FROM users').first().catch(() => ({ n: 1 }));
     if (!setupCheck || setupCheck.n === 0) {
       return new Response('', { status: 302, headers: { Location: '/setup' } });
@@ -793,6 +785,13 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
     if (!currentUser) {
       if (path === '/login') return loginPage();
       return loginPage();
+    }
+
+    // ── PAYROLL PAGE (auth-gated, no secondary login needed) ──
+    if (path === '/payroll' && method === 'GET') {
+      return new Response(PAYROLL_HTML, {
+        headers: { 'Content-Type': 'text/html; charset=utf-8', 'X-Robots-Tag': 'noindex, nofollow' }
+      });
     }
 
     // ── GYM ADMIN ROUTES (auth + gym_manage) ───────────────────

@@ -585,26 +585,8 @@
 </head>
 <body>
 
-<!-- ══ LOGIN SCREEN ══ -->
-<div id="loginScreen">
-  <div class="login-card">
-    <h1>Church Payroll</h1>
-    <p class="subtitle">Timothy Lutheran Church</p>
-    <div class="form-group">
-      <label for="loginEmail">Email</label>
-      <input type="email" id="loginEmail" placeholder="your@email.com" autocomplete="email">
-    </div>
-    <div class="form-group">
-      <label for="loginPassword">Password</label>
-      <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password">
-    </div>
-    <button class="btn-primary" id="loginBtn">Sign In</button>
-    <p id="loginError" class="error-msg hidden">Incorrect email or password.</p>
-  </div>
-</div>
-
 <!-- ══ DASHBOARD ══ -->
-<div id="dashboard" class="hidden">
+<div id="dashboard">
   <div class="page-header">
     <div>
       <h1>Church Payroll</h1>
@@ -799,49 +781,13 @@ const MDO_ROOMS = {
 // ============================================================
 // INIT
 // ============================================================
-(async () => {
-    const { data: { session } } = await sb.auth.getSession();
-    if (session) {
-        showDashboard();
-    }
-})();
+showDashboard();
 
-document.getElementById('loginBtn').addEventListener('click', attemptLogin);
-document.getElementById('loginPassword').addEventListener('keydown', e => { if (e.key === 'Enter') attemptLogin(); });
-document.getElementById('loginEmail').addEventListener('keydown',    e => { if (e.key === 'Enter') attemptLogin(); });
-
-async function attemptLogin() {
-    const email = document.getElementById('loginEmail').value.trim();
-    const pwd   = document.getElementById('loginPassword').value;
-    const btn   = document.getElementById('loginBtn');
-    const err   = document.getElementById('loginError');
-
-    err.classList.add('hidden');
-    btn.disabled    = true;
-    btn.textContent = 'Signing in…';
-
-    const { error } = await sb.auth.signInWithPassword({ email, password: pwd });
-
-    if (error) {
-        err.classList.remove('hidden');
-        btn.disabled    = false;
-        btn.textContent = 'Sign In';
-    } else {
-        showDashboard();
-    }
-}
-
-document.getElementById('logoutBtn').addEventListener('click', async () => {
-    await sb.auth.signOut();
-    document.getElementById('dashboard').classList.add('hidden');
-    document.getElementById('loginScreen').classList.remove('hidden');
-    document.getElementById('loginPassword').value = '';
-    document.getElementById('loginEmail').value    = '';
+document.getElementById('logoutBtn').addEventListener('click', () => {
+    window.location.href = '/logout';
 });
 
 async function showDashboard() {
-    document.getElementById('loginScreen').classList.add('hidden');
-    document.getElementById('dashboard').classList.remove('hidden');
     buildPeriodDropdown();
     await loadStaff();
     const sel = document.getElementById('periodSelect');
