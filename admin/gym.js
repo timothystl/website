@@ -480,12 +480,12 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
       if (!sub || sub === '') {
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
-        const numMonths = 12 - today.getMonth(); // current month through December
-        const yearEnd = new Date(today.getFullYear(), 11, 31).toISOString().split('T')[0];
+        const numMonths = Math.min(18, Math.max(3, parseInt(url.searchParams.get('months') || '6', 10)));
+        const windowEnd = new Date(today.getFullYear(), today.getMonth() + numMonths, 0).toISOString().split('T')[0];
 
         const [bookings, blocked] = await Promise.all([
-          env.DB.prepare("SELECT booking_date, start_time, end_time FROM gym_bookings WHERE status IN ('confirmed','hold') AND booking_date >= ? AND booking_date <= ?").bind(todayStr, yearEnd).all(),
-          env.DB.prepare('SELECT date FROM gym_blocked_dates WHERE date >= ? AND date <= ?').bind(todayStr, yearEnd).all(),
+          env.DB.prepare("SELECT booking_date, start_time, end_time FROM gym_bookings WHERE status IN ('confirmed','hold') AND booking_date >= ? AND booking_date <= ?").bind(todayStr, windowEnd).all(),
+          env.DB.prepare('SELECT date FROM gym_blocked_dates WHERE date >= ? AND date <= ?').bind(todayStr, windowEnd).all(),
         ]);
         const slotMap      = buildSlotMap(bookings.results);
         const blockedSet   = new Set(blocked.results.map(b => b.date));
@@ -544,7 +544,16 @@ ${portalHeader}
   ${portalAlert}
   ${portalNav('cal')}
   <div class="card">
-    <div class="card-title" style="margin-bottom:6px;">Select Your Dates &amp; Times</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:6px;">
+      <div class="card-title" style="margin-bottom:0;border-bottom:none;padding-bottom:0;">Select Your Dates &amp; Times</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+        <span style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);">Show:</span>
+        <select onchange="window.location.href='/gym/book/${token}?months='+this.value" style="font-size:13px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:white;cursor:pointer;">
+          ${[3,6,9,12,18].map(n=>`<option value="${n}"${numMonths===n?' selected':''}>${n} months</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div style="border-bottom:1px solid var(--border);margin-bottom:16px;margin-top:10px;"></div>
     <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">Tap any green slot to select it. Tap again to deselect. You can pick slots across multiple dates.</div>
     ${calHtml}
     <div class="scal-legend">
@@ -1852,7 +1861,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Gym Rentals</a>`)}
       if (path === '/gym-rentals/blocked' && method === 'GET') {
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
-        const monthsToYearEnd = 12 - today.getMonth(); // current month through December
+        const numMonths = Math.min(18, Math.max(3, parseInt(url.searchParams.get('months') || '6', 10)));
 
         const [blocked, bookings] = await Promise.all([
           env.DB.prepare('SELECT date FROM gym_blocked_dates WHERE date >= ?').bind(todayStr).all(),
@@ -1861,10 +1870,10 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Gym Rentals</a>`)}
         const blockedSet = new Set(blocked.results.map(b => b.date));
         const bookingSet = new Set(bookings.results.map(b => b.booking_date));
 
-        // Build year-end admin block calendar
+        // Build admin block calendar for selected window
         const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
         let calHtml = '<div class="cal-grid">';
-        for (let i = 0; i < monthsToYearEnd; i++) {
+        for (let i = 0; i < numMonths; i++) {
           const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
           const yr = d.getFullYear(), mo = d.getMonth();
           const lastDay = new Date(yr, mo + 1, 0);
@@ -1919,7 +1928,15 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
   <div class="page-sub">Click dates to select them, then save. Already-blocked dates (red) can be clicked to unblock.</div>
   ${gymAlert}
   <div class="card">
-    <div class="card-title">Select dates to block or unblock</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border);">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);">Select dates to block or unblock</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+        <span style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);">Show:</span>
+        <select onchange="window.location.href='/gym-rentals/blocked?months='+this.value" style="font-size:13px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:white;cursor:pointer;">
+          ${[3,6,9,12,18].map(n=>`<option value="${n}"${numMonths===n?' selected':''}>${n} months</option>`).join('')}
+        </select>
+      </div>
+    </div>
     ${calHtml}
     <div class="bcal-legend" style="margin-bottom:16px;">
       <span><span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:#fce8e8;border:1px solid #e8a0a0;"></span> Currently blocked</span>
@@ -2080,8 +2097,8 @@ updateSummary();
         // Build calendar server-side
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
-        const numMonths = 12 - today.getMonth(); // current month through December
-        const yearEndStr = new Date(today.getFullYear(), 11, 31).toISOString().split('T')[0];
+        const numMonths = Math.min(18, Math.max(3, parseInt(url.searchParams.get('months') || '6', 10)));
+        const yearEndStr = new Date(today.getFullYear(), today.getMonth() + numMonths, 0).toISOString().split('T')[0];
 
         const [bookedRows, blockedRows] = await Promise.all([
           env.DB.prepare(`SELECT booking_date FROM gym_bookings WHERE booking_date >= ? AND booking_date <= ? AND status IN ('confirmed','hold')`).bind(todayStr, yearEndStr).all(),
@@ -2111,7 +2128,15 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
       </div>
 
       <div class="form-group">
-        <label>Dates * <span id="date-count" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--amber);font-size:13px;"></span></label>
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
+          <label style="margin-bottom:0;">Dates * <span id="date-count" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--amber);font-size:13px;"></span></label>
+          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+            <span style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);">Show:</span>
+            <select onchange="window.location.href='/gym-rentals/bookings/new?months='+this.value" style="font-size:13px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:white;cursor:pointer;">
+              ${[3,6,9,12,18].map(n=>`<option value="${n}"${numMonths===n?' selected':''}>${n} months</option>`).join('')}
+            </select>
+          </div>
+        </div>
         <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">Tap any date to select it. Tap again to deselect.</div>
         <div class="scal-wrap" id="adm-cal">
           <div class="scal-nav">
