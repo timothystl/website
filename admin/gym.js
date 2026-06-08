@@ -558,7 +558,7 @@ ${portalHeader}
     <!-- Pattern selector — top for visibility -->
     <div class="pattern-card" style="margin-top:0;margin-bottom:20px;">
       <div class="pattern-card-title">Quick-select by pattern</div>
-      <div style="font-size:12px;color:var(--gray);margin-bottom:12px;">Build patterns like "Every Sunday, 5–8 PM" or "Mondays 2–6 PM, July–Sept" — add as many as you need.</div>
+      <div style="font-size:12px;color:var(--gray);margin-bottom:12px;">Pick a day, time range, and date window, then tap <strong>Add pattern</strong>. Each pattern appears as a chip below — tap × on a chip to undo it. Repeat to add multiple patterns (e.g. Sundays 5–8 PM <em>and</em> Mondays 2–6 PM).</div>
       <div class="pattern-fields">
         <div class="form-group">
           <label>Day of week</label>
@@ -777,6 +777,19 @@ function clearAll() {
   document.getElementById('pat-end').value = fmt(end);
 })();
 
+function removePattern(btn) {
+  const chip = btn.closest('[data-slot-keys]');
+  const keys = JSON.parse(chip.dataset.slotKeys || '[]');
+  keys.forEach(k => {
+    const [date, st, et] = k.split('|');
+    const el = document.querySelector('.scal-slot[data-date="' + date + '"][data-st="' + st + '"][data-et="' + et + '"]');
+    if (el && el.classList.contains('selected')) toggleSlot(el, false);
+  });
+  chip.remove();
+  update();
+  document.getElementById('pat-result').textContent = '';
+}
+
 function addPattern() {
   const dow       = parseInt(document.getElementById('pat-dow').value, 10);
   const startTime = document.getElementById('pat-start-time').value;
@@ -785,22 +798,31 @@ function addPattern() {
   const end       = document.getElementById('pat-end').value;
   const resultEl  = document.getElementById('pat-result');
 
-  if (!start || !end || start > end) { resultEl.textContent = 'Please set a valid date range.'; return; }
-  if (!startTime || !endTime || startTime >= endTime) { resultEl.textContent = 'End time must be after start time.'; return; }
+  if (!start || !end || start > end) { resultEl.style.color = 'var(--gray)'; resultEl.textContent = 'Please set a valid date range.'; return; }
+  if (!startTime || !endTime || startTime >= endTime) { resultEl.style.color = 'var(--gray)'; resultEl.textContent = 'End time must be after start time.'; return; }
 
   const startH = parseInt(startTime, 10);
   const endH   = parseInt(endTime, 10);
-  let matched = 0;
+  const addedKeys = [];
   for (let h = startH; h < endH; h++) {
     const t = h.toString().padStart(2, '0') + ':00';
     document.querySelectorAll('.scal-slot.open[data-st="' + t + '"]').forEach(el => {
       const date = el.dataset.date;
       if (date < start || date > end) return;
       if (new Date(date + 'T12:00:00').getDay() !== dow) return;
-      if (!el.classList.contains('selected')) { toggleSlot(el, true); matched++; }
+      if (!el.classList.contains('selected')) {
+        toggleSlot(el, true);
+        addedKeys.push(date + '|' + el.dataset.st + '|' + el.dataset.et);
+      }
     });
   }
   update();
+
+  if (addedKeys.length === 0) {
+    resultEl.style.color = 'var(--gray)';
+    resultEl.textContent = 'No available slots matched in that range.';
+    return;
+  }
 
   const DOW_NAMES = ['Sundays','Mondays','Tuesdays','Wednesdays','Thursdays','Fridays','Saturdays'];
   const fmtH = h => { const p = h >= 12 ? 'PM' : 'AM'; const h12 = h > 12 ? h - 12 : (h === 0 ? 12 : h); return h12 + '\u202f' + p; };
@@ -808,14 +830,20 @@ function addPattern() {
   const label = DOW_NAMES[dow] + ', ' + fmtH(startH) + '\u2013' + fmtH(endH) + ', ' + fmtD(start) + '\u2013' + fmtD(end);
 
   const chip = document.createElement('div');
+  chip.dataset.slotKeys = JSON.stringify(addedKeys);
   chip.style.cssText = 'display:inline-flex;align-items:center;gap:6px;background:var(--steel);color:white;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;';
-  chip.innerHTML = label + ' <button type="button" style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,.65);font-size:16px;line-height:1;padding:0;margin-left:2px;" title="Remove">\u00d7</button>';
+  chip.innerHTML = label + ' <button type="button" onclick="removePattern(this)" style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,.65);font-size:18px;line-height:1;padding:0 0 1px 2px;" title="Remove this pattern">\u00d7</button>';
   document.getElementById('pat-chips').appendChild(chip);
 
-  resultEl.style.color = matched > 0 ? 'var(--sage)' : 'var(--gray)';
-  resultEl.textContent = matched > 0
-    ? '\u2713 ' + matched + ' slot' + (matched === 1 ? '' : 's') + ' added.'
-    : 'No available slots matched in that range.';
+  // Advance the date range for the next pattern
+  const nextStart = new Date(end + 'T12:00:00'); nextStart.setDate(nextStart.getDate() + 1);
+  const nextEnd   = new Date(nextStart); nextEnd.setMonth(nextEnd.getMonth() + 1);
+  const fmt = d => d.toISOString().split('T')[0];
+  document.getElementById('pat-start').value = fmt(nextStart);
+  document.getElementById('pat-end').value   = fmt(nextEnd);
+
+  resultEl.style.color = 'var(--sage)';
+  resultEl.textContent = '\u2713 ' + addedKeys.length + ' slot' + (addedKeys.length === 1 ? '' : 's') + ' added. Change the fields above to add another pattern, or scroll down to review.';
 }
 </script>
 `, `${group.name} — Gym Rental`);
