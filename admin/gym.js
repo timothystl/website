@@ -1165,23 +1165,49 @@ ${portalHeader}
           return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?msg=err` } });
 
         const holdExpires = new Date(Date.now() + 48 * 3600000).toISOString().replace('T',' ').slice(0,19);
-        let created = 0, skipped = 0;
-        const createdSlots = [];
+        let skipped = 0;
+
+        // Validate each hourly slot, collect valid ones
+        const validSlots = [];
         for (const slot of slots) {
           const [date, st, et] = slot.split('|');
           if (!date || !st || !et || date < today) { skipped++; continue; }
-          const slotDow  = new Date(date + 'T12:00:00').getDay();
-          const validH   = getValidHoursForDow(slotDow);
+          const slotDow = new Date(date + 'T12:00:00').getDay();
+          const validH  = getValidHoursForDow(slotDow);
           if (!validH.has(parseInt(st.split(':')[0], 10))) { skipped++; continue; }
           const isBlocked = await env.DB.prepare('SELECT id FROM gym_blocked_dates WHERE date=?').bind(date).first();
           if (isBlocked) { skipped++; continue; }
           const conflict = await env.DB.prepare("SELECT id FROM gym_bookings WHERE booking_date=? AND status IN ('confirmed','hold') AND start_time < ? AND end_time > ?").bind(date, et, st).first();
           if (conflict) { skipped++; continue; }
+          validSlots.push({date, st, et});
+        }
+
+        // Group by date, sort by start, merge continuous blocks into single bookings
+        const byDate = {};
+        for (const {date, st, et} of validSlots) {
+          if (!byDate[date]) byDate[date] = [];
+          byDate[date].push({st, et});
+        }
+        const mergedSlots = [];
+        for (const [date, dSlots] of Object.entries(byDate)) {
+          dSlots.sort((a, b) => a.st.localeCompare(b.st));
+          let mSt = dSlots[0].st, mEt = dSlots[0].et;
+          for (let i = 1; i < dSlots.length; i++) {
+            if (dSlots[i].st === mEt) { mEt = dSlots[i].et; } // extend block
+            else { mergedSlots.push({date, st: mSt, et: mEt}); mSt = dSlots[i].st; mEt = dSlots[i].et; }
+          }
+          mergedSlots.push({date, st: mSt, et: mEt});
+        }
+
+        // Insert one row per merged block
+        let created = 0;
+        const createdSlots = [];
+        for (const {date, st, et} of mergedSlots) {
           try {
             await env.DB.prepare("INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, notes, status, hold_expires_at, created_by) VALUES (?, ?, ?, ?, ?, 'hold', ?, 'group')")
               .bind(group.id, date, st, et, notes, holdExpires).run();
             created++;
-            createdSlots.push({ date, st, et });
+            createdSlots.push({date, st, et});
           } catch (_) { skipped++; }
         }
 
@@ -1437,6 +1463,7 @@ ${portalHeader}
         : gymMsg === 'created'       ? `<div class="alert alert-success">✓ Group created.</div>`
         : gymMsg === 'deleted'       ? `<div class="alert alert-success">✓ Deleted.</div>`
         : gymMsg === 'confirmed-all' ? `<div class="alert alert-success">✓ ${gymAlertN} hold${gymAlertN===1?'':'s'} confirmed — invoices sent.</div>`
+        : gymMsg === 'merged'        ? `<div class="alert alert-success">✓ Consolidated ${gymAlertN} bookings — your hold list is now much cleaner.</div>`
         : '';
 
       // ── DASHBOARD ──────────────────────────────────────────────
@@ -1577,6 +1604,7 @@ ${topbarHtml('gym', currentUser)}
     <a href="/gym-rentals/groups" class="btn btn-secondary">Manage Groups</a>
     <a href="/gym-rentals/blocked" class="btn btn-sage">Blocked Dates</a>
     <a href="/gym-rentals/invoices" class="btn btn-secondary">Invoices</a>
+    <a href="/gym-rentals/merge-holds" class="btn btn-secondary">Consolidate Bookings</a>
     <a href="/gym-rentals/test-gcal" class="btn btn-secondary" style="margin-left:auto;">Test GCal →</a>
   </div>
   <div style="background:var(--mist);border:1px solid var(--border);border-radius:10px;padding:12px 18px;margin-bottom:24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
@@ -1928,6 +1956,110 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Gym Rentals</a>`)}
   ${eventCreated ? `<div class="alert alert-success">✓ Everything is working. A test event was added to your calendar — check it and delete it.</div>` : ''}
   <div style="margin-top:8px;"><a href="/gym-rentals/test-gcal" class="btn btn-secondary">Run test again</a></div>
 </div>`, 'GCal Test');
+      }
+
+      // ── MERGE/CONSOLIDATE HOLDS ──────────────────────────────
+      if (path === '/gym-rentals/merge-holds') {
+        // Shared helper: find merge operations across all (or filtered) bookings
+        async function getMergeOps(statuses) {
+          const placeholders = statuses.map(() => '?').join(',');
+          const rows = await env.DB.prepare(
+            `SELECT b.id, b.group_id, b.booking_date, b.start_time, b.end_time, b.status, b.notes, b.hold_expires_at, b.created_by, g.name as group_name
+             FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id
+             WHERE b.status IN (${placeholders}) ORDER BY b.group_id, b.booking_date, b.start_time`
+          ).bind(...statuses).all();
+          const byGroupDate = {};
+          for (const b of rows.results) {
+            const key = `${b.group_id}|${b.booking_date}`;
+            if (!byGroupDate[key]) byGroupDate[key] = [];
+            byGroupDate[key].push(b);
+          }
+          const ops = [];
+          for (const slots of Object.values(byGroupDate)) {
+            if (slots.length < 2) continue;
+            slots.sort((a, z) => a.start_time.localeCompare(z.start_time));
+            let curr = {...slots[0]}, block = [slots[0]];
+            for (let i = 1; i < slots.length; i++) {
+              if (slots[i].start_time === curr.end_time && slots[i].status === curr.status) {
+                curr.end_time = slots[i].end_time;
+                block.push(slots[i]);
+              } else {
+                if (block.length > 1) ops.push({toDelete: block.map(b => b.id), toCreate: curr, group_name: curr.group_name});
+                curr = {...slots[i]}; block = [slots[i]];
+              }
+            }
+            if (block.length > 1) ops.push({toDelete: block.map(b => b.id), toCreate: curr, group_name: curr.group_name});
+          }
+          return {ops, total: rows.results.length};
+        }
+
+        if (method === 'GET') {
+          const {ops, total} = await getMergeOps(['hold', 'confirmed']);
+          const totalAfter = total - ops.reduce((s, o) => s + o.toDelete.length - 1, 0);
+          // Group ops by org for display
+          const byOrg = {};
+          for (const op of ops) {
+            if (!byOrg[op.group_name]) byOrg[op.group_name] = [];
+            byOrg[op.group_name].push(op);
+          }
+          const previewHtml = ops.length === 0
+            ? `<div class="alert alert-success">✓ All bookings are already consolidated — nothing to merge.</div>`
+            : `<div class="alert alert-info" style="margin-bottom:20px;">Found <strong>${total} bookings</strong> that will consolidate into <strong>${totalAfter}</strong> — saving ${total - totalAfter} rows.</div>
+               ${Object.entries(byOrg).map(([org, orgOps]) => `
+                 <div style="margin-bottom:16px;">
+                   <div style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--amber);margin-bottom:8px;">${org}</div>
+                   ${orgOps.map(op => {
+                     const d = new Date(op.toCreate.booking_date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+                     const fmt12 = t => { const h=parseInt(t,10); return (h>12?h-12:h||12)+(h>=12?' PM':' AM'); };
+                     return `<div style="font-size:13px;padding:6px 0;border-bottom:1px solid var(--border);display:flex;gap:16px;align-items:center;">
+                       <span style="min-width:180px;">${d} &nbsp; ${fmt12(op.toCreate.start_time)}–${fmt12(op.toCreate.end_time)}</span>
+                       <span style="font-size:12px;color:var(--gray);">${op.toDelete.length} × 1-hr ${op.toCreate.status} → 1 block</span>
+                     </div>`;
+                   }).join('')}
+                 </div>`).join('')}`;
+
+          return html(`
+${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
+<div class="wrap">
+  <div class="page-title">Consolidate Bookings</div>
+  <div class="page-sub">Merge consecutive same-day bookings (e.g. three 1-hour holds → one 3-hour hold). No data is lost — only combined.</div>
+  <div class="card">
+    <div class="card-title">Preview</div>
+    ${previewHtml}
+    ${ops.length > 0 ? `
+    <form method="POST" action="/gym-rentals/merge-holds" style="margin-top:20px;">
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        <button type="submit" class="btn btn-primary">Consolidate ${total - totalAfter} bookings now</button>
+        <a href="/gym-rentals" class="btn btn-secondary" style="text-decoration:none;">Cancel</a>
+        <span style="font-size:12px;color:var(--gray);">${total} bookings → ${totalAfter} bookings</span>
+      </div>
+    </form>` : `<div style="margin-top:16px;"><a href="/gym-rentals" class="btn btn-secondary" style="text-decoration:none;">← Back to Dashboard</a></div>`}
+  </div>
+</div>`, 'Consolidate Bookings');
+        }
+
+        if (method === 'POST') {
+          const {ops} = await getMergeOps(['hold', 'confirmed']);
+          let merged = 0;
+          for (const op of ops) {
+            try {
+              // Insert new merged booking
+              const res = await env.DB.prepare(
+                "INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, notes, status, hold_expires_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+              ).bind(op.toCreate.group_id, op.toCreate.booking_date, op.toCreate.start_time, op.toCreate.end_time, op.toCreate.notes, op.toCreate.status, op.toCreate.hold_expires_at, op.toCreate.created_by).run();
+              const newId = res.meta.last_row_id;
+              // Update any invoices referencing the old booking IDs
+              for (const oldId of op.toDelete) {
+                await env.DB.prepare("UPDATE gym_invoices SET booking_id = ? WHERE booking_id = ?").bind(newId, oldId).run();
+              }
+              // Delete old individual bookings
+              const placeholders = op.toDelete.map(() => '?').join(',');
+              await env.DB.prepare(`DELETE FROM gym_bookings WHERE id IN (${placeholders})`).bind(...op.toDelete).run();
+              merged += op.toDelete.length - 1;
+            } catch (_) {}
+          }
+          return new Response('', { status: 302, headers: { Location: `/gym-rentals?msg=merged&n=${merged}` } });
+        }
       }
 
       // ── BLOCKED DATES CALENDAR ───────────────────────────────
