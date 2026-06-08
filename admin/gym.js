@@ -480,18 +480,19 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
       if (!sub || sub === '') {
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
-        const sixMonOut = new Date(today.getFullYear(), today.getMonth() + 6, 28).toISOString().split('T')[0];
+        const numMonths = 12 - today.getMonth(); // current month through December
+        const yearEnd = new Date(today.getFullYear(), 11, 31).toISOString().split('T')[0];
 
         const [bookings, blocked] = await Promise.all([
-          env.DB.prepare("SELECT booking_date, start_time, end_time FROM gym_bookings WHERE status IN ('confirmed','hold') AND booking_date >= ? AND booking_date <= ?").bind(todayStr, sixMonOut).all(),
-          env.DB.prepare('SELECT date FROM gym_blocked_dates WHERE date >= ? AND date <= ?').bind(todayStr, sixMonOut).all(),
+          env.DB.prepare("SELECT booking_date, start_time, end_time FROM gym_bookings WHERE status IN ('confirmed','hold') AND booking_date >= ? AND booking_date <= ?").bind(todayStr, yearEnd).all(),
+          env.DB.prepare('SELECT date FROM gym_blocked_dates WHERE date >= ? AND date <= ?').bind(todayStr, yearEnd).all(),
         ]);
         const slotMap      = buildSlotMap(bookings.results);
         const blockedSet   = new Set(blocked.results.map(b => b.date));
 
-        // Build 6-month interactive selection calendar (month navigator)
+        // Build year-end interactive selection calendar (month navigator)
         const MNAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-        const NUM_MONTHS = 6;
+        const NUM_MONTHS = numMonths;
         let calHtml = '<div class="scal-wrap">';
         calHtml += `<div class="scal-nav">
   <button class="scal-nav-btn" id="scal-prev" onclick="navMonth(-1)" disabled>&#8249;</button>
@@ -655,7 +656,7 @@ ${portalHeader}
 const selected = new Map(); // key "DATE|ST|ET" -> {date, st, et}
 const SLOT_LABELS = {'08:00':'8–9 AM','09:00':'9–10 AM','10:00':'10–11 AM','11:00':'11 AM–12 PM','12:00':'12–1 PM','13:00':'1–2 PM','14:00':'2–3 PM','15:00':'3–4 PM','16:00':'4–5 PM','17:00':'5–6 PM','18:00':'6–7 PM','19:00':'7–8 PM','20:00':'8–9 PM'};
 let curMonth = 0;
-const NUM_MONTHS = 6;
+const NUM_MONTHS = ${numMonths};
 
 // Month navigation
 function navMonth(dir) {
@@ -1851,7 +1852,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Gym Rentals</a>`)}
       if (path === '/gym-rentals/blocked' && method === 'GET') {
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
-        const sixMonthsOut = new Date(today.getFullYear(), today.getMonth() + 6, 1).toISOString().split('T')[0];
+        const monthsToYearEnd = 12 - today.getMonth(); // current month through December
 
         const [blocked, bookings] = await Promise.all([
           env.DB.prepare('SELECT date FROM gym_blocked_dates WHERE date >= ?').bind(todayStr).all(),
@@ -1860,10 +1861,10 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Gym Rentals</a>`)}
         const blockedSet = new Set(blocked.results.map(b => b.date));
         const bookingSet = new Set(bookings.results.map(b => b.booking_date));
 
-        // Build 3-month admin block calendar
+        // Build year-end admin block calendar
         const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
         let calHtml = '<div class="cal-grid">';
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < monthsToYearEnd; i++) {
           const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
           const yr = d.getFullYear(), mo = d.getMonth();
           const lastDay = new Date(yr, mo + 1, 0);
@@ -1897,7 +1898,12 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Gym Rentals</a>`)}
         return html(`
 ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <style>
-.bcal-day{display:block;width:34px;height:34px;line-height:34px;border-radius:50%;margin:0 auto;font-size:13px;font-weight:600;text-align:center;position:relative;cursor:pointer;color:var(--steel);}
+.cal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:28px;margin-bottom:20px;}
+.cal-month-name{font-family:var(--sans);font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--steel);margin-bottom:8px;}
+.cal-table{width:100%;border-collapse:collapse;table-layout:fixed;}
+.cal-table th{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:4px 0;text-align:center;}
+.cal-table td{padding:2px;text-align:center;}
+.bcal-day{display:block;width:30px;height:30px;line-height:30px;border-radius:50%;margin:0 auto;font-size:12px;font-weight:600;text-align:center;position:relative;cursor:pointer;color:var(--steel);}
 .bcal-past{color:#CBD5E1;cursor:default;}
 .bcal-blocked{background:#fce8e8;color:#7a1f1f;cursor:pointer;}
 .bcal-blocked.bcal-pending-unblock{background:transparent;color:#CBD5E1;text-decoration:line-through;}
@@ -2074,12 +2080,12 @@ updateSummary();
         // Build calendar server-side
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
-        const sixMonthsOut = new Date(today); sixMonthsOut.setMonth(today.getMonth() + 6);
-        const sixMonStr = sixMonthsOut.toISOString().split('T')[0];
+        const numMonths = 12 - today.getMonth(); // current month through December
+        const yearEndStr = new Date(today.getFullYear(), 11, 31).toISOString().split('T')[0];
 
         const [bookedRows, blockedRows] = await Promise.all([
-          env.DB.prepare(`SELECT booking_date FROM gym_bookings WHERE booking_date >= ? AND booking_date <= ? AND status IN ('confirmed','hold')`).bind(todayStr, sixMonStr).all(),
-          env.DB.prepare(`SELECT date FROM gym_blocked_dates WHERE date >= ? AND date <= ?`).bind(todayStr, sixMonStr).all(),
+          env.DB.prepare(`SELECT booking_date FROM gym_bookings WHERE booking_date >= ? AND booking_date <= ? AND status IN ('confirmed','hold')`).bind(todayStr, yearEndStr).all(),
+          env.DB.prepare(`SELECT date FROM gym_blocked_dates WHERE date >= ? AND date <= ?`).bind(todayStr, yearEndStr).all(),
         ]);
         const bookedSet  = new Set(bookedRows.results.map(r => r.booking_date));
         const blockedSet = new Set(blockedRows.results.map(r => r.date));
@@ -2169,6 +2175,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
       <input type="hidden" id="booked-dates" value="${JSON.stringify([...bookedSet]).replace(/"/g,'&quot;')}">
       <input type="hidden" id="blocked-dates" value="${JSON.stringify([...blockedSet]).replace(/"/g,'&quot;')}">
       <input type="hidden" id="today-str" value="${todayStr}">
+      <input type="hidden" id="num-months" value="${numMonths}">
       <input type="hidden" name="slots" id="slots-json">
       <div class="btn-row">
         <button type="submit" class="btn btn-primary" id="review-btn" disabled>Review →</button>
@@ -2230,7 +2237,7 @@ div.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020 !i
   var _tp    = TODAY_STR.split('-');
   var calDate = new Date(+_tp[0], +_tp[1]-1, 1);  /* first of current month */
   var monthOffset = 0;
-  var NUM_MONTHS  = 6;
+  var NUM_MONTHS  = parseInt(document.getElementById('num-months').value) || 7;
 
   function isInSlots(ds) {
     for (var i = 0; i < slots.length; i++) { if (slots[i].date === ds) return true; }
