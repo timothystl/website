@@ -467,12 +467,13 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
       const _payBtn = `<div style="margin-top:12px;"><a href="${_payLink}" target="_blank" style="display:inline-block;background:#00DB72;color:white;font-weight:700;font-size:14px;padding:10px 28px;border-radius:6px;text-decoration:none;">Pay Invoice Online →</a></div>`;
       const portalAlert = (portalMsg || '').startsWith('holds') ? `<div class="alert alert-success">✓ ${_pc} hold${_pc===1?'':'s'} placed! The church office will review and confirm your dates — you'll receive an invoice by email once confirmed.${_ps > 0 ? ` (${_ps} slot${_ps===1?'':'s'} were already taken and skipped.)` : ''}</div>`
         : portalMsg === 'nohold' ? `<div class="alert alert-error">No slots could be booked — they may have been taken or blocked. Please choose different times.</div>`
+        : portalMsg === 'noselect' ? `<div class="alert alert-error">No dates were selected. Please use the pattern selector or tap individual slots before submitting.</div>`
         : portalMsg === 'hold' ? `<div class="alert alert-success">✓ Hold placed! The church office will review and confirm your date — you'll receive an invoice by email.</div>`
         : portalMsg === 'confirmed' ? `<div class="alert alert-success">✓ Booking confirmed. An invoice has been emailed to you.${_payBtn}</div>`
         : portalMsg === 'released' ? `<div class="alert alert-success">✓ Hold released.</div>`
         : portalMsg === 'converted' ? `<div class="alert alert-success">✓ Booking confirmed! Invoice emailed to you.${_payBtn}</div>`
         : portalMsg === 'recurring' ? `<div class="alert alert-success">✓ Recurring request submitted! The church office will review it and follow up with you.</div>`
-        : portalMsg === 'err' ? `<div class="alert alert-error">Please check the payment agreement box.</div>`
+        : portalMsg === 'err' ? `<div class="alert alert-error">Please check the payment agreement box before submitting.</div>`
         : portalMsg === 'ratelimit' ? `<div class="alert alert-error">Too many holds at once. Please contact the office if you need to book more than 20 slots.</div>`
         : '';
 
@@ -1158,18 +1159,21 @@ ${portalHeader}
         const agree  = form.get('agree');
         const today  = new Date().toISOString().split('T')[0];
 
-        if (!agree || !slots.length)
-          return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?err=agree` } });
+        if (!slots.length)
+          return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?msg=noselect` } });
+        if (!agree)
+          return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?msg=err` } });
 
-        // Rate limit: max 20 new holds per submission, 8 per 24h per group
+        // Rate limit: max 20 new holds per submission, 20 per 24h per group
         if (slots.length > 20)
-          return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?err=ratelimit` } });
+          return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?msg=ratelimit` } });
         const recentCount = await env.DB.prepare("SELECT COUNT(*) as n FROM gym_bookings WHERE group_id=? AND created_at > datetime('now','-24 hours')").bind(group.id).first();
         if ((recentCount?.n || 0) + slots.length > 20)
-          return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?err=ratelimit` } });
+          return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?msg=ratelimit` } });
 
         const holdExpires = new Date(Date.now() + 48 * 3600000).toISOString().replace('T',' ').slice(0,19);
         let created = 0, skipped = 0;
+        const createdSlots = [];
         for (const slot of slots) {
           const [date, st, et] = slot.split('|');
           if (!date || !st || !et || date < today) { skipped++; continue; }
@@ -1184,20 +1188,39 @@ ${portalHeader}
             await env.DB.prepare("INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, notes, status, hold_expires_at, created_by) VALUES (?, ?, ?, ?, ?, 'hold', ?, 'group')")
               .bind(group.id, date, st, et, notes, holdExpires).run();
             created++;
+            createdSlots.push({ date, st, et });
           } catch (_) { skipped++; }
         }
 
-        // Notify admin
         if (created > 0) {
           const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_admin_email'").first();
           const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
+
+          const slotLines = createdSlots.map(s => {
+            const d = new Date(s.date + 'T12:00:00').toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric', year:'numeric'});
+            const fmt12 = t => { const [h,m] = t.split(':'); const hr = parseInt(h,10); return (hr > 12 ? hr-12 : hr||12) + (m!=='00'?':'+m:'') + (hr>=12?' PM':' AM'); };
+            return `<li>${d} &nbsp; ${fmt12(s.st)} – ${fmt12(s.et)}</li>`;
+          }).join('');
+
+          // Notify admin
           try {
             await sendTransactionalEmail(env, {
               subject: `${created} hold(s) placed — ${group.name}`,
-              htmlContent: `<p><strong>${group.name}</strong> placed ${created} hold(s) via the booking portal.</p><p>${skipped > 0 ? `(${skipped} slot(s) skipped due to conflicts.)` : ''}</p><p>Notes: ${notes || '—'}</p><p><a href="https://admin.timothystl.org/gym-rentals">Review at admin.timothystl.org/gym-rentals</a></p>`,
+              htmlContent: `<p><strong>${group.name}</strong> placed ${created} hold(s) via the booking portal.</p><ul>${slotLines}</ul>${skipped > 0 ? `<p>(${skipped} slot(s) skipped due to conflicts.)</p>` : ''}<p>Notes: ${notes || '—'}</p><p><a href="https://admin.timothystl.org/gym-rentals">Review at admin.timothystl.org/gym-rentals →</a></p>`,
               toEmails: [adminEmail],
             });
           } catch (_) {}
+
+          // Confirm to renter
+          if (group.email) {
+            try {
+              await sendTransactionalEmail(env, {
+                subject: `Your gym rental request — Timothy Lutheran Church`,
+                htmlContent: `<p>Hi ${group.contact || group.name},</p><p>We received your gym rental request for ${created} session${created===1?'':'s'}:</p><ul>${slotLines}</ul><p>The church office will review and confirm your dates. You'll receive an invoice by email once confirmed.</p>${notes ? `<p><em>Your notes: ${notes}</em></p>` : ''}<p>Questions? Email <a href="mailto:dinger@timothystl.org">dinger@timothystl.org</a> or call the church office.</p><p>— Timothy Lutheran Church</p>`,
+                toEmails: [group.email],
+              });
+            } catch (_) {}
+          }
         }
 
         const msg = created > 0 ? `holds${created}` : 'nohold';
