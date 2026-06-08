@@ -554,20 +554,11 @@ ${portalHeader}
       </div>
     </div>
     <div style="border-bottom:1px solid var(--border);margin-bottom:16px;margin-top:10px;"></div>
-    <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">Tap any green slot to select it. Tap again to deselect. You can pick slots across multiple dates.</div>
-    ${calHtml}
-    <div class="scal-legend">
-      <span><span class="legend-swatch" style="background:#5A9E6F;"></span> Available (tap to select)</span>
-      <span><span class="legend-swatch" style="background:var(--amber);"></span> Selected</span>
-      <span><span class="legend-swatch" style="background:#D17070;"></span> Already booked</span>
-      <span><span class="legend-swatch" style="background:#E8EDF3;"></span> Unavailable</span>
-    </div>
-    <div style="font-size:12px;color:var(--gray);margin-top:10px;">Each slot = 1 hour ($${rate}/hr). &nbsp;Mon–Fri: 5–9 PM &nbsp;·&nbsp; Sat: 8 AM–8 PM &nbsp;·&nbsp; Sun: 1–8 PM</div>
 
-    <!-- Pattern selector -->
-    <div class="pattern-card">
+    <!-- Pattern selector — top for visibility -->
+    <div class="pattern-card" style="margin-top:0;margin-bottom:20px;">
       <div class="pattern-card-title">Quick-select by pattern</div>
-      <div style="font-size:12px;color:var(--gray);margin-bottom:12px;">e.g. "Every Monday at 5–6 PM from March 1 to May 5"</div>
+      <div style="font-size:12px;color:var(--gray);margin-bottom:12px;">Build patterns like "Every Sunday, 5–8 PM" or "Mondays 2–6 PM, July–Sept" — add as many as you need.</div>
       <div class="pattern-fields">
         <div class="form-group">
           <label>Day of week</label>
@@ -582,21 +573,39 @@ ${portalHeader}
           </select>
         </div>
         <div class="form-group">
-          <label>Time slot</label>
-          <select id="pat-time">
-            <option value="08:00">8–9 AM</option>
-            <option value="09:00">9–10 AM</option>
-            <option value="10:00">10–11 AM</option>
-            <option value="11:00">11 AM–12 PM</option>
-            <option value="12:00">12–1 PM</option>
-            <option value="13:00">1–2 PM</option>
-            <option value="14:00">2–3 PM</option>
-            <option value="15:00">3–4 PM</option>
-            <option value="16:00">4–5 PM</option>
-            <option value="17:00">5–6 PM</option>
-            <option value="18:00">6–7 PM</option>
-            <option value="19:00">7–8 PM</option>
-            <option value="20:00">8–9 PM</option>
+          <label>Start time</label>
+          <select id="pat-start-time">
+            <option value="08:00">8 AM</option>
+            <option value="09:00">9 AM</option>
+            <option value="10:00">10 AM</option>
+            <option value="11:00">11 AM</option>
+            <option value="12:00">12 PM</option>
+            <option value="13:00">1 PM</option>
+            <option value="14:00">2 PM</option>
+            <option value="15:00">3 PM</option>
+            <option value="16:00">4 PM</option>
+            <option value="17:00" selected>5 PM</option>
+            <option value="18:00">6 PM</option>
+            <option value="19:00">7 PM</option>
+            <option value="20:00">8 PM</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>End time</label>
+          <select id="pat-end-time">
+            <option value="09:00">9 AM</option>
+            <option value="10:00">10 AM</option>
+            <option value="11:00">11 AM</option>
+            <option value="12:00">12 PM</option>
+            <option value="13:00">1 PM</option>
+            <option value="14:00">2 PM</option>
+            <option value="15:00">3 PM</option>
+            <option value="16:00">4 PM</option>
+            <option value="17:00">5 PM</option>
+            <option value="18:00">6 PM</option>
+            <option value="19:00">7 PM</option>
+            <option value="20:00">8 PM</option>
+            <option value="21:00" selected>9 PM</option>
           </select>
         </div>
         <div class="form-group">
@@ -607,13 +616,23 @@ ${portalHeader}
           <label>To</label>
           <input type="date" id="pat-end" style="font-size:13px;padding:7px 10px;">
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button type="button" class="btn btn-primary btn-sm" onclick="patternSelect(true)">Select all matching</button>
-          <button type="button" class="btn btn-secondary btn-sm" style="background:var(--linen);color:var(--steel);" onclick="patternSelect(false)">Deselect matching</button>
+        <div style="align-self:flex-end;">
+          <button type="button" class="btn btn-primary btn-sm" onclick="addPattern()">Add pattern</button>
         </div>
       </div>
-      <div id="pat-result" style="font-size:12px;color:var(--gray);margin-top:10px;"></div>
+      <div id="pat-chips" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;"></div>
+      <div id="pat-result" style="font-size:12px;color:var(--gray);margin-top:8px;"></div>
     </div>
+
+    <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">Or tap any slot below to select it individually. Tap again to deselect.</div>
+    ${calHtml}
+    <div class="scal-legend">
+      <span><span class="legend-swatch" style="background:#5A9E6F;"></span> Available (tap to select)</span>
+      <span><span class="legend-swatch" style="background:var(--amber);"></span> Selected</span>
+      <span><span class="legend-swatch" style="background:#D17070;"></span> Already booked</span>
+      <span><span class="legend-swatch" style="background:#E8EDF3;"></span> Unavailable</span>
+    </div>
+    <div style="font-size:12px;color:var(--gray);margin-top:10px;">Each slot = 1 hour ($${rate}/hr). &nbsp;Mon–Fri: 5–9 PM &nbsp;·&nbsp; Sat: 8 AM–8 PM &nbsp;·&nbsp; Sun: 1–8 PM</div>
 
   </div>
 
@@ -758,31 +777,44 @@ function clearAll() {
   document.getElementById('pat-end').value = fmt(end);
 })();
 
-function patternSelect(doSelect) {
-  const dow   = parseInt(document.getElementById('pat-dow').value, 10);
-  const time  = document.getElementById('pat-time').value;
-  const start = document.getElementById('pat-start').value;
-  const end   = document.getElementById('pat-end').value;
-  if (!start || !end || start > end) {
-    document.getElementById('pat-result').textContent = 'Please set a valid date range.';
-    return;
-  }
-  const slots = document.querySelectorAll('.scal-slot.open[data-st="' + time + '"]');
+function addPattern() {
+  const dow       = parseInt(document.getElementById('pat-dow').value, 10);
+  const startTime = document.getElementById('pat-start-time').value;
+  const endTime   = document.getElementById('pat-end-time').value;
+  const start     = document.getElementById('pat-start').value;
+  const end       = document.getElementById('pat-end').value;
+  const resultEl  = document.getElementById('pat-result');
+
+  if (!start || !end || start > end) { resultEl.textContent = 'Please set a valid date range.'; return; }
+  if (!startTime || !endTime || startTime >= endTime) { resultEl.textContent = 'End time must be after start time.'; return; }
+
+  const startH = parseInt(startTime, 10);
+  const endH   = parseInt(endTime, 10);
   let matched = 0;
-  slots.forEach(el => {
-    const date = el.dataset.date;
-    if (date < start || date > end) return;
-    const d = new Date(date + 'T12:00:00');
-    if (d.getDay() !== dow) return;
-    toggleSlot(el, doSelect);
-    matched++;
-    // If slot is now visible in a different month, navigate to show first match
-  });
+  for (let h = startH; h < endH; h++) {
+    const t = h.toString().padStart(2, '0') + ':00';
+    document.querySelectorAll('.scal-slot.open[data-st="' + t + '"]').forEach(el => {
+      const date = el.dataset.date;
+      if (date < start || date > end) return;
+      if (new Date(date + 'T12:00:00').getDay() !== dow) return;
+      if (!el.classList.contains('selected')) { toggleSlot(el, true); matched++; }
+    });
+  }
   update();
+
   const DOW_NAMES = ['Sundays','Mondays','Tuesdays','Wednesdays','Thursdays','Fridays','Saturdays'];
-  const action = doSelect ? 'Selected' : 'Deselected';
-  document.getElementById('pat-result').textContent = matched > 0
-    ? action + ' ' + matched + ' slot' + (matched===1?'':'s') + ' \u2014 ' + DOW_NAMES[dow] + ' at ' + (SLOT_LABELS[time]||time) + ' between ' + new Date(start+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' and ' + new Date(end+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) + '.'
+  const fmtH = h => { const p = h >= 12 ? 'PM' : 'AM'; const h12 = h > 12 ? h - 12 : (h === 0 ? 12 : h); return h12 + '\u202f' + p; };
+  const fmtD = d => new Date(d + 'T12:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric'});
+  const label = DOW_NAMES[dow] + ', ' + fmtH(startH) + '\u2013' + fmtH(endH) + ', ' + fmtD(start) + '\u2013' + fmtD(end);
+
+  const chip = document.createElement('div');
+  chip.style.cssText = 'display:inline-flex;align-items:center;gap:6px;background:var(--steel);color:white;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;';
+  chip.innerHTML = label + ' <button type="button" style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,.65);font-size:16px;line-height:1;padding:0;margin-left:2px;" title="Remove">\u00d7</button>';
+  document.getElementById('pat-chips').appendChild(chip);
+
+  resultEl.style.color = matched > 0 ? 'var(--sage)' : 'var(--gray)';
+  resultEl.textContent = matched > 0
+    ? '\u2713 ' + matched + ' slot' + (matched === 1 ? '' : 's') + ' added.'
     : 'No available slots matched in that range.';
 }
 </script>
