@@ -1164,13 +1164,6 @@ ${portalHeader}
         if (!agree)
           return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?msg=err` } });
 
-        // Rate limit: max 20 new holds per submission, 20 per 24h per group
-        if (slots.length > 20)
-          return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?msg=ratelimit` } });
-        const recentCount = await env.DB.prepare("SELECT COUNT(*) as n FROM gym_bookings WHERE group_id=? AND created_at > datetime('now','-24 hours')").bind(group.id).first();
-        if ((recentCount?.n || 0) + slots.length > 20)
-          return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?msg=ratelimit` } });
-
         const holdExpires = new Date(Date.now() + 48 * 3600000).toISOString().replace('T',' ').slice(0,19);
         let created = 0, skipped = 0;
         const createdSlots = [];
@@ -1237,9 +1230,6 @@ ${portalHeader}
 
         if (!agree || !slots.length)
           return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?err=agree` } });
-
-        if (slots.length > 20)
-          return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?err=ratelimit` } });
 
         const rate    = await getGroupRate(env, group);
         const invoiceDate = new Date().toISOString().split('T')[0];
