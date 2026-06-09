@@ -3830,14 +3830,20 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         if (!inv) return new Response('Not found', { status: 404 });
         const group   = await env.DB.prepare('SELECT * FROM gym_groups WHERE id = ?').bind(inv.group_id).first();
 
-        // Multi-booking invoice support
+        // Multi-booking invoice support — fetch in chunks to avoid D1 bind limit
         let viewBookings = [];
         if (inv.booking_ids) {
           try {
             const ids = JSON.parse(inv.booking_ids);
             if (ids.length) {
-              const rows = await env.DB.prepare(`SELECT * FROM gym_bookings WHERE id IN (${ids.map(()=>'?').join(',')}) ORDER BY booking_date, start_time`).bind(...ids).all();
-              viewBookings = rows.results;
+              const all = [];
+              for (let i = 0; i < ids.length; i += 99) {
+                const chunk = ids.slice(i, i + 99);
+                const rows = await env.DB.prepare(`SELECT * FROM gym_bookings WHERE id IN (${chunk.map(()=>'?').join(',')}) ORDER BY booking_date, start_time`).bind(...chunk).all();
+                all.push(...rows.results);
+              }
+              all.sort((a,b) => a.booking_date < b.booking_date ? -1 : a.booking_date > b.booking_date ? 1 : 0);
+              viewBookings = all;
             }
           } catch (_) {}
         }
@@ -3850,7 +3856,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         const rate      = parseFloat(inv.rate         || 0);
         const total     = parseFloat(inv.total_amount || 0);
         const rateType  = inv.rate_type || 'hourly';
-        const rateLabel = rateType === 'daily' ? '/day' : '/hr';
+        const rateLabel = rateType === 'daily' ? '/day' : rateType === 'lump' ? ' (flat rate)' : '/hr';
         const paymentLink = await getPaymentLink(env);
         const vm = url.searchParams.get('msg');
         const viewAlert = vm === 'created' ? `<div class="alert alert-success">&#10003; Booking confirmed. Invoice emailed to ${group?.email ? group.email : 'you and the group'}.</div>`
@@ -3859,33 +3865,46 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 
         let rentalDetailsRows = '';
         if (viewBookings.length > 1) {
-          const dateRows = viewBookings.map(b => {
-            const bh = calcHours(b.start_time, b.end_time);
-            const sub = rateType === 'daily' ? rate : bh * rate;
-            const detail = rateType === 'daily'
-              ? `${fmt12h(b.start_time)} &ndash; ${fmt12h(b.end_time)} &middot; $${sub.toFixed(2)}`
-              : `${fmt12h(b.start_time)} &ndash; ${fmt12h(b.end_time)} &middot; ${bh} hr${bh !== 1 ? 's' : ''} &middot; $${sub.toFixed(2)}`;
-            return `<tr style="border-bottom:1px solid var(--border);">
-              <td style="padding:8px 0;font-size:14px;color:var(--charcoal);font-weight:600;">${formatDate(b.booking_date)}</td>
-              <td style="padding:8px 0;font-size:13px;color:var(--gray);text-align:right;">${detail}</td>
-            </tr>`;
-          }).join('');
-          const totalHoursRow = rateType === 'daily' ? '' :
-            `<tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Total Hours</td><td style="padding:10px 0;font-size:14px;font-weight:600;text-align:right;">${hours} hrs</td></tr>`;
-          rentalDetailsRows = `
-            <tr><td colspan="2" style="padding:4px 0 8px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--amber);">Rental Dates (${viewBookings.length})</td></tr>
-            ${dateRows}
-            <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Rate</td><td style="padding:10px 0;font-size:14px;text-align:right;">$${rate.toFixed(2)}${rateLabel}</td></tr>
-            ${totalHoursRow}`;
+          const numDays = viewBookings.length;
+          if (rateType === 'lump') {
+            // Lump: show period summary, no per-date rows
+            rentalDetailsRows = `
+              <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Period</td><td style="padding:10px 0;font-size:14px;font-weight:600;text-align:right;">${formatDate(inv.period_start)} \u2013 ${formatDate(inv.period_end)}</td></tr>
+              <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Days</td><td style="padding:10px 0;font-size:14px;font-weight:600;text-align:right;">${numDays} day${numDays !== 1 ? 's' : ''}</td></tr>
+              <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Total Hours</td><td style="padding:10px 0;font-size:14px;color:var(--gray);text-align:right;">${hours} hrs</td></tr>
+              <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Pricing</td><td style="padding:10px 0;font-size:14px;text-align:right;">Flat rate</td></tr>`;
+          } else {
+            const dateRows = viewBookings.map(b => {
+              const bh = calcHours(b.start_time, b.end_time);
+              const sub = rateType === 'daily' ? rate : bh * rate;
+              const detail = rateType === 'daily'
+                ? `${fmt12h(b.start_time)} &ndash; ${fmt12h(b.end_time)} &middot; $${sub.toFixed(2)}`
+                : `${fmt12h(b.start_time)} &ndash; ${fmt12h(b.end_time)} &middot; ${bh} hr${bh !== 1 ? 's' : ''} &middot; $${sub.toFixed(2)}`;
+              return `<tr style="border-bottom:1px solid var(--border);">
+                <td style="padding:8px 0;font-size:14px;color:var(--charcoal);font-weight:600;">${formatDate(b.booking_date)}</td>
+                <td style="padding:8px 0;font-size:13px;color:var(--gray);text-align:right;">${detail}</td>
+              </tr>`;
+            }).join('');
+            const totalHoursRow = rateType === 'daily' ? '' :
+              `<tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Total Hours</td><td style="padding:10px 0;font-size:14px;font-weight:600;text-align:right;">${hours} hrs</td></tr>`;
+            rentalDetailsRows = `
+              <tr><td colspan="2" style="padding:4px 0 8px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--amber);">Rental Dates (${numDays})</td></tr>
+              ${dateRows}
+              <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Rate</td><td style="padding:10px 0;font-size:14px;text-align:right;">$${rate.toFixed(2)}${rateLabel}</td></tr>
+              ${totalHoursRow}`;
+          }
         } else {
           const booking = viewBookings[0];
-          const durationRow = rateType === 'daily' ? '' :
+          const durationRow = (rateType === 'daily' || rateType === 'lump') ? '' :
             `<tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Duration</td><td style="padding:10px 0;font-size:14px;font-weight:600;text-align:right;">${hours} hr${hours !== 1 ? 's' : ''}</td></tr>`;
+          const rateRow = rateType === 'lump'
+            ? `<tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Pricing</td><td style="padding:10px 0;font-size:14px;text-align:right;">Flat rate</td></tr>`
+            : `<tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Rate</td><td style="padding:10px 0;font-size:14px;text-align:right;">$${rate.toFixed(2)}${rateLabel}</td></tr>`;
           rentalDetailsRows = `
             <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Date</td><td style="padding:10px 0;font-size:14px;font-weight:600;text-align:right;">${booking ? formatDate(booking.booking_date) : formatDate(inv.period_start)}</td></tr>
             <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Time</td><td style="padding:10px 0;font-size:14px;font-weight:600;text-align:right;">${booking ? `${fmt12h(booking.start_time)} \u2013 ${fmt12h(booking.end_time)}` : '\u2014'}</td></tr>
             ${durationRow}
-            <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;font-size:14px;color:var(--gray);">Rate</td><td style="padding:10px 0;font-size:14px;text-align:right;">$${rate.toFixed(2)}${rateLabel}</td></tr>`;
+            ${rateRow}`;
         }
 
         return html(`
