@@ -1658,14 +1658,20 @@ ${portalHeader}
         };
 
         // Render an org accordion
-        const orgAccordion = (orgName, items, mode) => `
+        const orgAccordion = (orgName, items, mode) => {
+          const groupId = items[0]?.group_id;
+          const confirmGroupBtn = (mode === 'hold' && groupId)
+            ? `<a href="/gym-rentals/bookings/confirm-group/${groupId}" class="btn btn-sm btn-primary" style="text-decoration:none;margin-left:8px;">Set Price &amp; Confirm</a>`
+            : '';
+          return `
 <details open style="margin-bottom:8px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
   <summary style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:11px 18px;background:var(--mist);font-family:var(--sans);font-size:14px;font-weight:700;color:var(--charcoal);list-style:none;-webkit-appearance:none;">
     <span>${orgName}</span>
-    <span style="font-size:12px;font-weight:400;color:var(--gray);">${items.length} booking${items.length !== 1 ? 's' : ''}</span>
+    <span style="display:flex;align-items:center;gap:4px;font-size:12px;font-weight:400;color:var(--gray);">${items.length} booking${items.length !== 1 ? 's' : ''}${confirmGroupBtn}</span>
   </summary>
   ${items.map(b => bookingLine(b, mode)).join('')}
 </details>`;
+        };
 
         // Build holds HTML (grouped by org)
         const holdItems = collapseConsecutive(buildItems(holdsRes.results));
@@ -3430,6 +3436,148 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
     ${pastHtml}
   </div>
 </div>`, 'All Bookings');
+      }
+
+      // ── CONFIRM GROUP WITH CUSTOM PRICE ──────────────────────
+      if (path.startsWith('/gym-rentals/bookings/confirm-group/')) {
+        const groupId = parseInt(path.split('/').pop(), 10);
+        const group = await env.DB.prepare('SELECT * FROM gym_groups WHERE id=?').bind(groupId).first();
+        if (!group) return new Response('Not found', { status: 404 });
+
+        const holds = await env.DB.prepare(
+          `SELECT b.*, r.day_of_week as rec_dow, r.start_time as rec_st, r.end_time as rec_et, r.start_date as rec_sd, r.end_date as rec_ed
+           FROM gym_bookings b LEFT JOIN gym_recurrences r ON r.id = b.recurrence_id
+           WHERE b.group_id=? AND b.status='hold' ORDER BY b.booking_date, b.start_time`
+        ).bind(groupId).all();
+
+        if (!holds.results.length) return new Response('', { status: 302, headers: { Location: '/gym-rentals?msg=saved' } });
+
+        if (method === 'GET') {
+          const {rate: defaultRate, rateType} = await getGroupRate(env, group);
+          const totalHours = holds.results.reduce((s, b) => s + calcHours(b.start_time, b.end_time), 0);
+          const suggestedTotal = calcTotal(rateType, defaultRate, totalHours, holds.results.length);
+          const DOW_L = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+          const fmtS = d => d ? new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '';
+
+          // Group display: deduplicate recurring
+          const seen = new Set();
+          const displayRows = [];
+          for (const b of holds.results) {
+            if (b.recurrence_id) {
+              if (seen.has(b.recurrence_id)) continue;
+              seen.add(b.recurrence_id);
+              const count = holds.results.filter(x => x.recurrence_id === b.recurrence_id).length;
+              const hrs = holds.results.filter(x => x.recurrence_id === b.recurrence_id).reduce((s,x)=>s+calcHours(x.start_time,x.end_time),0);
+              displayRows.push(`<tr style="border-bottom:1px solid var(--border);">
+                <td style="padding:8px 12px;font-size:13px;font-weight:600;">${DOW_L[b.rec_dow]}s, ${fmtS(b.rec_sd)}–${fmtS(b.rec_ed)}</td>
+                <td style="padding:8px 12px;font-size:13px;">${fmt12h(b.rec_st||b.start_time)}–${fmt12h(b.rec_et||b.end_time)}</td>
+                <td style="padding:8px 12px;font-size:13px;text-align:right;">${count} sessions · ${hrs} hrs</td>
+                <td style="padding:8px 12px;"><span class="badge" style="background:#e8f0fe;color:#1a3060;font-size:10px;">Recurring</span></td>
+              </tr>`);
+            } else {
+              const bh = calcHours(b.start_time, b.end_time);
+              displayRows.push(`<tr style="border-bottom:1px solid var(--border);">
+                <td style="padding:8px 12px;font-size:13px;font-weight:600;">${new Date(b.booking_date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</td>
+                <td style="padding:8px 12px;font-size:13px;">${fmt12h(b.start_time)}–${fmt12h(b.end_time)}</td>
+                <td style="padding:8px 12px;font-size:13px;text-align:right;">${bh} hrs</td>
+                <td></td>
+              </tr>`);
+            }
+          }
+
+          return html(`
+${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
+<div class="wrap">
+  <div class="page-title">Set Price &amp; Confirm — ${group.name}</div>
+  <div class="page-sub">Review all pending holds for this group, set the invoice total, then confirm.</div>
+  <div class="card">
+    <div class="card-title">Pending Holds (${holds.results.length})</div>
+    <table style="width:100%;border-collapse:collapse;">
+      <thead><tr style="border-bottom:2px solid var(--border);">
+        <th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:var(--amber);letter-spacing:.06em;">Schedule</th>
+        <th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:var(--amber);letter-spacing:.06em;">Time</th>
+        <th style="padding:8px 12px;text-align:right;font-size:11px;text-transform:uppercase;color:var(--amber);letter-spacing:.06em;">Detail</th>
+        <th></th>
+      </tr></thead>
+      <tbody>${displayRows.join('')}</tbody>
+      <tfoot><tr style="background:var(--mist);">
+        <td colspan="2" style="padding:12px;font-size:14px;font-weight:700;color:var(--steel);">Total hours</td>
+        <td style="padding:12px;text-align:right;font-size:14px;font-weight:700;color:var(--steel);">${totalHours} hrs</td>
+        <td></td>
+      </tr></tfoot>
+    </table>
+  </div>
+  <div class="card">
+    <div class="card-title">Invoice Total</div>
+    <form method="POST" action="/gym-rentals/bookings/confirm-group/${groupId}">
+      <div class="form-group">
+        <label>Total amount to charge <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:12px;">— edit to set any flat price</span></label>
+        <div style="display:flex;align-items:center;gap:8px;max-width:220px;">
+          <span style="font-size:20px;font-weight:700;color:var(--charcoal);">$</span>
+          <input type="number" name="total_amount" step="0.01" min="0" value="${suggestedTotal.toFixed(2)}" required style="font-size:20px;font-weight:700;">
+        </div>
+        <div style="font-size:12px;color:var(--gray);margin-top:6px;">Suggested: $${suggestedTotal.toFixed(2)} (${totalHours} hrs × $${defaultRate.toFixed(2)}${rateType === 'daily' ? '/day' : rateType === 'lump' ? ' flat' : '/hr'})</div>
+      </div>
+      <div class="form-group">
+        <label>Invoice note <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:12px;">— optional, included in email</span></label>
+        <input type="text" name="notes" placeholder="e.g. Season rate — Aug 2025 – Mar 2026">
+      </div>
+      <div class="btn-row">
+        <button type="submit" class="btn btn-primary" onclick="return confirm('Confirm all ${holds.results.length} holds for ${group.name.replace(/'/g,"\\'")} and send invoice?')">Confirm &amp; Send Invoice →</button>
+        <a href="/gym-rentals" class="btn btn-secondary" style="text-decoration:none;">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>`, `Set Price — ${group.name}`);
+        }
+
+        if (method === 'POST') {
+          const form = await request.formData();
+          const totalAmount = parseFloat(form.get('total_amount') || '0');
+          const invoiceNotes = form.get('notes') || '';
+          const invoiceDate = new Date().toISOString().split('T')[0];
+          const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_admin_email'").first();
+          const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
+          const pymtLink = await getPaymentLink(env);
+
+          // Confirm all holds
+          for (const b of holds.results) {
+            await env.DB.prepare("UPDATE gym_bookings SET status='confirmed', hold_expires_at=NULL WHERE id=?").bind(b.id).run();
+          }
+
+          const bookings = holds.results;
+          const totalHours = bookings.reduce((s, b) => s + calcHours(b.start_time, b.end_time), 0);
+          const allDates = bookings.map(b => b.booking_date).sort();
+          const bookingIds = JSON.stringify(bookings.map(b => b.id));
+
+          // Build recurrenceMap for pattern-aware invoice
+          const recurrenceMap = {};
+          for (const b of bookings) {
+            if (b.recurrence_id && !recurrenceMap[b.recurrence_id]) {
+              recurrenceMap[b.recurrence_id] = { day_of_week: b.rec_dow, start_time: b.rec_st||b.start_time, end_time: b.rec_et||b.end_time, start_date: b.rec_sd, end_date: b.rec_ed };
+            }
+          }
+
+          const iRes = await env.DB.prepare(
+            `INSERT INTO gym_invoices (group_id, booking_ids, invoice_date, period_start, period_end, total_hours, rate, rate_type, total_amount, notes, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'lump', ?, ?, 'unpaid')`
+          ).bind(groupId, bookingIds, invoiceDate, allDates[0], allDates[allDates.length-1], totalHours, totalAmount, totalAmount, invoiceNotes).run();
+          const invoiceId = iRes.meta.last_row_id;
+          const inv = await env.DB.prepare('SELECT * FROM gym_invoices WHERE id=?').bind(invoiceId).first();
+
+          const subject = `Gym Rental Confirmed — ${group.name} — ${bookings.length} dates`;
+          const hasPatterns = Object.keys(recurrenceMap).length > 0;
+          const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, bookings, pymtLink, hasPatterns ? recurrenceMap : null);
+          const toEmails = [adminEmail];
+          if (group.email) toEmails.push(group.email);
+
+          const bg = async () => {
+            try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {}
+            await Promise.all(bookings.map(b => addGymBookingToGCal(env, { ...b, group_name: group.name })));
+          };
+          if (ctx?.waitUntil) ctx.waitUntil(bg()); else await bg();
+
+          return new Response('', { status: 302, headers: { Location: `/gym-rentals/invoices/view/${invoiceId}?msg=created` } });
+        }
       }
 
       // ── ADMIN CONFIRM HOLD ────────────────────────────────────
