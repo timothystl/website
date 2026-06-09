@@ -80,7 +80,7 @@ async function getGroupRate(env, group) {
   return parseFloat(row?.value || '25');
 }
 
-function buildGymInvoiceEmailHtml(inv, group, bookingOrBookings, paymentLink = PAYMENT_LINK_DEFAULT) {
+function buildGymInvoiceEmailHtml(inv, group, bookingOrBookings, paymentLink = PAYMENT_LINK_DEFAULT, recurrenceMap = null) {
   const invNum   = `GYM-${inv.id.toString().padStart(4,'0')}`;
   const hours    = parseFloat(inv.total_hours  || 0);
   const rate     = parseFloat(inv.rate         || 0);
@@ -91,6 +91,7 @@ function buildGymInvoiceEmailHtml(inv, group, bookingOrBookings, paymentLink = P
   const payLink  = amountCents > 0 ? `${paymentLink}&amount=${amountCents}` : paymentLink;
   const bookings = Array.isArray(bookingOrBookings) ? bookingOrBookings : [bookingOrBookings];
   const isMulti  = bookings.length > 1;
+  const DOW_LABELS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 
   let rentalRows;
   if (!isMulti) {
@@ -102,6 +103,51 @@ function buildGymInvoiceEmailHtml(inv, group, bookingOrBookings, paymentLink = P
     <tr style="border-bottom:1px solid #EDE9E0;"><td style="padding:10px 0;font-size:14px;color:#4A4860;">Time</td><td style="padding:10px 0;font-size:14px;font-weight:600;color:#1A1A2A;text-align:right;">${fmt12h(b.start_time)} – ${fmt12h(b.end_time)}</td></tr>
     ${durationRow}
     <tr style="border-bottom:1px solid #EDE9E0;"><td style="padding:10px 0;font-size:14px;color:#4A4860;">Rate</td><td style="padding:10px 0;font-size:14px;color:#1A1A2A;text-align:right;">$${rate.toFixed(2)}${rateLabel}</td></tr>`;
+  } else if (recurrenceMap && Object.keys(recurrenceMap).length > 0) {
+    // Pattern-summary invoice: group bookings by recurrence_id
+    const byRec = {};
+    const noRec = [];
+    for (const b of bookings) {
+      if (b.recurrence_id && recurrenceMap[b.recurrence_id]) {
+        if (!byRec[b.recurrence_id]) byRec[b.recurrence_id] = [];
+        byRec[b.recurrence_id].push(b);
+      } else {
+        noRec.push(b);
+      }
+    }
+    const patternRows = Object.entries(byRec).map(([recId, rBks]) => {
+      const rec = recurrenceMap[recId];
+      const sessions = rBks.length;
+      const recHrs = rBks.reduce((s, b) => s + calcHours(b.start_time, b.end_time), 0);
+      const subtotal = rateType === 'daily' ? sessions * rate : recHrs * rate;
+      const label = `Every ${DOW_LABELS[rec.day_of_week]}, ${fmt12h(rec.start_time)}&ndash;${fmt12h(rec.end_time)}`;
+      const dateRange = `${formatDate(rec.start_date)}&ndash;${formatDate(rec.end_date)}`;
+      const detail = rateType === 'daily'
+        ? `${dateRange} &middot; ${sessions} session${sessions !== 1 ? 's' : ''} &middot; $${subtotal.toFixed(2)}`
+        : `${dateRange} &middot; ${sessions} session${sessions !== 1 ? 's' : ''} &middot; ${recHrs} hrs &middot; $${subtotal.toFixed(2)}`;
+      return `<tr style="border-bottom:1px solid #EDE9E0;">
+        <td style="padding:8px 0;font-size:13px;color:#1A1A2A;font-weight:600;">${label}</td>
+        <td style="padding:8px 0;font-size:13px;color:#4A4860;text-align:right;">${detail}</td>
+      </tr>`;
+    }).join('');
+    const individualRows = noRec.map(b => {
+      const bh = calcHours(b.start_time, b.end_time);
+      const subtotal = rateType === 'daily' ? rate : bh * rate;
+      const detail = rateType === 'daily'
+        ? `${fmt12h(b.start_time)}&ndash;${fmt12h(b.end_time)} &middot; $${subtotal.toFixed(2)}`
+        : `${fmt12h(b.start_time)}&ndash;${fmt12h(b.end_time)} &middot; ${bh} hrs &middot; $${subtotal.toFixed(2)}`;
+      return `<tr style="border-bottom:1px solid #EDE9E0;">
+        <td style="padding:8px 0;font-size:13px;color:#1A1A2A;font-weight:600;">${formatDate(b.booking_date)}</td>
+        <td style="padding:8px 0;font-size:13px;color:#4A4860;text-align:right;">${detail}</td>
+      </tr>`;
+    }).join('');
+    const totalHoursRow = rateType === 'daily' ? '' :
+      `<tr style="border-bottom:1px solid #EDE9E0;"><td style="padding:10px 0;font-size:14px;color:#4A4860;">Total Hours</td><td style="padding:10px 0;font-size:14px;font-weight:600;color:#1A1A2A;text-align:right;">${hours} hrs</td></tr>`;
+    rentalRows = `
+    <tr><td colspan="2" style="padding:4px 0 8px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#C9973A;">Rental Schedule</td></tr>
+    ${patternRows}${individualRows}
+    <tr style="border-bottom:1px solid #EDE9E0;"><td style="padding:10px 0;font-size:14px;color:#4A4860;">Rate</td><td style="padding:10px 0;font-size:14px;color:#1A1A2A;text-align:right;">$${rate.toFixed(2)}${rateLabel}</td></tr>
+    ${totalHoursRow}`;
   } else {
     const dateRows = bookings.map(b => {
       const bh = calcHours(b.start_time, b.end_time);
@@ -1464,6 +1510,7 @@ ${portalHeader}
         : gymMsg === 'deleted'       ? `<div class="alert alert-success">✓ Deleted.</div>`
         : gymMsg === 'confirmed-all' ? `<div class="alert alert-success">✓ ${gymAlertN} hold${gymAlertN===1?'':'s'} confirmed — invoices sent.</div>`
         : gymMsg === 'merged'        ? `<div class="alert alert-success">✓ Consolidated ${gymAlertN} bookings — your hold list is now much cleaner.</div>`
+        : gymMsg === 'patterns'      ? `<div class="alert alert-success">✓ Linked ${gymAlertN} recurring pattern${gymAlertN===1?'':'s'} — holds are now grouped by recurrence.</div>`
         : '';
 
       // ── DASHBOARD ──────────────────────────────────────────────
@@ -1605,6 +1652,7 @@ ${topbarHtml('gym', currentUser)}
     <a href="/gym-rentals/blocked" class="btn btn-sage">Blocked Dates</a>
     <a href="/gym-rentals/invoices" class="btn btn-secondary">Invoices</a>
     <a href="/gym-rentals/merge-holds" class="btn btn-secondary">Consolidate Bookings</a>
+    <a href="/gym-rentals/detect-patterns" class="btn btn-secondary">Detect Patterns</a>
     <a href="/gym-rentals/test-gcal" class="btn btn-secondary" style="margin-left:auto;">Test GCal →</a>
   </div>
   <div style="background:var(--mist);border:1px solid var(--border);border-radius:10px;padding:12px 18px;margin-bottom:24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
@@ -2059,6 +2107,138 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
             } catch (_) {}
           }
           return new Response('', { status: 302, headers: { Location: `/gym-rentals?msg=merged&n=${merged}` } });
+        }
+      }
+
+      // ── DETECT RECURRING PATTERNS ────────────────────────────
+      if (path === '/gym-rentals/detect-patterns') {
+        const DOW_FULL_LOCAL = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+        // Helper: compute which DOW dates in [first..last] are missing from a booking set
+        function findExceptions(bookingDates, dow) {
+          if (bookingDates.length === 0) return [];
+          const dateSet = new Set(bookingDates);
+          const first = bookingDates[0];
+          const last = bookingDates[bookingDates.length - 1];
+          const exceptions = [];
+          let d = new Date(first + 'T12:00:00');
+          const end = new Date(last + 'T12:00:00');
+          while (d <= end) {
+            if (d.getDay() === dow) {
+              const ds = d.toISOString().split('T')[0];
+              if (!dateSet.has(ds)) exceptions.push(ds);
+            }
+            d.setDate(d.getDate() + 1);
+          }
+          return exceptions;
+        }
+
+        // Fetch all unlinked holds and group into patterns
+        async function getPatterns() {
+          const rows = await env.DB.prepare(
+            `SELECT b.*, g.name as group_name FROM gym_bookings b
+             LEFT JOIN gym_groups g ON g.id = b.group_id
+             WHERE b.status = 'hold' AND b.recurrence_id IS NULL
+             ORDER BY b.group_id, b.booking_date`
+          ).all();
+
+          const patternMap = new Map();
+          for (const b of rows.results) {
+            const dow = new Date(b.booking_date + 'T12:00:00').getDay();
+            const key = `${b.group_id}|${dow}|${b.start_time}|${b.end_time}`;
+            if (!patternMap.has(key)) {
+              patternMap.set(key, {
+                group_id: b.group_id, group_name: b.group_name,
+                dow, start_time: b.start_time, end_time: b.end_time,
+                bookings: []
+              });
+            }
+            patternMap.get(key).bookings.push(b);
+          }
+
+          // Only return patterns with ≥2 bookings (single one-offs stay individual)
+          const patterns = [];
+          for (const p of patternMap.values()) {
+            if (p.bookings.length < 2) continue;
+            p.bookings.sort((a, z) => a.booking_date.localeCompare(z.booking_date));
+            p.startDate = p.bookings[0].booking_date;
+            p.endDate = p.bookings[p.bookings.length - 1].booking_date;
+            p.exceptions = findExceptions(p.bookings.map(b => b.booking_date), p.dow);
+            patterns.push(p);
+          }
+          return patterns;
+        }
+
+        if (method === 'GET') {
+          const patterns = await getPatterns();
+          // Also count already-linked holds
+          const linkedRow = await env.DB.prepare(
+            "SELECT COUNT(*) as n FROM gym_bookings WHERE status='hold' AND recurrence_id IS NOT NULL"
+          ).first();
+          const alreadyLinked = linkedRow?.n || 0;
+
+          const previewHtml = patterns.length === 0
+            ? `<div class="alert alert-success">✓ No new recurring patterns detected${alreadyLinked > 0 ? ` (${alreadyLinked} holds already linked to a recurrence)` : ' — holds may already be linked or are all one-off dates'}.</div>`
+            : `<div class="alert alert-info" style="margin-bottom:20px;">Found <strong>${patterns.length} recurring pattern${patterns.length !== 1 ? 's' : ''}</strong> across your holds. Running this will group them so invoices show a summary line per pattern instead of individual dates.${alreadyLinked > 0 ? ` (${alreadyLinked} holds already linked — skipped.)` : ''}</div>
+               <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                 <thead><tr style="border-bottom:2px solid var(--border);">
+                   <th style="text-align:left;padding:6px 8px;font-size:11px;text-transform:uppercase;color:var(--amber);letter-spacing:.06em;">Group</th>
+                   <th style="text-align:left;padding:6px 8px;font-size:11px;text-transform:uppercase;color:var(--amber);letter-spacing:.06em;">Schedule</th>
+                   <th style="text-align:left;padding:6px 8px;font-size:11px;text-transform:uppercase;color:var(--amber);letter-spacing:.06em;">Dates</th>
+                   <th style="text-align:right;padding:6px 8px;font-size:11px;text-transform:uppercase;color:var(--amber);letter-spacing:.06em;">Sessions</th>
+                   <th style="text-align:left;padding:6px 8px;font-size:11px;text-transform:uppercase;color:var(--amber);letter-spacing:.06em;">Exceptions</th>
+                 </tr></thead>
+                 <tbody>
+                 ${patterns.map(p => {
+                   const hrs = p.bookings.reduce((s, b) => s + calcHours(b.start_time, b.end_time), 0);
+                   const exStr = p.exceptions.length === 0 ? '—' : p.exceptions.map(d => new Date(d + 'T12:00:00').toLocaleDateString('en-US', {month:'short',day:'numeric'})).join(', ');
+                   return `<tr style="border-bottom:1px solid var(--border);">
+                     <td style="padding:7px 8px;font-weight:600;color:var(--charcoal);">${p.group_name || '—'}</td>
+                     <td style="padding:7px 8px;">Every ${DOW_FULL_LOCAL[p.dow]}, ${fmt12h(p.start_time)}–${fmt12h(p.end_time)}</td>
+                     <td style="padding:7px 8px;">${new Date(p.startDate+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${new Date(p.endDate+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</td>
+                     <td style="padding:7px 8px;text-align:right;">${p.bookings.length} &nbsp;(${hrs} hrs)</td>
+                     <td style="padding:7px 8px;color:${p.exceptions.length > 0 ? '#7A4F00' : 'var(--gray)'};">${exStr}</td>
+                   </tr>`;
+                 }).join('')}
+                 </tbody>
+               </table>`;
+
+          return html(`
+${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
+<div class="wrap">
+  <div class="page-title">Detect Recurring Patterns</div>
+  <div class="page-sub">Groups holds with the same day-of-week and time into recurrence records, so invoices show a clean summary ("Every Monday 5–8 PM, June–August: 13 sessions") instead of individual date lines.</div>
+  <div class="card">
+    <div class="card-title">Preview</div>
+    ${previewHtml}
+    ${patterns.length > 0 ? `
+    <form method="POST" action="/gym-rentals/detect-patterns" style="margin-top:20px;">
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        <button type="submit" class="btn btn-primary">Link ${patterns.length} pattern${patterns.length !== 1 ? 's' : ''} now</button>
+        <a href="/gym-rentals" class="btn btn-secondary" style="text-decoration:none;">Cancel</a>
+        <span style="font-size:12px;color:var(--gray);">This only sets recurrence links — no bookings are deleted or changed.</span>
+      </div>
+    </form>` : `<div style="margin-top:16px;"><a href="/gym-rentals" class="btn btn-secondary" style="text-decoration:none;">← Back to Dashboard</a></div>`}
+  </div>
+</div>`, 'Detect Patterns');
+        }
+
+        if (method === 'POST') {
+          const patterns = await getPatterns();
+          let linked = 0;
+          for (const p of patterns) {
+            // Create a recurrence record for this pattern
+            const rRes = await env.DB.prepare(
+              `INSERT INTO gym_recurrences (group_id, day_of_week, start_time, end_time, start_date, end_date, status, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, 'approved', 'admin', datetime('now'))`
+            ).bind(p.group_id, p.dow, p.start_time, p.end_time, p.startDate, p.endDate).run();
+            const recId = rRes.meta.last_row_id;
+            // Link all bookings in this pattern to the new recurrence
+            const bIds = p.bookings.map(b => b.id);
+            const placeholders = bIds.map(() => '?').join(',');
+            await env.DB.prepare(`UPDATE gym_bookings SET recurrence_id = ? WHERE id IN (${placeholders})`).bind(recId, ...bIds).run();
+            linked++;
+          }
+          return new Response('', { status: 302, headers: { Location: `/gym-rentals?msg=patterns&n=${linked}` } });
         }
       }
 
@@ -3163,7 +3343,9 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 
       // ── CONFIRM ALL HOLDS ─────────────────────────────────────
       if (path === '/gym-rentals/bookings/confirm-all-holds' && method === 'POST') {
-        const allHolds = await env.DB.prepare("SELECT * FROM gym_bookings WHERE status='hold'").all();
+        const allHolds = await env.DB.prepare(
+          "SELECT b.*, r.day_of_week as rec_dow, r.start_time as rec_start_time, r.end_time as rec_end_time, r.start_date as rec_start_date, r.end_date as rec_end_date FROM gym_bookings b LEFT JOIN gym_recurrences r ON r.id = b.recurrence_id WHERE b.status='hold'"
+        ).all();
         const invoiceDate = new Date().toISOString().split('T')[0];
         const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_admin_email'").first();
         const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
@@ -3186,6 +3368,16 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
           if (group) {
             for (const b of bookings) b.group_name = group.name;
           }
+          // Build recurrenceMap for pattern-aware invoice
+          const recurrenceMap = {};
+          for (const b of bookings) {
+            if (b.recurrence_id && !recurrenceMap[b.recurrence_id]) {
+              recurrenceMap[b.recurrence_id] = {
+                day_of_week: b.rec_dow, start_time: b.rec_start_time, end_time: b.rec_end_time,
+                start_date: b.rec_start_date, end_date: b.rec_end_date
+              };
+            }
+          }
           const rate = await getGroupRate(env, group);
           const totalHours = bookings.reduce((s, b) => s + calcHours(b.start_time, b.end_time), 0);
           const totalAmount = Math.round(totalHours * rate * 100) / 100;
@@ -3200,7 +3392,8 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
             const subject = bookings.length === 1
               ? `Gym Rental Confirmed — ${group.name} — ${formatDate(bookings[0].booking_date)}`
               : `Gym Rental Confirmed — ${group.name} — ${bookings.length} dates`;
-            const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, bookings, pymtLink);
+            const hasPatterns = Object.keys(recurrenceMap).length > 0;
+            const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, bookings, pymtLink, hasPatterns ? recurrenceMap : null);
             const toEmails = [adminEmail];
             if (group.email) toEmails.push(group.email);
             bgTasks.push(async () => { try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {} });
@@ -3227,7 +3420,9 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 
         const byGroup = new Map();
         for (const bid of ids) {
-          const booking = await env.DB.prepare("SELECT * FROM gym_bookings WHERE id=? AND status='hold'").bind(bid).first();
+          const booking = await env.DB.prepare(
+            "SELECT b.*, r.day_of_week as rec_dow, r.start_time as rec_start_time, r.end_time as rec_end_time, r.start_date as rec_start_date, r.end_date as rec_end_date FROM gym_bookings b LEFT JOIN gym_recurrences r ON r.id = b.recurrence_id WHERE b.id=? AND b.status='hold'"
+          ).bind(bid).first();
           if (!booking) continue;
           if (!byGroup.has(booking.group_id)) byGroup.set(booking.group_id, []);
           byGroup.get(booking.group_id).push(booking);
@@ -3239,6 +3434,16 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
             await env.DB.prepare("UPDATE gym_bookings SET status='confirmed', hold_expires_at=NULL WHERE id=?").bind(booking.id).run();
           }
           const group = await env.DB.prepare('SELECT * FROM gym_groups WHERE id=?').bind(groupId).first();
+          // Build recurrenceMap for pattern-aware invoice
+          const recurrenceMap = {};
+          for (const b of bookings) {
+            if (b.recurrence_id && !recurrenceMap[b.recurrence_id]) {
+              recurrenceMap[b.recurrence_id] = {
+                day_of_week: b.rec_dow, start_time: b.rec_start_time, end_time: b.rec_end_time,
+                start_date: b.rec_start_date, end_date: b.rec_end_date
+              };
+            }
+          }
           const rate = await getGroupRate(env, group);
           const totalHours = bookings.reduce((s, b) => s + calcHours(b.start_time, b.end_time), 0);
           const totalAmount = Math.round(totalHours * rate * 100) / 100;
@@ -3253,7 +3458,8 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
             const subject = bookings.length === 1
               ? `Gym Rental Confirmed — ${group.name} — ${formatDate(bookings[0].booking_date)}`
               : `Gym Rental Confirmed — ${group.name} — ${bookings.length} dates`;
-            const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, bookings, pymtLink);
+            const hasPatterns = Object.keys(recurrenceMap).length > 0;
+            const emailHtml = buildGymInvoiceEmailHtml({ ...inv, id: invoiceId }, group, bookings, pymtLink, hasPatterns ? recurrenceMap : null);
             const toEmails = [adminEmail];
             if (group.email) toEmails.push(group.email);
             bgTasks.push(async () => { try { await sendTransactionalEmail(env, { subject, htmlContent: emailHtml, toEmails }); } catch (_) {} });
