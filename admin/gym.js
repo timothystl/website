@@ -1520,7 +1520,7 @@ ${portalHeader}
         const fmtShort = d => d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
 
         const [holdsRes, pendingRes, confirmedRes, rateRow] = await Promise.all([
-          env.DB.prepare(`SELECT b.*, g.name as group_name, r.day_of_week as rec_dow, r.start_date as rec_start, r.end_date as rec_end FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id LEFT JOIN gym_recurrences r ON r.id = b.recurrence_id WHERE b.status = 'hold' ORDER BY b.group_id, b.hold_expires_at`).all(),
+          env.DB.prepare(`SELECT b.*, g.name as group_name, r.day_of_week as rec_dow, r.start_date as rec_start, r.end_date as rec_end FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id LEFT JOIN gym_recurrences r ON r.id = b.recurrence_id WHERE b.status = 'hold' ORDER BY b.group_id, b.booking_date, b.start_time`).all(),
           env.DB.prepare(`SELECT r.*, g.name as group_name FROM gym_recurrences r LEFT JOIN gym_groups g ON g.id = r.group_id WHERE r.status = 'pending_review' ORDER BY r.created_at`).all(),
           env.DB.prepare(`SELECT b.*, g.name as group_name, r.day_of_week as rec_dow, r.start_date as rec_start, r.end_date as rec_end FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id LEFT JOIN gym_recurrences r ON r.id = b.recurrence_id WHERE b.status = 'confirmed' AND b.booking_date >= ? ORDER BY b.group_id, b.recurrence_id, b.booking_date`).bind(today).all(),
           env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_rate_per_hour'").first(),
@@ -1542,10 +1542,62 @@ ${portalHeader}
           return items;
         };
 
+        // Collapse consecutive same-time individual bookings into a single range row
+        const collapseConsecutive = (items) => {
+          const out = [];
+          let i = 0;
+          while (i < items.length) {
+            const b = items[i];
+            if (b.isRecurring) { out.push(b); i++; continue; }
+            let j = i + 1;
+            while (j < items.length && !items[j].isRecurring) {
+              const prev = items[j - 1], curr = items[j];
+              const nextDay = new Date(prev.booking_date + 'T12:00:00');
+              nextDay.setDate(nextDay.getDate() + 1);
+              const isNext = nextDay.toISOString().split('T')[0] === curr.booking_date;
+              if (isNext && prev.start_time === curr.start_time && prev.end_time === curr.end_time) j++;
+              else break;
+            }
+            if (j - i > 1) {
+              out.push({ ...b, isGroup: true, groupEnd: items[j - 1].booking_date, groupIds: items.slice(i, j).map(x => x.id), groupHoldExpires: items[i].hold_expires_at });
+            } else {
+              out.push(b);
+            }
+            i = j;
+          }
+          return out;
+        };
+
         // Render a single booking line
         const bookingLine = (b, mode = 'none') => {
           // mode: 'hold' | 'confirmed' | 'none'
           const timeRange = `${fmt12h(b.start_time)}–${fmt12h(b.end_time)}`;
+
+          // Grouped consecutive-day block
+          if (b.isGroup) {
+            const allIds = b.groupIds;
+            const idsAttr = allIds.join(',');
+            const label = `${fmtBookingDate(b.booking_date)} – ${fmtBookingDate(b.groupEnd)}`;
+            const exp = mode === 'hold' && b.groupHoldExpires
+              ? ` <span style="color:#7A4F00;font-size:11px;">exp ${new Date(b.groupHoldExpires).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</span>`
+              : '';
+            const cb = mode === 'hold'
+              ? `<input type="checkbox" class="hold-cb" data-ids="${idsAttr}" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;">`
+              : `<span style="width:16px;flex-shrink:0;"></span>`;
+            const hiddenIds = allIds.map(id => `<input type="hidden" name="ids" value="${id}">`).join('');
+            const actions = mode === 'hold' ? `<div style="display:flex;gap:5px;flex-shrink:0;">
+    <form method="POST" action="/gym-rentals/bookings/bulk-confirm" style="display:contents;" onsubmit="return confirm('Confirm all ${allIds.length} bookings and generate an invoice?')">${hiddenIds}<button type="submit" class="btn btn-sm btn-primary">Confirm (${allIds.length})</button></form>
+    <form method="POST" action="/gym-rentals/bookings/bulk-release" style="display:contents;" onsubmit="return confirm('Release all ${allIds.length} bookings?')">${hiddenIds}<button type="submit" class="btn btn-sm btn-danger">Release (${allIds.length})</button></form>
+  </div>` : '';
+            return `<div style="display:flex;align-items:center;gap:10px;padding:9px 18px;border-bottom:1px solid var(--border);">
+  ${cb}
+  <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--steel);min-width:145px;">${label}</div>
+  <div style="flex:1;font-family:var(--sans);font-size:13px;color:var(--charcoal);">${timeRange}${exp}</div>
+  <span style="font-size:11px;color:var(--gray);">${allIds.length} dates</span>
+  ${actions}
+</div>`;
+          }
+
           const deleteAction = b.isRecurring
             ? `/gym-rentals/bookings/delete-recurring/${b.recurrence_id}`
             : `/gym-rentals/bookings/delete/${b.id}`;
@@ -1594,7 +1646,7 @@ ${portalHeader}
 </details>`;
 
         // Build holds HTML (grouped by org)
-        const holdItems = buildItems(holdsRes.results);
+        const holdItems = collapseConsecutive(buildItems(holdsRes.results));
         let holdsHtml = `<div style="text-align:center;padding:24px;color:var(--gray);font-size:14px;">No pending holds.</div>`;
         if (holdItems.length > 0) {
           const groups = {}, order = [];
@@ -1682,7 +1734,12 @@ ${topbarHtml('gym', currentUser)}
 </div>
 <script>
 function getChecked(cls) {
-  return [...document.querySelectorAll('.' + cls + ':checked')].map(cb => cb.dataset.id);
+  const ids = [];
+  for (const cb of document.querySelectorAll('.' + cls + ':checked')) {
+    if (cb.dataset.ids) ids.push(...cb.dataset.ids.split(','));
+    else if (cb.dataset.id) ids.push(cb.dataset.id);
+  }
+  return ids;
 }
 function bulkPost(url, ids, msg) {
   if (!ids.length) { alert('Select at least one item first.'); return; }
