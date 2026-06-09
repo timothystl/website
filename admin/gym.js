@@ -2179,9 +2179,11 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 
           const previewHtml = patterns.length === 0
             ? `<div class="alert alert-success">✓ No new recurring patterns detected${alreadyLinked > 0 ? ` (${alreadyLinked} holds already linked to a recurrence)` : ' — holds may already be linked or are all one-off dates'}.</div>`
-            : `<div class="alert alert-info" style="margin-bottom:20px;">Found <strong>${patterns.length} recurring pattern${patterns.length !== 1 ? 's' : ''}</strong> across your holds. Running this will group them so invoices show a summary line per pattern instead of individual dates.${alreadyLinked > 0 ? ` (${alreadyLinked} holds already linked — skipped.)` : ''}</div>
+            : `<div class="alert alert-info" style="margin-bottom:20px;">Found <strong>${patterns.length} recurring pattern${patterns.length !== 1 ? 's' : ''}</strong> across your holds. Check the ones you want to group, then click Link Selected.${alreadyLinked > 0 ? ` (${alreadyLinked} holds already linked — skipped.)` : ''}</div>
+               <form method="POST" action="/gym-rentals/detect-patterns" id="pat-form">
                <table style="width:100%;border-collapse:collapse;font-size:13px;">
                  <thead><tr style="border-bottom:2px solid var(--border);">
+                   <th style="padding:6px 8px;width:32px;"><input type="checkbox" id="pat-all" title="Select all" onchange="document.querySelectorAll('.pat-cb').forEach(c=>c.checked=this.checked);patSelCount();"></th>
                    <th style="text-align:left;padding:6px 8px;font-size:11px;text-transform:uppercase;color:var(--amber);letter-spacing:.06em;">Group</th>
                    <th style="text-align:left;padding:6px 8px;font-size:11px;text-transform:uppercase;color:var(--amber);letter-spacing:.06em;">Schedule</th>
                    <th style="text-align:left;padding:6px 8px;font-size:11px;text-transform:uppercase;color:var(--amber);letter-spacing:.06em;">Dates</th>
@@ -2190,9 +2192,11 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
                  </tr></thead>
                  <tbody>
                  ${patterns.map(p => {
+                   const key = `${p.group_id}|${p.dow}|${p.start_time}|${p.end_time}`;
                    const hrs = p.bookings.reduce((s, b) => s + calcHours(b.start_time, b.end_time), 0);
                    const exStr = p.exceptions.length === 0 ? '—' : p.exceptions.map(d => new Date(d + 'T12:00:00').toLocaleDateString('en-US', {month:'short',day:'numeric'})).join(', ');
                    return `<tr style="border-bottom:1px solid var(--border);">
+                     <td style="padding:7px 8px;"><input type="checkbox" class="pat-cb" name="keys" value="${key}" checked onchange="patSelCount()"></td>
                      <td style="padding:7px 8px;font-weight:600;color:var(--charcoal);">${p.group_name || '—'}</td>
                      <td style="padding:7px 8px;">Every ${DOW_FULL_LOCAL[p.dow]}, ${fmt12h(p.start_time)}–${fmt12h(p.end_time)}</td>
                      <td style="padding:7px 8px;">${new Date(p.startDate+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${new Date(p.endDate+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</td>
@@ -2201,7 +2205,23 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
                    </tr>`;
                  }).join('')}
                  </tbody>
-               </table>`;
+               </table>
+               <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:20px;">
+                 <button type="submit" class="btn btn-primary" id="pat-submit">Link <span id="pat-count">${patterns.length}</span> pattern${patterns.length !== 1 ? 's' : ''}</button>
+                 <a href="/gym-rentals" class="btn btn-secondary" style="text-decoration:none;">Cancel</a>
+                 <span style="font-size:12px;color:var(--gray);">This only sets recurrence links — no bookings are deleted or changed.</span>
+               </div>
+               </form>
+               <script>
+               function patSelCount(){
+                 const cbs=document.querySelectorAll('.pat-cb');
+                 const n=[...cbs].filter(c=>c.checked).length;
+                 document.getElementById('pat-count').textContent=n;
+                 document.getElementById('pat-submit').disabled=n===0;
+                 document.getElementById('pat-all').indeterminate=n>0&&n<cbs.length;
+                 document.getElementById('pat-all').checked=n===cbs.length;
+               }
+               </script>`;
 
           return html(`
 ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
@@ -2211,20 +2231,18 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
   <div class="card">
     <div class="card-title">Preview</div>
     ${previewHtml}
-    ${patterns.length > 0 ? `
-    <form method="POST" action="/gym-rentals/detect-patterns" style="margin-top:20px;">
-      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-        <button type="submit" class="btn btn-primary">Link ${patterns.length} pattern${patterns.length !== 1 ? 's' : ''} now</button>
-        <a href="/gym-rentals" class="btn btn-secondary" style="text-decoration:none;">Cancel</a>
-        <span style="font-size:12px;color:var(--gray);">This only sets recurrence links — no bookings are deleted or changed.</span>
-      </div>
-    </form>` : `<div style="margin-top:16px;"><a href="/gym-rentals" class="btn btn-secondary" style="text-decoration:none;">← Back to Dashboard</a></div>`}
+    ${patterns.length === 0 ? `<div style="margin-top:16px;"><a href="/gym-rentals" class="btn btn-secondary" style="text-decoration:none;">← Back to Dashboard</a></div>` : ''}
   </div>
 </div>`, 'Detect Patterns');
         }
 
         if (method === 'POST') {
-          const patterns = await getPatterns();
+          const form = await request.formData();
+          const selectedKeys = new Set(form.getAll('keys'));
+          const allPatterns = await getPatterns();
+          const patterns = selectedKeys.size > 0
+            ? allPatterns.filter(p => selectedKeys.has(`${p.group_id}|${p.dow}|${p.start_time}|${p.end_time}`))
+            : allPatterns;
           let linked = 0;
           for (const p of patterns) {
             // Create a recurrence record for this pattern
