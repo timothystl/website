@@ -1519,12 +1519,18 @@ ${portalHeader}
         const DOW_FULL = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
         const fmtShort = d => d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
 
-        const [holdsRes, pendingRes, confirmedRes, rateRow] = await Promise.all([
+        const [holdsRes, pendingRes, confirmedRes, rateRow, holdHrsRow, confHrsRow] = await Promise.all([
           env.DB.prepare(`SELECT b.*, g.name as group_name, r.day_of_week as rec_dow, r.start_date as rec_start, r.end_date as rec_end FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id LEFT JOIN gym_recurrences r ON r.id = b.recurrence_id WHERE b.status = 'hold' ORDER BY b.group_id, b.booking_date, b.start_time`).all(),
           env.DB.prepare(`SELECT r.*, g.name as group_name FROM gym_recurrences r LEFT JOIN gym_groups g ON g.id = r.group_id WHERE r.status = 'pending_review' ORDER BY r.created_at`).all(),
           env.DB.prepare(`SELECT b.*, g.name as group_name, r.day_of_week as rec_dow, r.start_date as rec_start, r.end_date as rec_end FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id LEFT JOIN gym_recurrences r ON r.id = b.recurrence_id WHERE b.status = 'confirmed' AND b.booking_date >= ? ORDER BY b.group_id, b.recurrence_id, b.booking_date`).bind(today).all(),
           env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_rate_per_hour'").first(),
+          env.DB.prepare("SELECT start_time, end_time FROM gym_bookings WHERE status='hold'").all(),
+          env.DB.prepare("SELECT start_time, end_time FROM gym_bookings WHERE status='confirmed'").all(),
         ]);
+        const sumHours = rows => rows.reduce((s, b) => s + calcHours(b.start_time, b.end_time), 0);
+        const holdHrs = sumHours(holdHrsRow.results);
+        const confHrs = sumHours(confHrsRow.results);
+        const rate = parseFloat(rateRow?.value || '25');
 
         // De-duplicate recurring bookings — show one row per recurrence_id
         const buildItems = (rows) => {
@@ -1707,9 +1713,12 @@ ${topbarHtml('gym', currentUser)}
     <a href="/gym-rentals/detect-patterns" class="btn btn-secondary">Detect Patterns</a>
     <a href="/gym-rentals/test-gcal" class="btn btn-secondary" style="margin-left:auto;">Test GCal →</a>
   </div>
-  <div style="background:var(--mist);border:1px solid var(--border);border-radius:10px;padding:12px 18px;margin-bottom:24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+  <div style="background:var(--mist);border:1px solid var(--border);border-radius:10px;padding:12px 18px;margin-bottom:24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
     <div style="font-size:14px;color:var(--charcoal);">Rental rate: <strong>$${rateRow?.value || '25.00'}/hr</strong></div>
     <a href="/settings" style="font-size:13px;color:var(--teal,#2E7EA6);text-decoration:none;border-bottom:1px solid currentColor;">Change rate →</a>
+    <div style="width:1px;height:20px;background:var(--border);"></div>
+    <div style="font-size:13px;color:var(--charcoal);">Pending holds: <strong>${holdHrs} hrs</strong> <span style="color:var(--gray);">($${(holdHrs * rate).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})})</span></div>
+    <div style="font-size:13px;color:var(--charcoal);">Confirmed (upcoming): <strong>${confHrs} hrs</strong> <span style="color:var(--gray);">($${(confHrs * rate).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})})</span></div>
     <div style="margin-left:auto;font-size:12px;color:var(--gray);">Mon–Fri 5–9 PM &nbsp;·&nbsp; Sat 8 AM–8 PM &nbsp;·&nbsp; Sun 1–8 PM</div>
   </div>
   <div class="card">
