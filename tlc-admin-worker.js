@@ -513,7 +513,8 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
         const result = await sendTransactionalEmail(env, {
           subject: `Contact Form — ${name}`,
           htmlContent: html,
-          toEmails: ['dinger@timothystl.org']
+          toEmails: ['dinger@timothystl.org'],
+          replyTo: email ? { email, name } : undefined
         });
         if (result.error) return new Response(JSON.stringify({ error: result.error }), { status: 500, headers: corsHeaders });
         // Confirmation email to user
