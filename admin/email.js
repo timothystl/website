@@ -32,7 +32,7 @@ export async function sendBrevoNewsletter(env, { subject, htmlContent, listIds }
 }
 
 // ── BREVO TRANSACTIONAL EMAIL ─────────────────────────────────
-export async function sendTransactionalEmail(env, { subject, htmlContent, toEmails }) {
+export async function sendTransactionalEmail(env, { subject, htmlContent, toEmails, replyTo }) {
   const apiKey = env.BREVO_API_KEY;
   if (!apiKey) return { error: 'BREVO_API_KEY not configured' };
   const resp = await fetch('https://api.brevo.com/v3/smtp/email', {
@@ -40,7 +40,7 @@ export async function sendTransactionalEmail(env, { subject, htmlContent, toEmai
     headers: { 'Content-Type': 'application/json', 'api-key': apiKey },
     body: JSON.stringify({
       sender: { name: 'Timothy Lutheran Church', email: env.BREVO_SENDER_EMAIL || 'dinger@timothystl.org' },
-      replyTo: { email: env.BREVO_REPLY_TO || env.BREVO_SENDER_EMAIL || 'dinger@timothystl.org' },
+      replyTo: replyTo || { email: env.BREVO_REPLY_TO || env.BREVO_SENDER_EMAIL || 'dinger@timothystl.org' },
       to: toEmails.map(e => ({ email: e })),
       subject,
       htmlContent
