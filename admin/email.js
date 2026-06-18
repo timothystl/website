@@ -103,7 +103,7 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
           <tr><td style="text-align:center;font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;color:#7A6E60;line-height:1.8;padding-bottom:20px;">
             6704 Fyler Ave · St. Louis, MO 63139<br>
             Sunday worship · 8:00 &amp; 10:45 am<br>
-            <a href="mailto:office@timothystl.org" style="color:#7A6E60;text-decoration:none;">office@timothystl.org</a> · <a href="tel:+13147818673" style="color:#7A6E60;text-decoration:none;">(314) 781-8673</a>
+            <a href="mailto:dinger@timothystl.org" style="color:#7A6E60;text-decoration:none;">dinger@timothystl.org</a> · <a href="tel:+13147818673" style="color:#7A6E60;text-decoration:none;">(314) 781-8673</a>
           </td></tr>
         </table>
       </td></tr>
@@ -283,7 +283,7 @@ img{max-width:100% !important;height:auto !important;}
           <tr><td style="text-align:center;font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;color:#7A6E60;line-height:1.8;padding-bottom:20px;">
             6704 Fyler Ave · St. Louis, MO 63139<br>
             Sunday worship · 8:00 &amp; 10:45 am<br>
-            <a href="mailto:office@timothystl.org" style="color:#7A6E60;text-decoration:none;">office@timothystl.org</a> · <a href="tel:+13147818673" style="color:#7A6E60;text-decoration:none;">(314) 781-8673</a>
+            <a href="mailto:dinger@timothystl.org" style="color:#7A6E60;text-decoration:none;">dinger@timothystl.org</a> · <a href="tel:+13147818673" style="color:#7A6E60;text-decoration:none;">(314) 781-8673</a>
           </td></tr>
         </table>
       </td></tr>
