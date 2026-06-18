@@ -127,7 +127,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-06-18-2';
+    const SCHEMA_VERSION = '2026-06-18-3';
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -192,8 +192,42 @@ export default {
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN tertiary_cta_url TEXT').run(); } catch (_) {}
     // Migrate: add bible_classes to newsletters
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN bible_classes TEXT').run(); } catch (_) {}
-    // Bible class templates
+    // Bible class templates (superseded by bible_classes, kept for foreign-key safety)
     try { await env.DB.prepare('CREATE TABLE IF NOT EXISTS bible_class_templates (id INTEGER PRIMARY KEY AUTOINCREMENT, topic TEXT NOT NULL, leader TEXT, location TEXT, sort_order INTEGER DEFAULT 0)').run(); } catch (_) {}
+    // Full bible_classes table for Christian Education tab + website
+    try { await env.DB.prepare(`CREATE TABLE IF NOT EXISTS bible_classes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      label TEXT,
+      description TEXT,
+      leader TEXT,
+      location TEXT,
+      schedule TEXT,
+      accent TEXT DEFAULT 'mid',
+      active INTEGER DEFAULT 1,
+      sort_order INTEGER DEFAULT 0
+    )`).run(); } catch (_) {}
+    // Migrate any existing bible_class_templates rows into bible_classes (preserves IDs for newsletter template_id refs)
+    try { await env.DB.prepare(`INSERT OR IGNORE INTO bible_classes (id, title, leader, location, active, sort_order)
+      SELECT id, topic, leader, location, 1, sort_order FROM bible_class_templates`).run(); } catch (_) {}
+    // Pre-populate with the 7 class offerings from the static education page (only if table is empty)
+    try {
+      const bcCount = await env.DB.prepare('SELECT COUNT(*) as n FROM bible_classes').first();
+      if (!bcCount || bcCount.n === 0) {
+        const INITIAL_CLASSES = [
+          { title: 'Adult Bible Class', label: 'Sunday Morning', description: 'An in-depth look at Scripture and living the Christian life in today\'s world. We rotate through different biblical studies and theological topics — from deep dives into a single book of Scripture to thematic explorations of faith and culture. All are welcome, no prior Bible knowledge required.', leader: '', location: '', schedule: 'Sunday · 9:30 AM', accent: 'mid', sort_order: 1 },
+          { title: 'Bible Study & Sing-Along', label: 'Wednesday Morning', description: 'Gather for study, discussion, and community — then close the morning with a sing-along at 11:00 AM, singing hymns and contemporary songs together before heading into your day.', leader: '', location: '', schedule: 'Wednesday · 10:00 AM · Sing-along at 11:00 AM', accent: 'teal', sort_order: 2 },
+          { title: "Men's Bible Class", label: '1st & 3rd Saturdays', description: 'Men of all ages are invited for coffee, Scripture, and brotherhood. No registration needed — just show up.', leader: '', location: 'Panera Bread on Chippewa', schedule: '1st & 3rd Saturdays · 8:00 AM', accent: 'steel', sort_order: 3 },
+          { title: 'Middle & High School Bible Class', label: 'Sunday Morning · Grades 7–12', description: 'High school students dive deep into Scripture — exploring God\'s Word together, asking hard questions, and discovering what faith means in daily life.', leader: '', location: '', schedule: 'Sunday · 9:30 AM', accent: 'sage', sort_order: 4 },
+          { title: 'Sunday School', label: 'Sunday · Children through 6th Grade', description: 'Kids hear God\'s Word, build friendships, and grow in faith through age-appropriate teaching. We close each week with a parent-child time (10:00–10:15 AM) — parents join to hear their child review the lesson, sing together, and pray.', leader: '', location: '', schedule: 'Sunday · 9:30–10:15 AM (includes parent-child closing)', accent: 'sage', sort_order: 5 },
+          { title: 'Confirmation', label: 'Grades 7–8 · School Year', description: 'A two-year journey through the Lutheran catechism, preparing young people to make a mature public confession of faith and receive Holy Communion.', leader: '', location: '', schedule: 'Sundays during the school year · 12:30–1:30 PM', accent: 'amber', sort_order: 6 },
+          { title: 'Adult Instruction', label: 'New to Timothy?', description: 'Interested in joining Timothy or learning more about the Lutheran faith? Our pastors offer adult instruction covering Scripture, the Apostles\' Creed, and what we believe. Classes are by arrangement — contact Pastor Dinger to get started.', leader: 'Pastor Dinger', location: '', schedule: 'By arrangement · dinger@timothystl.org', accent: 'plum', sort_order: 7 },
+        ];
+        for (const c of INITIAL_CLASSES) {
+          await env.DB.prepare('INSERT INTO bible_classes (title, label, description, leader, location, schedule, accent, active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)').bind(c.title, c.label, c.description, c.leader, c.location, c.schedule, c.accent, c.sort_order).run();
+        }
+      }
+    } catch (_) {}
     // New tables
     try { await env.DB.prepare(DB_INIT_STAFF_MEMBERS).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_SITE_SETTINGS).run(); } catch (_) {}
@@ -401,6 +435,14 @@ export default {
       const row = await env.DB.prepare('SELECT key, value FROM site_settings WHERE key = ?').bind(key).first();
       if (!row) return new Response('Not found', { status: 404 });
       return new Response(JSON.stringify(row), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
+      });
+    }
+
+    // ── PUBLIC: bible classes API ──
+    if (path === '/api/bible-classes' && method === 'GET') {
+      const rows = await env.DB.prepare('SELECT id, title, label, description, leader, location, schedule, accent FROM bible_classes WHERE active = 1 ORDER BY sort_order, id').all();
+      return new Response(JSON.stringify({ classes: rows.results || [] }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
       });
     }
@@ -1308,20 +1350,20 @@ ${topbarHtml('sermons', currentUser, `<a href="${n.series_id ? '/sermons/notes/'
               <div style="font-size:11px;color:var(--gray);margin-top:2px;">${item.publish_date}</div>
             </div>
           </label>`).join('');
-      const bibleClassTemplatesRows = await env.DB.prepare('SELECT * FROM bible_class_templates ORDER BY sort_order, id').all();
+      const bibleClassTemplatesRows = await env.DB.prepare('SELECT * FROM bible_classes WHERE active = 1 ORDER BY sort_order, id').all();
       const bibleClassTemplates = bibleClassTemplatesRows.results || [];
       const tplCheckboxesHtml = bibleClassTemplates.length ? bibleClassTemplates.map(t => `
         <div id="tpl-row-${t.id}">
           <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:8px 0;border-bottom:1px solid var(--border);">
             <input type="checkbox" id="tpl-cb-${t.id}" onchange="toggleTpl(this, ${t.id})">
-            <span style="font-size:14px;color:var(--charcoal);"><strong>${t.topic}</strong>${t.leader ? ` · <span style="font-weight:400;">${t.leader}</span>` : ''}${t.location ? ` · <span style="font-weight:400;color:var(--gray);">${t.location}</span>` : ''}</span>
+            <span style="font-size:14px;color:var(--charcoal);"><strong>${t.title}</strong>${t.leader ? ` · <span style="font-weight:400;">${t.leader}</span>` : ''}${t.location ? ` · <span style="font-weight:400;color:var(--gray);">${t.location}</span>` : ''}</span>
           </label>
           <div id="tpl-date-row-${t.id}" style="display:none;padding:8px 0 4px 26px;">
             <label style="font-size:11px;color:var(--gray);display:block;margin-bottom:4px;">Date for this session</label>
             <input type="date" id="tpl-date-${t.id}" oninput="syncTplDate(${t.id})" style="font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:5px;">
             <input type="hidden" name="class_ids" id="tpl-cid-${t.id}" value="t${t.id}" disabled>
             <input type="hidden" name="class_date_t${t.id}" id="tpl-cdate-${t.id}" disabled>
-            <input type="hidden" name="class_topic_t${t.id}" value="${t.topic.replace(/"/g,'&quot;')}" id="tpl-ctopic-${t.id}" disabled>
+            <input type="hidden" name="class_topic_t${t.id}" value="${t.title.replace(/"/g,'&quot;')}" id="tpl-ctopic-${t.id}" disabled>
             <input type="hidden" name="class_leader_t${t.id}" value="${(t.leader||'').replace(/"/g,'&quot;')}" id="tpl-cleader-${t.id}" disabled>
             <input type="hidden" name="class_location_t${t.id}" value="${(t.location||'').replace(/"/g,'&quot;')}" id="tpl-clocation-${t.id}" disabled>
           </div>
@@ -1703,22 +1745,177 @@ addEvent();
     }
 
     // ── BIBLE CLASS TEMPLATE CRUD ──
-    if (path === '/bible-classes/create' && method === 'POST') {
-      if (!hasPermission(currentUser, 'newsletter_edit')) return new Response('Access denied.', { status: 403 });
-      const tplForm = await request.formData();
-      const topic = (tplForm.get('topic') || '').trim();
-      const leader = (tplForm.get('leader') || '').trim();
-      const location = (tplForm.get('location') || '').trim();
-      if (!topic) return new Response('', { status: 302, headers: { Location: '/newsitems?msg=tpl-error' } });
-      await env.DB.prepare('INSERT INTO bible_class_templates (topic, leader, location, sort_order) VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort_order),0)+1 FROM bible_class_templates))').bind(topic, leader || null, location || null).run();
-      return new Response('', { status: 302, headers: { Location: '/newsitems?msg=tpl-added' } });
+    // ── CHRISTIAN EDUCATION: BIBLE CLASSES CRUD ──
+    const isCeRoute = path === '/christian-education' || path.startsWith('/christian-education/');
+    if (isCeRoute && !hasPermission(currentUser, 'news_edit')) return new Response('Access denied.', { status: 403 });
+
+    if (path === '/christian-education' && method === 'GET') {
+      const ceRows = await env.DB.prepare('SELECT * FROM bible_classes ORDER BY sort_order, id').all();
+      const ceMsg = url.searchParams.get('msg');
+      const ceAlert = ceMsg === 'saved' ? `<div class="alert alert-success">✓ Class saved.</div>`
+        : ceMsg === 'deleted' ? `<div class="alert alert-info">Class removed.</div>`
+        : ceMsg === 'error' ? `<div class="alert alert-error">Title is required.</div>` : '';
+      const ACCENT_OPTS = [['mid','Navy'],['teal','Teal'],['steel','Steel'],['sage','Moss'],['amber','Gold'],['plum','Plum']];
+      const classListHtml = ceRows.results.length === 0
+        ? `<div style="text-align:center;padding:40px;color:var(--gray);font-size:14px;">No classes yet. Add your first class below.</div>`
+        : ceRows.results.map(c => `<div style="display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid var(--border);">
+          <div style="flex:1;">
+            <div style="font-family:var(--sans);font-size:14px;font-weight:700;color:var(--charcoal);">${c.title}${!c.active ? ' <span style="font-size:11px;font-weight:400;color:var(--gray);">(hidden)</span>' : ''}</div>
+            ${c.label ? `<div style="font-size:12px;color:var(--gray);">${c.label}${c.schedule ? ' · ' + c.schedule : ''}</div>` : (c.schedule ? `<div style="font-size:12px;color:var(--gray);">${c.schedule}</div>` : '')}
+          </div>
+          <div style="display:flex;gap:8px;">
+            <a href="/christian-education/edit/${c.id}" class="btn btn-sm btn-secondary">Edit</a>
+            <form method="POST" action="/christian-education/toggle/${c.id}" style="margin:0;">
+              <button type="submit" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">${c.active ? 'Hide' : 'Show'}</button>
+            </form>
+            <form method="POST" action="/christian-education/delete/${c.id}" onsubmit="return confirm('Delete this class?')" style="margin:0;">
+              <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+            </form>
+          </div>
+        </div>`).join('');
+      return html(`
+${topbarHtml('christian-education', currentUser, `<a href="https://timothystl.org/education" target="_blank">View page →</a>`)}
+<div class="wrap">
+  <div class="page-title">Christian Education</div>
+  <div class="page-sub">Manage Bible classes shown on the <strong>/education</strong> page and available in the newsletter editor.</div>
+  ${ceAlert}
+  <div class="card">
+    <div class="card-title">Classes</div>
+    <div style="font-size:12px;color:var(--gray);margin-bottom:14px;">Active classes appear on the website and in the newsletter editor. Drag-to-reorder is not yet supported — use the sort order field on the edit form instead.</div>
+    ${classListHtml}
+  </div>
+  <div class="card" style="margin-top:16px;">
+    <div class="card-title">Add a class</div>
+    <form method="POST" action="/christian-education/create">
+      <div class="form-group">
+        <label>Title <span style="color:#B85C3A;">*</span></label>
+        <input type="text" name="title" required placeholder="e.g. Men's Bible Study">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="form-group" style="margin:0;">
+          <label>Eyebrow label <span style="font-weight:400;color:var(--gray);">(small text above title)</span></label>
+          <input type="text" name="label" placeholder="e.g. Saturday Mornings">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Schedule</label>
+          <input type="text" name="schedule" placeholder="e.g. Saturdays · 8:00 AM">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <textarea name="description" rows="3" placeholder="Brief description shown on the website..."></textarea>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+        <div class="form-group" style="margin:0;">
+          <label>Leader</label>
+          <input type="text" name="leader" placeholder="e.g. Pastor Matt">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Location</label>
+          <input type="text" name="location" placeholder="e.g. Fellowship Hall">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Accent color</label>
+          <select name="accent">${ACCENT_OPTS.map(([v,l]) => `<option value="${v}">${l}</option>`).join('')}</select>
+        </div>
+      </div>
+      <div style="margin-top:16px;">
+        <button type="submit" class="btn btn-primary">Add class</button>
+      </div>
+    </form>
+  </div>
+</div>`, 'Christian Education');
     }
 
-    if (path.startsWith('/bible-classes/delete/') && method === 'POST') {
-      if (!hasPermission(currentUser, 'newsletter_edit')) return new Response('Access denied.', { status: 403 });
-      const tplId = path.split('/').pop();
-      await env.DB.prepare('DELETE FROM bible_class_templates WHERE id = ?').bind(tplId).run();
-      return new Response('', { status: 302, headers: { Location: '/newsitems?msg=tpl-deleted' } });
+    if (path === '/christian-education/create' && method === 'POST') {
+      const ceForm = await request.formData();
+      const title = (ceForm.get('title') || '').trim();
+      if (!title) return new Response('', { status: 302, headers: { Location: '/christian-education?msg=error' } });
+      await env.DB.prepare('INSERT INTO bible_classes (title, label, description, leader, location, schedule, accent, active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, 1, (SELECT COALESCE(MAX(sort_order),0)+1 FROM bible_classes))')
+        .bind(title, (ceForm.get('label')||'').trim()||null, (ceForm.get('description')||'').trim()||null, (ceForm.get('leader')||'').trim()||null, (ceForm.get('location')||'').trim()||null, (ceForm.get('schedule')||'').trim()||null, ceForm.get('accent')||'mid').run();
+      return new Response('', { status: 302, headers: { Location: '/christian-education?msg=saved' } });
+    }
+
+    if (path.startsWith('/christian-education/edit/') && method === 'GET') {
+      const ceId = path.split('/').pop();
+      const ceRow = await env.DB.prepare('SELECT * FROM bible_classes WHERE id = ?').bind(ceId).first();
+      if (!ceRow) return new Response('Not found', { status: 404 });
+      const ACCENT_OPTS = [['mid','Navy'],['teal','Teal'],['steel','Steel'],['sage','Moss'],['amber','Gold'],['plum','Plum']];
+      return html(`
+${topbarHtml('christian-education', currentUser, `<a href="/christian-education">← All classes</a>`)}
+<div class="wrap">
+  <div class="page-title">Edit class</div>
+  <form method="POST" action="/christian-education/update/${ceId}">
+    <div class="card">
+      <div class="form-group">
+        <label>Title <span style="color:#B85C3A;">*</span></label>
+        <input type="text" name="title" required value="${ceRow.title.replace(/"/g,'&quot;')}">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="form-group" style="margin:0;">
+          <label>Eyebrow label <span style="font-weight:400;color:var(--gray);">(small text above title)</span></label>
+          <input type="text" name="label" value="${(ceRow.label||'').replace(/"/g,'&quot;')}" placeholder="e.g. Sunday Morning">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Schedule</label>
+          <input type="text" name="schedule" value="${(ceRow.schedule||'').replace(/"/g,'&quot;')}" placeholder="e.g. Sundays · 9:30 AM">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <textarea name="description" rows="4">${ceRow.description||''}</textarea>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:16px;">
+        <div class="form-group" style="margin:0;">
+          <label>Leader</label>
+          <input type="text" name="leader" value="${(ceRow.leader||'').replace(/"/g,'&quot;')}" placeholder="e.g. Pastor Matt">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Location</label>
+          <input type="text" name="location" value="${(ceRow.location||'').replace(/"/g,'&quot;')}" placeholder="e.g. Fellowship Hall">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Accent color</label>
+          <select name="accent">${ACCENT_OPTS.map(([v,l]) => `<option value="${v}"${ceRow.accent===v?' selected':''}>${l}</option>`).join('')}</select>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Sort order</label>
+          <input type="number" name="sort_order" value="${ceRow.sort_order||0}" min="0" style="width:80px;">
+        </div>
+      </div>
+      <div class="checkbox-row" style="margin-top:14px;">
+        <input type="checkbox" name="active" id="ce-active" value="1"${ceRow.active ? ' checked' : ''}>
+        <label for="ce-active">Active (shown on website and in newsletter editor)</label>
+      </div>
+      <div style="margin-top:20px;display:flex;gap:10px;">
+        <button type="submit" class="btn btn-primary">Save changes</button>
+        <a href="/christian-education" class="btn btn-secondary">Cancel</a>
+      </div>
+    </div>
+  </form>
+</div>`, 'Edit Class');
+    }
+
+    if (path.startsWith('/christian-education/update/') && method === 'POST') {
+      const ceId = path.split('/').pop();
+      const ceForm = await request.formData();
+      const title = (ceForm.get('title') || '').trim();
+      if (!title) return new Response('', { status: 302, headers: { Location: `/christian-education/edit/${ceId}?msg=error` } });
+      await env.DB.prepare('UPDATE bible_classes SET title=?, label=?, description=?, leader=?, location=?, schedule=?, accent=?, active=?, sort_order=? WHERE id=?')
+        .bind(title, (ceForm.get('label')||'').trim()||null, (ceForm.get('description')||'').trim()||null, (ceForm.get('leader')||'').trim()||null, (ceForm.get('location')||'').trim()||null, (ceForm.get('schedule')||'').trim()||null, ceForm.get('accent')||'mid', ceForm.get('active') === '1' ? 1 : 0, parseInt(ceForm.get('sort_order')||'0'), ceId).run();
+      return new Response('', { status: 302, headers: { Location: '/christian-education?msg=saved' } });
+    }
+
+    if (path.startsWith('/christian-education/toggle/') && method === 'POST') {
+      const ceId = path.split('/').pop();
+      await env.DB.prepare('UPDATE bible_classes SET active = CASE WHEN active = 1 THEN 0 ELSE 1 END WHERE id = ?').bind(ceId).run();
+      return new Response('', { status: 302, headers: { Location: '/christian-education' } });
+    }
+
+    if (path.startsWith('/christian-education/delete/') && method === 'POST') {
+      const ceId = path.split('/').pop();
+      await env.DB.prepare('DELETE FROM bible_classes WHERE id = ?').bind(ceId).run();
+      return new Response('', { status: 302, headers: { Location: '/christian-education?msg=deleted' } });
     }
 
     // ── NEWSLETTER APPROVE / REJECT (requires newsletter_approve) ──
@@ -1763,20 +1960,20 @@ addEvent();
             </div>
           </label>`).join('');
 
-      const editBibleClassTemplatesRows = await env.DB.prepare('SELECT * FROM bible_class_templates ORDER BY sort_order, id').all();
+      const editBibleClassTemplatesRows = await env.DB.prepare('SELECT * FROM bible_classes WHERE active = 1 ORDER BY sort_order, id').all();
       const editBibleClassTemplates = editBibleClassTemplatesRows.results || [];
       const editTplCheckboxesHtml = editBibleClassTemplates.length ? editBibleClassTemplates.map(t => `
         <div id="tpl-row-${t.id}">
           <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:8px 0;border-bottom:1px solid var(--border);">
             <input type="checkbox" id="tpl-cb-${t.id}" onchange="toggleTpl(this, ${t.id})">
-            <span style="font-size:14px;color:var(--charcoal);"><strong>${t.topic}</strong>${t.leader ? ` · <span style="font-weight:400;">${t.leader}</span>` : ''}${t.location ? ` · <span style="font-weight:400;color:var(--gray);">${t.location}</span>` : ''}</span>
+            <span style="font-size:14px;color:var(--charcoal);"><strong>${t.title}</strong>${t.leader ? ` · <span style="font-weight:400;">${t.leader}</span>` : ''}${t.location ? ` · <span style="font-weight:400;color:var(--gray);">${t.location}</span>` : ''}</span>
           </label>
           <div id="tpl-date-row-${t.id}" style="display:none;padding:8px 0 4px 26px;">
             <label style="font-size:11px;color:var(--gray);display:block;margin-bottom:4px;">Date for this session</label>
             <input type="date" id="tpl-date-${t.id}" oninput="syncTplDate(${t.id})" style="font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:5px;">
             <input type="hidden" name="class_ids" id="tpl-cid-${t.id}" value="t${t.id}" disabled>
             <input type="hidden" name="class_date_t${t.id}" id="tpl-cdate-${t.id}" disabled>
-            <input type="hidden" name="class_topic_t${t.id}" value="${t.topic.replace(/"/g,'&quot;')}" id="tpl-ctopic-${t.id}" disabled>
+            <input type="hidden" name="class_topic_t${t.id}" value="${t.title.replace(/"/g,'&quot;')}" id="tpl-ctopic-${t.id}" disabled>
             <input type="hidden" name="class_leader_t${t.id}" value="${(t.leader||'').replace(/"/g,'&quot;')}" id="tpl-cleader-${t.id}" disabled>
             <input type="hidden" name="class_location_t${t.id}" value="${(t.location||'').replace(/"/g,'&quot;')}" id="tpl-clocation-${t.id}" disabled>
           </div>
@@ -2077,10 +2274,9 @@ ${classesJs}
     // ── NEWS & EVENTS: COMBINED LIST (Newsletter + News Posts) ──
     if (path === '/newsitems' && method === 'GET') {
       await sweepExpiredItems(env, new URL(request.url).origin);
-      const [itemsRes, nlRes, tplRes] = await Promise.all([
+      const [itemsRes, nlRes] = await Promise.all([
         env.DB.prepare('SELECT * FROM news_items ORDER BY pinned DESC, COALESCE(event_date, publish_date) ASC').all(),
         env.DB.prepare("SELECT id, subject, published_at, format, status, approval_status, created_at FROM newsletters ORDER BY CASE WHEN status = 'draft' THEN 0 ELSE 1 END, published_at DESC").all(),
-        env.DB.prepare('SELECT * FROM bible_class_templates ORDER BY sort_order, id').all(),
       ]);
       const today = new Date().toISOString().split('T')[0];
       const msgParam = url.searchParams.get('msg');
@@ -2088,9 +2284,6 @@ ${classesJs}
       const emailedParam = url.searchParams.get('emailed');
       const emailErrParam = url.searchParams.get('emailerr');
       let alertHtml = '';
-      if (msgParam === 'tpl-added') alertHtml = `<div class="alert alert-success">✓ Bible class template added.</div>`;
-      if (msgParam === 'tpl-deleted') alertHtml = `<div class="alert alert-info">Bible class template removed.</div>`;
-      if (msgParam === 'tpl-error') alertHtml = `<div class="alert alert-error">Topic is required.</div>`;
       if (msgParam === 'saved') alertHtml = `<div class="alert alert-success">✓ News item saved.</div>`;
       if (msgParam === 'deleted') alertHtml = `<div class="alert alert-info">Item deleted.</div>`;
       if (msgParam === 'published') {
@@ -2246,20 +2439,6 @@ ${classesJs}
   </div>
 </div>`).join('');
 
-      const tplRows = tplRes.results || [];
-      const tplListHtml = tplRows.length === 0
-        ? `<div style="font-size:13px;color:var(--gray);padding:8px 0;">No templates yet. Add your recurring classes below.</div>`
-        : tplRows.map(t => `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);">
-          <div>
-            <span style="font-family:var(--sans);font-size:14px;font-weight:600;color:var(--charcoal);">${t.topic}</span>
-            ${t.leader ? `<span style="font-size:13px;color:var(--gray);margin-left:8px;">· ${t.leader}</span>` : ''}
-            ${t.location ? `<span style="font-size:13px;color:var(--gray);margin-left:4px;">· ${t.location}</span>` : ''}
-          </div>
-          <form method="POST" action="/bible-classes/delete/${t.id}" onsubmit="return confirm('Remove this template?')" style="margin:0;">
-            <button type="submit" class="btn btn-sm btn-danger">Remove</button>
-          </form>
-        </div>`).join('');
-
       return html(`
 ${topbarHtml('news', currentUser, `<a href="https://timothystl.org/news" target="_blank">View site →</a>`, pending.length)}
 <style>details > summary { list-style: none; } details > summary::-webkit-details-marker { display: none; }</style>
@@ -2281,34 +2460,6 @@ ${topbarHtml('news', currentUser, `<a href="https://timothystl.org/news" target=
         <div class="card-title">Past newsletters</div>
         ${publishedHtml}
       </div>
-    </div>
-  </details>
-  <details style="margin-bottom:16px;border:1px solid var(--border);border-radius:10px;overflow:hidden;">
-    <summary style="cursor:pointer;display:flex;align-items:center;padding:14px 20px;background:var(--steel);color:white;font-family:var(--sans);font-size:14px;font-weight:700;letter-spacing:.04em;">
-      Bible Class Templates
-    </summary>
-    <div style="padding:20px;">
-      <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">Save your recurring classes here. They appear as checkboxes in the newsletter editor so you can include them each week with just a date.</div>
-      <div class="card" style="margin-bottom:16px;">
-        ${tplListHtml}
-      </div>
-      <form method="POST" action="/bible-classes/create">
-        <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:10px;align-items:end;">
-          <div class="form-group" style="margin:0;">
-            <label style="font-size:12px;">Topic <span style="color:#B85C3A;">*</span></label>
-            <input type="text" name="topic" required placeholder="e.g. The Sermon on the Mount" style="font-size:13px;">
-          </div>
-          <div class="form-group" style="margin:0;">
-            <label style="font-size:12px;">Leader</label>
-            <input type="text" name="leader" placeholder="e.g. Pastor Matt" style="font-size:13px;">
-          </div>
-          <div class="form-group" style="margin:0;">
-            <label style="font-size:12px;">Location</label>
-            <input type="text" name="location" placeholder="e.g. Fellowship Hall" style="font-size:13px;">
-          </div>
-          <button type="submit" class="btn btn-primary" style="white-space:nowrap;">+ Add template</button>
-        </div>
-      </form>
     </div>
   </details>
   <details open style="margin-bottom:16px;border:1px solid var(--border);border-radius:10px;overflow:hidden;">
