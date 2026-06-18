@@ -725,7 +725,7 @@ tinymce.init({
   },
   init_instance_callback: function(editor) {
     var initial = \`${safe}\`;
-    if (initial.trim()) editor.setContent(initial);
+    if (initial.trim()) { editor.setContent(initial); editor.save(); }
   }
 });
 });
