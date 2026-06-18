@@ -127,7 +127,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-06-18-1';
+    const SCHEMA_VERSION = '2026-06-18-2';
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -192,6 +192,8 @@ export default {
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN tertiary_cta_url TEXT').run(); } catch (_) {}
     // Migrate: add bible_classes to newsletters
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN bible_classes TEXT').run(); } catch (_) {}
+    // Bible class templates
+    try { await env.DB.prepare('CREATE TABLE IF NOT EXISTS bible_class_templates (id INTEGER PRIMARY KEY AUTOINCREMENT, topic TEXT NOT NULL, leader TEXT, location TEXT, sort_order INTEGER DEFAULT 0)').run(); } catch (_) {}
     // New tables
     try { await env.DB.prepare(DB_INIT_STAFF_MEMBERS).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_SITE_SETTINGS).run(); } catch (_) {}
@@ -1306,6 +1308,24 @@ ${topbarHtml('sermons', currentUser, `<a href="${n.series_id ? '/sermons/notes/'
               <div style="font-size:11px;color:var(--gray);margin-top:2px;">${item.publish_date}</div>
             </div>
           </label>`).join('');
+      const bibleClassTemplatesRows = await env.DB.prepare('SELECT * FROM bible_class_templates ORDER BY sort_order, id').all();
+      const bibleClassTemplates = bibleClassTemplatesRows.results || [];
+      const tplCheckboxesHtml = bibleClassTemplates.length ? bibleClassTemplates.map(t => `
+        <div id="tpl-row-${t.id}">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:8px 0;border-bottom:1px solid var(--border);">
+            <input type="checkbox" id="tpl-cb-${t.id}" onchange="toggleTpl(this, ${t.id})">
+            <span style="font-size:14px;color:var(--charcoal);"><strong>${t.topic}</strong>${t.leader ? ` · <span style="font-weight:400;">${t.leader}</span>` : ''}${t.location ? ` · <span style="font-weight:400;color:var(--gray);">${t.location}</span>` : ''}</span>
+          </label>
+          <div id="tpl-date-row-${t.id}" style="display:none;padding:8px 0 4px 26px;">
+            <label style="font-size:11px;color:var(--gray);display:block;margin-bottom:4px;">Date for this session</label>
+            <input type="date" id="tpl-date-${t.id}" oninput="syncTplDate(${t.id})" style="font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:5px;">
+            <input type="hidden" name="class_ids" id="tpl-cid-${t.id}" value="t${t.id}" disabled>
+            <input type="hidden" name="class_date_t${t.id}" id="tpl-cdate-${t.id}" disabled>
+            <input type="hidden" name="class_topic_t${t.id}" value="${t.topic.replace(/"/g,'&quot;')}" id="tpl-ctopic-${t.id}" disabled>
+            <input type="hidden" name="class_leader_t${t.id}" value="${(t.leader||'').replace(/"/g,'&quot;')}" id="tpl-cleader-${t.id}" disabled>
+            <input type="hidden" name="class_location_t${t.id}" value="${(t.location||'').replace(/"/g,'&quot;')}" id="tpl-clocation-${t.id}" disabled>
+          </div>
+        </div>`).join('') : '';
       return html(`
 ${topbarHtml('news', currentUser, `<a href="/newsitems">← News &amp; Events</a>`)}
 <div class="wrap">
@@ -1372,9 +1392,10 @@ ${topbarHtml('news', currentUser, `<a href="/newsitems">← News &amp; Events</a
 
       <div class="card">
         <div class="card-title">Bible Classes <span class="tag">Optional</span></div>
-        <div style="font-size:12px;color:var(--gray);margin-bottom:14px;">Upcoming class sessions shown at the bottom of the email with a link to the full calendar.</div>
-        <div id="classes-container"></div>
-        <button type="button" class="add-event-btn" onclick="addBibleClass()">+ Add a class</button>
+        <div style="font-size:12px;color:var(--gray);margin-bottom:14px;">Check classes meeting this week. Each checked class will appear at the bottom of the email with a link to the full calendar.</div>
+        ${tplCheckboxesHtml}
+        <div id="classes-container" style="${bibleClassTemplates.length ? 'margin-top:12px;' : ''}"></div>
+        <button type="button" class="add-event-btn" onclick="addBibleClass()" style="margin-top:${bibleClassTemplates.length ? '6' : '0'}px;">${bibleClassTemplates.length ? '+ Add one-time class' : '+ Add a class'}</button>
       </div>
 
       <div class="card">
@@ -1510,8 +1531,17 @@ function addBibleClass(date, topic, location, leader) {
     <input type="hidden" name="class_ids" value="\${id}">\`;
   c.appendChild(div);
 }
-function removeBibleClass(id) {
-  document.getElementById('class-'+id).remove();
+function removeBibleClass(id) { document.getElementById('class-'+id).remove(); }
+function toggleTpl(cb, tplId) {
+  const row = document.getElementById('tpl-date-row-'+tplId);
+  const ids = ['tpl-cid-'+tplId, 'tpl-cdate-'+tplId, 'tpl-ctopic-'+tplId, 'tpl-cleader-'+tplId, 'tpl-clocation-'+tplId];
+  row.style.display = cb.checked ? '' : 'none';
+  ids.forEach(id => { const el = document.getElementById(id); if (el) el.disabled = !cb.checked; });
+}
+function syncTplDate(tplId) {
+  const v = document.getElementById('tpl-date-'+tplId)?.value || '';
+  const h = document.getElementById('tpl-cdate-'+tplId);
+  if (h) h.value = v;
 }
 function pickFormat(fmt) {
   document.getElementById('format-input').value = fmt;
@@ -1585,12 +1615,14 @@ addEvent();
         for (const id of classIds) {
           const topic = form.get(`class_topic_${id}`);
           if (!topic) continue;
-          bibleClasses.push({
+          const entry = {
             date: form.get(`class_date_${id}`) || '',
             topic,
             location: form.get(`class_location_${id}`) || '',
             leader: form.get(`class_leader_${id}`) || '',
-          });
+          };
+          if (String(id).startsWith('t')) entry.template_id = parseInt(id.slice(1));
+          bibleClasses.push(entry);
         }
       }
       const bibleClassesJson = bibleClasses.length ? JSON.stringify(bibleClasses) : null;
@@ -1670,6 +1702,25 @@ addEvent();
       });
     }
 
+    // ── BIBLE CLASS TEMPLATE CRUD ──
+    if (path === '/bible-classes/create' && method === 'POST') {
+      if (!hasPermission(currentUser, 'newsletter_edit')) return new Response('Access denied.', { status: 403 });
+      const tplForm = await request.formData();
+      const topic = (tplForm.get('topic') || '').trim();
+      const leader = (tplForm.get('leader') || '').trim();
+      const location = (tplForm.get('location') || '').trim();
+      if (!topic) return new Response('', { status: 302, headers: { Location: '/newsitems?msg=tpl-error' } });
+      await env.DB.prepare('INSERT INTO bible_class_templates (topic, leader, location, sort_order) VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort_order),0)+1 FROM bible_class_templates))').bind(topic, leader || null, location || null).run();
+      return new Response('', { status: 302, headers: { Location: '/newsitems?msg=tpl-added' } });
+    }
+
+    if (path.startsWith('/bible-classes/delete/') && method === 'POST') {
+      if (!hasPermission(currentUser, 'newsletter_edit')) return new Response('Access denied.', { status: 403 });
+      const tplId = path.split('/').pop();
+      await env.DB.prepare('DELETE FROM bible_class_templates WHERE id = ?').bind(tplId).run();
+      return new Response('', { status: 302, headers: { Location: '/newsitems?msg=tpl-deleted' } });
+    }
+
     // ── NEWSLETTER APPROVE / REJECT (requires newsletter_approve) ──
     if (path.startsWith('/newsletter/approve/') && method === 'POST') {
       if (!hasPermission(currentUser, 'newsletter_approve')) return new Response('Access denied.', { status: 403 });
@@ -1712,6 +1763,25 @@ addEvent();
             </div>
           </label>`).join('');
 
+      const editBibleClassTemplatesRows = await env.DB.prepare('SELECT * FROM bible_class_templates ORDER BY sort_order, id').all();
+      const editBibleClassTemplates = editBibleClassTemplatesRows.results || [];
+      const editTplCheckboxesHtml = editBibleClassTemplates.length ? editBibleClassTemplates.map(t => `
+        <div id="tpl-row-${t.id}">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:8px 0;border-bottom:1px solid var(--border);">
+            <input type="checkbox" id="tpl-cb-${t.id}" onchange="toggleTpl(this, ${t.id})">
+            <span style="font-size:14px;color:var(--charcoal);"><strong>${t.topic}</strong>${t.leader ? ` · <span style="font-weight:400;">${t.leader}</span>` : ''}${t.location ? ` · <span style="font-weight:400;color:var(--gray);">${t.location}</span>` : ''}</span>
+          </label>
+          <div id="tpl-date-row-${t.id}" style="display:none;padding:8px 0 4px 26px;">
+            <label style="font-size:11px;color:var(--gray);display:block;margin-bottom:4px;">Date for this session</label>
+            <input type="date" id="tpl-date-${t.id}" oninput="syncTplDate(${t.id})" style="font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:5px;">
+            <input type="hidden" name="class_ids" id="tpl-cid-${t.id}" value="t${t.id}" disabled>
+            <input type="hidden" name="class_date_t${t.id}" id="tpl-cdate-${t.id}" disabled>
+            <input type="hidden" name="class_topic_t${t.id}" value="${t.topic.replace(/"/g,'&quot;')}" id="tpl-ctopic-${t.id}" disabled>
+            <input type="hidden" name="class_leader_t${t.id}" value="${(t.leader||'').replace(/"/g,'&quot;')}" id="tpl-cleader-${t.id}" disabled>
+            <input type="hidden" name="class_location_t${t.id}" value="${(t.location||'').replace(/"/g,'&quot;')}" id="tpl-clocation-${t.id}" disabled>
+          </div>
+        </div>`).join('') : '';
+
       // Build prefilled events JS
       const eventsJs = eventsRows.results.map((e, i) => `
         (function(){
@@ -1731,11 +1801,16 @@ addEvent();
       `).join('');
 
       const existingClasses = JSON.parse(row.bible_classes || '[]');
-      const classesJs = existingClasses.map(c => `
+      const classesJs = existingClasses.map(c => c.template_id ? `
+        (function(){
+          const cb = document.getElementById('tpl-cb-${c.template_id}');
+          if (cb) { cb.checked = true; toggleTpl(cb, ${c.template_id}); }
+          const di = document.getElementById('tpl-date-${c.template_id}');
+          if (di) { di.value = ${JSON.stringify(c.date||'')}; syncTplDate(${c.template_id}); }
+        })();` : `
         (function(){
           addBibleClass(${JSON.stringify(c.date||'')}, ${JSON.stringify(c.topic||'')}, ${JSON.stringify(c.location||'')}, ${JSON.stringify(c.leader||'')});
-        })();
-      `).join('');
+        })();`).join('');
 
       const bodyVal = (fmt === 'quick' ? row.pastor_note : '') || '';
       const pastorNoteVal = (fmt === 'weekly' ? row.pastor_note : '') || '';
@@ -1803,9 +1878,10 @@ ${topbarHtml('news', currentUser, `<a href="/newsitems">← News &amp; Events</a
       </div>
       <div class="card">
         <div class="card-title">Bible Classes <span class="tag">Optional</span></div>
-        <div style="font-size:12px;color:var(--gray);margin-bottom:14px;">Upcoming class sessions shown at the bottom of the email with a link to the full calendar.</div>
-        <div id="classes-container"></div>
-        <button type="button" class="add-event-btn" onclick="addBibleClass()">+ Add a class</button>
+        <div style="font-size:12px;color:var(--gray);margin-bottom:14px;">Check classes meeting this week. Each checked class will appear at the bottom of the email with a link to the full calendar.</div>
+        ${editTplCheckboxesHtml}
+        <div id="classes-container" style="${editBibleClassTemplates.length ? 'margin-top:12px;' : ''}"></div>
+        <button type="button" class="add-event-btn" onclick="addBibleClass()" style="margin-top:${editBibleClassTemplates.length ? '6' : '0'}px;">${editBibleClassTemplates.length ? '+ Add one-time class' : '+ Add a class'}</button>
       </div>
       <div class="card">
         <div class="card-title">Word of Life &amp; LASM <span class="tag">Optional</span></div>
@@ -1920,6 +1996,17 @@ function addBibleClass(date, topic, location, leader) {
   c.appendChild(div);
 }
 function removeBibleClass(id) { document.getElementById('class-'+id).remove(); }
+function toggleTpl(cb, tplId) {
+  const row = document.getElementById('tpl-date-row-'+tplId);
+  const ids = ['tpl-cid-'+tplId, 'tpl-cdate-'+tplId, 'tpl-ctopic-'+tplId, 'tpl-cleader-'+tplId, 'tpl-clocation-'+tplId];
+  row.style.display = cb.checked ? '' : 'none';
+  ids.forEach(id => { const el = document.getElementById(id); if (el) el.disabled = !cb.checked; });
+}
+function syncTplDate(tplId) {
+  const v = document.getElementById('tpl-date-'+tplId)?.value || '';
+  const h = document.getElementById('tpl-cdate-'+tplId);
+  if (h) h.value = v;
+}
 function pickFormat(fmt) {
   document.getElementById('format-input').value = fmt;
   document.getElementById('fmt-weekly').classList.toggle('active', fmt === 'weekly');
@@ -1990,9 +2077,10 @@ ${classesJs}
     // ── NEWS & EVENTS: COMBINED LIST (Newsletter + News Posts) ──
     if (path === '/newsitems' && method === 'GET') {
       await sweepExpiredItems(env, new URL(request.url).origin);
-      const [itemsRes, nlRes] = await Promise.all([
+      const [itemsRes, nlRes, tplRes] = await Promise.all([
         env.DB.prepare('SELECT * FROM news_items ORDER BY pinned DESC, COALESCE(event_date, publish_date) ASC').all(),
         env.DB.prepare("SELECT id, subject, published_at, format, status, approval_status, created_at FROM newsletters ORDER BY CASE WHEN status = 'draft' THEN 0 ELSE 1 END, published_at DESC").all(),
+        env.DB.prepare('SELECT * FROM bible_class_templates ORDER BY sort_order, id').all(),
       ]);
       const today = new Date().toISOString().split('T')[0];
       const msgParam = url.searchParams.get('msg');
@@ -2000,6 +2088,9 @@ ${classesJs}
       const emailedParam = url.searchParams.get('emailed');
       const emailErrParam = url.searchParams.get('emailerr');
       let alertHtml = '';
+      if (msgParam === 'tpl-added') alertHtml = `<div class="alert alert-success">✓ Bible class template added.</div>`;
+      if (msgParam === 'tpl-deleted') alertHtml = `<div class="alert alert-info">Bible class template removed.</div>`;
+      if (msgParam === 'tpl-error') alertHtml = `<div class="alert alert-error">Topic is required.</div>`;
       if (msgParam === 'saved') alertHtml = `<div class="alert alert-success">✓ News item saved.</div>`;
       if (msgParam === 'deleted') alertHtml = `<div class="alert alert-info">Item deleted.</div>`;
       if (msgParam === 'published') {
@@ -2155,6 +2246,20 @@ ${classesJs}
   </div>
 </div>`).join('');
 
+      const tplRows = tplRes.results || [];
+      const tplListHtml = tplRows.length === 0
+        ? `<div style="font-size:13px;color:var(--gray);padding:8px 0;">No templates yet. Add your recurring classes below.</div>`
+        : tplRows.map(t => `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);">
+          <div>
+            <span style="font-family:var(--sans);font-size:14px;font-weight:600;color:var(--charcoal);">${t.topic}</span>
+            ${t.leader ? `<span style="font-size:13px;color:var(--gray);margin-left:8px;">· ${t.leader}</span>` : ''}
+            ${t.location ? `<span style="font-size:13px;color:var(--gray);margin-left:4px;">· ${t.location}</span>` : ''}
+          </div>
+          <form method="POST" action="/bible-classes/delete/${t.id}" onsubmit="return confirm('Remove this template?')" style="margin:0;">
+            <button type="submit" class="btn btn-sm btn-danger">Remove</button>
+          </form>
+        </div>`).join('');
+
       return html(`
 ${topbarHtml('news', currentUser, `<a href="https://timothystl.org/news" target="_blank">View site →</a>`, pending.length)}
 <style>details > summary { list-style: none; } details > summary::-webkit-details-marker { display: none; }</style>
@@ -2176,6 +2281,34 @@ ${topbarHtml('news', currentUser, `<a href="https://timothystl.org/news" target=
         <div class="card-title">Past newsletters</div>
         ${publishedHtml}
       </div>
+    </div>
+  </details>
+  <details style="margin-bottom:16px;border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+    <summary style="cursor:pointer;display:flex;align-items:center;padding:14px 20px;background:var(--steel);color:white;font-family:var(--sans);font-size:14px;font-weight:700;letter-spacing:.04em;">
+      Bible Class Templates
+    </summary>
+    <div style="padding:20px;">
+      <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">Save your recurring classes here. They appear as checkboxes in the newsletter editor so you can include them each week with just a date.</div>
+      <div class="card" style="margin-bottom:16px;">
+        ${tplListHtml}
+      </div>
+      <form method="POST" action="/bible-classes/create">
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:10px;align-items:end;">
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:12px;">Topic <span style="color:#B85C3A;">*</span></label>
+            <input type="text" name="topic" required placeholder="e.g. The Sermon on the Mount" style="font-size:13px;">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:12px;">Leader</label>
+            <input type="text" name="leader" placeholder="e.g. Pastor Matt" style="font-size:13px;">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:12px;">Location</label>
+            <input type="text" name="location" placeholder="e.g. Fellowship Hall" style="font-size:13px;">
+          </div>
+          <button type="submit" class="btn btn-primary" style="white-space:nowrap;">+ Add template</button>
+        </div>
+      </form>
     </div>
   </details>
   <details open style="margin-bottom:16px;border:1px solid var(--border);border-radius:10px;overflow:hidden;">
