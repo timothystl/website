@@ -1427,26 +1427,16 @@ ${topbarHtml('news', currentUser, `<a href="/newsitems">← News &amp; Events</a
 
     <div class="card" style="border-color:var(--amber);">
       <div class="card-title">Send email</div>
-      <div style="font-family:var(--sans);font-size:12px;color:var(--gray);margin-bottom:12px;">Choose who gets this in their inbox. You can always save as draft without sending.</div>
+      <div style="font-family:var(--sans);font-size:12px;color:var(--gray);margin-bottom:12px;"><strong>Publish</strong> sends to the selected list and goes live on the website. <strong>Save as draft</strong> saves without sending anything.</div>
       <div class="radio-row">
-        <label><input type="radio" name="email_send" value="none" checked> Don't send email</label>
-        <label><input type="radio" name="email_send" value="test"> Test list only <span style="font-weight:400;font-size:11px;color:var(--gray);">(BREVO_TEST_LIST_ID)</span></label>
+        <label><input type="radio" name="email_send" value="test" checked> Test list only</label>
         <label><input type="radio" name="email_send" value="all"> All subscribers</label>
+        <label><input type="radio" name="email_send" value="none"> Website only (no email)</label>
       </div>
       <div style="margin-top:14px;padding:12px 14px;background:var(--mist);border-radius:8px;border:1px solid var(--ice);font-family:var(--sans);font-size:12px;color:var(--charcoal);line-height:1.7;">
         📊 <strong>Email is sent via Brevo.</strong> To see open rates, clicks, and delivery stats after sending, log in at <a href="https://app.brevo.com" target="_blank" style="color:var(--mid);font-weight:700;">app.brevo.com</a> → Campaigns.
       </div>
     </div>
-
-    ${hasPermission(currentUser, 'newsletter_approve') ? `
-    <div class="card" style="background:var(--mist);border-color:var(--ice);">
-      <div class="card-title" style="color:var(--sage);">What happens when you publish</div>
-      <div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);line-height:1.8;">
-        <strong>1.</strong> The newsletter is saved to your website archive at timothystl.org/news<br>
-        <strong>2.</strong> It goes live immediately on timothystl.org/news<br>
-        <strong>3.</strong> If you selected an email list above, it is sent via Brevo
-      </div>
-    </div>` : ''}
 
     <div class="btn-row" style="margin-top:8px;">
       ${hasPermission(currentUser, 'newsletter_approve') ? `<button type="submit" name="action" value="publish" class="btn btn-primary">Publish →</button>` : ''}
@@ -1811,11 +1801,11 @@ ${topbarHtml('news', currentUser, `<a href="/newsitems">← News &amp; Events</a
     ${hasPermission(currentUser, 'newsletter_approve') ? `
     <div class="card" style="border-color:var(--amber);">
       <div class="card-title">Send email</div>
-      <div style="font-family:var(--sans);font-size:12px;color:var(--gray);margin-bottom:12px;">Choose who gets this in their inbox. You can save without sending.</div>
+      <div style="font-family:var(--sans);font-size:12px;color:var(--gray);margin-bottom:12px;"><strong>Publish</strong> sends to the selected list and goes live on the website. <strong>Save as draft</strong> saves without sending anything.</div>
       <div class="radio-row">
-        <label><input type="radio" name="email_send" value="none" checked> Don't send email</label>
-        <label><input type="radio" name="email_send" value="test"> Test list only</label>
+        <label><input type="radio" name="email_send" value="test" checked> Test list only</label>
         <label><input type="radio" name="email_send" value="all"> All subscribers</label>
+        <label><input type="radio" name="email_send" value="none"> Website only (no email)</label>
       </div>
       <div style="margin-top:14px;padding:12px 14px;background:var(--mist);border-radius:8px;border:1px solid var(--ice);font-family:var(--sans);font-size:12px;color:var(--charcoal);line-height:1.7;">
         📊 <strong>Email is sent via Brevo.</strong> To see open rates, clicks, and delivery stats after sending, log in at <a href="https://app.brevo.com" target="_blank" style="color:var(--mid);font-weight:700;">app.brevo.com</a> → Campaigns.
