@@ -79,9 +79,14 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
   <tr><td align="center">
     <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
       <!-- HEADER -->
-      <tr><td style="background:#0A3C5C;border-bottom:3px solid #D4922A;padding:20px 28px;border-radius:14px 14px 0 0;">
-        <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:14px;font-weight:800;color:white;">Timothy Lutheran Church</div>
-        <div style="font-family:'Lora',Georgia,serif;font-size:11px;font-style:italic;color:#D4922A;margin-top:2px;">from our Neighborhood to the Nations</div>
+      <tr><td style="background:#0A3C5C;border-bottom:3px solid #D4922A;padding:16px 28px;border-radius:14px 14px 0 0;">
+        <table cellpadding="0" cellspacing="0"><tr>
+          <td valign="middle" style="padding-right:14px;"><img src="https://timothystl.org/logo.png" alt="Timothy Lutheran Church" height="44" width="44" style="display:block;border-radius:50%;background:white;padding:3px;"></td>
+          <td valign="middle">
+            <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:14px;font-weight:800;color:white;">Timothy Lutheran Church</div>
+            <div style="font-family:'Lora',Georgia,serif;font-size:11px;font-style:italic;color:#D4922A;margin-top:2px;">from our Neighborhood to the Nations</div>
+          </td>
+        </tr></table>
       </td></tr>
       <!-- DATE + SUBJECT + FULL-WIDTH BODY -->
       <tr><td style="background:white;padding:24px 28px 28px;border-left:1px solid #E8E0D0;border-right:1px solid #E8E0D0;">
@@ -92,7 +97,7 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
         <!-- FOOTER -->
         <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;">
           <tr><td style="border-top:1px solid #E8E0D0;padding:20px 0;text-align:center;">
-            <a href="https://timothystl.org" style="display:inline-block;background:#0A3C5C;color:white;font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;font-weight:700;padding:11px 24px;border-radius:6px;text-decoration:none;margin-right:10px;">Visit our website</a>
+            <a href="https://timothystl.org/news" style="display:inline-block;background:#0A3C5C;color:white;font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;font-weight:700;padding:11px 24px;border-radius:6px;text-decoration:none;margin-right:10px;">Read on our website</a>
             <a href="https://timothystl.breezechms.com/give/online" style="display:inline-block;background:#D4922A;color:#0A3C5C;font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;font-weight:700;padding:11px 24px;border-radius:6px;text-decoration:none;">Give online</a>
           </td></tr>
           <tr><td style="text-align:center;font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;color:#7A6E60;line-height:1.8;padding-bottom:20px;">
@@ -159,7 +164,7 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
   // WOL + LASM side by side
   const ministryRowHtml = (wolContent || lasmContent) ? `
 <tr><td style="padding-top:22px;border-top:1px solid #E8E0D0;">
-  <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6B8F71;margin-bottom:12px;">From Our Ministries</div>
+  <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6B8F71;margin-bottom:12px;">From our Ministry Partners</div>
   <table width="100%" cellpadding="0" cellspacing="0"><tr>
     <td class="min-col" width="48%" valign="top" style="${wolContent ? 'background:#EEF5EF;border-left:3px solid #6B8F71;border-radius:0 6px 6px 0;padding:13px;' : ''}">
       ${wolContent ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6B8F71;margin-bottom:7px;">Word of Life</div><div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;color:#3D3530;line-height:1.7;">${wolContent}</div>` : ''}
@@ -219,9 +224,14 @@ img{max-width:100% !important;height:auto !important;}
   <tr><td align="center">
     <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
       <!-- HEADER -->
-      <tr><td style="background:#0A3C5C;border-bottom:3px solid #D4922A;padding:20px 28px;border-radius:14px 14px 0 0;">
-        <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:14px;font-weight:800;color:white;">Timothy Lutheran Church</div>
-        <div style="font-family:'Lora',Georgia,serif;font-size:11px;font-style:italic;color:#D4922A;margin-top:2px;">from our Neighborhood to the Nations</div>
+      <tr><td style="background:#0A3C5C;border-bottom:3px solid #D4922A;padding:16px 28px;border-radius:14px 14px 0 0;">
+        <table cellpadding="0" cellspacing="0"><tr>
+          <td valign="middle" style="padding-right:14px;"><img src="https://timothystl.org/logo.png" alt="Timothy Lutheran Church" height="44" width="44" style="display:block;border-radius:50%;background:white;padding:3px;"></td>
+          <td valign="middle">
+            <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:14px;font-weight:800;color:white;">Timothy Lutheran Church</div>
+            <div style="font-family:'Lora',Georgia,serif;font-size:11px;font-style:italic;color:#D4922A;margin-top:2px;">from our Neighborhood to the Nations</div>
+          </td>
+        </tr></table>
       </td></tr>
       <!-- DATE + SUBJECT -->
       <tr><td style="background:white;padding:24px 28px 0;border-left:1px solid #E8E0D0;border-right:1px solid #E8E0D0;">
@@ -250,7 +260,7 @@ img{max-width:100% !important;height:auto !important;}
         <!-- FOOTER -->
         <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;">
           <tr><td style="border-top:1px solid #E8E0D0;padding:20px 0;text-align:center;">
-            <a href="https://timothystl.org" style="display:inline-block;background:#0A3C5C;color:white;font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;font-weight:700;padding:11px 24px;border-radius:6px;text-decoration:none;margin-right:10px;">Visit our website</a>
+            <a href="https://timothystl.org/news" style="display:inline-block;background:#0A3C5C;color:white;font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;font-weight:700;padding:11px 24px;border-radius:6px;text-decoration:none;margin-right:10px;">Read on our website</a>
             <a href="https://timothystl.breezechms.com/give/online" style="display:inline-block;background:#D4922A;color:#0A3C5C;font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;font-weight:700;padding:11px 24px;border-radius:6px;text-decoration:none;">Give online</a>
           </td></tr>
           <tr><td style="text-align:center;font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;color:#7A6E60;line-height:1.8;padding-bottom:20px;">
