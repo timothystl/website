@@ -169,6 +169,7 @@ export function topbarHtml(activeTab, user, extraLinks = '', pendingCount = 0) {
 <nav class="tab-nav" id="tab-nav-scroll">
   <div class="tab-nav-inner">
     ${showNewsTab        ? `<a href="/newsitems" class="tab${newsActive ? ' tab-active' : ''}">News &amp; Events${pendingDot}</a>` : ''}
+    ${hp('news_edit')       ? `<a href="/christian-education" class="tab${activeTab === 'christian-education' ? ' tab-active' : ''}">Christian Ed</a>` : ''}
     ${hp('ministries_edit') ? `<a href="/ministries" class="tab${activeTab === 'ministries' ? ' tab-active' : ''}">Ministries</a>` : ''}
     ${hp('sermons_edit')    ? `<a href="/sermons" class="tab${activeTab === 'sermons' ? ' tab-active' : ''}">Sermons</a>` : ''}
     ${hp('pages_edit')      ? `<a href="/pages" class="tab${activeTab === 'pages' ? ' tab-active' : ''}">Pages</a>` : ''}

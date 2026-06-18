@@ -271,7 +271,7 @@ img{max-width:100% !important;height:auto !important;}
       </tr></table>
     </td></tr>`).join('')}
   </table>
-  <div style="margin-top:10px;"><a href="https://timothystl.org/calendar" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;color:#C9973A;text-decoration:none;">View full calendar →</a></div>
+  <div style="margin-top:10px;"><a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;color:#C9973A;text-decoration:none;">View full calendar →</a></div>
 </td></tr>` : ''}
         </table>
         <!-- FOOTER -->
