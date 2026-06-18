@@ -127,7 +127,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-06-09-1';
+    const SCHEMA_VERSION = '2026-06-18-1';
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -190,6 +190,8 @@ export default {
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN tertiary_note TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN tertiary_cta_label TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN tertiary_cta_url TEXT').run(); } catch (_) {}
+    // Migrate: add bible_classes to newsletters
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN bible_classes TEXT').run(); } catch (_) {}
     // New tables
     try { await env.DB.prepare(DB_INIT_STAFF_MEMBERS).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_SITE_SETTINGS).run(); } catch (_) {}
@@ -1369,6 +1371,13 @@ ${topbarHtml('news', currentUser, `<a href="/newsitems">← News &amp; Events</a
       </div>
 
       <div class="card">
+        <div class="card-title">Bible Classes <span class="tag">Optional</span></div>
+        <div style="font-size:12px;color:var(--gray);margin-bottom:14px;">Upcoming class sessions shown at the bottom of the email with a link to the full calendar.</div>
+        <div id="classes-container"></div>
+        <button type="button" class="add-event-btn" onclick="addBibleClass()">+ Add a class</button>
+      </div>
+
+      <div class="card">
         <div class="card-title">Word of Life &amp; LASM <span class="tag">Optional</span></div>
         <div style="font-size:12px;color:var(--gray);margin-bottom:14px;">These appear side by side in the email — left half Word of Life, right half LASM. Leave either blank to omit it.</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
@@ -1482,6 +1491,28 @@ function addEvent() {
 function removeEvent(id) {
   document.getElementById('event-'+id).remove();
 }
+let classCount = 0;
+function addBibleClass(date, topic, location, leader) {
+  const c = document.getElementById('classes-container');
+  const id = ++classCount;
+  const div = document.createElement('div');
+  div.className = 'event-block';
+  div.id = 'class-'+id;
+  div.innerHTML = \`<button type="button" class="remove-event" onclick="removeBibleClass(\${id})">×</button>
+    <div class="event-grid">
+      <div class="form-group" style="margin:0;"><label>Date</label><input type="date" name="class_date_\${id}" value="\${date||''}"></div>
+      <div class="form-group" style="margin:0;"><label>Topic</label><input type="text" name="class_topic_\${id}" placeholder="e.g. The Sermon on the Mount" value="\${topic||''}"></div>
+    </div>
+    <div class="event-grid" style="margin-top:12px;">
+      <div class="form-group" style="margin:0;"><label>Location</label><input type="text" name="class_location_\${id}" placeholder="e.g. Fellowship Hall" value="\${location||''}"></div>
+      <div class="form-group" style="margin:0;"><label>Leader</label><input type="text" name="class_leader_\${id}" placeholder="e.g. Pastor Matt" value="\${leader||''}"></div>
+    </div>
+    <input type="hidden" name="class_ids" value="\${id}">\`;
+  c.appendChild(div);
+}
+function removeBibleClass(id) {
+  document.getElementById('class-'+id).remove();
+}
 function pickFormat(fmt) {
   document.getElementById('format-input').value = fmt;
   document.getElementById('fmt-weekly').classList.toggle('active', fmt === 'weekly');
@@ -1547,6 +1578,23 @@ addEvent();
         }
       }
 
+      // Collect bible classes (weekly only)
+      const classIds = form.getAll('class_ids');
+      const bibleClasses = [];
+      if (fmt === 'weekly') {
+        for (const id of classIds) {
+          const topic = form.get(`class_topic_${id}`);
+          if (!topic) continue;
+          bibleClasses.push({
+            date: form.get(`class_date_${id}`) || '',
+            topic,
+            location: form.get(`class_location_${id}`) || '',
+            leader: form.get(`class_leader_${id}`) || '',
+          });
+        }
+      }
+      const bibleClassesJson = bibleClasses.length ? JSON.stringify(bibleClasses) : null;
+
       // Fetch selected news items (weekly only)
       const selectedNewsIds = fmt === 'weekly' ? form.getAll('news_item_ids') : [];
       let selectedNewsItems = [];
@@ -1564,16 +1612,16 @@ addEvent();
       if (editId) {
         // Update existing newsletter
         await env.DB.prepare(
-          'UPDATE newsletters SET subject=?, pastor_note=?, ministry_content=?, ministry_type=?, published_at=?, format=?, cta_url=?, cta_label=?, status=?, wol_content=?, lasm_content=?, secondary_note=?, news_item_ids=?, tertiary_note=?, tertiary_cta_label=?, tertiary_cta_url=? WHERE id=?'
-        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, editId).run();
+          'UPDATE newsletters SET subject=?, pastor_note=?, ministry_content=?, ministry_type=?, published_at=?, format=?, cta_url=?, cta_label=?, status=?, wol_content=?, lasm_content=?, secondary_note=?, news_item_ids=?, tertiary_note=?, tertiary_cta_label=?, tertiary_cta_url=?, bible_classes=? WHERE id=?'
+        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, editId).run();
         newsletterId = parseInt(editId, 10);
         // Replace events
         await env.DB.prepare('DELETE FROM events WHERE newsletter_id = ?').bind(newsletterId).run();
       } else {
         // Insert new newsletter
         const result = await env.DB.prepare(
-          'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl).run();
+          'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson).run();
         newsletterId = result.meta.last_row_id;
       }
 
@@ -1600,7 +1648,7 @@ addEvent();
         if (!listId && emailSend === 'all') {
           emailSuffix = `&emailerr=${encodeURIComponent('BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}`;
         } else if (listId) {
-          const emailHtml = buildEmailHtml(subject, savedNote, events, wolContent, lasmContent, publishedAt, selectedNewsItems, secondaryNote, newsletterId, fmt, ctaUrl, ctaLabel, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl);
+          const emailHtml = buildEmailHtml(subject, savedNote, events, wolContent, lasmContent, publishedAt, selectedNewsItems, secondaryNote, newsletterId, fmt, ctaUrl, ctaLabel, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClasses);
           const result = await sendBrevoNewsletter(env, { subject, htmlContent: emailHtml, listIds: [listId] });
           emailSuffix = result.success
             ? `&emailed=${emailSend}`
@@ -1682,6 +1730,13 @@ addEvent();
         })();
       `).join('');
 
+      const existingClasses = JSON.parse(row.bible_classes || '[]');
+      const classesJs = existingClasses.map(c => `
+        (function(){
+          addBibleClass(${JSON.stringify(c.date||'')}, ${JSON.stringify(c.topic||'')}, ${JSON.stringify(c.location||'')}, ${JSON.stringify(c.leader||'')});
+        })();
+      `).join('');
+
       const bodyVal = (fmt === 'quick' ? row.pastor_note : '') || '';
       const pastorNoteVal = (fmt === 'weekly' ? row.pastor_note : '') || '';
       const ministryChecked = (t) => (row.ministry_type || 'text') === t ? ' checked' : '';
@@ -1745,6 +1800,12 @@ ${topbarHtml('news', currentUser, `<a href="/newsitems">← News &amp; Events</a
         <div class="card-title">Upcoming events</div>
         <div id="events-container"></div>
         <button type="button" class="add-event-btn" onclick="addEvent()">+ Add an event</button>
+      </div>
+      <div class="card">
+        <div class="card-title">Bible Classes <span class="tag">Optional</span></div>
+        <div style="font-size:12px;color:var(--gray);margin-bottom:14px;">Upcoming class sessions shown at the bottom of the email with a link to the full calendar.</div>
+        <div id="classes-container"></div>
+        <button type="button" class="add-event-btn" onclick="addBibleClass()">+ Add a class</button>
       </div>
       <div class="card">
         <div class="card-title">Word of Life &amp; LASM <span class="tag">Optional</span></div>
@@ -1840,6 +1901,25 @@ function addEvent() {
   c.appendChild(div);
 }
 function removeEvent(id) { document.getElementById('event-'+id).remove(); }
+let classCount = 0;
+function addBibleClass(date, topic, location, leader) {
+  const c = document.getElementById('classes-container');
+  const id = ++classCount;
+  const div = document.createElement('div');
+  div.className = 'event-block'; div.id = 'class-'+id;
+  div.innerHTML = \`<button type="button" class="remove-event" onclick="removeBibleClass(\${id})">×</button>
+    <div class="event-grid">
+      <div class="form-group" style="margin:0;"><label>Date</label><input type="date" name="class_date_\${id}" value="\${date||''}"></div>
+      <div class="form-group" style="margin:0;"><label>Topic</label><input type="text" name="class_topic_\${id}" placeholder="e.g. The Sermon on the Mount" value="\${topic||''}"></div>
+    </div>
+    <div class="event-grid" style="margin-top:12px;">
+      <div class="form-group" style="margin:0;"><label>Location</label><input type="text" name="class_location_\${id}" placeholder="e.g. Fellowship Hall" value="\${location||''}"></div>
+      <div class="form-group" style="margin:0;"><label>Leader</label><input type="text" name="class_leader_\${id}" placeholder="e.g. Pastor Matt" value="\${leader||''}"></div>
+    </div>
+    <input type="hidden" name="class_ids" value="\${id}">\`;
+  c.appendChild(div);
+}
+function removeBibleClass(id) { document.getElementById('class-'+id).remove(); }
 function pickFormat(fmt) {
   document.getElementById('format-input').value = fmt;
   document.getElementById('fmt-weekly').classList.toggle('active', fmt === 'weekly');
@@ -1848,6 +1928,7 @@ function pickFormat(fmt) {
   document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : 'none';
 }
 ${eventsJs}
+${classesJs}
 </script>`, 'Edit Newsletter', TINYMCE_HEAD);
     }
 
@@ -1867,7 +1948,7 @@ ${eventsJs}
       }
 
       const row = await env.DB.prepare(
-        'SELECT subject, pastor_note, wol_content, lasm_content, secondary_note, published_at FROM newsletters WHERE id = ?'
+        'SELECT subject, pastor_note, wol_content, lasm_content, secondary_note, published_at, format, cta_url, cta_label, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes FROM newsletters WHERE id = ?'
       ).bind(id).first();
       if (!row) return new Response('Not found', { status: 404 });
 
@@ -1875,7 +1956,7 @@ ${eventsJs}
         'SELECT event_date, event_name, event_time, event_desc FROM events WHERE newsletter_id = ? ORDER BY sort_order'
       ).bind(id).all();
 
-      const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at, [], row.secondary_note || '', id, row.format || 'weekly', row.cta_url || '', row.cta_label || '', row.tertiary_note || '', row.tertiary_cta_label || '', row.tertiary_cta_url || '');
+      const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at, [], row.secondary_note || '', id, row.format || 'weekly', row.cta_url || '', row.cta_label || '', row.tertiary_note || '', row.tertiary_cta_label || '', row.tertiary_cta_url || '', JSON.parse(row.bible_classes || '[]'));
       const result = await sendBrevoNewsletter(env, { subject: row.subject, htmlContent: emailHtml, listIds: [listId] });
 
       // Sending to all = publish the newsletter so it appears on the website

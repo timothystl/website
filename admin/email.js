@@ -52,7 +52,7 @@ export async function sendTransactionalEmail(env, { subject, htmlContent, toEmai
 
 // ── BUILD EMAIL HTML ─────────────────────────────────────────
 // Layout: header · 2/3 pastor note + 1/3 events · main news · secondary news · WOL+LASM · additional posts · footer
-export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmContent, publishedAt, newsItems = [], secondaryNote = '', newsletterId = null, format = 'weekly', ctaUrl = '', ctaLabel = '', tertiaryNote = '', tertiaryCtaLabel = '', tertiaryCtaUrl = '') {
+export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmContent, publishedAt, newsItems = [], secondaryNote = '', newsletterId = null, format = 'weekly', ctaUrl = '', ctaLabel = '', tertiaryNote = '', tertiaryCtaLabel = '', tertiaryCtaUrl = '', bibleClasses = []) {
   const dateStr = formatDate(publishedAt);
   const isQuick = format === 'quick';
 
@@ -102,7 +102,8 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
           </td></tr>
           <tr><td style="text-align:center;font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;color:#7A6E60;line-height:1.8;padding-bottom:20px;">
             6704 Fyler Ave · St. Louis, MO 63139<br>
-            Sunday worship · 8:00 &amp; 10:45 am
+            Sunday worship · 8:00 &amp; 10:45 am<br>
+            <a href="mailto:office@timothystl.org" style="color:#7A6E60;text-decoration:none;">office@timothystl.org</a> · <a href="tel:+13147818673" style="color:#7A6E60;text-decoration:none;">(314) 781-8673</a>
           </td></tr>
         </table>
       </td></tr>
@@ -256,6 +257,22 @@ img{max-width:100% !important;height:auto !important;}
           ${ministryRowHtml}
           ${tertiaryNoteHtml}
           ${additionalNewsHtml}
+          ${bibleClasses && bibleClasses.length ? `
+<tr><td style="padding-top:22px;border-top:1px solid #E8E0D0;">
+  <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#0A3C5C;margin-bottom:12px;">Bible Classes</div>
+  <table width="100%" cellpadding="0" cellspacing="0">
+    ${bibleClasses.map(c => `<tr><td style="padding:9px 0;border-bottom:1px solid #F0E8DC;">
+      <table width="100%" cellpadding="0" cellspacing="0"><tr>
+        ${c.date ? `<td width="42" valign="top"><div style="background:#1E2D4A;color:white;border-radius:5px;padding:5px 6px;text-align:center;width:34px;"><div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:8px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;opacity:.7;">${new Date(c.date+'T12:00:00').toLocaleDateString('en-US',{month:'short'})}</div><div style="font-family:'Lora',Georgia,serif;font-size:16px;line-height:1.1;color:white;">${new Date(c.date+'T12:00:00').getDate()}</div></div></td>` : ''}
+        <td style="padding-left:${c.date?'9':'0'}px;vertical-align:top;">
+          <div style="font-family:'Lora',Georgia,serif;font-size:13px;color:#0A3C5C;">${c.topic}</div>
+          <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;color:#7A6E60;">${[c.leader,c.location].filter(Boolean).join(' · ')}</div>
+        </td>
+      </tr></table>
+    </td></tr>`).join('')}
+  </table>
+  <div style="margin-top:10px;"><a href="https://timothystl.org/calendar" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;color:#C9973A;text-decoration:none;">View full calendar →</a></div>
+</td></tr>` : ''}
         </table>
         <!-- FOOTER -->
         <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;">
@@ -265,7 +282,8 @@ img{max-width:100% !important;height:auto !important;}
           </td></tr>
           <tr><td style="text-align:center;font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;color:#7A6E60;line-height:1.8;padding-bottom:20px;">
             6704 Fyler Ave · St. Louis, MO 63139<br>
-            Sunday worship · 8:00 &amp; 10:45 am
+            Sunday worship · 8:00 &amp; 10:45 am<br>
+            <a href="mailto:office@timothystl.org" style="color:#7A6E60;text-decoration:none;">office@timothystl.org</a> · <a href="tel:+13147818673" style="color:#7A6E60;text-decoration:none;">(314) 781-8673</a>
           </td></tr>
         </table>
       </td></tr>
