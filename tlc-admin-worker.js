@@ -1502,7 +1502,9 @@ addEvent();
       const action = form.get('action') || 'publish';
       const fmt = form.get('format') || 'weekly';
       const editId = form.get('newsletter_id') || null; // present when editing an existing newsletter
-      const status = action === 'publish' ? 'published' : 'draft';
+      const emailSend = form.get('email_send') || 'none';
+      // Test sends stay as drafts — only 'all' or 'none' (website-only) publishes to the archive
+      const status = (action === 'publish' && emailSend !== 'test') ? 'published' : 'draft';
 
       // Strip <img src="blob:..."> tags — these are temporary in-browser URLs
       // that render as broken icons in email if the upload didn't finish.
@@ -1592,7 +1594,6 @@ addEvent();
       }
 
       // Send via Brevo if requested (only when publishing with newsletter_approve permission)
-      const emailSend = form.get('email_send') || 'none';
       let emailSuffix = '';
       if (action === 'publish' && emailSend !== 'none' && hasPermission(currentUser, 'newsletter_approve')) {
         const listId = emailSend === 'test' ? parseInt(env.BREVO_TEST_LIST_ID || '2', 10) : parseInt(env.BREVO_LIST_ID || '0', 10);
@@ -1607,16 +1608,17 @@ addEvent();
         }
       }
 
-      if (action === 'publish') {
+      if (action === 'publish' && emailSend !== 'test') {
         await env.DB.prepare("UPDATE newsletters SET approval_status = 'approved', approved_by_username = ? WHERE id = ?").bind(currentUser.username, newsletterId).run();
       } else {
-        // Saving as draft clears any prior approval state
+        // Saving as draft (or test send) clears any prior approval state
         await env.DB.prepare("UPDATE newsletters SET approval_status = NULL, approved_by_username = NULL WHERE id = ?").bind(newsletterId).run();
       }
 
+      const redirectMsg = (action === 'publish' && emailSend !== 'test') ? 'published' : 'draft';
       return new Response('', {
         status: 302,
-        headers: { Location: `/newsitems?msg=${encodeURIComponent(action === 'publish' ? 'published' : 'draft')}&subject=${encodeURIComponent(subject)}${emailSuffix}` }
+        headers: { Location: `/newsitems?msg=${encodeURIComponent(redirectMsg)}&subject=${encodeURIComponent(subject)}${emailSuffix}` }
       });
     }
 
@@ -1969,7 +1971,9 @@ ${eventsJs}
       } else if (msgParam === 'rejected') {
         alertHtml = `<div class="alert alert-info">Newsletter returned to draft for revisions.</div>`;
       } else if (msgParam === 'draft') {
-        alertHtml = `<div class="alert alert-info">Draft saved.</div>`;
+        alertHtml = emailedParam === 'test'
+          ? `<div class="alert alert-success">✓ Test email sent to test list. Newsletter saved as draft — not yet published to the website.</div>`
+          : `<div class="alert alert-info">Draft saved.</div>`;
       } else if (msgParam === 'emailed') {
         const sentTo = emailedParam === 'test' ? 'test list' : 'all subscribers';
         alertHtml = emailErrParam
