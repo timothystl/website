@@ -1901,11 +1901,6 @@ function toggleBio(id, btn){
     }).catch(function(){ window.location.replace('https://drive.google.com/drive/folders/1pgqJ32H3HS7SNYnnf7rOswC5c87IAzA4?usp=drive_link'); });
     return;
   }
-  if (path === 'calendar') {
-    showPage('news', false);
-    history.replaceState({page:'news'},'','/news');
-    return;
-  }
   var nlDetailMatch = path.match(/^news\/(\d+)$/);
   if (nlDetailMatch) {
     showPage('news', false);
