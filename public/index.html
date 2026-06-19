@@ -99,6 +99,7 @@
       <li><button onclick="showPage('sermons')">Sermons</button></li>
       <li><button onclick="showPage('ministries')">Ministries</button></li>
       <li><button onclick="showPage('news')">News &amp; Events</button></li>
+      <li><button onclick="showPage('calendar')">Calendar</button></li>
       <li><button onclick="showPage('contact')">Contact</button></li>
       <li><button onclick="showPage('give')" class="nav-cta">Give</button></li>
     </ul>
@@ -114,6 +115,7 @@
     <a href="https://mdo.timothystl.org" target="_blank" onclick="closeMobileNav()">Mother's Day Out</a>
     <a href="https://volunteer.timothystl.org" target="_blank" onclick="closeMobileNav()">Volunteer Sign-up</a>
     <button onclick="showPage('news');closeMobileNav()">News &amp; Events</button>
+    <button onclick="showPage('calendar');closeMobileNav()">Calendar</button>
     <button onclick="showPage('contact');closeMobileNav()">Contact</button>
     <button onclick="showPage('prayer');closeMobileNav()">Prayer Request</button>
     <button onclick="showPage('give');closeMobileNav()">Give Online</button>
@@ -815,21 +817,6 @@
       </div>
     </section>
 
-    <!-- UPCOMING EVENTS (Google Calendar) -->
-    <section class="section section--white">
-      <div class="wrap">
-        <span class="eyebrow eyebrow--sky">Upcoming events</span>
-        <h2>What's on the calendar</h2>
-        <p style="color:var(--gray);margin-bottom:24px;">Events, services, and gatherings at Timothy Lutheran. Worship services are every Sunday at 8:00 and 10:45 am.</p>
-        <div style="border-radius:var(--r-md);overflow:hidden;border:1px solid var(--border);">
-          <iframe id="gcal-frame" src="" data-src="https://calendar.google.com/calendar/embed?src=calendar%40timothystl.org&src=c_7f6d3db77b48c01af48592e21b2743d22fdf2b221d9d3c4e0c02680b73b89041%40group.calendar.google.com&ctz=America%2FChicago&mode=MONTH&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0" style="border:0;display:block;width:100%;height:600px;" frameborder="0" scrolling="no" title="Timothy Lutheran Church calendar"></iframe>
-        </div>
-        <div style="margin-top:12px;">
-          <a href="https://calendar.google.com/calendar/embed?src=calendar%40timothystl.org&ctz=America%2FChicago" target="_blank" style="font-family:var(--sans);font-size:13px;color:var(--mid);font-weight:600;">View full calendar →</a>
-        </div>
-      </div>
-    </section>
-
     <!-- NEWSLETTERS -->
     <section class="section section--linen">
       <div class="wrap" style="max-width:760px;">
@@ -841,6 +828,25 @@
       </div>
     </section>
   </div>
+</div>
+
+<!-- CALENDAR -->
+<div id="page-calendar" class="page">
+  <div class="page-hero">
+    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">What's coming up</span>
+    <h1>Calendar</h1>
+    <p>Events, services, and gatherings at Timothy Lutheran. Worship services are every Sunday at 8:00 and 10:45 am.</p>
+  </div>
+  <section class="section section--white">
+    <div class="wrap">
+      <div style="border-radius:var(--r-md);overflow:hidden;border:1px solid var(--border);">
+        <iframe id="gcal-frame" src="" data-src="https://calendar.google.com/calendar/embed?src=calendar%40timothystl.org&src=c_7f6d3db77b48c01af48592e21b2743d22fdf2b221d9d3c4e0c02680b73b89041%40group.calendar.google.com&ctz=America%2FChicago&mode=MONTH&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0" style="border:0;display:block;width:100%;height:600px;" frameborder="0" scrolling="no" title="Timothy Lutheran Church calendar"></iframe>
+      </div>
+      <div style="margin-top:12px;">
+        <a href="https://calendar.google.com/calendar/embed?src=calendar%40timothystl.org&ctz=America%2FChicago" target="_blank" style="font-family:var(--sans);font-size:13px;color:var(--mid);font-weight:600;">Open in Google Calendar →</a>
+      </div>
+    </div>
+  </section>
 </div>
 
 <!-- GIVE -->
@@ -1853,7 +1859,7 @@ function showPage(id, addHistory){
   }
   // Lazy-load embeds only when their page is first visited
   // Note: use getAttribute('src') not .src — browser resolves src="" to current page URL
-  if (id === 'news') {
+  if (id === 'calendar') {
     var frame = document.getElementById('gcal-frame');
     if (frame && !frame.getAttribute('src')) { frame.src = frame.dataset.src; }
   }
@@ -1893,11 +1899,6 @@ function toggleBio(id, btn){
     fetch('https://admin.timothystl.org/api/settings/councilfiles_url').then(function(r){return r.json();}).then(function(d){
       window.location.replace(d.value || 'https://drive.google.com/drive/folders/1pgqJ32H3HS7SNYnnf7rOswC5c87IAzA4?usp=drive_link');
     }).catch(function(){ window.location.replace('https://drive.google.com/drive/folders/1pgqJ32H3HS7SNYnnf7rOswC5c87IAzA4?usp=drive_link'); });
-    return;
-  }
-  if (path === 'calendar') {
-    showPage('news', false);
-    history.replaceState({page:'news'},'','/news');
     return;
   }
   var nlDetailMatch = path.match(/^news\/(\d+)$/);
@@ -2598,7 +2599,8 @@ window.showPage = function(id, addHistory) {
     if (nlArchive) nlArchive.style.display = '';
     if (nlDetail) nlDetail.style.display = 'none';
     loadNewsletters(); loadNewsItems();
-    // Lazy-load Google Calendar iframe on first visit to the news page
+  }
+  if (id === 'calendar') {
     var gcalFrame = document.getElementById('gcal-frame');
     if (gcalFrame && !gcalFrame.getAttribute('src')) { gcalFrame.src = gcalFrame.dataset.src; }
   }
@@ -2631,6 +2633,8 @@ window.showPage = function(id, addHistory) {
   }
   if (path === 'news') {
     loadNewsletters(); loadNewsItems();
+  }
+  if (path === 'calendar') {
     var gcalFrame = document.getElementById('gcal-frame');
     if (gcalFrame && !gcalFrame.getAttribute('src')) { gcalFrame.src = gcalFrame.dataset.src; }
   }
