@@ -12,6 +12,7 @@ export const PERMISSIONS = {
   gym_manage:         'Gym Rentals',
   users_manage:       'User management',
   audit_view:         'Audit log & rollback',
+  links_edit:         'Link tree (links.timothystl.org)',
 };
 
 // All permissions — used to create the first admin account

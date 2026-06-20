@@ -127,7 +127,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-06-18-3';
+    const SCHEMA_VERSION = '2026-06-20-1';
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -228,6 +228,35 @@ export default {
         }
       }
     } catch (_) {}
+    // Link tree cards
+    try { await env.DB.prepare(`CREATE TABLE IF NOT EXISTS link_cards (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      url TEXT NOT NULL,
+      icon_emoji TEXT DEFAULT '🔗',
+      icon_color TEXT DEFAULT 'sky',
+      sort_order INTEGER DEFAULT 0,
+      active INTEGER DEFAULT 1
+    )`).run(); } catch (_) {}
+    // Pre-populate link cards from the current static links page (only if table is empty)
+    try {
+      const lcCount = await env.DB.prepare('SELECT COUNT(*) as n FROM link_cards').first();
+      if (!lcCount || lcCount.n === 0) {
+        const INITIAL_LINKS = [
+          { title: 'Get Connected',  description: "We'd love to know you — say hello",          url: 'https://timothystl.org/contact',  icon_emoji: '👋', icon_color: 'sage',  sort_order: 1 },
+          { title: 'Prayer Request', description: "Share what's on your heart — we carry it with you", url: 'https://timothystl.org/prayer',  icon_emoji: '🙏', icon_color: 'mist',  sort_order: 2 },
+          { title: 'Give',           description: 'Support the ministry of Timothy',             url: 'https://give.tithe.ly/?formId=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8', icon_emoji: '💛', icon_color: 'amber', sort_order: 3 },
+          { title: 'Volunteer',      description: 'Find your place to serve',                    url: 'https://volunteer.timothystl.org',  icon_emoji: '🙌', icon_color: 'sage',  sort_order: 4 },
+          { title: 'News & Events',  description: "What's coming up at Timothy",                 url: 'https://timothystl.org/news',       icon_emoji: '📰', icon_color: 'sky',   sort_order: 5 },
+          { title: 'Sermon Notes',   description: 'Take today\'s message home with you',         url: 'https://timothystl.org/sermons',    icon_emoji: '📖', icon_color: 'sky',   sort_order: 6 },
+        ];
+        for (const lc of INITIAL_LINKS) {
+          await env.DB.prepare('INSERT INTO link_cards (title, description, url, icon_emoji, icon_color, sort_order, active) VALUES (?, ?, ?, ?, ?, ?, 1)')
+            .bind(lc.title, lc.description, lc.url, lc.icon_emoji, lc.icon_color, lc.sort_order).run();
+        }
+      }
+    } catch (_) {}
     // New tables
     try { await env.DB.prepare(DB_INIT_STAFF_MEMBERS).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_SITE_SETTINGS).run(); } catch (_) {}
@@ -321,6 +350,13 @@ export default {
       await env.DB.prepare(
         `UPDATE users SET permissions = '["newsletter_edit","newsletter_approve","news_edit","ministries_edit","sermons_edit","pages_edit","staff_edit","settings_manage","gym_manage","users_manage","audit_view"]'
          WHERE permissions LIKE '%"gym_manage"%' AND permissions NOT LIKE '%"users_manage"%'`
+      ).run();
+    } catch (_) {}
+    // Migrate: grant links_edit to existing full-admin accounts
+    try {
+      await env.DB.prepare(
+        `UPDATE users SET permissions = '["newsletter_edit","newsletter_approve","news_edit","ministries_edit","sermons_edit","pages_edit","staff_edit","settings_manage","gym_manage","users_manage","audit_view","links_edit"]'
+         WHERE permissions LIKE '%"audit_view"%' AND permissions NOT LIKE '%"links_edit"%'`
       ).run();
     } catch (_) {}
     // Performance indexes
@@ -444,6 +480,14 @@ export default {
       const rows = await env.DB.prepare('SELECT id, title, label, description, leader, location, schedule, accent FROM bible_classes WHERE active = 1 ORDER BY sort_order, id').all();
       return new Response(JSON.stringify({ classes: rows.results || [] }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
+      });
+    }
+
+    // ── PUBLIC: link cards API ──
+    if (path === '/api/link-cards' && method === 'GET') {
+      const rows = await env.DB.prepare('SELECT id, title, description, url, icon_emoji, icon_color FROM link_cards WHERE active = 1 ORDER BY sort_order, id').all();
+      return new Response(JSON.stringify({ cards: rows.results || [] }), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=60' }
       });
     }
 
@@ -3472,6 +3516,145 @@ ${topbarHtml('staff', currentUser, `<a href="/staff">← All staff</a>`)}
         return new Response('', { status: 302, headers: { Location: '/staff?msg=deleted' } });
       }
     } // end staff tab
+
+    // ── LINK CARDS TAB ─────────────────────────────────────────
+    if (path.startsWith('/link-cards') && !hasPermission(currentUser, 'links_edit')) {
+      return new Response('Access denied.', { status: 403 });
+    }
+    if (path.startsWith('/link-cards')) {
+      const esc = s => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      const COLOR_OPTIONS = ['amber','sage','sky','mist'];
+      const COLOR_LABELS = { amber: 'Amber (gold)', sage: 'Sage (green)', sky: 'Sky (blue)', mist: 'Mist (light blue)' };
+
+      // List
+      if (path === '/link-cards' && method === 'GET') {
+        const msg = url.searchParams.get('msg');
+        let alertHtml = '';
+        if (msg === 'saved')   alertHtml = `<div class="alert alert-success">✓ Card saved.</div>`;
+        if (msg === 'deleted') alertHtml = `<div class="alert alert-info">Card deleted.</div>`;
+        const rows = await env.DB.prepare('SELECT * FROM link_cards ORDER BY sort_order, id').all();
+        const cards = rows.results || [];
+        const tableRows = cards.map(c => `
+          <div class="ni-row">
+            <div style="font-size:22px;min-width:36px;text-align:center;">${esc(c.icon_emoji||'🔗')}</div>
+            <div class="ni-title">${esc(c.title)}${c.description ? `<div style="font-size:12px;color:var(--gray);margin-top:2px;">${esc(c.description)}</div>` : ''}</div>
+            <div style="font-size:12px;color:var(--gray);font-family:var(--sans);flex:1;word-break:break-all;">${esc(c.url)}</div>
+            <div style="font-family:var(--sans);font-size:12px;color:var(--gray);min-width:50px;">#${c.sort_order}</div>
+            <form method="POST" action="/link-cards/toggle/${c.id}" style="margin:0;">
+              <button class="btn btn-sm ${c.active ? 'btn-sage' : 'btn-secondary'}" type="submit">${c.active ? 'Active' : 'Hidden'}</button>
+            </form>
+            <div style="display:flex;gap:8px;">
+              <a href="/link-cards/edit/${c.id}" class="btn btn-sm btn-primary">Edit</a>
+              <form method="POST" action="/link-cards/delete/${c.id}" onsubmit="return confirm('Delete this card?')" style="margin:0;">
+                <button class="btn btn-sm btn-danger" type="submit">Delete</button>
+              </form>
+            </div>
+          </div>`).join('');
+        return html(topbarHtml('link-cards', currentUser) + `
+          <div class="wrap">
+            <div class="page-title">Link Tree</div>
+            <div class="page-sub">Cards shown on <a href="https://links.timothystl.org" target="_blank" style="color:var(--amber);">links.timothystl.org</a>. Set the Sort # to control order (lower = first).</div>
+            ${alertHtml}
+            <div class="card">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                <div class="card-title" style="margin:0;border:none;padding:0;">Cards (${cards.length})</div>
+                <a href="/link-cards/new" class="btn btn-primary btn-sm">+ Add card</a>
+              </div>
+              ${cards.length ? tableRows : '<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No cards yet. <a href="/link-cards/new">Add one →</a></div>'}
+            </div>
+          </div>`, 'Link Tree — TLC Admin');
+      }
+
+      // Form helper (new & edit)
+      const cardFormHtml = (c = {}) => {
+        const isNew = !c.id;
+        const action = isNew ? '/link-cards/create' : `/link-cards/update/${c.id}`;
+        const colorOpts = COLOR_OPTIONS.map(v => `<option value="${v}" ${(c.icon_color||'sky')===v?'selected':''}>${COLOR_LABELS[v]}</option>`).join('');
+        return `<form method="POST" action="${action}">
+          <div class="card">
+            <div class="card-title">${isNew ? 'New Card' : 'Edit Card'}</div>
+            <div class="form-group">
+              <label>Title <span style="color:#B85C3A;">*</span></label>
+              <input type="text" name="title" value="${esc(c.title||'')}" required placeholder="e.g. Get Connected">
+            </div>
+            <div class="form-group">
+              <label>Description <span style="font-weight:400;color:var(--gray);">(optional)</span></label>
+              <input type="text" name="description" value="${esc(c.description||'')}" placeholder="One-line tagline shown under the title">
+            </div>
+            <div class="form-group">
+              <label>URL <span style="color:#B85C3A;">*</span></label>
+              <input type="url" name="url" value="${esc(c.url||'')}" required placeholder="https://...">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+              <div class="form-group" style="margin:0;">
+                <label>Icon emoji</label>
+                <input type="text" name="icon_emoji" value="${esc(c.icon_emoji||'🔗')}" placeholder="🔗" maxlength="4" style="font-size:22px;">
+              </div>
+              <div class="form-group" style="margin:0;">
+                <label>Icon color</label>
+                <select name="icon_color">${colorOpts}</select>
+              </div>
+              <div class="form-group" style="margin:0;">
+                <label>Sort order</label>
+                <input type="number" name="sort_order" value="${c.sort_order||0}" min="0" step="1">
+              </div>
+            </div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-primary" type="submit">${isNew ? 'Add card' : 'Save changes'}</button>
+            <a href="/link-cards" class="btn btn-secondary">Cancel</a>
+          </div>
+        </form>`;
+      };
+
+      // New form
+      if (path === '/link-cards/new' && method === 'GET') {
+        return html(topbarHtml('link-cards', currentUser) + `<div class="wrap">${cardFormHtml()}</div>`, 'New Card — TLC Admin');
+      }
+
+      // Create
+      if (path === '/link-cards/create' && method === 'POST') {
+        const fd = await request.formData();
+        const title = (fd.get('title')||'').trim();
+        if (!title) return new Response('', { status: 302, headers: { Location: '/link-cards/new' } });
+        await env.DB.prepare('INSERT INTO link_cards (title, description, url, icon_emoji, icon_color, sort_order, active) VALUES (?, ?, ?, ?, ?, ?, 1)')
+          .bind(title, (fd.get('description')||'').trim(), (fd.get('url')||'').trim(), (fd.get('icon_emoji')||'🔗').trim(), (fd.get('icon_color')||'sky'), parseInt(fd.get('sort_order')||'0',10)).run();
+        return new Response('', { status: 302, headers: { Location: '/link-cards?msg=saved' } });
+      }
+
+      // Edit form
+      const editMatch = path.match(/^\/link-cards\/edit\/(\d+)$/);
+      if (editMatch && method === 'GET') {
+        const c = await env.DB.prepare('SELECT * FROM link_cards WHERE id = ?').bind(parseInt(editMatch[1],10)).first();
+        if (!c) return new Response('Not found', { status: 404 });
+        return html(topbarHtml('link-cards', currentUser) + `<div class="wrap">${cardFormHtml(c)}</div>`, 'Edit Card — TLC Admin');
+      }
+
+      // Update
+      const updateMatch = path.match(/^\/link-cards\/update\/(\d+)$/);
+      if (updateMatch && method === 'POST') {
+        const fd = await request.formData();
+        const title = (fd.get('title')||'').trim();
+        if (!title) return new Response('', { status: 302, headers: { Location: `/link-cards/edit/${updateMatch[1]}` } });
+        await env.DB.prepare('UPDATE link_cards SET title=?, description=?, url=?, icon_emoji=?, icon_color=?, sort_order=? WHERE id=?')
+          .bind(title, (fd.get('description')||'').trim(), (fd.get('url')||'').trim(), (fd.get('icon_emoji')||'🔗').trim(), (fd.get('icon_color')||'sky'), parseInt(fd.get('sort_order')||'0',10), parseInt(updateMatch[1],10)).run();
+        return new Response('', { status: 302, headers: { Location: '/link-cards?msg=saved' } });
+      }
+
+      // Toggle active
+      const toggleMatch = path.match(/^\/link-cards\/toggle\/(\d+)$/);
+      if (toggleMatch && method === 'POST') {
+        await env.DB.prepare('UPDATE link_cards SET active = CASE WHEN active = 1 THEN 0 ELSE 1 END WHERE id = ?').bind(parseInt(toggleMatch[1],10)).run();
+        return new Response('', { status: 302, headers: { Location: '/link-cards' } });
+      }
+
+      // Delete
+      const deleteMatch = path.match(/^\/link-cards\/delete\/(\d+)$/);
+      if (deleteMatch && method === 'POST') {
+        await env.DB.prepare('DELETE FROM link_cards WHERE id = ?').bind(parseInt(deleteMatch[1],10)).run();
+        return new Response('', { status: 302, headers: { Location: '/link-cards?msg=deleted' } });
+      }
+    } // end link-cards tab
 
     // ── SETTINGS TAB ───────────────────────────────────────────
     // ── GYM RENTALS ─────────────────────────────────────────────
