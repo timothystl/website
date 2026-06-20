@@ -174,6 +174,7 @@ export function topbarHtml(activeTab, user, extraLinks = '', pendingCount = 0) {
     ${hp('sermons_edit')    ? `<a href="/sermons" class="tab${activeTab === 'sermons' ? ' tab-active' : ''}">Sermons</a>` : ''}
     ${hp('pages_edit')      ? `<a href="/pages" class="tab${activeTab === 'pages' ? ' tab-active' : ''}">Pages</a>` : ''}
     ${hp('staff_edit')      ? `<a href="/staff" class="tab${activeTab === 'staff' ? ' tab-active' : ''}">Staff</a>` : ''}
+    ${hp('links_edit')      ? `<a href="/link-cards" class="tab${activeTab === 'link-cards' ? ' tab-active' : ''}">Links</a>` : ''}
     ${hp('settings_manage') ? `<a href="/settings" class="tab${activeTab === 'settings' ? ' tab-active' : ''}">Settings</a>` : ''}
     ${hp('settings_manage') ? `<a href="/subscribers" class="tab${activeTab === 'subscribers' ? ' tab-active' : ''}">Subscribers</a>` : ''}
     ${hp('gym_manage')      ? `<a href="/gym-rentals" class="tab${activeTab === 'gym' ? ' tab-active' : ''}">Gym Rentals</a>` : ''}
