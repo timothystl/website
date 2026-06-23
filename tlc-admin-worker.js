@@ -92,6 +92,7 @@ export default {
       }
       const resHeaders = new Headers(supabaseRes.headers);
       resHeaders.set('Access-Control-Allow-Origin', ADMIN_ORIGIN);
+      resHeaders.set('Cache-Control', 'no-store');
       return new Response(supabaseRes.body, { status: supabaseRes.status, headers: resHeaders });
     }
 
