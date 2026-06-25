@@ -654,6 +654,7 @@
   <div class="card" id="reportCard">
     <div class="print-bar">
       <button class="btn-print" id="printBtn" onclick="window.print()">🖨 Print Report</button>
+      <button class="btn-print" id="exportBtn" onclick="exportCsv()" style="background:var(--green);margin-left:8px;">⬇ Export CSV</button>
     </div>
     <div id="reportSection">
       <p style="color:var(--text-muted);font-size:0.9rem;">Select a pay period above to generate the report.</p>
@@ -1184,6 +1185,84 @@ function flashSaved() {
 // ============================================================
 // REPORT RENDERING
 // ============================================================
+function exportCsv() {
+    const sel = document.getElementById('periodSelect');
+    if (!sel.value) { alert('Select a pay period first.'); return; }
+    const [periodStart, periodEnd] = sel.value.split('|');
+    const label = periodLabel(periodStart, periodEnd);
+
+    const activeMdo    = mdoStaff.filter(s => calcMdoGross(s) > 0);
+    const activeChurch = churchStaff.filter(s => calcGross(s) > 0);
+
+    const q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+    const rows = [];
+
+    rows.push([q('Timothy Lutheran — Combined Payroll'), q('Pay Period: ' + label)]);
+    rows.push([]);
+
+    if (activeMdo.length) {
+        rows.push([q('MDO Staff'), q('Type'), q('Rate'), q('Hours'), q('PTO Hours'), q('Gross Pay')]);
+        let mdoTotal = 0;
+        activeMdo.forEach(s => {
+            const isSalary = s.pay_type === 'salary';
+            const hours    = mdoPeriodMap.get(s.id) || 0;
+            const pto      = mdoPtoMap.get(s.id)    || 0;
+            const gross    = calcMdoGross(s);
+            mdoTotal += gross;
+            rows.push([
+                q(s.name),
+                q(isSalary ? 'Salary' : 'Hourly'),
+                q(isSalary ? '' : Number(s.hourly_rate).toFixed(2)),
+                q(isSalary ? '' : hours.toFixed(2)),
+                q(pto > 0 ? pto.toFixed(2) : ''),
+                q(gross.toFixed(2)),
+            ]);
+        });
+        rows.push([q('MDO Subtotal'), '', '', '', '', q(mdoTotal.toFixed(2))]);
+        rows.push([]);
+    }
+
+    if (activeChurch.length) {
+        rows.push([q('Church Staff'), q('Type'), q('Base / Earnings'), q('Housing'), q('Ins Opt-Out'), q('HSA'), q('Mileage'), q('403(b) Deduction'), q('Gross Pay')]);
+        let churchTotal = 0;
+        activeChurch.forEach(s => {
+            const isSalary = s.pay_type === 'salary';
+            const entry    = periodEntries[s.id] || {};
+            const hours    = Number(entry.hours_worked || 0);
+            const ptoUsed  = Number(entry.pto_hours_used || 0);
+            const base     = isSalary ? Number(s.base_salary_biweekly) : (hours + ptoUsed) * Number(s.hourly_rate);
+            const b403     = calc403b(s, base);
+            const gross    = calcGross(s);
+            churchTotal += gross;
+            rows.push([
+                q(s.name),
+                q(isSalary ? 'Salary' : 'Hourly'),
+                q(isSalary ? Number(s.base_salary_biweekly).toFixed(2) : hours.toFixed(2) + ' hrs @ $' + Number(s.hourly_rate).toFixed(2)),
+                q(Number(s.housing_allowance_biweekly) > 0 ? Number(s.housing_allowance_biweekly).toFixed(2) : ''),
+                q(Number(s.insurance_opt_out_biweekly) > 0 ? Number(s.insurance_opt_out_biweekly).toFixed(2) : ''),
+                q(Number(s.hsa_contribution_biweekly) > 0 ? Number(s.hsa_contribution_biweekly).toFixed(2) : ''),
+                q(Number(s.mileage_biweekly) > 0 ? Number(s.mileage_biweekly).toFixed(2) : ''),
+                q(b403 > 0 ? ('-' + b403.toFixed(2)) : ''),
+                q(gross.toFixed(2)),
+            ]);
+        });
+        rows.push([q('Church Subtotal'), '', '', '', '', '', '', '', q(churchTotal.toFixed(2))]);
+        rows.push([]);
+    }
+
+    const grandTotal = activeMdo.reduce((t,s) => t + calcMdoGross(s), 0)
+                     + activeChurch.reduce((t,s) => t + calcGross(s), 0);
+    rows.push([q('TOTAL GROSS PAY'), '', '', '', '', '', '', '', q(grandTotal.toFixed(2))]);
+
+    const csv = rows.map(r => r.join(',')).join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'payroll-' + periodStart + '.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
 function renderReport(periodStart, periodEnd) {
     const section = document.getElementById('reportSection');
     const label   = periodLabel(periodStart, periodEnd);
