@@ -1074,7 +1074,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
       const quickAdd = [
         canNews ? `<a href="/newsitems/new" class="btn btn-primary" style="width:100%;justify-content:center;">+ News item</a>` : '',
         canDraft ? `<a href="/new" class="btn" style="width:100%;justify-content:center;background:var(--mist);color:var(--steel);">+ Newsletter draft</a>` : '',
-        canGym ? `<a href="/gym-rentals/bookings/new" class="btn" style="width:100%;justify-content:center;background:var(--mist);color:var(--steel);">+ Gym booking</a>` : '',
+        `<a href="/payroll" class="btn" style="width:100%;justify-content:center;background:var(--mist);color:var(--steel);">Run payroll</a>`,
       ].filter(Boolean).join('');
 
       // ── Recent activity (audit log) ──
