@@ -14,6 +14,11 @@ export function html(body, title = 'TLC Admin', extraHead = '') {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title}</title>
+<link rel="manifest" href="/site.webmanifest">
+<link rel="icon" href="https://timothystl.org/favicon.ico" sizes="any">
+<link rel="icon" href="https://timothystl.org/images/favicon-32x32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="https://timothystl.org/apple-touch-icon.png" sizes="180x180">
+<meta name="theme-color" content="#0A3C5C">
 ${extraHead}
 <style>
 :root{--steel:#0A3C5C;--amber:#D4922A;--sage:#6B8F71;--warm:#FAF7F0;--linen:#F2EDE2;--mist:#EDF5F8;--border:#E8E0D0;--charcoal:#3D3530;--gray:#7A6E60;--white:#fff;--sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;--serif:Georgia,'Times New Roman',serif;}

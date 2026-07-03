@@ -141,6 +141,24 @@ export default {
       return new Response(supabaseRes.body, { status: supabaseRes.status, headers: resHeaders });
     }
 
+    // Web app manifest — lets Chrome/Edge offer "Install admin.timothystl.org"
+    // as a standalone app. Served early since it needs no DB/auth. Icons point
+    // at the main site (this worker has no static asset binding of its own).
+    if (path === '/site.webmanifest') {
+      return new Response(JSON.stringify({
+        name: 'Timothy Lutheran Admin',
+        short_name: 'TLC Admin',
+        icons: [
+          { src: 'https://timothystl.org/images/android-chrome-192x192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'https://timothystl.org/images/android-chrome-512x512.png', sizes: '512x512', type: 'image/png' },
+        ],
+        theme_color: '#0A3C5C',
+        background_color: '#FAF7F0',
+        display: 'standalone',
+        start_url: '/',
+      }), { headers: { 'Content-Type': 'application/manifest+json', 'Cache-Control': 'public, max-age=3600' } });
+    }
+
     // Reject obviously oversized requests up front. 25MB is a generous ceiling
     // for image/PDF uploads; text-only forms are well under 1MB. Without this,
     // a single malicious POST could push tens of MB into D1 / R2 / memory.
