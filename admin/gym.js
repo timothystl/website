@@ -562,180 +562,186 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
         const slotMap      = buildSlotMap(bookings.results);
         const blockedSet   = new Set(blocked.results.map(b => b.date));
 
-        // Build year-end interactive selection calendar (month navigator)
+        // Build TAKEN data for client JS: {date: [takenHour, ...]}
+        const takenData = {};
+        for (const [date, slots] of slotMap.entries()) {
+          const taken = GYM_SLOTS.filter(([h], i) => slots[i]).map(([h]) => h);
+          if (taken.length) takenData[date] = taken;
+        }
+        const blockedArr = [...blockedSet];
+
         const MNAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-        const NUM_MONTHS = numMonths;
-        let calHtml = '<div class="scal-wrap">';
-        calHtml += `<div class="scal-nav">
-  <button class="scal-nav-btn" id="scal-prev" onclick="navMonth(-1)" disabled>&#8249;</button>
-  <div class="scal-nav-label" id="scal-nav-label"></div>
-  <button class="scal-nav-btn" id="scal-next" onclick="navMonth(1)">&#8250;</button>
-</div>`;
-        for (let mi = 0; mi < NUM_MONTHS; mi++) {
+
+        // Build dot calendar HTML (one dot per day)
+        let calMonthsHtml = '';
+        for (let mi = 0; mi < numMonths; mi++) {
           const d = new Date(today.getFullYear(), today.getMonth() + mi, 1);
           const yr = d.getFullYear(), mo = d.getMonth();
-          const lastDay = new Date(yr, mo + 1, 0).getDate();
+          const lastDate = new Date(yr, mo + 1, 0).getDate();
           const startDow = d.getDay();
-          calHtml += `<div class="scal-month${mi === 0 ? ' active' : ''}" id="scal-month-${mi}" data-label="${MNAMES[mo]} ${yr}">
-<table class="scal-table"><tr><th>Su</th><th>Mo</th><th>Tu</th><th>We</th><th>Th</th><th>Fr</th><th>Sa</th></tr><tr>`;
-          for (let s = 0; s < startDow; s++) calHtml += '<td></td>';
-          let dow = startDow;
-          for (let day = 1; day <= lastDay; day++) {
+          const moLabel = `${MNAMES[mo]} ${yr}`;
+          let rows = '<tr>';
+          for (let s = 0; s < startDow; s++) rows += '<td></td>';
+          let curDow = startDow;
+          for (let day = 1; day <= lastDate; day++) {
             const mm = (mo + 1).toString().padStart(2, '0');
             const dd = day.toString().padStart(2, '0');
             const ds = `${yr}-${mm}-${dd}`;
             const isPast = ds < todayStr;
             const isBlocked = blockedSet.has(ds);
             const dowForDate = new Date(ds + 'T12:00:00').getDay();
-            const validHours = getValidHoursForDow(dowForDate);
-            const slots = slotMap.get(ds) || Array(GYM_SLOTS.length).fill(false);
-            let numCls = 'scal-cell';
-            if (isPast) numCls += ' scal-past';
-            else if (isBlocked) numCls += ' scal-blocked';
-            const slotDivs = GYM_SLOTS.map(([h, label], i) => {
-              if (isPast || isBlocked || !validHours.has(h)) return `<span class="scal-slot na"></span>`;
-              if (slots[i]) return `<span class="scal-slot taken" data-label="${label} \u2014 Booked">${label}</span>`;
-              const st = `${h.toString().padStart(2,'0')}:00`;
-              const et = `${(h+1).toString().padStart(2,'0')}:00`;
-              return `<span class="scal-slot open" data-date="${ds}" data-st="${st}" data-et="${et}" data-label="${label}">${label}</span>`;
-            }).join('');
-            calHtml += `<td><div class="${numCls}" id="cell-${ds}"><div class="scal-num">${day}</div><div class="scal-slots">${slotDivs}</div></div></td>`;
-            dow++;
-            if (dow === 7 && day < lastDay) { calHtml += '</tr><tr>'; dow = 0; }
+            const validH = getValidHoursForDow(dowForDate);
+            const takenSet = new Set(takenData[ds] || []);
+            const validHours = [...validH];
+            const hasValidHours = validHours.length > 0;
+            const openCount = validHours.filter(h => !takenSet.has(h)).length;
+            const allTaken = hasValidHours && openCount === 0;
+
+            let dotColor, disabled, clickAttr;
+            if (isPast || isBlocked || !hasValidHours) {
+              dotColor = 'transparent';
+              disabled = true;
+              clickAttr = '';
+            } else if (allTaken) {
+              dotColor = '#D17070';
+              disabled = true;
+              clickAttr = '';
+            } else {
+              dotColor = '#5A9E6F';
+              disabled = false;
+              clickAttr = `onclick="openDay('${ds}')"`;
+            }
+
+            if (disabled) {
+              rows += `<td style="padding:3px;vertical-align:top;"><div style="width:100%;border:2px solid transparent;border-radius:8px;padding:6px 2px;display:flex;flex-direction:column;align-items:center;gap:4px;"><div style="font-size:12px;font-weight:700;color:${isPast||!hasValidHours?'#CBD5E1':'#D17070'};">${day}</div><div id="dot-${ds}" style="width:8px;height:8px;border-radius:50%;background:${dotColor};"></div></div></td>`;
+            } else {
+              rows += `<td style="padding:3px;vertical-align:top;"><button ${clickAttr} id="cell-${ds}" data-date="${ds}" style="width:100%;border:2px solid var(--border);border-radius:8px;padding:6px 2px;background:white;color:var(--steel);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;"><div style="font-size:12px;font-weight:700;">${day}</div><div id="dot-${ds}" style="width:8px;height:8px;border-radius:50%;background:${dotColor};"></div></button></td>`;
+            }
+
+            curDow++;
+            if (curDow === 7 && day < lastDate) { rows += '</tr><tr>'; curDow = 0; }
           }
-          while (dow > 0 && dow < 7) { calHtml += '<td></td>'; dow++; }
-          calHtml += '</tr></table></div>';
+          while (curDow > 0 && curDow < 7) { rows += '<td></td>'; curDow++; }
+          rows += '</tr>';
+          calMonthsHtml += `<div class="scal-month${mi === 0 ? ' active' : ''}" id="scal-month-${mi}" data-label="${moLabel}"><table style="width:100%;border-collapse:collapse;table-layout:fixed;"><tr><th style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:8px 0;text-align:center;">Su</th><th style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:8px 0;text-align:center;">Mo</th><th style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:8px 0;text-align:center;">Tu</th><th style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:8px 0;text-align:center;">We</th><th style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:8px 0;text-align:center;">Th</th><th style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:8px 0;text-align:center;">Fr</th><th style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:8px 0;text-align:center;">Sa</th></tr>${rows}</table></div>`;
         }
-        calHtml += '</div>';
+
+        // Month options for dropdown
+        const monthOpts = Array.from({length: numMonths}, (_, i) => {
+          const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+          const label = `${MNAMES[d.getMonth()]} ${d.getFullYear()}`;
+          return `<option value="${i}">${label}</option>`;
+        }).join('');
 
         const {rate: _calRate, rateType: _calRateType} = await getGroupRate(env, group);
         const rateDisplay = _calRateType === 'daily' ? `$${_calRate.toFixed(2)}/day` : _calRateType === 'lump' ? `$${_calRate.toFixed(2)} flat rate` : `$${_calRate.toFixed(2)}/hr`;
 
         return portalHtml(`
-${portalHeader}
-<div class="wrap" style="padding-bottom:100px;">
+<div style="background:var(--steel);border-bottom:3px solid var(--amber);padding:16px 20px;">
+  <div style="max-width:820px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+    <div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--amber);margin-bottom:3px;">Timothy Lutheran Church</div>
+      <div style="font-family:var(--serif);font-size:19px;color:white;">Gym Rental — ${group.name}</div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <a href="/gym/book/${token}" style="font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;border:none;cursor:pointer;background:var(--amber);color:var(--steel);text-decoration:none;">Book</a>
+      <a href="/gym/book/${token}/history" style="font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;border:none;cursor:pointer;background:rgba(255,255,255,.15);color:white;text-decoration:none;">My Bookings</a>
+    </div>
+  </div>
+</div>
+
+<div style="max-width:820px;margin:0 auto;padding:20px 20px 120px;">
   ${portalAlert}
-  ${portalNav('cal')}
-  <div class="card">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:6px;">
-      <div class="card-title" style="margin-bottom:0;border-bottom:none;padding-bottom:0;">Select Your Dates &amp; Times</div>
-      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-        <span style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);">Show:</span>
-        <select onchange="window.location.href='/gym/book/${token}?months='+this.value" style="font-size:13px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:white;cursor:pointer;">
-          ${[3,6,9,12,18].map(n=>`<option value="${n}"${numMonths===n?' selected':''}>${n} months</option>`).join('')}
-        </select>
-      </div>
-    </div>
-    <div style="border-bottom:1px solid var(--border);margin-bottom:16px;margin-top:10px;"></div>
 
-    <!-- Pattern selector — top for visibility -->
-    <div class="pattern-card" style="margin-top:0;margin-bottom:20px;">
-      <div class="pattern-card-title">Quick-select by pattern</div>
-      <div style="font-size:12px;color:var(--gray);margin-bottom:12px;">Pick a day, time range, and date window, then tap <strong>Add pattern</strong>. Each pattern appears as a chip below — tap × on a chip to undo it. Repeat to add multiple patterns (e.g. Sundays 5–8 PM <em>and</em> Mondays 2–6 PM).</div>
-      <div class="pattern-fields">
-        <div class="form-group">
-          <label>Day of week</label>
-          <select id="pat-dow">
-            <option value="0">Sundays</option>
-            <option value="1">Mondays</option>
-            <option value="2">Tuesdays</option>
-            <option value="3">Wednesdays</option>
-            <option value="4">Thursdays</option>
-            <option value="5">Fridays</option>
-            <option value="6">Saturdays</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Start time</label>
-          <select id="pat-start-time">
-            <option value="08:00">8 AM</option>
-            <option value="09:00">9 AM</option>
-            <option value="10:00">10 AM</option>
-            <option value="11:00">11 AM</option>
-            <option value="12:00">12 PM</option>
-            <option value="13:00">1 PM</option>
-            <option value="14:00">2 PM</option>
-            <option value="15:00">3 PM</option>
-            <option value="16:00">4 PM</option>
-            <option value="17:00" selected>5 PM</option>
-            <option value="18:00">6 PM</option>
-            <option value="19:00">7 PM</option>
-            <option value="20:00">8 PM</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>End time</label>
-          <select id="pat-end-time">
-            <option value="09:00">9 AM</option>
-            <option value="10:00">10 AM</option>
-            <option value="11:00">11 AM</option>
-            <option value="12:00">12 PM</option>
-            <option value="13:00">1 PM</option>
-            <option value="14:00">2 PM</option>
-            <option value="15:00">3 PM</option>
-            <option value="16:00">4 PM</option>
-            <option value="17:00">5 PM</option>
-            <option value="18:00">6 PM</option>
-            <option value="19:00">7 PM</option>
-            <option value="20:00">8 PM</option>
-            <option value="21:00" selected>9 PM</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>From</label>
-          <input type="date" id="pat-start" style="font-size:13px;padding:7px 10px;">
-        </div>
-        <div class="form-group">
-          <label>To</label>
-          <input type="date" id="pat-end" style="font-size:13px;padding:7px 10px;">
-        </div>
-        <div style="align-self:flex-end;">
-          <button type="button" class="btn btn-primary btn-sm" onclick="addPattern()">Add pattern</button>
-        </div>
-      </div>
-      <div id="pat-chips" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;"></div>
-      <div id="pat-result" style="font-size:12px;color:var(--gray);margin-top:8px;"></div>
+  <!-- Insurance banner -->
+  <div style="display:flex;gap:12px;align-items:flex-start;background:#FFF8EC;border:1px solid #E8C87A;border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+    <div style="font-size:20px;line-height:1;">📋</div>
+    <div style="font-size:13px;color:#5A4200;line-height:1.5;">
+      <strong>Before your rental date:</strong> email a certificate of insurance naming Timothy Lutheran Church as additional insured to <a href="mailto:dinger@timothystl.org" style="color:#2E7EA6;">dinger@timothystl.org</a>.
     </div>
-
-    <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">Or tap any slot below to select it individually. Tap again to deselect.</div>
-    ${calHtml}
-    <div class="scal-legend">
-      <span><span class="legend-swatch" style="background:#5A9E6F;"></span> Available (tap to select)</span>
-      <span><span class="legend-swatch" style="background:var(--amber);"></span> Selected</span>
-      <span><span class="legend-swatch" style="background:#D17070;"></span> Already booked</span>
-      <span><span class="legend-swatch" style="background:#E8EDF3;"></span> Unavailable</span>
-    </div>
-    <div style="font-size:12px;color:var(--gray);margin-top:10px;">Each slot = 1 hour ($${rate}/hr). &nbsp;Mon–Fri: 5–9 PM &nbsp;·&nbsp; Sat: 8 AM–8 PM &nbsp;·&nbsp; Sun: 1–8 PM</div>
-
   </div>
 
-  <!-- Request form — shown after slots selected -->
+  <!-- Rate info -->
+  <div style="background:var(--white);border:1px solid var(--border);border-radius:10px;padding:10px 16px;font-size:13px;color:var(--charcoal);margin-bottom:18px;">
+    <strong style="color:var(--steel);">${rateDisplay}</strong> · Mon–Fri 5–9 PM · Sat 8 AM–8 PM · Sun 1–8 PM
+  </div>
+
+  <!-- Mode toggle -->
+  <div style="display:flex;gap:0;margin-bottom:16px;background:var(--linen);border-radius:10px;padding:4px;">
+    <button id="btn-mode-tap" onclick="setMode('tap')" style="flex:1;font-size:13px;font-weight:700;padding:10px;border-radius:8px;border:none;cursor:pointer;background:white;color:var(--steel);box-shadow:0 1px 3px rgba(0,0,0,.1);">Tap individual times</button>
+    <button id="btn-mode-pattern" onclick="setMode('pattern')" style="flex:1;font-size:13px;font-weight:700;padding:10px;border-radius:8px;border:none;cursor:pointer;background:transparent;color:var(--gray);box-shadow:none;">Repeat weekly pattern</button>
+  </div>
+
+  <!-- Pattern panel -->
+  <div id="pattern-panel" style="display:none;background:var(--mist);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:18px;">
+    <div style="font-size:12px;color:var(--gray);margin-bottom:14px;">Pick a date range and the days of the week you need — we'll show which hours are rentable on those days, then add every matching open slot to your request.</div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+      <div style="flex:1;min-width:140px;">
+        <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:6px;">From</label>
+        <input type="date" id="pat-from" style="width:100%;border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-size:13px;font-family:var(--sans);">
+      </div>
+      <div style="flex:1;min-width:140px;">
+        <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:6px;">To</label>
+        <input type="date" id="pat-to" style="width:100%;border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-size:13px;font-family:var(--sans);">
+      </div>
+    </div>
+    <div style="margin-bottom:16px;">
+      <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:8px;">Repeat on</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;" id="dow-toggles"></div>
+    </div>
+    <div id="pat-hour-sections" style="display:flex;flex-direction:column;gap:14px;margin-bottom:16px;"></div>
+    <button id="pat-apply-btn" onclick="applyPattern()" disabled style="background:var(--steel);color:white;font-size:13px;font-weight:700;padding:10px 18px;border-radius:6px;border:none;cursor:pointer;opacity:.5;">Apply to date range →</button>
+    <div id="pat-result" style="font-size:12px;color:var(--sage);margin-top:10px;font-weight:600;display:none;"></div>
+  </div>
+
+  <!-- Tap calendar -->
+  <div id="tap-cal" style="background:var(--white);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:20px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:8px;">
+      <button id="scal-prev" onclick="navMonth(-1)" disabled style="background:var(--mist);border:1px solid var(--border);cursor:pointer;padding:8px 16px;border-radius:6px;font-size:18px;line-height:1;color:var(--steel);font-weight:700;">&#8249;</button>
+      <select id="month-jump" onchange="jumpToMonth(this.value)" style="font-family:var(--serif);font-size:16px;color:var(--steel);font-weight:700;text-align:center;border:1px solid var(--border);border-radius:8px;padding:6px 12px;background:white;cursor:pointer;">${monthOpts}</select>
+      <button id="scal-next" onclick="navMonth(1)" style="background:var(--mist);border:1px solid var(--border);cursor:pointer;padding:8px 16px;border-radius:6px;font-size:18px;line-height:1;color:var(--steel);font-weight:700;">&#8250;</button>
+    </div>
+    <div id="cal-months-wrap">
+      ${calMonthsHtml}
+    </div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--gray);margin-top:14px;">
+      <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:50%;background:#5A9E6F;display:inline-block;"></span> Open slots</span>
+      <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:50%;background:var(--amber);display:inline-block;"></span> You've selected</span>
+      <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:50%;background:#D17070;display:inline-block;"></span> Fully booked</span>
+      <span style="display:flex;align-items:center;gap:5px;color:#CBD5E1;">— Not rentable this day</span>
+    </div>
+  </div>
+
+  <!-- Day slot panel (shown when a day is tapped) -->
+  <div id="day-panel" style="display:none;background:var(--white);border:2px solid var(--steel);border-radius:14px;padding:20px;margin-bottom:20px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div id="day-panel-label" style="font-family:var(--serif);font-size:17px;color:var(--steel);"></div>
+      <button onclick="closeDay()" style="background:none;border:none;font-size:20px;color:var(--gray);cursor:pointer;">&times;</button>
+    </div>
+    <div id="day-panel-slots" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;"></div>
+  </div>
+
+  <!-- Request summary card -->
   <div id="req-form-wrap" style="display:none;">
-    <div class="card">
-      <div class="card-title">Your Request</div>
-      <div id="sel-summary-list" style="font-size:13px;color:var(--charcoal);margin-bottom:16px;line-height:1.8;"></div>
+    <div style="background:var(--white);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:20px;">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border);">Your Request</div>
+      <div id="sel-summary-list" style="font-size:13px;color:var(--charcoal);margin-bottom:14px;line-height:1.8;"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;background:var(--mist);border-radius:8px;padding:12px 16px;margin-bottom:16px;">
+        <span style="font-size:13px;color:var(--charcoal);">Estimated total (<span id="sel-hrs-label">0 hrs</span>)</span>
+        <span id="sel-total-display" style="font-size:20px;font-weight:700;color:var(--steel);">$0</span>
+      </div>
       <form method="POST" action="/gym/book/${token}/request-slots" id="req-form">
+        <input type="hidden" name="agree" value="1">
         <div id="slot-inputs"></div>
-        <div class="form-group">
-          <label>Notes <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional — activity type, etc.)</span></label>
-          <textarea name="notes" rows="2" maxlength="500" placeholder="e.g. Basketball practice"></textarea>
+        <div style="margin-bottom:18px;">
+          <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:6px;">Notes <span style="font-weight:400;text-transform:none;">(optional)</span></label>
+          <textarea name="notes" rows="2" maxlength="500" placeholder="e.g. Basketball practice" style="width:100%;border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-family:var(--sans);font-size:14px;"></textarea>
         </div>
-        <div class="agree-card">
-          <div style="background:#FFF8EC;border:1px solid #E8C87A;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#5A4200;">
-            <strong>Proof of insurance required:</strong> Please submit a certificate of insurance naming Timothy Lutheran Church as an additional insured to <a href="mailto:dinger@timothystl.org" style="color:#2E7EA6;">dinger@timothystl.org</a> before your rental date.
-          </div>
-          <label class="agree-check">
-            <input type="checkbox" name="agree" id="agree-box" required>
-            <span>I agree to pay the rental fee ($${rate}/hr) to Timothy Lutheran Church upon confirmation of my booking.</span>
-          </label>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+          <button type="submit" class="btn btn-amber">Submit Rental Request &rarr;</button>
+          <button type="button" onclick="clearAll()" style="background:var(--linen);color:var(--steel);font-weight:700;padding:12px 26px;border-radius:6px;border:none;font-size:14px;cursor:pointer;">Clear</button>
         </div>
-        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-          <div>
-            <button type="submit" formaction="/gym/book/${token}/request-slots" class="btn btn-amber">Submit Rental Request →</button>
-            <div style="font-size:11px;color:var(--gray);margin-top:5px;">The church office will review and confirm your dates.<br>You'll receive an invoice by email once confirmed.</div>
-          </div>
-          <button type="button" class="btn btn-secondary" style="background:var(--linen);color:var(--steel);align-self:center;" onclick="clearAll()">Clear</button>
-        </div>
+        <div style="font-size:11px;color:var(--gray);margin-top:8px;">The office reviews and confirms — you'll get an emailed invoice once confirmed.</div>
       </form>
     </div>
   </div>
@@ -743,21 +749,42 @@ ${portalHeader}
 </div>
 
 <!-- Sticky request bar -->
-<div class="req-bar" id="req-bar" style="display:none;">
+<div id="req-bar" style="display:none;position:sticky;bottom:0;left:0;right:0;background:var(--steel);color:white;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:3px solid var(--amber);z-index:100;">
   <div>
-    <div class="req-bar-count" id="req-bar-count">0 slots selected</div>
-    <div class="req-bar-detail" id="req-bar-detail"></div>
+    <div style="font-size:15px;font-weight:700;" id="req-bar-count">0 slots</div>
+    <div style="font-size:12px;opacity:.75;margin-top:2px;" id="req-bar-detail"></div>
   </div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;">
-    <button class="btn btn-amber" onclick="scrollToForm()">Review &amp; Submit Request →</button>
-  </div>
+  <button class="btn btn-amber" onclick="scrollToForm()">Review &amp; Submit &rarr;</button>
 </div>
 
+<style>
+.scal-month{display:none;}.scal-month.active{display:block;}
+.slot-btn{min-height:44px;border:none;border-radius:8px;font-size:12px;font-weight:700;color:white;cursor:pointer;padding:6px 4px;transition:transform .1s,filter .1s;}
+.slot-btn:hover{filter:brightness(1.08);}.slot-btn:active{transform:scale(.94);}
+.slot-btn:disabled{cursor:default;}
+</style>
+
 <script>
-const selected = new Map(); // key "DATE|ST|ET" -> {date, st, et}
-const SLOT_LABELS = {'08:00':'8–9 AM','09:00':'9–10 AM','10:00':'10–11 AM','11:00':'11 AM–12 PM','12:00':'12–1 PM','13:00':'1–2 PM','14:00':'2–3 PM','15:00':'3–4 PM','16:00':'4–5 PM','17:00':'5–6 PM','18:00':'6–7 PM','19:00':'7–8 PM','20:00':'8–9 PM'};
-let curMonth = 0;
+const TAKEN = ${JSON.stringify(takenData)};
+const BLOCKED = new Set(${JSON.stringify(blockedArr)});
+const GYM_SLOTS_DATA = ${JSON.stringify(GYM_SLOTS)};
 const NUM_MONTHS = ${numMonths};
+const RATE = ${_calRate};
+const RATE_TYPE = '${_calRateType}';
+const TODAY_STR = '${todayStr}';
+
+function validHoursForDow(dow) {
+  if (dow === 6) return new Set([8,9,10,11,12,13,14,15,16,17,18,19]);
+  if (dow === 0) return new Set([13,14,15,16,17,18,19]);
+  return new Set([17,18,19,20]);
+}
+
+const selected = new Map(); // key "DATE|H" -> {date, h, label}
+let curMonth = 0;
+let openDayStr = null;
+const patternDows = new Set();
+const patternHours = {}; // dow -> Set<h>
+let curMode = 'tap';
 
 // Month navigation
 function navMonth(dir) {
@@ -766,66 +793,146 @@ function navMonth(dir) {
   document.getElementById('scal-month-' + curMonth).classList.remove('active');
   curMonth = next;
   document.getElementById('scal-month-' + curMonth).classList.add('active');
-  updateNav();
-}
-function updateNav() {
+  document.getElementById('month-jump').value = curMonth;
   document.getElementById('scal-prev').disabled = curMonth === 0;
   document.getElementById('scal-next').disabled = curMonth === NUM_MONTHS - 1;
-  document.getElementById('scal-nav-label').textContent =
-    document.getElementById('scal-month-' + curMonth).dataset.label;
 }
-updateNav();
+function jumpToMonth(val) {
+  const next = parseInt(val, 10);
+  document.getElementById('scal-month-' + curMonth).classList.remove('active');
+  curMonth = next;
+  document.getElementById('scal-month-' + curMonth).classList.add('active');
+  document.getElementById('scal-prev').disabled = curMonth === 0;
+  document.getElementById('scal-next').disabled = curMonth === NUM_MONTHS - 1;
+}
 
-// Slot click handler
-function toggleSlot(el, doSelect) {
-  const {date, st, et} = el.dataset;
-  const key = date + '|' + st + '|' + et;
-  const shouldSelect = (doSelect === undefined) ? !selected.has(key) : doSelect;
-  if (shouldSelect) {
-    selected.set(key, {date, st, et});
-    el.classList.add('selected');
-  } else {
+function setMode(m) {
+  curMode = m;
+  const isTap = m === 'tap';
+  document.getElementById('tap-cal').style.display = isTap ? '' : 'none';
+  document.getElementById('pattern-panel').style.display = isTap ? 'none' : '';
+  const tapBtn = document.getElementById('btn-mode-tap');
+  const patBtn = document.getElementById('btn-mode-pattern');
+  tapBtn.style.background = isTap ? 'white' : 'transparent';
+  tapBtn.style.color = isTap ? 'var(--steel)' : 'var(--gray)';
+  tapBtn.style.boxShadow = isTap ? '0 1px 3px rgba(0,0,0,.1)' : 'none';
+  patBtn.style.background = isTap ? 'transparent' : 'white';
+  patBtn.style.color = isTap ? 'var(--gray)' : 'var(--steel)';
+  patBtn.style.boxShadow = isTap ? 'none' : '0 1px 3px rgba(0,0,0,.1)';
+}
+
+// Day panel
+function openDay(ds) {
+  openDayStr = ds;
+  const dow = new Date(ds + 'T12:00:00').getDay();
+  const validH = validHoursForDow(dow);
+  const takenSet = new Set(TAKEN[ds] || []);
+  const label = new Date(ds + 'T12:00:00').toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric'});
+  document.getElementById('day-panel-label').textContent = label;
+  const wrap = document.getElementById('day-panel-slots');
+  wrap.innerHTML = '';
+  GYM_SLOTS_DATA.filter(([h]) => validH.has(h)).forEach(([h, lbl]) => {
+    const key = ds + '|' + h;
+    const taken = takenSet.has(h);
+    const isSel = selected.has(key);
+    const bg = taken ? '#D17070' : isSel ? 'var(--amber)' : '#5A9E6F';
+    const btn = document.createElement('button');
+    btn.className = 'slot-btn';
+    btn.textContent = lbl;
+    btn.style.background = bg;
+    btn.disabled = taken;
+    btn.id = 'slotbtn-' + key;
+    if (!taken) btn.addEventListener('click', () => { toggleSlot(key, h, lbl, ds); });
+    wrap.appendChild(btn);
+  });
+  document.getElementById('day-panel').style.display = '';
+  document.getElementById('day-panel').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+function closeDay() {
+  openDayStr = null;
+  document.getElementById('day-panel').style.display = 'none';
+}
+
+function toggleSlot(key, h, label, date) {
+  if (selected.has(key)) {
     selected.delete(key);
-    el.classList.remove('selected');
+  } else {
+    selected.set(key, {date, h, label});
   }
-  const anyInCell = [...selected.keys()].some(k => k.startsWith(date + '|'));
-  const cell = document.getElementById('cell-' + date);
-  if (cell) cell.classList.toggle('has-selection', anyInCell);
+  // Update slot button color if panel open
+  const btn = document.getElementById('slotbtn-' + key);
+  if (btn) btn.style.background = selected.has(key) ? 'var(--amber)' : '#5A9E6F';
+  updateDotForDate(date);
+  updateUI();
 }
 
-document.querySelectorAll('.scal-slot.open').forEach(el => {
-  el.addEventListener('click', function() { toggleSlot(this); update(); });
-});
+function updateDotForDate(date) {
+  const dot = document.getElementById('dot-' + date);
+  if (!dot) return;
+  const cell = document.getElementById('cell-' + date);
+  const hasSel = [...selected.keys()].some(k => k.startsWith(date + '|'));
+  const takenSet = new Set(TAKEN[date] || []);
+  const dow = new Date(date + 'T12:00:00').getDay();
+  const validH = validHoursForDow(dow);
+  const validHours = [...validH];
+  const openCount = validHours.filter(h => !takenSet.has(h)).length;
+  const allTaken = validHours.length > 0 && openCount === 0;
+  if (hasSel) {
+    dot.style.background = 'var(--amber)';
+    if (cell) { cell.style.borderColor = 'var(--amber)'; }
+  } else {
+    dot.style.background = allTaken ? '#D17070' : '#5A9E6F';
+    if (cell) { cell.style.borderColor = 'var(--border)'; }
+  }
+}
 
-function update() {
+function updateUI() {
   const n = selected.size;
   const bar = document.getElementById('req-bar');
-  bar.style.display = n > 0 ? '' : 'none';
-  document.getElementById('req-bar-count').textContent = n + ' slot' + (n===1?'':'s') + ' selected';
+  bar.style.display = n > 0 ? 'flex' : 'none';
 
   const byDate = {};
-  selected.forEach(({date, st}) => {
+  selected.forEach(({date, h, label}) => {
     if (!byDate[date]) byDate[date] = [];
-    byDate[date].push(SLOT_LABELS[st] || st);
+    byDate[date].push({h, label});
   });
   const dates = Object.keys(byDate).sort();
+
+  // Bar
+  document.getElementById('req-bar-count').textContent = n + ' slot' + (n===1?'':'s') + ' selected';
   document.getElementById('req-bar-detail').textContent = dates.length <= 3
     ? dates.map(d => new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})).join(', ')
     : dates.length + ' dates';
 
-  const inp = document.getElementById('slot-inputs');
-  inp.innerHTML = '';
-  selected.forEach((_, key) => {
-    const h = document.createElement('input');
-    h.type='hidden'; h.name='slots'; h.value=key;
-    inp.appendChild(h);
-  });
-
+  // Summary
   const summaryHtml = dates.map(d => {
     const dn = new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-    return '<strong>' + dn + '</strong>: ' + byDate[d].join(', ');
+    const slots = byDate[d].sort((a,b)=>a.h-b.h).map(s=>s.label).join(', ');
+    return '<strong>' + dn + '</strong>: ' + slots;
   }).join('<br>');
-  document.getElementById('sel-summary-list').innerHTML = summaryHtml || '';
+  document.getElementById('sel-summary-list').innerHTML = summaryHtml;
+
+  // Total
+  const totalHrs = n; // each slot = 1 hr
+  const total = RATE_TYPE === 'lump' ? RATE : RATE_TYPE === 'daily' ? RATE * dates.length : RATE * totalHrs;
+  document.getElementById('sel-hrs-label').textContent = totalHrs + ' hr' + (totalHrs===1?'':'s');
+  document.getElementById('sel-total-display').textContent = '$' + total.toFixed(0);
+
+  // Form inputs
+  const inp = document.getElementById('slot-inputs');
+  inp.innerHTML = '';
+  selected.forEach(({date, h}) => {
+    const st = h.toString().padStart(2,'0') + ':00';
+    const et = (h+1).toString().padStart(2,'0') + ':00';
+    const hidden = document.createElement('input');
+    hidden.type = 'hidden'; hidden.name = 'slots'; hidden.value = date + '|' + st + '|' + et;
+    inp.appendChild(hidden);
+  });
+
+  // Show/hide req form card
+  const wrap = document.getElementById('req-form-wrap');
+  wrap.style.display = n > 0 ? '' : 'none';
 }
 
 function scrollToForm() {
@@ -835,89 +942,155 @@ function scrollToForm() {
 
 function clearAll() {
   selected.clear();
-  document.querySelectorAll('.scal-slot.selected').forEach(el => el.classList.remove('selected'));
-  document.querySelectorAll('.scal-cell.has-selection').forEach(el => el.classList.remove('has-selection'));
-  document.getElementById('req-form-wrap').style.display = 'none';
-  update();
+  [...document.querySelectorAll('[id^="dot-"]')].forEach(dot => {
+    const date = dot.id.replace('dot-', '');
+    const dow = new Date(date + 'T12:00:00').getDay();
+    const validH = validHoursForDow(dow);
+    const takenSet = new Set(TAKEN[date] || []);
+    const validHours = [...validH];
+    const openCount = validHours.filter(h => !takenSet.has(h)).length;
+    const allTaken = validHours.length > 0 && openCount === 0;
+    dot.style.background = (!validHours.length || date < TODAY_STR || BLOCKED.has(date)) ? 'transparent' : allTaken ? '#D17070' : '#5A9E6F';
+    const cell = document.getElementById('cell-' + date);
+    if (cell) cell.style.borderColor = 'var(--border)';
+  });
+  updateUI();
+  closeDay();
 }
 
-// Pattern selector
-(function initPatternDates() {
+// ---- Pattern mode ----
+const DOW_SHORT = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+const DOW_FULL = ['Sundays','Mondays','Tuesdays','Wednesdays','Thursdays','Fridays','Saturdays'];
+
+(function initPattern() {
   const today = new Date();
   const fmt = d => d.toISOString().split('T')[0];
-  document.getElementById('pat-start').value = fmt(today);
+  document.getElementById('pat-from').value = fmt(today);
   const end = new Date(today); end.setMonth(end.getMonth() + 1);
-  document.getElementById('pat-end').value = fmt(end);
+  document.getElementById('pat-to').value = fmt(end);
+
+  const wrap = document.getElementById('dow-toggles');
+  DOW_SHORT.forEach((lbl, i) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = lbl;
+    btn.dataset.dow = i;
+    btn.style.cssText = 'min-width:40px;padding:8px 10px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;background:white;color:var(--charcoal);border:1px solid var(--border);';
+    btn.addEventListener('click', () => toggleDow(i, btn));
+    wrap.appendChild(btn);
+  });
 })();
 
-function removePattern(btn) {
-  const chip = btn.closest('[data-slot-keys]');
-  const keys = JSON.parse(chip.dataset.slotKeys || '[]');
-  keys.forEach(k => {
-    const [date, st, et] = k.split('|');
-    const el = document.querySelector('.scal-slot[data-date="' + date + '"][data-st="' + st + '"][data-et="' + et + '"]');
-    if (el && el.classList.contains('selected')) toggleSlot(el, false);
-  });
-  chip.remove();
-  update();
-  document.getElementById('pat-result').textContent = '';
+function toggleDow(dow, btn) {
+  if (patternDows.has(dow)) {
+    patternDows.delete(dow);
+    if (patternHours[dow]) delete patternHours[dow];
+    btn.style.background = 'white';
+    btn.style.color = 'var(--charcoal)';
+    btn.style.border = '1px solid var(--border)';
+  } else {
+    patternDows.add(dow);
+    btn.style.background = 'var(--steel)';
+    btn.style.color = 'white';
+    btn.style.border = '1px solid var(--steel)';
+  }
+  renderHourSections();
 }
 
-function addPattern() {
-  const dow       = parseInt(document.getElementById('pat-dow').value, 10);
-  const startTime = document.getElementById('pat-start-time').value;
-  const endTime   = document.getElementById('pat-end-time').value;
-  const start     = document.getElementById('pat-start').value;
-  const end       = document.getElementById('pat-end').value;
-  const resultEl  = document.getElementById('pat-result');
-
-  if (!start || !end || start > end) { resultEl.style.color = 'var(--gray)'; resultEl.textContent = 'Please set a valid date range.'; return; }
-  if (!startTime || !endTime || startTime >= endTime) { resultEl.style.color = 'var(--gray)'; resultEl.textContent = 'End time must be after start time.'; return; }
-
-  const startH = parseInt(startTime, 10);
-  const endH   = parseInt(endTime, 10);
-  const addedKeys = [];
-  for (let h = startH; h < endH; h++) {
-    const t = h.toString().padStart(2, '0') + ':00';
-    document.querySelectorAll('.scal-slot.open[data-st="' + t + '"]').forEach(el => {
-      const date = el.dataset.date;
-      if (date < start || date > end) return;
-      if (new Date(date + 'T12:00:00').getDay() !== dow) return;
-      if (!el.classList.contains('selected')) {
-        toggleSlot(el, true);
-        addedKeys.push(date + '|' + el.dataset.st + '|' + el.dataset.et);
-      }
+function renderHourSections() {
+  const wrap = document.getElementById('pat-hour-sections');
+  wrap.innerHTML = '';
+  const activeDows = [...patternDows].sort((a,b)=>a-b);
+  activeDows.forEach(dow => {
+    const validH = validHoursForDow(dow);
+    const hours = [...validH].sort((a,b)=>a-b);
+    const sec = document.createElement('div');
+    const label = document.createElement('label');
+    label.style.cssText = 'display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:8px;';
+    label.textContent = DOW_FULL[dow] + ' — available times';
+    sec.appendChild(label);
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;';
+    hours.forEach(h => {
+      const slotDef = GYM_SLOTS_DATA.find(s => s[0] === h);
+      if (!slotDef) return;
+      if (!patternHours[dow]) patternHours[dow] = new Set();
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = slotDef[1];
+      const isSel = patternHours[dow].has(h);
+      btn.style.cssText = 'padding:8px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;background:' + (isSel?'var(--amber)':'white') + ';color:' + (isSel?'var(--steel)':'var(--charcoal)') + ';border:1px solid ' + (isSel?'var(--amber)':'var(--border)') + ';';
+      btn.addEventListener('click', () => {
+        if (!patternHours[dow]) patternHours[dow] = new Set();
+        if (patternHours[dow].has(h)) {
+          patternHours[dow].delete(h);
+          btn.style.background = 'white'; btn.style.color = 'var(--charcoal)'; btn.style.borderColor = 'var(--border)';
+        } else {
+          patternHours[dow].add(h);
+          btn.style.background = 'var(--amber)'; btn.style.color = 'var(--steel)'; btn.style.borderColor = 'var(--amber)';
+        }
+        updateApplyBtn();
+      });
+      row.appendChild(btn);
     });
-  }
-  update();
-
-  if (addedKeys.length === 0) {
-    resultEl.style.color = 'var(--gray)';
-    resultEl.textContent = 'No available slots matched in that range.';
-    return;
-  }
-
-  const DOW_NAMES = ['Sundays','Mondays','Tuesdays','Wednesdays','Thursdays','Fridays','Saturdays'];
-  const fmtH = h => { const p = h >= 12 ? 'PM' : 'AM'; const h12 = h > 12 ? h - 12 : (h === 0 ? 12 : h); return h12 + '\u202f' + p; };
-  const fmtD = d => new Date(d + 'T12:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric'});
-  const label = DOW_NAMES[dow] + ', ' + fmtH(startH) + '\u2013' + fmtH(endH) + ', ' + fmtD(start) + '\u2013' + fmtD(end);
-
-  const chip = document.createElement('div');
-  chip.dataset.slotKeys = JSON.stringify(addedKeys);
-  chip.style.cssText = 'display:inline-flex;align-items:center;gap:6px;background:var(--steel);color:white;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;';
-  chip.innerHTML = label + ' <button type="button" onclick="removePattern(this)" style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,.65);font-size:18px;line-height:1;padding:0 0 1px 2px;" title="Remove this pattern">\u00d7</button>';
-  document.getElementById('pat-chips').appendChild(chip);
-
-  // Advance the date range for the next pattern
-  const nextStart = new Date(end + 'T12:00:00'); nextStart.setDate(nextStart.getDate() + 1);
-  const nextEnd   = new Date(nextStart); nextEnd.setMonth(nextEnd.getMonth() + 1);
-  const fmt = d => d.toISOString().split('T')[0];
-  document.getElementById('pat-start').value = fmt(nextStart);
-  document.getElementById('pat-end').value   = fmt(nextEnd);
-
-  resultEl.style.color = 'var(--sage)';
-  resultEl.textContent = '\u2713 ' + addedKeys.length + ' slot' + (addedKeys.length === 1 ? '' : 's') + ' added. Change the fields above to add another pattern, or scroll down to review.';
+    sec.appendChild(row);
+    wrap.appendChild(sec);
+  });
+  updateApplyBtn();
 }
+
+function updateApplyBtn() {
+  const hasHours = [...patternDows].some(dow => patternHours[dow] && patternHours[dow].size > 0);
+  const btn = document.getElementById('pat-apply-btn');
+  btn.disabled = !hasHours;
+  btn.style.opacity = hasHours ? '1' : '.5';
+  btn.style.cursor = hasHours ? 'pointer' : 'default';
+}
+
+function applyPattern() {
+  const startStr = document.getElementById('pat-from').value;
+  const endStr = document.getElementById('pat-to').value;
+  if (!startStr || !endStr || !patternDows.size) return;
+  let added = 0, skipped = 0;
+  let cur = new Date(startStr + 'T12:00:00');
+  const end = new Date(endStr + 'T12:00:00');
+  while (cur <= end) {
+    const ds = cur.toISOString().split('T')[0];
+    const dow = cur.getDay();
+    if (ds >= TODAY_STR && patternDows.has(dow) && !BLOCKED.has(ds)) {
+      const hours = patternHours[dow] ? [...patternHours[dow]] : [];
+      const takenSet = new Set(TAKEN[ds] || []);
+      hours.forEach(h => {
+        if (takenSet.has(h)) { skipped++; return; }
+        const key = ds + '|' + h;
+        const slotDef = GYM_SLOTS_DATA.find(s => s[0] === h);
+        if (!slotDef) return;
+        if (!selected.has(key)) {
+          selected.set(key, {date: ds, h, label: slotDef[1]});
+          added++;
+        }
+      });
+      if (added > 0 || selected.size > 0) updateDotForDate(ds);
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+  // Refresh all dots
+  selected.forEach(({date}) => updateDotForDate(date));
+  const resultEl = document.getElementById('pat-result');
+  resultEl.style.display = '';
+  if (added > 0) {
+    resultEl.textContent = '✓ ' + added + ' slot' + (added===1?'':'s') + ' added.' + (skipped ? ' (' + skipped + ' already booked, skipped.)' : '');
+    resultEl.style.color = 'var(--sage)';
+  } else {
+    resultEl.textContent = 'No open slots matched — pick at least one time per day, or try different days/dates.';
+    resultEl.style.color = 'var(--gray)';
+  }
+  updateUI();
+}
+
+// Initial state
+document.getElementById('req-bar').style.display = 'none';
+document.getElementById('req-form-wrap').style.display = 'none';
 </script>
 `, `${group.name} — Gym Rental`);
       }
@@ -1179,23 +1352,35 @@ function calcTotal() {
           ? `<div style="padding:24px;text-align:center;color:var(--gray);font-size:14px;">No upcoming bookings.</div>`
           : upcoming.results.map(b => {
               const isHold = b.status === 'hold';
-              const exp = b.hold_expires_at ? new Date(b.hold_expires_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '';
+              let expireCountdown = '';
+              if (isHold && b.hold_expires_at) {
+                const minsLeft = Math.round((new Date(b.hold_expires_at) - Date.now()) / 60000);
+                if (minsLeft > 0) {
+                  if (minsLeft >= 60) {
+                    expireCountdown = Math.round(minsLeft / 60) + ' hrs left to confirm before this hold expires';
+                  } else {
+                    expireCountdown = minsLeft + ' min left to confirm before this hold expires';
+                  }
+                } else {
+                  expireCountdown = 'Hold expiring soon';
+                }
+              }
+              const stripe = isHold ? '#C9973A' : '#4A5E3A';
+              const badgeBg = isHold ? '#FFF3D6' : '#e8f5e9';
+              const badgeColor = isHold ? '#7A4F00' : '#1a3d1f';
+              const badgeText = isHold ? 'Pending Review' : 'Confirmed';
               const bAmt = invoiceAmtMap.get(b.id);
               const payHref = bAmt ? `${paymentLink}&amount=${bAmt}` : paymentLink;
               return `
-<div class="booking-row">
+<div style="display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
+  <div style="width:6px;align-self:stretch;border-radius:3px;background:${stripe};flex-shrink:0;"></div>
   <div style="flex:1;">
-    <div class="booking-date">${fmtBookingDate(b.booking_date)}</div>
-    <div class="booking-time">${fmt12h(b.start_time)} – ${fmt12h(b.end_time)}</div>
-    ${isHold ? `<div style="font-size:11px;color:#7A4F00;margin-top:2px;">Hold expires ${exp}</div>` : ''}
+    <div style="font-size:14px;font-weight:700;color:var(--steel);">${fmtBookingDate(b.booking_date)}</div>
+    <div style="font-size:13px;color:var(--gray);">${fmt12h(b.start_time)} – ${fmt12h(b.end_time)}</div>
+    ${expireCountdown ? `<div style="font-size:12px;color:#B85C3A;margin-top:3px;font-weight:600;">⏳ ${expireCountdown}</div>` : ''}
   </div>
-  <span class="badge ${isHold ? 'badge-hold' : 'badge-confirmed'}">${isHold ? 'Pending Review' : 'Confirmed'}</span>
-  ${isHold ? `
-  <div style="display:flex;gap:8px;flex-wrap:wrap;">
-    <form method="POST" action="/gym/book/${token}/release-hold/${b.id}" onsubmit="return confirm('Release this hold?')">
-      <button type="submit" class="btn btn-sm btn-danger">Cancel Request</button>
-    </form>
-  </div>` : `<a href="${payHref}" target="_blank" class="btn btn-sm btn-sage" style="text-decoration:none;">Pay Online →</a>`}
+  <span style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;white-space:nowrap;background:${badgeBg};color:${badgeColor};">${badgeText}</span>
+  ${isHold ? `<button onclick="askCancelModal('${b.id}')" style="background:transparent;color:#B85C3A;border:1px solid #B85C3A;font-size:12px;font-weight:700;padding:8px 14px;border-radius:6px;cursor:pointer;">Cancel</button>` : `<a href="${payHref}" target="_blank" style="background:var(--sage);color:white;font-size:12px;font-weight:700;padding:8px 14px;border-radius:6px;text-decoration:none;">Pay Online →</a>`}
 </div>`;
             }).join('');
 
@@ -1211,20 +1396,63 @@ function calcTotal() {
 </div>`).join('');
 
         return portalHtml(`
-${portalHeader}
-<div class="wrap">
+<div style="background:var(--steel);border-bottom:3px solid var(--amber);padding:16px 20px;">
+  <div style="max-width:820px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+    <div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--amber);margin-bottom:3px;">Timothy Lutheran Church</div>
+      <div style="font-family:var(--serif);font-size:19px;color:white;">Gym Rental — ${group.name}</div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <a href="/gym/book/${token}" style="font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;border:none;cursor:pointer;background:rgba(255,255,255,.15);color:white;text-decoration:none;">Book</a>
+      <a href="/gym/book/${token}/history" style="font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;border:none;cursor:pointer;background:var(--amber);color:var(--steel);text-decoration:none;">My Bookings</a>
+    </div>
+  </div>
+</div>
+<div style="max-width:820px;margin:0 auto;padding:24px 20px;">
   ${histErr}
   ${portalAlert}
-  ${portalNav('hist')}
-  <div class="card">
-    <div class="card-title">Upcoming Bookings</div>
+  <div style="background:var(--white);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px;">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border);">Upcoming</div>
     ${upHtml}
   </div>
-  <div class="card">
-    <div class="card-title">Past Bookings</div>
+  <div style="background:var(--white);border:1px solid var(--border);border-radius:14px;padding:20px;">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border);">Past</div>
     ${pastHtml}
   </div>
-</div>`, `My Bookings — ${group.name}`);
+</div>
+
+<!-- Cancel confirmation modal -->
+<div id="cancel-modal" style="display:none;position:fixed;inset:0;background:rgba(20,20,30,.5);align-items:center;justify-content:center;z-index:500;padding:20px;">
+  <div style="background:white;border-radius:14px;padding:26px;max-width:360px;width:100%;">
+    <div style="font-family:var(--serif);font-size:18px;color:var(--steel);margin-bottom:10px;">Release this hold?</div>
+    <div style="font-size:14px;color:var(--charcoal);margin-bottom:20px;line-height:1.5;">This time slot will open back up for other groups to request.</div>
+    <div style="display:flex;gap:10px;">
+      <button id="cancel-confirm-btn" style="flex:1;background:#B85C3A;color:white;font-weight:700;padding:10px;border-radius:6px;border:none;cursor:pointer;">Release Hold</button>
+      <button onclick="dismissCancel()" style="flex:1;background:var(--linen);color:var(--steel);font-weight:700;padding:10px;border-radius:6px;border:none;cursor:pointer;">Keep it</button>
+    </div>
+  </div>
+</div>
+<script>
+var cancelTargetId = null;
+function askCancelModal(id) {
+  cancelTargetId = id;
+  const modal = document.getElementById('cancel-modal');
+  modal.style.display = 'flex';
+}
+function dismissCancel() {
+  document.getElementById('cancel-modal').style.display = 'none';
+  cancelTargetId = null;
+}
+document.getElementById('cancel-confirm-btn').addEventListener('click', function() {
+  if (!cancelTargetId) return;
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = '/gym/book/${token}/release-hold/' + cancelTargetId;
+  document.body.appendChild(form);
+  form.submit();
+});
+</script>
+`, `My Bookings — ${group.name}`);
       }
 
       // ── BATCH SLOT REQUEST ────────────────────────────────────
