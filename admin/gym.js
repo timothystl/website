@@ -180,6 +180,18 @@ function buildGymInvoiceEmailHtml(inv, group, bookingOrBookings, paymentLink = P
     ${totalHoursRow}`;
   }
 
+  const today = new Date().toISOString().split('T')[0];
+  const dueDateStr = (() => {
+    const d = new Date((inv.invoice_date || '') + 'T12:00:00');
+    d.setDate(d.getDate() + 14);
+    return d.toISOString().split('T')[0];
+  })();
+  const isPaid = inv.status === 'paid';
+  const isOverdue = !isPaid && dueDateStr < today;
+  const statusLabel = isPaid ? '✓ PAID' : isOverdue ? 'OVERDUE' : 'AWAITING PAYMENT';
+  const statusBg = isPaid ? '#e8f5e9' : isOverdue ? '#fce8e8' : '#FFF3D6';
+  const statusColor = isPaid ? '#1a3d1f' : isOverdue ? '#7a1f1f' : '#7A4F00';
+
   return `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#F7F3EC;font-family:Arial,sans-serif;">
@@ -192,6 +204,7 @@ function buildGymInvoiceEmailHtml(inv, group, bookingOrBookings, paymentLink = P
   <div style="font-size:13px;color:rgba(255,255,255,.6);">#${invNum}</div>
 </td></tr>
 <tr><td style="padding:36px;">
+  <div style="font-size:14px;color:#4A4860;line-height:1.6;margin-bottom:24px;">Thank you for renting with Timothy Lutheran Church, ${group.name} — here's your invoice for the dates below.</div>
   <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
     <tr>
       <td style="vertical-align:top;">
@@ -203,7 +216,8 @@ function buildGymInvoiceEmailHtml(inv, group, bookingOrBookings, paymentLink = P
       <td style="vertical-align:top;text-align:right;">
         <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#C9973A;margin-bottom:8px;">Invoice Date</div>
         <div style="font-size:14px;color:#1A1A2A;">${formatDate(inv.invoice_date)}</div>
-        <div style="font-size:12px;font-weight:700;margin-top:4px;color:${inv.status==='paid'?'#1a3d1f':'#7a1f1f'};">${inv.status==='paid'?'✓ PAID':'UNPAID'}</div>
+        <div style="font-size:13px;color:#4A4860;margin-top:6px;">Due ${formatDate(dueDateStr)}</div>
+        <div style="display:inline-block;margin-top:8px;font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;background:${statusBg};color:${statusColor};">${statusLabel}</div>
       </td>
     </tr>
   </table>
@@ -538,7 +552,7 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
       if (!sub || sub === '') {
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
-        const numMonths = Math.min(18, Math.max(3, parseInt(url.searchParams.get('months') || '6', 10)));
+        const numMonths = 6;
         const windowEnd = new Date(today.getFullYear(), today.getMonth() + numMonths, 0).toISOString().split('T')[0];
 
         const [bookings, blocked] = await Promise.all([
