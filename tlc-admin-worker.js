@@ -6,7 +6,7 @@
 
 
 import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS } from './admin/db.js';
-import { html, topbarHtml, loginPage, setupPage, forgotPasswordPage, resetPasswordPage, permissionCheckboxes, formatDate, escapeHtml, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection } from './admin/helpers.js';
+import { html, sidebarShell, loginPage, setupPage, forgotPasswordPage, resetPasswordPage, permissionCheckboxes, formatDate, escapeHtml, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection } from './admin/helpers.js';
 import { hashPassword, verifyPassword, createSession, getSession, deleteSession, sessionCookieHeader, clearSessionCookieHeader, logAudit, hasPermission, ALL_PERMISSIONS, PERMISSIONS } from './admin/auth.js';
 import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHtml } from './admin/email.js';
 import { handleGymRoutes, sweepExpiredItems, extractImageKeys } from './admin/gym.js';
@@ -977,6 +977,146 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
       return loginPage();
     }
 
+    // ── DASHBOARD (new post-login landing page) ──
+    if (path === '/dashboard' && method === 'GET') {
+      const canNews = hasPermission(currentUser, 'news_edit');
+      const canDraft = hasPermission(currentUser, 'newsletter_edit') || hasPermission(currentUser, 'newsletter_approve');
+      const canApprove = hasPermission(currentUser, 'newsletter_approve');
+      const canGym = hasPermission(currentUser, 'gym_manage');
+      const canMinistries = hasPermission(currentUser, 'ministries_edit');
+
+      const [draftRow, pendingRow, gymHoldRow, liveNewsRow] = await Promise.all([
+        env.DB.prepare("SELECT COUNT(*) as n FROM newsletters WHERE status='draft'").first(),
+        env.DB.prepare("SELECT COUNT(*) as n FROM newsletters WHERE approval_status='pending'").first(),
+        canGym ? env.DB.prepare("SELECT COUNT(*) as n FROM gym_bookings WHERE status='hold'").first() : Promise.resolve({ n: 0 }),
+        env.DB.prepare("SELECT COUNT(*) as n FROM news_items WHERE expire_date IS NULL OR expire_date >= date('now')").first(),
+      ]);
+
+      const statCards = [];
+      if (canDraft) statCards.push({ label: 'Drafts waiting', num: draftRow.n, color: 'var(--amber)', note: draftRow.n === 1 ? '1 newsletter in progress' : `${draftRow.n} newsletters in progress` });
+      if (canApprove) statCards.push({ label: 'Pending approval', num: pendingRow.n, color: '#B85C3A', note: pendingRow.n > 0 ? 'Waiting on your review' : 'All caught up' });
+      if (canGym) statCards.push({ label: 'Gym holds', num: gymHoldRow.n, color: 'var(--steel)', note: gymHoldRow.n > 0 ? 'Need confirm or release' : 'No pending holds' });
+      if (canNews) statCards.push({ label: 'Live news items', num: liveNewsRow.n, color: 'var(--sage)', note: 'Currently on the site' });
+
+      // ── "Needs your attention" ──
+      const attn = [];
+      if (canApprove) {
+        const pendingNl = await env.DB.prepare("SELECT id, subject, created_at FROM newsletters WHERE approval_status='pending' ORDER BY created_at ASC").all();
+        for (const r of pendingNl.results) {
+          const ageMs = Date.now() - new Date(r.created_at || 0).getTime();
+          const recent = ageMs < 2 * 24 * 60 * 60 * 1000;
+          attn.push({ dot: recent ? 'var(--amber)' : 'var(--gray)', title: `&ldquo;${escapeHtml(r.subject)}&rdquo; newsletter`, meta: 'Awaiting approval', action: 'Review', href: `/edit/${r.id}` });
+        }
+      }
+      if (canGym) {
+        const holds = await env.DB.prepare(
+          `SELECT gb.group_id, gg.name as group_name, COUNT(*) as n, MIN(gb.hold_expires_at) as soonest
+           FROM gym_bookings gb LEFT JOIN gym_groups gg ON gg.id = gb.group_id
+           WHERE gb.status='hold' GROUP BY gb.group_id ORDER BY soonest ASC`
+        ).all();
+        for (const g of holds.results) {
+          const expiringSoon = g.soonest && (new Date(g.soonest).getTime() - Date.now()) < 48 * 60 * 60 * 1000;
+          attn.push({
+            dot: expiringSoon ? '#B85C3A' : 'var(--steel)',
+            title: `${g.n} gym hold${g.n !== 1 ? 's' : ''} from ${escapeHtml(g.group_name || 'Unassigned')}`,
+            meta: expiringSoon ? 'Hold expiring soon' : 'Awaiting confirmation',
+            action: 'Confirm', href: '/gym-rentals',
+          });
+        }
+      }
+      if (canNews) {
+        const soonExpire = await env.DB.prepare(
+          "SELECT id, title, expire_date FROM news_items WHERE expire_date IS NOT NULL AND expire_date >= date('now') AND expire_date <= date('now','+3 days') ORDER BY expire_date ASC"
+        ).all();
+        for (const it of soonExpire.results) {
+          attn.push({ dot: '#B85C3A', title: `&ldquo;${escapeHtml(it.title)}&rdquo; news item`, meta: `Expires ${it.expire_date}`, action: 'Extend', href: `/newsitems/edit/${it.id}` });
+        }
+      }
+      if (canMinistries) {
+        const slugLabels = { confirmation: 'Confirmation', sundayschool: 'Sunday School', vbs: 'VBS', egghunt: 'Egg Hunt', family: 'Family Ministry' };
+        const slugs = Object.keys(slugLabels);
+        const placeholders = slugs.map(() => '?').join(',');
+        const yp = await env.DB.prepare(`SELECT slug, content FROM youth_pages WHERE slug IN (${placeholders})`).bind(...slugs).all();
+        const haveContent = new Set(yp.results.filter(r => r.content && r.content.trim()).map(r => r.slug));
+        for (const slug of slugs) {
+          if (!haveContent.has(slug)) attn.push({ dot: 'var(--gray)', title: `${slugLabels[slug]} page still empty`, meta: 'Youth page needs content', action: 'Nudge', href: '/ministries' });
+        }
+      }
+      const attnCapped = attn.slice(0, 6);
+
+      const attnHtml = attnCapped.length === 0
+        ? `<div style="text-align:center;padding:32px;color:var(--gray);font-family:var(--sans);font-size:14px;">You&rsquo;re all caught up. 🎉</div>`
+        : attnCapped.map(a => `<div class="attn-row">
+  <span class="attn-dot" style="background:${a.dot};"></span>
+  <div class="attn-title">${a.title}<span class="attn-meta">${a.meta}</span></div>
+  <a href="${a.href}" class="btn btn-sm" style="background:var(--mist);color:var(--steel);">${a.action}</a>
+</div>`).join('');
+
+      // ── Quick add ──
+      const quickAdd = [
+        canNews ? `<a href="/newsitems/new" class="btn btn-primary" style="width:100%;justify-content:center;">+ News item</a>` : '',
+        canDraft ? `<a href="/new" class="btn" style="width:100%;justify-content:center;background:var(--mist);color:var(--steel);">+ Newsletter draft</a>` : '',
+        canGym ? `<a href="/gym-rentals/bookings/new" class="btn" style="width:100%;justify-content:center;background:var(--mist);color:var(--steel);">+ Gym booking</a>` : '',
+      ].filter(Boolean).join('');
+
+      // ── Recent activity (audit log) ──
+      const activityRes = await env.DB.prepare('SELECT username, action, entity_type, entity_label, created_at FROM audit_log ORDER BY created_at DESC LIMIT 6').all();
+      const timeAgo = (iso) => {
+        if (!iso) return '';
+        const diffMs = Date.now() - new Date(iso).getTime();
+        const mins = Math.round(diffMs / 60000);
+        if (mins < 1) return 'just now';
+        if (mins < 60) return `${mins} minute${mins !== 1 ? 's' : ''} ago`;
+        const hrs = Math.round(mins / 60);
+        if (hrs < 24) return `${hrs} hour${hrs !== 1 ? 's' : ''} ago`;
+        const days = Math.round(hrs / 24);
+        return `${days} day${days !== 1 ? 's' : ''} ago`;
+      };
+      const activityHtml = activityRes.results.length === 0
+        ? `<div style="text-align:center;padding:20px;color:var(--gray);font-family:var(--sans);font-size:13px;">No activity yet.</div>`
+        : activityRes.results.map(a => `<div class="activity-row"><strong>${escapeHtml(a.username || 'Someone')}</strong> ${escapeHtml(a.action)}d a ${escapeHtml((a.entity_type || '').replace(/_/g, ' '))}${a.entity_label ? `: &ldquo;${escapeHtml(a.entity_label)}&rdquo;` : ''}<span class="activity-time">${timeAgo(a.created_at)}</span></div>`).join('');
+
+      const hour = new Date().getHours();
+      const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+      const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+      const initials = (currentUser.username || '?').slice(0, 2).toUpperCase();
+
+      const statCardsHtml = statCards.map(s => `<div class="stat-card">
+  <div class="stat-label">${s.label}</div>
+  <div class="stat-num" style="color:${s.color};">${s.num}</div>
+  <div class="stat-note">${s.note}</div>
+</div>`).join('');
+
+      return html(`
+${sidebarShell('dashboard', currentUser)}
+<div class="wrap-wide">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:8px;">
+    <div>
+      <div class="dash-header">${greeting}, ${escapeHtml(currentUser.username)}</div>
+      <div class="dash-sub">${today} — here&rsquo;s what needs attention</div>
+    </div>
+    <div class="dash-avatar">${initials}</div>
+  </div>
+  ${statCards.length ? `<div class="stat-row">${statCardsHtml}</div>` : ''}
+  <div class="dash-grid">
+    <div class="card" style="margin-bottom:0;">
+      <div class="card-title">Needs your attention</div>
+      ${attnHtml}
+    </div>
+    <div>
+      ${quickAdd ? `<div class="card">
+        <div class="card-title">Quick add</div>
+        <div style="display:flex;flex-direction:column;gap:10px;">${quickAdd}</div>
+      </div>` : ''}
+      <div class="card" style="margin-bottom:0;">
+        <div class="card-title">Recent activity</div>
+        ${activityHtml}
+      </div>
+    </div>
+  </div>
+</div>`, 'Dashboard — TLC Admin');
+    }
+
     // ── PAYROLL PAGE (auth-gated, no secondary login needed) ──
     if (path === '/payroll' && method === 'GET') {
       return new Response(PAYROLL_HTML, {
@@ -1063,7 +1203,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
             </form>
           </div>`).join('');
       return html(`
-${topbarHtml('voters', currentUser)}
+${sidebarShell('voters', currentUser)}
 <div class="wrap">
   <div class="page-title">Voters Page</div>
   <div class="page-sub">Manage the members-only voters page content at timothystl.org/voters</div>
@@ -1218,7 +1358,7 @@ document.getElementById('upload-form').addEventListener('submit', async function
 </div>`).join('');
 
       return html(`
-${topbarHtml('sermons', currentUser, `<a href="https://timothystl.org/sermons" target="_blank">View page →</a>`)}
+${sidebarShell('sermons', currentUser, `<a href="https://timothystl.org/sermons" target="_blank">View page →</a>`)}
 <div class="wrap">
   <div class="page-title">Sermon Series</div>
   <div class="page-sub">Manage the current series and individual sermons shown on timothystl.org/sermons</div>
@@ -1241,7 +1381,7 @@ ${topbarHtml('sermons', currentUser, `<a href="https://timothystl.org/sermons" t
 
     if (path === '/sermons/new-series' && method === 'GET') {
       return html(`
-${topbarHtml('sermons', currentUser, `<a href="/sermons">← Back</a>`)}
+${sidebarShell('sermons', currentUser, `<a href="/sermons">← Back</a>`)}
 <div class="wrap">
   <div class="page-title">New Sermon Series</div>
   <form method="POST" action="/sermons/new-series">
@@ -1273,7 +1413,7 @@ ${topbarHtml('sermons', currentUser, `<a href="/sermons">← Back</a>`)}
       const s = await env.DB.prepare('SELECT * FROM sermon_series WHERE id = ?').bind(id).first();
       if (!s) return new Response('Not found', { status: 404 });
       return html(`
-${topbarHtml('sermons', currentUser, `<a href="/sermons">← Back</a>`)}
+${sidebarShell('sermons', currentUser, `<a href="/sermons">← Back</a>`)}
 <div class="wrap">
   <div class="page-title">Edit Series</div>
   <form method="POST" action="/sermons/edit-series/${id}">
@@ -1329,7 +1469,7 @@ ${topbarHtml('sermons', currentUser, `<a href="/sermons">← Back</a>`)}
   </div>
 </div>`).join('');
       return html(`
-${topbarHtml('sermons', currentUser, `<a href="/sermons">← All series</a>`)}
+${sidebarShell('sermons', currentUser, `<a href="/sermons">← All series</a>`)}
 <div class="wrap">
   <div class="page-title">${s.title}</div>
   <div class="page-sub">${s.date_range || 'Sermons in this series'}</div>
@@ -1346,7 +1486,7 @@ ${topbarHtml('sermons', currentUser, `<a href="/sermons">← All series</a>`)}
       const allSeries = await env.DB.prepare('SELECT id, title FROM sermon_series ORDER BY active DESC, id DESC').all();
       const seriesOptions = allSeries.results.map(s => `<option value="${s.id}" ${s.id == seriesId ? 'selected' : ''}>${s.title}</option>`).join('');
       return html(`
-${topbarHtml('sermons', currentUser, `<a href="${seriesId ? '/sermons/notes/' + seriesId : '/sermons'}">← Back</a>`)}
+${sidebarShell('sermons', currentUser, `<a href="${seriesId ? '/sermons/notes/' + seriesId : '/sermons'}">← Back</a>`)}
 <div class="wrap">
   <div class="page-title">Add Sermon</div>
   <form method="POST" action="/sermons/new-note">
@@ -1382,7 +1522,7 @@ ${topbarHtml('sermons', currentUser, `<a href="${seriesId ? '/sermons/notes/' + 
       const allSeries = await env.DB.prepare('SELECT id, title FROM sermon_series ORDER BY active DESC, id DESC').all();
       const seriesOptions = allSeries.results.map(s => `<option value="${s.id}" ${s.id == n.series_id ? 'selected' : ''}>${s.title}</option>`).join('');
       return html(`
-${topbarHtml('sermons', currentUser, `<a href="${n.series_id ? '/sermons/notes/' + n.series_id : '/sermons'}">← Back</a>`)}
+${sidebarShell('sermons', currentUser, `<a href="${n.series_id ? '/sermons/notes/' + n.series_id : '/sermons'}">← Back</a>`)}
 <div class="wrap">
   <div class="page-title">Edit Sermon</div>
   <form method="POST" action="/sermons/edit-note/${id}">
@@ -1475,7 +1615,7 @@ ${topbarHtml('sermons', currentUser, `<a href="${n.series_id ? '/sermons/notes/'
           </div>
         </div>`).join('') : '';
       return html(`
-${topbarHtml('news', currentUser, `<a href="/newsitems">← News &amp; Events</a>`)}
+${sidebarShell('news', currentUser, `<a href="/newsitems">← News &amp; Events</a>`)}
 <div class="wrap">
   <div class="page-title">New newsletter</div>
   <div class="page-sub">Write your update, add events, and publish to the website.</div>
@@ -1880,7 +2020,7 @@ addEvent();
           </div>
         </div>`).join('');
       return html(`
-${topbarHtml('christian-education', currentUser, `<a href="https://timothystl.org/education" target="_blank">View page →</a>`)}
+${sidebarShell('christian-education', currentUser, `<a href="https://timothystl.org/education" target="_blank">View page →</a>`)}
 <div class="wrap">
   <div class="page-title">Christian Education</div>
   <div class="page-sub">Manage Bible classes shown on the <strong>/education</strong> page and available in the newsletter editor.</div>
@@ -1948,7 +2088,7 @@ ${topbarHtml('christian-education', currentUser, `<a href="https://timothystl.or
       if (!ceRow) return new Response('Not found', { status: 404 });
       const ACCENT_OPTS = [['mid','Navy'],['teal','Teal'],['steel','Steel'],['sage','Moss'],['amber','Gold'],['plum','Plum']];
       return html(`
-${topbarHtml('christian-education', currentUser, `<a href="/christian-education">← All classes</a>`)}
+${sidebarShell('christian-education', currentUser, `<a href="/christian-education">← All classes</a>`)}
 <div class="wrap">
   <div class="page-title">Edit class</div>
   <form method="POST" action="/christian-education/update/${ceId}">
@@ -2120,7 +2260,7 @@ ${topbarHtml('christian-education', currentUser, `<a href="/christian-education"
       const ministryChecked = (t) => (row.ministry_type || 'text') === t ? ' checked' : '';
 
       return html(`
-${topbarHtml('news', currentUser, `<a href="/newsitems">← News &amp; Events</a>`)}
+${sidebarShell('news', currentUser, `<a href="/newsitems">← News &amp; Events</a>`)}
 <div class="wrap">
   <div class="page-title">Edit newsletter</div>
   <div class="page-sub" style="color:var(--amber);font-weight:700;">You are editing a ${row.status === 'draft' ? 'draft' : 'published'} newsletter. Changes will go live immediately when you publish.</div>
@@ -2466,15 +2606,25 @@ ${classesJs}
       }
 
       // ── News items HTML ──
+      const soon = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const statusLabel = { active: 'Live', upcoming: 'Upcoming', expired: 'Expired', expiring: 'Expiring soon' };
+      const themeIcon = { 'Christmas Market': '🎄', 'Beekeepers': '🐝', 'Music': '🎵', 'Stephen Ministry': '🤝', 'Food Pantry': '🥫' };
+      let liveCount = 0, upcomingCount = 0, expiredCount = 0;
       const listHtml = itemsRes.results.length === 0
         ? `<div style="text-align:center;padding:40px;color:var(--gray);font-size:14px;">No news items yet. Add your first announcement.</div>`
         : itemsRes.results.map(item => {
             let status = 'active';
             if (item.publish_date && item.publish_date > today) status = 'upcoming';
             else if (item.expire_date && item.expire_date < today) status = 'expired';
-            return `<div class="ni-row">
+            else if (item.expire_date && item.expire_date <= soon) status = 'expiring';
+            if (status === 'active' || status === 'expiring') liveCount++;
+            else if (status === 'upcoming') upcomingCount++;
+            else if (status === 'expired') expiredCount++;
+            const icon = themeIcon[item.theme] || '📰';
+            return `<div class="ni-row" data-status="${status}" data-pinned="${item.pinned ? 1 : 0}">
+  <div class="icon-tile">${icon}</div>
   ${item.pinned ? `<span class="badge badge-pinned">Pinned</span>` : ''}
-  <span class="badge badge-${status}">${status}</span>
+  <span class="badge badge-${status}">${statusLabel[status]}</span>
   <div class="ni-title">${item.title}</div>
   <div class="ni-meta">${item.event_date ? 'Event: ' + item.event_date + ' · ' : ''}Published: ${item.publish_date || ''}${item.expire_date ? ' → ' + item.expire_date : ''}</div>
   <div class="ni-actions">
@@ -2485,6 +2635,7 @@ ${classesJs}
   </div>
 </div>`;
           }).join('');
+      const countsSummary = `${liveCount} live · ${upcomingCount} upcoming · ${expiredCount} expired`;
 
       // ── Newsletter HTML ──
       const nRows = nlRes.results;
@@ -2559,11 +2710,11 @@ ${classesJs}
 </div>`).join('');
 
       return html(`
-${topbarHtml('news', currentUser, `<a href="https://timothystl.org/news" target="_blank">View site →</a>`, pending.length)}
+${sidebarShell('news', currentUser, `<a href="https://timothystl.org/news" target="_blank">View site →</a>`, pending.length)}
 <style>details > summary { list-style: none; } details > summary::-webkit-details-marker { display: none; }</style>
 <div class="wrap">
   <div class="page-title">News &amp; Events</div>
-  <div class="page-sub">Manage newsletters and website announcements.</div>
+  <div class="page-sub">Manage newsletters and website announcements. <span class="count-pill">${countsSummary}</span></div>
   ${alertHtml}
   <details open style="margin-bottom:16px;border:1px solid var(--border);border-radius:10px;overflow:hidden;">
     <summary style="cursor:pointer;display:flex;align-items:center;padding:14px 20px;background:var(--steel);color:white;font-family:var(--sans);font-size:14px;font-weight:700;letter-spacing:.04em;">
@@ -2586,12 +2737,18 @@ ${topbarHtml('news', currentUser, `<a href="https://timothystl.org/news" target=
       News Posts
     </summary>
     <div style="padding:20px;">
-      <div class="btn-row" style="margin-bottom:20px;">
+      <div class="btn-row" style="margin-bottom:16px;">
         <a href="/newsitems/new" class="btn btn-primary">+ Add news item</a>
+      </div>
+      <div class="btn-row" style="margin-bottom:20px;" id="ni-filters">
+        <button type="button" class="filter-pill active" data-filter="all">All</button>
+        <button type="button" class="filter-pill" data-filter="live">Live</button>
+        <button type="button" class="filter-pill" data-filter="upcoming">Upcoming</button>
+        <button type="button" class="filter-pill" data-filter="pinned">Pinned</button>
       </div>
       <div class="card" style="margin-bottom:0;">
         <div class="card-title">All items</div>
-        ${listHtml}
+        <div id="ni-list">${listHtml}</div>
       </div>
       <div style="margin-top:16px;padding:14px 18px;background:var(--mist);border-radius:8px;border-left:3px solid var(--steel);">
         <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--steel);margin-bottom:5px;">How it works</div>
@@ -2602,7 +2759,25 @@ ${topbarHtml('news', currentUser, `<a href="https://timothystl.org/news" target=
       </div>
     </div>
   </details>
-</div>`, 'TLC Admin — News & Events');
+</div>
+<script>(function(){
+var wrap=document.getElementById('ni-filters');
+if(!wrap)return;
+wrap.addEventListener('click',function(e){
+  var btn=e.target.closest('.filter-pill');
+  if(!btn)return;
+  wrap.querySelectorAll('.filter-pill').forEach(function(b){b.classList.remove('active');});
+  btn.classList.add('active');
+  var f=btn.dataset.filter;
+  document.querySelectorAll('#ni-list .ni-row').forEach(function(row){
+    var show = f==='all'
+      || (f==='live' && row.dataset.status==='active')
+      || (f==='upcoming' && row.dataset.status==='upcoming')
+      || (f==='pinned' && row.dataset.pinned==='1');
+    row.style.display = show ? '' : 'none';
+  });
+});
+})();</script>`, 'TLC Admin — News & Events');
     }
 
     // ── NEWS ITEMS: NEW FORM ──
@@ -2610,7 +2785,7 @@ ${topbarHtml('news', currentUser, `<a href="https://timothystl.org/news" target=
       const today = new Date().toISOString().split('T')[0];
       const expire = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       return html(`
-${topbarHtml('news', currentUser, `<a href="/newsitems">← Back</a>`)}
+${sidebarShell('news', currentUser, `<a href="/newsitems">← Back</a>`)}
 <div class="wrap">
   <div class="page-title">New news item</div>
   <div class="page-sub">This will appear on the website homepage and news page immediately.</div>
@@ -2730,7 +2905,7 @@ ${newsImageUploadScript()}`, 'TLC Admin — New News Item', TINYMCE_HEAD);
       if (!item) return new Response('Not found', { status: 404 });
       const v = (val) => (val || '').replace(/"/g, '&quot;');
       return html(`
-${topbarHtml('news', currentUser, `<a href="/newsitems">← Back</a>`)}
+${sidebarShell('news', currentUser, `<a href="/newsitems">← Back</a>`)}
 <div class="wrap">
   <div class="page-title">Edit news item</div>
   <div class="page-sub">Changes go live immediately when you save.</div>
@@ -2918,7 +3093,7 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
 </div>`;
 
         return html(`
-${topbarHtml('ministries', currentUser)}
+${sidebarShell('ministries', currentUser)}
 <div class="wrap">
   <div class="page-title">Ministries</div>
   <div class="page-sub">Edit ministry pages and manage posts. Changes appear on the website immediately.</div>
@@ -2935,7 +3110,7 @@ ${topbarHtml('ministries', currentUser)}
       // ── Add ministry form (GET) ──
       if (path === '/ministries/add' && method === 'GET') {
         return html(`
-${topbarHtml('ministries', currentUser, `<a href="/ministries">← All ministries</a>`)}
+${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministries</a>`)}
 <div class="wrap">
   <div class="page-title">New ministry page</div>
   <div class="page-sub">Create a new ministry landing page.</div>
@@ -3001,7 +3176,7 @@ ${topbarHtml('ministries', currentUser, `<a href="/ministries">← All ministrie
   </div>`).join('')}
 </div>` : '';
         return html(`
-${topbarHtml('ministries', currentUser, `<a href="/ministries">← All ministries</a>`)}
+${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministries</a>`)}
 <div class="wrap">
   <div class="page-title">${page.title}</div>
   <div class="page-sub">Edit this page and click Save &amp; Publish when done.</div>
@@ -3193,7 +3368,7 @@ ${topbarHtml('ministries', currentUser, `<a href="/ministries">← All ministrie
             }).join('');
 
         return html(`
-${topbarHtml('ministries', currentUser, `<a href="/ministries">← All ministries</a>`)}
+${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministries</a>`)}
 <div class="wrap">
   <div class="page-title">${page.title} — Posts</div>
   <div class="page-sub">Upcoming posts show at top. Past posts roll down automatically by date.</div>
@@ -3217,7 +3392,7 @@ ${topbarHtml('ministries', currentUser, `<a href="/ministries">← All ministrie
         if (!page) return new Response('Not found', { status: 404 });
         const today = new Date().toISOString().split('T')[0];
         return html(`
-${topbarHtml('ministries', currentUser, `<a href="/ministries/${slug}/posts">← Posts</a>`)}
+${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">← Posts</a>`)}
 <div class="wrap">
   <div class="page-title">New post — ${page.title}</div>
   <form method="POST" action="/ministries/${slug}/posts/create">
@@ -3283,7 +3458,7 @@ ${topbarHtml('ministries', currentUser, `<a href="/ministries/${slug}/posts">←
         const post = await env.DB.prepare('SELECT * FROM ministry_posts WHERE id = ? AND ministry_slug = ?').bind(id, slug).first();
         if (!post || !page) return new Response('Not found', { status: 404 });
         return html(`
-${topbarHtml('ministries', currentUser, `<a href="/ministries/${slug}/posts">← Posts</a>`)}
+${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">← Posts</a>`)}
 <div class="wrap">
   <div class="page-title">Edit post — ${page.title}</div>
   <form method="POST" action="/ministries/${slug}/posts/update/${id}">
@@ -3382,7 +3557,7 @@ ${topbarHtml('ministries', currentUser, `<a href="/ministries/${slug}/posts">←
           </tr>`;
         }).join('');
         return html(`
-${topbarHtml('pages', currentUser)}
+${sidebarShell('pages', currentUser)}
 <div class="wrap">
   <div class="page-title">Pages</div>
   <div class="page-sub">Edit content blocks that appear on specific pages of the website. Leave a block blank to hide it.</div>
@@ -3433,7 +3608,7 @@ ${topbarHtml('pages', currentUser)}
           <div style="font-size:12px;color:var(--gray);margin-top:8px;">Uncheck to hide without losing your content — useful between seasons or concerts.</div>
         </div>` : '';
         return html(`
-${topbarHtml('pages', currentUser, `<a href="/pages">← All pages</a>`)}
+${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`)}
 <div class="wrap">
   <div class="page-title">${block.label}</div>
   <div class="page-sub">${hint}</div>
@@ -3507,7 +3682,7 @@ ${topbarHtml('pages', currentUser, `<a href="/pages">← All pages</a>`)}
             </div>
           </div>`).join('');
         return html(`
-${topbarHtml('staff', currentUser)}
+${sidebarShell('staff', currentUser)}
 <div class="wrap">
   <div class="page-title">Staff &amp; Leadership</div>
   <div class="page-sub">Manage the staff cards shown on the About page. Drag to reorder by updating the Order number.</div>
@@ -3525,7 +3700,7 @@ ${topbarHtml('staff', currentUser)}
       if (path === '/staff/new' && method === 'GET') {
         const nextOrder = 10;
         return html(`
-${topbarHtml('staff', currentUser, `<a href="/staff">← All staff</a>`)}
+${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`)}
 <div class="wrap">
   <div class="page-title">Add Staff Member</div>
   <div class="card">
@@ -3564,7 +3739,7 @@ ${topbarHtml('staff', currentUser, `<a href="/staff">← All staff</a>`)}
         const m = await env.DB.prepare('SELECT * FROM staff_members WHERE id = ?').bind(id).first();
         if (!m) return new Response('Not found', { status: 404 });
         return html(`
-${topbarHtml('staff', currentUser, `<a href="/staff">← All staff</a>`)}
+${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`)}
 <div class="wrap">
   <div class="page-title">Edit — ${esc(m.name)}</div>
   <div class="card">
@@ -3637,7 +3812,7 @@ ${topbarHtml('staff', currentUser, `<a href="/staff">← All staff</a>`)}
               </form>
             </div>
           </div>`).join('');
-        return html(topbarHtml('link-cards', currentUser) + `
+        return html(sidebarShell('link-cards', currentUser) + `
           <div class="wrap">
             <div class="page-title">Link Tree</div>
             <div class="page-sub">Cards shown on <a href="https://links.timothystl.org" target="_blank" style="color:var(--amber);">links.timothystl.org</a>. Set the Sort # to control order (lower = first).</div>
@@ -3696,7 +3871,7 @@ ${topbarHtml('staff', currentUser, `<a href="/staff">← All staff</a>`)}
 
       // New form
       if (path === '/link-cards/new' && method === 'GET') {
-        return html(topbarHtml('link-cards', currentUser) + `<div class="wrap">${cardFormHtml()}</div>`, 'New Card — TLC Admin');
+        return html(sidebarShell('link-cards', currentUser) + `<div class="wrap">${cardFormHtml()}</div>`, 'New Card — TLC Admin');
       }
 
       // Create
@@ -3714,7 +3889,7 @@ ${topbarHtml('staff', currentUser, `<a href="/staff">← All staff</a>`)}
       if (editMatch && method === 'GET') {
         const c = await env.DB.prepare('SELECT * FROM link_cards WHERE id = ?').bind(parseInt(editMatch[1],10)).first();
         if (!c) return new Response('Not found', { status: 404 });
-        return html(topbarHtml('link-cards', currentUser) + `<div class="wrap">${cardFormHtml(c)}</div>`, 'Edit Card — TLC Admin');
+        return html(sidebarShell('link-cards', currentUser) + `<div class="wrap">${cardFormHtml(c)}</div>`, 'Edit Card — TLC Admin');
       }
 
       // Update
@@ -3836,7 +4011,7 @@ ${topbarHtml('staff', currentUser, `<a href="/staff">← All staff</a>`)}
 </div>`).join('');
 
       return html(`
-${topbarHtml('subscribers', currentUser)}
+${sidebarShell('subscribers', currentUser)}
 <div class="wrap">
   <div class="page-title">Newsletter Subscribers</div>
   <div class="page-sub">All subscribers from your Brevo list. Manage full list at <a href="https://app.brevo.com" target="_blank" style="color:var(--steel);">app.brevo.com ↗</a></div>
@@ -3897,7 +4072,7 @@ ${topbarHtml('subscribers', currentUser)}
             </div>`).join('');
 
         return html(`
-${topbarHtml('settings', currentUser)}
+${sidebarShell('settings', currentUser)}
 <div class="wrap">
   <div class="page-title">Site Settings</div>
   <div class="page-sub">Update redirect URLs and site-wide configuration. Changes take effect immediately.</div>
@@ -3976,17 +4151,27 @@ ${topbarHtml('settings', currentUser)}
       const alertHtml = msg === 'created' ? `<div class="alert alert-success">✓ User created.</div>`
         : msg === 'updated' ? `<div class="alert alert-success">✓ User updated.</div>`
         : msg === 'deleted' ? `<div class="alert alert-info">User deleted.</div>` : '';
+      const deriveRoleLabel = (perms) => {
+        if (perms.length === 0) return 'No access';
+        if (perms.length === ALL_PERMISSIONS.length && ALL_PERMISSIONS.every(p => perms.includes(p))) return 'Full access';
+        if (perms.length === 1) return `${PERMISSIONS[perms[0]] || perms[0]} only`;
+        return `Custom access (${perms.length} of ${ALL_PERMISSIONS.length})`;
+      };
       const listHtml = users.results.map(u => {
         let perms = [];
         try { perms = JSON.parse(u.permissions || '[]'); } catch(_) {}
         const permLabels = perms.map(p => (PERMISSIONS[p] || p)).join(', ') || 'None';
+        const initials = (u.username || '?').slice(0, 2).toUpperCase();
         return `<div class="user-row">
-  <div class="user-name">${escapeHtml(u.username)}${!u.active ? ' <span class="badge badge-expired">Inactive</span>' : ''}</div>
-  <div class="user-meta">${permLabels}</div>
-  <div class="user-meta">${u.email ? escapeHtml(u.email) : '<span style="color:#B85C3A;font-size:12px;">No email — can\'t reset password</span>'}</div>
+  <div class="dash-avatar" style="width:36px;height:36px;font-size:12px;">${escapeHtml(initials)}</div>
+  <div style="flex:1;min-width:160px;">
+    <div class="user-name">${escapeHtml(u.username)}${!u.active ? ' <span class="badge badge-expired">Inactive</span>' : ''}</div>
+    <div class="user-meta">${u.email ? escapeHtml(u.email) : '<span style="color:#B85C3A;font-size:12px;">No email — can\'t reset password</span>'}</div>
+  </div>
+  <span class="badge badge-upcoming" title="${escapeHtml(permLabels)}">${escapeHtml(deriveRoleLabel(perms))}</span>
   <div class="user-meta">${u.last_login ? 'Last login: ' + u.last_login.split('T')[0] : 'Never logged in'}</div>
   <div class="ni-actions">
-    <a href="/users/edit/${u.id}" class="btn btn-sm btn-secondary">Edit</a>
+    <a href="/users/edit/${u.id}" class="btn btn-sm btn-secondary">Edit access</a>
     ${u.id !== currentUser.id ? `<form method="POST" action="/users/delete/${u.id}" style="display:contents;" onsubmit="return confirm('Delete this user? This cannot be undone.')">
       <button type="submit" class="btn btn-sm btn-danger">Delete</button>
     </form>` : ''}
@@ -3994,13 +4179,13 @@ ${topbarHtml('settings', currentUser)}
 </div>`;
       }).join('') || '<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No users yet.</div>';
       return html(`
-${topbarHtml('users', currentUser)}
+${sidebarShell('users', currentUser)}
 <div class="wrap">
   <div class="page-title">User Management</div>
   <div class="page-sub">Manage admin portal accounts and permissions.</div>
   ${alertHtml}
   <div class="btn-row" style="margin-bottom:24px;">
-    <a href="/users/new" class="btn btn-primary">+ Add user</a>
+    <a href="/users/new" class="btn btn-primary">+ Invite user</a>
   </div>
   <div class="card">${listHtml}</div>
 </div>`, 'Users');
@@ -4008,7 +4193,7 @@ ${topbarHtml('users', currentUser)}
 
     if (path === '/users/new' && method === 'GET') {
       return html(`
-${topbarHtml('users', currentUser)}
+${sidebarShell('users', currentUser)}
 <div class="wrap">
   <div class="page-title">New user</div>
   <form method="POST" action="/users/new">
@@ -4053,7 +4238,7 @@ ${topbarHtml('users', currentUser)}
       let selectedPerms = [];
       try { selectedPerms = JSON.parse(u.permissions || '[]'); } catch(_) {}
       return html(`
-${topbarHtml('users', currentUser)}
+${sidebarShell('users', currentUser)}
 <div class="wrap">
   <div class="page-title">Edit user: ${escapeHtml(u.username)}</div>
   <form method="POST" action="/users/edit/${u.id}">
@@ -4160,7 +4345,7 @@ ${topbarHtml('users', currentUser)}
         Array.from({length:totalPages},(_,i)=>i+1).map(p=>`<a href="/audit-log?page=${p}" class="btn btn-sm ${p===pageNum?'btn-primary':''}" style="${p===pageNum?'':'background:var(--linen);color:var(--charcoal);border:1px solid var(--border);'}">${p}</a>`).join('')
       }</div>` : '';
       return html(`
-${topbarHtml('audit', currentUser)}
+${sidebarShell('audit', currentUser)}
 <div class="wrap">
   <div class="page-title">Audit Log</div>
   <div class="page-sub">A record of all content changes made by admin users.</div>
@@ -4203,9 +4388,9 @@ ${topbarHtml('audit', currentUser)}
       return new Response('Rollback not supported for this entity type.', { status: 400 });
     }
 
-    // Redirect old newsletter root to combined page
+    // Redirect root to the dashboard landing page
     if (path === '/') {
-      return new Response('', { status: 302, headers: { Location: '/newsitems' } });
+      return new Response('', { status: 302, headers: { Location: '/dashboard' } });
     }
 
     // ── DASHBOARD ──
@@ -4326,7 +4511,7 @@ ${topbarHtml('audit', currentUser)}
 </div>`).join('');
 
     return html(`
-${topbarHtml('newsletter', currentUser, `<a href="https://timothystl.org/news" target="_blank">View archive →</a>`)}
+${sidebarShell('newsletter', currentUser, `<a href="https://timothystl.org/news" target="_blank">View archive →</a>`)}
 <div class="wrap">
   <div class="page-title">Newsletters</div>
   <div class="page-sub">Write your weekly update and publish to the website.</div>

@@ -1,7 +1,7 @@
 // ── GYM RENTAL HELPERS & ROUTE HANDLER ──────────────────────
 // Extracted from tlc-admin-worker.js
 
-import { html, topbarHtml, formatDate, tinymceEditorSection } from './helpers.js';
+import { html, sidebarShell, formatDate, tinymceEditorSection } from './helpers.js';
 import { sendTransactionalEmail } from './email.js';
 
 // ── IMAGE HELPERS ───────────────────────────────────────────
@@ -1535,13 +1535,16 @@ ${portalHeader}
         const DOW_FULL = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
         const fmtShort = d => d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
 
-        const [holdsRes, pendingRes, confirmedRes, rateRow, holdHrsRow, confHrsRow] = await Promise.all([
+        const [holdsRes, pendingRes, confirmedRes, rateRow, holdHrsRow, confHrsRow, confirmedThisMonthRow, unpaidInvoicesRow, activeGroupsRow] = await Promise.all([
           env.DB.prepare(`SELECT b.*, g.name as group_name, r.day_of_week as rec_dow, r.start_date as rec_start, r.end_date as rec_end FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id LEFT JOIN gym_recurrences r ON r.id = b.recurrence_id WHERE b.status = 'hold' ORDER BY b.group_id, b.booking_date, b.start_time`).all(),
           env.DB.prepare(`SELECT r.*, g.name as group_name FROM gym_recurrences r LEFT JOIN gym_groups g ON g.id = r.group_id WHERE r.status = 'pending_review' ORDER BY r.created_at`).all(),
           env.DB.prepare(`SELECT b.*, g.name as group_name, r.day_of_week as rec_dow, r.start_date as rec_start, r.end_date as rec_end FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id LEFT JOIN gym_recurrences r ON r.id = b.recurrence_id WHERE b.status = 'confirmed' AND b.booking_date >= ? ORDER BY b.group_id, b.recurrence_id, b.booking_date`).bind(today).all(),
           env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_rate_per_hour'").first(),
           env.DB.prepare("SELECT start_time, end_time FROM gym_bookings WHERE status='hold'").all(),
           env.DB.prepare("SELECT start_time, end_time FROM gym_bookings WHERE status='confirmed'").all(),
+          env.DB.prepare("SELECT COUNT(*) as n FROM gym_bookings WHERE status='confirmed' AND strftime('%Y-%m', booking_date) = strftime('%Y-%m','now')").first(),
+          env.DB.prepare("SELECT COUNT(*) as n FROM gym_invoices WHERE status='unpaid'").first(),
+          env.DB.prepare("SELECT COUNT(*) as n FROM gym_groups WHERE active=1").first(),
         ]);
         const sumHours = rows => rows.reduce((s, b) => s + calcHours(b.start_time, b.end_time), 0);
         const holdHrs = sumHours(holdHrsRow.results);
@@ -1720,12 +1723,34 @@ ${portalHeader}
           : '';
 
         return html(`
-${topbarHtml('gym', currentUser)}
+${sidebarShell('gym', currentUser)}
 <style>details > summary { list-style: none; } details > summary::-webkit-details-marker { display: none; }</style>
 <div class="wrap">
   <div class="page-title">Gym Rentals</div>
   <div class="page-sub">Manage rental groups, bookings, and schedules.</div>
   ${gymAlert}
+  <div class="stat-row">
+    <div class="stat-card">
+      <div class="stat-label">Pending holds</div>
+      <div class="stat-num" style="color:var(--steel);">${holdsRes.results.length}</div>
+      <div class="stat-note">${holdsRes.results.length > 0 ? 'Need confirm or release' : 'None pending'}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Confirmed this month</div>
+      <div class="stat-num" style="color:var(--sage);">${confirmedThisMonthRow?.n || 0}</div>
+      <div class="stat-note">Bookings this calendar month</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Unpaid invoices</div>
+      <div class="stat-num" style="color:var(--amber);">${unpaidInvoicesRow?.n || 0}</div>
+      <div class="stat-note"><a href="/gym-rentals/invoices" style="color:inherit;">View invoices →</a></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Active groups</div>
+      <div class="stat-num" style="color:var(--steel);">${activeGroupsRow?.n || 0}</div>
+      <div class="stat-note"><a href="/gym-rentals/groups" style="color:inherit;">Manage groups →</a></div>
+    </div>
+  </div>
   <div class="btn-row" style="margin-bottom:16px;">
     <a href="/gym-rentals/bookings/new" class="btn btn-primary">+ New Booking</a>
     <a href="/gym-rentals/groups" class="btn btn-secondary">Manage Groups</a>
@@ -1822,7 +1847,7 @@ document.addEventListener('change', function(e) {
   </div>
 </div>`).join('');
         return html(`
-${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="wrap">
   <div class="page-title">Rental Groups</div>
   <div class="page-sub">Each group gets a private booking link. Share it with them — no login required.</div>
@@ -1837,7 +1862,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
       // ── NEW GROUP FORM ───────────────────────────────────────
       if (path === '/gym-rentals/groups/new' && method === 'GET') {
         return html(`
-${topbarHtml('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>`)}
 <div class="wrap">
   <div class="page-title">Add Rental Group</div>
   <div class="page-sub">After saving, you'll see their private booking link to share.</div>
@@ -1909,7 +1934,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>`)
           : '';
         const esc = v => (v||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
         return html(`
-${topbarHtml('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>`)}
 <div class="wrap">
   <div class="page-title">${g.name}</div>
   <div class="page-sub">Edit group details and manage their booking link.</div>
@@ -2110,7 +2135,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>`)
   </div>
 </div>`).join('');
         return html(`
-${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Gym Rentals</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Gym Rentals</a>`)}
 <div class="wrap">
   <div class="page-title">Google Calendar — Connection Test</div>
   <div class="page-sub">Checks secrets, access token, and creates a test event on your calendar.</div>
@@ -2181,7 +2206,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Gym Rentals</a>`)}
                  </div>`).join('')}`;
 
           return html(`
-${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="wrap">
   <div class="page-title">Consolidate Bookings</div>
   <div class="page-sub">Merge consecutive same-day bookings (e.g. three 1-hour holds → one 3-hour hold). No data is lost — only combined.</div>
@@ -2338,7 +2363,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
                </script>`;
 
           return html(`
-${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="wrap">
   <div class="page-title">Detect Recurring Patterns</div>
   <div class="page-sub">Groups holds with the same day-of-week and time into recurrence records, so invoices show a clean summary ("Every Monday 5–8 PM, June–August: 13 sessions") instead of individual date lines.</div>
@@ -2422,7 +2447,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         calHtml += '</div>';
 
         return html(`
-${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <style>
 .cal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:28px;margin-bottom:20px;}
 .cal-month-name{font-family:var(--sans);font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--steel);margin-bottom:8px;}
@@ -2629,7 +2654,7 @@ updateSummary();
 
 
         return html(`
-${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="wrap">
   <div class="page-title">New Booking</div>
   <div class="page-sub">Click dates, set times, then review before sending an invoice.</div>
@@ -3167,7 +3192,7 @@ div.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020 !i
         const editBack = `/gym-rentals/bookings/new?grp=${group_id}&slots=${encodeURIComponent(slotsRaw)}&notes=${encodeURIComponent(notes)}&rate_type=${rate_type}${rate_override ? '&rate=' + rate_override : ''}`;
 
         return html(`
-${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
+${sidebarShell('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
 <div class="wrap">
   <div class="page-title">Review Booking</div>
   <div class="page-sub">${group.name} — $${rate.toFixed(2)}${rateLabel}</div>
@@ -3419,7 +3444,7 @@ ${topbarHtml('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
           ? `<div style="text-align:center;padding:24px;color:var(--gray);font-size:13px;">No past bookings on record.</div>`
           : groupByOrg(past.results, false);
         return html(`
-${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="wrap">
   <div class="page-title">All Bookings</div>
   <div class="page-sub">Upcoming and past gym rentals.</div>
@@ -3486,7 +3511,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
           }
 
           return html(`
-${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="wrap">
   <div class="page-title">Set Price &amp; Confirm — ${group.name}</div>
   <div class="page-sub">Review all pending holds for this group, set the invoice total, then confirm.</div>
@@ -3814,7 +3839,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
   </div>
 </div>`; }).join('');
         return html(`
-${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="wrap">
   <div class="page-title">Invoices</div>
   <div class="page-sub">Invoice history and payment tracking.</div>
@@ -3908,7 +3933,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         }
 
         return html(`
-${topbarHtml('gym', currentUser, `<a href="/gym-rentals/invoices">\u2190 Invoices</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals/invoices">\u2190 Invoices</a>`)}
 <div class="wrap">
   <div class="page-title">Invoice ${invNum}</div>
   <div class="page-sub">${group?.name||'\u2014'}</div>
@@ -4066,7 +4091,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals/invoices">\u2190 Invoice
   </div>
 </div>`).join('');
         return html(`
-${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="wrap">
   <div class="page-title">Recurring Requests</div>
   <div class="page-sub">All recurring rental requests from groups.</div>
@@ -4131,7 +4156,7 @@ ${topbarHtml('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
           : '';
 
         return html(`
-${topbarHtml('gym', currentUser, `<a href="/gym-rentals/recurring">← Recurring</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals/recurring">← Recurring</a>`)}
 <div class="wrap">
   <div class="page-title">Recurring Request</div>
   ${msgAlert}
