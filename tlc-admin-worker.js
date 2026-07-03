@@ -5,7 +5,22 @@
 // Last modified: 2026-03-27
 
 
-import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS } from './admin/db.js';
+import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS } from './admin/db.js';
+
+// Static pages that can carry self-serve notices (matches the SPA's page ids in public/index.html)
+const STATIC_PAGES = [
+  { slug: 'home',       label: 'Home' },
+  { slug: 'about',      label: 'About' },
+  { slug: 'worship',    label: 'Worship' },
+  { slug: 'education',  label: 'Christian Education' },
+  { slug: 'sermons',    label: 'Sermons' },
+  { slug: 'ministries', label: 'Ministries' },
+  { slug: 'contact',    label: 'Contact' },
+  { slug: 'prayer',     label: 'Prayer Request' },
+  { slug: 'give',       label: 'Give' },
+  { slug: 'news',       label: 'News & Events' },
+  { slug: 'calendar',   label: 'Calendar' },
+];
 import { html, sidebarShell, loginPage, setupPage, forgotPasswordPage, resetPasswordPage, permissionCheckboxes, formatDate, escapeHtml, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection } from './admin/helpers.js';
 import { hashPassword, verifyPassword, createSession, getSession, deleteSession, sessionCookieHeader, clearSessionCookieHeader, logAudit, hasPermission, ALL_PERMISSIONS, PERMISSIONS } from './admin/auth.js';
 import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHtml } from './admin/email.js';
@@ -191,7 +206,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-06-20-1';
+    const SCHEMA_VERSION = '2026-07-03-1'; // bumped: added notices table + legacy page_content backfill
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -243,6 +258,35 @@ export default {
     try { await env.DB.prepare(DB_INIT_SERMON_NOTES).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_SUBSCRIBERS).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_PAGE_CONTENT).run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_NOTICES).run(); } catch (_) {}
+    // One-time backfill: migrate legacy static-page page_content banners into the
+    // new self-serve notices table, then leave page_content alone (still used by
+    // the Music ministry page's "community-concert" block).
+    try {
+      const legacyCount = await env.DB.prepare("SELECT COUNT(*) as c FROM notices").first();
+      if (!legacyCount || legacyCount.c === 0) {
+        const LEGACY_MAP = [
+          { key: 'home-notice',           slug: 'home' },
+          { key: 'worship-notice',        slug: 'worship' },
+          { key: 'about-notice',          slug: 'about' },
+          { key: 'seasonal-lent',         slug: 'worship' },
+          { key: 'seasonal-easter',       slug: 'worship' },
+          { key: 'seasonal-advent',       slug: 'worship' },
+          { key: 'seasonal-christmas',    slug: 'worship' },
+          { key: 'seasonal-thanksgiving', slug: 'worship' },
+          { key: 'education-schedule',    slug: 'education' },
+        ];
+        let pos = 0;
+        for (const m of LEGACY_MAP) {
+          const row = await env.DB.prepare('SELECT label, value, published, updated_at FROM page_content WHERE key = ?').bind(m.key).first();
+          if (row && row.value && row.value.trim()) {
+            await env.DB.prepare(
+              'INSERT INTO notices (page_slug, label, body, published, position, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+            ).bind(m.slug, row.label, row.value, row.published === null ? 1 : row.published, pos++, row.updated_at || new Date().toISOString()).run();
+          }
+        }
+      }
+    } catch (_) {}
     // Migrate: add CTA fields to ministry pages (youth_pages)
     try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN cta_label TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN cta_url TEXT').run(); } catch (_) {}
@@ -513,6 +557,17 @@ export default {
       const row = await env.DB.prepare('SELECT key, label, value, published FROM page_content WHERE key = ?').bind(key).first();
       if (!row) return new Response('Not found', { status: 404 });
       return new Response(JSON.stringify(row), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
+      });
+    }
+
+    // ── PUBLIC: self-serve notices API — one or more banners per static page ──
+    if (path.startsWith('/api/notices/') && method === 'GET') {
+      const slug = path.slice('/api/notices/'.length);
+      const rows = await env.DB.prepare(
+        'SELECT id, label, body FROM notices WHERE page_slug = ? AND published = 1 AND body IS NOT NULL AND trim(body) != \'\' ORDER BY position ASC, id ASC'
+      ).bind(slug).all();
+      return new Response(JSON.stringify({ notices: rows.results }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
       });
     }
@@ -3549,125 +3604,191 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">�
 
     } // end if (path.startsWith('/ministries'))
 
-    // ── PAGES TAB ──
-    if (path.startsWith('/pages') && !hasPermission(currentUser, 'pages_edit')) {
+    // ── NOTICES TAB (formerly "Pages") ──
+    // Self-serve: any number of notices can be added to any static page, no developer needed.
+    // Compat: old bookmarked /pages admin URLs redirect to /notices.
+    if (path === '/pages' && method === 'GET') {
+      return new Response('', { status: 302, headers: { Location: '/notices' } });
+    }
+    if (path.startsWith('/pages/') && method === 'GET') {
+      return new Response('', { status: 302, headers: { Location: '/notices' + path.slice('/pages'.length) } });
+    }
+    if (path.startsWith('/notices') && !hasPermission(currentUser, 'pages_edit')) {
       return new Response('Access denied.', { status: 403 });
     }
-    if (path.startsWith('/pages')) {
-      // List all editable page blocks
-      if (path === '/pages' && method === 'GET') {
-        const blocks = await env.DB.prepare('SELECT key, label, value, published, updated_at FROM page_content ORDER BY rowid').all();
+    if (path.startsWith('/notices')) {
+      const pageLabel = slug => (STATIC_PAGES.find(p => p.slug === slug) || {}).label || slug;
+      const pageOptionsHtml = selected => STATIC_PAGES.map(p =>
+        `<option value="${p.slug}" ${p.slug === selected ? 'selected' : ''}>${p.label}</option>`).join('');
+
+      // ── List, grouped by static page ──
+      if (path === '/notices' && method === 'GET') {
+        const rows = await env.DB.prepare('SELECT id, page_slug, label, body, published, updated_at FROM notices ORDER BY page_slug, position, id').all();
         const msg = url.searchParams.get('msg');
-        const alertHtml = msg === 'saved' ? `<div class="alert alert-success">✓ Page block saved.</div>` : '';
-        const rows = blocks.results.map(b => {
-          const isEmpty = !b.value || !b.value.trim();
-          const isHidden = b.published === 0;
-          const updated = b.updated_at ? new Date(b.updated_at).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) : '—';
+        const alertHtml = msg === 'saved' ? `<div class="alert alert-success">✓ Notice saved.</div>`
+          : msg === 'created' ? `<div class="alert alert-success">✓ Notice added.</div>`
+          : msg === 'deleted' ? `<div class="alert alert-info">Notice deleted.</div>` : '';
+
+        const byPage = {};
+        rows.results.forEach(r => { (byPage[r.page_slug] = byPage[r.page_slug] || []).push(r); });
+
+        const rowHtml = n => {
+          const isEmpty = !n.body || !n.body.trim();
+          const isHidden = n.published === 0;
+          const updated = n.updated_at ? new Date(n.updated_at).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) : '—';
           let statusHtml;
-          if (isEmpty) statusHtml = '<em style="color:var(--text-muted);">Not set — block hidden on site</em>';
+          if (isEmpty) statusHtml = '<em style="color:var(--gray);">Empty — hidden on site</em>';
           else if (isHidden) statusHtml = '<span style="color:#8a6a00;">⏸ Hidden (content saved)</span>';
           else statusHtml = '<span style="color:#2a5c2a;">✓ Published</span>';
           return `<tr>
-            <td><strong>${b.label}</strong><br><span style="font-size:12px;color:var(--gray);">${b.key}</span></td>
+            <td><strong>${escapeHtml(n.label)}</strong></td>
             <td style="font-size:13px;color:var(--gray);">${statusHtml}</td>
             <td style="font-size:12px;color:var(--gray);">${updated}</td>
-            <td><a href="/pages/edit/${b.key}" class="btn btn-sm btn-secondary">Edit</a></td>
+            <td style="text-align:right;white-space:nowrap;">
+              <a href="/notices/edit/${n.id}" class="btn btn-sm btn-secondary">Edit</a>
+              <form method="POST" action="/notices/delete/${n.id}" onsubmit="return confirm('Delete this notice?')" style="display:inline;margin:0;"><button type="submit" class="btn btn-sm btn-danger">Delete</button></form>
+            </td>
           </tr>`;
-        }).join('');
-        return html(`
-${sidebarShell('pages', currentUser)}
-<div class="wrap">
-  <div class="page-title">Pages</div>
-  <div class="page-sub">Edit content blocks that appear on specific pages of the website. Leave a block blank to hide it.</div>
-  ${alertHtml}
-  <div class="card" style="padding:0;overflow:hidden;">
+        };
+
+        const groupsHtml = STATIC_PAGES.map(p => {
+          const pageRows = byPage[p.slug] || [];
+          return `<div style="margin-bottom:28px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+    <div style="font-family:var(--sans);font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);">${p.label}</div>
+    <a href="/notices/add?page=${p.slug}" style="font-family:var(--sans);font-size:12px;font-weight:700;color:var(--steel);text-decoration:none;">+ Add notice</a>
+  </div>
+  ${pageRows.length ? `<div class="card" style="padding:0;overflow:hidden;">
     <table style="width:100%;border-collapse:collapse;">
-      <thead><tr style="background:var(--linen);border-bottom:1px solid var(--border);">
-        <th style="padding:12px 16px;text-align:left;font-family:var(--sans);font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);">Block</th>
-        <th style="padding:12px 16px;text-align:left;font-family:var(--sans);font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);">Status</th>
-        <th style="padding:12px 16px;text-align:left;font-family:var(--sans);font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);">Updated</th>
-        <th style="padding:12px 16px;"></th>
-      </tr></thead>
       <tbody style="font-family:var(--sans);">
-        ${rows}
+        ${pageRows.map(rowHtml).join('')}
       </tbody>
     </table>
+  </div>` : `<div style="font-size:13px;color:var(--gray);font-style:italic;padding:2px 2px 0;">No notices on this page yet.</div>`}
+</div>`;
+        }).join('');
+
+        return html(`
+${sidebarShell('notices', currentUser)}
+<div class="wrap">
+  <div class="page-title">Notices</div>
+  <div class="page-sub">Banners and announcements shown on the website's static pages. Add as many as you need to any page — no developer required.</div>
+  ${alertHtml}
+  <div class="btn-row" style="margin-bottom:28px;">
+    <a href="/notices/add" class="btn btn-primary">+ Add notice</a>
   </div>
-</div>`, 'Pages');
+  ${groupsHtml}
+</div>`, 'Notices');
       }
 
-      // Edit a page block
-      if (path.startsWith('/pages/edit/') && method === 'GET') {
-        const key = path.slice('/pages/edit/'.length);
-        const block = await env.DB.prepare('SELECT * FROM page_content WHERE key = ?').bind(key).first();
-        if (!block) return new Response('Not found', { status: 404 });
-        const HINT_MAP = {
-          'home-notice':           'Appears on the home page as a highlighted notice box. Leave blank to hide.',
-          'worship-notice':        'Appears on the Worship page (e.g. special service times, holiday changes). Leave blank to hide.',
-          'about-notice':          'Appears on the About page. Leave blank to hide.',
-          'seasonal-lent':         'Shown on the Worship page during Lent / midweek services. Toggle published on/off without losing your content.',
-          'seasonal-easter':       'Shown on the Worship page for Holy Week and Easter services. Toggle published on/off without losing your content.',
-          'seasonal-thanksgiving': 'Shown on the Worship page around Thanksgiving. Toggle published on/off without losing your content.',
-          'seasonal-advent':       'Shown on the Worship page during Advent. Toggle published on/off without losing your content.',
-          'seasonal-christmas':    'Shown on the Worship page for Christmas Eve and Christmas Day services. Toggle published on/off without losing your content.',
-          'community-concert':     'Shown on the Music Ministry page. Enter the performer name, date, time, and any details. Toggle off between concerts.',
-          'education-schedule':    'Shown on the Christian Education (Learn) page. Add current Bible study topics, class schedules, or upcoming events. Leave blank to hide.',
-        };
-        const hint = HINT_MAP[key] || 'Appears on the site when content is set. Leave blank to hide.';
-        const isSeasonal = key.startsWith('seasonal-') || key === 'community-concert';
-        const publishedChecked = (block.published === 1 || block.published === null) ? 'checked' : '';
-        const publishToggleHtml = isSeasonal ? `
-        <div class="card" style="margin-bottom:24px;background:var(--mist);border:1px solid var(--ice);">
-          <div class="card-title">Visibility</div>
-          <label style="display:flex;align-items:center;gap:12px;font-family:var(--sans);font-size:14px;cursor:pointer;">
-            <input type="checkbox" name="published" value="1" ${publishedChecked} style="width:18px;height:18px;cursor:pointer;">
-            Show this block on the website
-          </label>
-          <div style="font-size:12px;color:var(--gray);margin-top:8px;">Uncheck to hide without losing your content — useful between seasons or concerts.</div>
-        </div>` : '';
+      // ── Add notice (GET) ──
+      if (path === '/notices/add' && method === 'GET') {
+        const preselect = url.searchParams.get('page') || STATIC_PAGES[0].slug;
         return html(`
-${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`)}
+${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)}
 <div class="wrap">
-  <div class="page-title">${block.label}</div>
-  <div class="page-sub">${hint}</div>
+  <div class="page-title">New notice</div>
+  <div class="page-sub">Choose which page it appears on and write the content. It publishes immediately.</div>
   <div class="card">
-    <form method="POST" action="/pages/update/${key}">
-      ${publishToggleHtml}
-      ${tinymcePageSection(block.value || '')}
+    <form method="POST" action="/notices/create">
+      <div class="form-group">
+        <label>Page <span style="color:#B85C3A;">*</span></label>
+        <select name="page_slug">${pageOptionsHtml(preselect)}</select>
+      </div>
+      <div class="form-group">
+        <label>Internal label <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— for your reference in this list, not shown on the site</span></label>
+        <input type="text" name="label" required placeholder="e.g. Lent midweek services">
+      </div>
+      ${tinymcePageSection('')}
       <div class="btn-row" style="margin-top:24px;">
         <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save &amp; Publish →</button>
-        ${!isSeasonal ? `<a href="/pages/update/${key}?clear=1" class="btn btn-sm" style="background:#fce8e8;color:#7a1f1f;border:1px solid #e8b4b4;" onclick="return confirm('Clear this block and hide it from the site?')">Clear &amp; hide</a>` : ''}
-        <a href="/pages" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
+        <a href="/notices" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
       </div>
     </form>
   </div>
-</div>`, `Edit — ${block.label}`, TINYMCE_HEAD);
+</div>`, 'New Notice', TINYMCE_HEAD);
       }
 
-      // Clear a page block (GET with ?clear=1)
-      if (path.startsWith('/pages/update/') && method === 'GET' && url.searchParams.get('clear') === '1') {
-        const key = path.slice('/pages/update/'.length);
-        const now = new Date().toISOString();
-        await env.DB.prepare('UPDATE page_content SET value = ?, updated_at = ? WHERE key = ?').bind('', now, key).run();
-        return new Response('', { status: 302, headers: { Location: '/pages?msg=saved' } });
-      }
-
-      // Save a page block
-      if (path.startsWith('/pages/update/') && method === 'POST') {
-        const key = path.slice('/pages/update/'.length);
+      // ── Create notice (POST) ──
+      if (path === '/notices/create' && method === 'POST') {
         const form = await request.formData();
-        const value = form.get('content') || '';
+        const pageSlug = form.get('page_slug') || STATIC_PAGES[0].slug;
+        const label = form.get('label') || 'Untitled notice';
+        const body = form.get('content') || '';
+        const now = new Date().toISOString();
+        const maxPos = await env.DB.prepare('SELECT COALESCE(MAX(position), -1) as m FROM notices WHERE page_slug = ?').bind(pageSlug).first();
+        await env.DB.prepare(
+          'INSERT INTO notices (page_slug, label, body, published, position, updated_at) VALUES (?, ?, ?, 1, ?, ?)'
+        ).bind(pageSlug, label, body, (maxPos ? maxPos.m : -1) + 1, now).run();
+        await logAudit(env.DB, currentUser, 'create', 'notice', pageSlug, label, null, { pageSlug, label });
+        return new Response('', { status: 302, headers: { Location: '/notices?msg=created' } });
+      }
+
+      // ── Edit notice (GET) ──
+      if (path.startsWith('/notices/edit/') && method === 'GET') {
+        const id = path.slice('/notices/edit/'.length);
+        const n = await env.DB.prepare('SELECT * FROM notices WHERE id = ?').bind(id).first();
+        if (!n) return new Response('Not found', { status: 404 });
+        const publishedChecked = n.published === 1 ? 'checked' : '';
+        return html(`
+${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)}
+<div class="wrap">
+  <div class="page-title">${escapeHtml(n.label)}</div>
+  <div class="page-sub">Shown on the ${pageLabel(n.page_slug)} page.</div>
+  <div class="card">
+    <form method="POST" action="/notices/update/${n.id}">
+      <div class="form-group">
+        <label>Page</label>
+        <select name="page_slug">${pageOptionsHtml(n.page_slug)}</select>
+      </div>
+      <div class="form-group">
+        <label>Internal label</label>
+        <input type="text" name="label" value="${escapeHtml(n.label)}" required>
+      </div>
+      <div class="card" style="margin-bottom:24px;background:var(--mist);border:1px solid var(--ice);">
+        <div class="card-title">Visibility</div>
+        <label style="display:flex;align-items:center;gap:12px;font-family:var(--sans);font-size:14px;cursor:pointer;">
+          <input type="checkbox" name="published" value="1" ${publishedChecked} style="width:18px;height:18px;cursor:pointer;">
+          Show this notice on the website
+        </label>
+        <div style="font-size:12px;color:var(--gray);margin-top:8px;">Uncheck to hide without deleting it — useful between seasons or events.</div>
+      </div>
+      ${tinymcePageSection(n.body || '')}
+      <div class="btn-row" style="margin-top:24px;">
+        <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save &amp; Publish →</button>
+        <a href="/notices" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>`, `Edit — ${n.label}`, TINYMCE_HEAD);
+      }
+
+      // ── Save notice (POST) ──
+      if (path.startsWith('/notices/update/') && method === 'POST') {
+        const id = path.slice('/notices/update/'.length);
+        const form = await request.formData();
+        const pageSlug = form.get('page_slug') || STATIC_PAGES[0].slug;
+        const label = form.get('label') || 'Untitled notice';
+        const body = form.get('content') || '';
         const published = form.has('published') ? 1 : 0;
         const now = new Date().toISOString();
-        // Only save published flag for blocks that have the toggle (seasonal and concert blocks)
-        if (key.startsWith('seasonal-') || key === 'community-concert') {
-          await env.DB.prepare('UPDATE page_content SET value = ?, published = ?, updated_at = ? WHERE key = ?').bind(value, published, now, key).run();
-        } else {
-          await env.DB.prepare('UPDATE page_content SET value = ?, published = 1, updated_at = ? WHERE key = ?').bind(value, now, key).run();
-        }
-        return new Response('', { status: 302, headers: { Location: '/pages?msg=saved' } });
+        const before = await env.DB.prepare('SELECT page_slug, label, body FROM notices WHERE id = ?').bind(id).first();
+        await env.DB.prepare(
+          'UPDATE notices SET page_slug = ?, label = ?, body = ?, published = ?, updated_at = ? WHERE id = ?'
+        ).bind(pageSlug, label, body, published, now, id).run();
+        await logAudit(env.DB, currentUser, 'update', 'notice', id, label, before, { pageSlug, label });
+        return new Response('', { status: 302, headers: { Location: '/notices?msg=saved' } });
       }
-    } // end pages tab
+
+      // ── Delete notice (POST) ──
+      if (path.startsWith('/notices/delete/') && method === 'POST') {
+        const id = path.slice('/notices/delete/'.length);
+        const del = await env.DB.prepare('SELECT label FROM notices WHERE id = ?').bind(id).first();
+        await env.DB.prepare('DELETE FROM notices WHERE id = ?').bind(id).run();
+        await logAudit(env.DB, currentUser, 'delete', 'notice', id, del ? del.label : id, del, null);
+        return new Response('', { status: 302, headers: { Location: '/notices?msg=deleted' } });
+      }
+    } // end notices tab
 
     // ── STAFF TAB ──────────────────────────────────────────────
     if (path.startsWith('/staff') && !hasPermission(currentUser, 'staff_edit')) {

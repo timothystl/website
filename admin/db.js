@@ -84,6 +84,21 @@ export const DB_INIT_PAGE_CONTENT = `CREATE TABLE IF NOT EXISTS page_content (
   updated_at TEXT
 )`;
 
+// Self-serve notices — any number of banners per static page, added by staff
+// without a developer wiring a new slot. Replaces the old one-row-per-key
+// page_content system for static-page banners (page_content is retained only
+// for the ministry-page "community-concert" block, which lives on a
+// dynamic ministry page, not a static one).
+export const DB_INIT_NOTICES = `CREATE TABLE IF NOT EXISTS notices (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  page_slug TEXT NOT NULL,
+  label TEXT NOT NULL,
+  body TEXT,
+  published INTEGER DEFAULT 1,
+  position INTEGER DEFAULT 0,
+  updated_at TEXT
+)`;
+
 export const DB_INIT_STAFF_MEMBERS = `CREATE TABLE IF NOT EXISTS staff_members (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,

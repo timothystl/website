@@ -158,8 +158,8 @@
     </div>
   </section>
 
-  <!-- Admin-managed home notice (set in admin → Pages → Home page notice) -->
-  <div id="home-notice-block" style="display:none;"></div>
+  <!-- Self-serve notices (admin → Notices → Home) -->
+  <div id="notices-home"></div>
 
   <div class="welcome">
     <div class="welcome-inner">
@@ -217,8 +217,8 @@
     <h1>About Timothy Lutheran</h1>
     <p>A diverse city church in St. Louis — rooted in grace, sent to the world.</p>
   </div>
-  <!-- Admin-managed about notice (set in admin → Pages → About page notice) -->
-  <div id="about-notice-block" style="display:none;"></div>
+  <!-- Self-serve notices (admin → Notices → About) -->
+  <div id="notices-about"></div>
   <section class="section section--white">
     <div class="wrap">
       <div class="about-grid">
@@ -365,8 +365,8 @@
       </div>
     </div>
   </section>
-  <!-- Admin-managed worship notice (set in admin → Pages → Worship notice) -->
-  <div id="worship-notice-block" style="display:none;"></div>
+  <!-- Self-serve notices (admin → Notices → Worship) -->
+  <div id="notices-worship"></div>
   <section class="section section--mist">
     <div class="wrap">
       <span class="eyebrow eyebrow--sky">First time visiting?</span>
@@ -397,22 +397,6 @@
     </div>
   </section>
 
-  <!-- Admin-managed seasonal worship blocks (set in admin → Pages → Seasonal worship) -->
-  <section id="worship-seasonal-lent" class="section section--linen" style="display:none;">
-    <div id="worship-seasonal-lent-block" class="wrap rich-content" style="max-width:760px;"></div>
-  </section>
-  <section id="worship-seasonal-easter" class="section section--linen" style="display:none;">
-    <div id="worship-seasonal-easter-block" class="wrap rich-content" style="max-width:760px;"></div>
-  </section>
-  <section id="worship-seasonal-thanksgiving" class="section section--linen" style="display:none;">
-    <div id="worship-seasonal-thanksgiving-block" class="wrap rich-content" style="max-width:760px;"></div>
-  </section>
-  <section id="worship-seasonal-advent" class="section section--linen" style="display:none;">
-    <div id="worship-seasonal-advent-block" class="wrap rich-content" style="max-width:760px;"></div>
-  </section>
-  <section id="worship-seasonal-christmas" class="section section--linen" style="display:none;">
-    <div id="worship-seasonal-christmas-block" class="wrap rich-content" style="max-width:760px;"></div>
-  </section>
   <section class="section section--white">
     <div class="wrap" style="max-width:760px;">
       <span class="eyebrow eyebrow--sky">Worship at Timothy</span>
@@ -496,12 +480,7 @@
   </section>
 
   <!-- Admin-managed schedule & topics block (hidden until populated in admin → Pages) -->
-  <section id="education-schedule-section" class="section section--linen" style="display:none;">
-    <div class="wrap" style="max-width:760px;">
-      <span class="eyebrow eyebrow--sky">Current schedule &amp; topics</span>
-      <div id="education-schedule-content" class="rich-content" style="margin-top:24px;"></div>
-    </div>
-  </section>
+  <div id="notices-education" style="max-width:760px;margin:0 auto;"></div>
 
   <!-- Why it matters -->
   <section class="section section--white">
@@ -533,6 +512,7 @@
     <h1>Sunday Worship</h1>
     <p>Full worship services, live and archived — every Sunday on YouTube.</p>
   </div>
+  <div id="notices-sermons"></div>
   <!-- CURRENT SERIES — loaded dynamically -->
   <section class="section section--white" id="sermons-series-section">
     <div class="wrap" id="sermons-series-content">
@@ -564,6 +544,7 @@
     <h1>Ministries</h1>
     <p>Ways to connect, serve, grow, and belong at Timothy Lutheran.</p>
   </div>
+  <div id="notices-ministries"></div>
   <section class="section section--white">
     <div class="wrap">
       <span class="eyebrow">Church ministries</span>
@@ -674,6 +655,7 @@
     <h1>Contact Us</h1>
     <p>Questions, prayer requests, or just want to connect — we're here.</p>
   </div>
+  <div id="notices-contact"></div>
   <section class="section section--white">
     <div class="wrap">
       <div class="contact-grid">
@@ -763,6 +745,7 @@
     <h1>Prayer Requests</h1>
     <p>Share what's on your heart. Our pastoral staff prays for each request.</p>
   </div>
+  <div id="notices-prayer"></div>
   <section class="section section--white">
     <div class="wrap">
       <div style="max-width:600px;margin:0 auto;text-align:center;margin-bottom:48px;">
@@ -800,6 +783,7 @@
     <h1>News &amp; Events</h1>
     <p>Announcements, upcoming events, and weekly letters from our congregation.</p>
   </div>
+  <div id="notices-news"></div>
 
   <!-- NEWSLETTER DETAIL — shown when navigating to /news/:id -->
   <section id="newsletter-detail" style="display:none;" class="section section--white">
@@ -842,6 +826,7 @@
     <h1>Calendar</h1>
     <p>Events, services, and gatherings at Timothy Lutheran. Worship services are every Sunday at 8:00 and 10:45 am.</p>
   </div>
+  <div id="notices-calendar"></div>
   <section class="section section--white">
     <div class="wrap">
       <div style="border-radius:var(--r-md);overflow:hidden;border:1px solid var(--border);">
@@ -861,6 +846,7 @@
     <h1>Give to Timothy Lutheran</h1>
     <p>Your generosity makes this congregation's work possible — in our neighborhood and beyond.</p>
   </div>
+  <div id="notices-give"></div>
   <section class="section section--white">
     <div class="wrap" style="max-width:760px;">
       <span class="eyebrow">Why we give</span>
@@ -2243,43 +2229,28 @@ async function loadYouthPage() {
   } catch(e) {}
 }
 
-// Load admin-managed page content block (home-notice, worship-notice, about-notice)
-var pageContentLoaded = {};
-async function loadPageContent(key, targetId) {
-  if (pageContentLoaded[key]) return;
-  pageContentLoaded[key] = true;
-  var el = document.getElementById(targetId);
+// Load self-serve notices (admin → Notices) for a given static page.
+// Renders zero or more banners into a single generic container per page.
+var noticesLoaded = {};
+async function loadNotices(slug) {
+  if (noticesLoaded[slug]) return;
+  noticesLoaded[slug] = true;
+  var el = document.getElementById('notices-' + slug);
   if (!el) return;
   try {
-    var res = await fetch('https://admin.timothystl.org/api/page-content/' + key);
+    var res = await fetch('https://admin.timothystl.org/api/notices/' + slug);
     if (!res.ok) return;
     var data = await res.json();
-    if (data.value && data.value.trim()) {
-      el.innerHTML = '<div class="wrap" style="padding-top:28px;padding-bottom:28px;">' +
-        '<div style="background:#FFF8E7;border:1px solid var(--honey);border-left:4px solid var(--amber);border-radius:var(--r-md);padding:20px 24px;" class="rich-content">' +
-        data.value + '</div></div>';
-      el.style.display = '';
+    if (data.notices && data.notices.length) {
+      el.innerHTML = data.notices.map(function(n) {
+        return '<div class="wrap" style="padding-top:28px;padding-bottom:0;">' +
+          '<div style="background:#FFF8E7;border:1px solid var(--honey);border-left:4px solid var(--amber);border-radius:var(--r-md);padding:20px 24px;margin-bottom:20px;" class="rich-content">' +
+          fixImgUrls(n.body) + '</div></div>';
+      }).join('');
     }
   } catch(e) {}
 }
 
-// Load admin-managed Christian Education schedule block
-var educationScheduleLoaded = false;
-async function loadEducationSchedule() {
-  if (educationScheduleLoaded) return;
-  educationScheduleLoaded = true;
-  try {
-    var res = await fetch('https://admin.timothystl.org/api/page-content/education-schedule');
-    if (!res.ok) return;
-    var data = await res.json();
-    if (data.value && data.value.trim()) {
-      document.getElementById('education-schedule-content').innerHTML = fixImgUrls(data.value);
-      document.getElementById('education-schedule-section').style.display = '';
-    }
-  } catch(e) {}
-}
-
-// Load Bible classes from admin API onto the /education page
 var bibleClassesLoaded = false;
 async function loadBibleClasses() {
   if (bibleClassesLoaded) return;
@@ -2319,25 +2290,6 @@ async function loadConcertBlock() {
   } catch(e) {}
 }
 
-// Load seasonal worship content (Lent, Easter, Thanksgiving, Advent, Christmas)
-var seasonalLoaded = false;
-async function loadSeasonalContent() {
-  if (seasonalLoaded) return;
-  seasonalLoaded = true;
-  var seasons = ['lent','easter','thanksgiving','advent','christmas'];
-  for (var i = 0; i < seasons.length; i++) {
-    try {
-      var key = 'seasonal-' + seasons[i];
-      var res = await fetch('https://admin.timothystl.org/api/page-content/' + key);
-      if (!res.ok) continue;
-      var data = await res.json();
-      if (data.value && data.value.trim() && data.published === 1) {
-        document.getElementById('worship-seasonal-' + seasons[i] + '-block').innerHTML = fixImgUrls(data.value);
-        document.getElementById('worship-seasonal-' + seasons[i]).style.display = '';
-      }
-    } catch(e) {}
-  }
-}
 
 // Load staff from admin API
 var staffLoaded = false;
@@ -2658,10 +2610,17 @@ window.showPage = function(id, addHistory) {
   if (id === 'events' && !volLoaded) { volLoaded = true; loadVolunteerEvents(); }
   if (id === 'sermons') { loadSermons(); }
   if (id === 'voters') { loadVotersPage(); }
-  if (id === 'home') { loadPageContent('home-notice', 'home-notice-block'); }
-  if (id === 'worship') { loadPageContent('worship-notice', 'worship-notice-block'); loadSeasonalContent(); }
-  if (id === 'about') { loadPageContent('about-notice', 'about-notice-block'); loadStaff(); }
-  if (id === 'education') { loadEducationSchedule(); loadBibleClasses(); }
+  if (id === 'home') { loadNotices('home'); }
+  if (id === 'worship') { loadNotices('worship'); }
+  if (id === 'about') { loadNotices('about'); loadStaff(); }
+  if (id === 'education') { loadNotices('education'); loadBibleClasses(); }
+  if (id === 'sermons') { loadNotices('sermons'); }
+  if (id === 'ministries') { loadNotices('ministries'); }
+  if (id === 'contact') { loadNotices('contact'); }
+  if (id === 'prayer') { loadNotices('prayer'); }
+  if (id === 'give') { loadNotices('give'); }
+  if (id === 'news') { loadNotices('news'); }
+  if (id === 'calendar') { loadNotices('calendar'); }
   if (id === 'music') { loadConcertBlock(); }
   var adminContentPages = ['sundayschool','confirmation','vbs','egghunt','family','music','stephen','foodpantry','bees'];
   if (adminContentPages.indexOf(id) !== -1) { loadMinistryPage(id); }
@@ -2688,10 +2647,17 @@ window.showPage = function(id, addHistory) {
   if (path === 'events') { volLoaded = true; loadVolunteerEvents(); }
   if (path === 'sermons') { loadSermons(); }
   if (path === 'voters') { loadVotersPage(); }
-  if (path === '' || path === 'home') { loadPageContent('home-notice', 'home-notice-block'); }
-  if (path === 'worship') { loadPageContent('worship-notice', 'worship-notice-block'); loadSeasonalContent(); }
-  if (path === 'about') { loadPageContent('about-notice', 'about-notice-block'); loadStaff(); }
-  if (path === 'education') { loadEducationSchedule(); loadBibleClasses(); }
+  if (path === '' || path === 'home') { loadNotices('home'); }
+  if (path === 'worship') { loadNotices('worship'); }
+  if (path === 'about') { loadNotices('about'); loadStaff(); }
+  if (path === 'education') { loadNotices('education'); loadBibleClasses(); }
+  if (path === 'sermons') { loadNotices('sermons'); }
+  if (path === 'ministries') { loadNotices('ministries'); }
+  if (path === 'contact') { loadNotices('contact'); }
+  if (path === 'prayer') { loadNotices('prayer'); }
+  if (path === 'give') { loadNotices('give'); }
+  if (path === 'news') { loadNotices('news'); }
+  if (path === 'calendar') { loadNotices('calendar'); }
   if (path === 'music') { loadConcertBlock(); }
   var adminContentPages = ['sundayschool','confirmation','vbs','egghunt','family','music','stephen','foodpantry','bees'];
   if (adminContentPages.indexOf(path) !== -1) { loadMinistryPage(path); }
