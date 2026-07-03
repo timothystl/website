@@ -230,8 +230,8 @@ export function sidebarShell(activeTab, user, extraLinks = '', pendingCount = 0)
   ${contentItems ? `<div class="sidebar-group"><div class="sidebar-group-label">Content</div>${contentItems}</div>` : ''}
   ${opsItems ? `<div class="sidebar-group"><div class="sidebar-group-label">People &amp; Ops</div>${opsItems}</div>` : ''}
   <div class="sidebar-footer">
-    <a href="https://volunteer.timothystl.org/scheduler" target="_blank">Scheduler ↗</a>
-    <a href="https://volunteer.timothystl.org/admin" target="_blank">Volunteer Admin ↗</a>
+    <a href="https://chms.timothystl.org/chms#scheduler" target="_blank">Scheduler</a>
+    <a href="https://chms.timothystl.org/chms#volunteers" target="_blank">Volunteer Admin</a>
   </div>
 </aside>
 <div class="util-bar">
