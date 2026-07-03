@@ -128,9 +128,6 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
 .sidebar-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.35);flex-shrink:0;}
 .sidebar-item-active{background:rgba(212,146,42,.16);border-left-color:var(--amber);color:#fff;font-weight:700;}
 .sidebar-item-active .sidebar-dot{background:var(--amber);}
-.sidebar-footer{margin-top:auto;padding:14px 20px 18px;border-top:1px solid rgba(255,255,255,.12);display:flex;flex-direction:column;gap:8px;flex-shrink:0;}
-.sidebar-footer a{font-family:var(--sans);color:rgba(255,255,255,.6);font-size:12px;font-weight:600;text-decoration:none;}
-.sidebar-footer a:hover{color:#fff;}
 .sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:99;}
 .sidebar-backdrop.is-open{display:block;}
 .util-bar{margin-left:0;display:flex;align-items:center;gap:16px;padding:10px 28px;border-bottom:1px solid var(--border);background:#fff;min-height:20px;}
@@ -196,6 +193,8 @@ export function sidebarShell(activeTab, user, extraLinks = '', pendingCount = 0)
 
   const navItem = (href, label, active, extra = '') =>
     `<a href="${href}" class="sidebar-item${active ? ' sidebar-item-active' : ''}"><span class="sidebar-dot"></span>${label}${extra}</a>`;
+  const extNavItem = (href, label) =>
+    `<a href="${href}" target="_blank" class="sidebar-item"><span class="sidebar-dot"></span>${label}</a>`;
 
   const contentItems = [
     showNewsTab ? navItem('/newsitems', 'News &amp; Events', newsActive, pendingDot) : '',
@@ -209,6 +208,8 @@ export function sidebarShell(activeTab, user, extraLinks = '', pendingCount = 0)
   const opsItems = [
     hp('staff_edit')      ? navItem('/staff', 'Staff', activeTab === 'staff') : '',
     hp('gym_manage')      ? navItem('/gym-rentals', 'Gym Rentals', activeTab === 'gym') : '',
+    extNavItem('https://chms.timothystl.org/chms#scheduler', 'Scheduler'),
+    extNavItem('https://chms.timothystl.org/chms#volunteers', 'Volunteer Admin'),
     hp('users_manage')    ? navItem('/users', 'Users', activeTab === 'users') : '',
     hp('settings_manage') ? navItem('/subscribers', 'Subscribers', activeTab === 'subscribers') : '',
     hp('settings_manage') ? navItem('/settings', 'Redirects', activeTab === 'settings') : '',
@@ -229,10 +230,6 @@ export function sidebarShell(activeTab, user, extraLinks = '', pendingCount = 0)
   </div>
   ${contentItems ? `<div class="sidebar-group"><div class="sidebar-group-label">Content</div>${contentItems}</div>` : ''}
   ${opsItems ? `<div class="sidebar-group"><div class="sidebar-group-label">People &amp; Ops</div>${opsItems}</div>` : ''}
-  <div class="sidebar-footer">
-    <a href="https://chms.timothystl.org/chms#scheduler" target="_blank">Scheduler</a>
-    <a href="https://chms.timothystl.org/chms#volunteers" target="_blank">Volunteer Admin</a>
-  </div>
 </aside>
 <div class="util-bar">
   <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar">
