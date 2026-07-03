@@ -4,7 +4,7 @@
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, hasPermission } from './auth.js';
 
-export const VERSION = 'v1.76.41';
+export const VERSION = 'v1.77.0';
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
@@ -19,13 +19,8 @@ ${extraHead}
 :root{--steel:#0A3C5C;--amber:#D4922A;--sage:#6B8F71;--warm:#FAF7F0;--linen:#F2EDE2;--mist:#EDF5F8;--border:#E8E0D0;--charcoal:#3D3530;--gray:#7A6E60;--white:#fff;--sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;--serif:Georgia,'Times New Roman',serif;}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:var(--sans);background:var(--warm);color:var(--charcoal);min-height:100vh;}
-.topbar{background:var(--steel);border-bottom:3px solid var(--amber);padding:0 28px;height:56px;display:flex;align-items:center;justify-content:space-between;}
-.topbar-brand{font-family:var(--sans);font-size:14px;font-weight:800;color:white;}
-.topbar-sub{font-family:var(--sans);font-size:11px;color:var(--amber);}
-.topbar-links{display:flex;gap:16px;}
-.topbar-links a{font-family:var(--sans);font-size:12px;font-weight:700;color:rgba(255,255,255,.7);text-decoration:none;}
-.topbar-links a:hover{color:white;}
-.wrap{max-width:860px;margin:0 auto;padding:40px 28px;}
+.wrap{max-width:860px;margin-left:236px;padding:40px 28px;}
+.wrap-wide{max-width:none;margin-left:236px;padding:24px 32px;}
 .page-title{font-family:var(--serif);font-size:28px;color:var(--steel);margin-bottom:4px;}
 .page-sub{font-family:var(--sans);font-size:14px;color:var(--gray);margin-bottom:32px;}
 .card{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:28px;margin-bottom:20px;}
@@ -73,27 +68,6 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
 .divider{border:none;border-top:1px solid var(--border);margin:24px 0;}
 .tag{font-family:var(--sans);font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--mist);color:var(--steel);}
 .preview-box{background:var(--linen);border:1px solid var(--border);border-radius:10px;padding:20px;margin-top:16px;font-size:13px;color:var(--gray);font-style:italic;}
-.tab-nav{background:var(--linen);border-bottom:2px solid var(--border);overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin;}
-.tab-nav-inner{max-width:860px;margin:0 auto;padding:0 28px;display:flex;flex-wrap:nowrap;width:max-content;min-width:100%;}
-.tab{font-family:var(--sans);font-size:13px;font-weight:700;color:var(--gray);padding:12px 20px;text-decoration:none;border-bottom:3px solid transparent;margin-bottom:-2px;display:inline-block;white-space:nowrap;flex-shrink:0;transition:color .15s;}
-.tab:hover{color:var(--steel);}
-.tab-active{color:var(--steel);border-bottom-color:var(--amber);}
-.tab-external{color:var(--gray);font-weight:600;border-left:1px solid var(--border);margin-left:8px;padding-left:24px;}
-.tab-external:hover{color:var(--steel);}
-.nav-toggle{display:none;background:transparent;border:0;padding:8px;margin-right:-8px;cursor:pointer;color:white;}
-.nav-toggle svg{display:block;width:24px;height:24px;}
-@media (max-width:720px){
-  .topbar{padding:0 16px;}
-  .topbar-links{display:none;}
-  .nav-toggle{display:inline-flex;align-items:center;}
-  .tab-nav{display:none;overflow:visible;border-bottom:2px solid var(--border);}
-  .tab-nav.is-open{display:block;}
-  .tab-nav-inner{display:block;width:auto;min-width:0;padding:6px 0;}
-  .tab{display:block;padding:12px 20px;border-bottom:1px solid var(--border);border-left:3px solid transparent;margin-bottom:0;}
-  .tab:last-child{border-bottom:none;}
-  .tab-active{border-left-color:var(--amber);background:rgba(212,146,42,.08);}
-  .tab-external{border-left:3px solid transparent;margin-left:0;padding-left:20px;}
-}
 .ni-row{display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;}
 .ni-row:last-child{border-bottom:none;}
 .ni-title{font-family:var(--serif);font-size:16px;color:var(--steel);flex:1;min-width:160px;}
@@ -134,6 +108,67 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
 .audit-action{text-transform:capitalize;}
 .audit-entity{color:var(--gray);}
 .pending-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#D4922A;margin-left:6px;vertical-align:middle;}
+
+/* ── SIDEBAR SHELL ─────────────────────────────────────────── */
+.sidebar{position:fixed;top:0;left:0;width:236px;height:100vh;background:var(--steel);display:flex;flex-direction:column;overflow-y:auto;z-index:100;}
+.sidebar-brand{padding:20px 20px 18px;border-bottom:1px solid rgba(255,255,255,.12);margin-bottom:8px;flex-shrink:0;}
+.sidebar-brand-name{font-family:var(--sans);font-size:14px;font-weight:800;color:#fff;}
+.sidebar-brand-sub{font-family:var(--sans);font-size:11px;color:var(--amber);font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-top:2px;}
+.sidebar-user{padding:0 20px 8px;font-family:var(--sans);font-size:11px;color:rgba(255,255,255,.55);}
+.sidebar-group{padding:8px 0 12px;}
+.sidebar-group-label{font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.4);padding:4px 20px 6px 23px;}
+.sidebar-item{display:flex;align-items:center;gap:10px;padding:9px 20px 9px 23px;color:rgba(255,255,255,.78);font-size:13px;font-weight:600;text-decoration:none;border-left:3px solid transparent;}
+.sidebar-item:hover{color:#fff;background:rgba(255,255,255,.06);}
+.sidebar-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.35);flex-shrink:0;}
+.sidebar-item-active{background:rgba(212,146,42,.16);border-left-color:var(--amber);color:#fff;font-weight:700;}
+.sidebar-item-active .sidebar-dot{background:var(--amber);}
+.sidebar-footer{margin-top:auto;padding:14px 20px 18px;border-top:1px solid rgba(255,255,255,.12);display:flex;flex-direction:column;gap:8px;flex-shrink:0;}
+.sidebar-footer a{font-family:var(--sans);color:rgba(255,255,255,.6);font-size:12px;font-weight:600;text-decoration:none;}
+.sidebar-footer a:hover{color:#fff;}
+.sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:99;}
+.util-bar{margin-left:236px;display:flex;align-items:center;gap:16px;padding:10px 28px;border-bottom:1px solid var(--border);background:#fff;min-height:20px;}
+.util-bar-links{flex:1;display:flex;gap:16px;flex-wrap:wrap;}
+.util-bar-links a{font-family:var(--sans);font-size:12px;font-weight:700;color:var(--steel);text-decoration:none;}
+.util-bar-links a:hover{text-decoration:underline;}
+.util-bar-signout{font-family:var(--sans);font-size:12px;font-weight:700;color:var(--gray);text-decoration:none;}
+.util-bar-signout:hover{color:var(--charcoal);}
+.sidebar-toggle{display:none;background:transparent;border:0;padding:6px;margin:0;cursor:pointer;color:var(--steel);flex-shrink:0;}
+.sidebar-toggle svg{display:block;width:22px;height:22px;}
+@media (max-width:880px){
+  .wrap,.wrap-wide,.util-bar{margin-left:0;}
+  .sidebar{transform:translateX(-100%);transition:transform .2s ease;box-shadow:2px 0 16px rgba(0,0,0,.25);}
+  .sidebar.is-open{transform:translateX(0);}
+  .sidebar-backdrop.is-open{display:block;}
+  .sidebar-toggle{display:inline-flex;align-items:center;}
+  .util-bar{padding:10px 16px;}
+  .wrap{padding:24px 16px;}
+  .wrap-wide{padding:20px 16px;}
+}
+/* ── DASHBOARD ─────────────────────────────────────────────── */
+.dash-header{font-family:var(--serif);font-size:24px;color:var(--steel);}
+.dash-sub{font-family:var(--sans);font-size:13px;color:var(--gray);margin-top:2px;}
+.dash-avatar{width:40px;height:40px;border-radius:50%;background:var(--mist);color:var(--steel);display:flex;align-items:center;justify-content:center;font-family:var(--sans);font-weight:700;font-size:14px;flex-shrink:0;}
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:20px 0;}
+@media (max-width:880px){.stat-row{grid-template-columns:repeat(2,1fr);}}
+.stat-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px 20px;}
+.stat-label{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gray);}
+.stat-num{font-family:var(--serif);font-size:30px;margin-top:4px;line-height:1;}
+.stat-note{font-family:var(--sans);font-size:12px;color:var(--gray);margin-top:6px;}
+.dash-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:20px;align-items:start;}
+@media (max-width:960px){.dash-grid{grid-template-columns:1fr;}}
+.attn-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);}
+.attn-row:last-child{border-bottom:none;}
+.attn-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.attn-title{font-family:var(--serif);font-size:14px;color:var(--charcoal);flex:1;}
+.attn-meta{font-family:var(--sans);font-size:11px;color:var(--gray);display:block;margin-top:2px;}
+.activity-row{padding:10px 0;border-bottom:1px solid var(--border);font-family:var(--sans);font-size:13px;color:var(--charcoal);}
+.activity-row:last-child{border-bottom:none;}
+.activity-time{display:block;font-size:11px;color:var(--gray);margin-top:2px;}
+.icon-tile{width:44px;height:44px;border-radius:10px;background:var(--mist);color:var(--steel);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
+.badge-expiring{background:#FFF3D6;color:#7A4F00;}
+.count-pill{font-family:var(--sans);font-size:12px;color:var(--gray);}
+.filter-pill{font-family:var(--sans);font-size:12px;font-weight:700;color:var(--gray);background:var(--linen);border:1px solid var(--border);border-radius:999px;padding:6px 14px;cursor:pointer;}
+.filter-pill.active{background:var(--steel);color:#fff;border-color:var(--steel);}
 </style>
 </head>
 <body>${body}</body>
@@ -146,50 +181,69 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
   });
 }
 
-// ── TOPBAR WITH TABS ─────────────────────────────────────────
-// pendingCount: number of newsletters awaiting approval (shown as dot on News tab)
-export function topbarHtml(activeTab, user, extraLinks = '', pendingCount = 0) {
+// ── SIDEBAR SHELL ─────────────────────────────────────────────
+// Left sidebar navigation (grouped by task area) + a slim utility bar for
+// per-page back-links / external-view links + sign out. Replaces the old
+// horizontal topbarHtml() tab strip.
+// pendingCount: number of newsletters awaiting approval (shown as a dot on the News & Events item)
+export function sidebarShell(activeTab, user, extraLinks = '', pendingCount = 0) {
   const hp = (p) => hasPermission(user, p);
   const newsActive = activeTab === 'news' || activeTab === 'newsletter';
   const showNewsTab = hp('news_edit') || hp('newsletter_edit') || hp('newsletter_approve');
   const pendingDot = pendingCount > 0 && hp('newsletter_approve') ? `<span class="pending-dot" title="${pendingCount} newsletter(s) awaiting approval"></span>` : '';
-  return `<div class="topbar">
-  <div>
-    <div class="topbar-brand">Timothy Lutheran · Admin <span style="font-size:10px;font-weight:400;opacity:.5;margin-left:6px;">${VERSION}</span></div>
-    <div style="font-size:11px;color:rgba(255,255,255,.55);margin-top:1px;">${user ? user.username : ''}</div>
+
+  const navItem = (href, label, active, extra = '') =>
+    `<a href="${href}" class="sidebar-item${active ? ' sidebar-item-active' : ''}"><span class="sidebar-dot"></span>${label}${extra}</a>`;
+
+  const contentItems = [
+    showNewsTab ? navItem('/newsitems', 'News &amp; Events', newsActive, pendingDot) : '',
+    (hp('newsletter_edit') || hp('newsletter_approve')) ? navItem('/newsitems', 'Newsletter', activeTab === 'newsletter') : '',
+    hp('ministries_edit') ? navItem('/ministries', 'Ministries', activeTab === 'ministries') : '',
+    hp('sermons_edit')    ? navItem('/sermons', 'Sermons', activeTab === 'sermons') : '',
+    hp('news_edit')       ? navItem('/christian-education', 'Christian Ed', activeTab === 'christian-education') : '',
+    hp('pages_edit')      ? navItem('/pages', 'Pages', activeTab === 'pages') : '',
+    hp('links_edit')      ? navItem('/link-cards', 'Links', activeTab === 'link-cards') : '',
+  ].filter(Boolean).join('');
+
+  const opsItems = [
+    hp('staff_edit')      ? navItem('/staff', 'Staff', activeTab === 'staff') : '',
+    hp('gym_manage')      ? navItem('/gym-rentals', 'Gym Rentals', activeTab === 'gym') : '',
+    hp('users_manage')    ? navItem('/users', 'Users', activeTab === 'users') : '',
+    hp('settings_manage') ? navItem('/subscribers', 'Subscribers', activeTab === 'subscribers') : '',
+    hp('settings_manage') ? navItem('/settings', 'Settings', activeTab === 'settings') : '',
+    hp('settings_manage') ? navItem('/payroll', 'Payroll', activeTab === 'payroll') : '',
+    hp('audit_view')      ? navItem('/audit-log', 'Audit Log', activeTab === 'audit') : '',
+  ].filter(Boolean).join('');
+
+  return `<div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <div class="sidebar-brand-name">Timothy Lutheran</div>
+    <div class="sidebar-brand-sub">Admin <span style="opacity:.6;font-weight:400;text-transform:none;letter-spacing:0;">${VERSION}</span></div>
   </div>
-  <div class="topbar-links">
-    ${extraLinks}
-    <a href="/logout">Sign out</a>
+  <div class="sidebar-user">${user ? escapeHtml(user.username) : ''}</div>
+  <div class="sidebar-group">
+    <div class="sidebar-group-label">Overview</div>
+    ${navItem('/dashboard', 'Dashboard', activeTab === 'dashboard')}
   </div>
-  <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Open navigation" aria-expanded="false" aria-controls="tab-nav-scroll">
+  ${contentItems ? `<div class="sidebar-group"><div class="sidebar-group-label">Content</div>${contentItems}</div>` : ''}
+  ${opsItems ? `<div class="sidebar-group"><div class="sidebar-group-label">People &amp; Ops</div>${opsItems}</div>` : ''}
+  <div class="sidebar-footer">
+    <a href="https://volunteer.timothystl.org/scheduler" target="_blank">Scheduler ↗</a>
+    <a href="https://volunteer.timothystl.org/admin" target="_blank">Volunteer Admin ↗</a>
+  </div>
+</aside>
+<div class="util-bar">
+  <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
   </button>
+  <div class="util-bar-links">${extraLinks}</div>
+  <a href="/logout" class="util-bar-signout">Sign out</a>
 </div>
-<nav class="tab-nav" id="tab-nav-scroll">
-  <div class="tab-nav-inner">
-    ${showNewsTab        ? `<a href="/newsitems" class="tab${newsActive ? ' tab-active' : ''}">News &amp; Events${pendingDot}</a>` : ''}
-    ${hp('news_edit')       ? `<a href="/christian-education" class="tab${activeTab === 'christian-education' ? ' tab-active' : ''}">Christian Ed</a>` : ''}
-    ${hp('ministries_edit') ? `<a href="/ministries" class="tab${activeTab === 'ministries' ? ' tab-active' : ''}">Ministries</a>` : ''}
-    ${hp('sermons_edit')    ? `<a href="/sermons" class="tab${activeTab === 'sermons' ? ' tab-active' : ''}">Sermons</a>` : ''}
-    ${hp('pages_edit')      ? `<a href="/pages" class="tab${activeTab === 'pages' ? ' tab-active' : ''}">Pages</a>` : ''}
-    ${hp('staff_edit')      ? `<a href="/staff" class="tab${activeTab === 'staff' ? ' tab-active' : ''}">Staff</a>` : ''}
-    ${hp('links_edit')      ? `<a href="/link-cards" class="tab${activeTab === 'link-cards' ? ' tab-active' : ''}">Links</a>` : ''}
-    ${hp('settings_manage') ? `<a href="/settings" class="tab${activeTab === 'settings' ? ' tab-active' : ''}">Settings</a>` : ''}
-    ${hp('settings_manage') ? `<a href="/subscribers" class="tab${activeTab === 'subscribers' ? ' tab-active' : ''}">Subscribers</a>` : ''}
-    ${hp('gym_manage')      ? `<a href="/gym-rentals" class="tab${activeTab === 'gym' ? ' tab-active' : ''}">Gym Rentals</a>` : ''}
-    ${hp('settings_manage') ? `<a href="/payroll" class="tab${activeTab === 'payroll' ? ' tab-active' : ''}">Payroll</a>` : ''}
-    ${hp('users_manage')    ? `<a href="/users" class="tab${activeTab === 'users' ? ' tab-active' : ''}">Users</a>` : ''}
-    ${hp('audit_view')      ? `<a href="/audit-log" class="tab${activeTab === 'audit' ? ' tab-active' : ''}">Audit Log</a>` : ''}
-    <a href="https://volunteer.timothystl.org/scheduler" target="_blank" class="tab tab-external">Scheduler ↗</a>
-    <a href="https://volunteer.timothystl.org/admin" target="_blank" class="tab tab-external">Volunteer Admin ↗</a>
-  </div>
-</nav>
 <script>(function(){
-var n=document.getElementById('tab-nav-scroll');
-if(n){var a=n.querySelector('.tab-active');if(a){var l=a.offsetLeft-(n.clientWidth-a.offsetWidth)/2;n.scrollLeft=Math.max(0,l);}}
-var btn=document.getElementById('nav-toggle');
-if(btn&&n){btn.addEventListener('click',function(){var open=n.classList.toggle('is-open');btn.setAttribute('aria-expanded',open?'true':'false');});}
+var sb=document.getElementById('sidebar'),bd=document.getElementById('sidebar-backdrop'),btn=document.getElementById('sidebar-toggle');
+function close(){sb.classList.remove('is-open');bd.classList.remove('is-open');btn&&btn.setAttribute('aria-expanded','false');}
+if(btn&&sb&&bd){btn.addEventListener('click',function(){var open=sb.classList.toggle('is-open');bd.classList.toggle('is-open',open);btn.setAttribute('aria-expanded',open?'true':'false');});bd.addEventListener('click',close);}
 })();</script>`;
 }
 
