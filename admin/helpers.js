@@ -199,7 +199,6 @@ export function sidebarShell(activeTab, user, extraLinks = '', pendingCount = 0)
 
   const contentItems = [
     showNewsTab ? navItem('/newsitems', 'News &amp; Events', newsActive, pendingDot) : '',
-    (hp('newsletter_edit') || hp('newsletter_approve')) ? navItem('/newsitems', 'Newsletter', activeTab === 'newsletter') : '',
     hp('ministries_edit') ? navItem('/ministries', 'Ministries', activeTab === 'ministries') : '',
     hp('sermons_edit')    ? navItem('/sermons', 'Sermons', activeTab === 'sermons') : '',
     hp('news_edit')       ? navItem('/christian-education', 'Christian Ed', activeTab === 'christian-education') : '',
@@ -212,7 +211,7 @@ export function sidebarShell(activeTab, user, extraLinks = '', pendingCount = 0)
     hp('gym_manage')      ? navItem('/gym-rentals', 'Gym Rentals', activeTab === 'gym') : '',
     hp('users_manage')    ? navItem('/users', 'Users', activeTab === 'users') : '',
     hp('settings_manage') ? navItem('/subscribers', 'Subscribers', activeTab === 'subscribers') : '',
-    hp('settings_manage') ? navItem('/settings', 'Settings', activeTab === 'settings') : '',
+    hp('settings_manage') ? navItem('/settings', 'Redirects', activeTab === 'settings') : '',
     hp('settings_manage') ? navItem('/payroll', 'Payroll', activeTab === 'payroll') : '',
     hp('audit_view')      ? navItem('/audit-log', 'Audit Log', activeTab === 'audit') : '',
   ].filter(Boolean).join('');
