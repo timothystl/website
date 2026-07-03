@@ -170,18 +170,17 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
   <a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#D4922A;text-decoration:none;">Read more →</a>
 </td></tr>` : '';
 
-  // WOL + LASM side by side
+  // WOL + LASM side by side — centered as a single column when only one is present
+  const ministryCol = (label, content) => `<td class="min-col" width="48%" valign="top" style="background:#EEF5EF;border-left:3px solid #6B8F71;border-radius:0 6px 6px 0;padding:13px;">
+      <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6B8F71;margin-bottom:7px;">${label}</div><div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;color:#3D3530;line-height:1.7;">${content}</div>
+    </td>`;
   const ministryRowHtml = (wolContent || lasmContent) ? `
 <tr><td style="padding-top:22px;border-top:1px solid #E8E0D0;">
   <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6B8F71;margin-bottom:12px;">From our Ministry Partners</div>
   <table width="100%" cellpadding="0" cellspacing="0"><tr>
-    <td class="min-col" width="48%" valign="top" style="${wolContent ? 'background:#EEF5EF;border-left:3px solid #6B8F71;border-radius:0 6px 6px 0;padding:13px;' : ''}">
-      ${wolContent ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6B8F71;margin-bottom:7px;">Word of Life</div><div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;color:#3D3530;line-height:1.7;">${wolContent}</div>` : ''}
-    </td>
-    <td class="min-gap" width="4%"></td>
-    <td class="min-col" width="48%" valign="top" style="${lasmContent ? 'background:#EEF5EF;border-left:3px solid #6B8F71;border-radius:0 6px 6px 0;padding:13px;' : ''}">
-      ${lasmContent ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6B8F71;margin-bottom:7px;">LASM</div><div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;color:#3D3530;line-height:1.7;">${lasmContent}</div>` : ''}
-    </td>
+    ${wolContent && lasmContent
+      ? `${ministryCol('Word of Life', wolContent)}<td class="min-gap" width="4%"></td>${ministryCol('LASM', lasmContent)}`
+      : `<td class="min-gap" width="26%"></td>${ministryCol(wolContent ? 'Word of Life' : 'LASM', wolContent || lasmContent)}<td class="min-gap" width="26%"></td>`}
   </tr></table>
 </td></tr>` : '';
 

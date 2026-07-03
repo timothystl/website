@@ -2099,10 +2099,14 @@ async function loadNewsletterDetail(id) {
     }
     let secHtml = n.secondary_note ? '<div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border);font-family:var(--sans);font-size:15px;color:var(--charcoal);line-height:1.85;">'+n.secondary_note+'</div>' : '';
     let wolLasmHtml = '';
-    if (n.wol_content || n.lasm_content) {
+    const ministryBlock = (label, content) => '<div style="background:var(--linen);border-left:3px solid var(--sage);border-radius:0 8px 8px 0;padding:14px;"><div style=\'font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sage);margin-bottom:8px;\'>'+label+'</div><div style="font-family:var(--sans);font-size:14px;color:var(--charcoal);line-height:1.7;">'+content+'</div></div>';
+    if (n.wol_content && n.lasm_content) {
       wolLasmHtml = '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:16px;">' +
-        (n.wol_content ? '<div style="background:var(--linen);border-left:3px solid var(--sage);border-radius:0 8px 8px 0;padding:14px;"><div style=\'font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sage);margin-bottom:8px;\'>Word of Life</div><div style="font-family:var(--sans);font-size:14px;color:var(--charcoal);line-height:1.7;">'+n.wol_content+'</div></div>' : '<div></div>') +
-        (n.lasm_content ? '<div style="background:var(--linen);border-left:3px solid var(--sage);border-radius:0 8px 8px 0;padding:14px;"><div style=\'font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sage);margin-bottom:8px;\'>LASM</div><div style="font-family:var(--sans);font-size:14px;color:var(--charcoal);line-height:1.7;">'+n.lasm_content+'</div></div>' : '<div></div>') +
+        ministryBlock('Word of Life', n.wol_content) + ministryBlock('LASM', n.lasm_content) +
+        '</div>';
+    } else if (n.wol_content || n.lasm_content) {
+      wolLasmHtml = '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);display:flex;justify-content:center;">' +
+        '<div style="max-width:420px;width:100%;">' + ministryBlock(n.wol_content ? 'Word of Life' : 'LASM', n.wol_content || n.lasm_content) + '</div>' +
         '</div>';
     }
     let tertiaryHtml = '';
