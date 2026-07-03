@@ -3936,11 +3936,10 @@ ${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`)}
       }
     } // end link-cards tab
 
-    // ── SETTINGS TAB ───────────────────────────────────────────
-    // ── GYM RENTALS ─────────────────────────────────────────────
+    // ── REDIRECTS TAB ────────────────────────────────────────────
 
-    // ── CUSTOM REDIRECTS (add/delete, inside Settings page) ──
-    if ((path === '/redirects/add' || path.startsWith('/redirects/delete/') || path === '/settings' || path === '/settings/update') && !hasPermission(currentUser, 'settings_manage')) {
+    // ── CUSTOM REDIRECTS (add/edit/delete, inside Redirects page) ──
+    if ((path === '/redirects/add' || path === '/redirects/update' || path.startsWith('/redirects/delete/') || path === '/settings' || path === '/settings/update') && !hasPermission(currentUser, 'settings_manage')) {
       return new Response('Access denied.', { status: 403 });
     }
     if (path === '/redirects/add' && method === 'POST') {
@@ -3956,6 +3955,24 @@ ${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`)}
       }
       await env.DB.prepare('INSERT OR REPLACE INTO redirects (path, url, label) VALUES (?, ?, ?)').bind(rPath, rUrl, rLabel).run();
       return new Response('', { status: 302, headers: { Location: '/settings?msg=redirect-added' } });
+    }
+    if (path === '/redirects/update' && method === 'POST') {
+      const form = await request.formData();
+      const originalPath = (form.get('original_path') || '').trim().replace(/^\/+/, '').toLowerCase();
+      const rPath = (form.get('path') || '').trim().replace(/^\/+/, '').toLowerCase();
+      const rUrl  = (form.get('url')  || '').trim();
+      const rLabel= (form.get('label')|| '').trim();
+      if (!rPath || !rUrl) return new Response('', { status: 302, headers: { Location: '/settings?msg=redirect-error' } });
+      let parsedProtocol = '';
+      try { parsedProtocol = new URL(rUrl).protocol; } catch (_) {}
+      if (parsedProtocol !== 'http:' && parsedProtocol !== 'https:') {
+        return new Response('', { status: 302, headers: { Location: '/settings?msg=redirect-error' } });
+      }
+      if (rPath !== originalPath) {
+        await env.DB.prepare('DELETE FROM redirects WHERE path = ?').bind(originalPath).run();
+      }
+      await env.DB.prepare('INSERT OR REPLACE INTO redirects (path, url, label) VALUES (?, ?, ?)').bind(rPath, rUrl, rLabel).run();
+      return new Response('', { status: 302, headers: { Location: '/settings?msg=redirect-updated' } });
     }
     if (path.startsWith('/redirects/delete/') && method === 'POST') {
       const rPath = path.slice('/redirects/delete/'.length);
@@ -4058,42 +4075,41 @@ ${sidebarShell('subscribers', currentUser)}
     if (path.startsWith('/settings')) {
       // Show settings form
       if (path === '/settings' && method === 'GET') {
-        const settings = await env.DB.prepare('SELECT key, value, label, hint FROM site_settings ORDER BY rowid').all();
+        const REDIRECT_KEYS = ['zoom_url', 'councilfiles_url', 'give_url'];
+        const settings = await env.DB.prepare(`SELECT key, value, label, hint FROM site_settings WHERE key IN (${REDIRECT_KEYS.map(() => '?').join(',')}) ORDER BY rowid`).bind(...REDIRECT_KEYS).all();
         const customRedirects = await env.DB.prepare('SELECT path, url, label FROM redirects ORDER BY path').all();
         const msg = url.searchParams.get('msg');
         const alertHtml = msg === 'saved' ? `<div class="alert alert-success">✓ Settings saved.</div>`
           : msg === 'redirect-added'   ? `<div class="alert alert-success">✓ Redirect added.</div>`
+          : msg === 'redirect-updated' ? `<div class="alert alert-success">✓ Redirect updated.</div>`
           : msg === 'redirect-deleted' ? `<div class="alert alert-info">Redirect deleted.</div>`
           : msg === 'redirect-error'   ? `<div class="alert alert-error">Path and URL are both required.</div>` : '';
 
-        const REDIRECT_KEYS = ['zoom_url', 'councilfiles_url', 'give_url'];
         const renderField = s => `
           <div class="form-group" style="border-bottom:1px solid var(--border);padding-bottom:20px;margin-bottom:20px;">
             <label>${(s.label||s.key).replace(/&/g,'&amp;')}</label>
             ${s.hint ? `<div style="font-size:12px;color:var(--gray);margin-bottom:8px;">${s.hint.replace(/&/g,'&amp;')}</div>` : ''}
             <input type="text" name="${s.key.replace(/"/g,'&quot;')}" value="${(s.value||'').replace(/"/g,'&quot;').replace(/&/g,'&amp;')}" style="font-family:var(--mono,monospace);font-size:13px;">
           </div>`;
-        const redirectFields = settings.results.filter(s => REDIRECT_KEYS.includes(s.key)).map(renderField).join('');
-        const configFields   = settings.results.filter(s => !REDIRECT_KEYS.includes(s.key)).map(renderField).join('');
+        const redirectFields = settings.results.map(renderField).join('');
 
         const customRowsHtml = customRedirects.results.length === 0
           ? `<div style="font-size:13px;color:var(--gray);padding:12px 0;">No custom redirects yet.</div>`
           : customRedirects.results.map(r => `
-            <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
-              <code style="background:var(--mist);padding:3px 8px;border-radius:4px;font-size:13px;flex-shrink:0;">/${r.path.replace(/&/g,'&amp;')}</code>
-              <span style="font-size:12px;color:var(--gray);">→</span>
-              <span style="font-size:13px;color:var(--mid);flex:1;word-break:break-all;">${(r.url||'').replace(/&/g,'&amp;')}</span>
-              ${r.label ? `<span style="font-size:12px;color:var(--gray);">${r.label.replace(/&/g,'&amp;')}</span>` : ''}
-              <form method="POST" action="/redirects/delete/${encodeURIComponent(r.path)}" onsubmit="return confirm('Delete /${r.path}?')" style="margin:0;">
-                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-              </form>
-            </div>`).join('');
+            <form method="POST" action="/redirects/update" style="display:grid;grid-template-columns:1fr 2fr 1fr auto auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+              <input type="hidden" name="original_path" value="${r.path.replace(/"/g,'&quot;')}">
+              <input type="text" name="path" value="${r.path.replace(/"/g,'&quot;')}" style="font-family:var(--mono,monospace);font-size:13px;">
+              <input type="url" name="url" value="${(r.url||'').replace(/"/g,'&quot;')}" style="font-size:13px;">
+              <input type="text" name="label" value="${(r.label||'').replace(/"/g,'&quot;')}" placeholder="Label" style="font-size:13px;">
+              <button type="submit" class="btn btn-sm btn-secondary">Save</button>
+              <button type="submit" formaction="/redirects/delete/${encodeURIComponent(r.path)}" formnovalidate class="btn btn-sm btn-danger" onclick="return confirm('Delete /${r.path.replace(/'/g,"\\'")}?')">Delete</button>
+            </form>`).join('');
 
         return html(`
 ${sidebarShell('settings', currentUser)}
 <div class="wrap">
-  <div class="page-title">Site Settings</div>
-  <div class="page-sub">Update redirect URLs and site-wide configuration. Changes take effect immediately.</div>
+  <div class="page-title">Redirects</div>
+  <div class="page-sub">Manage short links and redirect URLs used across the site. Changes take effect immediately.</div>
   ${alertHtml}
   <form method="POST" action="/settings/update">
     <div class="card">
@@ -4108,7 +4124,7 @@ ${sidebarShell('settings', currentUser)}
 
   <div class="card" style="margin-top:20px;">
     <div class="card-title">Custom Redirects</div>
-    <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">Add short links that redirect visitors to any URL. Example: <code>/mdo</code> → <code>https://mdo.timothystl.org</code>. Works when someone types the URL directly in the browser.</div>
+    <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">Add short links that redirect visitors to any URL. Example: <code>/mdo</code> → <code>https://mdo.timothystl.org</code>. Works when someone types the URL directly in the browser. Edit the fields below and click Save, or Delete to remove.</div>
     ${customRowsHtml}
     <form method="POST" action="/redirects/add" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
       <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sage);margin-bottom:12px;">Add new redirect</div>
@@ -4131,17 +4147,7 @@ ${sidebarShell('settings', currentUser)}
       </div>
     </form>
   </div>
-
-  <form method="POST" action="/settings/update">
-    <div class="card" style="margin-top:20px;">
-      <div class="card-title">Site Configuration</div>
-      ${configFields}
-      <div class="btn-row" style="margin-top:4px;">
-        <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save configuration →</button>
-      </div>
-    </div>
-  </form>
-</div>`, 'Site Settings');
+</div>`, 'Redirects');
       }
 
       // Save settings
@@ -4156,7 +4162,7 @@ ${sidebarShell('settings', currentUser)}
         }
         return new Response('', { status: 302, headers: { Location: '/settings?msg=saved' } });
       }
-    } // end settings tab
+    } // end redirects tab
 
     // ── USER MANAGEMENT ────────────────────────────────────────
     if (path.startsWith('/users') && !hasPermission(currentUser, 'users_manage')) {

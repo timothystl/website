@@ -1758,11 +1758,12 @@ ${sidebarShell('gym', currentUser)}
     <a href="/gym-rentals/invoices" class="btn btn-secondary">Invoices</a>
     <a href="/gym-rentals/merge-holds" class="btn btn-secondary">Consolidate Bookings</a>
     <a href="/gym-rentals/detect-patterns" class="btn btn-secondary">Detect Patterns</a>
+    <a href="/gym-rentals/settings" class="btn btn-secondary">Settings</a>
     <a href="/gym-rentals/test-gcal" class="btn btn-secondary" style="margin-left:auto;">Test GCal →</a>
   </div>
   <div style="background:var(--mist);border:1px solid var(--border);border-radius:10px;padding:12px 18px;margin-bottom:24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
     <div style="font-size:14px;color:var(--charcoal);">Rental rate: <strong>$${rateRow?.value || '25.00'}/hr</strong></div>
-    <a href="/settings" style="font-size:13px;color:var(--teal,#2E7EA6);text-decoration:none;border-bottom:1px solid currentColor;">Change rate →</a>
+    <a href="/gym-rentals/settings" style="font-size:13px;color:var(--teal,#2E7EA6);text-decoration:none;border-bottom:1px solid currentColor;">Change rate →</a>
     <div style="width:1px;height:20px;background:var(--border);"></div>
     <div style="font-size:13px;color:var(--charcoal);">Pending holds: <strong>${holdHrs} hrs</strong> <span style="color:var(--gray);">($${(holdHrs * rate).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})})</span></div>
     <div style="font-size:13px;color:var(--charcoal);">Confirmed (upcoming): <strong>${confHrs} hrs</strong> <span style="color:var(--gray);">($${(confHrs * rate).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})})</span></div>
@@ -1827,6 +1828,44 @@ document.addEventListener('change', function(e) {
   }
 });
 </script>`, 'Gym Rentals');
+      }
+
+      // ── SETTINGS ─────────────────────────────────────────────
+      const GYM_SETTINGS_KEYS = ['gym_rate_per_hour', 'gym_hold_hours', 'gcal_calendar_id', 'gym_admin_email', 'gym_payment_link'];
+      if (path === '/gym-rentals/settings' && method === 'GET') {
+        const settings = await env.DB.prepare(`SELECT key, value, label, hint FROM site_settings WHERE key IN (${GYM_SETTINGS_KEYS.map(() => '?').join(',')}) ORDER BY rowid`).bind(...GYM_SETTINGS_KEYS).all();
+        const fieldsHtml = settings.results.map(s => `
+          <div class="form-group" style="border-bottom:1px solid var(--border);padding-bottom:20px;margin-bottom:20px;">
+            <label>${(s.label||s.key).replace(/&/g,'&amp;')}</label>
+            ${s.hint ? `<div style="font-size:12px;color:var(--gray);margin-bottom:8px;">${s.hint.replace(/&/g,'&amp;')}</div>` : ''}
+            <input type="text" name="${s.key.replace(/"/g,'&quot;')}" value="${(s.value||'').replace(/"/g,'&quot;').replace(/&/g,'&amp;')}" style="font-family:var(--mono,monospace);font-size:13px;">
+          </div>`).join('');
+        return html(`
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
+<div class="wrap">
+  <div class="page-title">Gym Rental Settings</div>
+  <div class="page-sub">Rate, holds, notifications, and Google Calendar sync for the gym rental scheduler.</div>
+  ${gymAlert}
+  <form method="POST" action="/gym-rentals/settings/update">
+    <div class="card">
+      ${fieldsHtml}
+      <div class="btn-row" style="margin-top:4px;">
+        <button type="submit" class="btn btn-primary">Save settings →</button>
+      </div>
+    </div>
+  </form>
+</div>`, 'Gym Rental Settings');
+      }
+
+      if (path === '/gym-rentals/settings/update' && method === 'POST') {
+        const form = await request.formData();
+        for (const key of GYM_SETTINGS_KEYS) {
+          const val = form.get(key);
+          if (val !== null) {
+            await env.DB.prepare('UPDATE site_settings SET value = ? WHERE key = ?').bind(val, key).run();
+          }
+        }
+        return new Response('', { status: 302, headers: { Location: '/gym-rentals/settings?msg=saved' } });
       }
 
       // ── GROUPS LIST ──────────────────────────────────────────
