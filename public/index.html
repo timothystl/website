@@ -2107,12 +2107,49 @@ async function loadNewsletterDetail(id) {
         : '';
       tertiaryHtml = '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);"><div style="background:var(--linen);border-left:3px solid var(--amber);border-radius:0 8px 8px 0;padding:16px 18px;"><div style="font-family:var(--sans);font-size:14px;color:var(--charcoal);line-height:1.8;">'+n.tertiary_note+'</div>'+ctaBtn+'</div></div>';
     }
+    // Featured / additional news items selected for this newsletter
+    let newsHtml = '';
+    if (n.news_items && n.news_items.length) {
+      const mainNews = n.news_items[0];
+      const secondaryNews = n.news_items[1] || null;
+      const additionalNews = n.news_items.slice(2);
+      newsHtml += '<div style="margin-top:24px;padding-top:20px;border-top:2px solid var(--amber);">' +
+        '<div style="font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--amber);margin-bottom:8px;">Featured</div>' +
+        '<div style="font-family:var(--serif);font-size:20px;color:var(--steel);margin-bottom:8px;">'+mainNews.title+'</div>' +
+        (mainNews.summary ? '<div style="font-family:var(--sans);font-size:15px;color:var(--charcoal);line-height:1.75;">'+mainNews.summary+'</div>' : '') +
+        '</div>';
+      if (secondaryNews) {
+        newsHtml += '<div style="margin-top:18px;padding-top:18px;border-top:1px solid var(--border);">' +
+          '<div style="font-family:var(--serif);font-size:17px;color:var(--steel);margin-bottom:6px;">'+secondaryNews.title+'</div>' +
+          (secondaryNews.summary ? '<div style="font-family:var(--sans);font-size:14px;color:var(--charcoal);line-height:1.7;">'+secondaryNews.summary+'</div>' : '') +
+          '</div>';
+      }
+      if (additionalNews.length) {
+        newsHtml += '<div style="margin-top:18px;padding-top:18px;border-top:1px solid var(--border);">' +
+          '<div style="font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:10px;">More from Timothy</div>' +
+          additionalNews.map(item => '<div style="padding:9px 0;border-bottom:1px solid var(--border);"><div style="font-family:var(--serif);font-size:15px;color:var(--steel);margin-bottom:3px;">'+item.title+'</div>'+(item.summary ? '<div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);line-height:1.6;">'+item.summary+'</div>' : '')+'</div>').join('') +
+          '</div>';
+      }
+    }
+    // Bible classes
+    let bibleHtml = '';
+    if (n.bible_classes && n.bible_classes.length) {
+      bibleHtml = '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);">' +
+        '<div style="font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--steel);margin-bottom:10px;">Bible Classes</div>' +
+        n.bible_classes.map(c => {
+          const cDate = c.date ? new Date(c.date+'T12:00:00') : null;
+          return '<div style="display:flex;align-items:center;gap:14px;padding:9px 0;border-top:1px solid var(--border);">' +
+            (cDate ? '<div style="background:var(--steel);color:white;border-radius:6px;padding:5px 8px;text-align:center;min-width:44px;flex-shrink:0;"><div style=\'font-family:var(--sans);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.65;\'>'+cDate.toLocaleDateString('en-US',{month:'short'})+'</div><div style=\'font-family:var(--serif);font-size:18px;line-height:1;\'>'+cDate.getDate()+'</div></div>' : '') +
+            '<div><div style="font-family:var(--serif);font-size:15px;color:var(--steel);">'+(c.topic||'')+'</div><div style="font-family:var(--sans);font-size:12px;color:var(--gray);">'+[c.leader,c.location].filter(Boolean).join(' · ')+'</div></div></div>';
+        }).join('') +
+        '</div>';
+    }
     content.innerHTML =
       '<div style="background:white;border:1px solid var(--border);border-radius:14px;padding:36px;box-shadow:var(--shadow);">' +
         '<div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:6px;">'+date+'</div>' +
         '<h2 style="font-family:var(--serif);font-size:26px;color:var(--steel);margin:0 0 20px;font-weight:600;">'+n.subject+'</h2>' +
         (n.pastor_note ? '<div style="font-family:var(--sans);font-size:16px;color:var(--charcoal);line-height:1.85;">'+n.pastor_note+'</div>' : '') +
-        secHtml + evHtml + wolLasmHtml + tertiaryHtml +
+        secHtml + newsHtml + evHtml + wolLasmHtml + tertiaryHtml + bibleHtml +
       '</div>';
   } catch(e) {
     content.innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--gray);font-family:var(--sans);font-size:14px;">Newsletter not found.</div>';

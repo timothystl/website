@@ -58,9 +58,17 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
 
   function truncate(text, limit) {
     if (!text) return '';
-    const stripped = (text + '').replace(/<[^>]+>/g, '');
-    if (stripped.length <= limit) return stripped;
-    return stripped.substring(0, limit).trimEnd() + '…';
+    const source = text + '';
+    // Preserve any images (e.g. in the pastor's note) — email clients need the <img>
+    // tag itself, not just its stripped-out text, so pull it out before truncating.
+    const imgHtml = (source.match(/<img[^>]*>/gi) || [])
+      .map(tag => {
+        const m = tag.match(/src=["']([^"']+)["']/i);
+        return m ? `<img src="${m[1]}" alt="" style="max-width:100%;height:auto;border-radius:6px;display:block;margin-top:8px;">` : '';
+      }).join('');
+    const stripped = source.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const textHtml = stripped.length <= limit ? stripped : stripped.substring(0, limit).trimEnd() + '…';
+    return textHtml + imgHtml;
   }
 
   // ── QUICK ANNOUNCEMENT layout (full-width, no events column) ──

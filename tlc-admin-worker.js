@@ -37,6 +37,51 @@ const ALLOWED_DOC_TYPES = new Map([
   ['application/pdf', 'pdf'],
 ]);
 
+// Wires the news-item "Header image" file input to /api/upload-image and
+// fills the hidden image_url field with the resulting R2 URL. Replaces the
+// old plain text input, which let staff paste a browser-local blob: URL
+// (dead for every other visitor) into a field with no upload path.
+function newsImageUploadScript(existingUrl = '') {
+  const safeUrl = (existingUrl || '').replace(/"/g, '&quot;');
+  return `<script>
+(function() {
+  var hidden = document.getElementById('image_url_val');
+  var preview = document.getElementById('image-url-preview');
+  var existing = "${safeUrl}";
+  if (existing && existing.indexOf('blob:') !== 0) {
+    hidden.value = existing;
+    preview.innerHTML = '<img src="' + existing + '" style="width:100%;border-radius:6px;">';
+    preview.style.display = '';
+  }
+  document.getElementById('image_url_file').addEventListener('change', async function() {
+    var file = this.files[0];
+    if (!file) return;
+    var status = document.getElementById('image-url-status');
+    status.textContent = 'Uploading…';
+    var fd = new FormData();
+    fd.append('file', file);
+    try {
+      var r = await fetch('/api/upload-image', { method: 'POST', body: fd });
+      var j = await r.json();
+      if (j.url) {
+        hidden.value = j.url;
+        preview.innerHTML = '<img src="' + j.url + '" style="width:100%;border-radius:6px;">';
+        preview.style.display = '';
+        status.textContent = '✓ Uploaded';
+        status.style.color = 'var(--sage)';
+      } else {
+        status.textContent = j.error || 'Upload failed';
+        status.style.color = '#B85C3A';
+      }
+    } catch (e) {
+      status.textContent = 'Upload failed — try again';
+      status.style.color = '#B85C3A';
+    }
+  });
+})();
+<\/script>`;
+}
+
 // ── MAIN HANDLER ─────────────────────────────────────────────
 export default {
   async fetch(request, env, ctx) {
@@ -515,7 +560,23 @@ export default {
       const row = await env.DB.prepare('SELECT * FROM newsletters WHERE id = ?').bind(id).first();
       if (!row) return new Response('Not found', { status: 404 });
       const evts = await env.DB.prepare('SELECT * FROM events WHERE newsletter_id = ? ORDER BY event_date, sort_order').bind(id).all();
-      return new Response(JSON.stringify({ ...row, events: evts.results }), {
+
+      // Resolve the newsletter's featured news items so the website can render
+      // the same Featured / More-from-Timothy sections shown in the email.
+      const newsIds = (row.news_item_ids || '').split(',').map(s => s.trim()).filter(Boolean);
+      let newsItems = [];
+      if (newsIds.length > 0) {
+        const placeholders = newsIds.map(() => '?').join(',');
+        const newsRows = await env.DB.prepare(
+          `SELECT id, title, summary, image_url FROM news_items WHERE id IN (${placeholders})`
+        ).bind(...newsIds).all();
+        const newsMap = Object.fromEntries(newsRows.results.map(r => [String(r.id), r]));
+        newsItems = newsIds.map(nid => newsMap[nid]).filter(Boolean);
+      }
+      let bibleClasses = [];
+      try { bibleClasses = JSON.parse(row.bible_classes || '[]'); } catch (_) {}
+
+      return new Response(JSON.stringify({ ...row, events: evts.results, news_items: newsItems, bible_classes: bibleClasses }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
       });
     }
@@ -2277,7 +2338,7 @@ ${classesJs}
       }
 
       const row = await env.DB.prepare(
-        'SELECT subject, pastor_note, wol_content, lasm_content, secondary_note, published_at, format, cta_url, cta_label, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes FROM newsletters WHERE id = ?'
+        'SELECT subject, pastor_note, wol_content, lasm_content, secondary_note, published_at, format, cta_url, cta_label, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, news_item_ids FROM newsletters WHERE id = ?'
       ).bind(id).first();
       if (!row) return new Response('Not found', { status: 404 });
 
@@ -2285,7 +2346,20 @@ ${classesJs}
         'SELECT event_date, event_name, event_time, event_desc FROM events WHERE newsletter_id = ? ORDER BY sort_order'
       ).bind(id).all();
 
-      const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at, [], row.secondary_note || '', id, row.format || 'weekly', row.cta_url || '', row.cta_label || '', row.tertiary_note || '', row.tertiary_cta_label || '', row.tertiary_cta_url || '', JSON.parse(row.bible_classes || '[]'));
+      // Re-fetch the newsletter's selected news items (title + summary) so the
+      // Featured/More-from-Timothy sections aren't silently empty when sending/resending.
+      const selectedNewsIds = (row.news_item_ids || '').split(',').map(s => s.trim()).filter(Boolean);
+      let selectedNewsItems = [];
+      if (selectedNewsIds.length > 0) {
+        const placeholders = selectedNewsIds.map(() => '?').join(',');
+        const newsRows = await env.DB.prepare(
+          `SELECT id, title, summary FROM news_items WHERE id IN (${placeholders})`
+        ).bind(...selectedNewsIds).all();
+        const newsMap = Object.fromEntries(newsRows.results.map(r => [String(r.id), r]));
+        selectedNewsItems = selectedNewsIds.map(nid => newsMap[nid]).filter(Boolean);
+      }
+
+      const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at, selectedNewsItems, row.secondary_note || '', id, row.format || 'weekly', row.cta_url || '', row.cta_label || '', row.tertiary_note || '', row.tertiary_cta_label || '', row.tertiary_cta_url || '', JSON.parse(row.bible_classes || '[]'));
       const result = await sendBrevoNewsletter(env, { subject: row.subject, htmlContent: emailHtml, listIds: [listId] });
 
       // Sending to all = publish the newsletter so it appears on the website
@@ -2553,8 +2627,11 @@ ${topbarHtml('news', currentUser, `<a href="/newsitems">← Back</a>`)}
       </div>
       ${tinymceEditorSection()}
       <div class="form-group">
-        <label>Header image URL <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, shown on the card thumbnail</span></label>
-        <input type="text" name="image_url" placeholder="https://... (or leave blank — images can also be dropped into the body above)">
+        <label>Header image <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, shown on the card thumbnail</span></label>
+        <input type="hidden" name="image_url" id="image_url_val" value="">
+        <input type="file" id="image_url_file" accept="image/*">
+        <div id="image-url-status" style="font-size:12px;color:var(--gray);margin-top:6px;"></div>
+        <div id="image-url-preview" style="display:none;margin-top:8px;max-width:240px;"></div>
       </div>
     </div>
     <div class="card">
@@ -2614,7 +2691,8 @@ ${topbarHtml('news', currentUser, `<a href="/newsitems">← Back</a>`)}
       <a href="/newsitems" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
     </div>
   </form>
-</div>`, 'TLC Admin — New News Item', TINYMCE_HEAD);
+</div>
+${newsImageUploadScript()}`, 'TLC Admin — New News Item', TINYMCE_HEAD);
     }
 
     // ── NEWS ITEMS: CREATE (POST) ──
@@ -2623,7 +2701,9 @@ ${topbarHtml('news', currentUser, `<a href="/newsitems">← Back</a>`)}
       const title = form.get('title') || '';
       const summary = form.get('summary') || '';
       const body = form.get('body') || '';
-      const image_url = form.get('image_url') || '';
+      // blob: URLs are only valid in the browser tab that created them — dead
+      // for every other visitor. Drop rather than store one if it slips through.
+      const image_url = (form.get('image_url') || '').trim().startsWith('blob:') ? '' : (form.get('image_url') || '');
       const publish_date = form.get('publish_date') || new Date().toISOString().split('T')[0];
       const event_date = form.get('event_date') || '';
       const expire_date = form.get('expire_date') || '';
@@ -2667,8 +2747,11 @@ ${topbarHtml('news', currentUser, `<a href="/newsitems">← Back</a>`)}
       </div>
       ${tinymceEditorSection(item.body || '')}
       <div class="form-group">
-        <label>Header image URL <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, shown on the card thumbnail</span></label>
-        <input type="text" name="image_url" value="${v(item.image_url)}" placeholder="https://... (or leave blank — images can also be dropped into the body above)">
+        <label>Header image <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, shown on the card thumbnail</span></label>
+        <input type="hidden" name="image_url" id="image_url_val" value="">
+        <input type="file" id="image_url_file" accept="image/*">
+        <div id="image-url-status" style="font-size:12px;color:var(--gray);margin-top:6px;"></div>
+        <div id="image-url-preview" style="display:none;margin-top:8px;max-width:240px;"></div>
       </div>
     </div>
     <div class="card">
@@ -2728,7 +2811,8 @@ ${topbarHtml('news', currentUser, `<a href="/newsitems">← Back</a>`)}
       <a href="/newsitems" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
     </div>
   </form>
-</div>`, 'TLC Admin — Edit News Item', TINYMCE_HEAD);
+</div>
+${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item', TINYMCE_HEAD);
     }
 
     // ── NEWS ITEMS: UPDATE (POST) ──
@@ -2738,7 +2822,9 @@ ${topbarHtml('news', currentUser, `<a href="/newsitems">← Back</a>`)}
       const title = form.get('title') || '';
       const summary = form.get('summary') || '';
       const body = form.get('body') || '';
-      const image_url = form.get('image_url') || '';
+      // blob: URLs are only valid in the browser tab that created them — dead
+      // for every other visitor. Drop rather than store one if it slips through.
+      const image_url = (form.get('image_url') || '').trim().startsWith('blob:') ? '' : (form.get('image_url') || '');
       const publish_date = form.get('publish_date') || '';
       const event_date = form.get('event_date') || '';
       const expire_date = form.get('expire_date') || '';
