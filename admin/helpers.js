@@ -4,7 +4,7 @@
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, hasPermission } from './auth.js';
 
-export const VERSION = 'v1.78.0'; // minor bump: self-serve Notices system replaces fixed Pages blocks
+export const VERSION = 'v1.78.1'; // minor bump: self-serve Notices system replaces fixed Pages blocks
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
