@@ -224,8 +224,14 @@
     }
 
     /* ── Staff table ── */
+    .table-scroll {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
     .staff-table {
       width: 100%;
+      min-width: 640px;
       border-collapse: collapse;
       font-size: 0.88rem;
     }
@@ -290,13 +296,19 @@
     .hours-row {
       display: grid;
       grid-template-columns: 1fr 100px 100px 100px;
+      grid-template-areas: "name hw pu pe";
       gap: 10px;
-      align-items: center;
+      align-items: end;
       padding: 10px 12px;
       background: var(--linen);
       border-radius: 8px;
       font-size: 0.88rem;
     }
+
+    .hours-row .staff-info  { grid-area: name; }
+    .hours-row .hf-hours    { grid-area: hw; }
+    .hours-row .hf-pto-used { grid-area: pu; }
+    .hours-row .hf-pto-earned { grid-area: pe; }
 
     .hours-row .staff-name { font-weight: 700; }
     .hours-row .staff-role { color: var(--text-muted); font-size: 0.8rem; }
@@ -322,6 +334,21 @@
       text-transform: uppercase;
       letter-spacing: 0.04em;
       font-weight: 700;
+      text-align: right;
+      margin-bottom: 4px;
+    }
+
+    /* ── Mobile: stack name above a 3-across input row instead of squeezing 4 fixed columns ── */
+    @media (max-width: 640px) {
+      .hours-row {
+        grid-template-columns: 1fr 1fr 1fr;
+        grid-template-areas:
+          "name name name"
+          "hw pu pe";
+        row-gap: 10px;
+      }
+
+      .staff-table { min-width: 560px; }
     }
 
     /* ── Report ── */
@@ -605,22 +632,24 @@
       </div>
     </div>
     <div id="staffPanelBody">
-      <table class="staff-table" id="staffTable">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Role</th>
-            <th>Pay Type</th>
-            <th>Rate / Salary</th>
-            <th>Housing</th>
-            <th>Mileage</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="staffTableBody">
-          <tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:20px;">Loading…</td></tr>
-        </tbody>
-      </table>
+      <div class="table-scroll">
+        <table class="staff-table" id="staffTable">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Role</th>
+              <th>Pay Type</th>
+              <th>Rate / Salary</th>
+              <th>Housing</th>
+              <th>Mileage</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="staffTableBody">
+            <tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:20px;">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -640,12 +669,6 @@
     <div class="card-header">
       <h2>Enter Hours &amp; PTO Used</h2>
       <span style="font-size:0.8rem;color:var(--text-muted);">Church hourly staff only — enter here before printing · auto-saves</span>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 100px 100px 100px;gap:10px;padding:0 12px 8px;align-items:end;">
-      <div></div>
-      <div class="hours-col-label" style="text-align:right;">Hrs Worked</div>
-      <div class="hours-col-label" style="text-align:right;">PTO Used</div>
-      <div class="hours-col-label" style="text-align:right;">PTO Earned</div>
     </div>
     <div class="hours-grid" id="hoursGrid"></div>
   </div>
@@ -1126,22 +1149,31 @@ function renderHoursSection(periodStart) {
         const pu  = entry.pto_hours_used  ?? '';
         const pe  = entry.pto_hours_earned ?? '';
         return `<div class="hours-row">
-            <div>
+            <div class="staff-info">
                 <div class="staff-name">${esc(s.name)}</div>
                 <div class="staff-role">${esc(s.role || '')}</div>
             </div>
-            <input type="number" min="0" step="0.25" value="${hw}" placeholder="0"
-                data-staff="${s.id}" data-field="hours_worked"
-                onchange="scheduleHoursSave('${s.id}', '${periodStart}')"
-                oninput="scheduleHoursSave('${s.id}', '${periodStart}')">
-            <input type="number" min="0" step="0.25" value="${pu}" placeholder="0"
-                data-staff="${s.id}" data-field="pto_hours_used"
-                onchange="scheduleHoursSave('${s.id}', '${periodStart}')"
-                oninput="scheduleHoursSave('${s.id}', '${periodStart}')">
-            <input type="number" min="0" step="0.25" value="${pe}" placeholder="0"
-                data-staff="${s.id}" data-field="pto_hours_earned"
-                onchange="scheduleHoursSave('${s.id}', '${periodStart}')"
-                oninput="scheduleHoursSave('${s.id}', '${periodStart}')">
+            <div class="hf-hours">
+                <div class="hours-col-label">Hrs Worked</div>
+                <input type="number" min="0" step="0.25" value="${hw}" placeholder="0"
+                    data-staff="${s.id}" data-field="hours_worked"
+                    onchange="scheduleHoursSave('${s.id}', '${periodStart}')"
+                    oninput="scheduleHoursSave('${s.id}', '${periodStart}')">
+            </div>
+            <div class="hf-pto-used">
+                <div class="hours-col-label">PTO Used</div>
+                <input type="number" min="0" step="0.25" value="${pu}" placeholder="0"
+                    data-staff="${s.id}" data-field="pto_hours_used"
+                    onchange="scheduleHoursSave('${s.id}', '${periodStart}')"
+                    oninput="scheduleHoursSave('${s.id}', '${periodStart}')">
+            </div>
+            <div class="hf-pto-earned">
+                <div class="hours-col-label">PTO Earned</div>
+                <input type="number" min="0" step="0.25" value="${pe}" placeholder="0"
+                    data-staff="${s.id}" data-field="pto_hours_earned"
+                    onchange="scheduleHoursSave('${s.id}', '${periodStart}')"
+                    oninput="scheduleHoursSave('${s.id}', '${periodStart}')">
+            </div>
         </div>`;
     }).join('');
 }
@@ -1197,7 +1229,10 @@ function exportCsv() {
     const q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
     const rows = [];
 
-    rows.push([q('Timothy Lutheran — Combined Payroll'), q('Pay Period: ' + label)]);
+    // Title + period go in a single cell (column A only) so long text here doesn't
+    // force a spreadsheet app to auto-widen column B past what its data needs —
+    // that was pushing the whole table past one printed page width.
+    rows.push([q('TLC Payroll — ' + label)]);
     rows.push([]);
 
     if (activeMdo.length) {
@@ -1223,7 +1258,7 @@ function exportCsv() {
     }
 
     if (activeChurch.length) {
-        rows.push([q('Church Staff'), q('Type'), q('Base / Earnings'), q('Housing'), q('Ins Opt-Out'), q('HSA'), q('Mileage'), q('403(b) Deduction'), q('Gross Pay')]);
+        rows.push([q('Church Staff'), q('Type'), q('Base/Earnings'), q('Housing'), q('Ins Opt-Out'), q('HSA'), q('Mileage'), q('403(b)'), q('Gross Pay')]);
         let churchTotal = 0;
         activeChurch.forEach(s => {
             const isSalary = s.pay_type === 'salary';
@@ -1237,7 +1272,7 @@ function exportCsv() {
             rows.push([
                 q(s.name),
                 q(isSalary ? 'Salary' : 'Hourly'),
-                q(isSalary ? Number(s.base_salary_biweekly).toFixed(2) : hours.toFixed(2) + ' hrs @ $' + Number(s.hourly_rate).toFixed(2)),
+                q(isSalary ? Number(s.base_salary_biweekly).toFixed(2) : hours.toFixed(2) + ' @ ' + Number(s.hourly_rate).toFixed(2)),
                 q(Number(s.housing_allowance_biweekly) > 0 ? Number(s.housing_allowance_biweekly).toFixed(2) : ''),
                 q(Number(s.insurance_opt_out_biweekly) > 0 ? Number(s.insurance_opt_out_biweekly).toFixed(2) : ''),
                 q(Number(s.hsa_contribution_biweekly) > 0 ? Number(s.hsa_contribution_biweekly).toFixed(2) : ''),
