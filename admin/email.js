@@ -56,19 +56,34 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
   const dateStr = formatDate(publishedAt);
   const isQuick = format === 'quick';
 
+  // Relative /images/... paths only resolve against the admin domain — fine in a
+  // browser tab, but emails have no page origin to resolve them against.
+  function fixImgSrc(url) {
+    return url && url.startsWith('/images/') ? `https://admin.timothystl.org${url}` : url;
+  }
+  function fixBodyImgSrcs(html) {
+    if (!html) return html;
+    return html.replace(/src="\/images\//g, 'src="https://admin.timothystl.org/images/')
+               .replace(/src='\/images\//g, "src='https://admin.timothystl.org/images/");
+  }
+  pastorNote = fixBodyImgSrcs(pastorNote);
+
   function truncate(text, limit) {
     if (!text) return '';
     const source = text + '';
-    // Preserve any images (e.g. in the pastor's note) — email clients need the <img>
-    // tag itself, not just its stripped-out text, so pull it out before truncating.
+    const stripped = source.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    // Content fits within the limit — keep the original HTML (paragraphs, line
+    // breaks, bold, images) instead of flattening it to plain text.
+    if (stripped.length <= limit) return source;
+    // Too long to show in full — fall back to plain text, but still preserve
+    // any images (e.g. in the pastor's note) since email clients need the
+    // <img> tag itself, not just its stripped-out text.
     const imgHtml = (source.match(/<img[^>]*>/gi) || [])
       .map(tag => {
         const m = tag.match(/src=["']([^"']+)["']/i);
         return m ? `<img src="${m[1]}" alt="" style="max-width:100%;height:auto;border-radius:6px;display:block;margin-top:8px;">` : '';
       }).join('');
-    const stripped = source.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    const textHtml = stripped.length <= limit ? stripped : stripped.substring(0, limit).trimEnd() + '…';
-    return textHtml + imgHtml;
+    return stripped.substring(0, limit).trimEnd() + '…' + imgHtml;
   }
 
   // ── QUICK ANNOUNCEMENT layout (full-width, no events column) ──
@@ -155,18 +170,22 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
   const secondaryNews = newsItems[1] || null;
   const additionalNews = newsItems.slice(2);
 
+  const mainNewsImg = mainNews && mainNews.image_url ? `<img src="${fixImgSrc(mainNews.image_url)}" alt="" style="width:100%;max-height:220px;object-fit:contain;background:#F7F3EC;border-radius:8px;display:block;margin-bottom:10px;">` : '';
   const mainNewsHtml = mainNews ? `
 <tr><td style="padding:22px 0 0;border-top:2px solid #D4922A;">
   <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#D4922A;margin-bottom:8px;">Featured</div>
   <div style="font-family:'Lora',Georgia,serif;font-size:20px;color:#0A3C5C;margin-bottom:8px;">${mainNews.title}</div>
-  ${mainNews.summary ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:14px;color:#3D3530;line-height:1.75;margin-bottom:10px;">${truncate(mainNews.summary, 280)}</div>` : ''}
+  ${mainNewsImg}
+  ${(mainNews.summary || mainNews.body) ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:14px;color:#3D3530;line-height:1.75;margin-bottom:10px;">${truncate(mainNews.summary || fixBodyImgSrcs(mainNews.body), 280)}</div>` : ''}
   <a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#D4922A;text-decoration:none;">Read more →</a>
 </td></tr>` : '';
 
+  const secondaryNewsImg = secondaryNews && secondaryNews.image_url ? `<img src="${fixImgSrc(secondaryNews.image_url)}" alt="" style="width:100%;max-height:200px;object-fit:contain;background:#F7F3EC;border-radius:8px;display:block;margin-bottom:8px;">` : '';
   const secondaryNewsHtml = secondaryNews ? `
 <tr><td style="padding:18px 0 0;border-top:1px solid #E8E0D0;">
   <div style="font-family:'Lora',Georgia,serif;font-size:17px;color:#0A3C5C;margin-bottom:6px;">${secondaryNews.title}</div>
-  ${secondaryNews.summary ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;color:#3D3530;line-height:1.7;margin-bottom:8px;">${truncate(secondaryNews.summary, 200)}</div>` : ''}
+  ${secondaryNewsImg}
+  ${(secondaryNews.summary || secondaryNews.body) ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;color:#3D3530;line-height:1.7;margin-bottom:8px;">${truncate(secondaryNews.summary || fixBodyImgSrcs(secondaryNews.body), 200)}</div>` : ''}
   <a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#D4922A;text-decoration:none;">Read more →</a>
 </td></tr>` : '';
 
@@ -204,7 +223,7 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
     ${additionalNews.map(item => `
     <tr><td style="padding:11px 0;border-bottom:1px solid #F0E8DC;">
       <div style="font-family:'Lora',Georgia,serif;font-size:15px;color:#0A3C5C;margin-bottom:4px;">${item.title}</div>
-      ${item.summary ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;color:#3D3530;line-height:1.65;margin-bottom:6px;">${truncate(item.summary, 150)}</div>` : ''}
+      ${(item.summary || item.body) ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;color:#3D3530;line-height:1.65;margin-bottom:6px;">${truncate(item.summary || fixBodyImgSrcs(item.body), 150)}</div>` : ''}
       <a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;color:#D4922A;text-decoration:none;">Read more →</a>
     </td></tr>`).join('')}
   </table>
