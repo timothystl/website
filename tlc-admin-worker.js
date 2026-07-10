@@ -1639,7 +1639,7 @@ ${sidebarShell('sermons', currentUser, `<a href="${n.series_id ? '/sermons/notes
 
     // ── NEWSLETTER + NEWS PERMISSION GUARD ──
     // Routes under /new, /publish, /edit/, /delete/, /send-email/, /newsitems require news or newsletter permission
-    const isNewsletterRoute = ['/new', '/publish'].includes(path) || path.startsWith('/edit/') || path.startsWith('/send-email/') || path.startsWith('/delete/');
+    const isNewsletterRoute = ['/new', '/publish'].includes(path) || path.startsWith('/edit/') || path.startsWith('/send-email/') || path.startsWith('/delete/') || path.startsWith('/newsletter/duplicate/');
     const isNewsItemRoute = path === '/newsitems' || path.startsWith('/newsitems/');
     if (isNewsletterRoute && !hasPermission(currentUser, 'newsletter_edit') && !hasPermission(currentUser, 'newsletter_approve')) {
       return new Response('Access denied.', { status: 403 });
@@ -2332,10 +2332,14 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
       const pastorNoteVal = (fmt === 'weekly' ? row.pastor_note : '') || '';
       const ministryChecked = (t) => (row.ministry_type || 'text') === t ? ' checked' : '';
 
+      const copiedNotice = url.searchParams.get('copied') === '1'
+        ? `<div class="alert alert-success">✓ Duplicated as a new draft. Update the subject, date, and content, then publish when ready.</div>`
+        : '';
       return html(`
 ${sidebarShell('news', currentUser, `<a href="/newsitems">← News &amp; Events</a>`)}
 <div class="wrap">
   <div class="page-title">Edit newsletter</div>
+  ${copiedNotice}
   <div class="page-sub" style="color:var(--amber);font-weight:700;">You are editing a ${row.status === 'draft' ? 'draft' : 'published'} newsletter. Changes will go live immediately when you publish.</div>
 
   <form method="POST" action="/publish" enctype="multipart/form-data">
@@ -2603,6 +2607,28 @@ ${classesJs}
       return new Response('', { status: 302, headers: { Location: '/newsitems' } });
     }
 
+    // ── DUPLICATE ──
+    if (path.startsWith('/newsletter/duplicate/') && method === 'POST') {
+      const id = path.split('/').pop();
+      const row = await env.DB.prepare('SELECT * FROM newsletters WHERE id = ?').bind(id).first();
+      if (!row) return new Response('Not found', { status: 404 });
+      const eventsRows = await env.DB.prepare('SELECT * FROM events WHERE newsletter_id = ? ORDER BY sort_order').bind(id).all();
+      const result = await env.DB.prepare(
+        'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(
+        `Copy of ${row.subject}`, row.pastor_note, row.ministry_content, row.ministry_type, null, row.format,
+        row.cta_url, row.cta_label, 'draft', row.wol_content, row.lasm_content, row.secondary_note,
+        row.news_item_ids, row.tertiary_note, row.tertiary_cta_label, row.tertiary_cta_url, row.bible_classes
+      ).run();
+      const newId = result.meta.last_row_id;
+      for (const e of eventsRows.results) {
+        await env.DB.prepare(
+          'INSERT INTO events (newsletter_id, event_date, event_name, event_time, event_desc, sort_order) VALUES (?, ?, ?, ?, ?, ?)'
+        ).bind(newId, e.event_date, e.event_name, e.event_time, e.event_desc, e.sort_order).run();
+      }
+      return new Response('', { status: 302, headers: { Location: `/edit/${newId}?copied=1` } });
+    }
+
     // ── NEWS & EVENTS: COMBINED LIST (Newsletter + News Posts) ──
     if (path === '/newsitems' && method === 'GET') {
       await sweepExpiredItems(env, new URL(request.url).origin);
@@ -2746,6 +2772,9 @@ ${classesJs}
   <div class="newsletter-subject">${r.subject}${fmtLabel(r)}</div>
   <div class="newsletter-actions">
     <a href="/edit/${r.id}" class="btn btn-sm btn-secondary">Edit</a>
+    <form method="POST" action="/newsletter/duplicate/${r.id}" style="display:contents;">
+      <button type="submit" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Copy</button>
+    </form>
     ${canApprove ? `<form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Send to test list?')">
       <input type="hidden" name="list_type" value="test">
       <button type="submit" class="btn btn-sm" style="background:var(--mist);color:var(--steel);border:1px solid var(--border);">Send test</button>
@@ -2767,6 +2796,9 @@ ${classesJs}
   <div class="newsletter-subject">${r.subject}${fmtLabel(r)}</div>
   <div class="newsletter-actions">
     <a href="/edit/${r.id}" class="btn btn-sm btn-secondary">Edit</a>
+    <form method="POST" action="/newsletter/duplicate/${r.id}" style="display:contents;">
+      <button type="submit" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Copy</button>
+    </form>
     ${hasPermission(currentUser, 'newsletter_approve') ? `
     <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Resend to test list?')">
       <input type="hidden" name="list_type" value="test">
@@ -4617,6 +4649,9 @@ ${sidebarShell('audit', currentUser)}
   <div class="newsletter-subject">${r.subject}${fmtLabel(r)}</div>
   <div class="newsletter-actions">
     <a href="/edit/${r.id}" class="btn btn-sm btn-secondary">Edit</a>
+    <form method="POST" action="/newsletter/duplicate/${r.id}" style="display:contents;">
+      <button type="submit" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Copy</button>
+    </form>
     <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Send to test list?')">
       <input type="hidden" name="list_type" value="test">
       <button type="submit" class="btn btn-sm" style="background:var(--mist);color:var(--steel);border:1px solid var(--border);">Send test</button>
@@ -4640,6 +4675,9 @@ ${sidebarShell('audit', currentUser)}
   <div class="newsletter-subject">${r.subject}${fmtLabel(r)}</div>
   <div class="newsletter-actions">
     <a href="/edit/${r.id}" class="btn btn-sm btn-secondary">Edit</a>
+    <form method="POST" action="/newsletter/duplicate/${r.id}" style="display:contents;">
+      <button type="submit" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Copy</button>
+    </form>
     ${hasPermission(currentUser, 'newsletter_approve') ? `
     <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Resend to test list?')">
       <input type="hidden" name="list_type" value="test">
