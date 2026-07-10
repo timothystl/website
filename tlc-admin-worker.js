@@ -2613,10 +2613,11 @@ ${classesJs}
       const row = await env.DB.prepare('SELECT * FROM newsletters WHERE id = ?').bind(id).first();
       if (!row) return new Response('Not found', { status: 404 });
       const eventsRows = await env.DB.prepare('SELECT * FROM events WHERE newsletter_id = ? ORDER BY sort_order').bind(id).all();
+      const copyPublishedAt = row.published_at || new Date().toISOString().split('T')[0];
       const result = await env.DB.prepare(
         'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       ).bind(
-        `Copy of ${row.subject}`, row.pastor_note, row.ministry_content, row.ministry_type, null, row.format,
+        `Copy of ${row.subject}`, row.pastor_note, row.ministry_content, row.ministry_type, copyPublishedAt, row.format,
         row.cta_url, row.cta_label, 'draft', row.wol_content, row.lasm_content, row.secondary_note,
         row.news_item_ids, row.tertiary_note, row.tertiary_cta_label, row.tertiary_cta_url, row.bible_classes
       ).run();
