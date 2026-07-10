@@ -1994,7 +1994,7 @@ addEvent();
       if (selectedNewsIds.length > 0) {
         const placeholders = selectedNewsIds.map(() => '?').join(',');
         const newsRows = await env.DB.prepare(
-          `SELECT id, title, summary FROM news_items WHERE id IN (${placeholders})`
+          `SELECT id, title, summary, body, image_url FROM news_items WHERE id IN (${placeholders})`
         ).bind(...selectedNewsIds).all();
         const newsMap = Object.fromEntries(newsRows.results.map(r => [r.id, r]));
         selectedNewsItems = selectedNewsIds.map(id => newsMap[id]).filter(Boolean);
@@ -2563,14 +2563,14 @@ ${classesJs}
         'SELECT event_date, event_name, event_time, event_desc FROM events WHERE newsletter_id = ? ORDER BY sort_order'
       ).bind(id).all();
 
-      // Re-fetch the newsletter's selected news items (title + summary) so the
+      // Re-fetch the newsletter's selected news items (title + summary/body/image) so the
       // Featured/More-from-Timothy sections aren't silently empty when sending/resending.
       const selectedNewsIds = (row.news_item_ids || '').split(',').map(s => s.trim()).filter(Boolean);
       let selectedNewsItems = [];
       if (selectedNewsIds.length > 0) {
         const placeholders = selectedNewsIds.map(() => '?').join(',');
         const newsRows = await env.DB.prepare(
-          `SELECT id, title, summary FROM news_items WHERE id IN (${placeholders})`
+          `SELECT id, title, summary, body, image_url FROM news_items WHERE id IN (${placeholders})`
         ).bind(...selectedNewsIds).all();
         const newsMap = Object.fromEntries(newsRows.results.map(r => [String(r.id), r]));
         selectedNewsItems = selectedNewsIds.map(nid => newsMap[nid]).filter(Boolean);
