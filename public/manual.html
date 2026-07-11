@@ -103,11 +103,14 @@ li{margin-bottom:6px;}
     <a href="#newsletter">Newsletter</a>
     <a href="#ministries-tab">Ministries</a>
     <a href="#sermons-tab">Sermons</a>
-    <a href="#pages-tab">Pages</a>
+    <a href="#christian-ed-tab">Christian Ed</a>
+    <a href="#pages-tab">Notices</a>
+    <a href="#links-tab">Links</a>
     <a href="#staff-tab">Staff</a>
     <a href="#settings-tab">Redirects</a>
     <a href="#subscribers-tab">Subscribers</a>
     <a href="#gym-tab">Gym Rentals</a>
+    <a href="#payroll-tab">Payroll</a>
     <a href="#users-tab">Users</a>
     <a href="#audit-tab">Audit Log</a>
     <h3>Volunteer Site</h3>
@@ -403,16 +406,24 @@ li{margin-bottom:6px;}
 
     <span class="toc-anchor" id="ministries-tab"></span>
     <h3>Ministries tab</h3>
-    <p><span class="badge badge--sage">Live</span> Manage the content of ministry landing pages — Music, Stephen Ministry, Food Pantry, Urban Beekeepers, and Christmas Market. You can update the page description, button text and links, and photos without touching any code. Changes appear on the site immediately.</p>
+    <p><span class="badge badge--sage">Live</span> Manage the content of ministry landing pages — Music, Stephen Ministry, Food Pantry, Urban Beekeepers, and Christmas Market. You can update the page description, button text and links, and photos without touching any code. Changes appear on the site immediately. This tab also covers Youth &amp; Family sub-pages (<code>/youth</code>, <code>/sundayschool</code>, <code>/confirmation</code>, <code>/vbs</code>, <code>/egghunt</code>, <code>/family</code> — TinyMCE editors, what used to be a separate "Youth Pages" tab) and the Voters Assembly page (<code>/voters</code> — Zoom link + council document upload, what used to be a separate "Special Pages" tab).</p>
 
     <span class="toc-anchor" id="sermons-tab"></span>
     <h3>Sermons tab</h3>
     <p><span class="badge badge--sage">Live</span> Add and edit sermon entries. Each sermon has a title, date, preacher, series name, and YouTube link. Sermons appear on the <code>/sermons</code> page in reverse-chronological order.</p>
 
+    <span class="toc-anchor" id="christian-ed-tab"></span>
+    <h3>Christian Ed tab</h3>
+    <p><span class="badge badge--sage">Live</span> Manage the Bible class schedule shown on the <code>/education</code> page — each class has a label, title, description, meeting schedule, and location. Edits appear on the site immediately.</p>
+
     <span class="toc-anchor" id="pages-tab"></span>
-    <h3>Pages tab</h3>
-    <p><span class="badge badge--sage">Live</span> Manage toggleable content blocks that appear on various pages — seasonal worship blocks (Advent, Christmas, Lent, Holy Week, Thanksgiving), the Community Concert announcement on the Music page, and other dynamic sections. Each block has a rich-text editor and a <strong>"Show this block on the website"</strong> checkbox. Uncheck to hide; the content stays saved for next time. See also: <a href="#seasonal-worship">Seasonal worship blocks</a> and <a href="#community-concerts">Community Concerts</a> above.</p>
-    <div class="callout callout--sky"><p><strong>Images in any rich-text editor:</strong> Drag and drop a photo into the editor, or copy-paste one. It uploads to Cloudflare automatically — no separate upload step needed. This works in Pages, News &amp; Events, Youth Pages, and Ministries body editors.</p></div>
+    <h3>Notices tab</h3>
+    <p><span class="badge badge--sage">Live</span> Manage toggleable content blocks that appear on various pages — seasonal worship blocks (Advent, Christmas, Lent, Holy Week, Thanksgiving), the Community Concert announcement on the Music page, and other dynamic sections. Each block has a rich-text editor and a <strong>"Show this block on the website"</strong> checkbox. Uncheck to hide; the content stays saved for next time. See also: <a href="#seasonal-worship">Seasonal worship blocks</a> and <a href="#community-concerts">Community Concerts</a> above. (This tab was renamed from "Pages" — same feature, new name.)</p>
+    <div class="callout callout--sky"><p><strong>Images in any rich-text editor:</strong> Drag and drop a photo into the editor, or copy-paste one. It uploads to Cloudflare automatically — no separate upload step needed. This works in Notices, News &amp; Events, Ministries, and Christian Ed body editors.</p></div>
+
+    <span class="toc-anchor" id="links-tab"></span>
+    <h3>Links tab</h3>
+    <p><span class="badge badge--sage">Live</span> Manage the link cards shown on the social "link in bio" page at <a href="https://links.timothystl.org" target="_blank">links.timothystl.org</a>. Each card has a title, description, icon, color, URL, and sort order. Only <code>http://</code> and <code>https://</code> URLs are accepted.</p>
 
     <span class="toc-anchor" id="staff-tab"></span>
     <h3>Staff tab</h3>
@@ -420,7 +431,7 @@ li{margin-bottom:6px;}
 
     <span class="toc-anchor" id="settings-tab"></span>
     <h3>Redirects tab</h3>
-    <p><span class="badge badge--sage">Live</span> Manage the built-in redirect URLs (Zoom meeting link for <code>/zoom</code>, Council Files Google Drive folder for <code>/councilfiles</code>, and the giving URL) plus any number of custom redirects — short links like <code>/mdo</code> that forward to any URL. Custom redirects can be edited or deleted in place. Gym rental settings (rate, hold duration, Google Calendar, notifications) live under the Gym Rentals tab instead.</p>
+    <p><span class="badge badge--sage">Live</span> Manage the built-in redirect URLs (Zoom meeting link for <code>/zoom</code>, Council Files Google Drive folder for <code>/councilfiles</code>, and the giving URL) plus any number of custom redirects — short links like <code>/mdo</code> that forward to any URL. Custom redirects can be edited or deleted in place. Gym rental settings (rate, hold duration, Google Calendar, notifications) live under the Gym Rentals tab instead. (This tab was renamed from "Settings" — same feature, new name.)</p>
 
     <span class="toc-anchor" id="subscribers-tab"></span>
     <h3>Subscribers tab</h3>
@@ -430,9 +441,13 @@ li{margin-bottom:6px;}
     <h3>Gym Rentals tab</h3>
     <p><span class="badge badge--sage">Live</span> Manage gym rental requests submitted through the website. Review pending requests, mark them approved or declined, and keep a record of past rentals. The <strong>Settings</strong> button on this tab manages the hourly rate, hold duration, Google Calendar sync, notification email, and payment link.</p>
 
+    <span class="toc-anchor" id="payroll-tab"></span>
+    <h3>Payroll tab</h3>
+    <p><span class="badge badge--sky">Requires Payroll permission</span> Runs combined biweekly payroll for church staff and MDO preschool staff — hours, PTO, hourly/salary pay, housing allowance, HSA, and 403(b) deductions, with CSV export. This data lives in a separate Supabase database, not the church's D1 database, because it also needs to read the MDO preschool's existing staff time-clock system. Access requires the dedicated <strong>Payroll</strong> permission on your account (Users tab) — it is no longer bundled with the Redirects/Settings permission.</p>
+
     <span class="toc-anchor" id="users-tab"></span>
     <h3>Users tab</h3>
-    <p><span class="badge badge--sky">Admin only</span> Manage admin portal user accounts. Create accounts for new staff, assign roles and permissions, reset passwords, and deactivate accounts that are no longer needed. The youth director has a separate account with access limited to the Youth Pages.</p>
+    <p><span class="badge badge--sky">Admin only</span> Manage admin portal user accounts. Create accounts for new staff, assign roles and permissions, reset passwords, and deactivate accounts that are no longer needed. The youth director has a separate account with access limited to the Ministries tab.</p>
 
     <span class="toc-anchor" id="audit-tab"></span>
     <h3>Audit Log tab</h3>

@@ -13,6 +13,7 @@ export const PERMISSIONS = {
   users_manage:       'User management',
   audit_view:         'Audit log & rollback',
   links_edit:         'Link tree (links.timothystl.org)',
+  payroll_manage:     'Payroll',
 };
 
 // All permissions — used to create the first admin account
