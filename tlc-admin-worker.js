@@ -38,6 +38,17 @@ const PUBLIC_SETTINGS_KEYS = new Set(['zoom_url', 'councilfiles_url', 'give_url'
 const ADMIN_ORIGIN = 'https://admin.timothystl.org';
 const PUBLIC_CROSS_ORIGIN_POSTS = new Set(['/api/contact', '/api/prayer', '/api/subscribe']);
 
+// Reject anything that isn't an http(s) URL — guards Link Card saves against
+// javascript:/data: payloads that would otherwise render as a clickable,
+// script-executing link on links.timothystl.org.
+function isSafeCardUrl(value) {
+  if (typeof value !== 'string' || !value) return false;
+  try {
+    const u = new URL(value);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch { return false; }
+}
+
 // Allowlists for file uploads. Extensions are derived from MIME type —
 // never from the client-supplied filename — so the stored file always
 // matches what it actually is.
@@ -120,9 +131,12 @@ export default {
     const path = url.pathname;
     const method = request.method;
 
-    // ── Supabase proxy for /payroll page — runs before schema gate and auth ──
-    // Must be first: the MDO worker has no D1 dependency in its proxy path.
-    // If the schema gate ran first, slow D1 reads would stall every API call.
+    // ── Supabase proxy for /payroll page — runs before the schema gate ──
+    // Placed ahead of the ~140-query schema-migration block below (so it isn't
+    // stalled by that), but it still requires a valid admin session of its own
+    // — getSession() is a single indexed lookup, not part of that gate, so
+    // authenticating here costs nothing extra. Fails closed (no session/error
+    // => 401) rather than trusting the Supabase anon key alone as the boundary.
     const MDO_SUPABASE_URL = 'https://dahdstopsumxnqvdclmy.supabase.co';
     if (path.startsWith('/sb/')) {
       if (method === 'OPTIONS') {
@@ -133,9 +147,35 @@ export default {
           'Access-Control-Max-Age': '86400',
         }});
       }
+      const sbUser = await getSession(env.DB, request).catch(() => null);
+      if (!sbUser || !hasPermission(sbUser, 'payroll_manage')) {
+        return new Response(JSON.stringify({ error: 'Not authenticated.', code: 'UNAUTHENTICATED' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': ADMIN_ORIGIN },
+        });
+      }
+      if (method !== 'GET' && method !== 'HEAD') {
+        const origin = request.headers.get('Origin') || '';
+        const referer = request.headers.get('Referer') || '';
+        const originOk = origin === ADMIN_ORIGIN || (!origin && referer.startsWith(ADMIN_ORIGIN + '/'));
+        if (!originOk) {
+          return new Response('Cross-origin request blocked.', { status: 403 });
+        }
+        const contentLength = parseInt(request.headers.get('content-length') || '0', 10);
+        if (contentLength > 25 * 1024 * 1024) {
+          return new Response('Request too large.', { status: 413 });
+        }
+      }
       const targetUrl = MDO_SUPABASE_URL + path.slice(3) + url.search;
+      // Build a fresh header set rather than forwarding request.headers verbatim —
+      // the incoming Cookie (admin session token) has no business reaching Supabase.
+      const outHeaders = new Headers();
+      for (const h of ['apikey', 'authorization', 'content-type', 'prefer', 'x-client-info']) {
+        const v = request.headers.get(h);
+        if (v) outHeaders.set(h, v);
+      }
       const proxyReq = new Request(targetUrl, {
-        method, headers: request.headers,
+        method, headers: outHeaders,
         body: ['GET', 'HEAD'].includes(method) ? undefined : request.body,
       });
       let supabaseRes;
@@ -206,7 +246,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-07-03-1'; // bumped: added notices table + legacy page_content backfill
+    const SCHEMA_VERSION = '2026-07-11-1'; // bumped: grant payroll_manage to existing settings_manage accounts
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -243,6 +283,14 @@ export default {
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN secondary_note TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN news_item_ids TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('CREATE TABLE IF NOT EXISTS redirects (path TEXT PRIMARY KEY, url TEXT NOT NULL, label TEXT)').run(); } catch (_) {}
+    // Seed a /links redirect now that the stale static public/links/index.html
+    // (dead routes, old Breeze giving URL) has been removed — timothystl.org/links
+    // should point to the real links.timothystl.org landing page.
+    try {
+      await env.DB.prepare(
+        `INSERT OR IGNORE INTO redirects (path, url, label) VALUES ('links', 'https://links.timothystl.org', 'Links / Social Landing Page')`
+      ).run();
+    } catch (_) {}
     // Pre-populate ministry page slugs so they're always editable
     for (const p of MINISTRY_SLUGS) {
       try {
@@ -465,6 +513,15 @@ export default {
       await env.DB.prepare(
         `UPDATE users SET permissions = '["newsletter_edit","newsletter_approve","news_edit","ministries_edit","sermons_edit","pages_edit","staff_edit","settings_manage","gym_manage","users_manage","audit_view","links_edit"]'
          WHERE permissions LIKE '%"audit_view"%' AND permissions NOT LIKE '%"links_edit"%'`
+      ).run();
+    } catch (_) {}
+    // Migrate: grant the new payroll_manage permission to accounts that could
+    // already reach /payroll under the old (settings_manage-gated) sidebar link,
+    // so this permission split doesn't lock anyone out who had access before.
+    try {
+      await env.DB.prepare(
+        `UPDATE users SET permissions = REPLACE(permissions, '[', '["payroll_manage",')
+         WHERE permissions LIKE '%"settings_manage"%' AND permissions NOT LIKE '%"payroll_manage"%'`
       ).run();
     } catch (_) {}
     // Performance indexes
@@ -734,7 +791,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
         // Honeypot — bots fill this hidden field, humans never see it
         if (form.get('website')) return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
         if (!name || !message) return new Response(JSON.stringify({ error: 'Name and message are required' }), { status: 400, headers: corsHeaders });
-        const html = `<p><strong>Name:</strong> ${name}</p><p><strong>Email:</strong> ${email || '(not provided)'}</p><p><strong>Message:</strong></p><p style="white-space:pre-wrap">${message.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`;
+        const html = `<p><strong>Name:</strong> ${escapeHtml(name)}</p><p><strong>Email:</strong> ${email ? escapeHtml(email) : '(not provided)'}</p><p><strong>Message:</strong></p><p style="white-space:pre-wrap">${escapeHtml(message)}</p>`;
         const result = await sendTransactionalEmail(env, {
           subject: `Contact Form — ${name}`,
           htmlContent: html,
@@ -746,7 +803,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
         if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
           await sendTransactionalEmail(env, {
             subject: 'We received your message — Timothy Lutheran Church',
-            htmlContent: `<p>Hi ${name},</p><p>Thank you for reaching out to Timothy Lutheran Church. We received your message and will be in touch soon.</p><p>If you need immediate assistance, please call us at (314) 781-8673 or email <a href="mailto:dinger@timothystl.org">dinger@timothystl.org</a>.</p><p>Grace and peace,<br>The team at Timothy Lutheran Church</p>`,
+            htmlContent: `<p>Hi ${escapeHtml(name)},</p><p>Thank you for reaching out to Timothy Lutheran Church. We received your message and will be in touch soon.</p><p>If you need immediate assistance, please call us at (314) 781-8673 or email <a href="mailto:dinger@timothystl.org">dinger@timothystl.org</a>.</p><p>Grace and peace,<br>The team at Timothy Lutheran Church</p>`,
             toEmails: [email]
           });
         }
@@ -794,7 +851,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
         // Honeypot — bots fill this hidden field, humans never see it
         if (form.get('website')) return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
         if (!message) return new Response(JSON.stringify({ error: 'Prayer request is required' }), { status: 400, headers: corsHeaders });
-        const htmlContent = `<p><strong>Name:</strong> ${name || '(anonymous)'}</p><p><strong>Email:</strong> ${email || '(not provided)'}</p><p><strong>Prayer request:</strong></p><p style="white-space:pre-wrap">${message.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`;
+        const htmlContent = `<p><strong>Name:</strong> ${name ? escapeHtml(name) : '(anonymous)'}</p><p><strong>Email:</strong> ${email ? escapeHtml(email) : '(not provided)'}</p><p><strong>Prayer request:</strong></p><p style="white-space:pre-wrap">${escapeHtml(message)}</p>`;
         const result = await sendTransactionalEmail(env, {
           subject: `Prayer Request — ${name || 'Anonymous'}`,
           htmlContent,
@@ -806,7 +863,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
         if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
           await sendTransactionalEmail(env, {
             subject: "We're praying for you — Timothy Lutheran Church",
-            htmlContent: `<p>Hi ${name || 'friend'},</p><p>Thank you for sharing your prayer request with us. Our pastoral staff has received it and will be praying for you.</p><p>If you'd like to speak with someone, please reach out to our office at <a href="mailto:dinger@timothystl.org">dinger@timothystl.org</a> or call (314) 781-8673.</p><p>Grace and peace,<br>The pastoral staff at Timothy Lutheran Church</p>`,
+            htmlContent: `<p>Hi ${name ? escapeHtml(name) : 'friend'},</p><p>Thank you for sharing your prayer request with us. Our pastoral staff has received it and will be praying for you.</p><p>If you'd like to speak with someone, please reach out to our office at <a href="mailto:dinger@timothystl.org">dinger@timothystl.org</a> or call (314) 781-8673.</p><p>Grace and peace,<br>The pastoral staff at Timothy Lutheran Church</p>`,
             toEmails: [email]
           });
         }
@@ -1192,6 +1249,9 @@ ${sidebarShell('dashboard', currentUser)}
 
     // ── PAYROLL PAGE (auth-gated, no secondary login needed) ──
     if (path === '/payroll' && method === 'GET') {
+      if (!hasPermission(currentUser, 'payroll_manage')) {
+        return new Response('Access denied.', { status: 403 });
+      }
       return new Response(PAYROLL_HTML, {
         headers: { 'Content-Type': 'text/html; charset=utf-8', 'X-Robots-Tag': 'noindex, nofollow' }
       });
@@ -4050,9 +4110,10 @@ ${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`)}
       if (path === '/link-cards/create' && method === 'POST') {
         const fd = await request.formData();
         const title = (fd.get('title')||'').trim();
-        if (!title) return new Response('', { status: 302, headers: { Location: '/link-cards/new' } });
+        const cardUrl = (fd.get('url')||'').trim();
+        if (!title || !isSafeCardUrl(cardUrl)) return new Response('', { status: 302, headers: { Location: '/link-cards/new' } });
         await env.DB.prepare('INSERT INTO link_cards (title, description, url, icon_emoji, icon_color, sort_order, active) VALUES (?, ?, ?, ?, ?, ?, 1)')
-          .bind(title, (fd.get('description')||'').trim(), (fd.get('url')||'').trim(), (fd.get('icon_emoji')||'🔗').trim(), (fd.get('icon_color')||'sky'), parseInt(fd.get('sort_order')||'0',10)).run();
+          .bind(title, (fd.get('description')||'').trim(), cardUrl, (fd.get('icon_emoji')||'🔗').trim(), (fd.get('icon_color')||'sky'), parseInt(fd.get('sort_order')||'0',10)).run();
         return new Response('', { status: 302, headers: { Location: '/link-cards?msg=saved' } });
       }
 
@@ -4069,9 +4130,10 @@ ${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`)}
       if (updateMatch && method === 'POST') {
         const fd = await request.formData();
         const title = (fd.get('title')||'').trim();
-        if (!title) return new Response('', { status: 302, headers: { Location: `/link-cards/edit/${updateMatch[1]}` } });
+        const cardUrl = (fd.get('url')||'').trim();
+        if (!title || !isSafeCardUrl(cardUrl)) return new Response('', { status: 302, headers: { Location: `/link-cards/edit/${updateMatch[1]}` } });
         await env.DB.prepare('UPDATE link_cards SET title=?, description=?, url=?, icon_emoji=?, icon_color=?, sort_order=? WHERE id=?')
-          .bind(title, (fd.get('description')||'').trim(), (fd.get('url')||'').trim(), (fd.get('icon_emoji')||'🔗').trim(), (fd.get('icon_color')||'sky'), parseInt(fd.get('sort_order')||'0',10), parseInt(updateMatch[1],10)).run();
+          .bind(title, (fd.get('description')||'').trim(), cardUrl, (fd.get('icon_emoji')||'🔗').trim(), (fd.get('icon_color')||'sky'), parseInt(fd.get('sort_order')||'0',10), parseInt(updateMatch[1],10)).run();
         return new Response('', { status: 302, headers: { Location: '/link-cards?msg=saved' } });
       }
 

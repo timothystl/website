@@ -25,12 +25,23 @@ The Timothy Lutheran Church website (timothystl.org) is live on Cloudflare Worke
 | timothystl-site | timothystl.org | `public/index.html` (SPA) |
 | tlc-newsletter-admin | admin.timothystl.org | `tlc-admin-worker.js` |
 | tlc-links | links.timothystl.org | `tlc-links-worker.js` |
-| tlc-chms | volunteer.timothystl.org | `tlc-volunteer-worker.js` |
+| tlc-chms | volunteer.timothystl.org **and** chms.timothystl.org | `tlc-volunteer-worker.js` (separate repo, not in this one) |
+
+Note: this same CHMS worker answers on two hostnames. `volunteer.timothystl.org`
+is used for the public `/volunteer` redirect and for API calls this repo makes
+to it (`/api/intake/connect-card`, `/api/intake/prayer` from the contact/prayer
+forms). `chms.timothystl.org/chms#scheduler` / `#volunteers` is the newer
+hostname the admin sidebar's "Scheduler" / "Volunteer Admin" links point staff
+to for the human-facing scheduler UI. Both are current — they're not a
+stale-vs-live pair, just two routes into the same worker for two audiences.
 
 ### Databases (Cloudflare D1)
-- `tlc-newsletter-db` — tables: `newsletters`, `events`, (planned: `news_items`, `youth_pages`)
+- `tlc-newsletter-db` — tables: `newsletters`, `events`, `news_items`, `youth_pages`, `ministry_posts`, `sermon_series`, `sermon_notes`, `notices`, `staff_members`, `bible_classes`, `link_cards`, `gym_*`, `users`, `sessions`, `audit_log`, and more — see the `DB_INIT_*` constants in `admin/db.js` for the full current schema
 - `tlc-volunteer-db` — tables: `serve_events`, `serve_roles`, `signups`, `signup_slots`
 - `RSVP_STORE` — Cloudflare KV namespace
+
+### External data stores outside D1/KV
+- **Supabase** (project ref `dahdstopsumxnqvdclmy`) — backs the MDO preschool's separate staff time-clock app and the admin Payroll tab's own `church_staff` tables. See "Payroll & Supabase" under Admin Portal Plan below. Not used for anything else on the site.
 
 ### Auth
 - Admin password: stored in Cloudflare Worker secret — do not commit here
@@ -124,12 +135,19 @@ Extend current `tlc-admin-worker.js` with new tabs:
 |-----|-------------|--------|
 | Newsletter | Pastor/office | **DONE** — format picker, Brevo email, draft/published split |
 | News & Events | Pastor/office | **DONE** — DB wired, API live at /api/news |
-| Ministries | Office staff | **DONE** — ministry page content management |
-| Youth Pages | Youth director | **DONE** — TinyMCE editor, youth_pages DB table live |
-| Scheduler | Link to volunteer scheduler | **DONE** — external link tab |
-| Volunteer Admin | Link to volunteer.timothystl.org/admin | **DONE** — external link tab |
-| Special Pages (`/voters`) | Office staff | **DONE** — Zoom link + file upload, admin-managed |
+| Ministries | Office staff | **DONE** — ministry page content management; also now covers Youth Pages (TinyMCE editor, youth_pages DB table) and the Voters Assembly special page (Zoom link + file upload), both folded in as cards rather than separate tabs |
+| Sermons | Pastor/office | **DONE** — sermon series + standalone sermon notes, powers /sermons |
+| Christian Ed | Pastor/office | **DONE** — Bible class schedule (`bible_classes` table), powers /education |
+| Notices | Office staff | **DONE** — self-serve banner notices per static page (renamed from "Pages") |
+| Links | Office staff | **DONE** — manages link cards shown at links.timothystl.org (`link_cards` table) |
+| Staff | Office staff | **DONE** — staff directory (photos, bios, emails) shown on /about |
 | Gym Rentals | Office staff (Dinger) | **DONE** — full rental management at /gym-rentals |
+| Users | Admins | **DONE** — user accounts + per-tab permission checkboxes |
+| Subscribers | Office staff | **DONE** — newsletter subscriber list |
+| Redirects | Office staff | **DONE** — admin-managed URL redirects + Zoom/council-files links (renamed from "Settings"; gym rate config now lives under Gym Rentals) |
+| Payroll | Office staff (Dinger) — requires `payroll_manage` permission | **DONE** — combined biweekly payroll (church staff + MDO preschool staff); see "Payroll & Supabase" below |
+| Audit Log | Admins | **DONE** — change history + rollback, requires `audit_view` |
+| Scheduler / Volunteer Admin | External links in sidebar | **DONE** — link out to `chms.timothystl.org/chms#scheduler` / `#volunteers` for the CHMS scheduler UI (see Architecture note on `volunteer.timothystl.org` vs `chms.timothystl.org`) |
 
 ### News & Events Data Model
 ```sql
@@ -182,12 +200,40 @@ CREATE TABLE gym_blocked_dates (id, date, reason);
 - Resend email re-sends the correct single/multi-booking invoice
 - iCal feed at `/gym/cal/:token.ics` (admin-set token) for calendar subscriptions
 - Blocked dates, recurring requests, group management all in the admin tab
-- Rate configured in Settings tab (`gym_rate_per_hour`)
+- Rate configured under the Gym Rentals tab (`gym_rate_per_hour`) — moved out of the old Settings tab (now "Redirects")
 - Google Calendar integration via service account (secrets: `GCAL_SERVICE_ACCOUNT_EMAIL`, `GCAL_PRIVATE_KEY`, setting: `gcal_calendar_id`)
 
+### Payroll & Supabase (added June 2026 — was previously undocumented here)
+
+The church's Mother's Day Out (MDO) preschool runs a separate staff time-clock
+app ("myMDO") backed by its own **Supabase** project (project ref
+`dahdstopsumxnqvdclmy`), with tables `staff`, `staff_hours`,
+`staff_clock_events`, `staff_pto_entries`. This is a data store independent of
+this repo's D1/KV — Supabase is otherwise not used anywhere else on the site.
+
+The admin **Payroll** tab (`admin/payroll.html`, served at `/payroll`) combines
+that MDO clock/PTO data (read-only) with two new tables of its own — also in
+the same Supabase project, not D1 — `church_staff` and
+`church_staff_period_entries` (name, pay type, hourly rate or salary, housing
+allowance, HSA, 403(b), mileage, PTO) — to produce one combined biweekly
+payroll report (MDO + church staff) with CSV export.
+
+`tlc-admin-worker.js` exposes a `/sb/*` reverse proxy so the browser-side
+Supabase client (`admin/payroll.html`) can reach Supabase through the admin
+worker's own origin without a CORS round-trip. The proxy requires a valid
+admin session (`payroll_manage` permission) before forwarding anything to
+Supabase — added as a security fix in July 2026 after a review found the
+proxy was originally unauthenticated (relying on the Supabase anon key alone,
+which was visible in page source). Access is gated by the **`payroll_manage`**
+permission (separate from `settings_manage`, which used to be the tab's only
+gate) so payroll can be restricted to office staff without granting full
+settings access.
+
 ### Access Control
-- Staff admin password: full access (News, Special Pages, Redirects, Newsletter, Gym Rentals)
-- Youth director password: Youth Pages tab only (separate password so it can be changed independently)
+- Staff admin password: full access (all tabs) — permissions are granted per-account, per-tab via the Users tab's checkboxes (see `PERMISSIONS` in `admin/auth.js`)
+- Youth content editing now lives under the **Ministries** tab (`ministries_edit` permission), not a separate "Youth Pages" tab
+- **Payroll** requires the dedicated `payroll_manage` permission — not bundled into `settings_manage` (see "Payroll & Supabase" above)
+- Youth director password: scope to `ministries_edit` only (separate password so it can be changed independently of office staff accounts)
 
 ---
 
@@ -302,11 +348,11 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 ### Still Needs to Be Built
 - **`/confirmation`, `/sundayschool`, `/vbs`, `/egghunt`, `/family`** — Youth sub-pages. Admin portal has the youth_pages table, but these slugs need content entered by the youth director.
 - **Christmas Market annual content** — Page structure is built. Needs dates, description, photos, and Google Form link for vendors entered via the admin Ministries tab each year.
-- **Prayer + Contact form delivery** — Confirm these forms send/deliver somewhere (email? DB?). Verify they're wired to a real endpoint.
 - **Sermons page** — YouTube embed page exists; confirm it's pulling the correct channel or that it's manually maintained.
 
 ### Pinned / Low Priority
 - **manual.html** — Keep this updated whenever new features, pages, or admin tabs are added. It is the staff reference guide at `/manual` and should always reflect the current state of the site and admin portal.
+- **Gym booking race condition** — `admin/gym.js` checks for a booking-slot conflict with a `SELECT` and then does a separate `INSERT`, with no transaction or unique constraint on `(booking_date, start_time, end_time)`. Two concurrent hold requests for the same slot could both pass the check and double-book. Needs a design decision (D1 batch/transaction vs. a unique index + handling the constraint-violation error) rather than a quick fix. Flagged in the July 2026 code review; not yet fixed.
 - **Newsletter Format 3** — Single-event announcement (date, time, location, RSVP). Skipped for now, add if needed.
 - **R2 image uploads (card thumbnail)** — Body editors (TinyMCE) across News, Youth Pages, Pages, and Posts all have R2 upload fully wired via `tlcUploadHandler` — drag/drop or paste images and they upload automatically. The only remaining URL-only field is the News item card thumbnail (`image_url` text input). A file-picker button for that field could be added if needed.
 - **KV-gate startup migrations** — ~130 D1 queries run on every admin request (no-ops after first deploy). Gate behind a KV schema-version key to reduce to 1 KV read per cold start. Low urgency.
@@ -336,6 +382,8 @@ The admin worker version (`admin/helpers.js`) follows semver:
 - **MAJOR** is manual — bump it (and reset MINOR and PATCH to 0) for a release worth marketing internally to staff (UI overhaul, new permission model, etc.).
 
 To cut a minor or major release, edit `admin/helpers.js` in the same PR as the feature; the CI bump will pick up from there.
+
+*(A July 2026 review found a few merged features — the gym rental portal redesign, Christian Ed tab, Links tab — that shipped without a MINOR bump. No retroactive fix, just a reminder to actually do this in the same PR as the feature, not after.)*
 
 ---
 

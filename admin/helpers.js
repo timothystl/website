@@ -212,7 +212,7 @@ export function sidebarShell(activeTab, user, extraLinks = '', pendingCount = 0)
     hp('users_manage')    ? navItem('/users', 'Users', activeTab === 'users') : '',
     hp('settings_manage') ? navItem('/subscribers', 'Subscribers', activeTab === 'subscribers') : '',
     hp('settings_manage') ? navItem('/settings', 'Redirects', activeTab === 'settings') : '',
-    hp('settings_manage') ? navItem('/payroll', 'Payroll', activeTab === 'payroll') : '',
+    hp('payroll_manage')  ? navItem('/payroll', 'Payroll', activeTab === 'payroll') : '',
     hp('audit_view')      ? navItem('/audit-log', 'Audit Log', activeTab === 'audit') : '',
   ].filter(Boolean).join('');
 

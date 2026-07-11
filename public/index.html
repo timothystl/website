@@ -647,7 +647,6 @@
 </div>
 
 
-<!-- EVENTS -->
 <!-- CONTACT -->
 <div id="page-contact" class="page">
   <div class="page-hero">
@@ -1838,26 +1837,10 @@ function fixImgUrls(html) {
   return html.replace(/src="\/images\//g, 'src="https://admin.timothystl.org/images/')
              .replace(/src='\/images\//g, "src='https://admin.timothystl.org/images/");
 }
-function showPage(id, addHistory){
-  document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
-  var page=document.getElementById('page-'+id);
-  if(page){page.classList.add('active');window.scrollTo(0,0);}
-  var url = (id === 'home') ? '/' : '/'+id;
-  if(addHistory === false){
-    history.replaceState({page:id},'',url);
-  } else {
-    history.pushState({page:id},'',url);
-  }
-  // Lazy-load embeds only when their page is first visited
-  // Note: use getAttribute('src') not .src — browser resolves src="" to current page URL
-  if (id === 'calendar') {
-    var frame = document.getElementById('gcal-frame');
-    if (frame && !frame.getAttribute('src')) { frame.src = frame.dataset.src; }
-  }
-  if (id === 'wol') {
-    var yt = document.getElementById('wol-yt-frame');
-    if (yt && !yt.getAttribute('src')) { yt.src = yt.dataset.src; }
-  }
+// Escapes plain-text admin fields (not TinyMCE rich-text body/content, which is
+// trusted HTML by design sitewide) before inserting via innerHTML.
+function escText(s) {
+  return (s == null ? '' : String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 document.getElementById('navToggle').addEventListener('click',function(){
   document.getElementById('navMobile').classList.toggle('open');
@@ -1876,42 +1859,6 @@ function toggleBio(id, btn){
   var open = el.classList.toggle('expanded');
   btn.textContent = open ? 'Read less ↑' : 'Read more ↓';
 }
-// Route on load based on URL path; replace (don't push) so back goes to previous site
-(function(){
-  var path = window.location.pathname.replace(/^\//, '').replace(/\/$/, '');
-  // External redirects
-  if(path === 'zoom'){
-    fetch('https://admin.timothystl.org/api/settings/zoom_url').then(function(r){return r.json();}).then(function(d){
-      window.location.replace(d.value || 'https://us02web.zoom.us/j/3147818673');
-    }).catch(function(){ window.location.replace('https://us02web.zoom.us/j/3147818673'); });
-    return;
-  }
-  if(path === 'councilfiles'){
-    fetch('https://admin.timothystl.org/api/settings/councilfiles_url').then(function(r){return r.json();}).then(function(d){
-      window.location.replace(d.value || 'https://drive.google.com/drive/folders/1pgqJ32H3HS7SNYnnf7rOswC5c87IAzA4?usp=drive_link');
-    }).catch(function(){ window.location.replace('https://drive.google.com/drive/folders/1pgqJ32H3HS7SNYnnf7rOswC5c87IAzA4?usp=drive_link'); });
-    return;
-  }
-  var nlDetailMatch = path.match(/^news\/(\d+)$/);
-  if (nlDetailMatch) {
-    showPage('news', false);
-    history.replaceState({page:'news'},'','/news/'+nlDetailMatch[1]);
-    window._pendingNlDetail = nlDetailMatch[1];
-    return;
-  }
-  if(path && document.getElementById('page-'+path)){
-    showPage(path, false);
-  } else if (path) {
-    // Unknown path — check custom redirects, then show 404 (keep URL intact)
-    fetch('https://admin.timothystl.org/api/redirects').then(function(r){return r.json();}).then(function(d){
-      var match = (d.redirects||[]).find(function(r){return r.path===path;});
-      if(match){ window.location.replace(match.url); }
-      else { showPage('404', false); }
-    }).catch(function(){ showPage('404', false); });
-  } else {
-    history.replaceState({page:'home'},'','/');
-  }
-})();
 // Handle browser back/forward
 window.addEventListener('popstate', function(e){
   var id = (e.state && e.state.page) ? e.state.page : 'home';
@@ -1939,8 +1886,8 @@ async function fetchHomeNews() {
       const dateLabel = dateRaw ? new Date(dateRaw + 'T12:00:00').toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'}) : '';
       return `<div class="news-item" style="${hasBody ? 'cursor:pointer;' : ''}" ${hasBody ? `onclick="var b=document.getElementById('${bodyId}');var more=this.querySelector('.ni-more');if(b.style.display==='none'){b.style.display='block';if(more)more.textContent='Read less ↑';}else{b.style.display='none';if(more)more.textContent='Read more ↓';}"` : ''}>
         <div class="news-item-date">${dateLabel}</div>
-        <div class="news-item-title">${item.title}</div>
-        <div class="news-item-summary">${item.summary || ''}</div>
+        <div class="news-item-title">${escText(item.title)}</div>
+        <div class="news-item-summary">${escText(item.summary)}</div>
         ${hasBody ? `<div id="${bodyId}" style="display:none;margin-top:10px;font-size:13px;color:var(--charcoal);line-height:1.7;border-top:1px solid var(--border);padding-top:10px;">${item.body}</div><div class="ni-more" style="font-size:12px;font-weight:700;color:var(--mid);margin-top:6px;">Read more ↓</div>` : ''}
       </div>`;
     }).join('');
@@ -1969,9 +1916,9 @@ async function loadHomeSermonCard() {
       : `<a href="https://www.youtube.com/@TimothySTL" target="_blank" class="btn btn-primary" style="font-size:13px;padding:9px 20px;">Watch on YouTube</a>`;
     hc.innerHTML = `<div class="sermon-icon"><svg width="20" height="24" viewBox="0 0 20 24" fill="none"><rect x="8" y="0" width="4" height="24" rx="2" fill="#0A3C5C"/><rect x="0" y="7" width="20" height="4" rx="2" fill="#0A3C5C"/></svg></div>
       <div>
-        <div class="sermon-series">${active.title}</div>
-        ${active.description ? `<div class="sermon-title">${active.description}</div>` : ''}
-        ${active.date_range ? `<div class="sermon-ref">${active.date_range}</div>` : ''}
+        <div class="sermon-series">${escText(active.title)}</div>
+        ${active.description ? `<div class="sermon-title">${escText(active.description)}</div>` : ''}
+        ${active.date_range ? `<div class="sermon-ref">${escText(active.date_range)}</div>` : ''}
         <div class="btn-row">${watchBtn}<button class="btn btn-outline" onclick="showPage('sermons')" style="font-size:13px;padding:9px 20px;">Watch &amp; notes</button></div>
       </div>`;
   } catch(e) {
@@ -2002,13 +1949,13 @@ async function loadNewsItems() {
     <div>
       ${item.pinned ? `<div style="font-family:var(--sans);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--amber);margin-bottom:4px;">Pinned</div>` : ''}
       ${dateLabel ? `<div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gray);margin-bottom:4px;">${dateLabel}</div>` : ''}
-      <div style="font-family:var(--serif);font-size:19px;color:var(--steel);line-height:1.3;">${item.title}</div>
+      <div style="font-family:var(--serif);font-size:19px;color:var(--steel);line-height:1.3;">${escText(item.title)}</div>
     </div>
     ${hasContent ? `<span class="ni-chevron" style="font-size:14px;color:var(--mid);flex-shrink:0;">↓</span>` : ''}
   </button>
   <div id="${bodyId}" style="display:none;padding:0 22px 20px;">
     ${hasImage ? `<img src="${item.image_url}" alt="" loading="lazy" style="width:100%;max-height:420px;object-fit:contain;background:var(--linen);border-radius:10px;margin-bottom:14px;">` : ''}
-    ${item.summary ? `<div style="font-family:var(--sans);font-size:15px;color:var(--charcoal);line-height:1.75;margin-bottom:12px;">${item.summary}</div>` : ''}
+    ${item.summary ? `<div style="font-family:var(--sans);font-size:15px;color:var(--charcoal);line-height:1.75;margin-bottom:12px;">${escText(item.summary)}</div>` : ''}
     ${item.body && item.body.trim() ? `<div class="rich-content">${fixImgUrls(item.body)}</div>` : ''}
   </div>
 </div>`;
@@ -2110,19 +2057,19 @@ async function loadNewsletterDetail(id) {
       const additionalNews = n.news_items.slice(2);
       newsHtml += '<div style="margin-top:24px;padding-top:20px;border-top:2px solid var(--amber);">' +
         '<div style="font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--amber);margin-bottom:8px;">Featured</div>' +
-        '<div style="font-family:var(--serif);font-size:20px;color:var(--steel);margin-bottom:8px;">'+mainNews.title+'</div>' +
-        (mainNews.summary ? '<div style="font-family:var(--sans);font-size:15px;color:var(--charcoal);line-height:1.75;">'+mainNews.summary+'</div>' : '') +
+        '<div style="font-family:var(--serif);font-size:20px;color:var(--steel);margin-bottom:8px;">'+escText(mainNews.title)+'</div>' +
+        (mainNews.summary ? '<div style="font-family:var(--sans);font-size:15px;color:var(--charcoal);line-height:1.75;">'+escText(mainNews.summary)+'</div>' : '') +
         '</div>';
       if (secondaryNews) {
         newsHtml += '<div style="margin-top:18px;padding-top:18px;border-top:1px solid var(--border);">' +
-          '<div style="font-family:var(--serif);font-size:17px;color:var(--steel);margin-bottom:6px;">'+secondaryNews.title+'</div>' +
-          (secondaryNews.summary ? '<div style="font-family:var(--sans);font-size:14px;color:var(--charcoal);line-height:1.7;">'+secondaryNews.summary+'</div>' : '') +
+          '<div style="font-family:var(--serif);font-size:17px;color:var(--steel);margin-bottom:6px;">'+escText(secondaryNews.title)+'</div>' +
+          (secondaryNews.summary ? '<div style="font-family:var(--sans);font-size:14px;color:var(--charcoal);line-height:1.7;">'+escText(secondaryNews.summary)+'</div>' : '') +
           '</div>';
       }
       if (additionalNews.length) {
         newsHtml += '<div style="margin-top:18px;padding-top:18px;border-top:1px solid var(--border);">' +
           '<div style="font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:10px;">More from Timothy</div>' +
-          additionalNews.map(item => '<div style="padding:9px 0;border-bottom:1px solid var(--border);"><div style="font-family:var(--serif);font-size:15px;color:var(--steel);margin-bottom:3px;">'+item.title+'</div>'+(item.summary ? '<div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);line-height:1.6;">'+item.summary+'</div>' : '')+'</div>').join('') +
+          additionalNews.map(item => '<div style="padding:9px 0;border-bottom:1px solid var(--border);"><div style="font-family:var(--serif);font-size:15px;color:var(--steel);margin-bottom:3px;">'+escText(item.title)+'</div>'+(item.summary ? '<div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);line-height:1.6;">'+escText(item.summary)+'</div>' : '')+'</div>').join('') +
           '</div>';
       }
     }
@@ -2143,7 +2090,7 @@ async function loadNewsletterDetail(id) {
       '<div style="background:white;border:1px solid var(--border);border-radius:14px;padding:36px;box-shadow:var(--shadow);">' +
         '<div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:6px;">'+date+'</div>' +
         '<h2 style="font-family:var(--serif);font-size:26px;color:var(--steel);margin:0 0 20px;font-weight:600;">'+n.subject+'</h2>' +
-        (n.pastor_note ? '<div style="font-family:var(--sans);font-size:16px;color:var(--charcoal);line-height:1.85;">'+n.pastor_note+'</div>' : '') +
+        (n.pastor_note ? '<div style="font-family:var(--sans);font-size:16px;color:var(--charcoal);line-height:1.85;">'+(n.pastor_note.includes('<') ? n.pastor_note : n.pastor_note.replace(/\n/g,'<br>'))+'</div>' : '') +
         secHtml + newsHtml + evHtml + wolLasmHtml + tertiaryHtml + bibleHtml +
       '</div>';
   } catch(e) {
@@ -2265,10 +2212,10 @@ async function loadBibleClasses() {
     if (!data.classes || data.classes.length === 0) { grid.innerHTML = ''; return; }
     grid.innerHTML = data.classes.map(function(c) {
       return '<div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:28px;">' +
-        (c.label ? '<div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:' + (accentMap[c.accent] || 'var(--mid)') + ';margin-bottom:8px;">' + c.label + '</div>' : '') +
-        '<h3 style="margin:0 0 10px;">' + c.title + '</h3>' +
-        (c.description ? '<p style="font-size:14px;color:var(--gray);margin:0 0 14px;">' + c.description + '</p>' : '') +
-        (c.schedule ? '<div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);font-weight:600;">' + c.schedule + (c.location ? '<br><span style="font-weight:400;color:var(--gray);">' + c.location + '</span>' : '') + '</div>' : '') +
+        (c.label ? '<div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:' + (accentMap[c.accent] || 'var(--mid)') + ';margin-bottom:8px;">' + escText(c.label) + '</div>' : '') +
+        '<h3 style="margin:0 0 10px;">' + escText(c.title) + '</h3>' +
+        (c.description ? '<p style="font-size:14px;color:var(--gray);margin:0 0 14px;">' + escText(c.description) + '</p>' : '') +
+        (c.schedule ? '<div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);font-weight:600;">' + escText(c.schedule) + (c.location ? '<br><span style="font-weight:400;color:var(--gray);">' + escText(c.location) + '</span>' : '') + '</div>' : '') +
         '</div>';
     }).join('');
   } catch(e) { grid.innerHTML = ''; }
@@ -2484,43 +2431,6 @@ async function loadMinistryPage(slug) {
   } catch(e) {}
 }
 
-// Load volunteer events from volunteer worker API
-var volLoaded = false;
-async function loadVolunteerEvents() {
-  try {
-    const res = await fetch('https://volunteer.timothystl.org/api/events');
-    if (!res.ok) throw new Error('not ok');
-    const events = await res.json();
-    document.getElementById('vol-loading').style.display = 'none';
-    if (!events || events.length === 0) {
-      document.getElementById('vol-empty').style.display = 'block';
-      return;
-    }
-    const list = document.getElementById('vol-list');
-    list.style.display = 'block';
-    list.innerHTML = events.map(function(e) {
-      const d = e.date || e.event_date;
-      const dt = d ? new Date(d + 'T12:00:00') : null;
-      const mon = dt ? dt.toLocaleDateString('en-US', {month:'short'}) : '';
-      const day = dt ? dt.getDate() : '';
-      const name = e.name || e.title || e.event_name || '';
-      const time = e.time || e.event_time || '';
-      const slots = (e.slots_available !== undefined) ? e.slots_available : null;
-      const eventUrl = 'https://volunteer.timothystl.org' + (e.id ? '/event/' + e.id : '');
-      return '<div class="event-row" style="justify-content:space-between;">' +
-        (dt ? '<div class="event-date"><div class="event-month">' + mon + '</div><div class="event-day">' + day + '</div></div>' : '') +
-        '<div class="event-name" style="flex:1;">' + name + '</div>' +
-        (time ? '<div class="event-time">' + time + '</div>' : '') +
-        (slots !== null ? '<span class="event-tag" style="background:var(--pale-sage);color:#2a4d2e;">' + slots + ' spot' + (slots !== 1 ? 's' : '') + '</span>' : '') +
-        '<a href="' + eventUrl + '" target="_blank" class="btn btn-secondary btn-sm" style="flex-shrink:0;">Sign Up</a>' +
-        '</div>';
-    }).join('');
-  } catch(e) {
-    document.getElementById('vol-loading').style.display = 'none';
-    document.getElementById('vol-empty').style.display = 'block';
-  }
-}
-
 // Per-page SEO meta: title + description
 var PAGE_META = {
   'home':         { title: 'Timothy Lutheran Church — St. Louis, MO',                                    desc: 'A congregation alive to the Gospel in Lindenwood Park, South City St. Louis. Two Sunday services. Come as you are.' },
@@ -2548,7 +2458,6 @@ var PAGE_META = {
   'vbs':          { title: 'Vacation Bible School — Timothy Lutheran Church',                             desc: 'Vacation Bible School at Timothy Lutheran Church in St. Louis — fun, faith, and community for kids.' },
   'egghunt':      { title: 'Easter Egg Hunt — Timothy Lutheran Church',                                   desc: 'Annual Easter Egg Hunt at Timothy Lutheran Church in Lindenwood Park, St. Louis.' },
   'family':       { title: 'Family Ministry — Timothy Lutheran Church',                                   desc: 'Family ministry and resources at Timothy Lutheran Church in St. Louis.' },
-  'manual':       { title: 'Staff Manual — Timothy Lutheran Church',                                      desc: 'Internal staff reference for managing the Timothy Lutheran Church website.', noindex: true },
   'voters':       { title: 'Voters Assembly — Timothy Lutheran Church',                                   desc: 'Voters Assembly information for Timothy Lutheran Church members.', noindex: true },
   '404':          { title: 'Page Not Found — Timothy Lutheran Church',                                    desc: 'The page you were looking for could not be found.', noindex: true },
 };
@@ -2607,7 +2516,6 @@ window.showPage = function(id, addHistory) {
     if (wolFrame && !wolFrame.getAttribute('src')) { wolFrame.src = wolFrame.dataset.src; }
   }
   if (id === 'youth') { loadYouthPage(); }
-  if (id === 'events' && !volLoaded) { volLoaded = true; loadVolunteerEvents(); }
   if (id === 'sermons') { loadSermons(); }
   if (id === 'voters') { loadVotersPage(); }
   if (id === 'home') { loadNotices('home'); }
@@ -2626,42 +2534,45 @@ window.showPage = function(id, addHistory) {
   if (adminContentPages.indexOf(id) !== -1) { loadMinistryPage(id); }
   if (id === 'christmasmarket') { loadMinistryCta(id); }
 };
-// Load data if landing directly on a lazy-loaded page
+// Route on load based on URL path; replace (don't push) so back goes to previous site.
+// Runs here (not in the first <script> block) so it can call the real window.showPage
+// above — which sets per-page <title>/meta/OG/canonical/robots tags via updatePageMeta —
+// instead of a stale duplicate that skipped that step.
 (function(){
   var path = window.location.pathname.replace(/^\//, '').replace(/\/$/, '');
-  // Handle /news/:id direct navigation (deferred from first script block)
-  if (window._pendingNlDetail) {
-    var nlId = window._pendingNlDetail;
-    delete window._pendingNlDetail;
-    loadNewsletterDetail(nlId);
+  // External redirects
+  if(path === 'zoom'){
+    fetch('https://admin.timothystl.org/api/settings/zoom_url').then(function(r){return r.json();}).then(function(d){
+      window.location.replace(d.value || 'https://us02web.zoom.us/j/3147818673');
+    }).catch(function(){ window.location.replace('https://us02web.zoom.us/j/3147818673'); });
     return;
   }
-  if (path === 'news') {
-    loadNewsletters(); loadNewsItems();
+  if(path === 'councilfiles'){
+    fetch('https://admin.timothystl.org/api/settings/councilfiles_url').then(function(r){return r.json();}).then(function(d){
+      window.location.replace(d.value || 'https://drive.google.com/drive/folders/1pgqJ32H3HS7SNYnnf7rOswC5c87IAzA4?usp=drive_link');
+    }).catch(function(){ window.location.replace('https://drive.google.com/drive/folders/1pgqJ32H3HS7SNYnnf7rOswC5c87IAzA4?usp=drive_link'); });
+    return;
   }
-  if (path === 'calendar') {
-    var gcalFrame = document.getElementById('gcal-frame');
-    if (gcalFrame && !gcalFrame.getAttribute('src')) { gcalFrame.src = gcalFrame.dataset.src; }
+  var nlDetailMatch = path.match(/^news\/(\d+)$/);
+  if (nlDetailMatch) {
+    window.showPage('news', false);
+    history.replaceState({page:'news'},'','/news/'+nlDetailMatch[1]);
+    loadNewsletterDetail(nlDetailMatch[1]);
+    return;
   }
-  if (path === 'youth') { loadYouthPage(); }
-  if (path === 'events') { volLoaded = true; loadVolunteerEvents(); }
-  if (path === 'sermons') { loadSermons(); }
-  if (path === 'voters') { loadVotersPage(); }
-  if (path === '' || path === 'home') { loadNotices('home'); }
-  if (path === 'worship') { loadNotices('worship'); }
-  if (path === 'about') { loadNotices('about'); loadStaff(); }
-  if (path === 'education') { loadNotices('education'); loadBibleClasses(); }
-  if (path === 'sermons') { loadNotices('sermons'); }
-  if (path === 'ministries') { loadNotices('ministries'); }
-  if (path === 'contact') { loadNotices('contact'); }
-  if (path === 'prayer') { loadNotices('prayer'); }
-  if (path === 'give') { loadNotices('give'); }
-  if (path === 'news') { loadNotices('news'); }
-  if (path === 'calendar') { loadNotices('calendar'); }
-  if (path === 'music') { loadConcertBlock(); }
-  var adminContentPages = ['sundayschool','confirmation','vbs','egghunt','family','music','stephen','foodpantry','bees'];
-  if (adminContentPages.indexOf(path) !== -1) { loadMinistryPage(path); }
-  if (path === 'christmasmarket') { loadMinistryCta(path); }
+  if(path && document.getElementById('page-'+path)){
+    window.showPage(path, false);
+  } else if (path) {
+    // Unknown path — check custom redirects, then show 404 (keep URL intact)
+    fetch('https://admin.timothystl.org/api/redirects').then(function(r){return r.json();}).then(function(d){
+      var match = (d.redirects||[]).find(function(r){return r.path===path;});
+      if(match){ window.location.replace(match.url); }
+      else { window.showPage('404', false); }
+    }).catch(function(){ window.showPage('404', false); });
+  } else {
+    history.replaceState({page:'home'},'','/');
+    loadNotices('home');
+  }
 })();
 
 // ── CONTACT FORM ──────────────────────────────────────────────
@@ -2801,9 +2712,9 @@ async function loadSermons() {
     if (activeSeries) {
       const sc = document.getElementById('sermons-series-content');
       sc.innerHTML = '<span class="eyebrow">Current series</span>' +
-        '<h2 style="margin-top:4px;">' + activeSeries.title + '</h2>' +
-        (activeSeries.description ? '<p style="max-width:640px;color:var(--gray);">' + activeSeries.description + '</p>' : '') +
-        (activeSeries.date_range ? '<p style="font-size:13px;color:var(--gray);">' + activeSeries.date_range + '</p>' : '') +
+        '<h2 style="margin-top:4px;">' + escText(activeSeries.title) + '</h2>' +
+        (activeSeries.description ? '<p style="max-width:640px;color:var(--gray);">' + escText(activeSeries.description) + '</p>' : '') +
+        (activeSeries.date_range ? '<p style="font-size:13px;color:var(--gray);">' + escText(activeSeries.date_range) + '</p>' : '') +
         '<div class="btn-row" style="margin-top:28px;">' +
         (activeSeries.playlist_url ? '<a href="' + activeSeries.playlist_url + '" target="_blank" class="btn btn-primary">Watch the series →</a>' : '') +
         '<a href="https://www.youtube.com/@TimothySTL" target="_blank" class="btn btn-outline">All services on YouTube</a>' +
@@ -2818,9 +2729,9 @@ async function loadSermons() {
         hc.innerHTML =
           '<div class="sermon-icon"><svg width="20" height="24" viewBox="0 0 20 24" fill="none"><rect x="8" y="0" width="4" height="24" rx="2" fill="#0A3C5C"/><rect x="0" y="7" width="20" height="4" rx="2" fill="#0A3C5C"/></svg></div>' +
           '<div>' +
-          '<div class="sermon-series">' + activeSeries.title + '</div>' +
-          (activeSeries.description ? '<div class="sermon-title">' + activeSeries.description + '</div>' : '') +
-          (activeSeries.date_range ? '<div class="sermon-ref">' + activeSeries.date_range + '</div>' : '') +
+          '<div class="sermon-series">' + escText(activeSeries.title) + '</div>' +
+          (activeSeries.description ? '<div class="sermon-title">' + escText(activeSeries.description) + '</div>' : '') +
+          (activeSeries.date_range ? '<div class="sermon-ref">' + escText(activeSeries.date_range) + '</div>' : '') +
           '<div class="btn-row">' + watchBtn +
           '<button class="btn btn-outline" onclick="showPage(\'sermons\')" style="font-size:13px;padding:9px 20px;">Watch &amp; notes</button>' +
           '</div></div>';
@@ -2839,8 +2750,8 @@ async function loadSermons() {
       const header = '<button onclick="(function(b,c,a){var open=b.style.display===\'none\';b.style.display=open?\'block\':\'none\';a.textContent=open?\'▲\':\'▼\';})(document.getElementById(\'' + bodyId + '\'),this,this.querySelector(\'.sn-chevron\'))" style="width:100%;text-align:left;background:none;border:none;cursor:pointer;padding:20px 20px ' + (isFirst && hasOutline ? '0' : '20px') + ';display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">' +
         '<div>' +
         (isFirst ? '<div style="font-family:var(--sans);font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--amber);margin-bottom:6px;">This Sunday</div>' : (dateLabel ? '<div style="font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gray);margin-bottom:5px;">' + dateLabel + '</div>' : '')) +
-        '<div style="font-family:var(--serif);font-size:20px;color:var(--steel);line-height:1.25;">' + n.title + '</div>' +
-        (n.scripture ? '<div style="font-family:var(--sans);font-size:13px;color:var(--mid);margin-top:4px;">' + n.scripture + '</div>' : '') +
+        '<div style="font-family:var(--serif);font-size:20px;color:var(--steel);line-height:1.25;">' + escText(n.title) + '</div>' +
+        (n.scripture ? '<div style="font-family:var(--sans);font-size:13px;color:var(--mid);margin-top:4px;">' + escText(n.scripture) + '</div>' : '') +
         '</div>' +
         (hasOutline ? '<span class="sn-chevron" style="color:var(--gray);font-size:12px;padding-top:4px;flex-shrink:0;">' + (isFirst ? '▲' : '▼') + '</span>' : '') +
         '</button>';
@@ -2885,13 +2796,13 @@ async function loadSermons() {
           if (section.isActive) {
             html += '<div style="margin:0 0 14px;padding-bottom:10px;border-bottom:2px solid var(--amber);">' +
               '<div style="font-family:var(--sans);font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--amber);margin-bottom:3px;">Current Series</div>' +
-              '<div style="font-family:var(--serif);font-size:19px;color:var(--steel);">' + section.label + '</div>' +
-              (section.dateRange ? '<div style="font-size:12px;color:var(--gray);margin-top:2px;">' + section.dateRange + '</div>' : '') +
+              '<div style="font-family:var(--serif);font-size:19px;color:var(--steel);">' + escText(section.label) + '</div>' +
+              (section.dateRange ? '<div style="font-size:12px;color:var(--gray);margin-top:2px;">' + escText(section.dateRange) + '</div>' : '') +
               '</div>';
           } else if (section.label) {
             html += '<div style="margin:28px 0 14px;padding-bottom:10px;border-bottom:1px solid var(--border);">' +
-              '<div style="font-family:var(--serif);font-size:17px;color:var(--steel);">' + section.label + '</div>' +
-              (section.dateRange ? '<div style="font-size:12px;color:var(--gray);margin-top:2px;">' + section.dateRange + '</div>' : '') +
+              '<div style="font-family:var(--serif);font-size:17px;color:var(--steel);">' + escText(section.label) + '</div>' +
+              (section.dateRange ? '<div style="font-size:12px;color:var(--gray);margin-top:2px;">' + escText(section.dateRange) + '</div>' : '') +
               '</div>';
           } else {
             html += '<div style="margin:28px 0 14px;padding-bottom:10px;border-bottom:1px solid var(--border);">' +

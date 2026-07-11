@@ -7,11 +7,22 @@ const ADMIN_API = 'https://admin.timothystl.org/api/link-cards';
 const COLOR_BG  = { amber: '#FEF3DC', sage: '#E8F2E9', sky: '#E4EEF4', mist: '#EDF5F8' };
 
 function esc(s) {
-  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Reject anything that isn't an http(s) URL — guards against javascript:,
+// data:, or other script-executing schemes sneaking in via admin-entered
+// link cards. Mirrors isSafeRedirectUrl in site-worker.js.
+function isSafeCardUrl(value) {
+  if (typeof value !== 'string' || !value) return false;
+  try {
+    const u = new URL(value);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch { return false; }
 }
 
 function renderCards(cards) {
-  return cards.map(c => {
+  return cards.filter(c => isSafeCardUrl(c.url)).map(c => {
     const bg = COLOR_BG[c.icon_color] || COLOR_BG.sky;
     return `  <a class="link-card" href="${esc(c.url)}" target="_blank" rel="noopener">
     <div class="card-icon" style="background:${bg};">
