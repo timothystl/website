@@ -451,3 +451,166 @@ the live DB. The format is a date plus a counter, e.g. `2026-05-20-1`.
 - WOL gets its own landing page (not a direct external redirect) — good for SEO and branding
 - Christmas Market = Option B (admin-managed, not static)
 - News and newsletter are separate systems (site news ≠ Beehiiv emails) — kept decoupled intentionally
+
+---
+
+## Pre-Redesign Hardening Review — 2026-07-12
+
+Full code review of the **volunteer scheduler** (`public/scheduler.html`) and the
+**admin sections** (`tlc-admin-worker.js`, `admin/gym.js`, `admin/payroll.html`,
+and the core modules `admin/auth.js` / `db.js` / `email.js` / `helpers.js`), done
+ahead of the planned redesign. Every item has a stable label so it can be
+referenced directly (e.g. "fix VS-1, GY-2"). Ranked within each subsystem by
+severity. **This is a catalog for review — nothing here has been changed yet.**
+
+**Label prefixes:** `VS-` volunteer scheduler · `AW-` admin worker · `AC-` admin
+core modules · `GY-` gym module · `PY-` payroll.
+
+### 🔴 Must-fix before redesign (Critical / High across all areas)
+
+| Label | Severity | Area | Issue |
+|-------|----------|------|-------|
+| VS-1 | Critical | Scheduler | Special-service rows crash Export CSV, Stats, Auto-Fill & Remove-Person (missing `type` guard) |
+| VS-2 | Critical | Scheduler | `scheduler.html` is served **unauthenticated** at `timothystl.org/scheduler.html` — anyone can open the staff tool |
+| GY-1 | Critical | Gym | [B1] Booking double-book race: SELECT-then-INSERT, no unique constraint/transaction |
+| GY-2 | Critical | Gym | Stored XSS via renter-controlled `notes` rendered unescaped in admin review page + staff emails |
+| AW-1 | High | Admin worker | Unhandled exceptions leak full stack traces to **unauthenticated** clients |
+| AW-2 | High | Admin worker | Stored XSS in admin UI via unescaped DB content → cross-privilege escalation (low-perm editor → admin) |
+| AC-1 | High | Core | Session cookie missing `Secure` flag (`auth.js`) |
+| AC-2 | High | Core | Email templates interpolate titles/subjects/URLs into broadcast HTML with **no** escaping (`email.js`) |
+| AC-3 | High | Core | `</script>` in saved editor content breaks out of the inline TinyMCE init block (`helpers.js`) |
+| AC-4 | High | Core | No UNIQUE constraint on `gym_bookings(booking_date,start_time,end_time)` — schema half of GY-1 |
+| VS-3 | High | Scheduler | Breeze/Resend/Worker **secrets stored plaintext** in localStorage AND synced to D1 in plaintext |
+| VS-4 | High | Scheduler | RSVP tokens generated with `Math.random()` — guessable; sole authenticator for `/rsvp` |
+| VS-5 | High | Scheduler | localStorage is the working store; D1 sync is last-write-wins → multi-device data loss |
+| VS-6 | High | Scheduler | Stats double-count confirmed slots after a month is regenerated (inflated serve counts) |
+| VS-7 | High | Scheduler | Side panels/modals: no Escape, no focus trap/return, no dialog ARIA |
+| GY-3 | High | Gym | Recurring monthly invoice re-bills every run (dedup is a no-op) — duplicate charges |
+| GY-4 | High | Gym | Batch hold endpoint bypasses rate-limit and `max_active_holds` (calendar DoS) |
+| GY-5 | High | Gym | Renter self-confirm endpoints still routed despite "holds only" policy (bypasses office review) |
+| GY-6 | High | Gym | `/hold` classic path skips day/hour business-rule validation (book outside allowed hours) |
+| PY-1 | High | Payroll | Staff name not JS-escaped in inline `onclick` → breaks legit names (`O'Brien`) + script injection |
+| PY-2 | High | Payroll | 403(b) base mismatch — stub line items don't reconcile to displayed Gross Pay |
+| PY-3 | High | Payroll | Payroll page ignores shared admin shell — divergent design, no nav (dead-end page) |
+
+**Cross-cutting themes** (fix systematically, not one-off): consistent output
+escaping — AW-2, AC-2, AC-3, GY-2, VS-8, PY-1 all share one root cause (a shared
+`escapeHtml` exists in `helpers.js` but is used in only ~one place). CSV formula
+injection — VS-13, PY-5. Money stored as float instead of integer cents — AC-5,
+GY-7, PY-6. Modal/keyboard accessibility — VS-7, VS-12, PY-7, PY-8, GY-12.
+**Schema changes require a `SCHEMA_VERSION` bump** — AC-4/GY-1, AC-5, AC-6, AC-7.
+
+> Reconciliation note: the admin worker already has a good CSRF `Origin`/`Referer`
+> gate with a tight public-POST allowlist, so the CSRF items raised against the
+> gym/core forms (GY / AC-15) are defense-in-depth, not open holes. SQL is
+> parameterized throughout (no injection found), gym portal tokens use
+> `crypto.randomUUID()`, and portal queries are correctly scoped by `group_id`.
+
+### Volunteer Scheduler — `public/scheduler.html`
+
+- **VS-1** (Critical, correctness) — Special rows `{type:'special', …}` have no `.assignments`; CSV (~2189), Stats (~4028), Auto-Fill (~3923), deletePerson (~1506) iterate blindly and throw `TypeError`. Add `if (row.type !== 'sunday') return;` like the other iterators do.
+- **VS-2** (Critical, security) — `site-worker.js` falls through to `env.ASSETS.fetch`, so the whole Worship Schedule Builder is public at `/scheduler.html` with no auth gate. Decide whether it should be gated or is dead/legacy (admin sidebar points staff to `chms.timothystl.org` instead).
+- **VS-3** (High, security) — `ws_breeze_settings` holds `apiKey`/`resendKey`/`workerSecret` in cleartext localStorage; `buildDataSnapshot()` (~3708) POSTs them to D1 in plaintext. Exclude secrets from the snapshot or move Breeze/Resend calls server-side.
+- **VS-4** (High, security) — RSVP tokens (~2566) use `Math.random()`; use `crypto.getRandomValues()` (16+ bytes hex).
+- **VS-5** (High, data) — 1.5s debounced last-write-wins D1 sync (~3759), pull overwrites local wholesale (~3736); two devices clobber each other; `beforeunload` only warns on schedule dirty, not people/settings/confirmations. Add version/updated-at check + flush on unload, or single authoritative store.
+- **VS-6** (High, correctness) — `renderStatsTab` (~4025) sums history + current, but Generate archives current to history every run → confirmed slots counted N times. De-dupe by dateISO.
+- **VS-7** (High, a11y) — Eight side panels: no Escape handler, no focus trap/return, no `role="dialog"`/`aria-modal`.
+- **VS-8** (Medium, security) — `showAlert` (872) uses `innerHTML`; special-service success path interpolates raw `name` → XSS. `esc(name)` first.
+- **VS-9** (Medium, data) — deletePerson (1501) only nulls current month; id lingers in other months, history, confirmations, last_served, rsvp_tokens → "⚠ name" ghosts. Sweep all stores.
+- **VS-10** (Medium, correctness) — Clicking a `needs_changes` confirmation pill (2144) hits `cycle['needs_changes']===undefined` → status silently reverts. Add it to the cycle map.
+- **VS-11** (Medium, data) — Manual Add Person (1309) has no duplicate detection (only approveSignup does). Warn on matching name/email.
+- **VS-12** (Medium, a11y) — Sortable `<th>` (1430), Sunday expand rows (2123), event cards (4526) are click-only, non-focusable. Make them buttons with `aria-expanded`.
+- **VS-13** (Medium, security) — CSV export (2188) not guarded against `= + - @` formula-injection prefixes.
+- **VS-14** (Medium, UX) — Generate Month (1573) silently wipes/overwrites a completed schedule unless override flags exist. Confirm before regenerating a non-empty month.
+- **VS-15** (Medium, maint) — Dead Breeze-sync tab (`initBreezeTab` 3242, never called; empty `#tab-breeze` 493) and orphan functions (`getSundays`, `getOrdinal`, `exportIcal`). Delete or restore.
+- **VS-16** (Low, correctness) — `archiveCurrentSchedule` builds `endDate` at local midnight then `toISOString()` — off-by-one for UTC+ viewers.
+- **VS-17** (Low, robustness) — Empty catches (migrate 1010) and fire-and-forget claim POSTs (`.catch(()=>{})` 4381/4464/4606) hide failures; a dismissed sign-up can reappear.
+- **VS-18** (Low, perf) — `buildCell` (1955) re-parses several localStorage blobs + rescans people per cell. Hoist into `renderTable`.
+- **VS-19** (Low, UI) — Collapsed thead renders 4 `th` (1806) vs body `colspan=9` (1852) — brittle grid.
+- **VS-20** (Low, data) — No email-format validation on the person email field (1312).
+- **VS-21** (Low, UI) — "Volunteer Sign-Up Page" button (438) links to `/`, not the sign-up page.
+
+### Admin Worker — `tlc-admin-worker.js`
+
+- **AW-1** (High, security) — Top-level catch (116-125) returns `e.stack` to every route incl. unauthenticated ones. Return generic 500; log detail server-side only.
+- **AW-2** (High, security) — Many DB strings interpolated without `escapeHtml` (news picker 1727, newsletter subject 4712/4738, sermon title incl. in `value="…"` 1464/1554/1665, bible class 2142). With `unsafe-inline` CSP this is a cross-privilege escalation path. Escape all output; attribute-safe escape for `value=`.
+- **AW-3** (Medium, security) — `/api/newsletter/:id` (688) has no status filter; drafts/pending readable by sequential ID. Add `AND status='published'` + public columns only.
+- **AW-4** (Medium, security) — `/api/voters` (936) and `/docs/*` (538) are unauthenticated though the Voters page is "members-only." Gate behind session/token if truly private.
+- **AW-5** (Medium, security) — `/api/contact` & `/api/prayer` (782-901): honeypot only, no rate limit; confirmation email to attacker-supplied address = email bomb/reflector. Add IP/time rate limiting + turnstile.
+- **AW-6** (Medium, security) — `/api/contact` (838) & `/api/prayer` (899) return `{error: e.message}` to unauthenticated callers (subscribe is generic — inconsistent). Generic error.
+- **AW-7** (Medium, security) — `/sb/*` proxy (141) correctly enforces `payroll_manage`, but forwards any `/sb/` path → authenticated open relay to whole Supabase project. Add a table/path allowlist; confirm RLS on all exposed tables.
+- **AW-8** (Medium, security) — `/api/upload-image` & `/api/upload-doc` (1279) require a session but no specific permission — any account can host permanent public files on the domain. Gate behind a content-edit permission.
+- **AW-9** (Low, security) — Login (1086) skips PBKDF2 for unknown users → timing enumeration. Run a dummy hash.
+- **AW-10** (Low, security) — Login rate limit (1071) is IP-only (defeated by rotation); add per-username counter.
+- **AW-11** (Low, security) — `/settings/update` (4370) writes any key in the body, not just the 3 the form exposes. Allowlist keys.
+- **AW-12** (Low, correctness) — Migration block swallows each error in `try/catch` then writes the version marker unconditionally (534) → partial migration marked "current," never retries. Track failures before stamping.
+- **AW-13** (Low, correctness) — No 404 fallthrough (4636): unknown authenticated paths render the newsletter dashboard. Add explicit 404.
+- **AW-14** (Low, security) — Password reset (987) doesn't invalidate prior tokens and stores them plaintext. Invalidate on new request; hash tokens.
+- **AW-15** (Low, design) — Inconsistent error shapes/status codes (plain text vs JSON, 400 vs 302). Standardize a JSON error envelope.
+- **AW-16** (Low, design) — Monolithic ~4,600-line `_fetch` if-chain with scattered inline permission gates — the single biggest risk to the redesign. Extract a route table + centralized `requirePermission(path)` map.
+- **AW-17** (Low, perf) — Per-request `_schema_version` D1 read on all hot paths incl. `/images/*` (= backlog [B4]). Cache per-isolate or via KV.
+- **AW-18** (Low, security) — No `frame-ancestors`/`X-Frame-Options` on admin pages. Add `frame-ancestors 'none'`.
+
+### Admin Core Modules — `admin/auth.js` · `db.js` · `email.js` · `helpers.js`
+
+- **AC-1** (High, security) — Session cookie (`auth.js` 109/113) sets `HttpOnly; SameSite=Strict` but not `Secure`. Append `; Secure`.
+- **AC-2** (High, security) — `email.js` drops subjects/titles/event names/CTA URLs into broadcast HTML with no escaping; `escapeHtml` exists in `helpers.js` but isn't imported here. Wrap all short plain-text fields.
+- **AC-3** (High, security) — `helpers.js` TinyMCE section builders (398/431 and 5 clones) escape backtick/`$` but not `</script>`, which the HTML parser honors regardless of JS-string context. Also neutralize the closing-tag sequence.
+- **AC-4** (High, correctness) — `db.js` `DB_INIT_GYM_BOOKINGS` (133) has no unique index → root of GY-1. Add a partial unique index over active statuses; bump `SCHEMA_VERSION`.
+- **AC-5** (Medium, correctness) — `gym_invoices` money columns are `REAL` (db.js 175). Store integer cents. (Schema change → version bump.)
+- **AC-6** (Medium, correctness) — `audit_log.user_id` is `NOT NULL` (db.js 231) but `logAudit` binds null for system actions (auth.js 134); the INSERT throws and is silently swallowed → those actions vanish from the audit trail. Make nullable or use a sentinel.
+- **AC-7** (Medium, perf) — Missing indexes on hot columns: `news_items(publish_date,expire_date,pinned)`, `gym_bookings(group_id,booking_date,status)`, `audit_log(created_at,entity_type)`, `sessions(user_id)`.
+- **AC-8** (Medium, security) — CSP (helpers.js 181) allows `'unsafe-inline'` + `'unsafe-eval'`, defeating it as an XSS backstop. Move to nonce-based inline scripts.
+- **AC-9** (Medium, correctness) — Email footers (email.js 124/307) hardcode the stale Breeze give URL; a managed `give_url` setting exists. Thread it in.
+- **AC-10** (Medium, maint) — ~500 lines of 6 near-identical TinyMCE builders (helpers.js 397-865) — any escaping fix (AC-3) must be applied 6×. Extract one parameterized builder.
+- **AC-11** (Medium, design/security) — Christian Ed tab gated by unrelated `news_edit` (helpers.js 204); no `christian_ed` permission exists. Granting News editing silently grants Bible-class management. Add a dedicated permission.
+- **AC-12** (Medium, security) — PBKDF2 at 100k iterations (auth.js 24/36); OWASP guidance ~600k. Iteration count is embedded in the hash so it's upgradeable on next login.
+- **AC-13** (Low, design) — `settings_manage` bundles Subscribers (PII) + Redirects. Split if finer control wanted.
+- **AC-14** (Low, maint) — Dead `sessions.permissions` column (db.js 224) — written at login but `getSession` reads from `users`. Drop or document.
+- **AC-15** (Low, security) — No CSRF token defense-in-depth beyond SameSite (mitigated by the worker's Origin gate — see reconciliation note). Add tokens if the cookie policy ever relaxes.
+- **AC-16** (Low, security) — `resetPasswordPage` (helpers.js 305) only escapes `"`. Use `escapeHtml`.
+- **AC-17** (Low, security) — `timingSafeEqual` (auth.js 45) short-circuits on length mismatch (fine for fixed-length hex; noted for completeness).
+- **AC-18** (Low, security) — TinyMCE API key hardcoded (db.js 5) — domain-restricted public key; move to env for rotation.
+- **AC-19** (Low, design) — No `FOREIGN KEY` declarations on relational columns → orphaned children on parent delete. Add FKs where cascade/restrict matters, or document app-level integrity.
+- **AC-20** (Low, maint) — `VERSION` string (helpers.js 7) labeled "minor bump" but sits in the PATCH position — reconcile with the semver convention.
+
+### Gym Module — `admin/gym.js`
+
+- **GY-1** (Critical, correctness) — [B1] double-book race (1220/1258/1484/3437). Add partial unique index (see AC-4) + handle constraint error as "slot taken."
+- **GY-2** (Critical, security) — Renter `notes` rendered unescaped in recurring-review page (4453) and admin emails (1532/1542/1705) → stored XSS in office admin's authenticated session. Escape `notes` (and defensively `group.*`) everywhere.
+- **GY-3** (High, correctness) — Recurring monthly invoice dedup (4572) queries `booking_id` but recurrence invoices are inserted without it → re-bills every run. Store `booking_ids` and filter against it.
+- **GY-4** (High, security/DoS) — Batch `/request-slots` (1459) enforces neither rate-limit nor `max_active_holds` (unlike single `/hold`). Enforce both + a per-request slot ceiling.
+- **GY-5** (High, security/design) — Public `/confirm` (1245) & `/confirm-slots` (1554) let a renter self-confirm + self-invoice despite "holds only." Remove or gate behind admin.
+- **GY-6** (High, correctness) — `/hold` (1099) validates only end>start/conflict/blocked, never `getValidHoursForDow` (batch path does). Validate hours.
+- **GY-7** (Medium, data) — Money stored as float (88/3593/3599) → drift between stored total and emailed/paid amount. Integer cents; derive pay-link from the stored rounded value.
+- **GY-8** (Medium, security) — `/gym/cal/:token.ics` (1720) uses one global token and returns every group's confirmed bookings incl. `notes`. Per-group tokens or strip notes.
+- **GY-9** (Medium, correctness) — `merge-holds` (2519) re-points `booking_id` but ignores multi-date invoices' `booking_ids` JSON → merged dates silently drop from invoice view/resend.
+- **GY-10** (Medium, correctness) — `sweepExpiredHolds` runs only on `/gym-rentals` load (1762); expired holds keep blocking slots + counting against the cap until staff open the dashboard. Sweep in the portal handler / cron, or ignore expired holds in conflict checks.
+- **GY-11** (Medium, maint) — `gym_hold_hours` setting (2076) is dead; expiry hardcoded `48*3600000` in two places (1225/1471). Read the setting or remove it.
+- **GY-12** (Medium, a11y) — Blocked-date calendar cells are `<span>` with click handlers (2721/2787) — not focusable; availability is color-only (707). Use `<button>` + aria; pair color with text.
+- **GY-13** (Medium, correctness/UX) — `edit-amount` (4300) writes `rate = parseFloat(...||'0')` → blank stores `0` (`$0.00/hr`); guard only checks `total_amount`. Validate rate, keep existing on blank.
+- **GY-14** (Low, correctness) — iCal events (1732) use floating time, no `TZID`/`VTIMEZONE` → shifted times for out-of-TZ subscribers.
+- **GY-15** (Low, correctness) — Custom rate `$0` coerced to default (`||null`, 2193/2312) → can't comp a group to $0. Use explicit empty-string checks.
+- **GY-16** (Low, maint) — Six confirm handlers (1245/1554/3840/3889/3922/3987) re-implement ~40 lines of confirm→invoice→email→GCal each, already diverging (where GY-3/GY-10 hide). Extract one helper.
+- **GY-17** (Low, maint) — `handleGymRoutes` is one ~4,100-line function; the calendar is rendered 3× (portal/new-booking/blocked) and time helpers re-declared server + client (drift risk). Split modules; share one renderer.
+- **GY-18** (Low, UX) — `test-gcal` (2346) writes a real event to the production calendar on every GET and is linked from the dashboard. Gate behind an explicit POST.
+
+### Payroll — `admin/payroll.html`
+
+- **PY-1** (High, security/correctness) — `esc()` (1596) doesn't escape single quotes; names land in single-quoted inline `onclick` (913). `O'Brien` breaks Edit/Remove; a crafted name executes JS. Use event delegation + `data-id`.
+- **PY-2** (High, correctness) — 403(b) shown in `renderStaffBlock` (1493) is computed on `hours*rate` but `calcGross` (1579) uses `(hours+ptoUsed)*rate` → stub line items don't reconcile to Gross. Compute `base` once and pass everywhere.
+- **PY-3** (High, design/UX) — Whole page is bespoke (Nunito/navy, own login CSS, no sidebar, only a Sign Out button) vs the shared `sidebarShell`/`html()` — a dead-end that won't inherit shell a11y/mobile fixes. Fold into the shared shell during the redesign.
+- **PY-4** (Medium, security) — Supabase anon JWT hardcoded in page source (779). `/sb` gate is the real control (defense-in-depth), but inject the key server-side / document rotation.
+- **PY-5** (Medium, security) — CSV `q()` (1229) quote-doubles but doesn't neutralize `= + - @` (the 403(b) column even emits leading `-`). Prefix risky cells.
+- **PY-6** (Medium, correctness) — Float money; rows rounded for display while subtotals sum unrounded values (1304) → printed subtotal a cent off. Round each gross to cents before summing, or integer cents.
+- **PY-7** (Medium, a11y) — `#staffModal` (691) has no `role="dialog"`/`aria-modal`, no focus move/trap/restore, no Escape.
+- **PY-8** (Medium, a11y) — Modal `<label>`s lack `for`; hours-grid captions are `<div>` not labels → three identical unlabeled spinboxes per row. Pair `for`/`id`; add `aria-label`.
+- **PY-9** (Medium, UX/correctness) — `onPeriodChange` (1059) awaits several fetches with no feedback; `loadMdoData` (1093) uses `|| []` and never checks the Supabase `error` field → a failed MDO query silently under-reports staff on a payroll run. Add loading state + error banner.
+- **PY-10** (Medium, responsive) — `.form-row`/`.form-row-3` (539) don't collapse on mobile; the 640px block only touches the hours row/table. Collapse to one column under ~560px.
+- **PY-11** (Medium, correctness) — Period dates parsed as local midnight but formatted via `toISOString()` (UTC) (824) — latent off-by-one. Format from local components consistently.
+- **PY-12** (Low, UX) — Save/remove errors use `alert()` (1039) inconsistent with admin `.alert` banners; `confirm()` gets HTML-entity-escaped name (`Smith &amp; Jones`).
+- **PY-13** (Low, UX) — Dead `#loginScreen` CSS (44) with no matching DOM; on 401 `showDashboard()` still runs and shows a raw "Network error." Remove dead CSS; redirect to `/login` on 401.
+- **PY-14** (Low, a11y) — "✓ Saved" flash (663) and error rows carry no `aria-live`. Add `role="status"` / `role="alert"`.
+- **PY-15** (Low, a11y) — Data-table `<th>` lack `scope="col"`; muted `#7A6E5A` at ~11px approaches/fails 4.5:1 contrast.
+- **PY-16** (Low, correctness) — Clock shifts <10 min silently dropped (1121); hours inputs wire both `oninput`+`onchange` → redundant save on blur.
+
