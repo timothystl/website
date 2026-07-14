@@ -2,5 +2,6 @@ User-agent: *
 Allow: /
 Disallow: /manual
 Disallow: /voters
+Disallow: /how-to-give
 
 Sitemap: https://timothystl.org/sitemap.xml
