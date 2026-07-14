@@ -4,7 +4,7 @@
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, hasPermission } from './auth.js';
 
-export const VERSION = 'v1.79.8'; // minor bump: duplicate newsletter (Copy button) to reuse a past newsletter as a new draft
+export const VERSION = 'v1.79.9'; // minor bump: duplicate newsletter (Copy button) to reuse a past newsletter as a new draft
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
