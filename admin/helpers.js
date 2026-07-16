@@ -4,7 +4,7 @@
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, hasPermission } from './auth.js';
 
-export const VERSION = 'v1.79.9'; // minor bump: duplicate newsletter (Copy button) to reuse a past newsletter as a new draft
+export const VERSION = 'v1.80.0'; // minor bump: schedule newsletter sends via Brevo's scheduledAt campaign field
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
@@ -61,7 +61,7 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
 .newsletter-row:last-child{border-bottom:none;}
 .newsletter-date{font-family:var(--sans);font-size:11px;font-weight:700;color:var(--gray);min-width:100px;}
 .newsletter-subject{font-family:var(--serif);font-size:16px;color:var(--steel);flex:1;}
-.newsletter-actions{display:flex;gap:8px;}
+.newsletter-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
 .radio-row{display:flex;gap:16px;margin-top:6px;}
 .radio-row label{font-family:var(--sans);font-size:13px;font-weight:600;color:var(--charcoal);letter-spacing:0;text-transform:none;display:flex;align-items:center;gap:6px;cursor:pointer;}
 .radio-row input[type=radio]{width:auto;}
@@ -173,7 +173,23 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
 .filter-pill.active{background:var(--steel);color:#fff;border-color:var(--steel);}
 </style>
 </head>
-<body>${body}</body>
+<body>${body}
+<script>
+function toggleSchedule(id){var row=document.getElementById('sched-row-'+id);if(row)row.style.display=row.style.display==='none'?'':'none';}
+// Converts the datetime-local field to an ISO instant using the browser's own
+// timezone before submit — the Worker runs in UTC, so it can't reliably turn
+// a bare "2026-07-20T09:00" string back into the office's actual local time.
+function prepSchedule(form){
+  var input = form.querySelector('input[type=datetime-local]');
+  var hidden = form.querySelector('input[name=scheduled_at]');
+  if (!input || !input.value) return false;
+  var d = new Date(input.value);
+  if (isNaN(d.getTime()) || d.getTime() <= Date.now()) { alert('Pick a valid date/time in the future.'); return false; }
+  hidden.value = d.toISOString();
+  return confirm('Schedule this newsletter to send via Brevo?');
+}
+</script>
+</body>
 </html>`, {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
