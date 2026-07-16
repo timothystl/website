@@ -4,7 +4,9 @@
 import { formatDate } from './helpers.js';
 
 // ── BREVO EMAIL SEND ─────────────────────────────────────────
-export async function sendBrevoNewsletter(env, { subject, htmlContent, listIds }) {
+// Pass scheduledAt (ISO-8601 datetime) to have Brevo hold and auto-send the
+// campaign at that time instead of sending immediately.
+export async function sendBrevoNewsletter(env, { subject, htmlContent, listIds, scheduledAt }) {
   const apiKey = env.BREVO_API_KEY;
   if (!apiKey) return { error: 'BREVO_API_KEY secret not configured' };
 
@@ -17,11 +19,16 @@ export async function sendBrevoNewsletter(env, { subject, htmlContent, listIds }
       sender: { name: 'Timothy Lutheran Church', email: env.BREVO_SENDER_EMAIL || 'dinger@timothystl.org' },
       replyTo: env.BREVO_REPLY_TO || env.BREVO_SENDER_EMAIL || 'dinger@timothystl.org',
       htmlContent,
-      recipients: { listIds }
+      recipients: { listIds },
+      ...(scheduledAt ? { scheduledAt } : {})
     })
   });
   if (!createResp.ok) return { error: `Brevo create error: ${await createResp.text()}` };
   const { id } = await createResp.json();
+
+  // Scheduled campaigns are already queued by Brevo at creation time — calling
+  // sendNow on top of a scheduledAt campaign would send it immediately instead.
+  if (scheduledAt) return { success: true, campaignId: id, scheduled: true };
 
   const sendResp = await fetch(`https://api.brevo.com/v3/emailCampaigns/${id}/sendNow`, {
     method: 'POST',
@@ -29,6 +36,19 @@ export async function sendBrevoNewsletter(env, { subject, htmlContent, listIds }
   });
   if (!sendResp.ok) return { error: `Brevo send error: ${await sendResp.text()}` };
   return { success: true, campaignId: id };
+}
+
+// ── BREVO CAMPAIGN CANCEL ────────────────────────────────────
+// Deletes a not-yet-sent scheduled campaign so it never goes out.
+export async function cancelBrevoCampaign(env, campaignId) {
+  const apiKey = env.BREVO_API_KEY;
+  if (!apiKey) return { error: 'BREVO_API_KEY secret not configured' };
+  const resp = await fetch(`https://api.brevo.com/v3/emailCampaigns/${campaignId}`, {
+    method: 'DELETE',
+    headers: { 'api-key': apiKey }
+  });
+  if (!resp.ok && resp.status !== 404) return { error: `Brevo cancel error: ${await resp.text()}` };
+  return { success: true };
 }
 
 // ── BREVO TRANSACTIONAL EMAIL ─────────────────────────────────

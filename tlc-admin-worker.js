@@ -23,7 +23,7 @@ const STATIC_PAGES = [
 ];
 import { html, sidebarShell, loginPage, setupPage, forgotPasswordPage, resetPasswordPage, permissionCheckboxes, formatDate, escapeHtml, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection } from './admin/helpers.js';
 import { hashPassword, verifyPassword, createSession, getSession, deleteSession, sessionCookieHeader, clearSessionCookieHeader, logAudit, hasPermission, ALL_PERMISSIONS, PERMISSIONS } from './admin/auth.js';
-import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHtml } from './admin/email.js';
+import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHtml, cancelBrevoCampaign } from './admin/email.js';
 import { handleGymRoutes, sweepExpiredItems, extractImageKeys } from './admin/gym.js';
 import PAYROLL_HTML from './admin/payroll.html';
 
@@ -37,6 +37,35 @@ const PUBLIC_SETTINGS_KEYS = new Set(['zoom_url', 'councilfiles_url', 'give_url'
 // state-changing request must originate from admin.timothystl.org itself.
 const ADMIN_ORIGIN = 'https://admin.timothystl.org';
 const PUBLIC_CROSS_ORIGIN_POSTS = new Set(['/api/contact', '/api/prayer', '/api/subscribe']);
+
+// Shared by the immediate-send and schedule-send routes: loads a saved
+// newsletter's content and renders it to the same email HTML both paths send.
+async function buildNewsletterEmailPayload(env, id) {
+  const row = await env.DB.prepare(
+    'SELECT subject, pastor_note, wol_content, lasm_content, secondary_note, published_at, format, cta_url, cta_label, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, news_item_ids FROM newsletters WHERE id = ?'
+  ).bind(id).first();
+  if (!row) return null;
+
+  const eventsRows = await env.DB.prepare(
+    'SELECT event_date, event_name, event_time, event_desc FROM events WHERE newsletter_id = ? ORDER BY sort_order'
+  ).bind(id).all();
+
+  // Re-fetch the newsletter's selected news items (title + summary/body/image) so the
+  // Featured/More-from-Timothy sections aren't silently empty when sending/resending.
+  const selectedNewsIds = (row.news_item_ids || '').split(',').map(s => s.trim()).filter(Boolean);
+  let selectedNewsItems = [];
+  if (selectedNewsIds.length > 0) {
+    const placeholders = selectedNewsIds.map(() => '?').join(',');
+    const newsRows = await env.DB.prepare(
+      `SELECT id, title, summary, body, image_url FROM news_items WHERE id IN (${placeholders})`
+    ).bind(...selectedNewsIds).all();
+    const newsMap = Object.fromEntries(newsRows.results.map(r => [String(r.id), r]));
+    selectedNewsItems = selectedNewsIds.map(nid => newsMap[nid]).filter(Boolean);
+  }
+
+  const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at, selectedNewsItems, row.secondary_note || '', id, row.format || 'weekly', row.cta_url || '', row.cta_label || '', row.tertiary_note || '', row.tertiary_cta_label || '', row.tertiary_cta_url || '', JSON.parse(row.bible_classes || '[]'));
+  return { row, emailHtml };
+}
 
 // Reject anything that isn't an http(s) URL — guards Link Card saves against
 // javascript:/data: payloads that would otherwise render as a clickable,
@@ -246,7 +275,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-07-11-1'; // bumped: grant payroll_manage to existing settings_manage accounts
+    const SCHEMA_VERSION = '2026-07-16-1'; // bumped: add scheduled_send_at / scheduled_list_type / brevo_campaign_id to newsletters
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -524,6 +553,10 @@ export default {
          WHERE permissions LIKE '%"settings_manage"%' AND permissions NOT LIKE '%"payroll_manage"%'`
       ).run();
     } catch (_) {}
+    // Migrate: scheduled send (Brevo campaign scheduling)
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN scheduled_send_at TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN scheduled_list_type TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN brevo_campaign_id TEXT').run(); } catch (_) {}
     // Performance indexes
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)').run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_news_items_publish_date ON news_items(publish_date)').run(); } catch (_) {}
@@ -2614,29 +2647,9 @@ ${classesJs}
         });
       }
 
-      const row = await env.DB.prepare(
-        'SELECT subject, pastor_note, wol_content, lasm_content, secondary_note, published_at, format, cta_url, cta_label, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, news_item_ids FROM newsletters WHERE id = ?'
-      ).bind(id).first();
-      if (!row) return new Response('Not found', { status: 404 });
-
-      const eventsRows = await env.DB.prepare(
-        'SELECT event_date, event_name, event_time, event_desc FROM events WHERE newsletter_id = ? ORDER BY sort_order'
-      ).bind(id).all();
-
-      // Re-fetch the newsletter's selected news items (title + summary/body/image) so the
-      // Featured/More-from-Timothy sections aren't silently empty when sending/resending.
-      const selectedNewsIds = (row.news_item_ids || '').split(',').map(s => s.trim()).filter(Boolean);
-      let selectedNewsItems = [];
-      if (selectedNewsIds.length > 0) {
-        const placeholders = selectedNewsIds.map(() => '?').join(',');
-        const newsRows = await env.DB.prepare(
-          `SELECT id, title, summary, body, image_url FROM news_items WHERE id IN (${placeholders})`
-        ).bind(...selectedNewsIds).all();
-        const newsMap = Object.fromEntries(newsRows.results.map(r => [String(r.id), r]));
-        selectedNewsItems = selectedNewsIds.map(nid => newsMap[nid]).filter(Boolean);
-      }
-
-      const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at, selectedNewsItems, row.secondary_note || '', id, row.format || 'weekly', row.cta_url || '', row.cta_label || '', row.tertiary_note || '', row.tertiary_cta_label || '', row.tertiary_cta_url || '', JSON.parse(row.bible_classes || '[]'));
+      const payload = await buildNewsletterEmailPayload(env, id);
+      if (!payload) return new Response('Not found', { status: 404 });
+      const { row, emailHtml } = payload;
       const result = await sendBrevoNewsletter(env, { subject: row.subject, htmlContent: emailHtml, listIds: [listId] });
 
       // Sending to all = publish the newsletter so it appears on the website
@@ -2653,6 +2666,87 @@ ${classesJs}
         status: 302,
         headers: { Location: `/newsitems?msg=emailed&subject=${encodeURIComponent(row.subject)}${suffix}` }
       });
+    }
+
+    // ── SCHEDULE SEND (Brevo scheduledAt — send-to-all only) ──
+    if (path.startsWith('/schedule-email/') && method === 'POST') {
+      if (!hasPermission(currentUser, 'newsletter_approve')) return new Response('Access denied.', { status: 403 });
+      const id = path.split('/').pop();
+      const form = await request.formData();
+      const listType = form.get('list_type') || 'all';
+      const listId = listType === 'test' ? parseInt(env.BREVO_TEST_LIST_ID || '2', 10) : parseInt(env.BREVO_LIST_ID || '0', 10);
+      // Submitted by prepSchedule() in helpers.js as a browser-computed ISO
+      // instant — the Worker itself runs in UTC and can't turn a bare
+      // "2026-07-20T09:00" string back into the office's actual local time.
+      const scheduledAtSubmitted = form.get('scheduled_at') || '';
+
+      if (!listId) {
+        return new Response('', {
+          status: 302,
+          headers: { Location: `/newsitems?msg=emailed&emailerr=${encodeURIComponent('BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}` }
+        });
+      }
+      const scheduledDate = scheduledAtSubmitted ? new Date(scheduledAtSubmitted) : null;
+      if (!scheduledDate || isNaN(scheduledDate.getTime()) || scheduledDate.getTime() <= Date.now()) {
+        return new Response('', {
+          status: 302,
+          headers: { Location: `/newsitems?msg=emailed&emailerr=${encodeURIComponent('Pick a valid date/time in the future to schedule this send.')}` }
+        });
+      }
+      const scheduledAtIso = scheduledDate.toISOString();
+
+      const payload = await buildNewsletterEmailPayload(env, id);
+      if (!payload) return new Response('Not found', { status: 404 });
+      const { row, emailHtml } = payload;
+      const result = await sendBrevoNewsletter(env, { subject: row.subject, htmlContent: emailHtml, listIds: [listId], scheduledAt: scheduledAtIso });
+
+      if (result.success) {
+        await env.DB.prepare(
+          'UPDATE newsletters SET scheduled_send_at = ?, scheduled_list_type = ?, brevo_campaign_id = ? WHERE id = ?'
+        ).bind(scheduledAtIso, listType, String(result.campaignId), id).run();
+
+        // There's no Brevo→worker callback for "campaign actually sent", and no
+        // Workers Cron in this project to poll for it — publish now (like an
+        // immediate send-to-all does) so the archive link the email points back
+        // to (buildEmailHtml's /news/{id} "Read the full letter" link) is live
+        // by the time Brevo delivers it, rather than 404ing until someone
+        // happens to revisit this page after the scheduled time.
+        if (listType === 'all') {
+          await env.DB.prepare(
+            "UPDATE newsletters SET status = 'published', approval_status = 'approved', approved_by_username = ?, published_at = COALESCE(published_at, ?) WHERE id = ?"
+          ).bind(currentUser.username, new Date().toISOString().split('T')[0], id).run();
+        }
+      }
+
+      const suffix = result.success
+        ? `&scheduled=1`
+        : `&emailerr=${encodeURIComponent(result.error)}`;
+      return new Response('', {
+        status: 302,
+        headers: { Location: `/newsitems?msg=emailed&subject=${encodeURIComponent(row.subject)}${suffix}` }
+      });
+    }
+
+    // ── CANCEL SCHEDULED SEND ──
+    if (path.startsWith('/newsletter/cancel-schedule/') && method === 'POST') {
+      if (!hasPermission(currentUser, 'newsletter_approve')) return new Response('Access denied.', { status: 403 });
+      const id = path.split('/').pop();
+      const row = await env.DB.prepare('SELECT brevo_campaign_id FROM newsletters WHERE id = ?').bind(id).first();
+      if (!row) return new Response('Not found', { status: 404 });
+
+      if (row.brevo_campaign_id) {
+        const result = await cancelBrevoCampaign(env, row.brevo_campaign_id);
+        if (!result.success) {
+          return new Response('', {
+            status: 302,
+            headers: { Location: `/newsitems?msg=emailed&emailerr=${encodeURIComponent(result.error)}` }
+          });
+        }
+      }
+      await env.DB.prepare(
+        'UPDATE newsletters SET scheduled_send_at = NULL, scheduled_list_type = NULL, brevo_campaign_id = NULL WHERE id = ?'
+      ).bind(id).run();
+      return new Response('', { status: 302, headers: { Location: `/newsitems?msg=emailed&scheduled=cancelled` } });
     }
 
     // ── DELETE ──
@@ -2695,13 +2789,14 @@ ${classesJs}
       await sweepExpiredItems(env, new URL(request.url).origin);
       const [itemsRes, nlRes] = await Promise.all([
         env.DB.prepare('SELECT * FROM news_items ORDER BY pinned DESC, COALESCE(event_date, publish_date) ASC').all(),
-        env.DB.prepare("SELECT id, subject, published_at, format, status, approval_status, created_at FROM newsletters ORDER BY CASE WHEN status = 'draft' THEN 0 ELSE 1 END, published_at DESC").all(),
+        env.DB.prepare("SELECT id, subject, published_at, format, status, approval_status, created_at, scheduled_send_at, scheduled_list_type FROM newsletters ORDER BY CASE WHEN status = 'draft' THEN 0 ELSE 1 END, published_at DESC").all(),
       ]);
       const today = new Date().toISOString().split('T')[0];
       const msgParam = url.searchParams.get('msg');
       const subjectParam = decodeURIComponent(url.searchParams.get('subject') || '');
       const emailedParam = url.searchParams.get('emailed');
       const emailErrParam = url.searchParams.get('emailerr');
+      const scheduledParam = url.searchParams.get('scheduled');
       let alertHtml = '';
       if (msgParam === 'saved') alertHtml = `<div class="alert alert-success">✓ News item saved.</div>`;
       if (msgParam === 'deleted') alertHtml = `<div class="alert alert-info">Item deleted.</div>`;
@@ -2762,7 +2857,11 @@ ${classesJs}
         const sentTo = emailedParam === 'test' ? 'test list' : 'all subscribers';
         alertHtml = emailErrParam
           ? `<div class="alert alert-error">Email failed: ${emailErrParam}</div>`
-          : `<div class="alert alert-success">✓ "${subjectParam}" sent to ${sentTo}.</div>`;
+          : scheduledParam === '1'
+            ? `<div class="alert alert-success">✓ "${subjectParam}" scheduled with Brevo.</div>`
+            : scheduledParam === 'cancelled'
+              ? `<div class="alert alert-info">Scheduled send cancelled.</div>`
+              : `<div class="alert alert-success">✓ "${subjectParam}" sent to ${sentTo}.</div>`;
       }
 
       // ── News items HTML ──
@@ -2806,6 +2905,31 @@ ${classesJs}
       const fmtLabel = (r) => r.format === 'quick'
         ? `<span class="badge" style="background:#e8f0fe;color:#1a3060;margin-left:8px;">⚡ Quick</span>`
         : '';
+      // A scheduled_send_at in the past just means Brevo already sent it — treat only
+      // future timestamps as "still pending" for the badge/cancel-button logic below.
+      const isPendingSchedule = (r) => r.scheduled_send_at && new Date(r.scheduled_send_at).getTime() > Date.now();
+      // Rendered server-side (Workers run in UTC) — pin the display to the
+      // church's own timezone so the badge matches what staff actually picked.
+      const scheduleBadge = (r) => isPendingSchedule(r)
+        ? `<span class="badge" style="background:#e6f0ff;color:#1a3c6e;margin-left:8px;">⏰ Scheduled for ${new Date(r.scheduled_send_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Chicago' })} CT${r.scheduled_list_type === 'test' ? ' (test list)' : ''}</span>`
+        : '';
+      const scheduleControls = (r) => {
+        if (!canApprove) return '';
+        if (isPendingSchedule(r)) {
+          return `<form method="POST" action="/newsletter/cancel-schedule/${r.id}" style="display:contents;" onsubmit="return confirm('Cancel the scheduled send?')">
+      <button type="submit" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel schedule</button>
+    </form>`;
+        }
+        return `<button type="button" class="btn btn-sm" style="background:var(--mist);color:var(--steel);border:1px solid var(--border);" onclick="toggleSchedule(${r.id})">Schedule send</button>
+    <div id="sched-row-${r.id}" style="display:none;flex-basis:100%;margin-top:10px;">
+      <form method="POST" action="/schedule-email/${r.id}" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;" onsubmit="return prepSchedule(this)">
+        <input type="datetime-local" required style="font-family:var(--sans);font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;">
+        <input type="hidden" name="scheduled_at">
+        <button type="submit" class="btn btn-sm btn-primary">Confirm schedule</button>
+        <button type="button" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);" onclick="toggleSchedule(${r.id})">Cancel</button>
+      </form>
+    </div>`;
+      };
       const pendingSectionHtml = (pending.length === 0 || !canApprove) ? '' : `<div style="margin-bottom:16px;border:2px solid #D4922A;border-radius:8px;overflow:hidden;">
   <div style="background:#FFF3D6;padding:8px 16px;border-bottom:1px solid #D4922A;">
     <span style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7A4F00;">⏳ Awaiting Approval — ${pending.length}</span>
@@ -2830,7 +2954,7 @@ ${classesJs}
   </div>
   ${drafts.map(r => `<div class="newsletter-row">
   <div class="newsletter-date">${r.published_at || r.created_at || ''}</div>
-  <div class="newsletter-subject">${r.subject}${fmtLabel(r)}</div>
+  <div class="newsletter-subject">${r.subject}${fmtLabel(r)}${scheduleBadge(r)}</div>
   <div class="newsletter-actions">
     <a href="/edit/${r.id}" class="btn btn-sm btn-secondary">Edit</a>
     <form method="POST" action="/newsletter/duplicate/${r.id}" style="display:contents;">
@@ -2843,7 +2967,8 @@ ${classesJs}
     <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Send to ALL subscribers? This cannot be undone.')">
       <input type="hidden" name="list_type" value="all">
       <button type="submit" class="btn btn-sm btn-primary">Send to all</button>
-    </form>` : ''}
+    </form>
+    ${scheduleControls(r)}` : ''}
     <form method="POST" action="/delete/${r.id}" style="display:contents;" onsubmit="return confirm('Delete this draft?')">
       <button type="submit" class="btn btn-sm btn-danger">Delete</button>
     </form>
@@ -2854,7 +2979,7 @@ ${classesJs}
         ? `<div style="text-align:center;padding:40px;color:var(--gray);font-family:var(--sans);font-size:14px;">No newsletters published yet.</div>`
         : published.map(r => `<div class="newsletter-row">
   <div class="newsletter-date">${r.published_at || ''}</div>
-  <div class="newsletter-subject">${r.subject}${fmtLabel(r)}</div>
+  <div class="newsletter-subject">${r.subject}${fmtLabel(r)}${scheduleBadge(r)}</div>
   <div class="newsletter-actions">
     <a href="/edit/${r.id}" class="btn btn-sm btn-secondary">Edit</a>
     <form method="POST" action="/newsletter/duplicate/${r.id}" style="display:contents;">
@@ -2868,7 +2993,8 @@ ${classesJs}
     <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Resend to ALL subscribers? This will send again to everyone.')">
       <input type="hidden" name="list_type" value="all">
       <button type="submit" class="btn btn-sm btn-primary">Resend to all</button>
-    </form>` : ''}
+    </form>
+    ${scheduleControls(r)}` : ''}
     ${hasPermission(currentUser, 'newsletter_approve') ? `<form method="POST" action="/delete/${r.id}" style="display:contents;" onsubmit="return confirm('Delete this newsletter?')">
       <button type="submit" class="btn btn-sm btn-danger">Delete</button>
     </form>` : ''}
