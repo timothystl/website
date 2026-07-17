@@ -137,6 +137,56 @@ function newsImageUploadScript(existingUrl = '') {
 <\/script>`;
 }
 
+// Renders the Staff form's photo field: a hidden photo_url input driven by
+// a file picker wired to /api/upload-image, plus a live preview. Replaces
+// the old plain-text "Photo URL" input, which required staff to already
+// have the file hosted somewhere else.
+function staffPhotoFieldHtml(existingUrl = '') {
+  const safeUrl = escapeHtml(existingUrl || '');
+  return `<div class="form-group">
+        <label>Photo</label>
+        <input type="hidden" name="photo_url" id="photo_url_val" value="${safeUrl}">
+        <div id="staff-photo-preview" style="${existingUrl ? '' : 'display:none;'}margin-bottom:8px;width:100px;height:100px;border-radius:50%;overflow:hidden;">
+          ${existingUrl ? `<img src="${safeUrl}" style="width:100%;height:100%;object-fit:cover;">` : ''}
+        </div>
+        <input type="file" id="photo_url_file" accept="image/jpeg,image/png,image/webp" style="font-size:13px;">
+        <div id="staff-photo-status" style="font-size:12px;color:var(--gray);margin-top:4px;"></div>
+      </div>`;
+}
+
+function staffPhotoUploadScript() {
+  return `<script>
+(function() {
+  document.getElementById('photo_url_file').addEventListener('change', async function() {
+    var file = this.files[0];
+    if (!file) return;
+    var status = document.getElementById('staff-photo-status');
+    status.textContent = 'Uploading…';
+    var fd = new FormData();
+    fd.append('file', file);
+    try {
+      var r = await fetch('/api/upload-image', { method: 'POST', body: fd });
+      var j = await r.json();
+      if (j.url) {
+        document.getElementById('photo_url_val').value = j.url;
+        var prev = document.getElementById('staff-photo-preview');
+        prev.innerHTML = '<img src="' + j.url + '" style="width:100%;height:100%;object-fit:cover;">';
+        prev.style.display = '';
+        status.textContent = '✓ Uploaded';
+        status.style.color = 'var(--sage)';
+      } else {
+        status.textContent = j.error || 'Upload failed';
+        status.style.color = '#B85C3A';
+      }
+    } catch (e) {
+      status.textContent = 'Upload failed — try again';
+      status.style.color = '#B85C3A';
+    }
+  });
+})();
+<\/script>`;
+}
+
 // ── MAIN HANDLER ─────────────────────────────────────────────
 export default {
   async fetch(request, env, ctx) {
@@ -4022,15 +4072,19 @@ ${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)
         const msg = url.searchParams.get('msg');
         const alertHtml = msg === 'saved' ? `<div class="alert alert-success">✓ Staff member saved.</div>`
           : msg === 'deleted' ? `<div class="alert alert-info">Staff member removed.</div>` : '';
-        const rows = members.results.map(m => `
+        const rows = members.results.map((m, i) => `
           <div class="ni-row" style="align-items:center;">
+            <div style="display:flex;flex-direction:column;gap:2px;">
+              <button type="button" onclick="staffMove(${m.id},'up')" ${i === 0 ? 'disabled' : ''} class="btn btn-sm" style="padding:2px 8px;line-height:1;${i === 0 ? 'opacity:.3;' : ''}" title="Move up">▲</button>
+              <button type="button" onclick="staffMove(${m.id},'down')" ${i === members.results.length - 1 ? 'disabled' : ''} class="btn btn-sm" style="padding:2px 8px;line-height:1;${i === members.results.length - 1 ? 'opacity:.3;' : ''}" title="Move down">▼</button>
+            </div>
             <div style="font-size:28px;width:44px;height:44px;border-radius:50%;background:var(--mist);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;">
               ${m.photo_url ? `<img src="${esc(m.photo_url)}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'">` : ''}
               <span style="font-family:var(--serif);font-size:14px;color:var(--steel);">${esc(m.name).split(' ').map(w=>w[0]).join('').slice(0,2)}</span>
             </div>
             <div style="flex:1;">
               <div class="ni-title">${esc(m.name)}</div>
-              <div class="ni-meta">${esc(m.title || '')}${m.email ? ' · ' + esc(m.email) : ''} · Order: ${m.display_order}</div>
+              <div class="ni-meta">${esc(m.title || '')}${m.email ? ' · ' + esc(m.email) : ''}</div>
             </div>
             <div class="ni-actions">
               <a href="/staff/edit/${m.id}" class="btn btn-sm btn-secondary">Edit</a>
@@ -4043,7 +4097,7 @@ ${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)
 ${sidebarShell('staff', currentUser)}
 <div class="wrap">
   <div class="page-title">Staff &amp; Leadership</div>
-  <div class="page-sub">Manage the staff cards shown on the About page. Drag to reorder by updating the Order number.</div>
+  <div class="page-sub">Manage the staff cards shown on the About page. Use the ▲/▼ buttons to reorder.</div>
   ${alertHtml}
   <div class="btn-row" style="margin-bottom:28px;">
     <a href="/staff/new" class="btn btn-primary">+ Add staff member</a>
@@ -4051,7 +4105,19 @@ ${sidebarShell('staff', currentUser)}
   <div class="card" style="padding:0;overflow:hidden;">
     ${members.results.length === 0 ? '<div style="padding:40px;text-align:center;color:var(--gray);">No staff members yet.</div>' : rows}
   </div>
-</div>`, 'Staff');
+</div>
+<script>
+function staffMove(id, direction) {
+  var f = document.createElement('form');
+  f.method = 'POST';
+  f.action = '/staff/move/' + id;
+  var i = document.createElement('input');
+  i.type = 'hidden'; i.name = 'direction'; i.value = direction;
+  f.appendChild(i);
+  document.body.appendChild(f);
+  f.submit();
+}
+</script>`, 'Staff');
       }
 
       // New staff form
@@ -4067,8 +4133,7 @@ ${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`)}
         <div class="form-group"><label>Name <span style="color:#B85C3A;">*</span></label><input type="text" name="name" required></div>
         <div class="form-group"><label>Title / Role <span style="color:#B85C3A;">*</span></label><input type="text" name="title" required placeholder="e.g. Lead Pastor"></div>
         <div class="form-group"><label>Email</label><input type="email" name="email" placeholder="name@timothystl.org"></div>
-        <div class="form-group"><label>Photo URL</label><input type="text" name="photo_url" placeholder="/images/staff/name.jpg"></div>
-        <div class="form-group"><label>Display order <span style="font-size:11px;color:var(--gray);">(lower = first)</span></label><input type="number" name="display_order" value="80" min="0" step="10"></div>
+        ${staffPhotoFieldHtml('')}
       </div>
       <div class="form-group"><label>Bio <span style="font-size:11px;color:var(--gray);">(optional)</span></label><textarea name="bio" rows="6" placeholder="Short biography..." style="width:100%;font-family:var(--sans);font-size:14px;padding:10px;border:1px solid var(--border);border-radius:var(--r-sm);resize:vertical;"></textarea></div>
       <div class="btn-row" style="margin-top:16px;">
@@ -4077,7 +4142,8 @@ ${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`)}
       </div>
     </form>
   </div>
-</div>`, 'New Staff Member');
+</div>
+${staffPhotoUploadScript()}`, 'New Staff Member');
       }
 
       // Create staff member
@@ -4085,9 +4151,14 @@ ${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`)}
         const form = await request.formData();
         const name = form.get('name') || '';
         if (!name.trim()) return new Response('', { status: 302, headers: { Location: '/staff' } });
+        // New members always go to the end of the list — ordering from here
+        // on is done with the Move up/down buttons on the staff list, not by
+        // hand-picking a number.
+        const maxOrder = await env.DB.prepare('SELECT MAX(display_order) as n FROM staff_members').first();
+        const nextOrder = (maxOrder && maxOrder.n != null ? maxOrder.n : 0) + 10;
         await env.DB.prepare(
           'INSERT INTO staff_members (name, title, email, photo_url, bio, display_order) VALUES (?, ?, ?, ?, ?, ?)'
-        ).bind(name, form.get('title')||'', form.get('email')||'', form.get('photo_url')||'', form.get('bio')||'', parseInt(form.get('display_order')||'80')).run();
+        ).bind(name, form.get('title')||'', form.get('email')||'', form.get('photo_url')||'', form.get('bio')||'', nextOrder).run();
         return new Response('', { status: 302, headers: { Location: '/staff?msg=saved' } });
       }
 
@@ -4106,8 +4177,7 @@ ${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`)}
         <div class="form-group"><label>Name <span style="color:#B85C3A;">*</span></label><input type="text" name="name" value="${esc(m.name)}" required></div>
         <div class="form-group"><label>Title / Role</label><input type="text" name="title" value="${esc(m.title||'')}"></div>
         <div class="form-group"><label>Email</label><input type="email" name="email" value="${esc(m.email||'')}"></div>
-        <div class="form-group"><label>Photo URL</label><input type="text" name="photo_url" value="${esc(m.photo_url||'')}" placeholder="/images/staff/name.jpg"></div>
-        <div class="form-group"><label>Display order <span style="font-size:11px;color:var(--gray);">(lower = first)</span></label><input type="number" name="display_order" value="${m.display_order||0}" min="0" step="10"></div>
+        ${staffPhotoFieldHtml(m.photo_url||'')}
       </div>
       <div class="form-group"><label>Bio</label><textarea name="bio" rows="8" style="width:100%;font-family:var(--sans);font-size:14px;padding:10px;border:1px solid var(--border);border-radius:var(--r-sm);resize:vertical;">${esc(m.bio||'')}</textarea></div>
       <div class="btn-row" style="margin-top:16px;">
@@ -4116,7 +4186,8 @@ ${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`)}
       </div>
     </form>
   </div>
-</div>`, `Edit — ${m.name}`);
+</div>
+${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
       }
 
       // Update staff member
@@ -4124,8 +4195,8 @@ ${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`)}
         const id = path.split('/').pop();
         const form = await request.formData();
         await env.DB.prepare(
-          'UPDATE staff_members SET name=?, title=?, email=?, photo_url=?, bio=?, display_order=? WHERE id=?'
-        ).bind(form.get('name')||'', form.get('title')||'', form.get('email')||'', form.get('photo_url')||'', form.get('bio')||'', parseInt(form.get('display_order')||'0'), id).run();
+          'UPDATE staff_members SET name=?, title=?, email=?, photo_url=?, bio=? WHERE id=?'
+        ).bind(form.get('name')||'', form.get('title')||'', form.get('email')||'', form.get('photo_url')||'', form.get('bio')||'', id).run();
         return new Response('', { status: 302, headers: { Location: '/staff?msg=saved' } });
       }
 
@@ -4134,6 +4205,26 @@ ${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`)}
         const id = path.split('/').pop();
         await env.DB.prepare('DELETE FROM staff_members WHERE id = ?').bind(id).run();
         return new Response('', { status: 302, headers: { Location: '/staff?msg=deleted' } });
+      }
+
+      // Move staff member up/down — swaps display_order with the adjacent
+      // member in the current sort order, so reordering doesn't require
+      // hand-picking a free number between two existing ones.
+      if (path.match(/^\/staff\/move\/\d+$/) && method === 'POST') {
+        const id = parseInt(path.split('/').pop());
+        const form = await request.formData();
+        const direction = form.get('direction');
+        const all = (await env.DB.prepare('SELECT id, display_order FROM staff_members ORDER BY display_order, id').all()).results;
+        const idx = all.findIndex(m => m.id === id);
+        const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+        if (idx !== -1 && swapIdx >= 0 && swapIdx < all.length) {
+          const a = all[idx], b = all[swapIdx];
+          await env.DB.batch([
+            env.DB.prepare('UPDATE staff_members SET display_order=? WHERE id=?').bind(b.display_order, a.id),
+            env.DB.prepare('UPDATE staff_members SET display_order=? WHERE id=?').bind(a.display_order, b.id),
+          ]);
+        }
+        return new Response('', { status: 302, headers: { Location: '/staff' } });
       }
     } // end staff tab
 
