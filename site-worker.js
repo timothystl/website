@@ -134,7 +134,7 @@ export default {
       });
     }
 
-    const path = url.pathname.replace(/^\//, '').replace(/\/$/, '');
+    const path = url.pathname.replace(/^\//, '').replace(/\/$/, '').toLowerCase();
 
     if (path) {
       // Settings-based redirects (zoom, councilfiles) — handled before SPA loads
