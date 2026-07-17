@@ -755,7 +755,7 @@ export default {
     if (path === '/api/staff' && method === 'GET') {
       const rows = await env.DB.prepare('SELECT id, name, title, email, photo_url, photo_position, bio, display_order FROM staff_members ORDER BY display_order, id').all();
       return new Response(JSON.stringify(rows.results), {
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=3600' }
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
       });
     }
 
