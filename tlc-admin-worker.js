@@ -85,6 +85,14 @@ function isSafeObjectPosition(value) {
   return typeof value === 'string' && /^\d{1,3}% \d{1,3}%$/.test(value);
 }
 
+// Clamps the staff photo zoom (a CSS transform: scale() factor) to a sane
+// range regardless of what's submitted — 1x (no zoom) to 2.5x.
+function safeZoomFactor(value) {
+  const n = parseFloat(value);
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(2.5, Math.max(1, n));
+}
+
 // Allowlists for file uploads. Extensions are derived from MIME type —
 // never from the client-supplied filename — so the stored file always
 // matches what it actually is.
@@ -157,28 +165,32 @@ function staffPhotoSrc(url) {
 }
 
 // Renders the Staff form's photo field: a hidden photo_url input driven by
-// a file picker wired to /api/upload-image, a circular preview, and two
-// sliders to recenter the crop (stored as photo_position, an object-position
-// CSS value like "50% 30%") since a straight center-crop of a portrait photo
-// often cuts off the top of someone's head. Replaces the old plain-text
+// a file picker wired to /api/upload-image, a circular preview, and sliders
+// to recenter the crop (stored as photo_position, an object-position CSS
+// value like "50% 30%", since a straight center-crop of a portrait photo
+// often cuts off the top of someone's head) and to zoom in (stored as
+// photo_zoom, a CSS transform: scale() factor). Replaces the old plain-text
 // "Photo URL" input, which required staff to already have the file hosted
 // somewhere else.
-function staffPhotoFieldHtml(existingUrl = '', existingPosition = '50% 50%') {
+function staffPhotoFieldHtml(existingUrl = '', existingPosition = '50% 50%', existingZoom = 1) {
   const safeUrl = escapeHtml(existingUrl || '');
   const pos = (existingPosition || '50% 50%').split(' ');
   const posX = parseInt(pos[0]) || 50;
   const posY = parseInt(pos[1]) || 50;
+  const zoom = parseFloat(existingZoom) || 1;
+  const zoomPct = Math.round(zoom * 100);
   return `<div class="form-group">
         <label>Photo</label>
         <input type="hidden" name="photo_url" id="photo_url_val" value="${safeUrl}">
         <input type="hidden" name="photo_position" id="photo_position_val" value="${escapeHtml(existingPosition || '50% 50%')}">
+        <input type="hidden" name="photo_zoom" id="photo_zoom_val" value="${zoom}">
         <div id="staff-photo-preview" style="${existingUrl ? '' : 'display:none;'}margin-bottom:8px;width:100px;height:100px;border-radius:50%;overflow:hidden;">
-          ${existingUrl ? `<img src="${escapeHtml(staffPhotoSrc(existingUrl))}" style="width:100%;height:100%;object-fit:cover;object-position:${posX}% ${posY}%;">` : ''}
+          ${existingUrl ? `<img src="${escapeHtml(staffPhotoSrc(existingUrl))}" style="width:100%;height:100%;object-fit:cover;object-position:${posX}% ${posY}%;transform:scale(${zoom});">` : ''}
         </div>
         <input type="file" id="photo_url_file" accept="image/jpeg,image/png,image/webp" style="font-size:13px;">
         <div id="staff-photo-status" style="font-size:12px;color:var(--gray);margin-top:4px;"></div>
         <div id="staff-photo-reposition" style="${existingUrl ? '' : 'display:none;'}margin-top:10px;">
-          <label style="font-size:11px;font-weight:600;color:var(--gray);">Recenter photo</label>
+          <label style="font-size:11px;font-weight:600;color:var(--gray);">Recenter &amp; zoom photo</label>
           <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
             <span style="font-size:11px;color:var(--gray);width:14px;">↔</span>
             <input type="range" id="photo_pos_x" min="0" max="100" value="${posX}" style="flex:1;">
@@ -186,6 +198,10 @@ function staffPhotoFieldHtml(existingUrl = '', existingPosition = '50% 50%') {
           <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
             <span style="font-size:11px;color:var(--gray);width:14px;">↕</span>
             <input type="range" id="photo_pos_y" min="0" max="100" value="${posY}" style="flex:1;">
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+            <span style="font-size:11px;color:var(--gray);width:14px;">🔍</span>
+            <input type="range" id="photo_zoom_slider" min="100" max="250" value="${zoomPct}" style="flex:1;">
           </div>
         </div>
       </div>`;
@@ -197,12 +213,18 @@ function staffPhotoUploadScript() {
   function applyPosition() {
     var x = document.getElementById('photo_pos_x').value;
     var y = document.getElementById('photo_pos_y').value;
+    var zoom = document.getElementById('photo_zoom_slider').value / 100;
     document.getElementById('photo_position_val').value = x + '% ' + y + '%';
+    document.getElementById('photo_zoom_val').value = zoom;
     var img = document.querySelector('#staff-photo-preview img');
-    if (img) img.style.objectPosition = x + '% ' + y + '%';
+    if (img) {
+      img.style.objectPosition = x + '% ' + y + '%';
+      img.style.transform = 'scale(' + zoom + ')';
+    }
   }
   document.getElementById('photo_pos_x').addEventListener('input', applyPosition);
   document.getElementById('photo_pos_y').addEventListener('input', applyPosition);
+  document.getElementById('photo_zoom_slider').addEventListener('input', applyPosition);
 
   // Resize + re-encode to WebP client-side before upload, matching how the
   // existing staff headshots were hand-converted to .webp for file size.
@@ -254,6 +276,8 @@ function staffPhotoUploadScript() {
         document.getElementById('photo_pos_x').value = 50;
         document.getElementById('photo_pos_y').value = 50;
         document.getElementById('photo_position_val').value = '50% 50%';
+        document.getElementById('photo_zoom_slider').value = 100;
+        document.getElementById('photo_zoom_val').value = 1;
         document.getElementById('staff-photo-reposition').style.display = '';
         status.textContent = '✓ Uploaded';
         status.style.color = 'var(--sage)';
@@ -408,7 +432,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-07-17-1'; // bumped: add photo_position to staff_members
+    const SCHEMA_VERSION = '2026-07-17-2'; // bumped: add photo_zoom to staff_members
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -664,6 +688,7 @@ export default {
     try { await env.DB.prepare("ALTER TABLE gym_invoices ADD COLUMN rate_type TEXT DEFAULT 'hourly'").run(); } catch (_) {}
     try { await env.DB.prepare("ALTER TABLE gym_groups ADD COLUMN rate_type TEXT DEFAULT 'hourly'").run(); } catch (_) {}
     try { await env.DB.prepare("ALTER TABLE staff_members ADD COLUMN photo_position TEXT DEFAULT '50% 50%'").run(); } catch (_) {}
+    try { await env.DB.prepare("ALTER TABLE staff_members ADD COLUMN photo_zoom REAL DEFAULT 1").run(); } catch (_) {}
     // Migrate: grant users_manage + audit_view to existing full-admin accounts that predate those permissions
     try {
       await env.DB.prepare(
@@ -798,7 +823,7 @@ export default {
 
     // ── PUBLIC: staff API ──
     if (path === '/api/staff' && method === 'GET') {
-      const rows = await env.DB.prepare('SELECT id, name, title, email, photo_url, photo_position, bio, display_order FROM staff_members ORDER BY display_order, id').all();
+      const rows = await env.DB.prepare('SELECT id, name, title, email, photo_url, photo_position, photo_zoom, bio, display_order FROM staff_members ORDER BY display_order, id').all();
       return new Response(JSON.stringify(rows.results), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
       });
@@ -4167,7 +4192,7 @@ ${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)
             </div>
             <div style="position:relative;font-size:28px;width:44px;height:44px;border-radius:50%;background:var(--mist);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;">
               <span style="font-family:var(--serif);font-size:14px;color:var(--steel);">${esc(m.name).split(' ').map(w=>w[0]).join('').slice(0,2)}</span>
-              ${m.photo_url ? `<img src="${esc(staffPhotoSrc(m.photo_url))}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:${esc(isSafeObjectPosition(m.photo_position) ? m.photo_position : '50% 50%')};" onerror="this.style.display='none'">` : ''}
+              ${m.photo_url ? `<img src="${esc(staffPhotoSrc(m.photo_url))}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:${esc(isSafeObjectPosition(m.photo_position) ? m.photo_position : '50% 50%')};transform:scale(${safeZoomFactor(m.photo_zoom)});" onerror="this.style.display='none'">` : ''}
             </div>
             <div style="flex:1;">
               <div class="ni-title">${esc(m.name)}</div>
@@ -4244,9 +4269,10 @@ ${staffPhotoUploadScript()}`, 'New Staff Member');
         const maxOrder = await env.DB.prepare('SELECT MAX(display_order) as n FROM staff_members').first();
         const nextOrder = (maxOrder && maxOrder.n != null ? maxOrder.n : 0) + 10;
         const photoPosition = isSafeObjectPosition(form.get('photo_position')) ? form.get('photo_position') : '50% 50%';
+        const photoZoom = safeZoomFactor(form.get('photo_zoom'));
         await env.DB.prepare(
-          'INSERT INTO staff_members (name, title, email, photo_url, photo_position, bio, display_order) VALUES (?, ?, ?, ?, ?, ?, ?)'
-        ).bind(name, form.get('title')||'', form.get('email')||'', form.get('photo_url')||'', photoPosition, form.get('bio')||'', nextOrder).run();
+          'INSERT INTO staff_members (name, title, email, photo_url, photo_position, photo_zoom, bio, display_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(name, form.get('title')||'', form.get('email')||'', form.get('photo_url')||'', photoPosition, photoZoom, form.get('bio')||'', nextOrder).run();
         return new Response('', { status: 302, headers: { Location: '/staff?msg=saved' } });
       }
 
@@ -4265,7 +4291,7 @@ ${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`)}
         <div class="form-group"><label>Name <span style="color:#B85C3A;">*</span></label><input type="text" name="name" value="${esc(m.name)}" required></div>
         <div class="form-group"><label>Title / Role</label><input type="text" name="title" value="${esc(m.title||'')}"></div>
         <div class="form-group"><label>Email</label><input type="email" name="email" value="${esc(m.email||'')}"></div>
-        ${staffPhotoFieldHtml(m.photo_url||'', m.photo_position||'50% 50%')}
+        ${staffPhotoFieldHtml(m.photo_url||'', m.photo_position||'50% 50%', m.photo_zoom||1)}
       </div>
       <div class="form-group"><label>Bio</label><textarea name="bio" rows="8" style="width:100%;font-family:var(--sans);font-size:14px;padding:10px;border:1px solid var(--border);border-radius:var(--r-sm);resize:vertical;">${esc(m.bio||'')}</textarea></div>
       <div class="btn-row" style="margin-top:16px;">
@@ -4283,9 +4309,10 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
         const id = path.split('/').pop();
         const form = await request.formData();
         const photoPosition = isSafeObjectPosition(form.get('photo_position')) ? form.get('photo_position') : '50% 50%';
+        const photoZoom = safeZoomFactor(form.get('photo_zoom'));
         await env.DB.prepare(
-          'UPDATE staff_members SET name=?, title=?, email=?, photo_url=?, photo_position=?, bio=? WHERE id=?'
-        ).bind(form.get('name')||'', form.get('title')||'', form.get('email')||'', form.get('photo_url')||'', photoPosition, form.get('bio')||'', id).run();
+          'UPDATE staff_members SET name=?, title=?, email=?, photo_url=?, photo_position=?, photo_zoom=?, bio=? WHERE id=?'
+        ).bind(form.get('name')||'', form.get('title')||'', form.get('email')||'', form.get('photo_url')||'', photoPosition, photoZoom, form.get('bio')||'', id).run();
         return new Response('', { status: 302, headers: { Location: '/staff?msg=saved' } });
       }
 
