@@ -80,7 +80,12 @@ jobs:
           # Auto-bump is patch-only; major and minor are intentionally manual
           # so the version number means something. To cut a minor or major
           # release, edit admin/helpers.js by hand before merging.
-          CURRENT=$(grep "export const VERSION = " admin/helpers.js | sed "s/.*'\(.*\)'.*/\1/")
+          # [^']* (not .*) so this stops at the version string's closing
+          # quote instead of greedily running to the last quote on the line
+          # — a trailing comment containing an apostrophe (e.g. "Brevo's")
+          # used to make .* swallow past the real value and break the sed
+          # below with an unbalanced delimiter.
+          CURRENT=$(grep "export const VERSION = " admin/helpers.js | sed "s/.*VERSION = '\([^']*\)'.*/\1/")
 
           # Strip leading 'v' and split on '.'. If the current version is
           # still in the old two-segment form (e.g. 'v1.76'), treat it as
