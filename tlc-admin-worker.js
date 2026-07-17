@@ -144,6 +144,18 @@ function newsImageUploadScript(existingUrl = '') {
 <\/script>`;
 }
 
+// Legacy staff photos are stored as a path relative to the main site
+// (e.g. "/images/staff/thompson.webp", served from public/images/staff/ on
+// timothystl.org) rather than an absolute R2 URL. That resolves fine on the
+// public About page, but rendered inside the admin dashboard the same
+// relative path resolves against admin.timothystl.org instead — where it
+// 404s — so the preview silently fell back to initials-only. Point
+// root-relative paths at the main site explicitly for any admin preview.
+function staffPhotoSrc(url) {
+  if (!url) return '';
+  return url.startsWith('/') ? `https://timothystl.org${url}` : url;
+}
+
 // Renders the Staff form's photo field: a hidden photo_url input driven by
 // a file picker wired to /api/upload-image, a circular preview, and two
 // sliders to recenter the crop (stored as photo_position, an object-position
@@ -161,7 +173,7 @@ function staffPhotoFieldHtml(existingUrl = '', existingPosition = '50% 50%') {
         <input type="hidden" name="photo_url" id="photo_url_val" value="${safeUrl}">
         <input type="hidden" name="photo_position" id="photo_position_val" value="${escapeHtml(existingPosition || '50% 50%')}">
         <div id="staff-photo-preview" style="${existingUrl ? '' : 'display:none;'}margin-bottom:8px;width:100px;height:100px;border-radius:50%;overflow:hidden;">
-          ${existingUrl ? `<img src="${safeUrl}" style="width:100%;height:100%;object-fit:cover;object-position:${posX}% ${posY}%;">` : ''}
+          ${existingUrl ? `<img src="${escapeHtml(staffPhotoSrc(existingUrl))}" style="width:100%;height:100%;object-fit:cover;object-position:${posX}% ${posY}%;">` : ''}
         </div>
         <input type="file" id="photo_url_file" accept="image/jpeg,image/png,image/webp" style="font-size:13px;">
         <div id="staff-photo-status" style="font-size:12px;color:var(--gray);margin-top:4px;"></div>
@@ -191,11 +203,44 @@ function staffPhotoUploadScript() {
   }
   document.getElementById('photo_pos_x').addEventListener('input', applyPosition);
   document.getElementById('photo_pos_y').addEventListener('input', applyPosition);
+
+  // Resize + re-encode to WebP client-side before upload, matching how the
+  // existing staff headshots were hand-converted to .webp for file size.
+  // Falls back to the original file untouched if the browser can't encode
+  // WebP via canvas (older Safari) or the image fails to decode.
+  function compressToWebp(file) {
+    return new Promise(function(resolve) {
+      var img = new Image();
+      var url = URL.createObjectURL(file);
+      img.onload = function() {
+        URL.revokeObjectURL(url);
+        var maxDim = 800;
+        var scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+        var w = Math.max(1, Math.round(img.naturalWidth * scale));
+        var h = Math.max(1, Math.round(img.naturalHeight * scale));
+        var canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        var ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        canvas.toBlob(function(blob) {
+          if (blob && blob.type === 'image/webp' && blob.size > 0) {
+            resolve(new File([blob], 'photo.webp', { type: 'image/webp' }));
+          } else {
+            resolve(file);
+          }
+        }, 'image/webp', 0.85);
+      };
+      img.onerror = function() { URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
+  }
+
   document.getElementById('photo_url_file').addEventListener('change', async function() {
-    var file = this.files[0];
-    if (!file) return;
+    var rawFile = this.files[0];
+    if (!rawFile) return;
     var status = document.getElementById('staff-photo-status');
     status.textContent = 'Uploading…';
+    var file = await compressToWebp(rawFile);
     var fd = new FormData();
     fd.append('file', file);
     try {
@@ -4120,9 +4165,9 @@ ${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)
               <button type="button" onclick="staffMove(${m.id},'up')" ${i === 0 ? 'disabled' : ''} class="btn btn-sm" style="padding:2px 8px;line-height:1;${i === 0 ? 'opacity:.3;' : ''}" title="Move up">▲</button>
               <button type="button" onclick="staffMove(${m.id},'down')" ${i === members.results.length - 1 ? 'disabled' : ''} class="btn btn-sm" style="padding:2px 8px;line-height:1;${i === members.results.length - 1 ? 'opacity:.3;' : ''}" title="Move down">▼</button>
             </div>
-            <div style="font-size:28px;width:44px;height:44px;border-radius:50%;background:var(--mist);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;">
-              ${m.photo_url ? `<img src="${esc(m.photo_url)}" style="width:100%;height:100%;object-fit:cover;object-position:${esc(isSafeObjectPosition(m.photo_position) ? m.photo_position : '50% 50%')};" onerror="this.style.display='none'">` : ''}
+            <div style="position:relative;font-size:28px;width:44px;height:44px;border-radius:50%;background:var(--mist);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;">
               <span style="font-family:var(--serif);font-size:14px;color:var(--steel);">${esc(m.name).split(' ').map(w=>w[0]).join('').slice(0,2)}</span>
+              ${m.photo_url ? `<img src="${esc(staffPhotoSrc(m.photo_url))}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:${esc(isSafeObjectPosition(m.photo_position) ? m.photo_position : '50% 50%')};" onerror="this.style.display='none'">` : ''}
             </div>
             <div style="flex:1;">
               <div class="ni-title">${esc(m.name)}</div>
