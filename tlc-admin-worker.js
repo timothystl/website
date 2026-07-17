@@ -203,11 +203,44 @@ function staffPhotoUploadScript() {
   }
   document.getElementById('photo_pos_x').addEventListener('input', applyPosition);
   document.getElementById('photo_pos_y').addEventListener('input', applyPosition);
+
+  // Resize + re-encode to WebP client-side before upload, matching how the
+  // existing staff headshots were hand-converted to .webp for file size.
+  // Falls back to the original file untouched if the browser can't encode
+  // WebP via canvas (older Safari) or the image fails to decode.
+  function compressToWebp(file) {
+    return new Promise(function(resolve) {
+      var img = new Image();
+      var url = URL.createObjectURL(file);
+      img.onload = function() {
+        URL.revokeObjectURL(url);
+        var maxDim = 800;
+        var scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+        var w = Math.max(1, Math.round(img.naturalWidth * scale));
+        var h = Math.max(1, Math.round(img.naturalHeight * scale));
+        var canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        var ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        canvas.toBlob(function(blob) {
+          if (blob && blob.type === 'image/webp' && blob.size > 0) {
+            resolve(new File([blob], 'photo.webp', { type: 'image/webp' }));
+          } else {
+            resolve(file);
+          }
+        }, 'image/webp', 0.85);
+      };
+      img.onerror = function() { URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
+  }
+
   document.getElementById('photo_url_file').addEventListener('change', async function() {
-    var file = this.files[0];
-    if (!file) return;
+    var rawFile = this.files[0];
+    if (!rawFile) return;
     var status = document.getElementById('staff-photo-status');
     status.textContent = 'Uploading…';
+    var file = await compressToWebp(rawFile);
     var fd = new FormData();
     fd.append('file', file);
     try {
