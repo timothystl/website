@@ -78,6 +78,13 @@ function isSafeCardUrl(value) {
   } catch { return false; }
 }
 
+// Staff photo crop position is written straight into a CSS object-position
+// value on the public site — restrict it to "NN% NN%" so it can't carry
+// anything else through.
+function isSafeObjectPosition(value) {
+  return typeof value === 'string' && /^\d{1,3}% \d{1,3}%$/.test(value);
+}
+
 // Allowlists for file uploads. Extensions are derived from MIME type —
 // never from the client-supplied filename — so the stored file always
 // matches what it actually is.
@@ -138,25 +145,52 @@ function newsImageUploadScript(existingUrl = '') {
 }
 
 // Renders the Staff form's photo field: a hidden photo_url input driven by
-// a file picker wired to /api/upload-image, plus a live preview. Replaces
-// the old plain-text "Photo URL" input, which required staff to already
-// have the file hosted somewhere else.
-function staffPhotoFieldHtml(existingUrl = '') {
+// a file picker wired to /api/upload-image, a circular preview, and two
+// sliders to recenter the crop (stored as photo_position, an object-position
+// CSS value like "50% 30%") since a straight center-crop of a portrait photo
+// often cuts off the top of someone's head. Replaces the old plain-text
+// "Photo URL" input, which required staff to already have the file hosted
+// somewhere else.
+function staffPhotoFieldHtml(existingUrl = '', existingPosition = '50% 50%') {
   const safeUrl = escapeHtml(existingUrl || '');
+  const pos = (existingPosition || '50% 50%').split(' ');
+  const posX = parseInt(pos[0]) || 50;
+  const posY = parseInt(pos[1]) || 50;
   return `<div class="form-group">
         <label>Photo</label>
         <input type="hidden" name="photo_url" id="photo_url_val" value="${safeUrl}">
+        <input type="hidden" name="photo_position" id="photo_position_val" value="${escapeHtml(existingPosition || '50% 50%')}">
         <div id="staff-photo-preview" style="${existingUrl ? '' : 'display:none;'}margin-bottom:8px;width:100px;height:100px;border-radius:50%;overflow:hidden;">
-          ${existingUrl ? `<img src="${safeUrl}" style="width:100%;height:100%;object-fit:cover;">` : ''}
+          ${existingUrl ? `<img src="${safeUrl}" style="width:100%;height:100%;object-fit:cover;object-position:${posX}% ${posY}%;">` : ''}
         </div>
         <input type="file" id="photo_url_file" accept="image/jpeg,image/png,image/webp" style="font-size:13px;">
         <div id="staff-photo-status" style="font-size:12px;color:var(--gray);margin-top:4px;"></div>
+        <div id="staff-photo-reposition" style="${existingUrl ? '' : 'display:none;'}margin-top:10px;">
+          <label style="font-size:11px;font-weight:600;color:var(--gray);">Recenter photo</label>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+            <span style="font-size:11px;color:var(--gray);width:14px;">↔</span>
+            <input type="range" id="photo_pos_x" min="0" max="100" value="${posX}" style="flex:1;">
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+            <span style="font-size:11px;color:var(--gray);width:14px;">↕</span>
+            <input type="range" id="photo_pos_y" min="0" max="100" value="${posY}" style="flex:1;">
+          </div>
+        </div>
       </div>`;
 }
 
 function staffPhotoUploadScript() {
   return `<script>
 (function() {
+  function applyPosition() {
+    var x = document.getElementById('photo_pos_x').value;
+    var y = document.getElementById('photo_pos_y').value;
+    document.getElementById('photo_position_val').value = x + '% ' + y + '%';
+    var img = document.querySelector('#staff-photo-preview img');
+    if (img) img.style.objectPosition = x + '% ' + y + '%';
+  }
+  document.getElementById('photo_pos_x').addEventListener('input', applyPosition);
+  document.getElementById('photo_pos_y').addEventListener('input', applyPosition);
   document.getElementById('photo_url_file').addEventListener('change', async function() {
     var file = this.files[0];
     if (!file) return;
@@ -172,6 +206,10 @@ function staffPhotoUploadScript() {
         var prev = document.getElementById('staff-photo-preview');
         prev.innerHTML = '<img src="' + j.url + '" style="width:100%;height:100%;object-fit:cover;">';
         prev.style.display = '';
+        document.getElementById('photo_pos_x').value = 50;
+        document.getElementById('photo_pos_y').value = 50;
+        document.getElementById('photo_position_val').value = '50% 50%';
+        document.getElementById('staff-photo-reposition').style.display = '';
         status.textContent = '✓ Uploaded';
         status.style.color = 'var(--sage)';
       } else {
@@ -325,7 +363,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-07-16-1'; // bumped: add scheduled_send_at / scheduled_list_type / brevo_campaign_id to newsletters
+    const SCHEMA_VERSION = '2026-07-17-1'; // bumped: add photo_position to staff_members
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -580,6 +618,7 @@ export default {
     try { await env.DB.prepare('ALTER TABLE gym_groups ADD COLUMN rate REAL').run(); } catch (_) {}
     try { await env.DB.prepare("ALTER TABLE gym_invoices ADD COLUMN rate_type TEXT DEFAULT 'hourly'").run(); } catch (_) {}
     try { await env.DB.prepare("ALTER TABLE gym_groups ADD COLUMN rate_type TEXT DEFAULT 'hourly'").run(); } catch (_) {}
+    try { await env.DB.prepare("ALTER TABLE staff_members ADD COLUMN photo_position TEXT DEFAULT '50% 50%'").run(); } catch (_) {}
     // Migrate: grant users_manage + audit_view to existing full-admin accounts that predate those permissions
     try {
       await env.DB.prepare(
@@ -714,7 +753,7 @@ export default {
 
     // ── PUBLIC: staff API ──
     if (path === '/api/staff' && method === 'GET') {
-      const rows = await env.DB.prepare('SELECT id, name, title, email, photo_url, bio, display_order FROM staff_members ORDER BY display_order, id').all();
+      const rows = await env.DB.prepare('SELECT id, name, title, email, photo_url, photo_position, bio, display_order FROM staff_members ORDER BY display_order, id').all();
       return new Response(JSON.stringify(rows.results), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=3600' }
       });
@@ -1365,8 +1404,11 @@ ${sidebarShell('dashboard', currentUser)}
       if (!file || typeof file === 'string') {
         return new Response(JSON.stringify({ error: 'No file' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
       }
-      if (file.size > 2097152) {
-        return new Response(JSON.stringify({ error: 'File too large (max 2MB)' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      // 8MB — raised from an earlier 2MB cap that was routinely tripped by
+      // straight-off-the-phone photos (a modern phone camera photo is
+      // commonly 3-6MB), which showed up as an unexplained "Upload failed."
+      if (file.size > 8388608) {
+        return new Response(JSON.stringify({ error: 'File too large (max 8MB)' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
       }
       const mimeType = (file.type || '').split(';')[0].trim().toLowerCase();
       if (!ALLOWED_IMAGE_TYPES.has(mimeType)) {
@@ -4079,7 +4121,7 @@ ${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)
               <button type="button" onclick="staffMove(${m.id},'down')" ${i === members.results.length - 1 ? 'disabled' : ''} class="btn btn-sm" style="padding:2px 8px;line-height:1;${i === members.results.length - 1 ? 'opacity:.3;' : ''}" title="Move down">▼</button>
             </div>
             <div style="font-size:28px;width:44px;height:44px;border-radius:50%;background:var(--mist);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;">
-              ${m.photo_url ? `<img src="${esc(m.photo_url)}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'">` : ''}
+              ${m.photo_url ? `<img src="${esc(m.photo_url)}" style="width:100%;height:100%;object-fit:cover;object-position:${esc(isSafeObjectPosition(m.photo_position) ? m.photo_position : '50% 50%')};" onerror="this.style.display='none'">` : ''}
               <span style="font-family:var(--serif);font-size:14px;color:var(--steel);">${esc(m.name).split(' ').map(w=>w[0]).join('').slice(0,2)}</span>
             </div>
             <div style="flex:1;">
@@ -4156,9 +4198,10 @@ ${staffPhotoUploadScript()}`, 'New Staff Member');
         // hand-picking a number.
         const maxOrder = await env.DB.prepare('SELECT MAX(display_order) as n FROM staff_members').first();
         const nextOrder = (maxOrder && maxOrder.n != null ? maxOrder.n : 0) + 10;
+        const photoPosition = isSafeObjectPosition(form.get('photo_position')) ? form.get('photo_position') : '50% 50%';
         await env.DB.prepare(
-          'INSERT INTO staff_members (name, title, email, photo_url, bio, display_order) VALUES (?, ?, ?, ?, ?, ?)'
-        ).bind(name, form.get('title')||'', form.get('email')||'', form.get('photo_url')||'', form.get('bio')||'', nextOrder).run();
+          'INSERT INTO staff_members (name, title, email, photo_url, photo_position, bio, display_order) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        ).bind(name, form.get('title')||'', form.get('email')||'', form.get('photo_url')||'', photoPosition, form.get('bio')||'', nextOrder).run();
         return new Response('', { status: 302, headers: { Location: '/staff?msg=saved' } });
       }
 
@@ -4177,7 +4220,7 @@ ${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`)}
         <div class="form-group"><label>Name <span style="color:#B85C3A;">*</span></label><input type="text" name="name" value="${esc(m.name)}" required></div>
         <div class="form-group"><label>Title / Role</label><input type="text" name="title" value="${esc(m.title||'')}"></div>
         <div class="form-group"><label>Email</label><input type="email" name="email" value="${esc(m.email||'')}"></div>
-        ${staffPhotoFieldHtml(m.photo_url||'')}
+        ${staffPhotoFieldHtml(m.photo_url||'', m.photo_position||'50% 50%')}
       </div>
       <div class="form-group"><label>Bio</label><textarea name="bio" rows="8" style="width:100%;font-family:var(--sans);font-size:14px;padding:10px;border:1px solid var(--border);border-radius:var(--r-sm);resize:vertical;">${esc(m.bio||'')}</textarea></div>
       <div class="btn-row" style="margin-top:16px;">
@@ -4194,9 +4237,10 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
       if (path.match(/^\/staff\/update\/\d+$/) && method === 'POST') {
         const id = path.split('/').pop();
         const form = await request.formData();
+        const photoPosition = isSafeObjectPosition(form.get('photo_position')) ? form.get('photo_position') : '50% 50%';
         await env.DB.prepare(
-          'UPDATE staff_members SET name=?, title=?, email=?, photo_url=?, bio=? WHERE id=?'
-        ).bind(form.get('name')||'', form.get('title')||'', form.get('email')||'', form.get('photo_url')||'', form.get('bio')||'', id).run();
+          'UPDATE staff_members SET name=?, title=?, email=?, photo_url=?, photo_position=?, bio=? WHERE id=?'
+        ).bind(form.get('name')||'', form.get('title')||'', form.get('email')||'', form.get('photo_url')||'', photoPosition, form.get('bio')||'', id).run();
         return new Response('', { status: 302, headers: { Location: '/staff?msg=saved' } });
       }
 
@@ -4207,22 +4251,25 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
         return new Response('', { status: 302, headers: { Location: '/staff?msg=deleted' } });
       }
 
-      // Move staff member up/down — swaps display_order with the adjacent
-      // member in the current sort order, so reordering doesn't require
-      // hand-picking a free number between two existing ones.
+      // Move staff member up/down in the list. Swaps position in the ordered
+      // array, then renumbers everyone 10/20/30/... from scratch — rather
+      // than swapping raw display_order values — so a pre-existing tie
+      // (e.g. two members both left at the old form's "80" default) can't
+      // make the buttons a silent no-op; every click produces a fresh,
+      // unique ordering.
       if (path.match(/^\/staff\/move\/\d+$/) && method === 'POST') {
         const id = parseInt(path.split('/').pop());
         const form = await request.formData();
         const direction = form.get('direction');
-        const all = (await env.DB.prepare('SELECT id, display_order FROM staff_members ORDER BY display_order, id').all()).results;
+        const all = (await env.DB.prepare('SELECT id FROM staff_members ORDER BY display_order, id').all()).results;
         const idx = all.findIndex(m => m.id === id);
         const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
         if (idx !== -1 && swapIdx >= 0 && swapIdx < all.length) {
-          const a = all[idx], b = all[swapIdx];
-          await env.DB.batch([
-            env.DB.prepare('UPDATE staff_members SET display_order=? WHERE id=?').bind(b.display_order, a.id),
-            env.DB.prepare('UPDATE staff_members SET display_order=? WHERE id=?').bind(a.display_order, b.id),
-          ]);
+          const reordered = all.slice();
+          [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
+          await env.DB.batch(reordered.map((m, i) =>
+            env.DB.prepare('UPDATE staff_members SET display_order=? WHERE id=?').bind((i + 1) * 10, m.id)
+          ));
         }
         return new Response('', { status: 302, headers: { Location: '/staff' } });
       }
