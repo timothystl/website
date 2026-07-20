@@ -94,7 +94,7 @@ function buildHtml(cardsHtml) {
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-height:100vh;display:flex;flex-direction:column;align-items:center;}
 .header{width:100%;background:var(--steel);border-bottom:3px solid var(--amber);padding:16px 24px;display:flex;align-items:center;justify-content:center;gap:14px;}
-.header-logo{width:48px;height:48px;border-radius:50%;flex-shrink:0;}
+.header-logo{width:48px;height:48px;border-radius:50%;background:#fff;flex-shrink:0;}
 .header-name{font-family:var(--sans);font-size:17px;font-weight:800;color:white;letter-spacing:.01em;line-height:1.2;}
 .header-tag{font-family:var(--sans);font-size:11px;font-weight:600;color:var(--amber);margin-top:3px;letter-spacing:.04em;}
 .main{width:100%;max-width:480px;padding:16px 20px 32px;display:flex;flex-direction:column;gap:12px;}
