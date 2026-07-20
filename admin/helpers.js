@@ -4,7 +4,7 @@
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, hasPermission } from './auth.js';
 
-export const VERSION = 'v1.80.5'; // minor bump: schedule newsletter sends via Brevo's scheduledAt campaign field
+export const VERSION = 'v1.80.6'; // minor bump: schedule newsletter sends via Brevo's scheduledAt campaign field
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
