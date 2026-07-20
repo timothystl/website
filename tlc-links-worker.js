@@ -53,9 +53,9 @@ const FALLBACK_CARDS_HTML = `  <a class="link-card" href="https://timothystl.org
     <div class="card-text"><div class="card-title">Give</div><div class="card-desc">Support the ministry of Timothy</div></div>
     <span class="card-arrow">&#x203A;</span>
   </a>
-  <a class="link-card" href="https://volunteer.timothystl.org" target="_blank" rel="noopener noreferrer">
+  <a class="link-card" href="https://serve.timothystl.org" target="_blank" rel="noopener noreferrer">
     <div class="card-icon" style="background:#E8F2E9;"><span style="font-size:22px;line-height:1;">🙌</span></div>
-    <div class="card-text"><div class="card-title">Volunteer</div><div class="card-desc">Find your place to serve</div></div>
+    <div class="card-text"><div class="card-title">Serve</div><div class="card-desc">Find your place to serve</div></div>
     <span class="card-arrow">&#x203A;</span>
   </a>
   <a class="link-card" href="https://timothystl.org/news" target="_blank" rel="noopener">
