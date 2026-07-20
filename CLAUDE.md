@@ -25,11 +25,14 @@ The Timothy Lutheran Church website (timothystl.org) is live on Cloudflare Worke
 | timothystl-site | timothystl.org | `public/index.html` (SPA) |
 | tlc-newsletter-admin | admin.timothystl.org | `tlc-admin-worker.js` |
 | tlc-links | links.timothystl.org | `tlc-links-worker.js` |
-| tlc-chms | volunteer.timothystl.org **and** chms.timothystl.org | `tlc-volunteer-worker.js` (separate repo, not in this one) |
+| tlc-chms | serve.timothystl.org **and** chms.timothystl.org | `tlc-volunteer-worker.js` (separate repo, not in this one) |
 
-Note: this same CHMS worker answers on two hostnames. `volunteer.timothystl.org`
-is used for the public `/volunteer` redirect and for API calls this repo makes
-to it (`/api/intake/connect-card`, `/api/intake/prayer` from the contact/prayer
+Note: this same CHMS worker answers on multiple hostnames. `serve.timothystl.org`
+(renamed 2026-07-20 from `volunteer.timothystl.org` — the old hostname now
+301-redirects there; both this repo's own links and its server-to-server API
+calls were updated to the new hostname in the same pass) is used for the public
+`/volunteer` redirect and for API calls this repo makes to it
+(`/api/intake/connect-card`, `/api/intake/prayer` from the contact/prayer
 forms). `chms.timothystl.org/chms#scheduler` / `#volunteers` is the newer
 hostname the admin sidebar's "Scheduler" / "Volunteer Admin" links point staff
 to for the human-facing scheduler UI. Both are current — they're not a
@@ -56,7 +59,7 @@ stale-vs-live pair, just two routes into the same worker for two audiences.
 - **Newsletter:** Brevo email sending + website archive (Beehiiv removed)
 - **Calendar:** Google Calendar RSS embed at `/calendar`
 - **Giving:** Tithely (`give.tithe.ly`) — displayed on site and in emails. Breeze is still used internally for people management and automated giving (some members have recurring giving set up via their bank to Breeze). Tithely and Breeze are the same company so this coexistence is not an issue. Do not prompt to "cancel Breeze."
-- **Volunteer signups:** Separate worker at volunteer.timothystl.org (already complete)
+- **Volunteer signups:** Separate worker, branded "Serve" at serve.timothystl.org (already complete; renamed 2026-07-20 from volunteer.timothystl.org)
 
 ---
 
@@ -117,7 +120,7 @@ stale-vs-live pair, just two routes into the same worker for two audiences.
 
 ### Utility Redirects (in Cloudflare Worker routing table)
 ```
-/volunteer      → volunteer.timothystl.org
+/volunteer      → serve.timothystl.org  [MANUAL FOLLOW-UP NEEDED — see note below]
 /councilfiles   → Google Drive folder
 /zoom           → Zoom meeting URL
 /voters         → Special page: Zoom link + downloadable reports (admin-managed)
@@ -147,7 +150,7 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Redirects | Office staff | **DONE** — admin-managed URL redirects + Zoom/council-files links (renamed from "Settings"; gym rate config now lives under Gym Rentals) |
 | Payroll | Office staff (Dinger) — requires `payroll_manage` permission | **DONE** — combined biweekly payroll (church staff + MDO preschool staff); see "Payroll & Supabase" below |
 | Audit Log | Admins | **DONE** — change history + rollback, requires `audit_view` |
-| Scheduler / Volunteer Admin | External links in sidebar | **DONE** — link out to `chms.timothystl.org/chms#scheduler` / `#volunteers` for the CHMS scheduler UI (see Architecture note on `volunteer.timothystl.org` vs `chms.timothystl.org`) |
+| Scheduler / Volunteer Admin | External links in sidebar | **DONE** — link out to `chms.timothystl.org/chms#scheduler` / `#volunteers` for the CHMS scheduler UI (see Architecture note on `serve.timothystl.org` vs `chms.timothystl.org`) |
 
 ### News & Events Data Model
 ```sql
@@ -346,6 +349,7 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 ## Pending / Deferred Items
 
 ### Still Needs to Be Built
+- **`/volunteer` redirect target update (MANUAL — cannot be done from code)** — The `/volunteer` short URL redirect is admin-managed data in the `redirects` table (Redirects tab in `admin.timothystl.org`), not hardcoded in `site-worker.js` — confirmed by grep, no hardcoded fallback exists. As part of the 2026-07-20 volunteer→serve rebrand (see the chms repo's own CLAUDE.md for the full change), this redirect's target still points at the old `volunteer.timothystl.org` and needs to be updated to `https://serve.timothystl.org` by an admin via the Redirects tab UI — a code session can't reach the live D1 row to fix this.
 - **`/confirmation`, `/sundayschool`, `/vbs`, `/egghunt`, `/family`** — Youth sub-pages. Admin portal has the youth_pages table, but these slugs need content entered by the youth director.
 - **Christmas Market annual content** — Page structure is built. Needs dates, description, photos, and Google Form link for vendors entered via the admin Ministries tab each year.
 - **Sermons page** — YouTube embed page exists; confirm it's pulling the correct channel or that it's manually maintained.

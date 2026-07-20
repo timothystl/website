@@ -589,7 +589,7 @@ export default {
           { title: 'Get Connected',  description: "We'd love to know you — say hello",          url: 'https://timothystl.org/contact',  icon_emoji: '👋', icon_color: 'sage',  sort_order: 1 },
           { title: 'Prayer Request', description: "Share what's on your heart — we carry it with you", url: 'https://timothystl.org/prayer',  icon_emoji: '🙏', icon_color: 'mist',  sort_order: 2 },
           { title: 'Give',           description: 'Support the ministry of Timothy',             url: 'https://give.tithe.ly/?formId=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8', icon_emoji: '💛', icon_color: 'amber', sort_order: 3 },
-          { title: 'Volunteer',      description: 'Find your place to serve',                    url: 'https://volunteer.timothystl.org',  icon_emoji: '🙌', icon_color: 'sage',  sort_order: 4 },
+          { title: 'Serve',          description: 'Find your place to serve',                    url: 'https://serve.timothystl.org',  icon_emoji: '🙌', icon_color: 'sage',  sort_order: 4 },
           { title: 'News & Events',  description: "What's coming up at Timothy",                 url: 'https://timothystl.org/news',       icon_emoji: '📰', icon_color: 'sky',   sort_order: 5 },
           { title: 'Sermon Notes',   description: 'Take today\'s message home with you',         url: 'https://timothystl.org/sermons',    icon_emoji: '📖', icon_color: 'sky',   sort_order: 6 },
         ];
@@ -1001,7 +1001,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
         }
         ctx.waitUntil((async () => {
           try {
-            const intakeReq = new Request('https://volunteer.timothystl.org/api/intake/connect-card', {
+            const intakeReq = new Request('https://serve.timothystl.org/api/intake/connect-card', {
               method: 'POST',
               headers: {
                 'X-Intake-Key': env.CHMS_INTAKE_API_KEY || '',
@@ -1061,7 +1061,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
         }
         ctx.waitUntil((async () => {
           try {
-            const intakeReq = new Request('https://volunteer.timothystl.org/api/intake/prayer', {
+            const intakeReq = new Request('https://serve.timothystl.org/api/intake/prayer', {
               method: 'POST',
               headers: {
                 'X-Intake-Key': env.CHMS_INTAKE_API_KEY || '',
