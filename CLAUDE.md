@@ -120,7 +120,7 @@ stale-vs-live pair, just two routes into the same worker for two audiences.
 
 ### Utility Redirects (in Cloudflare Worker routing table)
 ```
-/volunteer      → serve.timothystl.org  [MANUAL FOLLOW-UP NEEDED — see note below]
+/volunteer      → not currently a live redirect — see note below
 /councilfiles   → Google Drive folder
 /zoom           → Zoom meeting URL
 /voters         → Special page: Zoom link + downloadable reports (admin-managed)
@@ -349,7 +349,8 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 ## Pending / Deferred Items
 
 ### Still Needs to Be Built
-- **`/volunteer` redirect target update (MANUAL — cannot be done from code)** — The `/volunteer` short URL redirect is admin-managed data in the `redirects` table (Redirects tab in `admin.timothystl.org`), not hardcoded in `site-worker.js` — confirmed by grep, no hardcoded fallback exists. As part of the 2026-07-20 volunteer→serve rebrand (see the chms repo's own CLAUDE.md for the full change), this redirect's target still points at the old `volunteer.timothystl.org` and needs to be updated to `https://serve.timothystl.org` by an admin via the Redirects tab UI — a code session can't reach the live D1 row to fix this.
+- **`/volunteer` short-URL redirect does not actually exist** — confirmed live 2026-07-20 while chasing the 2026-07-20 volunteer→serve rebrand: the Redirects tab in `admin.timothystl.org` has no `/volunteer` entry at all. This table's earlier documentation of `/volunteer → volunteer.timothystl.org` as an existing "Utility Redirect" was aspirational/planned, not a live row — `site-worker.js` has no hardcoded fallback either (confirmed by grep), so `timothystl.org/volunteer` simply falls through to the normal 404 page today, not to a dead external host. Nothing broke as part of the volunteer.timothystl.org→serve.timothystl.org cutover (see the chms repo's own CLAUDE.md). If a short link is wanted, an admin can add one via the Redirects tab: path `/volunteer` (or `/serve`), target `https://serve.timothystl.org` — optional, not a fix for anything broken.
+- **links.timothystl.org "Volunteer" card still points at the old host** — the live `link_cards` D1 row (managed via the Links tab) was seeded long before this rebrand and still has `https://volunteer.timothystl.org` as its URL; the code-level seed constant was updated but that only affects a table that's empty on first run, not an already-populated one. Needs a manual edit via the Links tab: update the URL to `https://serve.timothystl.org` (and optionally rename the title to "Serve").
 - **`/confirmation`, `/sundayschool`, `/vbs`, `/egghunt`, `/family`** — Youth sub-pages. Admin portal has the youth_pages table, but these slugs need content entered by the youth director.
 - **Christmas Market annual content** — Page structure is built. Needs dates, description, photos, and Google Form link for vendors entered via the admin Ministries tab each year.
 - **Sermons page** — YouTube embed page exists; confirm it's pulling the correct channel or that it's manually maintained.
