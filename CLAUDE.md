@@ -28,15 +28,16 @@ The Timothy Lutheran Church website (timothystl.org) is live on Cloudflare Worke
 | tlc-chms | serve.timothystl.org **and** chms.timothystl.org | `tlc-volunteer-worker.js` (separate repo, not in this one) |
 
 Note: this same CHMS worker answers on multiple hostnames. `serve.timothystl.org`
-(renamed 2026-07-20 from `volunteer.timothystl.org` — the old hostname now
-301-redirects there; both this repo's own links and its server-to-server API
-calls were updated to the new hostname in the same pass) is used for the public
-`/volunteer` redirect and for API calls this repo makes to it
-(`/api/intake/connect-card`, `/api/intake/prayer` from the contact/prayer
-forms). `chms.timothystl.org/chms#scheduler` / `#volunteers` is the newer
-hostname the admin sidebar's "Scheduler" / "Volunteer Admin" links point staff
-to for the human-facing scheduler UI. Both are current — they're not a
-stale-vs-live pair, just two routes into the same worker for two audiences.
+(renamed 2026-07-20 from `volunteer.timothystl.org` as a full cutover — the old
+hostname's Cloudflare route was renamed in place rather than kept as a second
+route, so `volunteer.timothystl.org` no longer resolves at all; both this
+repo's own links and its server-to-server API calls were updated to the new
+hostname in the same pass) is used for the public `/volunteer` redirect and
+for API calls this repo makes to it (`/api/intake/connect-card`,
+`/api/intake/prayer` from the contact/prayer forms). `chms.timothystl.org` is
+the admin app hostname — the admin sidebar's external link (labeled "Timothy
+ChMS", changed 2026-07-20 from separate "Scheduler"/"Volunteer Admin" links)
+points staff there.
 
 ### Databases (Cloudflare D1)
 - `tlc-newsletter-db` — tables: `newsletters`, `events`, `news_items`, `youth_pages`, `ministry_posts`, `sermon_series`, `sermon_notes`, `notices`, `staff_members`, `bible_classes`, `link_cards`, `gym_*`, `users`, `sessions`, `audit_log`, and more — see the `DB_INIT_*` constants in `admin/db.js` for the full current schema
@@ -150,7 +151,7 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Redirects | Office staff | **DONE** — admin-managed URL redirects + Zoom/council-files links (renamed from "Settings"; gym rate config now lives under Gym Rentals) |
 | Payroll | Office staff (Dinger) — requires `payroll_manage` permission | **DONE** — combined biweekly payroll (church staff + MDO preschool staff); see "Payroll & Supabase" below |
 | Audit Log | Admins | **DONE** — change history + rollback, requires `audit_view` |
-| Scheduler / Volunteer Admin | External links in sidebar | **DONE** — link out to `chms.timothystl.org/chms#scheduler` / `#volunteers` for the CHMS scheduler UI (see Architecture note on `serve.timothystl.org` vs `chms.timothystl.org`) |
+| Timothy ChMS | External link in sidebar footer | **DONE** — single link out to `chms.timothystl.org` (changed 2026-07-20 from two separate "Scheduler"/"Volunteer Admin" links; see Architecture note on `serve.timothystl.org` vs `chms.timothystl.org`) |
 
 ### News & Events Data Model
 ```sql

@@ -115,8 +115,8 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
 .pending-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#D4922A;margin-left:6px;vertical-align:middle;}
 
 /* ── SIDEBAR SHELL ─────────────────────────────────────────── */
-.sidebar{position:fixed;top:0;left:0;width:236px;height:100vh;background:var(--steel);display:flex;flex-direction:column;overflow-y:auto;z-index:100;transform:translateX(-100%);transition:transform .2s ease;box-shadow:2px 0 16px rgba(0,0,0,.25);}
-.sidebar.is-open{transform:translateX(0);}
+.sidebar{position:fixed;top:0;left:0;width:236px;height:100vh;background:var(--steel);display:flex;flex-direction:column;overflow-y:auto;z-index:100;transform:translateX(-100%);transition:transform .2s ease;}
+.sidebar.is-open{transform:translateX(0);box-shadow:2px 0 16px rgba(0,0,0,.25);}
 .sidebar-brand{padding:20px 20px 18px;border-bottom:1px solid rgba(255,255,255,.12);margin-bottom:8px;flex-shrink:0;}
 .sidebar-brand-name{font-family:var(--sans);font-size:14px;font-weight:800;color:#fff;}
 .sidebar-brand-sub{font-family:var(--sans);font-size:11px;color:var(--amber);font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-top:2px;}
@@ -246,8 +246,7 @@ export function sidebarShell(activeTab, user, extraLinks = '', pendingCount = 0)
   ${contentItems ? `<div class="sidebar-group"><div class="sidebar-group-label">Content</div>${contentItems}</div>` : ''}
   ${opsItems ? `<div class="sidebar-group"><div class="sidebar-group-label">People &amp; Ops</div>${opsItems}</div>` : ''}
   <div class="sidebar-footer">
-    <a href="https://chms.timothystl.org/chms#scheduler" target="_blank">Scheduler</a>
-    <a href="https://chms.timothystl.org/chms#volunteers" target="_blank">Volunteer Admin</a>
+    <a href="https://chms.timothystl.org" target="_blank">Timothy ChMS</a>
   </div>
 </aside>
 <div class="util-bar">
