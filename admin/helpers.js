@@ -57,7 +57,7 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
 .alert-success{background:#e8f5e9;border-left:3px solid var(--sage);color:#1a3d1f;}
 .alert-error{background:#fce8e8;border-left:3px solid #B85C3A;color:#7a1f1f;}
 .alert-info{background:var(--mist);border-left:3px solid var(--steel);color:var(--steel);}
-.newsletter-row{display:flex;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;}
+.newsletter-row{display:flex;align-items:center;gap:16px;padding:14px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
 .newsletter-row:last-child{border-bottom:none;}
 .newsletter-date{font-family:var(--sans);font-size:11px;font-weight:700;color:var(--gray);min-width:100px;}
 .newsletter-subject{font-family:var(--serif);font-size:16px;color:var(--steel);flex:1;}
