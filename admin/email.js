@@ -88,6 +88,47 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
   }
   pastorNote = fixBodyImgSrcs(pastorNote);
 
+  // HTML-aware truncation: cuts by visible-text length but keeps tags
+  // (bold, paragraphs, line breaks) intact instead of stripping them, and
+  // closes any tags left open by the cut.
+  function truncateHtmlAware(html, limit) {
+    const VOID_TAGS = new Set(['br', 'img', 'hr']);
+    let result = '';
+    let visibleCount = 0;
+    let openTags = [];
+    let i = 0;
+    let cut = false;
+    while (i < html.length && !cut) {
+      if (html[i] === '<') {
+        const close = html.indexOf('>', i);
+        if (close === -1) break;
+        const tag = html.slice(i, close + 1);
+        result += tag;
+        const nameMatch = tag.match(/^<\/?([a-zA-Z0-9]+)/);
+        const name = nameMatch ? nameMatch[1].toLowerCase() : null;
+        if (name && !VOID_TAGS.has(name) && !tag.endsWith('/>')) {
+          if (tag.startsWith('</')) {
+            const idx = openTags.lastIndexOf(name);
+            if (idx !== -1) openTags.splice(idx, 1);
+          } else {
+            openTags.push(name);
+          }
+        }
+        i = close + 1;
+        continue;
+      }
+      if (visibleCount >= limit) { cut = true; break; }
+      result += html[i];
+      visibleCount++;
+      i++;
+    }
+    if (cut) {
+      result = result.replace(/\s+$/, '') + '…';
+      for (let k = openTags.length - 1; k >= 0; k--) result += `</${openTags[k]}>`;
+    }
+    return { html: result, cut };
+  }
+
   function truncate(text, limit) {
     if (!text) return '';
     const source = text + '';
@@ -95,15 +136,18 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
     // Content fits within the limit — keep the original HTML (paragraphs, line
     // breaks, bold, images) instead of flattening it to plain text.
     if (stripped.length <= limit) return source;
-    // Too long to show in full — fall back to plain text, but still preserve
-    // any images (e.g. in the pastor's note) since email clients need the
-    // <img> tag itself, not just its stripped-out text.
-    const imgHtml = (source.match(/<img[^>]*>/gi) || [])
+    // Too long to show in full — truncate but keep formatting tags intact
+    // rather than flattening to plain text. Any images cut off by the
+    // truncation are appended afterward so they still render.
+    const { html: truncated } = truncateHtmlAware(source, limit);
+    const allImgs = source.match(/<img[^>]*>/gi) || [];
+    const missingImgHtml = allImgs
+      .filter(tag => !truncated.includes(tag))
       .map(tag => {
         const m = tag.match(/src=["']([^"']+)["']/i);
         return m ? `<img src="${m[1]}" alt="" style="max-width:100%;height:auto;border-radius:6px;display:block;margin-top:8px;">` : '';
       }).join('');
-    return stripped.substring(0, limit).trimEnd() + '…' + imgHtml;
+    return truncated + missingImgHtml;
   }
 
   // ── QUICK ANNOUNCEMENT layout (full-width, no events column) ──
