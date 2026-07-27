@@ -50,15 +50,16 @@ const valuesBandHtml = VALUES_BAND.map(v => `
   </div>`).join('');
 
 // The "What Your Generosity Makes Possible" ministry ladder — Andrew's exact copy
-// (2026-07-27), reinforcing the amount chips above with concrete outcomes rather than
-// bare dollar labels. Purely informational — not wired to the interactive chip picker.
+// (updated 2026-07-27, weekly framing). Each row links directly to Tithe.ly for that
+// amount, same as the leadership tiers below — not just informational.
 const MINISTRY_LADDER = [
-  { amount: 30,  outcome: 'Provides one week of tuition assistance for a child in our daycare.' },
-  { amount: 50,  outcome: 'Provides a week of tuition assistance for a student at Timothy Lutheran School.' },
-  { amount: 75,  outcome: 'Sponsors devotional resources for families throughout the year.' },
-  { amount: 90,  outcome: 'Helps send a youth to a retreat or gathering.' },
-  { amount: 150, outcome: 'Provides a month of ministry support for a family in financial need.' },
-  { amount: 250, outcome: 'Helps underwrite children’s ministry and outreach for an entire month.' },
+  { amount: 15,  outcome: 'Sponsors devotional resources throughout the year.' },
+  { amount: 30,  outcome: 'Puts flowers on the altar.' },
+  { amount: 50,  outcome: 'Sends a youth to the National Youth Gathering.' },
+  { amount: 75,  outcome: 'Helps support tuition aid preparing future church workers.' },
+  { amount: 100, outcome: 'Provides tuition assistance for a child to Word of Life.' },
+  { amount: 175, outcome: 'Underwrites music ministry for the year.' },
+  { amount: 300, outcome: 'Provides one week of care in our MDO program.' },
 ];
 
 // "Bigger Commitments. Bigger Impact." — leadership-level annual gifts, Andrew's exact
@@ -116,8 +117,11 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds) {
 
   const ladderRowsHtml = MINISTRY_LADDER.map(row => `
     <div class="ladder-row">
-      <div class="ladder-amount">$${row.amount}<span class="ladder-period">/month</span></div>
-      <div class="ladder-outcome">${row.outcome}</div>
+      <div class="ladder-left">
+        <div class="ladder-amount">$${row.amount}<span class="ladder-period">/week</span></div>
+        <div class="ladder-outcome">${row.outcome}</div>
+      </div>
+      <a class="ladder-cta" href="${withAmount(safeBaseUrl, row.amount)}" target="_blank" rel="noopener">Give $${row.amount} →</a>
     </div>`).join('');
 
   const leadershipRowsHtml = LEADERSHIP_TIERS.map(row => `
@@ -167,32 +171,52 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds) {
     color: #fff;
   }
 
-  /* ── Two-column band ── */
-  .band-2col {
+  /* ── Hero header (full-width, replaces the old photo panel) ── */
+  .hero-header {
+    background: #111E32; padding: 56px 40px; text-align: center;
+  }
+  .hero-header h1 {
+    font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 48px; line-height: 1.1;
+    color: #fff; text-wrap: balance; max-width: 820px; margin: 0 auto;
+  }
+
+  /* ── Give row: ministry ladder (left) + giving widget (right) ── */
+  .give-row {
     display: grid;
-    grid-template-columns: 1.05fr .95fr;
+    grid-template-columns: 1.15fr .85fr;
+    background: #FBF8F3;
   }
-  .photo-col {
-    min-height: 520px;
-    background: #22324f url('/images/IMG_6133.jpg') center/cover no-repeat;
-    position: relative;
-    display: flex; align-items: flex-end;
+  .ladder-col {
+    padding: 48px 44px; border-right: 1px solid #DDE3ED;
   }
-  .photo-col::before {
-    content: '';
-    position: absolute; inset: 0;
-    background: linear-gradient(to bottom, rgba(17,30,50,.35), rgba(17,30,50,.88));
+  .ladder-eyebrow {
+    font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+    color: #C9973A; margin-bottom: 10px;
   }
-  .photo-col-content { position: relative; padding: 44px 44px 40px; }
-  .photo-col h1 {
-    font-family: 'Lora', Georgia, serif;
-    font-weight: 700; font-size: 56px; line-height: 1.05; color: #fff;
-    text-wrap: balance;
+  .ladder-heading { font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 26px; color: #1E2D4A; }
+  .ladder-steps {
+    margin-top: 18px; font-size: 14px; line-height: 1.65; color: #4A4860;
+    display: flex; flex-direction: column; gap: 5px;
   }
+  .ladder-steps b { color: #1E2D4A; }
+  .ladder-list { margin-top: 24px; display: flex; flex-direction: column; gap: 10px; }
+  .ladder-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    background: #fff; border: 1px solid #DDE3ED; border-radius: 10px; padding: 14px 16px;
+    flex-wrap: wrap;
+  }
+  .ladder-amount { font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 19px; color: #1E2D4A; }
+  .ladder-period { font-family: 'Source Sans 3', sans-serif; font-weight: 400; font-size: 12px; color: #8C8880; }
+  .ladder-outcome { font-size: 13px; line-height: 1.5; color: #4A4860; margin-top: 2px; max-width: 320px; }
+  .ladder-cta {
+    background: #C9973A; color: #1E2D4A; font-weight: 800; font-size: 13px;
+    padding: 10px 16px; border-radius: 8px; white-space: nowrap; transition: background .2s;
+  }
+  .ladder-cta:hover { background: #E8C070; }
 
   .widget-col {
     background: #FBF8F3;
-    padding: 38px 40px 36px;
+    padding: 48px 40px;
     display: flex; flex-direction: column;
   }
   .widget-col .give-title { font-family: 'Lora', Georgia, serif; font-weight: 600; font-size: 27px; color: #1E2D4A; }
@@ -250,30 +274,6 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds) {
   }
   .trust-line svg { flex-shrink: 0; margin-top: 2px; }
 
-  /* ── Ministry ladder ── */
-  .ladder-section {
-    background: #FBF8F3; padding: 48px 40px; border-top: 1px solid #DDE3ED;
-  }
-  .ladder-intro { max-width: 760px; margin: 0 auto 32px; text-align: center; }
-  .ladder-eyebrow {
-    font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
-    color: #C9973A; margin-bottom: 10px;
-  }
-  .ladder-heading { font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 30px; color: #1E2D4A; }
-  .ladder-steps {
-    margin-top: 20px; text-align: left; font-size: 15px; line-height: 1.7; color: #4A4860;
-    display: flex; flex-direction: column; gap: 6px;
-  }
-  .ladder-steps b { color: #1E2D4A; }
-  .ladder-table { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; }
-  .ladder-row {
-    display: grid; grid-template-columns: 140px 1fr; gap: 20px; align-items: baseline;
-    padding: 16px 0; border-bottom: 1px solid #DDE3ED;
-  }
-  .ladder-row:last-child { border-bottom: none; }
-  .ladder-amount { font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 22px; color: #1E2D4A; }
-  .ladder-period { font-family: 'Source Sans 3', sans-serif; font-weight: 400; font-size: 13px; color: #8C8880; }
-  .ladder-outcome { font-size: 15px; line-height: 1.6; color: #4A4860; }
 
   /* ── Leadership giving ── */
   .leadership-section { background: #111E32; padding: 48px 40px; }
@@ -317,17 +317,19 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds) {
   .footer a { color: #C9973A; font-weight: 600; }
 
   @media (max-width: 900px) {
-    .band-2col { grid-template-columns: 1fr; }
-    .photo-col { min-height: 210px; }
-    .photo-col h1 { font-size: 32px; }
+    .hero-header { padding: 40px 20px; }
+    .hero-header h1 { font-size: 32px; }
+    .give-row { grid-template-columns: 1fr; }
+    .ladder-col { border-right: none; border-bottom: 1px solid #DDE3ED; padding: 32px 22px; }
     .values-band { grid-template-columns: 1fr 1fr; padding: 24px 20px 28px; }
     .amount-chips { gap: 8px; }
     .chip { font-size: 14px; padding: 11px 0; }
     .topbar { padding: 14px 20px; }
-    .widget-col { padding: 28px 22px 26px; }
+    .widget-col { padding: 32px 22px; }
     .footer { padding: 22px 20px; text-align: center; justify-content: center; }
-    .ladder-section, .leadership-section { padding: 36px 20px; }
-    .ladder-row { grid-template-columns: 1fr; gap: 4px; }
+    .leadership-section { padding: 36px 20px; }
+    .ladder-row { flex-direction: column; align-items: flex-start; }
+    .ladder-cta { width: 100%; text-align: center; }
     .leadership-row { flex-direction: column; align-items: flex-start; }
     .leadership-cta { width: 100%; text-align: center; }
   }
@@ -339,11 +341,20 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds) {
     <div class="church-name">Timothy Lutheran Church</div>
   </div>
 
-  <div class="band-2col">
-    <div class="photo-col">
-      <div class="photo-col-content">
-        <h1>Your Gift Continues His Work</h1>
+  <div class="hero-header">
+    <h1>Your Gift Continues His Work</h1>
+  </div>
+
+  <div class="give-row">
+    <div class="ladder-col">
+      <div class="ladder-eyebrow">What Your Generosity Makes Possible</div>
+      <div class="ladder-heading">Every gift accomplishes great things in His Kingdom.</div>
+      <div class="ladder-steps">
+        <div><b>1.</b> Start automated giving if you don't already.</div>
+        <div><b>2.</b> Strengthen your recurring gift by increasing it to the next level.</div>
+        <div><b>3.</b> Sustain the mission through leadership-level gifts that underwrite the ministries the whole congregation depends on.</div>
       </div>
+      <div class="ladder-list">${ladderRowsHtml}</div>
     </div>
 
     <div class="widget-col">
@@ -376,19 +387,6 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds) {
         <span>Secure, encrypted giving through Tithe.ly. Receipt emailed instantly · tax-deductible · no account required.</span>
       </div>
     </div>
-  </div>
-
-  <div class="ladder-section">
-    <div class="ladder-intro">
-      <div class="ladder-eyebrow">What Your Generosity Makes Possible</div>
-      <div class="ladder-heading">Every level is honorable.</div>
-      <div class="ladder-steps">
-        <div><b>1.</b> Start automated giving if you don't already.</div>
-        <div><b>2.</b> Strengthen your recurring gift by increasing it to the next level.</div>
-        <div><b>3.</b> Sustain the mission through leadership-level gifts that underwrite the ministries the whole congregation depends on.</div>
-      </div>
-    </div>
-    <div class="ladder-table">${ladderRowsHtml}</div>
   </div>
 
   <div class="leadership-section">

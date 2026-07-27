@@ -178,12 +178,18 @@ code (`give-landing.js` in this repo) or scattered under Redirects:
   `GET /api/give-amounts` (same fetch-and-cache pattern as the existing `/api/redirects`)
   when rendering the giving page; a hardcoded fallback in `give-landing.js` is used only if
   `admin.timothystl.org` is unreachable. The page also has two static (non-admin-editable)
-  content sections below the chip picker, each amount also auto-linked via the same
-  `withAmount()` mechanism: a "What Your Generosity Makes Possible" ministry ladder
-  ($30–$250/month, each tied to a concrete outcome) and a "Bigger Commitments. Bigger
-  Impact." leadership-giving section ($5,000–$18,000/year, each with its own direct Give
-  button) — both are real copy from Andrew, hardcoded in `give-landing.js` rather than
-  data-driven, since they're narrative content rather than simple amount/link pairs.
+  content sections, each amount also auto-linked via the same `withAmount()` mechanism: a
+  "What Your Generosity Makes Possible" ministry ladder and a "Bigger Commitments. Bigger
+  Impact." leadership-giving section ($5,000–$18,000/year) — both are real copy from Andrew,
+  hardcoded in `give-landing.js` rather than data-driven, since they're narrative content
+  rather than simple amount/link pairs. Layout restructured 2026-07-27: the page opens with
+  a full-width navy hero banner ("Your Gift Continues His Work"), then a two-column row —
+  the ministry ladder on the left (own card per row, each with a direct "Give $X →" button
+  linking through `withAmount()`, same as the leadership tiers below it) and the amount-chip
+  giving widget on the right (photo panel removed). Ministry-ladder amounts are weekly
+  ($15/$30/$50/$75/$100/$175/$300, each tied to a concrete outcome — devotional resources,
+  altar flowers, NYG, tuition aid, Word of Life tuition, music ministry, MDO care) — distinct
+  from the separately admin-editable amount-chip tiers above.
 - **Funds** (`give_funds` D1 table, added 2026-07-27) — a "Give to" dropdown on
   give.timothystl.org's main widget (hidden entirely if only one fund exists). Each fund
   has its own Tithe.ly `fundId` — deliberately **not** pulled from ChMS's own `funds` table,
