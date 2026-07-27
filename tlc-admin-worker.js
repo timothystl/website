@@ -32,6 +32,16 @@ import PAYROLL_HTML from './admin/payroll.html';
 // email, Brevo keys, etc.) from leaking to anyone who can guess a key name.
 const PUBLIC_SETTINGS_KEYS = new Set(['zoom_url', 'councilfiles_url', 'give_url']);
 
+// Real Tithe.ly fund IDs, parsed by hand out of Tithe.ly-generated links (one link per
+// fund, `?...&fundId=<this value>&amount=...`) — Tithe.ly has no fund-listing API of its
+// own to pull these from automatically. Applied as a one-time backfill by name (see the
+// SCHEMA GATE block below) — only fills a `give_funds` row whose ID is still blank, so a
+// value already entered through the Giving tab is never clobbered. Append new entries here
+// as more are parsed; each addition needs a SCHEMA_VERSION bump so the backfill re-runs.
+const GIVE_FUND_TITHELY_ID_SEED = {
+  'General Fund': '7851d336-7349-489b-8e6b-5dfc822278cc',
+};
+
 // CSRF defense: only these POST paths are reachable from outside the admin
 // origin (the public site at timothystl.org POSTs to them). Every other
 // state-changing request must originate from admin.timothystl.org itself.
@@ -452,7 +462,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-07-27-4'; // bumped: add give_funds table (Giving tab fund selector)
+    const SCHEMA_VERSION = '2026-07-27-5'; // bumped: backfill real Tithe.ly fund IDs (GIVE_FUND_TITHELY_ID_SEED)
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -532,13 +542,12 @@ export default {
       }
     } catch (_) {}
     // Giving tab: fund selector for give.timothystl.org (added 2026-07-27). Self-contained
-    // in this repo rather than pulled from ChMS's own `funds` table — ChMS's funds have no
-    // Tithe.ly linkage (only a Breeze fund ID, for its own giving-sync dedup), so a fund
-    // selectable here needs its own Tithe.ly fund ID regardless of where the name comes
-    // from; no benefit to a live cross-app fetch when that ID still has to be entered by
-    // hand either way. Blank tithely_fund_id means "use whatever fundId is already in the
-    // base Tithe.ly Link" — lets a plain "General Fund" row exist without duplicating the
-    // GUID that's already in the give_url setting.
+    // in this repo — ChMS's own `funds` table has no Tithe.ly linkage of its own (only a
+    // Breeze fund ID, for its own giving-sync dedup), so every fund here needs its Tithe.ly
+    // ID hand-parsed from a real Tithe.ly-generated link and pasted in regardless of source.
+    // Blank tithely_fund_id means "use whatever fundId is already in the base Tithe.ly
+    // Link" — lets a plain "General Fund" row exist without duplicating the GUID that's
+    // already in the give_url setting.
     try {
       await env.DB.prepare(`CREATE TABLE IF NOT EXISTS give_funds (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -553,7 +562,17 @@ export default {
       const fundCount = await env.DB.prepare('SELECT COUNT(*) as c FROM give_funds').first();
       if (!fundCount || fundCount.c === 0) {
         await env.DB.prepare('INSERT INTO give_funds (name, tithely_fund_id, is_default, sort_order) VALUES (?, ?, ?, ?)')
-          .bind('General Fund', '', 1, 0).run();
+          .bind('General Fund', GIVE_FUND_TITHELY_ID_SEED['General Fund'] || '', 1, 0).run();
+      }
+    } catch (_) {}
+    // Backfill real Tithe.ly fund IDs as Andrew parses them out of Tithe.ly-generated links
+    // (GIVE_FUND_TITHELY_ID_SEED below) — only fills a row whose ID is still blank, so it
+    // never overwrites a value already entered by hand through the Giving tab itself. Safe
+    // to re-run on every deploy; each entry is a no-op once its row has a real ID.
+    try {
+      for (const [name, tithelyFundId] of Object.entries(GIVE_FUND_TITHELY_ID_SEED)) {
+        await env.DB.prepare("UPDATE give_funds SET tithely_fund_id = ? WHERE name = ? AND tithely_fund_id = ''")
+          .bind(tithelyFundId, name).run();
       }
     } catch (_) {}
     // Seed a /links redirect now that the stale static public/links/index.html
