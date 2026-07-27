@@ -4,7 +4,7 @@
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, hasPermission } from './auth.js';
 
-export const VERSION = 'v1.83.0'; // minor bump: give.timothystl.org ministry ladder + leadership giving section, dropped Monthly/One-time toggle
+export const VERSION = 'v1.83.1'; // minor bump: give.timothystl.org ministry ladder + leadership giving section, dropped Monthly/One-time toggle
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
