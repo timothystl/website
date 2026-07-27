@@ -3,28 +3,28 @@
 // per Andrew, someone lands here from a bulletin/QR/text link, sees one thing, and gives.
 //
 // Built from the "Giving Landing" design handoff (option 4a — "Conversion patterns"),
-// adapted in two ways from the literal spec: (1) the top nav's Visit/Worship/Learn links
-// and the nav "Give" button are dropped — there's nowhere else on this page to send
-// someone, and the whole page already is the give action; (2) the impact-figures block
-// (real $ / meals-served / cents-per-dollar stats) is omitted entirely rather than
-// shipping the design's placeholder numbers — add it back once real figures exist.
+// adapted from the literal spec: (1) the top nav's Visit/Worship/Learn links and the nav
+// "Give" button are dropped — there's nowhere else on this page to send someone, and the
+// whole page already is the give action; (2) the impact-figures block (real $ / meals-
+// served / cents-per-dollar stats) is omitted entirely rather than shipping the design's
+// placeholder numbers; (3) the Monthly/One-time toggle from the original build was removed
+// 2026-07-27 — Tithe.ly has no way to generate a custom link that prefills specifically as
+// recurring vs. one-time, so the toggle never actually changed anything real. The giver
+// picks frequency on Tithe.ly's own page.
 //
 // ── Tithe.ly linking ────────────────────────────────────────────────────────────────
-// The amount chips + Monthly/One-time toggle are real state (not decorative) and do
-// change the CTA label, but Tithe.ly doesn't publish a safe-to-guess raw query-string
-// spec for prefilling amount/frequency — their own "Create Custom Link" dashboard tool
-// generates a complete URL per configuration instead. Amount tiers and the base link are
-// now admin-editable (admin.timothystl.org → Giving tab, `give_amount_tiers` table +
-// `give_url` setting) rather than hardcoded here — site-worker.js fetches them and passes
-// them into renderGiveLandingHtml() below. Any tier with no dedicated link for the current
-// frequency falls back to the base link, so the CTA is always a real, working Tithe.ly
-// page even for amounts that haven't been given their own prefilled link yet.
+// Amount tiers and the base link are admin-editable (admin.timothystl.org → Giving tab,
+// `give_amount_tiers` table + `give_url` setting) rather than hardcoded here —
+// site-worker.js fetches them and passes them into renderGiveLandingHtml() below. Any tier
+// with no dedicated link falls back to the base link, so the CTA is always a real, working
+// Tithe.ly page even for amounts that haven't been given their own prefilled link yet.
 
 // Used only if the admin API is unreachable when site-worker.js builds the page, so the
-// giving page never breaks outright — matches the tiers this page originally shipped with.
+// giving page never breaks outright. Matches the ministry-ladder amounts Andrew provided
+// 2026-07-27 (see the "Makes possible" table below) — editable for real via the Giving tab.
 export const FALLBACK_BASE_URL = 'https://give.tithe.ly/?formId=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8';
-export const FALLBACK_TIERS = [25, 40, 75, 150, 300, 500].map(amount => ({
-  amount, monthlyUrl: '', onceUrl: '', isDefault: amount === 40,
+export const FALLBACK_TIERS = [30, 50, 75, 90, 150, 250].map(amount => ({
+  amount, url: '', isDefault: amount === 50,
 }));
 
 const VALUES_BAND = [
@@ -40,19 +40,58 @@ const valuesBandHtml = VALUES_BAND.map(v => `
     <div class="vb-word">${v.word}</div>
   </div>`).join('');
 
-// tiers: [{amount, monthlyUrl, onceUrl, isDefault}], baseUrl: string
+// The "What Your Generosity Makes Possible" ministry ladder — Andrew's exact copy
+// (2026-07-27), reinforcing the amount chips above with concrete outcomes rather than
+// bare dollar labels. Purely informational — not wired to the interactive chip picker.
+const MINISTRY_LADDER = [
+  { amount: 30,  outcome: 'Provides one week of tuition assistance for a child in our daycare.' },
+  { amount: 50,  outcome: 'Provides a week of tuition assistance for a student at Timothy Lutheran School.' },
+  { amount: 75,  outcome: 'Sponsors devotional resources for families throughout the year.' },
+  { amount: 90,  outcome: 'Helps send a youth to a retreat or gathering.' },
+  { amount: 150, outcome: 'Provides a month of ministry support for a family in financial need.' },
+  { amount: 250, outcome: 'Helps underwrite children’s ministry and outreach for an entire month.' },
+];
+
+// "Bigger Commitments. Bigger Impact." — leadership-level annual gifts, Andrew's exact
+// copy (2026-07-27). Each gets its own direct Give button rather than joining the chip
+// picker above — fewer, larger, more narrative asks. Both $10,000 items are intentional:
+// two distinct real costs (heat, power) that happen to land at the same figure.
+const LEADERSHIP_TIERS = [
+  { amount: 5000,  outcome: 'Helps ensure every child hears about Jesus regardless of a family’s ability to pay.' },
+  { amount: 9000,  outcome: 'Funds an entire year of music ministry that leads worship every Sunday.' },
+  { amount: 10000, outcome: 'Keeps our campus warm throughout the winter so ministry never stops.' },
+  { amount: 10000, outcome: 'Powers every classroom, office, sanctuary, and ministry space for a year.' },
+  { amount: 18000, outcome: 'Provides health insurance for one member of our ministry staff, allowing them to care for people instead of worrying about their family’s healthcare.' },
+];
+
+const fmtAmount = n => n.toLocaleString('en-US');
+
+// tiers: [{amount, url, isDefault}], baseUrl: string
 export function renderGiveLandingHtml(tiers, baseUrl) {
   const safeTiers = Array.isArray(tiers) && tiers.length ? tiers : FALLBACK_TIERS;
   const safeBaseUrl = baseUrl || FALLBACK_BASE_URL;
   const defaultTier = safeTiers.find(t => t.isDefault) || safeTiers[0];
   const defaultAmount = defaultTier.amount;
 
-  // Lookup table keyed by amount, each side falling back to the base link — same shape
-  // and fallback semantics as the original hardcoded TITHELY_LINKS.
-  const linksByAmount = {};
-  for (const t of safeTiers) {
-    linksByAmount[t.amount] = { monthly: t.monthlyUrl || safeBaseUrl, once: t.onceUrl || safeBaseUrl };
-  }
+  // Lookup table keyed by amount, falling back to the base link — same fallback semantics
+  // as the original build, just one link per amount instead of a monthly/once pair.
+  const linkByAmount = {};
+  for (const t of safeTiers) linkByAmount[t.amount] = t.url || safeBaseUrl;
+
+  const ladderRowsHtml = MINISTRY_LADDER.map(row => `
+    <div class="ladder-row">
+      <div class="ladder-amount">$${row.amount}<span class="ladder-period">/month</span></div>
+      <div class="ladder-outcome">${row.outcome}</div>
+    </div>`).join('');
+
+  const leadershipRowsHtml = LEADERSHIP_TIERS.map(row => `
+    <div class="leadership-row">
+      <div class="leadership-left">
+        <div class="leadership-amount">$${fmtAmount(row.amount)}<span class="leadership-period">/year</span></div>
+        <div class="leadership-outcome">${row.outcome}</div>
+      </div>
+      <a class="leadership-cta" href="${safeBaseUrl}" target="_blank" rel="noopener">Give $${fmtAmount(row.amount)} →</a>
+    </div>`).join('');
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -111,7 +150,7 @@ export function renderGiveLandingHtml(tiers, baseUrl) {
   .photo-col-content { position: relative; padding: 44px 44px 40px; }
   .photo-col h1 {
     font-family: 'Lora', Georgia, serif;
-    font-weight: 700; font-size: 62px; line-height: 1.02; color: #fff;
+    font-weight: 700; font-size: 56px; line-height: 1.05; color: #fff;
     text-wrap: balance;
   }
 
@@ -123,23 +162,9 @@ export function renderGiveLandingHtml(tiers, baseUrl) {
   .widget-col .give-title { font-family: 'Lora', Georgia, serif; font-weight: 600; font-size: 27px; color: #1E2D4A; }
   .widget-col .tagline { font-family: 'Lora', Georgia, serif; font-style: italic; font-size: 15.5px; color: #2E7EA6; margin-top: 4px; }
 
-  .freq-toggle {
-    margin-top: 22px;
-    background: #EDE7DC; border-radius: 9px; padding: 4px; display: flex; gap: 4px;
-  }
-  .freq-toggle button {
-    flex: 1; border: none; background: transparent; border-radius: 7px;
-    font-family: 'Source Sans 3', sans-serif; font-size: 14.5px; font-weight: 700;
-    color: #6b6a5f; padding: 10px 0; cursor: pointer; transition: all .15s;
-  }
-  .freq-toggle button.active { background: #fff; color: #1E2D4A; box-shadow: 0 2px 8px -3px rgba(30,45,74,.35); }
-  .freq-toggle button:focus-visible { outline: 2px solid #2E7EA6; outline-offset: 2px; }
-
-  .recur-note { font-size: 12.5px; color: #6b6a5f; margin-top: 10px; }
-
   .amount-label {
     font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
-    color: #6b6a5f; margin-top: 24px; margin-bottom: 10px;
+    color: #6b6a5f; margin-top: 26px; margin-bottom: 10px;
   }
   .amount-chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   .chip {
@@ -178,6 +203,55 @@ export function renderGiveLandingHtml(tiers, baseUrl) {
   }
   .trust-line svg { flex-shrink: 0; margin-top: 2px; }
 
+  /* ── Ministry ladder ── */
+  .ladder-section {
+    background: #FBF8F3; padding: 48px 40px; border-top: 1px solid #DDE3ED;
+  }
+  .ladder-intro { max-width: 760px; margin: 0 auto 32px; text-align: center; }
+  .ladder-eyebrow {
+    font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+    color: #C9973A; margin-bottom: 10px;
+  }
+  .ladder-heading { font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 30px; color: #1E2D4A; }
+  .ladder-steps {
+    margin-top: 20px; text-align: left; font-size: 15px; line-height: 1.7; color: #4A4860;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .ladder-steps b { color: #1E2D4A; }
+  .ladder-table { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; }
+  .ladder-row {
+    display: grid; grid-template-columns: 140px 1fr; gap: 20px; align-items: baseline;
+    padding: 16px 0; border-bottom: 1px solid #DDE3ED;
+  }
+  .ladder-row:last-child { border-bottom: none; }
+  .ladder-amount { font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 22px; color: #1E2D4A; }
+  .ladder-period { font-family: 'Source Sans 3', sans-serif; font-weight: 400; font-size: 13px; color: #8C8880; }
+  .ladder-outcome { font-size: 15px; line-height: 1.6; color: #4A4860; }
+
+  /* ── Leadership giving ── */
+  .leadership-section { background: #111E32; padding: 48px 40px; }
+  .leadership-intro { max-width: 720px; margin: 0 auto 32px; text-align: center; }
+  .leadership-eyebrow {
+    font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+    color: #E8C070; margin-bottom: 10px;
+  }
+  .leadership-heading { font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 30px; color: #fff; }
+  .leadership-sub { font-size: 15px; color: rgba(255,255,255,.7); margin-top: 10px; line-height: 1.6; }
+  .leadership-table { max-width: 780px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+  .leadership-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 20px;
+    background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.14);
+    border-radius: 10px; padding: 18px 22px; flex-wrap: wrap;
+  }
+  .leadership-amount { font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 24px; color: #E8C070; }
+  .leadership-period { font-family: 'Source Sans 3', sans-serif; font-weight: 400; font-size: 13px; color: rgba(255,255,255,.55); }
+  .leadership-outcome { font-size: 14.5px; color: rgba(255,255,255,.82); line-height: 1.55; margin-top: 4px; max-width: 480px; }
+  .leadership-cta {
+    background: #C9973A; color: #1E2D4A; font-weight: 800; font-size: 14.5px;
+    padding: 12px 20px; border-radius: 8px; white-space: nowrap; transition: background .2s;
+  }
+  .leadership-cta:hover { background: #E8C070; }
+
   /* ── Values band ── */
   .values-band {
     background: #F7F3EC; border-top: 1px solid #DDE3ED; padding: 32px 40px 36px;
@@ -191,19 +265,24 @@ export function renderGiveLandingHtml(tiers, baseUrl) {
   .footer {
     background: #111E32; padding: 26px 40px; display: flex; justify-content: space-between;
     flex-wrap: wrap; gap: 12px; color: rgba(255,255,255,.7); font-size: 13.5px;
+    border-top: 1px solid rgba(255,255,255,.1);
   }
   .footer a { color: #C9973A; font-weight: 600; }
 
   @media (max-width: 900px) {
     .band-2col { grid-template-columns: 1fr; }
     .photo-col { min-height: 210px; }
-    .photo-col h1 { font-size: 34px; }
+    .photo-col h1 { font-size: 32px; }
     .values-band { grid-template-columns: 1fr 1fr; padding: 24px 20px 28px; }
     .amount-chips { gap: 8px; }
     .chip { font-size: 14px; padding: 11px 0; }
     .topbar { padding: 14px 20px; }
     .widget-col { padding: 28px 22px 26px; }
     .footer { padding: 22px 20px; text-align: center; justify-content: center; }
+    .ladder-section, .leadership-section { padding: 36px 20px; }
+    .ladder-row { grid-template-columns: 1fr; gap: 4px; }
+    .leadership-row { flex-direction: column; align-items: flex-start; }
+    .leadership-cta { width: 100%; text-align: center; }
   }
 </style>
 </head>
@@ -216,19 +295,13 @@ export function renderGiveLandingHtml(tiers, baseUrl) {
   <div class="band-2col">
     <div class="photo-col">
       <div class="photo-col-content">
-        <h1>Your Gift Continues the Work</h1>
+        <h1>Your Gift Continues His Work</h1>
       </div>
     </div>
 
     <div class="widget-col">
       <div class="give-title">Give to Timothy</div>
       <div class="tagline">From Our Neighborhood to the Nations</div>
-
-      <div class="freq-toggle" role="tablist" aria-label="Giving frequency">
-        <button type="button" id="freq-monthly" class="active" role="tab" aria-selected="true" onclick="setFreq('monthly')">Monthly</button>
-        <button type="button" id="freq-once" role="tab" aria-selected="false" onclick="setFreq('once')">One-time</button>
-      </div>
-      <div class="recur-note" id="recur-note">Recurring gifts can be changed or cancelled anytime.</div>
 
       <div class="amount-label">Choose an amount</div>
       <div class="amount-chips" id="amount-chips" role="group" aria-label="Gift amount">
@@ -242,7 +315,7 @@ export function renderGiveLandingHtml(tiers, baseUrl) {
       <div class="amount-error" id="amount-error">Please enter an amount of at least $1.</div>
 
       <a class="cta" id="give-cta" href="${safeBaseUrl}" target="_blank" rel="noopener">
-        <span id="cta-label">Give $${defaultAmount} monthly</span> <span aria-hidden="true">→</span>
+        <span id="cta-label">Give $${defaultAmount}</span> <span aria-hidden="true">→</span>
       </a>
 
       <div class="trust-line">
@@ -250,6 +323,28 @@ export function renderGiveLandingHtml(tiers, baseUrl) {
         <span>Secure, encrypted giving through Tithe.ly. Receipt emailed instantly · tax-deductible · no account required.</span>
       </div>
     </div>
+  </div>
+
+  <div class="ladder-section">
+    <div class="ladder-intro">
+      <div class="ladder-eyebrow">What Your Generosity Makes Possible</div>
+      <div class="ladder-heading">Every level is honorable.</div>
+      <div class="ladder-steps">
+        <div><b>1.</b> Start automated giving if you don't already.</div>
+        <div><b>2.</b> Strengthen your recurring gift by increasing it to the next level.</div>
+        <div><b>3.</b> Sustain the mission through leadership-level gifts that underwrite the ministries the whole congregation depends on.</div>
+      </div>
+    </div>
+    <div class="ladder-table">${ladderRowsHtml}</div>
+  </div>
+
+  <div class="leadership-section">
+    <div class="leadership-intro">
+      <div class="leadership-eyebrow">Bigger Commitments. Bigger Impact.</div>
+      <div class="leadership-heading">What your generosity becomes.</div>
+      <div class="leadership-sub">A child hearing about Jesus. A family receiving hope. A teenager discovering lifelong faith. A teacher serving with confidence. A sanctuary filled with worship. A church whose doors stay open to the neighborhood.</div>
+    </div>
+    <div class="leadership-table">${leadershipRowsHtml}</div>
   </div>
 
   <div class="values-band">${valuesBandHtml}</div>
@@ -261,36 +356,22 @@ export function renderGiveLandingHtml(tiers, baseUrl) {
 
 <script>
   var BASE_URL = ${JSON.stringify(safeBaseUrl)};
-  var LINKS_BY_AMOUNT = ${JSON.stringify(linksByAmount)};
-  var state = { freq: 'monthly', amount: ${JSON.stringify(defaultAmount)} };
+  var LINK_BY_AMOUNT = ${JSON.stringify(linkByAmount)};
+  var state = { amount: ${JSON.stringify(defaultAmount)} };
 
-  function linkFor(freq, amount) {
-    var forAmount = LINKS_BY_AMOUNT[amount];
-    if (!forAmount) return BASE_URL;
-    return (freq === 'monthly' ? forAmount.monthly : forAmount.once) || BASE_URL;
+  function linkFor(amount) {
+    return LINK_BY_AMOUNT[amount] || BASE_URL;
   }
 
   function render() {
-    document.getElementById('freq-monthly').classList.toggle('active', state.freq === 'monthly');
-    document.getElementById('freq-monthly').setAttribute('aria-selected', state.freq === 'monthly');
-    document.getElementById('freq-once').classList.toggle('active', state.freq === 'once');
-    document.getElementById('freq-once').setAttribute('aria-selected', state.freq === 'once');
-    document.getElementById('recur-note').style.display = state.freq === 'monthly' ? 'block' : 'none';
-
     var chips = document.querySelectorAll('#amount-chips .chip');
     chips.forEach(function(c) {
       var isActive = Number(c.getAttribute('data-amount')) === state.amount;
       c.classList.toggle('active', isActive);
     });
 
-    var label = state.freq === 'monthly' ? ('Give $' + state.amount + ' monthly') : ('Give $' + state.amount);
-    document.getElementById('cta-label').textContent = label;
-    document.getElementById('give-cta').href = linkFor(state.freq, state.amount);
-  }
-
-  function setFreq(freq) {
-    state.freq = freq;
-    render();
+    document.getElementById('cta-label').textContent = 'Give $' + state.amount;
+    document.getElementById('give-cta').href = linkFor(state.amount);
   }
 
   function setAmount(amount) {
@@ -310,8 +391,7 @@ export function renderGiveLandingHtml(tiers, baseUrl) {
     // CTA falls back to the base (un-prefilled) giving form.
     state.amount = val;
     document.querySelectorAll('#amount-chips .chip').forEach(function(c) { c.classList.remove('active'); });
-    var label = state.freq === 'monthly' ? ('Give $' + val + ' monthly') : ('Give $' + val);
-    document.getElementById('cta-label').textContent = label;
+    document.getElementById('cta-label').textContent = 'Give $' + val;
     document.getElementById('give-cta').href = BASE_URL;
   }
 
