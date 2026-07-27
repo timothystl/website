@@ -432,7 +432,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-07-17-2'; // bumped: add photo_zoom to staff_members
+    const SCHEMA_VERSION = '2026-07-27-1'; // bumped: add category/active to redirects (Giving Links)
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -469,6 +469,12 @@ export default {
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN secondary_note TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN news_item_ids TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('CREATE TABLE IF NOT EXISTS redirects (path TEXT PRIMARY KEY, url TEXT NOT NULL, label TEXT)').run(); } catch (_) {}
+    // Giving Links (vendor/renter one-off Tithe.ly links): reuses this same table rather
+    // than a new one — a redirect is a redirect. `category` distinguishes them in the admin
+    // UI so they don't get lost in the general-purpose redirect list; `active` lets office
+    // staff retire an old one-off link without losing the audit trail of what it was.
+    try { await env.DB.prepare("ALTER TABLE redirects ADD COLUMN category TEXT NOT NULL DEFAULT 'general'").run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE redirects ADD COLUMN active INTEGER NOT NULL DEFAULT 1').run(); } catch (_) {}
     // Seed a /links redirect now that the stale static public/links/index.html
     // (dead routes, old Breeze giving URL) has been removed — timothystl.org/links
     // should point to the real links.timothystl.org landing page.
@@ -1136,9 +1142,9 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
       });
     }
 
-    // ── PUBLIC: custom redirects API ──
+    // ── PUBLIC: custom redirects API ── only active rows resolve for visitors
     if (path === '/api/redirects' && method === 'GET') {
-      const rows = await env.DB.prepare('SELECT path, url, label FROM redirects ORDER BY path').all();
+      const rows = await env.DB.prepare('SELECT path, url, label FROM redirects WHERE active != 0 ORDER BY path').all();
       return new Response(JSON.stringify({ redirects: rows.results }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
       });
@@ -4499,13 +4505,15 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
       const rPath = (form.get('path') || '').trim().replace(/^\/+/, '').toLowerCase();
       const rUrl  = (form.get('url')  || '').trim();
       const rLabel= (form.get('label')|| '').trim();
+      const rCategory = (form.get('category') || 'general').trim() === 'giving' ? 'giving' : 'general';
+      const rActive = form.get('active') !== null ? 1 : 0;
       if (!rPath || !rUrl) return new Response('', { status: 302, headers: { Location: '/settings?msg=redirect-error' } });
       let parsedProtocol = '';
       try { parsedProtocol = new URL(rUrl).protocol; } catch (_) {}
       if (parsedProtocol !== 'http:' && parsedProtocol !== 'https:') {
         return new Response('', { status: 302, headers: { Location: '/settings?msg=redirect-error' } });
       }
-      await env.DB.prepare('INSERT OR REPLACE INTO redirects (path, url, label) VALUES (?, ?, ?)').bind(rPath, rUrl, rLabel).run();
+      await env.DB.prepare('INSERT OR REPLACE INTO redirects (path, url, label, category, active) VALUES (?, ?, ?, ?, ?)').bind(rPath, rUrl, rLabel, rCategory, rActive).run();
       return new Response('', { status: 302, headers: { Location: '/settings?msg=redirect-added' } });
     }
     if (path === '/redirects/update' && method === 'POST') {
@@ -4514,6 +4522,8 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
       const rPath = (form.get('path') || '').trim().replace(/^\/+/, '').toLowerCase();
       const rUrl  = (form.get('url')  || '').trim();
       const rLabel= (form.get('label')|| '').trim();
+      const rCategory = (form.get('category') || 'general').trim() === 'giving' ? 'giving' : 'general';
+      const rActive = form.get('active') !== null ? 1 : 0;
       if (!rPath || !rUrl) return new Response('', { status: 302, headers: { Location: '/settings?msg=redirect-error' } });
       let parsedProtocol = '';
       try { parsedProtocol = new URL(rUrl).protocol; } catch (_) {}
@@ -4523,7 +4533,7 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
       if (rPath !== originalPath) {
         await env.DB.prepare('DELETE FROM redirects WHERE path = ?').bind(originalPath).run();
       }
-      await env.DB.prepare('INSERT OR REPLACE INTO redirects (path, url, label) VALUES (?, ?, ?)').bind(rPath, rUrl, rLabel).run();
+      await env.DB.prepare('INSERT OR REPLACE INTO redirects (path, url, label, category, active) VALUES (?, ?, ?, ?, ?)').bind(rPath, rUrl, rLabel, rCategory, rActive).run();
       return new Response('', { status: 302, headers: { Location: '/settings?msg=redirect-updated' } });
     }
     if (path.startsWith('/redirects/delete/') && method === 'POST') {
@@ -4629,7 +4639,8 @@ ${sidebarShell('subscribers', currentUser)}
       if (path === '/settings' && method === 'GET') {
         const REDIRECT_KEYS = ['zoom_url', 'councilfiles_url', 'give_url'];
         const settings = await env.DB.prepare(`SELECT key, value, label, hint FROM site_settings WHERE key IN (${REDIRECT_KEYS.map(() => '?').join(',')}) ORDER BY rowid`).bind(...REDIRECT_KEYS).all();
-        const customRedirects = await env.DB.prepare('SELECT path, url, label FROM redirects ORDER BY path').all();
+        const customRedirects = await env.DB.prepare("SELECT path, url, label, category, active FROM redirects WHERE category != 'giving' ORDER BY path").all();
+        const givingLinks = await env.DB.prepare("SELECT path, url, label, category, active FROM redirects WHERE category = 'giving' ORDER BY path").all();
         const msg = url.searchParams.get('msg');
         const alertHtml = msg === 'saved' ? `<div class="alert alert-success">✓ Settings saved.</div>`
           : msg === 'redirect-added'   ? `<div class="alert alert-success">✓ Redirect added.</div>`
@@ -4645,14 +4656,38 @@ ${sidebarShell('subscribers', currentUser)}
           </div>`;
         const redirectFields = settings.results.map(renderField).join('');
 
+        // Hidden category=general + active=1 preserve existing behavior exactly — this
+        // section never had an active toggle before and shouldn't get one now.
         const customRowsHtml = customRedirects.results.length === 0
           ? `<div style="font-size:13px;color:var(--gray);padding:12px 0;">No custom redirects yet.</div>`
           : customRedirects.results.map(r => `
             <form method="POST" action="/redirects/update" style="display:grid;grid-template-columns:1fr 2fr 1fr auto auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
               <input type="hidden" name="original_path" value="${r.path.replace(/"/g,'&quot;')}">
+              <input type="hidden" name="category" value="general">
+              <input type="hidden" name="active" value="1">
               <input type="text" name="path" value="${r.path.replace(/"/g,'&quot;')}" style="font-family:var(--mono,monospace);font-size:13px;">
               <input type="url" name="url" value="${(r.url||'').replace(/"/g,'&quot;')}" style="font-size:13px;">
               <input type="text" name="label" value="${(r.label||'').replace(/"/g,'&quot;')}" placeholder="Label" style="font-size:13px;">
+              <button type="submit" class="btn btn-sm btn-secondary">Save</button>
+              <button type="submit" formaction="/redirects/delete/${encodeURIComponent(r.path)}" formnovalidate class="btn btn-sm btn-danger" onclick="return confirm('Delete /${r.path.replace(/'/g,"\\'")}?')">Delete</button>
+            </form>`).join('');
+
+        // Giving Links: vendor/renter one-off Tithe.ly links (§ discussed with Andrew
+        // 2026-07-27). Same underlying redirects table, category='giving', with a real
+        // Active checkbox so an old one-off can be retired without deleting the row (keeps
+        // the label as a record of what it was for).
+        const givingRowsHtml = givingLinks.results.length === 0
+          ? `<div style="font-size:13px;color:var(--gray);padding:12px 0;">No giving links yet.</div>`
+          : givingLinks.results.map(r => `
+            <form method="POST" action="/redirects/update" style="display:grid;grid-template-columns:1fr 2fr 1.3fr auto auto auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+              <input type="hidden" name="original_path" value="${r.path.replace(/"/g,'&quot;')}">
+              <input type="hidden" name="category" value="giving">
+              <input type="text" name="path" value="${r.path.replace(/"/g,'&quot;')}" style="font-family:var(--mono,monospace);font-size:13px;">
+              <input type="url" name="url" value="${(r.url||'').replace(/"/g,'&quot;')}" style="font-size:13px;">
+              <input type="text" name="label" value="${(r.label||'').replace(/"/g,'&quot;')}" placeholder="e.g. Smith Catering — Fall Festival deposit" style="font-size:13px;">
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--gray);white-space:nowrap;">
+                <input type="checkbox" name="active" value="1" ${r.active ? 'checked' : ''}> Active
+              </label>
               <button type="submit" class="btn btn-sm btn-secondary">Save</button>
               <button type="submit" formaction="/redirects/delete/${encodeURIComponent(r.path)}" formnovalidate class="btn btn-sm btn-danger" onclick="return confirm('Delete /${r.path.replace(/'/g,"\\'")}?')">Delete</button>
             </form>`).join('');
@@ -4696,6 +4731,36 @@ ${sidebarShell('settings', currentUser)}
       </div>
       <div class="btn-row" style="margin-top:12px;">
         <button type="submit" class="btn btn-primary">Add redirect →</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card" style="margin-top:20px;">
+    <div class="card-title">Giving Links</div>
+    <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">One-off links for vendors and renters (e.g. a Christmas Market vendor deposit, a gym rental invoice) — paste in the prefilled link generated from the Tithe.ly dashboard's "Create Custom Link" tool, give it a short slug and a label so you remember what it was for, and share <code>timothystl.org/&lt;slug&gt;</code>. Uncheck Active to retire an old one without deleting the record.</div>
+    ${givingRowsHtml}
+    <form method="POST" action="/redirects/add" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+      <input type="hidden" name="category" value="giving">
+      <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sage);margin-bottom:12px;">Add new giving link</div>
+      <div style="display:grid;grid-template-columns:1fr 2fr 1.3fr auto;gap:12px;align-items:end;">
+        <div class="form-group" style="margin:0;">
+          <label>Slug (no slash)</label>
+          <input type="text" name="path" placeholder="e.g. smith-catering" style="font-family:var(--mono,monospace);">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Tithe.ly link</label>
+          <input type="url" name="url" placeholder="https://give.tithe.ly/?...">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Label</label>
+          <input type="text" name="label" placeholder="e.g. Smith Catering — Fall Festival deposit">
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--charcoal);white-space:nowrap;padding-bottom:10px;">
+          <input type="checkbox" name="active" value="1" checked> Active
+        </label>
+      </div>
+      <div class="btn-row" style="margin-top:12px;">
+        <button type="submit" class="btn btn-primary">Add giving link →</button>
       </div>
     </form>
   </div>

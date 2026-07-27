@@ -2,6 +2,8 @@
 // Handles server-side redirects before falling through to static assets.
 // Custom redirects are fetched from the admin API and cached in memory for 60s.
 
+import { GIVE_LANDING_HTML } from './give-landing.js';
+
 const ERROR_PAGE_HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -131,6 +133,15 @@ export default {
       return new Response(null, {
         status: 301,
         headers: { 'Location': 'https://timothystl.org' + url.pathname + url.search }
+      });
+    }
+
+    // give.timothystl.org — standalone giving landing page, not part of the main SPA.
+    // Same Worker, different hostname (same pattern used in the chms repo for
+    // connect.timothystl.org) — serves one single-purpose page regardless of path.
+    if (url.hostname === 'give.timothystl.org') {
+      return new Response(GIVE_LANDING_HTML, {
+        headers: { 'Content-Type': 'text/html;charset=UTF-8' }
       });
     }
 
