@@ -38,6 +38,26 @@ const PUBLIC_SETTINGS_KEYS = new Set(['zoom_url', 'councilfiles_url', 'give_url'
 const ADMIN_ORIGIN = 'https://admin.timothystl.org';
 const PUBLIC_CROSS_ORIGIN_POSTS = new Set(['/api/contact', '/api/prayer', '/api/subscribe']);
 
+// Real ChMS fund names — read-only, cross-Worker call — shown as suggestions in the
+// Giving tab's Funds card so staff can pick a real fund name instead of retyping one from
+// memory. ChMS's own `funds` table has no Tithe.ly linkage (only a Breeze giving-sync ID),
+// so this only helps get the *name* right; the Tithe.ly fundId still has to be pasted in by
+// hand per fund. Same X-Intake-Key auth pattern already used for the contact/prayer intake
+// calls in site-worker.js. Best-effort: any failure (key not yet configured on this Worker,
+// network error, ChMS down) just means no suggestions are shown — never breaks the page.
+async function getChmsFundSuggestions(env) {
+  const key = env.CHMS_INTAKE_API_KEY || '';
+  if (!key) return [];
+  try {
+    const res = await fetch('https://serve.timothystl.org/api/intake/funds', {
+      headers: { 'X-Intake-Key': key }
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data.funds) ? data.funds : [];
+  } catch (_) { return []; }
+}
+
 // Shared by the immediate-send and schedule-send routes: loads a saved
 // newsletter's content and renders it to the same email HTML both paths send.
 async function buildNewsletterEmailPayload(env, id) {
@@ -4960,6 +4980,15 @@ ${sidebarShell('settings', currentUser)}
       const tiers = await env.DB.prepare('SELECT * FROM give_amount_tiers ORDER BY sort_order').all();
       const funds = await env.DB.prepare('SELECT * FROM give_funds ORDER BY sort_order').all();
       const givingLinks = await env.DB.prepare("SELECT path, url, label, category, active FROM redirects WHERE category = 'giving' ORDER BY path").all();
+      const chmsFunds = await getChmsFundSuggestions(env);
+      const existingFundNames = new Set(funds.results.map(f => (f.name || '').trim().toLowerCase()));
+      const chmsSuggestionsHtml = chmsFunds.length === 0 ? '' : `
+        <div style="font-size:12px;color:var(--gray);margin:14px 0 6px;">
+          Real fund names from ChMS — click one to use it below:
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+          ${chmsFunds.map(f => `<button type="button" class="btn btn-sm" style="background:var(--mist);color:var(--steel);${existingFundNames.has((f.name||'').trim().toLowerCase()) ? 'opacity:.45;' : ''}" data-fund-name="${escapeHtml(f.name || '')}" onclick="document.querySelector('form[action=\\'/giving-funds/add\\'] input[name=name]').value=this.dataset.fundName">${escapeHtml(f.name || '')}</button>`).join('')}
+        </div>`;
       const msg = url.searchParams.get('msg');
       const alertHtml = msg === 'giving-saved'   ? `<div class="alert alert-success">✓ Saved.</div>`
         : msg === 'giving-added'   ? `<div class="alert alert-success">✓ Added.</div>`
@@ -5078,6 +5107,7 @@ ${sidebarShell('giving', currentUser)}
     ${fundRowsHtml}
     <form method="POST" action="/giving-funds/add" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
       <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sage);margin-bottom:12px;">Add new fund</div>
+      ${chmsSuggestionsHtml}
       <div style="display:grid;grid-template-columns:1.4fr 1.6fr auto auto;gap:12px;align-items:end;">
         <div class="form-group" style="margin:0;">
           <label>Fund name</label>

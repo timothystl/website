@@ -192,12 +192,26 @@ code (`give-landing.js` in this repo) or scattered under Redirects:
   from the separately admin-editable amount-chip tiers above.
 - **Funds** (`give_funds` D1 table, added 2026-07-27) — a "Give to" dropdown on
   give.timothystl.org's main widget (hidden entirely if only one fund exists). Each fund
-  has its own Tithe.ly `fundId` — deliberately **not** pulled from ChMS's own `funds` table,
-  since that table has no Tithe.ly linkage at all (only a `breeze_id`, for its own Breeze
-  giving-sync), so a live cross-app fetch would still need each fund's Tithe.ly ID entered
-  by hand here regardless. A blank `tithely_fund_id` means "use whatever fund is already in
-  the Base Tithe.ly Link" (the normal setup for a plain "General Fund" row). Switching funds
-  client-side recomputes every amount's link (chips + custom "other amount") to use the
+  has its own Tithe.ly `fundId`, entered by hand — ChMS's own `funds` table has no Tithe.ly
+  linkage at all (only a `breeze_id`, for its own Breeze giving-sync), so even a live
+  cross-app fetch can't supply the Tithe.ly ID, only the fund *name*. The "Add new fund"
+  form on this tab does that name lookup for real (added 2026-07-27): a new
+  `getChmsFundSuggestions(env)` calls `GET https://serve.timothystl.org/api/intake/funds`
+  (chms repo's read-only `/api/intake/funds` endpoint, same `X-Intake-Key`/
+  `CHMS_INTAKE_API_KEY` auth as the existing contact/prayer intake calls) and renders each
+  active ChMS fund name as a click-to-fill suggestion chip above the name field — clicking
+  one just fills the text input, nothing is auto-created. Fund names already present in
+  `give_funds` are shown dimmed rather than hidden, since the same name legitimately existing
+  in both apps isn't an error. Best-effort only: if `CHMS_INTAKE_API_KEY` isn't yet set on
+  this Worker, or ChMS is unreachable, the suggestions row is simply omitted — the manual
+  "type the name yourself" path is unaffected. **Requires a manual step outside this repo**:
+  `CHMS_INTAKE_API_KEY` must be set as a secret on this Worker
+  (`wrangler secret put CHMS_INTAKE_API_KEY --name tlc-newsletter-admin`, using the exact
+  same value already configured on the chms repo's Worker) — it isn't there today, since this
+  Worker never called out to ChMS before this feature. A blank `tithely_fund_id` means "use
+  whatever fund is already in the Base Tithe.ly Link" (the normal setup for a plain "General
+  Fund" row). Switching funds client-side recomputes every amount's link (chips + custom
+  "other amount") to use the
   selected fund's ID instead — the ministry-ladder and leadership-giving sections are
   unaffected by the selector and always use the default fund, since those are separate,
   narratively-specific asks rather than a generic amount+fund combo.
