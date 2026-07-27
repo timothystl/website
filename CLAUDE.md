@@ -158,23 +158,32 @@ Extend current `tlc-admin-worker.js` with new tabs:
 Consolidates everything related to giving/payment links, previously either hardcoded in
 code (`give-landing.js` in this repo) or scattered under Redirects:
 - **Base Tithe.ly Link** — the `give_url` site setting (unchanged storage, just moved its
-  edit field here from the old "Built-in Redirects" card) — the fallback link used
-  whenever a specific amount tier below has no dedicated link.
+  edit field here from the old "Built-in Redirects" card) — expected to hold `formId` +
+  `locationId` + `fundId` but **not** `amount`. Correction 2026-07-27: Tithe.ly *does*
+  support prefilling the gift amount, confirmed against a real generated link
+  (`...&amount=2500` for a $25 gift — amount is in **cents**) — this supersedes the earlier
+  assumption (based on generic help-doc search results, not a real link) that a distinct
+  pre-made link was needed per amount/frequency. `give-landing.js`'s `withAmount()` appends
+  `&amount=<cents>` to this base link for whichever amount is selected or typed (including a
+  custom "other amount"), computed on the fly — no per-tier link management needed for the
+  normal case.
 - **Amount Tiers** (`give_amount_tiers` D1 table) — the chip amounts on
-  `give.timothystl.org`, each with an optional Tithe.ly link (blank = fall back to the base
-  link) and a Default flag for which chip is pre-selected on page load. One link per tier,
-  not a Monthly/One-time pair — Tithe.ly has no way to generate a link that prefills
-  specifically as recurring vs. one-time (confirmed 2026-07-27), so the frequency toggle
-  originally built into the page was removed; the giver picks frequency on Tithe.ly's own
-  page. `site-worker.js` fetches active tiers from `GET /api/give-amounts` (same
-  fetch-and-cache pattern as the existing `/api/redirects`) when rendering the giving page;
-  a hardcoded fallback in `give-landing.js` is used only if `admin.timothystl.org` is
-  unreachable. The page also has two static (non-admin-editable) content sections below the
-  chip picker: a "What Your Generosity Makes Possible" ministry ladder ($30–$250/month,
-  each tied to a concrete outcome) and a "Bigger Commitments. Bigger Impact." leadership-
-  giving section ($5,000–$18,000/year, each with its own direct Give button) — both are
-  real copy from Andrew, hardcoded in `give-landing.js` rather than data-driven, since
-  they're narrative content rather than simple amount/link pairs.
+  `give.timothystl.org`, each with a Default flag for which chip is pre-selected on page
+  load, and an optional `url` override (blank in the normal case — the link is auto-built
+  from the base link + amount above; only set if a specific tier should go somewhere else
+  entirely, e.g. a different fund). One link concept per tier, not a Monthly/One-time pair —
+  Tithe.ly has no way to prefill a link as specifically recurring vs. one-time, so the
+  frequency toggle originally built into the page was removed (2026-07-27); the giver picks
+  frequency on Tithe.ly's own page. `site-worker.js` fetches active tiers from
+  `GET /api/give-amounts` (same fetch-and-cache pattern as the existing `/api/redirects`)
+  when rendering the giving page; a hardcoded fallback in `give-landing.js` is used only if
+  `admin.timothystl.org` is unreachable. The page also has two static (non-admin-editable)
+  content sections below the chip picker, each amount also auto-linked via the same
+  `withAmount()` mechanism: a "What Your Generosity Makes Possible" ministry ladder
+  ($30–$250/month, each tied to a concrete outcome) and a "Bigger Commitments. Bigger
+  Impact." leadership-giving section ($5,000–$18,000/year, each with its own direct Give
+  button) — both are real copy from Andrew, hardcoded in `give-landing.js` rather than
+  data-driven, since they're narrative content rather than simple amount/link pairs.
 - **Vendor / Market Links** — one-off payment links (e.g. a Christmas Market vendor
   deposit) — same underlying `redirects` table/`category='giving'` rows as before, just
   relocated here. URL-agnostic: works for a Tithe.ly custom link or a Square Checkout link

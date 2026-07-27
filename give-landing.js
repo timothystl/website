@@ -13,11 +13,16 @@
 // picks frequency on Tithe.ly's own page.
 //
 // ── Tithe.ly linking ────────────────────────────────────────────────────────────────
-// Amount tiers and the base link are admin-editable (admin.timothystl.org → Giving tab,
-// `give_amount_tiers` table + `give_url` setting) rather than hardcoded here —
-// site-worker.js fetches them and passes them into renderGiveLandingHtml() below. Any tier
-// with no dedicated link falls back to the base link, so the CTA is always a real, working
-// Tithe.ly page even for amounts that haven't been given their own prefilled link yet.
+// Correction, 2026-07-27: Tithe.ly DOES support prefilling the gift amount — confirmed
+// against a real link Andrew generated (`?formId=...&locationId=...&fundId=...&amount=2500`
+// for a $25 gift — amount is in CENTS). This supersedes the earlier assumption (based on
+// generic Tithe.ly help-doc search results, not a real generated link) that a distinct link
+// had to be pre-made per amount. Now: the base link (`give_url` setting) is expected to
+// hold everything EXCEPT amount — formId + locationId + fundId — and `withAmount()` below
+// appends `&amount=<cents>` for whatever amount is selected/typed, computed on the fly. A
+// tier's optional `url` field becomes a full override (e.g. to send one specific tier to a
+// different fund entirely) rather than the normal case — the normal case now needs no
+// per-tier link management at all.
 
 // Used only if the admin API is unreachable when site-worker.js builds the page, so the
 // giving page never breaks outright. Matches the ministry-ladder amounts Andrew provided
@@ -66,6 +71,23 @@ const LEADERSHIP_TIERS = [
 
 const fmtAmount = n => n.toLocaleString('en-US');
 
+// Appends Tithe.ly's amount param (cents) to a base link that already carries
+// formId/locationId/fundId. Robust to a base link with or without existing query params,
+// and to one that may (incorrectly) already have its own amount= — this always wins.
+function withAmount(baseUrl, amountDollars) {
+  const cents = Math.round(amountDollars * 100);
+  try {
+    const u = new URL(baseUrl);
+    u.searchParams.set('amount', String(cents));
+    return u.toString();
+  } catch {
+    // baseUrl isn't a valid absolute URL (shouldn't happen — validated on save) — best
+    // effort rather than throwing on a public page.
+    const sep = baseUrl.includes('?') ? '&' : '?';
+    return `${baseUrl}${sep}amount=${cents}`;
+  }
+}
+
 // tiers: [{amount, url, isDefault}], baseUrl: string
 export function renderGiveLandingHtml(tiers, baseUrl) {
   const safeTiers = Array.isArray(tiers) && tiers.length ? tiers : FALLBACK_TIERS;
@@ -73,10 +95,11 @@ export function renderGiveLandingHtml(tiers, baseUrl) {
   const defaultTier = safeTiers.find(t => t.isDefault) || safeTiers[0];
   const defaultAmount = defaultTier.amount;
 
-  // Lookup table keyed by amount, falling back to the base link — same fallback semantics
-  // as the original build, just one link per amount instead of a monthly/once pair.
+  // Lookup table keyed by amount. A tier's own `url` (if set) is a full override — used
+  // as-is, no amount appended, e.g. for a tier that should go to a different fund entirely.
+  // Otherwise the base link gets `&amount=<cents>` appended for this specific tier.
   const linkByAmount = {};
-  for (const t of safeTiers) linkByAmount[t.amount] = t.url || safeBaseUrl;
+  for (const t of safeTiers) linkByAmount[t.amount] = t.url || withAmount(safeBaseUrl, t.amount);
 
   const ladderRowsHtml = MINISTRY_LADDER.map(row => `
     <div class="ladder-row">
@@ -90,7 +113,7 @@ export function renderGiveLandingHtml(tiers, baseUrl) {
         <div class="leadership-amount">$${fmtAmount(row.amount)}<span class="leadership-period">/year</span></div>
         <div class="leadership-outcome">${row.outcome}</div>
       </div>
-      <a class="leadership-cta" href="${safeBaseUrl}" target="_blank" rel="noopener">Give $${fmtAmount(row.amount)} →</a>
+      <a class="leadership-cta" href="${withAmount(safeBaseUrl, row.amount)}" target="_blank" rel="noopener">Give $${fmtAmount(row.amount)} →</a>
     </div>`).join('');
 
   return `<!DOCTYPE html>
@@ -359,8 +382,23 @@ export function renderGiveLandingHtml(tiers, baseUrl) {
   var LINK_BY_AMOUNT = ${JSON.stringify(linkByAmount)};
   var state = { amount: ${JSON.stringify(defaultAmount)} };
 
+  // Client-side mirror of the server's withAmount() — Tithe.ly prefills the gift amount
+  // via a plain ?amount=<cents> query param appended to the base formId/locationId/fundId
+  // link, so a typed "other amount" can be prefilled too, not just the fixed chip tiers.
+  function withAmount(baseUrl, amountDollars) {
+    var cents = Math.round(amountDollars * 100);
+    try {
+      var u = new URL(baseUrl);
+      u.searchParams.set('amount', String(cents));
+      return u.toString();
+    } catch (e) {
+      var sep = baseUrl.indexOf('?') === -1 ? '?' : '&';
+      return baseUrl + sep + 'amount=' + cents;
+    }
+  }
+
   function linkFor(amount) {
-    return LINK_BY_AMOUNT[amount] || BASE_URL;
+    return LINK_BY_AMOUNT[amount] || withAmount(BASE_URL, amount);
   }
 
   function render() {
@@ -387,12 +425,12 @@ export function renderGiveLandingHtml(tiers, baseUrl) {
     if (!input.value) { errEl.classList.remove('show'); return; }
     if (!val || val < 1) { errEl.classList.add('show'); return; }
     errEl.classList.remove('show');
-    // Clear chip selection — a custom amount has no pre-generated Tithe.ly link, so the
-    // CTA falls back to the base (un-prefilled) giving form.
+    // Clear chip selection, but a custom amount now gets its own prefilled link too —
+    // Tithe.ly's amount param works for any figure, not just the fixed tiers.
     state.amount = val;
     document.querySelectorAll('#amount-chips .chip').forEach(function(c) { c.classList.remove('active'); });
     document.getElementById('cta-label').textContent = 'Give $' + val;
-    document.getElementById('give-cta').href = BASE_URL;
+    document.getElementById('give-cta').href = withAmount(BASE_URL, val);
   }
 
   render();

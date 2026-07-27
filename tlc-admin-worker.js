@@ -4903,7 +4903,7 @@ ${sidebarShell('settings', currentUser)}
               <span style="font-family:var(--mono,monospace);font-size:13px;color:var(--gray);">$</span>
               <input type="number" name="amount" min="1" value="${t.amount}" style="font-family:var(--mono,monospace);font-size:13px;">
             </div>
-            <input type="url" name="url" value="${(t.url||'').replace(/"/g,'&quot;')}" placeholder="Tithe.ly link (blank = base link)" style="font-size:12px;">
+            <input type="url" name="url" value="${(t.url||'').replace(/"/g,'&quot;')}" placeholder="Override link (blank = auto-built from base link)" style="font-size:12px;">
             <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--gray);white-space:nowrap;">
               <input type="checkbox" name="is_default" value="1" ${t.is_default ? 'checked' : ''}> Default
             </label>
@@ -4940,9 +4940,9 @@ ${sidebarShell('giving', currentUser)}
   <form method="POST" action="/giving/base-url">
     <div class="card">
       <div class="card-title">Base Tithe.ly Link</div>
-      <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">The default giving link — used on give.timothystl.org whenever an amount tier below has no dedicated link of its own (including a custom "other amount"), and on the main site's /give page.</div>
+      <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">The give.timothystl.org page and the main site's /give page both build off this link — it should include <code>formId</code>, <code>locationId</code>, and <code>fundId</code> but <strong>not</strong> an <code>amount</code> (the page appends the right amount automatically, in cents, for whichever tier is selected — confirmed against a real Tithe.ly link: <code>...&amount=2500</code> for a $25 gift). Get this from a link Tithe.ly generates for General Fund giving, then strip off the trailing <code>&amp;amount=...</code> before pasting it here.</div>
       <div class="form-group">
-        <label>Tithe.ly giving form URL</label>
+        <label>Tithe.ly giving form URL (no amount param)</label>
         <input type="url" name="give_url" value="${(baseUrlRow?.value||'').replace(/"/g,'&quot;')}" style="font-family:var(--mono,monospace);font-size:13px;">
       </div>
       <div class="btn-row" style="margin-top:4px;">
@@ -4953,7 +4953,7 @@ ${sidebarShell('giving', currentUser)}
 
   <div class="card" style="margin-top:20px;">
     <div class="card-title">Amount Tiers</div>
-    <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">The chip amounts shown on give.timothystl.org. Leave a Tithe.ly link blank to fall back to the base link above for that amount. To generate a prefilled link: Tithe.ly dashboard → Giving Form → Create Custom Link. (Tithe.ly has no way to prefill a link as specifically recurring vs. one-time, so each tier has just one link — the giver picks frequency on Tithe.ly's own page.)</div>
+    <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">The chip amounts shown on give.timothystl.org. Each one automatically gets a Tithe.ly link built from the Base Tithe.ly Link above with the right amount appended — <strong>you don't need to generate or paste a link per tier.</strong> The optional link field below is only for the rare case where a specific tier should go somewhere else entirely (a different fund, a different form) — leave it blank for the normal case.</div>
     ${tierRowsHtml}
     <form method="POST" action="/giving-tiers/add" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
       <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sage);margin-bottom:12px;">Add new tier</div>
@@ -4963,8 +4963,8 @@ ${sidebarShell('giving', currentUser)}
           <input type="number" name="amount" min="1" placeholder="e.g. 100" style="font-family:var(--mono,monospace);">
         </div>
         <div class="form-group" style="margin:0;">
-          <label>Tithe.ly link (optional)</label>
-          <input type="url" name="url" placeholder="https://give.tithe.ly/?...">
+          <label>Override link (optional)</label>
+          <input type="url" name="url" placeholder="Leave blank — usually not needed">
         </div>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--charcoal);white-space:nowrap;padding-bottom:10px;">
           <input type="checkbox" name="is_default"> Default
