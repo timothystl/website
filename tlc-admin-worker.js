@@ -432,7 +432,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-07-27-2'; // bumped: add give_amount_tiers table (Giving tab)
+    const SCHEMA_VERSION = '2026-07-27-3'; // bumped: collapse give_amount_tiers monthly_url/once_url into one url column
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -477,8 +477,8 @@ export default {
     try { await env.DB.prepare('ALTER TABLE redirects ADD COLUMN active INTEGER NOT NULL DEFAULT 1').run(); } catch (_) {}
     // Giving tab: admin-editable amount tiers for give.timothystl.org (added 2026-07-27,
     // replacing the amounts/links that were previously hardcoded in the website repo's
-    // give-landing.js). Blank monthly_url/once_url means "fall back to the base give_url
-    // setting" — same fallback semantics the hardcoded version always had.
+    // give-landing.js). Blank url means "fall back to the base give_url setting" — same
+    // fallback semantics the hardcoded version always had.
     try {
       await env.DB.prepare(`CREATE TABLE IF NOT EXISTS give_amount_tiers (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -490,15 +490,24 @@ export default {
         active INTEGER NOT NULL DEFAULT 1
       )`).run();
     } catch (_) {}
-    // Seed once from the amounts that were hardcoded in give-landing.js — idempotent via
-    // a row-count guard so re-running this on every request doesn't duplicate seed rows.
+    // Collapsed the original monthly_url/once_url split into a single url column — Tithe.ly
+    // has no way to generate a link that prefills specifically as recurring vs one-time, so
+    // the distinction never did anything real. Left the two old columns in place (unused)
+    // rather than DROP COLUMN, since D1/SQLite's DROP COLUMN support is inconsistent; any
+    // link an admin had already entered under monthly_url carries forward automatically.
+    try { await env.DB.prepare("ALTER TABLE give_amount_tiers ADD COLUMN url TEXT NOT NULL DEFAULT ''").run(); } catch (_) {}
+    try { await env.DB.prepare("UPDATE give_amount_tiers SET url = monthly_url WHERE url = '' AND monthly_url != ''").run(); } catch (_) {}
+    // Seed once from the ladder amounts Andrew provided 2026-07-27 — idempotent via a
+    // row-count guard so re-running this on every request doesn't duplicate seed rows. Only
+    // affects a fresh/never-seeded database; does not touch an already-seeded live table
+    // (edit tiers via the Giving tab itself for that).
     try {
       const tierCount = await env.DB.prepare('SELECT COUNT(*) as c FROM give_amount_tiers').first();
       if (!tierCount || tierCount.c === 0) {
-        const seedTiers = [25, 40, 75, 150, 300, 500];
+        const seedTiers = [30, 50, 75, 90, 150, 250];
         for (let i = 0; i < seedTiers.length; i++) {
           await env.DB.prepare('INSERT INTO give_amount_tiers (amount, is_default, sort_order) VALUES (?, ?, ?)')
-            .bind(seedTiers[i], seedTiers[i] === 40 ? 1 : 0, i).run();
+            .bind(seedTiers[i], seedTiers[i] === 50 ? 1 : 0, i).run();
         }
       }
     } catch (_) {}
@@ -1191,11 +1200,10 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
     // as /api/redirects above). The base Tithe.ly link is fetched separately via the
     // existing /api/settings/give_url endpoint below — not duplicated here.
     if (path === '/api/give-amounts' && method === 'GET') {
-      const rows = await env.DB.prepare('SELECT amount, monthly_url, once_url, is_default FROM give_amount_tiers WHERE active != 0 ORDER BY sort_order').all();
+      const rows = await env.DB.prepare('SELECT amount, url, is_default FROM give_amount_tiers WHERE active != 0 ORDER BY sort_order').all();
       const tiers = rows.results.map(r => ({
         amount: r.amount,
-        monthlyUrl: r.monthly_url || '',
-        onceUrl: r.once_url || '',
+        url: r.url || '',
         isDefault: !!r.is_default,
       }));
       return new Response(JSON.stringify({ tiers }), {
@@ -4832,42 +4840,38 @@ ${sidebarShell('settings', currentUser)}
     if (path === '/giving-tiers/add' && method === 'POST') {
       const form = await request.formData();
       const amount = parseInt(form.get('amount'), 10);
-      const monthlyUrl = (form.get('monthly_url') || '').trim();
-      const onceUrl = (form.get('once_url') || '').trim();
+      const tierUrl = (form.get('url') || '').trim();
       const isDefault = form.get('is_default') !== null ? 1 : 0;
       const active = form.get('active') !== null ? 1 : 0;
       if (!amount || amount < 1) return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-error' } });
-      for (const u of [monthlyUrl, onceUrl]) {
-        if (!u) continue;
+      if (tierUrl) {
         let proto = '';
-        try { proto = new URL(u).protocol; } catch (_) {}
+        try { proto = new URL(tierUrl).protocol; } catch (_) {}
         if (proto !== 'http:' && proto !== 'https:') return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-error' } });
       }
       if (isDefault) await env.DB.prepare('UPDATE give_amount_tiers SET is_default = 0').run();
       const maxSort = await env.DB.prepare('SELECT MAX(sort_order) as m FROM give_amount_tiers').first();
       const sortOrder = (maxSort?.m ?? -1) + 1;
-      await env.DB.prepare('INSERT INTO give_amount_tiers (amount, monthly_url, once_url, is_default, active, sort_order) VALUES (?, ?, ?, ?, ?, ?)')
-        .bind(amount, monthlyUrl, onceUrl, isDefault, active, sortOrder).run();
+      await env.DB.prepare('INSERT INTO give_amount_tiers (amount, url, is_default, active, sort_order) VALUES (?, ?, ?, ?, ?)')
+        .bind(amount, tierUrl, isDefault, active, sortOrder).run();
       return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-added' } });
     }
     if (path === '/giving-tiers/update' && method === 'POST') {
       const form = await request.formData();
       const id = parseInt(form.get('id'), 10);
       const amount = parseInt(form.get('amount'), 10);
-      const monthlyUrl = (form.get('monthly_url') || '').trim();
-      const onceUrl = (form.get('once_url') || '').trim();
+      const tierUrl = (form.get('url') || '').trim();
       const isDefault = form.get('is_default') !== null ? 1 : 0;
       const active = form.get('active') !== null ? 1 : 0;
       if (!id || !amount || amount < 1) return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-error' } });
-      for (const u of [monthlyUrl, onceUrl]) {
-        if (!u) continue;
+      if (tierUrl) {
         let proto = '';
-        try { proto = new URL(u).protocol; } catch (_) {}
+        try { proto = new URL(tierUrl).protocol; } catch (_) {}
         if (proto !== 'http:' && proto !== 'https:') return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-error' } });
       }
       if (isDefault) await env.DB.prepare('UPDATE give_amount_tiers SET is_default = 0 WHERE id != ?').bind(id).run();
-      await env.DB.prepare('UPDATE give_amount_tiers SET amount = ?, monthly_url = ?, once_url = ?, is_default = ?, active = ? WHERE id = ?')
-        .bind(amount, monthlyUrl, onceUrl, isDefault, active, id).run();
+      await env.DB.prepare('UPDATE give_amount_tiers SET amount = ?, url = ?, is_default = ?, active = ? WHERE id = ?')
+        .bind(amount, tierUrl, isDefault, active, id).run();
       return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-updated' } });
     }
     if (path.startsWith('/giving-tiers/delete/') && method === 'POST') {
@@ -4893,14 +4897,13 @@ ${sidebarShell('settings', currentUser)}
       const tierRowsHtml = tiers.results.length === 0
         ? `<div style="font-size:13px;color:var(--gray);padding:12px 0;">No amount tiers yet — the give.timothystl.org page falls back to the base Tithe.ly link below for every amount.</div>`
         : tiers.results.map(t => `
-          <form method="POST" action="/giving-tiers/update" style="display:grid;grid-template-columns:.7fr 1.6fr 1.6fr auto auto auto auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+          <form method="POST" action="/giving-tiers/update" style="display:grid;grid-template-columns:.7fr 2.4fr auto auto auto auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
             <input type="hidden" name="id" value="${t.id}">
             <div style="display:flex;align-items:center;gap:4px;">
               <span style="font-family:var(--mono,monospace);font-size:13px;color:var(--gray);">$</span>
               <input type="number" name="amount" min="1" value="${t.amount}" style="font-family:var(--mono,monospace);font-size:13px;">
             </div>
-            <input type="url" name="monthly_url" value="${(t.monthly_url||'').replace(/"/g,'&quot;')}" placeholder="Monthly Tithe.ly link (blank = base link)" style="font-size:12px;">
-            <input type="url" name="once_url" value="${(t.once_url||'').replace(/"/g,'&quot;')}" placeholder="One-time Tithe.ly link (blank = base link)" style="font-size:12px;">
+            <input type="url" name="url" value="${(t.url||'').replace(/"/g,'&quot;')}" placeholder="Tithe.ly link (blank = base link)" style="font-size:12px;">
             <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--gray);white-space:nowrap;">
               <input type="checkbox" name="is_default" value="1" ${t.is_default ? 'checked' : ''}> Default
             </label>
@@ -4950,22 +4953,18 @@ ${sidebarShell('giving', currentUser)}
 
   <div class="card" style="margin-top:20px;">
     <div class="card-title">Amount Tiers</div>
-    <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">The chip amounts shown on give.timothystl.org. Leave a Tithe.ly link blank to fall back to the base link above for that amount/frequency. To generate a prefilled link: Tithe.ly dashboard → Giving Form → Create Custom Link.</div>
+    <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">The chip amounts shown on give.timothystl.org. Leave a Tithe.ly link blank to fall back to the base link above for that amount. To generate a prefilled link: Tithe.ly dashboard → Giving Form → Create Custom Link. (Tithe.ly has no way to prefill a link as specifically recurring vs. one-time, so each tier has just one link — the giver picks frequency on Tithe.ly's own page.)</div>
     ${tierRowsHtml}
     <form method="POST" action="/giving-tiers/add" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
       <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sage);margin-bottom:12px;">Add new tier</div>
-      <div style="display:grid;grid-template-columns:.7fr 1.6fr 1.6fr auto auto;gap:12px;align-items:end;">
+      <div style="display:grid;grid-template-columns:.7fr 2.4fr auto auto;gap:12px;align-items:end;">
         <div class="form-group" style="margin:0;">
           <label>Amount ($)</label>
           <input type="number" name="amount" min="1" placeholder="e.g. 100" style="font-family:var(--mono,monospace);">
         </div>
         <div class="form-group" style="margin:0;">
-          <label>Monthly link (optional)</label>
-          <input type="url" name="monthly_url" placeholder="https://give.tithe.ly/?...">
-        </div>
-        <div class="form-group" style="margin:0;">
-          <label>One-time link (optional)</label>
-          <input type="url" name="once_url" placeholder="https://give.tithe.ly/?...">
+          <label>Tithe.ly link (optional)</label>
+          <input type="url" name="url" placeholder="https://give.tithe.ly/?...">
         </div>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--charcoal);white-space:nowrap;padding-bottom:10px;">
           <input type="checkbox" name="is_default"> Default

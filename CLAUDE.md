@@ -161,11 +161,20 @@ code (`give-landing.js` in this repo) or scattered under Redirects:
   edit field here from the old "Built-in Redirects" card) — the fallback link used
   whenever a specific amount tier below has no dedicated link.
 - **Amount Tiers** (`give_amount_tiers` D1 table) — the chip amounts on
-  `give.timothystl.org`, each with optional Monthly/One-time Tithe.ly links (blank = fall
-  back to the base link) and a Default flag for which chip is pre-selected on page load.
-  `site-worker.js` fetches active tiers from `GET /api/give-amounts` (same fetch-and-cache
-  pattern as the existing `/api/redirects`) when rendering the giving page; a hardcoded
-  fallback in `give-landing.js` is used only if `admin.timothystl.org` is unreachable.
+  `give.timothystl.org`, each with an optional Tithe.ly link (blank = fall back to the base
+  link) and a Default flag for which chip is pre-selected on page load. One link per tier,
+  not a Monthly/One-time pair — Tithe.ly has no way to generate a link that prefills
+  specifically as recurring vs. one-time (confirmed 2026-07-27), so the frequency toggle
+  originally built into the page was removed; the giver picks frequency on Tithe.ly's own
+  page. `site-worker.js` fetches active tiers from `GET /api/give-amounts` (same
+  fetch-and-cache pattern as the existing `/api/redirects`) when rendering the giving page;
+  a hardcoded fallback in `give-landing.js` is used only if `admin.timothystl.org` is
+  unreachable. The page also has two static (non-admin-editable) content sections below the
+  chip picker: a "What Your Generosity Makes Possible" ministry ladder ($30–$250/month,
+  each tied to a concrete outcome) and a "Bigger Commitments. Bigger Impact." leadership-
+  giving section ($5,000–$18,000/year, each with its own direct Give button) — both are
+  real copy from Andrew, hardcoded in `give-landing.js` rather than data-driven, since
+  they're narrative content rather than simple amount/link pairs.
 - **Vendor / Market Links** — one-off payment links (e.g. a Christmas Market vendor
   deposit) — same underlying `redirects` table/`category='giving'` rows as before, just
   relocated here. URL-agnostic: works for a Tithe.ly custom link or a Square Checkout link
