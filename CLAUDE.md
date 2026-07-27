@@ -445,6 +445,29 @@ the live DB. The format is a date plus a counter, e.g. `2026-05-20-1`.
 
 ---
 
+## CRITICAL: `wrangler-site.toml` needs `run_worker_first = true`
+
+Found 2026-07-27 while adding `give.timothystl.org`: without `run_worker_first = true`
+under `[assets]`, Cloudflare serves a matching static asset directly at the edge and
+**never invokes `site-worker.js`'s fetch handler at all** for that request. Since `/`
+conventionally maps straight to `public/index.html` as a literal asset match, this means
+`give.timothystl.org/` (and any other hostname bound to this Worker) was silently served
+the plain homepage instead of running the Worker's own hostname-branching logic — no
+error, no log, it just quietly returns the wrong page. This almost certainly also meant
+the documented `www` → apex redirect above was never actually firing for the bare root
+path either (subtler to notice, since the *content* still looked right, just from the
+wrong canonical hostname). Fixed by setting `run_worker_first = true` in
+`wrangler-site.toml`, which forces the Worker script to run first for every request; it
+still calls `env.ASSETS.fetch(request)` itself when it wants to fall through to a static
+asset, so normal site behavior is unchanged — only now every request, including `/`, on
+every hostname actually reaches the Worker's own logic first. **If a future hostname
+check or redirect in `site-worker.js` seems to silently not fire in production despite
+looking correct in code, check this setting first** — a local Node harness calling
+`worker.fetch()` directly (as used to "verify" changes to this file) cannot catch this
+class of bug, since it bypasses Cloudflare's edge asset-routing behavior entirely.
+
+---
+
 ## Decisions Made (Do Not Re-litigate)
 
 - Cloudflare Workers (not Netlify, Vercel, etc.) — already deployed and working
