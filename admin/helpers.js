@@ -4,7 +4,7 @@
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, hasPermission } from './auth.js';
 
-export const VERSION = 'v1.87.0'; // minor bump: Giving tab Funds card now suggests real ChMS fund names via cross-Worker lookup
+export const VERSION = 'v1.87.1'; // minor bump: Giving tab Funds card now suggests real ChMS fund names via cross-Worker lookup
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
