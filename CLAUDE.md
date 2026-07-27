@@ -40,7 +40,7 @@ ChMS", changed 2026-07-20 from separate "Scheduler"/"Volunteer Admin" links)
 points staff there.
 
 ### Databases (Cloudflare D1)
-- `tlc-newsletter-db` — tables: `newsletters`, `events`, `news_items`, `youth_pages`, `ministry_posts`, `sermon_series`, `sermon_notes`, `notices`, `staff_members`, `bible_classes`, `link_cards`, `gym_*`, `users`, `sessions`, `audit_log`, and more — see the `DB_INIT_*` constants in `admin/db.js` for the full current schema
+- `tlc-newsletter-db` — tables: `newsletters`, `events`, `news_items`, `youth_pages`, `ministry_posts`, `sermon_series`, `sermon_notes`, `notices`, `staff_members`, `bible_classes`, `link_cards`, `gym_*`, `users`, `sessions`, `audit_log`, `redirects` (`category`='giving' rows are vendor/market payment links, managed under the Giving tab), `give_amount_tiers` (admin-editable amount chips + per-tier Tithe.ly links for give.timothystl.org), and more — see the `DB_INIT_*` constants in `admin/db.js` for the full current schema
 - `tlc-volunteer-db` — tables: `serve_events`, `serve_roles`, `signups`, `signup_slots`
 - `RSVP_STORE` — Cloudflare KV namespace
 
@@ -148,10 +148,35 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Gym Rentals | Office staff (Dinger) | **DONE** — full rental management at /gym-rentals |
 | Users | Admins | **DONE** — user accounts + per-tab permission checkboxes |
 | Subscribers | Office staff | **DONE** — newsletter subscriber list |
-| Redirects | Office staff | **DONE** — admin-managed URL redirects + Zoom/council-files links (renamed from "Settings"; gym rate config now lives under Gym Rentals) |
+| Redirects | Office staff | **DONE** — admin-managed URL redirects + Zoom/council-files links (renamed from "Settings"; gym rate config lives under Gym Rentals, giving-related links moved to the new Giving tab) |
+| Giving | Office staff — requires `giving_manage` permission | **DONE** (2026-07-27) — base Tithe.ly link, give.timothystl.org's amount tiers + per-tier links, and vendor/market one-off payment links (Tithe.ly or Square); see below |
 | Payroll | Office staff (Dinger) — requires `payroll_manage` permission | **DONE** — combined biweekly payroll (church staff + MDO preschool staff); see "Payroll & Supabase" below |
 | Audit Log | Admins | **DONE** — change history + rollback, requires `audit_view` |
-| Timothy ChMS | External link in sidebar footer | **DONE** — single link out to `chms.timothystl.org` (changed 2026-07-20 from two separate "Scheduler"/"Volunteer Admin" links; see Architecture note on `serve.timothystl.org` vs `chms.timothystl.org`) |
+| Connect | External link in sidebar footer | **DONE** — single link out to `connect.timothystl.org` (renamed 2026-07-22 from `chms.timothystl.org`, itself changed 2026-07-20 from two separate "Scheduler"/"Volunteer Admin" links; see the chms repo's own CLAUDE.md) |
+
+### Giving Tab (added 2026-07-27)
+Consolidates everything related to giving/payment links, previously either hardcoded in
+code (`give-landing.js` in this repo) or scattered under Redirects:
+- **Base Tithe.ly Link** — the `give_url` site setting (unchanged storage, just moved its
+  edit field here from the old "Built-in Redirects" card) — the fallback link used
+  whenever a specific amount tier below has no dedicated link.
+- **Amount Tiers** (`give_amount_tiers` D1 table) — the chip amounts on
+  `give.timothystl.org`, each with optional Monthly/One-time Tithe.ly links (blank = fall
+  back to the base link) and a Default flag for which chip is pre-selected on page load.
+  `site-worker.js` fetches active tiers from `GET /api/give-amounts` (same fetch-and-cache
+  pattern as the existing `/api/redirects`) when rendering the giving page; a hardcoded
+  fallback in `give-landing.js` is used only if `admin.timothystl.org` is unreachable.
+- **Vendor / Market Links** — one-off payment links (e.g. a Christmas Market vendor
+  deposit) — same underlying `redirects` table/`category='giving'` rows as before, just
+  relocated here. URL-agnostic: works for a Tithe.ly custom link or a Square Checkout link
+  (the Christmas Market runs on its own separate Square account, not Tithe.ly) with no code
+  difference between the two. Gym rental invoices already auto-generate and email their own
+  Tithe.ly pay link on confirmation — nothing to add here for those.
+
+Gated by a dedicated **`giving_manage`** permission (`admin/auth.js`), separate from
+`settings_manage` — mirrors how Payroll got its own `payroll_manage` instead of riding on
+Settings, so giving-link management can be granted independently of plain redirects or
+Subscribers (PII) access.
 
 ### News & Events Data Model
 ```sql
@@ -237,6 +262,7 @@ settings access.
 - Staff admin password: full access (all tabs) — permissions are granted per-account, per-tab via the Users tab's checkboxes (see `PERMISSIONS` in `admin/auth.js`)
 - Youth content editing now lives under the **Ministries** tab (`ministries_edit` permission), not a separate "Youth Pages" tab
 - **Payroll** requires the dedicated `payroll_manage` permission — not bundled into `settings_manage` (see "Payroll & Supabase" above)
+- **Giving** requires the dedicated `giving_manage` permission — not bundled into `settings_manage` (see "Giving Tab" above)
 - Youth director password: scope to `ministries_edit` only (separate password so it can be changed independently of office staff accounts)
 
 ---

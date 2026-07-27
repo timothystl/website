@@ -4,7 +4,7 @@
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, hasPermission } from './auth.js';
 
-export const VERSION = 'v1.81.2'; // minor bump: Giving Links section in Redirects tab (vendor/renter one-off Tithe.ly links)
+export const VERSION = 'v1.82.0'; // minor bump: new Giving tab (amount tiers, base link, vendor/market links moved from Redirects)
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
@@ -228,6 +228,7 @@ export function sidebarShell(activeTab, user, extraLinks = '', pendingCount = 0)
     hp('users_manage')    ? navItem('/users', 'Users', activeTab === 'users') : '',
     hp('settings_manage') ? navItem('/subscribers', 'Subscribers', activeTab === 'subscribers') : '',
     hp('settings_manage') ? navItem('/settings', 'Redirects', activeTab === 'settings') : '',
+    hp('giving_manage')   ? navItem('/giving', 'Giving', activeTab === 'giving') : '',
     hp('payroll_manage')  ? navItem('/payroll', 'Payroll', activeTab === 'payroll') : '',
     hp('audit_view')      ? navItem('/audit-log', 'Audit Log', activeTab === 'audit') : '',
   ].filter(Boolean).join('');
@@ -246,7 +247,7 @@ export function sidebarShell(activeTab, user, extraLinks = '', pendingCount = 0)
   ${contentItems ? `<div class="sidebar-group"><div class="sidebar-group-label">Content</div>${contentItems}</div>` : ''}
   ${opsItems ? `<div class="sidebar-group"><div class="sidebar-group-label">People &amp; Ops</div>${opsItems}</div>` : ''}
   <div class="sidebar-footer">
-    <a href="https://chms.timothystl.org" target="_blank">Timothy ChMS</a>
+    <a href="https://connect.timothystl.org" target="_blank">Connect</a>
   </div>
 </aside>
 <div class="util-bar">
