@@ -4,7 +4,7 @@
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, hasPermission } from './auth.js';
 
-export const VERSION = 'v1.80.13'; // minor bump: schedule newsletter sends via Brevo's scheduledAt campaign field
+export const VERSION = 'v1.81.0'; // minor bump: Giving Links section in Redirects tab (vendor/renter one-off Tithe.ly links)
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
