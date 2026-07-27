@@ -2,7 +2,7 @@
 // Handles server-side redirects before falling through to static assets.
 // Custom redirects are fetched from the admin API and cached in memory for 60s.
 
-import { GIVE_LANDING_HTML } from './give-landing.js';
+import { renderGiveLandingHtml, FALLBACK_TIERS, FALLBACK_BASE_URL } from './give-landing.js';
 
 const ERROR_PAGE_HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -74,6 +74,8 @@ let redirectCache = null;
 let redirectCacheTime = 0;
 const settingsCache = {};
 const settingsCacheTime = {};
+let giveAmountsCache = null;
+let giveAmountsCacheTime = 0;
 const CACHE_TTL = 60_000; // 60 seconds
 
 // Paths handled via admin settings keys (instant server-side 302, no SPA load)
@@ -123,6 +125,25 @@ async function getSettingUrl(key, fallback) {
   return fallback;
 }
 
+// give.timothystl.org amount tiers — admin-editable via the Giving tab. Falls back to
+// give-landing.js's hardcoded FALLBACK_TIERS if admin.timothystl.org is unreachable, so
+// the giving page never breaks outright.
+async function getGiveAmounts() {
+  const now = Date.now();
+  if (giveAmountsCache && now - giveAmountsCacheTime < CACHE_TTL) return giveAmountsCache;
+  try {
+    const res = await fetch('https://admin.timothystl.org/api/give-amounts');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.tiers) && data.tiers.length) {
+        giveAmountsCache = data.tiers;
+        giveAmountsCacheTime = now;
+      }
+    }
+  } catch (_) {}
+  return giveAmountsCache || FALLBACK_TIERS;
+}
+
 export default {
   async fetch(request, env) {
     try {
@@ -139,8 +160,14 @@ export default {
     // give.timothystl.org — standalone giving landing page, not part of the main SPA.
     // Same Worker, different hostname (same pattern used in the chms repo for
     // connect.timothystl.org) — serves one single-purpose page regardless of path.
+    // Amount tiers + base link are admin-editable (Giving tab) and fetched/cached the
+    // same way as the custom redirects and zoom/councilfiles settings above.
     if (url.hostname === 'give.timothystl.org') {
-      return new Response(GIVE_LANDING_HTML, {
+      const [tiers, baseUrl] = await Promise.all([
+        getGiveAmounts(),
+        getSettingUrl('give_url', FALLBACK_BASE_URL),
+      ]);
+      return new Response(renderGiveLandingHtml(tiers, baseUrl), {
         headers: { 'Content-Type': 'text/html;charset=UTF-8' }
       });
     }

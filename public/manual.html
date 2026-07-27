@@ -108,6 +108,7 @@ li{margin-bottom:6px;}
     <a href="#links-tab">Links</a>
     <a href="#staff-tab">Staff</a>
     <a href="#settings-tab">Redirects</a>
+    <a href="#giving-tab">Giving</a>
     <a href="#subscribers-tab">Subscribers</a>
     <a href="#gym-tab">Gym Rentals</a>
     <a href="#payroll-tab">Payroll</a>
@@ -432,7 +433,17 @@ li{margin-bottom:6px;}
 
     <span class="toc-anchor" id="settings-tab"></span>
     <h3>Redirects tab</h3>
-    <p><span class="badge badge--sage">Live</span> Manage the built-in redirect URLs (Zoom meeting link for <code>/zoom</code>, Council Files Google Drive folder for <code>/councilfiles</code>, and the giving URL) plus any number of custom redirects — short links like <code>/mdo</code> that forward to any URL. Custom redirects can be edited or deleted in place. Gym rental settings (rate, hold duration, Google Calendar, notifications) live under the Gym Rentals tab instead. (This tab was renamed from "Settings" — same feature, new name.)</p>
+    <p><span class="badge badge--sage">Live</span> Manage the built-in redirect URLs (Zoom meeting link for <code>/zoom</code>, Council Files Google Drive folder for <code>/councilfiles</code>) plus any number of custom redirects — short links like <code>/mdo</code> that forward to any URL. Custom redirects can be edited or deleted in place. Gym rental settings (rate, hold duration, Google Calendar, notifications) live under the Gym Rentals tab instead; the giving URL and vendor payment links moved to the <a href="#giving-tab">Giving</a> tab. (This tab was renamed from "Settings" — same feature, new name.)</p>
+
+    <span class="toc-anchor" id="giving-tab"></span>
+    <h3>Giving tab</h3>
+    <p><span class="badge badge--sky">Requires Giving permission</span> Manages everything related to giving/payment links, added 2026-07-27:</p>
+    <ul>
+      <li><strong>Base Tithe.ly Link</strong> — the default giving-form URL, used by <code>give.timothystl.org</code> and the main site's <code>/give</code> page whenever a specific amount tier below doesn't have its own link.</li>
+      <li><strong>Amount Tiers</strong> — the chip amounts shown on <a href="https://give.timothystl.org" target="_blank">give.timothystl.org</a> (e.g. $25/$50/$100). Each tier can optionally have its own pre-filled Tithe.ly link for Monthly and/or One-time giving (generate these from Tithe.ly's dashboard: Giving Form → Create Custom Link) — leave blank to use the base link. Check "Default" on the one tier that should be pre-selected when the page loads.</li>
+      <li><strong>Vendor / Market Links</strong> — one-off payment links for things like a Christmas Market vendor deposit or a rental (moved here from the old Redirects tab's "Giving Links" section). Paste in a prefilled link from either <strong>Tithe.ly</strong> or <strong>Square</strong> (the Market runs on its own separate Square account) — any web link works. Give it a short slug and a label, then share <code>timothystl.org/&lt;slug&gt;</code>. Uncheck "Active" to retire an old one without losing the record of what it was for. Gym rental invoices already generate and email their own Tithe.ly pay link automatically — nothing needs to be added here for those.</li>
+    </ul>
+    <p>This tab has its own <strong>Giving</strong> permission (Users tab), separate from the Redirects permission — so giving-link management can be granted to office staff without also granting them access to plain site redirects, or vice versa.</p>
 
     <span class="toc-anchor" id="subscribers-tab"></span>
     <h3>Subscribers tab</h3>
@@ -458,7 +469,7 @@ li{margin-bottom:6px;}
     <!-- ═══ VOLUNTEER SITE ════════════════════════════════════════════════ -->
     <span class="toc-anchor" id="volunteer-site"></span>
     <h2>Volunteer Site</h2>
-    <p>The volunteer signup site is branded <strong>Serve</strong>, at <a href="https://serve.timothystl.org" target="_blank"><strong>serve.timothystl.org</strong></a> (renamed 2026-07-20 from volunteer.timothystl.org, which still redirects there). Admin access is at <a href="https://chms.timothystl.org" target="_blank">chms.timothystl.org</a> (same password).</p>
+    <p>The volunteer signup site is branded <strong>Serve</strong>, at <a href="https://serve.timothystl.org" target="_blank"><strong>serve.timothystl.org</strong></a> (renamed 2026-07-20 from volunteer.timothystl.org, which still redirects there). Admin access is at <a href="https://connect.timothystl.org" target="_blank">connect.timothystl.org</a> (same password; renamed 2026-07-22 from chms.timothystl.org, which still redirects there) — the whole app is now branded <strong>Connect</strong>.</p>
     <p>Ministry pages with volunteer opportunities link directly to this site. When you add new volunteer events in the admin, they automatically appear in the linked button on those pages.</p>
 
 

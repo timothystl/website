@@ -432,7 +432,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-07-27-1'; // bumped: add category/active to redirects (Giving Links)
+    const SCHEMA_VERSION = '2026-07-27-2'; // bumped: add give_amount_tiers table (Giving tab)
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -475,6 +475,33 @@ export default {
     // staff retire an old one-off link without losing the audit trail of what it was.
     try { await env.DB.prepare("ALTER TABLE redirects ADD COLUMN category TEXT NOT NULL DEFAULT 'general'").run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE redirects ADD COLUMN active INTEGER NOT NULL DEFAULT 1').run(); } catch (_) {}
+    // Giving tab: admin-editable amount tiers for give.timothystl.org (added 2026-07-27,
+    // replacing the amounts/links that were previously hardcoded in the website repo's
+    // give-landing.js). Blank monthly_url/once_url means "fall back to the base give_url
+    // setting" — same fallback semantics the hardcoded version always had.
+    try {
+      await env.DB.prepare(`CREATE TABLE IF NOT EXISTS give_amount_tiers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        amount INTEGER NOT NULL,
+        monthly_url TEXT NOT NULL DEFAULT '',
+        once_url TEXT NOT NULL DEFAULT '',
+        is_default INTEGER NOT NULL DEFAULT 0,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        active INTEGER NOT NULL DEFAULT 1
+      )`).run();
+    } catch (_) {}
+    // Seed once from the amounts that were hardcoded in give-landing.js — idempotent via
+    // a row-count guard so re-running this on every request doesn't duplicate seed rows.
+    try {
+      const tierCount = await env.DB.prepare('SELECT COUNT(*) as c FROM give_amount_tiers').first();
+      if (!tierCount || tierCount.c === 0) {
+        const seedTiers = [25, 40, 75, 150, 300, 500];
+        for (let i = 0; i < seedTiers.length; i++) {
+          await env.DB.prepare('INSERT INTO give_amount_tiers (amount, is_default, sort_order) VALUES (?, ?, ?)')
+            .bind(seedTiers[i], seedTiers[i] === 40 ? 1 : 0, i).run();
+        }
+      }
+    } catch (_) {}
     // Seed a /links redirect now that the stale static public/links/index.html
     // (dead routes, old Breeze giving URL) has been removed — timothystl.org/links
     // should point to the real links.timothystl.org landing page.
@@ -716,6 +743,15 @@ export default {
       await env.DB.prepare(
         `UPDATE users SET permissions = REPLACE(permissions, '[', '["payroll_manage",')
          WHERE permissions LIKE '%"settings_manage"%' AND permissions NOT LIKE '%"payroll_manage"%'`
+      ).run();
+    } catch (_) {}
+    // Same precedent as payroll_manage above: grant giving_manage to accounts that could
+    // already manage the old Redirects-tab "Giving Links" section under settings_manage,
+    // so splitting it into its own permission doesn't lock anyone out who had access before.
+    try {
+      await env.DB.prepare(
+        `UPDATE users SET permissions = REPLACE(permissions, '[', '["giving_manage",')
+         WHERE permissions LIKE '%"settings_manage"%' AND permissions NOT LIKE '%"giving_manage"%'`
       ).run();
     } catch (_) {}
     // Migrate: scheduled send (Brevo campaign scheduling)
@@ -1146,6 +1182,23 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
     if (path === '/api/redirects' && method === 'GET') {
       const rows = await env.DB.prepare('SELECT path, url, label FROM redirects WHERE active != 0 ORDER BY path').all();
       return new Response(JSON.stringify({ redirects: rows.results }), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
+      });
+    }
+
+    // ── PUBLIC: give.timothystl.org amount tiers ── consumed by the website repo's
+    // site-worker.js when rendering the giving landing page (same fetch-and-cache pattern
+    // as /api/redirects above). The base Tithe.ly link is fetched separately via the
+    // existing /api/settings/give_url endpoint below — not duplicated here.
+    if (path === '/api/give-amounts' && method === 'GET') {
+      const rows = await env.DB.prepare('SELECT amount, monthly_url, once_url, is_default FROM give_amount_tiers WHERE active != 0 ORDER BY sort_order').all();
+      const tiers = rows.results.map(r => ({
+        amount: r.amount,
+        monthlyUrl: r.monthly_url || '',
+        onceUrl: r.once_url || '',
+        isDefault: !!r.is_default,
+      }));
+      return new Response(JSON.stringify({ tiers }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
       });
     }
@@ -4497,7 +4550,14 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
     // ── REDIRECTS TAB ────────────────────────────────────────────
 
     // ── CUSTOM REDIRECTS (add/edit/delete, inside Redirects page) ──
-    if ((path === '/redirects/add' || path === '/redirects/update' || path.startsWith('/redirects/delete/') || path === '/settings' || path === '/settings/update') && !hasPermission(currentUser, 'settings_manage')) {
+    // Shared with the Giving tab's vendor/market links (category='giving' rows in the same
+    // table) — gate the outer path first with an OR of both permissions (we don't know the
+    // category yet), then check the *specific* required permission per-category below.
+    if ((path === '/redirects/add' || path === '/redirects/update' || path.startsWith('/redirects/delete/'))
+        && !hasPermission(currentUser, 'settings_manage') && !hasPermission(currentUser, 'giving_manage')) {
+      return new Response('Access denied.', { status: 403 });
+    }
+    if ((path === '/settings' || path === '/settings/update') && !hasPermission(currentUser, 'settings_manage')) {
       return new Response('Access denied.', { status: 403 });
     }
     if (path === '/redirects/add' && method === 'POST') {
@@ -4507,14 +4567,18 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
       const rLabel= (form.get('label')|| '').trim();
       const rCategory = (form.get('category') || 'general').trim() === 'giving' ? 'giving' : 'general';
       const rActive = form.get('active') !== null ? 1 : 0;
-      if (!rPath || !rUrl) return new Response('', { status: 302, headers: { Location: '/settings?msg=redirect-error' } });
+      const redirectBackTo = rCategory === 'giving' ? '/giving' : '/settings';
+      if (!hasPermission(currentUser, rCategory === 'giving' ? 'giving_manage' : 'settings_manage')) {
+        return new Response('Access denied.', { status: 403 });
+      }
+      if (!rPath || !rUrl) return new Response('', { status: 302, headers: { Location: redirectBackTo + '?msg=redirect-error' } });
       let parsedProtocol = '';
       try { parsedProtocol = new URL(rUrl).protocol; } catch (_) {}
       if (parsedProtocol !== 'http:' && parsedProtocol !== 'https:') {
-        return new Response('', { status: 302, headers: { Location: '/settings?msg=redirect-error' } });
+        return new Response('', { status: 302, headers: { Location: redirectBackTo + '?msg=redirect-error' } });
       }
       await env.DB.prepare('INSERT OR REPLACE INTO redirects (path, url, label, category, active) VALUES (?, ?, ?, ?, ?)').bind(rPath, rUrl, rLabel, rCategory, rActive).run();
-      return new Response('', { status: 302, headers: { Location: '/settings?msg=redirect-added' } });
+      return new Response('', { status: 302, headers: { Location: redirectBackTo + '?msg=redirect-added' } });
     }
     if (path === '/redirects/update' && method === 'POST') {
       const form = await request.formData();
@@ -4524,22 +4588,32 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
       const rLabel= (form.get('label')|| '').trim();
       const rCategory = (form.get('category') || 'general').trim() === 'giving' ? 'giving' : 'general';
       const rActive = form.get('active') !== null ? 1 : 0;
-      if (!rPath || !rUrl) return new Response('', { status: 302, headers: { Location: '/settings?msg=redirect-error' } });
+      const redirectBackTo = rCategory === 'giving' ? '/giving' : '/settings';
+      if (!hasPermission(currentUser, rCategory === 'giving' ? 'giving_manage' : 'settings_manage')) {
+        return new Response('Access denied.', { status: 403 });
+      }
+      if (!rPath || !rUrl) return new Response('', { status: 302, headers: { Location: redirectBackTo + '?msg=redirect-error' } });
       let parsedProtocol = '';
       try { parsedProtocol = new URL(rUrl).protocol; } catch (_) {}
       if (parsedProtocol !== 'http:' && parsedProtocol !== 'https:') {
-        return new Response('', { status: 302, headers: { Location: '/settings?msg=redirect-error' } });
+        return new Response('', { status: 302, headers: { Location: redirectBackTo + '?msg=redirect-error' } });
       }
       if (rPath !== originalPath) {
         await env.DB.prepare('DELETE FROM redirects WHERE path = ?').bind(originalPath).run();
       }
       await env.DB.prepare('INSERT OR REPLACE INTO redirects (path, url, label, category, active) VALUES (?, ?, ?, ?, ?)').bind(rPath, rUrl, rLabel, rCategory, rActive).run();
-      return new Response('', { status: 302, headers: { Location: '/settings?msg=redirect-updated' } });
+      return new Response('', { status: 302, headers: { Location: redirectBackTo + '?msg=redirect-updated' } });
     }
     if (path.startsWith('/redirects/delete/') && method === 'POST') {
       const rPath = path.slice('/redirects/delete/'.length);
+      const existing = await env.DB.prepare('SELECT category FROM redirects WHERE path = ?').bind(rPath).first();
+      const existingCategory = existing?.category === 'giving' ? 'giving' : 'general';
+      const redirectBackTo = existingCategory === 'giving' ? '/giving' : '/settings';
+      if (!hasPermission(currentUser, existingCategory === 'giving' ? 'giving_manage' : 'settings_manage')) {
+        return new Response('Access denied.', { status: 403 });
+      }
       await env.DB.prepare('DELETE FROM redirects WHERE path = ?').bind(rPath).run();
-      return new Response('', { status: 302, headers: { Location: '/settings?msg=redirect-deleted' } });
+      return new Response('', { status: 302, headers: { Location: redirectBackTo + '?msg=redirect-deleted' } });
     }
 
     // ── SUBSCRIBERS ADMIN ──
@@ -4637,10 +4711,9 @@ ${sidebarShell('subscribers', currentUser)}
     if (path.startsWith('/settings')) {
       // Show settings form
       if (path === '/settings' && method === 'GET') {
-        const REDIRECT_KEYS = ['zoom_url', 'councilfiles_url', 'give_url'];
+        const REDIRECT_KEYS = ['zoom_url', 'councilfiles_url'];
         const settings = await env.DB.prepare(`SELECT key, value, label, hint FROM site_settings WHERE key IN (${REDIRECT_KEYS.map(() => '?').join(',')}) ORDER BY rowid`).bind(...REDIRECT_KEYS).all();
         const customRedirects = await env.DB.prepare("SELECT path, url, label, category, active FROM redirects WHERE category != 'giving' ORDER BY path").all();
-        const givingLinks = await env.DB.prepare("SELECT path, url, label, category, active FROM redirects WHERE category = 'giving' ORDER BY path").all();
         const msg = url.searchParams.get('msg');
         const alertHtml = msg === 'saved' ? `<div class="alert alert-success">✓ Settings saved.</div>`
           : msg === 'redirect-added'   ? `<div class="alert alert-success">✓ Redirect added.</div>`
@@ -4672,26 +4745,6 @@ ${sidebarShell('subscribers', currentUser)}
               <button type="submit" formaction="/redirects/delete/${encodeURIComponent(r.path)}" formnovalidate class="btn btn-sm btn-danger" onclick="return confirm('Delete /${r.path.replace(/'/g,"\\'")}?')">Delete</button>
             </form>`).join('');
 
-        // Giving Links: vendor/renter one-off Tithe.ly links (§ discussed with Andrew
-        // 2026-07-27). Same underlying redirects table, category='giving', with a real
-        // Active checkbox so an old one-off can be retired without deleting the row (keeps
-        // the label as a record of what it was for).
-        const givingRowsHtml = givingLinks.results.length === 0
-          ? `<div style="font-size:13px;color:var(--gray);padding:12px 0;">No giving links yet.</div>`
-          : givingLinks.results.map(r => `
-            <form method="POST" action="/redirects/update" style="display:grid;grid-template-columns:1fr 2fr 1.3fr auto auto auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
-              <input type="hidden" name="original_path" value="${r.path.replace(/"/g,'&quot;')}">
-              <input type="hidden" name="category" value="giving">
-              <input type="text" name="path" value="${r.path.replace(/"/g,'&quot;')}" style="font-family:var(--mono,monospace);font-size:13px;">
-              <input type="url" name="url" value="${(r.url||'').replace(/"/g,'&quot;')}" style="font-size:13px;">
-              <input type="text" name="label" value="${(r.label||'').replace(/"/g,'&quot;')}" placeholder="e.g. Smith Catering — Fall Festival deposit" style="font-size:13px;">
-              <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--gray);white-space:nowrap;">
-                <input type="checkbox" name="active" value="1" ${r.active ? 'checked' : ''}> Active
-              </label>
-              <button type="submit" class="btn btn-sm btn-secondary">Save</button>
-              <button type="submit" formaction="/redirects/delete/${encodeURIComponent(r.path)}" formnovalidate class="btn btn-sm btn-danger" onclick="return confirm('Delete /${r.path.replace(/'/g,"\\'")}?')">Delete</button>
-            </form>`).join('');
-
         return html(`
 ${sidebarShell('settings', currentUser)}
 <div class="wrap">
@@ -4701,7 +4754,7 @@ ${sidebarShell('settings', currentUser)}
   <form method="POST" action="/settings/update">
     <div class="card">
       <div class="card-title">Built-in Redirects</div>
-      <div style="font-size:13px;color:var(--gray);margin-bottom:18px;">These are the URLs that short links on the site point to (<code>/zoom</code>, <code>/councilfiles</code>, <code>/give</code>). Edit here — no code change required.</div>
+      <div style="font-size:13px;color:var(--gray);margin-bottom:18px;">These are the URLs that short links on the site point to (<code>/zoom</code>, <code>/councilfiles</code>). Edit here — no code change required. (The <code>/give</code> link and giving page now live under the <a href="/giving" style="color:var(--steel);">Giving</a> tab.)</div>
       ${redirectFields}
       <div class="btn-row" style="margin-top:4px;">
         <button type="submit" class="btn btn-primary">Save redirect URLs →</button>
@@ -4734,36 +4787,6 @@ ${sidebarShell('settings', currentUser)}
       </div>
     </form>
   </div>
-
-  <div class="card" style="margin-top:20px;">
-    <div class="card-title">Giving Links</div>
-    <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">One-off links for vendors and renters (e.g. a Christmas Market vendor deposit, a gym rental invoice) — paste in the prefilled link generated from the Tithe.ly dashboard's "Create Custom Link" tool, give it a short slug and a label so you remember what it was for, and share <code>timothystl.org/&lt;slug&gt;</code>. Uncheck Active to retire an old one without deleting the record.</div>
-    ${givingRowsHtml}
-    <form method="POST" action="/redirects/add" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
-      <input type="hidden" name="category" value="giving">
-      <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sage);margin-bottom:12px;">Add new giving link</div>
-      <div style="display:grid;grid-template-columns:1fr 2fr 1.3fr auto;gap:12px;align-items:end;">
-        <div class="form-group" style="margin:0;">
-          <label>Slug (no slash)</label>
-          <input type="text" name="path" placeholder="e.g. smith-catering" style="font-family:var(--mono,monospace);">
-        </div>
-        <div class="form-group" style="margin:0;">
-          <label>Tithe.ly link</label>
-          <input type="url" name="url" placeholder="https://give.tithe.ly/?...">
-        </div>
-        <div class="form-group" style="margin:0;">
-          <label>Label</label>
-          <input type="text" name="label" placeholder="e.g. Smith Catering — Fall Festival deposit">
-        </div>
-        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--charcoal);white-space:nowrap;padding-bottom:10px;">
-          <input type="checkbox" name="active" value="1" checked> Active
-        </label>
-      </div>
-      <div class="btn-row" style="margin-top:12px;">
-        <button type="submit" class="btn btn-primary">Add giving link →</button>
-      </div>
-    </form>
-  </div>
 </div>`, 'Redirects');
       }
 
@@ -4780,6 +4803,214 @@ ${sidebarShell('settings', currentUser)}
         return new Response('', { status: 302, headers: { Location: '/settings?msg=saved' } });
       }
     } // end redirects tab
+
+    // ── GIVING TAB ───────────────────────────────────────────────
+    // Consolidates: the base Tithe.ly link (give_url, moved out of Redirects), the
+    // give.timothystl.org amount tiers, and the vendor/market one-off links (relocated
+    // from Redirects' old "Giving Links" card — same underlying redirects table,
+    // category='giving'). Dedicated giving_manage permission, separate from
+    // settings_manage, per Andrew's 2026-07-27 decision.
+    if (path.startsWith('/giving') && !hasPermission(currentUser, 'giving_manage')) {
+      return new Response('Access denied.', { status: 403 });
+    }
+    if (path.startsWith('/giving-tiers/') && !hasPermission(currentUser, 'giving_manage')) {
+      return new Response('Access denied.', { status: 403 });
+    }
+
+    if (path === '/giving/base-url' && method === 'POST') {
+      const form = await request.formData();
+      const val = (form.get('give_url') || '').trim();
+      let parsedProtocol = '';
+      try { parsedProtocol = new URL(val).protocol; } catch (_) {}
+      if (parsedProtocol !== 'http:' && parsedProtocol !== 'https:') {
+        return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-error' } });
+      }
+      await env.DB.prepare("UPDATE site_settings SET value = ? WHERE key = 'give_url'").bind(val).run();
+      return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-saved' } });
+    }
+
+    if (path === '/giving-tiers/add' && method === 'POST') {
+      const form = await request.formData();
+      const amount = parseInt(form.get('amount'), 10);
+      const monthlyUrl = (form.get('monthly_url') || '').trim();
+      const onceUrl = (form.get('once_url') || '').trim();
+      const isDefault = form.get('is_default') !== null ? 1 : 0;
+      const active = form.get('active') !== null ? 1 : 0;
+      if (!amount || amount < 1) return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-error' } });
+      for (const u of [monthlyUrl, onceUrl]) {
+        if (!u) continue;
+        let proto = '';
+        try { proto = new URL(u).protocol; } catch (_) {}
+        if (proto !== 'http:' && proto !== 'https:') return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-error' } });
+      }
+      if (isDefault) await env.DB.prepare('UPDATE give_amount_tiers SET is_default = 0').run();
+      const maxSort = await env.DB.prepare('SELECT MAX(sort_order) as m FROM give_amount_tiers').first();
+      const sortOrder = (maxSort?.m ?? -1) + 1;
+      await env.DB.prepare('INSERT INTO give_amount_tiers (amount, monthly_url, once_url, is_default, active, sort_order) VALUES (?, ?, ?, ?, ?, ?)')
+        .bind(amount, monthlyUrl, onceUrl, isDefault, active, sortOrder).run();
+      return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-added' } });
+    }
+    if (path === '/giving-tiers/update' && method === 'POST') {
+      const form = await request.formData();
+      const id = parseInt(form.get('id'), 10);
+      const amount = parseInt(form.get('amount'), 10);
+      const monthlyUrl = (form.get('monthly_url') || '').trim();
+      const onceUrl = (form.get('once_url') || '').trim();
+      const isDefault = form.get('is_default') !== null ? 1 : 0;
+      const active = form.get('active') !== null ? 1 : 0;
+      if (!id || !amount || amount < 1) return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-error' } });
+      for (const u of [monthlyUrl, onceUrl]) {
+        if (!u) continue;
+        let proto = '';
+        try { proto = new URL(u).protocol; } catch (_) {}
+        if (proto !== 'http:' && proto !== 'https:') return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-error' } });
+      }
+      if (isDefault) await env.DB.prepare('UPDATE give_amount_tiers SET is_default = 0 WHERE id != ?').bind(id).run();
+      await env.DB.prepare('UPDATE give_amount_tiers SET amount = ?, monthly_url = ?, once_url = ?, is_default = ?, active = ? WHERE id = ?')
+        .bind(amount, monthlyUrl, onceUrl, isDefault, active, id).run();
+      return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-updated' } });
+    }
+    if (path.startsWith('/giving-tiers/delete/') && method === 'POST') {
+      const id = parseInt(path.slice('/giving-tiers/delete/'.length), 10);
+      await env.DB.prepare('DELETE FROM give_amount_tiers WHERE id = ?').bind(id).run();
+      return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-deleted' } });
+    }
+
+    if (path === '/giving' && method === 'GET') {
+      const baseUrlRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'give_url'").first();
+      const tiers = await env.DB.prepare('SELECT * FROM give_amount_tiers ORDER BY sort_order').all();
+      const givingLinks = await env.DB.prepare("SELECT path, url, label, category, active FROM redirects WHERE category = 'giving' ORDER BY path").all();
+      const msg = url.searchParams.get('msg');
+      const alertHtml = msg === 'giving-saved'   ? `<div class="alert alert-success">✓ Saved.</div>`
+        : msg === 'giving-added'   ? `<div class="alert alert-success">✓ Added.</div>`
+        : msg === 'giving-updated' ? `<div class="alert alert-success">✓ Updated.</div>`
+        : msg === 'giving-deleted' ? `<div class="alert alert-info">Deleted.</div>`
+        : msg === 'redirect-added'   ? `<div class="alert alert-success">✓ Link added.</div>`
+        : msg === 'redirect-updated' ? `<div class="alert alert-success">✓ Link updated.</div>`
+        : msg === 'redirect-deleted' ? `<div class="alert alert-info">Link deleted.</div>`
+        : msg === 'giving-error' || msg === 'redirect-error' ? `<div class="alert alert-error">Check the fields — a valid amount and any URLs entered must be http(s) links.</div>` : '';
+
+      const tierRowsHtml = tiers.results.length === 0
+        ? `<div style="font-size:13px;color:var(--gray);padding:12px 0;">No amount tiers yet — the give.timothystl.org page falls back to the base Tithe.ly link below for every amount.</div>`
+        : tiers.results.map(t => `
+          <form method="POST" action="/giving-tiers/update" style="display:grid;grid-template-columns:.7fr 1.6fr 1.6fr auto auto auto auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+            <input type="hidden" name="id" value="${t.id}">
+            <div style="display:flex;align-items:center;gap:4px;">
+              <span style="font-family:var(--mono,monospace);font-size:13px;color:var(--gray);">$</span>
+              <input type="number" name="amount" min="1" value="${t.amount}" style="font-family:var(--mono,monospace);font-size:13px;">
+            </div>
+            <input type="url" name="monthly_url" value="${(t.monthly_url||'').replace(/"/g,'&quot;')}" placeholder="Monthly Tithe.ly link (blank = base link)" style="font-size:12px;">
+            <input type="url" name="once_url" value="${(t.once_url||'').replace(/"/g,'&quot;')}" placeholder="One-time Tithe.ly link (blank = base link)" style="font-size:12px;">
+            <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--gray);white-space:nowrap;">
+              <input type="checkbox" name="is_default" value="1" ${t.is_default ? 'checked' : ''}> Default
+            </label>
+            <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--gray);white-space:nowrap;">
+              <input type="checkbox" name="active" value="1" ${t.active ? 'checked' : ''}> Active
+            </label>
+            <button type="submit" class="btn btn-sm btn-secondary">Save</button>
+            <button type="submit" formaction="/giving-tiers/delete/${t.id}" formnovalidate class="btn btn-sm btn-danger" onclick="return confirm('Delete the \\$${t.amount} tier?')">Delete</button>
+          </form>`).join('');
+
+      const givingRowsHtml = givingLinks.results.length === 0
+        ? `<div style="font-size:13px;color:var(--gray);padding:12px 0;">No vendor/market links yet.</div>`
+        : givingLinks.results.map(r => `
+          <form method="POST" action="/redirects/update" style="display:grid;grid-template-columns:1fr 2fr 1.3fr auto auto auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+            <input type="hidden" name="original_path" value="${r.path.replace(/"/g,'&quot;')}">
+            <input type="hidden" name="category" value="giving">
+            <input type="text" name="path" value="${r.path.replace(/"/g,'&quot;')}" style="font-family:var(--mono,monospace);font-size:13px;">
+            <input type="url" name="url" value="${(r.url||'').replace(/"/g,'&quot;')}" style="font-size:13px;">
+            <input type="text" name="label" value="${(r.label||'').replace(/"/g,'&quot;')}" placeholder="e.g. Smith Catering — Fall Festival deposit" style="font-size:13px;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--gray);white-space:nowrap;">
+              <input type="checkbox" name="active" value="1" ${r.active ? 'checked' : ''}> Active
+            </label>
+            <button type="submit" class="btn btn-sm btn-secondary">Save</button>
+            <button type="submit" formaction="/redirects/delete/${encodeURIComponent(r.path)}" formnovalidate class="btn btn-sm btn-danger" onclick="return confirm('Delete /${r.path.replace(/'/g,"\\'")}?')">Delete</button>
+          </form>`).join('');
+
+      return html(`
+${sidebarShell('giving', currentUser)}
+<div class="wrap">
+  <div class="page-title">Giving</div>
+  <div class="page-sub">The base Tithe.ly link, the amount tiers shown on give.timothystl.org, and one-off vendor/market payment links.</div>
+  ${alertHtml}
+
+  <form method="POST" action="/giving/base-url">
+    <div class="card">
+      <div class="card-title">Base Tithe.ly Link</div>
+      <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">The default giving link — used on give.timothystl.org whenever an amount tier below has no dedicated link of its own (including a custom "other amount"), and on the main site's /give page.</div>
+      <div class="form-group">
+        <label>Tithe.ly giving form URL</label>
+        <input type="url" name="give_url" value="${(baseUrlRow?.value||'').replace(/"/g,'&quot;')}" style="font-family:var(--mono,monospace);font-size:13px;">
+      </div>
+      <div class="btn-row" style="margin-top:4px;">
+        <button type="submit" class="btn btn-primary">Save →</button>
+      </div>
+    </div>
+  </form>
+
+  <div class="card" style="margin-top:20px;">
+    <div class="card-title">Amount Tiers</div>
+    <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">The chip amounts shown on give.timothystl.org. Leave a Tithe.ly link blank to fall back to the base link above for that amount/frequency. To generate a prefilled link: Tithe.ly dashboard → Giving Form → Create Custom Link.</div>
+    ${tierRowsHtml}
+    <form method="POST" action="/giving-tiers/add" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+      <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sage);margin-bottom:12px;">Add new tier</div>
+      <div style="display:grid;grid-template-columns:.7fr 1.6fr 1.6fr auto auto;gap:12px;align-items:end;">
+        <div class="form-group" style="margin:0;">
+          <label>Amount ($)</label>
+          <input type="number" name="amount" min="1" placeholder="e.g. 100" style="font-family:var(--mono,monospace);">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Monthly link (optional)</label>
+          <input type="url" name="monthly_url" placeholder="https://give.tithe.ly/?...">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>One-time link (optional)</label>
+          <input type="url" name="once_url" placeholder="https://give.tithe.ly/?...">
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--charcoal);white-space:nowrap;padding-bottom:10px;">
+          <input type="checkbox" name="is_default"> Default
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--charcoal);white-space:nowrap;padding-bottom:10px;">
+          <input type="checkbox" name="active" value="1" checked> Active
+        </label>
+      </div>
+      <div class="btn-row" style="margin-top:12px;">
+        <button type="submit" class="btn btn-primary">Add tier →</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card" style="margin-top:20px;">
+    <div class="card-title">Vendor / Market Links</div>
+    <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">One-off payment links — a Christmas Market vendor deposit, a rental, anything one-time. Paste in a prefilled link from either <strong>Tithe.ly</strong> (dashboard → Giving Form → Create Custom Link) or <strong>Square</strong> (Square's own Checkout link tool) — any http(s) link works. Give it a short slug and a label, then share <code>timothystl.org/&lt;slug&gt;</code>. Uncheck Active to retire an old one without deleting the record. (Gym rental invoices already email their own Tithe.ly pay link automatically — nothing to add here for those.)</div>
+    ${givingRowsHtml}
+    <form method="POST" action="/redirects/add" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+      <input type="hidden" name="category" value="giving">
+      <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sage);margin-bottom:12px;">Add new link</div>
+      <div style="display:grid;grid-template-columns:1fr 2fr 1.3fr auto;gap:12px;align-items:end;">
+        <div class="form-group" style="margin:0;">
+          <label>Slug (no slash)</label>
+          <input type="text" name="path" placeholder="e.g. smith-catering" style="font-family:var(--mono,monospace);">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Payment link (Tithe.ly or Square)</label>
+          <input type="url" name="url" placeholder="https://...">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Label</label>
+          <input type="text" name="label" placeholder="e.g. Smith Catering — Fall Festival deposit">
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--charcoal);white-space:nowrap;padding-bottom:10px;">
+          <input type="checkbox" name="active" value="1" checked> Active
+        </label>
+      </div>
+      <div class="btn-row" style="margin-top:12px;">
+        <button type="submit" class="btn btn-primary">Add link →</button>
+      </div>
+    </form>
+  </div>
+</div>`, 'Giving');
+    }
 
     // ── USER MANAGEMENT ────────────────────────────────────────
     if (path.startsWith('/users') && !hasPermission(currentUser, 'users_manage')) {

@@ -13,16 +13,19 @@
 // The amount chips + Monthly/One-time toggle are real state (not decorative) and do
 // change the CTA label, but Tithe.ly doesn't publish a safe-to-guess raw query-string
 // spec for prefilling amount/frequency — their own "Create Custom Link" dashboard tool
-// generates a complete URL per configuration instead. TITHELY_LINKS below is a lookup
-// table ready to hold one generated link per (frequency, amount) combo; until Andrew
-// generates and pastes in the real ones, every combo falls back to the base giving-form
-// link so the CTA is always a real, working Tithe.ly page — just not amount-prefilled yet.
-const TITHELY_BASE_URL = 'https://give.tithe.ly/?formId=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8';
+// generates a complete URL per configuration instead. Amount tiers and the base link are
+// now admin-editable (admin.timothystl.org → Giving tab, `give_amount_tiers` table +
+// `give_url` setting) rather than hardcoded here — site-worker.js fetches them and passes
+// them into renderGiveLandingHtml() below. Any tier with no dedicated link for the current
+// frequency falls back to the base link, so the CTA is always a real, working Tithe.ly
+// page even for amounts that haven't been given their own prefilled link yet.
 
-const TITHELY_LINKS = {
-  monthly: { 25: '', 40: '', 75: '', 150: '', 300: '', 500: '' },
-  once:    { 25: '', 40: '', 75: '', 150: '', 300: '', 500: '' },
-};
+// Used only if the admin API is unreachable when site-worker.js builds the page, so the
+// giving page never breaks outright — matches the tiers this page originally shipped with.
+export const FALLBACK_BASE_URL = 'https://give.tithe.ly/?formId=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8';
+export const FALLBACK_TIERS = [25, 40, 75, 150, 300, 500].map(amount => ({
+  amount, monthlyUrl: '', onceUrl: '', isDefault: amount === 40,
+}));
 
 const VALUES_BAND = [
   { key: 'acceptance', label: 'Acceptance', word: 'Welcome', color: '#4A5E3A' },
@@ -37,7 +40,21 @@ const valuesBandHtml = VALUES_BAND.map(v => `
     <div class="vb-word">${v.word}</div>
   </div>`).join('');
 
-export const GIVE_LANDING_HTML = `<!DOCTYPE html>
+// tiers: [{amount, monthlyUrl, onceUrl, isDefault}], baseUrl: string
+export function renderGiveLandingHtml(tiers, baseUrl) {
+  const safeTiers = Array.isArray(tiers) && tiers.length ? tiers : FALLBACK_TIERS;
+  const safeBaseUrl = baseUrl || FALLBACK_BASE_URL;
+  const defaultTier = safeTiers.find(t => t.isDefault) || safeTiers[0];
+  const defaultAmount = defaultTier.amount;
+
+  // Lookup table keyed by amount, each side falling back to the base link — same shape
+  // and fallback semantics as the original hardcoded TITHELY_LINKS.
+  const linksByAmount = {};
+  for (const t of safeTiers) {
+    linksByAmount[t.amount] = { monthly: t.monthlyUrl || safeBaseUrl, once: t.onceUrl || safeBaseUrl };
+  }
+
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -215,7 +232,7 @@ export const GIVE_LANDING_HTML = `<!DOCTYPE html>
 
       <div class="amount-label">Choose an amount</div>
       <div class="amount-chips" id="amount-chips" role="group" aria-label="Gift amount">
-        ${[25,40,75,150,300,500].map(a => `<div class="chip${a===40?' active':''}" tabindex="0" role="button" data-amount="${a}" onclick="setAmount(${a})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setAmount(${a});}">$${a}</div>`).join('')}
+        ${safeTiers.map(t => `<div class="chip${t.amount===defaultAmount?' active':''}" tabindex="0" role="button" data-amount="${t.amount}" onclick="setAmount(${t.amount})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setAmount(${t.amount});}">$${t.amount}</div>`).join('')}
       </div>
 
       <div class="other-amount">
@@ -224,8 +241,8 @@ export const GIVE_LANDING_HTML = `<!DOCTYPE html>
       </div>
       <div class="amount-error" id="amount-error">Please enter an amount of at least $1.</div>
 
-      <a class="cta" id="give-cta" href="${TITHELY_BASE_URL}" target="_blank" rel="noopener">
-        <span id="cta-label">Give $40 monthly</span> <span aria-hidden="true">→</span>
+      <a class="cta" id="give-cta" href="${safeBaseUrl}" target="_blank" rel="noopener">
+        <span id="cta-label">Give $${defaultAmount} monthly</span> <span aria-hidden="true">→</span>
       </a>
 
       <div class="trust-line">
@@ -243,13 +260,14 @@ export const GIVE_LANDING_HTML = `<!DOCTYPE html>
   </div>
 
 <script>
-  var TITHELY_BASE_URL = ${JSON.stringify(TITHELY_BASE_URL)};
-  var TITHELY_LINKS = ${JSON.stringify(TITHELY_LINKS)};
-  var state = { freq: 'monthly', amount: 40 };
+  var BASE_URL = ${JSON.stringify(safeBaseUrl)};
+  var LINKS_BY_AMOUNT = ${JSON.stringify(linksByAmount)};
+  var state = { freq: 'monthly', amount: ${JSON.stringify(defaultAmount)} };
 
   function linkFor(freq, amount) {
-    var byFreq = TITHELY_LINKS[freq] || {};
-    return byFreq[amount] || TITHELY_BASE_URL;
+    var forAmount = LINKS_BY_AMOUNT[amount];
+    if (!forAmount) return BASE_URL;
+    return (freq === 'monthly' ? forAmount.monthly : forAmount.once) || BASE_URL;
   }
 
   function render() {
@@ -294,10 +312,11 @@ export const GIVE_LANDING_HTML = `<!DOCTYPE html>
     document.querySelectorAll('#amount-chips .chip').forEach(function(c) { c.classList.remove('active'); });
     var label = state.freq === 'monthly' ? ('Give $' + val + ' monthly') : ('Give $' + val);
     document.getElementById('cta-label').textContent = label;
-    document.getElementById('give-cta').href = TITHELY_BASE_URL;
+    document.getElementById('give-cta').href = BASE_URL;
   }
 
   render();
 </script>
 </body>
 </html>`;
+}
