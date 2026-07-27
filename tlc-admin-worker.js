@@ -432,7 +432,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-07-27-3'; // bumped: collapse give_amount_tiers monthly_url/once_url into one url column
+    const SCHEMA_VERSION = '2026-07-27-4'; // bumped: add give_funds table (Giving tab fund selector)
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -509,6 +509,31 @@ export default {
           await env.DB.prepare('INSERT INTO give_amount_tiers (amount, is_default, sort_order) VALUES (?, ?, ?)')
             .bind(seedTiers[i], seedTiers[i] === 50 ? 1 : 0, i).run();
         }
+      }
+    } catch (_) {}
+    // Giving tab: fund selector for give.timothystl.org (added 2026-07-27). Self-contained
+    // in this repo rather than pulled from ChMS's own `funds` table — ChMS's funds have no
+    // Tithe.ly linkage (only a Breeze fund ID, for its own giving-sync dedup), so a fund
+    // selectable here needs its own Tithe.ly fund ID regardless of where the name comes
+    // from; no benefit to a live cross-app fetch when that ID still has to be entered by
+    // hand either way. Blank tithely_fund_id means "use whatever fundId is already in the
+    // base Tithe.ly Link" — lets a plain "General Fund" row exist without duplicating the
+    // GUID that's already in the give_url setting.
+    try {
+      await env.DB.prepare(`CREATE TABLE IF NOT EXISTS give_funds (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        tithely_fund_id TEXT NOT NULL DEFAULT '',
+        is_default INTEGER NOT NULL DEFAULT 0,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        active INTEGER NOT NULL DEFAULT 1
+      )`).run();
+    } catch (_) {}
+    try {
+      const fundCount = await env.DB.prepare('SELECT COUNT(*) as c FROM give_funds').first();
+      if (!fundCount || fundCount.c === 0) {
+        await env.DB.prepare('INSERT INTO give_funds (name, tithely_fund_id, is_default, sort_order) VALUES (?, ?, ?, ?)')
+          .bind('General Fund', '', 1, 0).run();
       }
     } catch (_) {}
     // Seed a /links redirect now that the stale static public/links/index.html
@@ -1207,6 +1232,20 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
         isDefault: !!r.is_default,
       }));
       return new Response(JSON.stringify({ tiers }), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
+      });
+    }
+
+    // ── PUBLIC: give.timothystl.org fund selector ── same fetch-and-cache pattern.
+    if (path === '/api/give-funds' && method === 'GET') {
+      const rows = await env.DB.prepare('SELECT id, name, tithely_fund_id, is_default FROM give_funds WHERE active != 0 ORDER BY sort_order').all();
+      const funds = rows.results.map(r => ({
+        id: r.id,
+        name: r.name,
+        tithelyFundId: r.tithely_fund_id || '',
+        isDefault: !!r.is_default,
+      }));
+      return new Response(JSON.stringify({ funds }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
       });
     }
@@ -4824,6 +4863,9 @@ ${sidebarShell('settings', currentUser)}
     if (path.startsWith('/giving-tiers/') && !hasPermission(currentUser, 'giving_manage')) {
       return new Response('Access denied.', { status: 403 });
     }
+    if (path.startsWith('/giving-funds/') && !hasPermission(currentUser, 'giving_manage')) {
+      return new Response('Access denied.', { status: 403 });
+    }
 
     if (path === '/giving/base-url' && method === 'POST') {
       const form = await request.formData();
@@ -4880,9 +4922,43 @@ ${sidebarShell('settings', currentUser)}
       return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-deleted' } });
     }
 
+    if (path === '/giving-funds/add' && method === 'POST') {
+      const form = await request.formData();
+      const name = (form.get('name') || '').trim();
+      const tithelyFundId = (form.get('tithely_fund_id') || '').trim();
+      const isDefault = form.get('is_default') !== null ? 1 : 0;
+      const active = form.get('active') !== null ? 1 : 0;
+      if (!name) return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-error' } });
+      if (isDefault) await env.DB.prepare('UPDATE give_funds SET is_default = 0').run();
+      const maxSort = await env.DB.prepare('SELECT MAX(sort_order) as m FROM give_funds').first();
+      const sortOrder = (maxSort?.m ?? -1) + 1;
+      await env.DB.prepare('INSERT INTO give_funds (name, tithely_fund_id, is_default, active, sort_order) VALUES (?, ?, ?, ?, ?)')
+        .bind(name, tithelyFundId, isDefault, active, sortOrder).run();
+      return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-added' } });
+    }
+    if (path === '/giving-funds/update' && method === 'POST') {
+      const form = await request.formData();
+      const id = parseInt(form.get('id'), 10);
+      const name = (form.get('name') || '').trim();
+      const tithelyFundId = (form.get('tithely_fund_id') || '').trim();
+      const isDefault = form.get('is_default') !== null ? 1 : 0;
+      const active = form.get('active') !== null ? 1 : 0;
+      if (!id || !name) return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-error' } });
+      if (isDefault) await env.DB.prepare('UPDATE give_funds SET is_default = 0 WHERE id != ?').bind(id).run();
+      await env.DB.prepare('UPDATE give_funds SET name = ?, tithely_fund_id = ?, is_default = ?, active = ? WHERE id = ?')
+        .bind(name, tithelyFundId, isDefault, active, id).run();
+      return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-updated' } });
+    }
+    if (path.startsWith('/giving-funds/delete/') && method === 'POST') {
+      const id = parseInt(path.slice('/giving-funds/delete/'.length), 10);
+      await env.DB.prepare('DELETE FROM give_funds WHERE id = ?').bind(id).run();
+      return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-deleted' } });
+    }
+
     if (path === '/giving' && method === 'GET') {
       const baseUrlRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'give_url'").first();
       const tiers = await env.DB.prepare('SELECT * FROM give_amount_tiers ORDER BY sort_order').all();
+      const funds = await env.DB.prepare('SELECT * FROM give_funds ORDER BY sort_order').all();
       const givingLinks = await env.DB.prepare("SELECT path, url, label, category, active FROM redirects WHERE category = 'giving' ORDER BY path").all();
       const msg = url.searchParams.get('msg');
       const alertHtml = msg === 'giving-saved'   ? `<div class="alert alert-success">✓ Saved.</div>`
@@ -4912,6 +4988,23 @@ ${sidebarShell('settings', currentUser)}
             </label>
             <button type="submit" class="btn btn-sm btn-secondary">Save</button>
             <button type="submit" formaction="/giving-tiers/delete/${t.id}" formnovalidate class="btn btn-sm btn-danger" onclick="return confirm('Delete the \\$${t.amount} tier?')">Delete</button>
+          </form>`).join('');
+
+      const fundRowsHtml = funds.results.length === 0
+        ? `<div style="font-size:13px;color:var(--gray);padding:12px 0;">No funds yet — the give.timothystl.org page has no fund selector until at least one fund exists.</div>`
+        : funds.results.map(f => `
+          <form method="POST" action="/giving-funds/update" style="display:grid;grid-template-columns:1.4fr 1.6fr auto auto auto auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+            <input type="hidden" name="id" value="${f.id}">
+            <input type="text" name="name" value="${(f.name||'').replace(/"/g,'&quot;')}" style="font-size:13px;">
+            <input type="text" name="tithely_fund_id" value="${(f.tithely_fund_id||'').replace(/"/g,'&quot;')}" placeholder="Tithe.ly fundId (blank = base link's own fund)" style="font-family:var(--mono,monospace);font-size:12px;">
+            <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--gray);white-space:nowrap;">
+              <input type="checkbox" name="is_default" value="1" ${f.is_default ? 'checked' : ''}> Default
+            </label>
+            <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--gray);white-space:nowrap;">
+              <input type="checkbox" name="active" value="1" ${f.active ? 'checked' : ''}> Active
+            </label>
+            <button type="submit" class="btn btn-sm btn-secondary">Save</button>
+            <button type="submit" formaction="/giving-funds/delete/${f.id}" formnovalidate class="btn btn-sm btn-danger" onclick="return confirm('Delete the ${(f.name||'').replace(/'/g,"\\'")} fund?')">Delete</button>
           </form>`).join('');
 
       const givingRowsHtml = givingLinks.results.length === 0
@@ -4975,6 +5068,34 @@ ${sidebarShell('giving', currentUser)}
       </div>
       <div class="btn-row" style="margin-top:12px;">
         <button type="submit" class="btn btn-primary">Add tier →</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card" style="margin-top:20px;">
+    <div class="card-title">Funds</div>
+    <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">The fund selector shown on give.timothystl.org. Each fund needs its own Tithe.ly <code>fundId</code> — get this the same way as the base link (generate a link for that fund from Tithe.ly's dashboard and copy the <code>fundId</code> value out of the URL). Leave the fund ID blank for a fund that should use whichever fund is already in the Base Tithe.ly Link above (typically your "General Fund" row). Exactly one fund should be Default — that's what's selected when the page first loads.</div>
+    ${fundRowsHtml}
+    <form method="POST" action="/giving-funds/add" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+      <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sage);margin-bottom:12px;">Add new fund</div>
+      <div style="display:grid;grid-template-columns:1.4fr 1.6fr auto auto;gap:12px;align-items:end;">
+        <div class="form-group" style="margin:0;">
+          <label>Fund name</label>
+          <input type="text" name="name" placeholder="e.g. Building Fund">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Tithe.ly fund ID (optional)</label>
+          <input type="text" name="tithely_fund_id" placeholder="Blank = same fund as base link" style="font-family:var(--mono,monospace);">
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--charcoal);white-space:nowrap;padding-bottom:10px;">
+          <input type="checkbox" name="is_default"> Default
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--charcoal);white-space:nowrap;padding-bottom:10px;">
+          <input type="checkbox" name="active" value="1" checked> Active
+        </label>
+      </div>
+      <div class="btn-row" style="margin-top:12px;">
+        <button type="submit" class="btn btn-primary">Add fund →</button>
       </div>
     </form>
   </div>

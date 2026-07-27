@@ -184,6 +184,17 @@ code (`give-landing.js` in this repo) or scattered under Redirects:
   Impact." leadership-giving section ($5,000–$18,000/year, each with its own direct Give
   button) — both are real copy from Andrew, hardcoded in `give-landing.js` rather than
   data-driven, since they're narrative content rather than simple amount/link pairs.
+- **Funds** (`give_funds` D1 table, added 2026-07-27) — a "Give to" dropdown on
+  give.timothystl.org's main widget (hidden entirely if only one fund exists). Each fund
+  has its own Tithe.ly `fundId` — deliberately **not** pulled from ChMS's own `funds` table,
+  since that table has no Tithe.ly linkage at all (only a `breeze_id`, for its own Breeze
+  giving-sync), so a live cross-app fetch would still need each fund's Tithe.ly ID entered
+  by hand here regardless. A blank `tithely_fund_id` means "use whatever fund is already in
+  the Base Tithe.ly Link" (the normal setup for a plain "General Fund" row). Switching funds
+  client-side recomputes every amount's link (chips + custom "other amount") to use the
+  selected fund's ID instead — the ministry-ladder and leadership-giving sections are
+  unaffected by the selector and always use the default fund, since those are separate,
+  narratively-specific asks rather than a generic amount+fund combo.
 - **Vendor / Market Links** — one-off payment links (e.g. a Christmas Market vendor
   deposit) — same underlying `redirects` table/`category='giving'` rows as before, just
   relocated here. URL-agnostic: works for a Tithe.ly custom link or a Square Checkout link
