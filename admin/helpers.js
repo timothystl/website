@@ -4,7 +4,7 @@
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, hasPermission } from './auth.js';
 
-export const VERSION = 'v1.82.0'; // minor bump: new Giving tab (amount tiers, base link, vendor/market links moved from Redirects)
+export const VERSION = 'v1.82.1'; // minor bump: new Giving tab (amount tiers, base link, vendor/market links moved from Redirects)
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
