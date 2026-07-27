@@ -2,7 +2,7 @@
 // Handles server-side redirects before falling through to static assets.
 // Custom redirects are fetched from the admin API and cached in memory for 60s.
 
-import { renderGiveLandingHtml, FALLBACK_TIERS, FALLBACK_BASE_URL } from './give-landing.js';
+import { renderGiveLandingHtml, FALLBACK_TIERS, FALLBACK_BASE_URL, FALLBACK_FUNDS } from './give-landing.js';
 
 const ERROR_PAGE_HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -76,6 +76,8 @@ const settingsCache = {};
 const settingsCacheTime = {};
 let giveAmountsCache = null;
 let giveAmountsCacheTime = 0;
+let giveFundsCache = null;
+let giveFundsCacheTime = 0;
 const CACHE_TTL = 60_000; // 60 seconds
 
 // Paths handled via admin settings keys (instant server-side 302, no SPA load)
@@ -144,6 +146,23 @@ async function getGiveAmounts() {
   return giveAmountsCache || FALLBACK_TIERS;
 }
 
+// give.timothystl.org fund selector — same fetch-and-cache pattern, own fallback.
+async function getGiveFunds() {
+  const now = Date.now();
+  if (giveFundsCache && now - giveFundsCacheTime < CACHE_TTL) return giveFundsCache;
+  try {
+    const res = await fetch('https://admin.timothystl.org/api/give-funds');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.funds) && data.funds.length) {
+        giveFundsCache = data.funds;
+        giveFundsCacheTime = now;
+      }
+    }
+  } catch (_) {}
+  return giveFundsCache || FALLBACK_FUNDS;
+}
+
 export default {
   async fetch(request, env) {
     try {
@@ -163,11 +182,12 @@ export default {
     // Amount tiers + base link are admin-editable (Giving tab) and fetched/cached the
     // same way as the custom redirects and zoom/councilfiles settings above.
     if (url.hostname === 'give.timothystl.org') {
-      const [tiers, baseUrl] = await Promise.all([
+      const [tiers, baseUrl, funds] = await Promise.all([
         getGiveAmounts(),
         getSettingUrl('give_url', FALLBACK_BASE_URL),
+        getGiveFunds(),
       ]);
-      return new Response(renderGiveLandingHtml(tiers, baseUrl), {
+      return new Response(renderGiveLandingHtml(tiers, baseUrl, funds), {
         headers: { 'Content-Type': 'text/html;charset=UTF-8' }
       });
     }

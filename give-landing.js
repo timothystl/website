@@ -31,6 +31,10 @@ export const FALLBACK_BASE_URL = 'https://give.tithe.ly/?formId=e1769a0f-65b3-45
 export const FALLBACK_TIERS = [30, 50, 75, 90, 150, 250].map(amount => ({
   amount, url: '', isDefault: amount === 50,
 }));
+// A single "General Fund" entry with a blank tithelyFundId means "use whatever fundId is
+// already in the base link" — no fund override applied. This is what a fresh/unseeded DB
+// gets too (see the give_funds seed in tlc-admin-worker.js).
+export const FALLBACK_FUNDS = [{ id: 0, name: 'General Fund', tithelyFundId: '', isDefault: true }];
 
 const VALUES_BAND = [
   { key: 'acceptance', label: 'Acceptance', word: 'Welcome', color: '#4A5E3A' },
@@ -71,35 +75,44 @@ const LEADERSHIP_TIERS = [
 
 const fmtAmount = n => n.toLocaleString('en-US');
 
-// Appends Tithe.ly's amount param (cents) to a base link that already carries
-// formId/locationId/fundId. Robust to a base link with or without existing query params,
-// and to one that may (incorrectly) already have its own amount= — this always wins.
-function withAmount(baseUrl, amountDollars) {
+// Appends Tithe.ly's amount param (cents), and optionally overrides fundId, on a base link
+// that already carries formId/locationId/fundId. Robust to a base link with or without
+// existing query params, and to one that may (incorrectly) already have its own amount=/
+// fundId= — this always wins.
+function withAmountAndFund(baseUrl, amountDollars, tithelyFundId) {
   const cents = Math.round(amountDollars * 100);
   try {
     const u = new URL(baseUrl);
+    if (tithelyFundId) u.searchParams.set('fundId', tithelyFundId);
     u.searchParams.set('amount', String(cents));
     return u.toString();
   } catch {
     // baseUrl isn't a valid absolute URL (shouldn't happen — validated on save) — best
     // effort rather than throwing on a public page.
     const sep = baseUrl.includes('?') ? '&' : '?';
-    return `${baseUrl}${sep}amount=${cents}`;
+    const fundPart = tithelyFundId ? `&fundId=${encodeURIComponent(tithelyFundId)}` : '';
+    return `${baseUrl}${sep}amount=${cents}${fundPart}`;
   }
 }
+const withAmount = (baseUrl, amountDollars) => withAmountAndFund(baseUrl, amountDollars, '');
 
-// tiers: [{amount, url, isDefault}], baseUrl: string
-export function renderGiveLandingHtml(tiers, baseUrl) {
+// tiers: [{amount, url, isDefault}], baseUrl: string, funds: [{id, name, tithelyFundId, isDefault}]
+export function renderGiveLandingHtml(tiers, baseUrl, funds) {
   const safeTiers = Array.isArray(tiers) && tiers.length ? tiers : FALLBACK_TIERS;
   const safeBaseUrl = baseUrl || FALLBACK_BASE_URL;
+  const safeFunds = Array.isArray(funds) && funds.length ? funds : FALLBACK_FUNDS;
   const defaultTier = safeTiers.find(t => t.isDefault) || safeTiers[0];
   const defaultAmount = defaultTier.amount;
+  const defaultFund = safeFunds.find(f => f.isDefault) || safeFunds[0];
 
-  // Lookup table keyed by amount. A tier's own `url` (if set) is a full override — used
-  // as-is, no amount appended, e.g. for a tier that should go to a different fund entirely.
-  // Otherwise the base link gets `&amount=<cents>` appended for this specific tier.
-  const linkByAmount = {};
-  for (const t of safeTiers) linkByAmount[t.amount] = t.url || withAmount(safeBaseUrl, t.amount);
+  // Per-tier override URLs only — used as-is (ignoring the fund selector entirely), for the
+  // rare case a specific amount should go somewhere else altogether. Everything else is
+  // computed client-side from BASE_URL + the currently selected fund, so switching funds
+  // updates every amount's link without a page reload.
+  const tierOverrideByAmount = {};
+  for (const t of safeTiers) if (t.url) tierOverrideByAmount[t.amount] = t.url;
+  const initialLinkByAmount = {};
+  for (const t of safeTiers) initialLinkByAmount[t.amount] = t.url || withAmountAndFund(safeBaseUrl, t.amount, defaultFund.tithelyFundId);
 
   const ladderRowsHtml = MINISTRY_LADDER.map(row => `
     <div class="ladder-row">
@@ -184,6 +197,17 @@ export function renderGiveLandingHtml(tiers, baseUrl) {
   }
   .widget-col .give-title { font-family: 'Lora', Georgia, serif; font-weight: 600; font-size: 27px; color: #1E2D4A; }
   .widget-col .tagline { font-family: 'Lora', Georgia, serif; font-style: italic; font-size: 15.5px; color: #2E7EA6; margin-top: 4px; }
+
+  .fund-label {
+    font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+    color: #6b6a5f; margin-top: 24px; margin-bottom: 8px;
+  }
+  .fund-select {
+    width: 100%; background: #fff; border: 1px solid #DDE3ED; border-radius: 9px;
+    padding: 12px 14px; font-family: 'Source Sans 3', sans-serif; font-size: 15px;
+    color: #1E2D4A; font-weight: 600; cursor: pointer;
+  }
+  .fund-select:focus-visible { outline: 2px solid #2E7EA6; outline-offset: 2px; }
 
   .amount-label {
     font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
@@ -326,6 +350,12 @@ export function renderGiveLandingHtml(tiers, baseUrl) {
       <div class="give-title">Give to Timothy</div>
       <div class="tagline">From Our Neighborhood to the Nations</div>
 
+      ${safeFunds.length > 1 ? `
+      <div class="fund-label">Give to</div>
+      <select class="fund-select" id="fund-select" onchange="setFund(this.value)">
+        ${safeFunds.map(f => `<option value="${(f.tithelyFundId||'').replace(/"/g,'&quot;')}"${f.id===defaultFund.id?' selected':''}>${f.name}</option>`).join('')}
+      </select>` : ''}
+
       <div class="amount-label">Choose an amount</div>
       <div class="amount-chips" id="amount-chips" role="group" aria-label="Gift amount">
         ${safeTiers.map(t => `<div class="chip${t.amount===defaultAmount?' active':''}" tabindex="0" role="button" data-amount="${t.amount}" onclick="setAmount(${t.amount})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setAmount(${t.amount});}">$${t.amount}</div>`).join('')}
@@ -337,7 +367,7 @@ export function renderGiveLandingHtml(tiers, baseUrl) {
       </div>
       <div class="amount-error" id="amount-error">Please enter an amount of at least $1.</div>
 
-      <a class="cta" id="give-cta" href="${safeBaseUrl}" target="_blank" rel="noopener">
+      <a class="cta" id="give-cta" href="${initialLinkByAmount[defaultAmount]}" target="_blank" rel="noopener">
         <span id="cta-label">Give $${defaultAmount}</span> <span aria-hidden="true">→</span>
       </a>
 
@@ -379,26 +409,33 @@ export function renderGiveLandingHtml(tiers, baseUrl) {
 
 <script>
   var BASE_URL = ${JSON.stringify(safeBaseUrl)};
-  var LINK_BY_AMOUNT = ${JSON.stringify(linkByAmount)};
-  var state = { amount: ${JSON.stringify(defaultAmount)} };
+  var TIER_OVERRIDES = ${JSON.stringify(tierOverrideByAmount)};
+  var state = { amount: ${JSON.stringify(defaultAmount)}, fundId: ${JSON.stringify(defaultFund.tithelyFundId || '')} };
 
-  // Client-side mirror of the server's withAmount() — Tithe.ly prefills the gift amount
-  // via a plain ?amount=<cents> query param appended to the base formId/locationId/fundId
-  // link, so a typed "other amount" can be prefilled too, not just the fixed chip tiers.
-  function withAmount(baseUrl, amountDollars) {
+  // Client-side mirror of the server's withAmountAndFund() — Tithe.ly prefills the gift
+  // amount via a plain ?amount=<cents> query param, and lets a different fund be selected
+  // via ?fundId=..., both appended to the base formId/locationId/fundId link. Recomputed
+  // here (not just server-side) so changing the fund selector or typing a custom "other
+  // amount" both produce a real prefilled link without a page reload.
+  function withAmountAndFund(baseUrl, amountDollars, tithelyFundId) {
     var cents = Math.round(amountDollars * 100);
     try {
       var u = new URL(baseUrl);
+      if (tithelyFundId) u.searchParams.set('fundId', tithelyFundId);
       u.searchParams.set('amount', String(cents));
       return u.toString();
     } catch (e) {
       var sep = baseUrl.indexOf('?') === -1 ? '?' : '&';
-      return baseUrl + sep + 'amount=' + cents;
+      var fundPart = tithelyFundId ? ('&fundId=' + encodeURIComponent(tithelyFundId)) : '';
+      return baseUrl + sep + 'amount=' + cents + fundPart;
     }
   }
 
   function linkFor(amount) {
-    return LINK_BY_AMOUNT[amount] || withAmount(BASE_URL, amount);
+    // A tier's own override link ignores the fund selector entirely — it's a full,
+    // deliberate override (e.g. a different fund/form), not just an amount+fund combo.
+    if (TIER_OVERRIDES[amount]) return TIER_OVERRIDES[amount];
+    return withAmountAndFund(BASE_URL, amount, state.fundId);
   }
 
   function render() {
@@ -419,6 +456,11 @@ export function renderGiveLandingHtml(tiers, baseUrl) {
     render();
   }
 
+  function setFund(tithelyFundId) {
+    state.fundId = tithelyFundId;
+    render();
+  }
+
   function onOtherAmountInput(input) {
     var val = parseInt(input.value, 10);
     var errEl = document.getElementById('amount-error');
@@ -430,7 +472,7 @@ export function renderGiveLandingHtml(tiers, baseUrl) {
     state.amount = val;
     document.querySelectorAll('#amount-chips .chip').forEach(function(c) { c.classList.remove('active'); });
     document.getElementById('cta-label').textContent = 'Give $' + val;
-    document.getElementById('give-cta').href = withAmount(BASE_URL, val);
+    document.getElementById('give-cta').href = withAmountAndFund(BASE_URL, val, state.fundId);
   }
 
   render();

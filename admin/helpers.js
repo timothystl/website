@@ -4,7 +4,7 @@
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, hasPermission } from './auth.js';
 
-export const VERSION = 'v1.84.1'; // minor bump: give.timothystl.org auto-builds prefilled Tithe.ly links (amount param in cents) instead of needing one per tier
+export const VERSION = 'v1.85.0'; // minor bump: fund selector on give.timothystl.org, new Funds card in the Giving tab
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
