@@ -11,7 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   renderPage, sanitizeBlocks, parseBlocks, blocksClientConfig, editorPhoneCss,
-  migrateLegacyPage, starterBlocks,
+  migrateLegacyPage, starterBlocks, newBlock,
 } from '../admin/blocks.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -57,7 +57,9 @@ export function createEditorServer(seed = {}) {
 
     if (p.startsWith('/ministries/editor/') && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      return res.end(EDITOR_HTML.replace('/*TLCB_EDITOR_CSS*/', editorPhoneCss()));
+      // No TinyMCE in the harness (the container has no egress) — the editor
+      // must degrade to plain contenteditable, which this exercises.
+      return res.end(EDITOR_HTML.replace('/*TLCB_EDITOR_CSS*/', editorPhoneCss()).replace('<!--TLCB_TINYMCE-->', ''));
     }
 
     if (p.startsWith('/ministries/api/page/')) {
@@ -125,6 +127,13 @@ export function createEditorServer(seed = {}) {
         return json(res, { ok: true, status: row.page_status, publish_at: row.publish_at });
       }
       return json(res, { error: 'Not found' }, 404);
+    }
+
+    if (p === '/ministries/api/new-block' && req.method === 'POST') {
+      const body = await readBody(req);
+      const block = newBlock(String(body.type || ''));
+      if (!block) return json(res, { error: 'Unknown block type' }, 400);
+      return json(res, { block });
     }
 
     if (p === '/ministries/api/render' && req.method === 'POST') {

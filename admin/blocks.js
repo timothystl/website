@@ -511,6 +511,8 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-logo img{max-width:100%;max-height:100%;object-fit:contain;}
 .tlcb-spacer{height:var(--tlcb-height,48px);}
 .tlcb-note{font-size:11.5px;color:#8A8898;}
+.tlcb [contenteditable="true"]:empty::before{content:attr(data-ph);color:#A8A69A;font-style:italic;}
+.tlcb [contenteditable="true"]{min-height:1em;}
 .tlcb-stamp{position:absolute;z-index:4;bottom:14px;padding:7px 15px;border-radius:7px;
   font:700 13px/1.3 'Source Sans 3',sans-serif;letter-spacing:.1em;text-transform:uppercase;
   box-shadow:0 5px 16px rgba(30,45,74,.3);white-space:nowrap;}
@@ -604,27 +606,31 @@ function wrapperVars(b) {
 
 // In editing mode text fields become contenteditable and carry data-field so
 // the editor can commit them on blur. On the public site they are plain HTML.
-function field(opts, b, key, tag, cls, value, extra = '') {
+// `extra` may carry a data-ph placeholder; that is editor chrome, so it is
+// stripped from the public render rather than shipped to every visitor.
+const publicAttrs = (extra) => extra.replace(/ data-ph="[^"]*"/g, '');
+
+function field(opts, b, key, tag, cls, value, extra = '', rich = false) {
   const content = value == null ? '' : value;
-  if (!opts.editing) return `<${tag} class="${cls}"${extra}>${content}</${tag}>`;
-  return `<${tag} class="${cls}" data-field="${key}" contenteditable="true" spellcheck="true"${extra}>${content}</${tag}>`;
+  if (!opts.editing) return `<${tag} class="${cls}"${publicAttrs(extra)}>${content}</${tag}>`;
+  return `<${tag} class="${cls}" data-field="${key}"${rich ? ' data-rich="1"' : ''} contenteditable="true" spellcheck="true"${extra}>${content}</${tag}>`;
 }
 
-function itemField(opts, idx, key, tag, cls, value, extra = '') {
+function itemField(opts, idx, key, tag, cls, value, extra = '', rich = false) {
   const content = value == null ? '' : value;
-  if (!opts.editing) return `<${tag} class="${cls}"${extra}>${content}</${tag}>`;
-  return `<${tag} class="${cls}" data-item="${idx}" data-field="${key}" contenteditable="true" spellcheck="true"${extra}>${content}</${tag}>`;
+  if (!opts.editing) return `<${tag} class="${cls}"${publicAttrs(extra)}>${content}</${tag}>`;
+  return `<${tag} class="${cls}" data-item="${idx}" data-field="${key}"${rich ? ' data-rich="1"' : ''} contenteditable="true" spellcheck="true"${extra}>${content}</${tag}>`;
 }
 
 const ytId = (u) => (String(u || '').match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/)([A-Za-z0-9_-]{11})/) || [])[1] || '';
 
 function renderBody(opts, b, def) {
   const val = def.richBody ? (b.body || '') : esc(b.body || '');
-  return field(opts, b, 'body', 'div', 'tlcb-prose', val);
+  return field(opts, b, 'body', 'div', 'tlcb-prose', val, ' data-ph="Write something here…"', !!def.richBody);
 }
 
-function renderHead(opts, b) {
-  return field(opts, b, 'title', 'div', 'tlcb-head', esc(b.title || ''));
+function renderHead(opts, b, ph = 'Heading') {
+  return field(opts, b, 'title', 'div', 'tlcb-head', esc(b.title || ''), ` data-ph="${esc(ph)}"`);
 }
 
 function renderStamp(opts, b) {
@@ -643,8 +649,8 @@ function renderInner(b, opts) {
     const change = opts.editing
       ? `<button type="button" class="tlcb-pick" data-act="photo">Change photo</button>` : '';
     return `<div class="tlcb-hero">${change}
-      ${field(opts, b, 'body', 'div', 'tlcb-hero-eyebrow', esc(b.body || 'Ministry'))}
-      ${field(opts, b, 'title', 'div', 'tlcb-hero-title', esc(b.title || ''))}
+      ${field(opts, b, 'body', 'div', 'tlcb-hero-eyebrow', esc(b.body || ''), ' data-ph="Ministry"')}
+      ${field(opts, b, 'title', 'div', 'tlcb-hero-title', esc(b.title || ''), ' data-ph="Page title"')}
     </div>`;
   }
 
@@ -663,8 +669,8 @@ function renderInner(b, opts) {
 
   if (t === 'columns') {
     const cells = (b.items || []).map((it, i) => `<div class="tlcb-stack" style="gap:7px">
-        ${itemField(opts, i, 'title', 'div', 'tlcb-head', esc(it.title || ''), ' style="font-size:calc(var(--tlcb-head,22px) * .8)"')}
-        ${itemField(opts, i, 'body', 'div', 'tlcb-prose', it.body || '')}
+        ${itemField(opts, i, 'title', 'div', 'tlcb-head', esc(it.title || ''), ' data-ph="Column heading" style="font-size:calc(var(--tlcb-head,22px) * .8)"')}
+        ${itemField(opts, i, 'body', 'div', 'tlcb-prose', it.body || '', ' data-ph="What happens here"', true)}
       </div>`).join('');
     return `<div class="tlcb-stack">${renderHead(opts, b)}<div class="tlcb-cols">${cells}</div></div>`;
   }
@@ -706,17 +712,17 @@ function renderInner(b, opts) {
 
   if (t === 'times') {
     const rows = (b.items || []).map((it, i) => `<div class="tlcb-time">
-        ${itemField(opts, i, 'title', 'b', '', esc(it.title || ''))}
-        ${itemField(opts, i, 'body', 'i', '', esc(it.body || ''))}
-        ${itemField(opts, i, 'meta', 'u', '', esc(it.meta || ''))}
+        ${itemField(opts, i, 'title', 'b', '', esc(it.title || ''), ' data-ph="Who"')}
+        ${itemField(opts, i, 'body', 'i', '', esc(it.body || ''), ' data-ph="When"')}
+        ${itemField(opts, i, 'meta', 'u', '', esc(it.meta || ''), ' data-ph="Where"')}
       </div>`).join('');
     return `<div class="tlcb-stack">${renderHead(opts, b)}<div class="tlcb-times">${rows}</div></div>`;
   }
 
   if (t === 'faq') {
     const rows = (b.items || []).map((it, i) => `<details class="tlcb-faq"${opts.editing ? ' open' : ''}>
-        <summary>${itemField(opts, i, 'title', 'span', '', esc(it.title || ''))}</summary>
-        ${itemField(opts, i, 'body', 'div', 'tlcb-prose', it.body || '')}
+        <summary>${itemField(opts, i, 'title', 'span', '', esc(it.title || ''), ' data-ph="A question people ask"')}</summary>
+        ${itemField(opts, i, 'body', 'div', 'tlcb-prose', it.body || '', ' data-ph="The answer"', true)}
       </details>`).join('');
     return `<div class="tlcb-stack">${renderHead(opts, b)}<div class="tlcb-rows">${rows}</div></div>`;
   }
@@ -724,7 +730,7 @@ function renderInner(b, opts) {
   if (t === 'callout') {
     return `<div class="tlcb-callout">
       <span class="tlcb-callout-tag">Please note</span>
-      ${field(opts, b, 'title', 'div', 'tlcb-callout-t', esc(b.title || ''))}
+      ${field(opts, b, 'title', 'div', 'tlcb-callout-t', esc(b.title || ''), ' data-ph="What people need to know"')}
       ${renderBody(opts, b, def)}
     </div>`;
   }
@@ -732,7 +738,7 @@ function renderInner(b, opts) {
   if (t === 'buttons') {
     const btns = (b.items || []).map((it, i) => {
       const cls = 'tlcb-btn' + (i > 0 ? ' tlcb-btn--ghost' : '');
-      if (opts.editing) return itemField(opts, i, 'title', 'span', cls, esc(it.title || ''));
+      if (opts.editing) return itemField(opts, i, 'title', 'span', cls, esc(it.title || ''), ' data-ph="Button label"');
       const href = safeUrl(it.url);
       return href ? `<a class="${cls}" href="${esc(href)}"${/^https?:/i.test(href) ? ' target="_blank" rel="noopener noreferrer"' : ''}>${esc(it.title || '')}</a>`
         : `<span class="${cls}">${esc(it.title || '')}</span>`;
@@ -765,7 +771,7 @@ function renderInner(b, opts) {
       : `<span class="tlcb-btn tlcb-btn--ghost">Download</span>`;
     return `<div class="tlcb-dl">
       <span class="tlcb-dl-i">${kind}</span>
-      <span class="tlcb-dl-b">${field(opts, b, 'title', 'span', 'tlcb-dl-t', esc(b.title || ''))}
+      <span class="tlcb-dl-b">${field(opts, b, 'title', 'span', 'tlcb-dl-t', esc(b.title || ''), ' data-ph="What the file is"')}
         <span class="tlcb-dl-m">${href ? esc(href.split('/').pop().slice(0, 60)) : 'No file chosen yet'}</span></span>
       ${btn}
     </div>`;
@@ -786,7 +792,7 @@ function renderInner(b, opts) {
       : `<div class="tlcb-stack" style="gap:9px"><span class="tlcb-field"></span><span class="tlcb-field"></span>
           <span class="tlcb-btn" style="align-self:flex-start;background:#2E7EA6;border-color:#2E7EA6;color:#fff">Sign up</span>
           <span class="tlcb-note">${src ? 'Form embed' : 'Paste a Google Form URL in the panel on the right.'}</span></div>`;
-    return `<div class="tlcb-panel tlcb-panel--form">${renderHead(opts, b)}${field(opts, b, 'body', 'div', 'tlcb-prose', esc(b.body || ''))}${inner}</div>`;
+    return `<div class="tlcb-panel tlcb-panel--form">${renderHead(opts, b)}${field(opts, b, 'body', 'div', 'tlcb-prose', esc(b.body || ''), ' data-ph="A line of introduction"')}${inner}</div>`;
   }
 
   if (t === 'newsletter') {
@@ -795,7 +801,7 @@ function renderInner(b, opts) {
       : `<form class="tlcb-inline" method="POST" action="https://admin.timothystl.org/api/subscribe" target="_blank">
           <input class="tlcb-field" type="email" name="email" placeholder="you@email.com" required aria-label="Email address">
           <button class="tlcb-btn" type="submit">Subscribe</button></form>`;
-    return `<div class="tlcb-panel">${renderHead(opts, b)}${field(opts, b, 'body', 'div', 'tlcb-prose', esc(b.body || ''))}${form}</div>`;
+    return `<div class="tlcb-panel">${renderHead(opts, b)}${field(opts, b, 'body', 'div', 'tlcb-prose', esc(b.body || ''), ' data-ph="A line of introduction"')}${form}</div>`;
   }
 
   if (t === 'give') {
@@ -807,7 +813,7 @@ function renderInner(b, opts) {
       ? `<span class="tlcb-chip tlcb-chip--go">Give now</span>`
       : `<a class="tlcb-chip tlcb-chip--go" href="${esc(href)}" target="_blank" rel="noopener noreferrer">Give now</a>`;
     return `<div class="tlcb-give">${renderHead(opts, b)}
-      ${field(opts, b, 'body', 'div', 'tlcb-give-note', esc(b.body || ''))}
+      ${field(opts, b, 'body', 'div', 'tlcb-give-note', esc(b.body || ''), ' data-ph="Why it matters"')}
       <div class="tlcb-inline">${chip('$25', 2500)}${chip('$100', 10000)}${go}</div>
     </div>`;
   }

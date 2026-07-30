@@ -207,6 +207,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
   .ed-insp{width:280px;}
 }
 </style>
+<!--TLCB_TINYMCE-->
 </head>
 <body>
 <div id="root"><div class="ed-boot">Loading the page editor…</div></div>
@@ -424,9 +425,34 @@ async function refreshCanvas() {
 }
 
 function setCanvas(html) {
+  if (window.tinymce) { try { window.tinymce.remove(); } catch (_) {} }
   el.edPaper.innerHTML = html;
   applySelection();
   fitPaper();
+  initRichText();
+}
+
+// Rich text uses the same TinyMCE the office already knows, in inline mode: a
+// floating toolbar on selection rather than a second editor chrome inside the
+// page. The toolbar carries no font, size or colour controls — those live in
+// the inspector where they are constrained to the site's own scale and palette.
+// If TinyMCE fails to load the fields stay plain contenteditable, which still
+// types and still saves.
+function initRichText() {
+  if (!window.tinymce || !el.edPaper.querySelector('[data-rich="1"]')) return;
+  try {
+    window.tinymce.init({
+      selector: '#edPaper [data-rich="1"]',
+      inline: true, menubar: false, statusbar: false, branding: false,
+      plugins: 'lists link autolink',
+      toolbar: 'bold italic underline | bullist numlist | link',
+      valid_elements: 'p,br,strong/b,em/i,u,s,ul,ol,li,a[href|target|rel],h2,h3,h4,blockquote',
+      link_default_target: '_blank',
+      setup: function (ed) {
+        ed.on('blur', function () { commitField(ed.getElement()); });
+      },
+    });
+  } catch (_) { /* plain contenteditable is a fine fallback */ }
 }
 
 function applySelection() {
@@ -442,8 +468,230 @@ function renderAll() {
   renderInspector();
 }
 
-// ── inspector (phase 3 fills this in) ──────────────────────────────────────
+// ── mutation ───────────────────────────────────────────────────────────────
+// Every change goes through patch(). `mode` decides how the canvas catches up:
+//   'style'    — the block's CSS custom properties are updated in place (default)
+//   'rerender' — the markup itself changed, so ask the Worker to redraw
+//   'none'     — the DOM is already correct (the user just typed into it)
+function pushHistory() {
+  S.history.push(JSON.stringify(S.blocks));
+  if (S.history.length > 40) S.history.shift();
+}
+function note(text) {
+  if (!text) return;
+  S.changes.unshift(text + ' · ' + now());
+  if (S.changes.length > 24) S.changes.length = 24;
+}
+
+function patch(id, part, label, mode, keepInspector) {
+  var b = findBlock(id);
+  if (!b) return;
+  pushHistory();
+  Object.keys(part).forEach(function (k) { b[k] = part[k]; });
+  note(label);
+  if (mode === 'rerender') { rerender(); } else if (mode !== 'none') { restyle(b); }
+  renderTop(); renderRail(); renderChanges();
+  if (!keepInspector) renderInspector();
+  scheduleSave();
+  if (label) say(label);
+}
+
+// The client half of the CSS-custom-property contract in admin/blocks.js.
+// It must produce byte-identical output to wrapperVars() there — test/
+// editor.test.mjs asserts exactly that against a server render, so drift is
+// caught rather than shipped.
+function styleVars(b) {
+  var C = S.config;
+  var sz = C.SIZES.filter(function (x) { return x.key === b.size; })[0] || C.SIZES[1];
+  var sp = C.SPLITS.filter(function (x) { return x.key === b.split; })[0] || C.SPLITS[1];
+  var bg = C.BG[b.bg] || C.BG[0];
+  var ink = C.INK[b.ink] || C.INK[0];
+  var cols = b.side === 'above' ? '1fr' : (b.side === 'right' ? sp.b + ' ' + sp.a : sp.a + ' ' + sp.b);
+  var v = [
+    '--tlcb-bg:' + bg.c,
+    '--tlcb-ink:' + ink.c,
+    '--tlcb-head-ink:' + (bg.dark ? '#F3EDE1' : '#1E2D4A'),
+    '--tlcb-body:' + sz.body + 'px',
+    '--tlcb-head:' + sz.head + 'px',
+    '--tlcb-hero:' + sz.hero + 'px',
+    '--tlcb-gap:' + b.gap + 'px',
+    '--tlcb-height:' + b.height + 'px',
+    '--tlcb-media-order:' + (b.side === 'right' ? 2 : 0),
+    'margin-top:' + b.spaceAbove + 'px',
+    'margin-bottom:' + b.spaceBelow + 'px',
+  ];
+  if (b.type === 'textphoto') v.push('--tlcb-cols:' + cols);
+  if (b.type === 'columns') v.push('--tlcb-cols:repeat(' + b.cols + ',1fr)');
+  if (b.type === 'hero' && b.photo) v.push("--tlcb-hero-img:url('" + String(b.photo).replace(/["'\\()\s<>;{}]/g, '') + "')");
+  return v.join(';');
+}
+
+function blockNode(id) {
+  var nodes = el.edPaper.querySelectorAll('.tlcb');
+  for (var i = 0; i < nodes.length; i++) if (nodes[i].dataset.id === id) return nodes[i];
+  return null;
+}
+
+function restyle(b) {
+  var node = blockNode(b.id);
+  if (!node) return;
+  node.setAttribute('style', styleVars(b));
+  node.classList.toggle('tlcb-hide-phone', !!b.hidden);
+  node.classList.toggle('is-sel', b.id === S.selectedId);
+  if (b.type === 'spacer') {
+    var sp = node.querySelector('.tlcb-spacer');
+    if (sp) sp.textContent = b.height + 'PX SPACE';
+  }
+}
+
+async function rerender() {
+  try {
+    var out = await api('/ministries/api/render', { method: 'POST', body: JSON.stringify({ blocks: S.blocks, slug: S.slug }) });
+    S.blocks = out.blocks; // take the server's sanitised version back as the truth
+    setCanvas(out.html);
+    renderRail();
+    renderInspector();
+  } catch (err) {
+    if (String(err && err.message) !== 'auth') toast('Could not redraw the page — reload to be safe');
+  }
+}
+
+async function freshBlock(type) {
+  var out = await api('/ministries/api/new-block', { method: 'POST', body: JSON.stringify({ type: type }) });
+  return out.block;
+}
+
+// ── autosave ───────────────────────────────────────────────────────────────
+var saveTimer = null;
+function scheduleSave() {
+  S.dirty = true;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveDraft, 1500);
+}
+async function saveDraft() {
+  clearTimeout(saveTimer);
+  if (!S.dirty) return;
+  try {
+    var out = await api('/ministries/api/page/' + encodeURIComponent(S.slug) + '/draft',
+      { method: 'POST', body: JSON.stringify({ blocks: S.blocks, changes: S.changes }) });
+    S.dirty = false;
+    S.saved = now();
+    S.status = out.status || S.status;
+    renderTop();
+  } catch (err) {
+    if (String(err && err.message) === 'auth') return;
+    toast('Could not save — your connection may be down');
+  }
+}
+
+// ── block actions ──────────────────────────────────────────────────────────
+function select(id) {
+  S.selectedId = id;
+  applySelection();
+  renderRail();
+  renderInspector();
+}
+
+async function duplicateBlock(id) {
+  var i = indexOfBlock(id);
+  if (i < 0) return;
+  var copy = JSON.parse(JSON.stringify(S.blocks[i]));
+  copy.id = 'b' + Math.random().toString(36).slice(2, 12);
+  pushHistory();
+  S.blocks.splice(i + 1, 0, copy);
+  S.selectedId = copy.id;
+  note('Duplicated ' + def(copy.type).label.toLowerCase());
+  await rerender();
+  renderTop(); renderChanges(); scheduleSave();
+  say('Duplicated ' + def(copy.type).label);
+}
+
+async function deleteBlock(id) {
+  var b = findBlock(id);
+  if (!b) return;
+  pushHistory();
+  S.blocks = S.blocks.filter(function (x) { return x.id !== id; });
+  S.selectedId = null;
+  note('Deleted ' + def(b.type).label.toLowerCase());
+  await rerender();
+  renderTop(); renderChanges(); scheduleSave();
+  say('Deleted ' + def(b.type).label + '. Undo is in the top bar.');
+}
+
+function toggleHide(id) {
+  var b = findBlock(id);
+  if (!b) return;
+  patch(id, { hidden: !b.hidden }, (b.hidden ? 'Shown on phone: ' : 'Hidden on phone: ') + def(b.type).label.toLowerCase());
+}
+
+async function resetBlock(id) {
+  var b = findBlock(id);
+  if (!b) return;
+  var fresh = await freshBlock(b.type);
+  fresh.id = b.id;
+  pushHistory();
+  S.blocks = S.blocks.map(function (x) { return x.id === id ? fresh : x; });
+  note('Reset ' + def(b.type).label.toLowerCase());
+  await rerender();
+  renderTop(); renderChanges(); scheduleSave();
+}
+
+async function undo() {
+  if (!S.history.length) return;
+  var prev = JSON.parse(S.history.pop());
+  S.blocks = prev;
+  S.selectedId = null;
+  note('Undid last change');
+  await rerender();
+  renderTop(); renderChanges(); scheduleSave();
+  say('Undid last change');
+}
+
+// ── in-place text editing ──────────────────────────────────────────────────
+// The canvas markup is authored by the Worker with the current values already
+// in it, so there is nothing to "hydrate" on every keystroke and no controlled
+// re-render to fight the caret with. Values are read back on blur and
+// committed; the canvas is only redrawn for structural changes, which always
+// happen with the field already blurred.
+function commitField(node) {
+  // Only genuine fields. `closest('[contenteditable]')` also matches the
+  // contenteditable="false" toolbar, and a node detached by a re-render fires
+  // focusout on its way out — either one would log a phantom text edit and
+  // leave an extra step on the undo stack.
+  if (!node || node.getAttribute('contenteditable') !== 'true') return;
+  if (!node.dataset.field) return;
+  if (!el.edPaper.contains(node)) return;
+  var wrap = node.closest('.tlcb');
+  if (!wrap) return;
+  var b = findBlock(wrap.dataset.id);
+  if (!b) return;
+  var field = node.dataset.field;
+  var itemIdx = node.dataset.item;
+  var d = def(b.type);
+  var isRich = itemIdx != null ? d.richItemFields.indexOf(field) > -1 : (d.richBody && field === 'body');
+  var value = isRich ? node.innerHTML.trim() : node.textContent.trim();
+  if (itemIdx != null) {
+    var it = b.items[Number(itemIdx)];
+    if (!it || it[field] === value) return;
+    pushHistory();
+    it[field] = value;
+  } else {
+    if (b[field] === value) return;
+    pushHistory();
+    b[field] = value;
+  }
+  note((field === 'stamp' ? 'Reworded the stamp on ' : 'Edited text in ') + d.label.toLowerCase());
+  renderTop(); renderRail(); renderChanges();
+  scheduleSave();
+}
+
+// ── inspector ──────────────────────────────────────────────────────────────
 function renderInspector() {
+  // Rebuilding the panel loses focus; put it back on the same control so the
+  // keyboard path through a stepper or a swatch row survives a re-render.
+  var active = document.activeElement;
+  var focusKey = active && active.closest && active.closest('#edInspBody') ? active.getAttribute('data-k') : null;
+
   var b = findBlock(S.selectedId);
   if (!b) {
     el.edInspHead.innerHTML = '';
@@ -452,12 +700,274 @@ function renderInspector() {
     return;
   }
   var d = def(b.type);
-  el.edInspHead.innerHTML = '<div class="ed-insp-h"><b>' + esc(d.label) + '</b><span>Block ' + (indexOfBlock(b.id) + 1) + ' of ' + S.blocks.length + '</span></div>';
+  el.edInspHead.innerHTML = '<div class="ed-insp-h"><b>' + esc(d.label) + '</b>' +
+    '<span>Block ' + (indexOfBlock(b.id) + 1) + ' of ' + S.blocks.length + '</span></div>';
   el.edInspBody.className = 'ed-insp-body';
   el.edInspBody.innerHTML = inspectorSections(b, d);
+
+  if (focusKey) {
+    var back = el.edInspBody.querySelector('[data-k="' + focusKey.replace(/"/g, '') + '"]');
+    if (back) back.focus();
+  }
 }
 
-function inspectorSections() { return ''; }
+function chip(action, value, label, on, extra) {
+  return '<button type="button" class="ed-pick" data-a="' + action + '" data-v="' + esc(value) + '"' +
+    ' data-k="' + action + ':' + esc(value) + '" aria-pressed="' + (on ? 'true' : 'false') + '"' +
+    (extra || '') + '>' + esc(label) + '</button>';
+}
+
+function stepper(b, key, label) {
+  return '<div class="ed-step-row"><span>' + esc(label) + '</span>' +
+    '<span class="ed-step">' +
+      '<button type="button" data-a="step" data-v="' + key + ':-1" data-k="step:' + key + ':-1" aria-label="Less ' + esc(label.toLowerCase()) + '">−</button>' +
+      '<output>' + b[key] + 'px</output>' +
+      '<button type="button" data-a="step" data-v="' + key + ':1" data-k="step:' + key + ':1" aria-label="More ' + esc(label.toLowerCase()) + '">+</button>' +
+    '</span></div>';
+}
+
+function inspectorSections(b, d) {
+  var C = S.config;
+  var out = '';
+
+  // 1. Columns
+  if (b.type === 'columns') {
+    out += '<div class="ed-sec"><span class="ed-lab">Columns</span><div class="ed-chips">' +
+      chip('cols', '2', '2 columns', b.cols === 2) + chip('cols', '3', '3 columns', b.cols === 3) +
+      '</div><span class="ed-note">Columns stack on a phone automatically.</span></div>';
+  }
+
+  // 2 + 3. Photo position and column split
+  if (b.type === 'textphoto') {
+    out += '<div class="ed-sec"><span class="ed-lab">Photo position</span><div class="ed-chips">' +
+      chip('side', 'left', 'Left', b.side === 'left') +
+      chip('side', 'right', 'Right', b.side === 'right') +
+      chip('side', 'above', 'Above', b.side === 'above') +
+      '</div></div>';
+    var sp = C.SPLITS.filter(function (x) { return x.key === b.split; })[0] || C.SPLITS[1];
+    out += '<div class="ed-sec"><div class="ed-lab-row"><span class="ed-lab">Column split</span>' +
+      '<span class="ed-read">' + esc(b.side === 'above' ? 'Full width' : sp.text) + '</span></div><div class="ed-chips">' +
+      C.SPLITS.map(function (s) { return chip('split', s.key, s.label, s.key === b.split); }).join('') +
+      '</div><span class="ed-note">Columns stack automatically on a phone.</span></div>';
+  }
+
+  // 4. Spacing
+  out += '<div class="ed-sec"><span class="ed-lab">Spacing</span>' +
+    stepper(b, 'spaceAbove', 'Space above') +
+    stepper(b, 'spaceBelow', 'Space below') +
+    (b.type === 'textphoto' || b.type === 'columns' ? stepper(b, 'gap', 'Gap between columns') : '') +
+    (b.type === 'spacer' ? stepper(b, 'height', 'Height') : '') +
+    '<span class="ed-note">Steps of ' + C.step + 'px, capped at ' + C.max + ' — blocks always line up with the rest of the site.</span></div>';
+
+  // 5. Photo
+  if (d.photo) {
+    out += '<div class="ed-sec"><span class="ed-lab">Photo</span>' +
+      '<button type="button" class="ed-media" data-a="photo" data-k="photo"><span class="ed-media-thumb"' +
+        (b.photo ? ' style="background-image:url(' + esc(b.photo) + ')"' : '') + '>' + (b.photo ? '' : '▣') + '</span>' +
+      '<span class="ed-media-b"><span class="ed-media-n">' + esc(b.photo ? b.photo.split('/').pop() : 'No photo yet') + '</span>' +
+      '<span class="ed-media-c">Choose from library</span></span></button>' +
+      '<label class="ed-note" for="edAlt">Describe the photo for people using a screen reader</label>' +
+      '<input class="ed-field" id="edAlt" data-in="photoAlt" data-k="alt" value="' + esc(b.photoAlt) + '" placeholder="e.g. The choir in the balcony">' +
+      '</div>';
+  }
+
+  // 6. Video
+  if (d.video) {
+    out += '<div class="ed-sec"><span class="ed-lab">Video</span>' +
+      '<button type="button" class="ed-media" data-a="video" data-k="video"><span class="ed-media-thumb ed-tile-th--vid" style="background:#1E2D4A;color:#FBF8F3">▶</span>' +
+      '<span class="ed-media-b"><span class="ed-media-n">' + esc(b.video || 'No video yet') + '</span>' +
+      '<span class="ed-media-c">Choose from library</span></span></button></div>';
+  }
+
+  // Link / embed target
+  if (d.url) {
+    out += '<div class="ed-sec"><label class="ed-lab" for="edUrl">' + esc(d.urlLabel || 'Link') + '</label>' +
+      '<input class="ed-field" id="edUrl" data-in="url" data-k="url" value="' + esc(b.url) + '" placeholder="https://…"></div>';
+  }
+
+  // Repeating rows
+  if (d.items) out += itemsSection(b, d);
+
+  // 7. Theme colours
+  out += '<div class="ed-sec"><div class="ed-lab-row"><span class="ed-lab">Theme colours</span>' +
+    '<span class="ed-read">' + esc(C.BG[b.bg].name) + ' · ' + esc(C.INK[b.ink].name) + '</span></div>' +
+    '<span class="ed-note">Background</span><div class="ed-chips">' +
+    C.BG.map(function (t, i) {
+      return '<button type="button" class="ed-sw" data-a="bg" data-v="' + i + '" data-k="bg:' + i + '" title="' + esc(t.name) + '"' +
+        ' aria-label="Background ' + esc(t.name) + '" aria-pressed="' + (i === b.bg) + '" style="background:' + t.c + '"></button>';
+    }).join('') + '</div>' +
+    '<span class="ed-note">Text</span><div class="ed-chips">' +
+    C.INK.map(function (t, i) {
+      var usable = t.onDark === C.BG[b.bg].dark;
+      return '<button type="button" class="ed-sw" data-a="ink" data-v="' + i + '" data-k="ink:' + i + '" title="' +
+        esc(t.name + (usable ? '' : ' — unreadable on ' + C.BG[b.bg].name)) + '"' +
+        ' aria-label="Text colour ' + esc(t.name) + (usable ? '' : ', unreadable on ' + esc(C.BG[b.bg].name)) + '"' +
+        ' aria-pressed="' + (i === b.ink) + '" aria-disabled="' + (!usable) + '" style="background:' + t.c + '"></button>';
+    }).join('') + '</div>' +
+    '<span class="ed-note">Only the site\'s own palette, and only pairs that stay readable — unusable combinations are greyed out.</span></div>';
+
+  // 8. Text size
+  var sz = C.SIZES.filter(function (x) { return x.key === b.size; })[0] || C.SIZES[1];
+  out += '<div class="ed-sec"><div class="ed-lab-row"><span class="ed-lab">Text size</span>' +
+    '<span class="ed-read">' + sz.body + 'px body text</span></div><div class="ed-chips">' +
+    C.SIZES.map(function (x) {
+      return chip('size', x.key, x.label, x.key === b.size, ' style="font-size:' + (x.key === 's' ? 12 : x.key === 'm' ? 13.5 : 15) + 'px"');
+    }).join('') +
+    '</div><span class="ed-note">Three steps on the site\'s type scale — headings scale with the body text, so nothing drops below readable size.</span></div>';
+
+  // 9. Stamp
+  out += '<div class="ed-sec ed-sec--rule"><div class="ed-lab-row"><span class="ed-lab">Stamp</span>' +
+    '<span class="ed-read">' + esc(b.stamp || 'None') + '</span></div><div class="ed-chips">' +
+    chip('stamp', '', 'None', !b.stamp) +
+    C.stamps.map(function (s) { return chip('stamp', s, s, b.stamp === s); }).join('') + '</div>';
+  if (b.stamp) {
+    out += '<div class="ed-chips">' + C.TONES.map(function (t, i) {
+      return '<button type="button" class="ed-pick" data-a="tone" data-v="' + i + '" data-k="tone:' + i + '" aria-pressed="' + (i === b.tone) + '"' +
+        ' style="background:' + t.bg + ';color:' + t.fg + ';border:1px solid ' + t.bg + ';font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:10.5px' +
+        (i === b.tone ? ';box-shadow:0 0 0 2px #2E7EA6' : '') + '">' + esc(t.name) + '</button>';
+    }).join('') + '</div>' +
+    '<div class="ed-chips">' + chip('corner', 'tl', 'Left', b.corner === 'tl') + chip('corner', 'tr', 'Right', b.corner === 'tr') + '</div>';
+  }
+  out += '<span class="ed-note">Sits tilted over the block\'s lower corner. Click it on the page to reword it.</span></div>';
+
+  // 10-12. Show on phone, reassurance, reset
+  out += '<div class="ed-sec ed-sec--rule" style="gap:10px">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;font-size:13.5px;color:#1E2D4A">' +
+      '<span id="edPhoneLab">Show on phone</span>' +
+      '<button type="button" class="ed-track" data-a="hide" data-k="hide" role="switch" aria-labelledby="edPhoneLab"' +
+      ' aria-checked="' + (!b.hidden) + '" aria-pressed="' + (!b.hidden) + '"><span class="ed-knob"></span></button>' +
+    '</div>' +
+    '<div class="ed-reassure"><i aria-hidden="true">✓</i><span>Every value snaps to the site\'s spacing scale and fonts, so a page can\'t end up misaligned or unreadable on a phone.</span></div>' +
+    '<button type="button" class="ed-reset" data-a="reset" data-k="reset">Reset block</button>' +
+    '</div>';
+
+  return out;
+}
+
+function itemsSection(b, d) {
+  var inputFields = d.itemUrlFields.slice();
+  if (d.gallery) inputFields = ['url'];
+  var rows = (b.items || []).map(function (it, i) {
+    var fields = inputFields.map(function (f) {
+      var ph = d.itemPlaceholders[f] || (f === 'url' ? 'https://…' : f);
+      return '<input class="ed-field" data-in="item:' + i + ':' + f + '" data-k="item:' + i + ':' + f + '"' +
+        ' value="' + esc(it[f] || '') + '" placeholder="' + esc(ph) + '" aria-label="' + esc(d.itemLabel + ' ' + (i + 1) + ' ' + f) + '">';
+    }).join('');
+    var head = '<div class="ed-item-h"><span>' + esc(d.itemLabel + ' ' + (i + 1)) +
+      (it.title ? ' · ' + esc(String(it.title).slice(0, 22)) : '') + '</span>' +
+      '<button type="button" data-a="item-del" data-v="' + i + '" data-k="item-del:' + i + '">Remove</button></div>';
+    var hint = fields ? '' : '<span class="ed-note">Edit the wording on the page itself.</span>';
+    return '<div class="ed-item">' + head + fields + hint + '</div>';
+  }).join('');
+  var full = (b.items || []).length >= 24;
+  return '<div class="ed-sec"><span class="ed-lab">' + esc(d.itemLabel) + 's</span>' + rows +
+    (d.gallery
+      ? '<button type="button" class="ed-add" data-a="gallery" data-k="gallery">Add photos from the library</button>'
+      : '<button type="button" class="ed-add" data-a="item-add" data-k="item-add"' + (full ? ' disabled' : '') + '>+ Add ' + esc(d.itemLabel.toLowerCase()) + '</button>') +
+    '</div>';
+}
+
+// ── inspector actions ──────────────────────────────────────────────────────
+function inspectorAction(action, value) {
+  var b = findBlock(S.selectedId);
+  if (!b) return;
+  var C = S.config;
+  var d = def(b.type);
+  switch (action) {
+    case 'cols': {
+      var n = Number(value);
+      // Growing to three columns needs a third column to put text in.
+      var items = (b.items || []).slice();
+      var structural = false;
+      while (items.length < n) { items.push({ title: '', body: '' }); structural = true; }
+      patch(b.id, structural ? { cols: n, items: items } : { cols: n }, 'Changed to ' + n + ' columns', structural ? 'rerender' : 'style');
+      break;
+    }
+    case 'side': patch(b.id, { side: value }, 'Moved photo ' + value); break;
+    case 'split': patch(b.id, { split: value }, 'Changed column split'); break;
+    case 'step': {
+      var parts = value.split(':');
+      var key = parts[0];
+      var delta = Number(parts[1]) * C.step;
+      var v = Math.max(0, Math.min(C.max, (b[key] || 0) + delta));
+      if (v === b[key]) return;
+      var p = {}; p[key] = v;
+      // Spacing steps deliberately write no change-log entry — nudging a
+      // stepper four times would otherwise bury the meaningful edits.
+      patch(b.id, p, null, 'style');
+      say(key === 'height' ? 'Height ' + v + 'px' : v + 'px');
+      break;
+    }
+    case 'bg': {
+      var bgIdx = Number(value);
+      var part = { bg: bgIdx };
+      // Guardrail as data, not an ad-hoc conditional: an ink that would be
+      // unreadable on the new background moves to the readable default.
+      if (C.INK[b.ink].onDark !== C.BG[bgIdx].dark) part.ink = C.BG[bgIdx].dark ? 3 : 0;
+      patch(b.id, part, 'Background → ' + C.BG[bgIdx].name);
+      break;
+    }
+    case 'ink': {
+      var inkIdx = Number(value);
+      if (C.INK[inkIdx].onDark !== C.BG[b.bg].dark) {
+        say(C.INK[inkIdx].name + ' would be unreadable on ' + C.BG[b.bg].name);
+        return;
+      }
+      patch(b.id, { ink: inkIdx }, 'Text colour → ' + C.INK[inkIdx].name);
+      break;
+    }
+    case 'size': patch(b.id, { size: value }, 'Text size → ' + value.toUpperCase()); break;
+    case 'stamp': patch(b.id, { stamp: value }, value ? 'Stamp → ' + value : 'Removed stamp', 'rerender'); break;
+    case 'tone': patch(b.id, { tone: Number(value) }, 'Stamp colour → ' + C.TONES[Number(value)].name, 'rerender'); break;
+    case 'corner': patch(b.id, { corner: value }, 'Stamp moved ' + (value === 'tl' ? 'left' : 'right'), 'rerender'); break;
+    case 'hide': toggleHide(b.id); break;
+    case 'reset': resetBlock(b.id); break;
+    case 'item-add': {
+      var next = (b.items || []).slice();
+      if (next.length >= 24) return;
+      var blank = {};
+      d.itemFields.forEach(function (f) { blank[f] = ''; });
+      next.push(blank);
+      patch(b.id, { items: next }, 'Added a ' + d.itemLabel.toLowerCase(), 'rerender');
+      break;
+    }
+    case 'item-del': {
+      var idx = Number(value);
+      var left = (b.items || []).filter(function (_, i) { return i !== idx; });
+      patch(b.id, { items: left }, 'Removed a ' + d.itemLabel.toLowerCase(), 'rerender');
+      break;
+    }
+    case 'photo': openPicker(b.id, 'photo'); break;
+    case 'video': openPicker(b.id, 'video'); break;
+    case 'gallery': openPicker(b.id, 'gallery'); break;
+    default: break;
+  }
+}
+
+// Text inputs update state as you type without redrawing the panel underneath
+// the caret; the canvas catches up on a short debounce.
+var inputTimer = null;
+function inspectorInput(target) {
+  var b = findBlock(S.selectedId);
+  if (!b) return;
+  var spec = target.dataset.in;
+  var value = target.value;
+  if (spec === 'url') b.url = value;
+  else if (spec === 'photoAlt') b.photoAlt = value;
+  else if (spec.indexOf('item:') === 0) {
+    var parts = spec.split(':');
+    var it = (b.items || [])[Number(parts[1])];
+    if (!it) return;
+    it[parts[2]] = value;
+  } else return;
+  clearTimeout(inputTimer);
+  inputTimer = setTimeout(function () {
+    pushHistory();
+    note('Edited ' + def(b.type).label.toLowerCase());
+    rerender();
+    renderTop(); renderChanges(); scheduleSave();
+  }, 700);
+}
 
 // ── static wiring ──────────────────────────────────────────────────────────
 function bindStatic() {
@@ -468,10 +978,92 @@ function bindStatic() {
     var tab = e.target.closest('[data-group]');
     if (tab) { S.group = tab.dataset.group; S.paletteOpen = true; renderPalette(); return; }
     if (e.target.closest('#edPalToggle')) { S.paletteOpen = !S.paletteOpen; renderPalette(); return; }
+    if (e.target.closest('#edUndo')) { undo(); return; }
   });
+
+  // rail
+  el.edRail.addEventListener('click', function (e) {
+    var row = e.target.closest('.ed-row');
+    if (row) select(row.dataset.id);
+  });
+
+  // canvas: selection, block toolbar, media pickers
+  el.edPaper.addEventListener('click', function (e) {
+    var actEl = e.target.closest('[data-act]');
+    var wrap = e.target.closest('.tlcb');
+    if (!wrap) return;
+    if (actEl) {
+      e.preventDefault();
+      e.stopPropagation();
+      var id = wrap.dataset.id;
+      var act = actEl.dataset.act;
+      if (act === 'dup') return duplicateBlock(id);
+      if (act === 'del') return deleteBlock(id);
+      if (act === 'hide') return toggleHide(id);
+      if (act === 'up') return moveBlock(id, -1);
+      if (act === 'down') return moveBlock(id, 1);
+      if (act === 'photo' || act === 'video' || act === 'gallery') { select(id); return openPicker(id, act); }
+      return;
+    }
+    if (e.target.closest('[contenteditable="true"]')) { select(wrap.dataset.id); return; }
+    select(wrap.dataset.id);
+  });
+
+  // commit text on blur
+  el.edPaper.addEventListener('focusout', function (e) {
+    var node = e.target.closest ? e.target.closest('[contenteditable="true"]') : null;
+    if (node) commitField(node);
+  }, true);
+
+  // Enter should not create block-level markup in single-line fields
+  el.edPaper.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') return;
+    var node = e.target.closest ? e.target.closest('[contenteditable="true"]') : null;
+    if (!node || !node.dataset.field) return;
+    var wrap = node.closest('.tlcb');
+    var b = wrap && findBlock(wrap.dataset.id);
+    var d = b && def(b.type);
+    var rich = d && ((d.richBody && node.dataset.field === 'body' && node.dataset.item == null) ||
+      (node.dataset.item != null && d.richItemFields.indexOf(node.dataset.field) > -1));
+    if (!rich) { e.preventDefault(); node.blur(); }
+  });
+
+  // inspector
+  el.edInspBody.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-a]');
+    if (btn) inspectorAction(btn.dataset.a, btn.dataset.v || '');
+  });
+  el.edInspBody.addEventListener('input', function (e) {
+    if (e.target.dataset && e.target.dataset.in) inspectorInput(e.target);
+  });
+
+  // Escape clears the selection so the whole page is visible again
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !S.picker && S.selectedId) { select(null); }
+  });
+
+  // Don't lose an edit to a closed tab
+  window.addEventListener('beforeunload', function (e) {
+    if (!S.dirty) return;
+    try {
+      navigator.sendBeacon('/ministries/api/page/' + encodeURIComponent(S.slug) + '/draft',
+        new Blob([JSON.stringify({ blocks: S.blocks, changes: S.changes })], { type: 'application/json' }));
+    } catch (_) {}
+    e.preventDefault();
+    e.returnValue = '';
+  });
+
   window.addEventListener('resize', fitPaper);
   if (window.ResizeObserver) new ResizeObserver(fitPaper).observe(el.edCanvas);
 }
+
+// Placeholders filled in by later phases.
+function moveBlock() {}
+function openPicker() {}
+
+// Test seam: the browser tests assert that styleVars() produces byte-identical
+// output to wrapperVars() in admin/blocks.js. Pure function, no state.
+window.__edStyleVars = styleVars;
 
 // ── boot ───────────────────────────────────────────────────────────────────
 async function boot() {

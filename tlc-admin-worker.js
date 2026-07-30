@@ -3717,7 +3717,10 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
         const slug = decodeURIComponent(path.slice('/ministries/editor/'.length));
         const exists = await env.DB.prepare('SELECT slug FROM youth_pages WHERE slug = ?').bind(slug).first();
         if (!exists) return new Response('', { status: 302, headers: { Location: '/ministries' } });
-        return new Response(MINISTRY_EDITOR_HTML.replace('/*TLCB_EDITOR_CSS*/', editorPhoneCss()), {
+        const editorHtml = MINISTRY_EDITOR_HTML
+          .replace('/*TLCB_EDITOR_CSS*/', editorPhoneCss())
+          .replace('<!--TLCB_TINYMCE-->', TINYMCE_HEAD);
+        return new Response(editorHtml, {
           headers: {
             'Content-Type': 'text/html; charset=utf-8',
             'X-Robots-Tag': 'noindex, nofollow',
@@ -3753,6 +3756,36 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
           media: media.results || [],
           html: renderPage(blocks, { editing: true, slug, withCss: true }),
         });
+      }
+
+      // A fresh block of a given type, straight from the server's own defaults,
+      // so the editor never has to keep its own copy of them.
+      if (path === '/ministries/api/new-block' && method === 'POST') {
+        const body = await request.json().catch(() => ({}));
+        const block = newBlock(String(body.type || ''));
+        if (!block) return jsonResponse({ error: 'Unknown block type' }, 400);
+        return jsonResponse({ block });
+      }
+
+      // Autosaved working draft. Sanitised on the way in — client-side clamping
+      // is a courtesy, this is the control.
+      if (path.startsWith('/ministries/api/page/') && path.endsWith('/draft') && method === 'POST') {
+        const slug = decodeURIComponent(path.slice('/ministries/api/page/'.length, -('/draft'.length)));
+        const row = await env.DB.prepare('SELECT slug, page_status, published_blocks FROM youth_pages WHERE slug = ?').bind(slug).first();
+        if (!row) return jsonResponse({ error: 'Not found' }, 404);
+        const body = await request.json().catch(() => ({}));
+        const blocks = sanitizeBlocks(body.blocks);
+        const changes = (Array.isArray(body.changes) ? body.changes : []).slice(0, 24).map((c) => String(c).slice(0, 160));
+        const published = JSON.stringify(sanitizeBlocks(parseBlocks(row.published_blocks)));
+        const draft = JSON.stringify(blocks);
+        // A page only leaves "live" once the draft actually differs from what
+        // is published — otherwise an idle autosave would flag a false draft.
+        let status = row.page_status || 'live';
+        if (status !== 'scheduled') status = draft === published ? 'live' : 'draft';
+        const nowIso = new Date().toISOString();
+        await env.DB.prepare('UPDATE youth_pages SET blocks = ?, change_log = ?, page_status = ?, updated_at = ? WHERE slug = ?')
+          .bind(draft, JSON.stringify(changes), status, nowIso, slug).run();
+        return jsonResponse({ ok: true, saved_at: nowIso, status, blocks });
       }
 
       // Stateless render — the editor's single source of block markup. No DB
