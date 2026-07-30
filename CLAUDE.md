@@ -139,7 +139,7 @@ Extend current `tlc-admin-worker.js` with new tabs:
 |-----|-------------|--------|
 | Newsletter | Pastor/office | **DONE** — format picker, Brevo email, draft/published split |
 | News & Events | Pastor/office | **DONE** — DB wired, API live at /api/news |
-| Ministries | Office staff | **DONE** — ministry page content management; also now covers Youth Pages (TinyMCE editor, youth_pages DB table) and the Voters Assembly special page (Zoom link + file upload), both folded in as cards rather than separate tabs |
+| Ministries | Office staff | **DONE** — ministry page content management, now including the block-based **page editor** at `/ministries/editor/:slug` (see "Ministry Page Editor" below); also covers Youth Pages (TinyMCE editor, youth_pages DB table) and the Voters Assembly special page (Zoom link + file upload), both folded in as cards rather than separate tabs |
 | Sermons | Pastor/office | **DONE** — sermon series + standalone sermon notes, powers /sermons |
 | Christian Ed | Pastor/office | **DONE** — Bible class schedule (`bible_classes` table), powers /education |
 | Notices | Office staff | **DONE** — self-serve banner notices per static page (renamed from "Pages") |
@@ -226,6 +226,60 @@ Gated by a dedicated **`giving_manage`** permission (`admin/auth.js`), separate 
 `settings_manage` — mirrors how Payroll got its own `payroll_manage` instead of riding on
 Settings, so giving-link management can be granted independently of plain redirects or
 Subscribers (PII) access.
+
+### Ministry Page Editor (added 2026-07-30)
+
+Ministry pages are an ordered list of typed **blocks** rather than one TinyMCE box,
+edited in a full-viewport drag-and-drop editor at `/ministries/editor/:slug`. Built
+from the design handoff in `design_handoff_ministry_page_editor/`. The pastor's
+stated constraint — *it must not be possible to break the page* — is why every
+layout control is a constrained choice (an 8px spacing step, a palette colour, an
+S/M/L size) and never a free-form pixel or hex value.
+
+**`admin/blocks.js` is the single renderer.** It owns the block schema, the
+guardrails, the sanitiser, and the HTML template for all 19 block types. The public
+site and the editor canvas both render through `renderPage()`, so the WYSIWYG
+preview cannot drift from the live page. If you add a block type, add it there and
+it appears in both places at once. Do **not** add a second copy of a template
+anywhere — that is the one thing this design exists to prevent.
+
+- **Storage** — `youth_pages` gains `blocks` (JSON draft), `published_blocks` (JSON
+  live), `page_status` (`live`/`draft`/`scheduled`/`hidden`), `publish_at`,
+  `change_log`. Plus `ministry_media` (photo/video library) and
+  `ministry_page_revisions` (one snapshot per publish). The legacy `content` /
+  `hero_image_url` / `cta_*` / `vid_*` columns are deliberately kept — they are the
+  rollback path, and `hero_image_url` still drives the page banner, which is *not*
+  a block (blocks render into the content region below it, via `blocks_html` on
+  `GET /api/ministry/:slug`).
+- **Guardrails are enforced server-side**, in `sanitizeBlock()`, not just in the
+  client: spacing snaps to 8px steps capped at 96, colours must come from the two
+  palettes and an unreadable ink/background pair is corrected on write, unknown
+  block types are dropped, rich text goes through an allowlist sanitiser. A stale
+  tab cannot write `spaceAbove: 900`.
+- **The editor does not re-render to restyle.** Every inspector knob is emitted as
+  a CSS custom property on the block wrapper, so the editor patches the DOM node
+  directly. Only structural changes (add/delete/duplicate/reorder/undo/reset) ask
+  the Worker to re-render, through the stateless `POST /ministries/api/render`.
+  `styleVars()` in `admin/ministry-editor.html` must stay byte-identical to
+  `wrapperVars()` in `admin/blocks.js`; `test/editor-edit.test.mjs` asserts exactly
+  that, so drift is caught rather than shipped.
+- **Scheduling** needs the cron trigger in `wrangler.toml` (`*/15 * * * *` →
+  `promoteScheduledPages()`). Removing that trigger silently breaks "publish later".
+- **Rollout** — pages were migrated into blocks automatically by a one-time
+  backfill, and the public site only stands down a legacy region (CTA bar, Music
+  video grid, post accordions) when the blocks actually contain an equivalent
+  block. Start with Music Ministry, let the office use it, then migrate the rest by
+  moving banner/video/CTA content into blocks page by page.
+- **Not done**: server-side image resizing into hero/inline/thumb variants (needs
+  Cloudflare Images or a resize-on-read worker) and "saved sections" (reusable
+  block groups across pages).
+
+**Tests** — `node admin/blocks.test.mjs` (renderer, guardrails, sanitising,
+migration) plus browser suites in `test/` driven by Playwright against
+`test/editor-server.mjs`, a local stand-in for the Worker:
+`editor` (shell), `editor-edit` (inspector + typing), `editor-dnd` (reordering),
+`editor-media`, `editor-publish`, and `public-page` (the live site). Run any with
+`node <path>`. Chromium is at `/opt/pw-browsers/chromium`.
 
 ### News & Events Data Model
 ```sql
@@ -429,6 +483,8 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 - **links.timothystl.org "Volunteer" card still points at the old host** — the live `link_cards` D1 row (managed via the Links tab) was seeded long before this rebrand and still has `https://volunteer.timothystl.org` as its URL; the code-level seed constant was updated but that only affects a table that's empty on first run, not an already-populated one. Needs a manual edit via the Links tab: update the URL to `https://serve.timothystl.org` (and optionally rename the title to "Serve").
 - **`/confirmation`, `/sundayschool`, `/vbs`, `/egghunt`, `/family`** — Youth sub-pages. Admin portal has the youth_pages table, but these slugs need content entered by the youth director.
 - **Christmas Market annual content** — Page structure is built. Needs dates, description, photos, and Google Form link for vendors entered via the admin Ministries tab each year.
+- **Ministry page editor rollout** — every page was migrated into blocks automatically, but only the content region. Moving each page's banner, video grid and CTA buttons into blocks (and clearing the legacy columns once done) is a page-by-page job for the office, starting with Music Ministry.
+- **Ministry photo resizing** — uploads go to R2 at full size; there is no hero/inline/thumb variant generation. Needs Cloudflare Images or a resize-on-read worker. Straight-off-the-phone photos are up to 8MB.
 - **Sermons page** — YouTube embed page exists; confirm it's pulling the correct channel or that it's manually maintained.
 
 ### Pinned / Low Priority

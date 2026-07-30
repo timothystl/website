@@ -1,0 +1,1657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ministry page editor — Timothy Admin</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Source+Sans+3:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ── Editor chrome ────────────────────────────────────────────────────────
+   Colours and type come from the live site's palette (see CLAUDE.md → Design
+   System). Block styling itself is NOT here — it ships with the rendered
+   block HTML from admin/blocks.js, so the canvas and the public page cannot
+   drift apart. */
+*{box-sizing:border-box;}
+html,body{margin:0;height:100%;background:#E7E2D8;font-family:'Source Sans 3',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1A1A2A;}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
+::selection{background:#F5E4C0;}
+:focus-visible{outline:2px solid #2E7EA6;outline-offset:2px;}
+
+.ed{height:100vh;display:flex;flex-direction:column;background:#FBF8F3;overflow:hidden;}
+
+/* top bar */
+.ed-top{display:flex;align-items:center;gap:14px;padding:0 18px;height:58px;background:#1E2D4A;color:#EDF2F7;flex:none;}
+.ed-brand{display:flex;align-items:center;gap:10px;padding-right:16px;border-right:1px solid rgba(237,242,247,.18);}
+.ed-mark{width:26px;height:26px;border-radius:6px;background:#C9973A;color:#1E2D4A;font:600 13px/26px 'Source Sans 3';text-align:center;}
+.ed-brand span{font:600 14px/1 'Source Sans 3';white-space:nowrap;}
+.ed-crumb{display:flex;align-items:center;gap:8px;font-size:14px;color:#C4CEDF;min-width:0;}
+.ed-crumb a{color:#C4CEDF;text-decoration:none;}
+.ed-crumb a:hover{color:#FBF8F3;}
+.ed-crumb i{opacity:.5;font-style:normal;}
+.ed-crumb b{color:#FBF8F3;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ed-pill{padding:4px 10px;border-radius:999px;font:600 11px/1.4 'Source Sans 3';letter-spacing:.07em;text-transform:uppercase;white-space:nowrap;}
+.ed-pill--draft{background:rgba(201,151,58,.18);border:1px solid rgba(232,192,112,.5);color:#E8C070;}
+.ed-pill--live{background:rgba(220,230,214,.18);border:1px solid rgba(160,190,150,.5);color:#C6DDBB;}
+.ed-saved{font-size:12.5px;color:#93A2B8;white-space:nowrap;}
+.ed-spacer{flex:1;}
+.ed-devices{display:flex;padding:3px;background:rgba(17,30,50,.55);border-radius:9px;gap:2px;}
+.ed-devices button{padding:5px 12px;border-radius:7px;font:500 13px/1.2 'Source Sans 3';color:#C4CEDF;}
+.ed-devices button[aria-pressed="true"]{background:#EDF2F7;color:#1E2D4A;font-weight:600;}
+.ed-undo{padding:8px 13px;border:1px solid rgba(196,206,223,.45);border-radius:8px;font:600 13px/1 'Source Sans 3';color:#EDF2F7;}
+.ed-undo[disabled]{opacity:.4;cursor:default;}
+.ed-publish{padding:9px 16px;background:#C9973A;color:#1B1608;border-radius:8px;font:700 13px/1 'Source Sans 3';}
+.ed-publish:hover{background:#DBAA4E;}
+.ed-publish[disabled]{opacity:.5;cursor:default;}
+.ed-view{color:#C4CEDF;font:600 13px/1 'Source Sans 3';text-decoration:none;padding:8px 6px;white-space:nowrap;}
+.ed-view:hover{color:#FBF8F3;}
+
+/* hint strip */
+.ed-hint{display:flex;align-items:center;gap:8px;padding:7px 18px;background:#F7F3EC;border-bottom:1px solid #DDE3ED;font-size:12.5px;color:#6A6858;flex:none;}
+.ed-hint b{color:#C9973A;font-weight:700;}
+.ed-hint button{margin-left:auto;color:#8A8898;font-size:16px;line-height:1;padding:2px 6px;}
+
+.ed-body{flex:1;display:flex;min-height:0;}
+
+/* rail */
+.ed-rail{width:266px;flex:none;border-right:1px solid #DDE3ED;background:#F7F3EC;display:flex;flex-direction:column;min-height:0;}
+.ed-rail-h{padding:15px 16px 9px;font:600 11px/1 'Source Sans 3';letter-spacing:.14em;text-transform:uppercase;color:#8A8898;}
+.ed-rail-list{flex:1;overflow-y:auto;padding:0 12px 12px;display:flex;flex-direction:column;gap:5px;}
+.ed-row{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:9px;font-size:13.5px;cursor:pointer;text-align:left;width:100%;
+  background:#FBF8F3;border:1px solid #DDE3ED;color:#1E2D4A;}
+.ed-row[aria-selected="true"]{background:#E4EEF4;border-color:#2E7EA6;font-weight:600;}
+.ed-row.is-hidden .ed-row-label{color:#8A8898;}
+.ed-row.is-dragging{opacity:.4;}
+.ed-row-grip{color:#B8BECB;font-size:13px;cursor:grab;}
+.ed-row-glyph{width:16px;text-align:center;color:#2E7EA6;}
+.ed-row-label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ed-row-tag{font-size:10.5px;padding:1px 5px;border:1px solid #DDE3ED;border-radius:4px;color:#8A8898;}
+.ed-drop{height:2px;background:#C9973A;border-radius:2px;margin:1px 0;flex:none;}
+.ed-rail-empty{padding:22px 12px;border:1.5px dashed #C4CEDF;border-radius:10px;text-align:center;font-size:12.5px;color:#8A8898;line-height:1.5;}
+.ed-rail-f{padding:12px;border-top:1px solid #DDE3ED;text-align:center;font-size:11.5px;color:#8A8898;}
+
+/* canvas */
+.ed-mid{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0;background:#E7E2D8;}
+.ed-canvas{flex:1;overflow:auto;padding:24px 24px 30px;display:block;}
+.ed-paper{background:#FBF8F3;border-radius:10px;box-shadow:0 6px 30px rgba(30,45,74,.14);padding:18px;margin:0 auto;
+  flex:0 0 auto;min-height:420px;width:860px;transition:width .18s ease;}
+.ed-paper .tlcb-page{--tlcb-pad:34px;}
+.ed-paper--phone .tlcb-page{--tlcb-pad:18px;}
+/* Selection + per-block editor controls, layered over the shared block markup */
+.ed-paper .tlcb{cursor:pointer;}
+.ed-paper .tlcb.is-sel{border-color:#2E7EA6;}
+.ed-paper .tlcb-tools,.ed-paper .tlcb-badge,.ed-paper .tlcb-pick{display:none;}
+.ed-paper .tlcb.is-sel > .tlcb-tools{display:flex;align-items:center;gap:1px;position:absolute;top:-33px;left:-2px;z-index:5;
+  padding:3px;background:#1E2D4A;border-radius:8px;box-shadow:0 3px 14px rgba(30,45,74,.3);white-space:nowrap;}
+.ed-paper .tlcb-tool{padding:4px 8px;color:#C4CEDF;font-size:12.5px;}
+.ed-paper .tlcb-tool:hover{color:#FBF8F3;}
+.ed-paper .tlcb-tool--drag{cursor:grab;}
+.ed-paper .tlcb-tool--del{color:#E8A0A0;}
+.ed-paper .tlcb-tool--del:hover{color:#FFC9C9;}
+.ed-paper .tlcb-tool-div{width:1px;height:15px;background:rgba(196,206,223,.3);}
+.ed-paper .tlcb.is-sel > .tlcb-badge{display:block;position:absolute;top:-33px;right:-2px;padding:5px 10px;background:#2E7EA6;color:#fff;
+  border-radius:8px;font:700 10.5px/1.3 'Source Sans 3';letter-spacing:.08em;text-transform:uppercase;z-index:5;white-space:nowrap;}
+.ed-paper .tlcb.is-sel .tlcb-pick{display:inline-block;position:absolute;top:10px;right:10px;z-index:3;padding:6px 11px;
+  background:rgba(251,248,243,.94);border-radius:7px;font:600 12px/1 'Source Sans 3';color:#1E2D4A;}
+.ed-paper .tlcb .tlcb-pick--inline{position:static;display:none;}
+.ed-paper .tlcb.is-sel .tlcb-pick--inline{display:inline-block;align-self:flex-start;padding:7px 12px;border:1px solid #C4CEDF;background:#FBF8F3;}
+.ed-paper [contenteditable]{outline:none;}
+.ed-paper [contenteditable]:focus{box-shadow:0 0 0 2px rgba(46,126,166,.35);border-radius:4px;}
+.ed-paper .tlcb-media{position:relative;}
+.ed-canvas-drop{position:relative;height:3px;background:#C9973A;border-radius:3px;box-shadow:0 0 0 4px rgba(201,151,58,.16);margin:6px 0;}
+.ed-canvas-drop span{position:absolute;left:50%;transform:translateX(-50%);top:-24px;padding:3px 9px;background:#C9973A;color:#1B1608;
+  border-radius:6px;font:700 10.5px/1.5 'Source Sans 3';letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;}
+
+/* palette */
+.ed-pal{flex:none;border-top:1px solid #DDE3ED;background:#1E2D4A;}
+.ed-pal-h{display:flex;align-items:center;gap:8px;padding:8px 14px 0;}
+.ed-pal-scroll{flex:1;min-width:0;display:flex;align-items:center;gap:4px;overflow-x:auto;}
+.ed-pal-label{flex:none;padding:8px 8px 8px 2px;color:#93A2B8;font:600 12.5px/1 'Source Sans 3';}
+.ed-pal-tab{flex:none;white-space:nowrap;padding:7px 11px;border-radius:8px;font:500 12.5px/1 'Source Sans 3';color:#C4CEDF;}
+.ed-pal-tab[aria-pressed="true"]{background:#EDF2F7;color:#1E2D4A;font-weight:600;}
+.ed-pal-toggle{flex:none;padding:7px 11px;border:1px solid rgba(196,206,223,.35);border-radius:7px;color:#C4CEDF;font:600 12px/1 'Source Sans 3';white-space:nowrap;}
+.ed-pal-chips{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:10px 14px 12px;}
+.ed-chip{padding:9px 13px;background:rgba(237,242,247,.1);border-radius:9px;color:#EDF2F7;font:500 12.5px/1 'Source Sans 3';cursor:grab;}
+.ed-chip:hover{background:rgba(237,242,247,.22);}
+
+/* inspector */
+.ed-insp{width:318px;flex:none;border-left:1px solid #DDE3ED;background:#FBF8F3;display:flex;flex-direction:column;min-height:0;}
+.ed-insp-h{padding:14px 16px;border-bottom:1px solid #DDE3ED;display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.ed-insp-h b{font:600 15px/1 'Source Sans 3';color:#1E2D4A;}
+.ed-insp-h span{font-size:12px;color:#8A8898;white-space:nowrap;}
+.ed-insp-body{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:15px;}
+.ed-none{padding:22px 18px;display:flex;flex-direction:column;gap:9px;}
+.ed-none b{font:500 16px/1.3 Lora,Georgia,serif;color:#1E2D4A;font-weight:500;}
+.ed-none span{font-size:13px;color:#8A8898;line-height:1.5;}
+.ed-sec{display:flex;flex-direction:column;gap:8px;}
+.ed-sec--rule{padding-top:11px;border-top:1px solid #DDE3ED;}
+.ed-lab{font:600 11px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8898;}
+.ed-lab-row{display:flex;align-items:baseline;justify-content:space-between;gap:8px;}
+.ed-read{font-size:12px;color:#4A4860;}
+.ed-note{font-size:11.5px;color:#8A8898;line-height:1.4;}
+.ed-chips{display:flex;gap:6px;flex-wrap:wrap;}
+.ed-pick{flex:1;padding:6px 4px;text-align:center;border-radius:7px;font:500 12.5px/1.2 'Source Sans 3';border:1px solid #DDE3ED;color:#4A4860;background:#fff;}
+.ed-pick[aria-pressed="true"]{border:2px solid #2E7EA6;background:#E4EEF4;color:#1E2D4A;font-weight:600;}
+.ed-step-row{display:flex;align-items:center;gap:8px;font-size:13px;color:#1E2D4A;}
+.ed-step-row > span:first-child{flex:1;}
+.ed-step{display:flex;align-items:center;border:1px solid #DDE3ED;border-radius:7px;overflow:hidden;background:#fff;}
+.ed-step button{padding:4px 9px;color:#4A4860;}
+.ed-step button:first-child{border-right:1px solid #DDE3ED;}
+.ed-step button:last-child{border-left:1px solid #DDE3ED;}
+.ed-step button:hover{background:#EDF2F7;}
+.ed-step output{padding:4px 10px;font:600 12.5px/1.4 'Source Sans 3';min-width:38px;text-align:center;}
+.ed-sw{width:30px;height:30px;border-radius:7px;border:1px solid #DDE3ED;padding:0;}
+.ed-sw[aria-pressed="true"]{border:2px solid #2E7EA6;box-shadow:0 0 0 2px rgba(46,126,166,.2);}
+.ed-sw[aria-disabled="true"]{border:1px dashed #DDE3ED;opacity:.3;cursor:not-allowed;}
+.ed-media{display:flex;gap:10px;align-items:center;padding:10px;border:1px solid #DDE3ED;border-radius:9px;background:#F7F3EC;width:100%;text-align:left;}
+.ed-media:hover{border-color:#2E7EA6;}
+.ed-media-thumb{width:44px;height:44px;border-radius:6px;flex:none;background:#E4EAF2 center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:#8A8898;}
+.ed-media-b{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
+.ed-media-n{font-size:13px;color:#1E2D4A;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ed-media-c{font-size:12px;color:#2E7EA6;}
+.ed-track{width:40px;height:22px;border-radius:999px;position:relative;display:inline-block;background:#DDE3ED;flex:none;padding:0;}
+.ed-track[aria-pressed="true"]{background:#4A5E3A;}
+.ed-knob{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#FBF8F3;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:left .12s ease;}
+.ed-track[aria-pressed="true"] .ed-knob{left:21px;}
+.ed-reassure{display:flex;gap:9px;padding:10px;border:1px solid #DCE6D6;border-radius:9px;background:#F2F6EF;}
+.ed-reassure i{color:#4A5E3A;font-size:13px;line-height:1.3;font-style:normal;}
+.ed-reassure span{font-size:11.5px;line-height:1.45;color:#3B4C2E;}
+.ed-reset{align-self:flex-start;padding:7px 12px;border:1px solid #C4CEDF;border-radius:7px;font:600 12.5px/1 'Source Sans 3';color:#1E2D4A;}
+.ed-reset:hover{background:#EDF2F7;}
+.ed-field{width:100%;padding:8px 10px;border:1px solid #DDE3ED;border-radius:7px;font:400 13px/1.4 'Source Sans 3';background:#fff;color:#1E2D4A;}
+.ed-item{border:1px solid #DDE3ED;border-radius:8px;padding:9px;background:#fff;display:flex;flex-direction:column;gap:6px;}
+.ed-item-h{display:flex;align-items:center;justify-content:space-between;font-size:11.5px;color:#8A8898;}
+.ed-item-h button{color:#B85C3A;font-size:11.5px;font-weight:600;}
+.ed-add{align-self:flex-start;padding:6px 11px;border:1px solid #C4CEDF;border-radius:7px;font:600 12.5px/1 'Source Sans 3';color:#1E2D4A;}
+
+/* changes panel */
+.ed-changes{flex:none;padding:13px 16px;border-top:1px solid #DDE3ED;display:flex;flex-direction:column;gap:9px;background:#F7F3EC;}
+.ed-changes ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;max-height:132px;overflow-y:auto;font-size:12.5px;color:#4A4860;}
+.ed-changes .ed-none-yet{color:#8A8898;}
+
+/* modal */
+.ed-back{position:fixed;inset:0;background:rgba(17,30,50,.5);display:flex;align-items:center;justify-content:center;z-index:60;padding:34px;}
+.ed-modal{width:760px;max-width:100%;max-height:82vh;background:#FBF8F3;border-radius:14px;box-shadow:0 24px 70px rgba(17,30,50,.4);display:flex;flex-direction:column;overflow:hidden;}
+.ed-modal-h{padding:16px 20px;border-bottom:1px solid #DDE3ED;display:flex;align-items:center;gap:12px;}
+.ed-modal-h b{font:500 19px/1.2 Lora,Georgia,serif;color:#1E2D4A;font-weight:500;}
+.ed-modal-h span{font-size:12.5px;color:#8A8898;}
+.ed-modal-grid{flex:1;overflow-y:auto;padding:18px 20px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+.ed-tile{display:flex;flex-direction:column;gap:7px;padding:8px;border:1px solid transparent;border-radius:10px;text-align:left;}
+.ed-tile:hover,.ed-tile[aria-pressed="true"]{border-color:#2E7EA6;background:#F2F7FA;}
+.ed-tile-th{aspect-ratio:4/3;border-radius:8px;background:#DDE3ED center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:#1E2D4A;}
+.ed-tile-th--vid{aspect-ratio:16/9;background-color:#1E2D4A;color:#FBF8F3;font-size:24px;}
+.ed-tile-n{font:600 12.5px/1.3 'Source Sans 3';color:#1E2D4A;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ed-tile-m{font-size:11px;color:#8A8898;}
+.ed-modal-f{padding:14px 20px;border-top:1px solid #DDE3ED;background:#F7F3EC;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.ed-dropzone{position:relative;flex:1;min-width:220px;padding:16px;border:1.5px dashed #C4CEDF;border-radius:10px;text-align:center;font:600 13px/1.3 'Source Sans 3';color:#1E2D4A;cursor:pointer;}
+.ed-dropzone.is-over{border-color:#2E7EA6;background:#F2F7FA;}
+.ed-upload{padding:10px 15px;background:#1E2D4A;color:#F5E4C0;border-radius:8px;font:700 13px/1 'Source Sans 3';}
+.ed-close{padding:6px 11px;border:1px solid #C4CEDF;border-radius:7px;font:600 12.5px/1 'Source Sans 3';color:#1E2D4A;}
+.ed-close:hover{background:#EDF2F7;}
+
+/* publishing panel */
+.ed-panel{position:fixed;top:64px;right:18px;width:330px;max-height:calc(100vh - 84px);overflow-y:auto;z-index:65;
+  background:#FBF8F3;border:1px solid #DDE3ED;border-radius:12px;box-shadow:0 18px 50px rgba(17,30,50,.28);
+  display:flex;flex-direction:column;}
+.ed-panel-sec{padding:14px 16px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid #DDE3ED;}
+.ed-panel-sec:last-child{border-bottom:0;}
+.ed-revs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:210px;overflow-y:auto;}
+.ed-rev{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12.5px;color:#4A4860;
+  padding:8px 10px;border:1px solid #DDE3ED;border-radius:8px;background:#fff;}
+.ed-rev b{color:#1E2D4A;}
+.ed-publish-more{padding:9px 9px;border-radius:8px;}
+
+/* toast + live region */
+.ed-toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);padding:12px 20px;background:#1E2D4A;color:#F5E4C0;border-radius:10px;
+  box-shadow:0 12px 34px rgba(17,30,50,.4);font:600 13.5px/1.3 'Source Sans 3';z-index:70;}
+.ed-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
+.ed-boot{display:flex;align-items:center;justify-content:center;height:100vh;color:#6A6858;font-size:14px;}
+
+/* Blocks laid out as they would be on a phone, scoped to the paper rather than
+   the viewport. Injected from admin/blocks.js so it stays identical to the
+   media query the public page uses. */
+/*TLCB_EDITOR_CSS*/
+
+@media(max-width:1100px){
+  .ed-rail{width:216px;}
+  .ed-insp{width:280px;}
+}
+</style>
+<!--TLCB_TINYMCE-->
+</head>
+<body>
+<div id="root"><div class="ed-boot">Loading the page editor…</div></div>
+<div class="ed-sr" role="status" aria-live="polite" id="live"></div>
+<script>
+/* ── Ministry page editor ─────────────────────────────────────────────────
+   Owns the rail, canvas, palette and inspector. It does NOT own the block
+   templates: the canvas HTML is rendered by the Worker from admin/blocks.js,
+   the same module the public page renders through. Structural changes (add,
+   delete, duplicate, reorder, undo, reset) ask the Worker to re-render;
+   everything the inspector adjusts is a CSS custom property applied straight
+   to the block node, so spacing/colour/size changes are instant and cannot
+   drift from what the public page will do with the same value. */
+(function () {
+'use strict';
+
+var SLUG = decodeURIComponent((location.pathname.match(/\/ministries\/editor\/([^/?#]+)/) || [])[1] || '');
+var WIDTHS = { desktop: 860, tablet: 620, phone: 390 };
+var HINT_KEY = 'tlc-ministry-editor-hint-v1';
+
+var S = {
+  slug: SLUG, title: '', status: 'live', updatedAt: '',
+  blocks: [], config: null, media: [],
+  selectedId: null, device: 'desktop', group: 'Content', paletteOpen: true,
+  changes: [], history: [], saved: null, dirty: false,
+  dragId: null, dragType: null, dropIndex: null,
+  picker: null, toast: null, hint: true, loadError: '',
+  publishPanel: false, publishAt: null, publishAtLocal: '', revisions: [],
+};
+
+var el = {};
+var toastTimer = null;
+
+// ── small helpers ──────────────────────────────────────────────────────────
+function esc(s) {
+  return (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function def(type) { return (S.config && S.config.types[type]) || { label: 'Block', glyph: '▣' }; }
+function findBlock(id) { for (var i = 0; i < S.blocks.length; i++) if (S.blocks[i].id === id) return S.blocks[i]; return null; }
+function indexOfBlock(id) { for (var i = 0; i < S.blocks.length; i++) if (S.blocks[i].id === id) return i; return -1; }
+function now() { return new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); }
+function say(msg) { el.live.textContent = msg; }
+
+async function api(path, opts) {
+  var res = await fetch(path, Object.assign({ headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin' }, opts || {}));
+  if (res.status === 401 || res.status === 403) { location.href = '/login'; throw new Error('auth'); }
+  if (!res.ok) throw new Error((await res.text().catch(function () { return ''; })) || ('Request failed (' + res.status + ')'));
+  return res.json();
+}
+
+function toast(msg) {
+  S.toast = msg;
+  renderToast();
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { S.toast = null; renderToast(); }, 2600);
+}
+
+// ── shell ──────────────────────────────────────────────────────────────────
+function shellHtml() {
+  return '' +
+  '<div class="ed">' +
+    '<header class="ed-top">' +
+      '<div class="ed-brand"><div class="ed-mark" aria-hidden="true">T</div><span>Timothy Admin</span></div>' +
+      '<nav class="ed-crumb" aria-label="Breadcrumb"><a href="/ministries">Ministries</a><i>/</i><b id="edTitle"></b></nav>' +
+      '<span class="ed-pill" id="edPill"></span>' +
+      '<span class="ed-saved" id="edSaved"></span>' +
+      '<div class="ed-spacer"></div>' +
+      '<a class="ed-view" id="edView" target="_blank" rel="noopener">View live ↗</a>' +
+      '<div class="ed-devices" role="group" aria-label="Preview width">' +
+        '<button type="button" data-device="desktop">Desktop</button>' +
+        '<button type="button" data-device="tablet">Tablet</button>' +
+        '<button type="button" data-device="phone">Phone</button>' +
+      '</div>' +
+      '<button type="button" class="ed-undo" id="edUndo">↺ Undo</button>' +
+      '<span style="display:flex;gap:1px">' +
+        '<button type="button" class="ed-publish" id="edPublish">Publish</button>' +
+        '<button type="button" class="ed-publish ed-publish-more" id="edMore" aria-haspopup="dialog" aria-expanded="false" aria-label="Publishing options">▾</button>' +
+      '</span>' +
+    '</header>' +
+    '<div class="ed-hint" id="edHint">' +
+      '<b>Try it:</b><span>drag rows in the left rail to reorder · drag a block from the bottom panel onto the page · click any text to type · use the right panel for spacing and layout</span>' +
+      '<button type="button" id="edHintX" aria-label="Dismiss tip">×</button>' +
+    '</div>' +
+    '<div class="ed-body">' +
+      '<aside class="ed-rail">' +
+        '<div class="ed-rail-h" id="edRailHead">Page blocks</div>' +
+        '<div class="ed-rail-list" id="edRail" role="listbox" aria-labelledby="edRailHead" tabindex="-1"></div>' +
+        '<div class="ed-rail-f">Drag to reorder · Alt + ↑ ↓ with a row focused</div>' +
+      '</aside>' +
+      '<main class="ed-mid">' +
+        '<div class="ed-canvas" id="edCanvas"><div class="ed-paper" id="edPaper"></div></div>' +
+        '<div class="ed-pal">' +
+          '<div class="ed-pal-h">' +
+            '<div class="ed-pal-scroll"><span class="ed-pal-label">Add block</span><span id="edPalTabs" style="display:flex;gap:4px"></span></div>' +
+            '<button type="button" class="ed-pal-toggle" id="edPalToggle"></button>' +
+          '</div>' +
+          '<div class="ed-pal-chips" id="edPalChips"></div>' +
+        '</div>' +
+      '</main>' +
+      '<aside class="ed-insp">' +
+        '<div id="edInspHead"></div>' +
+        '<div id="edInspBody" class="ed-insp-body"></div>' +
+        '<div class="ed-changes">' +
+          '<span class="ed-lab" id="edChangesHead">Unpublished changes</span>' +
+          '<ul id="edChanges"></ul>' +
+        '</div>' +
+      '</aside>' +
+    '</div>' +
+  '</div>' +
+  '<div id="edPublishPanel"></div>' +
+  '<div id="edModal"></div>' +
+  '<div id="edToast"></div>';
+}
+
+function cacheEls() {
+  ['edTitle', 'edPill', 'edSaved', 'edView', 'edUndo', 'edPublish', 'edHint', 'edHintX', 'edRail',
+   'edCanvas', 'edPaper', 'edPalTabs', 'edPalChips', 'edPalToggle', 'edInspHead', 'edInspBody',
+   'edChanges', 'edChangesHead', 'edModal', 'edToast', 'edMore', 'edPublishPanel'].forEach(function (id) { el[id] = document.getElementById(id); });
+  el.live = document.getElementById('live');
+}
+
+// ── canvas sizing ──────────────────────────────────────────────────────────
+// The paper keeps its true pixel width and is scaled to fit with `zoom`.
+// `transform: scale()` is wrong here: it does not affect the layout box, so a
+// centred scaled paper drifts out of view. The paper must not flex-shrink
+// either, or the device switcher looks like it does nothing.
+function fitPaper() {
+  var w = WIDTHS[S.device] || WIDTHS.desktop;
+  el.edPaper.style.width = w + 'px';
+  el.edPaper.classList.toggle('ed-paper--phone', S.device === 'phone');
+  var avail = el.edCanvas.clientWidth - 56;
+  el.edPaper.style.zoom = avail > 0 ? Math.min(1, avail / w) : 1;
+}
+
+function setDevice(d) {
+  S.device = d;
+  var btns = el.edCanvas.ownerDocument.querySelectorAll('.ed-devices button');
+  for (var i = 0; i < btns.length; i++) btns[i].setAttribute('aria-pressed', String(btns[i].dataset.device === d));
+  fitPaper();
+  say(d === 'phone' ? 'Phone preview' : d === 'tablet' ? 'Tablet preview' : 'Desktop preview');
+}
+
+// ── rendering ──────────────────────────────────────────────────────────────
+function renderTop() {
+  el.edTitle.textContent = S.title || S.slug;
+  document.title = (S.title || S.slug) + ' — page editor';
+  var n = S.changes.length;
+  var scheduled = S.status === 'scheduled' && S.publishAt;
+  el.edPill.className = 'ed-pill ' + (scheduled || n ? 'ed-pill--draft' : 'ed-pill--live');
+  el.edPill.textContent = scheduled ? 'Scheduled · ' + fmtWhen(S.publishAt)
+    : n ? 'Draft · ' + n + ' edit' + (n === 1 ? '' : 's')
+    : (S.status === 'live' ? 'Published' : 'Draft');
+  el.edSaved.textContent = S.saved ? 'Autosaved ' + S.saved : 'No changes yet';
+  el.edUndo.disabled = S.history.length === 0;
+  el.edPublish.disabled = false;
+  el.edView.href = 'https://timothystl.org/' + S.slug;
+}
+
+function renderRail() {
+  var html = '';
+  for (var i = 0; i < S.blocks.length; i++) {
+    var b = S.blocks[i];
+    var d = def(b.type);
+    if (S.dropIndex === i) html += '<div class="ed-drop" aria-hidden="true"></div>';
+    html += '<button type="button" role="option" class="ed-row' + (b.hidden ? ' is-hidden' : '') + (S.dragId === b.id ? ' is-dragging' : '') + '"' +
+      ' draggable="true" data-id="' + esc(b.id) + '" data-index="' + i + '"' +
+      ' aria-selected="' + (b.id === S.selectedId) + '"' +
+      ' aria-label="' + esc(d.label) + ' block, position ' + (i + 1) + ' of ' + S.blocks.length + (b.hidden ? ', hidden on phone' : '') + '">' +
+      '<span class="ed-row-grip" aria-hidden="true">⠿</span>' +
+      '<span class="ed-row-glyph" aria-hidden="true">' + esc(d.glyph) + '</span>' +
+      '<span class="ed-row-label">' + esc(rowLabel(b, d)) + '</span>' +
+      (b.hidden ? '<span class="ed-row-tag">Hidden</span>' : '') +
+      '</button>';
+  }
+  if (S.dropIndex === S.blocks.length && (S.dragId || S.dragType)) html += '<div class="ed-drop" aria-hidden="true"></div>';
+  if (!S.blocks.length) html += '<div class="ed-rail-empty">No blocks yet.<br>Drag one from below.</div>';
+  el.edRail.innerHTML = html;
+}
+
+// The rail is more useful when a row says which block it is, not just its type.
+function rowLabel(b, d) {
+  var own = (b.title || '').trim() || (b.type === 'text' ? stripTags(b.body).slice(0, 32) : '');
+  return own ? d.label + ' · ' + own : d.label;
+}
+function stripTags(s) { return (s || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(); }
+
+function renderPalette() {
+  var tabs = '';
+  S.config.groups.forEach(function (g) {
+    tabs += '<button type="button" class="ed-pal-tab" data-group="' + esc(g.name) + '" aria-pressed="' + (g.name === S.group) + '">' + esc(g.name) + '</button>';
+  });
+  el.edPalTabs.innerHTML = tabs;
+  el.edPalToggle.textContent = S.paletteOpen ? 'Hide' : 'Show blocks';
+  el.edPalToggle.setAttribute('aria-expanded', String(S.paletteOpen));
+  el.edPalChips.style.display = S.paletteOpen ? '' : 'none';
+  var group = null;
+  S.config.groups.forEach(function (g) { if (g.name === S.group) group = g; });
+  var chips = '';
+  (group ? group.types : []).forEach(function (t) {
+    var d = def(t);
+    chips += '<button type="button" class="ed-chip" draggable="true" data-type="' + esc(t) + '">' +
+      esc(d.glyph) + '&nbsp;&nbsp;' + esc(d.label) + '</button>';
+  });
+  el.edPalChips.innerHTML = chips;
+}
+
+function renderChanges() {
+  el.edChangesHead.textContent = S.changes.length ? 'Unpublished changes (' + S.changes.length + ')' : 'Unpublished changes';
+  el.edChanges.innerHTML = S.changes.length
+    ? S.changes.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('')
+    : '<li class="ed-none-yet">Nothing since the last publish.</li>';
+}
+
+function renderToast() {
+  el.edToast.innerHTML = S.toast ? '<div class="ed-toast" role="status">' + esc(S.toast) + '</div>' : '';
+}
+
+// Canvas markup always comes from the Worker.
+async function refreshCanvas() {
+  var out = await api('/ministries/api/render', { method: 'POST', body: JSON.stringify({ blocks: S.blocks, slug: S.slug }) });
+  setCanvas(out.html);
+}
+
+function setCanvas(html) {
+  if (window.tinymce) { try { window.tinymce.remove(); } catch (_) {} }
+  el.edPaper.innerHTML = html;
+  applySelection();
+  fitPaper();
+  initRichText();
+}
+
+// Rich text uses the same TinyMCE the office already knows, in inline mode: a
+// floating toolbar on selection rather than a second editor chrome inside the
+// page. The toolbar carries no font, size or colour controls — those live in
+// the inspector where they are constrained to the site's own scale and palette.
+// If TinyMCE fails to load the fields stay plain contenteditable, which still
+// types and still saves.
+function initRichText() {
+  if (!window.tinymce || !el.edPaper.querySelector('[data-rich="1"]')) return;
+  try {
+    window.tinymce.init({
+      selector: '#edPaper [data-rich="1"]',
+      inline: true, menubar: false, statusbar: false, branding: false,
+      plugins: 'lists link autolink',
+      toolbar: 'bold italic underline | bullist numlist | link',
+      valid_elements: 'p,br,strong/b,em/i,u,s,ul,ol,li,a[href|target|rel],h2,h3,h4,blockquote',
+      link_default_target: '_blank',
+      setup: function (ed) {
+        ed.on('blur', function () { commitField(ed.getElement()); });
+      },
+    });
+  } catch (_) { /* plain contenteditable is a fine fallback */ }
+}
+
+function applySelection() {
+  var nodes = el.edPaper.querySelectorAll('.tlcb');
+  for (var i = 0; i < nodes.length; i++) nodes[i].classList.toggle('is-sel', nodes[i].dataset.id === S.selectedId);
+}
+
+function renderAll() {
+  renderTop();
+  renderRail();
+  renderPalette();
+  renderChanges();
+  renderInspector();
+}
+
+// ── mutation ───────────────────────────────────────────────────────────────
+// Every change goes through patch(). `mode` decides how the canvas catches up:
+//   'style'    — the block's CSS custom properties are updated in place (default)
+//   'rerender' — the markup itself changed, so ask the Worker to redraw
+//   'none'     — the DOM is already correct (the user just typed into it)
+function pushHistory() {
+  S.history.push(JSON.stringify(S.blocks));
+  if (S.history.length > 40) S.history.shift();
+}
+function note(text) {
+  if (!text) return;
+  S.changes.unshift(text + ' · ' + now());
+  if (S.changes.length > 24) S.changes.length = 24;
+}
+
+function patch(id, part, label, mode, keepInspector) {
+  var b = findBlock(id);
+  if (!b) return;
+  pushHistory();
+  Object.keys(part).forEach(function (k) { b[k] = part[k]; });
+  note(label);
+  if (mode === 'rerender') { rerender(); } else if (mode !== 'none') { restyle(b); }
+  renderTop(); renderRail(); renderChanges();
+  if (!keepInspector) renderInspector();
+  scheduleSave();
+  if (label) say(label);
+}
+
+// The client half of the CSS-custom-property contract in admin/blocks.js.
+// It must produce byte-identical output to wrapperVars() there — test/
+// editor.test.mjs asserts exactly that against a server render, so drift is
+// caught rather than shipped.
+function styleVars(b) {
+  var C = S.config;
+  var sz = C.SIZES.filter(function (x) { return x.key === b.size; })[0] || C.SIZES[1];
+  var sp = C.SPLITS.filter(function (x) { return x.key === b.split; })[0] || C.SPLITS[1];
+  var bg = C.BG[b.bg] || C.BG[0];
+  var ink = C.INK[b.ink] || C.INK[0];
+  var cols = b.side === 'above' ? '1fr' : (b.side === 'right' ? sp.b + ' ' + sp.a : sp.a + ' ' + sp.b);
+  var v = [
+    '--tlcb-bg:' + bg.c,
+    '--tlcb-ink:' + ink.c,
+    '--tlcb-head-ink:' + (bg.dark ? '#F3EDE1' : '#1E2D4A'),
+    '--tlcb-body:' + sz.body + 'px',
+    '--tlcb-head:' + sz.head + 'px',
+    '--tlcb-hero:' + sz.hero + 'px',
+    '--tlcb-gap:' + b.gap + 'px',
+    '--tlcb-height:' + b.height + 'px',
+    '--tlcb-media-order:' + (b.side === 'right' ? 2 : 0),
+    'margin-top:' + b.spaceAbove + 'px',
+    'margin-bottom:' + b.spaceBelow + 'px',
+  ];
+  if (b.type === 'textphoto') v.push('--tlcb-cols:' + cols);
+  if (b.type === 'columns') v.push('--tlcb-cols:repeat(' + b.cols + ',1fr)');
+  if (b.type === 'hero' && b.photo) v.push("--tlcb-hero-img:url('" + String(b.photo).replace(/["'\\()\s<>;{}]/g, '') + "')");
+  return v.join(';');
+}
+
+function blockNode(id) {
+  var nodes = el.edPaper.querySelectorAll('.tlcb');
+  for (var i = 0; i < nodes.length; i++) if (nodes[i].dataset.id === id) return nodes[i];
+  return null;
+}
+
+function restyle(b) {
+  var node = blockNode(b.id);
+  if (!node) return;
+  node.setAttribute('style', styleVars(b));
+  node.classList.toggle('tlcb-hide-phone', !!b.hidden);
+  node.classList.toggle('is-sel', b.id === S.selectedId);
+  if (b.type === 'spacer') {
+    var sp = node.querySelector('.tlcb-spacer');
+    if (sp) sp.textContent = b.height + 'PX SPACE';
+  }
+}
+
+// Redraws are serialised. Clicking two things quickly starts two round trips,
+// and without this the slower one can land last and repaint the canvas from a
+// state that has already been superseded.
+var renderChain = Promise.resolve();
+function rerender() {
+  renderChain = renderChain.then(doRerender, doRerender);
+  return renderChain;
+}
+async function doRerender() {
+  try {
+    var out = await api('/ministries/api/render', { method: 'POST', body: JSON.stringify({ blocks: S.blocks, slug: S.slug }) });
+    S.blocks = out.blocks; // take the server's sanitised version back as the truth
+    setCanvas(out.html);
+    renderRail();
+    renderInspector();
+  } catch (err) {
+    if (String(err && err.message) !== 'auth') toast('Could not redraw the page — reload to be safe');
+  }
+}
+
+async function freshBlock(type) {
+  var out = await api('/ministries/api/new-block', { method: 'POST', body: JSON.stringify({ type: type }) });
+  return out.block;
+}
+
+// ── autosave ───────────────────────────────────────────────────────────────
+var saveTimer = null;
+function scheduleSave() {
+  S.dirty = true;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveDraft, 1500);
+}
+async function saveDraft() {
+  clearTimeout(saveTimer);
+  if (!S.dirty) return;
+  try {
+    var out = await api('/ministries/api/page/' + encodeURIComponent(S.slug) + '/draft',
+      { method: 'POST', body: JSON.stringify({ blocks: S.blocks, changes: S.changes }) });
+    S.dirty = false;
+    S.saved = now();
+    S.status = out.status || S.status;
+    renderTop();
+  } catch (err) {
+    if (String(err && err.message) === 'auth') return;
+    toast('Could not save — your connection may be down');
+  }
+}
+
+// ── block actions ──────────────────────────────────────────────────────────
+function select(id) {
+  S.selectedId = id;
+  applySelection();
+  renderRail();
+  renderInspector();
+}
+
+async function duplicateBlock(id) {
+  var i = indexOfBlock(id);
+  if (i < 0) return;
+  var copy = JSON.parse(JSON.stringify(S.blocks[i]));
+  copy.id = 'b' + Math.random().toString(36).slice(2, 12);
+  pushHistory();
+  S.blocks.splice(i + 1, 0, copy);
+  S.selectedId = copy.id;
+  note('Duplicated ' + def(copy.type).label.toLowerCase());
+  await rerender();
+  renderTop(); renderChanges(); scheduleSave();
+  say('Duplicated ' + def(copy.type).label);
+}
+
+async function deleteBlock(id) {
+  var b = findBlock(id);
+  if (!b) return;
+  pushHistory();
+  S.blocks = S.blocks.filter(function (x) { return x.id !== id; });
+  S.selectedId = null;
+  note('Deleted ' + def(b.type).label.toLowerCase());
+  await rerender();
+  renderTop(); renderChanges(); scheduleSave();
+  say('Deleted ' + def(b.type).label + '. Undo is in the top bar.');
+}
+
+function toggleHide(id) {
+  var b = findBlock(id);
+  if (!b) return;
+  patch(id, { hidden: !b.hidden }, (b.hidden ? 'Shown on phone: ' : 'Hidden on phone: ') + def(b.type).label.toLowerCase());
+}
+
+async function resetBlock(id) {
+  var b = findBlock(id);
+  if (!b) return;
+  var fresh = await freshBlock(b.type);
+  fresh.id = b.id;
+  pushHistory();
+  S.blocks = S.blocks.map(function (x) { return x.id === id ? fresh : x; });
+  note('Reset ' + def(b.type).label.toLowerCase());
+  await rerender();
+  renderTop(); renderChanges(); scheduleSave();
+}
+
+async function undo() {
+  if (!S.history.length) return;
+  var prev = JSON.parse(S.history.pop());
+  S.blocks = prev;
+  S.selectedId = null;
+  note('Undid last change');
+  await rerender();
+  renderTop(); renderChanges(); scheduleSave();
+  say('Undid last change');
+}
+
+// ── in-place text editing ──────────────────────────────────────────────────
+// The canvas markup is authored by the Worker with the current values already
+// in it, so there is nothing to "hydrate" on every keystroke and no controlled
+// re-render to fight the caret with. Values are read back on blur and
+// committed; the canvas is only redrawn for structural changes, which always
+// happen with the field already blurred.
+function commitField(node) {
+  // Only genuine fields. `closest('[contenteditable]')` also matches the
+  // contenteditable="false" toolbar, and a node detached by a re-render fires
+  // focusout on its way out — either one would log a phantom text edit and
+  // leave an extra step on the undo stack.
+  if (!node || node.getAttribute('contenteditable') !== 'true') return;
+  if (!node.dataset.field) return;
+  if (!el.edPaper.contains(node)) return;
+  var wrap = node.closest('.tlcb');
+  if (!wrap) return;
+  var b = findBlock(wrap.dataset.id);
+  if (!b) return;
+  var field = node.dataset.field;
+  var itemIdx = node.dataset.item;
+  var d = def(b.type);
+  var isRich = itemIdx != null ? d.richItemFields.indexOf(field) > -1 : (d.richBody && field === 'body');
+  var value = isRich ? node.innerHTML.trim() : node.textContent.trim();
+  if (itemIdx != null) {
+    var it = b.items[Number(itemIdx)];
+    if (!it || it[field] === value) return;
+    pushHistory();
+    it[field] = value;
+  } else {
+    if (b[field] === value) return;
+    pushHistory();
+    b[field] = value;
+  }
+  note((field === 'stamp' ? 'Reworded the stamp on ' : 'Edited text in ') + d.label.toLowerCase());
+  renderTop(); renderRail(); renderChanges();
+  scheduleSave();
+}
+
+// ── inspector ──────────────────────────────────────────────────────────────
+function renderInspector() {
+  // Rebuilding the panel loses focus; put it back on the same control so the
+  // keyboard path through a stepper or a swatch row survives a re-render.
+  var active = document.activeElement;
+  var focusKey = active && active.closest && active.closest('#edInspBody') ? active.getAttribute('data-k') : null;
+
+  var b = findBlock(S.selectedId);
+  if (!b) {
+    el.edInspHead.innerHTML = '';
+    el.edInspBody.className = 'ed-none';
+    el.edInspBody.innerHTML = '<b>Nothing selected</b><span>Click a block on the page — or a row in the left rail — to change its layout, spacing, and background.</span>';
+    return;
+  }
+  var d = def(b.type);
+  el.edInspHead.innerHTML = '<div class="ed-insp-h"><b>' + esc(d.label) + '</b>' +
+    '<span>Block ' + (indexOfBlock(b.id) + 1) + ' of ' + S.blocks.length + '</span></div>';
+  el.edInspBody.className = 'ed-insp-body';
+  el.edInspBody.innerHTML = inspectorSections(b, d);
+
+  if (focusKey) {
+    var back = el.edInspBody.querySelector('[data-k="' + focusKey.replace(/"/g, '') + '"]');
+    if (back) back.focus();
+  }
+}
+
+function chip(action, value, label, on, extra) {
+  return '<button type="button" class="ed-pick" data-a="' + action + '" data-v="' + esc(value) + '"' +
+    ' data-k="' + action + ':' + esc(value) + '" aria-pressed="' + (on ? 'true' : 'false') + '"' +
+    (extra || '') + '>' + esc(label) + '</button>';
+}
+
+function stepper(b, key, label) {
+  return '<div class="ed-step-row"><span>' + esc(label) + '</span>' +
+    '<span class="ed-step">' +
+      '<button type="button" data-a="step" data-v="' + key + ':-1" data-k="step:' + key + ':-1" aria-label="Less ' + esc(label.toLowerCase()) + '">−</button>' +
+      '<output>' + b[key] + 'px</output>' +
+      '<button type="button" data-a="step" data-v="' + key + ':1" data-k="step:' + key + ':1" aria-label="More ' + esc(label.toLowerCase()) + '">+</button>' +
+    '</span></div>';
+}
+
+function inspectorSections(b, d) {
+  var C = S.config;
+  var out = '';
+
+  // 1. Columns
+  if (b.type === 'columns') {
+    out += '<div class="ed-sec"><span class="ed-lab">Columns</span><div class="ed-chips">' +
+      chip('cols', '2', '2 columns', b.cols === 2) + chip('cols', '3', '3 columns', b.cols === 3) +
+      '</div><span class="ed-note">Columns stack on a phone automatically.</span></div>';
+  }
+
+  // 2 + 3. Photo position and column split
+  if (b.type === 'textphoto') {
+    out += '<div class="ed-sec"><span class="ed-lab">Photo position</span><div class="ed-chips">' +
+      chip('side', 'left', 'Left', b.side === 'left') +
+      chip('side', 'right', 'Right', b.side === 'right') +
+      chip('side', 'above', 'Above', b.side === 'above') +
+      '</div></div>';
+    var sp = C.SPLITS.filter(function (x) { return x.key === b.split; })[0] || C.SPLITS[1];
+    out += '<div class="ed-sec"><div class="ed-lab-row"><span class="ed-lab">Column split</span>' +
+      '<span class="ed-read">' + esc(b.side === 'above' ? 'Full width' : sp.text) + '</span></div><div class="ed-chips">' +
+      C.SPLITS.map(function (s) { return chip('split', s.key, s.label, s.key === b.split); }).join('') +
+      '</div><span class="ed-note">Columns stack automatically on a phone.</span></div>';
+  }
+
+  // 4. Spacing
+  out += '<div class="ed-sec"><span class="ed-lab">Spacing</span>' +
+    stepper(b, 'spaceAbove', 'Space above') +
+    stepper(b, 'spaceBelow', 'Space below') +
+    (b.type === 'textphoto' || b.type === 'columns' ? stepper(b, 'gap', 'Gap between columns') : '') +
+    (b.type === 'spacer' ? stepper(b, 'height', 'Height') : '') +
+    '<span class="ed-note">Steps of ' + C.step + 'px, capped at ' + C.max + ' — blocks always line up with the rest of the site.</span></div>';
+
+  // 5. Photo
+  if (d.photo) {
+    out += '<div class="ed-sec"><span class="ed-lab">Photo</span>' +
+      '<button type="button" class="ed-media" data-a="photo" data-k="photo"><span class="ed-media-thumb"' +
+        (b.photo ? ' style="background-image:url(' + esc(b.photo) + ')"' : '') + '>' + (b.photo ? '' : '▣') + '</span>' +
+      '<span class="ed-media-b"><span class="ed-media-n">' + esc(b.photo ? b.photo.split('/').pop() : 'No photo yet') + '</span>' +
+      '<span class="ed-media-c">Choose from library</span></span></button>' +
+      '<label class="ed-note" for="edAlt">Describe the photo for people using a screen reader</label>' +
+      '<input class="ed-field" id="edAlt" data-in="photoAlt" data-k="alt" value="' + esc(b.photoAlt) + '" placeholder="e.g. The choir in the balcony">' +
+      '</div>';
+  }
+
+  // 6. Video
+  if (d.video) {
+    out += '<div class="ed-sec"><span class="ed-lab">Video</span>' +
+      '<button type="button" class="ed-media" data-a="video" data-k="video"><span class="ed-media-thumb ed-tile-th--vid" style="background:#1E2D4A;color:#FBF8F3">▶</span>' +
+      '<span class="ed-media-b"><span class="ed-media-n">' + esc(b.video || 'No video yet') + '</span>' +
+      '<span class="ed-media-c">Choose from library</span></span></button></div>';
+  }
+
+  // Link / embed target
+  if (d.url) {
+    out += '<div class="ed-sec"><label class="ed-lab" for="edUrl">' + esc(d.urlLabel || 'Link') + '</label>' +
+      '<input class="ed-field" id="edUrl" data-in="url" data-k="url" value="' + esc(b.url) + '" placeholder="https://…"></div>';
+  }
+
+  // Repeating rows
+  if (d.items) out += itemsSection(b, d);
+
+  // 7. Theme colours
+  out += '<div class="ed-sec"><div class="ed-lab-row"><span class="ed-lab">Theme colours</span>' +
+    '<span class="ed-read">' + esc(C.BG[b.bg].name) + ' · ' + esc(C.INK[b.ink].name) + '</span></div>' +
+    '<span class="ed-note">Background</span><div class="ed-chips">' +
+    C.BG.map(function (t, i) {
+      return '<button type="button" class="ed-sw" data-a="bg" data-v="' + i + '" data-k="bg:' + i + '" title="' + esc(t.name) + '"' +
+        ' aria-label="Background ' + esc(t.name) + '" aria-pressed="' + (i === b.bg) + '" style="background:' + t.c + '"></button>';
+    }).join('') + '</div>' +
+    '<span class="ed-note">Text</span><div class="ed-chips">' +
+    C.INK.map(function (t, i) {
+      var usable = t.onDark === C.BG[b.bg].dark;
+      return '<button type="button" class="ed-sw" data-a="ink" data-v="' + i + '" data-k="ink:' + i + '" title="' +
+        esc(t.name + (usable ? '' : ' — unreadable on ' + C.BG[b.bg].name)) + '"' +
+        ' aria-label="Text colour ' + esc(t.name) + (usable ? '' : ', unreadable on ' + esc(C.BG[b.bg].name)) + '"' +
+        ' aria-pressed="' + (i === b.ink) + '" aria-disabled="' + (!usable) + '" style="background:' + t.c + '"></button>';
+    }).join('') + '</div>' +
+    '<span class="ed-note">Only the site\'s own palette, and only pairs that stay readable — unusable combinations are greyed out.</span></div>';
+
+  // 8. Text size
+  var sz = C.SIZES.filter(function (x) { return x.key === b.size; })[0] || C.SIZES[1];
+  out += '<div class="ed-sec"><div class="ed-lab-row"><span class="ed-lab">Text size</span>' +
+    '<span class="ed-read">' + sz.body + 'px body text</span></div><div class="ed-chips">' +
+    C.SIZES.map(function (x) {
+      return chip('size', x.key, x.label, x.key === b.size, ' style="font-size:' + (x.key === 's' ? 12 : x.key === 'm' ? 13.5 : 15) + 'px"');
+    }).join('') +
+    '</div><span class="ed-note">Three steps on the site\'s type scale — headings scale with the body text, so nothing drops below readable size.</span></div>';
+
+  // 9. Stamp
+  out += '<div class="ed-sec ed-sec--rule"><div class="ed-lab-row"><span class="ed-lab">Stamp</span>' +
+    '<span class="ed-read">' + esc(b.stamp || 'None') + '</span></div><div class="ed-chips">' +
+    chip('stamp', '', 'None', !b.stamp) +
+    C.stamps.map(function (s) { return chip('stamp', s, s, b.stamp === s); }).join('') + '</div>';
+  if (b.stamp) {
+    out += '<div class="ed-chips">' + C.TONES.map(function (t, i) {
+      return '<button type="button" class="ed-pick" data-a="tone" data-v="' + i + '" data-k="tone:' + i + '" aria-pressed="' + (i === b.tone) + '"' +
+        ' style="background:' + t.bg + ';color:' + t.fg + ';border:1px solid ' + t.bg + ';font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:10.5px' +
+        (i === b.tone ? ';box-shadow:0 0 0 2px #2E7EA6' : '') + '">' + esc(t.name) + '</button>';
+    }).join('') + '</div>' +
+    '<div class="ed-chips">' + chip('corner', 'tl', 'Left', b.corner === 'tl') + chip('corner', 'tr', 'Right', b.corner === 'tr') + '</div>';
+  }
+  out += '<span class="ed-note">Sits tilted over the block\'s lower corner. Click it on the page to reword it.</span></div>';
+
+  // 10-12. Show on phone, reassurance, reset
+  out += '<div class="ed-sec ed-sec--rule" style="gap:10px">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;font-size:13.5px;color:#1E2D4A">' +
+      '<span id="edPhoneLab">Show on phone</span>' +
+      '<button type="button" class="ed-track" data-a="hide" data-k="hide" role="switch" aria-labelledby="edPhoneLab"' +
+      ' aria-checked="' + (!b.hidden) + '" aria-pressed="' + (!b.hidden) + '"><span class="ed-knob"></span></button>' +
+    '</div>' +
+    '<div class="ed-reassure"><i aria-hidden="true">✓</i><span>Every value snaps to the site\'s spacing scale and fonts, so a page can\'t end up misaligned or unreadable on a phone.</span></div>' +
+    '<button type="button" class="ed-reset" data-a="reset" data-k="reset">Reset block</button>' +
+    '</div>';
+
+  return out;
+}
+
+function itemsSection(b, d) {
+  var inputFields = d.itemUrlFields.slice();
+  if (d.gallery) inputFields = ['url'];
+  var rows = (b.items || []).map(function (it, i) {
+    var fields = inputFields.map(function (f) {
+      var ph = d.itemPlaceholders[f] || (f === 'url' ? 'https://…' : f);
+      return '<input class="ed-field" data-in="item:' + i + ':' + f + '" data-k="item:' + i + ':' + f + '"' +
+        ' value="' + esc(it[f] || '') + '" placeholder="' + esc(ph) + '" aria-label="' + esc(d.itemLabel + ' ' + (i + 1) + ' ' + f) + '">';
+    }).join('');
+    var head = '<div class="ed-item-h"><span>' + esc(d.itemLabel + ' ' + (i + 1)) +
+      (it.title ? ' · ' + esc(String(it.title).slice(0, 22)) : '') + '</span>' +
+      '<button type="button" data-a="item-del" data-v="' + i + '" data-k="item-del:' + i + '">Remove</button></div>';
+    var hint = fields ? '' : '<span class="ed-note">Edit the wording on the page itself.</span>';
+    return '<div class="ed-item">' + head + fields + hint + '</div>';
+  }).join('');
+  var full = (b.items || []).length >= 24;
+  return '<div class="ed-sec"><span class="ed-lab">' + esc(d.itemLabel) + 's</span>' + rows +
+    (d.gallery
+      ? '<button type="button" class="ed-add" data-a="gallery" data-k="gallery">Add photos from the library</button>'
+      : '<button type="button" class="ed-add" data-a="item-add" data-k="item-add"' + (full ? ' disabled' : '') + '>+ Add ' + esc(d.itemLabel.toLowerCase()) + '</button>') +
+    '</div>';
+}
+
+// ── inspector actions ──────────────────────────────────────────────────────
+function inspectorAction(action, value) {
+  var b = findBlock(S.selectedId);
+  if (!b) return;
+  var C = S.config;
+  var d = def(b.type);
+  switch (action) {
+    case 'cols': {
+      var n = Number(value);
+      // Growing to three columns needs a third column to put text in.
+      var items = (b.items || []).slice();
+      var structural = false;
+      while (items.length < n) { items.push({ title: '', body: '' }); structural = true; }
+      patch(b.id, structural ? { cols: n, items: items } : { cols: n }, 'Changed to ' + n + ' columns', structural ? 'rerender' : 'style');
+      break;
+    }
+    case 'side': patch(b.id, { side: value }, 'Moved photo ' + value); break;
+    case 'split': patch(b.id, { split: value }, 'Changed column split'); break;
+    case 'step': {
+      var parts = value.split(':');
+      var key = parts[0];
+      var delta = Number(parts[1]) * C.step;
+      var v = Math.max(0, Math.min(C.max, (b[key] || 0) + delta));
+      if (v === b[key]) return;
+      var p = {}; p[key] = v;
+      // Spacing steps deliberately write no change-log entry — nudging a
+      // stepper four times would otherwise bury the meaningful edits.
+      patch(b.id, p, null, 'style');
+      say(key === 'height' ? 'Height ' + v + 'px' : v + 'px');
+      break;
+    }
+    case 'bg': {
+      var bgIdx = Number(value);
+      var part = { bg: bgIdx };
+      // Guardrail as data, not an ad-hoc conditional: an ink that would be
+      // unreadable on the new background moves to the readable default.
+      if (C.INK[b.ink].onDark !== C.BG[bgIdx].dark) part.ink = C.BG[bgIdx].dark ? 3 : 0;
+      patch(b.id, part, 'Background → ' + C.BG[bgIdx].name);
+      break;
+    }
+    case 'ink': {
+      var inkIdx = Number(value);
+      if (C.INK[inkIdx].onDark !== C.BG[b.bg].dark) {
+        say(C.INK[inkIdx].name + ' would be unreadable on ' + C.BG[b.bg].name);
+        return;
+      }
+      patch(b.id, { ink: inkIdx }, 'Text colour → ' + C.INK[inkIdx].name);
+      break;
+    }
+    case 'size': patch(b.id, { size: value }, 'Text size → ' + value.toUpperCase()); break;
+    case 'stamp': patch(b.id, { stamp: value }, value ? 'Stamp → ' + value : 'Removed stamp', 'rerender'); break;
+    case 'tone': patch(b.id, { tone: Number(value) }, 'Stamp colour → ' + C.TONES[Number(value)].name, 'rerender'); break;
+    case 'corner': patch(b.id, { corner: value }, 'Stamp moved ' + (value === 'tl' ? 'left' : 'right'), 'rerender'); break;
+    case 'hide': toggleHide(b.id); break;
+    case 'reset': resetBlock(b.id); break;
+    case 'item-add': {
+      var next = (b.items || []).slice();
+      if (next.length >= 24) return;
+      var blank = {};
+      d.itemFields.forEach(function (f) { blank[f] = ''; });
+      next.push(blank);
+      patch(b.id, { items: next }, 'Added a ' + d.itemLabel.toLowerCase(), 'rerender');
+      break;
+    }
+    case 'item-del': {
+      var idx = Number(value);
+      var left = (b.items || []).filter(function (_, i) { return i !== idx; });
+      patch(b.id, { items: left }, 'Removed a ' + d.itemLabel.toLowerCase(), 'rerender');
+      break;
+    }
+    case 'photo': openPicker(b.id, 'photo'); break;
+    case 'video': openPicker(b.id, 'video'); break;
+    case 'gallery': openPicker(b.id, 'gallery'); break;
+    default: break;
+  }
+}
+
+// Text inputs update state as you type without redrawing the panel underneath
+// the caret; the canvas catches up on a short debounce.
+var inputTimer = null;
+function inspectorInput(target) {
+  var b = findBlock(S.selectedId);
+  if (!b) return;
+  var spec = target.dataset.in;
+  var value = target.value;
+  if (spec === 'url') b.url = value;
+  else if (spec === 'photoAlt') b.photoAlt = value;
+  else if (spec.indexOf('item:') === 0) {
+    var parts = spec.split(':');
+    var it = (b.items || [])[Number(parts[1])];
+    if (!it) return;
+    it[parts[2]] = value;
+  } else return;
+  clearTimeout(inputTimer);
+  inputTimer = setTimeout(function () {
+    pushHistory();
+    note('Edited ' + def(b.type).label.toLowerCase());
+    rerender();
+    renderTop(); renderChanges(); scheduleSave();
+  }, 700);
+}
+
+// ── static wiring ──────────────────────────────────────────────────────────
+function bindStatic() {
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-device]');
+    if (t) { setDevice(t.dataset.device); return; }
+    if (e.target.closest('#edHintX')) { S.hint = false; el.edHint.style.display = 'none'; try { localStorage.setItem(HINT_KEY, '1'); } catch (_) {} return; }
+    var tab = e.target.closest('[data-group]');
+    if (tab) { S.group = tab.dataset.group; S.paletteOpen = true; renderPalette(); return; }
+    if (e.target.closest('#edPalToggle')) { S.paletteOpen = !S.paletteOpen; renderPalette(); return; }
+    if (e.target.closest('#edUndo')) { undo(); return; }
+  });
+
+  // rail
+  el.edRail.addEventListener('click', function (e) {
+    var row = e.target.closest('.ed-row');
+    if (row) select(row.dataset.id);
+  });
+
+  // canvas: selection, block toolbar, media pickers
+  el.edPaper.addEventListener('click', function (e) {
+    var actEl = e.target.closest('[data-act]');
+    var wrap = e.target.closest('.tlcb');
+    if (!wrap) return;
+    if (actEl) {
+      e.preventDefault();
+      e.stopPropagation();
+      var id = wrap.dataset.id;
+      var act = actEl.dataset.act;
+      if (act === 'dup') return duplicateBlock(id);
+      if (act === 'del') return deleteBlock(id);
+      if (act === 'hide') return toggleHide(id);
+      if (act === 'up') return moveBlock(id, -1);
+      if (act === 'down') return moveBlock(id, 1);
+      if (act === 'photo' || act === 'video' || act === 'gallery') { select(id); return openPicker(id, act); }
+      return;
+    }
+    if (e.target.closest('[contenteditable="true"]')) { select(wrap.dataset.id); return; }
+    select(wrap.dataset.id);
+  });
+
+  // commit text on blur
+  el.edPaper.addEventListener('focusout', function (e) {
+    var node = e.target.closest ? e.target.closest('[contenteditable="true"]') : null;
+    if (node) commitField(node);
+  }, true);
+
+  // Enter should not create block-level markup in single-line fields
+  el.edPaper.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') return;
+    var node = e.target.closest ? e.target.closest('[contenteditable="true"]') : null;
+    if (!node || !node.dataset.field) return;
+    var wrap = node.closest('.tlcb');
+    var b = wrap && findBlock(wrap.dataset.id);
+    var d = b && def(b.type);
+    var rich = d && ((d.richBody && node.dataset.field === 'body' && node.dataset.item == null) ||
+      (node.dataset.item != null && d.richItemFields.indexOf(node.dataset.field) > -1));
+    if (!rich) { e.preventDefault(); node.blur(); }
+  });
+
+  // inspector
+  el.edInspBody.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-a]');
+    if (btn) inspectorAction(btn.dataset.a, btn.dataset.v || '');
+  });
+  el.edInspBody.addEventListener('input', function (e) {
+    if (e.target.dataset && e.target.dataset.in) inspectorInput(e.target);
+  });
+
+  // Escape clears the selection so the whole page is visible again
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !S.picker && S.selectedId) { select(null); }
+  });
+
+  // Don't lose an edit to a closed tab
+  window.addEventListener('beforeunload', function (e) {
+    if (!S.dirty) return;
+    try {
+      navigator.sendBeacon('/ministries/api/page/' + encodeURIComponent(S.slug) + '/draft',
+        new Blob([JSON.stringify({ blocks: S.blocks, changes: S.changes })], { type: 'application/json' }));
+    } catch (_) {}
+    e.preventDefault();
+    e.returnValue = '';
+  });
+
+  bindDragAndDrop();
+  bindPicker();
+  bindPublish();
+
+  window.addEventListener('resize', fitPaper);
+  if (window.ResizeObserver) new ResizeObserver(fitPaper).observe(el.edCanvas);
+}
+
+// ── reordering and adding ──────────────────────────────────────────────────
+// Drop indicators are inserted into the DOM directly rather than by re-rendering
+// the rail or canvas: a re-render mid-drag replaces the element being dragged,
+// which cancels the drag in every browser.
+function dropLabel() {
+  return S.dragType ? 'Insert ' + def(S.dragType).label.toLowerCase() + ' here' : 'Move here';
+}
+
+function clearIndicators() {
+  var old = document.querySelectorAll('.ed-drop, .ed-canvas-drop');
+  for (var i = 0; i < old.length; i++) old[i].remove();
+}
+
+function setDropIndex(i) {
+  if (S.dropIndex === i) return; // only on change, or we thrash on every mousemove
+  S.dropIndex = i;
+  clearIndicators();
+  if (i == null) return;
+  var rows = el.edRail.querySelectorAll('.ed-row');
+  var bar = document.createElement('div');
+  bar.className = 'ed-drop';
+  if (i >= rows.length) el.edRail.appendChild(bar); else el.edRail.insertBefore(bar, rows[i]);
+  var page = el.edPaper.querySelector('.tlcb-page');
+  if (!page) return;
+  var blocks = page.querySelectorAll('.tlcb');
+  var line = document.createElement('div');
+  line.className = 'ed-canvas-drop';
+  line.innerHTML = '<span>' + esc(dropLabel()) + '</span>';
+  if (i >= blocks.length) page.appendChild(line); else page.insertBefore(line, blocks[i]);
+}
+
+function clearDrag() {
+  S.dragId = null;
+  S.dragType = null;
+  S.dropIndex = null;
+  clearIndicators();
+  var dragging = el.edRail.querySelectorAll('.is-dragging');
+  for (var i = 0; i < dragging.length; i++) dragging[i].classList.remove('is-dragging');
+}
+
+// Midpoint rule: above the halfway line drops before this block, below it after.
+// `node` is passed explicitly — these listeners are delegated from the rail and
+// canvas containers, so e.currentTarget is the container and measuring against
+// it would put every drop in the same place.
+function overItem(e, index, node) {
+  if (!S.dragId && !S.dragType) return;
+  e.preventDefault();
+  e.stopPropagation();
+  var r = node.getBoundingClientRect();
+  setDropIndex((e.clientY - r.top) < r.height / 2 ? index : index + 1);
+}
+
+function overContainer(e) {
+  if (!S.dragId && !S.dragType) return;
+  e.preventDefault();
+  if (S.dropIndex === null) setDropIndex(S.blocks.length);
+}
+
+async function performDrop(e) {
+  if (e) e.preventDefault();
+  if (!S.dragId && !S.dragType) return;
+  var at = S.dropIndex == null ? S.blocks.length : S.dropIndex;
+  var type = S.dragType;
+  var id = S.dragId;
+  clearDrag();
+  if (type) {
+    var block = await freshBlock(type);
+    pushHistory();
+    S.blocks.splice(at, 0, block);
+    S.selectedId = block.id;
+    note('Added ' + def(type).label.toLowerCase());
+    say(def(type).label + ' added at position ' + (at + 1));
+  } else if (id) {
+    var from = indexOfBlock(id);
+    if (from < 0) return;
+    // Removing the source first shifts everything after it down by one.
+    if (at > from) at -= 1;
+    if (at === from) return;
+    pushHistory();
+    var moved = S.blocks.splice(from, 1)[0];
+    S.blocks.splice(at, 0, moved);
+    note('Reordered ' + def(moved.type).label.toLowerCase());
+    say(def(moved.type).label + ' moved to position ' + (at + 1) + ' of ' + S.blocks.length);
+  }
+  await rerender();
+  renderTop(); renderRail(); renderChanges(); scheduleSave();
+}
+
+async function moveBlock(id, delta) {
+  var from = indexOfBlock(id);
+  var to = from + delta;
+  if (from < 0 || to < 0 || to >= S.blocks.length) return;
+  pushHistory();
+  var moved = S.blocks.splice(from, 1)[0];
+  S.blocks.splice(to, 0, moved);
+  note('Reordered ' + def(moved.type).label.toLowerCase());
+  await rerender();
+  renderTop(); renderRail(); renderChanges(); scheduleSave();
+  say(def(moved.type).label + ' moved to position ' + (to + 1) + ' of ' + S.blocks.length);
+  var row = el.edRail.querySelector('.ed-row[data-id="' + id + '"]');
+  if (row) row.focus();
+}
+
+// Clicking a palette chip appends. The youth director will use clicks, not drags.
+async function addBlock(type) {
+  var block = await freshBlock(type);
+  pushHistory();
+  S.blocks.push(block);
+  S.selectedId = block.id;
+  note('Added ' + def(type).label.toLowerCase());
+  await rerender();
+  renderTop(); renderRail(); renderChanges(); scheduleSave();
+  say(def(type).label + ' added at the end of the page');
+  var node = blockNode(block.id);
+  if (node && node.scrollIntoView) node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+function bindDragAndDrop() {
+  // rail rows
+  el.edRail.addEventListener('dragstart', function (e) {
+    var row = e.target.closest('.ed-row');
+    if (!row) return;
+    S.dragId = row.dataset.id;
+    S.dragType = null;
+    row.classList.add('is-dragging');
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', row.dataset.id); } catch (_) {}
+    }
+  });
+  el.edRail.addEventListener('dragover', function (e) {
+    var row = e.target.closest('.ed-row');
+    if (row) overItem(e, Number(row.dataset.index), row);
+    else overContainer(e);
+  });
+  el.edRail.addEventListener('drop', performDrop);
+  el.edRail.addEventListener('dragend', clearDrag);
+
+  // canvas — the ⠿ Move handle in the block toolbar starts the drag
+  el.edPaper.addEventListener('dragstart', function (e) {
+    var handle = e.target.closest('[data-act="move"]');
+    if (!handle) { e.preventDefault(); return; }
+    var wrap = handle.closest('.tlcb');
+    S.dragId = wrap.dataset.id;
+    S.dragType = null;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', wrap.dataset.id); } catch (_) {}
+    }
+  });
+  el.edCanvas.addEventListener('dragover', function (e) {
+    var wrap = e.target.closest('.tlcb');
+    if (wrap) overItem(e, indexOfBlock(wrap.dataset.id), wrap);
+    else overContainer(e);
+  });
+  el.edCanvas.addEventListener('drop', performDrop);
+  el.edCanvas.addEventListener('dragend', clearDrag);
+
+  // palette chips
+  el.edPalChips.addEventListener('dragstart', function (e) {
+    var c = e.target.closest('.ed-chip');
+    if (!c) return;
+    S.dragType = c.dataset.type;
+    S.dragId = null;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'copy';
+      try { e.dataTransfer.setData('text/plain', c.dataset.type); } catch (_) {}
+    }
+  });
+  el.edPalChips.addEventListener('dragend', clearDrag);
+  el.edPalChips.addEventListener('click', function (e) {
+    var c = e.target.closest('.ed-chip');
+    if (c) addBlock(c.dataset.type);
+  });
+
+  // Keyboard reordering. HTML5 drag-and-drop is mouse-only and does not work on
+  // a tablet at all, so this and the toolbar's ↑ ↓ are not optional extras.
+  el.edRail.addEventListener('keydown', function (e) {
+    var row = e.target.closest('.ed-row');
+    if (!row) return;
+    if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      e.preventDefault();
+      moveBlock(row.dataset.id, e.key === 'ArrowUp' ? -1 : 1);
+      return;
+    }
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      var rows = el.edRail.querySelectorAll('.ed-row');
+      var i = Number(row.dataset.index) + (e.key === 'ArrowUp' ? -1 : 1);
+      if (!rows[i]) return;
+      var nextId = rows[i].dataset.id;
+      select(nextId); // this redraws the rail, so re-find the row before focusing
+      var moved = el.edRail.querySelector('.ed-row[data-id="' + nextId + '"]');
+      if (moved) moved.focus();
+    }
+  });
+}
+
+// ── publishing ─────────────────────────────────────────────────────────────
+async function publish() {
+  await saveDraft();
+  try {
+    var out = await api('/ministries/api/page/' + encodeURIComponent(S.slug) + '/publish',
+      { method: 'POST', body: JSON.stringify({ blocks: S.blocks }) });
+    S.changes = [];
+    S.status = 'live';
+    S.publishAt = null;
+    S.saved = now();
+    S.dirty = false;
+    closePublishPanel();
+    renderTop(); renderChanges();
+    toast('Published to timothystl.org/' + S.slug);
+    say('Published');
+  } catch (err) {
+    if (String(err && err.message) !== 'auth') toast('Could not publish — ' + (err.message || 'try again'));
+  }
+}
+
+function fmtWhen(iso) {
+  if (!iso) return '';
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+// datetime-local wants a local wall-clock string and hands one back with no
+// zone. The Worker runs in UTC, so both directions are converted here, in the
+// office's own timezone.
+function toLocalInput(iso) {
+  if (!iso) return '';
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  var pad = function (n) { return String(n).padStart(2, '0'); };
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+    'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
+
+function localToIso(value) {
+  var d = new Date(value);
+  return isNaN(d.getTime()) ? '' : d.toISOString();
+}
+
+function closePublishPanel() {
+  S.publishPanel = false;
+  el.edMore.setAttribute('aria-expanded', 'false');
+  el.edPublishPanel.innerHTML = '';
+}
+
+async function togglePublishPanel() {
+  if (S.publishPanel) return closePublishPanel();
+  S.publishPanel = true;
+  el.edMore.setAttribute('aria-expanded', 'true');
+  renderPublishPanel();
+  try {
+    var out = await api('/ministries/api/page/' + encodeURIComponent(S.slug) + '/revisions');
+    S.revisions = out.revisions || [];
+    if (S.publishPanel) renderPublishPanel();
+  } catch (_) { /* the panel still works without history */ }
+}
+
+function renderPublishPanel() {
+  if (!S.publishPanel) return;
+  var scheduled = S.status === 'scheduled' && S.publishAt;
+  var revs = (S.revisions || []).map(function (r) {
+    return '<li class="ed-rev"><span><b>' + esc(fmtWhen(r.published_at)) + '</b><br>' +
+      esc(r.published_by || 'staff') + ' · ' + r.count + ' block' + (r.count === 1 ? '' : 's') + '</span>' +
+      '<button type="button" class="ed-close" data-restore="' + r.id + '">Restore</button></li>';
+  }).join('');
+  el.edPublishPanel.innerHTML = '<div class="ed-panel" role="dialog" aria-label="Publishing options">' +
+    '<div class="ed-panel-sec"><span class="ed-lab">Status</span>' +
+      '<span class="ed-note">' + (scheduled
+        ? 'Scheduled for ' + esc(fmtWhen(S.publishAt))
+        : (S.changes.length ? S.changes.length + ' unpublished change' + (S.changes.length === 1 ? '' : 's') : 'Everything is published')) + '</span>' +
+      '<a class="ed-close" style="display:inline-block;text-align:center" href="https://timothystl.org/' + esc(S.slug) + '" target="_blank" rel="noopener">Compare with the live page ↗</a>' +
+    '</div>' +
+    '<div class="ed-panel-sec"><label class="ed-lab" for="edWhen">Publish later</label>' +
+      '<input class="ed-field" type="datetime-local" id="edWhen" value="' + esc(S.publishAtLocal || '') + '">' +
+      '<div style="display:flex;gap:6px">' +
+        '<button type="button" class="ed-close" id="edSchedule">Schedule</button>' +
+        (scheduled ? '<button type="button" class="ed-close" id="edUnschedule">Cancel schedule</button>' : '') +
+      '</div>' +
+      '<span class="ed-note">The page goes live on its own within about fifteen minutes of that time.</span>' +
+    '</div>' +
+    '<div class="ed-panel-sec"><span class="ed-lab">Recently published</span>' +
+      (revs ? '<ul class="ed-revs">' + revs + '</ul>' : '<span class="ed-note">Nothing published from this editor yet.</span>') +
+      '<span class="ed-note">Restoring loads that version as a draft — nothing changes on the live page until you publish.</span>' +
+    '</div></div>';
+}
+
+async function schedulePublish(whenIso) {
+  try {
+    await saveDraft();
+    var out = await api('/ministries/api/page/' + encodeURIComponent(S.slug) + '/schedule',
+      { method: 'POST', body: JSON.stringify({ publish_at: whenIso }) });
+    S.status = out.status;
+    S.publishAt = out.publish_at;
+    renderTop();
+    renderPublishPanel();
+    toast(whenIso ? 'Scheduled for ' + fmtWhen(out.publish_at) : 'Schedule cancelled');
+  } catch (err) {
+    toast(err.message || 'Could not schedule');
+  }
+}
+
+async function restoreRevision(id) {
+  try {
+    var out = await api('/ministries/api/page/' + encodeURIComponent(S.slug) + '/restore',
+      { method: 'POST', body: JSON.stringify({ id: id }) });
+    pushHistory();
+    S.blocks = out.blocks;
+    S.selectedId = null;
+    S.status = 'draft';
+    note('Restored an earlier version');
+    closePublishPanel();
+    setCanvas(out.html);
+    renderTop(); renderRail(); renderChanges(); renderInspector();
+    toast('Loaded as a draft — publish when you are happy with it');
+  } catch (err) {
+    toast(err.message || 'Could not restore');
+  }
+}
+
+function bindPublish() {
+  el.edPublish.addEventListener('click', publish);
+  el.edMore.addEventListener('click', togglePublishPanel);
+  el.edPublishPanel.addEventListener('click', function (e) {
+    var rev = e.target.closest('[data-restore]');
+    if (rev) return restoreRevision(Number(rev.dataset.restore));
+    if (e.target.closest('#edSchedule')) {
+      var v = el.edPublishPanel.querySelector('#edWhen').value;
+      if (!v) return toast('Pick a date and time first');
+      return schedulePublish(localToIso(v));
+    }
+    if (e.target.closest('#edUnschedule')) return schedulePublish(null);
+  });
+  document.addEventListener('click', function (e) {
+    if (!S.publishPanel) return;
+    if (e.target.closest('#edPublishPanel') || e.target.closest('#edMore')) return;
+    closePublishPanel();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && S.publishPanel) closePublishPanel();
+  });
+}
+
+// ── media library ──────────────────────────────────────────────────────────
+var lastFocus = null;
+
+function openPicker(id, kind) {
+  lastFocus = document.activeElement;
+  S.picker = { id: id, kind: kind, chosen: [], staged: null, error: '' };
+  renderModal();
+}
+
+function closePicker() {
+  S.picker = null;
+  renderModal();
+  if (lastFocus && lastFocus.focus) lastFocus.focus();
+}
+
+function pickerItems() {
+  var wantVideo = S.picker.kind === 'video';
+  return S.media.filter(function (m) { return (m.kind === 'video') === wantVideo; });
+}
+
+function renderModal() {
+  if (!S.picker) { el.edModal.innerHTML = ''; return; }
+  var p = S.picker;
+  var isVideo = p.kind === 'video';
+  var isGallery = p.kind === 'gallery';
+  var title = isVideo ? 'Video library' : 'Photo library';
+  var hint = isVideo
+    ? 'Paste a YouTube link, or reuse a video already on the site.'
+    : 'Photos are cropped to fit whichever block you place them in. Up to 8MB each.';
+  var tiles = pickerItems().map(function (m) {
+    var chosen = p.chosen.indexOf(m.url) > -1;
+    var thumb = isVideo
+      ? '<span class="ed-tile-th ed-tile-th--vid">▶</span>'
+      : '<span class="ed-tile-th" style="background-image:url(' + esc(m.url) + ')"></span>';
+    return '<button type="button" class="ed-tile" data-pick="' + esc(m.url) + '" data-alt="' + esc(m.alt || '') + '"' +
+      ' data-name="' + esc(m.filename) + '" aria-pressed="' + chosen + '">' + thumb +
+      '<span class="ed-tile-n">' + esc(m.filename) + '</span>' +
+      '<span class="ed-tile-m">' + esc(m.meta || (isVideo ? 'YouTube' : 'Photo')) + (chosen ? ' · selected' : '') + '</span></button>';
+  }).join('');
+
+  var footer;
+  if (isVideo) {
+    footer = '<input class="ed-field" id="edVidUrl" placeholder="https://youtu.be/…" style="flex:1;min-width:220px">' +
+      '<input class="ed-field" id="edVidName" placeholder="What is it called?" style="flex:1;min-width:180px">' +
+      '<button type="button" class="ed-upload" id="edVidAdd">Add video</button>';
+  } else if (p.staged) {
+    // Alt text is required before a photo can join the library.
+    footer = '<span class="ed-dropzone" style="flex:0 0 auto;padding:10px 14px">' + esc(p.staged.filename) + '</span>' +
+      '<input class="ed-field" id="edAltNew" placeholder="Describe this photo (required)" style="flex:1;min-width:220px" autofocus>' +
+      '<button type="button" class="ed-upload" id="edStagedAdd">Add to library</button>';
+  } else {
+    footer = '<label class="ed-dropzone" id="edDrop">Drop a photo here, or choose a file' +
+      '<input type="file" id="edFile" accept="image/jpeg,image/png,image/webp,image/gif" style="position:absolute;width:1px;height:1px;opacity:0"></label>' +
+      '<button type="button" class="ed-upload" id="edUploadBtn">Upload</button>';
+  }
+
+  el.edModal.innerHTML = '<div class="ed-back" id="edBack"><div class="ed-modal" role="dialog" aria-modal="true" aria-label="' + esc(title) + '">' +
+    '<div class="ed-modal-h"><b>' + esc(title) + '</b><span>' + esc(hint) + '</span><div style="flex:1"></div>' +
+    (isGallery ? '<button type="button" class="ed-upload" id="edGalleryAdd">Add ' + p.chosen.length + ' photo' + (p.chosen.length === 1 ? '' : 's') + '</button>' : '') +
+    '<button type="button" class="ed-close" id="edPickerClose">Close</button></div>' +
+    '<div class="ed-modal-grid">' + (tiles || '<span class="ed-note">Nothing in the library yet — add something below.</span>') + '</div>' +
+    (p.error ? '<div style="padding:8px 20px;color:#B85C3A;font-size:12.5px">' + esc(p.error) + '</div>' : '') +
+    '<div class="ed-modal-f">' + footer + '</div>' +
+    '</div></div>';
+
+  var first = el.edModal.querySelector('#edAltNew, #edVidUrl, #edPickerClose');
+  if (first) first.focus();
+}
+
+async function addMedia(payload) {
+  var out = await api('/ministries/api/media', { method: 'POST', body: JSON.stringify(payload) });
+  S.media.unshift(out.item);
+  return out.item;
+}
+
+async function uploadPhoto(file) {
+  var fd = new FormData();
+  fd.append('file', file);
+  var res = await fetch('/api/upload-image', { method: 'POST', body: fd, credentials: 'same-origin' });
+  var j = await res.json().catch(function () { return {}; });
+  if (!res.ok || !j.url) throw new Error(j.error || 'Upload failed');
+  return { url: j.url, filename: file.name || 'photo.jpg' };
+}
+
+function applyMedia(url, alt, name) {
+  var p = S.picker;
+  if (!p) return;
+  var b = findBlock(p.id);
+  if (!b) return;
+  if (p.kind === 'video') {
+    patch(p.id, { video: url }, 'Changed video · ' + name, 'rerender');
+  } else {
+    patch(p.id, { photo: url, photoAlt: alt || b.photoAlt || '' }, 'Changed photo · ' + name, 'rerender');
+  }
+  closePicker();
+}
+
+function bindPicker() {
+  el.edModal.addEventListener('click', async function (e) {
+    if (!S.picker) return;
+    if (e.target.id === 'edBack' || e.target.closest('#edPickerClose')) return closePicker();
+
+    var tile = e.target.closest('[data-pick]');
+    if (tile) {
+      if (S.picker.kind === 'gallery') {
+        var url = tile.dataset.pick;
+        var at = S.picker.chosen.indexOf(url);
+        if (at > -1) S.picker.chosen.splice(at, 1); else S.picker.chosen.push(url);
+        renderModal();
+      } else {
+        applyMedia(tile.dataset.pick, tile.dataset.alt, tile.dataset.name);
+      }
+      return;
+    }
+
+    if (e.target.closest('#edGalleryAdd')) {
+      var b = findBlock(S.picker.id);
+      if (!b || !S.picker.chosen.length) return closePicker();
+      var items = (b.items || []).slice();
+      S.picker.chosen.forEach(function (u) {
+        var m = S.media.filter(function (x) { return x.url === u; })[0] || {};
+        items.push({ url: u, title: m.alt || m.filename || '' });
+      });
+      var n = S.picker.chosen.length;
+      var id = S.picker.id;
+      closePicker();
+      patch(id, { items: items }, 'Added ' + n + ' photo' + (n === 1 ? '' : 's') + ' to the gallery', 'rerender');
+      return;
+    }
+
+    if (e.target.closest('#edUploadBtn')) { el.edModal.querySelector('#edFile').click(); return; }
+
+    if (e.target.closest('#edStagedAdd')) {
+      var alt = (el.edModal.querySelector('#edAltNew').value || '').trim();
+      if (!alt) { S.picker.error = 'Please describe the photo — it is read aloud to people who cannot see it.'; return renderModal(); }
+      try {
+        var item = await addMedia({ kind: 'photo', url: S.picker.staged.url, filename: S.picker.staged.filename, alt: alt, meta: 'Photo' });
+        if (S.picker.kind === 'gallery') { S.picker.staged = null; S.picker.error = ''; renderModal(); }
+        else applyMedia(item.url, item.alt, item.filename);
+      } catch (err) { S.picker.error = String(err.message || err); renderModal(); }
+      return;
+    }
+
+    if (e.target.closest('#edVidAdd')) {
+      var vurl = (el.edModal.querySelector('#edVidUrl').value || '').trim();
+      var vname = (el.edModal.querySelector('#edVidName').value || '').trim() || 'Video';
+      if (!/youtu\.?be/i.test(vurl)) { S.picker.error = 'Paste a YouTube link (youtube.com or youtu.be).'; return renderModal(); }
+      try {
+        var v = await addMedia({ kind: 'video', url: vurl, filename: vname, alt: '', meta: 'YouTube' });
+        applyMedia(v.url, '', v.filename);
+      } catch (err2) { S.picker.error = String(err2.message || err2); renderModal(); }
+    }
+  });
+
+  el.edModal.addEventListener('change', async function (e) {
+    if (e.target.id !== 'edFile' || !e.target.files || !e.target.files[0]) return;
+    try {
+      S.picker.staged = await uploadPhoto(e.target.files[0]);
+      S.picker.error = '';
+    } catch (err) { S.picker.error = String(err.message || err); }
+    renderModal();
+  });
+
+  ['dragover', 'dragleave', 'drop'].forEach(function (type) {
+    el.edModal.addEventListener(type, async function (e) {
+      var zone = e.target.closest ? e.target.closest('#edDrop') : null;
+      if (!zone) return;
+      e.preventDefault();
+      zone.classList.toggle('is-over', type === 'dragover');
+      if (type !== 'drop') return;
+      var file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!file) return;
+      try {
+        S.picker.staged = await uploadPhoto(file);
+        S.picker.error = '';
+      } catch (err) { S.picker.error = String(err.message || err); }
+      renderModal();
+    });
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && S.picker) { e.stopPropagation(); closePicker(); }
+  }, true);
+}
+
+// Test seam: the browser tests assert that styleVars() produces byte-identical
+// output to wrapperVars() in admin/blocks.js. Pure function, no state.
+window.__edStyleVars = styleVars;
+
+// ── boot ───────────────────────────────────────────────────────────────────
+async function boot() {
+  var root = document.getElementById('root');
+  root.innerHTML = shellHtml();
+  cacheEls();
+  try { if (localStorage.getItem(HINT_KEY)) { S.hint = false; el.edHint.style.display = 'none'; } } catch (_) {}
+  bindStatic();
+  try {
+    var data = await api('/ministries/api/page/' + encodeURIComponent(S.slug));
+    S.title = data.page.title;
+    S.status = data.page.status;
+    S.publishAt = data.page.publish_at || null;
+    S.publishAtLocal = toLocalInput(S.publishAt);
+    S.blocks = data.page.blocks;
+    S.changes = data.page.changes || [];
+    S.updatedAt = data.page.updated_at || '';
+    S.config = data.config;
+    S.media = data.media || [];
+    setCanvas(data.html);
+    setDevice('desktop');
+    renderAll();
+  } catch (err) {
+    if (String(err && err.message) === 'auth') return;
+    root.innerHTML = '<div class="ed-boot">Could not load this page — <a href="/ministries" style="color:#2E7EA6;margin-left:6px">back to Ministries</a></div>';
+  }
+}
+
+boot();
+})();
+</script>
+</body>
+</html>

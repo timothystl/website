@@ -57,6 +57,31 @@ export const DB_INIT_MINISTRY_POSTS = `CREATE TABLE IF NOT EXISTS ministry_posts
   created_at TEXT DEFAULT (datetime('now'))
 )`;
 
+// Media library backing the ministry page editor's photo/video picker. Photos
+// live in R2 (same bucket as every other admin upload); a "video" row is just a
+// YouTube URL plus a cached thumbnail, so both kinds fit one table.
+export const DB_INIT_MINISTRY_MEDIA = `CREATE TABLE IF NOT EXISTS ministry_media (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  filename TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'photo',
+  url TEXT NOT NULL,
+  thumb_url TEXT,
+  alt TEXT,
+  meta TEXT,
+  created_by TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+)`;
+
+// One snapshot per publish, so a page can be rolled back. Restoring loads the
+// snapshot into the *draft* — never straight to live — so staff review first.
+export const DB_INIT_MINISTRY_REVISIONS = `CREATE TABLE IF NOT EXISTS ministry_page_revisions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug TEXT NOT NULL,
+  blocks TEXT NOT NULL,
+  published_at TEXT,
+  published_by TEXT
+)`;
+
 export const DB_INIT_VOTERS_PAGE = `CREATE TABLE IF NOT EXISTS voters_page (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   meeting_info TEXT,

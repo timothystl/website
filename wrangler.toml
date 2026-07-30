@@ -14,3 +14,9 @@ database_id = "7feda7f2-abf5-4756-9c15-9bb1c9a6c331"
 [[r2_buckets]]
 binding = "IMAGES"
 bucket_name = "tlc-news-images"
+
+# Promotes ministry pages whose scheduled publish time has come
+# (see promoteScheduledPages in tlc-admin-worker.js). Quarter-hourly so a page
+# scheduled for "6:00 am" goes live within 15 minutes of that, not an hour.
+[triggers]
+crons = ["*/15 * * * *"]

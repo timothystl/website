@@ -2294,16 +2294,24 @@ async function loadMinistryCta(slug) {
     var res = await fetch('https://admin.timothystl.org/api/ministry/' + slug);
     if (!res.ok) return;
     var data = await res.json();
-    // Load admin body content if present
-    if (data.content && data.content.trim()) {
-      var contentEl = document.getElementById(slug + '-admin-content');
-      var contentSection = document.getElementById(slug + '-admin-content-section');
-      if (contentEl && contentSection) {
-        contentEl.innerHTML = fixImgUrls(data.content);
-        contentSection.style.display = '';
+    var ctaBlocks = (data.blocks_html || '').trim();
+    ministryBlockManaged[slug] = !!ctaBlocks;
+    // Load admin body content if present. These pages put the admin-managed
+    // region under an -admin-content id rather than -content.
+    var contentEl = document.getElementById(slug + '-admin-content');
+    var contentSection = document.getElementById(slug + '-admin-content-section');
+    if (contentEl && contentSection && (ctaBlocks || (data.content && data.content.trim()))) {
+      if (ctaBlocks) {
+        if (document.getElementById('tlcb-css')) ctaBlocks = ctaBlocks.replace(/<style id="tlcb-css">[\s\S]*?<\/style>/, '');
+        contentEl.classList.remove('rich-content');
       }
+      contentEl.innerHTML = fixImgUrls(ctaBlocks || data.content);
+      contentSection.style.display = '';
     }
-    if (data.cta_label && data.cta_url) {
+    if (tlcHas(ctaBlocks, 'buttons')) {
+      var blockBar2 = document.querySelector('#page-' + slug + ' > div.page-cta-bar, #page-' + slug + ' > section.page-cta-bar');
+      if (blockBar2) blockBar2.style.display = 'none';
+    } else if (data.cta_label && data.cta_url) {
       var hardBar2 = document.querySelector('#page-' + slug + ' > div.page-cta-bar, #page-' + slug + ' > section.page-cta-bar');
       if (hardBar2) hardBar2.style.display = 'none';
       if (ctaWrap) {
@@ -2316,8 +2324,72 @@ async function loadMinistryCta(slug) {
   } catch(e) {}
 }
 
+// ── Block-managed ministry pages ─────────────────────────────────────────────
+// A page that has been arranged in the admin block editor ships finished HTML
+// from the admin worker, produced by the very same templates the editor canvas
+// draws (admin/blocks.js). There is no second renderer here on purpose — that is
+// what stops the editor preview and the live page from drifting apart.
+//
+// Blocks replace the *content region* of the page. The page banner stays part of
+// the page frame. Legacy admin-driven regions (CTA bar, video grid, post lists)
+// are hidden only when the blocks actually contain an equivalent block, so a page
+// that hasn't been rearranged yet loses nothing.
+function tlcApplyBlocks(slug, blocksHtml) {
+  var host = document.getElementById(slug + '-content');
+  var section = document.getElementById(slug + '-content-section');
+  if (!host || !blocksHtml) return false;
+  var markup = blocksHtml;
+  // The stylesheet ships with every page's HTML; only the first one is needed.
+  if (document.getElementById('tlcb-css')) markup = markup.replace(/<style id="tlcb-css">[\s\S]*?<\/style>/, '');
+  host.classList.remove('rich-content');
+  host.innerHTML = fixImgUrls(markup);
+  if (section) section.style.display = '';
+  return true;
+}
+
+function tlcHas(blocksHtml, type) {
+  return blocksHtml.indexOf('tlcb--' + type) !== -1;
+}
+
+// Fills every posts/events block on a block-managed page from the ministry's
+// own posts, which is what the block promises in the editor ("shows the newest
+// posts automatically").
+function tlcHydrateFeeds(slug, posts) {
+  var today = new Date().toISOString().split('T')[0];
+  var hosts = document.querySelectorAll('#page-' + slug + ' [data-tlcb-feed]');
+  for (var i = 0; i < hosts.length; i++) {
+    var host = hosts[i];
+    var kind = host.getAttribute('data-tlcb-feed');
+    var list, markup;
+    if (kind === 'events') {
+      list = posts.filter(function(p) {
+        var d = p.event_date || p.post_date;
+        return d && d >= today;
+      }).slice(0, 6);
+      markup = list.length ? '<div class="tlcb-rows">' + list.map(function(p) {
+        var raw = p.event_date || p.post_date;
+        var d = raw ? new Date(raw + 'T12:00:00') : null;
+        var label = d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+        return '<div class="tlcb-row"><span class="tlcb-row-d">' + escText(label) + '</span>' +
+          '<span class="tlcb-row-b"><span class="tlcb-row-n">' + escText(p.title || '') + '</span></span></div>';
+      }).join('') + '</div>' : '<p class="tlcb-note">Nothing on the calendar just now.</p>';
+    } else {
+      list = posts.slice(0, 6);
+      markup = list.length ? '<div class="tlcb-cards">' + list.map(function(p) {
+        var raw = p.event_date || p.post_date;
+        var d = raw ? new Date(raw + 'T12:00:00') : null;
+        var label = d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+        return '<div class="tlcb-card"><span class="tlcb-card-t">' + escText(p.title || '') + '</span>' +
+          (label ? '<span class="tlcb-card-m">' + escText(label) + '</span>' : '') + '</div>';
+      }).join('') + '</div>' : '<p class="tlcb-note">No posts yet.</p>';
+    }
+    host.innerHTML = markup;
+  }
+}
+
 // Generic loader for ministry sub-pages (sundayschool, confirmation, vbs, egghunt, family)
 var ministryLoaded = {};
+var ministryBlockManaged = {};
 async function loadMinistryPage(slug) {
   if (ministryLoaded[slug]) return;
   ministryLoaded[slug] = true;
@@ -2327,25 +2399,36 @@ async function loadMinistryPage(slug) {
     var res = await fetch('https://admin.timothystl.org/api/ministry/' + slug);
     if (res.ok) {
       var data = await res.json();
-      if (data.content && data.content.trim()) {
+      var blocksHtml = (data.blocks_html || '').trim();
+      ministryBlockManaged[slug] = !!blocksHtml;
+      if (blocksHtml) {
+        tlcApplyBlocks(slug, blocksHtml);
+      } else if (data.content && data.content.trim()) {
         document.getElementById(slug + '-content').innerHTML = fixImgUrls(data.content);
       } else {
         document.getElementById(slug + '-content-section').style.display = 'none';
       }
-      // Hero image
+      // Hero image — the page banner stays part of the page frame, above the blocks
       var heroEl = document.getElementById(slug + '-hero');
       if (heroEl && data.hero_image_url) {
         heroEl.style.backgroundImage = 'url(' + data.hero_image_url + ')';
       }
-      // Ministry photo (music page only)
-      if (slug === 'music' && data.ministry_image_url) {
+      // Ministry photo (music page only) — a block-managed page carries its own
+      // photo inside a Text + photo block, so don't also fill the legacy slot.
+      if (slug === 'music' && data.ministry_image_url && !blocksHtml) {
         var photoWrap = document.getElementById('music-ministry-photo-wrap');
         if (photoWrap) {
           photoWrap.innerHTML = '<img src="' + data.ministry_image_url + '" style="width:100%;border-radius:12px;display:block;" alt="Music Ministry">';
         }
       }
-      // Video cards (music page only)
-      if (slug === 'music') {
+      // Video cards (music page only). Once the page carries Video blocks the
+      // whole hardcoded section comes down — its three fallback cards would
+      // otherwise sit under the blocks saying the same thing twice.
+      if (slug === 'music' && tlcHas(blocksHtml, 'video')) {
+        var vidGridEl = document.getElementById('music-vid-grid');
+        var vidSection = vidGridEl && vidGridEl.closest('section');
+        if (vidSection) vidSection.style.display = 'none';
+      } else if (slug === 'music') {
         var vidGrid = document.getElementById('music-vid-grid');
         if (vidGrid) {
           var vids = [
@@ -2366,8 +2449,13 @@ async function loadMinistryPage(slug) {
           }
         }
       }
-      // If admin has set any CTA buttons, replace the hardcoded page-cta-bar
-      if (data.cta_label && data.cta_url) {
+      // If admin has set any CTA buttons, replace the hardcoded page-cta-bar.
+      // A page whose blocks already contain a Button bar renders its buttons
+      // there instead, so hide the hardcoded bar and skip this entirely.
+      if (tlcHas(blocksHtml, 'buttons')) {
+        var blockBar = document.querySelector('#page-' + slug + ' > div.page-cta-bar, #page-' + slug + ' > section.page-cta-bar');
+        if (blockBar) blockBar.style.display = 'none';
+      } else if (data.cta_label && data.cta_url) {
         var hardBar = document.querySelector('#page-' + slug + ' > div.page-cta-bar, #page-' + slug + ' > section.page-cta-bar');
         if (hardBar) hardBar.style.display = 'none';
         var ctaWrap = document.getElementById(slug + '-admin-cta');
@@ -2378,7 +2466,10 @@ async function loadMinistryPage(slug) {
           ctaWrap.style.display = '';
         }
       }
-      if (!data.has_posts) return;
+      // A Posts feed / Upcoming events block needs the posts even on a page
+      // that was never flagged has_posts — the block itself is the request.
+      var wantsFeed = tlcHas(blocksHtml, 'posts') || tlcHas(blocksHtml, 'events');
+      if (!data.has_posts && !wantsFeed) return;
     } else {
       document.getElementById(slug + '-content-section').style.display = 'none';
       return;
@@ -2398,6 +2489,13 @@ async function loadMinistryPage(slug) {
     if (!res2.ok) return;
     var posts = await res2.json();
     if (!posts || posts.length === 0) return;
+
+    // Block-managed page: the posts live inside a Posts feed / Upcoming events
+    // block, so fill those and leave the legacy accordions hidden.
+    if (ministryBlockManaged[slug]) {
+      tlcHydrateFeeds(slug, posts);
+      return;
+    }
 
     var upcoming = posts.filter(function(p){ return p.pinned || (p.post_date && p.post_date >= today); });
     var past     = posts.filter(function(p){ return !p.pinned && (!p.post_date || p.post_date < today); });
