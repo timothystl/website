@@ -544,7 +544,15 @@ function restyle(b) {
   }
 }
 
-async function rerender() {
+// Redraws are serialised. Clicking two things quickly starts two round trips,
+// and without this the slower one can land last and repaint the canvas from a
+// state that has already been superseded.
+var renderChain = Promise.resolve();
+function rerender() {
+  renderChain = renderChain.then(doRerender, doRerender);
+  return renderChain;
+}
+async function doRerender() {
   try {
     var out = await api('/ministries/api/render', { method: 'POST', body: JSON.stringify({ blocks: S.blocks, slug: S.slug }) });
     S.blocks = out.blocks; // take the server's sanitised version back as the truth
@@ -1053,12 +1061,210 @@ function bindStatic() {
     e.returnValue = '';
   });
 
+  bindDragAndDrop();
+
   window.addEventListener('resize', fitPaper);
   if (window.ResizeObserver) new ResizeObserver(fitPaper).observe(el.edCanvas);
 }
 
-// Placeholders filled in by later phases.
-function moveBlock() {}
+// ── reordering and adding ──────────────────────────────────────────────────
+// Drop indicators are inserted into the DOM directly rather than by re-rendering
+// the rail or canvas: a re-render mid-drag replaces the element being dragged,
+// which cancels the drag in every browser.
+function dropLabel() {
+  return S.dragType ? 'Insert ' + def(S.dragType).label.toLowerCase() + ' here' : 'Move here';
+}
+
+function clearIndicators() {
+  var old = document.querySelectorAll('.ed-drop, .ed-canvas-drop');
+  for (var i = 0; i < old.length; i++) old[i].remove();
+}
+
+function setDropIndex(i) {
+  if (S.dropIndex === i) return; // only on change, or we thrash on every mousemove
+  S.dropIndex = i;
+  clearIndicators();
+  if (i == null) return;
+  var rows = el.edRail.querySelectorAll('.ed-row');
+  var bar = document.createElement('div');
+  bar.className = 'ed-drop';
+  if (i >= rows.length) el.edRail.appendChild(bar); else el.edRail.insertBefore(bar, rows[i]);
+  var page = el.edPaper.querySelector('.tlcb-page');
+  if (!page) return;
+  var blocks = page.querySelectorAll('.tlcb');
+  var line = document.createElement('div');
+  line.className = 'ed-canvas-drop';
+  line.innerHTML = '<span>' + esc(dropLabel()) + '</span>';
+  if (i >= blocks.length) page.appendChild(line); else page.insertBefore(line, blocks[i]);
+}
+
+function clearDrag() {
+  S.dragId = null;
+  S.dragType = null;
+  S.dropIndex = null;
+  clearIndicators();
+  var dragging = el.edRail.querySelectorAll('.is-dragging');
+  for (var i = 0; i < dragging.length; i++) dragging[i].classList.remove('is-dragging');
+}
+
+// Midpoint rule: above the halfway line drops before this block, below it after.
+// `node` is passed explicitly — these listeners are delegated from the rail and
+// canvas containers, so e.currentTarget is the container and measuring against
+// it would put every drop in the same place.
+function overItem(e, index, node) {
+  if (!S.dragId && !S.dragType) return;
+  e.preventDefault();
+  e.stopPropagation();
+  var r = node.getBoundingClientRect();
+  setDropIndex((e.clientY - r.top) < r.height / 2 ? index : index + 1);
+}
+
+function overContainer(e) {
+  if (!S.dragId && !S.dragType) return;
+  e.preventDefault();
+  if (S.dropIndex === null) setDropIndex(S.blocks.length);
+}
+
+async function performDrop(e) {
+  if (e) e.preventDefault();
+  if (!S.dragId && !S.dragType) return;
+  var at = S.dropIndex == null ? S.blocks.length : S.dropIndex;
+  var type = S.dragType;
+  var id = S.dragId;
+  clearDrag();
+  if (type) {
+    var block = await freshBlock(type);
+    pushHistory();
+    S.blocks.splice(at, 0, block);
+    S.selectedId = block.id;
+    note('Added ' + def(type).label.toLowerCase());
+    say(def(type).label + ' added at position ' + (at + 1));
+  } else if (id) {
+    var from = indexOfBlock(id);
+    if (from < 0) return;
+    // Removing the source first shifts everything after it down by one.
+    if (at > from) at -= 1;
+    if (at === from) return;
+    pushHistory();
+    var moved = S.blocks.splice(from, 1)[0];
+    S.blocks.splice(at, 0, moved);
+    note('Reordered ' + def(moved.type).label.toLowerCase());
+    say(def(moved.type).label + ' moved to position ' + (at + 1) + ' of ' + S.blocks.length);
+  }
+  await rerender();
+  renderTop(); renderRail(); renderChanges(); scheduleSave();
+}
+
+async function moveBlock(id, delta) {
+  var from = indexOfBlock(id);
+  var to = from + delta;
+  if (from < 0 || to < 0 || to >= S.blocks.length) return;
+  pushHistory();
+  var moved = S.blocks.splice(from, 1)[0];
+  S.blocks.splice(to, 0, moved);
+  note('Reordered ' + def(moved.type).label.toLowerCase());
+  await rerender();
+  renderTop(); renderRail(); renderChanges(); scheduleSave();
+  say(def(moved.type).label + ' moved to position ' + (to + 1) + ' of ' + S.blocks.length);
+  var row = el.edRail.querySelector('.ed-row[data-id="' + id + '"]');
+  if (row) row.focus();
+}
+
+// Clicking a palette chip appends. The youth director will use clicks, not drags.
+async function addBlock(type) {
+  var block = await freshBlock(type);
+  pushHistory();
+  S.blocks.push(block);
+  S.selectedId = block.id;
+  note('Added ' + def(type).label.toLowerCase());
+  await rerender();
+  renderTop(); renderRail(); renderChanges(); scheduleSave();
+  say(def(type).label + ' added at the end of the page');
+  var node = blockNode(block.id);
+  if (node && node.scrollIntoView) node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+function bindDragAndDrop() {
+  // rail rows
+  el.edRail.addEventListener('dragstart', function (e) {
+    var row = e.target.closest('.ed-row');
+    if (!row) return;
+    S.dragId = row.dataset.id;
+    S.dragType = null;
+    row.classList.add('is-dragging');
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', row.dataset.id); } catch (_) {}
+    }
+  });
+  el.edRail.addEventListener('dragover', function (e) {
+    var row = e.target.closest('.ed-row');
+    if (row) overItem(e, Number(row.dataset.index), row);
+    else overContainer(e);
+  });
+  el.edRail.addEventListener('drop', performDrop);
+  el.edRail.addEventListener('dragend', clearDrag);
+
+  // canvas — the ⠿ Move handle in the block toolbar starts the drag
+  el.edPaper.addEventListener('dragstart', function (e) {
+    var handle = e.target.closest('[data-act="move"]');
+    if (!handle) { e.preventDefault(); return; }
+    var wrap = handle.closest('.tlcb');
+    S.dragId = wrap.dataset.id;
+    S.dragType = null;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', wrap.dataset.id); } catch (_) {}
+    }
+  });
+  el.edCanvas.addEventListener('dragover', function (e) {
+    var wrap = e.target.closest('.tlcb');
+    if (wrap) overItem(e, indexOfBlock(wrap.dataset.id), wrap);
+    else overContainer(e);
+  });
+  el.edCanvas.addEventListener('drop', performDrop);
+  el.edCanvas.addEventListener('dragend', clearDrag);
+
+  // palette chips
+  el.edPalChips.addEventListener('dragstart', function (e) {
+    var c = e.target.closest('.ed-chip');
+    if (!c) return;
+    S.dragType = c.dataset.type;
+    S.dragId = null;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'copy';
+      try { e.dataTransfer.setData('text/plain', c.dataset.type); } catch (_) {}
+    }
+  });
+  el.edPalChips.addEventListener('dragend', clearDrag);
+  el.edPalChips.addEventListener('click', function (e) {
+    var c = e.target.closest('.ed-chip');
+    if (c) addBlock(c.dataset.type);
+  });
+
+  // Keyboard reordering. HTML5 drag-and-drop is mouse-only and does not work on
+  // a tablet at all, so this and the toolbar's ↑ ↓ are not optional extras.
+  el.edRail.addEventListener('keydown', function (e) {
+    var row = e.target.closest('.ed-row');
+    if (!row) return;
+    if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      e.preventDefault();
+      moveBlock(row.dataset.id, e.key === 'ArrowUp' ? -1 : 1);
+      return;
+    }
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      var rows = el.edRail.querySelectorAll('.ed-row');
+      var i = Number(row.dataset.index) + (e.key === 'ArrowUp' ? -1 : 1);
+      if (!rows[i]) return;
+      var nextId = rows[i].dataset.id;
+      select(nextId); // this redraws the rail, so re-find the row before focusing
+      var moved = el.edRail.querySelector('.ed-row[data-id="' + nextId + '"]');
+      if (moved) moved.focus();
+    }
+  });
+}
+
 function openPicker() {}
 
 // Test seam: the browser tests assert that styleVars() produces byte-identical
