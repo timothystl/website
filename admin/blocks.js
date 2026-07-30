@@ -388,11 +388,13 @@ export function migrateLegacyPage(row) {
   if (content && row.ministry_image_url) {
     // The one legacy layout that was genuinely two-column: body text with the
     // ministry photo alongside it (the Music page).
-    push('textphoto', { body: content, photo: row.ministry_image_url, photoAlt: row.title || '', side: 'right', split: '40' });
+    // title stays empty: the legacy content already carries its own headings,
+    // and a block default like "A heading" would appear as real page copy.
+    push('textphoto', { title: '', body: content, photo: row.ministry_image_url, photoAlt: row.title || '', side: 'right', split: '40' });
   } else if (content) {
     push('text', { body: content });
   } else if (row.ministry_image_url) {
-    push('textphoto', { body: '', photo: row.ministry_image_url, photoAlt: row.title || '', side: 'above' });
+    push('textphoto', { title: '', body: '', photo: row.ministry_image_url, photoAlt: row.title || '', side: 'above' });
   }
 
   for (const i of [1, 2, 3]) {
@@ -519,16 +521,50 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-empty b{font:500 22px/1.2 Lora,Georgia,serif;color:#1E2D4A;font-weight:500;}
 .tlcb-empty span{font-size:13.5px;color:#8A8898;}
 @media(max-width:640px){
-  .tlcb-grid,.tlcb-cols{grid-template-columns:1fr!important;}
-  .tlcb-media{order:0!important;}
-  .tlcb-cards{grid-template-columns:1fr!important;}
-  .tlcb-gallery{grid-template-columns:1fr 1fr!important;}
-  .tlcb-logos{grid-template-columns:1fr 1fr!important;}
-  .tlcb-time{grid-template-columns:1fr!important;gap:2px;}
-  .tlcb-hero-title{font-size:calc(var(--tlcb-hero,38px) * .74)!important;}
+PHONE_RULES_PLACEHOLDER
   .tlcb-hide-phone{display:none!important;}
 }
-</style>`;
+</style>`.replace('PHONE_RULES_PLACEHOLDER', phoneRules(''));
+
+// What "phone" does to a block layout, written once. The public page applies it
+// through a media query; the editor applies the identical rules to the paper
+// when the Phone device tab is active, since there the viewport is still wide.
+// Sharing the text is the point — a phone preview that lies is worse than none.
+function phoneRules(p) {
+  return [
+    `${p}.tlcb-grid,${p}.tlcb-cols{grid-template-columns:1fr!important;}`,
+    `${p}.tlcb-media{order:0!important;}`,
+    `${p}.tlcb-cards{grid-template-columns:1fr!important;}`,
+    `${p}.tlcb-gallery{grid-template-columns:1fr 1fr!important;}`,
+    `${p}.tlcb-logos{grid-template-columns:1fr 1fr!important;}`,
+    `${p}.tlcb-time{grid-template-columns:1fr!important;gap:2px;}`,
+    `${p}.tlcb-hero-title{font-size:calc(var(--tlcb-hero,38px) * .74)!important;}`,
+  ].join('\n  ');
+}
+
+// Editor-only: the same phone layout, scoped to the paper instead of the
+// viewport, plus the "hidden on phone" reminder treatment (dimmed, not removed).
+export function editorPhoneCss() {
+  return phoneRules('.ed-paper--phone ') + '\n.ed-paper--phone .tlcb-hide-phone{opacity:.4;}';
+}
+
+// Everything the editor client needs to draw the rail, palette and inspector,
+// derived from the definitions above rather than restated in the editor page.
+export function blocksClientConfig() {
+  const types = {};
+  for (const [key, d] of Object.entries(BLOCK_DEFS)) {
+    types[key] = {
+      label: d.label, glyph: d.glyph,
+      photo: !!d.photo, video: !!d.video, url: !!d.url, urlLabel: d.urlLabel || '',
+      items: !!d.items, itemFields: d.itemFields || [], itemLabel: d.itemLabel || 'Row',
+      itemPlaceholders: d.itemPlaceholders || {}, richItemFields: d.richItemFields || [],
+      itemUrlFields: d.itemUrlFields || [], richBody: !!d.richBody,
+      gallery: !!d.gallery, feed: d.feed || '',
+      defaults: d.defaults || {}, defaultItems: d.defaultItems || [],
+    };
+  }
+  return { types, groups: GROUPS, BG, INK, SIZES, SPLITS, TONES, stamps: STAMP_PRESETS, step: SPACE_STEP, max: SPACE_MAX };
+}
 
 // ── RENDERING ────────────────────────────────────────────────────────────────
 

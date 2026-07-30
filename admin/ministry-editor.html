@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ministry page editor — Timothy Admin</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Source+Sans+3:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ── Editor chrome ────────────────────────────────────────────────────────
+   Colours and type come from the live site's palette (see CLAUDE.md → Design
+   System). Block styling itself is NOT here — it ships with the rendered
+   block HTML from admin/blocks.js, so the canvas and the public page cannot
+   drift apart. */
+*{box-sizing:border-box;}
+html,body{margin:0;height:100%;background:#E7E2D8;font-family:'Source Sans 3',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1A1A2A;}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
+::selection{background:#F5E4C0;}
+:focus-visible{outline:2px solid #2E7EA6;outline-offset:2px;}
+
+.ed{height:100vh;display:flex;flex-direction:column;background:#FBF8F3;overflow:hidden;}
+
+/* top bar */
+.ed-top{display:flex;align-items:center;gap:14px;padding:0 18px;height:58px;background:#1E2D4A;color:#EDF2F7;flex:none;}
+.ed-brand{display:flex;align-items:center;gap:10px;padding-right:16px;border-right:1px solid rgba(237,242,247,.18);}
+.ed-mark{width:26px;height:26px;border-radius:6px;background:#C9973A;color:#1E2D4A;font:600 13px/26px 'Source Sans 3';text-align:center;}
+.ed-brand span{font:600 14px/1 'Source Sans 3';white-space:nowrap;}
+.ed-crumb{display:flex;align-items:center;gap:8px;font-size:14px;color:#C4CEDF;min-width:0;}
+.ed-crumb a{color:#C4CEDF;text-decoration:none;}
+.ed-crumb a:hover{color:#FBF8F3;}
+.ed-crumb i{opacity:.5;font-style:normal;}
+.ed-crumb b{color:#FBF8F3;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ed-pill{padding:4px 10px;border-radius:999px;font:600 11px/1.4 'Source Sans 3';letter-spacing:.07em;text-transform:uppercase;white-space:nowrap;}
+.ed-pill--draft{background:rgba(201,151,58,.18);border:1px solid rgba(232,192,112,.5);color:#E8C070;}
+.ed-pill--live{background:rgba(220,230,214,.18);border:1px solid rgba(160,190,150,.5);color:#C6DDBB;}
+.ed-saved{font-size:12.5px;color:#93A2B8;white-space:nowrap;}
+.ed-spacer{flex:1;}
+.ed-devices{display:flex;padding:3px;background:rgba(17,30,50,.55);border-radius:9px;gap:2px;}
+.ed-devices button{padding:5px 12px;border-radius:7px;font:500 13px/1.2 'Source Sans 3';color:#C4CEDF;}
+.ed-devices button[aria-pressed="true"]{background:#EDF2F7;color:#1E2D4A;font-weight:600;}
+.ed-undo{padding:8px 13px;border:1px solid rgba(196,206,223,.45);border-radius:8px;font:600 13px/1 'Source Sans 3';color:#EDF2F7;}
+.ed-undo[disabled]{opacity:.4;cursor:default;}
+.ed-publish{padding:9px 16px;background:#C9973A;color:#1B1608;border-radius:8px;font:700 13px/1 'Source Sans 3';}
+.ed-publish:hover{background:#DBAA4E;}
+.ed-publish[disabled]{opacity:.5;cursor:default;}
+.ed-view{color:#C4CEDF;font:600 13px/1 'Source Sans 3';text-decoration:none;padding:8px 6px;white-space:nowrap;}
+.ed-view:hover{color:#FBF8F3;}
+
+/* hint strip */
+.ed-hint{display:flex;align-items:center;gap:8px;padding:7px 18px;background:#F7F3EC;border-bottom:1px solid #DDE3ED;font-size:12.5px;color:#6A6858;flex:none;}
+.ed-hint b{color:#C9973A;font-weight:700;}
+.ed-hint button{margin-left:auto;color:#8A8898;font-size:16px;line-height:1;padding:2px 6px;}
+
+.ed-body{flex:1;display:flex;min-height:0;}
+
+/* rail */
+.ed-rail{width:266px;flex:none;border-right:1px solid #DDE3ED;background:#F7F3EC;display:flex;flex-direction:column;min-height:0;}
+.ed-rail-h{padding:15px 16px 9px;font:600 11px/1 'Source Sans 3';letter-spacing:.14em;text-transform:uppercase;color:#8A8898;}
+.ed-rail-list{flex:1;overflow-y:auto;padding:0 12px 12px;display:flex;flex-direction:column;gap:5px;}
+.ed-row{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:9px;font-size:13.5px;cursor:pointer;text-align:left;width:100%;
+  background:#FBF8F3;border:1px solid #DDE3ED;color:#1E2D4A;}
+.ed-row[aria-selected="true"]{background:#E4EEF4;border-color:#2E7EA6;font-weight:600;}
+.ed-row.is-hidden .ed-row-label{color:#8A8898;}
+.ed-row.is-dragging{opacity:.4;}
+.ed-row-grip{color:#B8BECB;font-size:13px;cursor:grab;}
+.ed-row-glyph{width:16px;text-align:center;color:#2E7EA6;}
+.ed-row-label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ed-row-tag{font-size:10.5px;padding:1px 5px;border:1px solid #DDE3ED;border-radius:4px;color:#8A8898;}
+.ed-drop{height:2px;background:#C9973A;border-radius:2px;margin:1px 0;flex:none;}
+.ed-rail-empty{padding:22px 12px;border:1.5px dashed #C4CEDF;border-radius:10px;text-align:center;font-size:12.5px;color:#8A8898;line-height:1.5;}
+.ed-rail-f{padding:12px;border-top:1px solid #DDE3ED;text-align:center;font-size:11.5px;color:#8A8898;}
+
+/* canvas */
+.ed-mid{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0;background:#E7E2D8;}
+.ed-canvas{flex:1;overflow:auto;padding:24px 24px 30px;display:block;}
+.ed-paper{background:#FBF8F3;border-radius:10px;box-shadow:0 6px 30px rgba(30,45,74,.14);padding:18px;margin:0 auto;
+  flex:0 0 auto;min-height:420px;width:860px;transition:width .18s ease;}
+.ed-paper .tlcb-page{--tlcb-pad:34px;}
+.ed-paper--phone .tlcb-page{--tlcb-pad:18px;}
+/* Selection + per-block editor controls, layered over the shared block markup */
+.ed-paper .tlcb{cursor:pointer;}
+.ed-paper .tlcb.is-sel{border-color:#2E7EA6;}
+.ed-paper .tlcb-tools,.ed-paper .tlcb-badge,.ed-paper .tlcb-pick{display:none;}
+.ed-paper .tlcb.is-sel > .tlcb-tools{display:flex;align-items:center;gap:1px;position:absolute;top:-33px;left:-2px;z-index:5;
+  padding:3px;background:#1E2D4A;border-radius:8px;box-shadow:0 3px 14px rgba(30,45,74,.3);white-space:nowrap;}
+.ed-paper .tlcb-tool{padding:4px 8px;color:#C4CEDF;font-size:12.5px;}
+.ed-paper .tlcb-tool:hover{color:#FBF8F3;}
+.ed-paper .tlcb-tool--drag{cursor:grab;}
+.ed-paper .tlcb-tool--del{color:#E8A0A0;}
+.ed-paper .tlcb-tool--del:hover{color:#FFC9C9;}
+.ed-paper .tlcb-tool-div{width:1px;height:15px;background:rgba(196,206,223,.3);}
+.ed-paper .tlcb.is-sel > .tlcb-badge{display:block;position:absolute;top:-33px;right:-2px;padding:5px 10px;background:#2E7EA6;color:#fff;
+  border-radius:8px;font:700 10.5px/1.3 'Source Sans 3';letter-spacing:.08em;text-transform:uppercase;z-index:5;white-space:nowrap;}
+.ed-paper .tlcb.is-sel .tlcb-pick{display:inline-block;position:absolute;top:10px;right:10px;z-index:3;padding:6px 11px;
+  background:rgba(251,248,243,.94);border-radius:7px;font:600 12px/1 'Source Sans 3';color:#1E2D4A;}
+.ed-paper .tlcb .tlcb-pick--inline{position:static;display:none;}
+.ed-paper .tlcb.is-sel .tlcb-pick--inline{display:inline-block;align-self:flex-start;padding:7px 12px;border:1px solid #C4CEDF;background:#FBF8F3;}
+.ed-paper [contenteditable]{outline:none;}
+.ed-paper [contenteditable]:focus{box-shadow:0 0 0 2px rgba(46,126,166,.35);border-radius:4px;}
+.ed-paper .tlcb-media{position:relative;}
+.ed-canvas-drop{position:relative;height:3px;background:#C9973A;border-radius:3px;box-shadow:0 0 0 4px rgba(201,151,58,.16);margin:6px 0;}
+.ed-canvas-drop span{position:absolute;left:50%;transform:translateX(-50%);top:-24px;padding:3px 9px;background:#C9973A;color:#1B1608;
+  border-radius:6px;font:700 10.5px/1.5 'Source Sans 3';letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;}
+
+/* palette */
+.ed-pal{flex:none;border-top:1px solid #DDE3ED;background:#1E2D4A;}
+.ed-pal-h{display:flex;align-items:center;gap:8px;padding:8px 14px 0;}
+.ed-pal-scroll{flex:1;min-width:0;display:flex;align-items:center;gap:4px;overflow-x:auto;}
+.ed-pal-label{flex:none;padding:8px 8px 8px 2px;color:#93A2B8;font:600 12.5px/1 'Source Sans 3';}
+.ed-pal-tab{flex:none;white-space:nowrap;padding:7px 11px;border-radius:8px;font:500 12.5px/1 'Source Sans 3';color:#C4CEDF;}
+.ed-pal-tab[aria-pressed="true"]{background:#EDF2F7;color:#1E2D4A;font-weight:600;}
+.ed-pal-toggle{flex:none;padding:7px 11px;border:1px solid rgba(196,206,223,.35);border-radius:7px;color:#C4CEDF;font:600 12px/1 'Source Sans 3';white-space:nowrap;}
+.ed-pal-chips{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:10px 14px 12px;}
+.ed-chip{padding:9px 13px;background:rgba(237,242,247,.1);border-radius:9px;color:#EDF2F7;font:500 12.5px/1 'Source Sans 3';cursor:grab;}
+.ed-chip:hover{background:rgba(237,242,247,.22);}
+
+/* inspector */
+.ed-insp{width:318px;flex:none;border-left:1px solid #DDE3ED;background:#FBF8F3;display:flex;flex-direction:column;min-height:0;}
+.ed-insp-h{padding:14px 16px;border-bottom:1px solid #DDE3ED;display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.ed-insp-h b{font:600 15px/1 'Source Sans 3';color:#1E2D4A;}
+.ed-insp-h span{font-size:12px;color:#8A8898;white-space:nowrap;}
+.ed-insp-body{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:15px;}
+.ed-none{padding:22px 18px;display:flex;flex-direction:column;gap:9px;}
+.ed-none b{font:500 16px/1.3 Lora,Georgia,serif;color:#1E2D4A;font-weight:500;}
+.ed-none span{font-size:13px;color:#8A8898;line-height:1.5;}
+.ed-sec{display:flex;flex-direction:column;gap:8px;}
+.ed-sec--rule{padding-top:11px;border-top:1px solid #DDE3ED;}
+.ed-lab{font:600 11px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8898;}
+.ed-lab-row{display:flex;align-items:baseline;justify-content:space-between;gap:8px;}
+.ed-read{font-size:12px;color:#4A4860;}
+.ed-note{font-size:11.5px;color:#8A8898;line-height:1.4;}
+.ed-chips{display:flex;gap:6px;flex-wrap:wrap;}
+.ed-pick{flex:1;padding:6px 4px;text-align:center;border-radius:7px;font:500 12.5px/1.2 'Source Sans 3';border:1px solid #DDE3ED;color:#4A4860;background:#fff;}
+.ed-pick[aria-pressed="true"]{border:2px solid #2E7EA6;background:#E4EEF4;color:#1E2D4A;font-weight:600;}
+.ed-step-row{display:flex;align-items:center;gap:8px;font-size:13px;color:#1E2D4A;}
+.ed-step-row > span:first-child{flex:1;}
+.ed-step{display:flex;align-items:center;border:1px solid #DDE3ED;border-radius:7px;overflow:hidden;background:#fff;}
+.ed-step button{padding:4px 9px;color:#4A4860;}
+.ed-step button:first-child{border-right:1px solid #DDE3ED;}
+.ed-step button:last-child{border-left:1px solid #DDE3ED;}
+.ed-step button:hover{background:#EDF2F7;}
+.ed-step output{padding:4px 10px;font:600 12.5px/1.4 'Source Sans 3';min-width:38px;text-align:center;}
+.ed-sw{width:30px;height:30px;border-radius:7px;border:1px solid #DDE3ED;padding:0;}
+.ed-sw[aria-pressed="true"]{border:2px solid #2E7EA6;box-shadow:0 0 0 2px rgba(46,126,166,.2);}
+.ed-sw[aria-disabled="true"]{border:1px dashed #DDE3ED;opacity:.3;cursor:not-allowed;}
+.ed-media{display:flex;gap:10px;align-items:center;padding:10px;border:1px solid #DDE3ED;border-radius:9px;background:#F7F3EC;width:100%;text-align:left;}
+.ed-media:hover{border-color:#2E7EA6;}
+.ed-media-thumb{width:44px;height:44px;border-radius:6px;flex:none;background:#E4EAF2 center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:#8A8898;}
+.ed-media-b{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
+.ed-media-n{font-size:13px;color:#1E2D4A;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ed-media-c{font-size:12px;color:#2E7EA6;}
+.ed-track{width:40px;height:22px;border-radius:999px;position:relative;display:inline-block;background:#DDE3ED;flex:none;padding:0;}
+.ed-track[aria-pressed="true"]{background:#4A5E3A;}
+.ed-knob{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#FBF8F3;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:left .12s ease;}
+.ed-track[aria-pressed="true"] .ed-knob{left:21px;}
+.ed-reassure{display:flex;gap:9px;padding:10px;border:1px solid #DCE6D6;border-radius:9px;background:#F2F6EF;}
+.ed-reassure i{color:#4A5E3A;font-size:13px;line-height:1.3;font-style:normal;}
+.ed-reassure span{font-size:11.5px;line-height:1.45;color:#3B4C2E;}
+.ed-reset{align-self:flex-start;padding:7px 12px;border:1px solid #C4CEDF;border-radius:7px;font:600 12.5px/1 'Source Sans 3';color:#1E2D4A;}
+.ed-reset:hover{background:#EDF2F7;}
+.ed-field{width:100%;padding:8px 10px;border:1px solid #DDE3ED;border-radius:7px;font:400 13px/1.4 'Source Sans 3';background:#fff;color:#1E2D4A;}
+.ed-item{border:1px solid #DDE3ED;border-radius:8px;padding:9px;background:#fff;display:flex;flex-direction:column;gap:6px;}
+.ed-item-h{display:flex;align-items:center;justify-content:space-between;font-size:11.5px;color:#8A8898;}
+.ed-item-h button{color:#B85C3A;font-size:11.5px;font-weight:600;}
+.ed-add{align-self:flex-start;padding:6px 11px;border:1px solid #C4CEDF;border-radius:7px;font:600 12.5px/1 'Source Sans 3';color:#1E2D4A;}
+
+/* changes panel */
+.ed-changes{flex:none;padding:13px 16px;border-top:1px solid #DDE3ED;display:flex;flex-direction:column;gap:9px;background:#F7F3EC;}
+.ed-changes ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;max-height:132px;overflow-y:auto;font-size:12.5px;color:#4A4860;}
+.ed-changes .ed-none-yet{color:#8A8898;}
+
+/* modal */
+.ed-back{position:fixed;inset:0;background:rgba(17,30,50,.5);display:flex;align-items:center;justify-content:center;z-index:60;padding:34px;}
+.ed-modal{width:760px;max-width:100%;max-height:82vh;background:#FBF8F3;border-radius:14px;box-shadow:0 24px 70px rgba(17,30,50,.4);display:flex;flex-direction:column;overflow:hidden;}
+.ed-modal-h{padding:16px 20px;border-bottom:1px solid #DDE3ED;display:flex;align-items:center;gap:12px;}
+.ed-modal-h b{font:500 19px/1.2 Lora,Georgia,serif;color:#1E2D4A;font-weight:500;}
+.ed-modal-h span{font-size:12.5px;color:#8A8898;}
+.ed-modal-grid{flex:1;overflow-y:auto;padding:18px 20px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+.ed-tile{display:flex;flex-direction:column;gap:7px;padding:8px;border:1px solid transparent;border-radius:10px;text-align:left;}
+.ed-tile:hover,.ed-tile[aria-pressed="true"]{border-color:#2E7EA6;background:#F2F7FA;}
+.ed-tile-th{aspect-ratio:4/3;border-radius:8px;background:#DDE3ED center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:#1E2D4A;}
+.ed-tile-th--vid{aspect-ratio:16/9;background-color:#1E2D4A;color:#FBF8F3;font-size:24px;}
+.ed-tile-n{font:600 12.5px/1.3 'Source Sans 3';color:#1E2D4A;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ed-tile-m{font-size:11px;color:#8A8898;}
+.ed-modal-f{padding:14px 20px;border-top:1px solid #DDE3ED;background:#F7F3EC;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.ed-dropzone{flex:1;min-width:220px;padding:16px;border:1.5px dashed #C4CEDF;border-radius:10px;text-align:center;font:600 13px/1.3 'Source Sans 3';color:#1E2D4A;}
+.ed-dropzone.is-over{border-color:#2E7EA6;background:#F2F7FA;}
+.ed-upload{padding:10px 15px;background:#1E2D4A;color:#F5E4C0;border-radius:8px;font:700 13px/1 'Source Sans 3';}
+.ed-close{padding:6px 11px;border:1px solid #C4CEDF;border-radius:7px;font:600 12.5px/1 'Source Sans 3';color:#1E2D4A;}
+.ed-close:hover{background:#EDF2F7;}
+
+/* toast + live region */
+.ed-toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);padding:12px 20px;background:#1E2D4A;color:#F5E4C0;border-radius:10px;
+  box-shadow:0 12px 34px rgba(17,30,50,.4);font:600 13.5px/1.3 'Source Sans 3';z-index:70;}
+.ed-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
+.ed-boot{display:flex;align-items:center;justify-content:center;height:100vh;color:#6A6858;font-size:14px;}
+
+/* Blocks laid out as they would be on a phone, scoped to the paper rather than
+   the viewport. Injected from admin/blocks.js so it stays identical to the
+   media query the public page uses. */
+/*TLCB_EDITOR_CSS*/
+
+@media(max-width:1100px){
+  .ed-rail{width:216px;}
+  .ed-insp{width:280px;}
+}
+</style>
+</head>
+<body>
+<div id="root"><div class="ed-boot">Loading the page editor…</div></div>
+<div class="ed-sr" role="status" aria-live="polite" id="live"></div>
+<script>
+/* ── Ministry page editor ─────────────────────────────────────────────────
+   Owns the rail, canvas, palette and inspector. It does NOT own the block
+   templates: the canvas HTML is rendered by the Worker from admin/blocks.js,
+   the same module the public page renders through. Structural changes (add,
+   delete, duplicate, reorder, undo, reset) ask the Worker to re-render;
+   everything the inspector adjusts is a CSS custom property applied straight
+   to the block node, so spacing/colour/size changes are instant and cannot
+   drift from what the public page will do with the same value. */
+(function () {
+'use strict';
+
+var SLUG = decodeURIComponent((location.pathname.match(/\/ministries\/editor\/([^/?#]+)/) || [])[1] || '');
+var WIDTHS = { desktop: 860, tablet: 620, phone: 390 };
+var HINT_KEY = 'tlc-ministry-editor-hint-v1';
+
+var S = {
+  slug: SLUG, title: '', status: 'live', updatedAt: '',
+  blocks: [], config: null, media: [],
+  selectedId: null, device: 'desktop', group: 'Content', paletteOpen: true,
+  changes: [], history: [], saved: null, dirty: false,
+  dragId: null, dragType: null, dropIndex: null,
+  picker: null, toast: null, hint: true, loadError: '',
+};
+
+var el = {};
+var toastTimer = null;
+
+// ── small helpers ──────────────────────────────────────────────────────────
+function esc(s) {
+  return (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function def(type) { return (S.config && S.config.types[type]) || { label: 'Block', glyph: '▣' }; }
+function findBlock(id) { for (var i = 0; i < S.blocks.length; i++) if (S.blocks[i].id === id) return S.blocks[i]; return null; }
+function indexOfBlock(id) { for (var i = 0; i < S.blocks.length; i++) if (S.blocks[i].id === id) return i; return -1; }
+function now() { return new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); }
+function say(msg) { el.live.textContent = msg; }
+
+async function api(path, opts) {
+  var res = await fetch(path, Object.assign({ headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin' }, opts || {}));
+  if (res.status === 401 || res.status === 403) { location.href = '/login'; throw new Error('auth'); }
+  if (!res.ok) throw new Error((await res.text().catch(function () { return ''; })) || ('Request failed (' + res.status + ')'));
+  return res.json();
+}
+
+function toast(msg) {
+  S.toast = msg;
+  renderToast();
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { S.toast = null; renderToast(); }, 2600);
+}
+
+// ── shell ──────────────────────────────────────────────────────────────────
+function shellHtml() {
+  return '' +
+  '<div class="ed">' +
+    '<header class="ed-top">' +
+      '<div class="ed-brand"><div class="ed-mark" aria-hidden="true">T</div><span>Timothy Admin</span></div>' +
+      '<nav class="ed-crumb" aria-label="Breadcrumb"><a href="/ministries">Ministries</a><i>/</i><b id="edTitle"></b></nav>' +
+      '<span class="ed-pill" id="edPill"></span>' +
+      '<span class="ed-saved" id="edSaved"></span>' +
+      '<div class="ed-spacer"></div>' +
+      '<a class="ed-view" id="edView" target="_blank" rel="noopener">View live ↗</a>' +
+      '<div class="ed-devices" role="group" aria-label="Preview width">' +
+        '<button type="button" data-device="desktop">Desktop</button>' +
+        '<button type="button" data-device="tablet">Tablet</button>' +
+        '<button type="button" data-device="phone">Phone</button>' +
+      '</div>' +
+      '<button type="button" class="ed-undo" id="edUndo">↺ Undo</button>' +
+      '<button type="button" class="ed-publish" id="edPublish">Publish</button>' +
+    '</header>' +
+    '<div class="ed-hint" id="edHint">' +
+      '<b>Try it:</b><span>drag rows in the left rail to reorder · drag a block from the bottom panel onto the page · click any text to type · use the right panel for spacing and layout</span>' +
+      '<button type="button" id="edHintX" aria-label="Dismiss tip">×</button>' +
+    '</div>' +
+    '<div class="ed-body">' +
+      '<aside class="ed-rail">' +
+        '<div class="ed-rail-h" id="edRailHead">Page blocks</div>' +
+        '<div class="ed-rail-list" id="edRail" role="listbox" aria-labelledby="edRailHead" tabindex="-1"></div>' +
+        '<div class="ed-rail-f">Drag to reorder · Alt + ↑ ↓ with a row focused</div>' +
+      '</aside>' +
+      '<main class="ed-mid">' +
+        '<div class="ed-canvas" id="edCanvas"><div class="ed-paper" id="edPaper"></div></div>' +
+        '<div class="ed-pal">' +
+          '<div class="ed-pal-h">' +
+            '<div class="ed-pal-scroll"><span class="ed-pal-label">Add block</span><span id="edPalTabs" style="display:flex;gap:4px"></span></div>' +
+            '<button type="button" class="ed-pal-toggle" id="edPalToggle"></button>' +
+          '</div>' +
+          '<div class="ed-pal-chips" id="edPalChips"></div>' +
+        '</div>' +
+      '</main>' +
+      '<aside class="ed-insp">' +
+        '<div id="edInspHead"></div>' +
+        '<div id="edInspBody" class="ed-insp-body"></div>' +
+        '<div class="ed-changes">' +
+          '<span class="ed-lab" id="edChangesHead">Unpublished changes</span>' +
+          '<ul id="edChanges"></ul>' +
+        '</div>' +
+      '</aside>' +
+    '</div>' +
+  '</div>' +
+  '<div id="edModal"></div>' +
+  '<div id="edToast"></div>';
+}
+
+function cacheEls() {
+  ['edTitle', 'edPill', 'edSaved', 'edView', 'edUndo', 'edPublish', 'edHint', 'edHintX', 'edRail',
+   'edCanvas', 'edPaper', 'edPalTabs', 'edPalChips', 'edPalToggle', 'edInspHead', 'edInspBody',
+   'edChanges', 'edChangesHead', 'edModal', 'edToast'].forEach(function (id) { el[id] = document.getElementById(id); });
+  el.live = document.getElementById('live');
+}
+
+// ── canvas sizing ──────────────────────────────────────────────────────────
+// The paper keeps its true pixel width and is scaled to fit with `zoom`.
+// `transform: scale()` is wrong here: it does not affect the layout box, so a
+// centred scaled paper drifts out of view. The paper must not flex-shrink
+// either, or the device switcher looks like it does nothing.
+function fitPaper() {
+  var w = WIDTHS[S.device] || WIDTHS.desktop;
+  el.edPaper.style.width = w + 'px';
+  el.edPaper.classList.toggle('ed-paper--phone', S.device === 'phone');
+  var avail = el.edCanvas.clientWidth - 56;
+  el.edPaper.style.zoom = avail > 0 ? Math.min(1, avail / w) : 1;
+}
+
+function setDevice(d) {
+  S.device = d;
+  var btns = el.edCanvas.ownerDocument.querySelectorAll('.ed-devices button');
+  for (var i = 0; i < btns.length; i++) btns[i].setAttribute('aria-pressed', String(btns[i].dataset.device === d));
+  fitPaper();
+  say(d === 'phone' ? 'Phone preview' : d === 'tablet' ? 'Tablet preview' : 'Desktop preview');
+}
+
+// ── rendering ──────────────────────────────────────────────────────────────
+function renderTop() {
+  el.edTitle.textContent = S.title || S.slug;
+  document.title = (S.title || S.slug) + ' — page editor';
+  var n = S.changes.length;
+  el.edPill.className = 'ed-pill ' + (n ? 'ed-pill--draft' : 'ed-pill--live');
+  el.edPill.textContent = n ? 'Draft · ' + n + ' edit' + (n === 1 ? '' : 's') : (S.status === 'live' ? 'Published' : S.status);
+  el.edSaved.textContent = S.saved ? 'Autosaved ' + S.saved : 'No changes yet';
+  el.edUndo.disabled = S.history.length === 0;
+  el.edPublish.disabled = false;
+  el.edView.href = 'https://timothystl.org/' + S.slug;
+}
+
+function renderRail() {
+  var html = '';
+  for (var i = 0; i < S.blocks.length; i++) {
+    var b = S.blocks[i];
+    var d = def(b.type);
+    if (S.dropIndex === i) html += '<div class="ed-drop" aria-hidden="true"></div>';
+    html += '<button type="button" role="option" class="ed-row' + (b.hidden ? ' is-hidden' : '') + (S.dragId === b.id ? ' is-dragging' : '') + '"' +
+      ' draggable="true" data-id="' + esc(b.id) + '" data-index="' + i + '"' +
+      ' aria-selected="' + (b.id === S.selectedId) + '"' +
+      ' aria-label="' + esc(d.label) + ' block, position ' + (i + 1) + ' of ' + S.blocks.length + (b.hidden ? ', hidden on phone' : '') + '">' +
+      '<span class="ed-row-grip" aria-hidden="true">⠿</span>' +
+      '<span class="ed-row-glyph" aria-hidden="true">' + esc(d.glyph) + '</span>' +
+      '<span class="ed-row-label">' + esc(rowLabel(b, d)) + '</span>' +
+      (b.hidden ? '<span class="ed-row-tag">Hidden</span>' : '') +
+      '</button>';
+  }
+  if (S.dropIndex === S.blocks.length && (S.dragId || S.dragType)) html += '<div class="ed-drop" aria-hidden="true"></div>';
+  if (!S.blocks.length) html += '<div class="ed-rail-empty">No blocks yet.<br>Drag one from below.</div>';
+  el.edRail.innerHTML = html;
+}
+
+// The rail is more useful when a row says which block it is, not just its type.
+function rowLabel(b, d) {
+  var own = (b.title || '').trim() || (b.type === 'text' ? stripTags(b.body).slice(0, 32) : '');
+  return own ? d.label + ' · ' + own : d.label;
+}
+function stripTags(s) { return (s || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(); }
+
+function renderPalette() {
+  var tabs = '';
+  S.config.groups.forEach(function (g) {
+    tabs += '<button type="button" class="ed-pal-tab" data-group="' + esc(g.name) + '" aria-pressed="' + (g.name === S.group) + '">' + esc(g.name) + '</button>';
+  });
+  el.edPalTabs.innerHTML = tabs;
+  el.edPalToggle.textContent = S.paletteOpen ? 'Hide' : 'Show blocks';
+  el.edPalToggle.setAttribute('aria-expanded', String(S.paletteOpen));
+  el.edPalChips.style.display = S.paletteOpen ? '' : 'none';
+  var group = null;
+  S.config.groups.forEach(function (g) { if (g.name === S.group) group = g; });
+  var chips = '';
+  (group ? group.types : []).forEach(function (t) {
+    var d = def(t);
+    chips += '<button type="button" class="ed-chip" draggable="true" data-type="' + esc(t) + '">' +
+      esc(d.glyph) + '&nbsp;&nbsp;' + esc(d.label) + '</button>';
+  });
+  el.edPalChips.innerHTML = chips;
+}
+
+function renderChanges() {
+  el.edChangesHead.textContent = S.changes.length ? 'Unpublished changes (' + S.changes.length + ')' : 'Unpublished changes';
+  el.edChanges.innerHTML = S.changes.length
+    ? S.changes.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('')
+    : '<li class="ed-none-yet">Nothing since the last publish.</li>';
+}
+
+function renderToast() {
+  el.edToast.innerHTML = S.toast ? '<div class="ed-toast" role="status">' + esc(S.toast) + '</div>' : '';
+}
+
+// Canvas markup always comes from the Worker.
+async function refreshCanvas() {
+  var out = await api('/ministries/api/render', { method: 'POST', body: JSON.stringify({ blocks: S.blocks, slug: S.slug }) });
+  setCanvas(out.html);
+}
+
+function setCanvas(html) {
+  el.edPaper.innerHTML = html;
+  applySelection();
+  fitPaper();
+}
+
+function applySelection() {
+  var nodes = el.edPaper.querySelectorAll('.tlcb');
+  for (var i = 0; i < nodes.length; i++) nodes[i].classList.toggle('is-sel', nodes[i].dataset.id === S.selectedId);
+}
+
+function renderAll() {
+  renderTop();
+  renderRail();
+  renderPalette();
+  renderChanges();
+  renderInspector();
+}
+
+// ── inspector (phase 3 fills this in) ──────────────────────────────────────
+function renderInspector() {
+  var b = findBlock(S.selectedId);
+  if (!b) {
+    el.edInspHead.innerHTML = '';
+    el.edInspBody.className = 'ed-none';
+    el.edInspBody.innerHTML = '<b>Nothing selected</b><span>Click a block on the page — or a row in the left rail — to change its layout, spacing, and background.</span>';
+    return;
+  }
+  var d = def(b.type);
+  el.edInspHead.innerHTML = '<div class="ed-insp-h"><b>' + esc(d.label) + '</b><span>Block ' + (indexOfBlock(b.id) + 1) + ' of ' + S.blocks.length + '</span></div>';
+  el.edInspBody.className = 'ed-insp-body';
+  el.edInspBody.innerHTML = inspectorSections(b, d);
+}
+
+function inspectorSections() { return ''; }
+
+// ── static wiring ──────────────────────────────────────────────────────────
+function bindStatic() {
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-device]');
+    if (t) { setDevice(t.dataset.device); return; }
+    if (e.target.closest('#edHintX')) { S.hint = false; el.edHint.style.display = 'none'; try { localStorage.setItem(HINT_KEY, '1'); } catch (_) {} return; }
+    var tab = e.target.closest('[data-group]');
+    if (tab) { S.group = tab.dataset.group; S.paletteOpen = true; renderPalette(); return; }
+    if (e.target.closest('#edPalToggle')) { S.paletteOpen = !S.paletteOpen; renderPalette(); return; }
+  });
+  window.addEventListener('resize', fitPaper);
+  if (window.ResizeObserver) new ResizeObserver(fitPaper).observe(el.edCanvas);
+}
+
+// ── boot ───────────────────────────────────────────────────────────────────
+async function boot() {
+  var root = document.getElementById('root');
+  root.innerHTML = shellHtml();
+  cacheEls();
+  try { if (localStorage.getItem(HINT_KEY)) { S.hint = false; el.edHint.style.display = 'none'; } } catch (_) {}
+  bindStatic();
+  try {
+    var data = await api('/ministries/api/page/' + encodeURIComponent(S.slug));
+    S.title = data.page.title;
+    S.status = data.page.status;
+    S.blocks = data.page.blocks;
+    S.changes = data.page.changes || [];
+    S.updatedAt = data.page.updated_at || '';
+    S.config = data.config;
+    S.media = data.media || [];
+    setCanvas(data.html);
+    setDevice('desktop');
+    renderAll();
+  } catch (err) {
+    if (String(err && err.message) === 'auth') return;
+    root.innerHTML = '<div class="ed-boot">Could not load this page — <a href="/ministries" style="color:#2E7EA6;margin-left:6px">back to Ministries</a></div>';
+  }
+}
+
+boot();
+})();
+</script>
+</body>
+</html>

@@ -27,8 +27,9 @@ import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHt
 import { handleGymRoutes, sweepExpiredItems, extractImageKeys } from './admin/gym.js';
 import { migrateLegacyPage, starterBlocks, sanitizeBlocks, sanitizeBlock, parseBlocks, newBlock,
          renderPage, renderBlock, BLOCK_DEFS, BLOCK_TYPE_KEYS, GROUPS, BG, INK, SIZES, SPLITS, TONES,
-         STAMP_PRESETS, safeUrl, esc as escBlock } from './admin/blocks.js';
+         STAMP_PRESETS, safeUrl, esc as escBlock, editorPhoneCss, blocksClientConfig } from './admin/blocks.js';
 import PAYROLL_HTML from './admin/payroll.html';
+import MINISTRY_EDITOR_HTML from './admin/ministry-editor.html';
 
 // Allowlist of site_settings keys readable via the public /api/settings/{key}
 // endpoint. Everything else returns 404 — keeps internal config (gym admin
@@ -44,6 +45,21 @@ const PUBLIC_SETTINGS_KEYS = new Set(['zoom_url', 'councilfiles_url', 'give_url'
 const GIVE_FUND_TITHELY_ID_SEED = {
   'General Fund': '7851d336-7349-489b-8e6b-5dfc822278cc',
 };
+
+// JSON responses for the ministry page editor's API. Admin-only and never
+// cached — a stale draft served from a cache would silently undo an edit.
+function jsonResponse(obj, status = 200) {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow' },
+  });
+}
+
+// Ministry slugs are used in URLs and DB lookups; keep them to the shape the
+// rest of the site already assumes.
+function cleanSlug(s) {
+  return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 48);
+}
 
 // CSRF defense: only these POST paths are reachable from outside the admin
 // origin (the public site at timothystl.org POSTs to them). Every other
@@ -3693,6 +3709,63 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
 
     if (path.startsWith('/ministries')) {
       const CORE_SLUGS = ['youth','sundayschool','confirmation','vbs','egghunt','family','music','stephen','foodpantry','bees','christmasmarket'];
+
+      // ── BLOCK PAGE EDITOR ────────────────────────────────────────────────
+      // Full-viewport editor screen. Served as a static shell (same pattern as
+      // the payroll page); everything it needs arrives over the JSON API below.
+      if (path.startsWith('/ministries/editor/') && method === 'GET') {
+        const slug = decodeURIComponent(path.slice('/ministries/editor/'.length));
+        const exists = await env.DB.prepare('SELECT slug FROM youth_pages WHERE slug = ?').bind(slug).first();
+        if (!exists) return new Response('', { status: 302, headers: { Location: '/ministries' } });
+        return new Response(MINISTRY_EDITOR_HTML.replace('/*TLCB_EDITOR_CSS*/', editorPhoneCss()), {
+          headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'X-Robots-Tag': 'noindex, nofollow',
+            'Cache-Control': 'no-store',
+            'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tiny.cloud; " +
+              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tiny.cloud; " +
+              "font-src https://fonts.gstatic.com https://cdn.tiny.cloud; img-src 'self' data: blob: https:; " +
+              "connect-src 'self' https://cdn.tiny.cloud; frame-src 'self' https://www.youtube-nocookie.com https://docs.google.com https://calendar.google.com; " +
+              "frame-ancestors 'none'; base-uri 'none'",
+          },
+        });
+      }
+
+      // Everything the editor needs in one round trip.
+      if (path.startsWith('/ministries/api/page/') && method === 'GET') {
+        const slug = decodeURIComponent(path.slice('/ministries/api/page/'.length));
+        const row = await env.DB.prepare(
+          'SELECT slug, title, blocks, published_blocks, page_status, publish_at, change_log, updated_at FROM youth_pages WHERE slug = ?'
+        ).bind(slug).first();
+        if (!row) return jsonResponse({ error: 'Not found' }, 404);
+        const blocks = sanitizeBlocks(parseBlocks(row.blocks));
+        const media = await env.DB.prepare(
+          'SELECT id, filename, kind, url, thumb_url, alt, meta FROM ministry_media ORDER BY id DESC LIMIT 200'
+        ).all().catch(() => ({ results: [] }));
+        return jsonResponse({
+          page: {
+            slug: row.slug, title: row.title, status: row.page_status || 'live',
+            publish_at: row.publish_at || null, updated_at: row.updated_at || '',
+            blocks, changes: parseBlocks(row.change_log),
+            published_count: sanitizeBlocks(parseBlocks(row.published_blocks)).length,
+          },
+          config: blocksClientConfig(),
+          media: media.results || [],
+          html: renderPage(blocks, { editing: true, slug, withCss: true }),
+        });
+      }
+
+      // Stateless render — the editor's single source of block markup. No DB
+      // access, so it stays fast enough to call on every structural change.
+      if (path === '/ministries/api/render' && method === 'POST') {
+        const body = await request.json().catch(() => ({}));
+        const blocks = sanitizeBlocks(body.blocks);
+        const slug = cleanSlug(body.slug);
+        return jsonResponse({
+          html: renderPage(blocks, { editing: true, slug, withCss: true }),
+          blocks,
+        });
+      }
 
       // ── Ministry list ──
       if (path === '/ministries' && method === 'GET') {
