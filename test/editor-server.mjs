@@ -11,7 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   renderPage, sanitizeBlocks, parseBlocks, blocksClientConfig, editorPhoneCss,
-  migrateLegacyPage, starterBlocks, newBlock,
+  migrateLegacyPage, starterBlocks, newBlock, makeBlockId,
 } from '../admin/blocks.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -27,6 +27,8 @@ export function createEditorServer(seed = {}) {
   let mediaSeq = media.length;
   const uploads = [];
   const revisions = [];
+  const sections = [];
+  let sectionSeq = 0;
 
   const seedPages = seed.pages || [{ slug: 'music', title: 'Music Ministry', blocks: migrateLegacyPage({
     slug: 'music', title: 'Music Ministry',
@@ -172,6 +174,34 @@ export function createEditorServer(seed = {}) {
       return json(res, { promoted });
     }
 
+    if (p === '/ministries/api/sections' && req.method === 'GET') {
+      return json(res, { sections: sections.map((x) => ({ id: x.id, name: x.name, created_by: x.created_by, count: parseBlocks(x.blocks).length })) });
+    }
+    if (p === '/ministries/api/sections' && req.method === 'POST') {
+      const body = await readBody(req);
+      const name = String(body.name || '').trim().slice(0, 60);
+      const blocks = sanitizeBlocks(body.blocks);
+      if (!name) return json(res, { error: 'Give the section a name.' }, 400);
+      if (!blocks.length) return json(res, { error: 'There is nothing to save.' }, 400);
+      const row = { id: ++sectionSeq, name, blocks: JSON.stringify(blocks), created_by: 'test' };
+      sections.push(row);
+      sections.sort((a, b) => a.name.localeCompare(b.name));
+      return json(res, { ok: true, section: { id: row.id, name, count: blocks.length } });
+    }
+    if (/^\/ministries\/api\/sections\/\d+$/.test(p) && req.method === 'GET') {
+      const row = sections.find((x) => x.id === Number(p.split('/').pop()));
+      if (!row) return json(res, { error: 'Not found' }, 404);
+      // fresh ids, so the same section can be dropped twice without colliding
+      const blocks = sanitizeBlocks(parseBlocks(row.blocks)).map((b) => ({ ...b, id: makeBlockId() }));
+      return json(res, { blocks });
+    }
+    if (/^\/ministries\/api\/sections\/\d+\/delete$/.test(p) && req.method === 'POST') {
+      const id = Number(p.split('/')[4]);
+      const at = sections.findIndex((x) => x.id === id);
+      if (at > -1) sections.splice(at, 1);
+      return json(res, { ok: true });
+    }
+
     if (p === '/ministries/api/media' && req.method === 'GET') return json(res, { media });
     if (p === '/ministries/api/media' && req.method === 'POST') {
       const body = await readBody(req);
@@ -199,5 +229,5 @@ export function createEditorServer(seed = {}) {
     res.end('Not found');
   });
 
-  return { server, pages, media, revisions, uploads };
+  return { server, pages, media, revisions, uploads, sections };
 }

@@ -115,6 +115,10 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
 .ed-pal-chips{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:10px 14px 12px;}
 .ed-chip{padding:9px 13px;background:rgba(237,242,247,.1);border-radius:9px;color:#EDF2F7;font:500 12.5px/1 'Source Sans 3';cursor:grab;}
 .ed-chip:hover{background:rgba(237,242,247,.22);}
+.ed-chip--saved{display:inline-flex;align-items:center;gap:8px;}
+.ed-chip-n{font-size:10.5px;color:#93A2B8;border:1px solid rgba(196,206,223,.35);border-radius:5px;padding:0 5px;}
+.ed-chip-x{color:#93A2B8;font-size:14px;line-height:1;padding:0 2px;}
+.ed-chip-x:hover{color:#FFC9C9;}
 
 /* inspector */
 .ed-insp{width:318px;flex:none;border-left:1px solid #DDE3ED;background:#FBF8F3;display:flex;flex-direction:column;min-height:0;}
@@ -245,9 +249,9 @@ var S = {
   blocks: [], config: null, media: [],
   selectedId: null, device: 'desktop', group: 'Content', paletteOpen: true,
   changes: [], history: [], saved: null, dirty: false,
-  dragId: null, dragType: null, dropIndex: null,
+  dragId: null, dragType: null, dragSection: null, dropIndex: null,
   picker: null, toast: null, hint: true, loadError: '',
-  publishPanel: false, publishAt: null, publishAtLocal: '', revisions: [],
+  publishPanel: false, publishAt: null, publishAtLocal: '', revisions: [], sections: [],
 };
 
 var el = {};
@@ -407,24 +411,95 @@ function rowLabel(b, d) {
 }
 function stripTags(s) { return (s || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(); }
 
+// The four groups come from the block definitions; "Saved" is added here
+// because its contents are whatever this church has saved, not a fixed list.
+function paletteGroups() {
+  return S.config.groups.concat([{ name: 'Saved', types: [] }]);
+}
+
 function renderPalette() {
   var tabs = '';
-  S.config.groups.forEach(function (g) {
+  paletteGroups().forEach(function (g) {
     tabs += '<button type="button" class="ed-pal-tab" data-group="' + esc(g.name) + '" aria-pressed="' + (g.name === S.group) + '">' + esc(g.name) + '</button>';
   });
   el.edPalTabs.innerHTML = tabs;
   el.edPalToggle.textContent = S.paletteOpen ? 'Hide' : 'Show blocks';
   el.edPalToggle.setAttribute('aria-expanded', String(S.paletteOpen));
   el.edPalChips.style.display = S.paletteOpen ? '' : 'none';
-  var group = null;
-  S.config.groups.forEach(function (g) { if (g.name === S.group) group = g; });
   var chips = '';
-  (group ? group.types : []).forEach(function (t) {
-    var d = def(t);
-    chips += '<button type="button" class="ed-chip" draggable="true" data-type="' + esc(t) + '">' +
-      esc(d.glyph) + '&nbsp;&nbsp;' + esc(d.label) + '</button>';
-  });
+  if (S.group === 'Saved') {
+    if (!S.sections.length) {
+      chips = '<span class="ed-note" style="color:#93A2B8;padding:4px 2px">Nothing saved yet. Select a block and choose ' +
+        '&ldquo;Save as reusable section&rdquo; to keep it for other pages.</span>';
+    } else {
+      S.sections.forEach(function (sec) {
+        chips += '<span class="ed-chip ed-chip--saved" draggable="true" data-section="' + sec.id + '">' +
+          '◇&nbsp;&nbsp;' + esc(sec.name) +
+          '<span class="ed-chip-n">' + sec.count + '</span>' +
+          '<button type="button" class="ed-chip-x" data-del-section="' + sec.id + '" aria-label="Delete the saved section ' + esc(sec.name) + '">×</button>' +
+          '</span>';
+      });
+    }
+  } else {
+    var group = null;
+    S.config.groups.forEach(function (g) { if (g.name === S.group) group = g; });
+    (group ? group.types : []).forEach(function (t) {
+      var d = def(t);
+      chips += '<button type="button" class="ed-chip" draggable="true" data-type="' + esc(t) + '">' +
+        esc(d.glyph) + '&nbsp;&nbsp;' + esc(d.label) + '</button>';
+    });
+  }
   el.edPalChips.innerHTML = chips;
+}
+
+// ── saved sections ─────────────────────────────────────────────────────────
+async function loadSections() {
+  try {
+    var out = await api('/ministries/api/sections');
+    S.sections = out.sections || [];
+    if (S.group === 'Saved') renderPalette();
+  } catch (_) { /* the rest of the palette still works */ }
+}
+
+async function saveSection(blocks, suggested) {
+  if (!blocks.length) return toast('There is nothing to save');
+  var name = window.prompt('Name this section so you can find it again:', suggested || '');
+  if (name === null) return;
+  name = name.trim();
+  if (!name) return toast('A section needs a name');
+  try {
+    await api('/ministries/api/sections', { method: 'POST', body: JSON.stringify({ name: name, blocks: blocks }) });
+    await loadSections();
+    toast('Saved — find it under "Saved" in the panel below');
+    say('Section saved');
+  } catch (err) {
+    toast(err.message || 'Could not save that section');
+  }
+}
+
+async function insertSection(id, at) {
+  var out = await api('/ministries/api/sections/' + Number(id));
+  var blocks = out.blocks || [];
+  if (!blocks.length) return;
+  pushHistory();
+  var args = [at, 0].concat(blocks);
+  Array.prototype.splice.apply(S.blocks, args);
+  S.selectedId = blocks[0].id;
+  var sec = S.sections.filter(function (x) { return x.id === Number(id); })[0];
+  note('Added ' + (sec ? sec.name : 'a saved section'));
+  await rerender();
+  renderTop(); renderRail(); renderChanges(); scheduleSave();
+  say((sec ? sec.name : 'Section') + ' added — ' + blocks.length + ' block' + (blocks.length === 1 ? '' : 's'));
+}
+
+async function deleteSection(id) {
+  var sec = S.sections.filter(function (x) { return x.id === Number(id); })[0];
+  if (!window.confirm('Delete the saved section "' + (sec ? sec.name : '') + '"? Pages already using it keep their blocks.')) return;
+  try {
+    await api('/ministries/api/sections/' + Number(id) + '/delete', { method: 'POST', body: '{}' });
+    await loadSections();
+    toast('Saved section deleted');
+  } catch (err) { toast(err.message || 'Could not delete that'); }
 }
 
 function renderChanges() {
@@ -866,8 +941,10 @@ function inspectorSections(b, d) {
       ' aria-checked="' + (!b.hidden) + '" aria-pressed="' + (!b.hidden) + '"><span class="ed-knob"></span></button>' +
     '</div>' +
     '<div class="ed-reassure"><i aria-hidden="true">✓</i><span>Every value snaps to the site\'s spacing scale and fonts, so a page can\'t end up misaligned or unreadable on a phone.</span></div>' +
-    '<button type="button" class="ed-reset" data-a="reset" data-k="reset">Reset block</button>' +
-    '</div>';
+    '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+      '<button type="button" class="ed-reset" data-a="reset" data-k="reset">Reset block</button>' +
+      '<button type="button" class="ed-reset" data-a="save-section" data-k="save-section">Save as reusable section</button>' +
+    '</div></div>';
 
   return out;
 }
@@ -950,6 +1027,7 @@ function inspectorAction(action, value) {
     case 'corner': patch(b.id, { corner: value }, 'Stamp moved ' + (value === 'tl' ? 'left' : 'right'), 'rerender'); break;
     case 'hide': toggleHide(b.id); break;
     case 'reset': resetBlock(b.id); break;
+    case 'save-section': saveSection([b], d.label); break;
     case 'item-add': {
       var next = (b.items || []).slice();
       if (next.length >= 24) return;
@@ -1094,6 +1172,10 @@ function bindStatic() {
 // the rail or canvas: a re-render mid-drag replaces the element being dragged,
 // which cancels the drag in every browser.
 function dropLabel() {
+  if (S.dragSection) {
+    var sec = S.sections.filter(function (x) { return x.id === Number(S.dragSection); })[0];
+    return 'Insert ' + (sec ? sec.name.toLowerCase() : 'saved section') + ' here';
+  }
   return S.dragType ? 'Insert ' + def(S.dragType).label.toLowerCase() + ' here' : 'Move here';
 }
 
@@ -1123,6 +1205,7 @@ function setDropIndex(i) {
 function clearDrag() {
   S.dragId = null;
   S.dragType = null;
+  S.dragSection = null;
   S.dropIndex = null;
   clearIndicators();
   var dragging = el.edRail.querySelectorAll('.is-dragging');
@@ -1134,7 +1217,7 @@ function clearDrag() {
 // canvas containers, so e.currentTarget is the container and measuring against
 // it would put every drop in the same place.
 function overItem(e, index, node) {
-  if (!S.dragId && !S.dragType) return;
+  if (!S.dragId && !S.dragType && !S.dragSection) return;
   e.preventDefault();
   e.stopPropagation();
   var r = node.getBoundingClientRect();
@@ -1142,18 +1225,22 @@ function overItem(e, index, node) {
 }
 
 function overContainer(e) {
-  if (!S.dragId && !S.dragType) return;
+  if (!S.dragId && !S.dragType && !S.dragSection) return;
   e.preventDefault();
   if (S.dropIndex === null) setDropIndex(S.blocks.length);
 }
 
 async function performDrop(e) {
   if (e) e.preventDefault();
-  if (!S.dragId && !S.dragType) return;
+  if (!S.dragId && !S.dragType && !S.dragSection) return;
   var at = S.dropIndex == null ? S.blocks.length : S.dropIndex;
   var type = S.dragType;
   var id = S.dragId;
+  var section = S.dragSection;
   clearDrag();
+  if (section) {
+    return insertSection(section, at);
+  }
   if (type) {
     var block = await freshBlock(type);
     pushHistory();
@@ -1251,7 +1338,8 @@ function bindDragAndDrop() {
   el.edPalChips.addEventListener('dragstart', function (e) {
     var c = e.target.closest('.ed-chip');
     if (!c) return;
-    S.dragType = c.dataset.type;
+    S.dragType = c.dataset.type || null;
+    S.dragSection = c.dataset.section || null;
     S.dragId = null;
     if (e.dataTransfer) {
       e.dataTransfer.effectAllowed = 'copy';
@@ -1260,8 +1348,12 @@ function bindDragAndDrop() {
   });
   el.edPalChips.addEventListener('dragend', clearDrag);
   el.edPalChips.addEventListener('click', function (e) {
+    var x = e.target.closest('[data-del-section]');
+    if (x) { e.stopPropagation(); return deleteSection(x.dataset.delSection); }
     var c = e.target.closest('.ed-chip');
-    if (c) addBlock(c.dataset.type);
+    if (!c) return;
+    if (c.dataset.section) return insertSection(c.dataset.section, S.blocks.length);
+    addBlock(c.dataset.type);
   });
 
   // Keyboard reordering. HTML5 drag-and-drop is mouse-only and does not work on
@@ -1363,6 +1455,7 @@ function renderPublishPanel() {
         ? 'Scheduled for ' + esc(fmtWhen(S.publishAt))
         : (S.changes.length ? S.changes.length + ' unpublished change' + (S.changes.length === 1 ? '' : 's') : 'Everything is published')) + '</span>' +
       '<a class="ed-close" style="display:inline-block;text-align:center" href="https://timothystl.org/' + esc(S.slug) + '" target="_blank" rel="noopener">Compare with the live page ↗</a>' +
+      '<button type="button" class="ed-close" id="edSavePage">Save this whole page as a section</button>' +
     '</div>' +
     '<div class="ed-panel-sec"><label class="ed-lab" for="edWhen">Publish later</label>' +
       '<input class="ed-field" type="datetime-local" id="edWhen" value="' + esc(S.publishAtLocal || '') + '">' +
@@ -1423,6 +1516,7 @@ function bindPublish() {
       return schedulePublish(localToIso(v));
     }
     if (e.target.closest('#edUnschedule')) return schedulePublish(null);
+    if (e.target.closest('#edSavePage')) { closePublishPanel(); return saveSection(S.blocks, S.title); }
   });
   document.addEventListener('click', function (e) {
     if (!S.publishPanel) return;
@@ -1735,6 +1829,7 @@ async function boot() {
     setCanvas(data.html);
     setDevice('desktop');
     renderAll();
+    loadSections();
   } catch (err) {
     if (String(err && err.message) === 'auth') return;
     root.innerHTML = '<div class="ed-boot">Could not load this page — <a href="/ministries" style="color:#2E7EA6;margin-left:6px">back to Ministries</a></div>';
