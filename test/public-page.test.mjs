@@ -121,10 +121,13 @@ console.log('\npublic ministry page — every block type renders without error')
   const all = Object.keys(BLOCK_DEFS).map((t) => newBlock(t));
   const { page, ctx, errors } = await visit('vbs', apiFor('vbs', all, { title: 'VBS' }));
   eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
-  eq(await page.locator('#vbs-content .tlcb').count(), all.length, 'all block types present on the page');
+  // this list leads with a hero, so the page renders in whole-page mode and the
+  // blocks live in the page itself rather than the old content region
+  eq(await page.locator('#page-vbs .tlcb').count(), all.length, 'all block types present on the page');
   // nothing overflows the page horizontally — the classic phone-layout failure
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   ok(overflow <= 1, 'no horizontal overflow at 1280px (got ' + overflow + ')');
+  eq(await page.locator('.tlcb-page--full').count(), 1, 'and it took the whole page over');
   await page.setViewportSize({ width: 390, height: 800 });
   await page.waitForTimeout(200);
   const overflowPhone = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

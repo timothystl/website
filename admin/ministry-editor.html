@@ -78,6 +78,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
 .ed-paper{background:#FBF8F3;border-radius:10px;box-shadow:0 6px 30px rgba(30,45,74,.14);padding:18px;margin:0 auto;
   flex:0 0 auto;min-height:420px;width:860px;transition:width .18s ease;}
 .ed-paper .tlcb-page{--tlcb-pad:34px;}
+.ed-paper .tlcb-page--full{--tlcb-wrap:100%;}
 .ed-paper--phone .tlcb-page{--tlcb-pad:18px;}
 /* Selection + per-block editor controls, layered over the shared block markup */
 .ed-paper .tlcb{cursor:pointer;}
@@ -115,6 +116,10 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
 .ed-pal-chips{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:10px 14px 12px;}
 .ed-chip{padding:9px 13px;background:rgba(237,242,247,.1);border-radius:9px;color:#EDF2F7;font:500 12.5px/1 'Source Sans 3';cursor:grab;}
 .ed-chip:hover{background:rgba(237,242,247,.22);}
+.ed-chip--saved{display:inline-flex;align-items:center;gap:8px;}
+.ed-chip-n{font-size:10.5px;color:#93A2B8;border:1px solid rgba(196,206,223,.35);border-radius:5px;padding:0 5px;}
+.ed-chip-x{color:#93A2B8;font-size:14px;line-height:1;padding:0 2px;}
+.ed-chip-x:hover{color:#FFC9C9;}
 
 /* inspector */
 .ed-insp{width:318px;flex:none;border-left:1px solid #DDE3ED;background:#FBF8F3;display:flex;flex-direction:column;min-height:0;}
@@ -245,9 +250,9 @@ var S = {
   blocks: [], config: null, media: [],
   selectedId: null, device: 'desktop', group: 'Content', paletteOpen: true,
   changes: [], history: [], saved: null, dirty: false,
-  dragId: null, dragType: null, dropIndex: null,
+  dragId: null, dragType: null, dragSection: null, dropIndex: null,
   picker: null, toast: null, hint: true, loadError: '',
-  publishPanel: false, publishAt: null, publishAtLocal: '', revisions: [],
+  publishPanel: false, publishAt: null, publishAtLocal: '', revisions: [], sections: [],
 };
 
 var el = {};
@@ -407,24 +412,95 @@ function rowLabel(b, d) {
 }
 function stripTags(s) { return (s || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(); }
 
+// The four groups come from the block definitions; "Saved" is added here
+// because its contents are whatever this church has saved, not a fixed list.
+function paletteGroups() {
+  return S.config.groups.concat([{ name: 'Saved', types: [] }]);
+}
+
 function renderPalette() {
   var tabs = '';
-  S.config.groups.forEach(function (g) {
+  paletteGroups().forEach(function (g) {
     tabs += '<button type="button" class="ed-pal-tab" data-group="' + esc(g.name) + '" aria-pressed="' + (g.name === S.group) + '">' + esc(g.name) + '</button>';
   });
   el.edPalTabs.innerHTML = tabs;
   el.edPalToggle.textContent = S.paletteOpen ? 'Hide' : 'Show blocks';
   el.edPalToggle.setAttribute('aria-expanded', String(S.paletteOpen));
   el.edPalChips.style.display = S.paletteOpen ? '' : 'none';
-  var group = null;
-  S.config.groups.forEach(function (g) { if (g.name === S.group) group = g; });
   var chips = '';
-  (group ? group.types : []).forEach(function (t) {
-    var d = def(t);
-    chips += '<button type="button" class="ed-chip" draggable="true" data-type="' + esc(t) + '">' +
-      esc(d.glyph) + '&nbsp;&nbsp;' + esc(d.label) + '</button>';
-  });
+  if (S.group === 'Saved') {
+    if (!S.sections.length) {
+      chips = '<span class="ed-note" style="color:#93A2B8;padding:4px 2px">Nothing saved yet. Select a block and choose ' +
+        '&ldquo;Save as reusable section&rdquo; to keep it for other pages.</span>';
+    } else {
+      S.sections.forEach(function (sec) {
+        chips += '<span class="ed-chip ed-chip--saved" draggable="true" data-section="' + sec.id + '">' +
+          '◇&nbsp;&nbsp;' + esc(sec.name) +
+          '<span class="ed-chip-n">' + sec.count + '</span>' +
+          '<button type="button" class="ed-chip-x" data-del-section="' + sec.id + '" aria-label="Delete the saved section ' + esc(sec.name) + '">×</button>' +
+          '</span>';
+      });
+    }
+  } else {
+    var group = null;
+    S.config.groups.forEach(function (g) { if (g.name === S.group) group = g; });
+    (group ? group.types : []).forEach(function (t) {
+      var d = def(t);
+      chips += '<button type="button" class="ed-chip" draggable="true" data-type="' + esc(t) + '">' +
+        esc(d.glyph) + '&nbsp;&nbsp;' + esc(d.label) + '</button>';
+    });
+  }
   el.edPalChips.innerHTML = chips;
+}
+
+// ── saved sections ─────────────────────────────────────────────────────────
+async function loadSections() {
+  try {
+    var out = await api('/ministries/api/sections');
+    S.sections = out.sections || [];
+    if (S.group === 'Saved') renderPalette();
+  } catch (_) { /* the rest of the palette still works */ }
+}
+
+async function saveSection(blocks, suggested) {
+  if (!blocks.length) return toast('There is nothing to save');
+  var name = window.prompt('Name this section so you can find it again:', suggested || '');
+  if (name === null) return;
+  name = name.trim();
+  if (!name) return toast('A section needs a name');
+  try {
+    await api('/ministries/api/sections', { method: 'POST', body: JSON.stringify({ name: name, blocks: blocks }) });
+    await loadSections();
+    toast('Saved — find it under "Saved" in the panel below');
+    say('Section saved');
+  } catch (err) {
+    toast(err.message || 'Could not save that section');
+  }
+}
+
+async function insertSection(id, at) {
+  var out = await api('/ministries/api/sections/' + Number(id));
+  var blocks = out.blocks || [];
+  if (!blocks.length) return;
+  pushHistory();
+  var args = [at, 0].concat(blocks);
+  Array.prototype.splice.apply(S.blocks, args);
+  S.selectedId = blocks[0].id;
+  var sec = S.sections.filter(function (x) { return x.id === Number(id); })[0];
+  note('Added ' + (sec ? sec.name : 'a saved section'));
+  await rerender();
+  renderTop(); renderRail(); renderChanges(); scheduleSave();
+  say((sec ? sec.name : 'Section') + ' added — ' + blocks.length + ' block' + (blocks.length === 1 ? '' : 's'));
+}
+
+async function deleteSection(id) {
+  var sec = S.sections.filter(function (x) { return x.id === Number(id); })[0];
+  if (!window.confirm('Delete the saved section "' + (sec ? sec.name : '') + '"? Pages already using it keep their blocks.')) return;
+  try {
+    await api('/ministries/api/sections/' + Number(id) + '/delete', { method: 'POST', body: '{}' });
+    await loadSections();
+    toast('Saved section deleted');
+  } catch (err) { toast(err.message || 'Could not delete that'); }
 }
 
 function renderChanges() {
@@ -447,6 +523,10 @@ async function refreshCanvas() {
 function setCanvas(html) {
   if (window.tinymce) { try { window.tinymce.remove(); } catch (_) {} }
   el.edPaper.innerHTML = html;
+  // A page whose blocks lead with a hero owns the whole page on the public
+  // site, and the canvas has to preview it the same way or the WYSIWYG lies.
+  var pageDiv = el.edPaper.querySelector('.tlcb-page');
+  if (pageDiv) pageDiv.classList.toggle('tlcb-page--full', !!(S.blocks[0] && S.blocks[0].type === 'hero'));
   applySelection();
   fitPaper();
   initRichText();
@@ -537,8 +617,8 @@ function styleVars(b) {
     '--tlcb-gap:' + b.gap + 'px',
     '--tlcb-height:' + b.height + 'px',
     '--tlcb-media-order:' + (b.side === 'right' ? 2 : 0),
-    'margin-top:' + b.spaceAbove + 'px',
-    'margin-bottom:' + b.spaceBelow + 'px',
+    '--tlcb-space-above:' + b.spaceAbove + 'px',
+    '--tlcb-space-below:' + b.spaceBelow + 'px',
   ];
   if (b.type === 'textphoto') v.push('--tlcb-cols:' + cols);
   if (b.type === 'columns') v.push('--tlcb-cols:repeat(' + b.cols + ',1fr)');
@@ -866,8 +946,10 @@ function inspectorSections(b, d) {
       ' aria-checked="' + (!b.hidden) + '" aria-pressed="' + (!b.hidden) + '"><span class="ed-knob"></span></button>' +
     '</div>' +
     '<div class="ed-reassure"><i aria-hidden="true">✓</i><span>Every value snaps to the site\'s spacing scale and fonts, so a page can\'t end up misaligned or unreadable on a phone.</span></div>' +
-    '<button type="button" class="ed-reset" data-a="reset" data-k="reset">Reset block</button>' +
-    '</div>';
+    '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+      '<button type="button" class="ed-reset" data-a="reset" data-k="reset">Reset block</button>' +
+      '<button type="button" class="ed-reset" data-a="save-section" data-k="save-section">Save as reusable section</button>' +
+    '</div></div>';
 
   return out;
 }
@@ -950,6 +1032,7 @@ function inspectorAction(action, value) {
     case 'corner': patch(b.id, { corner: value }, 'Stamp moved ' + (value === 'tl' ? 'left' : 'right'), 'rerender'); break;
     case 'hide': toggleHide(b.id); break;
     case 'reset': resetBlock(b.id); break;
+    case 'save-section': saveSection([b], d.label); break;
     case 'item-add': {
       var next = (b.items || []).slice();
       if (next.length >= 24) return;
@@ -1094,6 +1177,10 @@ function bindStatic() {
 // the rail or canvas: a re-render mid-drag replaces the element being dragged,
 // which cancels the drag in every browser.
 function dropLabel() {
+  if (S.dragSection) {
+    var sec = S.sections.filter(function (x) { return x.id === Number(S.dragSection); })[0];
+    return 'Insert ' + (sec ? sec.name.toLowerCase() : 'saved section') + ' here';
+  }
   return S.dragType ? 'Insert ' + def(S.dragType).label.toLowerCase() + ' here' : 'Move here';
 }
 
@@ -1123,6 +1210,7 @@ function setDropIndex(i) {
 function clearDrag() {
   S.dragId = null;
   S.dragType = null;
+  S.dragSection = null;
   S.dropIndex = null;
   clearIndicators();
   var dragging = el.edRail.querySelectorAll('.is-dragging');
@@ -1134,7 +1222,7 @@ function clearDrag() {
 // canvas containers, so e.currentTarget is the container and measuring against
 // it would put every drop in the same place.
 function overItem(e, index, node) {
-  if (!S.dragId && !S.dragType) return;
+  if (!S.dragId && !S.dragType && !S.dragSection) return;
   e.preventDefault();
   e.stopPropagation();
   var r = node.getBoundingClientRect();
@@ -1142,18 +1230,22 @@ function overItem(e, index, node) {
 }
 
 function overContainer(e) {
-  if (!S.dragId && !S.dragType) return;
+  if (!S.dragId && !S.dragType && !S.dragSection) return;
   e.preventDefault();
   if (S.dropIndex === null) setDropIndex(S.blocks.length);
 }
 
 async function performDrop(e) {
   if (e) e.preventDefault();
-  if (!S.dragId && !S.dragType) return;
+  if (!S.dragId && !S.dragType && !S.dragSection) return;
   var at = S.dropIndex == null ? S.blocks.length : S.dropIndex;
   var type = S.dragType;
   var id = S.dragId;
+  var section = S.dragSection;
   clearDrag();
+  if (section) {
+    return insertSection(section, at);
+  }
   if (type) {
     var block = await freshBlock(type);
     pushHistory();
@@ -1251,7 +1343,8 @@ function bindDragAndDrop() {
   el.edPalChips.addEventListener('dragstart', function (e) {
     var c = e.target.closest('.ed-chip');
     if (!c) return;
-    S.dragType = c.dataset.type;
+    S.dragType = c.dataset.type || null;
+    S.dragSection = c.dataset.section || null;
     S.dragId = null;
     if (e.dataTransfer) {
       e.dataTransfer.effectAllowed = 'copy';
@@ -1260,8 +1353,12 @@ function bindDragAndDrop() {
   });
   el.edPalChips.addEventListener('dragend', clearDrag);
   el.edPalChips.addEventListener('click', function (e) {
+    var x = e.target.closest('[data-del-section]');
+    if (x) { e.stopPropagation(); return deleteSection(x.dataset.delSection); }
     var c = e.target.closest('.ed-chip');
-    if (c) addBlock(c.dataset.type);
+    if (!c) return;
+    if (c.dataset.section) return insertSection(c.dataset.section, S.blocks.length);
+    addBlock(c.dataset.type);
   });
 
   // Keyboard reordering. HTML5 drag-and-drop is mouse-only and does not work on
@@ -1363,6 +1460,7 @@ function renderPublishPanel() {
         ? 'Scheduled for ' + esc(fmtWhen(S.publishAt))
         : (S.changes.length ? S.changes.length + ' unpublished change' + (S.changes.length === 1 ? '' : 's') : 'Everything is published')) + '</span>' +
       '<a class="ed-close" style="display:inline-block;text-align:center" href="https://timothystl.org/' + esc(S.slug) + '" target="_blank" rel="noopener">Compare with the live page ↗</a>' +
+      '<button type="button" class="ed-close" id="edSavePage">Save this whole page as a section</button>' +
     '</div>' +
     '<div class="ed-panel-sec"><label class="ed-lab" for="edWhen">Publish later</label>' +
       '<input class="ed-field" type="datetime-local" id="edWhen" value="' + esc(S.publishAtLocal || '') + '">' +
@@ -1423,6 +1521,7 @@ function bindPublish() {
       return schedulePublish(localToIso(v));
     }
     if (e.target.closest('#edUnschedule')) return schedulePublish(null);
+    if (e.target.closest('#edSavePage')) { closePublishPanel(); return saveSection(S.blocks, S.title); }
   });
   document.addEventListener('click', function (e) {
     if (!S.publishPanel) return;
@@ -1462,12 +1561,12 @@ function renderModal() {
   var title = isVideo ? 'Video library' : 'Photo library';
   var hint = isVideo
     ? 'Paste a YouTube link, or reuse a video already on the site.'
-    : 'Photos are cropped to fit whichever block you place them in. Up to 8MB each.';
+    : 'Photos are resized for the web as you add them — drop one straight off a phone.';
   var tiles = pickerItems().map(function (m) {
     var chosen = p.chosen.indexOf(m.url) > -1;
     var thumb = isVideo
       ? '<span class="ed-tile-th ed-tile-th--vid">▶</span>'
-      : '<span class="ed-tile-th" style="background-image:url(' + esc(m.url) + ')"></span>';
+      : '<span class="ed-tile-th" style="background-image:url(' + esc(m.thumb_url || m.url) + ')"></span>';
     return '<button type="button" class="ed-tile" data-pick="' + esc(m.url) + '" data-alt="' + esc(m.alt || '') + '"' +
       ' data-name="' + esc(m.filename) + '" aria-pressed="' + chosen + '">' + thumb +
       '<span class="ed-tile-n">' + esc(m.filename) + '</span>' +
@@ -1481,7 +1580,8 @@ function renderModal() {
       '<button type="button" class="ed-upload" id="edVidAdd">Add video</button>';
   } else if (p.staged) {
     // Alt text is required before a photo can join the library.
-    footer = '<span class="ed-dropzone" style="flex:0 0 auto;padding:10px 14px">' + esc(p.staged.filename) + '</span>' +
+    footer = '<span class="ed-dropzone" style="flex:0 0 auto;padding:10px 14px">' + esc(p.staged.filename) +
+      (p.staged.saved ? '<br><span class="ed-note">' + esc(p.staged.saved) + '</span>' : '') + '</span>' +
       '<input class="ed-field" id="edAltNew" placeholder="Describe this photo (required)" style="flex:1;min-width:220px" autofocus>' +
       '<button type="button" class="ed-upload" id="edStagedAdd">Add to library</button>';
   } else {
@@ -1509,13 +1609,101 @@ async function addMedia(payload) {
   return out.item;
 }
 
-async function uploadPhoto(file) {
+// ── resizing ───────────────────────────────────────────────────────────────
+// Photos come off a phone at 3-6MB and 4000px across. The widest a block ever
+// draws one is about 860px on a desktop, and the library grid needs a fraction
+// of that. Shrinking in the browser before upload keeps the originals off the
+// site altogether — no image service, no resize-on-read worker, and the office
+// can go on dragging photos straight out of the camera roll.
+var MAX_MAIN = 1600;   // enough for a full-bleed hero on a retina screen
+var MAX_THUMB = 400;   // the library grid and gallery tiles
+var QUALITY = 0.85;
+
+function readImage(file) {
+  if (window.createImageBitmap) return createImageBitmap(file);
+  return new Promise(function (resolve, reject) {
+    var img = new Image();
+    var url = URL.createObjectURL(file);
+    img.onload = function () { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('Could not read that image')); };
+    img.src = url;
+  });
+}
+
+function encode(canvas, type) {
+  return new Promise(function (resolve) {
+    if (!canvas.toBlob) return resolve(null);
+    canvas.toBlob(function (b) { resolve(b && b.type === type ? b : null); }, type, QUALITY);
+  });
+}
+
+// Returns a { blob, filename, width, height } or null when the original should
+// be used as-is.
+async function shrink(file, maxDim) {
+  // An animated GIF would come out of a canvas as a single frozen frame.
+  if (/gif$/i.test(file.type)) return null;
+  var src;
+  try { src = await readImage(file); } catch (_) { return null; }
+  var w = src.width, h = src.height;
+  if (!w || !h) return null;
+  var scale = Math.min(1, maxDim / Math.max(w, h));
+  var out = { w: Math.max(1, Math.round(w * scale)), h: Math.max(1, Math.round(h * scale)) };
+  var canvas = document.createElement('canvas');
+  canvas.width = out.w;
+  canvas.height = out.h;
+  var ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.drawImage(src, 0, 0, out.w, out.h);
+  if (src.close) src.close();
+
+  // WebP first: it is smaller than JPEG at the same quality and, unlike JPEG,
+  // it keeps transparency. A PNG logo flattened onto black would be a real
+  // regression, so if WebP is unavailable we leave a PNG alone rather than
+  // wreck it.
+  var blob = await encode(canvas, 'image/webp');
+  var ext = 'webp';
+  if (!blob) {
+    if (/png$/i.test(file.type)) return null;
+    blob = await encode(canvas, 'image/jpeg');
+    ext = 'jpg';
+  }
+  if (!blob) return null;
+  // Re-encoding a small, already-optimised image can make it bigger.
+  if (blob.size >= file.size && scale === 1) return null;
+  var base = (file.name || 'photo').replace(/\.[^.]+$/, '').slice(0, 60) || 'photo';
+  return { blob: blob, filename: base + '.' + ext, width: out.w, height: out.h };
+}
+
+async function postImage(blob, filename) {
   var fd = new FormData();
-  fd.append('file', file);
+  fd.append('file', blob, filename);
   var res = await fetch('/api/upload-image', { method: 'POST', body: fd, credentials: 'same-origin' });
   var j = await res.json().catch(function () { return {}; });
   if (!res.ok || !j.url) throw new Error(j.error || 'Upload failed');
-  return { url: j.url, filename: file.name || 'photo.jpg' };
+  return j.url;
+}
+
+function prettyBytes(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return Math.round(n / 1024) + ' KB';
+  return (n / 1048576).toFixed(1) + ' MB';
+}
+
+async function uploadPhoto(file) {
+  var main = await shrink(file, MAX_MAIN);
+  var url = await postImage(main ? main.blob : file, main ? main.filename : (file.name || 'photo.jpg'));
+  var thumbUrl = '';
+  try {
+    var thumb = await shrink(file, MAX_THUMB);
+    if (thumb) thumbUrl = await postImage(thumb.blob, thumb.filename.replace(/(\.[^.]+)$/, '-thumb$1'));
+  } catch (_) { /* the full-size image is enough on its own */ }
+  return {
+    url: url,
+    thumb_url: thumbUrl,
+    filename: file.name || 'photo.jpg',
+    meta: main ? main.width + '×' + main.height : 'Photo',
+    saved: main ? 'Resized ' + prettyBytes(file.size) + ' → ' + prettyBytes(main.blob.size) : '',
+  };
 }
 
 function applyMedia(url, alt, name) {
@@ -1570,7 +1758,8 @@ function bindPicker() {
       var alt = (el.edModal.querySelector('#edAltNew').value || '').trim();
       if (!alt) { S.picker.error = 'Please describe the photo — it is read aloud to people who cannot see it.'; return renderModal(); }
       try {
-        var item = await addMedia({ kind: 'photo', url: S.picker.staged.url, filename: S.picker.staged.filename, alt: alt, meta: 'Photo' });
+        var item = await addMedia({ kind: 'photo', url: S.picker.staged.url, thumb_url: S.picker.staged.thumb_url,
+          filename: S.picker.staged.filename, alt: alt, meta: S.picker.staged.meta || 'Photo' });
         if (S.picker.kind === 'gallery') { S.picker.staged = null; S.picker.error = ''; renderModal(); }
         else applyMedia(item.url, item.alt, item.filename);
       } catch (err) { S.picker.error = String(err.message || err); renderModal(); }
@@ -1622,6 +1811,7 @@ function bindPicker() {
 // Test seam: the browser tests assert that styleVars() produces byte-identical
 // output to wrapperVars() in admin/blocks.js. Pure function, no state.
 window.__edStyleVars = styleVars;
+window.__edShrink = shrink;
 
 // ── boot ───────────────────────────────────────────────────────────────────
 async function boot() {
@@ -1644,6 +1834,7 @@ async function boot() {
     setCanvas(data.html);
     setDevice('desktop');
     renderAll();
+    loadSections();
   } catch (err) {
     if (String(err && err.message) === 'auth') return;
     root.innerHTML = '<div class="ed-boot">Could not load this page — <a href="/ministries" style="color:#2E7EA6;margin-left:6px">back to Ministries</a></div>';

@@ -5,7 +5,7 @@
 // Last modified: 2026-03-27
 
 
-import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS } from './admin/db.js';
+import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS } from './admin/db.js';
 
 // Static pages that can carry self-serve notices (matches the SPA's page ids in public/index.html)
 const STATIC_PAGES = [
@@ -27,9 +27,10 @@ import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHt
 import { handleGymRoutes, sweepExpiredItems, extractImageKeys } from './admin/gym.js';
 import { migrateLegacyPage, starterBlocks, sanitizeBlocks, sanitizeBlock, parseBlocks, newBlock,
          renderPage, renderBlock, BLOCK_DEFS, BLOCK_TYPE_KEYS, GROUPS, BG, INK, SIZES, SPLITS, TONES,
-         STAMP_PRESETS, safeUrl, esc as escBlock, editorPhoneCss, blocksClientConfig } from './admin/blocks.js';
+         STAMP_PRESETS, safeUrl, esc as escBlock, editorPhoneCss, blocksClientConfig, makeBlockId } from './admin/blocks.js';
 import PAYROLL_HTML from './admin/payroll.html';
 import MINISTRY_EDITOR_HTML from './admin/ministry-editor.html';
+import { PAGE_SEEDS } from './admin/page-seeds.js';
 
 // Allowlist of site_settings keys readable via the public /api/settings/{key}
 // endpoint. Everything else returns 404 — keeps internal config (gym admin
@@ -510,7 +511,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-07-30-1'; // bumped: ministry page blocks (blocks/published_blocks/page_status/publish_at + media, revisions, legacy backfill)
+    const SCHEMA_VERSION = '2026-07-30-3'; // bumped: seed each ministry page's hardcoded sections into its draft (whole-page blocks)
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -890,6 +891,7 @@ export default {
     try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN change_log TEXT').run(); } catch (_) {}         // JSON, survives a reload
     try { await env.DB.prepare(DB_INIT_MINISTRY_MEDIA).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_MINISTRY_REVISIONS).run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_MINISTRY_SECTIONS).run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_ministry_revisions_slug ON ministry_page_revisions(slug, published_at DESC)').run(); } catch (_) {}
     // One-time backfill: wrap each page's legacy content into blocks so the
     // editor opens on the real page rather than an empty canvas, and the
@@ -907,6 +909,30 @@ export default {
         ).bind(migrated, migrated, lp.slug).run();
       }
     } catch (_) {}
+
+    // ── Whole-page blocks ──
+    // Each ministry page's hardcoded sections, converted to blocks by
+    // tools/extract-page-seeds.mjs, are seeded into the DRAFT so staff can take
+    // the whole page over in the editor instead of only the region near the
+    // bottom. Written to `blocks` only — never `published_blocks` — so the live
+    // page keeps rendering exactly as it does today until someone opens the
+    // editor, looks it over and presses Publish. Skipped for any page whose
+    // draft already leads with a hero, i.e. one that has already been taken over.
+    try {
+      for (const [seedSlug, seedBlocks] of Object.entries(PAGE_SEEDS)) {
+        const row = await env.DB.prepare('SELECT slug, blocks, published_blocks FROM youth_pages WHERE slug = ?').bind(seedSlug).first();
+        if (!row) continue;
+        const draft = sanitizeBlocks(parseBlocks(row.blocks));
+        if (draft.some((b) => b.type === 'hero')) continue;      // already taken over
+        const published = sanitizeBlocks(parseBlocks(row.published_blocks));
+        if (published.some((b) => b.type === 'hero')) continue;
+        // The page's existing admin-managed content still belongs to it: keep
+        // those blocks after the converted ones rather than dropping them.
+        const combined = sanitizeBlocks(sanitizeBlocks(seedBlocks).concat(draft));
+        await env.DB.prepare("UPDATE youth_pages SET blocks = ?, page_status = 'draft' WHERE slug = ?")
+          .bind(JSON.stringify(combined), seedSlug).run();
+      }
+    } catch (e) { console.error('Page seed failed:', e && e.message); }
 
     // Performance indexes
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)').run(); } catch (_) {}
@@ -3807,12 +3833,53 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
         // A church site should not ship inaccessible images. Videos carry their
         // own title on YouTube, so the requirement is photos only.
         if (kind === 'photo' && !alt) return jsonResponse({ error: 'Please describe the photo before adding it.' }, 400);
+        const thumbUrl = safeUrl(body.thumb_url).slice(0, 600);
         const filename = String(body.filename || url.split('/').pop() || 'upload').slice(0, 160);
         const meta = String(body.meta || '').slice(0, 80);
         const res = await env.DB.prepare(
           'INSERT INTO ministry_media (filename, kind, url, thumb_url, alt, meta, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-        ).bind(filename, kind, url, String(body.thumb_url || '').slice(0, 600), alt, meta, currentUser?.username || '', new Date().toISOString()).run();
-        return jsonResponse({ ok: true, item: { id: res.meta?.last_row_id || 0, filename, kind, url, thumb_url: body.thumb_url || '', alt, meta } });
+        ).bind(filename, kind, url, thumbUrl, alt, meta, currentUser?.username || '', new Date().toISOString()).run();
+        return jsonResponse({ ok: true, item: { id: res.meta?.last_row_id || 0, filename, kind, url, thumb_url: thumbUrl, alt, meta } });
+      }
+
+      // ── SAVED SECTIONS ──────────────────────────────────────────────────
+      if (path === '/ministries/api/sections' && method === 'GET') {
+        const rows = await env.DB.prepare(
+          'SELECT id, name, blocks, created_by FROM ministry_saved_sections ORDER BY name COLLATE NOCASE'
+        ).all();
+        return jsonResponse({
+          sections: (rows.results || []).map((r) => ({
+            id: r.id, name: r.name, created_by: r.created_by, count: parseBlocks(r.blocks).length,
+          })),
+        });
+      }
+
+      if (path === '/ministries/api/sections' && method === 'POST') {
+        const body = await request.json().catch(() => ({}));
+        const name = String(body.name || '').trim().slice(0, 60);
+        const blocks = sanitizeBlocks(body.blocks);
+        if (!name) return jsonResponse({ error: 'Give the section a name.' }, 400);
+        if (!blocks.length) return jsonResponse({ error: 'There is nothing to save.' }, 400);
+        const res = await env.DB.prepare(
+          'INSERT INTO ministry_saved_sections (name, blocks, created_by, created_at) VALUES (?, ?, ?, ?)'
+        ).bind(name, JSON.stringify(blocks), currentUser?.username || 'staff', new Date().toISOString()).run();
+        return jsonResponse({ ok: true, section: { id: res.meta?.last_row_id || 0, name, count: blocks.length } });
+      }
+
+      // The blocks of one section, with fresh ids so dropping the same section
+      // onto a page twice cannot collide with itself.
+      if (path.match(/^\/ministries\/api\/sections\/\d+$/) && method === 'GET') {
+        const id = Number(path.split('/').pop());
+        const row = await env.DB.prepare('SELECT blocks FROM ministry_saved_sections WHERE id = ?').bind(id).first();
+        if (!row) return jsonResponse({ error: 'Not found' }, 404);
+        const blocks = sanitizeBlocks(parseBlocks(row.blocks)).map((b) => Object.assign({}, b, { id: makeBlockId() }));
+        return jsonResponse({ blocks });
+      }
+
+      if (path.match(/^\/ministries\/api\/sections\/\d+\/delete$/) && method === 'POST') {
+        const id = Number(path.split('/')[4]);
+        await env.DB.prepare('DELETE FROM ministry_saved_sections WHERE id = ?').bind(id).run();
+        return jsonResponse({ ok: true });
       }
 
       // A fresh block of a given type, straight from the server's own defaults,

@@ -82,6 +82,16 @@ export const DB_INIT_MINISTRY_REVISIONS = `CREATE TABLE IF NOT EXISTS ministry_p
   published_by TEXT
 )`;
 
+// Reusable block groups. The office saves a bit they use on several ministry
+// pages ("Contact the office") once and drops it in from the palette after.
+export const DB_INIT_MINISTRY_SECTIONS = `CREATE TABLE IF NOT EXISTS ministry_saved_sections (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  blocks TEXT NOT NULL,
+  created_by TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+)`;
+
 export const DB_INIT_VOTERS_PAGE = `CREATE TABLE IF NOT EXISTS voters_page (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   meeting_info TEXT,

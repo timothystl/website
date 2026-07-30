@@ -108,7 +108,7 @@ await page.setViewportSize({ width: 1440, height: 900 });
 await page.waitForTimeout(250);
 
 group('palette');
-eq(await page.locator('.ed-pal-tab').count(), 4, 'four palette groups');
+eq(await page.locator('.ed-pal-tab').count(), 5, 'four block groups plus Saved');
 eq(await page.locator('.ed-pal-tab[aria-pressed="true"]').textContent(), 'Content', 'Content group active by default');
 eq(await page.locator('.ed-chip').count(), 7, 'Content group shows its seven blocks');
 await page.click('.ed-pal-tab[data-group="Dates"]');

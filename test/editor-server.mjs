@@ -11,8 +11,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   renderPage, sanitizeBlocks, parseBlocks, blocksClientConfig, editorPhoneCss,
-  migrateLegacyPage, starterBlocks, newBlock,
+  migrateLegacyPage, starterBlocks, newBlock, makeBlockId,
 } from '../admin/blocks.js';
+import { PAGE_SEEDS } from '../admin/page-seeds.js';
+export { PAGE_SEEDS };
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const EDITOR_HTML = fs.readFileSync(path.join(HERE, '..', 'admin', 'ministry-editor.html'), 'utf8');
@@ -25,8 +27,10 @@ export function createEditorServer(seed = {}) {
     { id: 3, filename: 'Choir at Advent Vespers', kind: 'video', url: 'https://youtu.be/dQw4w9WgXcQ', thumb_url: '', alt: '', meta: 'YouTube · 4:12' },
   ];
   let mediaSeq = media.length;
-  let uploads = 0;
+  const uploads = [];
   const revisions = [];
+  const sections = [];
+  let sectionSeq = 0;
 
   const seedPages = seed.pages || [{ slug: 'music', title: 'Music Ministry', blocks: migrateLegacyPage({
     slug: 'music', title: 'Music Ministry',
@@ -172,6 +176,34 @@ export function createEditorServer(seed = {}) {
       return json(res, { promoted });
     }
 
+    if (p === '/ministries/api/sections' && req.method === 'GET') {
+      return json(res, { sections: sections.map((x) => ({ id: x.id, name: x.name, created_by: x.created_by, count: parseBlocks(x.blocks).length })) });
+    }
+    if (p === '/ministries/api/sections' && req.method === 'POST') {
+      const body = await readBody(req);
+      const name = String(body.name || '').trim().slice(0, 60);
+      const blocks = sanitizeBlocks(body.blocks);
+      if (!name) return json(res, { error: 'Give the section a name.' }, 400);
+      if (!blocks.length) return json(res, { error: 'There is nothing to save.' }, 400);
+      const row = { id: ++sectionSeq, name, blocks: JSON.stringify(blocks), created_by: 'test' };
+      sections.push(row);
+      sections.sort((a, b) => a.name.localeCompare(b.name));
+      return json(res, { ok: true, section: { id: row.id, name, count: blocks.length } });
+    }
+    if (/^\/ministries\/api\/sections\/\d+$/.test(p) && req.method === 'GET') {
+      const row = sections.find((x) => x.id === Number(p.split('/').pop()));
+      if (!row) return json(res, { error: 'Not found' }, 404);
+      // fresh ids, so the same section can be dropped twice without colliding
+      const blocks = sanitizeBlocks(parseBlocks(row.blocks)).map((b) => ({ ...b, id: makeBlockId() }));
+      return json(res, { blocks });
+    }
+    if (/^\/ministries\/api\/sections\/\d+\/delete$/.test(p) && req.method === 'POST') {
+      const id = Number(p.split('/')[4]);
+      const at = sections.findIndex((x) => x.id === id);
+      if (at > -1) sections.splice(at, 1);
+      return json(res, { ok: true });
+    }
+
     if (p === '/ministries/api/media' && req.method === 'GET') return json(res, { media });
     if (p === '/ministries/api/media' && req.method === 'POST') {
       const body = await readBody(req);
@@ -179,15 +211,19 @@ export function createEditorServer(seed = {}) {
       const alt = String(body.alt || '').trim();
       if (kind === 'photo' && !alt) return json(res, { error: 'Please describe the photo before adding it.' }, 400);
       const row = { id: ++mediaSeq, filename: String(body.filename || 'upload.jpg'), kind,
-        url: String(body.url || ''), thumb_url: '', alt, meta: String(body.meta || '') };
+        url: String(body.url || ''), thumb_url: String(body.thumb_url || ''), alt, meta: String(body.meta || '') };
       media.unshift(row);
       return json(res, { ok: true, item: row });
     }
 
-    // Stand-in for the Worker's R2 upload endpoint.
+    // Stand-in for the Worker's R2 upload endpoint. Records what it actually
+    // received so the tests can prove the browser shrank the file first.
     if (p === '/api/upload-image' && req.method === 'POST') {
-      uploads += 1;
-      const url = '/images/uploaded-' + uploads + '.jpg';
+      const chunks = [];
+      await new Promise((resolve) => { req.on('data', (c) => chunks.push(c)); req.on('end', resolve); });
+      const body = Buffer.concat(chunks);
+      uploads.push({ bytes: body.length, isWebp: body.includes(Buffer.from('WEBP')) });
+      const url = '/images/uploaded-' + uploads.length + '.webp';
       return json(res, { url, location: url });
     }
 
@@ -195,5 +231,5 @@ export function createEditorServer(seed = {}) {
     res.end('Not found');
   });
 
-  return { server, pages, media, revisions };
+  return { server, pages, media, revisions, uploads, sections };
 }

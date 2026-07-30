@@ -265,21 +265,41 @@ anywhere — that is the one thing this design exists to prevent.
   that, so drift is caught rather than shipped.
 - **Scheduling** needs the cron trigger in `wrangler.toml` (`*/15 * * * *` →
   `promoteScheduledPages()`). Removing that trigger silently breaks "publish later".
-- **Rollout** — pages were migrated into blocks automatically by a one-time
-  backfill, and the public site only stands down a legacy region (CTA bar, Music
-  video grid, post accordions) when the blocks actually contain an equivalent
-  block. Start with Music Ministry, let the office use it, then migrate the rest by
-  moving banner/video/CTA content into blocks page by page.
-- **Not done**: server-side image resizing into hero/inline/thumb variants (needs
-  Cloudflare Images or a resize-on-read worker) and "saved sections" (reusable
-  block groups across pages).
+- **Whole-page blocks (2026-07-30)** — a page whose blocks *lead with a hero*
+  is rendered entirely from blocks: `tlcMaybeTakeOver()` in `public/index.html`
+  hides every hardcoded section in that page div and drops the blocks in at full
+  width (`.tlcb-page--full`). Any other page keeps its hardcoded sections and
+  blocks fill only the content region, as before. That one signal — first block
+  is a hero — is the whole switch; there is no separate flag to fall out of sync.
+  `tools/extract-page-seeds.mjs` converted each hardcoded ministry page into
+  blocks (`admin/page-seeds.js`, generated — do not hand-edit); the Worker seeds
+  those into each page's **draft** only, so the live page is unchanged until
+  staff open the editor and press Publish.
+- **Takeover is decided in one place.** Ministry pages are loaded by three
+  different functions (`loadMinistryPage`, `loadYouthPage`, `loadMinistryCta`).
+  `tlcMaybeTakeOver()` runs before all of them; the legacy loader only runs if it
+  returns false. Adding a fourth loader without routing it through there would
+  silently leave that page un-takeover-able.
+- **Rollout** — start with Music Ministry, let the office use it, then publish the
+  rest page by page. Once a page has been published from the editor its hardcoded
+  markup in `public/index.html` is dead and can be deleted.
+- **Images** are resized in the *browser* before upload (1600px + a 400px
+  thumbnail, WebP where available) — see `shrink()` in `admin/ministry-editor.html`.
+  No Cloudflare Images dependency. Animated GIFs are passed through untouched and
+  PNGs are left alone when WebP is unavailable, so transparency is never
+  flattened.
+- **Saved sections** (`ministry_saved_sections`) let the office keep a block, or a
+  whole page, as a reusable named section and drop it in from the palette's
+  "Saved" group. Inserted copies get fresh block ids and no live link back.
 
 **Tests** — `node admin/blocks.test.mjs` (renderer, guardrails, sanitising,
 migration) plus browser suites in `test/` driven by Playwright against
 `test/editor-server.mjs`, a local stand-in for the Worker:
 `editor` (shell), `editor-edit` (inspector + typing), `editor-dnd` (reordering),
-`editor-media`, `editor-publish`, and `public-page` (the live site). Run any with
-`node <path>`. Chromium is at `/opt/pw-browsers/chromium`.
+`editor-media`, `editor-resize`, `editor-sections`, `editor-publish`,
+`public-page` (the live site), `whole-page` (takeover + the generated seeds) and
+`ministries-list`. Run any with `node <path>`. Chromium is at
+`/opt/pw-browsers/chromium`.
 
 ### News & Events Data Model
 ```sql
@@ -483,8 +503,8 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 - **links.timothystl.org "Volunteer" card still points at the old host** — the live `link_cards` D1 row (managed via the Links tab) was seeded long before this rebrand and still has `https://volunteer.timothystl.org` as its URL; the code-level seed constant was updated but that only affects a table that's empty on first run, not an already-populated one. Needs a manual edit via the Links tab: update the URL to `https://serve.timothystl.org` (and optionally rename the title to "Serve").
 - **`/confirmation`, `/sundayschool`, `/vbs`, `/egghunt`, `/family`** — Youth sub-pages. Admin portal has the youth_pages table, but these slugs need content entered by the youth director.
 - **Christmas Market annual content** — Page structure is built. Needs dates, description, photos, and Google Form link for vendors entered via the admin Ministries tab each year.
-- **Ministry page editor rollout** — every page was migrated into blocks automatically, but only the content region. Moving each page's banner, video grid and CTA buttons into blocks (and clearing the legacy columns once done) is a page-by-page job for the office, starting with Music Ministry.
-- **Ministry photo resizing** — uploads go to R2 at full size; there is no hero/inline/thumb variant generation. Needs Cloudflare Images or a resize-on-read worker. Straight-off-the-phone photos are up to 8MB.
+- **Ministry page editor rollout** — every ministry page now has a full-page block draft waiting in the editor (banner and all sections). The office reviews each one and presses Publish; until then the live page renders from its hardcoded markup exactly as before. Once a page is published from the editor, its hardcoded section markup in `public/index.html` is dead and can be deleted.
+- **Music page video strip** — the three fallback video cards on `/music` were not converted (they need real YouTube URLs). Add Video blocks in the editor, or drop them.
 - **Sermons page** — YouTube embed page exists; confirm it's pulling the correct channel or that it's manually maintained.
 
 ### Pinned / Low Priority
