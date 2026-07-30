@@ -368,6 +368,58 @@ export function parseBlocks(json) {
   } catch (_) { return []; }
 }
 
+// ── LEGACY MIGRATION ─────────────────────────────────────────────────────────
+// Turns a pre-blocks youth_pages row into an equivalent block list so nothing
+// staff wrote is lost. The legacy columns are deliberately left in place: they
+// are the rollback path until every page has been published from the new
+// editor at least once.
+
+// Deliberately does NOT emit a hero block from hero_image_url. On this site the
+// public ministry page is an SPA view whose banner is part of the page frame,
+// driven by hero_image_url; blocks render into the content region below it. A
+// migrated hero block would draw a *second* banner under the real one, which
+// breaks the "looks the same as before" bar Phase 1 has to clear. Staff can add
+// a hero block deliberately if they want one mid-page.
+export function migrateLegacyPage(row) {
+  const blocks = [];
+  const push = (type, over) => { const b = newBlock(type, over); if (b) blocks.push(b); };
+
+  const content = (row.content || '').trim();
+  if (content && row.ministry_image_url) {
+    // The one legacy layout that was genuinely two-column: body text with the
+    // ministry photo alongside it (the Music page).
+    push('textphoto', { body: content, photo: row.ministry_image_url, photoAlt: row.title || '', side: 'right', split: '40' });
+  } else if (content) {
+    push('text', { body: content });
+  } else if (row.ministry_image_url) {
+    push('textphoto', { body: '', photo: row.ministry_image_url, photoAlt: row.title || '', side: 'above' });
+  }
+
+  for (const i of [1, 2, 3]) {
+    const url = row['vid_' + i + '_url'];
+    if (url) push('video', { title: row['vid_' + i + '_title'] || 'Watch', video: url });
+  }
+
+  const buttons = [];
+  if (row.cta_label && row.cta_url) buttons.push({ title: row.cta_label, url: row.cta_url });
+  if (row.cta_label_2 && row.cta_url_2) buttons.push({ title: row.cta_label_2, url: row.cta_url_2 });
+  if (buttons.length) push('buttons', { items: buttons });
+
+  if (row.has_posts) push('posts', { title: 'From this ministry' });
+
+  return sanitizeBlocks(blocks);
+}
+
+// A brand-new page starts from three sensible blocks rather than a blank
+// canvas — an empty page is intimidating, three blocks are not.
+export function starterBlocks(title) {
+  return sanitizeBlocks([
+    newBlock('hero', { title: title || 'Ministry name', body: 'Ministry' }),
+    newBlock('text', { body: '<p>Tell people what this ministry is and who it is for.</p>' }),
+    newBlock('buttons', { items: [{ title: 'Contact the office', url: 'mailto:office@timothystl.org' }] }),
+  ]);
+}
+
 // ── STYLESHEET ───────────────────────────────────────────────────────────────
 // Shipped once per page (renderPage prepends it). Class-prefixed `tlcb-` so it
 // cannot collide with the public site's own stylesheet or the admin shell.

@@ -5,7 +5,7 @@
 // Last modified: 2026-03-27
 
 
-import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS } from './admin/db.js';
+import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS } from './admin/db.js';
 
 // Static pages that can carry self-serve notices (matches the SPA's page ids in public/index.html)
 const STATIC_PAGES = [
@@ -25,6 +25,9 @@ import { html, sidebarShell, loginPage, setupPage, forgotPasswordPage, resetPass
 import { hashPassword, verifyPassword, createSession, getSession, deleteSession, sessionCookieHeader, clearSessionCookieHeader, logAudit, hasPermission, ALL_PERMISSIONS, PERMISSIONS } from './admin/auth.js';
 import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHtml, cancelBrevoCampaign } from './admin/email.js';
 import { handleGymRoutes, sweepExpiredItems, extractImageKeys } from './admin/gym.js';
+import { migrateLegacyPage, starterBlocks, sanitizeBlocks, sanitizeBlock, parseBlocks, newBlock,
+         renderPage, renderBlock, BLOCK_DEFS, BLOCK_TYPE_KEYS, GROUPS, BG, INK, SIZES, SPLITS, TONES,
+         STAMP_PRESETS, safeUrl, esc as escBlock } from './admin/blocks.js';
 import PAYROLL_HTML from './admin/payroll.html';
 
 // Allowlist of site_settings keys readable via the public /api/settings/{key}
@@ -462,7 +465,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-07-27-5'; // bumped: backfill real Tithe.ly fund IDs (GIVE_FUND_TITHELY_ID_SEED)
+    const SCHEMA_VERSION = '2026-07-30-1'; // bumped: ministry page blocks (blocks/published_blocks/page_status/publish_at + media, revisions, legacy backfill)
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -831,6 +834,35 @@ export default {
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN scheduled_send_at TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN scheduled_list_type TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN brevo_campaign_id TEXT').run(); } catch (_) {}
+    // ── Ministry page blocks (block-based page editor) ──
+    // The legacy content/hero/video/CTA columns stay exactly where they are —
+    // they are the rollback path until every page has been published from the
+    // new editor at least once.
+    try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN blocks TEXT').run(); } catch (_) {}            // JSON working draft
+    try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN published_blocks TEXT').run(); } catch (_) {}   // JSON the public site renders
+    try { await env.DB.prepare("ALTER TABLE youth_pages ADD COLUMN page_status TEXT DEFAULT 'live'").run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN publish_at TEXT').run(); } catch (_) {}         // ISO8601 or NULL
+    try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN change_log TEXT').run(); } catch (_) {}         // JSON, survives a reload
+    try { await env.DB.prepare(DB_INIT_MINISTRY_MEDIA).run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_MINISTRY_REVISIONS).run(); } catch (_) {}
+    try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_ministry_revisions_slug ON ministry_page_revisions(slug, published_at DESC)').run(); } catch (_) {}
+    // One-time backfill: wrap each page's legacy content into blocks so the
+    // editor opens on the real page rather than an empty canvas, and the
+    // public site keeps rendering exactly what it rendered before. Only pages
+    // that have never been converted are touched.
+    try {
+      const legacyPages = await env.DB.prepare(
+        'SELECT slug, title, content, has_posts, cta_label, cta_url, cta_label_2, cta_url_2, hero_image_url, ministry_image_url, ' +
+        'vid_1_url, vid_1_title, vid_2_url, vid_2_title, vid_3_url, vid_3_title FROM youth_pages WHERE blocks IS NULL'
+      ).all();
+      for (const lp of legacyPages.results || []) {
+        const migrated = JSON.stringify(migrateLegacyPage(lp));
+        await env.DB.prepare(
+          "UPDATE youth_pages SET blocks = ?, published_blocks = ?, page_status = COALESCE(page_status, 'live') WHERE slug = ? AND blocks IS NULL"
+        ).bind(migrated, migrated, lp.slug).run();
+      }
+    } catch (_) {}
+
     // Performance indexes
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)').run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_news_items_publish_date ON news_items(publish_date)').run(); } catch (_) {}
@@ -907,10 +939,19 @@ export default {
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
         });
       }
-      const row = await env.DB.prepare('SELECT slug, title, content, has_posts, cta_label, cta_url, cta_label_2, cta_url_2, hero_image_url, ministry_image_url, vid_1_url, vid_1_title, vid_2_url, vid_2_title, vid_3_url, vid_3_title, updated_at FROM youth_pages WHERE slug = ?').bind(slug).first();
+      const row = await env.DB.prepare('SELECT slug, title, content, has_posts, cta_label, cta_url, cta_label_2, cta_url_2, hero_image_url, ministry_image_url, vid_1_url, vid_1_title, vid_2_url, vid_2_title, vid_3_url, vid_3_title, updated_at, published_blocks, page_status FROM youth_pages WHERE slug = ?').bind(slug).first();
       if (!row) return new Response('Not found', { status: 404 });
       const fixUrl = s => s ? s.replace(/src="\/images\//g, 'src="https://admin.timothystl.org/images/') : s;
-      return new Response(JSON.stringify({ ...row, content: fixUrl(row.content) }), {
+      // Block-rendered pages: hand the public site finished HTML from the very
+      // same templates the editor canvas draws, so what staff saw is what
+      // visitors get. Pages still on the legacy renderer send no blocks_html
+      // and the site falls back to `content` exactly as before.
+      const pubBlocks = row.page_status === 'hidden' ? [] : parseBlocks(row.published_blocks);
+      const blocksHtml = pubBlocks.length
+        ? fixUrl(renderPage(sanitizeBlocks(pubBlocks), { slug }))
+        : '';
+      const { published_blocks, ...publicRow } = row;
+      return new Response(JSON.stringify({ ...publicRow, content: fixUrl(row.content), blocks_html: blocksHtml }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
       });
     }
