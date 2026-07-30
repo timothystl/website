@@ -30,6 +30,7 @@ import { migrateLegacyPage, starterBlocks, sanitizeBlocks, sanitizeBlock, parseB
          STAMP_PRESETS, safeUrl, esc as escBlock, editorPhoneCss, blocksClientConfig, makeBlockId } from './admin/blocks.js';
 import PAYROLL_HTML from './admin/payroll.html';
 import MINISTRY_EDITOR_HTML from './admin/ministry-editor.html';
+import { PAGE_SEEDS } from './admin/page-seeds.js';
 
 // Allowlist of site_settings keys readable via the public /api/settings/{key}
 // endpoint. Everything else returns 404 — keeps internal config (gym admin
@@ -510,7 +511,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-07-30-2'; // bumped: ministry_saved_sections (reusable block groups)
+    const SCHEMA_VERSION = '2026-07-30-3'; // bumped: seed each ministry page's hardcoded sections into its draft (whole-page blocks)
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -908,6 +909,30 @@ export default {
         ).bind(migrated, migrated, lp.slug).run();
       }
     } catch (_) {}
+
+    // ── Whole-page blocks ──
+    // Each ministry page's hardcoded sections, converted to blocks by
+    // tools/extract-page-seeds.mjs, are seeded into the DRAFT so staff can take
+    // the whole page over in the editor instead of only the region near the
+    // bottom. Written to `blocks` only — never `published_blocks` — so the live
+    // page keeps rendering exactly as it does today until someone opens the
+    // editor, looks it over and presses Publish. Skipped for any page whose
+    // draft already leads with a hero, i.e. one that has already been taken over.
+    try {
+      for (const [seedSlug, seedBlocks] of Object.entries(PAGE_SEEDS)) {
+        const row = await env.DB.prepare('SELECT slug, blocks, published_blocks FROM youth_pages WHERE slug = ?').bind(seedSlug).first();
+        if (!row) continue;
+        const draft = sanitizeBlocks(parseBlocks(row.blocks));
+        if (draft.some((b) => b.type === 'hero')) continue;      // already taken over
+        const published = sanitizeBlocks(parseBlocks(row.published_blocks));
+        if (published.some((b) => b.type === 'hero')) continue;
+        // The page's existing admin-managed content still belongs to it: keep
+        // those blocks after the converted ones rather than dropping them.
+        const combined = sanitizeBlocks(sanitizeBlocks(seedBlocks).concat(draft));
+        await env.DB.prepare("UPDATE youth_pages SET blocks = ?, page_status = 'draft' WHERE slug = ?")
+          .bind(JSON.stringify(combined), seedSlug).run();
+      }
+    } catch (e) { console.error('Page seed failed:', e && e.message); }
 
     // Performance indexes
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)').run(); } catch (_) {}

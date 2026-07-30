@@ -78,6 +78,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
 .ed-paper{background:#FBF8F3;border-radius:10px;box-shadow:0 6px 30px rgba(30,45,74,.14);padding:18px;margin:0 auto;
   flex:0 0 auto;min-height:420px;width:860px;transition:width .18s ease;}
 .ed-paper .tlcb-page{--tlcb-pad:34px;}
+.ed-paper .tlcb-page--full{--tlcb-wrap:100%;}
 .ed-paper--phone .tlcb-page{--tlcb-pad:18px;}
 /* Selection + per-block editor controls, layered over the shared block markup */
 .ed-paper .tlcb{cursor:pointer;}
@@ -522,6 +523,10 @@ async function refreshCanvas() {
 function setCanvas(html) {
   if (window.tinymce) { try { window.tinymce.remove(); } catch (_) {} }
   el.edPaper.innerHTML = html;
+  // A page whose blocks lead with a hero owns the whole page on the public
+  // site, and the canvas has to preview it the same way or the WYSIWYG lies.
+  var pageDiv = el.edPaper.querySelector('.tlcb-page');
+  if (pageDiv) pageDiv.classList.toggle('tlcb-page--full', !!(S.blocks[0] && S.blocks[0].type === 'hero'));
   applySelection();
   fitPaper();
   initRichText();
@@ -612,8 +617,8 @@ function styleVars(b) {
     '--tlcb-gap:' + b.gap + 'px',
     '--tlcb-height:' + b.height + 'px',
     '--tlcb-media-order:' + (b.side === 'right' ? 2 : 0),
-    'margin-top:' + b.spaceAbove + 'px',
-    'margin-bottom:' + b.spaceBelow + 'px',
+    '--tlcb-space-above:' + b.spaceAbove + 'px',
+    '--tlcb-space-below:' + b.spaceBelow + 'px',
   ];
   if (b.type === 'textphoto') v.push('--tlcb-cols:' + cols);
   if (b.type === 'columns') v.push('--tlcb-cols:repeat(' + b.cols + ',1fr)');

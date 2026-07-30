@@ -13,6 +13,8 @@ import {
   renderPage, sanitizeBlocks, parseBlocks, blocksClientConfig, editorPhoneCss,
   migrateLegacyPage, starterBlocks, newBlock, makeBlockId,
 } from '../admin/blocks.js';
+import { PAGE_SEEDS } from '../admin/page-seeds.js';
+export { PAGE_SEEDS };
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const EDITOR_HTML = fs.readFileSync(path.join(HERE, '..', 'admin', 'ministry-editor.html'), 'utf8');

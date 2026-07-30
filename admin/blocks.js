@@ -37,9 +37,9 @@ export const INK = [
 ];
 
 export const SIZES = [
-  { key: 's', label: 'S', body: 14, head: 19, hero: 30 },
-  { key: 'm', label: 'M', body: 15, head: 22, hero: 38 },
-  { key: 'l', label: 'L', body: 17, head: 26, hero: 46 },
+  { key: 's', label: 'S', body: 14, head: 24, hero: 30 },
+  { key: 'm', label: 'M', body: 15, head: 30, hero: 38 },
+  { key: 'l', label: 'L', body: 17, head: 36, hero: 46 },
 ];
 
 export const SPLITS = [
@@ -70,8 +70,8 @@ export const snapSpace = (v) => Math.max(0, Math.min(SPACE_MAX, Math.round((Numb
 export const BLOCK_DEFS = {
   hero: {
     label: 'Hero banner', glyph: '▣', group: 'Structure',
-    defaults: { title: 'Ministry name', body: 'Ministry', spaceAbove: 0, spaceBelow: 24 },
-    photo: true,
+    defaults: { title: 'Ministry name', eyebrow: 'Ministry', subtitle: 'One line about this ministry.', spaceAbove: 0, spaceBelow: 0 },
+    photo: true, subtitle: true, banner: true,
   },
   text: {
     label: 'Rich text', glyph: '¶', group: 'Content',
@@ -211,7 +211,9 @@ export function safeUrl(u) {
 
 const RICH_TAGS = new Set(['p', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'ul', 'ol', 'li',
   'a', 'h2', 'h3', 'h4', 'blockquote', 'span', 'div', 'img', 'hr', 'sup', 'sub']);
-const RICH_ATTRS = { a: ['href', 'target', 'rel'], img: ['src', 'alt', 'width', 'height'] };
+// `rel` is deliberately NOT allowed through: it is re-added below, once. Letting
+// the incoming one survive as well made every sanitise pass append another copy.
+const RICH_ATTRS = { a: ['href', 'target'], img: ['src', 'alt', 'width', 'height'] };
 const RICH_VOID = new Set(['br', 'img', 'hr']);
 const RICH_DROP_WITH_CONTENT = /<(script|style|iframe|object|embed|form|link|meta|base|svg|math)\b[\s\S]*?(<\/\1\s*>|$)/gi;
 
@@ -270,6 +272,8 @@ export function newBlock(type, over = {}) {
     id: makeBlockId(),
     type,
     title: d.title || '',
+    subtitle: d.subtitle || '',
+    eyebrow: d.eyebrow || '',
     body: d.body || '',
     url: d.url || '',
     spaceAbove: d.spaceAbove == null ? 24 : d.spaceAbove,
@@ -304,6 +308,8 @@ export function sanitizeBlock(b) {
     id: cleanText(b.id, 32) || makeBlockId(),
     type: b.type,
     title: cleanText(b.title, 200),
+    subtitle: cleanText(b.subtitle, 300),
+    eyebrow: cleanText(b.eyebrow, 80),
     body: richBody ? sanitizeRich(b.body) : cleanText(b.body, 600),
     url: safeUrl(b.url).slice(0, 600),
     spaceAbove: snapSpace(b.spaceAbove),
@@ -427,15 +433,37 @@ export function starterBlocks(title) {
 // cannot collide with the public site's own stylesheet or the admin shell.
 
 export const BLOCK_CSS = `<style id="tlcb-css">
+/* Whole-page mode: the blocks are the page, so each one is centred at the
+   site's own content width while the banner runs edge to edge. */
+.tlcb-page--full{--tlcb-wrap:1100px;}
+/* Backgrounds run edge to edge like the site's own sections, while the content
+   inside stays centred at the site's content width. */
+.tlcb-page--full > .tlcb{max-width:none;border-radius:0;margin:0;
+  padding-top:calc(14px + var(--tlcb-space-above,0px));
+  padding-bottom:calc(14px + var(--tlcb-space-below,0px));
+  padding-left:max(var(--tlcb-pad), calc((100% - var(--tlcb-wrap)) / 2));
+  padding-right:max(var(--tlcb-pad), calc((100% - var(--tlcb-wrap)) / 2));}
+.tlcb-page--full > .tlcb--hero{padding:0;}
+.tlcb-page--full > .tlcb--hero .tlcb-hero{border-radius:0;}
 .tlcb-page{--tlcb-pad:24px;font-family:'Source Sans 3',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
 .tlcb{position:relative;border-radius:10px;background:var(--tlcb-bg,#FBF8F3);color:var(--tlcb-ink,#3A3A4A);
-  padding:14px var(--tlcb-pad);border:2px solid transparent;}
+  padding:14px var(--tlcb-pad);border:2px solid transparent;
+  margin-top:var(--tlcb-space-above,0px);margin-bottom:var(--tlcb-space-below,0px);}
 .tlcb--hero{padding:0;}
 .tlcb--spacer{padding:0 var(--tlcb-pad);}
 .tlcb *{box-sizing:border-box;}
-.tlcb-head{font-family:Lora,Georgia,serif;font-weight:500;line-height:1.25;margin:0;
+.tlcb-eyebrow{font:700 11px/1.4 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;
+  color:#C9973A;margin-bottom:8px;}
+.tlcb-head{font-family:Lora,Georgia,serif;font-weight:700;line-height:1.2;margin:0;
   font-size:var(--tlcb-head,22px);color:var(--tlcb-head-ink,#1E2D4A);}
 .tlcb-prose{font-size:var(--tlcb-body,15px);line-height:1.75;color:var(--tlcb-ink,#3A3A4A);text-wrap:pretty;}
+.tlcb-prose h2{font-family:Lora,Georgia,serif;font-weight:700;line-height:1.2;margin:0 0 16px;
+  font-size:var(--tlcb-head,30px);color:var(--tlcb-head-ink,#1E2D4A);}
+.tlcb-prose h3{font-family:Lora,Georgia,serif;font-weight:700;line-height:1.25;margin:0 0 12px;
+  font-size:calc(var(--tlcb-head,30px) * .72);color:var(--tlcb-head-ink,#1E2D4A);}
+.tlcb-prose h4{font:600 calc(var(--tlcb-body,15px) * 1.15)/1.35 'Source Sans 3',sans-serif;margin:0 0 8px;
+  color:var(--tlcb-head-ink,#1E2D4A);}
+.tlcb-prose blockquote{margin:0 0 .8em;padding-left:16px;border-left:3px solid #C9973A;color:#4A4860;}
 .tlcb-prose > :first-child{margin-top:0;}
 .tlcb-prose > :last-child{margin-bottom:0;}
 .tlcb-prose p{margin:0 0 .8em;}
@@ -448,11 +476,16 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-media{order:var(--tlcb-media-order,0);min-height:150px;border-radius:8px;background:#E4EAF2 center/cover no-repeat;
   display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;}
 .tlcb-media img{width:100%;height:100%;object-fit:cover;display:block;border-radius:8px;}
-.tlcb-hero{border-radius:8px;min-height:196px;padding:22px var(--tlcb-pad);display:flex;flex-direction:column;
-  justify-content:flex-end;background:linear-gradient(180deg,rgba(30,45,74,.12),rgba(30,45,74,.72)),var(--tlcb-hero-img,linear-gradient(135deg,#43536F,#1E2D4A));
-  background-size:cover;background-position:center;position:relative;}
-.tlcb-hero-eyebrow{font:600 11px/1 'Source Sans 3',sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#E8C070;}
-.tlcb-hero-title{font-family:Lora,Georgia,serif;font-weight:500;font-size:var(--tlcb-hero,38px);line-height:1.1;color:#FBF8F3;margin:8px 0 0;}
+/* Matches .page-hero in public/styles.css — this is the page banner, so it has
+   to be the same thing whether the page draws it or a block does. */
+.tlcb-hero{border-radius:8px;padding:56px 28px;text-align:center;position:relative;
+  background:#1E2D4A var(--tlcb-hero-img,none) center/cover;}
+.tlcb-hero::before{content:'';position:absolute;inset:0;border-radius:inherit;
+  background:linear-gradient(135deg,rgba(30,45,74,.82),rgba(17,30,50,.92));opacity:var(--tlcb-hero-veil,0);}
+.tlcb-hero > *{position:relative;z-index:1;}
+.tlcb-hero-eyebrow{font:700 11px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#E8C070;margin-bottom:8px;}
+.tlcb-hero-title{font-family:Lora,Georgia,serif;font-weight:700;font-size:var(--tlcb-hero,38px);line-height:1.15;color:#fff;margin:0;}
+.tlcb-hero-sub{font-size:17px;color:rgba(255,255,255,.72);max-width:600px;margin:12px auto 0;font-weight:300;line-height:1.5;}
 .tlcb-embed{position:relative;aspect-ratio:16/9;border-radius:8px;overflow:hidden;background:#1E2D4A;}
 .tlcb-embed iframe{position:absolute;inset:0;width:100%;height:100%;border:0;}
 .tlcb-embed-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#FBF8F3;font-size:30px;}
@@ -595,12 +628,19 @@ function wrapperVars(b) {
     '--tlcb-gap:' + b.gap + 'px',
     '--tlcb-height:' + b.height + 'px',
     '--tlcb-media-order:' + (b.side === 'right' ? 2 : 0),
-    'margin-top:' + b.spaceAbove + 'px',
-    'margin-bottom:' + b.spaceBelow + 'px',
+    // Spacing is a custom property rather than an inline margin so whole-page
+    // mode can spend it as padding instead, keeping section backgrounds
+    // continuous the way the site's own sections are. An inline margin would
+    // beat any stylesheet rule trying to do that.
+    '--tlcb-space-above:' + b.spaceAbove + 'px',
+    '--tlcb-space-below:' + b.spaceBelow + 'px',
   ];
   if (b.type === 'textphoto') v.push('--tlcb-cols:' + cols);
   if (b.type === 'columns') v.push('--tlcb-cols:repeat(' + b.cols + ',1fr)');
-  if (b.type === 'hero' && b.photo) v.push("--tlcb-hero-img:url('" + cssUrl(b.photo) + "')");
+  if (b.type === 'hero' && b.photo) {
+    v.push("--tlcb-hero-img:url('" + cssUrl(b.photo) + "')");
+    v.push('--tlcb-hero-veil:1'); // the gradient that keeps white text legible over a photo
+  }
   return v.join(';');
 }
 
@@ -629,8 +669,17 @@ function renderBody(opts, b, def) {
   return field(opts, b, 'body', 'div', 'tlcb-prose', val, ' data-ph="Write something here…"', !!def.richBody);
 }
 
+// The small uppercase label the site puts above a heading (.eyebrow in
+// public/styles.css). Only rendered when it has something in it, so blocks that
+// never had one are unchanged.
+function renderEyebrow(opts, b) {
+  if (!opts.editing && !b.eyebrow) return '';
+  return field(opts, b, 'eyebrow', 'div', 'tlcb-eyebrow', esc(b.eyebrow || ''), ' data-ph="Small label (optional)"');
+}
+
 function renderHead(opts, b, ph = 'Heading') {
-  return field(opts, b, 'title', 'div', 'tlcb-head', esc(b.title || ''), ` data-ph="${esc(ph)}"`);
+  return renderEyebrow(opts, b) +
+    field(opts, b, 'title', 'div', 'tlcb-head', esc(b.title || ''), ` data-ph="${esc(ph)}"`);
 }
 
 function renderStamp(opts, b) {
@@ -649,8 +698,9 @@ function renderInner(b, opts) {
     const change = opts.editing
       ? `<button type="button" class="tlcb-pick" data-act="photo">Change photo</button>` : '';
     return `<div class="tlcb-hero">${change}
-      ${field(opts, b, 'body', 'div', 'tlcb-hero-eyebrow', esc(b.body || ''), ' data-ph="Ministry"')}
-      ${field(opts, b, 'title', 'div', 'tlcb-hero-title', esc(b.title || ''), ' data-ph="Page title"')}
+      ${field(opts, b, 'eyebrow', 'div', 'tlcb-hero-eyebrow', esc(b.eyebrow || ''), ' data-ph="Ministry"')}
+      ${field(opts, b, 'title', 'h1', 'tlcb-hero-title', esc(b.title || ''), ' data-ph="Page title"')}
+      ${field(opts, b, 'subtitle', 'p', 'tlcb-hero-sub', esc(b.subtitle || ''), ' data-ph="One line about this ministry"')}
     </div>`;
   }
 

@@ -2351,6 +2351,58 @@ function tlcHas(blocksHtml, type) {
   return blocksHtml.indexOf('tlcb--' + type) !== -1;
 }
 
+// A page whose blocks start with a hero banner has been taken over completely
+// in the editor: the blocks are the page. Everything hardcoded here is stood
+// down and the blocks render in its place, full width. Pages that have not been
+// taken over keep their hardcoded sections and drop blocks into the content
+// region as before, so nothing changes until staff publish a hero.
+function tlcOwnsWholePage(blocksHtml) {
+  var first = blocksHtml.indexOf('tlcb tlcb--');
+  return first !== -1 && blocksHtml.substr(first, 22).indexOf('tlcb--hero') !== -1;
+}
+
+// Ministry pages are loaded by three different functions (loadMinistryPage,
+// loadYouthPage, loadMinistryCta). Whole-page takeover is decided here, once,
+// before any of them run, so a page cannot be missed just because of which
+// loader it happens to use.
+var ministryTakeover = {};
+async function tlcMaybeTakeOver(slug) {
+  if (ministryTakeover[slug] !== undefined) return ministryTakeover[slug];
+  ministryTakeover[slug] = false;
+  try {
+    var res = await fetch('https://admin.timothystl.org/api/ministry/' + slug);
+    if (!res.ok) return false;
+    var data = await res.json();
+    var html = (data.blocks_html || '').trim();
+    if (!html || !tlcOwnsWholePage(html)) return false;
+    if (!tlcTakeOverPage(slug, html)) return false;
+    ministryTakeover[slug] = true;
+    ministryBlockManaged[slug] = true;
+    if (tlcHas(html, 'posts') || tlcHas(html, 'events')) {
+      try {
+        var posts = await fetch('https://admin.timothystl.org/api/ministry/' + slug + '/posts');
+        if (posts.ok) tlcHydrateFeeds(slug, await posts.json());
+      } catch (e) {}
+    }
+    return true;
+  } catch (e) { return false; }
+}
+
+function tlcTakeOverPage(slug, blocksHtml) {
+  var pageEl = document.getElementById('page-' + slug);
+  if (!pageEl) return false;
+  var markup = blocksHtml;
+  if (document.getElementById('tlcb-css')) markup = markup.replace(/<style id="tlcb-css">[\s\S]*?<\/style>/, '');
+  var host = document.createElement('div');
+  host.id = slug + '-blocks';
+  for (var i = 0; i < pageEl.children.length; i++) pageEl.children[i].style.display = 'none';
+  pageEl.insertBefore(host, pageEl.firstChild);
+  host.innerHTML = fixImgUrls(markup);
+  var pageDiv = host.querySelector('.tlcb-page');
+  if (pageDiv) pageDiv.classList.add('tlcb-page--full');
+  return true;
+}
+
 // Fills every posts/events block on a block-managed page from the ministry's
 // own posts, which is what the block promises in the editor ("shows the newest
 // posts automatically").
@@ -2617,7 +2669,6 @@ window.showPage = function(id, addHistory) {
     var wolFrame = document.getElementById('wol-yt-frame');
     if (wolFrame && !wolFrame.getAttribute('src')) { wolFrame.src = wolFrame.dataset.src; }
   }
-  if (id === 'youth') { loadYouthPage(); }
   if (id === 'sermons') { loadSermons(); }
   if (id === 'voters') { loadVotersPage(); }
   if (id === 'home') { loadNotices('home'); }
@@ -2633,8 +2684,17 @@ window.showPage = function(id, addHistory) {
   if (id === 'calendar') { loadNotices('calendar'); }
   if (id === 'music') { loadConcertBlock(); }
   var adminContentPages = ['sundayschool','confirmation','vbs','egghunt','family','music','stephen','foodpantry','bees'];
-  if (adminContentPages.indexOf(id) !== -1) { loadMinistryPage(id); }
-  if (id === 'christmasmarket') { loadMinistryCta(id); }
+  var ministryPages = adminContentPages.concat(['youth','christmasmarket']);
+  if (ministryPages.indexOf(id) !== -1) {
+    // A page taken over in the block editor draws itself entirely; the legacy
+    // loaders only run for pages that have not been taken over yet.
+    tlcMaybeTakeOver(id).then(function (took) {
+      if (took) return;
+      if (id === 'youth') { loadYouthPage(); return; }
+      if (id === 'christmasmarket') { loadMinistryCta(id); return; }
+      loadMinistryPage(id);
+    });
+  }
 };
 // Route on load based on URL path; replace (don't push) so back goes to previous site.
 // Runs here (not in the first <script> block) so it can call the real window.showPage
