@@ -4,7 +4,7 @@
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, hasPermission } from './auth.js';
 
-export const VERSION = 'v1.89.0'; // minor bump: block-based ministry page editor (drag-and-drop layout, media library, drafts/scheduling/revisions)
+export const VERSION = 'v1.89.1'; // minor bump: block-based ministry page editor (drag-and-drop layout, media library, drafts/scheduling/revisions)
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
