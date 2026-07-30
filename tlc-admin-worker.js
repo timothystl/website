@@ -3807,12 +3807,13 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
         // A church site should not ship inaccessible images. Videos carry their
         // own title on YouTube, so the requirement is photos only.
         if (kind === 'photo' && !alt) return jsonResponse({ error: 'Please describe the photo before adding it.' }, 400);
+        const thumbUrl = safeUrl(body.thumb_url).slice(0, 600);
         const filename = String(body.filename || url.split('/').pop() || 'upload').slice(0, 160);
         const meta = String(body.meta || '').slice(0, 80);
         const res = await env.DB.prepare(
           'INSERT INTO ministry_media (filename, kind, url, thumb_url, alt, meta, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-        ).bind(filename, kind, url, String(body.thumb_url || '').slice(0, 600), alt, meta, currentUser?.username || '', new Date().toISOString()).run();
-        return jsonResponse({ ok: true, item: { id: res.meta?.last_row_id || 0, filename, kind, url, thumb_url: body.thumb_url || '', alt, meta } });
+        ).bind(filename, kind, url, thumbUrl, alt, meta, currentUser?.username || '', new Date().toISOString()).run();
+        return jsonResponse({ ok: true, item: { id: res.meta?.last_row_id || 0, filename, kind, url, thumb_url: thumbUrl, alt, meta } });
       }
 
       // A fresh block of a given type, straight from the server's own defaults,
