@@ -185,7 +185,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
 .ed-tile-n{font:600 12.5px/1.3 'Source Sans 3';color:#1E2D4A;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .ed-tile-m{font-size:11px;color:#8A8898;}
 .ed-modal-f{padding:14px 20px;border-top:1px solid #DDE3ED;background:#F7F3EC;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
-.ed-dropzone{flex:1;min-width:220px;padding:16px;border:1.5px dashed #C4CEDF;border-radius:10px;text-align:center;font:600 13px/1.3 'Source Sans 3';color:#1E2D4A;}
+.ed-dropzone{position:relative;flex:1;min-width:220px;padding:16px;border:1.5px dashed #C4CEDF;border-radius:10px;text-align:center;font:600 13px/1.3 'Source Sans 3';color:#1E2D4A;cursor:pointer;}
 .ed-dropzone.is-over{border-color:#2E7EA6;background:#F2F7FA;}
 .ed-upload{padding:10px 15px;background:#1E2D4A;color:#F5E4C0;border-radius:8px;font:700 13px/1 'Source Sans 3';}
 .ed-close{padding:6px 11px;border:1px solid #C4CEDF;border-radius:7px;font:600 12.5px/1 'Source Sans 3';color:#1E2D4A;}
@@ -1062,6 +1062,7 @@ function bindStatic() {
   });
 
   bindDragAndDrop();
+  bindPicker();
 
   window.addEventListener('resize', fitPaper);
   if (window.ResizeObserver) new ResizeObserver(fitPaper).observe(el.edCanvas);
@@ -1265,7 +1266,190 @@ function bindDragAndDrop() {
   });
 }
 
-function openPicker() {}
+// ── media library ──────────────────────────────────────────────────────────
+var lastFocus = null;
+
+function openPicker(id, kind) {
+  lastFocus = document.activeElement;
+  S.picker = { id: id, kind: kind, chosen: [], staged: null, error: '' };
+  renderModal();
+}
+
+function closePicker() {
+  S.picker = null;
+  renderModal();
+  if (lastFocus && lastFocus.focus) lastFocus.focus();
+}
+
+function pickerItems() {
+  var wantVideo = S.picker.kind === 'video';
+  return S.media.filter(function (m) { return (m.kind === 'video') === wantVideo; });
+}
+
+function renderModal() {
+  if (!S.picker) { el.edModal.innerHTML = ''; return; }
+  var p = S.picker;
+  var isVideo = p.kind === 'video';
+  var isGallery = p.kind === 'gallery';
+  var title = isVideo ? 'Video library' : 'Photo library';
+  var hint = isVideo
+    ? 'Paste a YouTube link, or reuse a video already on the site.'
+    : 'Photos are cropped to fit whichever block you place them in. Up to 8MB each.';
+  var tiles = pickerItems().map(function (m) {
+    var chosen = p.chosen.indexOf(m.url) > -1;
+    var thumb = isVideo
+      ? '<span class="ed-tile-th ed-tile-th--vid">▶</span>'
+      : '<span class="ed-tile-th" style="background-image:url(' + esc(m.url) + ')"></span>';
+    return '<button type="button" class="ed-tile" data-pick="' + esc(m.url) + '" data-alt="' + esc(m.alt || '') + '"' +
+      ' data-name="' + esc(m.filename) + '" aria-pressed="' + chosen + '">' + thumb +
+      '<span class="ed-tile-n">' + esc(m.filename) + '</span>' +
+      '<span class="ed-tile-m">' + esc(m.meta || (isVideo ? 'YouTube' : 'Photo')) + (chosen ? ' · selected' : '') + '</span></button>';
+  }).join('');
+
+  var footer;
+  if (isVideo) {
+    footer = '<input class="ed-field" id="edVidUrl" placeholder="https://youtu.be/…" style="flex:1;min-width:220px">' +
+      '<input class="ed-field" id="edVidName" placeholder="What is it called?" style="flex:1;min-width:180px">' +
+      '<button type="button" class="ed-upload" id="edVidAdd">Add video</button>';
+  } else if (p.staged) {
+    // Alt text is required before a photo can join the library.
+    footer = '<span class="ed-dropzone" style="flex:0 0 auto;padding:10px 14px">' + esc(p.staged.filename) + '</span>' +
+      '<input class="ed-field" id="edAltNew" placeholder="Describe this photo (required)" style="flex:1;min-width:220px" autofocus>' +
+      '<button type="button" class="ed-upload" id="edStagedAdd">Add to library</button>';
+  } else {
+    footer = '<label class="ed-dropzone" id="edDrop">Drop a photo here, or choose a file' +
+      '<input type="file" id="edFile" accept="image/jpeg,image/png,image/webp,image/gif" style="position:absolute;width:1px;height:1px;opacity:0"></label>' +
+      '<button type="button" class="ed-upload" id="edUploadBtn">Upload</button>';
+  }
+
+  el.edModal.innerHTML = '<div class="ed-back" id="edBack"><div class="ed-modal" role="dialog" aria-modal="true" aria-label="' + esc(title) + '">' +
+    '<div class="ed-modal-h"><b>' + esc(title) + '</b><span>' + esc(hint) + '</span><div style="flex:1"></div>' +
+    (isGallery ? '<button type="button" class="ed-upload" id="edGalleryAdd">Add ' + p.chosen.length + ' photo' + (p.chosen.length === 1 ? '' : 's') + '</button>' : '') +
+    '<button type="button" class="ed-close" id="edPickerClose">Close</button></div>' +
+    '<div class="ed-modal-grid">' + (tiles || '<span class="ed-note">Nothing in the library yet — add something below.</span>') + '</div>' +
+    (p.error ? '<div style="padding:8px 20px;color:#B85C3A;font-size:12.5px">' + esc(p.error) + '</div>' : '') +
+    '<div class="ed-modal-f">' + footer + '</div>' +
+    '</div></div>';
+
+  var first = el.edModal.querySelector('#edAltNew, #edVidUrl, #edPickerClose');
+  if (first) first.focus();
+}
+
+async function addMedia(payload) {
+  var out = await api('/ministries/api/media', { method: 'POST', body: JSON.stringify(payload) });
+  S.media.unshift(out.item);
+  return out.item;
+}
+
+async function uploadPhoto(file) {
+  var fd = new FormData();
+  fd.append('file', file);
+  var res = await fetch('/api/upload-image', { method: 'POST', body: fd, credentials: 'same-origin' });
+  var j = await res.json().catch(function () { return {}; });
+  if (!res.ok || !j.url) throw new Error(j.error || 'Upload failed');
+  return { url: j.url, filename: file.name || 'photo.jpg' };
+}
+
+function applyMedia(url, alt, name) {
+  var p = S.picker;
+  if (!p) return;
+  var b = findBlock(p.id);
+  if (!b) return;
+  if (p.kind === 'video') {
+    patch(p.id, { video: url }, 'Changed video · ' + name, 'rerender');
+  } else {
+    patch(p.id, { photo: url, photoAlt: alt || b.photoAlt || '' }, 'Changed photo · ' + name, 'rerender');
+  }
+  closePicker();
+}
+
+function bindPicker() {
+  el.edModal.addEventListener('click', async function (e) {
+    if (!S.picker) return;
+    if (e.target.id === 'edBack' || e.target.closest('#edPickerClose')) return closePicker();
+
+    var tile = e.target.closest('[data-pick]');
+    if (tile) {
+      if (S.picker.kind === 'gallery') {
+        var url = tile.dataset.pick;
+        var at = S.picker.chosen.indexOf(url);
+        if (at > -1) S.picker.chosen.splice(at, 1); else S.picker.chosen.push(url);
+        renderModal();
+      } else {
+        applyMedia(tile.dataset.pick, tile.dataset.alt, tile.dataset.name);
+      }
+      return;
+    }
+
+    if (e.target.closest('#edGalleryAdd')) {
+      var b = findBlock(S.picker.id);
+      if (!b || !S.picker.chosen.length) return closePicker();
+      var items = (b.items || []).slice();
+      S.picker.chosen.forEach(function (u) {
+        var m = S.media.filter(function (x) { return x.url === u; })[0] || {};
+        items.push({ url: u, title: m.alt || m.filename || '' });
+      });
+      var n = S.picker.chosen.length;
+      var id = S.picker.id;
+      closePicker();
+      patch(id, { items: items }, 'Added ' + n + ' photo' + (n === 1 ? '' : 's') + ' to the gallery', 'rerender');
+      return;
+    }
+
+    if (e.target.closest('#edUploadBtn')) { el.edModal.querySelector('#edFile').click(); return; }
+
+    if (e.target.closest('#edStagedAdd')) {
+      var alt = (el.edModal.querySelector('#edAltNew').value || '').trim();
+      if (!alt) { S.picker.error = 'Please describe the photo — it is read aloud to people who cannot see it.'; return renderModal(); }
+      try {
+        var item = await addMedia({ kind: 'photo', url: S.picker.staged.url, filename: S.picker.staged.filename, alt: alt, meta: 'Photo' });
+        if (S.picker.kind === 'gallery') { S.picker.staged = null; S.picker.error = ''; renderModal(); }
+        else applyMedia(item.url, item.alt, item.filename);
+      } catch (err) { S.picker.error = String(err.message || err); renderModal(); }
+      return;
+    }
+
+    if (e.target.closest('#edVidAdd')) {
+      var vurl = (el.edModal.querySelector('#edVidUrl').value || '').trim();
+      var vname = (el.edModal.querySelector('#edVidName').value || '').trim() || 'Video';
+      if (!/youtu\.?be/i.test(vurl)) { S.picker.error = 'Paste a YouTube link (youtube.com or youtu.be).'; return renderModal(); }
+      try {
+        var v = await addMedia({ kind: 'video', url: vurl, filename: vname, alt: '', meta: 'YouTube' });
+        applyMedia(v.url, '', v.filename);
+      } catch (err2) { S.picker.error = String(err2.message || err2); renderModal(); }
+    }
+  });
+
+  el.edModal.addEventListener('change', async function (e) {
+    if (e.target.id !== 'edFile' || !e.target.files || !e.target.files[0]) return;
+    try {
+      S.picker.staged = await uploadPhoto(e.target.files[0]);
+      S.picker.error = '';
+    } catch (err) { S.picker.error = String(err.message || err); }
+    renderModal();
+  });
+
+  ['dragover', 'dragleave', 'drop'].forEach(function (type) {
+    el.edModal.addEventListener(type, async function (e) {
+      var zone = e.target.closest ? e.target.closest('#edDrop') : null;
+      if (!zone) return;
+      e.preventDefault();
+      zone.classList.toggle('is-over', type === 'dragover');
+      if (type !== 'drop') return;
+      var file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!file) return;
+      try {
+        S.picker.staged = await uploadPhoto(file);
+        S.picker.error = '';
+      } catch (err) { S.picker.error = String(err.message || err); }
+      renderModal();
+    });
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && S.picker) { e.stopPropagation(); closePicker(); }
+  }, true);
+}
 
 // Test seam: the browser tests assert that styleVars() produces byte-identical
 // output to wrapperVars() in admin/blocks.js. Pure function, no state.

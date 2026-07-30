@@ -25,6 +25,7 @@ export function createEditorServer(seed = {}) {
     { id: 3, filename: 'Choir at Advent Vespers', kind: 'video', url: 'https://youtu.be/dQw4w9WgXcQ', thumb_url: '', alt: '', meta: 'YouTube · 4:12' },
   ];
   let mediaSeq = media.length;
+  let uploads = 0;
   const revisions = [];
 
   const seedPages = seed.pages || [{ slug: 'music', title: 'Music Ministry', blocks: migrateLegacyPage({
@@ -145,10 +146,20 @@ export function createEditorServer(seed = {}) {
     if (p === '/ministries/api/media' && req.method === 'GET') return json(res, { media });
     if (p === '/ministries/api/media' && req.method === 'POST') {
       const body = await readBody(req);
-      const row = { id: ++mediaSeq, filename: String(body.filename || 'upload.jpg'), kind: body.kind === 'video' ? 'video' : 'photo',
-        url: String(body.url || ''), thumb_url: '', alt: String(body.alt || ''), meta: String(body.meta || '') };
+      const kind = body.kind === 'video' ? 'video' : 'photo';
+      const alt = String(body.alt || '').trim();
+      if (kind === 'photo' && !alt) return json(res, { error: 'Please describe the photo before adding it.' }, 400);
+      const row = { id: ++mediaSeq, filename: String(body.filename || 'upload.jpg'), kind,
+        url: String(body.url || ''), thumb_url: '', alt, meta: String(body.meta || '') };
       media.unshift(row);
       return json(res, { ok: true, item: row });
+    }
+
+    // Stand-in for the Worker's R2 upload endpoint.
+    if (p === '/api/upload-image' && req.method === 'POST') {
+      uploads += 1;
+      const url = '/images/uploaded-' + uploads + '.jpg';
+      return json(res, { url, location: url });
     }
 
     res.writeHead(404, { 'Content-Type': 'text/plain' });

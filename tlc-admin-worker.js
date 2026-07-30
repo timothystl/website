@@ -3758,6 +3758,34 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
         });
       }
 
+      // ── MEDIA LIBRARY ───────────────────────────────────────────────────
+      // Photos land in the same R2 bucket as every other admin upload (via
+      // /api/upload-image); a "video" row is just a YouTube URL. Both are
+      // catalogued here so staff pick from a library instead of pasting URLs.
+      if (path === '/ministries/api/media' && method === 'GET') {
+        const rows = await env.DB.prepare(
+          'SELECT id, filename, kind, url, thumb_url, alt, meta FROM ministry_media ORDER BY id DESC LIMIT 200'
+        ).all();
+        return jsonResponse({ media: rows.results || [] });
+      }
+
+      if (path === '/ministries/api/media' && method === 'POST') {
+        const body = await request.json().catch(() => ({}));
+        const kind = body.kind === 'video' ? 'video' : 'photo';
+        const url = safeUrl(body.url);
+        if (!url) return jsonResponse({ error: 'That link does not look like a URL.' }, 400);
+        const alt = String(body.alt || '').trim().slice(0, 200);
+        // A church site should not ship inaccessible images. Videos carry their
+        // own title on YouTube, so the requirement is photos only.
+        if (kind === 'photo' && !alt) return jsonResponse({ error: 'Please describe the photo before adding it.' }, 400);
+        const filename = String(body.filename || url.split('/').pop() || 'upload').slice(0, 160);
+        const meta = String(body.meta || '').slice(0, 80);
+        const res = await env.DB.prepare(
+          'INSERT INTO ministry_media (filename, kind, url, thumb_url, alt, meta, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(filename, kind, url, String(body.thumb_url || '').slice(0, 600), alt, meta, currentUser?.username || '', new Date().toISOString()).run();
+        return jsonResponse({ ok: true, item: { id: res.meta?.last_row_id || 0, filename, kind, url, thumb_url: body.thumb_url || '', alt, meta } });
+      }
+
       // A fresh block of a given type, straight from the server's own defaults,
       // so the editor never has to keep its own copy of them.
       if (path === '/ministries/api/new-block' && method === 'POST') {
