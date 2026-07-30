@@ -3923,11 +3923,17 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
 
       // ── Ministry list ──
       if (path === '/ministries' && method === 'GET') {
-        const pages = await env.DB.prepare('SELECT slug, title, has_posts, updated_at FROM youth_pages ORDER BY rowid').all();
+        // Anything whose scheduled time has passed goes live before the list is
+        // drawn, so staff never see a page still labelled "scheduled" after the
+        // moment it was meant to publish.
+        await promoteScheduledPages(env);
+        const pages = await env.DB.prepare(
+          'SELECT slug, title, has_posts, updated_at, blocks, published_blocks, page_status, publish_at FROM youth_pages ORDER BY rowid'
+        ).all();
         const msg = url.searchParams.get('msg');
         let alertHtml = '';
         if (msg === 'saved')       alertHtml = `<div class="alert alert-success">✓ Page saved and published.</div>`;
-        if (msg === 'created')     alertHtml = `<div class="alert alert-success">✓ Ministry page created.</div>`;
+        if (msg === 'created')     alertHtml = `<div class="alert alert-success">✓ Ministry page created — open the editor to lay it out.</div>`;
         if (msg === 'deleted')     alertHtml = `<div class="alert alert-info">Ministry page deleted.</div>`;
         if (msg === 'postsaved')   alertHtml = `<div class="alert alert-success">✓ Post saved.</div>`;
         if (msg === 'postdeleted') alertHtml = `<div class="alert alert-info">Post deleted.</div>`;
@@ -3940,38 +3946,108 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
           for (const r of countRows.results) countMap[r.ministry_slug] = r.cnt;
         } catch (_) {}
 
-        const listHtml = pages.results.map(p => {
+        const PILL = {
+          draft:     { label: 'Draft',     bg: '#F5E4C0', fg: '#7A5A12' },
+          live:      { label: 'Live',      bg: '#DCE6D6', fg: '#3B4C2E' },
+          scheduled: { label: 'Scheduled', bg: '#E4EEF4', fg: '#1E5C7A' },
+          hidden:    { label: 'Hidden',    bg: '#EDE9E0', fg: '#6A6858' },
+        };
+
+        const rows = pages.results.map((p) => {
+          const draftCount = sanitizeBlocks(parseBlocks(p.blocks)).length;
+          const status = PILL[p.page_status] ? p.page_status : 'live';
+          const pill = PILL[status];
+          const when = status === 'scheduled' && p.publish_at
+            ? new Date(p.publish_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+            : (p.updated_at ? p.updated_at.split('T')[0] : 'Not yet edited');
           const postCount = countMap[p.slug] || 0;
-          return `<div class="ni-row">
-  <div class="ni-title">${p.title}</div>
-  <div class="ni-meta">${p.updated_at ? 'Updated ' + p.updated_at.split('T')[0] : 'Not yet edited'}</div>
-  <div class="ni-actions">
-    ${p.has_posts ? `<a href="/ministries/${p.slug}/posts" class="btn btn-sm btn-sage">Posts${postCount > 0 ? ' (' + postCount + ')' : ''}</a>` : ''}
-    <a href="/ministries/edit/${p.slug}" class="btn btn-sm btn-secondary">Edit</a>
-    ${!CORE_SLUGS.includes(p.slug) ? `<form method="POST" action="/ministries/delete/${p.slug}" onsubmit="return confirm('Delete this ministry page?')" style="margin:0;"><button type="submit" class="btn btn-sm btn-danger">Delete</button></form>` : ''}
-  </div>
-</div>`;
-        }).join('') + `<div class="ni-row">
-  <div class="ni-title">Voters Assembly Page</div>
-  <div class="ni-meta">Zoom link &amp; council report downloads · /voters</div>
-  <div class="ni-actions">
-    <a href="/voters" class="btn btn-sm btn-secondary">Edit</a>
-  </div>
-</div>`;
+          return `<tr class="mrow" data-name="${escapeHtml((p.title + ' ' + p.slug).toLowerCase())}" data-status="${status}" data-updated="${escapeHtml(p.updated_at || '')}">
+  <td>
+    <div style="font-weight:600;color:var(--steel);">${escapeHtml(p.title)}</div>
+    <div style="font-size:12px;color:var(--gray);">/${escapeHtml(p.slug)} · ${draftCount} block${draftCount === 1 ? '' : 's'}${postCount ? ' · ' + postCount + ' post' + (postCount === 1 ? '' : 's') : ''}</div>
+  </td>
+  <td><span style="display:inline-block;padding:3px 9px;border-radius:999px;font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:${pill.bg};color:${pill.fg};">${pill.label}</span></td>
+  <td style="font-size:13px;color:var(--gray);white-space:nowrap;">${escapeHtml(when)}</td>
+  <td style="text-align:right;white-space:nowrap;">
+    ${p.has_posts ? `<a href="/ministries/${escapeHtml(p.slug)}/posts" class="btn btn-sm btn-sage">Posts${postCount > 0 ? ' (' + postCount + ')' : ''}</a>` : ''}
+    <a href="/ministries/edit/${escapeHtml(p.slug)}" class="btn btn-sm btn-secondary">Banner &amp; settings</a>
+    <a href="/ministries/editor/${escapeHtml(p.slug)}" class="btn btn-sm btn-primary">Edit page →</a>
+    ${!CORE_SLUGS.includes(p.slug) ? `<form method="POST" action="/ministries/delete/${escapeHtml(p.slug)}" onsubmit="return confirm('Delete this ministry page?')" style="display:inline;margin:0;"><button type="submit" class="btn btn-sm btn-danger">Delete</button></form>` : ''}
+  </td>
+</tr>`;
+        }).join('');
 
         return html(`
 ${sidebarShell('ministries', currentUser)}
-<div class="wrap">
+<div class="wrap wrap-wide">
   <div class="page-title">Ministries</div>
-  <div class="page-sub">Edit ministry pages and manage posts. Changes appear on the website immediately.</div>
+  <div class="page-sub">${pages.results.length} pages. Open one to rearrange it — drag blocks into the order you want, edit the words on the page itself, then publish.</div>
   ${alertHtml}
-  <div class="btn-row" style="margin-bottom:28px;">
-    <a href="/ministries/add" class="btn btn-primary">+ Add ministry page</a>
+  <div class="btn-row" style="margin-bottom:20px;">
+    <a href="/ministries/add" class="btn btn-primary">+ New ministry page</a>
+    <a href="/manual#ministry-editor" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">How the page editor works</a>
   </div>
   <div class="card">
-    ${listHtml}
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
+      <input id="mSearch" type="search" placeholder="Search pages…" style="flex:1;min-width:200px;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-family:var(--sans);font-size:14px;">
+      <select id="mStatus" style="padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-family:var(--sans);font-size:14px;">
+        <option value="">All statuses</option>
+        <option value="live">Live</option>
+        <option value="draft">Draft</option>
+        <option value="scheduled">Scheduled</option>
+        <option value="hidden">Hidden</option>
+      </select>
+      <select id="mSort" style="padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-family:var(--sans);font-size:14px;">
+        <option value="recent">Sort: recently updated</option>
+        <option value="name">Sort: name</option>
+      </select>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-family:var(--sans);">
+      <thead><tr style="text-align:left;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--gray);">
+        <th scope="col" style="padding:6px 0;">Page</th><th scope="col">Status</th><th scope="col">Updated</th><th scope="col"></th>
+      </tr></thead>
+      <tbody id="mBody">${rows}</tbody>
+    </table>
+    <div id="mNone" style="display:none;padding:28px;text-align:center;color:var(--gray);font-size:14px;">No pages match that.</div>
   </div>
-</div>`, 'Ministries Admin');
+  <div class="card" style="margin-top:20px;">
+    <div class="card-title">Voters Assembly page</div>
+    <div class="card-sub" style="font-size:13px;color:var(--gray);">Zoom link &amp; council report downloads · /voters</div>
+    <div class="btn-row" style="margin-top:12px;"><a href="/voters" class="btn btn-sm btn-secondary">Edit</a></div>
+  </div>
+</div>
+<style>
+#mBody tr{border-top:1px solid var(--border);}
+#mBody td{padding:12px 8px 12px 0;vertical-align:middle;}
+</style>
+<script>
+(function(){
+  var body = document.getElementById('mBody');
+  var all = Array.prototype.slice.call(body.querySelectorAll('tr'));
+  function apply(){
+    var q = document.getElementById('mSearch').value.trim().toLowerCase();
+    var st = document.getElementById('mStatus').value;
+    var sort = document.getElementById('mSort').value;
+    var shown = 0;
+    all.forEach(function(tr){
+      var hit = (!q || tr.dataset.name.indexOf(q) > -1) && (!st || tr.dataset.status === st);
+      tr.style.display = hit ? '' : 'none';
+      if (hit) shown++;
+    });
+    document.getElementById('mNone').style.display = shown ? 'none' : '';
+    var sorted = all.slice().sort(function(a,b){
+      if (sort === 'name') return a.dataset.name.localeCompare(b.dataset.name);
+      return (b.dataset.updated || '').localeCompare(a.dataset.updated || '');
+    });
+    sorted.forEach(function(tr){ body.appendChild(tr); });
+  }
+  ['mSearch','mStatus','mSort'].forEach(function(id){
+    document.getElementById(id).addEventListener('input', apply);
+    document.getElementById(id).addEventListener('change', apply);
+  });
+  apply();
+})();
+</script>`, 'Ministries Admin');
       }
 
       // ── Add ministry form (GET) ──
@@ -4015,10 +4091,15 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministr
         const title = form.get('title') || '';
         const has_posts = form.get('has_posts') === '1' ? 1 : 0;
         if (!slug || !title) return new Response('', { status: 302, headers: { Location: '/ministries/add' } });
+        // A new page starts from three sensible blocks rather than a blank
+        // canvas — an empty page is intimidating, three blocks are not — and
+        // opens straight into the editor.
+        const starter = JSON.stringify(starterBlocks(title));
         await env.DB.prepare(
-          'INSERT OR IGNORE INTO youth_pages (slug, title, content, has_posts, updated_at) VALUES (?, ?, ?, ?, ?)'
-        ).bind(slug, title, '', has_posts, '').run();
-        return new Response('', { status: 302, headers: { Location: '/ministries?msg=created' } });
+          "INSERT OR IGNORE INTO youth_pages (slug, title, content, has_posts, updated_at, blocks, published_blocks, page_status, change_log) VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', '[]')"
+        ).bind(slug, title, '', has_posts, new Date().toISOString(), starter, '[]').run();
+        await logAudit(env.DB, currentUser, 'create', 'ministry_page', slug, title, null, { blocks: parseBlocks(starter).length });
+        return new Response('', { status: 302, headers: { Location: '/ministries/editor/' + encodeURIComponent(slug) } });
       }
 
       // ── Edit ministry page (GET) ──
@@ -4046,7 +4127,12 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministr
 ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministries</a>`)}
 <div class="wrap">
   <div class="page-title">${page.title}</div>
-  <div class="page-sub">Edit this page and click Save &amp; Publish when done.</div>
+  <div class="page-sub">Banner image, buttons and video slots for this page.</div>
+  <div class="alert alert-info" style="margin-bottom:20px;">
+    <strong>The words and layout of this page are edited in the page editor.</strong>
+    Open <a href="/ministries/editor/${escapeHtml(slug)}">${escapeHtml(page.title)} in the page editor</a> to write copy and arrange blocks.
+    This screen keeps the page banner and a few older settings. The body text below is only used on pages that have not been laid out in blocks yet.
+  </div>
   <div class="card">
     <form method="POST" action="/ministries/update/${slug}">
       <div class="form-group">
