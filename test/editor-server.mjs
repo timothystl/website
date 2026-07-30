@@ -123,9 +123,19 @@ export function createEditorServer(seed = {}) {
 
       if (action === 'schedule' && req.method === 'POST') {
         const body = await readBody(req);
-        row.publish_at = body.publish_at || null;
-        row.page_status = body.publish_at ? 'scheduled' : 'draft';
-        return json(res, { ok: true, status: row.page_status, publish_at: row.publish_at });
+        if (!body.publish_at) {
+          const back = JSON.stringify(sanitizeBlocks(parseBlocks(row.blocks))) === JSON.stringify(sanitizeBlocks(parseBlocks(row.published_blocks))) ? 'live' : 'draft';
+          row.publish_at = null;
+          row.page_status = back;
+          return json(res, { ok: true, status: back, publish_at: null });
+        }
+        const when = new Date(body.publish_at);
+        if (isNaN(when.getTime()) || when.getTime() < Date.now() - 60000) {
+          return json(res, { error: 'Pick a date and time in the future.' }, 400);
+        }
+        row.publish_at = when.toISOString();
+        row.page_status = 'scheduled';
+        return json(res, { ok: true, status: 'scheduled', publish_at: row.publish_at });
       }
       return json(res, { error: 'Not found' }, 404);
     }
@@ -141,6 +151,25 @@ export function createEditorServer(seed = {}) {
       const body = await readBody(req);
       const blocks = sanitizeBlocks(body.blocks);
       return json(res, { html: renderPage(blocks, { editing: true, slug: String(body.slug || ''), withCss: true }), blocks });
+    }
+
+    // Mirrors promoteScheduledPages() in tlc-admin-worker.js, which the cron
+    // trigger calls. Exercised by the tests in place of an actual cron tick.
+    if (p === '/__promote-scheduled' && req.method === 'POST') {
+      const nowIso = new Date().toISOString();
+      let promoted = 0;
+      for (const [slug, r] of pages) {
+        if (r.page_status !== 'scheduled' || !r.publish_at || r.publish_at > nowIso) continue;
+        const blocks = JSON.stringify(sanitizeBlocks(parseBlocks(r.blocks)));
+        r.published_blocks = blocks;
+        r.page_status = 'live';
+        r.publish_at = null;
+        r.change_log = '[]';
+        r.updated_at = nowIso;
+        revisions.push({ slug, blocks, published_at: nowIso, published_by: 'scheduled' });
+        promoted += 1;
+      }
+      return json(res, { promoted });
     }
 
     if (p === '/ministries/api/media' && req.method === 'GET') return json(res, { media });

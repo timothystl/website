@@ -344,7 +344,36 @@ function staffPhotoUploadScript() {
 }
 
 // ── MAIN HANDLER ─────────────────────────────────────────────
+// Promotes ministry pages whose scheduled publish time has come. Run from the
+// cron trigger in wrangler.toml, and again whenever staff open the Ministries
+// list so the admin never shows a page as "scheduled" after its moment passed.
+async function promoteScheduledPages(env) {
+  const nowIso = new Date().toISOString();
+  let promoted = 0;
+  try {
+    const due = await env.DB.prepare(
+      "SELECT slug, title, blocks FROM youth_pages WHERE page_status = 'scheduled' AND publish_at IS NOT NULL AND publish_at <= ?"
+    ).bind(nowIso).all();
+    for (const row of due.results || []) {
+      const json = JSON.stringify(sanitizeBlocks(parseBlocks(row.blocks)));
+      await env.DB.prepare(
+        "UPDATE youth_pages SET published_blocks = ?, page_status = 'live', publish_at = NULL, change_log = '[]', updated_at = ? WHERE slug = ?"
+      ).bind(json, nowIso, row.slug).run();
+      await env.DB.prepare('INSERT INTO ministry_page_revisions (slug, blocks, published_at, published_by) VALUES (?, ?, ?, ?)')
+        .bind(row.slug, json, nowIso, 'scheduled').run();
+      promoted += 1;
+    }
+  } catch (e) {
+    console.error('Scheduled ministry publish failed:', e && e.message);
+  }
+  return promoted;
+}
+
 export default {
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(promoteScheduledPages(env));
+  },
+
   async fetch(request, env, ctx) {
     try {
       return await this._fetch(request, env, ctx);
@@ -3814,6 +3843,70 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
         await env.DB.prepare('UPDATE youth_pages SET blocks = ?, change_log = ?, page_status = ?, updated_at = ? WHERE slug = ?')
           .bind(draft, JSON.stringify(changes), status, nowIso, slug).run();
         return jsonResponse({ ok: true, saved_at: nowIso, status, blocks });
+      }
+
+      // Publish: the draft becomes what the public site renders, and a snapshot
+      // goes into the revision log so it can be rolled back.
+      if (path.startsWith('/ministries/api/page/') && path.endsWith('/publish') && method === 'POST') {
+        const slug = decodeURIComponent(path.slice('/ministries/api/page/'.length, -('/publish'.length)));
+        const row = await env.DB.prepare('SELECT slug, title, blocks FROM youth_pages WHERE slug = ?').bind(slug).first();
+        if (!row) return jsonResponse({ error: 'Not found' }, 404);
+        const body = await request.json().catch(() => ({}));
+        const blocks = sanitizeBlocks(body.blocks && body.blocks.length ? body.blocks : parseBlocks(row.blocks));
+        const json = JSON.stringify(blocks);
+        const nowIso = new Date().toISOString();
+        await env.DB.prepare(
+          "UPDATE youth_pages SET blocks = ?, published_blocks = ?, page_status = 'live', publish_at = NULL, change_log = '[]', updated_at = ? WHERE slug = ?"
+        ).bind(json, json, nowIso, slug).run();
+        await env.DB.prepare('INSERT INTO ministry_page_revisions (slug, blocks, published_at, published_by) VALUES (?, ?, ?, ?)')
+          .bind(slug, json, nowIso, currentUser?.username || 'staff').run();
+        await logAudit(env.DB, currentUser, 'publish', 'ministry_page', slug, row.title || slug, null, { blocks: blocks.length });
+        return jsonResponse({ ok: true, status: 'live', saved_at: nowIso, url: 'https://timothystl.org/' + slug });
+      }
+
+      // Schedule: the draft is promoted by the cron handler when it comes due.
+      if (path.startsWith('/ministries/api/page/') && path.endsWith('/schedule') && method === 'POST') {
+        const slug = decodeURIComponent(path.slice('/ministries/api/page/'.length, -('/schedule'.length)));
+        const row = await env.DB.prepare('SELECT slug, blocks, published_blocks FROM youth_pages WHERE slug = ?').bind(slug).first();
+        if (!row) return jsonResponse({ error: 'Not found' }, 404);
+        const body = await request.json().catch(() => ({}));
+        if (!body.publish_at) {
+          const back = JSON.stringify(sanitizeBlocks(parseBlocks(row.blocks))) === JSON.stringify(sanitizeBlocks(parseBlocks(row.published_blocks))) ? 'live' : 'draft';
+          await env.DB.prepare('UPDATE youth_pages SET publish_at = NULL, page_status = ? WHERE slug = ?').bind(back, slug).run();
+          return jsonResponse({ ok: true, status: back, publish_at: null });
+        }
+        const when = new Date(body.publish_at);
+        if (isNaN(when.getTime()) || when.getTime() < Date.now() - 60000) {
+          return jsonResponse({ error: 'Pick a date and time in the future.' }, 400);
+        }
+        await env.DB.prepare("UPDATE youth_pages SET publish_at = ?, page_status = 'scheduled' WHERE slug = ?").bind(when.toISOString(), slug).run();
+        return jsonResponse({ ok: true, status: 'scheduled', publish_at: when.toISOString() });
+      }
+
+      if (path.startsWith('/ministries/api/page/') && path.endsWith('/revisions') && method === 'GET') {
+        const slug = decodeURIComponent(path.slice('/ministries/api/page/'.length, -('/revisions'.length)));
+        const rows = await env.DB.prepare(
+          'SELECT id, published_at, published_by, blocks FROM ministry_page_revisions WHERE slug = ? ORDER BY id DESC LIMIT 20'
+        ).bind(slug).all();
+        return jsonResponse({
+          revisions: (rows.results || []).map((r) => ({
+            id: r.id, published_at: r.published_at, published_by: r.published_by, count: parseBlocks(r.blocks).length,
+          })),
+        });
+      }
+
+      // Restore loads a snapshot into the DRAFT, never straight to live, so
+      // staff look at what they are about to bring back before publishing it.
+      if (path.startsWith('/ministries/api/page/') && path.endsWith('/restore') && method === 'POST') {
+        const slug = decodeURIComponent(path.slice('/ministries/api/page/'.length, -('/restore'.length)));
+        const body = await request.json().catch(() => ({}));
+        const rev = await env.DB.prepare('SELECT blocks FROM ministry_page_revisions WHERE id = ? AND slug = ?')
+          .bind(Number(body.id) || 0, slug).first();
+        if (!rev) return jsonResponse({ error: 'Not found' }, 404);
+        const blocks = sanitizeBlocks(parseBlocks(rev.blocks));
+        await env.DB.prepare("UPDATE youth_pages SET blocks = ?, page_status = 'draft', updated_at = ? WHERE slug = ?")
+          .bind(JSON.stringify(blocks), new Date().toISOString(), slug).run();
+        return jsonResponse({ ok: true, blocks, html: renderPage(blocks, { editing: true, slug, withCss: true }) });
       }
 
       // Stateless render — the editor's single source of block markup. No DB

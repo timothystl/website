@@ -191,6 +191,18 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
 .ed-close{padding:6px 11px;border:1px solid #C4CEDF;border-radius:7px;font:600 12.5px/1 'Source Sans 3';color:#1E2D4A;}
 .ed-close:hover{background:#EDF2F7;}
 
+/* publishing panel */
+.ed-panel{position:fixed;top:64px;right:18px;width:330px;max-height:calc(100vh - 84px);overflow-y:auto;z-index:65;
+  background:#FBF8F3;border:1px solid #DDE3ED;border-radius:12px;box-shadow:0 18px 50px rgba(17,30,50,.28);
+  display:flex;flex-direction:column;}
+.ed-panel-sec{padding:14px 16px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid #DDE3ED;}
+.ed-panel-sec:last-child{border-bottom:0;}
+.ed-revs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:210px;overflow-y:auto;}
+.ed-rev{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12.5px;color:#4A4860;
+  padding:8px 10px;border:1px solid #DDE3ED;border-radius:8px;background:#fff;}
+.ed-rev b{color:#1E2D4A;}
+.ed-publish-more{padding:9px 9px;border-radius:8px;}
+
 /* toast + live region */
 .ed-toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);padding:12px 20px;background:#1E2D4A;color:#F5E4C0;border-radius:10px;
   box-shadow:0 12px 34px rgba(17,30,50,.4);font:600 13.5px/1.3 'Source Sans 3';z-index:70;}
@@ -235,6 +247,7 @@ var S = {
   changes: [], history: [], saved: null, dirty: false,
   dragId: null, dragType: null, dropIndex: null,
   picker: null, toast: null, hint: true, loadError: '',
+  publishPanel: false, publishAt: null, publishAtLocal: '', revisions: [],
 };
 
 var el = {};
@@ -282,7 +295,10 @@ function shellHtml() {
         '<button type="button" data-device="phone">Phone</button>' +
       '</div>' +
       '<button type="button" class="ed-undo" id="edUndo">↺ Undo</button>' +
-      '<button type="button" class="ed-publish" id="edPublish">Publish</button>' +
+      '<span style="display:flex;gap:1px">' +
+        '<button type="button" class="ed-publish" id="edPublish">Publish</button>' +
+        '<button type="button" class="ed-publish ed-publish-more" id="edMore" aria-haspopup="dialog" aria-expanded="false" aria-label="Publishing options">▾</button>' +
+      '</span>' +
     '</header>' +
     '<div class="ed-hint" id="edHint">' +
       '<b>Try it:</b><span>drag rows in the left rail to reorder · drag a block from the bottom panel onto the page · click any text to type · use the right panel for spacing and layout</span>' +
@@ -314,6 +330,7 @@ function shellHtml() {
       '</aside>' +
     '</div>' +
   '</div>' +
+  '<div id="edPublishPanel"></div>' +
   '<div id="edModal"></div>' +
   '<div id="edToast"></div>';
 }
@@ -321,7 +338,7 @@ function shellHtml() {
 function cacheEls() {
   ['edTitle', 'edPill', 'edSaved', 'edView', 'edUndo', 'edPublish', 'edHint', 'edHintX', 'edRail',
    'edCanvas', 'edPaper', 'edPalTabs', 'edPalChips', 'edPalToggle', 'edInspHead', 'edInspBody',
-   'edChanges', 'edChangesHead', 'edModal', 'edToast'].forEach(function (id) { el[id] = document.getElementById(id); });
+   'edChanges', 'edChangesHead', 'edModal', 'edToast', 'edMore', 'edPublishPanel'].forEach(function (id) { el[id] = document.getElementById(id); });
   el.live = document.getElementById('live');
 }
 
@@ -351,8 +368,11 @@ function renderTop() {
   el.edTitle.textContent = S.title || S.slug;
   document.title = (S.title || S.slug) + ' — page editor';
   var n = S.changes.length;
-  el.edPill.className = 'ed-pill ' + (n ? 'ed-pill--draft' : 'ed-pill--live');
-  el.edPill.textContent = n ? 'Draft · ' + n + ' edit' + (n === 1 ? '' : 's') : (S.status === 'live' ? 'Published' : S.status);
+  var scheduled = S.status === 'scheduled' && S.publishAt;
+  el.edPill.className = 'ed-pill ' + (scheduled || n ? 'ed-pill--draft' : 'ed-pill--live');
+  el.edPill.textContent = scheduled ? 'Scheduled · ' + fmtWhen(S.publishAt)
+    : n ? 'Draft · ' + n + ' edit' + (n === 1 ? '' : 's')
+    : (S.status === 'live' ? 'Published' : 'Draft');
   el.edSaved.textContent = S.saved ? 'Autosaved ' + S.saved : 'No changes yet';
   el.edUndo.disabled = S.history.length === 0;
   el.edPublish.disabled = false;
@@ -1063,6 +1083,7 @@ function bindStatic() {
 
   bindDragAndDrop();
   bindPicker();
+  bindPublish();
 
   window.addEventListener('resize', fitPaper);
   if (window.ResizeObserver) new ResizeObserver(fitPaper).observe(el.edCanvas);
@@ -1266,6 +1287,153 @@ function bindDragAndDrop() {
   });
 }
 
+// ── publishing ─────────────────────────────────────────────────────────────
+async function publish() {
+  await saveDraft();
+  try {
+    var out = await api('/ministries/api/page/' + encodeURIComponent(S.slug) + '/publish',
+      { method: 'POST', body: JSON.stringify({ blocks: S.blocks }) });
+    S.changes = [];
+    S.status = 'live';
+    S.publishAt = null;
+    S.saved = now();
+    S.dirty = false;
+    closePublishPanel();
+    renderTop(); renderChanges();
+    toast('Published to timothystl.org/' + S.slug);
+    say('Published');
+  } catch (err) {
+    if (String(err && err.message) !== 'auth') toast('Could not publish — ' + (err.message || 'try again'));
+  }
+}
+
+function fmtWhen(iso) {
+  if (!iso) return '';
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+// datetime-local wants a local wall-clock string and hands one back with no
+// zone. The Worker runs in UTC, so both directions are converted here, in the
+// office's own timezone.
+function toLocalInput(iso) {
+  if (!iso) return '';
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  var pad = function (n) { return String(n).padStart(2, '0'); };
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+    'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
+
+function localToIso(value) {
+  var d = new Date(value);
+  return isNaN(d.getTime()) ? '' : d.toISOString();
+}
+
+function closePublishPanel() {
+  S.publishPanel = false;
+  el.edMore.setAttribute('aria-expanded', 'false');
+  el.edPublishPanel.innerHTML = '';
+}
+
+async function togglePublishPanel() {
+  if (S.publishPanel) return closePublishPanel();
+  S.publishPanel = true;
+  el.edMore.setAttribute('aria-expanded', 'true');
+  renderPublishPanel();
+  try {
+    var out = await api('/ministries/api/page/' + encodeURIComponent(S.slug) + '/revisions');
+    S.revisions = out.revisions || [];
+    if (S.publishPanel) renderPublishPanel();
+  } catch (_) { /* the panel still works without history */ }
+}
+
+function renderPublishPanel() {
+  if (!S.publishPanel) return;
+  var scheduled = S.status === 'scheduled' && S.publishAt;
+  var revs = (S.revisions || []).map(function (r) {
+    return '<li class="ed-rev"><span><b>' + esc(fmtWhen(r.published_at)) + '</b><br>' +
+      esc(r.published_by || 'staff') + ' · ' + r.count + ' block' + (r.count === 1 ? '' : 's') + '</span>' +
+      '<button type="button" class="ed-close" data-restore="' + r.id + '">Restore</button></li>';
+  }).join('');
+  el.edPublishPanel.innerHTML = '<div class="ed-panel" role="dialog" aria-label="Publishing options">' +
+    '<div class="ed-panel-sec"><span class="ed-lab">Status</span>' +
+      '<span class="ed-note">' + (scheduled
+        ? 'Scheduled for ' + esc(fmtWhen(S.publishAt))
+        : (S.changes.length ? S.changes.length + ' unpublished change' + (S.changes.length === 1 ? '' : 's') : 'Everything is published')) + '</span>' +
+      '<a class="ed-close" style="display:inline-block;text-align:center" href="https://timothystl.org/' + esc(S.slug) + '" target="_blank" rel="noopener">Compare with the live page ↗</a>' +
+    '</div>' +
+    '<div class="ed-panel-sec"><label class="ed-lab" for="edWhen">Publish later</label>' +
+      '<input class="ed-field" type="datetime-local" id="edWhen" value="' + esc(S.publishAtLocal || '') + '">' +
+      '<div style="display:flex;gap:6px">' +
+        '<button type="button" class="ed-close" id="edSchedule">Schedule</button>' +
+        (scheduled ? '<button type="button" class="ed-close" id="edUnschedule">Cancel schedule</button>' : '') +
+      '</div>' +
+      '<span class="ed-note">The page goes live on its own within about fifteen minutes of that time.</span>' +
+    '</div>' +
+    '<div class="ed-panel-sec"><span class="ed-lab">Recently published</span>' +
+      (revs ? '<ul class="ed-revs">' + revs + '</ul>' : '<span class="ed-note">Nothing published from this editor yet.</span>') +
+      '<span class="ed-note">Restoring loads that version as a draft — nothing changes on the live page until you publish.</span>' +
+    '</div></div>';
+}
+
+async function schedulePublish(whenIso) {
+  try {
+    await saveDraft();
+    var out = await api('/ministries/api/page/' + encodeURIComponent(S.slug) + '/schedule',
+      { method: 'POST', body: JSON.stringify({ publish_at: whenIso }) });
+    S.status = out.status;
+    S.publishAt = out.publish_at;
+    renderTop();
+    renderPublishPanel();
+    toast(whenIso ? 'Scheduled for ' + fmtWhen(out.publish_at) : 'Schedule cancelled');
+  } catch (err) {
+    toast(err.message || 'Could not schedule');
+  }
+}
+
+async function restoreRevision(id) {
+  try {
+    var out = await api('/ministries/api/page/' + encodeURIComponent(S.slug) + '/restore',
+      { method: 'POST', body: JSON.stringify({ id: id }) });
+    pushHistory();
+    S.blocks = out.blocks;
+    S.selectedId = null;
+    S.status = 'draft';
+    note('Restored an earlier version');
+    closePublishPanel();
+    setCanvas(out.html);
+    renderTop(); renderRail(); renderChanges(); renderInspector();
+    toast('Loaded as a draft — publish when you are happy with it');
+  } catch (err) {
+    toast(err.message || 'Could not restore');
+  }
+}
+
+function bindPublish() {
+  el.edPublish.addEventListener('click', publish);
+  el.edMore.addEventListener('click', togglePublishPanel);
+  el.edPublishPanel.addEventListener('click', function (e) {
+    var rev = e.target.closest('[data-restore]');
+    if (rev) return restoreRevision(Number(rev.dataset.restore));
+    if (e.target.closest('#edSchedule')) {
+      var v = el.edPublishPanel.querySelector('#edWhen').value;
+      if (!v) return toast('Pick a date and time first');
+      return schedulePublish(localToIso(v));
+    }
+    if (e.target.closest('#edUnschedule')) return schedulePublish(null);
+  });
+  document.addEventListener('click', function (e) {
+    if (!S.publishPanel) return;
+    if (e.target.closest('#edPublishPanel') || e.target.closest('#edMore')) return;
+    closePublishPanel();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && S.publishPanel) closePublishPanel();
+  });
+}
+
 // ── media library ──────────────────────────────────────────────────────────
 var lastFocus = null;
 
@@ -1466,6 +1634,8 @@ async function boot() {
     var data = await api('/ministries/api/page/' + encodeURIComponent(S.slug));
     S.title = data.page.title;
     S.status = data.page.status;
+    S.publishAt = data.page.publish_at || null;
+    S.publishAtLocal = toLocalInput(S.publishAt);
     S.blocks = data.page.blocks;
     S.changes = data.page.changes || [];
     S.updatedAt = data.page.updated_at || '';
