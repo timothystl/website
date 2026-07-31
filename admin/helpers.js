@@ -4,7 +4,7 @@
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, hasPermission } from './auth.js';
 
-export const VERSION = 'v1.90.1'; // minor bump: whole-page blocks, in-browser image resizing, saved sections
+export const VERSION = 'v2.0.0'; // major bump: the site editor — every page is editable, with a new permission model
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
@@ -214,6 +214,7 @@ export function sidebarShell(activeTab, user, extraLinks = '', pendingCount = 0)
     `<a href="${href}" class="sidebar-item${active ? ' sidebar-item-active' : ''}"><span class="sidebar-dot"></span>${label}${extra}</a>`;
 
   const contentItems = [
+    hp('site_pages')      ? navItem('/pages', 'Pages', activeTab === 'pages') : '',
     showNewsTab ? navItem('/newsitems', 'News &amp; Events', newsActive, pendingDot) : '',
     hp('ministries_edit') ? navItem('/ministries', 'Ministries', activeTab === 'ministries') : '',
     hp('sermons_edit')    ? navItem('/sermons', 'Sermons', activeTab === 'sermons') : '',

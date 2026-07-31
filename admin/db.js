@@ -223,6 +223,7 @@ export const DB_INIT_SERMON_NOTES = `CREATE TABLE IF NOT EXISTS sermon_notes (
   scripture TEXT,
   outline TEXT,
   youtube_url TEXT,
+  audio_url TEXT,
   created_at TEXT DEFAULT (datetime('now'))
 )`;
 
@@ -274,6 +275,50 @@ export const DB_INIT_AUDIT_LOG = `CREATE TABLE IF NOT EXISTS audit_log (
   created_at TEXT NOT NULL
 )`;
 
+// ── SITE PAGES ───────────────────────────────────────────────────────────────
+// Every page on the site is a row here. `blocks` is the working draft, and
+// `published_blocks` is what visitors see; a page whose `published_blocks` is
+// NULL still renders from its hardcoded markup in public/index.html, which is
+// what makes converting the site page by page safe.
+export const DB_INIT_PAGES = `CREATE TABLE IF NOT EXISTS pages (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  menu_label TEXT,
+  slug TEXT NOT NULL UNIQUE,
+  parent_id TEXT,
+  sort INTEGER NOT NULL DEFAULT 0,
+  template TEXT NOT NULL DEFAULT 'standard',
+  status TEXT NOT NULL DEFAULT 'published',
+  in_menu INTEGER NOT NULL DEFAULT 1,
+  locked INTEGER NOT NULL DEFAULT 0,
+  seo_description TEXT,
+  owner_username TEXT,
+  blocks TEXT,
+  published_blocks TEXT,
+  publish_at TEXT,
+  change_log TEXT,
+  updated_at TEXT,
+  updated_by TEXT
+)`;
+
+// Renaming a page regenerates its address; the old one is kept here and 301s to
+// the new one, so a volunteer renaming "VBS" cannot break an inbound link. Named
+// page_redirects because `redirects` already holds the admin's own short links.
+export const DB_INIT_PAGE_REDIRECTS = `CREATE TABLE IF NOT EXISTS page_redirects (
+  from_slug TEXT PRIMARY KEY,
+  to_slug TEXT NOT NULL,
+  created_at TEXT
+)`;
+
+export const DB_INIT_PAGE_REVISIONS = `CREATE TABLE IF NOT EXISTS page_revisions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  page_id TEXT NOT NULL,
+  blocks TEXT,
+  note TEXT,
+  created_at TEXT,
+  created_by TEXT
+)`;
+
 export const THEMES = ['Acceptance', 'Christian Education', 'Outreach', 'Worship'];
 export const CONTENT_TYPES = ['Testimonial / Quote', 'Story', 'Explainer', 'Event Promo', 'Factoid / Trivia'];
 
@@ -311,4 +356,22 @@ export const INITIAL_SETTINGS = [
   { key: 'gcal_calendar_id',  value: '',                        label: 'Google Calendar ID (gym rentals)', hint: 'Calendar ID that confirmed gym bookings are automatically added to. Format: xxxxx@group.calendar.google.com or your Gmail address for a personal calendar. Also requires GCAL_SERVICE_ACCOUNT_EMAIL and GCAL_PRIVATE_KEY set as Cloudflare Worker secrets.' },
   { key: 'gym_admin_email',   value: 'dinger@timothystl.org',  label: 'Gym booking notification email', hint: 'Email notified when a group places a hold, confirms a booking, or submits a recurring request.' },
   { key: 'gym_payment_link',  value: 'https://give.tithe.ly/?formId=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8&locationId=fe6ddef2-d6d2-4c85-adfd-f19eac997d38&fundId=51451abb-a7e4-435a-8fc3-cb061b0ab1d7', label: 'Gym rental payment link', hint: 'Tithely (or other) URL shown on invoices and confirmation pages for online payment. Update if the payment form changes.' },
+  // Church details — the one record every page reads. The map block, the
+  // service-times block, the sidebar layout and the footer all pull from here,
+  // so a phone number changes in one place and no deploy is needed.
+  { key: 'church_address_line', value: '6704 Fyler Ave',            label: 'Street address',  hint: 'Shown on the map block, contact page, and page sidebars.' },
+  { key: 'church_address_city', value: 'St. Louis, MO 63139',       label: 'City, state, ZIP', hint: 'The second line of the address.' },
+  { key: 'church_phone',        value: '(314) 781-8673',            label: 'Church phone',    hint: 'Shown wherever the site lists a phone number.' },
+  { key: 'church_email',        value: 'office@timothystl.org',     label: 'Church email',    hint: 'The public contact address for the church office.' },
+  { key: 'church_service_times', label: 'Service times', hint: 'One line per service: Day | Time | Note. Shown by the Service times block and page sidebars.',
+    value: 'Sunday | 8:00 am | Traditional\nSunday | 9:30 am | Vietnamese worship · Hội Thánh Việt\nSunday | 10:45 am | Contemporary' },
 ];
+
+// Service times are stored as one editable text box rather than a table of
+// their own: three lines that staff can retype without learning a new screen.
+export function parseServiceTimes(value) {
+  return String(value || '').split('\n').map((line) => {
+    const [day, time, note] = line.split('|').map((s) => s.trim());
+    return { day: day || '', time: time || '', note: note || '' };
+  }).filter((r) => r.day || r.time);
+}

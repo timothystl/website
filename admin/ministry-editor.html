@@ -123,6 +123,33 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
 
 /* inspector */
 .ed-insp{width:318px;flex:none;border-left:1px solid #DDE3ED;background:#FBF8F3;display:flex;flex-direction:column;min-height:0;}
+.ed-tabs{display:flex;gap:2px;padding:8px 10px 0;border-bottom:1px solid #DDE3ED;}
+.ed-tabs button{padding:7px 14px;border-radius:8px 8px 0 0;font:500 13px/1 'Source Sans 3';color:#8A8898;
+  border:1px solid transparent;border-bottom:none;background:none;cursor:pointer;margin-bottom:-1px;}
+.ed-tabs button[aria-selected="true"]{background:#FBF8F3;border-color:#DDE3ED;color:#1E2D4A;font-weight:600;}
+/* Page tab */
+.ed-field{display:flex;flex-direction:column;gap:5px;}
+.ed-field input[type="text"],.ed-field textarea,.ed-field select{width:100%;padding:8px 10px;border:1px solid #DDE3ED;
+  border-radius:8px;font:400 13.5px/1.4 'Source Sans 3';color:#1E2D4A;background:#fff;}
+.ed-field textarea{resize:vertical;min-height:64px;}
+.ed-field input[readonly]{background:#F2EFE8;color:#6A6858;}
+.ed-addr{display:flex;align-items:center;border:1px solid #DDE3ED;border-radius:8px;background:#F2EFE8;overflow:hidden;}
+.ed-addr span{padding:8px 0 8px 10px;font-size:13px;color:#8A8898;white-space:nowrap;}
+.ed-addr input{border:none;background:none;flex:1;min-width:0;padding:8px 10px 8px 2px;
+  font:400 13.5px/1.4 'Source Sans 3';color:#1E2D4A;}
+.ed-menu-opts{display:flex;flex-direction:column;gap:3px;max-height:230px;overflow-y:auto;}
+.ed-menu-opt{text-align:left;padding:8px 11px;border:1px solid #DDE3ED;border-radius:8px;background:#fff;
+  font:400 13px/1.3 'Source Sans 3';color:#4A4860;cursor:pointer;}
+.ed-menu-opt[aria-pressed="true"]{border:2px solid #2E7EA6;background:#E4EEF4;color:#1E2D4A;font-weight:600;}
+.ed-check{display:flex;align-items:center;gap:8px;font-size:13px;color:#1E2D4A;cursor:pointer;}
+.ed-count{font-size:11.5px;color:#8A8898;}
+.ed-count.is-over{color:#B85C3A;font-weight:600;}
+.ed-fills{border:1px solid #C4CEDF;border-radius:9px;background:#EDF2F7;padding:11px 12px;
+  display:flex;flex-direction:column;gap:9px;}
+.ed-fills .ed-lab{color:#1E5C7A;}
+.ed-fills p{margin:0;font-size:12.5px;line-height:1.5;color:#3A4E5C;}
+.ed-danger{padding:8px 12px;border:1px solid #E3C4B8;border-radius:8px;background:#fff;
+  color:#8A3A1F;font:500 12.5px/1 'Source Sans 3';cursor:pointer;align-self:flex-start;}
 .ed-insp-h{padding:14px 16px;border-bottom:1px solid #DDE3ED;display:flex;align-items:center;justify-content:space-between;gap:8px;}
 .ed-insp-h b{font:600 15px/1 'Source Sans 3';color:#1E2D4A;}
 .ed-insp-h span{font-size:12px;color:#8A8898;white-space:nowrap;}
@@ -219,9 +246,50 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
    media query the public page uses. */
 /*TLCB_EDITOR_CSS*/
 
+/* ── Pages rail ──────────────────────────────────────────────────────────
+   The far-left column: every page on the site, in menu order. Only drawn for
+   the site editor — a ministry page has no siblings to switch between. */
+.ed-pages{width:224px;flex:none;border-right:1px solid #DDE3ED;background:#FBF8F3;
+  display:flex;flex-direction:column;min-height:0;position:relative;z-index:5;}
+.ed-pages-h{padding:15px 14px 9px;display:flex;align-items:center;justify-content:space-between;gap:6px;
+  font:600 11px/1 'Source Sans 3';letter-spacing:.14em;text-transform:uppercase;color:#8A8898;}
+.ed-pages-h button{background:none;border:none;cursor:pointer;color:#8A8898;font-size:14px;line-height:1;padding:2px 4px;}
+.ed-pages-search{margin:0 12px 8px;padding:7px 10px;border:1px solid #DDE3ED;border-radius:8px;
+  font:400 13px/1.2 'Source Sans 3';color:#1E2D4A;background:#fff;width:calc(100% - 24px);}
+.ed-pages-list{flex:1;overflow-y:auto;padding:0 8px 10px;display:flex;flex-direction:column;gap:1px;}
+.ed-page{display:flex;align-items:center;gap:7px;padding:7px 9px;border-radius:8px;text-decoration:none;
+  font:400 13.5px/1.3 'Source Sans 3';color:#3A3A4A;border:1px solid transparent;background:none;
+  text-align:left;cursor:pointer;width:100%;}
+.ed-page:hover{background:#EDF2F7;}
+.ed-page.is-here{background:#EDF2F7;border-color:#C4CEDF;color:#1E2D4A;font-weight:600;}
+.ed-page--child{padding-left:24px;font-size:13px;}
+.ed-page-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ed-page-dot{width:7px;height:7px;border-radius:50%;background:#C9973A;flex:none;}
+.ed-page-tag{font-size:10px;color:#8A8898;flex:none;}
+.ed-pages-f{padding:10px 12px;border-top:1px solid #DDE3ED;display:flex;flex-direction:column;gap:6px;}
+.ed-pages-f a,.ed-pages-f button{display:block;text-align:center;padding:8px;border-radius:8px;
+  font:600 12.5px/1 'Source Sans 3';text-decoration:none;cursor:pointer;}
+.ed-pages-f a{border:1px solid #C4CEDF;color:#1E2D4A;background:#fff;}
+.ed-pages-f button{border:1px solid #DDE3ED;color:#4A4860;background:none;}
+.ed-pages-none{padding:14px 10px;font-size:12.5px;color:#8A8898;text-align:center;}
+/* Collapsed: a hairline strip with just the reopen arrow. */
+.ed-pages--shut{width:26px;}
+.ed-pages--shut .ed-pages-search,.ed-pages--shut .ed-pages-list,
+.ed-pages--shut .ed-pages-f,.ed-pages--shut .ed-pages-h span{display:none;}
+.ed-pages--shut .ed-pages-h{padding:12px 4px;justify-content:center;}
+
 @media(max-width:1100px){
   .ed-rail{width:216px;}
   .ed-insp{width:280px;}
+}
+/* Below 1240px the open pages rail floats OVER the canvas instead of taking a
+   column of its own. Left as a flex column, the four columns together exceed
+   the viewport and the inspector is pushed off-screen with no way to reach
+   it — which is exactly what happened in the prototype. */
+@media(max-width:1240px){
+  .ed-pages{position:absolute;left:0;top:0;bottom:0;box-shadow:6px 0 20px rgba(30,45,74,.14);}
+  .ed-pages--shut{position:static;box-shadow:none;}
+  .ed-body{position:relative;}
 }
 </style>
 <!--TLCB_TINYMCE-->
@@ -241,18 +309,34 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
 (function () {
 'use strict';
 
-var SLUG = decodeURIComponent((location.pathname.match(/\/ministries\/editor\/([^/?#]+)/) || [])[1] || '');
-var WIDTHS = { desktop: 860, tablet: 620, phone: 390 };
+// The same editor serves two things: a ministry page (youth_pages, addressed by
+// slug) and a site page (the pages table, addressed by id). Only the API prefix
+// and the identifier differ, so they are picked up from the address once here
+// rather than forking the editor.
+var PAGE_MATCH = location.pathname.match(/^\/pages\/([^/?#]+)\/edit/);
+var IS_SITE_PAGE = !!PAGE_MATCH;
+var API = IS_SITE_PAGE ? '/pages/api' : '/ministries/api';
+var BACK_HREF = IS_SITE_PAGE ? '/pages' : '/ministries';
+var BACK_LABEL = IS_SITE_PAGE ? 'Pages' : 'Ministries';
+var SLUG = decodeURIComponent(PAGE_MATCH ? PAGE_MATCH[1]
+  : ((location.pathname.match(/\/ministries\/editor\/([^/?#]+)/) || [])[1] || ''));
+var WIDTHS = { desktop: 900, tablet: 620, phone: 390 };
 var HINT_KEY = 'tlc-ministry-editor-hint-v1';
 
 var S = {
-  slug: SLUG, title: '', status: 'live', updatedAt: '',
+  // `slug` identifies the page to the API; `path` is where it lives on the
+  // public site. For a ministry page they are the same word; for a site page
+  // the id and the address are separate things.
+  slug: SLUG, path: '/' + SLUG, title: '', status: 'live', updatedAt: '',
   blocks: [], config: null, media: [],
   selectedId: null, device: 'desktop', group: 'Content', paletteOpen: true,
   changes: [], history: [], saved: null, dirty: false,
   dragId: null, dragType: null, dragSection: null, dropIndex: null,
   picker: null, toast: null, hint: true, loadError: '',
   publishPanel: false, publishAt: null, publishAtLocal: '', revisions: [], sections: [],
+  template: '', siblings: [], railOpen: true, leaving: false, tab: 'block',
+  role: 'office', editors: [],
+  pageMeta: null, savingPage: false,
 };
 
 var el = {};
@@ -289,7 +373,7 @@ function shellHtml() {
   '<div class="ed">' +
     '<header class="ed-top">' +
       '<div class="ed-brand"><div class="ed-mark" aria-hidden="true">T</div><span>Timothy Admin</span></div>' +
-      '<nav class="ed-crumb" aria-label="Breadcrumb"><a href="/ministries">Ministries</a><i>/</i><b id="edTitle"></b></nav>' +
+      '<nav class="ed-crumb" aria-label="Breadcrumb"><a href="' + BACK_HREF + '">' + BACK_LABEL + '</a><i>/</i><b id="edTitle"></b></nav>' +
       '<span class="ed-pill" id="edPill"></span>' +
       '<span class="ed-saved" id="edSaved"></span>' +
       '<div class="ed-spacer"></div>' +
@@ -310,6 +394,17 @@ function shellHtml() {
       '<button type="button" id="edHintX" aria-label="Dismiss tip">×</button>' +
     '</div>' +
     '<div class="ed-body">' +
+      (IS_SITE_PAGE ?
+      '<aside class="ed-pages" id="edPages">' +
+        '<div class="ed-pages-h"><span>Site pages</span>' +
+          '<button type="button" id="edPagesToggle" aria-expanded="true" aria-label="Hide the page list">‹</button></div>' +
+        '<input class="ed-pages-search" id="edPagesSearch" type="search" placeholder="Search pages…" aria-label="Search pages">' +
+        '<div class="ed-pages-list" id="edPagesList"></div>' +
+        '<div class="ed-pages-f">' +
+          '<a href="/pages">All pages &amp; menu</a>' +
+          '<button type="button" id="edPagesNew">+ New page</button>' +
+        '</div>' +
+      '</aside>' : '') +
       '<aside class="ed-rail">' +
         '<div class="ed-rail-h" id="edRailHead">Page blocks</div>' +
         '<div class="ed-rail-list" id="edRail" role="listbox" aria-labelledby="edRailHead" tabindex="-1"></div>' +
@@ -326,6 +421,11 @@ function shellHtml() {
         '</div>' +
       '</main>' +
       '<aside class="ed-insp">' +
+        (IS_SITE_PAGE ?
+        '<div class="ed-tabs" role="tablist" aria-label="Inspector">' +
+          '<button type="button" role="tab" data-tab="block" id="edTabBlock" aria-selected="true">Block</button>' +
+          '<button type="button" role="tab" data-tab="page" id="edTabPage" aria-selected="false">Page</button>' +
+        '</div>' : '') +
         '<div id="edInspHead"></div>' +
         '<div id="edInspBody" class="ed-insp-body"></div>' +
         '<div class="ed-changes">' +
@@ -343,7 +443,9 @@ function shellHtml() {
 function cacheEls() {
   ['edTitle', 'edPill', 'edSaved', 'edView', 'edUndo', 'edPublish', 'edHint', 'edHintX', 'edRail',
    'edCanvas', 'edPaper', 'edPalTabs', 'edPalChips', 'edPalToggle', 'edInspHead', 'edInspBody',
-   'edChanges', 'edChangesHead', 'edModal', 'edToast', 'edMore', 'edPublishPanel'].forEach(function (id) { el[id] = document.getElementById(id); });
+   'edChanges', 'edChangesHead', 'edModal', 'edToast', 'edMore', 'edPublishPanel',
+   'edPages', 'edPagesList', 'edPagesSearch', 'edPagesToggle', 'edPagesNew',
+   'edTabBlock', 'edTabPage'].forEach(function (id) { el[id] = document.getElementById(id); });
   el.live = document.getElementById('live');
 }
 
@@ -381,7 +483,7 @@ function renderTop() {
   el.edSaved.textContent = S.saved ? 'Autosaved ' + S.saved : 'No changes yet';
   el.edUndo.disabled = S.history.length === 0;
   el.edPublish.disabled = false;
-  el.edView.href = 'https://timothystl.org/' + S.slug;
+  el.edView.href = 'https://timothystl.org' + S.path;
 }
 
 function renderRail() {
@@ -393,10 +495,12 @@ function renderRail() {
     html += '<button type="button" role="option" class="ed-row' + (b.hidden ? ' is-hidden' : '') + (S.dragId === b.id ? ' is-dragging' : '') + '"' +
       ' draggable="true" data-id="' + esc(b.id) + '" data-index="' + i + '"' +
       ' aria-selected="' + (b.id === S.selectedId) + '"' +
-      ' aria-label="' + esc(d.label) + ' block, position ' + (i + 1) + ' of ' + S.blocks.length + (b.hidden ? ', hidden on phone' : '') + '">' +
+      ' aria-label="' + esc(d.label) + ' block, position ' + (i + 1) + ' of ' + S.blocks.length +
+        (b.hidden ? ', hidden on phone' : '') + (b.locked ? ', set by the church office' : '') + '">' +
       '<span class="ed-row-grip" aria-hidden="true">⠿</span>' +
       '<span class="ed-row-glyph" aria-hidden="true">' + esc(d.glyph) + '</span>' +
       '<span class="ed-row-label">' + esc(rowLabel(b, d)) + '</span>' +
+      (b.locked ? '<span class="ed-row-tag" title="Set by the church office">\uD83D\uDD12</span>' : '') +
       (b.hidden ? '<span class="ed-row-tag">Hidden</span>' : '') +
       '</button>';
   }
@@ -456,7 +560,7 @@ function renderPalette() {
 // ── saved sections ─────────────────────────────────────────────────────────
 async function loadSections() {
   try {
-    var out = await api('/ministries/api/sections');
+    var out = await api(API + '/sections');
     S.sections = out.sections || [];
     if (S.group === 'Saved') renderPalette();
   } catch (_) { /* the rest of the palette still works */ }
@@ -469,7 +573,7 @@ async function saveSection(blocks, suggested) {
   name = name.trim();
   if (!name) return toast('A section needs a name');
   try {
-    await api('/ministries/api/sections', { method: 'POST', body: JSON.stringify({ name: name, blocks: blocks }) });
+    await api(API + '/sections', { method: 'POST', body: JSON.stringify({ name: name, blocks: blocks }) });
     await loadSections();
     toast('Saved — find it under "Saved" in the panel below');
     say('Section saved');
@@ -479,7 +583,7 @@ async function saveSection(blocks, suggested) {
 }
 
 async function insertSection(id, at) {
-  var out = await api('/ministries/api/sections/' + Number(id));
+  var out = await api(API + '/sections/' + Number(id));
   var blocks = out.blocks || [];
   if (!blocks.length) return;
   pushHistory();
@@ -497,7 +601,7 @@ async function deleteSection(id) {
   var sec = S.sections.filter(function (x) { return x.id === Number(id); })[0];
   if (!window.confirm('Delete the saved section "' + (sec ? sec.name : '') + '"? Pages already using it keep their blocks.')) return;
   try {
-    await api('/ministries/api/sections/' + Number(id) + '/delete', { method: 'POST', body: '{}' });
+    await api(API + '/sections/' + Number(id) + '/delete', { method: 'POST', body: '{}' });
     await loadSections();
     toast('Saved section deleted');
   } catch (err) { toast(err.message || 'Could not delete that'); }
@@ -516,7 +620,7 @@ function renderToast() {
 
 // Canvas markup always comes from the Worker.
 async function refreshCanvas() {
-  var out = await api('/ministries/api/render', { method: 'POST', body: JSON.stringify({ blocks: S.blocks, slug: S.slug }) });
+  var out = await api(API + '/render', { method: 'POST', body: JSON.stringify({ blocks: S.blocks, slug: S.slug }) });
   setCanvas(out.html);
 }
 
@@ -560,8 +664,40 @@ function applySelection() {
   for (var i = 0; i < nodes.length; i++) nodes[i].classList.toggle('is-sel', nodes[i].dataset.id === S.selectedId);
 }
 
+// The pages rail: every page on the site, in menu order, children indented.
+// A gold dot marks a page with unpublished changes and "hidden" marks one that
+// is not in the menu — the same two facts the All pages list shows, so the two
+// screens cannot tell staff different things.
+function renderPagesRail() {
+  if (!el.edPagesList) return;
+  var q = (el.edPagesSearch && el.edPagesSearch.value || '').trim().toLowerCase();
+  var all = S.siblings || [];
+  var hit = function (p) { return !q || (p.title + ' ' + p.slug).toLowerCase().indexOf(q) > -1; };
+  var row = function (p, child) {
+    var here = p.id === S.slug;
+    return '<button type="button" class="ed-page' + (child ? ' ed-page--child' : '') + (here ? ' is-here' : '') +
+      '" data-page="' + esc(p.id) + '"' + (here ? ' aria-current="page"' : '') + '>' +
+      (p.slug === '/' ? '<span class="ed-page-tag" title="Homepage">\u2302</span>' : '') +
+      '<span class="ed-page-t">' + esc(p.title) + '</span>' +
+      (p.hasDraftEdits ? '<span class="ed-page-dot" title="Unpublished changes"></span>' : '') +
+      (p.in_menu ? '' : '<span class="ed-page-tag">hidden</span>') +
+      '</button>';
+  };
+  var html = '';
+  all.filter(function (p) { return !p.parent_id; }).forEach(function (p) {
+    var kids = all.filter(function (c) { return c.parent_id === p.id; });
+    // A parent stays visible when one of its children matches, or searching
+    // would strand the child with nothing to sit under.
+    if (!hit(p) && !kids.some(hit)) return;
+    html += row(p, false);
+    kids.filter(hit).forEach(function (c) { html += row(c, true); });
+  });
+  el.edPagesList.innerHTML = html || '<div class="ed-pages-none">No pages match that.</div>';
+}
+
 function renderAll() {
   renderTop();
+  renderPagesRail();
   renderRail();
   renderPalette();
   renderChanges();
@@ -654,7 +790,7 @@ function rerender() {
 }
 async function doRerender() {
   try {
-    var out = await api('/ministries/api/render', { method: 'POST', body: JSON.stringify({ blocks: S.blocks, slug: S.slug }) });
+    var out = await api(API + '/render', { method: 'POST', body: JSON.stringify({ blocks: S.blocks, slug: S.slug }) });
     S.blocks = out.blocks; // take the server's sanitised version back as the truth
     setCanvas(out.html);
     renderRail();
@@ -665,7 +801,7 @@ async function doRerender() {
 }
 
 async function freshBlock(type) {
-  var out = await api('/ministries/api/new-block', { method: 'POST', body: JSON.stringify({ type: type }) });
+  var out = await api(API + '/new-block', { method: 'POST', body: JSON.stringify({ type: type }) });
   return out.block;
 }
 
@@ -680,7 +816,7 @@ async function saveDraft() {
   clearTimeout(saveTimer);
   if (!S.dirty) return;
   try {
-    var out = await api('/ministries/api/page/' + encodeURIComponent(S.slug) + '/draft',
+    var out = await api(API + '/page/' + encodeURIComponent(S.slug) + '/draft',
       { method: 'POST', body: JSON.stringify({ blocks: S.blocks, changes: S.changes }) });
     S.dirty = false;
     S.saved = now();
@@ -692,8 +828,113 @@ async function saveDraft() {
   }
 }
 
+// Everything the editor holds that has not reached the server yet, written out
+// before the page changes underneath it. Switching pages with an unsaved edit
+// in the debounce window would otherwise silently lose it.
+async function flushDraft() {
+  clearTimeout(saveTimer);
+  if (S.dirty) await saveDraft();
+}
+
+// Moving between pages is a real navigation, not a swap of state in place: the
+// editor reboots on the new page, so nothing from the old one can leak into it.
+async function goToPage(id) {
+  S.leaving = true;
+  await flushDraft();
+  location.href = '/pages/' + encodeURIComponent(id) + '/edit';
+}
+
+// ── Page tab behaviour ─────────────────────────────────────────────────────
+// Page settings save on their own (debounced), separate from the block draft:
+// they are not part of what Publish promotes, so treating them as draft edits
+// would put a page permanently in "Draft edits" for changing its own name.
+var pageSaveTimer = null;
+function schedulePageSave(fields, immediate) {
+  Object.assign(S.pageMeta, fields);
+  S.savingPage = true;
+  var saved = document.getElementById('edPageSaved');
+  if (saved) saved.textContent = 'Saving\u2026';
+  clearTimeout(pageSaveTimer);
+  pageSaveTimer = setTimeout(savePageMeta, immediate ? 0 : 700);
+}
+
+async function savePageMeta() {
+  clearTimeout(pageSaveTimer);
+  try {
+    var out = await api(API + '/page/' + encodeURIComponent(S.slug) + '/settings',
+      { method: 'POST', body: JSON.stringify(S.pageMeta) });
+    S.pageMeta = out.page;
+    S.siblings = out.pages || S.siblings;
+    S.path = out.page.slug;
+    S.title = out.page.title;
+    S.template = out.page.template;
+    S.savingPage = false;
+    // The address may have been cleaned up or made unique on the way in, and
+    // the layout may have changed what the canvas should look like.
+    if (out.rerender) { setCanvas(out.html); applySelection(); }
+    renderTop();
+    renderPagesRail();
+    if (S.tab === 'page') renderInspector();
+    if (out.redirected) toast('Old address will send visitors to the new one');
+  } catch (err) {
+    if (String(err && err.message) === 'auth') return;
+    S.savingPage = false;
+    toast('Could not save the page settings');
+  }
+}
+
+function pageTabClick(e) {
+  var opt = e.target.closest('[data-a="parent"]');
+  if (opt) { schedulePageSave({ parent_id: opt.dataset.v || null }, true); return; }
+  if (e.target.closest('#edPageDelete')) return deletePage();
+}
+
+function pageTabInput(e) {
+  var t = e.target;
+  if (t.id === 'edPageTitle') return schedulePageSave({ title: t.value });
+  if (t.id === 'edPageSlug') return schedulePageSave({ slug: t.value });
+  if (t.id === 'edPageInMenu') return schedulePageSave({ in_menu: t.checked ? 1 : 0 }, true);
+  if (t.id === 'edPageTemplate') return schedulePageSave({ template: t.value }, true);
+  if (t.id === 'edPageOwner') return schedulePageSave({ owner_username: t.value }, true);
+  if (t.id === 'edPageSeo') {
+    var c = document.getElementById('edSeoCount');
+    if (c) {
+      c.textContent = t.value.length + ' / ' + SEO_MAX;
+      c.classList.toggle('is-over', t.value.length > SEO_MAX);
+    }
+    return schedulePageSave({ seo_description: t.value });
+  }
+}
+
+async function deletePage() {
+  if (S.pageMeta && S.pageMeta.locked) return;
+  var name = (S.pageMeta && S.pageMeta.title) || 'this page';
+  if (!confirm('Delete \u201C' + name + '\u201D and everything on it? Its address will start showing the "page not found" screen.')) return;
+  try {
+    await api(API + '/page/' + encodeURIComponent(S.slug) + '/delete', { method: 'POST', body: '{}' });
+    S.leaving = true;
+    S.dirty = false;
+    location.href = '/pages';
+  } catch (err) {
+    if (String(err && err.message) === 'auth') return;
+    toast('Could not delete this page');
+  }
+}
+
+// Locked blocks belong to the site's design rather than to the page. The office
+// can still take one out; a ministry leader edits around it.
+function canRemove(id) {
+  if (S.role === 'office') return true;
+  var b = findBlock(id);
+  return !b || !b.locked;
+}
+
 // ── block actions ──────────────────────────────────────────────────────────
 function select(id) {
+  // Clicking a block is a request to look at that block, so the panel comes
+  // back from the Page tab on its own rather than leaving staff wondering why
+  // nothing happened.
+  if (id) S.tab = 'block';
   S.selectedId = id;
   applySelection();
   renderRail();
@@ -717,6 +958,7 @@ async function duplicateBlock(id) {
 async function deleteBlock(id) {
   var b = findBlock(id);
   if (!b) return;
+  if (!canRemove(id)) { toast('That part of the page is set by the church office'); return; }
   pushHistory();
   S.blocks = S.blocks.filter(function (x) { return x.id !== id; });
   S.selectedId = null;
@@ -794,11 +1036,117 @@ function commitField(node) {
 }
 
 // ── inspector ──────────────────────────────────────────────────────────────
+// ── the Page tab ───────────────────────────────────────────────────────────
+function pageTabReadOnly(m) {
+  var layouts = (S.config && S.config.templates) || [];
+  var layout = layouts.filter(function (t) { return t.key === m.template; })[0] || {};
+  return '' +
+    '<div class="ed-sec ed-field"><span class="ed-lab">Page name</span>' +
+      '<input type="text" id="edPageTitle" value="' + esc(m.title || '') + '" readonly></div>' +
+    '<div class="ed-sec ed-field ed-sec--rule"><span class="ed-lab">Web address</span>' +
+      '<input type="text" id="edPageSlug" value="timothystl.org' + esc(m.slug || '') + '" readonly></div>' +
+    '<div class="ed-sec ed-field ed-sec--rule"><span class="ed-lab">Page layout</span>' +
+      '<input type="text" id="edPageLayout" value="' + esc(layout.label || m.template || '') + '" readonly></div>' +
+    '<div class="ed-sec ed-sec--rule">' +
+      '<span class="ed-note">The name, address, menu placement and layout are set by the church office. ' +
+      'Everything on the page itself is yours to change.</span>' +
+    '</div>';
+}
+
+// Everything about the page rather than a block: what it is called, where it
+// lives, whether it is in the menu, which layout it uses, and its search
+// summary. Renaming regenerates the address and leaves a redirect behind, so
+// the one thing a volunteer could break — an inbound link — is handled for
+// them rather than left to be remembered.
+var SEO_MAX = 160;
+
+function pageTabHtml() {
+  var m = S.pageMeta || {};
+  // A ministry leader edits their page's content, not the site's structure.
+  // The fields still show what is true — they are just not theirs to change.
+  if (S.role !== 'office') return pageTabReadOnly(m);
+  var isHome = m.slug === '/';
+  var parents = (S.siblings || []).filter(function (p) { return !p.parent_id && p.id !== S.slug; });
+  var desc = m.seo_description || '';
+  var over = desc.length > SEO_MAX;
+  var layouts = (S.config && S.config.templates) || [];
+
+  var menuOpts = '<button type="button" class="ed-menu-opt" data-a="parent" data-v=""' +
+    ' aria-pressed="' + (!m.parent_id ? 'true' : 'false') + '">Top level of the menu</button>' +
+    parents.map(function (p) {
+      return '<button type="button" class="ed-menu-opt" data-a="parent" data-v="' + esc(p.id) + '"' +
+        ' aria-pressed="' + (m.parent_id === p.id ? 'true' : 'false') + '">Under ' + esc(p.title) + '</button>';
+    }).join('');
+
+  return '' +
+    '<div class="ed-sec ed-field">' +
+      '<span class="ed-lab">Page name</span>' +
+      '<input type="text" id="edPageTitle" value="' + esc(m.title || '') + '" maxlength="80">' +
+      '<span class="ed-note">This is the name people see in the menu.</span>' +
+    '</div>' +
+    '<div class="ed-sec ed-field ed-sec--rule">' +
+      '<span class="ed-lab">Web address</span>' +
+      '<div class="ed-addr"><span>timothystl.org</span>' +
+        '<input type="text" id="edPageSlug" value="' + esc(m.slug || '') + '"' + (isHome ? ' readonly' : '') + '></div>' +
+      '<span class="ed-note">' + (isHome
+        ? 'The homepage always lives at the root.'
+        : 'Set from the page name. Change it only if you must \u2014 old links stop working, though we will send them on for you.') + '</span>' +
+    '</div>' +
+    '<div class="ed-sec ed-sec--rule">' +
+      '<span class="ed-lab">Where it sits in the menu</span>' +
+      '<div class="ed-menu-opts">' + menuOpts + '</div>' +
+      '<label class="ed-check"><input type="checkbox" id="edPageInMenu"' + (m.in_menu ? ' checked' : '') + '>' +
+        'Show this page in the menu</label>' +
+    '</div>' +
+    '<div class="ed-sec ed-field ed-sec--rule">' +
+      '<span class="ed-lab">Page layout</span>' +
+      '<select id="edPageTemplate">' + layouts.map(function (t) {
+        return '<option value="' + esc(t.key) + '"' + (t.key === m.template ? ' selected' : '') + '>' + esc(t.label) + '</option>';
+      }).join('') + '</select>' +
+      '<span class="ed-note" id="edPageTemplateHint">' + esc((layouts.find(function (t) { return t.key === m.template; }) || {}).hint || '') + '</span>' +
+    '</div>' +
+    '<div class="ed-sec ed-field ed-sec--rule">' +
+      '<div class="ed-lab-row"><span class="ed-lab">Search summary</span>' +
+        '<span class="ed-count' + (over ? ' is-over' : '') + '" id="edSeoCount">' + desc.length + ' / ' + SEO_MAX + '</span></div>' +
+      '<textarea id="edPageSeo" rows="3">' + esc(desc) + '</textarea>' +
+      '<span class="ed-note">The sentence Google shows under the page title.</span>' +
+    '</div>' +
+    (S.role === 'office' ? '<div class="ed-sec ed-field ed-sec--rule">' +
+      '<span class="ed-lab">Who can edit this page</span>' +
+      '<select id="edPageOwner">' +
+        '<option value=""' + (!m.owner_username ? ' selected' : '') + '>Anyone in the church office</option>' +
+        (S.editors || []).map(function (u) {
+          return '<option value="' + esc(u) + '"' + (u === m.owner_username ? ' selected' : '') + '>' + esc(u) + '</option>';
+        }).join('') +
+      '</select>' +
+      '<span class="ed-note">Hand a page to one person and it is the only page they see.</span>' +
+    '</div>' : '') +
+    '<div class="ed-sec ed-sec--rule">' +
+      '<span class="ed-lab">Publishing</span>' +
+      '<span class="ed-read" id="edPageSaved">' + (S.savingPage ? 'Saving\u2026' : 'Saved') + '</span>' +
+      '<button type="button" class="ed-danger" id="edPageDelete">Delete this page</button>' +
+      '<span class="ed-note">' + (m.locked
+        ? 'This page is part of the site\u2019s structure and cannot be deleted.'
+        : 'The page and everything on it. Its address will start showing the \u201Cpage not found\u201D screen.') + '</span>' +
+    '</div>';
+}
+
 function renderInspector() {
   // Rebuilding the panel loses focus; put it back on the same control so the
   // keyboard path through a stepper or a swatch row survives a re-render.
   var active = document.activeElement;
   var focusKey = active && active.closest && active.closest('#edInspBody') ? active.getAttribute('data-k') : null;
+
+  if (el.edTabBlock) {
+    el.edTabBlock.setAttribute('aria-selected', String(S.tab === 'block'));
+    el.edTabPage.setAttribute('aria-selected', String(S.tab === 'page'));
+  }
+  if (S.tab === 'page') {
+    el.edInspHead.innerHTML = '';
+    el.edInspBody.className = 'ed-insp-body';
+    el.edInspBody.innerHTML = pageTabHtml();
+    return;
+  }
 
   var b = findBlock(S.selectedId);
   if (!b) {
@@ -837,6 +1185,30 @@ function stepper(b, key, label) {
 function inspectorSections(b, d) {
   var C = S.config;
   var out = '';
+
+  // Locking is the office's own control: it marks a block as part of the site's
+  // design so whoever the page is handed to can edit around it but not remove
+  // it. Nobody else sees this, because for them it is not a choice.
+  var lockRow = S.role === 'office' && IS_SITE_PAGE
+    ? '<div class="ed-sec ed-sec--rule"><label class="ed-check">' +
+        '<input type="checkbox" data-in="locked"' + (b.locked ? ' checked' : '') + '>' +
+        'Set by the church office</label>' +
+        '<span class="ed-note">Whoever this page is handed to can edit around this block but cannot delete it.</span></div>'
+    : '';
+
+  // 0. Self-filling blocks say plainly where their content comes from, and
+  // offer the one thing there is to decide: how many to show. There is no
+  // editable body inside one — the whole point is that it cannot go stale.
+  if (d.auto) {
+    out += '<div class="ed-fills"><span class="ed-lab">Fills itself</span>' +
+      '<p>' + esc(d.autoNote || 'This block fills itself from elsewhere in the admin.') + '</p>' +
+      (d.autoCount ? '<div class="ed-step-row"><span>How many to show</span><span class="ed-step">' +
+        '<button type="button" data-a="count" data-v="-1" data-k="count:-1" aria-label="Show fewer">\u2212</button>' +
+        '<output>' + b.count + '</output>' +
+        '<button type="button" data-a="count" data-v="1" data-k="count:1" aria-label="Show more">+</button>' +
+      '</span></div>' : '') +
+      '</div>';
+  }
 
   // 1. Columns
   if (b.type === 'columns') {
@@ -949,7 +1321,7 @@ function inspectorSections(b, d) {
     '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
       '<button type="button" class="ed-reset" data-a="reset" data-k="reset">Reset block</button>' +
       '<button type="button" class="ed-reset" data-a="save-section" data-k="save-section">Save as reusable section</button>' +
-    '</div></div>';
+    '</div></div>' + lockRow;
 
   return out;
 }
@@ -991,6 +1363,13 @@ function inspectorAction(action, value) {
       var structural = false;
       while (items.length < n) { items.push({ title: '', body: '' }); structural = true; }
       patch(b.id, structural ? { cols: n, items: items } : { cols: n }, 'Changed to ' + n + ' columns', structural ? 'rerender' : 'style');
+      break;
+    }
+    case 'count': {
+      var n2 = Math.max(1, Math.min(6, (b.count || 3) + Number(value)));
+      if (n2 === b.count) return;
+      patch(b.id, { count: n2 }, 'Showing ' + n2 + ' at a time', 'rerender');
+      say('Showing ' + n2);
       break;
     }
     case 'side': patch(b.id, { side: value }, 'Moved photo ' + value); break;
@@ -1063,6 +1442,13 @@ function inspectorInput(target) {
   if (!b) return;
   var spec = target.dataset.in;
   var value = target.value;
+  if (spec === 'locked') {
+    // A structural fact about the block, not a typed value — save it now
+    // rather than on the 700ms input debounce below.
+    patch(b.id, { locked: target.checked }, target.checked ? 'Marked as set by the office' : 'Unmarked as set by the office', 'none');
+    renderRail();
+    return;
+  }
   if (spec === 'url') b.url = value;
   else if (spec === 'photoAlt') b.photoAlt = value;
   else if (spec.indexOf('item:') === 0) {
@@ -1097,6 +1483,33 @@ function bindStatic() {
     var row = e.target.closest('.ed-row');
     if (row) select(row.dataset.id);
   });
+
+  // pages rail
+  if (el.edPagesList) {
+    el.edPagesList.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-page]');
+      if (!btn || btn.dataset.page === S.slug) return;
+      // Leaving with work in flight would lose it, so flush first.
+      goToPage(btn.dataset.page);
+    });
+    el.edPagesSearch.addEventListener('input', renderPagesRail);
+    el.edPagesToggle.addEventListener('click', function () {
+      S.railOpen = !S.railOpen;
+      el.edPages.classList.toggle('ed-pages--shut', !S.railOpen);
+      el.edPagesToggle.textContent = S.railOpen ? '\u2039' : '\u203A';
+      el.edPagesToggle.setAttribute('aria-expanded', String(S.railOpen));
+      el.edPagesToggle.setAttribute('aria-label', S.railOpen ? 'Hide the page list' : 'Show the page list');
+      fitPaper();
+    });
+    el.edPagesNew.addEventListener('click', async function () {
+      await flushDraft();
+      var form = document.createElement('form');
+      form.method = 'POST';
+      form.action = '/pages/new';
+      document.body.appendChild(form);
+      form.submit();
+    });
+  }
 
   // canvas: selection, block toolbar, media pickers
   el.edPaper.addEventListener('click', function (e) {
@@ -1141,25 +1554,65 @@ function bindStatic() {
 
   // inspector
   el.edInspBody.addEventListener('click', function (e) {
+    if (S.tab === 'page') return pageTabClick(e);
     var btn = e.target.closest('[data-a]');
     if (btn) inspectorAction(btn.dataset.a, btn.dataset.v || '');
   });
   el.edInspBody.addEventListener('input', function (e) {
+    if (S.tab === 'page') return pageTabInput(e);
+    if (e.target.dataset && e.target.dataset.in) inspectorInput(e.target);
+  });
+  el.edInspBody.addEventListener('change', function (e) {
+    if (S.tab === 'page') return pageTabInput(e);
+    // Checkboxes fire `change`, not `input`, in every browser that matters.
     if (e.target.dataset && e.target.dataset.in) inspectorInput(e.target);
   });
 
-  // Escape clears the selection so the whole page is visible again
+  if (el.edTabBlock) {
+    el.edTabBlock.addEventListener('click', function () { S.tab = 'block'; renderInspector(); });
+    el.edTabPage.addEventListener('click', function () { S.tab = 'page'; renderInspector(); });
+  }
+
+  // Pasting from Word or a website brings its own fonts, sizes and colours with
+  // it. Without this the palette guarantee is worthless — one paste and the
+  // page carries markup nothing in the editor can reach. Plain text only.
+  el.edPaper.addEventListener('paste', function (e) {
+    var field = e.target.closest && e.target.closest('[contenteditable="true"]');
+    if (!field || !e.clipboardData) return;
+    e.preventDefault();
+    var text = e.clipboardData.getData('text/plain') || '';
+    if (!text) return;
+    // Single-line fields take the text as one line; a heading is not a place
+    // for three paragraphs.
+    if (!field.classList.contains('tlcb-prose')) text = text.replace(/\s*[\r\n]+\s*/g, ' ');
+    document.execCommand('insertText', false, text);
+  });
+
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && !S.picker && S.selectedId) { select(null); }
+    // Escape clears the selection so the whole page is visible again
+    if (e.key === 'Escape' && !S.picker && S.selectedId) { select(null); return; }
+    // Undo. Typing inside a field is the browser's own undo, not the editor's,
+    // so leave that alone — taking it over would be worse than not having it.
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+      var t = e.target;
+      if (t && t.closest && (t.closest('[contenteditable="true"]') || t.closest('input, textarea, select'))) return;
+      if (!S.history.length) return;
+      e.preventDefault();
+      undo();
+    }
   });
 
   // Don't lose an edit to a closed tab
   window.addEventListener('beforeunload', function (e) {
     if (!S.dirty) return;
     try {
-      navigator.sendBeacon('/ministries/api/page/' + encodeURIComponent(S.slug) + '/draft',
+      navigator.sendBeacon(API + '/page/' + encodeURIComponent(S.slug) + '/draft',
         new Blob([JSON.stringify({ blocks: S.blocks, changes: S.changes })], { type: 'application/json' }));
     } catch (_) {}
+    // Only warn when the visitor is leaving the editor altogether. Moving to
+    // another page in the rail already flushed the draft, and a "leave site?"
+    // dialog there would both be untrue and cancel the navigation.
+    if (S.leaving) return;
     e.preventDefault();
     e.returnValue = '';
   });
@@ -1388,7 +1841,7 @@ function bindDragAndDrop() {
 async function publish() {
   await saveDraft();
   try {
-    var out = await api('/ministries/api/page/' + encodeURIComponent(S.slug) + '/publish',
+    var out = await api(API + '/page/' + encodeURIComponent(S.slug) + '/publish',
       { method: 'POST', body: JSON.stringify({ blocks: S.blocks }) });
     S.changes = [];
     S.status = 'live';
@@ -1397,7 +1850,7 @@ async function publish() {
     S.dirty = false;
     closePublishPanel();
     renderTop(); renderChanges();
-    toast('Published to timothystl.org/' + S.slug);
+    toast('Published to timothystl.org' + S.path);
     say('Published');
   } catch (err) {
     if (String(err && err.message) !== 'auth') toast('Could not publish — ' + (err.message || 'try again'));
@@ -1440,7 +1893,7 @@ async function togglePublishPanel() {
   el.edMore.setAttribute('aria-expanded', 'true');
   renderPublishPanel();
   try {
-    var out = await api('/ministries/api/page/' + encodeURIComponent(S.slug) + '/revisions');
+    var out = await api(API + '/page/' + encodeURIComponent(S.slug) + '/revisions');
     S.revisions = out.revisions || [];
     if (S.publishPanel) renderPublishPanel();
   } catch (_) { /* the panel still works without history */ }
@@ -1459,7 +1912,7 @@ function renderPublishPanel() {
       '<span class="ed-note">' + (scheduled
         ? 'Scheduled for ' + esc(fmtWhen(S.publishAt))
         : (S.changes.length ? S.changes.length + ' unpublished change' + (S.changes.length === 1 ? '' : 's') : 'Everything is published')) + '</span>' +
-      '<a class="ed-close" style="display:inline-block;text-align:center" href="https://timothystl.org/' + esc(S.slug) + '" target="_blank" rel="noopener">Compare with the live page ↗</a>' +
+      '<a class="ed-close" style="display:inline-block;text-align:center" href="https://timothystl.org' + esc(S.path) + '" target="_blank" rel="noopener">Compare with the live page ↗</a>' +
       '<button type="button" class="ed-close" id="edSavePage">Save this whole page as a section</button>' +
     '</div>' +
     '<div class="ed-panel-sec"><label class="ed-lab" for="edWhen">Publish later</label>' +
@@ -1479,7 +1932,7 @@ function renderPublishPanel() {
 async function schedulePublish(whenIso) {
   try {
     await saveDraft();
-    var out = await api('/ministries/api/page/' + encodeURIComponent(S.slug) + '/schedule',
+    var out = await api(API + '/page/' + encodeURIComponent(S.slug) + '/schedule',
       { method: 'POST', body: JSON.stringify({ publish_at: whenIso }) });
     S.status = out.status;
     S.publishAt = out.publish_at;
@@ -1493,7 +1946,7 @@ async function schedulePublish(whenIso) {
 
 async function restoreRevision(id) {
   try {
-    var out = await api('/ministries/api/page/' + encodeURIComponent(S.slug) + '/restore',
+    var out = await api(API + '/page/' + encodeURIComponent(S.slug) + '/restore',
       { method: 'POST', body: JSON.stringify({ id: id }) });
     pushHistory();
     S.blocks = out.blocks;
@@ -1604,7 +2057,7 @@ function renderModal() {
 }
 
 async function addMedia(payload) {
-  var out = await api('/ministries/api/media', { method: 'POST', body: JSON.stringify(payload) });
+  var out = await api(API + '/media', { method: 'POST', body: JSON.stringify(payload) });
   S.media.unshift(out.item);
   return out.item;
 }
@@ -1618,6 +2071,13 @@ async function addMedia(payload) {
 var MAX_MAIN = 1600;   // enough for a full-bleed hero on a retina screen
 var MAX_THUMB = 400;   // the library grid and gallery tiles
 var QUALITY = 0.85;
+// Every stored image has to come in under a megabyte. Images live in the
+// database and are served on every page view, so one 4MB photo off a phone is
+// a page nobody on a phone will wait for. The ladder below is tried in order
+// until something fits; the server checks the result independently.
+var MAX_BYTES = 1048576;
+var QUALITY_LADDER = [0.85, 0.72, 0.6, 0.48];
+var DIM_LADDER = [1600, 1280, 1000, 800];
 
 function readImage(file) {
   if (window.createImageBitmap) return createImageBitmap(file);
@@ -1630,20 +2090,17 @@ function readImage(file) {
   });
 }
 
-function encode(canvas, type) {
+function encode(canvas, type, quality) {
   return new Promise(function (resolve) {
     if (!canvas.toBlob) return resolve(null);
-    canvas.toBlob(function (b) { resolve(b && b.type === type ? b : null); }, type, QUALITY);
+    canvas.toBlob(function (b) { resolve(b && b.type === type ? b : null); }, type, quality === undefined ? QUALITY : quality);
   });
 }
 
 // Returns a { blob, filename, width, height } or null when the original should
 // be used as-is.
-async function shrink(file, maxDim) {
-  // An animated GIF would come out of a canvas as a single frozen frame.
-  if (/gif$/i.test(file.type)) return null;
-  var src;
-  try { src = await readImage(file); } catch (_) { return null; }
+// One pass: draw the source at `maxDim` and encode it at `quality`.
+async function encodeAt(src, file, maxDim, quality) {
   var w = src.width, h = src.height;
   if (!w || !h) return null;
   var scale = Math.min(1, maxDim / Math.max(w, h));
@@ -1654,24 +2111,53 @@ async function shrink(file, maxDim) {
   var ctx = canvas.getContext('2d');
   if (!ctx) return null;
   ctx.drawImage(src, 0, 0, out.w, out.h);
-  if (src.close) src.close();
 
   // WebP first: it is smaller than JPEG at the same quality and, unlike JPEG,
   // it keeps transparency. A PNG logo flattened onto black would be a real
   // regression, so if WebP is unavailable we leave a PNG alone rather than
   // wreck it.
-  var blob = await encode(canvas, 'image/webp');
+  var blob = await encode(canvas, 'image/webp', quality);
   var ext = 'webp';
   if (!blob) {
     if (/png$/i.test(file.type)) return null;
-    blob = await encode(canvas, 'image/jpeg');
+    blob = await encode(canvas, 'image/jpeg', quality);
     ext = 'jpg';
   }
   if (!blob) return null;
-  // Re-encoding a small, already-optimised image can make it bigger.
-  if (blob.size >= file.size && scale === 1) return null;
   var base = (file.name || 'photo').replace(/\.[^.]+$/, '').slice(0, 60) || 'photo';
-  return { blob: blob, filename: base + '.' + ext, width: out.w, height: out.h };
+  return { blob: blob, filename: base + '.' + ext, width: out.w, height: out.h, scale: scale };
+}
+
+// Returns a { blob, filename, width, height } or null when the original should
+// be used as-is. Walks down quality first (invisible at these sizes), then the
+// dimension, until the result is under MAX_BYTES — the original phone-camera
+// file is never what gets stored.
+async function shrink(file, maxDim, cap) {
+  // An animated GIF would come out of a canvas as a single frozen frame.
+  if (/gif$/i.test(file.type)) return null;
+  var limit = cap === undefined ? MAX_BYTES : cap;
+  var src;
+  try { src = await readImage(file); } catch (_) { return null; }
+  var best = null;
+  try {
+    var dims = DIM_LADDER.filter(function (d) { return d <= maxDim; });
+    if (!dims.length) dims = [maxDim];
+    for (var i = 0; i < dims.length; i++) {
+      for (var q = 0; q < QUALITY_LADDER.length; q++) {
+        var got = await encodeAt(src, file, dims[i], QUALITY_LADDER[q]);
+        if (!got) return null;                       // cannot re-encode this kind of file
+        if (!best || got.blob.size < best.blob.size) best = got;
+        if (got.blob.size <= limit) { best = got; i = dims.length; break; }
+      }
+    }
+  } finally {
+    if (src.close) src.close();
+  }
+  if (!best) return null;
+  // Re-encoding a small, already-optimised image can make it bigger — but only
+  // leave the original in place if it is itself within the limit.
+  if (best.blob.size >= file.size && best.scale === 1 && file.size <= limit) return null;
+  return best;
 }
 
 async function postImage(blob, filename) {
@@ -1694,7 +2180,7 @@ async function uploadPhoto(file) {
   var url = await postImage(main ? main.blob : file, main ? main.filename : (file.name || 'photo.jpg'));
   var thumbUrl = '';
   try {
-    var thumb = await shrink(file, MAX_THUMB);
+    var thumb = await shrink(file, MAX_THUMB, MAX_BYTES);
     if (thumb) thumbUrl = await postImage(thumb.blob, thumb.filename.replace(/(\.[^.]+)$/, '-thumb$1'));
   } catch (_) { /* the full-size image is enough on its own */ }
   return {
@@ -1821,7 +2307,7 @@ async function boot() {
   try { if (localStorage.getItem(HINT_KEY)) { S.hint = false; el.edHint.style.display = 'none'; } } catch (_) {}
   bindStatic();
   try {
-    var data = await api('/ministries/api/page/' + encodeURIComponent(S.slug));
+    var data = await api(API + '/page/' + encodeURIComponent(S.slug));
     S.title = data.page.title;
     S.status = data.page.status;
     S.publishAt = data.page.publish_at || null;
@@ -1831,13 +2317,20 @@ async function boot() {
     S.updatedAt = data.page.updated_at || '';
     S.config = data.config;
     S.media = data.media || [];
+    S.path = data.page.path || ('/' + S.slug);
+    S.template = data.page.template || '';
+    S.siblings = data.pages || [];
+    S.pageMeta = data.page.settings || null;
+    S.role = data.role || 'office';
+    S.editors = data.editors || [];
+    if (IS_SITE_PAGE && /(\?|&)tab=page(&|$)/.test(location.search)) S.tab = 'page';
     setCanvas(data.html);
     setDevice('desktop');
     renderAll();
     loadSections();
   } catch (err) {
     if (String(err && err.message) === 'auth') return;
-    root.innerHTML = '<div class="ed-boot">Could not load this page — <a href="/ministries" style="color:#2E7EA6;margin-left:6px">back to Ministries</a></div>';
+    root.innerHTML = '<div class="ed-boot">Could not load this page — <a href="' + BACK_HREF + '" style="color:#2E7EA6;margin-left:6px">back to ' + BACK_LABEL + '</a></div>';
   }
 }
 

@@ -5,7 +5,7 @@
 // Last modified: 2026-03-27
 
 
-import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS } from './admin/db.js';
+import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes } from './admin/db.js';
 
 // Static pages that can carry self-serve notices (matches the SPA's page ids in public/index.html)
 const STATIC_PAGES = [
@@ -27,10 +27,13 @@ import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHt
 import { handleGymRoutes, sweepExpiredItems, extractImageKeys } from './admin/gym.js';
 import { migrateLegacyPage, starterBlocks, sanitizeBlocks, sanitizeBlock, parseBlocks, newBlock,
          renderPage, renderBlock, BLOCK_DEFS, BLOCK_TYPE_KEYS, GROUPS, BG, INK, SIZES, SPLITS, TONES,
-         STAMP_PRESETS, safeUrl, esc as escBlock, editorPhoneCss, blocksClientConfig, makeBlockId } from './admin/blocks.js';
+         STAMP_PRESETS, safeUrl, esc as escBlock, editorPhoneCss, blocksClientConfig, makeBlockId,
+         TEMPLATES, templateOf, wrapTemplate, BLOCK_CSS, cleanText } from './admin/blocks.js';
 import PAYROLL_HTML from './admin/payroll.html';
 import MINISTRY_EDITOR_HTML from './admin/ministry-editor.html';
 import { PAGE_SEEDS } from './admin/page-seeds.js';
+import { SITE_PAGES } from './admin/site-pages.js';
+import { orderPages, filterPages, pageStatus, slugify, uniqueSlug, pageRename } from './admin/pages.js';
 
 // Allowlist of site_settings keys readable via the public /api/settings/{key}
 // endpoint. Everything else returns 404 — keeps internal config (gym admin
@@ -60,6 +63,226 @@ function jsonResponse(obj, status = 200) {
 // rest of the site already assumes.
 function cleanSlug(s) {
   return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 48);
+}
+
+// The page editor is a full-viewport screen served as a static shell, so it
+// gets its own headers: never cached (a stale draft would silently undo an
+// edit), never indexed, and no frame-ancestors.
+const EDITOR_HEADERS = {
+  'Content-Type': 'text/html; charset=utf-8',
+  'X-Robots-Tag': 'noindex, nofollow',
+  'Cache-Control': 'no-store',
+  'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tiny.cloud; " +
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tiny.cloud; " +
+    "font-src https://fonts.gstatic.com https://cdn.tiny.cloud; img-src 'self' data: blob: https:; " +
+    "connect-src 'self' https://cdn.tiny.cloud; frame-src 'self' https://www.youtube-nocookie.com https://docs.google.com https://calendar.google.com; " +
+    "frame-ancestors 'none'; base-uri 'none'",
+};
+
+// The fields the editor's Page tab edits. Kept apart from the block draft: page
+// settings are not part of what Publish promotes, so folding them into the draft
+// would leave a page permanently reading "Draft edits" for having been renamed.
+function pageSettings(row) {
+  return {
+    title: row.title, slug: row.slug, parent_id: row.parent_id || null,
+    in_menu: row.in_menu ? 1 : 0, template: templateOf(row.template).key,
+    seo_description: row.seo_description || '', locked: row.locked ? 1 : 0,
+    owner_username: row.owner_username || '',
+  };
+}
+
+// Accounts that could be handed a page of their own — anyone who holds either
+// website-pages permission.
+async function pageEditors(env) {
+  try {
+    const rows = await env.DB.prepare('SELECT username, permissions FROM users WHERE active = 1 ORDER BY username').all();
+    return (rows.results || [])
+      .filter((u) => { try { return JSON.parse(u.permissions || '[]').some((p) => p === 'site_pages' || p === 'site_pages_own'); } catch { return false; } })
+      .map((u) => u.username);
+  } catch (_) { return []; }
+}
+
+// What the editor's topbar should say about a site page. Derived from the row,
+// never from the session's change log — that is what kept the topbar and the
+// All pages list agreeing with each other.
+function pageEditorStatus(row) {
+  if (row.publish_at) return 'scheduled';
+  if (row.status === 'draft') return 'draft';
+  const draft = JSON.stringify(sanitizeBlocks(parseBlocks(row.blocks)));
+  const live = JSON.stringify(sanitizeBlocks(parseBlocks(row.published_blocks)));
+  return draft === live ? 'live' : 'draft';
+}
+
+// A page carries its images on every view, so one straight-off-the-phone photo
+// is a page nobody on a phone waits for. Returns a message when an image in our
+// own bucket is over the limit, or '' when it is fine — an image hosted
+// somewhere else is not ours to measure.
+const MEDIA_MAX_BYTES = 1048576;
+async function oversizeImage(env, url, request) {
+  try {
+    const origin = new URL(request.url).origin;
+    if (!url.startsWith(origin + '/images/')) return '';
+    const obj = await env.IMAGES.head(url.slice((origin + '/images/').length));
+    if (!obj || obj.size <= MEDIA_MAX_BYTES) return '';
+    return `That photo is ${(obj.size / 1048576).toFixed(1)}MB. Photos have to be under 1MB so pages stay quick on a phone — try a smaller one.`;
+  } catch (_) {
+    return '';
+  }
+}
+
+// The parts of the page editor's API that do not care which table the page
+// lives in: the media library, saved sections, a fresh block of a given type,
+// and the stateless renderer. The ministry editor and the site editor mount
+// them under their own prefix and share one implementation, so a fix to either
+// lands in both. Returns null when `path` is none of them.
+async function sharedEditorApi(path, method, request, env, ctx, currentUser, P) {
+  if (!path.startsWith(P + '/')) return null;
+  const rest = path.slice(P.length);            // '/media', '/sections/12/delete', …
+  const sectionId = (suffix) => {
+    const m = rest.match(new RegExp('^/sections/(\\d+)' + suffix + '$'));
+    return m ? Number(m[1]) : null;
+  };
+    // ── MEDIA LIBRARY ───────────────────────────────────────────────────
+    // Photos land in the same R2 bucket as every other admin upload (via
+    // /api/upload-image); a "video" row is just a YouTube URL. Both are
+    // catalogued here so staff pick from a library instead of pasting URLs.
+    if (path === P + '/media' && method === 'GET') {
+      const rows = await env.DB.prepare(
+        'SELECT id, filename, kind, url, thumb_url, alt, meta FROM ministry_media ORDER BY id DESC LIMIT 200'
+      ).all();
+      return jsonResponse({ media: rows.results || [] });
+    }
+
+    if (path === P + '/media' && method === 'POST') {
+      const body = await request.json().catch(() => ({}));
+      const kind = body.kind === 'video' ? 'video' : 'photo';
+      const url = safeUrl(body.url);
+      if (!url) return jsonResponse({ error: 'That link does not look like a URL.' }, 400);
+      const alt = String(body.alt || '').trim().slice(0, 200);
+      // A church site should not ship inaccessible images. Videos carry their
+      // own title on YouTube, so the requirement is photos only.
+      if (kind === 'photo' && !alt) return jsonResponse({ error: 'Please describe the photo before adding it.' }, 400);
+      // Every stored image stays under a megabyte. The browser resizes before
+      // uploading, but that is a courtesy — this is the control, and it is the
+      // only place that sees what actually landed in the bucket.
+      if (kind === 'photo') {
+        const tooBig = await oversizeImage(env, url, request);
+        if (tooBig) return jsonResponse({ error: tooBig }, 400);
+      }
+      const thumbUrl = safeUrl(body.thumb_url).slice(0, 600);
+      const filename = String(body.filename || url.split('/').pop() || 'upload').slice(0, 160);
+      const meta = String(body.meta || '').slice(0, 80);
+      const res = await env.DB.prepare(
+        'INSERT INTO ministry_media (filename, kind, url, thumb_url, alt, meta, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(filename, kind, url, thumbUrl, alt, meta, currentUser?.username || '', new Date().toISOString()).run();
+      return jsonResponse({ ok: true, item: { id: res.meta?.last_row_id || 0, filename, kind, url, thumb_url: thumbUrl, alt, meta } });
+    }
+
+    // ── SAVED SECTIONS ──────────────────────────────────────────────────
+    if (path === P + '/sections' && method === 'GET') {
+      const rows = await env.DB.prepare(
+        'SELECT id, name, blocks, created_by FROM ministry_saved_sections ORDER BY name COLLATE NOCASE'
+      ).all();
+      return jsonResponse({
+        sections: (rows.results || []).map((r) => ({
+          id: r.id, name: r.name, created_by: r.created_by, count: parseBlocks(r.blocks).length,
+        })),
+      });
+    }
+
+    if (path === P + '/sections' && method === 'POST') {
+      const body = await request.json().catch(() => ({}));
+      const name = String(body.name || '').trim().slice(0, 60);
+      const blocks = sanitizeBlocks(body.blocks);
+      if (!name) return jsonResponse({ error: 'Give the section a name.' }, 400);
+      if (!blocks.length) return jsonResponse({ error: 'There is nothing to save.' }, 400);
+      const res = await env.DB.prepare(
+        'INSERT INTO ministry_saved_sections (name, blocks, created_by, created_at) VALUES (?, ?, ?, ?)'
+      ).bind(name, JSON.stringify(blocks), currentUser?.username || 'staff', new Date().toISOString()).run();
+      return jsonResponse({ ok: true, section: { id: res.meta?.last_row_id || 0, name, count: blocks.length } });
+    }
+
+    // The blocks of one section, with fresh ids so dropping the same section
+    // onto a page twice cannot collide with itself.
+    if (sectionId('') !== null && method === 'GET') {
+      const id = sectionId('');
+      const row = await env.DB.prepare('SELECT blocks FROM ministry_saved_sections WHERE id = ?').bind(id).first();
+      if (!row) return jsonResponse({ error: 'Not found' }, 404);
+      const blocks = sanitizeBlocks(parseBlocks(row.blocks)).map((b) => Object.assign({}, b, { id: makeBlockId() }));
+      return jsonResponse({ blocks });
+    }
+
+    if (sectionId('/delete') !== null && method === 'POST') {
+      const id = sectionId('/delete');
+      await env.DB.prepare('DELETE FROM ministry_saved_sections WHERE id = ?').bind(id).run();
+      return jsonResponse({ ok: true });
+    }
+
+    // A fresh block of a given type, straight from the server's own defaults,
+    // so the editor never has to keep its own copy of them.
+    if (path === P + '/new-block' && method === 'POST') {
+      const body = await request.json().catch(() => ({}));
+      const block = newBlock(String(body.type || ''));
+      if (!block) return jsonResponse({ error: 'Unknown block type' }, 400);
+      return jsonResponse({ block });
+    }
+
+    // Stateless render — the editor's single source of block markup. It
+    // stores nothing; the only reads are the self-filling blocks' data
+    // bundle, so what staff arrange on the canvas is what visitors get.
+    if (path === P + '/render' && method === 'POST') {
+      const body = await request.json().catch(() => ({}));
+      const blocks = sanitizeBlocks(body.blocks);
+      const slug = cleanSlug(body.slug);
+      return jsonResponse({
+        html: renderPage(blocks, { editing: true, slug, withCss: true, data: await pageData(env, ctx) }),
+        blocks,
+      });
+    }
+
+
+  return null;
+}
+
+// ── PAGE DATA CONTEXT ────────────────────────────────────────────────────────
+// Self-filling blocks (sermon, news, staff, service times, map) read from here
+// and never from the block itself, so a page cannot show stale copies of data
+// that lives elsewhere in the admin.
+//
+// One query bundle per page render, memoised for the life of the request: a
+// page with a Sermon block and a Staff block costs the same queries as a page
+// with ten of each. Keyed on the request's own ExecutionContext, not on `env` —
+// `env` is shared by every request in an isolate, so caching against it would
+// serve yesterday's sermon until Cloudflare happened to recycle the isolate.
+const PAGE_DATA_CACHE = new WeakMap();
+
+async function pageData(env, reqKey) {
+  if (reqKey && PAGE_DATA_CACHE.has(reqKey)) return PAGE_DATA_CACHE.get(reqKey);
+  const p = (async () => {
+    const q = async (sql, ...binds) => {
+      try { return (await env.DB.prepare(sql).bind(...binds).all()).results || []; } catch (_) { return []; }
+    };
+    const [settingRows, sermonRow, news, staff] = await Promise.all([
+      q("SELECT key, value FROM site_settings WHERE key LIKE 'church_%'"),
+      env.DB.prepare(
+        'SELECT n.title, n.date, n.scripture, n.youtube_url, n.audio_url, s.title AS series ' +
+        'FROM sermon_notes n LEFT JOIN sermon_series s ON s.id = n.series_id ' +
+        'ORDER BY COALESCE(n.date, \'\') DESC, n.id DESC LIMIT 1'
+      ).first().catch(() => null),
+      q("SELECT title, summary, publish_date AS date FROM news_items WHERE (expire_date IS NULL OR expire_date >= date('now')) ORDER BY pinned DESC, publish_date DESC, id DESC LIMIT 6"),
+      q('SELECT name, title, email, photo_url FROM staff_members ORDER BY display_order ASC, id ASC LIMIT 12'),
+    ]);
+    const s = {};
+    for (const r of settingRows) s[r.key.replace(/^church_/, '')] = r.value;
+    return {
+      settings: { address_line: s.address_line || '', address_city: s.address_city || '', phone: s.phone || '', email: s.email || '' },
+      services: parseServiceTimes(s.service_times),
+      sermon: sermonRow || null,
+      news, staff,
+    };
+  })();
+  if (reqKey) PAGE_DATA_CACHE.set(reqKey, p);
+  return p;
 }
 
 // CSRF defense: only these POST paths are reachable from outside the admin
@@ -367,6 +590,24 @@ async function promoteScheduledPages(env) {
   } catch (e) {
     console.error('Scheduled ministry publish failed:', e && e.message);
   }
+  // Site pages schedule the same way. Kept in one function so removing the cron
+  // trigger cannot break "publish later" for one kind of page but not the other.
+  try {
+    const due = await env.DB.prepare(
+      'SELECT id, title, blocks FROM pages WHERE publish_at IS NOT NULL AND publish_at <= ?'
+    ).bind(nowIso).all();
+    for (const row of due.results || []) {
+      const json = JSON.stringify(sanitizeBlocks(parseBlocks(row.blocks)));
+      await env.DB.prepare(
+        "UPDATE pages SET published_blocks = ?, status = 'published', publish_at = NULL, change_log = '[]', updated_at = ? WHERE id = ?"
+      ).bind(json, nowIso, row.id).run();
+      await env.DB.prepare('INSERT INTO page_revisions (page_id, blocks, note, created_at, created_by) VALUES (?, ?, ?, ?, ?)')
+        .bind(row.id, json, 'Published on schedule', nowIso, 'scheduled').run();
+      promoted += 1;
+    }
+  } catch (e) {
+    console.error('Scheduled site page publish failed:', e && e.message);
+  }
   return promoted;
 }
 
@@ -511,7 +752,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-07-30-3'; // bumped: seed each ministry page's hardcoded sections into its draft (whole-page blocks)
+    const SCHEMA_VERSION = '2026-07-31-3'; // bumped: pages.owner_username, so a ministry leader can be given their own pages
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -889,6 +1130,11 @@ export default {
     try { await env.DB.prepare("ALTER TABLE youth_pages ADD COLUMN page_status TEXT DEFAULT 'live'").run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN publish_at TEXT').run(); } catch (_) {}         // ISO8601 or NULL
     try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN change_log TEXT').run(); } catch (_) {}         // JSON, survives a reload
+    // Sermons are series → sermons with no recording attached yet. The column
+    // exists now so the Sermon block can branch on it: with media it renders a
+    // play card, without one a text card. When recordings start, every Sermon
+    // block on the site upgrades itself with no edit.
+    try { await env.DB.prepare('ALTER TABLE sermon_notes ADD COLUMN audio_url TEXT').run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_MINISTRY_MEDIA).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_MINISTRY_REVISIONS).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_MINISTRY_SECTIONS).run(); } catch (_) {}
@@ -934,6 +1180,33 @@ export default {
       }
     } catch (e) { console.error('Page seed failed:', e && e.message); }
 
+    // ── Site pages ──
+    // Every page on the site becomes a row. Seeded from admin/site-pages.js,
+    // generated by tools/extract-pages.mjs out of the hardcoded markup that
+    // renders the site today. `published_blocks` is deliberately left NULL:
+    // until someone opens a page in the editor and presses Publish, the public
+    // site keeps rendering its hardcoded version, so this migration cannot
+    // change what a visitor sees.
+    //
+    // Only pages that do not exist yet are inserted. A page staff have already
+    // touched is never overwritten, so re-running this is safe.
+    try {
+      await env.DB.prepare(DB_INIT_PAGES).run();
+      await env.DB.prepare(DB_INIT_PAGE_REDIRECTS).run();
+      await env.DB.prepare(DB_INIT_PAGE_REVISIONS).run();
+      try { await env.DB.prepare('ALTER TABLE pages ADD COLUMN owner_username TEXT').run(); } catch (_) {}
+      await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_pages_menu ON pages(parent_id, sort)').run();
+      await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_page_revisions_page ON page_revisions(page_id, created_at DESC)').run();
+      const now = new Date().toISOString();
+      for (const p of SITE_PAGES) {
+        await env.DB.prepare(
+          'INSERT OR IGNORE INTO pages (id, title, menu_label, slug, parent_id, sort, template, status, in_menu, seo_description, blocks, updated_at, updated_by) ' +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, 'published', ?, ?, ?, ?, 'migration')"
+        ).bind(p.id, p.title, p.menu_label || '', p.slug, p.parent_id, p.sort, p.template, p.in_menu,
+               p.seo_description || '', JSON.stringify(sanitizeBlocks(p.blocks)), now).run();
+      }
+    } catch (e) { console.error('Site page seed failed:', e && e.message); }
+
     // Performance indexes
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)').run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_news_items_publish_date ON news_items(publish_date)').run(); } catch (_) {}
@@ -965,6 +1238,47 @@ export default {
       obj.writeHttpMetadata(headers);
       headers.set('Cache-Control', 'public, max-age=31536000, immutable');
       return new Response(obj.body, { headers });
+    }
+
+    // ── PUBLIC: site pages API ──
+    // One call gives the public site its navigation and, for any page that has
+    // been published from the editor, the finished HTML for that page. Pages
+    // with no published blocks are simply absent from `rendered`, and the site
+    // falls back to its own hardcoded markup — that fallback is what lets the
+    // site be converted one page at a time.
+    if (path === '/api/pages' && method === 'GET') {
+      const publicPage = (r) => ({
+        id: r.id, title: r.title, label: r.menu_label || r.title, slug: r.slug,
+        parent: r.parent_id || null, in_menu: !!r.in_menu, template: r.template,
+        seo_description: r.seo_description || '',
+      });
+      const rows = await env.DB.prepare(
+        "SELECT id, title, menu_label, slug, parent_id, sort, template, in_menu, seo_description, published_blocks " +
+        "FROM pages WHERE status = 'published' ORDER BY sort ASC, title ASC"
+      ).all().catch(() => ({ results: [] }));
+      const list = rows.results || [];
+      const fixUrl = (s) => s ? s.replace(/src="\/images\//g, 'src="https://admin.timothystl.org/images/') : s;
+      const data = await pageData(env, ctx);
+      const rendered = {};
+      for (const r of list) {
+        const blocks = sanitizeBlocks(parseBlocks(r.published_blocks));
+        if (!blocks.length) continue;
+        const children = list.filter((c) => c.parent_id === r.id).map(publicPage);
+        // The stylesheet ships once for the whole response, not once per page.
+        rendered[r.id] = fixUrl(renderPage(blocks, { slug: r.id, template: r.template, data, children, withCss: false }));
+      }
+      const redirects = await env.DB.prepare('SELECT from_slug, to_slug FROM page_redirects').all().catch(() => ({ results: [] }));
+      return new Response(JSON.stringify({
+        // The church details, so the footer reads the same record the map
+        // block and the sidebar do. Staff change a phone number once.
+        details: { settings: data.settings, services: data.services },
+        pages: list.map(publicPage),
+        rendered,
+        css: Object.keys(rendered).length ? BLOCK_CSS : '',
+        redirects: (redirects.results || []).reduce((acc, r) => (acc[r.from_slug] = r.to_slug, acc), {}),
+      }), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=120' }
+      });
     }
 
     // ── PUBLIC: news items API ──
@@ -1019,7 +1333,7 @@ export default {
       // and the site falls back to `content` exactly as before.
       const pubBlocks = row.page_status === 'hidden' ? [] : parseBlocks(row.published_blocks);
       const blocksHtml = pubBlocks.length
-        ? fixUrl(renderPage(sanitizeBlocks(pubBlocks), { slug }))
+        ? fixUrl(renderPage(sanitizeBlocks(pubBlocks), { slug, data: await pageData(env, ctx) }))
         : '';
       const { published_blocks, ...publicRow } = row;
       return new Response(JSON.stringify({ ...publicRow, content: fixUrl(row.content), blocks_html: blocksHtml }), {
@@ -3747,6 +4061,430 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
     }
 
     // ════════════════════════════════════════════════════════
+    // ── SITE PAGES ──────────────────────────────────────────
+    // ════════════════════════════════════════════════════════
+    // Every page on the public site, in menu order. Server-rendered — filters
+    // are query parameters rather than client-side hiding, so a bookmarked
+    // "?filter=drafts" is a real address and the list cannot disagree with the
+    // database.
+
+    if (path === '/pages' || path.startsWith('/pages/')) {
+      // Two roles. Office staff hold `site_pages` and can do everything. A
+      // ministry leader holds `site_pages_own` and can edit the pages assigned
+      // to them — the words and the blocks — but cannot rename the site's
+      // structure, move things around the menu, create pages, delete them, or
+      // touch the church details. Enforced here, not in the UI: hiding a
+      // control is a courtesy, this is the control.
+      const fullAccess = hasPermission(currentUser, 'site_pages');
+      const ownOnly = !fullAccess && hasPermission(currentUser, 'site_pages_own');
+      if (!fullAccess && !ownOnly) return new Response('Access denied.', { status: 403 });
+      const owns = (row) => fullAccess || (row && row.owner_username && row.owner_username === currentUser?.username);
+      const denied = () => new Response('Access denied.', { status: 403 });
+      if (ownOnly && (path === '/pages/new' || path === '/pages/details')) return denied();
+
+      // ── All pages ──
+      if (path === '/pages' && method === 'GET') {
+        // Anything whose scheduled time has passed goes live before the list is
+        // drawn, so staff never see a page still labelled "scheduled" after the
+        // moment it was meant to publish.
+        await promoteScheduledPages(env);
+        const filter = url.searchParams.get('filter') || 'all';
+        const rows = await env.DB.prepare(
+          'SELECT id, title, menu_label, slug, parent_id, sort, template, status, in_menu, owner_username, blocks, published_blocks, publish_at, updated_at, updated_by FROM pages ORDER BY sort ASC, title ASC'
+        ).all().catch(() => ({ results: [] }));
+        const all = (rows.results || []).filter(owns);
+
+        const ordered = orderPages(all);
+        const shown = filterPages(ordered, filter);
+        const draftCount = ordered.filter((p) => p.hasDraftEdits).length;
+        const parentName = (id) => {
+          const p = ordered.find((x) => x.id === id);
+          return p ? (p.menu_label || p.title) : '';
+        };
+        const edited = (p) => {
+          if (!p.updated_at) return 'Not yet edited';
+          const d = new Date(p.updated_at);
+          const when = isNaN(d) ? p.updated_at : d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+          return when + (p.updated_by ? ' · ' + p.updated_by : '');
+        };
+
+        const rowsHtml = shown.map((p) => {
+          const s = pageStatus(p);
+          return `<tr>
+  <td>
+    <div style="font-weight:600;color:var(--steel);${p.parent_id ? 'padding-left:22px;' : ''}">
+      <a href="/pages/${escapeHtml(p.id)}/edit" style="color:inherit;text-decoration:none;">${escapeHtml(p.menu_label || p.title)}</a>
+      ${p.slug === '/' ? '<span style="margin-left:8px;display:inline-block;padding:2px 7px;border-radius:4px;background:var(--linen);color:var(--gray);font-size:10px;font-weight:700;letter-spacing:.08em;">HOME</span>' : ''}
+    </div>
+    <div style="font-size:12px;color:var(--gray);${p.parent_id ? 'padding-left:22px;' : ''}">${p.blockCount} block${p.blockCount === 1 ? '' : 's'}${p.neverPublished ? ' · never published' : ''}</div>
+  </td>
+  <td style="font-size:13px;color:var(--gray);white-space:nowrap;">${escapeHtml(p.slug)}</td>
+  <td style="font-size:13px;color:var(--gray);white-space:nowrap;">${p.in_menu ? (p.parent_id ? 'Under ' + escapeHtml(parentName(p.parent_id)) : 'Top level') : '—'}</td>
+  <td><span style="display:inline-block;padding:3px 9px;border-radius:999px;font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:${s.bg};color:${s.fg};">${escapeHtml(s.label)}</span></td>
+  <td style="font-size:13px;color:var(--gray);white-space:nowrap;">${escapeHtml(edited(p))}${p.owner_username ? `<div style="font-size:12px;">Assigned to ${escapeHtml(p.owner_username)}</div>` : ''}</td>
+  <td style="text-align:right;white-space:nowrap;">
+    <a href="/pages/${escapeHtml(p.id)}/edit" class="btn btn-sm btn-primary">Edit page →</a>
+  </td>
+</tr>`;
+        }).join('');
+
+        const tab = (key, label) => `<a href="/pages${key === 'all' ? '' : '?filter=' + key}" class="btn btn-sm"${filter === key
+          ? ' style="background:var(--steel);color:#fff;border:1px solid var(--steel);"'
+          : ' style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);"'}>${label}</a>`;
+
+        return html(`
+${sidebarShell('pages', currentUser)}
+<div class="wrap wrap-wide">
+  <div class="page-title">All pages</div>
+  <div class="page-sub">${all.length} page${all.length === 1 ? '' : 's'}${draftCount ? ' · ' + draftCount + ' with unpublished changes' : ''}. Open one to lay it out — drag blocks into the order you want, edit the words on the page itself, then publish.</div>
+  <div class="btn-row" style="margin-bottom:20px;justify-content:space-between;">
+    <span style="display:flex;gap:8px;">${tab('all', 'All')}${tab('published', 'Published')}${tab('drafts', 'Drafts')}</span>
+    <span style="display:flex;gap:8px;">
+      <a href="/pages/details" class="btn btn-sm btn-secondary">Church details</a>
+      <form method="POST" action="/pages/new" style="margin:0;"><button type="submit" class="btn btn-primary">+ New page</button></form>
+    </span>
+  </div>
+  <div class="card">
+    <table style="width:100%;border-collapse:collapse;font-family:var(--sans);">
+      <thead><tr style="text-align:left;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--gray);">
+        <th scope="col" style="padding:6px 0;">Page</th><th scope="col">Address</th><th scope="col">In menu</th>
+        <th scope="col">Status</th><th scope="col">Last edited</th><th scope="col"></th>
+      </tr></thead>
+      <tbody id="pBody">${rowsHtml}</tbody>
+    </table>
+    ${shown.length ? '' : `<div style="padding:28px;text-align:center;color:var(--gray);font-size:14px;">No pages ${filter === 'drafts' ? 'have unpublished changes' : 'to show'}.</div>`}
+  </div>
+</div>
+<style>
+#pBody tr{border-top:1px solid var(--border);}
+#pBody td{padding:12px 8px 12px 0;vertical-align:middle;}
+</style>`, 'Pages — TLC Admin');
+      }
+
+      // ── Church details ──
+      // The one record the map block, the service-times block, the sidebar
+      // layout and the footer all read. Staff fix a phone number here once and
+      // every page follows — which is the whole reason these are not in a
+      // config file needing a deploy.
+      if (path === '/pages/details' && method === 'GET') {
+        const rows = await env.DB.prepare(
+          "SELECT key, value, label, hint FROM site_settings WHERE key LIKE 'church_%' ORDER BY rowid"
+        ).all().catch(() => ({ results: [] }));
+        const saved = url.searchParams.get('msg') === 'saved';
+        const field = (r) => {
+          const multiline = r.key === 'church_service_times';
+          return `<div class="form-group">
+  <label for="f-${escapeHtml(r.key)}">${escapeHtml(r.label || r.key)}</label>
+  ${multiline
+    ? `<textarea id="f-${escapeHtml(r.key)}" name="${escapeHtml(r.key)}" rows="4" style="font-family:var(--sans);">${escapeHtml(r.value || '')}</textarea>`
+    : `<input type="text" id="f-${escapeHtml(r.key)}" name="${escapeHtml(r.key)}" value="${escapeHtml(r.value || '')}">`}
+  <div style="font-size:12px;color:var(--gray);margin-top:4px;">${escapeHtml(r.hint || '')}</div>
+</div>`;
+        };
+        return html(`
+${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`)}
+<div class="wrap">
+  <div class="page-title">Church details</div>
+  <div class="page-sub">The address, phone number, email and service times the whole site reads. Change them here once and every page that shows them follows — no need to edit each page.</div>
+  ${saved ? `<div class="alert alert-success">✓ Saved. Every page that shows these will pick them up within a couple of minutes.</div>` : ''}
+  <form method="POST" action="/pages/details">
+    <div class="card">
+      ${(rows.results || []).map(field).join('') || '<div style="color:var(--gray);font-size:14px;">Nothing to edit yet.</div>'}
+    </div>
+    <div class="btn-row">
+      <button type="submit" class="btn btn-primary">Save →</button>
+      <a href="/pages" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
+    </div>
+  </form>
+</div>`, 'Church details — TLC Admin');
+      }
+
+      if (path === '/pages/details' && method === 'POST') {
+        const form = await request.formData();
+        const rows = await env.DB.prepare("SELECT key FROM site_settings WHERE key LIKE 'church_%'")
+          .all().catch(() => ({ results: [] }));
+        // Only the keys the form actually exposes are writable, so a crafted
+        // POST cannot reach the rest of site_settings through this screen.
+        for (const r of rows.results || []) {
+          const v = form.get(r.key);
+          if (v === null) continue;
+          await env.DB.prepare('UPDATE site_settings SET value = ? WHERE key = ?').bind(String(v).slice(0, 500), r.key).run();
+        }
+        await logAudit(env.DB, currentUser, 'update', 'settings', 'church_details', 'Church details');
+        return new Response('', { status: 302, headers: { Location: '/pages/details?msg=saved' } });
+      }
+
+      // ── New page ──
+      // Creates a draft and drops staff straight into the editor with the Page
+      // tab open, rather than asking them to fill in a form first.
+      if (path === '/pages/new' && method === 'POST') {
+        const now = new Date().toISOString();
+        let id = 'page-' + Math.random().toString(36).slice(2, 8);
+        for (let i = 0; i < 5; i++) {
+          const clash = await env.DB.prepare('SELECT id FROM pages WHERE id = ?').bind(id).first();
+          if (!clash) break;
+          id = 'page-' + Math.random().toString(36).slice(2, 8);
+        }
+        const blocks = sanitizeBlocks(starterBlocks('New page'));
+        await env.DB.prepare(
+          "INSERT INTO pages (id, title, menu_label, slug, parent_id, sort, template, status, in_menu, seo_description, blocks, updated_at, updated_by) " +
+          "VALUES (?, 'New page', '', ?, NULL, 999, 'standard', 'draft', 0, '', ?, ?, ?)"
+        ).bind(id, '/' + id, JSON.stringify(blocks), now, currentUser?.username || '').run();
+        await logAudit(env.DB, currentUser, 'create', 'page', id, 'New page', null, { title: 'New page', slug: '/' + id });
+        return new Response('', { status: 302, headers: { Location: `/pages/${id}/edit?tab=page` } });
+      }
+
+      // ── The editor screen ──
+      // Same shell as the ministry editor; it works out from its own address
+      // which API to talk to. Nothing about a page is baked into the HTML.
+      if (path.match(/^\/pages\/[^/]+\/edit$/) && method === 'GET') {
+        const id = decodeURIComponent(path.split('/')[2]);
+        const exists = await env.DB.prepare('SELECT id, owner_username FROM pages WHERE id = ?').bind(id).first();
+        if (!exists) return new Response('', { status: 302, headers: { Location: '/pages' } });
+        if (!owns(exists)) return denied();
+        return new Response(MINISTRY_EDITOR_HTML
+          .replace('/*TLCB_EDITOR_CSS*/', editorPhoneCss())
+          .replace('<!--TLCB_TINYMCE-->', TINYMCE_HEAD), { headers: EDITOR_HEADERS });
+      }
+
+      // ── The editor's API ──
+      if (path.startsWith('/pages/api/')) {
+        const shared = await sharedEditorApi(path, method, request, env, ctx, currentUser, '/pages/api');
+        if (shared) return shared;
+
+        const rest = path.slice('/pages/api'.length);
+        const pageMatch = rest.match(/^\/page\/([^/]+)(\/[a-z]+)?$/);
+        const pageId = pageMatch ? decodeURIComponent(pageMatch[1]) : '';
+        const action = pageMatch ? (pageMatch[2] || '') : '';
+        if (!pageId) return jsonResponse({ error: 'Not found' }, 404);
+
+        const COLS = 'id, title, menu_label, slug, parent_id, sort, template, status, in_menu, locked, seo_description, ' +
+          'owner_username, blocks, published_blocks, publish_at, change_log, updated_at, updated_by';
+        const row = await env.DB.prepare(`SELECT ${COLS} FROM pages WHERE id = ?`).bind(pageId).first();
+        if (!row) return jsonResponse({ error: 'Not found' }, 404);
+        if (!owns(row)) return jsonResponse({ error: 'This page is not yours to edit.' }, 403);
+        // A ministry leader edits the page; they do not restructure the site.
+        if (ownOnly && (action === '/settings' || action === '/delete')) {
+          return jsonResponse({ error: 'Only the office can rename, move or delete a page.' }, 403);
+        }
+
+        // Everything the editor needs in one round trip, including the list of
+        // every page for the far-left rail.
+        if (!action && method === 'GET') {
+          const blocks = sanitizeBlocks(parseBlocks(row.blocks));
+          const [media, siblings] = await Promise.all([
+            env.DB.prepare('SELECT id, filename, kind, url, thumb_url, alt, meta FROM ministry_media ORDER BY id DESC LIMIT 200')
+              .all().catch(() => ({ results: [] })),
+            env.DB.prepare('SELECT id, title, menu_label, slug, parent_id, sort, status, in_menu, owner_username, blocks, published_blocks, publish_at FROM pages ORDER BY sort ASC, title ASC')
+              .all().catch(() => ({ results: [] })),
+          ]);
+          // The section-landing child list is what visitors will see, so it is
+          // every child; the rail is what this person may open, so it is not.
+          const children = orderPages(siblings.results || []).filter((c) => c.parent_id === row.id);
+          const openable = (siblings.results || []).filter(owns);
+          return jsonResponse({
+            page: {
+              slug: row.id, path: row.slug, title: row.title, status: pageEditorStatus(row),
+              template: row.template, publish_at: row.publish_at || null, updated_at: row.updated_at || '',
+              blocks, changes: parseBlocks(row.change_log),
+              published_count: sanitizeBlocks(parseBlocks(row.published_blocks)).length,
+              settings: pageSettings(row),
+            },
+            pages: orderPages(openable).map((p) => ({
+              id: p.id, title: p.menu_label || p.title, slug: p.slug, parent_id: p.parent_id,
+              in_menu: !!p.in_menu, hasDraftEdits: p.hasDraftEdits,
+            })),
+            role: fullAccess ? 'office' : 'own',
+            // Who a page can be handed to. Only the office assigns owners, so
+            // only the office is sent the list.
+            editors: fullAccess ? await pageEditors(env) : [],
+            config: blocksClientConfig(),
+            media: media.results || [],
+            html: renderPage(blocks, {
+              editing: true, slug: row.id, template: row.template, withCss: true,
+              data: await pageData(env, ctx), children,
+            }),
+          });
+        }
+
+        // Page settings: name, address, menu placement, layout, search summary.
+        // Renaming regenerates the address and writes a redirect from the old
+        // one, so the one thing a well-meaning volunteer can break — an inbound
+        // link — is handled rather than left to be remembered.
+        if (action === '/settings' && method === 'POST') {
+          const body = await request.json().catch(() => ({}));
+          const all = (await env.DB.prepare('SELECT id, title, menu_label, slug, parent_id, sort, in_menu FROM pages')
+            .all().catch(() => ({ results: [] }))).results || [];
+          const before = pageSettings(row);
+
+          const title = cleanText(body.title, 80) || row.title;
+          // Only a real rename regenerates the address, so retyping the same
+          // name — or editing anything else — never moves the page.
+          let slug = row.slug;
+          let redirects = [];
+          if (typeof body.slug === 'string' && body.slug.trim() && body.slug.trim() !== row.slug && row.slug !== '/') {
+            // An address typed by hand is still cleaned and made unique.
+            const taken = new Set(all.filter((p) => p.id !== row.id).map((p) => p.slug));
+            slug = uniqueSlug(slugify(body.slug.replace(/^\/+/, ''), (all.find((p) => p.id === (body.parent_id ?? row.parent_id)) || {}).slug || ''), taken);
+            if (slug !== row.slug) redirects.push({ from: row.slug, to: slug });
+          } else if (title !== row.title) {
+            const r = pageRename(Object.assign({}, row, { parent_id: body.parent_id === undefined ? row.parent_id : body.parent_id }), title, all);
+            slug = r.slug;
+            redirects = r.redirects;
+          }
+
+          // Menu depth is two levels: a page with children of its own cannot be
+          // filed under another page, and nothing can be its own parent.
+          let parentId = body.parent_id === undefined ? row.parent_id : (body.parent_id || null);
+          if (parentId === row.id) parentId = row.parent_id;
+          const parent = parentId ? all.find((p) => p.id === parentId) : null;
+          if (parentId && (!parent || parent.parent_id)) parentId = null;
+          if (parentId && all.some((p) => p.parent_id === row.id)) parentId = null;
+
+          const owner = body.owner_username === undefined ? (row.owner_username || '') : cleanText(body.owner_username, 60);
+          const template = body.template === undefined ? row.template : templateOf(body.template).key;
+          const inMenu = body.in_menu === undefined ? row.in_menu : (body.in_menu ? 1 : 0);
+          const seo = cleanText(body.seo_description, 300);
+          const nowIso = new Date().toISOString();
+
+          await env.DB.prepare(
+            'UPDATE pages SET title = ?, slug = ?, parent_id = ?, template = ?, in_menu = ?, seo_description = ?, owner_username = ?, updated_at = ?, updated_by = ? WHERE id = ?'
+          ).bind(title, slug, parentId, template, inMenu, seo, owner || null, nowIso, currentUser?.username || '', pageId).run();
+
+          for (const r of redirects) {
+            if (r.id) await env.DB.prepare('UPDATE pages SET slug = ? WHERE id = ?').bind(r.to, r.id).run();
+            // A redirect that would now point at a page's own address is not a
+            // redirect, it is a loop.
+            if (r.from === r.to) continue;
+            await env.DB.prepare('INSERT OR REPLACE INTO page_redirects (from_slug, to_slug, created_at) VALUES (?, ?, ?)')
+              .bind(r.from, r.to, nowIso).run();
+            // An address that used to redirect *to* this page now has to follow
+            // it, or the older link dead-ends one hop short.
+            await env.DB.prepare('UPDATE page_redirects SET to_slug = ? WHERE to_slug = ?').bind(r.to, r.from).run();
+          }
+
+          const after = await env.DB.prepare(`SELECT ${COLS} FROM pages WHERE id = ?`).bind(pageId).first();
+          const siblings = (await env.DB.prepare('SELECT id, title, menu_label, slug, parent_id, sort, status, in_menu, blocks, published_blocks, publish_at FROM pages ORDER BY sort ASC, title ASC')
+            .all().catch(() => ({ results: [] }))).results || [];
+          await logAudit(env.DB, currentUser, 'update', 'page', pageId, title, before, pageSettings(after));
+
+          // Only the layout changes what the canvas looks like; a rename does
+          // not, and redrawing on every keystroke would fight the caret.
+          const rerender = after.template !== row.template;
+          const blocks = sanitizeBlocks(parseBlocks(after.blocks));
+          return jsonResponse({
+            ok: true,
+            page: pageSettings(after),
+            pages: orderPages(siblings).map((p) => ({
+              id: p.id, title: p.menu_label || p.title, slug: p.slug, parent_id: p.parent_id,
+              in_menu: !!p.in_menu, hasDraftEdits: p.hasDraftEdits,
+            })),
+            redirected: redirects.length > 0,
+            rerender,
+            html: rerender ? renderPage(blocks, {
+              editing: true, slug: after.id, template: after.template, withCss: true,
+              data: await pageData(env, ctx),
+              children: orderPages(siblings).filter((c) => c.parent_id === after.id),
+            }) : '',
+          });
+        }
+
+        if (action === '/delete' && method === 'POST') {
+          if (row.locked) return jsonResponse({ error: 'This page is part of the site structure and cannot be deleted.' }, 400);
+          // Children would be stranded with no parent and no menu entry, so
+          // they come up a level rather than disappearing with it.
+          await env.DB.prepare('UPDATE pages SET parent_id = NULL WHERE parent_id = ?').bind(pageId).run();
+          await env.DB.prepare('DELETE FROM pages WHERE id = ?').bind(pageId).run();
+          await env.DB.prepare('DELETE FROM page_redirects WHERE to_slug = ?').bind(row.slug).run();
+          await logAudit(env.DB, currentUser, 'delete', 'page', pageId, row.title, pageSettings(row), null);
+          return jsonResponse({ ok: true });
+        }
+
+        // Autosaved working draft. Sanitised on the way in — client-side
+        // clamping is a courtesy, this is the control.
+        if (action === '/draft' && method === 'POST') {
+          const body = await request.json().catch(() => ({}));
+          const blocks = sanitizeBlocks(body.blocks);
+          // Locked blocks belong to the site's design rather than to the page.
+          // A ministry leader can edit around one but cannot remove it, so a
+          // save that drops one is refused rather than quietly accepted.
+          if (ownOnly) {
+            const kept = new Set(blocks.map((b) => b.id));
+            const lost = sanitizeBlocks(parseBlocks(row.blocks)).filter((b) => b.locked && !kept.has(b.id));
+            if (lost.length) return jsonResponse({ error: 'That part of the page is set by the church office and cannot be removed.' }, 403);
+          }
+          const changes = (Array.isArray(body.changes) ? body.changes : []).slice(0, 24).map((c) => String(c).slice(0, 160));
+          const nowIso = new Date().toISOString();
+          await env.DB.prepare('UPDATE pages SET blocks = ?, change_log = ?, updated_at = ?, updated_by = ? WHERE id = ?')
+            .bind(JSON.stringify(blocks), JSON.stringify(changes), nowIso, currentUser?.username || '', pageId).run();
+          const after = Object.assign({}, row, { blocks: JSON.stringify(blocks) });
+          return jsonResponse({ ok: true, saved_at: nowIso, status: pageEditorStatus(after), blocks });
+        }
+
+        // Publish: the draft becomes what the public site renders, and a
+        // snapshot goes into the revision log so it can be rolled back.
+        if (action === '/publish' && method === 'POST') {
+          const body = await request.json().catch(() => ({}));
+          const blocks = sanitizeBlocks(body.blocks && body.blocks.length ? body.blocks : parseBlocks(row.blocks));
+          const json = JSON.stringify(blocks);
+          const nowIso = new Date().toISOString();
+          await env.DB.prepare(
+            "UPDATE pages SET blocks = ?, published_blocks = ?, status = 'published', publish_at = NULL, change_log = '[]', updated_at = ?, updated_by = ? WHERE id = ?"
+          ).bind(json, json, nowIso, currentUser?.username || '', pageId).run();
+          await env.DB.prepare('INSERT INTO page_revisions (page_id, blocks, note, created_at, created_by) VALUES (?, ?, ?, ?, ?)')
+            .bind(pageId, json, 'Published', nowIso, currentUser?.username || 'staff').run();
+          await logAudit(env.DB, currentUser, 'publish', 'page', pageId, row.title, null, { blocks: blocks.length });
+          return jsonResponse({ ok: true, status: 'live', saved_at: nowIso, url: 'https://timothystl.org' + row.slug });
+        }
+
+        // Schedule: the cron handler promotes the draft when it comes due.
+        if (action === '/schedule' && method === 'POST') {
+          const body = await request.json().catch(() => ({}));
+          if (!body.publish_at) {
+            await env.DB.prepare('UPDATE pages SET publish_at = NULL WHERE id = ?').bind(pageId).run();
+            const after = Object.assign({}, row, { publish_at: null });
+            return jsonResponse({ ok: true, status: pageEditorStatus(after), publish_at: null });
+          }
+          const when = new Date(body.publish_at);
+          if (isNaN(when.getTime()) || when.getTime() < Date.now() - 60000) {
+            return jsonResponse({ error: 'Pick a date and time in the future.' }, 400);
+          }
+          await env.DB.prepare('UPDATE pages SET publish_at = ? WHERE id = ?').bind(when.toISOString(), pageId).run();
+          return jsonResponse({ ok: true, status: 'scheduled', publish_at: when.toISOString() });
+        }
+
+        if (action === '/revisions' && method === 'GET') {
+          const rows = await env.DB.prepare(
+            'SELECT id, created_at, created_by, blocks FROM page_revisions WHERE page_id = ? ORDER BY id DESC LIMIT 20'
+          ).bind(pageId).all().catch(() => ({ results: [] }));
+          return jsonResponse({
+            revisions: (rows.results || []).map((r) => ({
+              id: r.id, published_at: r.created_at, published_by: r.created_by, count: parseBlocks(r.blocks).length,
+            })),
+          });
+        }
+
+        // Restore loads a snapshot into the DRAFT, never straight to live, so
+        // staff look at what they are about to bring back before publishing it.
+        if (action === '/restore' && method === 'POST') {
+          const body = await request.json().catch(() => ({}));
+          const rev = await env.DB.prepare('SELECT blocks FROM page_revisions WHERE id = ? AND page_id = ?')
+            .bind(Number(body.id) || 0, pageId).first();
+          if (!rev) return jsonResponse({ error: 'Not found' }, 404);
+          const blocks = sanitizeBlocks(parseBlocks(rev.blocks));
+          await env.DB.prepare('UPDATE pages SET blocks = ?, updated_at = ? WHERE id = ?')
+            .bind(JSON.stringify(blocks), new Date().toISOString(), pageId).run();
+          return jsonResponse({
+            ok: true, blocks,
+            html: renderPage(blocks, { editing: true, slug: row.id, template: row.template, withCss: true, data: await pageData(env, ctx) }),
+          });
+        }
+
+        return jsonResponse({ error: 'Not found' }, 404);
+      }
+    }
+
+    // ════════════════════════════════════════════════════════
     // ── MINISTRIES ──────────────────────────────────────────
     // ════════════════════════════════════════════════════════
 
@@ -3775,18 +4513,7 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
         const editorHtml = MINISTRY_EDITOR_HTML
           .replace('/*TLCB_EDITOR_CSS*/', editorPhoneCss())
           .replace('<!--TLCB_TINYMCE-->', TINYMCE_HEAD);
-        return new Response(editorHtml, {
-          headers: {
-            'Content-Type': 'text/html; charset=utf-8',
-            'X-Robots-Tag': 'noindex, nofollow',
-            'Cache-Control': 'no-store',
-            'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tiny.cloud; " +
-              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tiny.cloud; " +
-              "font-src https://fonts.gstatic.com https://cdn.tiny.cloud; img-src 'self' data: blob: https:; " +
-              "connect-src 'self' https://cdn.tiny.cloud; frame-src 'self' https://www.youtube-nocookie.com https://docs.google.com https://calendar.google.com; " +
-              "frame-ancestors 'none'; base-uri 'none'",
-          },
-        });
+        return new Response(editorHtml, { headers: EDITOR_HEADERS });
       }
 
       // Everything the editor needs in one round trip.
@@ -3809,86 +4536,8 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
           },
           config: blocksClientConfig(),
           media: media.results || [],
-          html: renderPage(blocks, { editing: true, slug, withCss: true }),
+          html: renderPage(blocks, { editing: true, slug, withCss: true, data: await pageData(env, ctx) }),
         });
-      }
-
-      // ── MEDIA LIBRARY ───────────────────────────────────────────────────
-      // Photos land in the same R2 bucket as every other admin upload (via
-      // /api/upload-image); a "video" row is just a YouTube URL. Both are
-      // catalogued here so staff pick from a library instead of pasting URLs.
-      if (path === '/ministries/api/media' && method === 'GET') {
-        const rows = await env.DB.prepare(
-          'SELECT id, filename, kind, url, thumb_url, alt, meta FROM ministry_media ORDER BY id DESC LIMIT 200'
-        ).all();
-        return jsonResponse({ media: rows.results || [] });
-      }
-
-      if (path === '/ministries/api/media' && method === 'POST') {
-        const body = await request.json().catch(() => ({}));
-        const kind = body.kind === 'video' ? 'video' : 'photo';
-        const url = safeUrl(body.url);
-        if (!url) return jsonResponse({ error: 'That link does not look like a URL.' }, 400);
-        const alt = String(body.alt || '').trim().slice(0, 200);
-        // A church site should not ship inaccessible images. Videos carry their
-        // own title on YouTube, so the requirement is photos only.
-        if (kind === 'photo' && !alt) return jsonResponse({ error: 'Please describe the photo before adding it.' }, 400);
-        const thumbUrl = safeUrl(body.thumb_url).slice(0, 600);
-        const filename = String(body.filename || url.split('/').pop() || 'upload').slice(0, 160);
-        const meta = String(body.meta || '').slice(0, 80);
-        const res = await env.DB.prepare(
-          'INSERT INTO ministry_media (filename, kind, url, thumb_url, alt, meta, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-        ).bind(filename, kind, url, thumbUrl, alt, meta, currentUser?.username || '', new Date().toISOString()).run();
-        return jsonResponse({ ok: true, item: { id: res.meta?.last_row_id || 0, filename, kind, url, thumb_url: thumbUrl, alt, meta } });
-      }
-
-      // ── SAVED SECTIONS ──────────────────────────────────────────────────
-      if (path === '/ministries/api/sections' && method === 'GET') {
-        const rows = await env.DB.prepare(
-          'SELECT id, name, blocks, created_by FROM ministry_saved_sections ORDER BY name COLLATE NOCASE'
-        ).all();
-        return jsonResponse({
-          sections: (rows.results || []).map((r) => ({
-            id: r.id, name: r.name, created_by: r.created_by, count: parseBlocks(r.blocks).length,
-          })),
-        });
-      }
-
-      if (path === '/ministries/api/sections' && method === 'POST') {
-        const body = await request.json().catch(() => ({}));
-        const name = String(body.name || '').trim().slice(0, 60);
-        const blocks = sanitizeBlocks(body.blocks);
-        if (!name) return jsonResponse({ error: 'Give the section a name.' }, 400);
-        if (!blocks.length) return jsonResponse({ error: 'There is nothing to save.' }, 400);
-        const res = await env.DB.prepare(
-          'INSERT INTO ministry_saved_sections (name, blocks, created_by, created_at) VALUES (?, ?, ?, ?)'
-        ).bind(name, JSON.stringify(blocks), currentUser?.username || 'staff', new Date().toISOString()).run();
-        return jsonResponse({ ok: true, section: { id: res.meta?.last_row_id || 0, name, count: blocks.length } });
-      }
-
-      // The blocks of one section, with fresh ids so dropping the same section
-      // onto a page twice cannot collide with itself.
-      if (path.match(/^\/ministries\/api\/sections\/\d+$/) && method === 'GET') {
-        const id = Number(path.split('/').pop());
-        const row = await env.DB.prepare('SELECT blocks FROM ministry_saved_sections WHERE id = ?').bind(id).first();
-        if (!row) return jsonResponse({ error: 'Not found' }, 404);
-        const blocks = sanitizeBlocks(parseBlocks(row.blocks)).map((b) => Object.assign({}, b, { id: makeBlockId() }));
-        return jsonResponse({ blocks });
-      }
-
-      if (path.match(/^\/ministries\/api\/sections\/\d+\/delete$/) && method === 'POST') {
-        const id = Number(path.split('/')[4]);
-        await env.DB.prepare('DELETE FROM ministry_saved_sections WHERE id = ?').bind(id).run();
-        return jsonResponse({ ok: true });
-      }
-
-      // A fresh block of a given type, straight from the server's own defaults,
-      // so the editor never has to keep its own copy of them.
-      if (path === '/ministries/api/new-block' && method === 'POST') {
-        const body = await request.json().catch(() => ({}));
-        const block = newBlock(String(body.type || ''));
-        if (!block) return jsonResponse({ error: 'Unknown block type' }, 400);
-        return jsonResponse({ block });
       }
 
       // Autosaved working draft. Sanitised on the way in — client-side clamping
@@ -3973,20 +4622,11 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
         const blocks = sanitizeBlocks(parseBlocks(rev.blocks));
         await env.DB.prepare("UPDATE youth_pages SET blocks = ?, page_status = 'draft', updated_at = ? WHERE slug = ?")
           .bind(JSON.stringify(blocks), new Date().toISOString(), slug).run();
-        return jsonResponse({ ok: true, blocks, html: renderPage(blocks, { editing: true, slug, withCss: true }) });
+        return jsonResponse({ ok: true, blocks, html: renderPage(blocks, { editing: true, slug, withCss: true, data: await pageData(env, ctx) }) });
       }
 
-      // Stateless render — the editor's single source of block markup. No DB
-      // access, so it stays fast enough to call on every structural change.
-      if (path === '/ministries/api/render' && method === 'POST') {
-        const body = await request.json().catch(() => ({}));
-        const blocks = sanitizeBlocks(body.blocks);
-        const slug = cleanSlug(body.slug);
-        return jsonResponse({
-          html: renderPage(blocks, { editing: true, slug, withCss: true }),
-          blocks,
-        });
-      }
+      const sharedMinistry = await sharedEditorApi(path, method, request, env, ctx, currentUser, '/ministries/api');
+      if (sharedMinistry) return sharedMinistry;
 
       // ── Ministry list ──
       if (path === '/ministries' && method === 'GET') {

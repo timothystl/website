@@ -4,7 +4,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { execSync } from 'node:child_process';
 import { createEditorServer } from './editor-server.mjs';
-import { newBlock, sanitizeBlocks } from '../admin/blocks.js';
+import { newBlock, sanitizeBlocks, GROUPS } from '../admin/blocks.js';
 
 const globalRoot = (process.env.NODE_PATH || execSync('npm root -g').toString()).trim().split(path.delimiter)[0];
 const { chromium } = createRequire(path.join(globalRoot, 'x.js'))('playwright');
@@ -13,6 +13,9 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.error('  ✗ ' + m); } };
 const eq = (a, b, m) => ok(a === b, `${m} — expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`);
 const group = (n) => console.log('\n' + n);
+// Which palette tab holds a given block type — read from the definition so
+// renaming or regrouping a block does not silently break the drag tests.
+const groupOf = (type) => (GROUPS.find((g) => g.types.includes(type)) || {}).name;
 
 const seed = sanitizeBlocks([newBlock('hero'), newBlock('text'), newBlock('video'), newBlock('faq')]);
 const harness = createEditorServer({ pages: [{ slug: 'music', title: 'Music Ministry', blocks: seed }] });
@@ -150,7 +153,7 @@ eq(await waitOrder(['hero', 'text', 'video', 'faq']), JSON.stringify(['hero', 't
 
 group('add by clicking a palette chip');
 await resetPage();
-await page.click('.ed-pal-tab[data-group="Dates"]');
+await page.click('.ed-pal-tab[data-group="' + groupOf('times') + '"]');
 await page.click('.ed-chip:has-text("Meeting times")');
 await settle(700);
 await page.waitForFunction(() => document.querySelectorAll('.ed-paper .tlcb').length === 5);
@@ -163,7 +166,7 @@ group('add by dragging a palette chip');
 await resetPage();
 {
   const chip = page.locator('.ed-chip:has-text("Callout box")');
-  await page.click('.ed-pal-tab[data-group="Structure"]');
+  await page.click('.ed-pal-tab[data-group="' + groupOf('callout') + '"]');
   await chip.dispatchEvent('dragstart', { dataTransfer: await page.evaluateHandle(() => new DataTransfer()) });
   const target = page.locator('.ed-row').nth(1);
   const box = await target.boundingBox();
@@ -186,7 +189,7 @@ await page.waitForFunction(() => document.querySelectorAll('.ed-paper .tlcb').le
 eq((await order()).length, 0, 'all blocks removed');
 ok((await page.textContent('.ed-paper')).includes('This page is empty'), 'empty state on the canvas');
 ok((await page.textContent('.ed-rail-list')).includes('No blocks yet'), 'empty state in the rail');
-await page.click('.ed-pal-tab[data-group="Content"]');
+await page.click('.ed-pal-tab[data-group="' + groupOf('text') + '"]');
 await page.click('.ed-chip:has-text("Rich text")');
 await settle(700);
 await page.waitForFunction(() => document.querySelectorAll('.ed-paper .tlcb').length === 1).catch(() => {});
