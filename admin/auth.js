@@ -10,7 +10,8 @@ export const PERMISSIONS = {
   // The site editor: every page on the public site. Separate from pages_edit
   // (which is the notice banners) so a ministry leader can be given their own
   // pages without also being handed the notice bar on every page.
-  site_pages:         'Website pages',
+  site_pages:         'Website pages — all pages, and the menu',
+  site_pages_own:     'Website pages — only the pages assigned to them',
   staff_edit:         'Staff profiles',
   settings_manage:    'Settings & Subscribers',
   gym_manage:         'Gym Rentals',

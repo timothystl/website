@@ -4,7 +4,7 @@
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, hasPermission } from './auth.js';
 
-export const VERSION = 'v1.91.0'; // minor bump: site editor — pages table, All pages screen, pages rail
+export const VERSION = 'v2.0.0'; // major bump: the site editor — every page is editable, with a new permission model
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {

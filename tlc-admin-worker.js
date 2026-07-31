@@ -87,7 +87,19 @@ function pageSettings(row) {
     title: row.title, slug: row.slug, parent_id: row.parent_id || null,
     in_menu: row.in_menu ? 1 : 0, template: templateOf(row.template).key,
     seo_description: row.seo_description || '', locked: row.locked ? 1 : 0,
+    owner_username: row.owner_username || '',
   };
+}
+
+// Accounts that could be handed a page of their own — anyone who holds either
+// website-pages permission.
+async function pageEditors(env) {
+  try {
+    const rows = await env.DB.prepare('SELECT username, permissions FROM users WHERE active = 1 ORDER BY username').all();
+    return (rows.results || [])
+      .filter((u) => { try { return JSON.parse(u.permissions || '[]').some((p) => p === 'site_pages' || p === 'site_pages_own'); } catch { return false; } })
+      .map((u) => u.username);
+  } catch (_) { return []; }
 }
 
 // What the editor's topbar should say about a site page. Derived from the row,
@@ -740,7 +752,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-07-31-2'; // bumped: pages / page_redirects / page_revisions, seeded from admin/site-pages.js
+    const SCHEMA_VERSION = '2026-07-31-3'; // bumped: pages.owner_username, so a ministry leader can be given their own pages
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -1182,6 +1194,7 @@ export default {
       await env.DB.prepare(DB_INIT_PAGES).run();
       await env.DB.prepare(DB_INIT_PAGE_REDIRECTS).run();
       await env.DB.prepare(DB_INIT_PAGE_REVISIONS).run();
+      try { await env.DB.prepare('ALTER TABLE pages ADD COLUMN owner_username TEXT').run(); } catch (_) {}
       await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_pages_menu ON pages(parent_id, sort)').run();
       await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_page_revisions_page ON page_revisions(page_id, created_at DESC)').run();
       const now = new Date().toISOString();
@@ -4056,7 +4069,18 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
     // database.
 
     if (path === '/pages' || path.startsWith('/pages/')) {
-      if (!hasPermission(currentUser, 'site_pages')) return new Response('Access denied.', { status: 403 });
+      // Two roles. Office staff hold `site_pages` and can do everything. A
+      // ministry leader holds `site_pages_own` and can edit the pages assigned
+      // to them — the words and the blocks — but cannot rename the site's
+      // structure, move things around the menu, create pages, delete them, or
+      // touch the church details. Enforced here, not in the UI: hiding a
+      // control is a courtesy, this is the control.
+      const fullAccess = hasPermission(currentUser, 'site_pages');
+      const ownOnly = !fullAccess && hasPermission(currentUser, 'site_pages_own');
+      if (!fullAccess && !ownOnly) return new Response('Access denied.', { status: 403 });
+      const owns = (row) => fullAccess || (row && row.owner_username && row.owner_username === currentUser?.username);
+      const denied = () => new Response('Access denied.', { status: 403 });
+      if (ownOnly && (path === '/pages/new' || path === '/pages/details')) return denied();
 
       // ── All pages ──
       if (path === '/pages' && method === 'GET') {
@@ -4066,9 +4090,9 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
         await promoteScheduledPages(env);
         const filter = url.searchParams.get('filter') || 'all';
         const rows = await env.DB.prepare(
-          'SELECT id, title, menu_label, slug, parent_id, sort, template, status, in_menu, blocks, published_blocks, publish_at, updated_at, updated_by FROM pages ORDER BY sort ASC, title ASC'
+          'SELECT id, title, menu_label, slug, parent_id, sort, template, status, in_menu, owner_username, blocks, published_blocks, publish_at, updated_at, updated_by FROM pages ORDER BY sort ASC, title ASC'
         ).all().catch(() => ({ results: [] }));
-        const all = rows.results || [];
+        const all = (rows.results || []).filter(owns);
 
         const ordered = orderPages(all);
         const shown = filterPages(ordered, filter);
@@ -4097,7 +4121,7 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
   <td style="font-size:13px;color:var(--gray);white-space:nowrap;">${escapeHtml(p.slug)}</td>
   <td style="font-size:13px;color:var(--gray);white-space:nowrap;">${p.in_menu ? (p.parent_id ? 'Under ' + escapeHtml(parentName(p.parent_id)) : 'Top level') : '—'}</td>
   <td><span style="display:inline-block;padding:3px 9px;border-radius:999px;font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:${s.bg};color:${s.fg};">${escapeHtml(s.label)}</span></td>
-  <td style="font-size:13px;color:var(--gray);white-space:nowrap;">${escapeHtml(edited(p))}</td>
+  <td style="font-size:13px;color:var(--gray);white-space:nowrap;">${escapeHtml(edited(p))}${p.owner_username ? `<div style="font-size:12px;">Assigned to ${escapeHtml(p.owner_username)}</div>` : ''}</td>
   <td style="text-align:right;white-space:nowrap;">
     <a href="/pages/${escapeHtml(p.id)}/edit" class="btn btn-sm btn-primary">Edit page →</a>
   </td>
@@ -4215,8 +4239,9 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`)}
       // which API to talk to. Nothing about a page is baked into the HTML.
       if (path.match(/^\/pages\/[^/]+\/edit$/) && method === 'GET') {
         const id = decodeURIComponent(path.split('/')[2]);
-        const exists = await env.DB.prepare('SELECT id FROM pages WHERE id = ?').bind(id).first();
+        const exists = await env.DB.prepare('SELECT id, owner_username FROM pages WHERE id = ?').bind(id).first();
         if (!exists) return new Response('', { status: 302, headers: { Location: '/pages' } });
+        if (!owns(exists)) return denied();
         return new Response(MINISTRY_EDITOR_HTML
           .replace('/*TLCB_EDITOR_CSS*/', editorPhoneCss())
           .replace('<!--TLCB_TINYMCE-->', TINYMCE_HEAD), { headers: EDITOR_HEADERS });
@@ -4234,9 +4259,14 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`)}
         if (!pageId) return jsonResponse({ error: 'Not found' }, 404);
 
         const COLS = 'id, title, menu_label, slug, parent_id, sort, template, status, in_menu, locked, seo_description, ' +
-          'blocks, published_blocks, publish_at, change_log, updated_at, updated_by';
+          'owner_username, blocks, published_blocks, publish_at, change_log, updated_at, updated_by';
         const row = await env.DB.prepare(`SELECT ${COLS} FROM pages WHERE id = ?`).bind(pageId).first();
         if (!row) return jsonResponse({ error: 'Not found' }, 404);
+        if (!owns(row)) return jsonResponse({ error: 'This page is not yours to edit.' }, 403);
+        // A ministry leader edits the page; they do not restructure the site.
+        if (ownOnly && (action === '/settings' || action === '/delete')) {
+          return jsonResponse({ error: 'Only the office can rename, move or delete a page.' }, 403);
+        }
 
         // Everything the editor needs in one round trip, including the list of
         // every page for the far-left rail.
@@ -4245,10 +4275,13 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`)}
           const [media, siblings] = await Promise.all([
             env.DB.prepare('SELECT id, filename, kind, url, thumb_url, alt, meta FROM ministry_media ORDER BY id DESC LIMIT 200')
               .all().catch(() => ({ results: [] })),
-            env.DB.prepare('SELECT id, title, menu_label, slug, parent_id, sort, status, in_menu, blocks, published_blocks, publish_at FROM pages ORDER BY sort ASC, title ASC')
+            env.DB.prepare('SELECT id, title, menu_label, slug, parent_id, sort, status, in_menu, owner_username, blocks, published_blocks, publish_at FROM pages ORDER BY sort ASC, title ASC')
               .all().catch(() => ({ results: [] })),
           ]);
+          // The section-landing child list is what visitors will see, so it is
+          // every child; the rail is what this person may open, so it is not.
           const children = orderPages(siblings.results || []).filter((c) => c.parent_id === row.id);
+          const openable = (siblings.results || []).filter(owns);
           return jsonResponse({
             page: {
               slug: row.id, path: row.slug, title: row.title, status: pageEditorStatus(row),
@@ -4257,10 +4290,14 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`)}
               published_count: sanitizeBlocks(parseBlocks(row.published_blocks)).length,
               settings: pageSettings(row),
             },
-            pages: orderPages(siblings.results || []).map((p) => ({
+            pages: orderPages(openable).map((p) => ({
               id: p.id, title: p.menu_label || p.title, slug: p.slug, parent_id: p.parent_id,
               in_menu: !!p.in_menu, hasDraftEdits: p.hasDraftEdits,
             })),
+            role: fullAccess ? 'office' : 'own',
+            // Who a page can be handed to. Only the office assigns owners, so
+            // only the office is sent the list.
+            editors: fullAccess ? await pageEditors(env) : [],
             config: blocksClientConfig(),
             media: media.results || [],
             html: renderPage(blocks, {
@@ -4304,14 +4341,15 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`)}
           if (parentId && (!parent || parent.parent_id)) parentId = null;
           if (parentId && all.some((p) => p.parent_id === row.id)) parentId = null;
 
+          const owner = body.owner_username === undefined ? (row.owner_username || '') : cleanText(body.owner_username, 60);
           const template = body.template === undefined ? row.template : templateOf(body.template).key;
           const inMenu = body.in_menu === undefined ? row.in_menu : (body.in_menu ? 1 : 0);
           const seo = cleanText(body.seo_description, 300);
           const nowIso = new Date().toISOString();
 
           await env.DB.prepare(
-            'UPDATE pages SET title = ?, slug = ?, parent_id = ?, template = ?, in_menu = ?, seo_description = ?, updated_at = ?, updated_by = ? WHERE id = ?'
-          ).bind(title, slug, parentId, template, inMenu, seo, nowIso, currentUser?.username || '', pageId).run();
+            'UPDATE pages SET title = ?, slug = ?, parent_id = ?, template = ?, in_menu = ?, seo_description = ?, owner_username = ?, updated_at = ?, updated_by = ? WHERE id = ?'
+          ).bind(title, slug, parentId, template, inMenu, seo, owner || null, nowIso, currentUser?.username || '', pageId).run();
 
           for (const r of redirects) {
             if (r.id) await env.DB.prepare('UPDATE pages SET slug = ? WHERE id = ?').bind(r.to, r.id).run();
@@ -4367,6 +4405,14 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`)}
         if (action === '/draft' && method === 'POST') {
           const body = await request.json().catch(() => ({}));
           const blocks = sanitizeBlocks(body.blocks);
+          // Locked blocks belong to the site's design rather than to the page.
+          // A ministry leader can edit around one but cannot remove it, so a
+          // save that drops one is refused rather than quietly accepted.
+          if (ownOnly) {
+            const kept = new Set(blocks.map((b) => b.id));
+            const lost = sanitizeBlocks(parseBlocks(row.blocks)).filter((b) => b.locked && !kept.has(b.id));
+            if (lost.length) return jsonResponse({ error: 'That part of the page is set by the church office and cannot be removed.' }, 403);
+          }
           const changes = (Array.isArray(body.changes) ? body.changes : []).slice(0, 24).map((c) => String(c).slice(0, 160));
           const nowIso = new Date().toISOString();
           await env.DB.prepare('UPDATE pages SET blocks = ?, change_log = ?, updated_at = ?, updated_by = ? WHERE id = ?')

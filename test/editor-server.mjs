@@ -34,6 +34,10 @@ export function createEditorServer(seed = {}) {
   let sectionSeq = 0;
   // The Worker's pageData() bundle, standing in for the D1 queries. The blocks
   // read it exactly as they do in production.
+  // Which role the harness is standing in for, so the browser tests can drive
+  // both the office view and a ministry leader's.
+  const ROLE = seed.role || 'office';
+  const EDITORS = seed.editors || ['office', 'youthdirector'];
   const DATA = seed.data || {
     settings: { address_line: '6704 Fyler Ave', address_city: 'St. Louis, MO 63139', phone: '(314) 781-8673', email: 'office@timothystl.org' },
     services: [
@@ -59,6 +63,7 @@ export function createEditorServer(seed = {}) {
       path: p.path || ('/' + p.slug), template: p.template || 'standard',
       parent_id: p.parent_id || null, in_menu: p.in_menu === undefined ? 1 : p.in_menu,
       seo_description: p.seo_description || '', locked: p.locked ? 1 : 0,
+      owner_username: p.owner_username || '',
       blocks: JSON.stringify(sanitizeBlocks(p.blocks || starterBlocks(p.title))),
       published_blocks: JSON.stringify(sanitizeBlocks(p.blocks || [])),
       change_log: '[]', updated_at: new Date().toISOString(),
@@ -71,6 +76,7 @@ export function createEditorServer(seed = {}) {
     title: r.title, slug: r.path || ('/' + r.slug), parent_id: r.parent_id || null,
     in_menu: r.in_menu ? 1 : 0, template: templateOf(r.template).key,
     seo_description: r.seo_description || '', locked: r.locked ? 1 : 0,
+    owner_username: r.owner_username || '',
   });
   const asPageRow = (r) => ({
     id: r.slug, title: r.title, menu_label: '', slug: r.path || ('/' + r.slug),
@@ -128,11 +134,17 @@ export function createEditorServer(seed = {}) {
             settings: isSitePage ? settingsOf(row) : undefined,
           },
           pages: isSitePage ? Array.from(pages.values()).map(asRailPage) : [],
+          role: ROLE,
+          editors: ROLE === 'office' ? EDITORS : [],
           config: blocksClientConfig(),
           media,
           html: renderPage(blocks, { editing: true, slug, withCss: true, data: DATA,
             template: isSitePage ? (row.template || 'standard') : undefined }),
         });
+      }
+
+      if ((action === 'settings' || action === 'delete') && ROLE !== 'office') {
+        return json(res, { error: 'Only the office can rename, move or delete a page.' }, 403);
       }
 
       if (action === 'settings' && req.method === 'POST') {
@@ -168,6 +180,7 @@ export function createEditorServer(seed = {}) {
         row.template = body.template === undefined ? oldTemplate : templateOf(body.template).key;
         row.in_menu = body.in_menu === undefined ? row.in_menu : (body.in_menu ? 1 : 0);
         row.seo_description = body.seo_description === undefined ? (row.seo_description || '') : cleanText(body.seo_description, 300);
+        row.owner_username = body.owner_username === undefined ? (row.owner_username || '') : cleanText(body.owner_username, 60);
         const rerender = row.template !== oldTemplate;
         const blocks = sanitizeBlocks(parseBlocks(row.blocks));
         return json(res, {
@@ -190,6 +203,11 @@ export function createEditorServer(seed = {}) {
       if (action === 'draft' && req.method === 'POST') {
         const body = await readBody(req);
         const blocks = sanitizeBlocks(body.blocks);
+        if (ROLE !== 'office') {
+          const kept = new Set(blocks.map((b) => b.id));
+          const lost = sanitizeBlocks(parseBlocks(row.blocks)).filter((b) => b.locked && !kept.has(b.id));
+          if (lost.length) return json(res, { error: 'That part of the page is set by the church office and cannot be removed.' }, 403);
+        }
         row.blocks = JSON.stringify(blocks);
         row.change_log = JSON.stringify(Array.isArray(body.changes) ? body.changes.slice(0, 24) : []);
         row.updated_at = new Date().toISOString();

@@ -152,7 +152,7 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Giving | Office staff — requires `giving_manage` permission | **DONE** (2026-07-27) — base Tithe.ly link, give.timothystl.org's amount tiers + per-tier links, and vendor/market one-off payment links (Tithe.ly or Square); see below |
 | Payroll | Office staff (Dinger) — requires `payroll_manage` permission | **DONE** — combined biweekly payroll (church staff + MDO preschool staff); see "Payroll & Supabase" below |
 | Audit Log | Admins | **DONE** — change history + rollback, requires `audit_view` |
-| Pages | Office staff — requires `site_pages` | **DONE** (2026-07-31) — every page on the public site, with the block editor at `/pages/:id/edit`; see "Site Editor" below |
+| Pages | Office staff (`site_pages`) or a ministry leader for their own pages (`site_pages_own`) | **DONE** (2026-07-31) — every page on the public site, with the block editor at `/pages/:id/edit`; see "Site Editor" below |
 | Connect | External link in sidebar footer | **DONE** — single link out to `connect.timothystl.org` (renamed 2026-07-22 from `chms.timothystl.org`, itself changed 2026-07-20 from two separate "Scheduler"/"Volunteer Admin" links; see the chms repo's own CLAUDE.md) |
 
 ### Giving Tab (added 2026-07-27)
@@ -299,7 +299,8 @@ migration, layouts, the generated site-page seeds) and `node admin/pages.test.mj
 suites in `test/` driven by Playwright against `test/editor-server.mjs`, a local
 stand-in for the Worker: `editor` (shell), `editor-edit` (inspector + typing),
 `editor-dnd` (reordering), `editor-media`, `editor-resize`, `editor-sections`,
-`editor-publish`, `site-editor` (the pages rail + moving between pages),
+`editor-publish`, `site-editor` (the pages rail, the Page tab, self-filling
+blocks, paste), `site-roles` (roles, locked blocks, undo),
 `public-page` (the live site), `whole-page` (takeover + the generated seeds),
 `site-pages` (generated nav, published pages, fallback) and `ministries-list`.
 Run any with `node <path>`. Chromium is at `/opt/pw-browsers/chromium`.
@@ -346,8 +347,18 @@ navigation is generated from those rows.
   address which API to talk to (`/ministries/api` vs `/pages/api`). The routes
   that do not care which table the page lives in — media, saved sections,
   new-block, render — are one implementation in `sharedEditorApi()`.
-- **Permission** — the new `site_pages`. `pages_edit` was always the *Notices*
-  tab and is now labelled that way in the Users tab.
+- **Two roles.** `site_pages` is office staff — every page, the menu, the
+  church details. `site_pages_own` is a ministry leader: they see only the
+  pages whose `pages.owner_username` is theirs, can edit the content, and
+  cannot rename, move, create or delete. Enforced in the route, not the UI.
+- **Locked blocks** (`locked` on the block) are the site's design rather than
+  the page's content: marked `🔒` in the rail, and a `site_pages_own` save that
+  drops one is refused server-side. The office sets the flag from the Block tab.
+- **Church details** live in `site_settings` under `church_*`, edited at
+  `/pages/details`. The map block, the service-times block, the `sidebar`
+  layout and the public footer all read that one record.
+- **Every stored image is under 1MB.** `shrink()` walks down quality, then the
+  dimension, until it fits; the media POST checks the R2 object independently.
 - Below **1240px** the open pages rail must float *over* the canvas. As a flex
   column the four columns exceed the viewport and the inspector is pushed
   off-screen with no way to reach it.

@@ -69,7 +69,7 @@ const paperWidth = () => page.evaluate(() => {
   return { css: p.style.width, zoom: p.style.zoom, phone: p.classList.contains('ed-paper--phone') };
 });
 let w = await paperWidth();
-eq(w.css, '860px', 'desktop paper is 860px');
+eq(w.css, '900px', 'desktop paper is 900px, the width the design handoff specifies');
 await page.click('[data-device="tablet"]');
 w = await paperWidth();
 eq(w.css, '620px', 'tablet paper is 620px');
@@ -100,7 +100,7 @@ await page.setViewportSize({ width: 1100, height: 900 });
 await page.waitForTimeout(250);
 const narrow = await paperWidth();
 ok(Number(narrow.zoom) < 1 && Number(narrow.zoom) > 0.2, 'paper zooms down to fit a narrow canvas (zoom ' + narrow.zoom + ')');
-// 860px paper + 266px rail + 318px inspector + padding needs ~1500px of window
+// 900px paper + 266px rail + 318px inspector + padding needs ~1550px of window
 await page.setViewportSize({ width: 1700, height: 900 });
 await page.waitForTimeout(250);
 eq(Number((await paperWidth()).zoom), 1, 'zoom returns to 1 when the window is wide enough');
