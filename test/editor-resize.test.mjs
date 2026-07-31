@@ -120,6 +120,18 @@ group('thumbnails');
   ok(r.size < full.size / 4, `thumb is far smaller than the full size (${full.size} → ${r.size})`);
 }
 
+group('nothing over a megabyte is ever stored');
+{
+  // Pure noise is close to the worst case for a photo encoder: it will not go
+  // under 1MB at 1600px, so the ladder has to keep stepping down.
+  const r = await shrinkIn(4000, 3000, 'image/jpeg', 1600);
+  ok(!r.skipped, 'a huge photo is not passed through untouched');
+  ok(r.size <= 1048576, `the stored image is under 1MB (${r.orig} \u2192 ${r.size})`);
+  ok(r.w <= 1600, 'and no wider than the site ever renders (' + r.w + 'px)');
+  // whatever it took to get there, the picture is still a usable size
+  ok(r.w >= 800, 'without shrinking it past the point of being useful (' + r.w + 'px)');
+}
+
 group('an already-small photo is left alone');
 {
   const r = await shrinkIn(300, 200, 'image/png', 1600);

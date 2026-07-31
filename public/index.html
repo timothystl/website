@@ -2381,10 +2381,31 @@ function loadSitePages() {
       sitePagesData = d;
       if (d.css && !document.getElementById('tlcb-css')) document.head.insertAdjacentHTML('beforeend', d.css);
       buildNav(d.pages);
+      fillFooter(d.details);
       return d;
     })
     .catch(function () { return null; });
   return sitePagesPromise;
+}
+
+// The footer reads the same church-details record the map block and the sidebar
+// layout do, so a phone number is corrected in one place. The markup below is
+// the fallback: if this never runs, what shipped with the page stays put.
+function fillFooter(details) {
+  if (!details) return;
+  var st = details.settings || {};
+  // Plain-text lines throughout, escaped once and only then joined with <br>.
+  var lines = [[st.address_line, st.address_city].filter(Boolean).join(' · ')];
+  (details.services || []).forEach(function (r) {
+    var line = [r.day, r.time].filter(Boolean).join(' · ');
+    if (line) lines.push(line);
+  });
+  lines.push([st.phone, st.email].filter(Boolean).join(' · '));
+  lines = lines.filter(Boolean);
+  if (!lines.length) return;
+  var esc = function (x) { return String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+  var el = document.querySelector('.footer-brand-addr');
+  if (el) el.innerHTML = lines.map(esc).join('<br>');
 }
 
 // The navigation is generated from the pages table, so adding a page and

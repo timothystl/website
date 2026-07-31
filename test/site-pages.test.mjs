@@ -40,7 +40,12 @@ const base = 'http://localhost:' + server.address().port;
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium' });
 
 // The Worker's /api/pages response, built the way the Worker builds it.
-function apiPages({ publish = {}, redirects = {}, pages = SITE_PAGES } = {}) {
+const DETAILS = {
+  settings: { address_line: '6704 Fyler Ave', address_city: 'St. Louis, MO 63139', phone: '(314) 781-8673', email: 'office@timothystl.org' },
+  services: [{ day: 'Sunday', time: '8:00 am', note: 'Traditional' }, { day: 'Sunday', time: '10:45 am', note: 'Contemporary' }],
+};
+
+function apiPages({ publish = {}, redirects = {}, pages = SITE_PAGES, details = DETAILS } = {}) {
   const rendered = {};
   for (const [id, blocks] of Object.entries(publish)) {
     const p = pages.find((x) => x.id === id) || {};
@@ -56,6 +61,7 @@ function apiPages({ publish = {}, redirects = {}, pages = SITE_PAGES } = {}) {
     rendered,
     css: Object.keys(rendered).length ? BLOCK_CSS : '',
     redirects,
+    details,
   };
 }
 
@@ -101,6 +107,36 @@ group('the menu is generated from the pages table');
   await page.waitForTimeout(200);
   eq(await page.locator('#page-worship').isVisible(), true, 'a generated nav button navigates');
   eq(new URL(page.url()).pathname, '/worship', 'and pushes the right address');
+  await ctx.close();
+}
+
+group('the footer reads the church details record');
+{
+  const { page, ctx, errors } = await visit('/about', apiPages());
+  eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
+  const foot = await page.locator('.footer-brand-addr').innerHTML();
+  ok(foot.includes('6704 Fyler Ave'), 'the address comes from the record');
+  ok(foot.includes('(314) 781-8673') && foot.includes('office@timothystl.org'), 'so do the phone and email');
+  ok(foot.includes('8:00 am') && foot.includes('10:45 am'), 'and every service time');
+  ok(!foot.includes('&lt;br&gt;'), 'the line breaks are line breaks, not escaped text');
+  await ctx.close();
+}
+{
+  // a changed record reaches the footer without touching the page
+  const { page, ctx } = await visit('/about', apiPages({ details: {
+    settings: { address_line: '1 New Street', address_city: 'St. Louis, MO', phone: '314-000-0000', email: 'hello@timothystl.org' },
+    services: [{ day: 'Sunday', time: '9:00 am' }],
+  } }));
+  const foot = await page.locator('.footer-brand-addr').innerHTML();
+  ok(foot.includes('1 New Street') && foot.includes('9:00 am'), 'changing the record changes the footer');
+  ok(!foot.includes('6704 Fyler'), 'and the old details are gone');
+  await ctx.close();
+}
+{
+  // and the markup that shipped with the page is the fallback
+  const { page, ctx } = await visit('/about', apiPages({ details: null }));
+  ok((await page.locator('.footer-brand-addr').innerHTML()).includes('6704 Fyler Ave'),
+    'with no record the footer keeps what shipped with the page');
   await ctx.close();
 }
 

@@ -2001,6 +2001,13 @@ async function addMedia(payload) {
 var MAX_MAIN = 1600;   // enough for a full-bleed hero on a retina screen
 var MAX_THUMB = 400;   // the library grid and gallery tiles
 var QUALITY = 0.85;
+// Every stored image has to come in under a megabyte. Images live in the
+// database and are served on every page view, so one 4MB photo off a phone is
+// a page nobody on a phone will wait for. The ladder below is tried in order
+// until something fits; the server checks the result independently.
+var MAX_BYTES = 1048576;
+var QUALITY_LADDER = [0.85, 0.72, 0.6, 0.48];
+var DIM_LADDER = [1600, 1280, 1000, 800];
 
 function readImage(file) {
   if (window.createImageBitmap) return createImageBitmap(file);
@@ -2013,20 +2020,17 @@ function readImage(file) {
   });
 }
 
-function encode(canvas, type) {
+function encode(canvas, type, quality) {
   return new Promise(function (resolve) {
     if (!canvas.toBlob) return resolve(null);
-    canvas.toBlob(function (b) { resolve(b && b.type === type ? b : null); }, type, QUALITY);
+    canvas.toBlob(function (b) { resolve(b && b.type === type ? b : null); }, type, quality === undefined ? QUALITY : quality);
   });
 }
 
 // Returns a { blob, filename, width, height } or null when the original should
 // be used as-is.
-async function shrink(file, maxDim) {
-  // An animated GIF would come out of a canvas as a single frozen frame.
-  if (/gif$/i.test(file.type)) return null;
-  var src;
-  try { src = await readImage(file); } catch (_) { return null; }
+// One pass: draw the source at `maxDim` and encode it at `quality`.
+async function encodeAt(src, file, maxDim, quality) {
   var w = src.width, h = src.height;
   if (!w || !h) return null;
   var scale = Math.min(1, maxDim / Math.max(w, h));
@@ -2037,24 +2041,53 @@ async function shrink(file, maxDim) {
   var ctx = canvas.getContext('2d');
   if (!ctx) return null;
   ctx.drawImage(src, 0, 0, out.w, out.h);
-  if (src.close) src.close();
 
   // WebP first: it is smaller than JPEG at the same quality and, unlike JPEG,
   // it keeps transparency. A PNG logo flattened onto black would be a real
   // regression, so if WebP is unavailable we leave a PNG alone rather than
   // wreck it.
-  var blob = await encode(canvas, 'image/webp');
+  var blob = await encode(canvas, 'image/webp', quality);
   var ext = 'webp';
   if (!blob) {
     if (/png$/i.test(file.type)) return null;
-    blob = await encode(canvas, 'image/jpeg');
+    blob = await encode(canvas, 'image/jpeg', quality);
     ext = 'jpg';
   }
   if (!blob) return null;
-  // Re-encoding a small, already-optimised image can make it bigger.
-  if (blob.size >= file.size && scale === 1) return null;
   var base = (file.name || 'photo').replace(/\.[^.]+$/, '').slice(0, 60) || 'photo';
-  return { blob: blob, filename: base + '.' + ext, width: out.w, height: out.h };
+  return { blob: blob, filename: base + '.' + ext, width: out.w, height: out.h, scale: scale };
+}
+
+// Returns a { blob, filename, width, height } or null when the original should
+// be used as-is. Walks down quality first (invisible at these sizes), then the
+// dimension, until the result is under MAX_BYTES — the original phone-camera
+// file is never what gets stored.
+async function shrink(file, maxDim, cap) {
+  // An animated GIF would come out of a canvas as a single frozen frame.
+  if (/gif$/i.test(file.type)) return null;
+  var limit = cap === undefined ? MAX_BYTES : cap;
+  var src;
+  try { src = await readImage(file); } catch (_) { return null; }
+  var best = null;
+  try {
+    var dims = DIM_LADDER.filter(function (d) { return d <= maxDim; });
+    if (!dims.length) dims = [maxDim];
+    for (var i = 0; i < dims.length; i++) {
+      for (var q = 0; q < QUALITY_LADDER.length; q++) {
+        var got = await encodeAt(src, file, dims[i], QUALITY_LADDER[q]);
+        if (!got) return null;                       // cannot re-encode this kind of file
+        if (!best || got.blob.size < best.blob.size) best = got;
+        if (got.blob.size <= limit) { best = got; i = dims.length; break; }
+      }
+    }
+  } finally {
+    if (src.close) src.close();
+  }
+  if (!best) return null;
+  // Re-encoding a small, already-optimised image can make it bigger — but only
+  // leave the original in place if it is itself within the limit.
+  if (best.blob.size >= file.size && best.scale === 1 && file.size <= limit) return null;
+  return best;
 }
 
 async function postImage(blob, filename) {
@@ -2077,7 +2110,7 @@ async function uploadPhoto(file) {
   var url = await postImage(main ? main.blob : file, main ? main.filename : (file.name || 'photo.jpg'));
   var thumbUrl = '';
   try {
-    var thumb = await shrink(file, MAX_THUMB);
+    var thumb = await shrink(file, MAX_THUMB, MAX_BYTES);
     if (thumb) thumbUrl = await postImage(thumb.blob, thumb.filename.replace(/(\.[^.]+)$/, '-thumb$1'));
   } catch (_) { /* the full-size image is enough on its own */ }
   return {

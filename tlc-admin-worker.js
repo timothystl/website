@@ -101,6 +101,23 @@ function pageEditorStatus(row) {
   return draft === live ? 'live' : 'draft';
 }
 
+// A page carries its images on every view, so one straight-off-the-phone photo
+// is a page nobody on a phone waits for. Returns a message when an image in our
+// own bucket is over the limit, or '' when it is fine — an image hosted
+// somewhere else is not ours to measure.
+const MEDIA_MAX_BYTES = 1048576;
+async function oversizeImage(env, url, request) {
+  try {
+    const origin = new URL(request.url).origin;
+    if (!url.startsWith(origin + '/images/')) return '';
+    const obj = await env.IMAGES.head(url.slice((origin + '/images/').length));
+    if (!obj || obj.size <= MEDIA_MAX_BYTES) return '';
+    return `That photo is ${(obj.size / 1048576).toFixed(1)}MB. Photos have to be under 1MB so pages stay quick on a phone — try a smaller one.`;
+  } catch (_) {
+    return '';
+  }
+}
+
 // The parts of the page editor's API that do not care which table the page
 // lives in: the media library, saved sections, a fresh block of a given type,
 // and the stateless renderer. The ministry editor and the site editor mount
@@ -133,6 +150,13 @@ async function sharedEditorApi(path, method, request, env, ctx, currentUser, P) 
       // A church site should not ship inaccessible images. Videos carry their
       // own title on YouTube, so the requirement is photos only.
       if (kind === 'photo' && !alt) return jsonResponse({ error: 'Please describe the photo before adding it.' }, 400);
+      // Every stored image stays under a megabyte. The browser resizes before
+      // uploading, but that is a courtesy — this is the control, and it is the
+      // only place that sees what actually landed in the bucket.
+      if (kind === 'photo') {
+        const tooBig = await oversizeImage(env, url, request);
+        if (tooBig) return jsonResponse({ error: tooBig }, 400);
+      }
       const thumbUrl = safeUrl(body.thumb_url).slice(0, 600);
       const filename = String(body.filename || url.split('/').pop() || 'upload').slice(0, 160);
       const meta = String(body.meta || '').slice(0, 80);
@@ -1232,6 +1256,9 @@ export default {
       }
       const redirects = await env.DB.prepare('SELECT from_slug, to_slug FROM page_redirects').all().catch(() => ({ results: [] }));
       return new Response(JSON.stringify({
+        // The church details, so the footer reads the same record the map
+        // block and the sidebar do. Staff change a phone number once.
+        details: { settings: data.settings, services: data.services },
         pages: list.map(publicPage),
         rendered,
         css: Object.keys(rendered).length ? BLOCK_CSS : '',
@@ -4088,7 +4115,10 @@ ${sidebarShell('pages', currentUser)}
   <div class="page-sub">${all.length} page${all.length === 1 ? '' : 's'}${draftCount ? ' · ' + draftCount + ' with unpublished changes' : ''}. Open one to lay it out — drag blocks into the order you want, edit the words on the page itself, then publish.</div>
   <div class="btn-row" style="margin-bottom:20px;justify-content:space-between;">
     <span style="display:flex;gap:8px;">${tab('all', 'All')}${tab('published', 'Published')}${tab('drafts', 'Drafts')}</span>
-    <form method="POST" action="/pages/new" style="margin:0;"><button type="submit" class="btn btn-primary">+ New page</button></form>
+    <span style="display:flex;gap:8px;">
+      <a href="/pages/details" class="btn btn-sm btn-secondary">Church details</a>
+      <form method="POST" action="/pages/new" style="margin:0;"><button type="submit" class="btn btn-primary">+ New page</button></form>
+    </span>
   </div>
   <div class="card">
     <table style="width:100%;border-collapse:collapse;font-family:var(--sans);">
@@ -4105,6 +4135,59 @@ ${sidebarShell('pages', currentUser)}
 #pBody tr{border-top:1px solid var(--border);}
 #pBody td{padding:12px 8px 12px 0;vertical-align:middle;}
 </style>`, 'Pages — TLC Admin');
+      }
+
+      // ── Church details ──
+      // The one record the map block, the service-times block, the sidebar
+      // layout and the footer all read. Staff fix a phone number here once and
+      // every page follows — which is the whole reason these are not in a
+      // config file needing a deploy.
+      if (path === '/pages/details' && method === 'GET') {
+        const rows = await env.DB.prepare(
+          "SELECT key, value, label, hint FROM site_settings WHERE key LIKE 'church_%' ORDER BY rowid"
+        ).all().catch(() => ({ results: [] }));
+        const saved = url.searchParams.get('msg') === 'saved';
+        const field = (r) => {
+          const multiline = r.key === 'church_service_times';
+          return `<div class="form-group">
+  <label for="f-${escapeHtml(r.key)}">${escapeHtml(r.label || r.key)}</label>
+  ${multiline
+    ? `<textarea id="f-${escapeHtml(r.key)}" name="${escapeHtml(r.key)}" rows="4" style="font-family:var(--sans);">${escapeHtml(r.value || '')}</textarea>`
+    : `<input type="text" id="f-${escapeHtml(r.key)}" name="${escapeHtml(r.key)}" value="${escapeHtml(r.value || '')}">`}
+  <div style="font-size:12px;color:var(--gray);margin-top:4px;">${escapeHtml(r.hint || '')}</div>
+</div>`;
+        };
+        return html(`
+${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`)}
+<div class="wrap">
+  <div class="page-title">Church details</div>
+  <div class="page-sub">The address, phone number, email and service times the whole site reads. Change them here once and every page that shows them follows — no need to edit each page.</div>
+  ${saved ? `<div class="alert alert-success">✓ Saved. Every page that shows these will pick them up within a couple of minutes.</div>` : ''}
+  <form method="POST" action="/pages/details">
+    <div class="card">
+      ${(rows.results || []).map(field).join('') || '<div style="color:var(--gray);font-size:14px;">Nothing to edit yet.</div>'}
+    </div>
+    <div class="btn-row">
+      <button type="submit" class="btn btn-primary">Save →</button>
+      <a href="/pages" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
+    </div>
+  </form>
+</div>`, 'Church details — TLC Admin');
+      }
+
+      if (path === '/pages/details' && method === 'POST') {
+        const form = await request.formData();
+        const rows = await env.DB.prepare("SELECT key FROM site_settings WHERE key LIKE 'church_%'")
+          .all().catch(() => ({ results: [] }));
+        // Only the keys the form actually exposes are writable, so a crafted
+        // POST cannot reach the rest of site_settings through this screen.
+        for (const r of rows.results || []) {
+          const v = form.get(r.key);
+          if (v === null) continue;
+          await env.DB.prepare('UPDATE site_settings SET value = ? WHERE key = ?').bind(String(v).slice(0, 500), r.key).run();
+        }
+        await logAudit(env.DB, currentUser, 'update', 'settings', 'church_details', 'Church details');
+        return new Response('', { status: 302, headers: { Location: '/pages/details?msg=saved' } });
       }
 
       // ── New page ──
