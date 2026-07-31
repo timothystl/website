@@ -153,6 +153,7 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Payroll | Office staff (Dinger) — requires `payroll_manage` permission | **DONE** — combined biweekly payroll (church staff + MDO preschool staff); see "Payroll & Supabase" below |
 | Audit Log | Admins | **DONE** — change history + rollback, requires `audit_view` |
 | Pages | Office staff (`site_pages`) or a ministry leader for their own pages (`site_pages_own`) | **DONE** (2026-07-31) — every page on the public site, with the block editor at `/pages/:id/edit`; see "Site Editor" below |
+| Filtered Mail | Office staff — requires `settings_manage` | **DONE** (2026-07-31) — review queue for public-form submissions held as spam; see "Form Spam Screening" below |
 | Connect | External link in sidebar footer | **DONE** — single link out to `connect.timothystl.org` (renamed 2026-07-22 from `chms.timothystl.org`, itself changed 2026-07-20 from two separate "Scheduler"/"Volunteer Admin" links; see the chms repo's own CLAUDE.md) |
 
 ### Giving Tab (added 2026-07-27)
@@ -227,6 +228,57 @@ Gated by a dedicated **`giving_manage`** permission (`admin/auth.js`), separate 
 `settings_manage` — mirrors how Payroll got its own `payroll_manage` instead of riding on
 Settings, so giving-link management can be granted independently of plain redirects or
 Subscribers (PII) access.
+
+### Form Spam Screening (added 2026-07-31)
+
+The public contact / prayer / newsletter forms had one defence — a hidden
+honeypot field — and the forms POST cross-origin to
+`admin.timothystl.org/api/contact`, so a bot never has to load the site at all
+and the honeypot never gets a chance. Marketing pitches were arriving in the
+office inbox as "Contact Form — …" a few times a month.
+
+**The governing constraint: a real prayer request must never be lost.** Nothing
+is rejected. A submission that scores past the threshold is *held* — stored in
+full and listed at `/filtered` — and the sender is told it went through (a bot
+that learns which of its messages were caught learns how to get past the
+filter). Everything below the threshold is delivered as before, with
+`[likely spam]` prefixed to the subject when it scored high enough to be worth
+a glance.
+
+- **`admin/spam.js`** is pure and unit-tested — the scoring rules, and the
+  signed form token. `admin/forms.js` is the part that touches D1, Turnstile
+  and Brevo: `screenSubmission()`, the ChMS hand-off, and the Filtered Mail
+  page.
+- **Three independent signals**, so no single one has to be right: a signed
+  token issued by `GET /api/form-config` when the page loads (a bot POSTing
+  straight at the API has none, and a submit faster than ~2.5s reads as
+  machine-quick); content scoring against real spam vocabulary; and a
+  per-address flood limit computed from the `form_submissions` table.
+- **A missing token is a *signal*, never a rejection.** Same for a Turnstile
+  outage or an unreadable signing key — all of them cost a visitor points, not
+  their message. A clean prayer request with no token at all still goes
+  through. This is why the thresholds look low: they are only ever additive.
+- **`admin/spam.test.mjs` is scored against real mail** — every "legitimate"
+  case in it is an actual submission from the site (a food-pantry ask, a
+  cancer prayer request, a giving question) and every spam case is a pitch that
+  really arrived. A rule change that holds one of those real messages is wrong,
+  and the test says so. `admin/forms.test.mjs` covers the wiring end-to-end
+  against real SQLite (`node:sqlite` behind a D1-shaped shim) with `fetch`
+  stubbed. Run: `node admin/spam.test.mjs`, `node admin/forms.test.mjs`.
+- **Retention:** `delivered` rows exist only for the flood limit and are pruned
+  after 30 days; `released` after 90; `held` never — it waits for a human. The
+  table must not become a second, unguarded archive of everyone's prayer
+  requests.
+- **Held mail is invisible by design**, so the Dashboard's "Needs your
+  attention" entry is what makes holding safe rather than silently lossy. Don't
+  remove it without replacing the signal.
+- **Turnstile is optional and inert until configured** — the site key is saved
+  from the Filtered Mail tab, and `TURNSTILE_SECRET_KEY` must be set on the
+  Worker (`wrangler secret put TURNSTILE_SECRET_KEY --name tlc-newsletter-admin`).
+  With only one half in place nothing changes on the site.
+- Confirmation auto-replies are now suppressed for suspect submissions — the
+  address is attacker-supplied, so replying to it turned the form into a way to
+  mail someone else's inbox (part of AW-5 in the July 2026 review).
 
 ### Ministry Page Editor (added 2026-07-30)
 

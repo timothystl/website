@@ -677,6 +677,7 @@
               <textarea name="message" class="form-input" placeholder="How can we help you?" required></textarea>
             </div>
             <input type="text" name="website" style="display:none;" tabindex="-1" autocomplete="off" aria-hidden="true">
+            <div class="tlc-turnstile" style="margin-bottom:14px;"></div>
             <button type="submit" class="btn btn-primary" id="contact-btn">Send message</button>
           </form>
         </div>
@@ -768,6 +769,7 @@
             <textarea name="message" class="form-input" style="min-height:160px;" placeholder="Share what's on your heart..." required></textarea>
           </div>
           <input type="text" name="website" style="display:none;" tabindex="-1" autocomplete="off" aria-hidden="true">
+          <div class="tlc-turnstile" style="margin-bottom:14px;"></div>
           <button type="submit" class="btn btn-primary" id="prayer-btn">Submit prayer request</button>
         </form>
       </div>
@@ -2862,6 +2864,45 @@ window.showPage = function(id, addHistory) {
   }
 })();
 
+// ── FORM SPAM SCREENING ───────────────────────────────────────
+// The admin worker hands out a short-lived signed token when this page loads.
+// Sending it back with a submission proves the message came from a browser
+// that actually opened the form, rather than a script POSTing straight at
+// admin.timothystl.org/api/contact — which is how the marketing spam gets in.
+// If this fetch fails the forms still work: the server treats a missing token
+// as one signal among several, never as a reason to reject a message.
+var tlcFormToken = '';
+(async function tlcLoadFormConfig() {
+  try {
+    const r = await fetch('https://admin.timothystl.org/api/form-config', { cache: 'no-store' });
+    const d = await r.json();
+    tlcFormToken = d.token || '';
+    if (d.turnstile_site_key) tlcMountTurnstile(d.turnstile_site_key);
+  } catch (_) {}
+})();
+
+// Only runs if a Turnstile site key has been saved in the admin. Until then
+// nothing is loaded and the forms look exactly as they do today.
+function tlcMountTurnstile(siteKey) {
+  const mounts = document.querySelectorAll('.tlc-turnstile');
+  if (!mounts.length) return;
+  window.tlcTurnstileReady = function() {
+    mounts.forEach(function(el) {
+      try { window.turnstile.render(el, { sitekey: siteKey }); } catch (_) {}
+    });
+  };
+  const s = document.createElement('script');
+  s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=tlcTurnstileReady';
+  s.async = true; s.defer = true;
+  document.head.appendChild(s);
+}
+
+function tlcFormData(form) {
+  const fd = new FormData(form);
+  if (tlcFormToken) fd.append('form_token', tlcFormToken);
+  return fd;
+}
+
 // ── CONTACT FORM ──────────────────────────────────────────────
 document.getElementById('contact-form').addEventListener('submit', async function(e) {
   e.preventDefault();
@@ -2880,7 +2921,7 @@ document.getElementById('contact-form').addEventListener('submit', async functio
   btn.disabled = true; btn.textContent = 'Sending…';
   alert.style.display = 'none';
   try {
-    const fd = new FormData(this);
+    const fd = tlcFormData(this);
     const r = await fetch('https://admin.timothystl.org/api/contact', { method: 'POST', body: fd });
     const d = await r.json();
     if (!r.ok || d.error) throw new Error(d.error || 'Server error');
@@ -2910,7 +2951,7 @@ document.getElementById('prayer-form').addEventListener('submit', async function
   btn.disabled = true; btn.textContent = 'Sending…';
   alert.style.display = 'none';
   try {
-    const fd = new FormData(this);
+    const fd = tlcFormData(this);
     const r = await fetch('https://admin.timothystl.org/api/prayer', { method: 'POST', body: fd });
     const d = await r.json();
     if (!r.ok || d.error) throw new Error(d.error || 'Server error');
@@ -2932,7 +2973,7 @@ async function handleNewsletterSignup(e) {
   btn.disabled = true; btn.textContent = 'Subscribing…';
   alert.style.display = 'none';
   try {
-    const fd = new FormData(e.target);
+    const fd = tlcFormData(e.target);
     const r = await fetch('https://admin.timothystl.org/api/subscribe', { method: 'POST', body: fd });
     const d = await r.json();
     if (!r.ok || d.error) throw new Error(d.error || 'Server error');

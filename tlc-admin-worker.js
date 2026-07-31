@@ -5,7 +5,7 @@
 // Last modified: 2026-03-27
 
 
-import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes } from './admin/db.js';
+import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes } from './admin/db.js';
 
 // Static pages that can carry self-serve notices (matches the SPA's page ids in public/index.html)
 const STATIC_PAGES = [
@@ -34,6 +34,8 @@ import MINISTRY_EDITOR_HTML from './admin/ministry-editor.html';
 import { PAGE_SEEDS } from './admin/page-seeds.js';
 import { SITE_PAGES } from './admin/site-pages.js';
 import { orderPages, filterPages, pageStatus, slugify, uniqueSlug, pageRename } from './admin/pages.js';
+import { screenSubmission, formConfig, forwardToChms, officeEmailHtml, officeSubject,
+         handleFilteredRoutes, heldCount, OFFICE_EMAIL } from './admin/forms.js';
 
 // Allowlist of site_settings keys readable via the public /api/settings/{key}
 // endpoint. Everything else returns 404 — keeps internal config (gym admin
@@ -752,7 +754,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-07-31-3'; // bumped: pages.owner_username, so a ministry leader can be given their own pages
+    const SCHEMA_VERSION = '2026-07-31-4'; // bumped: form_submissions, the spam-screening queue behind the public forms
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -1207,6 +1209,11 @@ export default {
       }
     } catch (e) { console.error('Site page seed failed:', e && e.message); }
 
+    // Public form intake + spam screening (see admin/forms.js)
+    try { await env.DB.prepare(DB_INIT_FORM_SUBMISSIONS).run(); } catch (_) {}
+    try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_form_submissions_status ON form_submissions(status, created_at DESC)').run(); } catch (_) {}
+    try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_form_submissions_ip ON form_submissions(ip, created_at)').run(); } catch (_) {}
+
     // Performance indexes
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)').run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_news_items_publish_date ON news_items(publish_date)').run(); } catch (_) {}
@@ -1512,6 +1519,20 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
 </html>`, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
     }
 
+    // ── PUBLIC: what the website's forms need before they can be submitted ──
+    // A signed token proving the browser actually loaded the form, plus the
+    // Turnstile site key if one has been configured. Never cached — the token
+    // carries its issue time, and a cached one would read as stale to everyone.
+    if (path === '/api/form-config' && method === 'GET') {
+      return new Response(JSON.stringify(await formConfig(env)), {
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'no-store',
+        }
+      });
+    }
+
     // ── PUBLIC: contact form submission ──
     if (path === '/api/contact' && method === 'POST') {
       const corsHeaders = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' };
@@ -1521,54 +1542,42 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
         const name = (form.get('name') || '').trim();
         const email = (form.get('email') || '').trim();
         const message = (form.get('message') || '').trim();
-        // Honeypot — bots fill this hidden field, humans never see it
-        if (form.get('website')) return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
         if (!name || !message) return new Response(JSON.stringify({ error: 'Name and message are required' }), { status: 400, headers: corsHeaders });
-        const html = `<p><strong>Name:</strong> ${escapeHtml(name)}</p><p><strong>Email:</strong> ${email ? escapeHtml(email) : '(not provided)'}</p><p><strong>Message:</strong></p><p style="white-space:pre-wrap">${escapeHtml(message)}</p>`;
+
+        // Spam screening. A held message is stored for review at /filtered and
+        // the sender is told it went through — a bot learning which of its
+        // messages were caught is how it learns to get past the filter. The
+        // few real messages this catches are one click from being released.
+        const screen = await screenSubmission(env, request, {
+          kind: 'contact', name, email, message,
+          honeypot: form.get('website'),
+          token: form.get('form_token'),
+          turnstileToken: form.get('cf-turnstile-response'),
+        });
+        if (screen.held) return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
+
         const result = await sendTransactionalEmail(env, {
-          subject: `Contact Form — ${name}`,
-          htmlContent: html,
-          toEmails: ['dinger@timothystl.org'],
+          subject: officeSubject('contact', name, screen.suspect),
+          htmlContent: officeEmailHtml('contact', { name, email, message }),
+          toEmails: [OFFICE_EMAIL],
           replyTo: email ? { email, name } : undefined
         });
         if (result.error) return new Response(JSON.stringify({ error: result.error }), { status: 500, headers: corsHeaders });
-        // Confirmation email to user
-        if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        // Confirmation email to the sender. Skipped for anything that scored as
+        // suspect: the address is attacker-supplied, so auto-replying to it
+        // turns this form into a way to mail someone else's inbox.
+        if (!screen.suspect && email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
           await sendTransactionalEmail(env, {
             subject: 'We received your message — Timothy Lutheran Church',
             htmlContent: `<p>Hi ${escapeHtml(name)},</p><p>Thank you for reaching out to Timothy Lutheran Church. We received your message and will be in touch soon.</p><p>If you need immediate assistance, please call us at (314) 781-8673 or email <a href="mailto:dinger@timothystl.org">dinger@timothystl.org</a>.</p><p>Grace and peace,<br>The team at Timothy Lutheran Church</p>`,
             toEmails: [email]
           });
         }
-        ctx.waitUntil((async () => {
-          try {
-            const intakeReq = new Request('https://serve.timothystl.org/api/intake/connect-card', {
-              method: 'POST',
-              headers: {
-                'X-Intake-Key': env.CHMS_INTAKE_API_KEY || '',
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                name: name,
-                email: email,
-                message: message,
-                source: 'website-contact',
-              })
-            });
-            const chmsRes = env.VOLUNTEER_WORKER
-              ? await env.VOLUNTEER_WORKER.fetch(intakeReq)
-              : await fetch(intakeReq);
-            if (!chmsRes.ok) {
-              const body = await chmsRes.text().catch(() => '');
-              console.error(`ChMS intake forward failed (contact): HTTP ${chmsRes.status} — ${body}`);
-            }
-          } catch (e) {
-            console.error('ChMS intake forward failed (contact):', e?.message);
-          }
-        })());
+        forwardToChms(env, ctx, 'contact', { name, email, message });
         return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
       } catch(e) {
-        return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: corsHeaders });
+        console.error('Contact form failed:', e?.message);
+        return new Response(JSON.stringify({ error: 'Something went wrong. Please try again or call the church office.' }), { status: 500, headers: corsHeaders });
       }
     }
 
@@ -1581,55 +1590,40 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
         const name = (form.get('name') || '').trim();
         const email = (form.get('email') || '').trim();
         const message = (form.get('message') || '').trim();
-        // Honeypot — bots fill this hidden field, humans never see it
-        if (form.get('website')) return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
         if (!message) return new Response(JSON.stringify({ error: 'Prayer request is required' }), { status: 400, headers: corsHeaders });
-        const htmlContent = `<p><strong>Name:</strong> ${name ? escapeHtml(name) : '(anonymous)'}</p><p><strong>Email:</strong> ${email ? escapeHtml(email) : '(not provided)'}</p><p><strong>Prayer request:</strong></p><p style="white-space:pre-wrap">${escapeHtml(message)}</p>`;
+
+        // Same screening as the contact form. The threshold in admin/spam.js is
+        // deliberately conservative here: holding a real prayer request for a
+        // few hours costs far more than letting a pitch through.
+        const screen = await screenSubmission(env, request, {
+          kind: 'prayer', name, email, message,
+          honeypot: form.get('website'),
+          token: form.get('form_token'),
+          turnstileToken: form.get('cf-turnstile-response'),
+        });
+        if (screen.held) return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
+
         const result = await sendTransactionalEmail(env, {
-          subject: `Prayer Request — ${name || 'Anonymous'}`,
-          htmlContent,
-          toEmails: ['dinger@timothystl.org'],
+          subject: officeSubject('prayer', name, screen.suspect),
+          htmlContent: officeEmailHtml('prayer', { name, email, message }),
+          toEmails: [OFFICE_EMAIL],
           replyTo: email ? { email, name } : undefined
         });
         if (result.error) return new Response(JSON.stringify({ error: result.error }), { status: 500, headers: corsHeaders });
-        // Confirmation email to user
-        if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        // Confirmation email to the sender — suppressed for suspect messages,
+        // see the note on the contact route above.
+        if (!screen.suspect && email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
           await sendTransactionalEmail(env, {
             subject: "We're praying for you — Timothy Lutheran Church",
             htmlContent: `<p>Hi ${name ? escapeHtml(name) : 'friend'},</p><p>Thank you for sharing your prayer request with us. Our pastoral staff has received it and will be praying for you.</p><p>If you'd like to speak with someone, please reach out to our office at <a href="mailto:dinger@timothystl.org">dinger@timothystl.org</a> or call (314) 781-8673.</p><p>Grace and peace,<br>The pastoral staff at Timothy Lutheran Church</p>`,
             toEmails: [email]
           });
         }
-        ctx.waitUntil((async () => {
-          try {
-            const intakeReq = new Request('https://serve.timothystl.org/api/intake/prayer', {
-              method: 'POST',
-              headers: {
-                'X-Intake-Key': env.CHMS_INTAKE_API_KEY || '',
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                name: name,
-                email: email,
-                message: message,
-                source: 'website-prayer',
-                is_urgent: 0,
-              })
-            });
-            const chmsRes = env.VOLUNTEER_WORKER
-              ? await env.VOLUNTEER_WORKER.fetch(intakeReq)
-              : await fetch(intakeReq);
-            if (!chmsRes.ok) {
-              const body = await chmsRes.text().catch(() => '');
-              console.error(`ChMS intake forward failed (prayer): HTTP ${chmsRes.status} — ${body}`);
-            }
-          } catch (e) {
-            console.error('ChMS intake forward failed (prayer):', e?.message);
-          }
-        })());
+        forwardToChms(env, ctx, 'prayer', { name, email, message });
         return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
       } catch(e) {
-        return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: corsHeaders });
+        console.error('Prayer form failed:', e?.message);
+        return new Response(JSON.stringify({ error: 'Something went wrong. Please try again or call the church office.' }), { status: 500, headers: corsHeaders });
       }
     }
 
@@ -1638,12 +1632,21 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
       const corsH = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
       try {
         const form = await request.formData();
-        if (form.get('website')) return new Response(JSON.stringify({ success: true }), { headers: corsH }); // honeypot
         const email = (form.get('email') || '').trim().toLowerCase();
         const name = (form.get('name') || '').trim();
         if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
           return new Response(JSON.stringify({ error: 'Please enter a valid email address.' }), { status: 400, headers: corsH });
         }
+        // Screened like the other forms — mostly for the flood limit, since a
+        // scripted signup run is how a mailing list fills up with dead
+        // addresses. A held signup waits at /filtered and can be released.
+        const screen = await screenSubmission(env, request, {
+          kind: 'subscribe', name, email, message: '',
+          honeypot: form.get('website'),
+          token: form.get('form_token'),
+          turnstileToken: form.get('cf-turnstile-response'),
+        });
+        if (screen.held) return new Response(JSON.stringify({ success: true }), { headers: corsH });
         // Add to Brevo contacts list
         const listId = parseInt(env.BREVO_LIST_ID || '2');
         const brevoRes = await fetch('https://api.brevo.com/v3/contacts', {
@@ -1925,6 +1928,20 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
           attn.push({ dot: '#B85C3A', title: `&ldquo;${escapeHtml(it.title)}&rdquo; news item`, meta: `Expires ${it.expire_date}`, action: 'Extend', href: `/newsitems/edit/${it.id}` });
         }
       }
+      // Held mail is invisible by design — the sender is told it went through —
+      // so the only way anyone learns a real message was caught is if it shows
+      // up here. This is what makes holding safe rather than silently lossy.
+      if (hasPermission(currentUser, 'settings_manage')) {
+        const n = await heldCount(env);
+        if (n > 0) {
+          attn.push({
+            dot: '#B85C3A',
+            title: `${n} website message${n !== 1 ? 's' : ''} held as spam`,
+            meta: 'Release anything that turns out to be real',
+            action: 'Review', href: '/filtered',
+          });
+        }
+      }
       if (canMinistries) {
         const slugLabels = { confirmation: 'Confirmation', sundayschool: 'Sunday School', vbs: 'VBS', egghunt: 'Egg Hunt', family: 'Family Ministry' };
         const slugs = Object.keys(slugLabels);
@@ -2026,6 +2043,13 @@ ${sidebarShell('dashboard', currentUser)}
         return new Response('Access denied.', { status: 403 });
       }
       const r = await handleGymRoutes(path, method, url, request, env, currentUser, ctx);
+      if (r) return r;
+    }
+
+    // ── FILTERED MAIL (auth + settings_manage) ─────────────────
+    // The review queue for anything the public forms held as spam.
+    {
+      const r = await handleFilteredRoutes(request, env, path, method, currentUser, ctx);
       if (r) return r;
     }
 

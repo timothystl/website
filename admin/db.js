@@ -151,6 +151,28 @@ export const DB_INIT_SITE_SETTINGS = `CREATE TABLE IF NOT EXISTS site_settings (
   hint TEXT
 )`;
 
+// Everything that comes through the public contact / prayer / subscribe forms,
+// with the spam score that decided its fate. `status='held'` is the review
+// queue at /filtered — nothing the filter catches is ever thrown away, it just
+// waits there for a human. 'delivered' rows are the rate-limit ledger and are
+// pruned after 30 days (see pruneSubmissions in admin/forms.js), so this table
+// never turns into a second, unguarded copy of everyone's prayer requests.
+export const DB_INIT_FORM_SUBMISSIONS = `CREATE TABLE IF NOT EXISTS form_submissions (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind        TEXT NOT NULL,
+  name        TEXT,
+  email       TEXT,
+  message     TEXT,
+  ip          TEXT,
+  user_agent  TEXT,
+  score       INTEGER NOT NULL DEFAULT 0,
+  reasons     TEXT,
+  status      TEXT NOT NULL DEFAULT 'held',
+  created_at  TEXT DEFAULT (datetime('now')),
+  released_at TEXT,
+  released_by TEXT
+)`;
+
 // ── GYM RENTAL DB TABLES ─────────────────────────────────────
 export const DB_INIT_GYM_GROUPS = `CREATE TABLE IF NOT EXISTS gym_groups (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,
