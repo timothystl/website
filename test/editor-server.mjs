@@ -55,6 +55,8 @@ export function createEditorServer(seed = {}) {
   for (const p of seedPages) {
     pages.set(p.slug, {
       slug: p.slug, title: p.title, page_status: p.status || 'live', publish_at: null,
+      path: p.path || ('/' + p.slug), template: p.template || 'standard',
+      parent_id: p.parent_id || null, in_menu: p.in_menu === undefined ? 1 : p.in_menu,
       blocks: JSON.stringify(sanitizeBlocks(p.blocks || starterBlocks(p.title))),
       published_blocks: JSON.stringify(sanitizeBlocks(p.blocks || [])),
       change_log: '[]', updated_at: new Date().toISOString(),
@@ -71,7 +73,16 @@ export function createEditorServer(seed = {}) {
 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
-    const p = url.pathname;
+    let p = url.pathname;
+
+    // The site editor is the same screen under a different address. Rewriting
+    // it onto the ministry routes here is what lets one harness exercise both
+    // — the editor client is the thing under test, and it is the part that has
+    // to work out which API it is talking to.
+    const siteEdit = p.match(/^\/pages\/([^/]+)\/edit$/);
+    const isSitePage = !!siteEdit || p.startsWith('/pages/api/');
+    if (siteEdit) p = '/ministries/editor/' + siteEdit[1];
+    if (p.startsWith('/pages/api/')) p = '/ministries/api' + p.slice('/pages/api'.length);
 
     if (p.startsWith('/ministries/editor/') && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -94,10 +105,17 @@ export function createEditorServer(seed = {}) {
             slug, title: row.title, status: row.page_status, publish_at: row.publish_at,
             updated_at: row.updated_at, blocks, changes: parseBlocks(row.change_log),
             published_count: sanitizeBlocks(parseBlocks(row.published_blocks)).length,
+            path: row.path || ('/' + slug), template: row.template || 'standard',
           },
+          pages: isSitePage ? Array.from(pages.values()).map((r) => ({
+            id: r.slug, title: r.title, slug: r.path || ('/' + r.slug), parent_id: r.parent_id || null,
+            in_menu: r.in_menu === undefined ? true : !!r.in_menu,
+            hasDraftEdits: JSON.stringify(sanitizeBlocks(parseBlocks(r.blocks))) !== JSON.stringify(sanitizeBlocks(parseBlocks(r.published_blocks))),
+          })) : [],
           config: blocksClientConfig(),
           media,
-          html: renderPage(blocks, { editing: true, slug, withCss: true, data: DATA }),
+          html: renderPage(blocks, { editing: true, slug, withCss: true, data: DATA,
+            template: isSitePage ? (row.template || 'standard') : undefined }),
         });
       }
 

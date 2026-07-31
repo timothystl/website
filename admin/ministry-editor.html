@@ -219,9 +219,50 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
    media query the public page uses. */
 /*TLCB_EDITOR_CSS*/
 
+/* ── Pages rail ──────────────────────────────────────────────────────────
+   The far-left column: every page on the site, in menu order. Only drawn for
+   the site editor — a ministry page has no siblings to switch between. */
+.ed-pages{width:224px;flex:none;border-right:1px solid #DDE3ED;background:#FBF8F3;
+  display:flex;flex-direction:column;min-height:0;position:relative;z-index:5;}
+.ed-pages-h{padding:15px 14px 9px;display:flex;align-items:center;justify-content:space-between;gap:6px;
+  font:600 11px/1 'Source Sans 3';letter-spacing:.14em;text-transform:uppercase;color:#8A8898;}
+.ed-pages-h button{background:none;border:none;cursor:pointer;color:#8A8898;font-size:14px;line-height:1;padding:2px 4px;}
+.ed-pages-search{margin:0 12px 8px;padding:7px 10px;border:1px solid #DDE3ED;border-radius:8px;
+  font:400 13px/1.2 'Source Sans 3';color:#1E2D4A;background:#fff;width:calc(100% - 24px);}
+.ed-pages-list{flex:1;overflow-y:auto;padding:0 8px 10px;display:flex;flex-direction:column;gap:1px;}
+.ed-page{display:flex;align-items:center;gap:7px;padding:7px 9px;border-radius:8px;text-decoration:none;
+  font:400 13.5px/1.3 'Source Sans 3';color:#3A3A4A;border:1px solid transparent;background:none;
+  text-align:left;cursor:pointer;width:100%;}
+.ed-page:hover{background:#EDF2F7;}
+.ed-page.is-here{background:#EDF2F7;border-color:#C4CEDF;color:#1E2D4A;font-weight:600;}
+.ed-page--child{padding-left:24px;font-size:13px;}
+.ed-page-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ed-page-dot{width:7px;height:7px;border-radius:50%;background:#C9973A;flex:none;}
+.ed-page-tag{font-size:10px;color:#8A8898;flex:none;}
+.ed-pages-f{padding:10px 12px;border-top:1px solid #DDE3ED;display:flex;flex-direction:column;gap:6px;}
+.ed-pages-f a,.ed-pages-f button{display:block;text-align:center;padding:8px;border-radius:8px;
+  font:600 12.5px/1 'Source Sans 3';text-decoration:none;cursor:pointer;}
+.ed-pages-f a{border:1px solid #C4CEDF;color:#1E2D4A;background:#fff;}
+.ed-pages-f button{border:1px solid #DDE3ED;color:#4A4860;background:none;}
+.ed-pages-none{padding:14px 10px;font-size:12.5px;color:#8A8898;text-align:center;}
+/* Collapsed: a hairline strip with just the reopen arrow. */
+.ed-pages--shut{width:26px;}
+.ed-pages--shut .ed-pages-search,.ed-pages--shut .ed-pages-list,
+.ed-pages--shut .ed-pages-f,.ed-pages--shut .ed-pages-h span{display:none;}
+.ed-pages--shut .ed-pages-h{padding:12px 4px;justify-content:center;}
+
 @media(max-width:1100px){
   .ed-rail{width:216px;}
   .ed-insp{width:280px;}
+}
+/* Below 1240px the open pages rail floats OVER the canvas instead of taking a
+   column of its own. Left as a flex column, the four columns together exceed
+   the viewport and the inspector is pushed off-screen with no way to reach
+   it — which is exactly what happened in the prototype. */
+@media(max-width:1240px){
+  .ed-pages{position:absolute;left:0;top:0;bottom:0;box-shadow:6px 0 20px rgba(30,45,74,.14);}
+  .ed-pages--shut{position:static;box-shadow:none;}
+  .ed-body{position:relative;}
 }
 </style>
 <!--TLCB_TINYMCE-->
@@ -241,18 +282,32 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
 (function () {
 'use strict';
 
-var SLUG = decodeURIComponent((location.pathname.match(/\/ministries\/editor\/([^/?#]+)/) || [])[1] || '');
+// The same editor serves two things: a ministry page (youth_pages, addressed by
+// slug) and a site page (the pages table, addressed by id). Only the API prefix
+// and the identifier differ, so they are picked up from the address once here
+// rather than forking the editor.
+var PAGE_MATCH = location.pathname.match(/^\/pages\/([^/?#]+)\/edit/);
+var IS_SITE_PAGE = !!PAGE_MATCH;
+var API = IS_SITE_PAGE ? '/pages/api' : '/ministries/api';
+var BACK_HREF = IS_SITE_PAGE ? '/pages' : '/ministries';
+var BACK_LABEL = IS_SITE_PAGE ? 'Pages' : 'Ministries';
+var SLUG = decodeURIComponent(PAGE_MATCH ? PAGE_MATCH[1]
+  : ((location.pathname.match(/\/ministries\/editor\/([^/?#]+)/) || [])[1] || ''));
 var WIDTHS = { desktop: 860, tablet: 620, phone: 390 };
 var HINT_KEY = 'tlc-ministry-editor-hint-v1';
 
 var S = {
-  slug: SLUG, title: '', status: 'live', updatedAt: '',
+  // `slug` identifies the page to the API; `path` is where it lives on the
+  // public site. For a ministry page they are the same word; for a site page
+  // the id and the address are separate things.
+  slug: SLUG, path: '/' + SLUG, title: '', status: 'live', updatedAt: '',
   blocks: [], config: null, media: [],
   selectedId: null, device: 'desktop', group: 'Content', paletteOpen: true,
   changes: [], history: [], saved: null, dirty: false,
   dragId: null, dragType: null, dragSection: null, dropIndex: null,
   picker: null, toast: null, hint: true, loadError: '',
   publishPanel: false, publishAt: null, publishAtLocal: '', revisions: [], sections: [],
+  template: '', siblings: [], railOpen: true, leaving: false,
 };
 
 var el = {};
@@ -289,7 +344,7 @@ function shellHtml() {
   '<div class="ed">' +
     '<header class="ed-top">' +
       '<div class="ed-brand"><div class="ed-mark" aria-hidden="true">T</div><span>Timothy Admin</span></div>' +
-      '<nav class="ed-crumb" aria-label="Breadcrumb"><a href="/ministries">Ministries</a><i>/</i><b id="edTitle"></b></nav>' +
+      '<nav class="ed-crumb" aria-label="Breadcrumb"><a href="' + BACK_HREF + '">' + BACK_LABEL + '</a><i>/</i><b id="edTitle"></b></nav>' +
       '<span class="ed-pill" id="edPill"></span>' +
       '<span class="ed-saved" id="edSaved"></span>' +
       '<div class="ed-spacer"></div>' +
@@ -310,6 +365,17 @@ function shellHtml() {
       '<button type="button" id="edHintX" aria-label="Dismiss tip">×</button>' +
     '</div>' +
     '<div class="ed-body">' +
+      (IS_SITE_PAGE ?
+      '<aside class="ed-pages" id="edPages">' +
+        '<div class="ed-pages-h"><span>Site pages</span>' +
+          '<button type="button" id="edPagesToggle" aria-expanded="true" aria-label="Hide the page list">‹</button></div>' +
+        '<input class="ed-pages-search" id="edPagesSearch" type="search" placeholder="Search pages…" aria-label="Search pages">' +
+        '<div class="ed-pages-list" id="edPagesList"></div>' +
+        '<div class="ed-pages-f">' +
+          '<a href="/pages">All pages &amp; menu</a>' +
+          '<button type="button" id="edPagesNew">+ New page</button>' +
+        '</div>' +
+      '</aside>' : '') +
       '<aside class="ed-rail">' +
         '<div class="ed-rail-h" id="edRailHead">Page blocks</div>' +
         '<div class="ed-rail-list" id="edRail" role="listbox" aria-labelledby="edRailHead" tabindex="-1"></div>' +
@@ -343,7 +409,8 @@ function shellHtml() {
 function cacheEls() {
   ['edTitle', 'edPill', 'edSaved', 'edView', 'edUndo', 'edPublish', 'edHint', 'edHintX', 'edRail',
    'edCanvas', 'edPaper', 'edPalTabs', 'edPalChips', 'edPalToggle', 'edInspHead', 'edInspBody',
-   'edChanges', 'edChangesHead', 'edModal', 'edToast', 'edMore', 'edPublishPanel'].forEach(function (id) { el[id] = document.getElementById(id); });
+   'edChanges', 'edChangesHead', 'edModal', 'edToast', 'edMore', 'edPublishPanel',
+   'edPages', 'edPagesList', 'edPagesSearch', 'edPagesToggle', 'edPagesNew'].forEach(function (id) { el[id] = document.getElementById(id); });
   el.live = document.getElementById('live');
 }
 
@@ -381,7 +448,7 @@ function renderTop() {
   el.edSaved.textContent = S.saved ? 'Autosaved ' + S.saved : 'No changes yet';
   el.edUndo.disabled = S.history.length === 0;
   el.edPublish.disabled = false;
-  el.edView.href = 'https://timothystl.org/' + S.slug;
+  el.edView.href = 'https://timothystl.org' + S.path;
 }
 
 function renderRail() {
@@ -456,7 +523,7 @@ function renderPalette() {
 // ── saved sections ─────────────────────────────────────────────────────────
 async function loadSections() {
   try {
-    var out = await api('/ministries/api/sections');
+    var out = await api(API + '/sections');
     S.sections = out.sections || [];
     if (S.group === 'Saved') renderPalette();
   } catch (_) { /* the rest of the palette still works */ }
@@ -469,7 +536,7 @@ async function saveSection(blocks, suggested) {
   name = name.trim();
   if (!name) return toast('A section needs a name');
   try {
-    await api('/ministries/api/sections', { method: 'POST', body: JSON.stringify({ name: name, blocks: blocks }) });
+    await api(API + '/sections', { method: 'POST', body: JSON.stringify({ name: name, blocks: blocks }) });
     await loadSections();
     toast('Saved — find it under "Saved" in the panel below');
     say('Section saved');
@@ -479,7 +546,7 @@ async function saveSection(blocks, suggested) {
 }
 
 async function insertSection(id, at) {
-  var out = await api('/ministries/api/sections/' + Number(id));
+  var out = await api(API + '/sections/' + Number(id));
   var blocks = out.blocks || [];
   if (!blocks.length) return;
   pushHistory();
@@ -497,7 +564,7 @@ async function deleteSection(id) {
   var sec = S.sections.filter(function (x) { return x.id === Number(id); })[0];
   if (!window.confirm('Delete the saved section "' + (sec ? sec.name : '') + '"? Pages already using it keep their blocks.')) return;
   try {
-    await api('/ministries/api/sections/' + Number(id) + '/delete', { method: 'POST', body: '{}' });
+    await api(API + '/sections/' + Number(id) + '/delete', { method: 'POST', body: '{}' });
     await loadSections();
     toast('Saved section deleted');
   } catch (err) { toast(err.message || 'Could not delete that'); }
@@ -516,7 +583,7 @@ function renderToast() {
 
 // Canvas markup always comes from the Worker.
 async function refreshCanvas() {
-  var out = await api('/ministries/api/render', { method: 'POST', body: JSON.stringify({ blocks: S.blocks, slug: S.slug }) });
+  var out = await api(API + '/render', { method: 'POST', body: JSON.stringify({ blocks: S.blocks, slug: S.slug }) });
   setCanvas(out.html);
 }
 
@@ -560,8 +627,40 @@ function applySelection() {
   for (var i = 0; i < nodes.length; i++) nodes[i].classList.toggle('is-sel', nodes[i].dataset.id === S.selectedId);
 }
 
+// The pages rail: every page on the site, in menu order, children indented.
+// A gold dot marks a page with unpublished changes and "hidden" marks one that
+// is not in the menu — the same two facts the All pages list shows, so the two
+// screens cannot tell staff different things.
+function renderPagesRail() {
+  if (!el.edPagesList) return;
+  var q = (el.edPagesSearch && el.edPagesSearch.value || '').trim().toLowerCase();
+  var all = S.siblings || [];
+  var hit = function (p) { return !q || (p.title + ' ' + p.slug).toLowerCase().indexOf(q) > -1; };
+  var row = function (p, child) {
+    var here = p.id === S.slug;
+    return '<button type="button" class="ed-page' + (child ? ' ed-page--child' : '') + (here ? ' is-here' : '') +
+      '" data-page="' + esc(p.id) + '"' + (here ? ' aria-current="page"' : '') + '>' +
+      (p.slug === '/' ? '<span class="ed-page-tag" title="Homepage">\u2302</span>' : '') +
+      '<span class="ed-page-t">' + esc(p.title) + '</span>' +
+      (p.hasDraftEdits ? '<span class="ed-page-dot" title="Unpublished changes"></span>' : '') +
+      (p.in_menu ? '' : '<span class="ed-page-tag">hidden</span>') +
+      '</button>';
+  };
+  var html = '';
+  all.filter(function (p) { return !p.parent_id; }).forEach(function (p) {
+    var kids = all.filter(function (c) { return c.parent_id === p.id; });
+    // A parent stays visible when one of its children matches, or searching
+    // would strand the child with nothing to sit under.
+    if (!hit(p) && !kids.some(hit)) return;
+    html += row(p, false);
+    kids.filter(hit).forEach(function (c) { html += row(c, true); });
+  });
+  el.edPagesList.innerHTML = html || '<div class="ed-pages-none">No pages match that.</div>';
+}
+
 function renderAll() {
   renderTop();
+  renderPagesRail();
   renderRail();
   renderPalette();
   renderChanges();
@@ -654,7 +753,7 @@ function rerender() {
 }
 async function doRerender() {
   try {
-    var out = await api('/ministries/api/render', { method: 'POST', body: JSON.stringify({ blocks: S.blocks, slug: S.slug }) });
+    var out = await api(API + '/render', { method: 'POST', body: JSON.stringify({ blocks: S.blocks, slug: S.slug }) });
     S.blocks = out.blocks; // take the server's sanitised version back as the truth
     setCanvas(out.html);
     renderRail();
@@ -665,7 +764,7 @@ async function doRerender() {
 }
 
 async function freshBlock(type) {
-  var out = await api('/ministries/api/new-block', { method: 'POST', body: JSON.stringify({ type: type }) });
+  var out = await api(API + '/new-block', { method: 'POST', body: JSON.stringify({ type: type }) });
   return out.block;
 }
 
@@ -680,7 +779,7 @@ async function saveDraft() {
   clearTimeout(saveTimer);
   if (!S.dirty) return;
   try {
-    var out = await api('/ministries/api/page/' + encodeURIComponent(S.slug) + '/draft',
+    var out = await api(API + '/page/' + encodeURIComponent(S.slug) + '/draft',
       { method: 'POST', body: JSON.stringify({ blocks: S.blocks, changes: S.changes }) });
     S.dirty = false;
     S.saved = now();
@@ -690,6 +789,22 @@ async function saveDraft() {
     if (String(err && err.message) === 'auth') return;
     toast('Could not save — your connection may be down');
   }
+}
+
+// Everything the editor holds that has not reached the server yet, written out
+// before the page changes underneath it. Switching pages with an unsaved edit
+// in the debounce window would otherwise silently lose it.
+async function flushDraft() {
+  clearTimeout(saveTimer);
+  if (S.dirty) await saveDraft();
+}
+
+// Moving between pages is a real navigation, not a swap of state in place: the
+// editor reboots on the new page, so nothing from the old one can leak into it.
+async function goToPage(id) {
+  S.leaving = true;
+  await flushDraft();
+  location.href = '/pages/' + encodeURIComponent(id) + '/edit';
 }
 
 // ── block actions ──────────────────────────────────────────────────────────
@@ -1098,6 +1213,33 @@ function bindStatic() {
     if (row) select(row.dataset.id);
   });
 
+  // pages rail
+  if (el.edPagesList) {
+    el.edPagesList.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-page]');
+      if (!btn || btn.dataset.page === S.slug) return;
+      // Leaving with work in flight would lose it, so flush first.
+      goToPage(btn.dataset.page);
+    });
+    el.edPagesSearch.addEventListener('input', renderPagesRail);
+    el.edPagesToggle.addEventListener('click', function () {
+      S.railOpen = !S.railOpen;
+      el.edPages.classList.toggle('ed-pages--shut', !S.railOpen);
+      el.edPagesToggle.textContent = S.railOpen ? '\u2039' : '\u203A';
+      el.edPagesToggle.setAttribute('aria-expanded', String(S.railOpen));
+      el.edPagesToggle.setAttribute('aria-label', S.railOpen ? 'Hide the page list' : 'Show the page list');
+      fitPaper();
+    });
+    el.edPagesNew.addEventListener('click', async function () {
+      await flushDraft();
+      var form = document.createElement('form');
+      form.method = 'POST';
+      form.action = '/pages/new';
+      document.body.appendChild(form);
+      form.submit();
+    });
+  }
+
   // canvas: selection, block toolbar, media pickers
   el.edPaper.addEventListener('click', function (e) {
     var actEl = e.target.closest('[data-act]');
@@ -1157,9 +1299,13 @@ function bindStatic() {
   window.addEventListener('beforeunload', function (e) {
     if (!S.dirty) return;
     try {
-      navigator.sendBeacon('/ministries/api/page/' + encodeURIComponent(S.slug) + '/draft',
+      navigator.sendBeacon(API + '/page/' + encodeURIComponent(S.slug) + '/draft',
         new Blob([JSON.stringify({ blocks: S.blocks, changes: S.changes })], { type: 'application/json' }));
     } catch (_) {}
+    // Only warn when the visitor is leaving the editor altogether. Moving to
+    // another page in the rail already flushed the draft, and a "leave site?"
+    // dialog there would both be untrue and cancel the navigation.
+    if (S.leaving) return;
     e.preventDefault();
     e.returnValue = '';
   });
@@ -1388,7 +1534,7 @@ function bindDragAndDrop() {
 async function publish() {
   await saveDraft();
   try {
-    var out = await api('/ministries/api/page/' + encodeURIComponent(S.slug) + '/publish',
+    var out = await api(API + '/page/' + encodeURIComponent(S.slug) + '/publish',
       { method: 'POST', body: JSON.stringify({ blocks: S.blocks }) });
     S.changes = [];
     S.status = 'live';
@@ -1397,7 +1543,7 @@ async function publish() {
     S.dirty = false;
     closePublishPanel();
     renderTop(); renderChanges();
-    toast('Published to timothystl.org/' + S.slug);
+    toast('Published to timothystl.org' + S.path);
     say('Published');
   } catch (err) {
     if (String(err && err.message) !== 'auth') toast('Could not publish — ' + (err.message || 'try again'));
@@ -1440,7 +1586,7 @@ async function togglePublishPanel() {
   el.edMore.setAttribute('aria-expanded', 'true');
   renderPublishPanel();
   try {
-    var out = await api('/ministries/api/page/' + encodeURIComponent(S.slug) + '/revisions');
+    var out = await api(API + '/page/' + encodeURIComponent(S.slug) + '/revisions');
     S.revisions = out.revisions || [];
     if (S.publishPanel) renderPublishPanel();
   } catch (_) { /* the panel still works without history */ }
@@ -1459,7 +1605,7 @@ function renderPublishPanel() {
       '<span class="ed-note">' + (scheduled
         ? 'Scheduled for ' + esc(fmtWhen(S.publishAt))
         : (S.changes.length ? S.changes.length + ' unpublished change' + (S.changes.length === 1 ? '' : 's') : 'Everything is published')) + '</span>' +
-      '<a class="ed-close" style="display:inline-block;text-align:center" href="https://timothystl.org/' + esc(S.slug) + '" target="_blank" rel="noopener">Compare with the live page ↗</a>' +
+      '<a class="ed-close" style="display:inline-block;text-align:center" href="https://timothystl.org' + esc(S.path) + '" target="_blank" rel="noopener">Compare with the live page ↗</a>' +
       '<button type="button" class="ed-close" id="edSavePage">Save this whole page as a section</button>' +
     '</div>' +
     '<div class="ed-panel-sec"><label class="ed-lab" for="edWhen">Publish later</label>' +
@@ -1479,7 +1625,7 @@ function renderPublishPanel() {
 async function schedulePublish(whenIso) {
   try {
     await saveDraft();
-    var out = await api('/ministries/api/page/' + encodeURIComponent(S.slug) + '/schedule',
+    var out = await api(API + '/page/' + encodeURIComponent(S.slug) + '/schedule',
       { method: 'POST', body: JSON.stringify({ publish_at: whenIso }) });
     S.status = out.status;
     S.publishAt = out.publish_at;
@@ -1493,7 +1639,7 @@ async function schedulePublish(whenIso) {
 
 async function restoreRevision(id) {
   try {
-    var out = await api('/ministries/api/page/' + encodeURIComponent(S.slug) + '/restore',
+    var out = await api(API + '/page/' + encodeURIComponent(S.slug) + '/restore',
       { method: 'POST', body: JSON.stringify({ id: id }) });
     pushHistory();
     S.blocks = out.blocks;
@@ -1604,7 +1750,7 @@ function renderModal() {
 }
 
 async function addMedia(payload) {
-  var out = await api('/ministries/api/media', { method: 'POST', body: JSON.stringify(payload) });
+  var out = await api(API + '/media', { method: 'POST', body: JSON.stringify(payload) });
   S.media.unshift(out.item);
   return out.item;
 }
@@ -1821,7 +1967,7 @@ async function boot() {
   try { if (localStorage.getItem(HINT_KEY)) { S.hint = false; el.edHint.style.display = 'none'; } } catch (_) {}
   bindStatic();
   try {
-    var data = await api('/ministries/api/page/' + encodeURIComponent(S.slug));
+    var data = await api(API + '/page/' + encodeURIComponent(S.slug));
     S.title = data.page.title;
     S.status = data.page.status;
     S.publishAt = data.page.publish_at || null;
@@ -1831,13 +1977,16 @@ async function boot() {
     S.updatedAt = data.page.updated_at || '';
     S.config = data.config;
     S.media = data.media || [];
+    S.path = data.page.path || ('/' + S.slug);
+    S.template = data.page.template || '';
+    S.siblings = data.pages || [];
     setCanvas(data.html);
     setDevice('desktop');
     renderAll();
     loadSections();
   } catch (err) {
     if (String(err && err.message) === 'auth') return;
-    root.innerHTML = '<div class="ed-boot">Could not load this page — <a href="/ministries" style="color:#2E7EA6;margin-left:6px">back to Ministries</a></div>';
+    root.innerHTML = '<div class="ed-boot">Could not load this page — <a href="' + BACK_HREF + '" style="color:#2E7EA6;margin-left:6px">back to ' + BACK_LABEL + '</a></div>';
   }
 }
 

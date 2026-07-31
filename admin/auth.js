@@ -6,7 +6,11 @@ export const PERMISSIONS = {
   news_edit:          'News & Events',
   ministries_edit:    'Ministries & Youth Pages',
   sermons_edit:       'Sermons',
-  pages_edit:         'Pages',
+  pages_edit:         'Notices',
+  // The site editor: every page on the public site. Separate from pages_edit
+  // (which is the notice banners) so a ministry leader can be given their own
+  // pages without also being handed the notice bar on every page.
+  site_pages:         'Website pages',
   staff_edit:         'Staff profiles',
   settings_manage:    'Settings & Subscribers',
   gym_manage:         'Gym Rentals',

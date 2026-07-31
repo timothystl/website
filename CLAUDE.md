@@ -152,6 +152,7 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Giving | Office staff — requires `giving_manage` permission | **DONE** (2026-07-27) — base Tithe.ly link, give.timothystl.org's amount tiers + per-tier links, and vendor/market one-off payment links (Tithe.ly or Square); see below |
 | Payroll | Office staff (Dinger) — requires `payroll_manage` permission | **DONE** — combined biweekly payroll (church staff + MDO preschool staff); see "Payroll & Supabase" below |
 | Audit Log | Admins | **DONE** — change history + rollback, requires `audit_view` |
+| Pages | Office staff — requires `site_pages` | **DONE** (2026-07-31) — every page on the public site, with the block editor at `/pages/:id/edit`; see "Site Editor" below |
 | Connect | External link in sidebar footer | **DONE** — single link out to `connect.timothystl.org` (renamed 2026-07-22 from `chms.timothystl.org`, itself changed 2026-07-20 from two separate "Scheduler"/"Volunteer Admin" links; see the chms repo's own CLAUDE.md) |
 
 ### Giving Tab (added 2026-07-27)
@@ -293,13 +294,63 @@ anywhere — that is the one thing this design exists to prevent.
   "Saved" group. Inserted copies get fresh block ids and no live link back.
 
 **Tests** — `node admin/blocks.test.mjs` (renderer, guardrails, sanitising,
-migration) plus browser suites in `test/` driven by Playwright against
-`test/editor-server.mjs`, a local stand-in for the Worker:
-`editor` (shell), `editor-edit` (inspector + typing), `editor-dnd` (reordering),
-`editor-media`, `editor-resize`, `editor-sections`, `editor-publish`,
-`public-page` (the live site), `whole-page` (takeover + the generated seeds) and
-`ministries-list`. Run any with `node <path>`. Chromium is at
-`/opt/pw-browsers/chromium`.
+migration, layouts, the generated site-page seeds) and `node admin/pages.test.mjs`
+(what counts as a draft, list order, filters, addresses, renaming), plus browser
+suites in `test/` driven by Playwright against `test/editor-server.mjs`, a local
+stand-in for the Worker: `editor` (shell), `editor-edit` (inspector + typing),
+`editor-dnd` (reordering), `editor-media`, `editor-resize`, `editor-sections`,
+`editor-publish`, `site-editor` (the pages rail + moving between pages),
+`public-page` (the live site), `whole-page` (takeover + the generated seeds),
+`site-pages` (generated nav, published pages, fallback) and `ministries-list`.
+Run any with `node <path>`. Chromium is at `/opt/pw-browsers/chromium`.
+
+### Site Editor (added 2026-07-31)
+
+The block editor extended from ministry pages to **every page on the site**,
+built from the design handoff in `design_handoff_site_editor/`. Same block
+engine, same single renderer (`admin/blocks.js`), same guardrails — what is new
+is that a page is now a database row rather than hardcoded markup, and the
+navigation is generated from those rows.
+
+- **`pages`** (id, title, menu_label, slug, parent_id, sort, template, status,
+  in_menu, locked, seo_description, blocks, published_blocks, publish_at,
+  change_log, updated_at/by), plus **`page_redirects`** (renaming a page 301s
+  the old address — named that way because `redirects` already holds the
+  admin's own short links) and **`page_revisions`** (one row per publish).
+- **Page layouts** — `home` / `standard` / `section` / `sidebar`, in
+  `TEMPLATES` in `admin/blocks.js`. `wrapTemplate()` owns the wrapper and
+  nothing else, so switching layout can never drop a block. `section` appends
+  the automatic child-page list; `sidebar` fills its aside from site settings.
+- **Self-filling blocks** (sermon, news, staff, service times, map) read from
+  `ctx.data`, never from the block. `pageData()` in `tlc-admin-worker.js` is one
+  query bundle per request, keyed on the request's `ExecutionContext` — *not* on
+  `env`, which is shared across an isolate and would serve stale data.
+- **`admin/site-pages.js` is generated** by `tools/extract-pages.mjs` (which
+  also regenerates `admin/page-seeds.js`, and takes `--dry-run`). Do not
+  hand-edit it. Block ids are derived from the page, so re-running produces a
+  diff only when the content actually changed.
+- **Seeds land in the draft, never in `published_blocks`.** A page with nothing
+  published renders its hardcoded markup in `public/index.html` exactly as
+  before. That fallback is what makes the conversion page-by-page and what keeps
+  the site working when the admin is unreachable — both covered by tests.
+- **`GET /api/pages`** returns the menu, the rendered HTML of every published
+  page, and the rename redirects, with the stylesheet shipped once. The public
+  nav is built from it (`buildNav()` in `public/index.html`); the hardcoded nav
+  in the markup is the fallback.
+- **`admin/pages.js`** holds the page-tree rules as pure functions —
+  draft-vs-live, list order, filters, `slugify`/`uniqueSlug`/`pageRename`. A
+  page reads as a draft when `blocks ≠ published_blocks` **or** `status='draft'`;
+  never from a session's change log, or the list and the editor topbar disagree.
+- **One editor, two mounts.** `admin/ministry-editor.html` serves both
+  `/ministries/editor/:slug` and `/pages/:id/edit`; it works out from its own
+  address which API to talk to (`/ministries/api` vs `/pages/api`). The routes
+  that do not care which table the page lives in — media, saved sections,
+  new-block, render — are one implementation in `sharedEditorApi()`.
+- **Permission** — the new `site_pages`. `pages_edit` was always the *Notices*
+  tab and is now labelled that way in the Users tab.
+- Below **1240px** the open pages rail must float *over* the canvas. As a flex
+  column the four columns exceed the viewport and the inspector is pushed
+  off-screen with no way to reach it.
 
 ### News & Events Data Model
 ```sql
