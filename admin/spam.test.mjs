@@ -106,6 +106,71 @@ Reply STOP to opt out.`,
   ok(cyr.score >= 4, 'a non-Latin message is scored');
 }
 
+// ── the donated-piano scam ───────────────────────────────────────────────────
+group('the donated-instrument scam is held');
+{
+  // Real message, received 2026-07-22. Andrew reports this one arriving over
+  // and over, by email as well as through the form.
+  const piano = scoreSubmission({
+    name: 'Elizabeth Schrader Polczer', email: 'elizabethschraderpolczer@hotmail.com',
+    message: `Hello,
+
+I hope you're doing well. Mrs.Elizabeth Schrader Polczer is offering her Yamaha baby grand piano for free. She is looking for a passionate music enthusiast who will appreciate and care for it. As She retires from music and needs someone who can take proper care of it
+
+If you or someone you know is interested, please feel free to contact Her via email at:elizabethschraderpolczer@hotmail.com
+
+Warm regards,
+Tony`,
+  }, viaForm);
+  eq(piano.verdict, 'spam', `the piano scam is held (scored ${piano.score})`);
+  ok(piano.reasons.some(r => /offered on behalf of someone else/.test(r)), 'because it is written about a third party');
+
+  // The variants that arrive in the same wave.
+  const organ = scoreSubmission({
+    name: 'David', email: 'd@example.com',
+    message: 'Greetings, my late husband left behind a Hammond organ which I would like to donate to a good home. Kindly contact me for details.',
+  }, viaForm);
+  eq(organ.verdict, 'spam', `the late-husband variant is held (scored ${organ.score})`);
+
+  const fee = scoreSubmission({
+    name: 'Karen', email: 'k@example.com',
+    message: 'The piano is a gift at no cost to you. You would only cover the shipping through our moving company.',
+  }, viaForm);
+  eq(fee.verdict, 'spam', `the you-only-pay-delivery variant is held (scored ${fee.score})`);
+}
+
+group('a real gift to the church is not');
+{
+  // The message this rule must never catch: a member offering their own piano.
+  const member = scoreSubmission({
+    name: 'Carol Wohlstadter', email: 'carol@example.com',
+    message: "We have my mother's old upright piano sitting in our basement and we'd like to donate it to the church if anyone can use it. I can arrange to have it moved. Give me a call this week.",
+  }, viaForm);
+  ok(member.verdict !== 'spam', `a member donating their own piano is delivered (scored ${member.score})`);
+
+  const musician = scoreSubmission({
+    name: 'Jinah', email: 'jinah@timothystl.org',
+    message: 'The piano in the fellowship hall needs tuning before Christmas. Also, is the organ still under a service contract?',
+  }, viaForm);
+  eq(musician.verdict, 'clean', 'and ordinary talk about the church piano scores nothing');
+
+  // The genuinely hard case: a member writing about somebody else's piano
+  // reads exactly like the scam's opening line. It is flagged so it can be
+  // eyeballed, but it is never held — which is why writing about a third party
+  // scores far less than the tells that follow it in the real thing.
+  const relay = scoreSubmission({
+    name: 'Margaret', email: 'margaret@example.com',
+    message: 'Mrs. Johnson is donating her piano to the church and wants to know who to call about picking it up.',
+  }, viaForm);
+  ok(relay.verdict !== 'spam', `a member relaying a real offer still gets through (scored ${relay.score})`);
+
+  const neighbour = scoreSubmission({
+    name: 'Tiffany', email: 't@example.com',
+    message: 'A family in the neighborhood is offering their upright piano for free if the school could use it.',
+  }, viaForm);
+  ok(neighbour.verdict !== 'spam', `so does a neighbourhood offer relayed second-hand (scored ${neighbour.score})`);
+}
+
 group('borderline pitches are flagged but still delivered');
 {
   // Real message, 2026-07-25 — a guest-post pitch dressed as a reader note.

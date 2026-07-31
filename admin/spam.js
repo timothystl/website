@@ -60,6 +60,50 @@ const SCAM = [
 ];
 const SCAM_WEIGHT = 5;
 
+// The donated-piano scam. It arrives at churches constantly, in the same shape
+// every time: a valuable instrument offered free on behalf of a third party,
+// with an outside address to write to. What follows is a delivery or "moving
+// company" fee for a piano that does not exist.
+//
+// It is scored in two halves on purpose, because a member really might write
+// offering the church a piano. The item on its own is nearly worthless as a
+// signal (ITEM_GIFT); it takes one of the shapes a parishioner would never use
+// (GIFT_SCAM_SHAPE) to reach the hold threshold. Someone writing about their
+// own piano — "we'd like to donate my mother's upright" — stays well under it.
+const ITEM_GIFT_SUBJECT = /\b(baby ?grand|grand piano|upright piano|piano|pipe organ|church organ|hammond organ|harpsichord|treadmill|pool table)\b/;
+const ITEM_GIFT_OFFER = /\b(for free|free of charge|at no cost|no cost to you|donat(e|ing|ion)|giving (it )?away|give away|good home|loving home|bequeath)\b/;
+const ITEM_GIFT_WEIGHT = 2;
+
+// Written about a named third party rather than by the person who owns it.
+// Only worth a little on its own: a member relaying a neighbour's offer writes
+// this way too, and that message must still reach the office.
+const GIFT_THIRD_PARTY = [
+  [/\b(is|are) (offering|donating|gifting|giving away|looking to donate)\b.{0,40}\b(her|his|their)\b/, 'offered on behalf of someone else'],
+  [/\b(mr|mrs|ms|miss)\.? ?[a-z]+.{0,60}\b(is|are) (offering|donating|gifting)/, 'offered on behalf of someone else'],
+];
+const GIFT_THIRD_PARTY_WEIGHT = 2;
+
+// The tells no member offering their own piano would ever write.
+const GIFT_TELLS = [
+  // The redirect to an address other than the one the form was filled in with.
+  [/contact (her|him|them)\b.{0,30}(via|at|through)\b.{0,20}(e-?mail|address)/, 'redirects to a different email address'],
+  // The stock sentiment these always carry.
+  [/passionate (music )?(enthusiast|lover)|someone who (will|can) (appreciate|treasure|care for)|retir(es|ing) from music/, 'stock wording from the donated-instrument scam'],
+  [/\blate (husband|wife|father|mother|spouse)\b.{0,80}\b(donat|offer|gift|give|left behind|good home)/, 'late-relative framing'],
+];
+const GIFT_TELLS_WEIGHT = 4;
+
+// The payload of the scam, and decisive on its own: the item is free, you
+// merely cover the shipping.
+const DELIVERY_FEE = [
+  [/(only|just|simply) (pay|cover|handle)\b.{0,30}(shipping|delivery|moving|transport|freight)/, 'free item, you pay the delivery'],
+  [/(shipping|delivery|moving|freight) (fee|cost|charge|company)\b.{0,40}(only|your|arrang)/, 'free item, you pay the delivery'],
+];
+const DELIVERY_FEE_WEIGHT = 5;
+// Even a pile of these shouldn't swamp everything else — one clear tell is
+// enough to hold, and holding is the strongest thing the filter can do.
+const GIFT_CAP = 8;
+
 // Blast-mail greetings — a real visitor writes to a person or to "Timothy",
 // not to the owner of a website.
 const IMPERSONAL = [
@@ -95,12 +139,16 @@ function normalize(s) {
   return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+// Scores each *distinct reason* once, not each regex. Several patterns often
+// describe the same tell — two phrasings of a bulk-mail opt-out line, two ways
+// of writing "so-and-so is offering her piano" — and charging for both would
+// double a signal that a visitor only gave once.
 function matchGroup(text, group, weight, hits) {
   let score = 0;
   for (const [re, why] of group) {
-    if (re.test(text)) {
+    if (re.test(text) && !hits.includes(why)) {
       score += weight;
-      if (!hits.includes(why)) hits.push(why);
+      hits.push(why);
     }
   }
   return score;
@@ -135,6 +183,21 @@ export function scoreSubmission(sub = {}, signals = {}) {
   score += matchGroup(haystack, BULK, BULK_WEIGHT, reasons);
   score += matchGroup(haystack, SCAM, SCAM_WEIGHT, reasons);
   score += matchGroup(message, IMPERSONAL, IMPERSONAL_WEIGHT, reasons);
+
+  // The donated-instrument scam: an item being given away, plus at least one
+  // thing a real member offering their own piano would never write.
+  const giftHits = [];
+  let gift = 0;
+  if (ITEM_GIFT_SUBJECT.test(message) && ITEM_GIFT_OFFER.test(message)) {
+    gift += ITEM_GIFT_WEIGHT;
+    giftHits.push('an instrument or large item offered free');
+  }
+  if (gift) {
+    gift += matchGroup(message, GIFT_THIRD_PARTY, GIFT_THIRD_PARTY_WEIGHT, giftHits);
+    gift += matchGroup(message, GIFT_TELLS, GIFT_TELLS_WEIGHT, giftHits);
+  }
+  gift += matchGroup(message, DELIVERY_FEE, DELIVERY_FEE_WEIGHT, giftHits);
+  if (gift) { score += Math.min(gift, GIFT_CAP); reasons.push(...giftHits); }
 
   const links = (String(sub.message || '').match(URL_RE) || []).length;
   if (links === 1) { score += 2; reasons.push('contains a link'); }

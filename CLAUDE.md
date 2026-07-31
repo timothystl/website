@@ -265,6 +265,20 @@ a glance.
   and the test says so. `admin/forms.test.mjs` covers the wiring end-to-end
   against real SQLite (`node:sqlite` behind a D1-shaped shim) with `fetch`
   stubbed. Run: `node admin/spam.test.mjs`, `node admin/forms.test.mjs`.
+- **The donated-piano scam has its own rule** (added 2026-07-31 at Andrew's
+  request — it arrives constantly, by email as well as through the form). It is
+  scored in two halves on purpose: the item being given away is nearly
+  worthless as a signal, because a member really might offer the church a
+  piano. What holds it is the shape a parishioner would never use — written
+  about a named third party *plus* a redirect to an outside address, the stock
+  "passionate music enthusiast" sentiment, a late-relative framing, or the
+  you-only-pay-the-delivery ask. A member relaying somebody else's offer lands
+  at `suspect`: delivered, tagged, never held. Both sides are in the test file.
+- **`matchGroup` scores each distinct reason once, not each regex.** Several
+  patterns often describe one tell; charging for both doubles a signal the
+  visitor only gave once. Add a pattern with an existing reason string and it
+  widens coverage without inflating the score — that is the intended way to
+  extend a group.
 - **Retention:** `delivered` rows exist only for the flood limit and are pruned
   after 30 days; `released` after 90; `held` never — it waits for a human. The
   table must not become a second, unguarded archive of everyone's prayer
