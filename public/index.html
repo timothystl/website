@@ -2361,6 +2361,87 @@ function tlcOwnsWholePage(blocksHtml) {
   return first !== -1 && blocksHtml.substr(first, 22).indexOf('tlcb--hero') !== -1;
 }
 
+// ── Site pages ───────────────────────────────────────────────────────────────
+// Every page on the site has a row in the admin's `pages` table. The one call
+// below brings back the navigation and, for any page that has been published
+// from the page editor, that page's finished HTML.
+//
+// A page with nothing published is simply absent from `rendered`, and its
+// hardcoded markup below renders exactly as it always has. That fallback is
+// what lets the site be converted one page at a time — and what keeps the site
+// working if the admin is unreachable.
+var sitePagesPromise = null;
+var sitePagesData = null;
+function loadSitePages() {
+  if (sitePagesPromise) return sitePagesPromise;
+  sitePagesPromise = fetch('https://admin.timothystl.org/api/pages')
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      if (!d || !Array.isArray(d.pages)) return null;
+      sitePagesData = d;
+      if (d.css && !document.getElementById('tlcb-css')) document.head.insertAdjacentHTML('beforeend', d.css);
+      buildNav(d.pages);
+      return d;
+    })
+    .catch(function () { return null; });
+  return sitePagesPromise;
+}
+
+// The navigation is generated from the pages table, so adding a page and
+// ticking "Show in menu" is all it takes. The markup below is the fallback: if
+// this never runs, the hardcoded nav that shipped with the page stays put.
+function buildNav(pages) {
+  var top = pages.filter(function (p) { return p.in_menu && !p.parent; });
+  if (!top.length) return;
+  var kids = function (id) { return pages.filter(function (p) { return p.in_menu && p.parent === id; }); };
+  var go = function (p) { return "showPage('" + p.id + "')"; };
+  var esc = function (s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); };
+
+  var desktop = document.querySelector('.nav-links');
+  if (desktop) {
+    desktop.innerHTML = top.map(function (p) {
+      var cls = p.id === 'give' ? ' class="nav-cta"' : '';
+      return '<li><button onclick="' + go(p) + '"' + cls + '>' + esc(p.label) + '</button></li>';
+    }).join('');
+  }
+  var mobile = document.getElementById('navMobile');
+  if (mobile) {
+    // The external links are not pages, so they stay where they are and the
+    // generated entries go above them.
+    var external = Array.prototype.filter.call(mobile.children, function (el) { return el.tagName === 'A'; });
+    var html = '';
+    top.forEach(function (p) {
+      html += '<button onclick="' + go(p) + ';closeMobileNav()">' + esc(p.label) + '</button>';
+      kids(p.id).forEach(function (c) {
+        html += '<button onclick="' + go(c) + ';closeMobileNav()" style="padding-left:32px;">' + esc(c.label) + '</button>';
+      });
+    });
+    mobile.innerHTML = html;
+    external.forEach(function (a) { mobile.appendChild(a); });
+  }
+}
+
+// Takes over a page that has been published from the page editor. Same
+// mechanism as the ministry editor's takeover: the hardcoded sections are stood
+// down and the blocks render in their place.
+var sitePageTakeover = {};
+async function tlcMaybeTakeOverSitePage(id) {
+  if (sitePageTakeover[id] !== undefined) return sitePageTakeover[id];
+  sitePageTakeover[id] = false;
+  var d = await loadSitePages();
+  var html = d && d.rendered && d.rendered[id];
+  if (!html) return false;
+  if (!tlcTakeOverPage(id, html)) return false;
+  sitePageTakeover[id] = true;
+  if (tlcHas(html, 'posts') || tlcHas(html, 'events')) {
+    try {
+      var posts = await fetch('https://admin.timothystl.org/api/ministry/' + id + '/posts');
+      if (posts.ok) tlcHydrateFeeds(id, await posts.json());
+    } catch (e) {}
+  }
+  return true;
+}
+
 // Ministry pages are loaded by three different functions (loadMinistryPage,
 // loadYouthPage, loadMinistryCta). Whole-page takeover is decided here, once,
 // before any of them run, so a page cannot be missed just because of which
@@ -2399,7 +2480,12 @@ function tlcTakeOverPage(slug, blocksHtml) {
   pageEl.insertBefore(host, pageEl.firstChild);
   host.innerHTML = fixImgUrls(markup);
   var pageDiv = host.querySelector('.tlcb-page');
-  if (pageDiv) pageDiv.classList.add('tlcb-page--full');
+  // A page rendered through a layout has already decided whether it runs full
+  // width — forcing it here would put a sidebar page edge to edge. Only the
+  // ministry editor, which has no layouts, needs the class applied for it.
+  if (pageDiv && !/tlcb-page--(home|standard|section|sidebar)/.test(pageDiv.className)) {
+    pageDiv.classList.add('tlcb-page--full');
+  }
   return true;
 }
 
@@ -2685,16 +2771,18 @@ window.showPage = function(id, addHistory) {
   if (id === 'music') { loadConcertBlock(); }
   var adminContentPages = ['sundayschool','confirmation','vbs','egghunt','family','music','stephen','foodpantry','bees'];
   var ministryPages = adminContentPages.concat(['youth','christmasmarket']);
-  if (ministryPages.indexOf(id) !== -1) {
-    // A page taken over in the block editor draws itself entirely; the legacy
-    // loaders only run for pages that have not been taken over yet.
-    tlcMaybeTakeOver(id).then(function (took) {
-      if (took) return;
+  // A page published from the page editor draws itself entirely. Checked first,
+  // and for every page — ministry pages exist in both systems, and the newer
+  // one wins. Only when nothing has been published do the legacy loaders run.
+  tlcMaybeTakeOverSitePage(id).then(function (took) {
+    if (took || ministryPages.indexOf(id) === -1) return;
+    return tlcMaybeTakeOver(id).then(function (tookMinistry) {
+      if (tookMinistry) return;
       if (id === 'youth') { loadYouthPage(); return; }
       if (id === 'christmasmarket') { loadMinistryCta(id); return; }
       loadMinistryPage(id);
     });
-  }
+  });
 };
 // Route on load based on URL path; replace (don't push) so back goes to previous site.
 // Runs here (not in the first <script> block) so it can call the real window.showPage
@@ -2725,15 +2813,31 @@ window.showPage = function(id, addHistory) {
   if(path && document.getElementById('page-'+path)){
     window.showPage(path, false);
   } else if (path) {
-    // Unknown path — check custom redirects, then show 404 (keep URL intact)
-    fetch('https://admin.timothystl.org/api/redirects').then(function(r){return r.json();}).then(function(d){
-      var match = (d.redirects||[]).find(function(r){return r.path===path;});
-      if(match){ window.location.replace(match.url); }
-      else { window.showPage('404', false); }
-    }).catch(function(){ window.showPage('404', false); });
+    // Unknown path. It may be a page that has since been renamed, or one of the
+    // admin's own short links; check both before showing the 404.
+    // showPage rewrites the address to match the page it shows, which for the
+    // 404 would throw away the address the visitor actually typed.
+    var show404 = function () { window.showPage('404', false); history.replaceState({ page: '404' }, '', '/' + path); };
+    loadSitePages().then(function (site) {
+      var moved = site && site.redirects && site.redirects['/' + path];
+      if (moved) {
+        var target = (site.pages || []).find(function (p) { return p.slug === moved; });
+        if (target && document.getElementById('page-' + target.id)) { window.showPage(target.id, false); return; }
+        window.location.replace(moved);
+        return;
+      }
+      return fetch('https://admin.timothystl.org/api/redirects').then(function(r){return r.json();}).then(function(d){
+        var match = (d.redirects||[]).find(function(r){return r.path===path;});
+        if(match){ window.location.replace(match.url); }
+        else { show404(); }
+      });
+    }).catch(show404);
   } else {
     history.replaceState({page:'home'},'','/');
     loadNotices('home');
+    // The homepage is already the active page, so showPage never runs for it —
+    // the takeover and the generated nav have to be kicked off here instead.
+    tlcMaybeTakeOverSitePage('home');
   }
 })();
 

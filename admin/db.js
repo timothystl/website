@@ -275,6 +275,49 @@ export const DB_INIT_AUDIT_LOG = `CREATE TABLE IF NOT EXISTS audit_log (
   created_at TEXT NOT NULL
 )`;
 
+// ── SITE PAGES ───────────────────────────────────────────────────────────────
+// Every page on the site is a row here. `blocks` is the working draft, and
+// `published_blocks` is what visitors see; a page whose `published_blocks` is
+// NULL still renders from its hardcoded markup in public/index.html, which is
+// what makes converting the site page by page safe.
+export const DB_INIT_PAGES = `CREATE TABLE IF NOT EXISTS pages (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  menu_label TEXT,
+  slug TEXT NOT NULL UNIQUE,
+  parent_id TEXT,
+  sort INTEGER NOT NULL DEFAULT 0,
+  template TEXT NOT NULL DEFAULT 'standard',
+  status TEXT NOT NULL DEFAULT 'published',
+  in_menu INTEGER NOT NULL DEFAULT 1,
+  locked INTEGER NOT NULL DEFAULT 0,
+  seo_description TEXT,
+  blocks TEXT,
+  published_blocks TEXT,
+  publish_at TEXT,
+  change_log TEXT,
+  updated_at TEXT,
+  updated_by TEXT
+)`;
+
+// Renaming a page regenerates its address; the old one is kept here and 301s to
+// the new one, so a volunteer renaming "VBS" cannot break an inbound link. Named
+// page_redirects because `redirects` already holds the admin's own short links.
+export const DB_INIT_PAGE_REDIRECTS = `CREATE TABLE IF NOT EXISTS page_redirects (
+  from_slug TEXT PRIMARY KEY,
+  to_slug TEXT NOT NULL,
+  created_at TEXT
+)`;
+
+export const DB_INIT_PAGE_REVISIONS = `CREATE TABLE IF NOT EXISTS page_revisions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  page_id TEXT NOT NULL,
+  blocks TEXT,
+  note TEXT,
+  created_at TEXT,
+  created_by TEXT
+)`;
+
 export const THEMES = ['Acceptance', 'Christian Education', 'Outreach', 'Worship'];
 export const CONTENT_TYPES = ['Testimonial / Quote', 'Story', 'Explainer', 'Event Promo', 'Factoid / Trivia'];
 
