@@ -11,8 +11,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   renderPage, sanitizeBlocks, parseBlocks, blocksClientConfig, editorPhoneCss,
-  migrateLegacyPage, starterBlocks, newBlock, makeBlockId,
+  migrateLegacyPage, starterBlocks, newBlock, makeBlockId, templateOf, cleanText,
 } from '../admin/blocks.js';
+import { slugify, uniqueSlug, pageRename } from '../admin/pages.js';
 import { PAGE_SEEDS } from '../admin/page-seeds.js';
 export { PAGE_SEEDS };
 
@@ -57,11 +58,29 @@ export function createEditorServer(seed = {}) {
       slug: p.slug, title: p.title, page_status: p.status || 'live', publish_at: null,
       path: p.path || ('/' + p.slug), template: p.template || 'standard',
       parent_id: p.parent_id || null, in_menu: p.in_menu === undefined ? 1 : p.in_menu,
+      seo_description: p.seo_description || '', locked: p.locked ? 1 : 0,
       blocks: JSON.stringify(sanitizeBlocks(p.blocks || starterBlocks(p.title))),
       published_blocks: JSON.stringify(sanitizeBlocks(p.blocks || [])),
       change_log: '[]', updated_at: new Date().toISOString(),
     });
   }
+
+  // The three shapes a page row is served in, so the harness cannot quietly
+  // disagree with the Worker about what the editor receives.
+  const settingsOf = (r) => ({
+    title: r.title, slug: r.path || ('/' + r.slug), parent_id: r.parent_id || null,
+    in_menu: r.in_menu ? 1 : 0, template: templateOf(r.template).key,
+    seo_description: r.seo_description || '', locked: r.locked ? 1 : 0,
+  });
+  const asPageRow = (r) => ({
+    id: r.slug, title: r.title, menu_label: '', slug: r.path || ('/' + r.slug),
+    parent_id: r.parent_id || null,
+  });
+  const asRailPage = (r) => ({
+    id: r.slug, title: r.title, slug: r.path || ('/' + r.slug), parent_id: r.parent_id || null,
+    in_menu: r.in_menu === undefined ? true : !!r.in_menu,
+    hasDraftEdits: JSON.stringify(sanitizeBlocks(parseBlocks(r.blocks))) !== JSON.stringify(sanitizeBlocks(parseBlocks(r.published_blocks))),
+  });
 
   const json = (res, obj, status = 200) => {
     res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -106,17 +125,66 @@ export function createEditorServer(seed = {}) {
             updated_at: row.updated_at, blocks, changes: parseBlocks(row.change_log),
             published_count: sanitizeBlocks(parseBlocks(row.published_blocks)).length,
             path: row.path || ('/' + slug), template: row.template || 'standard',
+            settings: isSitePage ? settingsOf(row) : undefined,
           },
-          pages: isSitePage ? Array.from(pages.values()).map((r) => ({
-            id: r.slug, title: r.title, slug: r.path || ('/' + r.slug), parent_id: r.parent_id || null,
-            in_menu: r.in_menu === undefined ? true : !!r.in_menu,
-            hasDraftEdits: JSON.stringify(sanitizeBlocks(parseBlocks(r.blocks))) !== JSON.stringify(sanitizeBlocks(parseBlocks(r.published_blocks))),
-          })) : [],
+          pages: isSitePage ? Array.from(pages.values()).map(asRailPage) : [],
           config: blocksClientConfig(),
           media,
           html: renderPage(blocks, { editing: true, slug, withCss: true, data: DATA,
             template: isSitePage ? (row.template || 'standard') : undefined }),
         });
+      }
+
+      if (action === 'settings' && req.method === 'POST') {
+        const body = await readBody(req);
+        const all = Array.from(pages.values()).map(asPageRow);
+        const title = cleanText(body.title, 80) || row.title;
+        let slugPath = row.path;
+        let redirected = false;
+        if (typeof body.slug === 'string' && body.slug.trim() && body.slug.trim() !== row.path && row.path !== '/') {
+          const taken = new Set(all.filter((x) => x.id !== slug).map((x) => x.slug));
+          slugPath = uniqueSlug(slugify(body.slug.replace(/^\/+/, '')), taken);
+          redirected = slugPath !== row.path;
+        } else if (title !== row.title) {
+          const r = pageRename(asPageRow(row), title, all);
+          slugPath = r.slug;
+          redirected = r.redirects.length > 0;
+          for (const x of r.redirects) {
+            if (!x.id) continue;
+            const child = pages.get(x.id);
+            if (child) child.path = x.to;
+          }
+        }
+        let parentId = body.parent_id === undefined ? row.parent_id : (body.parent_id || null);
+        if (parentId === slug) parentId = row.parent_id;
+        const parent = parentId ? all.find((x) => x.id === parentId) : null;
+        if (parentId && (!parent || parent.parent_id)) parentId = null;
+        if (parentId && all.some((x) => x.parent_id === slug)) parentId = null;
+
+        const oldTemplate = row.template || 'standard';
+        row.title = title;
+        row.path = slugPath;
+        row.parent_id = parentId;
+        row.template = body.template === undefined ? oldTemplate : templateOf(body.template).key;
+        row.in_menu = body.in_menu === undefined ? row.in_menu : (body.in_menu ? 1 : 0);
+        row.seo_description = body.seo_description === undefined ? (row.seo_description || '') : cleanText(body.seo_description, 300);
+        const rerender = row.template !== oldTemplate;
+        const blocks = sanitizeBlocks(parseBlocks(row.blocks));
+        return json(res, {
+          ok: true,
+          page: settingsOf(row),
+          pages: Array.from(pages.values()).map(asRailPage),
+          redirected,
+          rerender,
+          html: rerender ? renderPage(blocks, { editing: true, slug, withCss: true, data: DATA, template: row.template }) : '',
+        });
+      }
+
+      if (action === 'delete' && req.method === 'POST') {
+        if (row.locked) return json(res, { error: 'locked' }, 400);
+        for (const r of pages.values()) if (r.parent_id === slug) r.parent_id = null;
+        pages.delete(slug);
+        return json(res, { ok: true });
       }
 
       if (action === 'draft' && req.method === 'POST') {

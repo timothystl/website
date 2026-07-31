@@ -134,6 +134,126 @@ group('everything else still works under the new address');
   eq(await page.locator('#edUndo').isDisabled(), false, 'undo is offered');
 }
 
+group('the Page tab');
+{
+  await open('about');
+  eq(await page.locator('.ed-tabs button').count(), 2, 'the inspector has a Block tab and a Page tab');
+  await page.click('#edTabPage');
+  await page.waitForTimeout(150);
+  eq(await page.locator('#edPageTitle').inputValue(), 'About', 'the page name is filled in');
+  eq(await page.locator('#edPageSlug').inputValue(), '/about', 'so is the address');
+  eq(await page.locator('.ed-menu-opt[aria-pressed="true"]').textContent(), 'Top level of the menu', 'menu placement is shown');
+  eq(await page.locator('#edPageInMenu').isChecked(), true, 'and whether it is in the menu');
+  eq(await page.locator('#edPageTemplate').inputValue(), 'standard', 'the layout is shown');
+  ok((await page.textContent('#edPageTemplateHint')).length > 10, 'with a plain-language description of it');
+  // clicking a block brings the Block tab back on its own
+  await page.click('.ed-paper .tlcb--hero');
+  await page.waitForTimeout(150);
+  eq(await page.locator('#edTabBlock').getAttribute('aria-selected'), 'true', 'clicking a block returns to the Block tab');
+}
+
+group('the search summary counts characters');
+{
+  await page.click('#edTabPage');
+  await page.waitForTimeout(150);
+  await page.fill('#edPageSeo', 'x'.repeat(150));
+  await page.waitForTimeout(100);
+  eq(await page.locator('#edSeoCount').textContent(), '150 / 160', 'the counter tracks what is typed');
+  eq(await page.locator('#edSeoCount.is-over').count(), 0, 'and is not flagged under the limit');
+  await page.fill('#edPageSeo', 'x'.repeat(170));
+  await page.waitForTimeout(100);
+  eq(await page.locator('#edSeoCount.is-over').count(), 1, 'going over the limit is flagged');
+}
+
+group('renaming a page moves its address and leaves a redirect');
+{
+  await open('about');
+  await page.click('#edTabPage');
+  await page.waitForTimeout(150);
+  await page.fill('#edPageTitle', 'About Timothy');
+  await page.waitForFunction(() => document.getElementById('edPageSlug').value === '/about-timothy', null, { timeout: 8000 });
+  eq(await page.locator('#edPageSlug').inputValue(), '/about-timothy', 'the address follows the name');
+  ok((await page.textContent('#edTitle')).includes('About Timothy'), 'the topbar follows too');
+  eq(await page.getAttribute('#edView', 'href'), 'https://timothystl.org/about-timothy', 'and so does View live');
+  ok((await railTitles()).includes('About Timothy'), 'the pages rail follows');
+  // the child page moved with its parent
+  await page.click('.ed-page[data-page="beliefs"]');
+  await page.waitForFunction(() => location.pathname === '/pages/beliefs/edit', null, { timeout: 8000 });
+  await page.waitForSelector('.ed-paper .tlcb', { timeout: 8000 });
+  await page.click('#edTabPage');
+  await page.waitForTimeout(200);
+  eq(await page.locator('#edPageSlug').inputValue(), '/about-timothy/beliefs', 'a child page moved with its parent');
+}
+
+group('the homepage keeps its address');
+{
+  await open('home');
+  await page.click('#edTabPage');
+  await page.waitForTimeout(150);
+  eq(await page.locator('#edPageSlug').isEditable(), false, 'the homepage address cannot be edited');
+  await page.fill('#edPageTitle', 'Welcome');
+  await page.waitForTimeout(1200);
+  eq(await page.locator('#edPageSlug').inputValue(), '/', 'and renaming it does not move it');
+}
+
+group('changing the layout redraws the canvas');
+{
+  await open('home');
+  await page.click('#edTabPage');
+  await page.waitForTimeout(150);
+  eq(await page.locator('.ed-paper .tlcb-page--home').count(), 1, 'starts on the Home layout');
+  await page.selectOption('#edPageTemplate', 'sidebar');
+  await page.waitForFunction(() => !!document.querySelector('.ed-paper .tlcb-page--sidebar'), null, { timeout: 8000 });
+  eq(await page.locator('.ed-paper .tlcb-page--sidebar').count(), 1, 'switching layout redraws through the new one');
+  eq(await page.locator('.ed-paper .tlcb').count(), 1, 'and does not drop the block');
+  await page.selectOption('#edPageTemplate', 'home');
+  await page.waitForFunction(() => !!document.querySelector('.ed-paper .tlcb-page--home'), null, { timeout: 8000 });
+  eq(await page.locator('.ed-paper .tlcb').count(), 1, 'and switching back does not drop it either');
+}
+
+group('a self-filling block says where its content comes from');
+{
+  await open('about');
+  await page.click('.ed-pal-tab[data-group="Content"]');
+  await page.click('.ed-chip:has-text("News highlights")');
+  await page.waitForFunction(() => !!document.querySelector('.ed-paper .tlcb--news'), null, { timeout: 8000 });
+  await page.waitForTimeout(200);
+  eq(await page.locator('.ed-fills').count(), 1, 'the "Fills itself" panel is shown');
+  ok((await page.textContent('.ed-fills')).includes('newest posts'), 'and says in plain words what fills it');
+  const shown = () => page.locator('.ed-fills output').textContent();
+  eq(await shown(), '3', 'how many to show starts at the block default');
+  await page.click('.ed-fills [data-a="count"][data-v="1"]');
+  await page.waitForTimeout(500);
+  eq(await shown(), '4', 'the stepper goes up');
+  for (let i = 0; i < 4; i++) { await page.click('.ed-fills [data-a="count"][data-v="1"]'); await page.waitForTimeout(350); }
+  eq(await shown(), '6', 'and stops at six');
+  for (let i = 0; i < 8; i++) { await page.click('.ed-fills [data-a="count"][data-v="-1"]'); await page.waitForTimeout(350); }
+  eq(await shown(), '1', 'and at one going the other way');
+  // no editable body inside an auto block
+  eq(await page.locator('.ed-paper .tlcb--news [data-field="body"]').count(), 0, 'an auto block has no editable body text');
+  await page.click('.ed-paper .tlcb--news [data-act="del"]');
+  await page.waitForTimeout(500);
+}
+
+group('pasting brings text, not formatting');
+{
+  await open('about');
+  await page.click('.ed-paper .tlcb--text [data-field="body"]');
+  await page.waitForTimeout(120);
+  await page.keyboard.press('Control+A');
+  // a paste carrying its own fonts, sizes and colours, exactly as Word sends it
+  await page.evaluate(() => {
+    const dt = new DataTransfer();
+    dt.setData('text/plain', 'Pasted words');
+    dt.setData('text/html', '<span style="font-family:Comic Sans MS;font-size:44px;color:#f0f">Pasted words</span>');
+    document.activeElement.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+  });
+  await page.waitForTimeout(150);
+  const html = await page.locator('.ed-paper .tlcb--text [data-field="body"]').innerHTML();
+  ok(html.includes('Pasted words'), 'the words arrive');
+  ok(!/Comic Sans|font-size|color:/.test(html), 'the formatting does not: ' + html.slice(0, 200));
+}
+
 group('the homepage renders through its own layout');
 await open('home');
 eq(await page.locator('.ed-paper .tlcb-page--home').count(), 1, 'the Home layout is used on the canvas');

@@ -123,6 +123,33 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
 
 /* inspector */
 .ed-insp{width:318px;flex:none;border-left:1px solid #DDE3ED;background:#FBF8F3;display:flex;flex-direction:column;min-height:0;}
+.ed-tabs{display:flex;gap:2px;padding:8px 10px 0;border-bottom:1px solid #DDE3ED;}
+.ed-tabs button{padding:7px 14px;border-radius:8px 8px 0 0;font:500 13px/1 'Source Sans 3';color:#8A8898;
+  border:1px solid transparent;border-bottom:none;background:none;cursor:pointer;margin-bottom:-1px;}
+.ed-tabs button[aria-selected="true"]{background:#FBF8F3;border-color:#DDE3ED;color:#1E2D4A;font-weight:600;}
+/* Page tab */
+.ed-field{display:flex;flex-direction:column;gap:5px;}
+.ed-field input[type="text"],.ed-field textarea,.ed-field select{width:100%;padding:8px 10px;border:1px solid #DDE3ED;
+  border-radius:8px;font:400 13.5px/1.4 'Source Sans 3';color:#1E2D4A;background:#fff;}
+.ed-field textarea{resize:vertical;min-height:64px;}
+.ed-field input[readonly]{background:#F2EFE8;color:#6A6858;}
+.ed-addr{display:flex;align-items:center;border:1px solid #DDE3ED;border-radius:8px;background:#F2EFE8;overflow:hidden;}
+.ed-addr span{padding:8px 0 8px 10px;font-size:13px;color:#8A8898;white-space:nowrap;}
+.ed-addr input{border:none;background:none;flex:1;min-width:0;padding:8px 10px 8px 2px;
+  font:400 13.5px/1.4 'Source Sans 3';color:#1E2D4A;}
+.ed-menu-opts{display:flex;flex-direction:column;gap:3px;max-height:230px;overflow-y:auto;}
+.ed-menu-opt{text-align:left;padding:8px 11px;border:1px solid #DDE3ED;border-radius:8px;background:#fff;
+  font:400 13px/1.3 'Source Sans 3';color:#4A4860;cursor:pointer;}
+.ed-menu-opt[aria-pressed="true"]{border:2px solid #2E7EA6;background:#E4EEF4;color:#1E2D4A;font-weight:600;}
+.ed-check{display:flex;align-items:center;gap:8px;font-size:13px;color:#1E2D4A;cursor:pointer;}
+.ed-count{font-size:11.5px;color:#8A8898;}
+.ed-count.is-over{color:#B85C3A;font-weight:600;}
+.ed-fills{border:1px solid #C4CEDF;border-radius:9px;background:#EDF2F7;padding:11px 12px;
+  display:flex;flex-direction:column;gap:9px;}
+.ed-fills .ed-lab{color:#1E5C7A;}
+.ed-fills p{margin:0;font-size:12.5px;line-height:1.5;color:#3A4E5C;}
+.ed-danger{padding:8px 12px;border:1px solid #E3C4B8;border-radius:8px;background:#fff;
+  color:#8A3A1F;font:500 12.5px/1 'Source Sans 3';cursor:pointer;align-self:flex-start;}
 .ed-insp-h{padding:14px 16px;border-bottom:1px solid #DDE3ED;display:flex;align-items:center;justify-content:space-between;gap:8px;}
 .ed-insp-h b{font:600 15px/1 'Source Sans 3';color:#1E2D4A;}
 .ed-insp-h span{font-size:12px;color:#8A8898;white-space:nowrap;}
@@ -307,7 +334,8 @@ var S = {
   dragId: null, dragType: null, dragSection: null, dropIndex: null,
   picker: null, toast: null, hint: true, loadError: '',
   publishPanel: false, publishAt: null, publishAtLocal: '', revisions: [], sections: [],
-  template: '', siblings: [], railOpen: true, leaving: false,
+  template: '', siblings: [], railOpen: true, leaving: false, tab: 'block',
+  pageMeta: null, savingPage: false,
 };
 
 var el = {};
@@ -392,6 +420,11 @@ function shellHtml() {
         '</div>' +
       '</main>' +
       '<aside class="ed-insp">' +
+        (IS_SITE_PAGE ?
+        '<div class="ed-tabs" role="tablist" aria-label="Inspector">' +
+          '<button type="button" role="tab" data-tab="block" id="edTabBlock" aria-selected="true">Block</button>' +
+          '<button type="button" role="tab" data-tab="page" id="edTabPage" aria-selected="false">Page</button>' +
+        '</div>' : '') +
         '<div id="edInspHead"></div>' +
         '<div id="edInspBody" class="ed-insp-body"></div>' +
         '<div class="ed-changes">' +
@@ -410,7 +443,8 @@ function cacheEls() {
   ['edTitle', 'edPill', 'edSaved', 'edView', 'edUndo', 'edPublish', 'edHint', 'edHintX', 'edRail',
    'edCanvas', 'edPaper', 'edPalTabs', 'edPalChips', 'edPalToggle', 'edInspHead', 'edInspBody',
    'edChanges', 'edChangesHead', 'edModal', 'edToast', 'edMore', 'edPublishPanel',
-   'edPages', 'edPagesList', 'edPagesSearch', 'edPagesToggle', 'edPagesNew'].forEach(function (id) { el[id] = document.getElementById(id); });
+   'edPages', 'edPagesList', 'edPagesSearch', 'edPagesToggle', 'edPagesNew',
+   'edTabBlock', 'edTabPage'].forEach(function (id) { el[id] = document.getElementById(id); });
   el.live = document.getElementById('live');
 }
 
@@ -807,8 +841,88 @@ async function goToPage(id) {
   location.href = '/pages/' + encodeURIComponent(id) + '/edit';
 }
 
+// ── Page tab behaviour ─────────────────────────────────────────────────────
+// Page settings save on their own (debounced), separate from the block draft:
+// they are not part of what Publish promotes, so treating them as draft edits
+// would put a page permanently in "Draft edits" for changing its own name.
+var pageSaveTimer = null;
+function schedulePageSave(fields, immediate) {
+  Object.assign(S.pageMeta, fields);
+  S.savingPage = true;
+  var saved = document.getElementById('edPageSaved');
+  if (saved) saved.textContent = 'Saving\u2026';
+  clearTimeout(pageSaveTimer);
+  pageSaveTimer = setTimeout(savePageMeta, immediate ? 0 : 700);
+}
+
+async function savePageMeta() {
+  clearTimeout(pageSaveTimer);
+  try {
+    var out = await api(API + '/page/' + encodeURIComponent(S.slug) + '/settings',
+      { method: 'POST', body: JSON.stringify(S.pageMeta) });
+    S.pageMeta = out.page;
+    S.siblings = out.pages || S.siblings;
+    S.path = out.page.slug;
+    S.title = out.page.title;
+    S.template = out.page.template;
+    S.savingPage = false;
+    // The address may have been cleaned up or made unique on the way in, and
+    // the layout may have changed what the canvas should look like.
+    if (out.rerender) { setCanvas(out.html); applySelection(); }
+    renderTop();
+    renderPagesRail();
+    if (S.tab === 'page') renderInspector();
+    if (out.redirected) toast('Old address will send visitors to the new one');
+  } catch (err) {
+    if (String(err && err.message) === 'auth') return;
+    S.savingPage = false;
+    toast('Could not save the page settings');
+  }
+}
+
+function pageTabClick(e) {
+  var opt = e.target.closest('[data-a="parent"]');
+  if (opt) { schedulePageSave({ parent_id: opt.dataset.v || null }, true); return; }
+  if (e.target.closest('#edPageDelete')) return deletePage();
+}
+
+function pageTabInput(e) {
+  var t = e.target;
+  if (t.id === 'edPageTitle') return schedulePageSave({ title: t.value });
+  if (t.id === 'edPageSlug') return schedulePageSave({ slug: t.value });
+  if (t.id === 'edPageInMenu') return schedulePageSave({ in_menu: t.checked ? 1 : 0 }, true);
+  if (t.id === 'edPageTemplate') return schedulePageSave({ template: t.value }, true);
+  if (t.id === 'edPageSeo') {
+    var c = document.getElementById('edSeoCount');
+    if (c) {
+      c.textContent = t.value.length + ' / ' + SEO_MAX;
+      c.classList.toggle('is-over', t.value.length > SEO_MAX);
+    }
+    return schedulePageSave({ seo_description: t.value });
+  }
+}
+
+async function deletePage() {
+  if (S.pageMeta && S.pageMeta.locked) return;
+  var name = (S.pageMeta && S.pageMeta.title) || 'this page';
+  if (!confirm('Delete \u201C' + name + '\u201D and everything on it? Its address will start showing the "page not found" screen.')) return;
+  try {
+    await api(API + '/page/' + encodeURIComponent(S.slug) + '/delete', { method: 'POST', body: '{}' });
+    S.leaving = true;
+    S.dirty = false;
+    location.href = '/pages';
+  } catch (err) {
+    if (String(err && err.message) === 'auth') return;
+    toast('Could not delete this page');
+  }
+}
+
 // ── block actions ──────────────────────────────────────────────────────────
 function select(id) {
+  // Clicking a block is a request to look at that block, so the panel comes
+  // back from the Page tab on its own rather than leaving staff wondering why
+  // nothing happened.
+  if (id) S.tab = 'block';
   S.selectedId = id;
   applySelection();
   renderRail();
@@ -909,11 +1023,88 @@ function commitField(node) {
 }
 
 // ── inspector ──────────────────────────────────────────────────────────────
+// ── the Page tab ───────────────────────────────────────────────────────────
+// Everything about the page rather than a block: what it is called, where it
+// lives, whether it is in the menu, which layout it uses, and its search
+// summary. Renaming regenerates the address and leaves a redirect behind, so
+// the one thing a volunteer could break — an inbound link — is handled for
+// them rather than left to be remembered.
+var SEO_MAX = 160;
+
+function pageTabHtml() {
+  var m = S.pageMeta || {};
+  var isHome = m.slug === '/';
+  var parents = (S.siblings || []).filter(function (p) { return !p.parent_id && p.id !== S.slug; });
+  var desc = m.seo_description || '';
+  var over = desc.length > SEO_MAX;
+  var layouts = (S.config && S.config.templates) || [];
+
+  var menuOpts = '<button type="button" class="ed-menu-opt" data-a="parent" data-v=""' +
+    ' aria-pressed="' + (!m.parent_id ? 'true' : 'false') + '">Top level of the menu</button>' +
+    parents.map(function (p) {
+      return '<button type="button" class="ed-menu-opt" data-a="parent" data-v="' + esc(p.id) + '"' +
+        ' aria-pressed="' + (m.parent_id === p.id ? 'true' : 'false') + '">Under ' + esc(p.title) + '</button>';
+    }).join('');
+
+  return '' +
+    '<div class="ed-sec ed-field">' +
+      '<span class="ed-lab">Page name</span>' +
+      '<input type="text" id="edPageTitle" value="' + esc(m.title || '') + '" maxlength="80">' +
+      '<span class="ed-note">This is the name people see in the menu.</span>' +
+    '</div>' +
+    '<div class="ed-sec ed-field ed-sec--rule">' +
+      '<span class="ed-lab">Web address</span>' +
+      '<div class="ed-addr"><span>timothystl.org</span>' +
+        '<input type="text" id="edPageSlug" value="' + esc(m.slug || '') + '"' + (isHome ? ' readonly' : '') + '></div>' +
+      '<span class="ed-note">' + (isHome
+        ? 'The homepage always lives at the root.'
+        : 'Set from the page name. Change it only if you must \u2014 old links stop working, though we will send them on for you.') + '</span>' +
+    '</div>' +
+    '<div class="ed-sec ed-sec--rule">' +
+      '<span class="ed-lab">Where it sits in the menu</span>' +
+      '<div class="ed-menu-opts">' + menuOpts + '</div>' +
+      '<label class="ed-check"><input type="checkbox" id="edPageInMenu"' + (m.in_menu ? ' checked' : '') + '>' +
+        'Show this page in the menu</label>' +
+    '</div>' +
+    '<div class="ed-sec ed-field ed-sec--rule">' +
+      '<span class="ed-lab">Page layout</span>' +
+      '<select id="edPageTemplate">' + layouts.map(function (t) {
+        return '<option value="' + esc(t.key) + '"' + (t.key === m.template ? ' selected' : '') + '>' + esc(t.label) + '</option>';
+      }).join('') + '</select>' +
+      '<span class="ed-note" id="edPageTemplateHint">' + esc((layouts.find(function (t) { return t.key === m.template; }) || {}).hint || '') + '</span>' +
+    '</div>' +
+    '<div class="ed-sec ed-field ed-sec--rule">' +
+      '<div class="ed-lab-row"><span class="ed-lab">Search summary</span>' +
+        '<span class="ed-count' + (over ? ' is-over' : '') + '" id="edSeoCount">' + desc.length + ' / ' + SEO_MAX + '</span></div>' +
+      '<textarea id="edPageSeo" rows="3">' + esc(desc) + '</textarea>' +
+      '<span class="ed-note">The sentence Google shows under the page title.</span>' +
+    '</div>' +
+    '<div class="ed-sec ed-sec--rule">' +
+      '<span class="ed-lab">Publishing</span>' +
+      '<span class="ed-read" id="edPageSaved">' + (S.savingPage ? 'Saving\u2026' : 'Saved') + '</span>' +
+      '<button type="button" class="ed-danger" id="edPageDelete">Delete this page</button>' +
+      '<span class="ed-note">' + (m.locked
+        ? 'This page is part of the site\u2019s structure and cannot be deleted.'
+        : 'The page and everything on it. Its address will start showing the \u201Cpage not found\u201D screen.') + '</span>' +
+    '</div>';
+}
+
 function renderInspector() {
   // Rebuilding the panel loses focus; put it back on the same control so the
   // keyboard path through a stepper or a swatch row survives a re-render.
   var active = document.activeElement;
   var focusKey = active && active.closest && active.closest('#edInspBody') ? active.getAttribute('data-k') : null;
+
+  if (el.edTabBlock) {
+    el.edTabBlock.setAttribute('aria-selected', String(S.tab === 'block'));
+    el.edTabPage.setAttribute('aria-selected', String(S.tab === 'page'));
+  }
+  if (S.tab === 'page') {
+    el.edInspHead.innerHTML = '';
+    el.edInspBody.className = 'ed-insp-body';
+    el.edInspBody.innerHTML = pageTabHtml();
+    return;
+  }
 
   var b = findBlock(S.selectedId);
   if (!b) {
@@ -952,6 +1143,20 @@ function stepper(b, key, label) {
 function inspectorSections(b, d) {
   var C = S.config;
   var out = '';
+
+  // 0. Self-filling blocks say plainly where their content comes from, and
+  // offer the one thing there is to decide: how many to show. There is no
+  // editable body inside one — the whole point is that it cannot go stale.
+  if (d.auto) {
+    out += '<div class="ed-fills"><span class="ed-lab">Fills itself</span>' +
+      '<p>' + esc(d.autoNote || 'This block fills itself from elsewhere in the admin.') + '</p>' +
+      (d.autoCount ? '<div class="ed-step-row"><span>How many to show</span><span class="ed-step">' +
+        '<button type="button" data-a="count" data-v="-1" data-k="count:-1" aria-label="Show fewer">\u2212</button>' +
+        '<output>' + b.count + '</output>' +
+        '<button type="button" data-a="count" data-v="1" data-k="count:1" aria-label="Show more">+</button>' +
+      '</span></div>' : '') +
+      '</div>';
+  }
 
   // 1. Columns
   if (b.type === 'columns') {
@@ -1106,6 +1311,13 @@ function inspectorAction(action, value) {
       var structural = false;
       while (items.length < n) { items.push({ title: '', body: '' }); structural = true; }
       patch(b.id, structural ? { cols: n, items: items } : { cols: n }, 'Changed to ' + n + ' columns', structural ? 'rerender' : 'style');
+      break;
+    }
+    case 'count': {
+      var n2 = Math.max(1, Math.min(6, (b.count || 3) + Number(value)));
+      if (n2 === b.count) return;
+      patch(b.id, { count: n2 }, 'Showing ' + n2 + ' at a time', 'rerender');
+      say('Showing ' + n2);
       break;
     }
     case 'side': patch(b.id, { side: value }, 'Moved photo ' + value); break;
@@ -1283,11 +1495,36 @@ function bindStatic() {
 
   // inspector
   el.edInspBody.addEventListener('click', function (e) {
+    if (S.tab === 'page') return pageTabClick(e);
     var btn = e.target.closest('[data-a]');
     if (btn) inspectorAction(btn.dataset.a, btn.dataset.v || '');
   });
   el.edInspBody.addEventListener('input', function (e) {
+    if (S.tab === 'page') return pageTabInput(e);
     if (e.target.dataset && e.target.dataset.in) inspectorInput(e.target);
+  });
+  el.edInspBody.addEventListener('change', function (e) {
+    if (S.tab === 'page') pageTabInput(e);
+  });
+
+  if (el.edTabBlock) {
+    el.edTabBlock.addEventListener('click', function () { S.tab = 'block'; renderInspector(); });
+    el.edTabPage.addEventListener('click', function () { S.tab = 'page'; renderInspector(); });
+  }
+
+  // Pasting from Word or a website brings its own fonts, sizes and colours with
+  // it. Without this the palette guarantee is worthless — one paste and the
+  // page carries markup nothing in the editor can reach. Plain text only.
+  el.edPaper.addEventListener('paste', function (e) {
+    var field = e.target.closest && e.target.closest('[contenteditable="true"]');
+    if (!field || !e.clipboardData) return;
+    e.preventDefault();
+    var text = e.clipboardData.getData('text/plain') || '';
+    if (!text) return;
+    // Single-line fields take the text as one line; a heading is not a place
+    // for three paragraphs.
+    if (!field.classList.contains('tlcb-prose')) text = text.replace(/\s*[\r\n]+\s*/g, ' ');
+    document.execCommand('insertText', false, text);
   });
 
   // Escape clears the selection so the whole page is visible again
@@ -1980,6 +2217,8 @@ async function boot() {
     S.path = data.page.path || ('/' + S.slug);
     S.template = data.page.template || '';
     S.siblings = data.pages || [];
+    S.pageMeta = data.page.settings || null;
+    if (IS_SITE_PAGE && /(\?|&)tab=page(&|$)/.test(location.search)) S.tab = 'page';
     setCanvas(data.html);
     setDevice('desktop');
     renderAll();

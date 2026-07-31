@@ -72,19 +72,19 @@ export const BLOCK_DEFS = {
   // already maintains: the point is that nobody retypes a sermon title into a
   // page and then lets it go stale.
   alert: {
-    label: 'Notice bar', glyph: '!', group: 'Structure',
+    label: 'Notice bar', glyph: '!',
     defaults: { body: 'Something everyone needs to know.', spaceAbove: 0, spaceBelow: 16, url: '' },
     url: true, urlLabel: 'Where "Details" goes (optional)',
   },
   slideshow: {
-    label: 'Welcome banner', glyph: '❏', group: 'Structure',
+    label: 'Welcome banner', glyph: '❏',
     defaults: { title: 'A line that says who you are', subtitle: 'A sentence underneath it.', spaceAbove: 0, spaceBelow: 24 },
     photo: true, subtitle: true, banner: true,
     links: true, defaultLinks: [{ title: 'Plan your visit', url: '/visit' }, { title: 'Watch a service', url: '/worship' }],
     items: true, itemFields: ['url', 'title'], itemUrlFields: ['url'], itemLabel: 'Slide', gallery: true, defaultItems: [],
   },
   quicklinks: {
-    label: 'Link tiles', glyph: '⊞', group: 'Structure',
+    label: 'Link tiles', glyph: '⊞',
     defaults: { title: 'Start here', spaceAbove: 24, spaceBelow: 24 },
     items: true, itemFields: ['title', 'url', 'meta'], itemUrlFields: ['url'], itemLabel: 'Tile',
     itemPlaceholders: { title: 'Label', url: 'Where it goes', meta: 'Small note' },
@@ -96,50 +96,50 @@ export const BLOCK_DEFS = {
     ],
   },
   sermon: {
-    label: 'Latest sermon', glyph: '♪', group: 'Content',
+    label: 'Latest sermon', glyph: '♪',
     defaults: { title: 'The latest sermon', spaceAbove: 24, spaceBelow: 24 },
     auto: 'sermon', autoNote: 'Shows the newest sermon from the sermon library. Nothing to update by hand.',
     autoCount: false,
   },
   news: {
-    label: 'News highlights', glyph: '▤', group: 'Content',
+    label: 'News highlights', glyph: '▤',
     defaults: { title: 'What\u2019s happening', spaceAbove: 24, spaceBelow: 24 },
     auto: 'news', autoNote: 'Shows the newest posts. Pin a post to keep it in front.',
   },
   staff: {
-    label: 'Staff grid', glyph: '☺', group: 'Content',
+    label: 'Staff grid', glyph: '☺',
     defaults: { title: 'People to know', spaceAbove: 24, spaceBelow: 24 },
     auto: 'staff', autoNote: 'Pulls from the staff directory.',
   },
   servicetimes: {
-    label: 'Service times', glyph: '◷', group: 'Dates & details',
+    label: 'Service times', glyph: '◷',
     defaults: { title: 'When we gather', spaceAbove: 24, spaceBelow: 24 },
     auto: 'servicetimes', autoNote: 'Reads the one service-times record in the admin, so a change lands on every page at once.',
     autoCount: false,
   },
   map: {
-    label: 'Map & address', glyph: '◎', group: 'Dates & details',
+    label: 'Map & address', glyph: '◎',
     defaults: { title: 'Find us', body: '<p>Where to park and which door to use.</p>', spaceAbove: 24, spaceBelow: 24 },
     richBody: true, auto: 'map', autoNote: 'The address, phone and email come from the church details in the admin.',
     autoCount: false, split: true,
   },
   hero: {
-    label: 'Hero banner', glyph: '▣', group: 'Structure',
+    label: 'Hero banner', glyph: '▣',
     defaults: { title: 'Ministry name', eyebrow: 'Ministry', subtitle: 'One line about this ministry.', spaceAbove: 0, spaceBelow: 0 },
     photo: true, subtitle: true, banner: true,
   },
   text: {
-    label: 'Rich text', glyph: '¶', group: 'Content',
+    label: 'Rich text', glyph: '¶',
     defaults: { body: '<p>Tell people what this ministry is and who it is for.</p>', spaceAbove: 8, spaceBelow: 8 },
     richBody: true,
   },
   textphoto: {
-    label: 'Text + photo', glyph: '◲', group: 'Content',
+    label: 'Text + photo', glyph: '◲',
     defaults: { title: 'A heading', body: '<p>A short paragraph beside the photo.</p>', spaceAbove: 24, spaceBelow: 24 },
     richBody: true, photo: true,
   },
   columns: {
-    label: 'Columns', glyph: '▥', group: 'Content',
+    label: 'Columns', glyph: '▥',
     defaults: { title: 'Three ways to take part', spaceAbove: 24, spaceBelow: 24, cols: 2 },
     items: true, itemFields: ['title', 'body'], richItemFields: ['body'],
     itemLabel: 'Column',
@@ -149,83 +149,83 @@ export const BLOCK_DEFS = {
     ],
   },
   video: {
-    label: 'Video', glyph: '▶', group: 'Content',
+    label: 'Video', glyph: '▶',
     defaults: { title: 'Watch', spaceAbove: 24, spaceBelow: 24 },
     video: true,
   },
   gallery: {
-    label: 'Photo gallery', glyph: '▦', group: 'Content',
+    label: 'Photo gallery', glyph: '▦',
     defaults: { title: 'Through the church year', spaceAbove: 24, spaceBelow: 24 },
     items: true, itemFields: ['url', 'title'], itemUrlFields: ['url'], itemLabel: 'Photo', gallery: true,
     defaultItems: [],
   },
   posts: {
-    label: 'Posts feed', glyph: '☰', group: 'Content',
+    label: 'Posts feed', glyph: '☰',
     defaults: { title: 'From this ministry', spaceAbove: 24, spaceBelow: 24 },
     feed: 'posts', auto: 'posts', autoNote: 'Shows the newest posts for this page.',
   },
   faq: {
-    label: 'FAQ', glyph: '?', group: 'Content',
+    label: 'FAQ', glyph: '?',
     defaults: { title: 'Questions people ask', spaceAbove: 24, spaceBelow: 24 },
     items: true, itemFields: ['title', 'body'], richItemFields: ['body'], itemLabel: 'Question',
     defaultItems: [{ title: 'A question people ask', body: '<p>The answer.</p>' }],
   },
   events: {
-    label: 'Upcoming events', glyph: '▤', group: 'Dates',
+    label: 'Upcoming events', glyph: '▤',
     defaults: { title: 'Upcoming', spaceAbove: 24, spaceBelow: 24 },
     feed: 'events', auto: 'events', autoNote: 'Pulls from the church calendar.',
   },
   times: {
-    label: 'Meeting times', glyph: '◷', group: 'Dates',
+    label: 'Meeting times', glyph: '◷',
     defaults: { title: 'When we gather', spaceAbove: 24, spaceBelow: 24 },
     items: true, itemFields: ['title', 'body', 'meta'], itemLabel: 'Row',
     itemPlaceholders: { title: 'Who', body: 'When', meta: 'Where' },
     defaultItems: [{ title: 'Group name', body: 'Wednesdays, 7:00 pm', meta: 'Fellowship Hall' }],
   },
   calendar: {
-    label: 'Calendar', glyph: '▩', group: 'Dates',
+    label: 'Calendar', glyph: '▩',
     defaults: { title: 'Calendar', spaceAbove: 24, spaceBelow: 24, url: '' },
     url: true, urlLabel: 'Google Calendar embed URL',
   },
   download: {
-    label: 'File download', glyph: '⤓', group: 'Dates',
+    label: 'File download', glyph: '⤓',
     defaults: { title: 'A document to download', body: 'PDF', spaceAbove: 16, spaceBelow: 16 },
     url: true, urlLabel: 'File URL',
   },
   callout: {
-    label: 'Callout box', glyph: '❢', group: 'Structure',
+    label: 'Callout box', glyph: '❢',
     defaults: { title: 'Please note', body: '<p>Something people need to know.</p>', spaceAbove: 24, spaceBelow: 24 },
     richBody: true,
   },
   buttons: {
-    label: 'Button bar', glyph: '⬒', group: 'Structure',
+    label: 'Button bar', glyph: '⬒',
     defaults: { spaceAbove: 16, spaceBelow: 16 },
     items: true, itemFields: ['title', 'url'], itemUrlFields: ['url'], itemLabel: 'Button',
     itemPlaceholders: { title: 'Button label', url: 'https://…' },
     defaultItems: [{ title: 'Get in touch', url: 'mailto:office@timothystl.org' }],
   },
   spacer: {
-    label: 'Spacer', glyph: '↕', group: 'Structure',
+    label: 'Spacer', glyph: '↕',
     defaults: { spaceAbove: 0, spaceBelow: 0, height: 48 },
   },
   partners: {
-    label: 'Partner logos', glyph: '◈', group: 'Structure',
+    label: 'Partner logos', glyph: '◈',
     defaults: { title: 'With thanks to', spaceAbove: 24, spaceBelow: 24 },
     items: true, itemFields: ['title', 'url', 'meta'], itemUrlFields: ['url', 'meta'], itemLabel: 'Partner',
     itemPlaceholders: { title: 'Partner name', url: 'Link (optional)', meta: 'Logo image URL' },
     defaultItems: [{ title: 'Partner name', url: '', meta: '' }],
   },
   form: {
-    label: 'Signup form', glyph: '◉', group: 'Sign up',
+    label: 'Signup form', glyph: '◉',
     defaults: { title: 'Sign up', body: 'Fill this in and the office will be in touch.', spaceAbove: 24, spaceBelow: 24, url: '' },
     url: true, urlLabel: 'Google Form embed URL',
   },
   newsletter: {
-    label: 'Newsletter', glyph: '✉', group: 'Sign up',
+    label: 'Newsletter', glyph: '✉',
     defaults: { title: 'Get news by email', body: 'A short note each month.', spaceAbove: 24, spaceBelow: 24 },
   },
   give: {
-    label: 'Give', glyph: '♡', group: 'Sign up',
+    label: 'Give', glyph: '♡',
     defaults: { title: 'Support this ministry', body: 'Gifts go directly toward this work.', spaceAbove: 24, spaceBelow: 24, url: 'https://give.timothystl.org' },
     url: true, urlLabel: 'Giving link',
   },
@@ -756,13 +756,14 @@ export function blocksClientConfig() {
       label: d.label, glyph: d.glyph,
       photo: !!d.photo, video: !!d.video, url: !!d.url, urlLabel: d.urlLabel || '',
       items: !!d.items, itemFields: d.itemFields || [], itemLabel: d.itemLabel || 'Row',
+      auto: d.auto || '', autoNote: d.autoNote || '', autoCount: d.auto ? d.autoCount !== false : false,
       itemPlaceholders: d.itemPlaceholders || {}, richItemFields: d.richItemFields || [],
       itemUrlFields: d.itemUrlFields || [], richBody: !!d.richBody,
       gallery: !!d.gallery, feed: d.feed || '',
       defaults: d.defaults || {}, defaultItems: d.defaultItems || [],
     };
   }
-  return { types, groups: GROUPS, BG, INK, SIZES, SPLITS, TONES, stamps: STAMP_PRESETS, step: SPACE_STEP, max: SPACE_MAX };
+  return { types, groups: GROUPS, templates: TEMPLATES, BG, INK, SIZES, SPLITS, TONES, stamps: STAMP_PRESETS, step: SPACE_STEP, max: SPACE_MAX };
 }
 
 // ── RENDERING ────────────────────────────────────────────────────────────────

@@ -28,12 +28,12 @@ import { handleGymRoutes, sweepExpiredItems, extractImageKeys } from './admin/gy
 import { migrateLegacyPage, starterBlocks, sanitizeBlocks, sanitizeBlock, parseBlocks, newBlock,
          renderPage, renderBlock, BLOCK_DEFS, BLOCK_TYPE_KEYS, GROUPS, BG, INK, SIZES, SPLITS, TONES,
          STAMP_PRESETS, safeUrl, esc as escBlock, editorPhoneCss, blocksClientConfig, makeBlockId,
-         TEMPLATES, templateOf, wrapTemplate, BLOCK_CSS } from './admin/blocks.js';
+         TEMPLATES, templateOf, wrapTemplate, BLOCK_CSS, cleanText } from './admin/blocks.js';
 import PAYROLL_HTML from './admin/payroll.html';
 import MINISTRY_EDITOR_HTML from './admin/ministry-editor.html';
 import { PAGE_SEEDS } from './admin/page-seeds.js';
 import { SITE_PAGES } from './admin/site-pages.js';
-import { orderPages, filterPages, pageStatus } from './admin/pages.js';
+import { orderPages, filterPages, pageStatus, slugify, uniqueSlug, pageRename } from './admin/pages.js';
 
 // Allowlist of site_settings keys readable via the public /api/settings/{key}
 // endpoint. Everything else returns 404 — keeps internal config (gym admin
@@ -78,6 +78,17 @@ const EDITOR_HEADERS = {
     "connect-src 'self' https://cdn.tiny.cloud; frame-src 'self' https://www.youtube-nocookie.com https://docs.google.com https://calendar.google.com; " +
     "frame-ancestors 'none'; base-uri 'none'",
 };
+
+// The fields the editor's Page tab edits. Kept apart from the block draft: page
+// settings are not part of what Publish promotes, so folding them into the draft
+// would leave a page permanently reading "Draft edits" for having been renamed.
+function pageSettings(row) {
+  return {
+    title: row.title, slug: row.slug, parent_id: row.parent_id || null,
+    in_menu: row.in_menu ? 1 : 0, template: templateOf(row.template).key,
+    seo_description: row.seo_description || '', locked: row.locked ? 1 : 0,
+  };
+}
 
 // What the editor's topbar should say about a site page. Derived from the row,
 // never from the session's change log — that is what kept the topbar and the
@@ -4161,6 +4172,7 @@ ${sidebarShell('pages', currentUser)}
               template: row.template, publish_at: row.publish_at || null, updated_at: row.updated_at || '',
               blocks, changes: parseBlocks(row.change_log),
               published_count: sanitizeBlocks(parseBlocks(row.published_blocks)).length,
+              settings: pageSettings(row),
             },
             pages: orderPages(siblings.results || []).map((p) => ({
               id: p.id, title: p.menu_label || p.title, slug: p.slug, parent_id: p.parent_id,
@@ -4173,6 +4185,98 @@ ${sidebarShell('pages', currentUser)}
               data: await pageData(env, ctx), children,
             }),
           });
+        }
+
+        // Page settings: name, address, menu placement, layout, search summary.
+        // Renaming regenerates the address and writes a redirect from the old
+        // one, so the one thing a well-meaning volunteer can break — an inbound
+        // link — is handled rather than left to be remembered.
+        if (action === '/settings' && method === 'POST') {
+          const body = await request.json().catch(() => ({}));
+          const all = (await env.DB.prepare('SELECT id, title, menu_label, slug, parent_id, sort, in_menu FROM pages')
+            .all().catch(() => ({ results: [] }))).results || [];
+          const before = pageSettings(row);
+
+          const title = cleanText(body.title, 80) || row.title;
+          // Only a real rename regenerates the address, so retyping the same
+          // name — or editing anything else — never moves the page.
+          let slug = row.slug;
+          let redirects = [];
+          if (typeof body.slug === 'string' && body.slug.trim() && body.slug.trim() !== row.slug && row.slug !== '/') {
+            // An address typed by hand is still cleaned and made unique.
+            const taken = new Set(all.filter((p) => p.id !== row.id).map((p) => p.slug));
+            slug = uniqueSlug(slugify(body.slug.replace(/^\/+/, ''), (all.find((p) => p.id === (body.parent_id ?? row.parent_id)) || {}).slug || ''), taken);
+            if (slug !== row.slug) redirects.push({ from: row.slug, to: slug });
+          } else if (title !== row.title) {
+            const r = pageRename(Object.assign({}, row, { parent_id: body.parent_id === undefined ? row.parent_id : body.parent_id }), title, all);
+            slug = r.slug;
+            redirects = r.redirects;
+          }
+
+          // Menu depth is two levels: a page with children of its own cannot be
+          // filed under another page, and nothing can be its own parent.
+          let parentId = body.parent_id === undefined ? row.parent_id : (body.parent_id || null);
+          if (parentId === row.id) parentId = row.parent_id;
+          const parent = parentId ? all.find((p) => p.id === parentId) : null;
+          if (parentId && (!parent || parent.parent_id)) parentId = null;
+          if (parentId && all.some((p) => p.parent_id === row.id)) parentId = null;
+
+          const template = body.template === undefined ? row.template : templateOf(body.template).key;
+          const inMenu = body.in_menu === undefined ? row.in_menu : (body.in_menu ? 1 : 0);
+          const seo = cleanText(body.seo_description, 300);
+          const nowIso = new Date().toISOString();
+
+          await env.DB.prepare(
+            'UPDATE pages SET title = ?, slug = ?, parent_id = ?, template = ?, in_menu = ?, seo_description = ?, updated_at = ?, updated_by = ? WHERE id = ?'
+          ).bind(title, slug, parentId, template, inMenu, seo, nowIso, currentUser?.username || '', pageId).run();
+
+          for (const r of redirects) {
+            if (r.id) await env.DB.prepare('UPDATE pages SET slug = ? WHERE id = ?').bind(r.to, r.id).run();
+            // A redirect that would now point at a page's own address is not a
+            // redirect, it is a loop.
+            if (r.from === r.to) continue;
+            await env.DB.prepare('INSERT OR REPLACE INTO page_redirects (from_slug, to_slug, created_at) VALUES (?, ?, ?)')
+              .bind(r.from, r.to, nowIso).run();
+            // An address that used to redirect *to* this page now has to follow
+            // it, or the older link dead-ends one hop short.
+            await env.DB.prepare('UPDATE page_redirects SET to_slug = ? WHERE to_slug = ?').bind(r.to, r.from).run();
+          }
+
+          const after = await env.DB.prepare(`SELECT ${COLS} FROM pages WHERE id = ?`).bind(pageId).first();
+          const siblings = (await env.DB.prepare('SELECT id, title, menu_label, slug, parent_id, sort, status, in_menu, blocks, published_blocks, publish_at FROM pages ORDER BY sort ASC, title ASC')
+            .all().catch(() => ({ results: [] }))).results || [];
+          await logAudit(env.DB, currentUser, 'update', 'page', pageId, title, before, pageSettings(after));
+
+          // Only the layout changes what the canvas looks like; a rename does
+          // not, and redrawing on every keystroke would fight the caret.
+          const rerender = after.template !== row.template;
+          const blocks = sanitizeBlocks(parseBlocks(after.blocks));
+          return jsonResponse({
+            ok: true,
+            page: pageSettings(after),
+            pages: orderPages(siblings).map((p) => ({
+              id: p.id, title: p.menu_label || p.title, slug: p.slug, parent_id: p.parent_id,
+              in_menu: !!p.in_menu, hasDraftEdits: p.hasDraftEdits,
+            })),
+            redirected: redirects.length > 0,
+            rerender,
+            html: rerender ? renderPage(blocks, {
+              editing: true, slug: after.id, template: after.template, withCss: true,
+              data: await pageData(env, ctx),
+              children: orderPages(siblings).filter((c) => c.parent_id === after.id),
+            }) : '',
+          });
+        }
+
+        if (action === '/delete' && method === 'POST') {
+          if (row.locked) return jsonResponse({ error: 'This page is part of the site structure and cannot be deleted.' }, 400);
+          // Children would be stranded with no parent and no menu entry, so
+          // they come up a level rather than disappearing with it.
+          await env.DB.prepare('UPDATE pages SET parent_id = NULL WHERE parent_id = ?').bind(pageId).run();
+          await env.DB.prepare('DELETE FROM pages WHERE id = ?').bind(pageId).run();
+          await env.DB.prepare('DELETE FROM page_redirects WHERE to_slug = ?').bind(row.slug).run();
+          await logAudit(env.DB, currentUser, 'delete', 'page', pageId, row.title, pageSettings(row), null);
+          return jsonResponse({ ok: true });
         }
 
         // Autosaved working draft. Sanitised on the way in — client-side
