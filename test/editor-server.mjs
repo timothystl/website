@@ -31,6 +31,19 @@ export function createEditorServer(seed = {}) {
   const revisions = [];
   const sections = [];
   let sectionSeq = 0;
+  // The Worker's pageData() bundle, standing in for the D1 queries. The blocks
+  // read it exactly as they do in production.
+  const DATA = seed.data || {
+    settings: { address_line: '6704 Fyler Ave', address_city: 'St. Louis, MO 63139', phone: '(314) 781-8673', email: 'office@timothystl.org' },
+    services: [
+      { day: 'Sunday', time: '8:00 am', note: 'Traditional' },
+      { day: 'Sunday', time: '9:30 am', note: 'Vietnamese worship' },
+      { day: 'Sunday', time: '10:45 am', note: 'Contemporary' },
+    ],
+    sermon: { title: 'The Good Shepherd', series: 'Psalms of Ascent', date: '2026-07-26', scripture: 'Psalm 23' },
+    news: [{ title: 'Advent Lessons and Carols', date: '2026-12-08' }],
+    staff: [{ name: 'Pastor Matt', title: 'Pastor' }, { name: 'Dinger', title: 'Office Manager' }],
+  };
 
   const seedPages = seed.pages || [{ slug: 'music', title: 'Music Ministry', blocks: migrateLegacyPage({
     slug: 'music', title: 'Music Ministry',
@@ -84,7 +97,7 @@ export function createEditorServer(seed = {}) {
           },
           config: blocksClientConfig(),
           media,
-          html: renderPage(blocks, { editing: true, slug, withCss: true }),
+          html: renderPage(blocks, { editing: true, slug, withCss: true, data: DATA }),
         });
       }
 
@@ -122,7 +135,7 @@ export function createEditorServer(seed = {}) {
         const blocks = sanitizeBlocks(parseBlocks(rev.blocks));
         row.blocks = JSON.stringify(blocks);
         row.page_status = 'draft';
-        return json(res, { ok: true, blocks, html: renderPage(blocks, { editing: true, slug, withCss: true }) });
+        return json(res, { ok: true, blocks, html: renderPage(blocks, { editing: true, slug, withCss: true, data: DATA }) });
       }
 
       if (action === 'schedule' && req.method === 'POST') {
@@ -154,7 +167,7 @@ export function createEditorServer(seed = {}) {
     if (p === '/ministries/api/render' && req.method === 'POST') {
       const body = await readBody(req);
       const blocks = sanitizeBlocks(body.blocks);
-      return json(res, { html: renderPage(blocks, { editing: true, slug: String(body.slug || ''), withCss: true }), blocks });
+      return json(res, { html: renderPage(blocks, { editing: true, slug: String(body.slug || ''), withCss: true, data: DATA }), blocks });
     }
 
     // Mirrors promoteScheduledPages() in tlc-admin-worker.js, which the cron

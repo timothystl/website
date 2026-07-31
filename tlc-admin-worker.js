@@ -5,7 +5,7 @@
 // Last modified: 2026-03-27
 
 
-import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS } from './admin/db.js';
+import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes } from './admin/db.js';
 
 // Static pages that can carry self-serve notices (matches the SPA's page ids in public/index.html)
 const STATIC_PAGES = [
@@ -27,7 +27,8 @@ import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHt
 import { handleGymRoutes, sweepExpiredItems, extractImageKeys } from './admin/gym.js';
 import { migrateLegacyPage, starterBlocks, sanitizeBlocks, sanitizeBlock, parseBlocks, newBlock,
          renderPage, renderBlock, BLOCK_DEFS, BLOCK_TYPE_KEYS, GROUPS, BG, INK, SIZES, SPLITS, TONES,
-         STAMP_PRESETS, safeUrl, esc as escBlock, editorPhoneCss, blocksClientConfig, makeBlockId } from './admin/blocks.js';
+         STAMP_PRESETS, safeUrl, esc as escBlock, editorPhoneCss, blocksClientConfig, makeBlockId,
+         TEMPLATES, templateOf, wrapTemplate } from './admin/blocks.js';
 import PAYROLL_HTML from './admin/payroll.html';
 import MINISTRY_EDITOR_HTML from './admin/ministry-editor.html';
 import { PAGE_SEEDS } from './admin/page-seeds.js';
@@ -60,6 +61,47 @@ function jsonResponse(obj, status = 200) {
 // rest of the site already assumes.
 function cleanSlug(s) {
   return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 48);
+}
+
+// ── PAGE DATA CONTEXT ────────────────────────────────────────────────────────
+// Self-filling blocks (sermon, news, staff, service times, map) read from here
+// and never from the block itself, so a page cannot show stale copies of data
+// that lives elsewhere in the admin.
+//
+// One query bundle per page render, memoised for the life of the request: a
+// page with a Sermon block and a Staff block costs the same queries as a page
+// with ten of each. Keyed on the request's own ExecutionContext, not on `env` —
+// `env` is shared by every request in an isolate, so caching against it would
+// serve yesterday's sermon until Cloudflare happened to recycle the isolate.
+const PAGE_DATA_CACHE = new WeakMap();
+
+async function pageData(env, reqKey) {
+  if (reqKey && PAGE_DATA_CACHE.has(reqKey)) return PAGE_DATA_CACHE.get(reqKey);
+  const p = (async () => {
+    const q = async (sql, ...binds) => {
+      try { return (await env.DB.prepare(sql).bind(...binds).all()).results || []; } catch (_) { return []; }
+    };
+    const [settingRows, sermonRow, news, staff] = await Promise.all([
+      q("SELECT key, value FROM site_settings WHERE key LIKE 'church_%'"),
+      env.DB.prepare(
+        'SELECT n.title, n.date, n.scripture, n.youtube_url, n.audio_url, s.title AS series ' +
+        'FROM sermon_notes n LEFT JOIN sermon_series s ON s.id = n.series_id ' +
+        'ORDER BY COALESCE(n.date, \'\') DESC, n.id DESC LIMIT 1'
+      ).first().catch(() => null),
+      q("SELECT title, summary, publish_date AS date FROM news_items WHERE (expire_date IS NULL OR expire_date >= date('now')) ORDER BY pinned DESC, publish_date DESC, id DESC LIMIT 6"),
+      q('SELECT name, title, email, photo_url FROM staff_members ORDER BY display_order ASC, id ASC LIMIT 12'),
+    ]);
+    const s = {};
+    for (const r of settingRows) s[r.key.replace(/^church_/, '')] = r.value;
+    return {
+      settings: { address_line: s.address_line || '', address_city: s.address_city || '', phone: s.phone || '', email: s.email || '' },
+      services: parseServiceTimes(s.service_times),
+      sermon: sermonRow || null,
+      news, staff,
+    };
+  })();
+  if (reqKey) PAGE_DATA_CACHE.set(reqKey, p);
+  return p;
 }
 
 // CSRF defense: only these POST paths are reachable from outside the admin
@@ -511,7 +553,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-07-30-3'; // bumped: seed each ministry page's hardcoded sections into its draft (whole-page blocks)
+    const SCHEMA_VERSION = '2026-07-31-1'; // bumped: sermon_notes.audio_url, so the Sermon block can branch on whether a recording exists
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -889,6 +931,11 @@ export default {
     try { await env.DB.prepare("ALTER TABLE youth_pages ADD COLUMN page_status TEXT DEFAULT 'live'").run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN publish_at TEXT').run(); } catch (_) {}         // ISO8601 or NULL
     try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN change_log TEXT').run(); } catch (_) {}         // JSON, survives a reload
+    // Sermons are series → sermons with no recording attached yet. The column
+    // exists now so the Sermon block can branch on it: with media it renders a
+    // play card, without one a text card. When recordings start, every Sermon
+    // block on the site upgrades itself with no edit.
+    try { await env.DB.prepare('ALTER TABLE sermon_notes ADD COLUMN audio_url TEXT').run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_MINISTRY_MEDIA).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_MINISTRY_REVISIONS).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_MINISTRY_SECTIONS).run(); } catch (_) {}
@@ -1019,7 +1066,7 @@ export default {
       // and the site falls back to `content` exactly as before.
       const pubBlocks = row.page_status === 'hidden' ? [] : parseBlocks(row.published_blocks);
       const blocksHtml = pubBlocks.length
-        ? fixUrl(renderPage(sanitizeBlocks(pubBlocks), { slug }))
+        ? fixUrl(renderPage(sanitizeBlocks(pubBlocks), { slug, data: await pageData(env, ctx) }))
         : '';
       const { published_blocks, ...publicRow } = row;
       return new Response(JSON.stringify({ ...publicRow, content: fixUrl(row.content), blocks_html: blocksHtml }), {
@@ -3809,7 +3856,7 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
           },
           config: blocksClientConfig(),
           media: media.results || [],
-          html: renderPage(blocks, { editing: true, slug, withCss: true }),
+          html: renderPage(blocks, { editing: true, slug, withCss: true, data: await pageData(env, ctx) }),
         });
       }
 
@@ -3973,17 +4020,18 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
         const blocks = sanitizeBlocks(parseBlocks(rev.blocks));
         await env.DB.prepare("UPDATE youth_pages SET blocks = ?, page_status = 'draft', updated_at = ? WHERE slug = ?")
           .bind(JSON.stringify(blocks), new Date().toISOString(), slug).run();
-        return jsonResponse({ ok: true, blocks, html: renderPage(blocks, { editing: true, slug, withCss: true }) });
+        return jsonResponse({ ok: true, blocks, html: renderPage(blocks, { editing: true, slug, withCss: true, data: await pageData(env, ctx) }) });
       }
 
-      // Stateless render — the editor's single source of block markup. No DB
-      // access, so it stays fast enough to call on every structural change.
+      // Stateless render — the editor's single source of block markup. It
+      // stores nothing; the only reads are the self-filling blocks' data
+      // bundle, so what staff arrange on the canvas is what visitors get.
       if (path === '/ministries/api/render' && method === 'POST') {
         const body = await request.json().catch(() => ({}));
         const blocks = sanitizeBlocks(body.blocks);
         const slug = cleanSlug(body.slug);
         return jsonResponse({
-          html: renderPage(blocks, { editing: true, slug, withCss: true }),
+          html: renderPage(blocks, { editing: true, slug, withCss: true, data: await pageData(env, ctx) }),
           blocks,
         });
       }

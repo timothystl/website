@@ -118,7 +118,9 @@ console.log('\npublic ministry page — legacy fallback (not yet converted)');
 
 console.log('\npublic ministry page — every block type renders without error');
 {
-  const all = Object.keys(BLOCK_DEFS).map((t) => newBlock(t));
+  // Hero first on purpose — that is the signal that puts the page in whole-page
+  // mode, which is the harder layout to get right, so test every type in it.
+  const all = ['hero', ...Object.keys(BLOCK_DEFS).filter((t) => t !== 'hero')].map((t) => newBlock(t));
   const { page, ctx, errors } = await visit('vbs', apiFor('vbs', all, { title: 'VBS' }));
   eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
   // this list leads with a hero, so the page renders in whole-page mode and the

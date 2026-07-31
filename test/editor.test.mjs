@@ -4,7 +4,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { execSync } from 'node:child_process';
 import { createEditorServer } from './editor-server.mjs';
-import { newBlock, BLOCK_DEFS } from '../admin/blocks.js';
+import { newBlock, BLOCK_DEFS, GROUPS } from '../admin/blocks.js';
 
 const globalRoot = (process.env.NODE_PATH || execSync('npm root -g').toString()).trim().split(path.delimiter)[0];
 const { chromium } = createRequire(path.join(globalRoot, 'x.js'))('playwright');
@@ -108,17 +108,22 @@ await page.setViewportSize({ width: 1440, height: 900 });
 await page.waitForTimeout(250);
 
 group('palette');
-eq(await page.locator('.ed-pal-tab').count(), 5, 'four block groups plus Saved');
-eq(await page.locator('.ed-pal-tab[aria-pressed="true"]').textContent(), 'Content', 'Content group active by default');
-eq(await page.locator('.ed-chip').count(), 7, 'Content group shows its seven blocks');
-await page.click('.ed-pal-tab[data-group="Dates"]');
-eq(await page.locator('.ed-chip').count(), 4, 'Dates group shows four blocks');
-ok((await page.locator('.ed-pal-chips').textContent()).includes('Upcoming events'), 'Dates group lists Upcoming events');
+// Counts come from the palette definition rather than being restated here, so
+// adding a block type cannot silently leave the palette half-drawn.
+eq(await page.locator('.ed-pal-tab').count(), GROUPS.length + 1, 'every block group, plus Saved');
+eq(await page.locator('.ed-pal-tab[aria-pressed="true"]').textContent(), GROUPS[0].name, 'the first group is active by default');
+for (const g of GROUPS) {
+  await page.click('.ed-pal-tab[data-group="' + g.name + '"]');
+  eq(await page.locator('.ed-chip').count(), g.types.length, `${g.name} shows all ${g.types.length} of its blocks`);
+  const txt = await page.locator('.ed-pal-chips').textContent();
+  for (const t of g.types) ok(txt.includes(BLOCK_DEFS[t].label), `${g.name} lists ${BLOCK_DEFS[t].label}`);
+}
+await page.click('.ed-pal-tab[data-group="' + GROUPS[1].name + '"]');
 await page.click('#edPalToggle');
 eq(await page.locator('.ed-pal-chips').isVisible(), false, 'palette collapses');
 await page.click('#edPalToggle');
 eq(await page.locator('.ed-pal-chips').isVisible(), true, 'palette reopens');
-await page.click('.ed-pal-tab[data-group="Content"]');
+await page.click('.ed-pal-tab[data-group="' + GROUPS[0].name + '"]');
 
 group('inspector empty state');
 ok((await page.textContent('#edInspBody')).includes('Nothing selected'), 'inspector shows the empty state');

@@ -68,6 +68,61 @@ export const snapSpace = (v) => Math.max(0, Math.min(SPACE_MAX, Math.round((Numb
 // edited as rich text. Anything not listed is dropped on save.
 
 export const BLOCK_DEFS = {
+  // ── Site-wide blocks. Several of these fill themselves from data the church
+  // already maintains: the point is that nobody retypes a sermon title into a
+  // page and then lets it go stale.
+  alert: {
+    label: 'Notice bar', glyph: '!', group: 'Structure',
+    defaults: { body: 'Something everyone needs to know.', spaceAbove: 0, spaceBelow: 16, url: '' },
+    url: true, urlLabel: 'Where "Details" goes (optional)',
+  },
+  slideshow: {
+    label: 'Welcome banner', glyph: '❏', group: 'Structure',
+    defaults: { title: 'A line that says who you are', subtitle: 'A sentence underneath it.', spaceAbove: 0, spaceBelow: 24 },
+    photo: true, subtitle: true, banner: true,
+    links: true, defaultLinks: [{ title: 'Plan your visit', url: '/visit' }, { title: 'Watch a service', url: '/worship' }],
+    items: true, itemFields: ['url', 'title'], itemUrlFields: ['url'], itemLabel: 'Slide', gallery: true, defaultItems: [],
+  },
+  quicklinks: {
+    label: 'Link tiles', glyph: '⊞', group: 'Structure',
+    defaults: { title: 'Start here', spaceAbove: 24, spaceBelow: 24 },
+    items: true, itemFields: ['title', 'url', 'meta'], itemUrlFields: ['url'], itemLabel: 'Tile',
+    itemPlaceholders: { title: 'Label', url: 'Where it goes', meta: 'Small note' },
+    defaultItems: [
+      { title: 'Plan a visit', url: '/visit', meta: 'Visit' },
+      { title: 'Worship & sermons', url: '/worship', meta: 'Worship' },
+      { title: 'School & daycare', url: '/school', meta: 'School' },
+      { title: 'Give', url: '/give', meta: 'Give' },
+    ],
+  },
+  sermon: {
+    label: 'Latest sermon', glyph: '♪', group: 'Content',
+    defaults: { title: 'The latest sermon', spaceAbove: 24, spaceBelow: 24 },
+    auto: 'sermon', autoNote: 'Shows the newest sermon from the sermon library. Nothing to update by hand.',
+    autoCount: false,
+  },
+  news: {
+    label: 'News highlights', glyph: '▤', group: 'Content',
+    defaults: { title: 'What\u2019s happening', spaceAbove: 24, spaceBelow: 24 },
+    auto: 'news', autoNote: 'Shows the newest posts. Pin a post to keep it in front.',
+  },
+  staff: {
+    label: 'Staff grid', glyph: '☺', group: 'Content',
+    defaults: { title: 'People to know', spaceAbove: 24, spaceBelow: 24 },
+    auto: 'staff', autoNote: 'Pulls from the staff directory.',
+  },
+  servicetimes: {
+    label: 'Service times', glyph: '◷', group: 'Dates & details',
+    defaults: { title: 'When we gather', spaceAbove: 24, spaceBelow: 24 },
+    auto: 'servicetimes', autoNote: 'Reads the one service-times record in the admin, so a change lands on every page at once.',
+    autoCount: false,
+  },
+  map: {
+    label: 'Map & address', glyph: '◎', group: 'Dates & details',
+    defaults: { title: 'Find us', body: '<p>Where to park and which door to use.</p>', spaceAbove: 24, spaceBelow: 24 },
+    richBody: true, auto: 'map', autoNote: 'The address, phone and email come from the church details in the admin.',
+    autoCount: false, split: true,
+  },
   hero: {
     label: 'Hero banner', glyph: '▣', group: 'Structure',
     defaults: { title: 'Ministry name', eyebrow: 'Ministry', subtitle: 'One line about this ministry.', spaceAbove: 0, spaceBelow: 0 },
@@ -107,7 +162,7 @@ export const BLOCK_DEFS = {
   posts: {
     label: 'Posts feed', glyph: '☰', group: 'Content',
     defaults: { title: 'From this ministry', spaceAbove: 24, spaceBelow: 24 },
-    feed: 'posts',
+    feed: 'posts', auto: 'posts', autoNote: 'Shows the newest posts for this page.',
   },
   faq: {
     label: 'FAQ', glyph: '?', group: 'Content',
@@ -118,7 +173,7 @@ export const BLOCK_DEFS = {
   events: {
     label: 'Upcoming events', glyph: '▤', group: 'Dates',
     defaults: { title: 'Upcoming', spaceAbove: 24, spaceBelow: 24 },
-    feed: 'events',
+    feed: 'events', auto: 'events', autoNote: 'Pulls from the church calendar.',
   },
   times: {
     label: 'Meeting times', glyph: '◷', group: 'Dates',
@@ -177,13 +232,27 @@ export const BLOCK_DEFS = {
 };
 
 export const GROUPS = [
-  { name: 'Content',   types: ['text', 'textphoto', 'columns', 'video', 'gallery', 'posts', 'faq'] },
-  { name: 'Dates',     types: ['events', 'times', 'calendar', 'download'] },
-  { name: 'Structure', types: ['hero', 'callout', 'buttons', 'spacer', 'partners'] },
-  { name: 'Sign up',   types: ['form', 'newsletter', 'give'] },
+  { name: 'Content',         types: ['text', 'textphoto', 'columns', 'video', 'gallery', 'sermon', 'news', 'posts', 'staff', 'faq'] },
+  { name: 'Dates & details', types: ['servicetimes', 'events', 'times', 'calendar', 'map', 'download'] },
+  { name: 'Structure',       types: ['slideshow', 'hero', 'quicklinks', 'callout', 'alert', 'buttons', 'partners', 'spacer'] },
+  { name: 'Sign up & give',  types: ['form', 'newsletter', 'give'] },
 ];
 
 export const BLOCK_TYPE_KEYS = Object.keys(BLOCK_DEFS);
+
+// ── PAGE LAYOUTS ─────────────────────────────────────────────────────────────
+// The template owns the wrapper around the blocks and nothing else. Switching
+// template must never drop a block, which is why nothing here inspects or
+// rewrites the block list — it only decides what goes around it.
+
+export const TEMPLATES = [
+  { key: 'home',     label: 'Home',           hint: 'Full-width banner, no sidebar. The homepage only.' },
+  { key: 'standard', label: 'Standard page',  hint: 'Banner, then your blocks in one column. Right for most pages.' },
+  { key: 'section',  label: 'Section landing', hint: 'Banner plus an automatic list of the pages beneath this one.' },
+  { key: 'sidebar',  label: 'With sidebar',   hint: 'Blocks on the left; service times and contact details on the right.' },
+];
+
+export const templateOf = (key) => TEMPLATES.find((t) => t.key === key) || TEMPLATES[1];
 
 // ── ESCAPING / SANITISING ────────────────────────────────────────────────────
 
@@ -283,6 +352,8 @@ export function newBlock(type, over = {}) {
     split: '40',
     side: 'left',
     cols: d.cols || 2,
+    count: d.count || 3,
+    locked: false,
     bg: 0,
     ink: 0,
     size: 'm',
@@ -294,6 +365,7 @@ export function newBlock(type, over = {}) {
     corner: 'tr',
     hidden: false,
     items: def.items ? JSON.parse(JSON.stringify(def.defaultItems || [])) : [],
+    links: def.links ? JSON.parse(JSON.stringify(def.defaultLinks || [])) : [],
   }, over));
 }
 
@@ -319,6 +391,8 @@ export function sanitizeBlock(b) {
     split: SPLITS.some((s) => s.key === b.split) ? b.split : '40',
     side: ['left', 'right', 'above'].includes(b.side) ? b.side : 'left',
     cols: Number(b.cols) === 3 ? 3 : 2,
+    count: Math.max(1, Math.min(6, Math.floor(Number(b.count)) || 3)),
+    locked: !!b.locked,
     bg: clampIndex(b.bg, BG.length),
     ink: clampIndex(b.ink, INK.length),
     size: SIZES.some((s) => s.key === b.size) ? b.size : 'm',
@@ -330,6 +404,7 @@ export function sanitizeBlock(b) {
     corner: b.corner === 'tl' ? 'tl' : 'tr',
     hidden: !!b.hidden,
     items: [],
+    links: [],
   };
   // Colour guardrail, enforced server-side too: an ink that is unreadable on
   // the chosen background snaps back to a readable one.
@@ -349,6 +424,12 @@ export function sanitizeBlock(b) {
       }
       return item;
     });
+  }
+  if (def.links && Array.isArray(b.links)) {
+    out.links = b.links.slice(0, 4).map((raw) => ({
+      title: cleanText(raw && raw.title, 60),
+      url: safeUrl(raw && raw.url).slice(0, 600),
+    }));
   }
   return out;
 }
@@ -546,6 +627,59 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-note{font-size:11.5px;color:#8A8898;}
 .tlcb [contenteditable="true"]:empty::before{content:attr(data-ph);color:#A8A69A;font-style:italic;}
 .tlcb [contenteditable="true"]{min-height:1em;}
+
+/* ── Site-wide blocks ─────────────────────────────────────────────────────── */
+.tlcb-alert{display:flex;align-items:center;gap:12px;padding:10px 16px;border-radius:8px;background:#FDF8EC;border:1px solid #F0DCB0;
+  font-size:13.5px;color:#4A4860;flex-wrap:wrap;}
+.tlcb-alert-tag{flex:none;padding:2px 8px;border-radius:5px;background:#C9973A;color:#1B1608;
+  font:700 10px/1.6 'Source Sans 3',sans-serif;letter-spacing:.1em;text-transform:uppercase;}
+.tlcb-alert-body{flex:1;min-width:120px;}
+.tlcb-alert-link{flex:none;color:#2E7EA6;font-weight:600;text-decoration:none;}
+.tlcb-slide{position:relative;border-radius:10px;overflow:hidden;padding:64px 40px;display:flex;flex-direction:column;
+  align-items:flex-start;gap:14px;min-height:300px;justify-content:center;
+  background:#43536F var(--tlcb-slide-img,none) center/cover;}
+.tlcb-slide::before{content:'';position:absolute;inset:0;background:linear-gradient(105deg,rgba(17,30,50,.86),rgba(30,45,74,.55));}
+.tlcb-slide > *{position:relative;z-index:1;}
+.tlcb-slide-title{font-family:Lora,Georgia,serif;font-weight:700;font-size:var(--tlcb-hero,38px);line-height:1.12;color:#fff;margin:0;max-width:16em;}
+.tlcb-slide-sub{font-size:16px;line-height:1.55;color:rgba(255,255,255,.8);margin:0;max-width:34em;font-weight:300;}
+.tlcb-btn--ghost-light{background:transparent;color:#F3EDE1;border:1px solid rgba(245,228,192,.5);}
+.tlcb-dots{display:flex;gap:6px;margin-top:4px;}
+.tlcb-dots span{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.4);}
+.tlcb-dots span.on{background:#E8C070;}
+.tlcb-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+.tlcb-tile{display:flex;flex-direction:column;gap:8px;padding:16px;border:1px solid #DDE3ED;border-radius:9px;background:#FBF8F3;
+  text-decoration:none;color:inherit;}
+.tlcb-tile:hover{border-color:#2E7EA6;}
+.tlcb-tile-i{font-size:17px;color:#2E7EA6;}
+.tlcb-tile-t{font:600 13.5px/1.3 'Source Sans 3',sans-serif;color:#1E2D4A;}
+.tlcb-svcs{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+.tlcb-svc{display:flex;flex-direction:column;gap:4px;padding:14px 16px;border:1px solid #DDE3ED;border-radius:9px;background:#FBF8F3;}
+.tlcb-svc-d{font:700 10px/1.6 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8898;}
+.tlcb-svc-t{font-family:Lora,Georgia,serif;font-weight:700;font-size:21px;color:#1E2D4A;line-height:1.2;}
+.tlcb-svc-n{font-size:12.5px;color:#6A6858;}
+.tlcb-sermon{display:grid;grid-template-columns:var(--tlcb-cols,4fr 6fr);gap:var(--tlcb-gap,32px);align-items:center;}
+.tlcb-sermon--text{grid-template-columns:1fr;}
+.tlcb-sermon-play{position:relative;aspect-ratio:16/9;border-radius:8px;background:#1E2D4A center/cover;display:flex;
+  align-items:center;justify-content:center;order:var(--tlcb-media-order,0);text-decoration:none;}
+.tlcb-sermon-play--audio{aspect-ratio:auto;min-height:96px;background:#1E2D4A;}
+.tlcb-sermon-play span{width:46px;height:46px;border-radius:50%;background:rgba(251,248,243,.92);color:#1E2D4A;
+  display:flex;align-items:center;justify-content:center;font-size:17px;}
+.tlcb-sermon-b{display:flex;flex-direction:column;gap:6px;min-width:0;}
+.tlcb-sermon-t{font-family:Lora,Georgia,serif;font-weight:700;font-size:calc(var(--tlcb-head,30px) * .78);line-height:1.25;color:var(--tlcb-head-ink,#1E2D4A);}
+.tlcb-sermon-m{font-size:13px;color:#8A8898;}
+.tlcb-sermon-all{font-size:13px;color:#2E7EA6;text-decoration:none;font-weight:600;}
+.tlcb-news{display:flex;align-items:baseline;gap:14px;padding:11px 13px;border:1px solid #DDE3ED;border-radius:8px;background:#F7F3EC;}
+.tlcb-news-d{flex:none;width:56px;font:700 12px/1.4 'Source Sans 3',sans-serif;color:#8A8898;letter-spacing:.03em;}
+.tlcb-news-t{flex:1;font:600 13.5px/1.35 'Source Sans 3',sans-serif;color:#1E2D4A;}
+.tlcb-people{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+.tlcb-person{display:flex;flex-direction:column;gap:6px;}
+.tlcb-person-p{aspect-ratio:1/1;border-radius:9px;background:#DDE3ED center/cover no-repeat;}
+.tlcb-person-n{font:600 13.5px/1.3 'Source Sans 3',sans-serif;color:#1E2D4A;}
+.tlcb-person-r{font-size:12px;color:#8A8898;}
+.tlcb-map{min-height:230px;overflow:hidden;}
+.tlcb-map-f{width:100%;height:100%;min-height:230px;border:0;display:block;}
+.tlcb-map-ph{color:#8A8898;font-size:13px;}
+.tlcb-addr{display:flex;flex-direction:column;gap:3px;font-size:13.5px;color:#4A4860;}
 .tlcb-stamp{position:absolute;z-index:4;bottom:14px;padding:7px 15px;border-radius:7px;
   font:700 13px/1.3 'Source Sans 3',sans-serif;letter-spacing:.1em;text-transform:uppercase;
   box-shadow:0 5px 16px rgba(30,45,74,.3);white-space:nowrap;}
@@ -555,6 +689,26 @@ export const BLOCK_CSS = `<style id="tlcb-css">
   display:flex;flex-direction:column;gap:8px;}
 .tlcb-empty b{font:500 22px/1.2 Lora,Georgia,serif;color:#1E2D4A;font-weight:500;}
 .tlcb-empty span{font-size:13.5px;color:#8A8898;}
+/* Page layouts. The template owns the wrapper only — it never touches a block,
+   so switching layout can never drop content. */
+.tlcb-layout{display:grid;grid-template-columns:1fr 300px;gap:32px;align-items:start;
+  max-width:var(--tlcb-wrap,none);margin:0 auto;padding:0 var(--tlcb-pad);}
+.tlcb-layout-main{min-width:0;display:flex;flex-direction:column;}
+.tlcb-side{position:sticky;top:16px;display:flex;flex-direction:column;gap:14px;}
+.tlcb-side-card{border:1px solid #DDE3ED;border-radius:11px;background:#FBF8F3;padding:18px;
+  display:flex;flex-direction:column;gap:10px;}
+.tlcb-side-h{font:700 11px/1.4 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;
+  color:#8A8898;margin:0;}
+.tlcb-side .tlcb-svc{padding:10px 12px;}
+.tlcb-side .tlcb-svc-t{font-size:18px;}
+.tlcb-side-lines{display:flex;flex-direction:column;gap:5px;font-size:13.5px;color:#4A4860;line-height:1.5;}
+.tlcb-side-lines a{color:#2E7EA6;}
+.tlcb-kids{max-width:var(--tlcb-wrap,none);margin:0 auto;padding:8px var(--tlcb-pad) 32px;
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;}
+.tlcb-kid{display:flex;flex-direction:column;gap:5px;padding:16px 18px;border:1px solid #DDE3ED;
+  border-radius:11px;background:#FBF8F3;text-decoration:none;}
+.tlcb-kid-t{font-family:Lora,Georgia,serif;font-weight:700;font-size:17px;color:#1E2D4A;line-height:1.25;}
+.tlcb-kid-d{font-size:13px;color:#6A6858;line-height:1.5;}
 @media(max-width:640px){
 PHONE_RULES_PLACEHOLDER
   .tlcb-hide-phone{display:none!important;}
@@ -572,8 +726,18 @@ function phoneRules(p) {
     `${p}.tlcb-cards{grid-template-columns:1fr!important;}`,
     `${p}.tlcb-gallery{grid-template-columns:1fr 1fr!important;}`,
     `${p}.tlcb-logos{grid-template-columns:1fr 1fr!important;}`,
+    `${p}.tlcb-tiles{grid-template-columns:1fr 1fr!important;}`,
+    `${p}.tlcb-svcs{grid-template-columns:1fr!important;}`,
+    `${p}.tlcb-people{grid-template-columns:1fr 1fr!important;}`,
+    `${p}.tlcb-sermon{grid-template-columns:1fr!important;}`,
+    `${p}.tlcb-sermon-play{order:0!important;}`,
+    `${p}.tlcb-slide{padding:40px 22px!important;min-height:0!important;}`,
+    `${p}.tlcb-slide-title{font-size:calc(var(--tlcb-hero,38px) * .74)!important;}`,
     `${p}.tlcb-time{grid-template-columns:1fr!important;gap:2px;}`,
     `${p}.tlcb-hero-title{font-size:calc(var(--tlcb-hero,38px) * .74)!important;}`,
+    `${p}.tlcb-layout{grid-template-columns:1fr!important;}`,
+    `${p}.tlcb-side{position:static!important;}`,
+    `${p}.tlcb-kids{grid-template-columns:1fr!important;}`,
   ].join('\n  ');
 }
 
@@ -635,7 +799,7 @@ function wrapperVars(b) {
     '--tlcb-space-above:' + b.spaceAbove + 'px',
     '--tlcb-space-below:' + b.spaceBelow + 'px',
   ];
-  if (b.type === 'textphoto') v.push('--tlcb-cols:' + cols);
+  if (b.type === 'textphoto' || b.type === 'map' || b.type === 'sermon') v.push('--tlcb-cols:' + cols);
   if (b.type === 'columns') v.push('--tlcb-cols:repeat(' + b.cols + ',1fr)');
   if (b.type === 'hero' && b.photo) {
     v.push("--tlcb-hero-img:url('" + cssUrl(b.photo) + "')");
@@ -693,6 +857,131 @@ function renderStamp(opts, b) {
 function renderInner(b, opts) {
   const def = BLOCK_DEFS[b.type];
   const t = b.type;
+  const data = opts.data || {};
+
+
+  // ── Self-filling blocks ───────────────────────────────────────────────────
+  // These read from ctx.data, never from the block. In the editor they show
+  // real data too, so what staff arrange is what visitors get; when there is
+  // nothing to show they say so plainly rather than rendering empty furniture.
+
+  if (t === 'alert') {
+    const href = safeUrl(b.url);
+    const link = href && !opts.editing
+      ? `<a class="tlcb-alert-link" href="${esc(href)}">Details</a>`
+      : (opts.editing && href ? `<span class="tlcb-alert-link">Details</span>` : '');
+    return `<div class="tlcb-alert"><span class="tlcb-alert-tag">Notice</span>
+      ${field(opts, b, 'body', 'span', 'tlcb-alert-body', esc(b.body || ''), ' data-ph="One line everyone needs to read"')}
+      ${link}</div>`;
+  }
+
+  if (t === 'slideshow') {
+    const slides = (b.items || []).filter((i) => i.url);
+    const bg = b.photo || (slides[0] && slides[0].url) || '';
+    const pick = opts.editing ? `<button type="button" class="tlcb-pick" data-act="gallery">Manage slides</button>` : '';
+    const dots = slides.length > 1
+      ? `<div class="tlcb-dots">${slides.map((_, i) => `<span${i ? '' : ' class="on"'}></span>`).join('')}</div>` : '';
+    const btns = (b.links || []).map((l, i) => {
+      const cls = 'tlcb-btn' + (i > 0 ? ' tlcb-btn--ghost-light' : '');
+      const href = safeUrl(l.url);
+      return href && !opts.editing
+        ? `<a class="${cls}" href="${esc(href)}">${esc(l.title || '')}</a>`
+        : `<span class="${cls}">${esc(l.title || '')}</span>`;
+    }).join('');
+    return `<div class="tlcb-slide"${bg ? ` style="--tlcb-slide-img:url('${cssUrl(bg)}')"` : ''}>${pick}
+      ${field(opts, b, 'title', 'h1', 'tlcb-slide-title', esc(b.title || ''), ' data-ph="A line that says who you are"')}
+      ${field(opts, b, 'subtitle', 'p', 'tlcb-slide-sub', esc(b.subtitle || ''), ' data-ph="A sentence underneath it"')}
+      <div class="tlcb-btns">${btns}</div>${dots}</div>`;
+  }
+
+  if (t === 'quicklinks') {
+    const tiles = (b.items || []).map((it, i) => {
+      const inner = `<span class="tlcb-tile-i">${esc(it.meta || '◆')}</span>
+        ${itemField(opts, i, 'title', 'span', 'tlcb-tile-t', esc(it.title || ''), ' data-ph="Label"')}`;
+      const href = safeUrl(it.url);
+      return href && !opts.editing
+        ? `<a class="tlcb-tile" href="${esc(href)}">${inner}</a>`
+        : `<span class="tlcb-tile">${inner}</span>`;
+    }).join('');
+    return `<div class="tlcb-stack">${renderHead(opts, b)}<div class="tlcb-tiles">${tiles}</div></div>`;
+  }
+
+  if (t === 'servicetimes') {
+    const rows = (data.services || []).map((r) => `<div class="tlcb-svc">
+        <span class="tlcb-svc-d">${esc(r.day || '')}</span>
+        <span class="tlcb-svc-t">${esc(r.time || '')}</span>
+        <span class="tlcb-svc-n">${esc(r.note || '')}</span>
+      </div>`).join('');
+    return `<div class="tlcb-stack">${renderHead(opts, b)}
+      ${rows ? `<div class="tlcb-svcs">${rows}</div>` : `<p class="tlcb-note">Service times have not been filled in yet — add them under Church details in the admin.</p>`}</div>`;
+  }
+
+  if (t === 'sermon') {
+    const sm = data.sermon;
+    if (!sm) {
+      return `<div class="tlcb-stack">${renderHead(opts, b)}<p class="tlcb-note">Nothing in the sermon library yet.</p></div>`;
+    }
+    // Two states, chosen from the data rather than from a setting the editor
+    // has to remember: with a recording it gets a play card, without one it is
+    // a text card. The sermon library has no recordings attached today, so the
+    // text card is what staff will see — and the block upgrades itself the day
+    // a video or audio URL is filled in, with nobody editing a page.
+    const id = ytId(sm.youtube_url);
+    const play = safeUrl(sm.youtube_url) || safeUrl(sm.audio_url);
+    const thumb = id ? `https://img.youtube.com/vi/${esc(id)}/mqdefault.jpg` : '';
+    const media = play
+      ? `<a class="tlcb-sermon-play${thumb ? '' : ' tlcb-sermon-play--audio'}" href="${esc(play)}"${opts.editing ? ' onclick="return false"' : ' target="_blank" rel="noopener noreferrer"'}
+           ${thumb ? `style="background-image:url('${cssUrl(thumb)}')"` : ''}><span>${id ? '▶' : '♪'}</span></a>`
+      : '';
+    return `<div class="tlcb-stack">${renderHead(opts, b)}
+      <div class="tlcb-sermon${play ? '' : ' tlcb-sermon--text'}">
+        ${media}
+        <div class="tlcb-sermon-b">
+          ${sm.series ? `<span class="tlcb-eyebrow">${esc(sm.series)}</span>` : ''}
+          <span class="tlcb-sermon-t">${esc(sm.title || '')}</span>
+          <span class="tlcb-sermon-m">${esc([sm.date, sm.scripture].filter(Boolean).join(' · '))}</span>
+          ${opts.editing ? '<span class="tlcb-note">All sermons →</span>' : '<a class="tlcb-sermon-all" href="/sermons">All sermons →</a>'}
+        </div>
+      </div></div>`;
+  }
+
+  if (t === 'news') {
+    const rows = (data.news || []).slice(0, b.count).map((n) => `<div class="tlcb-news">
+        <span class="tlcb-news-d">${esc(n.date || '')}</span>
+        <span class="tlcb-news-t">${esc(n.title || '')}</span>
+      </div>`).join('');
+    return `<div class="tlcb-stack">${renderHead(opts, b)}
+      ${rows ? `<div class="tlcb-rows">${rows}</div>` : `<p class="tlcb-note">No posts yet.</p>`}</div>`;
+  }
+
+  if (t === 'staff') {
+    const people = (data.staff || []).slice(0, b.count).map((m) => `<div class="tlcb-person">
+        <span class="tlcb-person-p"${m.photo_url ? ` style="background-image:url('${cssUrl(m.photo_url)}')"` : ''}></span>
+        <span class="tlcb-person-n">${esc(m.name || '')}</span>
+        <span class="tlcb-person-r">${esc(m.title || '')}</span>
+      </div>`).join('');
+    return `<div class="tlcb-stack">${renderHead(opts, b)}
+      ${people ? `<div class="tlcb-people">${people}</div>` : `<p class="tlcb-note">The staff directory is empty.</p>`}</div>`;
+  }
+
+  if (t === 'map') {
+    const st = data.settings || {};
+    const addr = [st.address_line, st.address_city].filter(Boolean).join(', ');
+    const q = encodeURIComponent(addr || 'Timothy Lutheran Church St. Louis');
+    const frame = opts.editing
+      ? `<span class="tlcb-map-ph">Map</span>`
+      : `<iframe class="tlcb-map-f" src="https://www.google.com/maps?q=${q}&output=embed" title="Map" loading="lazy"></iframe>`;
+    return `<div class="tlcb-grid">
+      <div class="tlcb-media tlcb-map">${frame}</div>
+      <div class="tlcb-stack" style="gap:9px">${renderHead(opts, b)}${renderBody(opts, b, def)}
+        <div class="tlcb-addr">
+          ${addr ? `<span>${esc(addr)}</span>` : ''}
+          ${st.phone ? `<span>${esc(st.phone)}</span>` : ''}
+          ${st.email ? `<span>${esc(st.email)}</span>` : ''}
+          ${addr || st.phone || st.email ? '' : '<span class="tlcb-note">Add the church address under Church details in the admin.</span>'}
+        </div>
+      </div></div>`;
+  }
 
   if (t === 'hero') {
     const change = opts.editing
@@ -894,13 +1183,88 @@ export function renderBlock(b, opts = {}) {
   return `<div class="${classes.join(' ')}" style="${wrapperVars(b)}"${attrs}>${tools}${renderStamp(opts, b)}${renderInner(b, opts)}</div>`;
 }
 
+// The sidebar template's right-hand column. Reads the one site-settings record,
+// never the page — staff fix the phone number once and every sidebar updates.
+function sidebarAside(ctx) {
+  const data = ctx.data || {};
+  const st = data.settings || {};
+  const services = data.services || [];
+  const times = services.length ? `<div class="tlcb-side-card"><h2 class="tlcb-side-h">Service times</h2>
+      ${services.map((r) => `<div class="tlcb-svc">
+        <span class="tlcb-svc-d">${esc(r.day || '')}</span>
+        <span class="tlcb-svc-t">${esc(r.time || '')}</span>
+        <span class="tlcb-svc-n">${esc(r.note || '')}</span>
+      </div>`).join('')}</div>` : '';
+  const addr = [st.address_line, st.address_city].filter(Boolean).join(', ');
+  const tel = safeUrl(st.phone ? 'tel:' + String(st.phone).replace(/[^0-9+]/g, '') : '');
+  const mail = safeUrl(st.email ? 'mailto:' + st.email : '');
+  const lines = [
+    addr ? `<span>${esc(addr)}</span>` : '',
+    st.phone ? (ctx.editing || !tel ? `<span>${esc(st.phone)}</span>` : `<a href="${esc(tel)}">${esc(st.phone)}</a>`) : '',
+    st.email ? (ctx.editing || !mail ? `<span>${esc(st.email)}</span>` : `<a href="${esc(mail)}">${esc(st.email)}</a>`) : '',
+  ].filter(Boolean).join('');
+  const contact = lines ? `<div class="tlcb-side-card"><h2 class="tlcb-side-h">Visit us</h2>
+      <div class="tlcb-side-lines">${lines}</div></div>` : '';
+  if (times || contact) return `<aside class="tlcb-side">${times}${contact}</aside>`;
+  // Empty in the editor is a question, so answer it there; on the live page an
+  // unfilled sidebar is just nothing.
+  return ctx.editing ? `<aside class="tlcb-side"><div class="tlcb-side-card">
+      <p class="tlcb-note">Service times and contact details appear here. Fill them in under Church details in the admin.</p>
+    </div></aside>` : '<aside class="tlcb-side"></aside>';
+}
+
+// The section template's automatic child list. Never stored on the page — it is
+// derived from which pages sit beneath this one, so it cannot go stale.
+function childList(ctx) {
+  const kids = ctx.children || [];
+  if (!kids.length) {
+    return ctx.editing ? `<div class="tlcb-kids"><p class="tlcb-note">Pages you file beneath this one are listed here automatically.</p></div>` : '';
+  }
+  return `<div class="tlcb-kids">${kids.map((k) => {
+    const href = safeUrl(k.slug || '');
+    const body = `<span class="tlcb-kid-t">${esc(k.title || '')}</span>` +
+      (k.seo_description ? `<span class="tlcb-kid-d">${esc(k.seo_description)}</span>` : '');
+    return ctx.editing || !href ? `<span class="tlcb-kid">${body}</span>` : `<a class="tlcb-kid" href="${esc(href)}">${body}</a>`;
+  }).join('')}</div>`;
+}
+
+// wrapTemplate(template, inner, ctx) — the four page layouts.
+//
+// `inner` may be the joined block HTML or the per-block array; passing the array
+// lets `sidebar` lift a leading banner out above the two columns, which is what
+// "banner, then blocks" means on every template but `home`.
+export function wrapTemplate(template, inner, ctx = {}) {
+  const key = templateOf(template).key;
+  const parts = Array.isArray(inner) ? inner.slice() : [String(inner || '')];
+  const list = Array.isArray(ctx.blocks) ? ctx.blocks : [];
+  // One signal decides full-bleed, everywhere: the page opens with a banner.
+  // `home` is always full-bleed because it has no other shape.
+  const banners = new Set(['hero', 'slideshow']);
+  const leads = !!(list[0] && banners.has(list[0].type)) ||
+    (!list.length && Array.isArray(inner) && /^<div class="tlcb tlcb--(hero|slideshow)\b/.test(parts[0] || ''));
+  const full = key === 'home' || leads;
+  const cls = 'tlcb-page tlcb-page--' + key + (full ? ' tlcb-page--full' : '');
+  const tail = (ctx.empty || '') + (key === 'section' ? childList(ctx) : '');
+
+  if (key === 'sidebar') {
+    const banner = leads && Array.isArray(inner) ? parts.shift() : '';
+    return `<div class="${cls}">${banner}<div class="tlcb-layout">` +
+      `<div class="tlcb-layout-main">${parts.join('')}</div>${sidebarAside(ctx)}</div>${tail}</div>`;
+  }
+  return `<div class="${cls}">${parts.join('')}${tail}</div>`;
+}
+
 export function renderPage(blocks, opts = {}) {
   const list = Array.isArray(blocks) ? blocks : [];
   const total = list.length;
-  const body = list.map((b, i) => renderBlock(b, Object.assign({}, opts, { index: i, total }))).join('');
+  const parts = list.map((b, i) => renderBlock(b, Object.assign({}, opts, { index: i, total })));
   const empty = !total && opts.editing
     ? `<div class="tlcb-empty"><b>This page is empty</b><span>Drag a block up from the panel below to begin.</span></div>`
     : '';
   const css = opts.withCss === false ? '' : BLOCK_CSS;
-  return css + `<div class="tlcb-page">` + body + empty + `</div>`;
+  // No template named means a ministry page, which has always been a bare
+  // column with the full-bleed class applied by the caller. Left exactly as it
+  // was so converting ministry pages to `pages` rows can happen on its own.
+  if (!opts.template) return css + `<div class="tlcb-page">` + parts.join('') + empty + `</div>`;
+  return css + wrapTemplate(opts.template, parts, Object.assign({}, opts, { blocks: list, empty }));
 }
