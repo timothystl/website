@@ -4,7 +4,7 @@
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, hasPermission } from './auth.js';
 
-export const VERSION = 'v2.1.0'; // minor bump: spam screening on the public forms, with the Filtered Mail review queue
+export const VERSION = 'v2.1.1'; // minor bump: spam screening on the public forms, with the Filtered Mail review queue
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
