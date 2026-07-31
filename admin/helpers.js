@@ -4,7 +4,7 @@
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, hasPermission } from './auth.js';
 
-export const VERSION = 'v2.0.1'; // major bump: the site editor — every page is editable, with a new permission model
+export const VERSION = 'v2.1.0'; // minor bump: spam screening on the public forms, with the Filtered Mail review queue
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
@@ -227,6 +227,7 @@ export function sidebarShell(activeTab, user, extraLinks = '', pendingCount = 0)
     hp('staff_edit')      ? navItem('/staff', 'Staff', activeTab === 'staff') : '',
     hp('gym_manage')      ? navItem('/gym-rentals', 'Gym Rentals', activeTab === 'gym') : '',
     hp('users_manage')    ? navItem('/users', 'Users', activeTab === 'users') : '',
+    hp('settings_manage') ? navItem('/filtered', 'Filtered Mail', activeTab === 'filtered') : '',
     hp('settings_manage') ? navItem('/subscribers', 'Subscribers', activeTab === 'subscribers') : '',
     hp('settings_manage') ? navItem('/settings', 'Redirects', activeTab === 'settings') : '',
     hp('giving_manage')   ? navItem('/giving', 'Giving', activeTab === 'giving') : '',
