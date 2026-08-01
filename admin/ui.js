@@ -29,29 +29,42 @@ export function esc(s) {
 // The exact tokens from the design handoff §6. Everything in the admin reads
 // these; no route should ever write a raw hex value.
 export const PALETTE = {
-  sidebarNavy: '#12243D',
+  sidebarNavy: '#1D3557',   // sidebar background — sidebar only, never a page
+  navyRaised: '#27496E',    // the active nav row
   navy: '#1D3557',
-  navyInk: '#1E2D4A',
-  gold: '#C9973A',
+  navyInk: '#1E2D4A',       // h1, primary button fill, toast fill
+  gold: '#C9973A',          // ADMIN mark, sign out, eyebrow labels. Never a large fill
+  goldLabel: '#D9A445',     // sidebar group labels
+  goldBright: '#E0A82E',    // the active nav dot
   goldInk: '#1B1608',
-  cream: '#F5E4C0',
-  parchment: '#FAF7F1',
-  sand: '#F4EFE5',
-  edge: '#E7DFD1',
-  divider: '#EFE7D9',
-  muted: '#8A8271',
-  body: '#4A4860',
-  blue: '#2E7EA6',
+  cream: '#F5E4C0',         // text on navy buttons
+  parchment: '#FAF7F1',     // the whole right-hand area
+  card: '#FFFDF9',          // cards, table body, drawer — one step brighter
+  sand: '#F4EFE5',          // table header, read-only fields
+  edge: '#E7DFD1',          // the default 1px border everywhere
+  divider: '#EFE7D9',       // row dividers, segmented track
+  rowHover: '#F7F2E9',
+  ink: '#1A1A2A',           // body text
+  muted: '#8A8271',         // column headers, counts, filenames
+  secondary: '#6A6858',     // purpose lines, cell subtext
+  body: '#4A4860',          // field labels, row text
+  blue: '#2E7EA6',          // links, checkboxes, selected outline
+  navLabel: '#C6D0DC',      // nav label, resting, on navy
+  navDot: '#5A7191',        // nav dot, resting, on navy
 };
 
 // Five tones, and only five. Green = good or live, amber = needs attention,
 // red = broken, grey = deliberately off, blue-grey = automatic (something the
 // system did, which a volunteer should not feel responsible for).
+// Four of these are the spec's own Good / Waiting / Problem / Neutral. `auto`
+// is a fifth, for something the system did on its own (a rename 301, a lapsed
+// hold) — a volunteer should not read those as work waiting for them, and the
+// spec has no tone that says "not your doing".
 export const TONES = {
-  good:  { bg: '#EAF1E5', fg: '#3B4C2E', bd: '#C9DCBD' },
-  warn:  { bg: '#FBF1DC', fg: '#7A5B18', bd: '#EBD5A6' },
-  bad:   { bg: '#FAEFEF', fg: '#8A4A4A', bd: '#E4C8C8' },
-  plain: { bg: '#EFEFEF', fg: '#6A6858', bd: '#DDD9D0' },
+  good:  { bg: '#EDF0E4', fg: '#3F5424', bd: '#D3DCC2' },
+  warn:  { bg: '#FAF0DC', fg: '#7A5B18', bd: '#EBD5A6' },
+  bad:   { bg: '#F7E4DE', fg: '#8C3A28', bd: '#E4C8C8' },
+  plain: { bg: '#EFE7D9', fg: '#6A6858', bd: '#E0DACE' },
   auto:  { bg: '#EDF2F6', fg: '#3E5C76', bd: '#CFDCE6' },
 };
 
@@ -175,8 +188,11 @@ export function renderListSection(cfg) {
   // plain filters — that is how the design separates "which kind of thing" from
   // "which value it carries". They are additive: picking a value narrows
   // whatever the row above already selected.
+  // A value chip keeps its own colours in BOTH states — selected only adds the
+  // 2px solid border. Recolouring it on selection would read as a different
+  // value rather than the same one, chosen.
   const chipsHtml = (cfg.chipFilters || []).map((c) =>
-    `<button type="button" class="tlc-chipfilter" data-value="${esc(c.value)}" style="background:${esc(c.tint)};color:${esc(c.ink)};">${esc(c.label)}</button>`
+    `<button type="button" class="tlc-chipfilter" data-value="${esc(c.value)}" style="background:${esc(c.tint)};color:${esc(c.ink)};--tlc-chip-solid:${esc(c.solid || c.ink)};">${esc(c.label)}</button>`
   ).join('');
 
   return `<section class="tlc-section" id="sec-${esc(key)}" data-noun="${esc(noun)}" data-noun-plural="${esc(plural)}">
@@ -207,7 +223,10 @@ export function renderListSection(cfg) {
   <div class="tlc-table">
     <div class="tlc-thead" style="grid-template-columns:${grid};">${head}</div>
     <div class="tlc-tbody">${rowsHtml}</div>
-    <div class="tlc-empty" hidden>${esc(empty)}</div>
+    <div class="tlc-empty" hidden>
+      <span class="tlc-empty-title" data-empty="${esc(empty)}">${esc(empty)}</span>
+      <span class="tlc-empty-help" data-empty="Use the button above to add the first one.">Use the button above to add the first one.</span>
+    </div>
   </div>
   ${note ? `<p class="tlc-note"><span class="tlc-note-mark">◆</span><span>${esc(note)}</span></p>` : ''}
 </section>`;
@@ -216,6 +235,18 @@ export function renderListSection(cfg) {
 // One script for every list section on the page. Included once by
 // sidebarShell(); it discovers sections rather than being wired per section, so
 // a new section needs no script of its own.
+// The state word beside a drawer toggle follows the switch. Rendering it once
+// server-side and leaving it stale would be worse than not having it — it
+// would confidently say "Showing" about something now hidden.
+export const TOGGLE_WORD_JS = `(function(){
+  document.addEventListener('change', function(e){
+    var box = e.target;
+    if (!box.matches || !box.matches('.tlc-toggle input[type=checkbox]')) return;
+    var word = box.closest('.tlc-toggle') && box.closest('.tlc-toggle').querySelector('.tlc-toggle-state');
+    if (word) word.textContent = box.checked ? word.dataset.on : word.dataset.off;
+  });
+})();`;
+
 export const LIST_SECTION_JS = `(function(){
 function wire(sec){
   var body=sec.querySelector('.tlc-tbody'); if(!body) return;
@@ -232,7 +263,8 @@ function wire(sec){
     return (' '+(r.getAttribute('data-filter')||'')+' ').indexOf(' '+active+' ')>-1;
   }
   function apply(){
-    var q=(input&&input.value||'').trim().toLowerCase();
+    var raw=(input&&input.value||'').trim();
+    var q=raw.toLowerCase();
     var shown=0,reachable=0;
     rows.forEach(function(r){
       var inFilter=matchesFilter(r)&&(!chip||(' '+(r.getAttribute('data-filter')||'')+' ').indexOf(' '+chip+' ')>-1);
@@ -240,7 +272,22 @@ function wire(sec){
       var hit=inFilter&&(!q||(r.getAttribute('data-search')||'').indexOf(q)>-1);
       r.hidden=!hit; if(hit) shown++;
     });
-    if(empty) empty.hidden=shown!==0;
+    // Two different empty states, because they need two different actions:
+    // a search that matches nothing wants the words changed, an empty section
+    // wants the first row added.
+    if(empty){
+      empty.hidden=shown!==0;
+      var et=empty.querySelector('.tlc-empty-title'), eh=empty.querySelector('.tlc-empty-help');
+      if(et&&eh){
+        if(q){
+          et.textContent='Nothing matches \u201C'+raw+'\u201D';
+          eh.textContent='Try fewer words, or clear the filters.';
+        }else{
+          et.textContent=et.getAttribute('data-empty');
+          eh.textContent=eh.getAttribute('data-empty');
+        }
+      }
+    }
     if(count) count.textContent=shown===reachable
       ? (reachable+' '+(reachable===1?noun:plural)+' shown')
       : (shown+' of '+reachable+' shown');
@@ -349,14 +396,31 @@ function renderField(f) {
       // A hidden 0 ahead of the checkbox so an unchecked box posts a value.
       // Without it "off" is indistinguishable from "field not on the form",
       // and a partial form silently clears flags it never showed.
+      //
+      // The STATE WORD beside the switch is not optional (Foundations spec):
+      // a switch on its own says only "there is a setting here", and which way
+      // is on is a convention nobody has agreed to. `on`/`off` name the two
+      // states in the section's own language — Showing/Hidden, Live/Off.
       return `<div class="tlc-field tlc-field-toggle">
         <input type="hidden" name="${esc(f.name)}" value="0">
         <label class="tlc-toggle">
           <input type="checkbox" id="${id}" name="${esc(f.name)}" value="1"${f.value ? ' checked' : ''}>
           <span class="tlc-toggle-track"><span class="tlc-toggle-knob"></span></span>
           <span class="tlc-toggle-label">${esc(f.label || '')}</span>
+          <span class="tlc-toggle-state" data-on="${esc(f.on || 'Showing')}" data-off="${esc(f.off || 'Hidden')}">${esc(f.value ? (f.on || 'Showing') : (f.off || 'Hidden'))}</span>
         </label>${hint}
       </div>`;
+
+    // Four options or fewer is a row of chips, not a select. A select hides
+    // three of the four choices behind a click and gives no sense of how many
+    // there are; chips show the whole decision at once.
+    case 'chips':
+      return `<div class="tlc-field">${label}<div class="tlc-chips" role="radiogroup"${f.label ? ` aria-label="${esc(f.label)}"` : ''}>${
+        (f.options || []).map((o, i) => `<label class="tlc-chip">
+          <input type="radio" name="${esc(f.name)}" value="${esc(o.value)}"${String(o.value) === String(f.value) || (f.value == null && i === 0) ? ' checked' : ''}>
+          <span>${esc(o.label)}</span>
+        </label>`).join('')
+      }</div>${hint}</div>`;
 
     case 'choice':
       return `<div class="tlc-field">${label}<select id="${id}" name="${esc(f.name)}">${
@@ -446,11 +510,14 @@ export function panel(titleText, bodyHtml, { right = '', pad = true, id = '' } =
 // at a time.
 export const ADMIN_UI_CSS = `
 :root{
-  --tlc-sidebar:${PALETTE.sidebarNavy};--tlc-navy:${PALETTE.navy};--tlc-ink:${PALETTE.navyInk};
-  --tlc-gold:${PALETTE.gold};--tlc-gold-ink:${PALETTE.goldInk};--tlc-cream:${PALETTE.cream};
-  --tlc-parchment:${PALETTE.parchment};--tlc-sand:${PALETTE.sand};--tlc-edge:${PALETTE.edge};
-  --tlc-divider:${PALETTE.divider};--tlc-muted:${PALETTE.muted};--tlc-body:${PALETTE.body};
-  --tlc-blue:${PALETTE.blue};
+  --tlc-sidebar:${PALETTE.sidebarNavy};--tlc-nav-raised:${PALETTE.navyRaised};
+  --tlc-navy:${PALETTE.navy};--tlc-ink:${PALETTE.navyInk};--tlc-text:${PALETTE.ink};
+  --tlc-gold:${PALETTE.gold};--tlc-gold-label:${PALETTE.goldLabel};--tlc-gold-bright:${PALETTE.goldBright};
+  --tlc-gold-ink:${PALETTE.goldInk};--tlc-cream:${PALETTE.cream};
+  --tlc-parchment:${PALETTE.parchment};--tlc-card:${PALETTE.card};--tlc-sand:${PALETTE.sand};
+  --tlc-edge:${PALETTE.edge};--tlc-divider:${PALETTE.divider};--tlc-row-hover:${PALETTE.rowHover};
+  --tlc-muted:${PALETTE.muted};--tlc-secondary:${PALETTE.secondary};--tlc-body:${PALETTE.body};
+  --tlc-blue:${PALETTE.blue};--tlc-nav-label:${PALETTE.navLabel};--tlc-nav-dot:${PALETTE.navDot};
   --tlc-serif:'Lora',Georgia,'Times New Roman',serif;
   --tlc-sans:'Source Sans 3',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
 }
@@ -459,22 +526,23 @@ export const ADMIN_UI_CSS = `
 .tlc-section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:18px;}
 .tlc-section-headings{min-width:0;}
 .tlc-title{font:500 25px/1.2 var(--tlc-serif);color:var(--tlc-navy);margin:0;}
-.tlc-purpose{margin:6px 0 0;font-size:13.5px;line-height:1.6;color:var(--tlc-body);max-width:62em;text-wrap:pretty;}
-.tlc-action{flex:none;display:inline-flex;align-items:center;background:var(--tlc-navy);color:#fff;font:600 13px var(--tlc-sans);padding:10px 18px;border-radius:8px;text-decoration:none;border:0;cursor:pointer;}
+.tlc-purpose{margin:6px 0 0;font-size:13.5px;line-height:1.5;color:var(--tlc-secondary);max-width:56em;text-wrap:pretty;}
+.tlc-action{flex:none;display:inline-flex;align-items:center;background:var(--tlc-ink);color:var(--tlc-cream);font:600 13.5px var(--tlc-sans);padding:10px 17px;border-radius:8px;text-decoration:none;border:0;cursor:pointer;}
+.tlc-action:hover{background:#2A3E62;}
 .tlc-action:hover{background:#16273F;}
 .tlc-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
 .tlc-search{flex:1;min-width:200px;max-width:340px;display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--tlc-edge);border-radius:8px;padding:0 12px;}
 .tlc-search-icon{color:var(--tlc-muted);font-size:14px;}
 .tlc-search input{flex:1;border:0;outline:0;background:transparent;padding:9px 0;font:400 13.5px var(--tlc-sans);color:var(--tlc-ink);width:100%;}
 .tlc-filters{display:flex;gap:7px;flex-wrap:wrap;}
-.tlc-filter{font:600 12.5px var(--tlc-sans);color:var(--tlc-body);background:#fff;border:1px solid var(--tlc-edge);border-radius:999px;padding:8px 15px;cursor:pointer;}
+.tlc-filter{font:600 11.5px var(--tlc-sans);color:var(--tlc-body);background:var(--tlc-parchment);border:1px solid var(--tlc-edge);border-radius:8px;padding:7px 12px;cursor:pointer;}
 .tlc-filter:hover{border-color:var(--tlc-blue);}
-.tlc-filter.is-on{background:#E7EFF5;border-color:var(--tlc-blue);color:var(--tlc-navy);}
+.tlc-filter.is-on{background:#E7EEF7;border:2px solid var(--tlc-ink);color:var(--tlc-ink);padding:6px 11px;}
 .tlc-count{margin-left:auto;font-size:12.5px;color:var(--tlc-muted);white-space:nowrap;}
 .tlc-bar--chips{margin-top:-6px;}
-.tlc-chipfilter{font:600 12px var(--tlc-sans);border:1px solid transparent;border-radius:999px;padding:7px 14px;cursor:pointer;opacity:.62;}
-.tlc-chipfilter:hover{opacity:.85;}
-.tlc-chipfilter.is-on{opacity:1;box-shadow:inset 0 0 0 1.5px currentColor;}
+.tlc-chipfilter{font:600 11.5px var(--tlc-sans);border:1px solid transparent;border-radius:8px;padding:7px 12px;cursor:pointer;opacity:.72;}
+.tlc-chipfilter:hover{opacity:.9;}
+.tlc-chipfilter.is-on{opacity:1;border:2px solid var(--tlc-chip-solid);padding:6px 11px;}
 /* ── Row overflow menu ── */
 .tlc-more{position:relative;display:inline-flex;}
 .tlc-more-btn{background:none;border:0;cursor:pointer;color:var(--tlc-muted);font-size:15px;line-height:1;padding:4px 6px;border-radius:6px;}
@@ -490,7 +558,7 @@ export const ADMIN_UI_CSS = `
 .tlc-switch-knob{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .15s;}
 .tlc-switch.is-on .tlc-switch-knob{transform:translateX(16px);}
 .tlc-switch:focus-visible{outline:2px solid var(--tlc-blue);outline-offset:2px;}
-.tlc-table{border:1px solid var(--tlc-edge);border-radius:12px;background:var(--tlc-parchment);overflow:hidden;}
+.tlc-table{border:1px solid var(--tlc-edge);border-radius:12px;background:var(--tlc-card);overflow:hidden;}
 .tlc-thead{display:grid;gap:14px;padding:11px 18px;background:var(--tlc-sand);border-bottom:1px solid var(--tlc-edge);}
 .tlc-th{font:600 10.5px/1 var(--tlc-sans);letter-spacing:.12em;text-transform:uppercase;color:var(--tlc-muted);}
 .tlc-row-wrap{border-bottom:1px solid var(--tlc-divider);}
@@ -500,7 +568,7 @@ export const ADMIN_UI_CSS = `
 .tlc-row-child .tlc-primary::before{content:'└';position:absolute;left:4px;top:2px;color:var(--tlc-muted);font-size:11px;}
 .tlc-row-child .tlc-primary-title{font-weight:500;}
 .tlc-row{display:grid;gap:14px;align-items:center;padding:12px 18px;min-height:56px;cursor:pointer;}
-.tlc-row:hover{background:#fff;}
+.tlc-row:hover{background:var(--tlc-row-hover);}
 .tlc-row-wrap[data-href=""] .tlc-row{cursor:default;}
 .tlc-td{font-size:13px;color:var(--tlc-body);min-width:0;overflow-wrap:anywhere;}
 .tlc-right{text-align:right;justify-self:end;}
@@ -520,7 +588,12 @@ export const ADMIN_UI_CSS = `
 .tlc-warn-mark{flex:none;font-size:10px;}
 .tlc-warn-text{flex:1;text-wrap:pretty;}
 .tlc-warn-cta{flex:none;font-weight:700;color:#7A5B18;text-decoration:underline;}
-.tlc-empty{padding:34px 18px;text-align:center;font-size:13.5px;color:var(--tlc-muted);}
+.tlc-empty{padding:34px 18px;text-align:center;display:flex;flex-direction:column;gap:5px;}
+/* An explicit display wins over the UA's [hidden]{display:none}, so it has to
+   be restated or the empty state never actually hides. */
+.tlc-empty[hidden]{display:none;}
+.tlc-empty-title{font:600 14px var(--tlc-sans);color:var(--tlc-body);}
+.tlc-empty-help{font-size:13px;color:var(--tlc-muted);}
 .tlc-note{display:flex;gap:9px;align-items:baseline;margin:14px 0 0;font-size:13px;line-height:1.65;color:var(--tlc-body);max-width:66em;text-wrap:pretty;}
 .tlc-note-mark{flex:none;color:var(--tlc-gold);font-size:11px;}
 /* ── Giving surfaces ── */
@@ -609,11 +682,11 @@ export const ADMIN_UI_CSS = `
 /* ── Drawer ── */
 .tlc-drawer-scrim{position:fixed;inset:0;background:rgba(18,36,61,.34);z-index:200;display:none;}
 .tlc-drawer-scrim.is-open{display:block;}
-.tlc-drawer{position:fixed;top:0;right:0;width:min(430px,100vw);height:100vh;background:#fff;border-left:1px solid var(--tlc-edge);box-shadow:-8px 0 28px rgba(18,36,61,.16);z-index:201;transform:translateX(100%);transition:transform .18s ease;font-family:var(--tlc-sans);}
+.tlc-drawer{position:fixed;top:0;right:0;width:min(460px,100vw);height:100vh;background:var(--tlc-card);border-left:1px solid var(--tlc-edge);box-shadow:-8px 0 28px rgba(18,36,61,.16);z-index:201;transform:translateX(100%);transition:transform .18s ease;font-family:var(--tlc-sans);}
 .tlc-drawer.is-open{transform:translateX(0);}
 .tlc-drawer-form{display:flex;flex-direction:column;height:100%;}
 .tlc-drawer-head{flex:none;display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:18px 20px 14px;border-bottom:1px solid var(--tlc-edge);}
-.tlc-drawer-title{margin:0;font:500 21px/1.2 var(--tlc-serif);color:var(--tlc-navy);}
+.tlc-drawer-title{margin:0;font:500 18px/1.25 var(--tlc-serif);color:var(--tlc-navy);}
 .tlc-drawer-sub{margin:4px 0 0;font-size:12.5px;color:var(--tlc-muted);}
 .tlc-drawer-close{flex:none;font-size:12.5px;font-weight:600;color:var(--tlc-navy);border:1px solid var(--tlc-edge);border-radius:999px;padding:6px 14px;text-decoration:none;}
 .tlc-drawer-body{flex:1;overflow-y:auto;padding:16px 20px 22px;}
@@ -624,19 +697,32 @@ export const ADMIN_UI_CSS = `
 .tlc-btn-quiet{background:#fff;color:var(--tlc-body);border:1px solid var(--tlc-edge);border-radius:8px;padding:9px 16px;font:600 13px var(--tlc-sans);text-decoration:none;cursor:pointer;}
 .tlc-field{margin-bottom:16px;}
 .tlc-label{display:block;font:600 10.5px/1 var(--tlc-sans);letter-spacing:.12em;text-transform:uppercase;color:var(--tlc-muted);margin-bottom:6px;}
-.tlc-field input[type=text],.tlc-field input[type=email],.tlc-field input[type=url],.tlc-field input[type=number],.tlc-field input[type=date],.tlc-field textarea,.tlc-field select{width:100%;border:1px solid var(--tlc-edge);border-radius:8px;padding:10px 12px;font:400 13.5px var(--tlc-sans);color:var(--tlc-ink);background:#fff;outline:none;}
+.tlc-field input[type=text],.tlc-field input[type=email],.tlc-field input[type=url],.tlc-field input[type=number],.tlc-field input[type=date],.tlc-field textarea,.tlc-field select{width:100%;border:1px solid var(--tlc-edge);border-radius:8px;padding:9px 11px;font:400 13.5px var(--tlc-sans);color:var(--tlc-ink);background:#fff;outline:none;}
+/* Read-only is a filled field, never greyed text — grey text reads as broken,
+   a sand fill reads as "this is a fact, not a question". */
+.tlc-field input[readonly],.tlc-field textarea[readonly]{background:var(--tlc-sand);}
 .tlc-field input:focus,.tlc-field textarea:focus,.tlc-field select:focus{border-color:var(--tlc-blue);box-shadow:0 0 0 3px rgba(46,126,166,.14);}
-.tlc-hint{margin:5px 0 0;font-size:11.5px;line-height:1.5;color:var(--tlc-muted);text-wrap:pretty;}
+.tlc-hint{margin:5px 0 0;font-size:12.5px;line-height:1.5;color:var(--tlc-muted);text-wrap:pretty;}
 .tlc-static{font-size:13.5px;color:var(--tlc-body);}
 .tlc-field-toggle{display:flex;flex-direction:column;gap:4px;}
 .tlc-toggle{display:flex;align-items:center;gap:10px;cursor:pointer;}
 .tlc-toggle input{position:absolute;opacity:0;width:0;height:0;}
-.tlc-toggle-track{flex:none;width:36px;height:20px;border-radius:999px;background:#D9D3C6;position:relative;transition:background .15s;}
-.tlc-toggle-knob{position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .15s;}
-.tlc-toggle input:checked + .tlc-toggle-track{background:var(--tlc-gold);}
-.tlc-toggle input:checked + .tlc-toggle-track .tlc-toggle-knob{transform:translateX(16px);}
+/* 40x22, moss when on — the spec's own numbers. Gold is the accent colour and
+   is never a large fill; on/off is a state, not an accent. */
+.tlc-toggle-track{flex:none;width:40px;height:22px;border-radius:999px;background:var(--tlc-edge);position:relative;transition:background .15s;}
+.tlc-toggle-knob{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#FAF7F1;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:transform .15s;}
+.tlc-toggle input:checked + .tlc-toggle-track{background:#4A5E3A;}
+.tlc-toggle input:checked + .tlc-toggle-track .tlc-toggle-knob{transform:translateX(18px);}
 .tlc-toggle input:focus-visible + .tlc-toggle-track{box-shadow:0 0 0 3px rgba(46,126,166,.3);}
 .tlc-toggle-label{font-size:13.5px;color:var(--tlc-ink);}
+.tlc-toggle-state{font:600 12.5px var(--tlc-sans);color:var(--tlc-secondary);margin-left:auto;}
+/* Choice as chips — the whole decision visible at once. */
+.tlc-chips{display:flex;flex-wrap:wrap;gap:8px;}
+.tlc-chip{position:relative;cursor:pointer;}
+.tlc-chip input{position:absolute;opacity:0;width:0;height:0;}
+.tlc-chip span{display:inline-flex;align-items:center;font:600 12.5px var(--tlc-sans);color:var(--tlc-body);background:var(--tlc-parchment);border:1px solid var(--tlc-edge);border-radius:8px;padding:8px 13px;}
+.tlc-chip input:checked + span{border:2px solid var(--tlc-blue);background:#E7EEF7;color:var(--tlc-ink);padding:7px 12px;}
+.tlc-chip input:focus-visible + span{box-shadow:0 0 0 3px rgba(46,126,166,.25);}
 .tlc-perms{display:flex;flex-direction:column;gap:2px;border:1px solid var(--tlc-edge);border-radius:9px;padding:6px;background:var(--tlc-parchment);}
 .tlc-perm{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:6px;cursor:pointer;}
 .tlc-perm:hover{background:#fff;}
@@ -953,4 +1039,54 @@ export const PANEL_LIST_JS = `(function(){
       save(list);
     });
   });
+})();`;
+
+// ── TOASTS ───────────────────────────────────────────────────
+// The spec's own rule, and the reason this exists rather than another banner:
+// "Toast copy states the consequence, not the event." Not "Saved" but
+// "Saved · written to the audit log"; not "Deleted" but "Deleted · recoverable
+// from the audit log". A volunteer who has just pressed something wants to
+// know what it did, not that it happened.
+//
+// It reads `?msg=` on load, so a normal form POST → redirect → GET raises one
+// with no client state to keep. `toast()` is there for the pages that already
+// act without navigating.
+export const TOAST_CSS = `
+.tlc-toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(8px);z-index:400;
+  background:var(--tlc-ink);color:var(--tlc-cream);font:500 13.5px var(--tlc-sans);
+  padding:11px 20px;border-radius:10px;box-shadow:0 12px 34px rgba(17,30,50,.4);
+  opacity:0;pointer-events:none;transition:opacity .16s ease,transform .16s ease;max-width:min(560px,92vw);text-wrap:pretty;}
+.tlc-toast.is-on{opacity:1;transform:translateX(-50%) translateY(0);}
+@media (prefers-reduced-motion:reduce){.tlc-toast{transition:opacity .16s ease;}}
+`;
+
+export const TOAST_JS = `(function(){
+  var el = null, t = null;
+  window.tlcToast = function(text){
+    if (!text) return;
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'tlc-toast';
+      // polite, not assertive: it is confirmation, not an alarm, and should not
+      // interrupt whatever a screen reader is already saying.
+      el.setAttribute('role', 'status');
+      el.setAttribute('aria-live', 'polite');
+      document.body.appendChild(el);
+    }
+    el.textContent = text;
+    requestAnimationFrame(function(){ el.classList.add('is-on'); });
+    clearTimeout(t);
+    t = setTimeout(function(){ el.classList.remove('is-on'); }, 2200);
+  };
+  // A redirect carrying ?toast= raises one and then takes it out of the address
+  // bar, so a refresh does not replay a message about something already done.
+  try {
+    var u = new URL(window.location.href);
+    var m = u.searchParams.get('toast');
+    if (m) {
+      window.tlcToast(m);
+      u.searchParams.delete('toast');
+      history.replaceState(null, '', u.pathname + (u.search || '') + u.hash);
+    }
+  } catch (_) {}
 })();`;

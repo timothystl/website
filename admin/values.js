@@ -10,37 +10,45 @@
 // news_items, bible_classes and partners, so renaming a display label never
 // touches the database.
 
+// tint / ink / solid are the Foundations spec's own three columns. `solid` is
+// the 2px border a chip takes when it is the selected filter — without it a
+// selected chip has to change its fill, which reads as a different value
+// rather than the same one, chosen.
 export const VALUES = [
   {
     key: 'acceptance',
     short: 'Welcome',
     name: 'Acceptance',
-    ink: '#1D3557',
-    tint: '#E7ECF3',
+    tint: '#EDF0E4',
+    ink: '#3F5424',
+    solid: '#4A5E3A',
     blurb: 'Intentionally welcoming and loving all people as Jesus does.',
   },
   {
     key: 'worship',
     short: 'Receive',
     name: 'Worship',
-    ink: '#3E5C76',
-    tint: '#E9EFF4',
+    tint: '#E7EEF7',
+    ink: '#1E2D4A',
+    solid: '#1E2D4A',
     blurb: "Gathering as God's people, celebrating His grace, receiving His gifts of Word and Sacrament.",
   },
   {
     key: 'education',
     short: 'Grow',
     name: 'Christian Education',
-    ink: '#4A5E3A',
-    tint: '#EAF1E5',
+    tint: '#E4EFEF',
+    ink: '#17565C',
+    solid: '#1F6B72',
     blurb: 'Equipping people for a lifelong journey with Christ.',
   },
   {
     key: 'outreach',
     short: 'Go',
     name: 'Outreach',
-    ink: '#C9973A',
-    tint: '#FBF1DC',
+    tint: '#FAF0DC',
+    ink: '#7A5B18',
+    solid: '#C9973A',
     blurb: "Sharing the love of Jesus with those who don't yet know Him.",
   },
 ];

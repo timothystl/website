@@ -57,7 +57,10 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
 
 /* rail */
 .ed-rail{width:266px;flex:none;border-right:1px solid #DDE3ED;background:#F7F3EC;display:flex;flex-direction:column;min-height:0;}
-.ed-rail-h{padding:15px 16px 9px;font:600 11px/1 'Source Sans 3';letter-spacing:.14em;text-transform:uppercase;color:#8A8898;}
+.ed-rail-h{padding:15px 16px 9px;display:flex;align-items:center;justify-content:space-between;gap:6px;
+  font:600 11px/1 'Source Sans 3';letter-spacing:.14em;text-transform:uppercase;color:#8A8898;}
+.ed-rail-h button{background:none;border:none;cursor:pointer;color:#8A8898;font-size:14px;line-height:1;padding:2px 4px;}
+.ed-rail-h button:hover{color:#1E2D4A;}
 .ed-rail-list{flex:1;overflow-y:auto;padding:0 12px 12px;display:flex;flex-direction:column;gap:5px;}
 .ed-row{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:9px;font-size:13.5px;cursor:pointer;text-align:left;width:100%;
   background:#FBF8F3;border:1px solid #DDE3ED;color:#1E2D4A;}
@@ -277,6 +280,13 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
 .ed-pages--shut .ed-pages-search,.ed-pages--shut .ed-pages-list,
 .ed-pages--shut .ed-pages-f,.ed-pages--shut .ed-pages-h span{display:none;}
 .ed-pages--shut .ed-pages-h{padding:12px 4px;justify-content:center;}
+/* Both left rails fold away to a 26px spine, so the page being edited gets the
+   width. They collapse independently — the outline is the one you want while
+   restructuring, the page list the one you want while moving between pages,
+   and they are rarely both wanted at once. */
+.ed-rail--shut{width:26px;}
+.ed-rail--shut .ed-rail-list,.ed-rail--shut .ed-rail-f,.ed-rail--shut .ed-rail-h span{display:none;}
+.ed-rail--shut .ed-rail-h{padding:12px 4px;justify-content:center;}
 
 @media(max-width:1100px){
   .ed-rail{width:216px;}
@@ -334,7 +344,7 @@ var S = {
   dragId: null, dragType: null, dragSection: null, dropIndex: null,
   picker: null, toast: null, hint: true, loadError: '',
   publishPanel: false, publishAt: null, publishAtLocal: '', revisions: [], sections: [],
-  template: '', siblings: [], railOpen: true, leaving: false, tab: 'block',
+  template: '', siblings: [], railOpen: true, blocksOpen: true, leaving: false, tab: 'block',
   role: 'office', editors: [],
   pageMeta: null, savingPage: false,
 };
@@ -405,8 +415,9 @@ function shellHtml() {
           '<button type="button" id="edPagesNew">+ New page</button>' +
         '</div>' +
       '</aside>' : '') +
-      '<aside class="ed-rail">' +
-        '<div class="ed-rail-h" id="edRailHead">Page blocks</div>' +
+      '<aside class="ed-rail" id="edBlockRail">' +
+        '<div class="ed-rail-h" id="edRailHead"><span>Page blocks</span>' +
+          '<button type="button" id="edRailToggle" aria-expanded="true" aria-label="Hide the block list">\u2039</button></div>' +
         '<div class="ed-rail-list" id="edRail" role="listbox" aria-labelledby="edRailHead" tabindex="-1"></div>' +
         '<div class="ed-rail-f">Drag to reorder · Alt + ↑ ↓ with a row focused</div>' +
       '</aside>' +
@@ -445,6 +456,7 @@ function cacheEls() {
    'edCanvas', 'edPaper', 'edPalTabs', 'edPalChips', 'edPalToggle', 'edInspHead', 'edInspBody',
    'edChanges', 'edChangesHead', 'edModal', 'edToast', 'edMore', 'edPublishPanel',
    'edPages', 'edPagesList', 'edPagesSearch', 'edPagesToggle', 'edPagesNew',
+   'edBlockRail', 'edRailToggle',
    'edTabBlock', 'edTabPage'].forEach(function (id) { el[id] = document.getElementById(id); });
   el.live = document.getElementById('live');
 }
@@ -1484,6 +1496,38 @@ function bindStatic() {
     if (row) select(row.dataset.id);
   });
 
+  // ── THE TWO LEFT RAILS ───────────────────────────────────────
+  // Both fold away to a 26px spine so the page being edited gets the width.
+  // One function drives both, and the choice is remembered — somebody working
+  // on a laptop collapses them once, not on every page they open.
+  //
+  // This sits OUTSIDE the pages-rail guard below on purpose: the block outline
+  // exists on ministry pages too, where there is no page list at all.
+  function setRail(which, open) {
+    var isPages = which === 'pages';
+    var aside = isPages ? el.edPages : el.edBlockRail;
+    var btn = isPages ? el.edPagesToggle : el.edRailToggle;
+    if (!aside || !btn) return;
+    if (isPages) S.railOpen = open; else S.blocksOpen = open;
+    aside.classList.toggle(isPages ? 'ed-pages--shut' : 'ed-rail--shut', !open);
+    btn.textContent = open ? '\u2039' : '\u203A';
+    btn.setAttribute('aria-expanded', String(open));
+    btn.setAttribute('aria-label', (open ? 'Hide the ' : 'Show the ') + (isPages ? 'page list' : 'block list'));
+    try { localStorage.setItem('tlcEdRail' + which, open ? '1' : '0'); } catch (_) {}
+    fitPaper();
+  }
+
+  if (el.edRailToggle) {
+    el.edRailToggle.addEventListener('click', function () { setRail('blocks', !S.blocksOpen); });
+  }
+
+  // Restore what they chose last time. Missing means open, so a first visit
+  // shows everything rather than a page flanked by two mystery spines.
+  try {
+    if (localStorage.getItem('tlcEdRailpages') === '0') setRail('pages', false);
+    if (localStorage.getItem('tlcEdRailblocks') === '0') setRail('blocks', false);
+  } catch (_) {}
+
   // pages rail
   if (el.edPagesList) {
     el.edPagesList.addEventListener('click', function (e) {
@@ -1494,12 +1538,7 @@ function bindStatic() {
     });
     el.edPagesSearch.addEventListener('input', renderPagesRail);
     el.edPagesToggle.addEventListener('click', function () {
-      S.railOpen = !S.railOpen;
-      el.edPages.classList.toggle('ed-pages--shut', !S.railOpen);
-      el.edPagesToggle.textContent = S.railOpen ? '\u2039' : '\u203A';
-      el.edPagesToggle.setAttribute('aria-expanded', String(S.railOpen));
-      el.edPagesToggle.setAttribute('aria-label', S.railOpen ? 'Hide the page list' : 'Show the page list');
-      fitPaper();
+      setRail('pages', !S.railOpen);
     });
     el.edPagesNew.addEventListener('click', async function () {
       await flushDraft();

@@ -3,9 +3,9 @@
 
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
-import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
+import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, TOGGLE_WORD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 
-export const VERSION = 'v3.3.1'; // minor: payroll period approval + email to the bookkeeper, clickable gym calendar
+export const VERSION = 'v3.4.0'; // minor: the Foundations pass — exact spec tokens, toggle words, toasts, two empty states, collapsing editor rails
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
@@ -181,32 +181,36 @@ ${PRESET_CSS}
 ${GYM_CAL_CSS}
 ${PANEL_LIST_CSS}
 ${NEWSLETTER_CSS}
+${TOAST_CSS}
 ${CMDK_CSS}
-/* ── SIDEBAR, REDESIGNED ───────────────────────────────────────
-   Five groups from the design's NAV, the page-producing sections nested under
-   Pages, a gold inset
-   bar plus a gold dot on the active item, and badges that count only things a
-   human still has to do. */
-.sidebar{background:var(--tlc-sidebar);width:246px;font-family:var(--tlc-sans);}
-.sidebar-brand{padding:18px 20px 15px;border-bottom:1px solid rgba(255,255,255,.1);margin-bottom:6px;}
-.sidebar-brand-name{font:600 15px/1.2 var(--tlc-serif);color:#fff;letter-spacing:.01em;}
-.sidebar-brand-sub{font:700 10.5px/1 var(--tlc-sans);color:var(--tlc-gold);letter-spacing:.14em;text-transform:uppercase;margin-top:5px;}
-.sidebar-version{opacity:.55;font-weight:400;text-transform:none;letter-spacing:0;}
-.sidebar-user{padding:0 20px 10px;font-size:12px;color:rgba(255,255,255,.5);}
-.sidebar-group{padding:6px 0 10px;}
-.sidebar-group-label{font:700 10px/1 var(--tlc-sans);letter-spacing:.14em;text-transform:uppercase;color:var(--tlc-gold);padding:6px 20px 7px 21px;opacity:.85;}
-.sidebar-item{display:flex;align-items:center;gap:10px;padding:8px 16px 8px 21px;color:rgba(255,255,255,.76);font-size:13px;font-weight:500;text-decoration:none;border-left:3px solid transparent;}
-.sidebar-item:hover{color:#fff;background:rgba(255,255,255,.05);}
+/* ── THE SIDEBAR ───────────────────────────────────────────────
+   Straight from the Foundations spec, down to the numbers: 228px, its own
+   scroll, identical on every screen — only the active row changes. The active
+   row is RAISED (a lighter navy plus a hairline inset), not recoloured with a
+   gold bar; that was mine. */
+.sidebar{background:var(--tlc-sidebar);width:228px;font-family:var(--tlc-sans);}
+.sidebar-brand{padding:16px 18px 14px;border-bottom:1px solid rgba(237,242,247,.12);margin-bottom:0;}
+.sidebar-brand-name{font:600 16px/1.2 var(--tlc-sans);color:#FAF7F1;}
+.sidebar-brand-sub{font:700 11.5px/1 var(--tlc-sans);color:var(--tlc-gold);letter-spacing:.16em;text-transform:uppercase;margin-top:5px;}
+.sidebar-version{font:400 11px/1 var(--tlc-sans);color:#6B7F99;text-transform:none;letter-spacing:0;margin-left:6px;}
+.sidebar-user{padding:10px 18px;font-size:12.5px;color:#8598B0;border-bottom:1px solid rgba(237,242,247,.12);}
+.sidebar-group{padding:8px 0 4px;}
+.sidebar-group-label{font:700 10.5px/1 var(--tlc-sans);letter-spacing:.14em;text-transform:uppercase;color:var(--tlc-gold-label);padding:8px 18px 8px 20px;}
+.sidebar-item{display:flex;align-items:center;gap:11px;margin:1px 8px;padding:9px 12px;border-radius:9px;color:var(--tlc-nav-label);font:500 13.5px/1.35 var(--tlc-sans);text-decoration:none;}
+.sidebar-item:hover{color:#fff;background:rgba(255,255,255,.06);}
 .sidebar-label{flex:1;min-width:0;}
-.sidebar-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.3);flex:none;}
-.sidebar-tick{flex:none;width:6px;font-size:11px;line-height:1;color:rgba(255,255,255,.3);}
-.sidebar-item-child{padding-left:34px;font-size:12.5px;}
-.sidebar-item-active{background:rgba(201,151,58,.15);border-left-color:var(--tlc-gold);color:#fff;font-weight:600;}
-.sidebar-item-active .sidebar-dot,.sidebar-item-active .sidebar-tick{background:var(--tlc-gold);color:var(--tlc-gold);}
-.sidebar-item-active .sidebar-tick{background:none;}
-.sidebar-badge{flex:none;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--tlc-gold);color:var(--tlc-gold-ink);font:700 10.5px/18px var(--tlc-sans);text-align:center;}
-.sidebar-footer{border-top:1px solid rgba(255,255,255,.1);}
-.sidebar-footer a{font-size:12px;color:rgba(255,255,255,.55);}
+.sidebar-dot{flex:none;width:7px;height:7px;border-radius:50%;background:var(--tlc-nav-dot);}
+/* A child row's marker is an elbow, not a circle — it draws the relationship
+   rather than asserting it with indentation alone. */
+.sidebar-tick{flex:none;width:7px;height:7px;border-radius:0 0 0 3px;border-left:1px solid var(--tlc-nav-dot);border-bottom:1px solid var(--tlc-nav-dot);background:transparent;font-size:0;line-height:0;}
+.sidebar-item-child{padding-left:26px;}
+.sidebar-item-active{background:var(--tlc-nav-raised);color:#FFFFFF;font-weight:600;box-shadow:inset 0 0 0 1px rgba(255,255,255,.16);}
+.sidebar-item-active .sidebar-dot{background:var(--tlc-gold-bright);}
+.sidebar-item-active .sidebar-tick{border-color:var(--tlc-gold-bright);}
+.sidebar-badge{flex:none;padding:1px 7px;border-radius:999px;background:rgba(201,151,58,.22);color:#E8C070;font:700 10.5px/1.6 var(--tlc-sans);}
+.sidebar-footer{border-top:1px solid rgba(237,242,247,.12);}
+.sidebar-footer a{font-size:11.5px;color:#8397AF;}
+.sidebar-footer a:last-child{font-size:12.5px;color:var(--tlc-gold);}
 </style>
 </head>
 <body>${body}
@@ -226,6 +230,8 @@ function prepSchedule(form){
 }
 ${LIST_SECTION_JS}
 ${PANEL_LIST_JS}
+${TOGGLE_WORD_JS}
+${TOAST_JS}
 ${CMDK_JS}
 </script>
 </body>

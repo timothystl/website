@@ -923,7 +923,94 @@ questions, so they are two different clicks rather than one ambiguous one. A
 blocked date and a date already past are not links, because they cannot be
 booked and should not pretend otherwise.
 
-#### The handoff's own open questions (§8), as answered#### The handoff's own open questions (§8), as answered
+#### The Foundations pass (v3.4.0, 2026-08-01)
+
+The fourth mockup drop added what the first three had not: `screens/` — one
+reference file per screen — and **`screens/00-foundations.html`**, an exact
+spec for the shell. *"If a screen you are building does not look like its
+reference file, the shell is where to look first."* It was right, and this pass
+is the shell.
+
+**Tokens are the spec's, verbatim**, in `PALETTE` and `TONES` (`admin/ui.js`)
+and `VALUES` (`admin/values.js`). What had drifted:
+
+| | was | now |
+|---|---|---|
+| Sidebar | `#12243D`, a darker navy of mine | `#1D3557` |
+| Active nav row | gold left-bar + tint | **raised** `#27496E` + a hairline inset |
+| Card surfaces | reused the page background | `#FFFDF9`, one step brighter |
+| Status tones | four approximations | Good `#EDF0E4`/`#3F5424` · Waiting `#FAF0DC`/`#7A5B18` · Problem `#F7E4DE`/`#8C3A28` · Neutral `#EFE7D9`/`#6A6858` |
+| The four values | tint/ink invented | the spec's tint / ink / **solid** triples |
+| Filter chips | 999px pills | radius 8, on = 2px `#1E2D4A` on `#E7EEF7` |
+| Primary button | navy with white text | `#1E2D4A` with `#F5E4C0` text |
+
+- **A value chip keeps its own colours in both states** — selected only adds
+  the 2px `solid` border. Recolouring it would read as a *different value*
+  rather than the same one, chosen. That is why `solid` exists as a third
+  colour per value.
+- **A child nav row's marker is an elbow**, not a circle: 7×7 with left and
+  bottom hairlines, radius `0 0 0 3px`. It draws the relationship instead of
+  asserting it with indentation alone.
+- **⚠ A toggle's state word is not optional.** A switch alone says only that a
+  setting exists, and which way is on is a convention nobody agreed to. Every
+  drawer toggle carries `Showing`/`Hidden` (or the section's own pair), and
+  `TOGGLE_WORD_JS` keeps it following the switch — a word rendered once
+  server-side would confidently say "Showing" about something now hidden.
+- **Four options or fewer is chips, not a select** (`kind: 'chips'`). A select
+  hides three of four choices behind a click.
+- **Read-only is a sand fill, never greyed text.** Grey text reads as broken.
+- **Toasts** (`TOAST_CSS` / `TOAST_JS`) — bottom centre, navy on cream, 2.2s.
+  The rule that makes them worth having is the copy: *state the consequence,
+  not the event*. "Saved · written to the audit log", not "Saved". A redirect
+  carrying `?toast=` raises one and then strips it from the address bar, so a
+  refresh does not replay a message about something already done.
+- **Two empty states, not one.** A fruitless search quotes back what was typed
+  and says "Try fewer words, or clear the filters"; an empty section says "Use
+  the button above to add the first one". They call for different actions.
+  ⚠ `.tlc-empty` carries an explicit `display`, which beats the UA's
+  `[hidden]{display:none}` — hiding it has to be restated in CSS or the empty
+  state sits under a full table forever. A browser test caught exactly that.
+
+**Where the spec contradicts itself, the screenshot wins.** Its drawer prose
+says "primary save on the left, destructive delete on the right";
+`drawer-user-permissions.png` shows Delete left, Cancel + Save right. The
+screenshot is what got built.
+
+**Where the spec is followed in outcome but not mechanism**: it says
+"permissions hide whole groups, not individual rows". Taken literally, a
+bookkeeper holding only `payroll_manage` would see Giving and Gym Rentals
+beside Payroll and get 403s from both. Items are hidden individually and a
+group with nothing left in it is not rendered — which produces the outcome the
+spec describes ("a ministry leader sees Website only") without ever showing a
+link somebody cannot open.
+
+#### The editor's rails fold away (2026-08-01)
+
+Andrew: *"i want the 2 sidebars to be able to collapse left so that there is
+more screen space to edit the page we are working on."*
+
+Both left rails collapse to a 26px spine — the pages rail already did, the
+block outline did not. `setRail()` in `admin/ministry-editor.html` drives both,
+and the choice is kept in `localStorage`: somebody on a laptop collapses them
+once, not on every page they open. Absent means open, so a first visit shows
+everything rather than a page flanked by two mystery spines.
+
+They collapse **independently** on purpose — the outline is what you want while
+restructuring, the page list while moving between pages, and both at once is
+rare.
+
+⚠ The block rail's toggle is wired **outside** the `if (el.edPagesList)` guard.
+It was inside at first, which meant it silently did nothing on ministry pages,
+where there is no page list at all. `test/editor.test.mjs` drives a ministry
+page and asserts the collapse, the width the canvas gets back, and that the
+choice survives a reload.
+
+**Still to do from the editor spec** (`screens/22-page-editor.html`), none of it
+started: the device switcher (Desktop · Tablet · Phone as *real widths*, not a
+zoom), the info-card slot on banner blocks, the starter picker on New page, and
+the block library's full grouping. Recorded here so the next pass has the list.
+
+#### The handoff's own open questions (§8), as answered
 
 Andrew answered these on 2026-08-01. They gate later phases, so they are
 recorded here rather than left in the handoff.
