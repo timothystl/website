@@ -39,6 +39,7 @@ import { orderPages, filterPages, pageStatus, slugify, uniqueSlug, pageRename,
          withShortLinks, shortLinkFor, shortLinkRoutes } from './admin/pages.js';
 import { MENUS, menuTree, publicMenu, orphanPages, menuWarnings, renumber,
          normalizeMenu, normalizeKind, normalizeStyle, normalizeDepth } from './admin/menu.js';
+import { diffSummary, auditGroup, canRollback as auditCanRollback, rollbackNote, actionTone } from './admin/audit.js';
 import { BLOCKS as NL_BLOCKS, parseBlocks as parseNlBlocks, serializeBlocks as serializeNlBlocks,
          blockOn, AUDIENCES, normalizeAudience, subjectAdvice, preheaderAdvice,
          isSent as isNewsletterSent, canEdit as canEditNewsletter, approvalState,
@@ -183,10 +184,11 @@ async function sharedEditorApi(path, method, request, env, ctx, currentUser, P) 
       const thumbUrl = safeUrl(body.thumb_url).slice(0, 600);
       const filename = String(body.filename || url.split('/').pop() || 'upload').slice(0, 160);
       const meta = String(body.meta || '').slice(0, 80);
+      const bytes = Math.max(0, parseInt(body.bytes, 10) || 0);
       const res = await env.DB.prepare(
-        'INSERT INTO ministry_media (filename, kind, url, thumb_url, alt, meta, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(filename, kind, url, thumbUrl, alt, meta, currentUser?.username || '', new Date().toISOString()).run();
-      return jsonResponse({ ok: true, item: { id: res.meta?.last_row_id || 0, filename, kind, url, thumb_url: thumbUrl, alt, meta } });
+        'INSERT INTO ministry_media (filename, kind, url, thumb_url, alt, meta, bytes, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(filename, kind, url, thumbUrl, alt, meta, bytes, currentUser?.username || '', new Date().toISOString()).run();
+      return jsonResponse({ ok: true, item: { id: res.meta?.last_row_id || 0, filename, kind, url, thumb_url: thumbUrl, alt, meta, bytes } });
     }
 
     // ── SAVED SECTIONS ──────────────────────────────────────────────────
@@ -789,7 +791,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-08-01-4'; // bumped: gift-vs-payment tagging on giving links (phase 7)
+    const SCHEMA_VERSION = '2026-08-01-5'; // bumped: media byte sizes, audit user_id nullable (phase 9)
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -1179,6 +1181,24 @@ export default {
     // block on the site upgrades itself with no edit.
     try { await env.DB.prepare('ALTER TABLE sermon_notes ADD COLUMN audio_url TEXT').run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_MINISTRY_MEDIA).run(); } catch (_) {}
+    // Media (phase 9): the size actually stored, so the Media screen can flag
+    // anything over 1MB without re-reading every object out of R2.
+    try { await env.DB.prepare('ALTER TABLE ministry_media ADD COLUMN bytes INTEGER DEFAULT 0').run(); } catch (_) {}
+    // audit_log.user_id was NOT NULL while logAudit binds null for anything the
+    // system did on its own (a scheduled publish, a lapsed hold). The INSERT
+    // threw, logAudit swallowed it, and those actions were simply missing from
+    // the log — which matters most now that the log is something you can roll
+    // back from. SQLite cannot drop NOT NULL in place, so the table is rebuilt.
+    try {
+      const info = await env.DB.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='audit_log'").first();
+      if (info && /user_id\s+INTEGER\s+NOT NULL/i.test(info.sql || '')) {
+        await env.DB.prepare('ALTER TABLE audit_log RENAME TO audit_log_old').run();
+        await env.DB.prepare(DB_INIT_AUDIT_LOG).run();
+        await env.DB.prepare('INSERT INTO audit_log (id, user_id, username, action, entity_type, entity_id, entity_label, before_state, after_state, created_at) SELECT id, user_id, username, action, entity_type, entity_id, entity_label, before_state, after_state, created_at FROM audit_log_old').run();
+        await env.DB.prepare('DROP TABLE audit_log_old').run();
+      }
+    } catch (_) { /* leave the old table in place rather than lose the history */ }
+    try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at)').run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_MINISTRY_REVISIONS).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_MINISTRY_SECTIONS).run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_ministry_revisions_slug ON ministry_page_revisions(slug, published_at DESC)').run(); } catch (_) {}
@@ -2318,6 +2338,181 @@ ${sidebarShell('dashboard', currentUser, '', badges)}
 </div>`, 'Dashboard — TLC Admin');
     }
 
+    // ── ⌘K — one search over every section ─────────────────────
+    // Returns "Section · row" results, permission-scoped, so somebody who
+    // cannot open Payroll never sees a payroll row in their results. Searching
+    // is not a way around a permission gate.
+    if (path === '/api/search' && method === 'GET') {
+      const q = String(url.searchParams.get('q') || '').trim().toLowerCase();
+      if (q.length < 2) return jsonResponse({ results: [] });
+      const like = `%${q}%`;
+      const hp = (p) => hasPermission(currentUser, p);
+      const grab = async (sql, ...binds) => {
+        try { return (await env.DB.prepare(sql).bind(...binds).all()).results || []; } catch (_) { return []; }
+      };
+
+      const sources = [
+        { on: hp('pages_edit') || hp('pages_edit_own'), section: 'Pages',
+          sql: 'SELECT id, title, slug FROM pages WHERE LOWER(title) LIKE ? OR LOWER(slug) LIKE ? LIMIT 5',
+          map: (r) => ({ label: r.title, meta: r.slug, href: `/pages/${encodeURIComponent(r.id)}/edit` }) },
+        { on: hp('ministries_edit'), section: 'Ministries',
+          sql: 'SELECT slug, title FROM youth_pages WHERE LOWER(title) LIKE ? OR LOWER(slug) LIKE ? LIMIT 5',
+          map: (r) => ({ label: r.title || r.slug, meta: `/${r.slug}`, href: `/ministries/editor/${encodeURIComponent(r.slug)}` }) },
+        { on: hp('news_edit'), section: 'News & Events',
+          sql: 'SELECT id, title, publish_date FROM news_items WHERE LOWER(title) LIKE ? OR LOWER(COALESCE(summary,\'\')) LIKE ? ORDER BY publish_date DESC LIMIT 5',
+          map: (r) => ({ label: r.title, meta: r.publish_date || '', href: `/newsitems/edit/${r.id}` }) },
+        { on: hp('newsletter_edit') || hp('newsletter_approve'), section: 'Newsletter',
+          sql: 'SELECT id, subject, published_at FROM newsletters WHERE LOWER(subject) LIKE ? OR LOWER(COALESCE(preheader,\'\')) LIKE ? ORDER BY published_at DESC LIMIT 5',
+          map: (r) => ({ label: r.subject || 'Untitled', meta: r.published_at || '', href: `/edit/${r.id}` }) },
+        { on: hp('sermons_edit'), section: 'Sermons',
+          sql: 'SELECT id, title, date FROM sermon_notes WHERE LOWER(COALESCE(title,\'\')) LIKE ? OR LOWER(COALESCE(scripture,\'\')) LIKE ? ORDER BY date DESC LIMIT 5',
+          map: (r) => ({ label: r.title || 'Untitled', meta: r.date || '', href: `/sermons/edit-note/${r.id}` }) },
+        { on: hp('staff_edit'), section: 'Staff',
+          sql: 'SELECT id, name, title FROM staff_members WHERE LOWER(name) LIKE ? OR LOWER(COALESCE(title,\'\')) LIKE ? LIMIT 5',
+          map: (r) => ({ label: r.name, meta: r.title || '', href: `/staff/edit/${r.id}` }) },
+        { on: hp('notices_edit'), section: 'Notices',
+          sql: 'SELECT id, label, page_slug FROM notices WHERE LOWER(label) LIKE ? OR LOWER(page_slug) LIKE ? LIMIT 5',
+          map: (r) => ({ label: r.label, meta: `on ${r.page_slug}`, href: `/notices/edit/${r.id}` }) },
+        { on: hp('news_edit'), section: 'Christian Ed',
+          sql: 'SELECT id, title, schedule FROM bible_classes WHERE LOWER(title) LIKE ? OR LOWER(COALESCE(leader,\'\')) LIKE ? LIMIT 5',
+          map: (r) => ({ label: r.title, meta: r.schedule || '', href: `/christian-education/edit/${r.id}` }) },
+        { on: hp('gym_manage'), section: 'Gym Rentals',
+          sql: 'SELECT id, name, email FROM gym_groups WHERE LOWER(name) LIKE ? OR LOWER(COALESCE(email,\'\')) LIKE ? LIMIT 5',
+          map: (r) => ({ label: r.name, meta: r.email || '', href: '/gym-rentals/groups' }) },
+        { on: hp('users_manage'), section: 'Users',
+          sql: 'SELECT id, username, email FROM users WHERE LOWER(username) LIKE ? OR LOWER(COALESCE(email,\'\')) LIKE ? LIMIT 5',
+          map: (r) => ({ label: r.username, meta: r.email || '', href: `/users/edit/${r.id}` }) },
+        { on: hp('settings_manage'), section: 'Redirects',
+          sql: 'SELECT path, url, label FROM redirects WHERE LOWER(path) LIKE ? OR LOWER(COALESCE(label,\'\')) LIKE ? LIMIT 5',
+          map: (r) => ({ label: `/${r.path}`, meta: r.label || r.url, href: '/settings' }) },
+      ];
+
+      const results = [];
+      for (const s of sources) {
+        if (!s.on) continue;
+        for (const r of await grab(s.sql, like, like)) {
+          results.push(Object.assign({ section: s.section }, s.map(r)));
+        }
+      }
+      return jsonResponse({ results: results.slice(0, 40) });
+    }
+    // ── MEDIA ──────────────────────────────────────────────────
+    // The library behind every page editor's photo picker. This screen exists
+    // for the two things that actually go wrong: a file that slipped past the
+    // 1MB target, and a photo with no alt text. Everything else about a photo
+    // is managed where it is used.
+    if (path === '/media' || path.startsWith('/media/')) {
+      if (!hasPermission(currentUser, 'pages_edit') && !hasPermission(currentUser, 'ministries_edit')) {
+        return new Response('Access denied.', { status: 403 });
+      }
+
+      if (path === '/media' && method === 'GET') {
+        const [mediaRes, pagesRes, ministryRes] = await Promise.all([
+          env.DB.prepare('SELECT * FROM ministry_media ORDER BY created_at DESC, id DESC').all().catch(() => ({ results: [] })),
+          env.DB.prepare('SELECT id, title, menu_label, blocks, published_blocks FROM pages').all().catch(() => ({ results: [] })),
+          env.DB.prepare('SELECT slug, title, blocks, published_blocks, hero_image_url FROM youth_pages').all().catch(() => ({ results: [] })),
+        ]);
+        const msg = url.searchParams.get('msg');
+        const alertHtml = msg === 'alt' ? `<div class="alert alert-success">✓ Alt text saved.</div>`
+          : msg === 'deleted' ? `<div class="alert alert-info">Removed from the library. The file itself is still in storage, so anything already using it keeps working.</div>` : '';
+
+        // "Used nowhere" is answered by searching every page's blocks for the
+        // URL. Crude, but it is the honest answer — a photo is used if its
+        // address appears in something that renders. Both the draft and the
+        // published copy count: a picture in an unpublished draft is still
+        // wanted, and telling somebody it is unused would invite them to delete
+        // it out from under their own half-finished page.
+        const haystacks = [];
+        for (const p of (pagesRes.results || [])) {
+          haystacks.push({ label: p.menu_label || p.title, text: `${p.blocks || ''}${p.published_blocks || ''}` });
+        }
+        for (const m of (ministryRes.results || [])) {
+          haystacks.push({ label: m.title || m.slug, text: `${m.blocks || ''}${m.published_blocks || ''}${m.hero_image_url || ''}` });
+        }
+        const usedBy = (u) => {
+          if (!u) return [];
+          // The stored URL and the one written into a block can differ by
+          // origin, so match on the filename tail rather than the whole thing.
+          const tail = String(u).split('/').pop();
+          if (!tail) return [];
+          return haystacks.filter((h) => h.text.includes(tail)).map((h) => h.label);
+        };
+
+        const OVER = 1024 * 1024;
+        const prettyBytes = (n) => {
+          if (!n) return 'Unknown';
+          if (n < 1024) return `${n} B`;
+          if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+          return `${(n / 1024 / 1024).toFixed(1)} MB`;
+        };
+
+        const listRows = (mediaRes.results || []).map((m) => {
+          const uses = usedBy(m.url);
+          const over = (m.bytes || 0) > OVER;
+          const noAlt = m.kind === 'photo' && !String(m.alt || '').trim();
+          const thumb = m.thumb_url || m.url;
+          return {
+            filter: [over ? 'big' : '', noAlt ? 'noalt' : '', uses.length ? 'used' : 'unused'].filter(Boolean),
+            search: `${m.filename} ${m.alt || ''} ${uses.join(' ')}`.toLowerCase(),
+            cells: [
+              primaryCell(m.filename, uses.length ? `On ${uses.slice(0, 3).join(', ')}` : 'Used nowhere', {
+                icon: m.kind === 'photo' ? `<img src="${escapeHtml(thumb)}" alt="">` : '▶',
+              }),
+              // Alt text is edited in place: it is the field this screen exists
+              // to fix, so making somebody open a drawer for it would be the
+              // wrong shape.
+              `<form method="POST" action="/media/alt/${m.id}" style="display:flex;gap:6px;margin:0;">
+                <input type="text" name="alt" value="${escapeHtml(m.alt || '')}" placeholder="${m.kind === 'photo' ? 'Describe the picture' : 'Title'}" style="flex:1;min-width:0;font-size:12.5px;padding:6px 8px;border:1px solid var(--tlc-edge);border-radius:6px;">
+                <button type="submit" class="tlc-edit" style="background:none;border:0;cursor:pointer;font:inherit;">Save</button>
+              </form>`,
+              over ? statusPill('bad', prettyBytes(m.bytes)) : statusPill(m.bytes ? 'plain' : 'plain', prettyBytes(m.bytes)),
+            ],
+            actions: `<a class="tlc-edit" href="${escapeHtml(m.url)}" target="_blank" rel="noopener">Open</a>`,
+            warn: over
+              ? `${prettyBytes(m.bytes)} — over the 1MB target, so this page will be slow on a phone. Re-upload it and the editor will resize it on the way in.`
+              : (noAlt ? 'No alt text, so anyone using a screen reader is told nothing about this picture.' : ''),
+            warnCta: over ? { label: 'Re-upload', href: '/pages' } : null,
+          };
+        });
+
+        return html(`
+${sidebarShell('media', currentUser, '', await badgeCounts(env, currentUser))}
+<div class="tlc-wrap">
+  ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
+  ${renderListSection({
+    key: 'media',
+    title: 'Media',
+    purpose: 'Every photo and video in the library, and which pages use them. Pictures are added from inside a page editor — this is where they get checked.',
+    search: 'Search media',
+    filters: [
+      { label: 'All', value: 'all' },
+      { label: 'No alt text', value: 'noalt' },
+      { label: 'Over 1MB', value: 'big' },
+      { label: 'Used nowhere', value: 'unused' },
+    ],
+    columns: [
+      { label: 'File', width: '2.2fr' },
+      { label: 'Alt text', width: '2.4fr' },
+      { label: 'Size', width: '.9fr' },
+    ],
+    rows: listRows,
+    noun: 'file',
+    empty: 'Nothing in the library yet. Photos are added from inside a page editor.',
+    note: 'Alt text is what somebody using a screen reader hears in place of the picture. Describe what is in it, not that it is a photo — “The congregation singing on Easter morning”, not “Easter photo”.',
+  })}
+</div>`, 'Media');
+      }
+
+      if (path.startsWith('/media/alt/') && method === 'POST') {
+        const id = path.slice('/media/alt/'.length);
+        const form = await request.formData();
+        const before = await env.DB.prepare('SELECT filename, alt FROM ministry_media WHERE id = ?').bind(id).first();
+        const alt = String(form.get('alt') || '').slice(0, 300);
+        await env.DB.prepare('UPDATE ministry_media SET alt = ? WHERE id = ?').bind(alt, id).run();
+        await logAudit(env.DB, currentUser, 'update', 'media', id, before?.filename || '', before, { alt });
+        return new Response('', { status: 302, headers: { Location: '/media?msg=alt' } });
+      }
+    }
     // ── MENU ───────────────────────────────────────────────────
     // The second genuinely bespoke screen: a tree with drag-and-drop and a live
     // preview of the real header. Gated on pages_edit — whoever owns the site's
@@ -7499,36 +7694,70 @@ ${sidebarShell('users', currentUser)}
         env.DB.prepare('SELECT COUNT(*) as n FROM audit_log').first()
       ]);
       const totalPages = Math.ceil((total ? total.n : 0) / limit);
-      const canRollback = (row) => (row.entity_type === 'news_item' || row.entity_type === 'ministry_page' || row.entity_type === 'ministry_post') && row.action === 'update' && row.before_state;
-      const listHtml = rows.results.length === 0
-        ? '<div style="text-align:center;padding:40px;color:var(--gray);font-size:14px;">No audit log entries yet.</div>'
-        : rows.results.map(row => {
-            let before = null;
-            try { before = JSON.parse(row.before_state || 'null'); } catch(_) {}
-            return `<div class="audit-row">
-  <div class="audit-who" style="font-size:12px;">${row.created_at ? escapeHtml(row.created_at.replace('T',' ').slice(0,16)) : ''}<br><span style="color:var(--amber);">${escapeHtml(row.username)}</span></div>
-  <div class="audit-action"><span class="badge ${row.action === 'delete' ? 'badge-expired' : row.action === 'create' ? 'badge-active' : 'badge-upcoming'}">${escapeHtml(row.action)}</span></div>
-  <div class="audit-entity" style="font-size:12px;">${escapeHtml(row.entity_type)}<br>${escapeHtml(row.entity_id)}</div>
-  <div style="font-size:13px;color:var(--charcoal);">${escapeHtml(row.entity_label || '')}</div>
-  <div>${canRollback(row) ? `<form method="POST" action="/rollback/${row.id}" onsubmit="return confirm('Restore this item to its previous state?')" style="display:inline;">
-    <button type="submit" class="btn btn-sm btn-danger">Rollback</button>
-  </form>` : ''}</div>
-</div>`;
-          }).join('');
-      const pagination = totalPages > 1 ? `<div style="display:flex;gap:8px;justify-content:center;padding:24px 0;">${
-        Array.from({length:totalPages},(_,i)=>i+1).map(p=>`<a href="/audit-log?page=${p}" class="btn btn-sm ${p===pageNum?'btn-primary':''}" style="${p===pageNum?'':'background:var(--linen);color:var(--charcoal);border:1px solid var(--border);'}">${p}</a>`).join('')
+      const msg = url.searchParams.get('msg');
+      const alertHtml = msg === 'rolledback' ? `<div class="alert alert-success">✓ Change rolled back. The rollback itself is now the newest entry in this log.</div>` : '';
+
+      const when = (iso) => {
+        if (!iso) return '';
+        const d = new Date(iso);
+        return isNaN(d) ? iso : d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+      };
+
+      const listRows = rows.results.map((row) => {
+        const summary = diffSummary(row.before_state, row.after_state);
+        const note = rollbackNote(row);
+        return {
+          filter: auditGroup(row),
+          search: `${row.username || ''} ${row.action} ${row.entity_type} ${row.entity_label || ''} ${summary}`.toLowerCase(),
+          cells: [
+            // The diff is the sub-line, because "what changed" is the reason
+            // anybody opens this screen — not the entity type or the id.
+            primaryCell(
+              `${row.action === 'rollback' ? 'Rolled back' : row.action} ${String(row.entity_type || '').replace(/_/g, ' ')}${row.entity_label ? ` — ${row.entity_label}` : ''}`,
+              summary || 'No field-level record of this change'
+            ),
+            escapeHtml(row.username || 'the system'),
+            escapeHtml(when(row.created_at)),
+            statusPill(actionTone(row.action), row.action),
+          ],
+          actions: auditCanRollback(row)
+            ? `<form method="POST" action="/rollback/${row.id}" style="display:inline;margin:0;" onsubmit="return confirm('Put this back the way it was? The rollback is itself recorded here.')"><button type="submit" class="tlc-edit" style="background:none;border:0;cursor:pointer;font:inherit;color:inherit;">Roll back</button></form>`
+            // A dead button is worse than none; say why instead.
+            : `<span style="color:var(--tlc-muted);font-size:12px;" title="${escapeHtml(note)}">—</span>`,
+        };
+      });
+
+      const pagination = totalPages > 1 ? `<div class="tlc-section" style="padding-top:0;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">${
+        Array.from({ length: totalPages }, (_, i) => i + 1).map((p) =>
+          `<a href="/audit-log?page=${p}" class="tlc-filter${p === pageNum ? ' is-on' : ''}">${p}</a>`).join('')
       }</div>` : '';
+
       return html(`
-${sidebarShell('audit', currentUser)}
-<div class="wrap">
-  <div class="page-title">Audit Log</div>
-  <div class="page-sub">A record of all content changes made by admin users.</div>
-  <div class="card">
-    <div style="display:grid;grid-template-columns:140px 80px 90px 1fr auto;gap:12px;padding:0 0 10px;border-bottom:2px solid var(--border);font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gray);">
-      <div>When / Who</div><div>Action</div><div>Type / ID</div><div>Item</div><div></div>
-    </div>
-    ${listHtml}
-  </div>
+${sidebarShell('audit', currentUser, '', await badgeCounts(env, currentUser))}
+<div class="tlc-wrap">
+  ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
+  ${renderListSection({
+    key: 'audit',
+    title: 'Audit log',
+    purpose: 'Who changed what, and what it looked like before. Every change made through this admin is here.',
+    search: 'Search the log',
+    filters: [
+      { label: 'All', value: 'all' },
+      { label: 'Content', value: 'content' },
+      { label: 'People & ops', value: 'ops' },
+      { label: 'Rolled back', value: 'rolled-back' },
+    ],
+    columns: [
+      { label: 'Change', width: '3fr' },
+      { label: 'Who', width: '1fr' },
+      { label: 'When', width: '1.2fr' },
+      { label: 'Action', width: '.9fr' },
+    ],
+    rows: listRows,
+    noun: 'entry', nounPlural: 'entries',
+    empty: 'Nothing has been changed yet.',
+    note: 'Rolling a change back does not erase it. The original entry stays, and the rollback is recorded as its own entry — so the log always says everything that happened, including the undoing.',
+  })}
   ${pagination}
 </div>`, 'Audit Log');
     }

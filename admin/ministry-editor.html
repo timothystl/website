@@ -2188,6 +2188,9 @@ async function uploadPhoto(file) {
     thumb_url: thumbUrl,
     filename: file.name || 'photo.jpg',
     meta: main ? main.width + '×' + main.height : 'Photo',
+    // The size actually stored, so the Media screen can flag anything that
+    // slipped past the 1MB target without re-fetching every object from R2.
+    bytes: main ? main.blob.size : (file.size || 0),
     saved: main ? 'Resized ' + prettyBytes(file.size) + ' → ' + prettyBytes(main.blob.size) : '',
   };
 }
@@ -2245,7 +2248,7 @@ function bindPicker() {
       if (!alt) { S.picker.error = 'Please describe the photo — it is read aloud to people who cannot see it.'; return renderModal(); }
       try {
         var item = await addMedia({ kind: 'photo', url: S.picker.staged.url, thumb_url: S.picker.staged.thumb_url,
-          filename: S.picker.staged.filename, alt: alt, meta: S.picker.staged.meta || 'Photo' });
+          filename: S.picker.staged.filename, alt: alt, meta: S.picker.staged.meta || 'Photo', bytes: S.picker.staged.bytes || 0 });
         if (S.picker.kind === 'gallery') { S.picker.staged = null; S.picker.error = ''; renderModal(); }
         else applyMedia(item.url, item.alt, item.filename);
       } catch (err) { S.picker.error = String(err.message || err); renderModal(); }

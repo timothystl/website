@@ -153,6 +153,7 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Giving | Office staff — requires `giving_manage` permission | **DONE** (2026-07-27) — base Tithe.ly link, give.timothystl.org's amount tiers + per-tier links, and vendor/market one-off payment links (Tithe.ly or Square); see below |
 | Payroll | Office staff (Dinger) — requires `payroll_manage` permission | **DONE** — combined biweekly payroll (church staff + MDO preschool staff); see "Payroll & Supabase" below |
 | Audit Log | Admins | **DONE** — change history + rollback, requires `audit_view` |
+| Media | Office staff (`pages_edit`) or a ministry leader (`ministries_edit`) | **DONE** (2026-08-01) — the photo/video library with alt text, size and usage; see "Phase 9" below |
 | Menu | Office staff — requires `pages_edit` | **DONE** (2026-08-01) — the header and footer as a drag-and-drop tree with a live preview (`menu_items` table); see "Phase 4 — the Menu" below |
 | Partners | Office staff — requires `pages_edit` | **DONE** (2026-08-01) — one partner ministry per core value (`partners` table), feeding the dashboard's values report and the public /about/values page |
 | Pages | Office staff (`pages_edit`) or a ministry leader for their own pages (`pages_edit_own`) | **DONE** (2026-07-31) — every page on the public site, with the block editor at `/pages/:id/edit`; see "Site Editor" below. Both permissions were renamed in v3.0.0 (from `site_pages` / `site_pages_own`) |
@@ -693,6 +694,48 @@ That is the church's donation page; it should be a deliberate change with
 someone watching it, not something folded into the end of a redesign pass. The
 amount tiers, funds and base link it reads are already admin-editable, which is
 most of what that section was for.
+
+#### Phase 9 — Media, audit rollback, ⌘K (2026-08-01)
+
+**Media** reuses `ministry_media` rather than adding the handoff's `media`
+table — it already is the media library, with `alt` on it, and a second table
+would be a second place to look for the same photo. What was added is `bytes`,
+recorded by the editor after it resizes, so the screen can flag anything over
+1MB without re-reading every object out of R2.
+
+- **"Used nowhere" is answered by searching every page's blocks for the
+  filename** — crude, but honest: a photo is used if its address appears in
+  something that renders. Both the draft and the published copy count, because
+  a picture in an unpublished draft is still wanted and calling it unused
+  would invite somebody to delete it out from under their own half-finished
+  page.
+- **Alt text is edited in place**, not in a drawer. It is the field the screen
+  exists to fix.
+
+**Audit log.** `admin/audit.js` turns a stored before/after pair into
+something readable, and the diff is the row's sub-line because "what changed"
+is why anybody opens the screen. Timestamps are filtered out of the diff —
+they change on every save and bury the field that actually changed. A row that
+cannot be rolled back shows **why** instead of a dead button.
+
+- **⚠ `audit_log.user_id` was `NOT NULL` while `logAudit` binds null for
+  anything the system did on its own** (a scheduled page going live, a hold
+  lapsing). The INSERT threw, `logAudit` swallowed it, and those entries were
+  simply missing — the exact ones somebody later goes looking for. This was
+  AC-6 in the July 2026 review. The column is now nullable; SQLite cannot drop
+  NOT NULL in place, so the table is rebuilt and the history copied across.
+- **Rolling back does not erase anything.** The original entry stays and the
+  rollback is recorded as its own entry, so the log always says everything
+  that happened including the undoing. That already worked; the screen now
+  says so.
+
+**⌘K** is `GET /api/search` over eleven sections, returning "Section · row".
+**Results are permission-scoped server-side** — searching is not a way around
+a gate, and a test asserts somebody without `staff_edit` gets no staff rows.
+Under two characters returns nothing rather than the whole database. The
+palette lives in `sidebarShell()`, so it is on every screen.
+
+Run: `node admin/audit.test.mjs`.
 
 #### The handoff's own open questions (§8), as answered
 

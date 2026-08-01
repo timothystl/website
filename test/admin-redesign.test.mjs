@@ -66,8 +66,12 @@ async function call(env, path, { cookie = '', method = 'GET' } = {}) {
 }
 
 // A signed-in session, created directly in the tables the way login does.
+let tokenSeq = 0;
 function signIn(db, permissions = ALL_PERMISSIONS, username = 'dinger') {
-  const token = 'a'.repeat(64);
+  // A distinct token per sign-in, so a test can hold two sessions at once —
+  // which is how the permission-scoping of search gets checked.
+  tokenSeq += 1;
+  const token = String(tokenSeq).padStart(2, '0').repeat(32).slice(0, 64);
   db.prepare('INSERT INTO users (username, password_hash, permissions, created_at, active) VALUES (?,?,?,?,1)')
     .run(username, 'pbkdf2:1:x:y', JSON.stringify(permissions), new Date().toISOString());
   const uid = db.prepare('SELECT id FROM users WHERE username = ?').get(username).id;
@@ -776,6 +780,108 @@ group('gift and payment are tagged apart');
   }), env, ctx);
   eq(res2.status, 302, 'and an explicit gift is accepted');
   eq(db.prepare("SELECT give_kind FROM redirects WHERE path='realgift'").get().give_kind, 'gift', 'as a gift');
+}
+
+
+// ── phase 9: media, audit rollback, ⌘K ───────────────────────────────────────
+group('media');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  ok(db.prepare('PRAGMA table_info(ministry_media)').all().some((c) => c.name === 'bytes'),
+    'media rows record the size actually stored');
+
+  const now = new Date().toISOString();
+  db.prepare("INSERT INTO ministry_media (filename,kind,url,alt,bytes,created_at) VALUES ('choir.webp','photo','/images/choir.webp','The choir on Easter morning',420000,?)").run(now);
+  db.prepare("INSERT INTO ministry_media (filename,kind,url,alt,bytes,created_at) VALUES ('huge.jpg','photo','/images/huge.jpg','A big one',2400000,?)").run(now);
+  db.prepare("INSERT INTO ministry_media (filename,kind,url,alt,bytes,created_at) VALUES ('noalt.webp','photo','/images/noalt.webp','',90000,?)").run(now);
+  // A page that uses one of them, so "used nowhere" can be wrong as well as right.
+  db.prepare("UPDATE youth_pages SET blocks='[{\"type\":\"photo\",\"url\":\"/images/choir.webp\"}]' WHERE slug='music'").run();
+
+  const body = await (await call(env, '/media', { cookie })).text();
+  eq((await call(env, '/media', { cookie })).status, 200, 'the Media screen renders');
+  has(body, 'choir.webp', 'a file appears');
+  has(body, 'On Music', 'and says which page uses it');
+  has(body, 'Used nowhere', 'while an unused file says so');
+  has(body, '2.3 MB', 'an oversized file shows its real size');
+  has(body, 'over the 1MB target', 'with a warning row explaining the cost');
+  has(body, 'No alt text', 'and a photo with no alt text is flagged');
+  has(body, 'screen reader', 'in terms of who it affects');
+
+  // Alt text is edited in place — it is the field the screen exists to fix.
+  const res = await worker.fetch(new Request('https://admin.timothystl.org/media/alt/3', {
+    method: 'POST',
+    headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
+    body: 'alt=' + encodeURIComponent('Children at the egg hunt'),
+  }), env, ctx);
+  eq(res.status, 302, 'saving alt text redirects');
+  eq(db.prepare('SELECT alt FROM ministry_media WHERE id=3').get().alt, 'Children at the egg hunt', 'and stores it');
+  ok(db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE entity_type='media'").get().n > 0, 'and is audited');
+}
+
+group('the audit log shows what changed');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const now = new Date().toISOString();
+  db.prepare("INSERT INTO audit_log (user_id,username,action,entity_type,entity_id,entity_label,before_state,after_state,created_at) VALUES (1,'dinger','update','news_item','5','Egg Hunt',?,?,?)")
+    .run(JSON.stringify({ title: 'Egg Hunt', summary: 'Old text', updated_at: '1' }),
+         JSON.stringify({ title: 'Egg Hunt', summary: 'New text', updated_at: '2' }), now);
+  db.prepare("INSERT INTO audit_log (user_id,username,action,entity_type,entity_id,entity_label,before_state,after_state,created_at) VALUES (1,'dinger','update','user','2','office','{}','{}',?)").run(now);
+
+  const body = await (await call(env, '/audit-log', { cookie })).text();
+  eq((await call(env, '/audit-log', { cookie })).status, 200, 'the audit log renders');
+  has(body, 'summary: Old text → New text', 'the row shows the field that changed');
+  lacks(body, 'updated_at:', 'and not the timestamp that changes on every save');
+  has(body, 'Roll back', 'a reversible change offers a rollback');
+  has(body, 'People &amp; ops', 'and the filters split content from people & ops');
+  has(body, 'does not erase it', 'the note explains that rolling back is itself recorded');
+}
+
+group('system actions reach the audit log');
+{
+  const { db, env } = await boot();
+  // user_id was NOT NULL, so anything the system did on its own threw on
+  // insert and was silently swallowed — exactly the entries somebody later
+  // wants to find.
+  const col = db.prepare('PRAGMA table_info(audit_log)').all().find((c) => c.name === 'user_id');
+  eq(col.notnull, 0, 'audit_log.user_id is nullable');
+  let threw = false;
+  try {
+    db.prepare("INSERT INTO audit_log (user_id,username,action,entity_type,entity_id,entity_label,created_at) VALUES (NULL,'','publish','page','x','Scheduled page',?)")
+      .run(new Date().toISOString());
+  } catch (_) { threw = true; }
+  eq(threw, false, 'so a system action can be recorded at all');
+}
+
+group('⌘K searches every section, within permissions');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  db.prepare("INSERT INTO news_items (title,summary,publish_date) VALUES ('Egg Hunt Saturday','Bring a basket','2026-03-01')").run();
+  db.prepare("INSERT INTO staff_members (name,title,display_order) VALUES ('Andrew Dinger','Lead Pastor',10)").run();
+
+  const shell = await (await call(env, '/dashboard', { cookie })).text();
+  has(shell, 'tlc-k-input', 'the palette is in the shared shell, so it is on every screen');
+  has(shell, '⌘K searches every section', 'and the sidebar says so');
+
+  const res = await call(env, '/api/search?q=egg', { cookie });
+  eq(res.status, 200, 'search responds');
+  const d = await res.json();
+  ok(d.results.some((r) => r.section === 'News & Events' && r.label.includes('Egg Hunt')), 'and finds a news post');
+
+  const staff = await (await call(env, '/api/search?q=dinger', { cookie })).json();
+  ok(staff.results.some((r) => r.section === 'Staff'), 'and a staff member, labelled by section');
+
+  eq((await (await call(env, '/api/search?q=a', { cookie })).json()).results.length, 0,
+    'a single letter searches nothing — that would return the whole database');
+
+  // Searching must not be a way around a permission gate.
+  const { cookie: limited } = signIn(db, ['news_edit'], 'newsonly');
+  const scoped = await (await call(env, '/api/search?q=dinger', { cookie: limited })).json();
+  ok(!scoped.results.some((r) => r.section === 'Staff'),
+    'somebody without staff_edit gets no staff results');
+  ok(!scoped.results.some((r) => r.section === 'Users'), 'nor user results');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
