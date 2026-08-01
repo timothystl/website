@@ -675,8 +675,24 @@ has **Queue** and **Calendar** views.
 - Holds are amber, confirmed bookings green, blocked dates greyed with their
   reason. Month navigation preserves the view.
 
-Still to do in Phase 7: Giving (the two page surfaces, the keep-in-step flag,
-and Gift-vs-Payment tagging on links).
+#### Phase 7 (part) — Giving: Gift vs Payment (2026-08-01)
+
+`redirects.give_kind` tags every giving link **gift** or **payment**. A Gift is
+receipted as a donation on somebody's year-end statement; a Payment — gym rent,
+a registration fee, a vendor invoice — is not.
+
+**It defaults to `payment`, on both the column and the write path, and that is
+deliberate.** Every row that exists today is a vendor or market link, and the
+two mistakes are not equal: wrongly receipting a non-donation as tax-deductible
+is the more serious error, so a gift has to be chosen on purpose.
+
+**Not built, and not from lack of time:** the handoff's "two page surfaces with
+a keep-in-step switch" would mean converting `give.timothystl.org` — currently
+rendered by the hardcoded `give-landing.js` — into a page in the block editor.
+That is the church's donation page; it should be a deliberate change with
+someone watching it, not something folded into the end of a redesign pass. The
+amount tiers, funds and base link it reads are already admin-editable, which is
+most of what that section was for.
 
 #### The handoff's own open questions (§8), as answered
 
