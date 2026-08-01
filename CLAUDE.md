@@ -850,11 +850,10 @@ Requested · Conflicts · Status`, with `Approve` and `Open` on every row.
   eleven PostgREST queries were ever made, so `sbQuery()` is that subset with
   the SDK's shape — `sb.from(t).select().eq()` still reads the same.
 - **The design's Status column is real, not a label.** It reads `Needs hours`
-  → `Ready` → `Approved`, in the order the work happens. Approved is a stored
-  fact — see "Checking a payroll row off" below. It was deliberately left out
-  of the first build because nothing wrote it, and a green APPROVED beside a
-  row nobody had looked at would have been a lie; Andrew then asked for the
-  check-off, so it is stored now.
+  → `Ready` → `Approved`, and Approved is a stored fact — see "Approving a
+  payroll period" below. It was left out of the first build because nothing
+  wrote it, and a green APPROVED beside a row nobody had looked at would have
+  been a lie.
 - **There is no "Import from childcare app" button**, because there is no
   import step — MDO hours are read live every time the period changes. A button
   labelled Import would imply a staleness that does not exist. The row says
@@ -878,45 +877,53 @@ rewritten anyway and leaving them would have meant touching payroll twice:
 page — `/payroll` carried it itself, and folding it into the shell would
 otherwise have quietly dropped it.
 
-#### Checking a payroll row off (2026-08-01)
+#### Approving a payroll period, and emailing it (2026-08-01)
 
-Andrew asked for it after seeing the rebuilt screen: *"an approved but for
-payroll would be good to check off that it is reviewed."* Every row now carries
-an **Approve** button that records who checked those figures and when.
+Andrew, after seeing the rebuilt screen: *"a simple approve of the whole thing
+at once, not line by line"* and *"we can have an email report button to. i have
+to email it to the bookkeeper"*.
 
-- **`payroll_reviews` is a new Supabase table** — `(period_start, source,
-  staff_id, reviewed_at, reviewed_by)` with `UNIQUE(period_start, source,
-  staff_id)`. Additive; nothing existing was altered. RLS mirrors
-  `church_staff_period_entries` beside it (`allow all` for public) because the
-  real boundary is the Worker's `/sb` proxy, which requires a session holding
-  `payroll_manage` before it forwards anything at all.
-- **A table of its own, not columns on `church_staff_period_entries`**, because
-  MDO staff have no row there — their hours live in the childcare app's tables
-  — and a review that could only cover half the payroll would be worse than
-  none. `source` is `church` or `mdo`.
-- **The row IS the fact.** Present means reviewed, absent means not;
-  un-approving deletes the row rather than flipping a boolean. There is no
-  `false`, so a failed write leaves somebody unchecked rather than in a state
-  that half-claims a review.
-- **Nothing is approvable until its figures exist.** An hourly person with no
-  hours entered gets no button at all — one that silently did nothing would be
-  worse than none.
-- **The period badge names the outstanding step, in order**: `N still need
-  hours` outranks `N left to check`, which outranks `Approved`. Telling
-  somebody "3 left to check" while two people have no hours at all would point
-  them at the wrong job.
-- **Printing is deliberately not gated on it.** A report is often printed to
-  *do* the checking. The badge says where the run has got to; it does not
-  block.
+**Approval is per period.** `payroll_periods` (`period_start` PK, `approved_at`,
+`approved_by`) — one row per approved run. The mockup draws *both* a per-row
+Approve and a period one; only the period one was wanted, so the per-row table
+built first (`payroll_reviews`) was dropped the same day, before it held
+anything.
 
-**Tests:** `node test/payroll.test.mjs` drives the real page in Chromium against
-a stubbed Supabase. It pins the arithmetic with worked figures (a $3,966
-salaried gross; $1,224 for 60 hours + 8 PTO at $20 with a 10% 403(b) — which is
-$1,240 if PY-2 comes back), all three report layouts, the apostrophe, and the
-childcare-app-unreachable path. Gym's queue is covered in
-`test/admin-redesign.test.mjs`.
+- **The row is the fact.** Present means somebody has signed the run off, absent
+  means not; taking it back deletes the row rather than flipping a boolean, so
+  approved can never be half-set by a failed write. If the approval cannot be
+  read at all, the period shows unapproved — that asks for a second look at
+  something already looked at, rather than claiming a sign-off that never
+  happened.
+- **The Status column follows the period**: `Needs hours` → `Ready` →
+  `Approved`. Approving is one decision about one run.
+- **Approving with somebody's hours missing asks rather than refuses**, and
+  *names them* — the office may know that person genuinely worked none. The
+  period badge still leads with `N still need hours`, because that outranks
+  everything else.
+- **`Email report`** posts the *figures* to `POST /payroll/email`; the Worker
+  builds the email and escapes every field. Posting rendered HTML would let a
+  staff name become markup in something that lands in an outside inbox, and
+  would let the emailed report drift from the screen's own. Recipient is the
+  `payroll_bookkeeper_email` setting; with none set it refuses and says which
+  setting to fill in. Whether the run was approved is on the face of the email,
+  because that is the difference between "here are the figures" and "these are
+  final" — as is an incomplete run whose MDO half could not be read.
+- **⚠ `sendTransactionalEmail` returns `{error}`, it does not throw.** A bare
+  try/catch around it reports success on every failure. The route checks the
+  return value.
 
-#### The handoff's own open questions (§8), as answered
+#### The gym calendar is clickable (2026-08-01)
+
+Andrew: *"make the calendar clickable on the dates"*. A day opens the booking
+form with that date already filled in (`/gym-rentals/bookings/new?dt=…`, which
+already accepted the parameter). A booking chip inside the day links to its
+group instead — "what is this?" and "book this day" are two different
+questions, so they are two different clicks rather than one ambiguous one. A
+blocked date and a date already past are not links, because they cannot be
+booked and should not pretend otherwise.
+
+#### The handoff's own open questions (§8), as answered#### The handoff's own open questions (§8), as answered
 
 Andrew answered these on 2026-08-01. They gate later phases, so they are
 recorded here rather than left in the handoff.
@@ -1076,7 +1083,7 @@ The admin **Payroll** tab (`admin/payroll.html`, served at `/payroll`) combines
 that MDO clock/PTO data (read-only) with three tables of its own — also in
 the same Supabase project, not D1 — `church_staff`,
 `church_staff_period_entries` (name, pay type, hourly rate or salary, housing
-allowance, HSA, 403(b), mileage, PTO) and `payroll_reviews` (who checked a row
+allowance, HSA, 403(b), mileage, PTO) and `payroll_periods` (who signed a run
 off, and when) — to produce one combined biweekly payroll report (MDO + church
 staff) with CSV export.
 

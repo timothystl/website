@@ -716,6 +716,18 @@ export const GYM_CAL_CSS = `
 .gymcal-cell--today{box-shadow:inset 0 0 0 2px var(--tlc-gold);}
 .gymcal-cell--blocked{background:#F4F2EE;}
 .gymcal-day{font:600 11.5px var(--tlc-sans);color:var(--tlc-muted);}
+/* A day you can book is a link, and says so on hover rather than all the time
+   — forty-two permanently visible plus signs would be noise, not affordance. */
+.gymcal-day--open{display:inline-flex;align-items:center;gap:4px;text-decoration:none;border-radius:5px;padding:1px 5px;margin:-1px -5px;}
+.gymcal-day--open:hover,.gymcal-day--open:focus-visible{background:var(--tlc-navy);color:#fff;outline:none;}
+.gymcal-add{opacity:0;font-size:12px;line-height:1;}
+.gymcal-day--open:hover .gymcal-add,.gymcal-day--open:focus-visible .gymcal-add{opacity:1;}
+/* A date already gone cannot be booked, so it does not pretend to be clickable. */
+.gymcal-cell--past{background:#FCFAF6;}
+.gymcal-cell--past .gymcal-day{opacity:.5;}
+a.gymcal-chip{text-decoration:none;}
+a.gymcal-chip:hover{filter:brightness(.96);}
+.tlc-sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;}
 .gymcal-chip{display:block;font:600 10.5px/1.35 var(--tlc-sans);padding:3px 6px;border-radius:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 /* The design's four tones. Confirmed is blue rather than green because green
    is the pill colour for "live" everywhere else and a calendar full of it

@@ -90,12 +90,15 @@
 .tlc-pay-saved{font:600 12px var(--tlc-sans);color:#3B4C2E;opacity:0;transition:opacity .2s;}
 .tlc-pay-saved.is-on{opacity:1;}
 .tlc-pay-status{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
-/* Approve is a plain button until it is pressed, then a quiet green tick.
-   A row that is done should recede — the eye belongs on the ones that are not. */
-.tlc-pay-check{font:600 12px var(--tlc-sans);color:var(--tlc-navy);background:#fff;border:1px solid var(--tlc-edge);border-radius:7px;padding:5px 11px;cursor:pointer;white-space:nowrap;}
-.tlc-pay-check:hover{border-color:var(--tlc-blue);}
-.tlc-pay-check:disabled{opacity:.5;cursor:default;}
-.tlc-pay-check.is-on{background:#EAF1E5;border-color:#C9DCBD;color:#3B4C2E;padding:5px 9px;}
+/* The one decision on this screen, at the bottom of the run it signs off —
+   after the figures, not above them. */
+.tlc-pay-foot{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:13px 18px;background:var(--tlc-parchment);border-top:1px solid var(--tlc-edge);font-size:13px;color:var(--tlc-body);}
+.tlc-pay-approve{font:700 13px var(--tlc-sans);color:#1B1608;background:var(--tlc-gold);border:1px solid var(--tlc-gold);border-radius:8px;padding:9px 18px;cursor:pointer;white-space:nowrap;}
+.tlc-pay-approve:hover{filter:brightness(1.05);}
+.tlc-pay-approve:disabled{opacity:.45;cursor:default;}
+/* Once approved it stops being the loud thing on the screen — the decision is
+   made, and taking it back should look like the exception it is. */
+.tlc-pay-approve.is-done{background:#fff;color:var(--tlc-navy);border-color:var(--tlc-edge);font-weight:600;}
 @media (max-width:860px){
   .tlc-pay-grid,.tlc-pay-tgrid{grid-template-columns:1fr;gap:6px;}
   .tlc-pay-thead{display:none;}
@@ -125,6 +128,7 @@
     <span class="tlc-pay-spacer"></span>
     <button type="button" class="tlc-pay-btn" id="printBtn">Print report</button>
     <button type="button" class="tlc-pay-btn" id="exportBtn">Export CSV</button>
+    <button type="button" class="tlc-pay-btn" id="emailBtn">Email report</button>
   </div>
 
   <p class="tlc-pay-err" id="payError" hidden></p>
@@ -151,6 +155,13 @@
         <span>Person</span><span>Paid as</span><span>Hours</span><span>PTO used</span><span>Status</span>
       </div>
       <div id="entryRows"><div class="tlc-pay-empty">Loading…</div></div>
+      <!-- One decision about one run, made once. -->
+      <div class="tlc-pay-foot">
+        <span id="periodSummary"></span>
+        <span class="tlc-pay-spacer"></span>
+        <span class="tlc-pay-saved" id="savedFlash">✓ Saved</span>
+        <button type="button" class="tlc-pay-approve" id="approvePeriodBtn">Approve period</button>
+      </div>
     </div>
 
     <p class="tlc-note" style="margin:14px 0 0;"><span class="tlc-note-mark">◆</span><span>Church hours are typed here and save on their own. Childcare hours come from the MDO app and cannot be edited here — one number for what somebody worked, in one place.</span></p>
@@ -211,7 +222,6 @@
       <button type="button" class="tlc-drawer-delete" id="staffRemoveBtn" hidden>Remove</button>
       <span></span>
       <div class="tlc-drawer-foot-right">
-        <span class="tlc-pay-saved" id="savedFlash">✓ Saved</span>
         <button type="button" class="tlc-btn-primary" id="staffSaveBtn">Save</button>
       </div>
     </footer>
@@ -294,11 +304,10 @@ let mdoStaff = [];
 let mdoPeriodMap = new Map();
 let mdoPtoMap = new Map();
 let mdoError = '';
-// Who has been checked off in this period. The key is source + staff id; the
-// value is when. A person is reviewed when they are in here — there is no
-// false, because a row that failed to save simply is not present, and half-set
-// is the one state a review must never be in.
-let reviewed = new Map();
+// Whether this period has been signed off, and by whom. Null means not — there
+// is no false, because a write that failed simply leaves it null, and half-set
+// is the one state an approval must never be in.
+let periodApproval = null;
 let payView = 'entry';
 let payLayout = 'cards';
 let lastFocus = null;
@@ -446,20 +455,17 @@ async function onPeriodChange(value) {
   $('entryPeriodLabel').textContent = 'Pay period · ' + periodLabel(periodStart, periodEnd);
   $('entryPays').textContent = paysOnLabel(periodEnd);
 
-  const [entriesRes, reviewRes] = await Promise.all([
+  const [entriesRes, approvalRes] = await Promise.all([
     sb.from('church_staff_period_entries').select('*').eq('period_start', periodStart),
-    sb.from('payroll_reviews').select('source,staff_id,reviewed_at,reviewed_by').eq('period_start', periodStart),
+    sb.from('payroll_periods').select('period_start,approved_at,approved_by').eq('period_start', periodStart),
     loadMdoData(periodStart, periodEnd),
   ]);
   if (entriesRes.error) showError('This period’s hours could not be read: ' + entriesRes.error.message);
 
-  // If the review list cannot be read, everybody shows as unchecked. That is
+  // If the approval cannot be read, the period shows as not approved. That is
   // the safe way round: it asks for a second look at something already looked
-  // at, rather than reporting a review that never happened.
-  reviewed = new Map();
-  (reviewRes.data || []).forEach((r) => {
-    reviewed.set(r.source + ':' + r.staff_id, { at: r.reviewed_at, by: r.reviewed_by });
-  });
+  // at, rather than reporting an approval that never happened.
+  periodApproval = (approvalRes.data || [])[0] || null;
 
   periodEntries = {};
   (entriesRes.data || []).forEach((e) => { periodEntries[e.staff_id] = e; });
@@ -532,75 +538,77 @@ function pill(tone, label) {
     + (tones[tone] || tones.plain) + '">' + esc(label) + '</span>';
 }
 
-// The design's Status column. Three states, in the order they actually happen:
+// The Status column. What it says is what actually blocks a payroll run:
 //
-//   Needs hours  — an hourly person with nothing entered. Nothing can be
-//                  reviewed until this is fixed, so it outranks everything.
-//   Ready        — the figures are in and nobody has checked them yet.
-//   Approved     — somebody has checked them, and it says who and when.
+//   Needs hours  — an hourly person with nothing entered. Until this is fixed
+//                  the period cannot honestly be signed off.
+//   Ready        — the figures are in.
+//   Approved     — the whole period has been signed off, so every row in it has.
 //
-// Approved is a real stored fact (a row in payroll_reviews), not a label. It
-// was left out of the first build precisely because nothing wrote it, and a
-// green APPROVED beside a row nobody had looked at would have been a lie.
-function entryStatus(source, staffId, kind, hoursEntered) {
-  if (kind === 'hourly' && !hoursEntered) return { tone: 'warn', label: 'Needs hours', can: false };
-  const r = reviewed.get(source + ':' + staffId);
-  if (r) return { tone: 'good', label: 'Approved', can: true, on: true, at: r.at, by: r.by };
-  return { tone: 'plain', label: 'Ready', can: true, on: false };
+// Approval is per PERIOD, not per person: it is one decision about one run,
+// made once. A tick beside each name would ask the same question eleven times
+// and leave a run half-approved in between.
+function entryStatus(kind, hoursEntered) {
+  if (kind === 'hourly' && !hoursEntered) return { tone: 'warn', label: 'Needs hours' };
+  if (periodApproval) return { tone: 'good', label: 'Approved' };
+  return { tone: 'plain', label: 'Ready' };
 }
 
-function reviewedTitle(st) {
-  if (!st.on) return '';
-  const when = st.at ? new Date(st.at) : null;
+function approvalLine() {
+  if (!periodApproval) return '';
+  const when = periodApproval.approved_at ? new Date(periodApproval.approved_at) : null;
   const stamp = when && !isNaN(when)
-    ? when.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' at '
+    ? when.toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) + ' at '
       + when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
     : '';
-  return 'Checked' + (st.by ? ' by ' + st.by : '') + (stamp ? ' on ' + stamp : '') + '. Click to undo.';
-}
-
-// The cell is the pill plus the one action that changes it. A person whose
-// hours are missing gets neither — there is nothing to approve yet, and a
-// button that silently does nothing is worse than no button.
-function reviewCell(source, staffId, st) {
-  if (!st.can) return pill(st.tone, st.label);
-  return pill(st.tone, st.label)
-    + '<button type="button" class="tlc-pay-check' + (st.on ? ' is-on' : '') + '"'
-    + ' data-review-source="' + esc(source) + '" data-review-staff="' + esc(staffId) + '"'
-    + ' aria-pressed="' + (st.on ? 'true' : 'false') + '"'
-    + ' title="' + esc(st.on ? reviewedTitle(st) : 'Mark these figures as checked') + '">'
-    + (st.on ? '✓' : 'Approve') + '</button>';
+  return 'Approved' + (periodApproval.approved_by ? ' by ' + periodApproval.approved_by : '')
+    + (stamp ? ' on ' + stamp : '') + '.';
 }
 
 // The period's own state, in the order the work actually happens: hours have
-// to be in before anything can be checked, and everything has to be checked
-// before the run is done. Whichever step is outstanding is the one it names —
-// telling somebody "3 left to check" while two people have no hours at all
-// would point them at the wrong job.
+// to be in before the run can honestly be signed off. Whichever step is
+// outstanding is the one it names — saying the run is ready while two people
+// have no hours at all would point somebody at the wrong job.
 function renderPeriodState() {
-  const missing = churchStaff.filter((s) => s.pay_type === 'hourly'
-    && !(Number((periodEntries[s.id] || {}).hours_worked) > 0)).length;
-  if (missing) {
-    $('entryState').innerHTML = pill('warn', missing + (missing === 1 ? ' still needs hours' : ' still need hours'));
-    return;
-  }
+  const missing = missingHours();
   const people = payablePeople();
-  const unchecked = people.filter((k) => !reviewed.has(k)).length;
-  $('entryState').innerHTML = unchecked
-    ? pill('plain', unchecked + ' left to check')
-    : pill('good', people.length ? 'Approved' : 'Nothing to pay');
+
+  if (periodApproval) {
+    $('entryState').innerHTML = pill('good', 'Approved');
+  } else if (missing.length) {
+    $('entryState').innerHTML = pill('warn', missing.length + (missing.length === 1 ? ' still needs hours' : ' still need hours'));
+  } else {
+    $('entryState').innerHTML = pill('plain', people ? 'Ready to approve' : 'Nothing to pay');
+  }
+
+  // What the run adds up to, said once, beside the button that signs it off.
+  const hourly = churchStaff.filter((x) => x.pay_type === 'hourly').length
+    + mdoStaff.filter((x) => x.pay_type !== 'salary' && ((mdoPeriodMap.get(x.id) || 0) > 0 || (mdoPtoMap.get(x.id) || 0) > 0)).length;
+  const salaried = churchStaff.filter((x) => x.pay_type === 'salary').length
+    + mdoStaff.filter((x) => x.pay_type === 'salary').length;
+  const totalHours = Object.values(periodEntries).reduce((n, e) => n + Number(e.hours_worked || 0), 0)
+    + Array.from(mdoPeriodMap.values()).reduce((n, h) => n + h, 0);
+  $('periodSummary').textContent = periodApproval
+    ? approvalLine()
+    : totalHours.toFixed(2) + ' hours from ' + hourly + (hourly === 1 ? ' hourly person' : ' hourly staff')
+      + ' · ' + salaried + ' salaried, exceptions only';
+
+  const btn = $('approvePeriodBtn');
+  btn.textContent = periodApproval ? 'Take back approval' : 'Approve period';
+  btn.classList.toggle('is-done', !!periodApproval);
+  btn.disabled = !people;
 }
 
-// Everybody who appears as a row this period, keyed the way reviews are —
-// so "how many are left" and "which button did you press" cannot disagree.
+// How many rows this period has. Approving an empty period would be a
+// signature on nothing.
 function payablePeople() {
-  const keys = churchStaff.map((s) => 'church:' + s.id);
+  let n = churchStaff.length;
   mdoStaff.forEach((s) => {
     const h = mdoPeriodMap.get(s.id) || 0;
     const pto = mdoPtoMap.get(s.id) || 0;
-    if (s.pay_type === 'salary' || h > 0 || pto > 0) keys.push('mdo:' + s.id);
+    if (s.pay_type === 'salary' || h > 0 || pto > 0) n++;
   });
-  return keys;
+  return n;
 }
 
 function renderEntry(periodStart) {
@@ -611,7 +619,7 @@ function renderEntry(periodStart) {
     const isSalary = s.pay_type === 'salary';
     const hoursVal = entry.hours_worked === undefined || entry.hours_worked === null ? '' : entry.hours_worked;
     const ptoVal = entry.pto_hours_used === undefined || entry.pto_hours_used === null ? '' : entry.pto_hours_used;
-    const st = entryStatus('church', s.id, isSalary ? 'salary' : 'hourly', Number(hoursVal) > 0);
+    const st = entryStatus(isSalary ? 'salary' : 'hourly', Number(hoursVal) > 0);
     rows.push('<div class="tlc-pay-row tlc-pay-grid">'
       + '<span class="tlc-pay-name"><b>' + esc(s.name) + '</b><span>' + esc(s.role || 'Church staff') + '</span></span>'
       + '<span>' + pill('plain', isSalary ? 'Salaried' : 'Hourly') + '</span>'
@@ -623,7 +631,7 @@ function renderEntry(periodStart) {
       + '<span><span class="tlc-pay-inwrap"><input class="tlc-pay-in" type="number" min="0" step="0.25" value="' + esc(ptoVal)
         + '" placeholder="0" data-staff="' + esc(s.id) + '" data-field="pto_hours_used" data-period="' + esc(periodStart)
         + '" aria-label="PTO used by ' + esc(s.name) + '"><small>hrs</small></span></span>'
-      + '<span class="tlc-pay-status">' + reviewCell('church', s.id, st) + '</span>'
+      + '<span class="tlc-pay-status">' + pill(st.tone, st.label) + '</span>'
       + '</div>');
   });
 
@@ -632,13 +640,13 @@ function renderEntry(periodStart) {
     const h = mdoPeriodMap.get(s.id) || 0;
     const pto = mdoPtoMap.get(s.id) || 0;
     if (!isSalary && h === 0 && pto === 0) return;
-    const st = entryStatus('mdo', s.id, isSalary ? 'salary' : 'hourly', true);
+    const st = entryStatus(isSalary ? 'salary' : 'hourly', true);
     rows.push('<div class="tlc-pay-row tlc-pay-grid">'
       + '<span class="tlc-pay-name"><b>' + esc(s.name) + '</b><span>' + esc(s.role || 'Childcare') + '</span></span>'
       + '<span>' + pill('plain', isSalary ? 'Salaried' : 'Childcare app') + '</span>'
       + '<span class="' + (isSalary ? 'tlc-pay-na' : 'tlc-pay-num') + '">' + (isSalary ? 'n/a' : hrs(h)) + '</span>'
       + '<span class="tlc-pay-num">' + hrs(pto) + '</span>'
-      + '<span class="tlc-pay-status">' + reviewCell('mdo', s.id, st) + '</span>'
+      + '<span class="tlc-pay-status">' + pill(st.tone, st.label) + '</span>'
       + '</div>');
   });
 
@@ -665,36 +673,44 @@ document.addEventListener('input', (e) => {
   scheduleHoursSave(el.dataset.staff, el.dataset.period);
 });
 
-// Checking somebody off, and un-checking them. Delegated like everything else
-// on this page so a name never reaches JS source.
-document.addEventListener('click', async (e) => {
-  const btn = e.target.closest('[data-review-staff]');
-  if (!btn) return;
-  const source = btn.dataset.reviewSource;
-  const staffId = btn.dataset.reviewStaff;
+// Approving the period, and taking it back. One button, one decision.
+$('approvePeriodBtn').addEventListener('click', async () => {
   const periodStart = ($('periodSelect').value || '').split('|')[0];
   if (!periodStart) return;
-  const key = source + ':' + staffId;
-  const wasOn = reviewed.has(key);
+  const btn = $('approvePeriodBtn');
+
+  // Approving while somebody still has no hours would sign off a run that is
+  // demonstrably not finished, so it asks rather than refuses — the office may
+  // know that person genuinely worked none.
+  const missing = missingHours();
+  if (!periodApproval && missing.length) {
+    const names = missing.map((x) => x.name).join(', ');
+    if (!confirm(missing.length + (missing.length === 1 ? ' person has' : ' people have')
+      + ' no hours entered — ' + names + '.\n\nApprove the period anyway?')) return;
+  }
+  if (periodApproval && !confirm('Take back the approval on this period?')) return;
 
   btn.disabled = true;
-  const { error } = wasOn
-    ? await sb.from('payroll_reviews').remove()
-      .eq('period_start', periodStart).eq('source', source).eq('staff_id', staffId)
-    : await sb.from('payroll_reviews')
-      .upsert({ period_start: periodStart, source, staff_id: staffId, reviewed_by: WHO },
-        { onConflict: 'period_start,source,staff_id' });
+  const { error } = periodApproval
+    ? await sb.from('payroll_periods').remove().eq('period_start', periodStart)
+    : await sb.from('payroll_periods')
+      .upsert({ period_start: periodStart, approved_by: WHO }, { onConflict: 'period_start' });
   btn.disabled = false;
 
-  // Only touch the local record once the write has actually landed. Flipping
-  // it first and rolling back on failure would leave a green tick on screen
-  // for a moment on a row nobody had approved.
+  // Only touch the local record once the write has landed. Flipping it first
+  // and rolling back on failure would show a green Approved for a moment on a
+  // run nobody had signed off.
   if (error) { showError('That could not be saved: ' + error.message); return; }
   showError('');
-  if (wasOn) reviewed.delete(key); else reviewed.set(key, { at: new Date().toISOString(), by: WHO });
+  periodApproval = periodApproval ? null : { approved_at: new Date().toISOString(), approved_by: WHO };
   renderEntry(periodStart);
   flashSaved();
 });
+
+function missingHours() {
+  return churchStaff.filter((s) => s.pay_type === 'hourly'
+    && !(Number((periodEntries[s.id] || {}).hours_worked) > 0));
+}
 
 function scheduleHoursSave(staffId, periodStart) {
   clearTimeout(savePending[staffId]);
@@ -976,6 +992,55 @@ $('exportBtn').addEventListener('click', () => {
   a.download = 'payroll-' + periodStart + '.csv';
   a.click();
   URL.revokeObjectURL(a.href);
+});
+
+// ════════════════════════════════════════════════════════════
+// EMAIL THE REPORT TO THE BOOKKEEPER
+// ════════════════════════════════════════════════════════════
+// The page posts the FIGURES, not the rendered HTML. The Worker builds the
+// email itself and escapes every field on the way in, so a staff name can
+// never become markup in something that lands in an outside inbox — and the
+// emailed report cannot drift from a hand-built copy of the same thing.
+$('emailBtn').addEventListener('click', async () => {
+  const sel = $('periodSelect');
+  if (!sel.value) return;
+  const [periodStart, periodEnd] = sel.value.split('|');
+  const groups = reportGroups();
+  if (!groups.some((g) => g.people.length)) { showError('There is nothing to send for this period yet.'); return; }
+
+  const btn = $('emailBtn');
+  btn.disabled = true; btn.textContent = 'Sending…';
+  let res, body;
+  try {
+    res = await fetch('/payroll/email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        periodStart, periodEnd,
+        periodLabel: periodLabel(periodStart, periodEnd),
+        approved: !!periodApproval,
+        approvedBy: periodApproval ? (periodApproval.approved_by || '') : '',
+        incomplete: !!mdoError,
+        total: fromCents(groups.reduce((n, g) => n + cents(subtotal(g.people)), 0)),
+        groups: groups.filter((g) => g.people.length).map((g) => ({
+          name: g.name,
+          subtotal: subtotal(g.people),
+          people: g.people.map((x) => ({ name: x.name, kind: x.kind, basis: x.basis, pto: x.pto, gross: x.gross })),
+        })),
+      }),
+    });
+    body = await res.json().catch(() => ({}));
+  } catch (e) {
+    btn.disabled = false; btn.textContent = 'Email report';
+    showError('The report could not be sent: ' + e.message);
+    return;
+  }
+  btn.disabled = false; btn.textContent = 'Email report';
+  if (!res.ok) { showError(body.error || 'The report could not be sent.'); return; }
+  showError('');
+  $('periodSummary').textContent = 'Sent to ' + (body.to || 'the bookkeeper') + '.';
+  flashSaved();
 });
 
 // ════════════════════════════════════════════════════════════
