@@ -158,7 +158,7 @@ export function primaryCell(title, sub, { icon = '', iconClass = '' } = {}) {
 // JavaScript disabled — you just see every row.
 export function renderListSection(cfg) {
   const {
-    key, title, purpose = '', action = null, altActions = [], search = '', filters = [],
+    key, title, purpose = '', action = null, altActions = [], search = '', filters = [], valueChips = false,
     columns = [], rows = [], note = '', noun = 'item', nounPlural = '',
     empty = 'Nothing here yet.', headerExtra = '',
   } = cfg;
@@ -207,7 +207,13 @@ export function renderListSection(cfg) {
   // A value chip keeps its own colours in BOTH states — selected only adds the
   // 2px solid border. Recolouring it on selection would read as a different
   // value rather than the same one, chosen.
-  const chipsHtml = (cfg.chipFilters || []).map((c) =>
+  // Derived from VALUES when the section declares `valueChips`, so the four
+  // are described in one place (admin/values.js) rather than restated in every
+  // route that wants them. `chipFilters` stays for anything that needs a
+  // bespoke set.
+  const chips = cfg.chipFilters
+    || (valueChips ? VALUES.map((v) => ({ label: `${v.short} · ${v.name}`, value: v.key, tint: v.tint, ink: v.ink, solid: v.solid })) : []);
+  const chipsHtml = chips.map((c) =>
     `<button type="button" class="tlc-chipfilter" data-value="${esc(c.value)}" style="background:${esc(c.tint)};color:${esc(c.ink)};--tlc-chip-solid:${esc(c.solid || c.ink)};">${esc(c.label)}</button>`
   ).join('');
 

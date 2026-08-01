@@ -43,13 +43,13 @@ export const SECTIONS = {
   },
   news: {
     label: 'News & Events', glyph: '◫', title: 'News & Events', purpose: 'One list behind one page — announcements and dated events together, with the calendar embedded below them. Posts here also get pulled into the weekly email. Pinned items stay on top; expired ones drop off on their own.',
-    action: '+ New post', search: 'Search posts', filters: ['All', 'Live', 'Scheduled', 'Expired'],
+    action: '+ New post', search: 'Search posts', filters: ['All', 'Live', 'Scheduled', 'Expired'], valueChips: true,
     columns: [['Post', '2.4fr'], ['Published', '1fr'], ['Expires', '1fr'], ['Status', '1.1fr']],
     note: 'Expiry is what keeps the site honest — a post with an expire date disappears without anyone remembering to delete it.'
   },
   ministries: {
     label: 'Ministries', glyph: '◈', title: 'Ministry pages', purpose: 'Eleven ministry pages, split out from Pages because different people own them and some carry posts. Clicking a row opens the editor.',
-    action: '+ New ministry', search: 'Search ministries', filters: ['All', 'With posts', 'Draft edits', 'Not in menu'],
+    action: '+ New ministry', search: 'Search ministries', filters: ['All', 'With posts', 'Draft edits', 'Not in menu'], valueChips: true,
     columns: [['Ministry', '2.3fr'], ['Short link', '1.1fr'], ['In menu', '.7fr'], ['Status', '1fr']],
     openMode: 'editor',
     note: 'The In menu switch takes a ministry out of the header without unpublishing it — the page stays live at its address, it just stops being listed. Short links work either way: /youth and /ministries/youth land in the same place.'
@@ -58,11 +58,11 @@ export const SECTIONS = {
     label: 'Sermons', glyph: '♪', title: 'Sermons', purpose: 'Series, and the sermons inside them. One series is the active one shown on the site.',
     action: '+ New series', search: 'Search series & sermons', filters: ['All', 'Active series', 'Missing media'],
     columns: [['Series / sermon', '2.4fr'], ['Date', '1fr'], ['Scripture', '1.2fr'], ['Media', '1fr']],
-    note: 'No recordings are attached yet, so the site shows text-only cards. Add a YouTube link to any sermon and it upgrades itself.'
+    note: 'A sermon with no recording shows a text-only card. Add a YouTube link and it upgrades itself.'
   },
   ed: {
     label: 'Christian Ed', glyph: '✎', title: 'Christian Education', purpose: 'Bible classes and Sunday School offerings, in the order they appear on the education page.',
-    action: '+ New class', search: 'Search classes', filters: ['All', 'Running', 'Paused'],
+    action: '+ New class', search: 'Search classes', filters: ['All', 'Running', 'Paused'], valueChips: true,
     columns: [['Class', '2.3fr'], ['Schedule', '1.6fr'], ['Leader', '1fr'], ['Status', '1fr']]
   },
   notices: {
@@ -72,7 +72,7 @@ export const SECTIONS = {
     note: 'A notice is deliberately not a page block: it can be switched off in one click without touching the page it sits on.'
   },
   links: {
-    label: 'NFC Taps\n', glyph: '⛓', title: 'Taps & links', purpose: 'Four NFC taps, each with its own set of link cards. Re-point a tap here and the physical tag keeps working — nothing is reprogrammed.',
+    label: 'NFC Taps', glyph: '⛓', title: 'Taps & links', purpose: 'Four NFC taps, each with its own set of link cards. Re-point a tap here and the physical tag keeps working — nothing is reprogrammed.',
     action: '+ New card', search: 'Search cards', filters: ['All', 'Showing', 'Hidden'],
     columns: [['Card', '2.4fr'], ['Goes to', '2fr'], ['Order', '.7fr'], ['Status', '1fr']],
     note: 'The tag itself only ever holds its short address — /tap1 through /tap4. Everything a visitor sees is these cards, so a tap printed a year ago can point somewhere new today.'
