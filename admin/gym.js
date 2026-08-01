@@ -1541,7 +1541,7 @@ document.getElementById('cancel-confirm-btn').addEventListener('click', function
             try {
               await sendTransactionalEmail(env, {
                 subject: `Your gym rental request — Timothy Lutheran Church`,
-                htmlContent: `<p>Hi ${group.contact || group.name},</p><p>We received your gym rental request for ${created} session${created===1?'':'s'}:</p><ul>${slotLines}</ul><p>The church office will review and confirm your dates. You'll receive an invoice by email once confirmed.</p>${notes ? `<p><em>Your notes: ${notes}</em></p>` : ''}<p>Questions? Email <a href="mailto:dinger@timothystl.org">dinger@timothystl.org</a> or call the church office.</p><p>— Timothy Lutheran Church</p>`,
+                htmlContent: `<p>Hi ${escapeHtml(group.contact || group.name)},</p><p>We received your gym rental request for ${created} session${created===1?'':'s'}:</p><ul>${slotLines}</ul><p>The church office will review and confirm your dates. You'll receive an invoice by email once confirmed.</p>${notes ? `<p><em>Your notes: ${escapeHtml(notes)}</em></p>` : ''}<p>Questions? Email <a href="mailto:dinger@timothystl.org">dinger@timothystl.org</a> or call the church office.</p><p>— Timothy Lutheran Church</p>`,
                 toEmails: [group.email],
               });
             } catch (_) {}
@@ -1698,13 +1698,13 @@ ${portalHeader}
         const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
         try {
           await sendTransactionalEmail(env, {
-            subject: `Recurring rental request — ${group.name}`,
-            htmlContent: `<p><strong>${group.name}</strong> submitted a recurring rental request:</p>
+            subject: `Recurring rental request — ${group.name}`,  // subject is plain text, not markup
+            htmlContent: `<p><strong>${escapeHtml(group.name)}</strong> submitted a recurring rental request:</p>
 <ul>
   <li><strong>Day:</strong> ${DOW_NAMES[dow]}s</li>
   <li><strong>Time:</strong> ${fmt12h(st)} – ${fmt12h(et)}</li>
   <li><strong>Date range:</strong> ${formatDate(sd)} – ${formatDate(ed)}</li>
-  ${notes ? `<li><strong>Notes:</strong> ${notes}</li>` : ''}
+  ${notes ? `<li><strong>Notes:</strong> ${escapeHtml(notes)}</li>` : ''}
 </ul>
 <p><a href="https://admin.timothystl.org/gym-rentals">Review at admin.timothystl.org/gym-rentals</a></p>`,
             toEmails: [adminEmail],
@@ -4707,7 +4707,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/recurring">← Recurri
       <div><div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:4px;">Date Range</div><div style="font-weight:600;">${formatDate(rec.start_date)} – ${formatDate(rec.end_date)}</div></div>
       <div><div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:4px;">Rate</div><div style="font-weight:600;">$${calcTotal(rateType, rate, hours, 1).toFixed(2)}/session (${rateType === 'daily' ? `$${rate}/day` : rateType === 'lump' ? `$${rate} flat` : `${hours}h × $${rate}/hr`})</div></div>
       <div><div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:4px;">Status</div><div style="font-weight:600;">${rec.status}</div></div>
-      ${rec.notes ? `<div style="grid-column:1/-1;"><div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:4px;">Notes</div><div>${rec.notes}</div></div>` : ''}
+      ${rec.notes ? `<div style="grid-column:1/-1;"><div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:4px;">Notes</div><div>${escapeHtml(rec.notes)}</div></div>` : ''}
     </div>
     ${isPending ? `
     <div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);">

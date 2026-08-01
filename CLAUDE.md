@@ -1144,6 +1144,46 @@ needs the resolution to happen somewhere that can record it, and today it
 happens from a cached list in `site-worker.js`. That is a real piece of work,
 not a display change.
 
+#### Four security fixes from the July review (v3.8.0, 2026-08-01)
+
+**VS-2 — the Worship Schedule Builder was public.** `public/scheduler.html`
+was served by the site worker to anybody who typed
+`timothystl.org/scheduler.html`: the whole staff tool, no login. Andrew's call
+was *"lock scheduler behind login"*, so the file moved to `admin/` and is
+served at `admin.timothystl.org/scheduler`, below the session gate.
+
+The old address 302s to the new one. That redirect is not decoration:
+`wrangler-site.toml` sets `not_found_handling = "single-page-application"`, so
+a missing path returns `index.html` with a **200** rather than a 404 — without
+the redirect, the old address would quietly answer with the homepage and look
+like it still worked.
+
+⚠ **It is also dead code.** The only endpoint it talks to,
+`/admin/api/scheduler/data`, does not exist anywhere in this repo, so it can
+neither load nor save. It was locked rather than deleted because that is what
+was asked, and because the schedules it once held may still be wanted. Staff
+are pointed at `connect.timothystl.org` for real scheduling.
+
+**AW-1 — stack traces to strangers.** The top-level catch returned `e.stack`
+to every caller. Its comment said "admin portal is staff-only", but the same
+handler wraps the login page and the public `/api/contact`, `/api/prayer` and
+`/api/subscribe` endpoints. It now returns a short reference and logs the
+detail; a test asserts the message never reaches the response body.
+
+**AC-1 — `Secure` on the session cookie.** Added to the clearing header too:
+a browser will not overwrite a Secure cookie with a non-Secure one, so signing
+out has to match or the cookie survives the sign-out.
+
+**GY-2 — renter notes in the office's session.** `notes` is typed by a renter
+in the public booking portal and was interpolated unescaped into the recurring-
+review page and two staff emails. All three escape now.
+
+`group.name` / `contact` / `email` are still interpolated unescaped in the gym
+portal's own markup. Those are **office-entered** — `gym_groups` is writable
+only through `/gym-rentals/groups/update/`, behind `gym_manage` — so it is
+defence-in-depth against a typo, not an attack path, and a mass edit across a
+hundred call sites was the riskier change. Left deliberately, noted here.
+
 #### The handoff's own open questions (§8), as answered
 
 Andrew answered these on 2026-08-01. They gate later phases, so they are
@@ -1614,12 +1654,12 @@ core modules · `GY-` gym module · `PY-` payroll.
 | Label | Severity | Area | Issue |
 |-------|----------|------|-------|
 | VS-1 | Critical | Scheduler | Special-service rows crash Export CSV, Stats, Auto-Fill & Remove-Person (missing `type` guard) |
-| VS-2 | Critical | Scheduler | `scheduler.html` is served **unauthenticated** at `timothystl.org/scheduler.html` — anyone can open the staff tool |
+| VS-2 | ~~Critical~~ **FIXED v3.8.0** | Scheduler | `scheduler.html` was served unauthenticated at `timothystl.org/scheduler.html` — now `admin.timothystl.org/scheduler`, behind the session |
 | GY-1 | Critical | Gym | [B1] Booking double-book race: SELECT-then-INSERT, no unique constraint/transaction |
-| GY-2 | Critical | Gym | Stored XSS via renter-controlled `notes` rendered unescaped in admin review page + staff emails |
-| AW-1 | High | Admin worker | Unhandled exceptions leak full stack traces to **unauthenticated** clients |
+| GY-2 | ~~Critical~~ **FIXED v3.8.0** | Gym | Stored XSS via renter-controlled `notes` — escaped in the review page and both emails |
+| AW-1 | ~~High~~ **FIXED v3.8.0** | Admin worker | Unhandled exceptions leaked full stack traces to unauthenticated clients — now a reference, with the detail in the log |
 | AW-2 | High | Admin worker | Stored XSS in admin UI via unescaped DB content → cross-privilege escalation (low-perm editor → admin) |
-| AC-1 | High | Core | Session cookie missing `Secure` flag (`auth.js`) |
+| AC-1 | ~~High~~ **FIXED v3.8.0** | Core | Session cookie missing `Secure` flag — added, on both the set and clear headers |
 | AC-2 | High | Core | Email templates interpolate titles/subjects/URLs into broadcast HTML with **no** escaping (`email.js`) |
 | AC-3 | ~~High~~ **FIXED v3.6.0** | Core | `</script>` in saved editor content breaks out of the inline TinyMCE init block (`helpers.js`) — one builder now, `jsString()` splits the tag |
 | AC-4 | High | Core | No UNIQUE constraint on `gym_bookings(booking_date,start_time,end_time)` — schema half of GY-1 |

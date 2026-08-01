@@ -1352,5 +1352,57 @@ group('the NFC taps actually answer');
     'a hand-made redirect beats the tap');
 }
 
+group('the July review\u2019s open security items');
+{
+  const { db, env } = await boot();
+
+  // AW-1: the top-level catch used to return e.stack to EVERY caller. It also
+  // wraps the login page and the public contact/prayer/subscribe endpoints, so
+  // a stranger could read file names, line numbers and query shapes.
+  const boom = await worker.fetch(new Request('https://admin.timothystl.org/api/newsletter/x', {
+    headers: { origin: 'https://admin.timothystl.org' },
+  }), { ...env, DB: { prepare() { throw new Error('SECRET-INTERNAL-DETAIL'); } } }, ctx);
+  const body = await boom.text();
+  ok(!body.includes('SECRET-INTERNAL-DETAIL'), 'an error does not hand its message to the caller');
+  ok(!/\bat\s+\w+.*:\d+:\d+/.test(body), 'nor a stack trace');
+  has(body, 'Reference:', 'it gives a reference instead, so the log can still be found');
+
+  // AC-1: without Secure the browser will send the session cookie over plain
+  // HTTP. It has to be on the clearing header too, or signing out cannot
+  // overwrite the cookie it set.
+  const { cookie } = signIn(db);
+  const out = await call(env, '/logout', { cookie });
+  const setCookie = out.headers.get('set-cookie') || '';
+  has(setCookie, 'Secure', 'signing out clears a Secure cookie');
+  has(setCookie, 'HttpOnly', 'and keeps HttpOnly');
+
+  // VS-2: the Worship Schedule Builder is behind the session now. Before, it
+  // sat in public/ and answered to anybody on the internet.
+  const anon = await worker.fetch(new Request('https://admin.timothystl.org/scheduler'), env, ctx);
+  const anonBody = await anon.text();
+  ok(!anonBody.includes('Worship Schedule'), 'a signed-out visitor does not get the scheduler');
+  has(anonBody, 'Sign in', 'they get the login page');
+
+  const inside = await (await call(env, '/scheduler', { cookie })).text();
+  ok(inside.length > 10000, 'a signed-in staff member does get it: ' + inside.length + ' bytes');
+}
+
+group('renter notes cannot smuggle markup into the office\u2019s session');
+{
+  // GY-2. `notes` is typed by a renter in the public booking portal and was
+  // rendered unescaped into the admin review page and into staff emails —
+  // stored XSS running in the session of whoever opened it.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const now = new Date().toISOString();
+  db.prepare("INSERT INTO gym_groups (id,name,contact,email,active) VALUES (1,'Southside','Ann','a@b.co',1)").run();
+  db.prepare(`INSERT INTO gym_recurrences (id,group_id,day_of_week,start_time,end_time,start_date,end_date,notes,status,created_at)
+              VALUES (1,1,2,'18:00','20:00','2026-09-01','2026-12-15','<img src=x onerror=alert(1)>','pending_review',?)`).run(now);
+
+  const page = await (await call(env, '/gym-rentals/recurring/review/1', { cookie })).text();
+  ok(!page.includes('<img src=x onerror'), 'the note does not reach the page as markup');
+  has(page, '&lt;img src=x', 'it is escaped instead');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

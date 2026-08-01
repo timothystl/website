@@ -195,6 +195,24 @@ export default {
     const path = url.pathname.replace(/^\//, '').replace(/\/$/, '').toLowerCase();
 
     if (path) {
+      // VS-2: the Worship Schedule Builder used to sit in public/ and was
+      // served to anybody who typed this address — the whole staff tool, with
+      // no login. It now lives behind the admin session at
+      // admin.timothystl.org/scheduler.
+      //
+      // This is belt as well as braces: the file is out of public/ already, so
+      // there is nothing here to serve. But `not_found_handling` is
+      // single-page-application, which means an unknown path returns
+      // index.html with a 200 rather than a 404 — so without this, the old
+      // address would quietly answer with the website's homepage and look like
+      // it still works. Sending it somewhere real is more useful than either.
+      if (path === 'scheduler.html' || path === 'scheduler') {
+        return new Response(null, {
+          status: 302,
+          headers: { 'Location': 'https://admin.timothystl.org/scheduler' },
+        });
+      }
+
       // Settings-based redirects (zoom, councilfiles) — handled before SPA loads
       if (SETTINGS_REDIRECTS[path]) {
         const { key, fallback } = SETTINGS_REDIRECTS[path];
