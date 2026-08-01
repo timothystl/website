@@ -72,6 +72,7 @@ jobs:
 #   node test/editor.test.mjs            # the block editor shell
 #   node test/site-editor.test.mjs       # the pages rail and Page tab
 #   node test/public-page.test.mjs       # the live site
+#   node test/payroll.test.mjs           # payroll, against a stubbed Supabase
 #   ... and editor-edit, editor-dnd, editor-media, editor-publish,
 #       editor-resize, editor-sections, site-roles, site-pages, whole-page
 #

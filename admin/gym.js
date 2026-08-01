@@ -3,6 +3,8 @@
 
 import { html, sidebarShell, formatDate, tinymceEditorSection, escapeHtml } from './helpers.js';
 import { sendTransactionalEmail } from './email.js';
+import { renderListSection, primaryCell, statusPill } from './ui.js';
+import { section as sectionCfg } from './sections.js';
 
 // ── IMAGE HELPERS ───────────────────────────────────────────
 export function extractImageKeys(body, origin) {
@@ -1778,9 +1780,9 @@ ${portalHeader}
         const fmtShort = d => d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
 
         const [holdsRes, pendingRes, confirmedRes, rateRow, holdHrsRow, confHrsRow, confirmedThisMonthRow, unpaidInvoicesRow, activeGroupsRow] = await Promise.all([
-          env.DB.prepare(`SELECT b.*, g.name as group_name, r.day_of_week as rec_dow, r.start_date as rec_start, r.end_date as rec_end FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id LEFT JOIN gym_recurrences r ON r.id = b.recurrence_id WHERE b.status = 'hold' ORDER BY b.group_id, b.booking_date, b.start_time`).all(),
-          env.DB.prepare(`SELECT r.*, g.name as group_name FROM gym_recurrences r LEFT JOIN gym_groups g ON g.id = r.group_id WHERE r.status = 'pending_review' ORDER BY r.created_at`).all(),
-          env.DB.prepare(`SELECT b.*, g.name as group_name, r.day_of_week as rec_dow, r.start_date as rec_start, r.end_date as rec_end FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id LEFT JOIN gym_recurrences r ON r.id = b.recurrence_id WHERE b.status = 'confirmed' AND b.booking_date >= ? ORDER BY b.group_id, b.recurrence_id, b.booking_date`).bind(today).all(),
+          env.DB.prepare(`SELECT b.*, g.name as group_name, g.contact as group_contact, g.phone as group_phone, r.day_of_week as rec_dow, r.start_date as rec_start, r.end_date as rec_end FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id LEFT JOIN gym_recurrences r ON r.id = b.recurrence_id WHERE b.status = 'hold' ORDER BY b.group_id, b.booking_date, b.start_time`).all(),
+          env.DB.prepare(`SELECT r.*, g.name as group_name, g.contact as group_contact, g.phone as group_phone FROM gym_recurrences r LEFT JOIN gym_groups g ON g.id = r.group_id WHERE r.status = 'pending_review' ORDER BY r.created_at`).all(),
+          env.DB.prepare(`SELECT b.*, g.name as group_name, g.contact as group_contact, g.phone as group_phone, r.day_of_week as rec_dow, r.start_date as rec_start, r.end_date as rec_end FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id LEFT JOIN gym_recurrences r ON r.id = b.recurrence_id WHERE b.status = 'confirmed' AND b.booking_date >= ? ORDER BY b.group_id, b.recurrence_id, b.booking_date`).bind(today).all(),
           env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_rate_per_hour'").first(),
           env.DB.prepare("SELECT start_time, end_time FROM gym_bookings WHERE status='hold'").all(),
           env.DB.prepare("SELECT start_time, end_time FROM gym_bookings WHERE status='confirmed'").all(),
@@ -1996,9 +1998,15 @@ ${portalHeader}
           const iso = `${calY}-${String(calM).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
           const items = byDate[iso] || [];
           const blocked = blockedBy[iso];
-          const chips = items.slice(0, 3).map((it) =>
-            `<span class="gymcal-chip gymcal-chip--${it.kind}" title="${escapeHtml((it.b.group_name || 'Unassigned') + ' · ' + (it.b.start_time || '') + '–' + (it.b.end_time || ''))}">${escapeHtml((it.b.group_name || 'Unassigned').slice(0, 14))}</span>`
-          ).join('');
+          // A booking sitting on a blocked date is the one thing on this
+          // screen that is actually wrong, so it takes the conflict tone
+          // rather than its own — being blue and correct-looking is how a
+          // double-booking survives to Sunday.
+          const chips = items.slice(0, 3).map((it) => {
+            const tone = blocked ? 'conflict' : it.kind;
+            const label = (it.b.group_name || 'Unassigned').slice(0, 14) + (it.kind === 'hold' ? ' · hold' : '');
+            return `<span class="gymcal-chip gymcal-chip--${tone}" title="${escapeHtml((it.b.group_name || 'Unassigned') + ' · ' + fmt12h(it.b.start_time) + '–' + fmt12h(it.b.end_time) + (blocked ? ' — on a blocked date' : ''))}">${escapeHtml(label)}</span>`;
+          }).join('');
           const more = items.length > 3 ? `<span class="gymcal-more">+${items.length - 3} more</span>` : '';
           cells += `<div class="gymcal-cell${blocked ? ' gymcal-cell--blocked' : ''}${iso === today ? ' gymcal-cell--today' : ''}">
       <span class="gymcal-day">${day}</span>
@@ -2008,22 +2016,176 @@ ${portalHeader}
         }
 
         const calendarHtml = `<div class="gymcal-head">
-    <a class="gymcal-nav" href="/gym-rentals?view=calendar&m=${shiftMonth(-1)}">← ${new Date(Date.UTC(calY, calM - 2, 1)).toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' })}</a>
-    <span class="gymcal-title">${escapeHtml(monthLabel)}</span>
-    <a class="gymcal-nav" href="/gym-rentals?view=calendar&m=${shiftMonth(1)}">${new Date(Date.UTC(calY, calM, 1)).toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' })} →</a>
+    <span style="display:flex;align-items:center;gap:10px;">
+      <span class="gymcal-title">${escapeHtml(monthLabel)}</span>
+      <span class="gymcal-navs">
+        <a class="gymcal-arrow" href="/gym-rentals?view=calendar&m=${shiftMonth(-1)}" aria-label="Previous month">&lsaquo;</a>
+        <a class="gymcal-arrow" href="/gym-rentals?view=calendar&m=${shiftMonth(1)}" aria-label="Next month">&rsaquo;</a>
+      </span>
+    </span>
+    <span class="gymcal-legend">
+      <span><i class="gymcal-swatch gymcal-chip--confirmed"></i>Confirmed</span>
+      <span><i class="gymcal-swatch gymcal-chip--hold"></i>Hold</span>
+      <span><i class="gymcal-swatch gymcal-chip--conflict"></i>Conflict</span>
+      <span><i class="gymcal-swatch gymcal-swatch--blocked"></i>Blocked</span>
+    </span>
   </div>
   <div class="gymcal-grid">
-    ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d) => `<div class="gymcal-dow">${d}</div>`).join('')}
+    ${['S','M','T','W','T','F','S'].map((d) => `<div class="gymcal-dow">${d}</div>`).join('')}
     ${cells}
   </div>
-  <div class="gymcal-key">
-    <span><i class="gymcal-swatch gymcal-chip--confirmed"></i>Confirmed</span>
-    <span><i class="gymcal-swatch gymcal-chip--hold"></i>Hold, awaiting review</span>
-    <span><i class="gymcal-swatch gymcal-swatch--blocked"></i>Blocked date</span>
-  </div>
-  <p class="tlc-note" style="margin:14px 16px 0;"><span class="tlc-note-mark">◆</span><span>This view is for seeing the shape of a month. Confirming, releasing and invoicing all happen in the Queue view, so there is only ever one place a booking changes.</span></p>`;
+  <p class="tlc-note" style="margin:14px 16px 16px;"><span class="tlc-note-mark">◆</span><span>This view is for seeing the shape of a month. Confirming, releasing and invoicing all happen in the Queue view, so there is only ever one place a booking changes.</span></p>`;
 
         const gymView = url.searchParams.get('view') === 'calendar' ? 'calendar' : 'queue';
+
+        // ── THE QUEUE, AS THE DESIGN DRAWS IT ──────────────────
+        // One list: recurring requests waiting for review, holds ticking down,
+        // and what is already confirmed. The old screen split those into three
+        // cards, which meant the question "what needs me?" had three places to
+        // look. Group · Requested · Conflicts · Status, and two actions.
+        //
+        // The bulk tools and the per-organisation accordions are NOT dropped —
+        // they carry the invoice generation and the calendar push, and one
+        // person's whole job runs through them. They moved below the queue,
+        // under a heading, rather than being replaced by a prettier list that
+        // cannot do the work.
+        const gymBlockedAll = await env.DB.prepare('SELECT date, reason FROM gym_blocked_dates').all().catch(() => ({ results: [] }));
+        const gymBlockedBy = {};
+        for (const b of (gymBlockedAll.results || [])) gymBlockedBy[b.date] = b.reason || 'Blocked';
+
+        // A conflict is one of two real things: the date is blocked, or the
+        // slot overlaps something already confirmed. Both are stated in words
+        // rather than left for somebody to spot on the calendar.
+        const confirmedSlots = confirmedRes.results.map((b) => ({ d: b.booking_date, s: b.start_time, e: b.end_time, id: b.id }));
+        const overlaps = (b) => confirmedSlots.some((c) =>
+          c.id !== b.id && c.d === b.booking_date && c.s < b.end_time && b.start_time < c.e);
+        const conflictOf = (b) => {
+          if (gymBlockedBy[b.booking_date]) return { text: 'Blocked date', bad: true };
+          if (overlaps(b)) return { text: '1 conflict', bad: true };
+          return { text: 'None', bad: false };
+        };
+
+        const hoursLeft = (iso) => {
+          if (!iso) return null;
+          const ms = new Date(iso).getTime() - Date.now();
+          return ms > 0 ? Math.round(ms / 3600000) : 0;
+        };
+
+        const groupCell = (name, contact, phone) => primaryCell(
+          name || 'Unassigned',
+          [contact, phone].filter(Boolean).join(' · ') || 'No contact on file');
+
+        const queueRows = [];
+
+        // Recurring requests waiting for a decision. These come first because
+        // they are the only rows where nothing happens at all until somebody
+        // acts — a hold at least expires on its own.
+        for (const r of pendingRes.results) {
+          const dates = r.start_date && r.end_date
+            ? Math.floor((new Date(r.end_date) - new Date(r.start_date)) / 6048e5) + 1 : null;
+          queueRows.push({
+            href: `/gym-rentals/recurring/review/${r.id}`,
+            filter: 'needs-review',
+            search: `${r.group_name || ''} ${r.group_contact || ''} recurring`.toLowerCase(),
+            cells: [
+              groupCell(r.group_name, r.group_contact, r.group_phone),
+              primaryCell(`${DOW_FULL[r.day_of_week]}s, ${fmt12h(r.start_time)}–${fmt12h(r.end_time)}`,
+                `${fmtShort(r.start_date)} – ${fmtShort(r.end_date)}${dates ? ` · ${dates} dates` : ''}`),
+              '<span style="font-weight:600;color:var(--tlc-body);">Recurring</span>',
+              statusPill('warn', 'Needs review'),
+            ],
+            actions: `<a class="tlc-gym-approve" href="/gym-rentals/recurring/review/${r.id}">Review</a>`
+              + `<a class="tlc-gym-open" href="/gym-rentals/recurring/review/${r.id}">Open</a>`,
+          });
+        }
+
+        // Holds, newest expiry first — the ones about to lapse are the ones
+        // worth seeing.
+        for (const b of holdItems) {
+          const left = hoursLeft(b.isGroup ? b.groupHoldExpires : b.hold_expires_at);
+          const c = conflictOf(b);
+          const ids = b.isGroup ? b.groupIds : [b.id];
+          const when = b.isRecurring
+            ? `${DOW_FULL[b.rec_dow]}s, ${fmt12h(b.start_time)}–${fmt12h(b.end_time)}`
+            : `${fmtBookingDate(b.booking_date)}, ${fmt12h(b.start_time)}–${fmt12h(b.end_time)}`;
+          const span = b.isGroup ? `${fmtShort(b.booking_date)} – ${fmtShort(b.groupEnd)} · ${ids.length} dates`
+            : b.isRecurring ? `${fmtShort(b.rec_start)} – ${fmtShort(b.rec_end)}` : 'One-off';
+          queueRows.push({
+            filter: 'holds',
+            search: `${b.group_name || ''} ${b.group_contact || ''} hold`.toLowerCase(),
+            cells: [
+              groupCell(b.group_name, b.group_contact, b.group_phone),
+              primaryCell(when, span),
+              `<span style="font-weight:600;color:${c.bad ? 'var(--tlc-bad-ink,#8A4A4A)' : '#3B4C2E'};">${escapeHtml(c.text)}</span>`,
+              statusPill('warn', left === null ? 'Hold' : left <= 0 ? 'Hold · expired' : `Hold · ${left}h left`),
+            ],
+            actions: `<form method="POST" action="/gym-rentals/bookings/${ids.length > 1 ? 'bulk-confirm' : `confirm-admin/${b.id}`}" style="margin:0;" onsubmit="return confirm('Confirm ${ids.length > 1 ? `all ${ids.length} bookings` : 'this hold'} and generate an invoice?')">`
+              + (ids.length > 1 ? ids.map((i) => `<input type="hidden" name="ids" value="${i}">`).join('') : '')
+              + `<button type="submit" class="tlc-gym-approve">Approve</button></form>`
+              + `<a class="tlc-gym-open" href="/gym-rentals/groups/${b.group_id}">Open</a>`,
+            warn: c.bad ? (gymBlockedBy[b.booking_date]
+              ? `${fmtBookingDate(b.booking_date)} is blocked — ${gymBlockedBy[b.booking_date]}. Approving anyway will double-book the gym.`
+              : 'This slot overlaps a booking that is already confirmed. Approving anyway will double-book the gym.') : '',
+            warnCta: c.bad ? { label: 'See the month', href: `/gym-rentals?view=calendar&m=${(b.booking_date || '').slice(0, 7)}` } : null,
+          });
+        }
+
+        // Already confirmed. Listed because "what is booked" is the other half
+        // of the question this screen answers, and because a confirmed booking
+        // on a date that later got blocked needs to be visible.
+        for (const b of confirmedItems) {
+          const c = conflictOf(b);
+          const when = b.isRecurring
+            ? `${DOW_FULL[b.rec_dow]}s, ${fmt12h(b.start_time)}–${fmt12h(b.end_time)}`
+            : `${fmtBookingDate(b.booking_date)}, ${fmt12h(b.start_time)}–${fmt12h(b.end_time)}`;
+          const span = b.isGroup ? `${fmtShort(b.booking_date)} – ${fmtShort(b.groupEnd)} · ${b.groupIds.length} dates`
+            : b.isRecurring ? `${fmtShort(b.rec_start)} – ${fmtShort(b.rec_end)}` : 'One-off';
+          queueRows.push({
+            filter: 'confirmed',
+            search: `${b.group_name || ''} ${b.group_contact || ''} confirmed`.toLowerCase(),
+            cells: [
+              groupCell(b.group_name, b.group_contact, b.group_phone),
+              primaryCell(when, span),
+              `<span style="font-weight:600;color:${c.bad ? 'var(--tlc-bad-ink,#8A4A4A)' : '#3B4C2E'};">${escapeHtml(c.text)}</span>`,
+              statusPill('good', 'Confirmed'),
+            ],
+            actions: `<a class="tlc-gym-open" href="/gym-rentals/groups/${b.group_id}">Open</a>`,
+            warn: gymBlockedBy[b.booking_date]
+              ? `This booking is confirmed on a date that has since been blocked — ${gymBlockedBy[b.booking_date]}. Somebody needs to be told.` : '',
+            warnCta: gymBlockedBy[b.booking_date] ? { label: 'Blocked dates', href: '/gym-rentals/blocked' } : null,
+          });
+        }
+
+        const queueHtml = renderListSection({
+          key: 'gym-queue',
+          title: sectionCfg('gym').title,
+          purpose: sectionCfg('gym').purpose,
+          action: { label: sectionCfg('gym').action, href: '/gym-rentals/bookings/new' },
+          search: 'Search groups',
+          filters: [
+            { label: 'All', value: 'all' },
+            { label: 'Needs review', value: 'needs-review' },
+            { label: 'Holds', value: 'holds' },
+            { label: 'Confirmed', value: 'confirmed' },
+          ],
+          columns: [
+            { label: 'Group', width: '1.9fr' },
+            { label: 'Requested', width: '1.9fr' },
+            { label: 'Conflicts', width: '1fr' },
+            { label: 'Status', width: '1.2fr' },
+          ],
+          rows: queueRows,
+          noun: 'request',
+          empty: 'Nothing waiting and nothing booked.',
+          headerExtra: `<div class="tlc-bar" style="border:0;padding-bottom:0;">
+            <nav class="tlc-seg" aria-label="Gym view">
+              <a href="/gym-rentals?view=calendar" class="${gymView === 'calendar' ? 'is-on' : ''}">Calendar first</a>
+              <a href="/gym-rentals" class="${gymView === 'queue' ? 'is-on' : ''}">Queue first</a>
+            </nav>
+            <span style="font-size:12.5px;color:var(--tlc-muted);">Billing at $${escapeHtml(rateRow?.value || '25.00')}/hr · <a href="/gym-rentals/settings" style="color:var(--tlc-blue);">change</a></span>
+          </div>`,
+          note: 'A hold that nobody touches lapses after 48 hours and the slot goes back. Approving one confirms the booking, generates the invoice and pushes the date to the calendar — all three, in one click.',
+        });
 
         const confirmAllBtn = holdsRes.results.length >= 1
           ? `<form method="POST" action="/gym-rentals/bookings/confirm-all-holds" onsubmit="return confirm('Confirm all ${holdsRes.results.length} holds and generate invoices?')" style="display:inline;"><button type="submit" class="btn btn-sm btn-primary">Confirm All (${holdsRes.results.length})</button></form>`
@@ -2032,19 +2194,27 @@ ${portalHeader}
         return html(`
 ${sidebarShell('gym', currentUser)}
 <style>details > summary { list-style: none; } details > summary::-webkit-details-marker { display: none; }</style>
-<div class="wrap">
-  <div class="tlc-dash-head" style="margin-bottom:16px;">
-    <div>
-      <h1 class="tlc-title">Gym Rentals</h1>
-      <p class="tlc-purpose">Requests to review, what is booked, and the invoices that follow. Holds lapse after 48 hours if nobody confirms them.</p>
-    </div>
-    <nav class="tlc-seg" aria-label="Gym view">
-      <a href="/gym-rentals" class="${gymView === 'queue' ? 'is-on' : ''}">Queue</a>
-      <a href="/gym-rentals?view=calendar" class="${gymView === 'calendar' ? 'is-on' : ''}">Calendar</a>
-    </nav>
-  </div>
+<div class="tlc-wrap">
   ${gymAlert}
-  ${gymView === 'calendar' ? `<div class="tlc-panel" style="margin-bottom:20px;">${calendarHtml}</div>` : ''}
+  ${gymView === 'calendar' ? `
+  <div class="tlc-section">
+    <header class="tlc-section-head">
+      <div class="tlc-section-headings">
+        <h1 class="tlc-title">${escapeHtml(sectionCfg('gym').title)}</h1>
+        <p class="tlc-purpose">${escapeHtml(sectionCfg('gym').purpose)}</p>
+      </div>
+      <a class="tlc-action" href="/gym-rentals/bookings/new">${escapeHtml(sectionCfg('gym').action)}</a>
+    </header>
+    <div class="tlc-bar" style="border:0;">
+      <nav class="tlc-seg" aria-label="Gym view">
+        <a href="/gym-rentals?view=calendar" class="is-on">Calendar first</a>
+        <a href="/gym-rentals">Queue first</a>
+      </nav>
+    </div>
+    <div class="tlc-panel">${calendarHtml}</div>
+  </div>` : queueHtml}
+
+  <div class="tlc-section" style="padding-top:0;">
   <div class="stat-row"${gymView === 'calendar' ? ' style="display:none;"' : ''}>
     <div class="stat-card">
       <div class="stat-label">Pending holds</div>
@@ -2068,7 +2238,6 @@ ${sidebarShell('gym', currentUser)}
     </div>
   </div>
   <div class="btn-row" style="margin-bottom:16px;">
-    <a href="/gym-rentals/bookings/new" class="btn btn-primary">+ New Booking</a>
     <a href="/gym-rentals/groups" class="btn btn-secondary">Manage Groups</a>
     <a href="/gym-rentals/blocked" class="btn btn-sage">Blocked Dates</a>
     <a href="/gym-rentals/invoices" class="btn btn-secondary">Invoices</a>
@@ -2079,13 +2248,17 @@ ${sidebarShell('gym', currentUser)}
   </div>
   <div${gymView === 'calendar' ? ' style="display:none;"' : ''}>
   <div style="background:var(--mist);border:1px solid var(--border);border-radius:10px;padding:12px 18px;margin-bottom:24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
-    <div style="font-size:14px;color:var(--charcoal);">Rental rate: <strong>$${rateRow?.value || '25.00'}/hr</strong></div>
-    <a href="/gym-rentals/settings" style="font-size:13px;color:var(--teal,#2E7EA6);text-decoration:none;border-bottom:1px solid currentColor;">Change rate →</a>
-    <div style="width:1px;height:20px;background:var(--border);"></div>
     <div style="font-size:13px;color:var(--charcoal);">Pending holds: <strong>${holdHrs} hrs</strong> <span style="color:var(--gray);">($${(holdHrs * rate).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})})</span></div>
     <div style="font-size:13px;color:var(--charcoal);">Confirmed (upcoming): <strong>${confHrs} hrs</strong> <span style="color:var(--gray);">($${(confHrs * rate).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})})</span></div>
     <div style="margin-left:auto;font-size:12px;color:var(--gray);">Mon–Fri 5–9 PM &nbsp;·&nbsp; Sat 8 AM–8 PM &nbsp;·&nbsp; Sun 1–8 PM</div>
   </div>
+  <!-- The queue above answers "what needs me". This is the same bookings
+       grouped by organisation, and it is where the bulk tools live: confirming
+       a whole group at one price, releasing several holds at once, deleting a
+       run of confirmed dates. One person's whole job runs through these, so
+       they stayed exactly as they were. -->
+  <h2 class="tlc-title" style="font-size:20px;margin-bottom:2px;">By organisation</h2>
+  <p class="tlc-purpose" style="margin-bottom:16px;">The same bookings, grouped — and where confirming, releasing or deleting several at once happens.</p>
   <div class="card">
     <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
       <span>Pending Holds</span>

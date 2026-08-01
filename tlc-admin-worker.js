@@ -2989,9 +2989,13 @@ ${sidebarShell('partners', currentUser, `<a href="/partners">← All partners</a
       if (!hasPermission(currentUser, 'payroll_manage')) {
         return new Response('Access denied.', { status: 403 });
       }
-      return new Response(PAYROLL_HTML, {
-        headers: { 'Content-Type': 'text/html; charset=utf-8', 'X-Robots-Tag': 'noindex, nofollow' }
-      });
+      // Phase 8: payroll is a fragment now, served inside the shared shell, so
+      // it has the sidebar, the ⌘K palette and every accessibility and mobile
+      // fix the rest of the admin gets. It used to be a standalone document
+      // whose only way back out was a Sign Out button (PY-3).
+      return html(`
+${sidebarShell('payroll', currentUser, '', await badgeCounts(env, currentUser))}
+${PAYROLL_HTML}`, 'Payroll');
     }
 
     // ── GYM ADMIN ROUTES (auth + gym_manage) ───────────────────

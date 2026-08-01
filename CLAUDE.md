@@ -146,13 +146,13 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Notices | Office staff — requires `notices_edit` | **DONE** — self-serve banner notices per static page (renamed from "Pages"; the permission was `pages_edit` before v3.0.0) · **on the shared pattern** |
 | Links | Office staff | **DONE** — manages link cards shown at links.timothystl.org (`link_cards` table) |
 | Staff | Office staff | **DONE** — staff directory (photos, bios, emails) shown on /about |
-| Gym Rentals | Office staff (Dinger) | **DONE** — full rental management at /gym-rentals |
+| Gym Rentals | Office staff (Dinger) | **DONE** (v3.2.0) — full rental management at /gym-rentals, queue rebuilt to the design; see "Gym and Payroll, to the mockups" below |
 | Users | Admins | **DONE** — user accounts + per-tab permission checkboxes |
 | Subscribers | Office staff | **DONE** — newsletter subscriber list |
 | Redirects | Office staff | **DONE** — admin-managed URL redirects at `/redirects`, all four kinds in one list (hand-made, automatic 301s from renames, derived short links, giving) · **on the shared pattern** with a drawer |
 | Settings | Office staff — requires `settings_manage` | **DONE** (v3.1.0) — the `site_settings` keys the rest of the site reads, each with what reads it; anything with a screen of its own links there rather than duplicating the field |
 | Giving | Office staff — requires `giving_manage` permission | **DONE** (2026-07-27) — base Tithe.ly link, give.timothystl.org's amount tiers + per-tier links, and vendor/market one-off payment links (Tithe.ly or Square); see below |
-| Payroll | Office staff (Dinger) — requires `payroll_manage` permission | **DONE** — combined biweekly payroll (church staff + MDO preschool staff); see "Payroll & Supabase" below |
+| Payroll | Office staff (Dinger) — requires `payroll_manage` permission | **DONE** (v3.2.0) — combined biweekly payroll (church staff + MDO preschool staff), rebuilt onto the shared shell with the design's period picker, Enter & approve / Report and three report layouts; see "Gym and Payroll, to the mockups" and "Payroll & Supabase" below |
 | Audit Log | Admins | **DONE** — change history + rollback, requires `audit_view` |
 | Media | Office staff (`pages_edit`) or a ministry leader (`ministries_edit`) | **DONE** (2026-08-01) — the photo/video library with alt text, size and usage; see "Phase 9" below |
 | Menu | Office staff — requires `pages_edit` | **DONE** (2026-08-01) — the header and footer as a drag-and-drop tree with a live preview (`menu_items` table); see "Phase 4 — the Menu" below |
@@ -384,10 +384,9 @@ own table, its own filters, its own idea of what a status looked like. The fix
 is not new features: it is **one pattern, applied to every section**, so that
 learning one screen teaches all of them.
 
-**This is phases 0–2 of a nine-phase plan.** What is NOT built yet: the Menu
-editor (4), the full newsletter composer (5), Staff/Users/Subscribers on the
-pattern (6), Gym and Giving (7), Payroll (8), Media / audit rollback / ⌘K (9).
-`design_handoff_admin_overhaul/IMPLEMENTATION-PHASES.md` is the build order.
+**All nine phases are built**, plus a mockup-match pass (v3.1.0) and the Gym /
+Payroll rebuild (v3.2.0). `design_handoff_admin_overhaul/IMPLEMENTATION-PHASES.md`
+was the build order.
 
 - **`admin/ui.js` is the pattern, once.** `renderListSection()` takes a config
   and emits the whole thing: title, one action, purpose line, search + filter
@@ -800,17 +799,91 @@ organization of tabs isn't the same"* — was right, and this pass is the fix.
   grid, from the design's own `grid()`): a pill that wraps reads as two broken
   words rather than one status.
 
-Not done, and deliberately: Gym Rentals and Payroll keep their bespoke screens
-(Gym because the money and the bookings are behind it and one person uses it;
-Payroll is Phase 8 and unstarted). Filtered Mail is not in the design's IA at
-all — it shipped after the handoff — and sits under Email, which is where
-somebody would look for held mail.
+Filtered Mail is not in the design's IA at all — it shipped after the handoff —
+and sits under Email, which is where somebody would look for held mail.
+
+Gym Rentals and Payroll were left bespoke in this pass and rebuilt in the next
+one — see "Gym and Payroll, to the mockups" below.
 
 **One question is still open**, and it is the only place the handoff
 contradicts itself: the mockups render a row's warning row **above** the row it
 refers to (visible in `pages.png` and `media.png`), while README §3 says it
 "grows a warning row beneath it". Warnings currently render beneath. Settle it
 before changing them.
+
+#### Gym and Payroll, to the mockups (v3.2.0, 2026-08-01)
+
+The two screens the mockup-match pass deliberately skipped. Andrew asked for
+both: *"i want the gym and payroll to move to what i mocked up for you"*.
+
+**Gym Rentals** now leads with the design's queue — one list, `Group ·
+Requested · Conflicts · Status`, with `Approve` and `Open` on every row.
+
+- **One list, not three cards.** Recurring requests awaiting review, holds
+  ticking down, and confirmed bookings were three separate cards, so "what
+  needs me?" had three places to look. Recurring requests sort first because
+  they are the only rows where nothing happens at all until somebody acts — a
+  hold at least expires on its own.
+- **`Conflicts` is computed, not decorative.** A hold on a blocked date, or one
+  overlapping something already confirmed, says so in the column *and* grows a
+  warning row spelling out that approving it would double-book the gym. On the
+  calendar the same booking takes the conflict tone rather than its own —
+  being blue and correct-looking is how a double-booking survives to Sunday.
+- **⚠ The bulk tools were NOT replaced by the queue.** Confirming a whole group
+  at one price, releasing several holds, deleting a run of confirmed dates —
+  those carry the invoice generation and the Google Calendar push, and one
+  person's whole job runs through them. They moved *below* the queue under a
+  "By organisation" heading, untouched. Deleting a working invoice flow because
+  a mockup does not draw it would be the wrong reading of "match the mockups".
+- The calendar view gained the design's four-tone legend (Confirmed · Hold ·
+  Conflict · Blocked) and `‹ ›` month arrows. It stays read-only on purpose.
+
+**Payroll (Phase 8)** is now a fragment served inside `sidebarShell()`.
+
+- **PY-3 is fixed.** It was a standalone document — its own fonts, its own
+  navy, no sidebar, and a Sign Out button as the only way back. It now has the
+  same chrome, sidebar and ⌘K palette as every other screen, and inherits every
+  future accessibility and mobile fix.
+- **The Supabase SDK is gone.** Running under the shared shell means running
+  under the admin CSP, which allows no third-party script host, and widening
+  the CSP for every screen to suit one page would be the wrong trade. Only
+  eleven PostgREST queries were ever made, so `sbQuery()` is that subset with
+  the SDK's shape — `sb.from(t).select().eq()` still reads the same.
+- **The design's Status column is not invented.** The mockup reads Approved /
+  Submitted / Imported / Unmatched; this repo has no approval state on a period
+  entry, and a green APPROVED beside a row nobody had looked at would be a lie.
+  It says the thing that is true and actually blocks a payroll run: `Needs
+  hours` / `Hours in` / `Salaried` / `From MDO`, with the period badge counting
+  who is still missing.
+- **There is no "Import from childcare app" button**, because there is no
+  import step — MDO hours are read live every time the period changes. A button
+  labelled Import would imply a staleness that does not exist. The row says
+  what is true and offers the one real action: read again.
+- **⚠ Still no rate field for MDO staff, deliberately.** Church rates are typed
+  in here; MDO rates are read from the MDO app. The screen says so in as many
+  words. See "Where a pay rate comes from" below — do not add one.
+
+Five review items were fixed while rebuilding, because the code was being
+rewritten anyway and leaving them would have meant touching payroll twice:
+
+| Label | What was wrong |
+|---|---|
+| PY-1 | Names interpolated into inline `onclick` — `O'Brien` broke Edit, and a crafted name ran script. Everything is delegated off data attributes now. |
+| PY-2 | The 403(b) base was `hours × rate` in the line items and `(hours + PTO) × rate` in the gross, so a person's card did not add up to their own Gross Pay. `baseEarnings()` is computed once and used by both. |
+| PY-5 | CSV cells starting `= + - @` are formulas to a spreadsheet. Prefixed now. |
+| PY-6 | Money was summed unrounded and rounded at the end, so a printed subtotal could disagree with the rows above it. Every gross rounds to cents *before* it is added. |
+| PY-9 | A failed MDO query was swallowed by `|| []`, so a payroll run quietly came out short. It now says the report is incomplete, in the entry view, in the report, and in the CSV. |
+
+`admin/helpers.js` also gained `X-Robots-Tag: noindex, nofollow` on every admin
+page — `/payroll` carried it itself, and folding it into the shell would
+otherwise have quietly dropped it.
+
+**Tests:** `node test/payroll.test.mjs` drives the real page in Chromium against
+a stubbed Supabase. It pins the arithmetic with worked figures (a $3,966
+salaried gross; $1,224 for 60 hours + 8 PTO at $20 with a 10% 403(b) — which is
+$1,240 if PY-2 comes back), all three report layouts, the apostrophe, and the
+childcare-app-unreachable path. Gym's queue is covered in
+`test/admin-redesign.test.mjs`.
 
 #### The handoff's own open questions (§8), as answered
 
@@ -1005,9 +1078,10 @@ add a rate field for MDO staff (which would create a second, silently
 diverging source of truth for what someone is paid) or try to import church
 rates from anywhere.
 
-When Phase 8 rebuilds the Payroll UI, it rebuilds the *screens* on the shared
-pattern. It does not move this data and does not change where a rate comes
-from.
+Phase 8 (v3.2.0) rebuilt the Payroll *screens* onto the shared shell. It did
+not move this data and did not change where a rate comes from — there is still
+deliberately no rate field for an MDO person, and the screen now says so in as
+many words.
 
 ### Access Control
 - Staff admin password: full access (all tabs) — permissions are granted per-account, per-tab via the Users tab's checkboxes (see `PERMISSIONS` in `admin/auth.js`)
