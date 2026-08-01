@@ -314,5 +314,27 @@ group('one palette');
   eq(shell.split(':root{').length - 1, 1, 'the shell declares exactly one :root');
 }
 
+
+// ── the first screen anybody sees ────────────────────────────────────────────
+// Login, forgot password, reset and first-run setup were never redesigned.
+// They inherit Task 1's primitives rather than carrying their own values, so
+// what this asserts is that the shared card is the spec's card — and that none
+// of the four has grown a private override since.
+group('login and the account screens');
+{
+  const shell = readFileSync(new URL('./helpers.js', import.meta.url), 'utf8');
+
+  ok(shell.includes('.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#1E2D4A;}'),
+    'the backdrop is the Foundations navy');
+  ok(shell.includes('max-width:380px'), 'the card is 380px');
+  ok(shell.includes('padding:36px 34px'), 'with the spec’s padding');
+  ok(shell.includes('box-shadow:0 18px 44px rgba(11,22,44,.28)'), 'and its shadow');
+  ok(shell.includes('.login-title{font:500 25px/1.2 var(--serif);color:#1E2D4A;'), 'the title is Lora 25 navy');
+
+  // The eyebrow is the same on all four screens. It was the old amber.
+  const eyebrows = shell.split("letter-spacing:.16em;text-transform:uppercase;color:#C9973A").length - 1;
+  eq(eyebrows, 4, 'all four account screens carry the gold eyebrow at .16em');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
