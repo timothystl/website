@@ -3297,7 +3297,7 @@ ${PAYROLL_HTML}`, 'Payroll');
       return html(`
 ${sidebarShell('voters', currentUser)}
 <div class="tlc-wrap">
-  <div class="page-title">Voters Page</div>
+  <div class="page-title">Voters page</div>
   <div class="page-sub">Manage the members-only voters page content at timothystl.org/voters</div>
   ${alertHtml}
   <form method="POST" action="/voters">
@@ -6776,7 +6776,7 @@ function staffMove(id, direction) {
         return html(`
 ${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`)}
 <div class="tlc-wrap">
-  <div class="page-title">Add Staff Member</div>
+  <div class="page-title">Add staff Member</div>
   <div class="card">
     <form method="POST" action="/staff/create">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">

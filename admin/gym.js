@@ -2432,7 +2432,7 @@ document.addEventListener('change', function(e) {
         return html(`
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="tlc-wrap">
-  <div class="page-title">Gym Rental Settings</div>
+  <div class="page-title">Gym rental settings</div>
   <div class="page-sub">Rate, holds, notifications, and Google Calendar sync for the gym rental scheduler.</div>
   ${gymAlert}
   <form method="POST" action="/gym-rentals/settings/update">
@@ -2477,7 +2477,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         return html(`
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="tlc-wrap">
-  <div class="page-title">Rental Groups</div>
+  <div class="page-title">Rental groups</div>
   <div class="page-sub">Each group gets a private booking link. Share it with them — no login required.</div>
   ${gymAlert}
   <div class="btn-row" style="margin-bottom:28px;">
@@ -2492,7 +2492,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         return html(`
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>`)}
 <div class="tlc-wrap">
-  <div class="page-title">Add Rental Group</div>
+  <div class="page-title">Add rental group</div>
   <div class="page-sub">After saving, you'll see their private booking link to share.</div>
   <div class="card">
     <form method="POST" action="/gym-rentals/groups/create">
@@ -2765,7 +2765,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>
         return html(`
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Gym Rentals</a>`)}
 <div class="tlc-wrap">
-  <div class="page-title">Google Calendar — Connection Test</div>
+  <div class="page-title">Google Calendar — connection test</div>
   <div class="page-sub">Checks secrets, access token, and creates a test event on your calendar.</div>
   <div class="card">${stepsHtml}</div>
   ${eventCreated ? `<div class="alert alert-success">✓ Everything is working. A test event was added to your calendar — check it and delete it.</div>` : ''}
@@ -2836,7 +2836,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Gym Rentals</a>`)
           return html(`
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="tlc-wrap">
-  <div class="page-title">Consolidate Bookings</div>
+  <div class="page-title">Consolidate bookings</div>
   <div class="page-sub">Merge consecutive same-day bookings (e.g. three 1-hour holds → one 3-hour hold). No data is lost — only combined.</div>
   <div class="card">
     <div class="card-title">Preview</div>
@@ -2993,7 +2993,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
           return html(`
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="tlc-wrap">
-  <div class="page-title">Detect Recurring Patterns</div>
+  <div class="page-title">Detect recurring patterns</div>
   <div class="page-sub">Groups holds with the same day-of-week and time into recurrence records, so invoices show a clean summary ("Every Monday 5–8 PM, June–August: 13 sessions") instead of individual date lines.</div>
   <div class="card">
     <div class="card-title">Preview</div>
@@ -3094,7 +3094,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 .bcal-legend span{display:flex;align-items:center;gap:6px;}
 </style>
 <div class="tlc-wrap">
-  <div class="page-title">Blocked Dates</div>
+  <div class="page-title">Blocked dates</div>
   <div class="page-sub">Click dates to select them, then save. Already-blocked dates (red) can be clicked to unblock.</div>
   ${gymAlert}
   <div class="card">
@@ -3284,7 +3284,7 @@ updateSummary();
         return html(`
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="tlc-wrap">
-  <div class="page-title">New Booking</div>
+  <div class="page-title">New booking</div>
   <div class="page-sub">Click dates, set times, then review before sending an invoice.</div>
   ${errAlert}
   <div class="card">
@@ -3822,7 +3822,7 @@ div.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020 !i
         return html(`
 ${sidebarShell('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
 <div class="tlc-wrap">
-  <div class="page-title">Review Booking</div>
+  <div class="page-title">Review booking</div>
   <div class="page-sub">${group.name} — $${rate.toFixed(2)}${rateLabel}</div>
   ${skippedAlert}
   ${validRows.length === 0 ? `<div class="alert alert-error">No valid dates remain. <a href="${editBack}">Go back</a>.</div>` : `
@@ -4074,7 +4074,7 @@ ${sidebarShell('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
         return html(`
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="tlc-wrap">
-  <div class="page-title">All Bookings</div>
+  <div class="page-title">All bookings</div>
   <div class="page-sub">Upcoming and past gym rentals.</div>
   ${gymAlert}
   <div class="btn-row" style="margin-bottom:28px;">
@@ -4141,7 +4141,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
           return html(`
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="tlc-wrap">
-  <div class="page-title">Set Price &amp; Confirm — ${group.name}</div>
+  <div class="page-title">Set price &amp; confirm — ${group.name}</div>
   <div class="page-sub">Review all pending holds for this group, set the invoice total, then confirm.</div>
   <div class="card">
     <div class="card-title">Pending Holds (${holds.results.length})</div>
@@ -4721,7 +4721,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/invoices">\u2190 Invoi
         return html(`
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 <div class="tlc-wrap">
-  <div class="page-title">Recurring Requests</div>
+  <div class="page-title">Recurring requests</div>
   <div class="page-sub">All recurring rental requests from groups.</div>
   ${gymAlert}
   <div class="card">
@@ -4786,7 +4786,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         return html(`
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/recurring">← Recurring</a>`)}
 <div class="tlc-wrap">
-  <div class="page-title">Recurring Request</div>
+  <div class="page-title">Recurring request</div>
   ${msgAlert}
   <div class="card">
     <div class="card-title">Request Details</div>
