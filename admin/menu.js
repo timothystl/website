@@ -71,7 +71,13 @@ export function resolveItem(item, pagesById) {
         broken: true, brokenReason: 'The page this points at is a draft, so visitors would hit nothing.',
       });
     }
-    return Object.assign(base, { label, href: page.slug, pageId: page.id, broken: false, brokenReason: '' });
+    // A page that links out is still a page here — the item points at it by id,
+    // so renaming or re-pointing it needs nothing changed in the menu — but the
+    // bar links straight to the outside site rather than to an address whose
+    // only job is to bounce.
+    const out = String(page.external_url || '').trim();
+    const href = /^https?:\/\/\S+$/i.test(out) ? out : page.slug;
+    return Object.assign(base, { label, href, pageId: page.id, broken: false, brokenReason: '' });
   }
 
   const target = String(item.target || '').trim();

@@ -32,14 +32,15 @@ import { handleGymRoutes, sweepExpiredItems, extractImageKeys } from './admin/gy
 import { migrateLegacyPage, starterBlocks, sanitizeBlocks, sanitizeBlock, parseBlocks, newBlock,
          renderPage, renderBlock, BLOCK_DEFS, BLOCK_TYPE_KEYS, GROUPS, BG, INK, SIZES, SPLITS, TONES,
          STAMP_PRESETS, safeUrl, esc as escBlock, editorPhoneCss, blocksClientConfig, makeBlockId,
-         TEMPLATES, templateOf, wrapTemplate, BLOCK_CSS, cleanText } from './admin/blocks.js';
+         TEMPLATES, templateOf, wrapTemplate, BLOCK_CSS, cleanText,
+         STARTERS, starterOf } from './admin/blocks.js';
 import PAYROLL_HTML from './admin/payroll.html';
 import SCHEDULER_HTML from './admin/scheduler.html';
 import MINISTRY_EDITOR_HTML from './admin/ministry-editor.html';
 import { PAGE_SEEDS } from './admin/page-seeds.js';
 import { SITE_PAGES } from './admin/site-pages.js';
 import { orderPages, filterPages, pageStatus, slugify, uniqueSlug, pageRename,
-         withShortLinks, shortLinkFor, shortLinkRoutes } from './admin/pages.js';
+         withShortLinks, shortLinkFor, shortLinkRoutes, outboundUrl } from './admin/pages.js';
 import { MENUS, menuTree, publicMenu, orphanPages, menuWarnings, renumber,
          normalizeMenu, normalizeKind, normalizeStyle, normalizeDepth } from './admin/menu.js';
 import { diffSummary, auditGroup, canRollback as auditCanRollback, rollbackNote, actionTone } from './admin/audit.js';
@@ -802,7 +803,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-08-01-6'; // bumped: NFC taps, and link cards belonging to one
+    const SCHEMA_VERSION = '2026-08-01-7'; // bumped: pages.external_url (a page that links out)
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -1335,6 +1336,11 @@ export default {
     // last segment of the address so it cannot drift when a page is renamed.
     // This column is only ever set by hand, and only to resolve a clash.
     try { await env.DB.prepare('ALTER TABLE pages ADD COLUMN short_link TEXT').run(); } catch (_) {}
+    // A page that stands in for somewhere else — /mdo is in the menu and in the
+    // sitemap but sends the visitor to mdo.timothystl.org. Held on the page
+    // rather than as a loose redirect so the menu can point at it by page id
+    // and a rename needs nothing else changed.
+    try { await env.DB.prepare('ALTER TABLE pages ADD COLUMN external_url TEXT').run(); } catch (_) {}
     // The navigation (phase 4). One row per appearance in a menu — see the note
     // at the top of admin/menu.js for why this is a join table rather than more
     // columns on `pages`. Seeded from the nav as it stands today, with explicit
@@ -1435,7 +1441,7 @@ export default {
         seo_description: r.seo_description || '',
       });
       const rows = await env.DB.prepare(
-        "SELECT id, title, menu_label, slug, parent_id, sort, template, status, in_menu, short_link, seo_description, published_blocks " +
+        "SELECT id, title, menu_label, slug, parent_id, sort, template, status, in_menu, short_link, external_url, seo_description, published_blocks " +
         "FROM pages WHERE status = 'published' ORDER BY sort ASC, title ASC"
       ).all().catch(() => ({ results: [] }));
       const list = rows.results || [];
@@ -1443,6 +1449,10 @@ export default {
       const data = await pageData(env, ctx);
       const rendered = {};
       for (const r of list) {
+        // A page that links out has no content of its own. Rendering blocks it
+        // may still be carrying from before would give the visitor a flash of a
+        // page that is about to redirect out from under them.
+        if (outboundUrl(r)) continue;
         const blocks = sanitizeBlocks(parseBlocks(r.published_blocks));
         if (!blocks.length) continue;
         const children = list.filter((c) => c.parent_id === r.id).map(publicPage);
@@ -1481,10 +1491,21 @@ export default {
         // change in a click. Letting a short link shadow a retired address
         // would silently break exactly the inbound links page_redirects exists
         // to protect.
-        redirects: Object.assign(
-          shortLinkRoutes(list),
-          (redirects.results || []).reduce((acc, r) => (acc[r.from_slug] = r.to_slug, acc), {})
-        ),
+        // A page that links out is the third kind. Its own address maps to the
+        // outside site, and then every entry is resolved through that map once,
+        // so a short link or a retired address pointing at /mdo sends the
+        // visitor to mdo.timothystl.org directly rather than to an address that
+        // would only redirect again on the next load.
+        redirects: (() => {
+          const outbound = list.reduce((acc, r) => { const u = outboundUrl(r); if (u) acc[r.slug] = u; return acc; }, {});
+          const merged = Object.assign(
+            shortLinkRoutes(list),
+            outbound,
+            (redirects.results || []).reduce((acc, r) => (acc[r.from_slug] = r.to_slug, acc), {})
+          );
+          for (const k of Object.keys(merged)) if (outbound[merged[k]]) merged[k] = outbound[merged[k]];
+          return merged;
+        })(),
       }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=120' }
       });
@@ -5260,7 +5281,13 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
       if (ownOnly && (path === '/pages/new' || path === '/pages/details')) return denied();
 
       // ── All pages ──
-      if (path === '/pages' && method === 'GET') {
+      // `/pages/:id/details` renders the same list with that page's drawer open,
+      // so the drawer is a real address: it survives a refresh and can be linked
+      // to from a warning row. `/pages/details` (church details, two segments)
+      // is a different screen and does not match this shape.
+      const detailsMatch = path.match(/^\/pages\/([^/]+)\/details$/);
+      const newPage = path === '/pages/new' && method === 'GET';
+      if ((path === '/pages' || detailsMatch || newPage) && method === 'GET') {
         // Anything whose scheduled time has passed goes live before the list is
         // drawn, so staff never see a page still labelled "scheduled" after the
         // moment it was meant to publish.
@@ -5270,7 +5297,7 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
         const alertHtml = msg === 'linksaved' ? `<div class="alert alert-success">✓ Short link saved.</div>`
           : msg === 'linkcleared' ? `<div class="alert alert-info">Short link reset — it now follows the page address again.</div>` : '';
         const rows = await env.DB.prepare(
-          'SELECT id, title, menu_label, slug, parent_id, sort, template, status, in_menu, owner_username, short_link, blocks, published_blocks, publish_at, updated_at, updated_by FROM pages ORDER BY sort ASC, title ASC'
+          'SELECT id, title, menu_label, slug, parent_id, sort, template, status, in_menu, owner_username, short_link, external_url, blocks, published_blocks, publish_at, updated_at, updated_by FROM pages ORDER BY sort ASC, title ASC'
         ).all().catch(() => ({ results: [] }));
         const all = (rows.results || []).filter(owns);
 
@@ -5296,45 +5323,62 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
           const s = pageStatus(p);
           const link = linkById[p.id] || { shortLink: null, shortLinkClash: null };
           const clash = link.shortLinkClash;
-          const tone = s.label === 'Published' ? 'good'
-            : s.label === 'Scheduled' ? 'auto'
-            : s.label === 'Not in menu' ? 'plain' : 'warn';
+          const out = outboundUrl(p);
 
           // A clash replaces the status pill rather than sitting beside it.
           // Two pills on one row makes a volunteer choose which to believe.
-          const statusCell = clash ? statusPill('bad', 'Link clash') : statusPill(tone, s.label);
+          const statusCell = clash ? statusPill('bad', 'Link clash') : statusPill(s.tone, s.label);
 
-          const sub = [
-            p.parent_id ? 'Under ' + parentName(p.parent_id) : 'Top level',
-            pluralise(p.blockCount, 'block'),
-            p.neverPublished ? 'never published' : edited(p),
-            p.owner_username ? 'assigned to ' + p.owner_username : '',
-          ].filter(Boolean).join(' · ');
+          const sub = out
+            // An outbound page has no blocks and no edit history worth showing —
+            // where it sends people is the only thing about it worth reading.
+            ? [p.parent_id ? 'Under ' + parentName(p.parent_id) : 'Top level', 'Links out to ' + out.replace(/^https?:\/\//, '')].join(' · ')
+            : [
+              p.parent_id ? 'Under ' + parentName(p.parent_id) : 'Top level',
+              pluralise(p.blockCount, 'block'),
+              p.neverPublished ? 'never published' : edited(p),
+              p.owner_username ? 'assigned to ' + p.owner_username : '',
+            ].filter(Boolean).join(' · ');
 
           return {
-            href: `/pages/${encodeURIComponent(p.id)}/edit`,
+            // The row opens the editor; the drawer is reached by the row's own
+            // "Details" action. Content lives in the editor, always — which is
+            // also why an outbound page, having none, opens its details instead.
+            href: out ? `/pages/${encodeURIComponent(p.id)}/details` : `/pages/${encodeURIComponent(p.id)}/edit`,
             filter: [
-              p.hasDraftEdits || p.status === 'draft' ? 'draft-edits' : 'live',
+              out ? 'live' : (p.hasDraftEdits || p.status === 'draft' ? 'draft-edits' : 'live'),
               p.in_menu ? '' : 'not-in-menu',
             ].filter(Boolean),
-            search: `${p.title} ${p.menu_label || ''} ${p.slug} ${link.shortLink || ''}`.toLowerCase(),
+            search: `${p.title} ${p.menu_label || ''} ${p.slug} ${link.shortLink || ''} ${out}`.toLowerCase(),
             cells: [
-              primaryCell(p.menu_label || p.title, sub, { icon: p.slug === '/' ? '⌂' : '' }),
+              primaryCell(p.menu_label || p.title, sub, { icon: p.slug === '/' ? '⌂' : (out ? '↗' : '') }),
               escapeHtml(p.slug),
               link.shortLink
-                ? `<a href="/pages/${encodeURIComponent(p.id)}/link" style="color:var(--tlc-blue);text-decoration:none;">${escapeHtml(link.shortLink)}</a>`
+                // A clashing short link is shown in the problem ink, because it
+                // is the thing on the row that is not working.
+                ? `<a href="/pages/${encodeURIComponent(p.id)}/details" style="color:${clash ? '#8A3A28' : 'var(--tlc-blue)'};text-decoration:none;">${escapeHtml(link.shortLink)}</a>`
                 : '<span style="color:var(--tlc-muted);">—</span>',
               statusCell,
             ],
-            actions: `<a class="tlc-edit" href="/pages/${encodeURIComponent(p.id)}/link">Short link</a><a class="tlc-edit" href="/pages/${encodeURIComponent(p.id)}/edit">Open editor</a>`,
+            actions: `<a class="tlc-edit" href="/pages/${encodeURIComponent(p.id)}/details">Details</a>${out ? '' : `<a class="tlc-edit" href="/pages/${encodeURIComponent(p.id)}/edit">Open editor</a>`}`,
             warn: clash
               ? (clash.reason === 'address'
                   ? `${clash.link} is the real address of the ${clash.withTitle} page — this short link would shadow it, so it is switched off.`
                   : `${clash.link} is already taken by the ${clash.withTitle} page — give one of them a different short link.`)
               : '',
-            warnCta: clash ? { label: 'Fix short link', href: `/pages/${encodeURIComponent(p.id)}/link` } : null,
+            warnCta: clash ? { label: 'Fix short link', href: `/pages/${encodeURIComponent(p.id)}/details` } : null,
           };
         });
+
+        // ── The Details drawer ──
+        // Name, address and short link — never content. Content lives in the
+        // page editor, always; putting a body field here would give the office
+        // two places to write the same page and no way to tell which one won.
+        const detailsId = detailsMatch ? decodeURIComponent(detailsMatch[1]) : '';
+        const detailsPage = detailsId ? ordered.find((p) => p.id === detailsId) : null;
+        const detailsLink = detailsPage ? (linkById[detailsPage.id] || {}) : null;
+        const detailsDerived = detailsPage ? shortLinkFor(Object.assign({}, detailsPage, { short_link: null })) : null;
+        const detailsClash = detailsLink ? detailsLink.shortLinkClash : null;
 
         return html(`
 ${sidebarShell('pages', currentUser, `<a href="/pages/details">Church details</a>`, await badgeCounts(env, currentUser))}
@@ -5344,7 +5388,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages/details">Church details</a
     key: 'pages',
     title: sectionCfg('pages').title,
     purpose: sectionCfg('pages').purpose,
-    action: { label: sectionCfg('pages').action, href: '/pages/new', method: 'POST' },
+    action: { label: sectionCfg('pages').action, href: '/pages/new' },
     search: sectionCfg('pages').search,
     filters: filtersOf('pages'),
     columns: columnsOf('pages'),
@@ -5353,73 +5397,115 @@ ${sidebarShell('pages', currentUser, `<a href="/pages/details">Church details</a
     empty: 'No pages to show.',
     note: sectionCfg('pages').note,
   })}
+  ${newPage ? renderDrawer({
+    key: 'page-new',
+    title: 'New page',
+    sub: 'Pick what it starts as. Every starter is a working page you edit down, and every new page begins as a draft — nothing reaches the site until you press Publish.',
+    action: '/pages/new',
+    cancelHref: '/pages',
+    saveLabel: 'Create and open the editor',
+    fields: [
+      { name: 'title', label: 'Page name', value: '', required: true, placeholder: 'Plan a Visit',
+        hint: 'The address is generated from this, and can be changed afterwards.' },
+      // Four options is four chips. A select would hide three of them behind a
+      // click, on the one decision this screen exists to ask.
+      { kind: 'chips', name: 'starter', label: 'Starts as', value: STARTERS[0].key,
+        options: STARTERS.map((s) => ({ value: s.key, label: s.label })),
+        hint: STARTERS.map((s) => `${s.label} — ${s.note}`).join(' · ') },
+    ],
+  }) : ''}
+  ${detailsPage ? renderDrawer({
+    key: 'page-details',
+    title: detailsPage.menu_label || detailsPage.title,
+    sub: 'Where this page lives and what it is called. Its words and pictures are in the page editor.',
+    action: `/pages/${encodeURIComponent(detailsPage.id)}/details`,
+    cancelHref: '/pages',
+    saveLabel: 'Save changes',
+    // A ministry leader may edit their pages' content but not the site's
+    // structure — so they get the same drawer with nothing to submit, rather
+    // than a hidden button they could post around.
+    readOnly: ownOnly,
+    fields: [
+      ...(detailsClash ? [{ kind: 'html', html: `<div class="alert alert-error" style="margin:0 0 14px;"><strong>${escapeHtml(detailsClash.link)} is already taken.</strong> ${detailsClash.reason === 'address'
+        ? `It is the real address of the ${escapeHtml(detailsClash.withTitle)} page, so this short link is switched off — the real page keeps the address.`
+        : `The ${escapeHtml(detailsClash.withTitle)} page wants it too, so neither short link works until one of them is changed. Nothing is guessed.`}</div>` }] : []),
+      { name: 'title', label: 'Page name', value: detailsPage.title || '', required: true },
+      { name: 'slug', label: 'Address', value: detailsPage.slug || '', required: true,
+        hint: 'Renaming writes a 301 from the old address automatically, so anything already linking here keeps working.' },
+      { name: 'short_link', label: 'Short link', value: detailsPage.short_link || '',
+        placeholder: (detailsDerived || '').replace(/^\/+/, ''),
+        hint: `Generated from the last part of the address${detailsDerived ? ` — which gives ${detailsDerived}` : ''}. Both work. Clear it to switch off.` },
+      { name: 'external_url', type: 'url', label: 'Links out to', value: outboundUrl(detailsPage), placeholder: 'https://…',
+        hint: 'Leave blank for a normal page. With an address here the page has no content of its own — visitors are sent straight to that site.' },
+      { kind: 'static', label: 'Content',
+        html: outboundUrl(detailsPage)
+          ? '<span style="color:var(--tlc-muted);">This page sends visitors to another site, so there is nothing to edit here.</span>'
+          : `<a href="/pages/${encodeURIComponent(detailsPage.id)}/edit" style="color:var(--tlc-blue);font-weight:600;text-decoration:none;">Open in page editor →</a>` },
+    ],
+  }) : ''}
 </div>`, 'Pages — TLC Admin');
       }
 
-      // ── Short link (GET form) ──
-      // Reached from the "Fix short link" warning and from the row's own action.
-      // Deliberately its own small screen rather than a field buried in the page
-      // editor: the person sent here by a clash warning is here for one reason.
+      // ── Short link ──
+      // Was its own small screen; it is a field in the Details drawer now, so
+      // there is one place a page's name, address and short link are edited
+      // rather than two that can disagree. The old address is kept because the
+      // Redirects screen links to it by name.
       if (path.startsWith('/pages/') && path.endsWith('/link') && method === 'GET') {
-        const id = decodeURIComponent(path.slice('/pages/'.length, -('/link'.length)));
+        const id = path.slice('/pages/'.length, -('/link'.length));
+        return new Response('', { status: 302, headers: { Location: `/pages/${id}/details` } });
+      }
+
+      // ── Details (POST) ──
+      // Name, address, short link and where the page links out to. Content is
+      // not here and never will be — see the drawer above.
+      if (detailsMatch && method === 'POST') {
+        const id = decodeURIComponent(detailsMatch[1]);
+        // A ministry leader edits their pages' words, not the site's shape.
+        if (ownOnly) return denied();
         const all = await env.DB.prepare(
-          'SELECT id, title, menu_label, slug, parent_id, status, short_link FROM pages'
+          'SELECT id, title, menu_label, slug, parent_id, status, short_link, external_url FROM pages'
         ).all().catch(() => ({ results: [] }));
         const page = (all.results || []).find((p) => p.id === id);
         if (!page) return new Response('Not found', { status: 404 });
         if (!owns(page)) return denied();
-        const linked = withShortLinks(all.results || []).find((p) => p.id === id);
-        const derived = shortLinkFor(Object.assign({}, page, { short_link: null }));
-
-        return html(`
-${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await badgeCounts(env, currentUser))}
-<div class="wrap">
-  <div class="page-title">Short link</div>
-  <div class="page-sub">${escapeHtml(page.menu_label || page.title)} — currently at <strong>${escapeHtml(page.slug)}</strong></div>
-  ${linked && linked.shortLinkClash ? `<div class="alert alert-error">
-    <strong>${escapeHtml(linked.shortLinkClash.link)} is already taken.</strong>
-    ${linked.shortLinkClash.reason === 'address'
-      ? `It is the real address of the ${escapeHtml(linked.shortLinkClash.withTitle)} page. Until this is changed, the short link is switched off — the real page keeps the address.`
-      : `The ${escapeHtml(linked.shortLinkClash.withTitle)} page wants it too. Until one of them is changed, neither short link works — nothing is guessed.`}
-  </div>` : ''}
-  <div class="card">
-    <form method="POST" action="/pages/${escapeHtml(page.id)}/link">
-      <div class="form-group">
-        <label>Short link</label>
-        <div style="display:flex;align-items:center;gap:6px;">
-          <span style="font-family:var(--sans);font-size:14px;color:var(--gray);">timothystl.org/</span>
-          <input type="text" name="short_link" value="${escapeHtml((page.short_link || '').replace(/^\/+/, ''))}" placeholder="${escapeHtml((derived || '/').replace(/^\/+/, ''))}" style="flex:1;">
-        </div>
-        <div style="font-size:12px;color:var(--gray);margin-top:6px;">
-          Leave it blank to follow the page address automatically${derived ? ` — which would give <strong>${escapeHtml(derived)}</strong>` : ''}.
-          Setting one by hand is only needed to settle a clash; a hand-set link stays put even if the page is renamed.
-        </div>
-      </div>
-      <div class="btn-row" style="margin-top:20px;">
-        <button type="submit" class="btn btn-primary">Save short link</button>
-        <a href="/pages" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
-      </div>
-    </form>
-  </div>
-</div>`, 'Short link');
-      }
-
-      // ── Short link (POST) ──
-      if (path.startsWith('/pages/') && path.endsWith('/link') && method === 'POST') {
-        const id = decodeURIComponent(path.slice('/pages/'.length, -('/link'.length)));
-        const page = await env.DB.prepare('SELECT id, title, slug, short_link FROM pages WHERE id = ?').bind(id).first();
-        if (!page) return new Response('Not found', { status: 404 });
-        if (!owns(page)) return denied();
         const form = await request.formData();
+
+        const title = String(form.get('title') || '').trim().slice(0, 200) || page.title;
         // Normalised the same way shortLinkFor() reads it, so what is stored and
         // what is displayed cannot disagree. Anything that is not a plain
         // address segment is dropped rather than stored and quietly ignored.
-        const raw = String(form.get('short_link') || '').trim().replace(/^\/+|\/+$/g, '')
+        const short = String(form.get('short_link') || '').trim().replace(/^\/+|\/+$/g, '')
           .toLowerCase().replace(/[^a-z0-9\-\/]+/g, '-').replace(/^-+|-+$/g, '');
-        await env.DB.prepare('UPDATE pages SET short_link = ? WHERE id = ?').bind(raw || null, id).run();
-        await logAudit(env.DB, currentUser, 'update', 'page_short_link', id, page.title,
-          { short_link: page.short_link }, { short_link: raw || null });
-        return new Response('', { status: 302, headers: { Location: `/pages?msg=${raw ? 'linksaved' : 'linkcleared'}` } });
+        // Only http(s) is stored. Anything else — a `javascript:` address most
+        // of all — would become a link the office clicks from inside their own
+        // session, so it is dropped rather than half-honoured.
+        const extRaw = String(form.get('external_url') || '').trim().slice(0, 500);
+        const ext = /^https?:\/\/\S+$/i.test(extRaw) ? extRaw : '';
+
+        // The address. Changing it writes a 301 from the old one, which is what
+        // makes renaming safe: an address already in a bulletin keeps working.
+        const wantSlug = String(form.get('slug') || '').trim();
+        let slug = page.slug;
+        if (wantSlug && wantSlug !== page.slug) {
+          const renamed = pageRename(page, title, all.results || [], wantSlug);
+          slug = renamed.slug;
+          const now = new Date().toISOString();
+          for (const r of renamed.redirects) {
+            await env.DB.prepare(
+              'INSERT OR REPLACE INTO page_redirects (from_slug, to_slug, created_at) VALUES (?, ?, ?)'
+            ).bind(r.from, r.to, now).run().catch(() => {});
+            // A child moves with its parent, so its own address changes too.
+            if (r.id) await env.DB.prepare('UPDATE pages SET slug = ? WHERE id = ?').bind(r.to, r.id).run().catch(() => {});
+          }
+        }
+
+        await env.DB.prepare('UPDATE pages SET title = ?, slug = ?, short_link = ?, external_url = ? WHERE id = ?')
+          .bind(title, slug, short || null, ext || null, id).run();
+        await logAudit(env.DB, currentUser, 'update', 'page', id, title,
+          { title: page.title, slug: page.slug, short_link: page.short_link, external_url: page.external_url },
+          { title, slug, short_link: short || null, external_url: ext || null });
+        return new Response('', { status: 302, headers: { Location: '/pages?toast=' + encodeURIComponent('Saved · the site picks this up within a couple of minutes') } });
       }
 
       // ── Church details ──
@@ -5476,22 +5562,32 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`)}
       }
 
       // ── New page ──
-      // Creates a draft and drops staff straight into the editor with the Page
-      // tab open, rather than asking them to fill in a form first.
+      // Creates a draft from the chosen starter and drops staff straight into
+      // the editor with the Page tab open. A starter rather than an empty page
+      // because an empty page is the hardest thing to start from — the first
+      // question is always "what goes on it?", and a working set of blocks
+      // answers that with something to edit down.
       if (path === '/pages/new' && method === 'POST') {
         const now = new Date().toISOString();
+        const form = await request.formData();
+        const title = String(form.get('title') || '').trim().slice(0, 200) || 'New page';
+        const starter = starterOf(String(form.get('starter') || ''));
         let id = 'page-' + Math.random().toString(36).slice(2, 8);
         for (let i = 0; i < 5; i++) {
           const clash = await env.DB.prepare('SELECT id FROM pages WHERE id = ?').bind(id).first();
           if (!clash) break;
           id = 'page-' + Math.random().toString(36).slice(2, 8);
         }
-        const blocks = sanitizeBlocks(starterBlocks('New page'));
+        const taken = await env.DB.prepare('SELECT slug FROM pages').all().catch(() => ({ results: [] }));
+        const slug = uniqueSlug(slugify(title), new Set((taken.results || []).map((p) => p.slug)));
+        const blocks = sanitizeBlocks(starterBlocks(title, starter.key));
+        // status 'draft' and out of the menu: a new page is never live by
+        // accident, whatever it was started from.
         await env.DB.prepare(
           "INSERT INTO pages (id, title, menu_label, slug, parent_id, sort, template, status, in_menu, seo_description, blocks, updated_at, updated_by) " +
-          "VALUES (?, 'New page', '', ?, NULL, 999, 'standard', 'draft', 0, '', ?, ?, ?)"
-        ).bind(id, '/' + id, JSON.stringify(blocks), now, currentUser?.username || '').run();
-        await logAudit(env.DB, currentUser, 'create', 'page', id, 'New page', null, { title: 'New page', slug: '/' + id });
+          "VALUES (?, ?, '', ?, NULL, 999, 'standard', 'draft', 0, '', ?, ?, ?)"
+        ).bind(id, title, slug, JSON.stringify(blocks), now, currentUser?.username || '').run();
+        await logAudit(env.DB, currentUser, 'create', 'page', id, title, null, { title, slug, starter: starter.key });
         return new Response('', { status: 302, headers: { Location: `/pages/${id}/edit?tab=page` } });
       }
 

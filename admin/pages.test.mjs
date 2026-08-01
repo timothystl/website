@@ -1,7 +1,8 @@
 // Node test harness for admin/pages.js — run with: node admin/pages.test.mjs
 // No test framework (the repo has no build step or dev dependencies).
 import { orderPages, filterPages, pageStatus, menuTree, slugify, uniqueSlug, pageRename, PILLS,
-         shortLinkFor, shortLinkClashes, withShortLinks, shortLinkRoutes } from './pages.js';
+         shortLinkFor, shortLinkClashes, withShortLinks, shortLinkRoutes,
+         outboundUrl, isOutbound, slugPath } from './pages.js';
 import { newBlock, sanitizeBlocks } from './blocks.js';
 
 let pass = 0, fail = 0;
@@ -22,7 +23,7 @@ group('what counts as a draft');
   const same = B(2);
   const [live] = orderPages([row({ blocks: same, published_blocks: same })]);
   eq(live.hasDraftEdits, false, 'identical draft and live is not a draft');
-  eq(pageStatus(live).label, 'Published', 'and reads as Published');
+  eq(pageStatus(live).label, 'Live', 'and reads as Live — the design\'s word, and the one on the filter chip beside it');
 
   const [edited] = orderPages([row({ blocks: B(3), published_blocks: B(2) })]);
   eq(edited.hasDraftEdits, true, 'a draft that differs from live has unpublished changes');
@@ -142,6 +143,58 @@ group('renaming');
 group('pill wording');
 for (const [key, p] of Object.entries(PILLS)) {
   ok(p.label && p.bg && p.fg, `${key} pill has a label and colours`);
+  // The list used to pick its tone by comparing the label string, so renaming a
+  // pill silently recoloured it. The tone travels with the words now.
+  ok(p.tone, `${key} pill carries its own tone`);
+}
+// The design's vocabulary for this screen, spelled out so a rename has to be
+// deliberate rather than incidental.
+{
+  const labels = Object.values(PILLS).map((p) => p.label);
+  for (const word of ['Live', 'Draft edits', 'Links out']) {
+    ok(labels.includes(word), `“${word}” is one of the page pills`);
+  }
+}
+
+
+// ── a page that links out ────────────────────────────────────────────────────
+group('pages that link out');
+{
+  eq(outboundUrl({ external_url: 'https://mdo.timothystl.org' }), 'https://mdo.timothystl.org', 'an https address is an outbound page');
+  eq(outboundUrl({ external_url: '  http://example.org  ' }), 'http://example.org', 'surrounding space is trimmed');
+  eq(outboundUrl({ external_url: '' }), '', 'a blank is a normal page');
+  eq(outboundUrl({}), '', 'so is a page with no column value at all');
+  // Anything that is not http(s) is not stored as a link the office would then
+  // click from inside their own admin session.
+  eq(outboundUrl({ external_url: 'javascript:alert(1)' }), '', 'a javascript: address is not an outbound page');
+  eq(outboundUrl({ external_url: '/somewhere' }), '', 'nor is a bare path');
+  eq(isOutbound({ external_url: 'https://x.org' }), true, 'isOutbound agrees');
+
+  // "Links out" beats every other state, including a draft, because a page with
+  // no content of its own cannot have unpublished content either.
+  const out = orderPages([row({ external_url: 'https://mdo.timothystl.org', blocks: B(3), published_blocks: B(1), status: 'draft', in_menu: 0 })])[0];
+  eq(pageStatus(out).label, 'Links out', 'an outbound page reads as Links out whatever else is true of it');
+  eq(pageStatus(out).tone, 'plain', 'and is not dressed up as a fault');
+}
+
+
+// ── an address typed by hand ─────────────────────────────────────────────────
+group('typing an address');
+{
+  eq(slugPath('/about/beliefs'), '/about/beliefs', 'slashes survive — the whole point of the per-segment pass');
+  eq(slugPath('about/beliefs'), '/about/beliefs', 'a missing leading slash is added');
+  eq(slugPath('/Plan A Visit/'), '/plan-a-visit', 'each segment is cleaned the same way slugify cleans a title');
+  eq(slugPath('///'), '', 'nothing usable comes back empty, so the caller can fall back to the title');
+  eq(slugPath(''), '', 'and so does a blank');
+
+  const all = [{ id: 'p', slug: '/plan-a-visit', title: 'Plan a Visit', parent_id: null }];
+  const typed = pageRename(all[0], 'Plan a Visit', all, '/visit');
+  eq(typed.slug, '/visit', 'a typed address wins over one derived from the title');
+  eq(typed.redirects.length, 1, 'and the old address is kept working');
+  eq(typed.redirects[0].from, '/plan-a-visit', 'with a 301 from where it used to be');
+
+  const derived = pageRename(all[0], 'Visit Us', all);
+  eq(derived.slug, '/visit-us', 'with nothing typed, the address still follows the title');
 }
 
 

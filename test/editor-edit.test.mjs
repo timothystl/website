@@ -250,6 +250,49 @@ await page.click('.ed-paper .tlcb--text');
 await flushSave();
 eq(savedBlocks().find((b) => b.type === 'faq').items[0].title, 'Do I need to audition?', 'row text saved');
 
+// ── the info card ────────────────────────────────────────────────────────────
+// A slot on the banner, switched on in the inspector. The banner's own text
+// column narrows to make room, so the card can never overlap the words and
+// there is nothing for the office to position.
+group('the info card');
+// The music fixture has no banner, so add one — which also proves the card is
+// offered on a block the moment it is inserted, not only on seeded ones.
+await page.click('.ed-pal-tab[data-group="Structure"]');
+await page.click('.ed-chip[data-type="hero"]');
+await page.waitForSelector('.ed-paper .tlcb--hero');
+await page.click('.ed-paper .tlcb--hero');
+ok((await page.textContent('#edInspBody')).includes('Info card'), 'a banner offers the card');
+ok(!(await page.textContent('#edInspBody')).includes('Card shows'), 'and hides what it shows until it is on');
+eq(await page.locator('.ed-paper .tlcb--hero .tlcb-card').count(), 0, 'nothing is drawn while it is off');
+
+await page.click('[data-k="card:right"]');
+await settle(400);
+eq(await page.locator('.ed-paper .tlcb--hero .tlcb-card').count(), 1, 'switching it on draws the card');
+eq(await page.locator('.ed-paper .tlcb--hero .tlcb-hero.tlcb-band--card-right').count(), 1, 'on the side chosen');
+ok((await page.textContent('#edInspBody')).includes('Card shows'), 'and now offers what it holds');
+// The card sits BESIDE the text, never over it — that is the whole reason it
+// is a slot rather than a floating block.
+const overlap = await page.evaluate(() => {
+  const t = document.querySelector('.tlcb--hero .tlcb-band-text').getBoundingClientRect();
+  const c = document.querySelector('.tlcb--hero .tlcb-card').getBoundingClientRect();
+  return t.right > c.left + 1 && c.right > t.left + 1;
+});
+eq(overlap, false, 'the card never overlaps the banner text');
+
+await page.click('[data-k="cardShows:contact"]');
+await settle(400);
+ok((await page.textContent('.ed-paper .tlcb--hero .tlcb-card')).includes('314'),
+  'the contact card reads the church details rather than asking anyone to retype them');
+
+await flushSave();
+const heroSaved = savedBlocks().find((b) => b.type === 'hero');
+eq(heroSaved.card, 'right', 'the card is saved on the block');
+eq(heroSaved.cardShows, 'contact', 'and so is what it shows');
+
+await page.click('[data-k="card:off"]');
+await settle(400);
+eq(await page.locator('.ed-paper .tlcb--hero .tlcb-card').count(), 0, 'switching it off takes it away again');
+
 group('server rejects what the client would never send');
 const bad = await (await fetch(base + '/ministries/api/render', {
   method: 'POST', headers: { 'Content-Type': 'application/json' },

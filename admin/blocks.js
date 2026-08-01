@@ -57,6 +57,31 @@ export const TONES = [
 
 export const STAMP_PRESETS = ['New', 'Upcoming', 'Take note', 'Registration open'];
 
+// ── THE INFO CARD ────────────────────────────────────────────────────────────
+// The white box that sits over a banner — service times, the address, a phone
+// number. It is deliberately **not** a block somebody drags in: a floating
+// block would mean asking the office to position it, and refusing to ask that
+// is the whole point of this editor. It is a slot on the banner, switched on
+// here, and the banner's own text column narrows to make room. One per banner,
+// never overlapping, never dragged.
+export const CARD_SIDES = [
+  { key: 'off', label: 'Off' },
+  { key: 'right', label: 'Right' },
+  { key: 'left', label: 'Left' },
+];
+
+// What the card holds is picked from a short list rather than left as a blank
+// canvas. The first two read the one church-details record, so changing the
+// service times once changes every card on the site — which is the reason to
+// offer them as choices at all rather than as free text.
+export const CARD_SHOWS = [
+  { key: 'services', label: 'Service times', note: 'Reads the service times from the church details — change them once and every card follows.' },
+  { key: 'address', label: 'Address & directions', note: 'Reads the address from the church details, with a link to directions.' },
+  { key: 'contact', label: 'Contact', note: 'The office phone and email from the church details.' },
+  { key: 'links', label: 'A short list of links', note: 'Up to four links, typed below.' },
+  { key: 'text', label: 'Free text', note: 'The only option that asks you to type anything.' },
+];
+
 // Spacing guardrail: 8px steps, 0–96. No free-form pixel input anywhere.
 export const SPACE_STEP = 8;
 export const SPACE_MAX = 96;
@@ -79,7 +104,7 @@ export const BLOCK_DEFS = {
   slideshow: {
     label: 'Welcome banner', glyph: '❏',
     defaults: { title: 'A line that says who you are', subtitle: 'A sentence underneath it.', spaceAbove: 0, spaceBelow: 24 },
-    photo: true, subtitle: true, banner: true,
+    photo: true, subtitle: true, banner: true, infoCard: true,
     links: true, defaultLinks: [{ title: 'Plan your visit', url: '/visit' }, { title: 'Watch a service', url: '/worship' }],
     items: true, itemFields: ['url', 'title'], itemUrlFields: ['url'], itemLabel: 'Slide', gallery: true, defaultItems: [],
   },
@@ -126,7 +151,7 @@ export const BLOCK_DEFS = {
   hero: {
     label: 'Hero banner', glyph: '▣',
     defaults: { title: 'Ministry name', eyebrow: 'Ministry', subtitle: 'One line about this ministry.', spaceAbove: 0, spaceBelow: 0 },
-    photo: true, subtitle: true, banner: true,
+    photo: true, subtitle: true, banner: true, infoCard: true,
   },
   text: {
     label: 'Rich text', glyph: '¶',
@@ -195,7 +220,7 @@ export const BLOCK_DEFS = {
   callout: {
     label: 'Callout box', glyph: '❢',
     defaults: { title: 'Please note', body: '<p>Something people need to know.</p>', spaceAbove: 24, spaceBelow: 24 },
-    richBody: true,
+    richBody: true, infoCard: true,
   },
   buttons: {
     label: 'Button bar', glyph: '⬒',
@@ -413,6 +438,21 @@ export function sanitizeBlock(b) {
   // the chosen background snaps back to a readable one.
   if (INK[out.ink].onDark !== BG[out.bg].dark) out.ink = BG[out.bg].dark ? 3 : 0;
 
+  // The info card. Off unless the block is one of the three that can carry it,
+  // so a stale tab cannot switch one on for a block with nowhere to put it —
+  // and so a block type losing the slot loses its cards rather than rendering
+  // them somewhere unintended.
+  out.card = def.infoCard && CARD_SIDES.some((s) => s.key === b.card) ? b.card : 'off';
+  out.cardShows = CARD_SHOWS.some((s) => s.key === b.cardShows) ? b.cardShows : 'services';
+  out.cardEyebrow = cleanText(b.cardEyebrow, 60);
+  out.cardBody = cleanText(b.cardBody, 400);
+  out.cardLinks = Array.isArray(b.cardLinks)
+    ? b.cardLinks.slice(0, 4).map((raw) => ({
+      title: cleanText(raw && raw.title, 60),
+      url: safeUrl(raw && raw.url).slice(0, 600),
+    }))
+    : [];
+
   if (def.items && Array.isArray(b.items)) {
     const fields = def.itemFields || [];
     const rich = def.richItemFields || [];
@@ -504,12 +544,56 @@ export function migrateLegacyPage(row) {
 
 // A brand-new page starts from three sensible blocks rather than a blank
 // canvas — an empty page is intimidating, three blocks are not.
-export function starterBlocks(title) {
-  return sanitizeBlocks([
-    newBlock('hero', { title: title || 'Ministry name', body: 'Ministry' }),
-    newBlock('text', { body: '<p>Tell people what this ministry is and who it is for.</p>' }),
-    newBlock('buttons', { items: [{ title: 'Contact the office', url: 'mailto:office@timothystl.org' }] }),
-  ]);
+// ── STARTERS ─────────────────────────────────────────────────────────────────
+// "New page" offers a working set of blocks rather than an empty canvas. An
+// empty page is the hardest thing to start from, and the office's first
+// question is always "what goes on it?" — a starter answers that with a page
+// they can edit down rather than a blank one they have to build up.
+//
+// Every starter lands in the DRAFT. A new page always begins as a draft, so
+// nothing here can reach the site until somebody presses Publish.
+export const STARTERS = [
+  {
+    key: 'ministry', label: 'Ministry page', note: 'A banner, a paragraph, and a way to get in touch.',
+    build: (title) => [
+      newBlock('hero', { title: title || 'Ministry name', eyebrow: 'Ministry' }),
+      newBlock('text', { body: '<p>Tell people what this ministry is and who it is for.</p>' }),
+      newBlock('buttons', { items: [{ title: 'Contact the office', url: 'mailto:office@timothystl.org' }] }),
+    ],
+  },
+  {
+    key: 'text', label: 'Simple text page', note: 'A heading and some words. Nothing else to fill in.',
+    build: (title) => [
+      newBlock('hero', { title: title || 'Page title', eyebrow: '' }),
+      newBlock('text', { body: '<p>Write here the way you would speak to a visitor — plainly, and without church shorthand.</p>' }),
+    ],
+  },
+  {
+    key: 'home', label: 'Homepage', note: 'A welcome banner with a service-times card, then what is happening.',
+    build: (title) => [
+      newBlock('slideshow', { title: title || 'A congregation on Fyler since 1889', card: 'right', cardShows: 'services', cardEyebrow: 'Join us Sunday' }),
+      newBlock('quicklinks'),
+      newBlock('news'),
+      newBlock('sermon'),
+      newBlock('map'),
+    ],
+  },
+  {
+    key: 'signup', label: 'Sign-up page', note: 'A banner, what people are signing up for, and the form.',
+    build: (title) => [
+      newBlock('hero', { title: title || 'Sign up', eyebrow: '' }),
+      newBlock('text', { body: '<p>What this is, who it is for, and when it happens.</p>' }),
+      newBlock('form'),
+    ],
+  },
+];
+
+export const starterOf = (key) => STARTERS.find((s) => s.key === key) || STARTERS[0];
+
+// Ministry pages keep the ministry starter, which is what this used to be —
+// the signature is unchanged so every existing caller behaves as before.
+export function starterBlocks(title, key = 'ministry') {
+  return sanitizeBlocks(starterOf(key).build(title));
 }
 
 // ── STYLESHEET ───────────────────────────────────────────────────────────────
@@ -649,6 +733,27 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-dots{display:flex;gap:6px;margin-top:4px;}
 .tlcb-dots span{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.4);}
 .tlcb-dots span.on{background:#E8C070;}
+/* ── THE INFO CARD ────────────────────────────────────────────────────────
+   A slot on a banner, not a block. When it is on, the banner becomes two
+   columns and the text column narrows to make room — the card never overlaps
+   the text and is never positioned by hand. Below the tablet breakpoint it
+   stacks under the text at full width. */
+.tlcb-band-text{display:flex;flex-direction:column;align-items:flex-start;gap:14px;min-width:0;}
+.tlcb-band--card{display:grid;grid-template-columns:1fr minmax(320px,34%);gap:34px;align-items:center;}
+.tlcb-band--card-left{grid-template-columns:minmax(320px,34%) 1fr;}
+.tlcb-band--card-left .tlcb-band-text{order:2;}
+.tlcb-band--card-left .tlcb-card{order:1;}
+.tlcb-card{background:#FFFFFF;border-radius:18px;padding:34px 32px;box-shadow:0 18px 44px rgba(11,22,44,.28);
+  display:flex;flex-direction:column;position:relative;z-index:1;}
+.tlcb-card-eyebrow{font:700 12.5px/1.4 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#C9973A;}
+.tlcb-card-eyebrow:empty::before{content:attr(data-ph);opacity:.45;}
+.tlcb-card-row{display:flex;flex-direction:column;gap:3px;padding:20px 0;border-bottom:1px solid #E7DFD1;}
+.tlcb-card-row:last-child{border-bottom:0;padding-bottom:0;}
+.tlcb-card-body > :first-child{padding-top:20px;}
+.tlcb-card-1{font:400 30px/1.2 Lora,Georgia,serif;color:#1E2D4A;}
+.tlcb-card-2{font:400 15px/1.5 'Source Sans 3',sans-serif;color:#4A4860;}
+.tlcb-card-link{font:600 15px/1.5 'Source Sans 3',sans-serif;color:#2E7EA6;text-decoration:none;}
+.tlcb-card-link:hover{text-decoration:underline;}
 .tlcb-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
 .tlcb-tile{display:flex;flex-direction:column;gap:8px;padding:16px;border:1px solid #DDE3ED;border-radius:9px;background:#FBF8F3;
   text-decoration:none;color:inherit;}
@@ -741,6 +846,13 @@ function phoneRules(p) {
     `${p}.tlcb-layout{grid-template-columns:1fr!important;}`,
     `${p}.tlcb-side{position:static!important;}`,
     `${p}.tlcb-kids{grid-template-columns:1fr!important;}`,
+    // The info card stacks under the banner text at full width rather than
+    // squeezing a 320px card and a headline into one narrow row.
+    `${p}.tlcb-band--card{grid-template-columns:1fr!important;}`,
+    `${p}.tlcb-band--card-left .tlcb-band-text{order:0!important;}`,
+    `${p}.tlcb-band--card-left .tlcb-card{order:1!important;}`,
+    `${p}.tlcb-card{padding:24px 22px!important;}`,
+    `${p}.tlcb-card-1{font-size:24px!important;}`,
   ].join('\n  ');
 }
 
@@ -762,11 +874,13 @@ export function blocksClientConfig() {
       auto: d.auto || '', autoNote: d.autoNote || '', autoCount: d.auto ? d.autoCount !== false : false,
       itemPlaceholders: d.itemPlaceholders || {}, richItemFields: d.richItemFields || [],
       itemUrlFields: d.itemUrlFields || [], richBody: !!d.richBody,
-      gallery: !!d.gallery, feed: d.feed || '',
+      gallery: !!d.gallery, feed: d.feed || '', infoCard: !!d.infoCard,
       defaults: d.defaults || {}, defaultItems: d.defaultItems || [],
     };
   }
-  return { types, groups: GROUPS, templates: TEMPLATES, BG, INK, SIZES, SPLITS, TONES, stamps: STAMP_PRESETS, step: SPACE_STEP, max: SPACE_MAX };
+  return { types, groups: GROUPS, templates: TEMPLATES, BG, INK, SIZES, SPLITS, TONES,
+    cardSides: CARD_SIDES, cardShows: CARD_SHOWS, starters: STARTERS.map((s) => ({ key: s.key, label: s.label, note: s.note })),
+    stamps: STAMP_PRESETS, step: SPACE_STEP, max: SPACE_MAX };
 }
 
 // ── RENDERING ────────────────────────────────────────────────────────────────
@@ -858,6 +972,72 @@ function renderStamp(opts, b) {
   return `<span class="tlcb-stamp tlcb-stamp--${b.corner === 'tl' ? 'tl' : 'tr'}" style="${style}"${editable}>${esc(b.stamp)}</span>`;
 }
 
+// A banner carrying a card lays out as two columns rather than one. The side
+// is a class rather than a style variable because it changes the *order* of
+// the two columns, which is structure, not styling.
+const cardClass = (b) => (b.card === 'left' || b.card === 'right') ? ` tlcb-band--card tlcb-band--card-${b.card}` : '';
+
+// The info card, drawn once for all three blocks that can carry it. What it
+// holds comes from `cardShows`; the two that read the church details read
+// ctx.data, never the block, so a phone number changed in the admin lands on
+// every card at once. Returns '' when the slot is off, which is what lets the
+// banner renderers stay one line longer rather than branching twice.
+function renderInfoCard(b, opts) {
+  if (!b || b.card !== 'left' && b.card !== 'right') return '';
+  const data = opts.data || {};
+  const st = data.settings || {};
+  const services = data.services || [];
+  const row = (primary, secondary) => `<div class="tlcb-card-row">
+      <span class="tlcb-card-1">${esc(primary)}</span>
+      ${secondary ? `<span class="tlcb-card-2">${esc(secondary)}</span>` : ''}
+    </div>`;
+
+  let body = '';
+  if (b.cardShows === 'services') {
+    body = services.length
+      ? services.map((r) => row(r.time || '', [r.day, r.note].filter(Boolean).join(' · '))).join('')
+      : `<p class="tlcb-note">No service times set yet — add them under Church details.</p>`;
+  } else if (b.cardShows === 'address') {
+    // `pageData()` strips the `church_` prefix, so these are the same keys the
+    // map block and the sidebar read — one record, four places, no retyping.
+    const line = st.address_line || '';
+    const city = st.address_city || '';
+    const maps = line || city ? `https://maps.google.com/?q=${encodeURIComponent([line, city].filter(Boolean).join(', '))}` : '';
+    body = (line || city)
+      ? row(line, city) + (maps ? `<div class="tlcb-card-row"><a class="tlcb-card-link" href="${esc(maps)}">Get directions →</a></div>` : '')
+      : `<p class="tlcb-note">No address set yet — add it under Church details.</p>`;
+  } else if (b.cardShows === 'contact') {
+    const phone = st.phone || '';
+    const email = st.email || '';
+    body = (phone || email)
+      ? (phone ? row(phone, 'Church office') : '') + (email ? `<div class="tlcb-card-row"><a class="tlcb-card-link" href="mailto:${esc(email)}">${esc(email)}</a></div>` : '')
+      : `<p class="tlcb-note">No phone or email set yet — add them under Church details.</p>`;
+  } else if (b.cardShows === 'links') {
+    const links = (b.cardLinks || []).filter((l) => l.title || l.url);
+    body = links.length
+      ? links.map((l) => {
+        const href = safeUrl(l.url);
+        return `<div class="tlcb-card-row">${href && !opts.editing
+          ? `<a class="tlcb-card-link" href="${esc(href)}">${esc(l.title || '')} →</a>`
+          : `<span class="tlcb-card-link">${esc(l.title || '')} →</span>`}</div>`;
+      }).join('')
+      : `<p class="tlcb-note">No links yet — add them in the inspector.</p>`;
+  } else {
+    body = b.cardBody
+      ? row(b.cardBody, '')
+      : `<p class="tlcb-note">Nothing typed yet.</p>`;
+  }
+
+  // The eyebrow is edited on the page like any other text, so it goes through
+  // `field()` rather than being printed flat.
+  const eyebrow = (b.cardEyebrow || opts.editing)
+    ? field(opts, b, 'cardEyebrow', 'div', 'tlcb-card-eyebrow', esc(b.cardEyebrow || ''), ' data-ph="JOIN US SUNDAY"')
+    : '';
+  // The card's contents are read from elsewhere or set in the inspector, so
+  // only the eyebrow is typed on the page — the rest is inert.
+  return `<aside class="tlcb-card">${eyebrow}<div class="tlcb-card-body" contenteditable="false">${body}</div></aside>`;
+}
+
 function renderInner(b, opts) {
   const def = BLOCK_DEFS[b.type];
   const t = b.type;
@@ -892,10 +1072,11 @@ function renderInner(b, opts) {
         ? `<a class="${cls}" href="${esc(href)}">${esc(l.title || '')}</a>`
         : `<span class="${cls}">${esc(l.title || '')}</span>`;
     }).join('');
-    return `<div class="tlcb-slide"${bg ? ` style="--tlcb-slide-img:url('${cssUrl(bg)}')"` : ''}>${pick}
+    return `<div class="tlcb-slide${cardClass(b)}"${bg ? ` style="--tlcb-slide-img:url('${cssUrl(bg)}')"` : ''}>${pick}
+      <div class="tlcb-band-text">
       ${field(opts, b, 'title', 'h1', 'tlcb-slide-title', esc(b.title || ''), ' data-ph="A line that says who you are"')}
       ${field(opts, b, 'subtitle', 'p', 'tlcb-slide-sub', esc(b.subtitle || ''), ' data-ph="A sentence underneath it"')}
-      <div class="tlcb-btns">${btns}</div>${dots}</div>`;
+      <div class="tlcb-btns">${btns}</div>${dots}</div>${renderInfoCard(b, opts)}</div>`;
   }
 
   if (t === 'quicklinks') {
@@ -990,10 +1171,12 @@ function renderInner(b, opts) {
   if (t === 'hero') {
     const change = opts.editing
       ? `<button type="button" class="tlcb-pick" data-act="photo">Change photo</button>` : '';
-    return `<div class="tlcb-hero">${change}
+    return `<div class="tlcb-hero${cardClass(b)}">${change}
+      <div class="tlcb-band-text">
       ${field(opts, b, 'eyebrow', 'div', 'tlcb-hero-eyebrow', esc(b.eyebrow || ''), ' data-ph="Ministry"')}
       ${field(opts, b, 'title', 'h1', 'tlcb-hero-title', esc(b.title || ''), ' data-ph="Page title"')}
       ${field(opts, b, 'subtitle', 'p', 'tlcb-hero-sub', esc(b.subtitle || ''), ' data-ph="One line about this ministry"')}
+      </div>${renderInfoCard(b, opts)}
     </div>`;
   }
 
@@ -1071,10 +1254,12 @@ function renderInner(b, opts) {
   }
 
   if (t === 'callout') {
-    return `<div class="tlcb-callout">
+    return `<div class="tlcb-callout${cardClass(b)}">
+      <div class="tlcb-band-text">
       <span class="tlcb-callout-tag">Please note</span>
       ${field(opts, b, 'title', 'div', 'tlcb-callout-t', esc(b.title || ''), ' data-ph="What people need to know"')}
       ${renderBody(opts, b, def)}
+      </div>${renderInfoCard(b, opts)}
     </div>`;
   }
 

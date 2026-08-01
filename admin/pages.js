@@ -6,17 +6,41 @@ import { sanitizeBlocks, parseBlocks, templateOf } from './blocks.js';
 
 export const PAGE_FILTERS = ['all', 'published', 'drafts'];
 
-// Wording is fixed by the design and used in two places (this list and the
-// editor topbar); keeping it here is what stops them disagreeing.
+// The design's own pill vocabulary for this list, in one place so the screen
+// and the tests cannot drift from it: Live / Draft edits / Hidden / Links out /
+// Clash. Each carries its tone as well as its words — the list used to pick a
+// tone by comparing the label string, which meant renaming a pill silently
+// recoloured it.
 export const PILLS = {
-  published:  { label: 'Published',   bg: '#DCE6D6', fg: '#3B4C2E' },
-  draft:      { label: 'Draft',       bg: '#F5E4C0', fg: '#7A5A12' },
-  draftEdits: { label: 'Draft edits', bg: '#F5E4C0', fg: '#7A5A12' },
-  scheduled:  { label: 'Scheduled',   bg: '#E4EEF4', fg: '#1E5C7A' },
-  hidden:     { label: 'Not in menu', bg: '#EDE9E0', fg: '#6A6858' },
+  published:  { label: 'Live',        tone: 'good',  bg: '#DCE6D6', fg: '#3B4C2E' },
+  draft:      { label: 'Draft',       tone: 'warn',  bg: '#F5E4C0', fg: '#7A5A12' },
+  draftEdits: { label: 'Draft edits', tone: 'warn',  bg: '#F5E4C0', fg: '#7A5A12' },
+  scheduled:  { label: 'Scheduled',   tone: 'auto',  bg: '#E4EEF4', fg: '#1E5C7A' },
+  hidden:     { label: 'Not in menu', tone: 'plain', bg: '#EDE9E0', fg: '#6A6858' },
+  outbound:   { label: 'Links out',   tone: 'plain', bg: '#EDE9E0', fg: '#6A6858' },
 };
 
 const json = (v) => JSON.stringify(sanitizeBlocks(parseBlocks(v)));
+
+// A page can stand in for somewhere else entirely — /mdo is the church's page
+// in the menu and in the sitemap, but what it actually does is send the visitor
+// to mdo.timothystl.org. Storing that on the page rather than as a loose
+// redirect is what lets the menu point at it by page id, so renaming or moving
+// it needs nothing else updated.
+//
+// Only http(s) counts. A `javascript:` address stored here would be a link the
+// office could click from their own admin, so anything else reads as "not an
+// outbound page" rather than being stored and half-honoured.
+export function outboundUrl(p) {
+  const raw = String((p && p.external_url) || '').trim();
+  if (!raw) return '';
+  if (!/^https?:\/\/\S+$/i.test(raw)) return '';
+  return raw;
+}
+
+export function isOutbound(p) {
+  return !!outboundUrl(p);
+}
 
 // A page has unpublished work when its draft differs from what is live.
 // Deriving that from an editing session's change log instead would let this
@@ -33,6 +57,11 @@ export function decoratePage(p) {
 }
 
 export function pageStatus(p) {
+  // A page that sends visitors to another site has no content of its own, so
+  // it can have no draft either — "Links out" is checked before every other
+  // state rather than sitting beside them. Showing "Draft edits" on a page
+  // nobody can edit would send staff to an editor with nothing in it.
+  if (isOutbound(p)) return PILLS.outbound;
   if (p.status === 'draft') return PILLS.draft;
   if (p.publish_at) return PILLS.scheduled;
   if (p.hasDraftEdits) return PILLS.draftEdits;
@@ -170,6 +199,20 @@ export function slugify(title, parentSlug = '') {
   return parent + '/' + base;
 }
 
+// An address typed by hand, cleaned up a segment at a time. slugify() collapses
+// everything that is not a letter or a digit, which would turn `/about/beliefs`
+// into `/about-beliefs` — so a typed path is normalised per segment and its
+// slashes are kept. Returns '' when nothing usable was typed, so the caller can
+// fall back to deriving the address from the title.
+export function slugPath(typed) {
+  const parts = String(typed || '').split('/').map((s) => s.toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48)).filter(Boolean);
+  return parts.length ? '/' + parts.join('/') : '';
+}
+
 // Makes an address unique against the addresses already in use.
 export function uniqueSlug(slug, taken) {
   if (!taken.has(slug)) return slug;
@@ -183,11 +226,17 @@ export function uniqueSlug(slug, taken) {
 // What renaming a page means, decided in one place: the new address, and the
 // redirect rows that keep every old address working — including the old
 // addresses of any child pages, which move with their parent.
-export function pageRename(page, newTitle, allPages) {
+export function pageRename(page, newTitle, allPages, desiredSlug = '') {
   const parent = page.parent_id ? allPages.find((p) => p.id === page.parent_id) : null;
   const taken = new Set(allPages.filter((p) => p.id !== page.id).map((p) => p.slug));
+  // An address typed by hand wins over one derived from the title — the Details
+  // drawer exists so the office can say `/visit` about a page called "Plan a
+  // Visit". It is still put through slugify, so a typed address cannot be
+  // something the router would not accept.
+  const typed = slugPath(desiredSlug);
+  const wanted = typed || slugify(newTitle, parent ? parent.slug : '');
   // The homepage keeps its address whatever it is called.
-  const slug = page.slug === '/' ? '/' : uniqueSlug(slugify(newTitle, parent ? parent.slug : ''), taken);
+  const slug = page.slug === '/' ? '/' : uniqueSlug(wanted, taken);
   const redirects = [];
   if (slug !== page.slug) {
     redirects.push({ from: page.slug, to: slug });

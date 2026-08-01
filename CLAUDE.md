@@ -1039,12 +1039,117 @@ these are the gaps I have not closed:
 
 | Screen | What is missing |
 |---|---|
-| 02 Pages | `Links out` and `Clash` status pills; the drawer reached by a `Details` action rather than by the row |
+| 02 Pages | ~~`Links out` and `Clash` status pills; the drawer reached by a `Details` action~~ — **done v3.9.0**, below |
 | 10 Taps | *taps this month* on each card — needs tap counting built first (see below); the cards themselves are done |
-| 16 Gym | "Calendar first" as the genuine default layout, with the queue beside the month rather than below it |
-| 22 Editor | the info-card slot on banner blocks, and the starter picker on New page |
+| 16 Gym | ~~"Calendar first" as the genuine default layout~~ — **done v3.9.0**, below |
+| 22 Editor | ~~the info-card slot on banner blocks, and the starter picker on New page~~ — **done v3.9.0**, below |
 
-None of those are blocked; they are simply not done yet.
+Only the Taps count is left, and it is blocked on counting existing at all —
+see "⚠ The NFC taps did not answer" above.
+
+#### The Pages screen, to its spec (v3.9.0, 2026-08-01)
+
+- **A page can now stand in for another site.** `pages.external_url` — /mdo is
+  in the menu and in the sitemap, but what it does is send the visitor to
+  mdo.timothystl.org. Held **on the page** rather than as a loose `redirects`
+  row so a menu item can point at it by page id: renaming it, moving it, or
+  re-pointing it needs nothing else changed.
+  - **"Links out" is checked before every other state**, so an outbound page
+    never reads `Draft edits`. It has no content, so it can have no draft — and
+    a Draft-edits pill would send staff to an editor with nothing in it. The row
+    offers no "Open editor" for the same reason.
+  - **Only `http(s)` is stored.** A `javascript:` address here would be a link
+    the office clicks from inside their own admin session, so anything else is
+    dropped rather than half-honoured. `outboundUrl()` is the one gate, used by
+    the pill, the row, the API and the menu alike.
+  - **`/api/pages` resolves one hop.** The outbound map is applied to every
+    other entry after merging, so a short link or a retired address pointing at
+    `/mdo` reaches the outside site directly instead of bouncing twice. Its
+    published blocks, if it still has any, are **not** rendered — that would be
+    a flash of a page about to redirect out from under the reader.
+- **The pill vocabulary is the design's**: `Live` (was "Published") ·
+  `Draft edits` · `Not in menu` · `Links out` · `Link clash`. Each `PILLS` entry
+  now carries its own **tone**; the list used to pick a tone by comparing the
+  label string, so renaming a pill silently recoloured it.
+- **A clashing short link is shown in the problem ink** rather than the ordinary
+  link blue — it is the thing on that row that is not working.
+- **The short-link screen is gone; it is a field in the Details drawer.** One
+  place a page's name, address and short link are edited rather than two that
+  can disagree. `/pages/:id/link` 302s to `/pages/:id/details`, which the
+  Redirects screen still links to by name.
+- **`/pages/:id/details` is a real address**, so the drawer survives a refresh
+  and a warning row can link straight to it. `/pages/details` — church details,
+  two segments — is a different screen and does not match that shape.
+- **The row opens the editor; `Details` opens the drawer.** Content lives in the
+  page editor, always: the drawer has no body field, and the spec's own
+  "get this wrong and it shows" is exactly that.
+- **An address can be typed.** `slugPath()` cleans a typed path a segment at a
+  time — `slugify()` collapses everything non-alphanumeric, which would turn
+  `/about/beliefs` into `/about-beliefs`. `pageRename()` takes it as an optional
+  fourth argument and still derives from the title when nothing is typed, so the
+  editor's own call is unchanged. Renaming writes the 301s, children included.
+- A ministry leader (`pages_edit_own`) gets the same drawer **read-only** — they
+  edit their pages' words, not the site's shape — and the POST refuses them
+  rather than relying on a hidden button.
+
+#### Gym calendar-first, and the editor's last two pieces (v3.9.0, 2026-08-01)
+
+**Gym Rentals now opens on the month.** The design's two variants were built as
+two *separate* screens, with Queue as the default; the spec's default is
+Calendar first, and its calendar layout is the month **plus** two panels, not
+the month alone.
+
+- **`/gym-rentals` is Calendar first**; `?view=queue` is the other weighting.
+  The month is what somebody wants to see before deciding anything; the queue is
+  what they act on once they have.
+- **Two panels under the month** — *Requests to review* (amber, recurring
+  requests first, then holds, each with Approve and Release) and *Invoices*
+  (Paid / Unpaid pills, the amount, and the rate it billed at). They are **not**
+  a second copy of the queue: the queue is every booking, these are only the
+  rows where somebody has to do something.
+- **Approving from the panel is not approving blind.** A hold that would
+  double-book carries its conflict in the sub-line *and* in the confirm text.
+  The panel exists so somebody can act without reading the whole list, which is
+  exactly why it cannot hide the one thing that would stop them.
+- Month arrows keep whichever layout you are in, rather than always landing on
+  the calendar.
+- **⚠ The "By organisation" bulk tools are on BOTH layouts now.** They used to
+  be hidden in the calendar view, which was harmless while Queue was the
+  default and a regression the moment Calendar became it — they carry the
+  invoice generation, the price-setting and the Google Calendar push, so
+  hiding them on the view everybody lands on would be dropping them in
+  everything but name.
+
+**The info card** (`22-page-editor.html` §"The info card") is a **slot on a
+banner, not a block** — available on Welcome banner, Page banner and Callout
+box, off by default, `Off · Right · Left`.
+
+- **A floating block would mean asking the office to position it**, and refusing
+  to ask that is the whole point of this editor. When the card is on, the
+  banner becomes two columns and the *text* narrows; the card can never overlap
+  the words and is never dragged. A browser test measures the two rectangles
+  and asserts they do not intersect.
+- **"Card shows" is a short list, not a blank canvas**: Service times · Address
+  & directions · Contact · A short list of links · Free text. The first three
+  read the church-details record — the same keys the map block and the sidebar
+  read — so changing the phone number once changes every card on the site.
+  Free text is the only option that asks anybody to type anything.
+- **A block without the slot cannot be given a card**, whatever arrives:
+  `sanitizeBlock` gates `card` on `def.infoCard`, so a stale tab, a crafted
+  POST, or a block type losing the slot all end up with `off` rather than a
+  card rendered somewhere unintended.
+- **The card's links are their own array** (`cardLinks`). A welcome banner
+  already uses `links` for its buttons, and one array doing two jobs is how a
+  button ends up inside the card.
+- The gold eyebrow is edited **on the page**, like every other text.
+
+**Starters.** `+ New page` now opens a picker — Homepage · Simple text page ·
+Ministry page · Sign-up page — instead of creating an untitled page outright.
+An empty page is the hardest thing to start from; the office's first question
+is always "what goes on it?", and a starter answers it with a page to edit down.
+A new page still begins as a **draft**, out of the menu. `starterBlocks(title)`
+keeps its old meaning (the ministry starter) so every existing caller is
+unchanged; the second argument picks another.
 
 #### Newsletter fields and the editor palette (v3.6.0, 2026-08-01)
 

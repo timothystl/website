@@ -1229,6 +1229,28 @@ function inspectorSections(b, d) {
       '</div>';
   }
 
+  // 0b. The info card — a slot on the banner, not a block. Off by default; the
+  // banner's text column narrows to make room when it is on, so it can never
+  // overlap the words and there is nothing to position by hand.
+  if (d.infoCard) {
+    var cardOn = b.card === 'left' || b.card === 'right';
+    out += '<div class="ed-sec"><span class="ed-lab">Info card</span><div class="ed-chips">' +
+      C.cardSides.map(function (s) { return chip('card', s.key, s.label, (b.card || 'off') === s.key); }).join('') +
+      '</div><span class="ed-note">The white box over the banner — service times, an address, a phone number. It sits beside the text, never on top of it.</span></div>';
+    if (cardOn) {
+      var shows = C.cardShows.filter(function (s) { return s.key === b.cardShows; })[0] || C.cardShows[0];
+      out += '<div class="ed-sec"><span class="ed-lab">Card shows</span><div class="ed-chips">' +
+        C.cardShows.map(function (s) { return chip('cardShows', s.key, s.label, s.key === b.cardShows); }).join('') +
+        '</div><span class="ed-note">' + esc(shows.note) + '</span></div>';
+      if (b.cardShows === 'text') {
+        out += '<div class="ed-sec"><label class="ed-lab" for="edCardBody">What it says</label>' +
+          '<input class="ed-field" id="edCardBody" data-in="cardBody" data-k="cardBody" value="' + esc(b.cardBody) + '" placeholder="One short line"></div>';
+      }
+      if (b.cardShows === 'links') out += cardLinksSection(b);
+      out += '<div class="ed-sec"><span class="ed-note">The gold line above the card is edited on the page itself, like any other text.</span></div>';
+    }
+  }
+
   // 1. Columns
   if (b.type === 'columns') {
     out += '<div class="ed-sec"><span class="ed-lab">Columns</span><div class="ed-chips">' +
@@ -1368,6 +1390,23 @@ function itemsSection(b, d) {
     '</div>';
 }
 
+// The card's own links. Kept apart from the block's `items` and `links` — a
+// welcome banner already uses `links` for its buttons, and one array doing two
+// jobs is how a button ends up inside the card.
+function cardLinksSection(b) {
+  var rows = (b.cardLinks || []).map(function (l, i) {
+    return '<div class="ed-item"><div class="ed-item-h"><span>Link ' + (i + 1) + '</span>' +
+      '<button type="button" data-a="cardlink-del" data-v="' + i + '" data-k="cardlink-del:' + i + '">Remove</button></div>' +
+      '<input class="ed-field" data-in="cardlink:' + i + ':title" data-k="cardlink:' + i + ':title" value="' + esc(l.title || '') + '" placeholder="What it says" aria-label="Link ' + (i + 1) + ' label">' +
+      '<input class="ed-field" data-in="cardlink:' + i + ':url" data-k="cardlink:' + i + ':url" value="' + esc(l.url || '') + '" placeholder="/visit" aria-label="Link ' + (i + 1) + ' address">' +
+      '</div>';
+  }).join('');
+  var full = (b.cardLinks || []).length >= 4;
+  return '<div class="ed-sec"><span class="ed-lab">Links</span>' + rows +
+    '<button type="button" class="ed-add" data-a="cardlink-add" data-k="cardlink-add"' + (full ? ' disabled' : '') + '>+ Add link</button>' +
+    '<span class="ed-note">Four at most — the card is a signpost, not a menu.</span></div>';
+}
+
 // ── inspector actions ──────────────────────────────────────────────────────
 function inspectorAction(action, value) {
   var b = findBlock(S.selectedId);
@@ -1446,6 +1485,33 @@ function inspectorAction(action, value) {
       patch(b.id, { items: left }, 'Removed a ' + d.itemLabel.toLowerCase(), 'rerender');
       break;
     }
+    // Switching the card on or off changes the banner from one column to two,
+    // and switching what it shows changes what is in it — both are structure,
+    // so both re-render rather than being patched onto the node.
+    case 'card': {
+      if ((b.card || 'off') === value) return;
+      patch(b.id, { card: value }, value === 'off' ? 'Info card switched off' : 'Info card moved ' + value, 'rerender');
+      say(value === 'off' ? 'Card off' : 'Card on the ' + value);
+      break;
+    }
+    case 'cardShows': {
+      if (b.cardShows === value) return;
+      var shows = C.cardShows.filter(function (s) { return s.key === value; })[0];
+      patch(b.id, { cardShows: value }, 'Card now shows ' + (shows ? shows.label.toLowerCase() : value), 'rerender');
+      break;
+    }
+    case 'cardlink-add': {
+      var links = (b.cardLinks || []).slice();
+      if (links.length >= 4) return;
+      links.push({ title: '', url: '' });
+      patch(b.id, { cardLinks: links }, 'Added a card link', 'rerender');
+      break;
+    }
+    case 'cardlink-del': {
+      var li = Number(value);
+      patch(b.id, { cardLinks: (b.cardLinks || []).filter(function (_, i) { return i !== li; }) }, 'Removed a card link', 'rerender');
+      break;
+    }
     case 'photo': openPicker(b.id, 'photo'); break;
     case 'video': openPicker(b.id, 'video'); break;
     case 'gallery': openPicker(b.id, 'gallery'); break;
@@ -1470,6 +1536,13 @@ function inspectorInput(target) {
   }
   if (spec === 'url') b.url = value;
   else if (spec === 'photoAlt') b.photoAlt = value;
+  else if (spec === 'cardBody') b.cardBody = value;
+  else if (spec.indexOf('cardlink:') === 0) {
+    var cp = spec.split(':');
+    var cl = (b.cardLinks || [])[Number(cp[1])];
+    if (!cl) return;
+    cl[cp[2]] = value;
+  }
   else if (spec.indexOf('item:') === 0) {
     var parts = spec.split(':');
     var it = (b.items || [])[Number(parts[1])];
