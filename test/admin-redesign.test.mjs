@@ -57,11 +57,16 @@ async function boot() {
   return { db, env };
 }
 
-async function call(env, path, { cookie = '', method = 'GET' } = {}) {
+async function call(env, path, { cookie = '', method = 'GET', form = null } = {}) {
   const headers = new Headers();
   if (cookie) headers.set('cookie', cookie);
   headers.set('origin', 'https://admin.timothystl.org');
-  const req = new Request('https://admin.timothystl.org' + path, { method, headers });
+  let body;
+  if (form) {
+    body = new URLSearchParams(form).toString();
+    headers.set('content-type', 'application/x-www-form-urlencoded');
+  }
+  const req = new Request('https://admin.timothystl.org' + path, { method, headers, body });
   return worker.fetch(req, env, ctx);
 }
 
@@ -235,7 +240,12 @@ group('every section renders with data');
 
   const ministries = await (await call(env, '/ministries', { cookie })).text();
   has(ministries, 'In menu', 'ministries separate menu visibility from published state');
-  has(ministries, 'Not listed', 'and a ministry taken out of the menu says so');
+  // The design shows this as a switch, not a pill — it is a thing you flip,
+  // and flipping it posts immediately.
+  has(ministries, 'tlc-switch', 'and In menu is a switch');
+  has(ministries, '/ministries/toggle-menu/', 'that posts on click');
+  has(ministries, 'Ministry pages', 'the title comes from the design config');
+  has(ministries, 'Short link', 'and the Short link column is present');
 }
 
 // ── one partner per value, enforced by the database ──────────────────────────
@@ -403,7 +413,9 @@ group('the Redirects screen shows every kind');
   db.prepare('DELETE FROM pages').run();
   db.prepare("INSERT INTO pages (id,title,slug,parent_id,sort,template,status,in_menu,blocks,published_blocks,updated_at) VALUES ('b','Beliefs','/about/beliefs',NULL,0,'standard','published',1,'[]','[]',?)").run(now);
 
-  const body = await (await call(env, '/settings', { cookie })).text();
+  // Redirects has its own address now. /settings is the Settings screen, which
+  // is a different section in the design and lists site_settings keys.
+  const body = await (await call(env, '/redirects', { cookie })).text();
   has(body, '/zoom', 'a hand-made redirect appears');
   has(body, 'Hand-made', 'labelled by kind');
   has(body, '/about/our-staff', 'an automatic 301 from a rename appears');
@@ -412,7 +424,49 @@ group('the Redirects screen shows every kind');
   has(body, '/beliefs', 'a derived short link appears too');
   has(body, 'Short link', 'labelled as such');
   has(body, 'Giving', 'and a giving link, managed elsewhere but listed here');
-  has(body, 'last year’s bulletins', 'the section note explains why automatics matter');
+  has(body, 'keeps old bulletins and Google results working', 'the note is the design’s wording, not mine');
+
+  // The drawer is the one place a redirect is written, and it opens on its own
+  // address so a half-filled form survives a refresh.
+  const drawer = await (await call(env, '/redirects/edit/zoom', { cookie })).text();
+  has(drawer, 'Edit /zoom', 'editing one opens a drawer named for it');
+  has(drawer, 'us02web.zoom.us', 'prefilled with where it currently goes');
+  has(drawer, 'original_path', 'and carries the old path, so renaming it moves rather than duplicates');
+}
+
+group('Settings lists the keys the rest of the site reads');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  db.prepare("INSERT INTO site_settings (key,value) VALUES ('zoom_url','https://us02web.zoom.us/j/314') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+
+  const body = await (await call(env, '/settings', { cookie })).text();
+  has(body, 'Zoom meeting link', 'a setting is named in plain language');
+  has(body, 'zoom_url', 'and the real key is shown, because that is what the code uses');
+  has(body, 'The /zoom short link', 'with what reads it');
+  has(body, 'Church address', 'church details are listed');
+  has(body, 'Gym rate per hour', 'so are the gym ones');
+  has(body, 'These are the real keys in site_settings', 'the note is the design’s wording');
+
+  // A setting with a screen of its own sends you there rather than offering a
+  // second field writing the same key.
+  has(body, '/pages/details', 'church details open on their own screen');
+  has(body, '/gym-rentals', 'and the gym ones on theirs');
+
+  // Only the listed keys can be written — the old form took any key in the body.
+  const bad = await call(env, '/settings/update', {
+    method: 'POST', cookie, form: { key: 'admin_password', value: 'x' },
+  });
+  eq(bad.headers.get('location'), '/settings?msg=settings-error', 'an unlisted key is refused');
+  const pw = db.prepare("SELECT value FROM site_settings WHERE key='admin_password'").get();
+  eq(pw, undefined, 'and nothing was written');
+
+  const good = await call(env, '/settings/update', {
+    method: 'POST', cookie, form: { key: 'zoom_url', value: 'https://zoom.example/new' },
+  });
+  eq(good.headers.get('location'), '/settings?msg=saved', 'a listed key saves');
+  eq(db.prepare("SELECT value FROM site_settings WHERE key='zoom_url'").get().value,
+    'https://zoom.example/new', 'and the value really changed');
 }
 
 
@@ -541,11 +595,15 @@ group('the newsletter list');
   // itself redirects to the dashboard.
   const body = await (await call(env, '/newsletters', { cookie })).text();
   has(body, 'Advent begins', 'a draft appears');
+  // The Sends column is the question people bring to this screen: did it go,
+  // and to how many. A sent issue reports what it actually reached.
+  has(body, '>609<', 'a sent issue keeps its real send count');
   // en-US ordering: the handoff writes "24 July", but every other date in
   // this admin reads American and so do its readers.
-  has(body, 'Sent July 24 to 609 subscribers', 'a sent issue keeps its real send record');
+  has(body, 'Sent Fri, Jul 24', 'and says when, as a date somebody can read');
+  has(body, 'Sends Tue, Dec 1', 'an unsent issue says when it will go instead');
   has(body, 'Duplicate as draft', 'and offers duplication rather than editing');
-  has(body, 'read-only', 'the section note states the rule');
+  has(body, 'change a post and the unsent issue follows', 'the note is the design’s wording, not mine');
 }
 
 group('a sent issue cannot be modified by any path');
@@ -568,9 +626,11 @@ group('a sent issue cannot be modified by any path');
 
   // The editor shows it read-only rather than pretending it is editable.
   const page = await (await call(env, '/edit/7', { cookie })).text();
-  has(page, 'Sent newsletter', 'the editor titles it as sent');
+  has(page, '>Sent<', 'the editor carries the same Sent pill as the list');
   has(page, 'read-only', 'explains the lock');
   has(page, 'Duplicate as draft', 'and offers the way forward');
+  has(page, 'tlc-nl-cols', 'and is the two-column editor — form beside a live preview');
+  has(page, 'Live preview', 'which is labelled');
 }
 
 group('duplicating a sent issue gives an editable draft');
@@ -681,15 +741,16 @@ group('staff, users and subscribers on the shared pattern');
   has(staff, 'Andrew Dinger', 'a staff member appears');
   has(staff, 'Lead Pastor', 'with their role as the sub-line');
   has(staff, 'No photo', 'and somebody without a photo is flagged');
-  has(staff, 'crop is set once', 'the note explains why the crop lives on the person');
+  has(staff, 'Photo crop is set per person', 'the note is the design\u2019s wording, not mine');
 
   const users = await (await call(env, '/users', { cookie })).text();
   has(users, 'Full access', 'the admin account reads as full access');
-  has(users, 'Disabling an account keeps its history', 'the note distinguishes disable from delete');
+  has(users, 'the checkboxes are the truth', 'the note is the design\u2019s wording, not mine');
 
   const subs = await (await call(env, '/subscribers', { cookie })).text();
   has(subs, 'Ann Brown', 'a website signup appears');
-  has(subs, 'Never delete somebody to unsubscribe', 'the note states the rule that matters');
+  has(subs, 'never delete by hand to remove someone', 'the note is the design’s wording, not mine');
+  has(subs, 'Import CSV', 'the section’s one action is the design’s');
   // Brevo is unreachable in the harness, so the error path must still render
   // the website signups rather than showing an empty screen.
   has(subs, 'Website signup', 'website signups show even when Brevo cannot be read');
@@ -882,6 +943,162 @@ group('⌘K searches every section, within permissions');
   ok(!scoped.results.some((r) => r.section === 'Staff'),
     'somebody without staff_edit gets no staff results');
   ok(!scoped.results.some((r) => r.section === 'Users'), 'nor user results');
+}
+
+
+// ── matching the design ──────────────────────────────────────────────────────
+group('Taps & links');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const taps = db.prepare('SELECT * FROM taps ORDER BY id').all();
+  eq(taps.length, 4, 'four NFC taps are seeded');
+  eq(taps[0].id, 1, 'and their ids are their addresses — tap 1 is /tap1');
+  ok(db.prepare('PRAGMA table_info(link_cards)').all().some((c) => c.name === 'tap'),
+    'a link card can belong to a tap');
+
+  db.prepare("UPDATE link_cards SET tap = 2 WHERE id = (SELECT MIN(id) FROM link_cards)").run();
+
+  const body = await (await call(env, '/link-cards', { cookie })).text();
+  eq((await call(env, '/link-cards', { cookie })).status, 200, 'the screen renders');
+  has(body, 'Taps &amp; links', 'titled from the design config');
+  has(body, '/tap1', 'each tap shows its short address');
+  has(body, '/tap4', 'all four of them');
+  has(body, 'Re-point', 'and offers to re-point');
+  has(body, 'only ever holds its short address', 'the note explains why re-pointing works');
+
+  // Re-pointing changes where the tag lands without touching the tag.
+  const res = await worker.fetch(new Request('https://admin.timothystl.org/link-cards/tap/3', {
+    method: 'POST',
+    headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
+    body: 'name=Giving+plate&placement=Offering+plates&destination=https%3A%2F%2Fgive.timothystl.org%2Feaster&active=1',
+  }), env, ctx);
+  eq(res.status, 302, 're-pointing redirects');
+  has(db.prepare('SELECT destination FROM taps WHERE id=3').get().destination, '/easter',
+    'and the tap now lands somewhere new');
+
+  // Filtering to one tap shows only its cards.
+  const one = await (await call(env, '/link-cards?tap=2', { cookie })).text();
+  has(one, 'Cards on /tap2', 'filtering to a tap says so');
+}
+
+group('screens say what the design says');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  // Each of these strings was wrong before — the screens used wording I wrote
+  // rather than the design's.
+  const checks = [
+    ['/ministries', 'Ministry pages'],
+    ['/ministries', 'Eleven ministry pages'],
+    ['/partners', 'Partner ministries'],
+    ['/christian-education', 'Christian Education'],
+    ['/notices', 'Short banners pinned to a specific page'],
+    ['/staff', 'Photo crop is set per person'],
+    ['/newsitems', 'One list behind one page'],
+    ['/sermons', 'One series is the active one shown on the site'],
+    ['/users', 'the checkboxes are the truth'],
+    ['/media', 'the two things that go wrong'],
+    ['/link-cards', 'Four NFC taps'],
+  ];
+  for (const [path, text] of checks) {
+    const body = await (await call(env, path, { cookie })).text();
+    has(body, text, `${path} uses the design's wording`);
+  }
+}
+
+group('rows carry an overflow menu');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const body = await (await call(env, '/ministries', { cookie })).text();
+  has(body, 'tlc-more-btn', 'a row has a ⋯ menu');
+  has(body, 'tlc-menu-item', 'with items inside it');
+  has(body, 'View live', 'including the rarely-wanted ones that should not sit in the row');
+}
+
+group('the giving page has both surfaces');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const body = await (await call(env, '/giving', { cookie })).text();
+  has(body, 'give.timothystl.org', 'the standalone address is shown');
+  has(body, 'timothystl.org/give', 'and the on-site one');
+  has(body, 'One set of blocks', 'described as one set of blocks in two places');
+  has(body, 'Kept in step', 'with the keep-in-step switch');
+  has(body, 'the amounts and funds offered on it', 'and the design’s purpose line');
+
+  const res = await worker.fetch(new Request('https://admin.timothystl.org/giving/keep-in-step', {
+    method: 'POST',
+    headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
+    body: 'value=0',
+  }), env, ctx);
+  eq(res.status, 302, 'the switch posts');
+  eq(db.prepare("SELECT value FROM site_settings WHERE key='give_keep_in_step'").get().value, '0', 'and is stored');
+}
+
+group('Giving: funds and amounts are two panels, side by side');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  // The Worker seeds a General Fund on first boot, so start from a known list.
+  db.prepare('DELETE FROM give_funds').run();
+  db.prepare('DELETE FROM give_amount_tiers').run();
+  db.prepare("INSERT INTO give_funds (id,name,tithely_fund_id,is_default,active,sort_order) VALUES (1,'General Fund','',1,1,10)").run();
+  db.prepare("INSERT INTO give_funds (id,name,tithely_fund_id,is_default,active,sort_order) VALUES (2,'Organ Fund','abc',0,1,20)").run();
+  db.prepare("INSERT INTO give_amount_tiers (id,amount,url,is_default,active,sort_order) VALUES (1,25,'',0,1,10)").run();
+  db.prepare("INSERT INTO give_amount_tiers (id,amount,url,is_default,active,sort_order) VALUES (2,100,'',1,1,20)").run();
+
+  const body = await (await call(env, '/giving', { cookie })).text();
+  has(body, 'tlc-give-cols', 'the two panels sit side by side');
+  has(body, 'General Fund', 'a fund is listed');
+  has(body, 'Default when nobody chooses', 'and says it is the default in words, not a code');
+  has(body, '$100', 'an amount is listed');
+  has(body, 'Showing', 'with its state as a pill');
+  has(body, 'tlc-pl-grip', 'and a grip, because the order is what the page shows');
+  has(body, 'data-sortlist="/giving-funds/reorder"', 'dragging posts the whole resulting order');
+
+  // The drawer holds the fields, so eight funds is eight rows rather than
+  // forty inputs.
+  const drawer = await (await call(env, '/giving?fund=2', { cookie })).text();
+  has(drawer, 'Organ Fund', 'opening a fund names it');
+  has(drawer, 'Tithe.ly fund ID', 'and offers its fields');
+
+  // A toggle posts a hidden 0 ahead of the checkbox. Reading it with get()
+  // would see that '0' and store 1 every time — so an unticked Default would
+  // silently become the default.
+  await call(env, '/giving-funds/update', {
+    method: 'POST', cookie,
+    form: { id: '2', name: 'Organ Fund', tithely_fund_id: 'abc', is_default: '0', active: '0' },
+  });
+  const organ = db.prepare('SELECT is_default, active FROM give_funds WHERE id=2').get();
+  eq(organ.is_default, 0, 'an unticked Default really stores 0');
+  eq(organ.active, 0, 'and so does an unticked Active');
+  eq(db.prepare('SELECT is_default FROM give_funds WHERE id=1').get().is_default, 1,
+    'and the existing default was not disturbed');
+
+  await call(env, '/giving-funds/reorder', { method: 'POST', cookie, form: { order: '["2","1"]' } });
+  const order = db.prepare('SELECT id FROM give_funds ORDER BY sort_order').all().map((r) => r.id);
+  eq(order.join(','), '2,1', 'reordering renumbers from scratch');
+
+  await call(env, '/giving-funds/toggle/1', { method: 'POST', cookie, form: { value: '0' } });
+  eq(db.prepare('SELECT active FROM give_funds WHERE id=1').get().active, 0, 'the row switch hides a fund in one click');
+}
+
+group('the sidebar is the design’s five groups');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const body = await (await call(env, '/dashboard', { cookie })).text();
+  for (const g of ['Website', 'Email', 'Money &amp; Building', 'People &amp; Access', 'Setup']) {
+    has(body, `>${g}<`, `${g} is a group`);
+  }
+  // Redirects and Settings are separate sections in the design, and they are
+  // separate addresses here — /settings used to render the redirects screen.
+  has(body, 'href="/redirects"', 'Redirects has its own address');
+  has(body, 'href="/settings"', 'and so does Settings');
+  // The page-producing sections nest under Pages rather than sitting beside it.
+  has(body, 'sidebar-item-child', 'Ministries and the rest are nested');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

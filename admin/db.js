@@ -497,6 +497,18 @@ export const MENU_SEED = [
   { id: 30, menu: 'footer', label: 'Volunteer Sign-up',   kind: 'external', target: 'https://serve.timothystl.org', sort_order: 110 },
 ];
 
+// ── NFC TAPS ─────────────────────────────────────────────────
+// The four physical tags, seeded from §5.10 of the design handoff. The ids are
+// fixed because they ARE the addresses: tap 1 is /tap1. Names and placements
+// are working labels the office can rename at any time — nothing depends on
+// them.
+export const TAP_SEED = [
+  { id: 1, name: 'Link tree',    placement: 'Narthex table · handout cards', destination: 'https://links.timothystl.org' },
+  { id: 2, name: 'Welcome card', placement: 'Pew racks · visitor cards',     destination: 'https://links.timothystl.org/welcome' },
+  { id: 3, name: 'Giving plate', placement: 'Offering plates · two tags',    destination: 'https://give.timothystl.org' },
+  { id: 4, name: 'School & MDO', placement: 'School entry · MDO front desk', destination: 'https://links.timothystl.org/school' },
+];
+
 // Service times are stored as one editable text box rather than a table of
 // their own: three lines that staff can retype without learning a new screen.
 export function parseServiceTimes(value) {

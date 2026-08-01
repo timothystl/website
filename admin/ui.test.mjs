@@ -126,7 +126,7 @@ group('list section');
 
   // The grid template must include one extra track for the actions cell, or
   // the last column and the Edit link fight over the same column.
-  has(out, 'grid-template-columns:2.2fr 1.8fr .7fr auto', 'columns plus an actions track');
+  has(out, 'grid-template-columns:2.2fr 1.8fr .7fr 118px', 'columns plus an actions track');
 
   // Three columns of data, and the header row must match them exactly.
   const ths = out.match(/<span class="tlc-th[ "]/g) || [];

@@ -5,7 +5,7 @@
 // Last modified: 2026-03-27
 
 
-import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes } from './admin/db.js';
+import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, TAP_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes } from './admin/db.js';
 
 // Static pages that can carry self-serve notices (matches the SPA's page ids in public/index.html)
 const STATIC_PAGES = [
@@ -22,7 +22,9 @@ const STATIC_PAGES = [
   { slug: 'calendar',   label: 'Calendar' },
 ];
 import { html, sidebarShell, loginPage, setupPage, forgotPasswordPage, resetPasswordPage, permissionCheckboxes, formatDate, escapeHtml, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection } from './admin/helpers.js';
-import { renderListSection, renderDrawer, primaryCell, statusPill, valueChip, valueSelect, panel, countLabel, pluralise } from './admin/ui.js';
+import { renderListSection, renderDrawer, primaryCell, statusPill, valueChip, valueSelect, panel, countLabel, pluralise,
+         rowActions, toggleCell, panelList } from './admin/ui.js';
+import { SECTIONS, section as sectionCfg, columnsOf, filtersOf } from './admin/sections.js';
 import { VALUES, valueByKey, normalizeValue } from './admin/values.js';
 import { hashPassword, verifyPassword, createSession, getSession, deleteSession, sessionCookieHeader, clearSessionCookieHeader, logAudit, hasPermission, ALL_PERMISSIONS, PERMISSIONS, PERMISSION_PRESETS, migratePermissionKeys } from './admin/auth.js';
 import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHtml, cancelBrevoCampaign } from './admin/email.js';
@@ -43,7 +45,7 @@ import { diffSummary, auditGroup, canRollback as auditCanRollback, rollbackNote,
 import { BLOCKS as NL_BLOCKS, parseBlocks as parseNlBlocks, serializeBlocks as serializeNlBlocks,
          blockOn, AUDIENCES, normalizeAudience, subjectAdvice, preheaderAdvice,
          isSent as isNewsletterSent, canEdit as canEditNewsletter, approvalState,
-         issueStatus, sendSummary } from './admin/newsletter.js';
+         issueStatus, sendSummary, parseSubscriberCsv } from './admin/newsletter.js';
 import { screenSubmission, formConfig, forwardToChms, officeEmailHtml, officeSubject,
          handleFilteredRoutes, heldCount, OFFICE_EMAIL } from './admin/forms.js';
 
@@ -791,7 +793,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-08-01-5'; // bumped: media byte sizes, audit user_id nullable (phase 9)
+    const SCHEMA_VERSION = '2026-08-01-6'; // bumped: NFC taps, and link cards belonging to one
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -1022,6 +1024,32 @@ export default {
       sort_order INTEGER DEFAULT 0,
       active INTEGER DEFAULT 1
     )`).run(); } catch (_) {}
+    // ── NFC TAPS ──
+    // Four physical tags, each holding nothing but its own short address
+    // (/tap1…/tap4). Everything a visitor sees is the cards behind it, so
+    // re-pointing a tap here changes where a tag handed out a year ago lands —
+    // without anybody reprogramming the tag.
+    try {
+      await env.DB.prepare(`CREATE TABLE IF NOT EXISTS taps (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        placement TEXT DEFAULT '',
+        destination TEXT NOT NULL,
+        scans INTEGER NOT NULL DEFAULT 0,
+        active INTEGER NOT NULL DEFAULT 1
+      )`).run();
+    } catch (_) {}
+    // The tap a card belongs to. NULL means "shows on every tap", which is the
+    // right default for the cards that existed before taps did — they were all
+    // on the one link page.
+    try { await env.DB.prepare('ALTER TABLE link_cards ADD COLUMN tap INTEGER').run(); } catch (_) {}
+    for (const t of TAP_SEED) {
+      try {
+        await env.DB.prepare('INSERT OR IGNORE INTO taps (id, name, placement, destination, active) VALUES (?, ?, ?, ?, 1)')
+          .bind(t.id, t.name, t.placement, t.destination).run();
+      } catch (_) {}
+    }
+
     // Pre-populate link cards from the current static links page (only if table is empty)
     try {
       const lcCount = await env.DB.prepare('SELECT COUNT(*) as n FROM link_cards').first();
@@ -2384,7 +2412,7 @@ ${sidebarShell('dashboard', currentUser, '', badges)}
           map: (r) => ({ label: r.username, meta: r.email || '', href: `/users/edit/${r.id}` }) },
         { on: hp('settings_manage'), section: 'Redirects',
           sql: 'SELECT path, url, label FROM redirects WHERE LOWER(path) LIKE ? OR LOWER(COALESCE(label,\'\')) LIKE ? LIMIT 5',
-          map: (r) => ({ label: `/${r.path}`, meta: r.label || r.url, href: '/settings' }) },
+          map: (r) => ({ label: `/${r.path}`, meta: r.label || r.url, href: `/redirects/edit/${encodeURIComponent(r.path)}` }) },
       ];
 
       const results = [];
@@ -2452,22 +2480,30 @@ ${sidebarShell('dashboard', currentUser, '', badges)}
           const noAlt = m.kind === 'photo' && !String(m.alt || '').trim();
           const thumb = m.thumb_url || m.url;
           return {
-            filter: [over ? 'big' : '', noAlt ? 'noalt' : '', uses.length ? 'used' : 'unused'].filter(Boolean),
+            filter: [
+              m.kind === 'photo' ? 'photos' : 'files',
+              over ? 'over-1-mb' : '',
+              noAlt ? 'needs-alt-text' : '',
+              uses.length ? '' : 'unused',
+            ].filter(Boolean),
             search: `${m.filename} ${m.alt || ''} ${uses.join(' ')}`.toLowerCase(),
             cells: [
               primaryCell(m.filename, uses.length ? `On ${uses.slice(0, 3).join(', ')}` : 'Used nowhere', {
                 icon: m.kind === 'photo' ? `<img src="${escapeHtml(thumb)}" alt="">` : '▶',
               }),
-              // Alt text is edited in place: it is the field this screen exists
-              // to fix, so making somebody open a drawer for it would be the
-              // wrong shape.
-              `<form method="POST" action="/media/alt/${m.id}" style="display:flex;gap:6px;margin:0;">
-                <input type="text" name="alt" value="${escapeHtml(m.alt || '')}" placeholder="${m.kind === 'photo' ? 'Describe the picture' : 'Title'}" style="flex:1;min-width:0;font-size:12.5px;padding:6px 8px;border:1px solid var(--tlc-edge);border-radius:6px;">
-                <button type="submit" class="tlc-edit" style="background:none;border:0;cursor:pointer;font:inherit;">Save</button>
-              </form>`,
-              over ? statusPill('bad', prettyBytes(m.bytes)) : statusPill(m.bytes ? 'plain' : 'plain', prettyBytes(m.bytes)),
+              // Missing alt text reads as a pill, not an empty box — the design
+              // makes the gap look like something wrong rather than something
+              // merely blank.
+              noAlt ? statusPill('warn', 'No alt text yet') : escapeHtml(m.alt || ''),
+              over ? `<strong style="color:#8A4A4A;">${prettyBytes(m.bytes)}</strong>` : escapeHtml(prettyBytes(m.bytes)),
             ],
-            actions: `<a class="tlc-edit" href="${escapeHtml(m.url)}" target="_blank" rel="noopener">Open</a>`,
+            actions: rowActions(
+              { label: 'Edit', href: `/media/edit/${m.id}` },
+              [
+                { label: 'Open the file', href: m.url },
+                uses.length ? { label: `Used on ${uses[0]}`, href: '/pages' } : null,
+              ]
+            ),
             warn: over
               ? `${prettyBytes(m.bytes)} — over the 1MB target, so this page will be slow on a phone. Re-upload it and the editor will resize it on the way in.`
               : (noAlt ? 'No alt text, so anyone using a screen reader is told nothing about this picture.' : ''),
@@ -2481,24 +2517,16 @@ ${sidebarShell('media', currentUser, '', await badgeCounts(env, currentUser))}
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
     key: 'media',
-    title: 'Media',
-    purpose: 'Every photo and video in the library, and which pages use them. Pictures are added from inside a page editor — this is where they get checked.',
-    search: 'Search media',
-    filters: [
-      { label: 'All', value: 'all' },
-      { label: 'No alt text', value: 'noalt' },
-      { label: 'Over 1MB', value: 'big' },
-      { label: 'Used nowhere', value: 'unused' },
-    ],
-    columns: [
-      { label: 'File', width: '2.2fr' },
-      { label: 'Alt text', width: '2.4fr' },
-      { label: 'Size', width: '.9fr' },
-    ],
+    title: sectionCfg('media').title,
+    purpose: sectionCfg('media').purpose,
+    action: { label: sectionCfg('media').action, href: '/media/upload' },
+    search: sectionCfg('media').search,
+    filters: filtersOf('media'),
+    columns: columnsOf('media'),
     rows: listRows,
     noun: 'file',
-    empty: 'Nothing in the library yet. Photos are added from inside a page editor.',
-    note: 'Alt text is what somebody using a screen reader hears in place of the picture. Describe what is in it, not that it is a photo — “The congregation singing on Easter morning”, not “Easter photo”.',
+    empty: 'Nothing in the library yet.',
+    note: sectionCfg('media').note,
   })}
 </div>`, 'Media');
       }
@@ -2849,20 +2877,16 @@ ${sidebarShell('partners', currentUser, `<a href="https://timothystl.org/about/v
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
     key: 'partners',
-    title: 'Partners',
-    purpose: 'One partner ministry per core value — who carries each of the four values out into the world alongside us.',
-    action: { label: '+ Add partner', href: '/partners/new' },
-    search: 'Search partners',
-    filters: [],
-    columns: [
-      { label: 'Partner', width: '3fr' },
-      { label: 'Value', width: '.9fr' },
-      { label: 'Their site', width: '1.3fr' },
-    ],
+    title: sectionCfg('partners').title,
+    purpose: sectionCfg('partners').purpose,
+    action: { label: sectionCfg('partners').action, href: '/partners/new' },
+    search: sectionCfg('partners').search,
+    filters: filtersOf('partners'),
+    columns: columnsOf('partners'),
     rows: listRows,
     noun: 'partner',
     empty: 'No partners yet.',
-    note: 'Exactly one partner per value — the database enforces it. There is no Status column here because every partner is shown; if one should come off the values page, remove the record rather than hiding it.',
+    note: sectionCfg('partners').note,
   })}
 </div>`, 'Partners');
       }
@@ -3192,7 +3216,7 @@ document.getElementById('upload-form').addEventListener('submit', async function
         const kinds = [];
         if (n.youtube_url) kinds.push('Video');
         if (n.audio_url) kinds.push('Audio');
-        return kinds.length ? statusPill('good', kinds.join(' + ')) : statusPill('plain', 'No recording');
+        return kinds.length ? statusPill('good', kinds.join(' + ')) : statusPill('warn', 'No recording');
       };
 
       const rows = [];
@@ -3201,13 +3225,13 @@ document.getElementById('upload-form').addEventListener('submit', async function
         const withMedia = kids.filter((n) => n.youtube_url || n.audio_url).length;
         rows.push({
           href: `/sermons/edit-series/${s.id}`,
-          filter: ['series', s.active ? 'active' : ''].filter(Boolean),
+          filter: ['series', s.active ? 'active-series' : ''].filter(Boolean),
           search: `${s.title} ${s.date_range || ''}`.toLowerCase(),
           cells: [
             primaryCell(s.title, s.date_range || pluralise(kids.length, 'sermon')),
             escapeHtml(s.date_range || '—'),
             '',
-            kids.length ? statusPill(withMedia === kids.length ? 'good' : 'plain', `${withMedia}/${kids.length} with media`) : statusPill('plain', 'No sermons yet'),
+            s.active ? statusPill('good', 'Active series') : (s.playlist_url ? statusPill('plain', 'Playlist') : statusPill('plain', pluralise(kids.length, 'sermon'))),
           ],
           actions: `<a class="tlc-edit" href="/sermons/new-note?series_id=${s.id}">+ Sermon</a><a class="tlc-edit" href="/sermons/edit-series/${s.id}">Edit</a>`,
         });
@@ -3215,7 +3239,7 @@ document.getElementById('upload-form').addEventListener('submit', async function
           rows.push({
             child: true,
             href: `/sermons/edit-note/${n.id}`,
-            filter: ['sermon', (n.youtube_url || n.audio_url) ? 'with-media' : 'no-media'],
+            filter: (n.youtube_url || n.audio_url) ? [] : ['missing-media'],
             search: `${n.title || ''} ${n.scripture || ''} ${s.title}`.toLowerCase(),
             cells: [
               primaryCell(n.title || '(untitled)', s.title),
@@ -3229,7 +3253,7 @@ document.getElementById('upload-form').addEventListener('submit', async function
       for (const n of standalone) {
         rows.push({
           href: `/sermons/edit-note/${n.id}`,
-          filter: ['sermon', 'standalone', (n.youtube_url || n.audio_url) ? 'with-media' : 'no-media'],
+          filter: (n.youtube_url || n.audio_url) ? [] : ['missing-media'],
           search: `${n.title || ''} ${n.scripture || ''}`.toLowerCase(),
           cells: [
             primaryCell(n.title || '(untitled)', 'Not part of a series'),
@@ -3246,26 +3270,16 @@ ${sidebarShell('sermons', currentUser, `<a href="/sermons/new-series">+ Add seri
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
     key: 'sermons',
-    title: 'Sermons',
-    purpose: 'The sermon library — series, and the sermons inside them. This is what the website’s Latest sermon block reads.',
-    action: { label: '+ Add series', href: '/sermons/new-series' },
-    search: 'Search sermons and series',
-    filters: [
-      { label: 'All', value: 'all' },
-      { label: 'Series', value: 'series' },
-      { label: 'With a recording', value: 'with-media' },
-      { label: 'No recording', value: 'no-media' },
-    ],
-    columns: [
-      { label: 'Series / sermon', width: '2.6fr' },
-      { label: 'Date', width: '1fr' },
-      { label: 'Scripture', width: '1.2fr' },
-      { label: 'Media', width: '1.2fr' },
-    ],
+    title: sectionCfg('sermons').title,
+    purpose: sectionCfg('sermons').purpose,
+    action: { label: sectionCfg('sermons').action, href: '/sermons/new-series' },
+    search: sectionCfg('sermons').search,
+    filters: filtersOf('sermons'),
+    columns: columnsOf('sermons'),
     rows,
     noun: 'entry', nounPlural: 'entries',
     empty: 'No series or sermons yet.',
-    note: 'A sermon with no recording is not broken. The website shows a text-only card — series, title, date and reading — and turns it into a play button by itself the moment a link is pasted here.',
+    note: sectionCfg('sermons').note,
   })}
 </div>`, 'Sermons Admin');
     }
@@ -3516,18 +3530,11 @@ ${sidebarShell('news', currentUser, `<a href="/newsitems">← News &amp; Events<
 
   <div class="card">
     <div class="card-title">What are you writing?</div>
-    <div class="format-picker">
-      <button type="button" class="format-card active" id="fmt-weekly" onclick="pickFormat('weekly')">
-        <div class="format-card-icon">📰</div>
-        <div class="format-card-name">Weekly Newsletter</div>
-        <div class="format-card-desc">Pastor's note, events, ministry content — your regular weekly update.</div>
-      </button>
-      <button type="button" class="format-card" id="fmt-quick" onclick="pickFormat('quick')">
-        <div class="format-card-icon">⚡</div>
-        <div class="format-card-name">Quick Announcement</div>
-        <div class="format-card-desc">Short message + optional button. Snow days, funerals, schedule changes.</div>
-      </button>
+    <div class="tlc-fmt" style="flex-direction:row;">
+      <button type="button" class="tlc-fmt-pill is-on" id="fmt-weekly" onclick="pickFormat('weekly')">Weekly</button>
+      <button type="button" class="tlc-fmt-pill" id="fmt-quick" onclick="pickFormat('quick')">Special edition</button>
     </div>
+    <div style="font-size:12.5px;color:var(--gray);margin-top:8px;">Weekly carries the pastor's note, events and ministry content. A special edition is a short message with an optional button — snow days, funerals, schedule changes.</div>
   </div>
 
     <div class="card">
@@ -3724,8 +3731,8 @@ function syncTplDate(tplId) {
 }
 function pickFormat(fmt) {
   document.getElementById('format-input').value = fmt;
-  document.getElementById('fmt-weekly').classList.toggle('active', fmt === 'weekly');
-  document.getElementById('fmt-quick').classList.toggle('active', fmt === 'quick');
+  document.getElementById('fmt-weekly').classList.toggle('is-on', fmt === 'weekly');
+  document.getElementById('fmt-quick').classList.toggle('is-on', fmt === 'quick');
   document.getElementById('weekly-fields').style.display = fmt === 'weekly' ? '' : 'none';
   document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : 'none';
 }
@@ -3985,14 +3992,16 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
 
       const rows = ceRows.results.map((c) => ({
         href: `/christian-education/edit/${c.id}`,
-        filter: [c.active ? 'active' : 'paused', c.value || 'untagged'],
+        filter: [c.active ? 'running' : 'paused', c.value || ''].filter(Boolean),
         search: `${c.title} ${c.label || ''} ${c.schedule || ''} ${c.leader || ''}`.toLowerCase(),
         cells: [
-          primaryCell(c.title, [c.label, c.location].filter(Boolean).join(' · ')),
+          `<div class="tlc-primary"><span class="tlc-primary-text">
+            <span class="tlc-primary-title">${escapeHtml(c.title)}${c.value ? ` ${valueChip(c.value)}` : ''}</span>
+            <span class="tlc-primary-sub">${escapeHtml([c.label, c.location].filter(Boolean).join(' · '))}</span>
+          </span></div>`,
           escapeHtml(c.schedule || '—'),
           escapeHtml(c.leader || '—'),
-          valueChip(c.value),
-          c.active ? statusPill('good', 'On the website') : statusPill('plain', 'Paused'),
+          c.active ? statusPill('good', 'Running') : statusPill('plain', 'Paused'),
         ],
         actions: `<form method="POST" action="/christian-education/toggle/${c.id}" style="display:inline;margin:0;"><button type="submit" class="tlc-edit" style="background:none;border:0;cursor:pointer;font:inherit;color:inherit;">${c.active ? 'Pause' : 'Resume'}</button></form><a class="tlc-edit" href="/christian-education/edit/${c.id}">Edit</a>`,
       }));
@@ -4003,26 +4012,16 @@ ${sidebarShell('christian-education', currentUser, `<a href="https://timothystl.
   ${ceAlert ? `<div class="tlc-section" style="padding-bottom:0;">${ceAlert}</div>` : ''}
   ${renderListSection({
     key: 'christian-ed',
-    title: 'Christian Ed',
-    purpose: 'Every class the church offers. This is what /education shows and what the newsletter offers in its class picker.',
-    action: { label: '+ Add class', href: '/christian-education/new' },
-    search: 'Search classes',
-    filters: [
-      { label: 'All', value: 'all' },
-      { label: 'On the website', value: 'active' },
-      { label: 'Paused', value: 'paused' },
-    ],
-    columns: [
-      { label: 'Class', width: '2.2fr' },
-      { label: 'Schedule', width: '1.3fr' },
-      { label: 'Leader', width: '1fr' },
-      { label: 'Value', width: '.8fr' },
-      { label: 'Status', width: '1.1fr' },
-    ],
+    title: sectionCfg('ed').title,
+    purpose: sectionCfg('ed').purpose,
+    action: { label: sectionCfg('ed').action, href: '/christian-education/new' },
+    search: sectionCfg('ed').search,
+    columns: columnsOf('ed'),
+    filters: filtersOf('ed'),
     rows,
     noun: 'class', nounPlural: 'classes',
     empty: 'No classes yet.',
-    note: 'Pausing a class keeps it in this list but takes it off the website — the right move for something that breaks for the summer and comes back. Delete only when a class is genuinely finished.',
+    note: 'Pausing a class keeps it in this list but takes it off the website — the right move for something that breaks for the summer and comes back.',
   })}
 </div>`, 'Christian Education');
     }
@@ -4237,98 +4236,91 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
     <span class="tlc-toggle-label">${escapeHtml(b.label)}${b.locked ? ' <span style="color:var(--tlc-muted);font-size:11.5px;">— always in</span>' : ''}</span>
   </label>${b.locked ? '' : `<input type="hidden" name="block_seen" value="${b.key}">`}`).join('');
 
-      return html(`
-${sidebarShell('newsletter', currentUser, `<a href="/newsletters">← All issues</a>`, await badgeCounts(env, currentUser))}
-<div class="wrap">
-  <div class="page-title">${nlLocked ? 'Sent newsletter' : 'Edit newsletter'}</div>
-  ${copiedNotice}
-  ${lockedMsg}
-  ${nlLocked
-    ? `<div class="alert alert-info"><strong>${escapeHtml(sendSummary(row))}.</strong> A sent issue is read-only — the archive on the website has to keep saying what was actually sent. To work from a copy, duplicate it as a draft.
-        <form method="POST" action="/newsletter/duplicate/${editId}" style="margin-top:10px;"><button type="submit" class="btn btn-sm btn-primary">Duplicate as draft</button></form></div>`
-    : `<div class="page-sub" style="color:var(--amber);font-weight:700;">You are editing a ${row.status === 'draft' ? 'draft' : 'published'} newsletter. Changes will go live immediately when you publish.</div>`}
+      // Editing an issue is one screen with two halves: what you are writing on
+      // the left, and what it will look like on the right, kept live. The
+      // preview is built by the same function the send path uses, so the two
+      // cannot drift — the whole reason it is worth the width.
+      // Whether a second person could approve this. With only one holder of
+      // newsletter_approve the step is a formality, and approvalState() says so
+      // rather than implying a review that cannot happen.
+      const approvers = await env.DB.prepare("SELECT permissions FROM users WHERE active = 1").all().catch(() => ({ results: [] }));
+      const approverCount = (approvers.results || []).filter((u) => {
+        try { const p = JSON.parse(u.permissions || '[]'); return p === 'all' || (Array.isArray(p) && p.includes('newsletter_approve')); }
+        catch (_) { return false; }
+      }).length;
+      const nlState = approvalState(row, currentUser, approverCount > 1);
+      const nlStatus = issueStatus(row);
+      const nlSendLine = nlLocked
+        ? sendSummary(row)
+        : [nlState.state === 'pending' ? 'Awaiting approval' : null,
+           row.published_at ? `sends ${new Date(row.published_at + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}` : 'no date set yet',
+          ].filter(Boolean).join(' · ');
 
+      return html(`
+${sidebarShell('newsletter', currentUser, '', await badgeCounts(env, currentUser))}
+<div class="tlc-wrap">
+  <div class="tlc-section" style="padding-bottom:0;">
+    <h1 class="tlc-title">${escapeHtml(sectionCfg('newsletter').title)}</h1>
+    <p class="tlc-purpose">${escapeHtml(sectionCfg('newsletter').purpose)}</p>
+    <div class="tlc-nl-crumb">
+      <a class="tlc-tap-btn" href="/newsletters">← All issues</a>
+      ${statusPill(nlStatus.tone, nlStatus.label)}
+    </div>
+    <p class="tlc-nl-when">${escapeHtml(nlSendLine)}</p>
+    ${copiedNotice}
+    ${lockedMsg}
+    ${nlLocked
+      ? `<div class="alert alert-info"><strong>${escapeHtml(sendSummary(row))}.</strong> A sent issue is read-only — the archive on the website has to keep saying what was actually sent. To work from a copy, duplicate it as a draft.
+          <form method="POST" action="/newsletter/duplicate/${editId}" style="margin-top:10px;"><button type="submit" class="btn btn-sm btn-primary">Duplicate as draft</button></form></div>`
+      : ''}
+  </div>
+
+  <div class="tlc-nl-cols">
+  <div class="tlc-nl-form">
   <form method="POST" action="/publish" enctype="multipart/form-data" id="nl-form">
   <input type="hidden" name="newsletter_id" value="${editId}">
   <input type="hidden" name="format" id="format-input" value="${fmt}">
+
+    <div class="card">
+      <div class="card-title">Subject line</div>
+      <div class="form-group">
+        <input type="text" name="subject" required value="${(row.subject||'').replace(/"/g,'&quot;')}" ${nlLocked ? 'readonly' : ''}>
+        <div style="font-size:12px;color:${subjAdvice.tone === 'warn' ? '#8a6a00' : 'var(--gray)'};margin-top:4px;">${escapeHtml(subjAdvice.text)}</div>
+      </div>
+      <div class="card-title" style="margin-top:18px;">Preview text</div>
+      <div class="form-group">
+        <input type="text" name="preheader" value="${escapeHtml(row.preheader || '')}" ${nlLocked ? 'readonly' : ''} placeholder="e.g. Advent begins Sunday, plus the Christmas Market dates">
+        <div style="font-size:12px;color:${preAdvice.tone === 'warn' ? '#8a6a00' : 'var(--gray)'};margin-top:4px;">${escapeHtml(preAdvice.text)} — this is the grey line after the subject in an inbox.</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div>
+          <div class="card-title">Format</div>
+          <div class="tlc-fmt">
+            <button type="button" class="tlc-fmt-pill${fmt==='weekly'?' is-on':''}" id="fmt-weekly" onclick="pickFormat('weekly')"${nlLocked ? ' disabled' : ''}>Weekly</button>
+            <button type="button" class="tlc-fmt-pill${fmt==='quick'?' is-on':''}" id="fmt-quick" onclick="pickFormat('quick')"${nlLocked ? ' disabled' : ''}>Special edition</button>
+          </div>
+        </div>
+        <div>
+          <div class="card-title">Publish date</div>
+          <div class="form-group" style="margin:0;">
+            <input type="date" name="published_at" value="${row.published_at||''}" ${nlLocked ? 'readonly' : ''}>
+          </div>
+        </div>
+      </div>
+      <div class="card-title" style="margin-top:18px;">Who gets it</div>
+      <div class="form-group" style="margin-bottom:0;">
+        <select name="audience" ${nlLocked ? 'disabled' : ''}>
+          ${AUDIENCES.map((a) => `<option value="${a.key}"${normalizeAudience(row.audience) === a.key ? ' selected' : ''}>${escapeHtml(a.label)}</option>`).join('')}
+        </select>
+        <div style="font-size:12px;color:var(--gray);margin-top:4px;">Brevo decides the actual list; this records who the issue was written for.</div>
+      </div>
+    </div>
 
   <div class="card" style="background:var(--tlc-parchment);">
     <div class="card-title">What goes in this issue</div>
     <div style="font-size:13px;color:var(--gray);margin-bottom:10px;">Switch a section off and it disappears from the email — the words stay saved for next week.</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:2px 18px;">${blockSwitches}</div>
   </div>
-
-  <div class="card">
-    <div class="card-title">Inbox</div>
-    <div class="form-group">
-      <label>Preview text <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— the grey line after the subject in an inbox</span></label>
-      <input type="text" name="preheader" value="${escapeHtml(row.preheader || '')}" ${nlLocked ? 'readonly' : ''} placeholder="e.g. Advent begins Sunday, plus the Christmas Market dates">
-      <div style="font-size:12px;color:${preAdvice.tone === 'warn' ? '#8a6a00' : 'var(--gray)'};margin-top:4px;">${escapeHtml(preAdvice.text)}</div>
-    </div>
-    <div class="form-group" style="margin-bottom:0;">
-      <label>Who gets it</label>
-      <select name="audience" ${nlLocked ? 'disabled' : ''}>
-        ${AUDIENCES.map((a) => `<option value="${a.key}"${normalizeAudience(row.audience) === a.key ? ' selected' : ''}>${escapeHtml(a.label)}</option>`).join('')}
-      </select>
-      <div style="font-size:12px;color:var(--gray);margin-top:4px;">Brevo decides the actual list; this records who the issue was written for.</div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-title">Preview</div>
-    <div style="font-size:13px;color:var(--gray);margin-bottom:10px;">Rendered by the same builder that sends the email, so what you see here and what lands in an inbox cannot drift apart.</div>
-    <button type="button" class="btn btn-sm btn-secondary" id="nl-preview-btn">Update preview</button>
-    <iframe id="nl-preview" title="Email preview" style="width:100%;height:520px;border:1px solid var(--border);border-radius:10px;margin-top:12px;background:#fff;"></iframe>
-  </div>
-  <script>(function(){
-    var btn = document.getElementById('nl-preview-btn');
-    var frame = document.getElementById('nl-preview');
-    if (!btn || !frame) return;
-    function refresh(){
-      var form = document.getElementById('nl-form');
-      if (!form) return;
-      // TinyMCE keeps its content in an iframe until asked, so a preview taken
-      // straight from the textareas would show the last saved text rather than
-      // what is on screen.
-      if (window.tinymce && tinymce.triggerSave) { try { tinymce.triggerSave(); } catch(e){} }
-      btn.textContent = 'Updating…'; btn.disabled = true;
-      fetch('/newsletter/preview', { method: 'POST', body: new FormData(form) })
-        .then(function(r){ return r.text(); })
-        .then(function(html){ frame.srcdoc = html; })
-        .catch(function(){ frame.srcdoc = '<p style="font-family:sans-serif;padding:20px;color:#8A4A4A;">Could not build the preview just now.</p>'; })
-        .finally(function(){ btn.textContent = 'Update preview'; btn.disabled = false; });
-    }
-    btn.addEventListener('click', refresh);
-    refresh();
-  })();</script>
-
-  <div class="card">
-    <div class="card-title">Format</div>
-    <div class="format-picker">
-      <button type="button" class="format-card${fmt==='weekly'?' active':''}" id="fmt-weekly" onclick="pickFormat('weekly')">
-        <div class="format-card-icon">📰</div>
-        <div class="format-card-name">Weekly Newsletter</div>
-        <div class="format-card-desc">Pastor's note, events, ministry content.</div>
-      </button>
-      <button type="button" class="format-card${fmt==='quick'?' active':''}" id="fmt-quick" onclick="pickFormat('quick')">
-        <div class="format-card-icon">⚡</div>
-        <div class="format-card-name">Quick Announcement</div>
-        <div class="format-card-desc">Short message + optional button.</div>
-      </button>
-    </div>
-  </div>
-
-    <div class="card">
-      <div class="card-title">Header</div>
-      <div class="form-group">
-        <label>Subject line <span style="color:#B85C3A;">*</span></label>
-        <input type="text" name="subject" required value="${(row.subject||'').replace(/"/g,'&quot;')}">
-      </div>
-      <div class="form-group">
-        <label>Date</label>
-        <input type="date" name="published_at" value="${row.published_at||''}">
-      </div>
-    </div>
 
     <div id="weekly-fields" style="display:${fmt==='weekly'?'':'none'}">
       <div class="card">
@@ -4430,11 +4422,63 @@ ${sidebarShell('newsletter', currentUser, `<a href="/newsletters">← All issues
     <div class="btn-row" style="margin-top:8px;">
       ${hasPermission(currentUser, 'newsletter_approve') ? `<button type="submit" name="action" value="publish" class="btn btn-primary">Publish →</button>` : ''}
       <button type="submit" name="action" value="draft" class="btn btn-secondary">Save as draft</button>
-      <a href="/" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
+      <a href="/newsletters" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
     </div>
 
   </form>
+  </div>
+
+  <aside class="tlc-nl-preview">
+    <div class="tlc-nl-preview-head">
+      <span class="tlc-panel-title">Live preview</span>
+      <button type="button" class="tlc-tap-btn" id="nl-preview-btn">Refresh</button>
+    </div>
+    <div class="tlc-nl-inbox">
+      <span class="tlc-nl-inbox-subj" id="nl-inbox-subj">${escapeHtml(row.subject || 'Untitled issue')}</span>
+      <span class="tlc-nl-inbox-pre" id="nl-inbox-pre">${escapeHtml(row.preheader || 'No preview text yet')}</span>
+    </div>
+    <iframe id="nl-preview" title="Email preview" class="tlc-nl-frame"></iframe>
+    <p class="tlc-note" style="margin:10px 0 0;"><span class="tlc-note-mark">◆</span><span>Built by the same code that sends the email, so what you see here and what lands in an inbox cannot drift apart. A section switched off is missing from this preview too.</span></p>
+  </aside>
+  </div>
 </div>
+<script>(function(){
+  // The inbox strip above the frame mirrors the two fields as you type — those
+  // are the only part of an email most people ever read, and waiting for a
+  // round trip to see them would be the wrong trade.
+  var form = document.getElementById('nl-form');
+  var subj = form && form.querySelector('input[name=subject]');
+  var pre = form && form.querySelector('input[name=preheader]');
+  if (subj) subj.addEventListener('input', function(){
+    document.getElementById('nl-inbox-subj').textContent = subj.value || 'Untitled issue';
+  });
+  if (pre) pre.addEventListener('input', function(){
+    document.getElementById('nl-inbox-pre').textContent = pre.value || 'No preview text yet';
+  });
+
+  var btn = document.getElementById('nl-preview-btn');
+  var frame = document.getElementById('nl-preview');
+  if (!btn || !frame || !form) return;
+  function refresh(){
+    // TinyMCE keeps its content in an iframe until asked, so a preview taken
+    // straight from the textareas would show the last saved text rather than
+    // what is on screen.
+    if (window.tinymce && tinymce.triggerSave) { try { tinymce.triggerSave(); } catch(e){} }
+    btn.textContent = 'Updating…'; btn.disabled = true;
+    fetch('/newsletter/preview', { method: 'POST', body: new FormData(form) })
+      .then(function(r){ return r.text(); })
+      .then(function(html){ frame.srcdoc = html; })
+      .catch(function(){ frame.srcdoc = '<p style="font-family:sans-serif;padding:20px;color:#8A4A4A;">Could not build the preview just now.</p>'; })
+      .finally(function(){ btn.textContent = 'Refresh'; btn.disabled = false; });
+  }
+  btn.addEventListener('click', refresh);
+  // Typing anywhere in the form redraws the body, but only once you pause —
+  // a request per keystroke would make the preview slower, not more live.
+  var t = null;
+  form.addEventListener('input', function(){ clearTimeout(t); t = setTimeout(refresh, 900); });
+  form.addEventListener('change', function(){ clearTimeout(t); t = setTimeout(refresh, 300); });
+  refresh();
+})();</script>
 <script>
 let eventCount = 0;
 function addEvent() {
@@ -4485,8 +4529,8 @@ function syncTplDate(tplId) {
 }
 function pickFormat(fmt) {
   document.getElementById('format-input').value = fmt;
-  document.getElementById('fmt-weekly').classList.toggle('active', fmt === 'weekly');
-  document.getElementById('fmt-quick').classList.toggle('active', fmt === 'quick');
+  document.getElementById('fmt-weekly').classList.toggle('is-on', fmt === 'weekly');
+  document.getElementById('fmt-quick').classList.toggle('is-on', fmt === 'quick');
   document.getElementById('weekly-fields').style.display = fmt === 'weekly' ? '' : 'none';
   document.getElementById('quick-fields').style.display = fmt === 'quick' ? '' : 'none';
 }
@@ -4750,16 +4794,16 @@ ${classesJs}
 
         return {
           href: `/newsitems/edit/${item.id}`,
-          filter: [state, item.pinned ? 'pinned' : ''].filter(Boolean),
+          filter: [state, item.value || ''].filter(Boolean),
           search: `${item.title} ${item.summary || ''} ${valueByKey(item.value)?.short || ''}`.toLowerCase(),
           cells: [
-            primaryCell(item.title, [
-              item.pinned ? 'Pinned to the top' : '',
-              item.event_date ? `Event ${item.event_date}` : '',
-              item.summary || '',
-            ].filter(Boolean).join(' · ').slice(0, 96)),
-            valueChip(item.value),
-            escapeHtml(item.publish_date || '—'),
+            `<div class="tlc-primary">
+              <span class="tlc-primary-icon">${item.image_url ? `<img src="${escapeHtml(item.image_url)}" alt="">` : '📰'}</span>
+              <span class="tlc-primary-text">
+                <span class="tlc-primary-title">${escapeHtml(item.title)}${item.value ? ` ${valueChip(item.value)}` : ''}</span>
+                <span class="tlc-primary-sub">${escapeHtml((item.summary || '').slice(0, 80))}</span>
+              </span></div>`,
+            `${escapeHtml(item.publish_date || '—')}${item.pinned ? '<span class="tlc-primary-sub">Pinned to top</span>' : ''}`,
             expires,
             status,
           ],
@@ -4776,28 +4820,17 @@ ${sidebarShell('news', currentUser, `<a href="https://timothystl.org/news" targe
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
     key: 'news',
-    title: 'News &amp; Events',
-    purpose: 'Everything on /news — announcements, events, and the calendar below them. One page, so nobody has to guess where to look.',
-    action: { label: '+ Add post', href: '/newsitems/new' },
-    search: 'Search posts',
-    filters: [
-      { label: 'All', value: 'all' },
-      { label: 'Live', value: 'live' },
-      { label: 'Scheduled', value: 'scheduled' },
-      { label: 'Expired', value: 'expired' },
-      { label: 'Pinned', value: 'pinned' },
-    ],
-    columns: [
-      { label: 'Post', width: '2.6fr' },
-      { label: 'Value', width: '.9fr' },
-      { label: 'Published', width: '1fr' },
-      { label: 'Expires', width: '1fr' },
-      { label: 'Status', width: '.9fr' },
-    ],
+    title: sectionCfg('news').title,
+    purpose: sectionCfg('news').purpose,
+    action: { label: sectionCfg('news').action, href: '/newsitems/new' },
+    search: sectionCfg('news').search,
+    filters: filtersOf('news'),
+    chipFilters: VALUES.map((v) => ({ label: `${v.short} · ${v.name}`, value: v.key, tint: v.tint, ink: v.ink })),
+    columns: columnsOf('news'),
     rows: listRows,
     noun: 'post',
     empty: 'No news posts yet.',
-    note: 'A post with an expiry date takes itself off the website on that day. That one field is what keeps the site from filling up with last year’s announcements — set it when you write the post, not later.',
+    note: sectionCfg('news').note,
   })}
 </div>`, 'TLC Admin — News & Events');
     }
@@ -5134,9 +5167,8 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
           return {
             href: `/pages/${encodeURIComponent(p.id)}/edit`,
             filter: [
-              p.hasDraftEdits || p.status === 'draft' ? 'drafts' : 'published',
-              p.in_menu ? '' : 'off-menu',
-              clash ? 'clash' : '',
+              p.hasDraftEdits || p.status === 'draft' ? 'draft-edits' : 'live',
+              p.in_menu ? '' : 'not-in-menu',
             ].filter(Boolean),
             search: `${p.title} ${p.menu_label || ''} ${p.slug} ${link.shortLink || ''}`.toLowerCase(),
             cells: [
@@ -5163,26 +5195,16 @@ ${sidebarShell('pages', currentUser, `<a href="/pages/details">Church details</a
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
     key: 'pages',
-    title: 'Pages',
-    purpose: 'Every page on the site except the ministry pages, which have their own screen. Opening a row goes straight to the page editor.',
-    action: { label: '+ New page', href: '/pages/new', method: 'POST' },
-    search: 'Search pages',
-    filters: [
-      { label: 'All', value: 'all' },
-      { label: 'Live', value: 'published' },
-      { label: 'Draft edits', value: 'drafts' },
-      { label: 'Not in menu', value: 'off-menu' },
-    ],
-    columns: [
-      { label: 'Page', width: '2.6fr' },
-      { label: 'Address', width: '1.4fr' },
-      { label: 'Short link', width: '1.1fr' },
-      { label: 'Status', width: '1fr' },
-    ],
+    title: sectionCfg('pages').title,
+    purpose: sectionCfg('pages').purpose,
+    action: { label: sectionCfg('pages').action, href: '/pages/new', method: 'POST' },
+    search: sectionCfg('pages').search,
+    filters: filtersOf('pages'),
+    columns: columnsOf('pages'),
     rows: listRows,
     noun: 'page',
-    empty: filter === 'drafts' ? 'No pages have unpublished changes.' : 'No pages to show.',
-    note: 'A short link is the last part of the address, so /beliefs works as well as /about/beliefs — an address you can say out loud. It follows the page automatically; the only reason to set one by hand is to settle a clash.',
+    empty: 'No pages to show.',
+    note: sectionCfg('pages').note,
   })}
 </div>`, 'Pages — TLC Admin');
       }
@@ -5746,61 +5768,69 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`)}
         } catch (_) {}
 
         const TONE = { draft: 'warn', live: 'good', scheduled: 'auto', hidden: 'plain' };
-        const LABEL = { draft: 'Draft', live: 'Live', scheduled: 'Scheduled', hidden: 'Hidden' };
+        const LABEL = { draft: 'Draft edits', live: 'Live', scheduled: 'Scheduled', hidden: 'Hidden' };
 
-        const rows = pages.results.map((p) => {
+        const listRows = pages.results.map((p) => {
           const draftCount = sanitizeBlocks(parseBlocks(p.blocks)).length;
           const status = LABEL[p.page_status] ? p.page_status : 'live';
           const postCount = countMap[p.slug] || 0;
           const inMenu = p.in_menu === null || p.in_menu === undefined ? 1 : p.in_menu;
-          const when = status === 'scheduled' && p.publish_at
-            ? new Date(p.publish_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-            : (p.updated_at ? p.updated_at.split('T')[0] : 'Not yet edited');
+          const v = valueByKey(p.value);
 
           return {
-            // The row's primary action is the editor, not a settings form —
-            // laying the page out is the thing people come here to do.
             href: `/ministries/editor/${encodeURIComponent(p.slug)}`,
-            filter: [status, inMenu ? 'in-menu' : 'off-menu', p.value || 'untagged'].filter(Boolean),
-            search: `${p.title} ${p.slug} ${valueByKey(p.value)?.short || ''} ${valueByKey(p.value)?.name || ''}`.toLowerCase(),
+            filter: [
+              status === 'draft' ? 'draft-edits' : '',
+              postCount ? 'with-posts' : '',
+              inMenu ? '' : 'not-in-menu',
+              p.value || '',
+            ].filter(Boolean),
+            search: `${p.title} ${p.slug} ${v?.short || ''} ${v?.name || ''}`.toLowerCase(),
             cells: [
-              primaryCell(p.title, `/${p.slug} · ${pluralise(draftCount, 'block')}${postCount ? ` · ${pluralise(postCount, 'post')}` : ''} · ${when}`),
-              valueChip(p.value),
-              // Menu visibility is deliberately its own column, not folded
-              // into Status. Taking a ministry out of the header leaves the
-              // page live at its address — it just stops being listed.
-              inMenu ? statusPill('good', 'In menu') : statusPill('plain', 'Not listed'),
+              // The value chip sits beside the name, as in the design — it is a
+              // property of the ministry, not a column of its own.
+              `<div class="tlc-primary"><span class="tlc-primary-text">
+                <span class="tlc-primary-title">${escapeHtml(p.title)}${v ? ` ${valueChip(p.value)}` : ''}</span>
+                <span class="tlc-primary-sub">/ministries/${escapeHtml(p.slug)}${postCount ? ` · ${pluralise(postCount, 'post')}` : ''}</span>
+              </span></div>`,
+              `<a href="/${escapeHtml(p.slug)}" target="_blank" rel="noopener" style="color:var(--tlc-blue);text-decoration:none;">/${escapeHtml(p.slug)}</a>`,
+              toggleCell(`/ministries/toggle-menu/${encodeURIComponent(p.slug)}`, !!inMenu, `${p.title} in the menu`),
               statusPill(TONE[status], LABEL[status]),
             ],
-            actions: `${p.has_posts ? `<a class="tlc-edit" href="/ministries/${encodeURIComponent(p.slug)}/posts">Posts</a>` : ''}<a class="tlc-edit" href="/ministries/edit/${encodeURIComponent(p.slug)}">Details</a><a class="tlc-edit" href="/ministries/editor/${encodeURIComponent(p.slug)}">Open editor</a>`,
+            actions: rowActions(
+              { label: 'Open editor', href: `/ministries/editor/${encodeURIComponent(p.slug)}` },
+              [
+                { label: 'Details', href: `/ministries/edit/${encodeURIComponent(p.slug)}` },
+                p.has_posts ? { label: 'Posts', href: `/ministries/${encodeURIComponent(p.slug)}/posts` } : null,
+                { label: 'View live', href: `https://timothystl.org/${encodeURIComponent(p.slug)}` },
+                !CORE_SLUGS.includes(p.slug)
+                  ? { label: 'Delete', action: `/ministries/delete/${encodeURIComponent(p.slug)}`, confirm: 'Delete this ministry page?', danger: true }
+                  : null,
+              ]
+            ),
             warn: !p.value ? 'No core value on this ministry, so it is missing from the values report on the dashboard.' : '',
             warnCta: !p.value ? { label: 'Tag it', href: `/ministries/edit/${encodeURIComponent(p.slug)}` } : null,
           };
         });
 
-        const valueFilters = VALUES.map((v) => ({ label: v.short, value: v.key }));
-
+        const cfg = sectionCfg('ministries');
         return html(`
 ${sidebarShell('ministries', currentUser, `<a href="/voters">Voters Assembly page</a> <a href="/manual#ministry-editor">How the editor works</a>`, await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
     key: 'ministries',
-    title: 'Ministries',
-    purpose: 'Every ministry page on the website. Open one to lay it out — drag blocks into the order you want, edit the words in place, then publish.',
-    action: { label: '+ New ministry page', href: '/ministries/add' },
-    search: 'Search ministries',
-    filters: [{ label: 'All', value: 'all' }, ...valueFilters, { label: 'Not listed', value: 'off-menu' }, { label: 'Draft', value: 'draft' }],
-    columns: [
-      { label: 'Ministry', width: '2.8fr' },
-      { label: 'Value', width: '.9fr' },
-      { label: 'In menu', width: '1fr' },
-      { label: 'Status', width: '.9fr' },
-    ],
-    rows,
+    title: cfg.title,
+    purpose: cfg.purpose,
+    action: { label: cfg.action, href: '/ministries/add' },
+    search: cfg.search,
+    filters: filtersOf('ministries'),
+    chipFilters: VALUES.map((v) => ({ label: `${v.short} · ${v.name}`, value: v.key, tint: v.tint, ink: v.ink })),
+    columns: columnsOf('ministries'),
+    rows: listRows,
     noun: 'ministry', nounPlural: 'ministries',
     empty: 'No ministry pages yet.',
-    note: 'In menu and Status are two different things. Switching a ministry out of the menu leaves the page live at its own address — it just stops being listed in the header. Unpublishing is what takes it off the website.',
+    note: cfg.note,
   })}
 </div>`, 'Ministries Admin');
       }
@@ -6037,6 +6067,20 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministr
         ).bind(title, content, ctaLabel, ctaUrl, ctaLabel2, ctaUrl2, heroImageUrl, ministryImageUrl, vid1Url, vid1Title, vid2Url, vid2Title, vid3Url, vid3Title, value, inMenu, now, slug).run();
         await logAudit(env.DB, currentUser, 'update', 'ministry_page', slug, title, beforePage, { title, content: content.substring(0, 200), ctaLabel, ctaUrl, value, in_menu: inMenu });
         return new Response('', { status: 302, headers: { Location: '/ministries?msg=saved' } });
+      }
+
+      // Taking a ministry out of the menu leaves the page live at its address —
+      // it just stops being listed. Posted from the switch in the list, so
+      // there is no Save step for something that reads as instant.
+      if (path.startsWith('/ministries/toggle-menu/') && method === 'POST') {
+        const slug = decodeURIComponent(path.slice('/ministries/toggle-menu/'.length));
+        const form = await request.formData();
+        const next = form.get('value') === '1' ? 1 : 0;
+        const before = await env.DB.prepare('SELECT title, in_menu FROM youth_pages WHERE slug = ?').bind(slug).first();
+        await env.DB.prepare('UPDATE youth_pages SET in_menu = ? WHERE slug = ?').bind(next, slug).run();
+        await logAudit(env.DB, currentUser, 'update', 'ministry_page', slug, before?.title || slug,
+          { in_menu: before?.in_menu }, { in_menu: next });
+        return new Response('', { status: 302, headers: { Location: '/ministries' } });
       }
 
       // ── Delete ministry page (POST) — non-core only ──
@@ -6305,7 +6349,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">�
             : statusPill('good', 'Live');
           return {
             href: `/notices/edit/${n.id}`,
-            filter: isEmpty ? 'empty' : (isHidden ? 'hidden' : 'live'),
+            filter: isHidden || isEmpty ? 'hidden' : 'showing',
             search: `${n.label} ${pageLabel(n.page_slug)}`.toLowerCase(),
             cells: [
               primaryCell(n.label, `Last edited ${updated}`),
@@ -6324,26 +6368,16 @@ ${sidebarShell('notices', currentUser, '', await badgeCounts(env, currentUser))}
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
     key: 'notices',
-    title: 'Notices',
-    purpose: 'Short banners pinned to one page — a service change, a closing, a one-week announcement.',
-    action: { label: '+ Add notice', href: '/notices/add' },
-    search: 'Search notices',
-    filters: [
-      { label: 'All', value: 'all' },
-      { label: 'Live', value: 'live' },
-      { label: 'Hidden', value: 'hidden' },
-      { label: 'Empty', value: 'empty' },
-    ],
-    columns: [
-      { label: 'Notice', width: '2.4fr' },
-      { label: 'On page', width: '1.3fr' },
-      { label: 'Position', width: '.7fr' },
-      { label: 'Status', width: '.9fr' },
-    ],
+    title: sectionCfg('notices').title,
+    purpose: sectionCfg('notices').purpose,
+    action: { label: sectionCfg('notices').action, href: '/notices/add' },
+    search: sectionCfg('notices').search,
+    filters: filtersOf('notices'),
+    columns: columnsOf('notices'),
     rows: listRows,
     noun: 'notice',
     empty: 'No notices on any page yet.',
-    note: 'A notice is deliberately not part of the page. Switching one off takes one click and leaves the page itself untouched — which is why a Sunday closing belongs here rather than in the page editor.',
+    note: sectionCfg('notices').note,
   })}
 </div>`, 'Notices');
       }
@@ -6479,7 +6513,7 @@ ${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)
             : `<span style="font-family:var(--tlc-serif);font-size:12px;">${initials}</span>`;
           return {
             href: `/staff/edit/${m.id}`,
-            filter: m.photo_url ? 'photo' : 'nophoto',
+            filter: m.photo_url ? 'on-the-website' : 'hidden',
             search: `${m.name} ${m.title || ''} ${m.email || ''}`.toLowerCase(),
             cells: [
               primaryCell(m.name, m.title || 'No role given', { icon: avatar }),
@@ -6504,25 +6538,16 @@ ${sidebarShell('staff', currentUser, `<a href="https://timothystl.org/about" tar
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
     key: 'staff',
-    title: 'Staff directory',
-    purpose: 'One record per person. Every page that shows staff reads from here — edit once and the whole site follows.',
-    action: { label: '+ Add person', href: '/staff/new' },
-    search: 'Search staff',
-    filters: [
-      { label: 'All', value: 'all' },
-      { label: 'With a photo', value: 'photo' },
-      { label: 'No photo', value: 'nophoto' },
-    ],
-    columns: [
-      { label: 'Person', width: '2.4fr' },
-      { label: 'Email', width: '1.8fr' },
-      { label: 'Order', width: '.6fr' },
-      { label: 'Photo', width: '1fr' },
-    ],
+    title: sectionCfg('staff').title,
+    purpose: sectionCfg('staff').purpose,
+    action: { label: sectionCfg('staff').action, href: '/staff/new' },
+    search: sectionCfg('staff').search,
+    filters: filtersOf('staff'),
+    columns: columnsOf('staff'),
     rows: listRows,
     noun: 'person', nounPlural: 'people',
     empty: 'No staff members yet.',
-    note: 'The photo crop is set once on the person and reused everywhere their picture appears — which is what stops heads being cut off differently on each page.',
+    note: sectionCfg('staff').note,
   })}
 </div>
 <script>
@@ -6669,37 +6694,159 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
         let alertHtml = '';
         if (msg === 'saved')   alertHtml = `<div class="alert alert-success">✓ Card saved.</div>`;
         if (msg === 'deleted') alertHtml = `<div class="alert alert-info">Card deleted.</div>`;
-        const rows = await env.DB.prepare('SELECT * FROM link_cards ORDER BY sort_order, id').all();
-        const cards = rows.results || [];
-        const tableRows = cards.map(c => `
-          <div class="ni-row">
-            <div style="font-size:22px;min-width:36px;text-align:center;">${esc(c.icon_emoji||'🔗')}</div>
-            <div class="ni-title">${esc(c.title)}${c.description ? `<div style="font-size:12px;color:var(--gray);margin-top:2px;">${esc(c.description)}</div>` : ''}</div>
-            <div style="font-size:12px;color:var(--gray);font-family:var(--sans);flex:1;word-break:break-all;">${esc(c.url)}</div>
-            <div style="font-family:var(--sans);font-size:12px;color:var(--gray);min-width:50px;">#${c.sort_order}</div>
-            <form method="POST" action="/link-cards/toggle/${c.id}" style="margin:0;">
-              <button class="btn btn-sm ${c.active ? 'btn-sage' : 'btn-secondary'}" type="submit">${c.active ? 'Active' : 'Hidden'}</button>
-            </form>
-            <div style="display:flex;gap:8px;">
-              <a href="/link-cards/edit/${c.id}" class="btn btn-sm btn-primary">Edit</a>
-              <form method="POST" action="/link-cards/delete/${c.id}" onsubmit="return confirm('Delete this card?')" style="margin:0;">
-                <button class="btn btn-sm btn-danger" type="submit">Delete</button>
-              </form>
-            </div>
-          </div>`).join('');
-        return html(sidebarShell('link-cards', currentUser) + `
-          <div class="wrap">
-            <div class="page-title">Link Tree</div>
-            <div class="page-sub">Cards shown on <a href="https://links.timothystl.org" target="_blank" style="color:var(--amber);">links.timothystl.org</a>. Set the Sort # to control order (lower = first).</div>
-            ${alertHtml}
-            <div class="card">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-                <div class="card-title" style="margin:0;border:none;padding:0;">Cards (${cards.length})</div>
-                <a href="/link-cards/new" class="btn btn-primary btn-sm">+ Add card</a>
-              </div>
-              ${cards.length ? tableRows : '<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No cards yet. <a href="/link-cards/new">Add one →</a></div>'}
-            </div>
-          </div>`, 'Link Tree — TLC Admin');
+        if (msg === 'repointed') alertHtml = `<div class="alert alert-success">✓ Tap re-pointed. The physical tag is unchanged — it already only holds its short address.</div>`;
+
+        const [cardRows, tapRows] = await Promise.all([
+          env.DB.prepare('SELECT * FROM link_cards ORDER BY sort_order, id').all().catch(() => ({ results: [] })),
+          env.DB.prepare('SELECT * FROM taps ORDER BY id').all().catch(() => ({ results: [] })),
+        ]);
+        const cards = cardRows.results || [];
+        const taps = tapRows.results || [];
+        const which = parseInt(url.searchParams.get('tap') || '0', 10);
+
+        // The whole mechanic of this screen: the tag holds nothing but /tapN.
+        // Re-pointing it here changes where a tag handed out a year ago lands,
+        // with nobody touching the tag.
+        const tapPanel = taps.length === 0 ? '' : `<div class="tlc-taps">${taps.map((t) => {
+          const count = cards.filter((c) => c.tap === t.id).length;
+          const on = which === t.id;
+          return `<div class="tlc-tap${on ? ' is-on' : ''}">
+    <div class="tlc-tap-head">
+      <span class="tlc-tap-n">/tap${t.id}</span>
+      ${t.active ? statusPill('good', 'Live') : statusPill('plain', 'Off')}
+    </div>
+    <span class="tlc-tap-name">${escapeHtml(t.name)}</span>
+    <span class="tlc-tap-where">${escapeHtml(t.placement || 'Placement not recorded')}</span>
+    <span class="tlc-tap-dest">Lands on ${escapeHtml(String(t.destination || '').replace(/^https?:\/\//, ''))}</span>
+    <span class="tlc-tap-count">${pluralise(count, 'card')}</span>
+    <div class="tlc-tap-actions">
+      <a class="tlc-tap-btn" href="/link-cards?tap=${on ? '' : t.id}">${on ? 'Show all cards' : 'Show its cards'}</a>
+      <a class="tlc-tap-btn" href="/link-cards/tap/${t.id}">Re-point</a>
+    </div>
+  </div>`;
+        }).join('')}</div>`;
+
+        const listRows = cards
+          .filter((c) => !which || c.tap === which)
+          .map((c) => ({
+            href: `/link-cards/edit/${c.id}`,
+            filter: c.active ? 'showing' : 'hidden',
+            search: `${c.title} ${c.description || ''} ${c.url}`.toLowerCase(),
+            cells: [
+              primaryCell(c.title, c.description || '', { icon: escapeHtml(c.icon_emoji || '🔗') }),
+              `<span title="${escapeHtml(c.url)}">${escapeHtml(String(c.url).replace(/^https?:\/\//, '').slice(0, 46))}</span>`,
+              `${c.sort_order ?? 0}`,
+              c.active ? statusPill('good', 'Showing') : statusPill('plain', 'Hidden'),
+            ],
+            actions: rowActions(
+              { label: 'Edit', href: `/link-cards/edit/${c.id}` },
+              [
+                { label: c.active ? 'Hide' : 'Show', action: `/link-cards/toggle/${c.id}` },
+                ...taps.map((t) => (c.tap === t.id ? null : {
+                  label: `Move to /tap${t.id}`,
+                  action: `/link-cards/move/${c.id}`,
+                  fields: { tap: String(t.id) },
+                })),
+                c.tap ? { label: 'Show on every tap', action: `/link-cards/move/${c.id}`, fields: { tap: '' } } : null,
+                { label: 'Delete', action: `/link-cards/delete/${c.id}`, confirm: 'Delete this card?', danger: true },
+              ]
+            ),
+          }));
+
+        const cfg = sectionCfg('links');
+        const activeTap = taps.find((t) => t.id === which);
+        return html(`
+${sidebarShell('link-cards', currentUser, `<a href="https://links.timothystl.org" target="_blank">View link page →</a>`, await badgeCounts(env, currentUser))}
+<div class="tlc-wrap">
+  ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
+  <div class="tlc-section" style="padding-bottom:0;">
+    <div class="tlc-section-head">
+      <div class="tlc-section-headings">
+        <h1 class="tlc-title">${escapeHtml(cfg.title)}</h1>
+        <p class="tlc-purpose">${escapeHtml(cfg.purpose)}</p>
+      </div>
+    </div>
+    ${tapPanel}
+  </div>
+  ${renderListSection({
+    key: 'links',
+    title: activeTap ? `Cards on /tap${activeTap.id}` : 'All cards',
+    purpose: activeTap
+      ? `${escapeHtml(activeTap.name)} — ${escapeHtml(activeTap.placement || 'placement not recorded')}.`
+      : 'Every card, across all four taps. A card with no tap of its own shows on all of them.',
+    action: { label: cfg.action, href: '/link-cards/new' },
+    search: cfg.search,
+    filters: filtersOf('links'),
+    columns: columnsOf('links'),
+    rows: listRows,
+    noun: 'card',
+    empty: activeTap ? 'No cards on this tap yet.' : 'No link cards yet.',
+    note: cfg.note,
+  })}
+</div>`, 'Taps & links — TLC Admin');
+      }
+
+      // Re-point a tap (GET form)
+      if (path.startsWith('/link-cards/tap/') && method === 'GET') {
+        const id = parseInt(path.slice('/link-cards/tap/'.length), 10);
+        const t = await env.DB.prepare('SELECT * FROM taps WHERE id = ?').bind(id).first();
+        if (!t) return new Response('Not found', { status: 404 });
+        return html(`
+${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; links</a>`, await badgeCounts(env, currentUser))}
+<div class="wrap">
+  <div class="page-title">Re-point /tap${t.id}</div>
+  <div class="page-sub">${escapeHtml(t.name)} — ${escapeHtml(t.placement || 'placement not recorded')}</div>
+  <div class="alert alert-info">The physical tag holds nothing but <code>/tap${t.id}</code>. Changing where that lands is this form — the tag itself is never reprogrammed, so anything already handed out keeps working.</div>
+  <div class="card">
+    <form method="POST" action="/link-cards/tap/${t.id}">
+      <div class="form-group">
+        <label>Name <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— for your reference here</span></label>
+        <input type="text" name="name" value="${escapeHtml(t.name)}" required>
+      </div>
+      <div class="form-group">
+        <label>Where the tag lives</label>
+        <input type="text" name="placement" value="${escapeHtml(t.placement || '')}" placeholder="e.g. Narthex table · handout cards">
+      </div>
+      <div class="form-group">
+        <label>Lands on <span style="color:#B85C3A;">*</span></label>
+        <input type="text" name="destination" value="${escapeHtml(t.destination || '')}" required placeholder="https://links.timothystl.org">
+      </div>
+      <div class="form-group">
+        <input type="hidden" name="active" value="0">
+        <div class="checkbox-row">
+          <input type="checkbox" name="active" value="1" id="tap-active" ${t.active ? 'checked' : ''}>
+          <span><label for="tap-active" style="display:inline;text-transform:none;letter-spacing:0;font-size:14px;font-weight:600;">This tap is in use</label></span>
+        </div>
+      </div>
+      <div class="btn-row" style="margin-top:20px;">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <a href="/link-cards" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>`, 'Re-point tap');
+      }
+
+      if (path.startsWith('/link-cards/tap/') && method === 'POST') {
+        const id = parseInt(path.slice('/link-cards/tap/'.length), 10);
+        const form = await request.formData();
+        const before = await env.DB.prepare('SELECT * FROM taps WHERE id = ?').bind(id).first();
+        await env.DB.prepare('UPDATE taps SET name = ?, placement = ?, destination = ?, active = ? WHERE id = ?')
+          .bind(String(form.get('name') || '').slice(0, 80), String(form.get('placement') || '').slice(0, 120),
+                String(form.get('destination') || '').slice(0, 400), form.get('active') === '1' ? 1 : 0, id).run();
+        await logAudit(env.DB, currentUser, 'update', 'tap', String(id), before?.name || `tap${id}`, before,
+          { destination: form.get('destination') });
+        return new Response('', { status: 302, headers: { Location: '/link-cards?msg=repointed' } });
+      }
+
+      // Move a card between taps
+      if (path.startsWith('/link-cards/move/') && method === 'POST') {
+        const id = parseInt(path.slice('/link-cards/move/'.length), 10);
+        const form = await request.formData();
+        const raw = String(form.get('tap') || '').trim();
+        const tap = raw ? parseInt(raw, 10) : null;
+        await env.DB.prepare('UPDATE link_cards SET tap = ? WHERE id = ?').bind(tap, id).run();
+        return new Response('', { status: 302, headers: { Location: '/link-cards?msg=saved' } });
       }
 
       // Form helper (new & edit)
@@ -6805,7 +6952,8 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
         && !hasPermission(currentUser, 'settings_manage') && !hasPermission(currentUser, 'giving_manage')) {
       return new Response('Access denied.', { status: 403 });
     }
-    if ((path === '/settings' || path === '/settings/update') && !hasPermission(currentUser, 'settings_manage')) {
+    if ((path.startsWith('/settings') || path.startsWith('/redirects')) && !hasPermission(currentUser, 'settings_manage')
+        && !(path.startsWith('/redirects/') && hasPermission(currentUser, 'giving_manage'))) {
       return new Response('Access denied.', { status: 403 });
     }
     if (path === '/redirects/add' && method === 'POST') {
@@ -6814,11 +6962,14 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
       const rUrl  = (form.get('url')  || '').trim();
       const rLabel= (form.get('label')|| '').trim();
       const rCategory = (form.get('category') || 'general').trim() === 'giving' ? 'giving' : 'general';
-      const rActive = form.get('active') !== null ? 1 : 0;
+      // A toggle posts a hidden 0 ahead of the checkbox, so get() always returns
+      // something; a 1 being present is what "on" means. A bare checkbox (the
+      // vendor-link form in Giving) still posts only '1' when ticked.
+      const rActive = form.getAll('active').includes('1') ? 1 : 0;
       // Anything but an explicit 'gift' is a payment. Defaulting the other way
       // would let a typo put a non-donation on somebody's tax statement.
       const rGiveKind = form.get('give_kind') === 'gift' ? 'gift' : 'payment';
-      const redirectBackTo = rCategory === 'giving' ? '/giving' : '/settings';
+      const redirectBackTo = rCategory === 'giving' ? '/giving' : '/redirects';
       if (!hasPermission(currentUser, rCategory === 'giving' ? 'giving_manage' : 'settings_manage')) {
         return new Response('Access denied.', { status: 403 });
       }
@@ -6838,11 +6989,14 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
       const rUrl  = (form.get('url')  || '').trim();
       const rLabel= (form.get('label')|| '').trim();
       const rCategory = (form.get('category') || 'general').trim() === 'giving' ? 'giving' : 'general';
-      const rActive = form.get('active') !== null ? 1 : 0;
+      // A toggle posts a hidden 0 ahead of the checkbox, so get() always returns
+      // something; a 1 being present is what "on" means. A bare checkbox (the
+      // vendor-link form in Giving) still posts only '1' when ticked.
+      const rActive = form.getAll('active').includes('1') ? 1 : 0;
       // Anything but an explicit 'gift' is a payment. Defaulting the other way
       // would let a typo put a non-donation on somebody's tax statement.
       const rGiveKind = form.get('give_kind') === 'gift' ? 'gift' : 'payment';
-      const redirectBackTo = rCategory === 'giving' ? '/giving' : '/settings';
+      const redirectBackTo = rCategory === 'giving' ? '/giving' : '/redirects';
       if (!hasPermission(currentUser, rCategory === 'giving' ? 'giving_manage' : 'settings_manage')) {
         return new Response('Access denied.', { status: 403 });
       }
@@ -6862,7 +7016,7 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
       const rPath = path.slice('/redirects/delete/'.length);
       const existing = await env.DB.prepare('SELECT category FROM redirects WHERE path = ?').bind(rPath).first();
       const existingCategory = existing?.category === 'giving' ? 'giving' : 'general';
-      const redirectBackTo = existingCategory === 'giving' ? '/giving' : '/settings';
+      const redirectBackTo = existingCategory === 'giving' ? '/giving' : '/redirects';
       if (!hasPermission(currentUser, existingCategory === 'giving' ? 'giving_manage' : 'settings_manage')) {
         return new Response('Access denied.', { status: 403 });
       }
@@ -6871,10 +7025,55 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
     }
 
     // ── SUBSCRIBERS ADMIN ──
-    if ((path === '/subscribers' || path === '/subscribers/delete') && !hasPermission(currentUser, 'settings_manage')) {
+    if (path.startsWith('/subscribers') && !hasPermission(currentUser, 'settings_manage')) {
       return new Response('Access denied.', { status: 403 });
     }
-    if (path === '/subscribers' && method === 'GET') {
+    if (path === '/subscribers/import' && method === 'POST') {
+      // Import is additive and never removes anybody. A row already on the list
+      // is left alone rather than overwritten — the office pasting last year's
+      // export must not reset somebody's name or resurrect an unsubscribe.
+      const form = await request.formData();
+      const raw = String(form.get('csv') || '');
+      const parsed = parseSubscriberCsv(raw);
+      if (!parsed.rows.length) {
+        return Response.redirect(new URL(`/subscribers?msg=${encodeURIComponent(parsed.skipped ? 'No usable rows — every line was missing an email address.' : 'Nothing to import.')}`, request.url), 302);
+      }
+      let added = 0, already = 0;
+      const now = new Date().toISOString();
+      for (const r of parsed.rows) {
+        const existing = await env.DB.prepare('SELECT email FROM newsletter_subscribers WHERE lower(email) = ?').bind(r.email.toLowerCase()).first().catch(() => null);
+        if (existing) { already++; continue; }
+        await env.DB.prepare('INSERT INTO newsletter_subscribers (email, name, subscribed_at) VALUES (?, ?, ?)')
+          .bind(r.email, r.name || null, now).run().catch(() => {});
+        added++;
+      }
+      // Push to Brevo too, so an imported address actually receives the email.
+      // Brevo failing is reported but does not undo the local rows — they are
+      // the record of who asked to be on the list.
+      let brevoNote = '';
+      if (env.BREVO_API_KEY && env.BREVO_LIST_ID) {
+        for (const r of parsed.rows) {
+          try {
+            await fetch('https://api.brevo.com/v3/contacts', {
+              method: 'POST',
+              headers: { 'api-key': env.BREVO_API_KEY, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                email: r.email,
+                attributes: r.name ? { FIRSTNAME: r.name.split(' ')[0], LASTNAME: r.name.split(' ').slice(1).join(' ') } : undefined,
+                listIds: [Number(env.BREVO_LIST_ID)],
+                updateEnabled: true,
+              }),
+            });
+          } catch (_) { brevoNote = ' Brevo could not be reached, so these are on the website list only.'; }
+        }
+      } else {
+        brevoNote = ' Brevo is not configured, so these are on the website list only.';
+      }
+      await logAudit(env.DB, currentUser, 'import', 'subscribers', 'import', 'Subscriber import', null, { added, already, skipped: parsed.skipped });
+      const msg = `Imported ${pluralise(added, 'new subscriber')}${already ? `, ${already} already on the list` : ''}${parsed.skipped ? `, ${parsed.skipped} skipped with no email address` : ''}.${brevoNote}`;
+      return Response.redirect(new URL(`/subscribers?msg=${encodeURIComponent(msg)}`, request.url), 302);
+    }
+    if ((path === '/subscribers' || path === '/subscribers/import') && method === 'GET') {
       // Fetch Brevo contacts from the newsletter list
       let brevoContacts = [];
       let brevoTotal = null;
@@ -6915,28 +7114,48 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
       for (const s of localRecent.results) {
         bySource.set(String(s.email || '').toLowerCase(), { joined: s.subscribed_at, name: s.name });
       }
+      // A bounce and an unsubscribe are different facts and the design asks for
+      // them apart. Brevo's contact record only ever tells us `emailBlacklisted`
+      // — true for both — so a bounce is only reported when the account keeps a
+      // marker attribute for it. Without one the Bounced filter reaches nothing,
+      // which is honest; guessing that every blacklisted address bounced would
+      // tell the office to chase people who simply opted out.
+      const bounced = (c) => {
+        const a = c.attributes || {};
+        return !!(a.HARD_BOUNCE || a.HARDBOUNCE || a.BOUNCED || a.BOUNCE);
+      };
       const listRows = brevoContacts.map((c) => {
         const email = String(c.email || '');
         const local = bySource.get(email.toLowerCase());
         const name = [c.attributes?.FIRSTNAME, c.attributes?.LASTNAME].filter(Boolean).join(' ') || local?.name || '';
-        const unsub = !!c.emailBlacklisted;
+        const isBounced = bounced(c);
+        const unsub = !isBounced && !!c.emailBlacklisted;
         bySource.delete(email.toLowerCase());
+        // Two filters have to reach the same row — where they came from, and
+        // whether the address still works — so the row carries both.
+        const filters = [local ? 'website' : 'added-by-office'];
+        if (isBounced) filters.push('bounced');
         return {
-          filter: unsub ? 'unsubscribed' : 'active',
+          filter: filters,
           search: `${email} ${name}`.toLowerCase(),
           cells: [
             primaryCell(name || email, name ? email : 'No name on file'),
-            local ? 'Website signup' : 'Added in Brevo',
+            local ? 'Website signup' : 'Added by office',
             escapeHtml((local?.joined || '').slice(0, 10) || '—'),
-            unsub ? statusPill('plain', 'Unsubscribed') : statusPill('good', 'Active'),
+            isBounced ? statusPill('bad', 'Bounced')
+              : unsub ? statusPill('plain', 'Unsubscribed')
+                : statusPill('good', 'Subscribed'),
           ],
           actions: '',
+          ...(isBounced ? { warn: 'Mail to this address is bouncing, so this person is not receiving the newsletter. Correct the address in Brevo or ask them for a new one.', warnAction: { label: 'Open in Brevo ↗', href: `https://app.brevo.com/contact/index` } } : {}),
         };
       });
-      // Anyone who signed up on the website but has not reached Brevo yet.
+      // Anyone who signed up on the website but has not reached Brevo yet. They
+      // are a website signup like any other — the gap is stated on the row
+      // rather than hidden behind a filter of its own.
       for (const [email, s] of bySource) {
         listRows.push({
-          filter: 'pending',
+          filter: 'website',
           search: `${email} ${s.name || ''}`.toLowerCase(),
           cells: [
             primaryCell(s.name || email, s.name ? email : 'No name on file'),
@@ -6945,13 +7164,14 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
             statusPill('warn', 'Not in Brevo'),
           ],
           actions: '',
-          warn: 'Signed up on the website but not showing in the Brevo list yet.',
+          warn: 'Signed up on the website but not showing in the Brevo list yet, so they are not receiving the email.',
         });
       }
 
-      const errorBanner = brevoError
+      const subMsg = url.searchParams.get('msg');
+      const errorBanner = (brevoError
         ? `<div class="alert alert-error">⚠ ${escapeHtml(brevoError)} <a href="https://app.brevo.com" target="_blank" style="color:var(--steel);">Open Brevo ↗</a><br><span style="font-size:13px;">The website signups below are still accurate; only the Brevo side could not be read.</span></div>`
-        : '';
+        : '') + (subMsg ? `<div class="alert alert-success">✓ ${escapeHtml(subMsg)}</div>` : '');
 
       return html(`
 ${sidebarShell('subscribers', currentUser, `<a href="https://app.brevo.com" target="_blank">Open Brevo ↗</a>`, await badgeCounts(env, currentUser))}
@@ -6959,227 +7179,293 @@ ${sidebarShell('subscribers', currentUser, `<a href="https://app.brevo.com" targ
   ${errorBanner ? `<div class="tlc-section" style="padding-bottom:0;">${errorBanner}</div>` : ''}
   ${renderListSection({
     key: 'subscribers',
-    title: 'Subscribers',
-    purpose: `Everyone who gets the newsletter${brevoTotal !== null ? ` — ${pluralise(brevoTotal, 'person', 'people')} in the Brevo list` : ''}.`,
-    search: 'Search subscribers',
-    filters: [
-      { label: 'All', value: 'all' },
-      { label: 'Active', value: 'active' },
-      { label: 'Unsubscribed', value: 'unsubscribed' },
-      { label: 'Not in Brevo', value: 'pending' },
-    ],
-    columns: [
-      { label: 'Person', width: '2.6fr' },
-      { label: 'Source', width: '1.2fr' },
-      { label: 'Joined', width: '1fr' },
-      { label: 'Status', width: '1.1fr' },
-    ],
+    title: sectionCfg('subscribers').title,
+    purpose: `${sectionCfg('subscribers').purpose}${brevoTotal !== null ? ` ${pluralise(brevoTotal, 'person', 'people')} in the Brevo list.` : ''}`,
+    action: { label: sectionCfg('subscribers').action, href: '/subscribers/import' },
+    search: sectionCfg('subscribers').search,
+    filters: filtersOf('subscribers'),
+    columns: columnsOf('subscribers'),
     rows: listRows,
     noun: 'subscriber',
     empty: 'No subscribers yet.',
-    note: 'This is a read-only mirror. Never delete somebody to unsubscribe them — an unsubscribe comes back from Brevo and deleting the record here would simply let them be added again next time they fill in a form.',
+    note: sectionCfg('subscribers').note,
   })}
+  ${path === '/subscribers/import' ? renderDrawer({
+    key: 'subscriber-import',
+    title: 'Import subscribers',
+    sub: 'Paste a list exported from Brevo, Breeze, or a spreadsheet.',
+    action: '/subscribers/import',
+    cancelHref: '/subscribers',
+    saveLabel: 'Import',
+    fields: [
+      { kind: 'textarea', name: 'csv', label: 'Rows', rows: 12, required: true,
+        placeholder: 'email,name\njane@example.com,Jane Smith\n…',
+        hint: 'One person per line. Any column with "email" in its heading is used as the address, and a name is taken from name, or first and last. A heading row is optional.' },
+      { kind: 'static', label: 'What this does',
+        html: '<p style="margin:0;">Adds anybody not already on the list, here and in Brevo. Nobody is removed and nobody already on the list is changed — so re-importing the same file is safe.</p>' },
+    ],
+  }) : ''}
 </div>`, 'Subscribers');
     }
 
-    if (path.startsWith('/settings')) {
-      // Show settings form
-      if (path === '/settings' && method === 'GET') {
-        const REDIRECT_KEYS = ['zoom_url', 'councilfiles_url'];
-        const [settings, customRedirects, givingRedirects, autoRedirects, pageRows] = await Promise.all([
-          env.DB.prepare(`SELECT key, value, label, hint FROM site_settings WHERE key IN (${REDIRECT_KEYS.map(() => '?').join(',')}) ORDER BY rowid`).bind(...REDIRECT_KEYS).all().catch(() => ({ results: [] })),
-          env.DB.prepare("SELECT path, url, label, category, active FROM redirects WHERE category != 'giving' ORDER BY path").all().catch(() => ({ results: [] })),
-          env.DB.prepare("SELECT path, url, label, active FROM redirects WHERE category = 'giving' ORDER BY path").all().catch(() => ({ results: [] })),
-          env.DB.prepare('SELECT from_slug, to_slug, created_at FROM page_redirects ORDER BY from_slug').all().catch(() => ({ results: [] })),
-          env.DB.prepare("SELECT id, title, menu_label, slug, parent_id, status, short_link FROM pages WHERE status = 'published'").all().catch(() => ({ results: [] })),
-        ]);
-        const msg = url.searchParams.get('msg');
-        const alertHtml = msg === 'saved' ? `<div class="alert alert-success">✓ Settings saved.</div>`
-          : msg === 'redirect-added'   ? `<div class="alert alert-success">✓ Redirect added.</div>`
-          : msg === 'redirect-updated' ? `<div class="alert alert-success">✓ Redirect updated.</div>`
-          : msg === 'redirect-deleted' ? `<div class="alert alert-info">Redirect deleted.</div>`
-          : msg === 'redirect-error'   ? `<div class="alert alert-error">Path and URL are both required.</div>` : '';
+    // ── REDIRECTS ────────────────────────────────────────────────
+    // Four kinds of address answer on this site and they live in three
+    // different places: hand-made rows in `redirects`, the 301s `page_redirects`
+    // writes when a page is renamed, short links derived from a page's address
+    // and stored nowhere at all, and the giving/vendor links managed under
+    // Giving. Somebody asking "where does /zoom go" should not have to know
+    // which of those it is, so all four are one list and the Kind column says
+    // which. The filters are the design's four: a short link is filed under
+    // Automatic because nobody typed it, and a giving link under Hand-made
+    // because somebody did.
+    if ((path === '/redirects' || path === '/redirects/new' || path.startsWith('/redirects/edit/')) && method === 'GET') {
+      const [customRedirects, givingRedirects, autoRedirects, pageRows] = await Promise.all([
+        env.DB.prepare("SELECT path, url, label, category, active FROM redirects WHERE category != 'giving' ORDER BY path").all().catch(() => ({ results: [] })),
+        env.DB.prepare("SELECT path, url, label, active FROM redirects WHERE category = 'giving' ORDER BY path").all().catch(() => ({ results: [] })),
+        env.DB.prepare('SELECT from_slug, to_slug, created_at FROM page_redirects ORDER BY from_slug').all().catch(() => ({ results: [] })),
+        env.DB.prepare("SELECT id, title, menu_label, slug, parent_id, status, short_link FROM pages WHERE status = 'published'").all().catch(() => ({ results: [] })),
+      ]);
+      const msg = url.searchParams.get('msg');
+      const alertHtml = msg === 'redirect-added'   ? `<div class="alert alert-success">✓ Redirect added.</div>`
+        : msg === 'redirect-updated' ? `<div class="alert alert-success">✓ Redirect updated.</div>`
+        : msg === 'redirect-deleted' ? `<div class="alert alert-info">Redirect deleted.</div>`
+        : msg === 'redirect-error'   ? `<div class="alert alert-error">A redirect needs both a path and a full destination URL starting http:// or https://.</div>` : '';
 
-        const short = (u, n = 44) => {
-          const s = String(u || '').replace(/^https?:\/\//, '');
-          return s.length > n ? s.slice(0, n - 1) + '…' : s;
-        };
+      const short = (u, n = 46) => {
+        const s = String(u || '').replace(/^https?:\/\//, '');
+        return s.length > n ? s.slice(0, n - 1) + '…' : s;
+      };
 
-        // Three kinds in one list, because a volunteer looking for "where does
-        // /zoom go" should not have to know which table it lives in.
-        const listRows = [];
+      const listRows = [];
 
-        for (const r of (customRedirects.results || [])) {
-          listRows.push({
-            href: `/settings#r-${encodeURIComponent(r.path)}`,
-            filter: r.active ? 'handmade' : 'off',
-            search: `${r.path} ${r.url} ${r.label || ''}`.toLowerCase(),
-            cells: [
-              primaryCell('/' + String(r.path).replace(/^\/+/, ''), r.label || 'No label'),
-              `<span title="${escapeHtml(r.url)}">${escapeHtml(short(r.url))}</span>`,
-              'Hand-made',
-              r.active ? statusPill('good', 'Live') : statusPill('plain', 'Off'),
-            ],
-            actions: `<a class="tlc-edit" href="/settings#r-${encodeURIComponent(r.path)}">Edit</a>`,
-          });
-        }
+      for (const r of (customRedirects.results || [])) {
+        listRows.push({
+          href: `/redirects/edit/${encodeURIComponent(r.path)}`,
+          filter: r.active ? 'hand-made' : 'off',
+          search: `${r.path} ${r.url} ${r.label || ''}`.toLowerCase(),
+          cells: [
+            primaryCell('/' + String(r.path).replace(/^\/+/, ''), r.label || 'No label'),
+            `<span title="${escapeHtml(r.url)}">${escapeHtml(short(r.url))}</span>`,
+            'Hand-made',
+            r.active ? statusPill('good', 'Live') : statusPill('plain', 'Off'),
+          ],
+          actions: rowActions(
+            { label: 'Edit', href: `/redirects/edit/${encodeURIComponent(r.path)}` },
+            [{ label: 'Delete', action: `/redirects/delete/${encodeURIComponent(r.path)}`, danger: true,
+               confirm: `Delete /${r.path}? Anybody who has that address written down will get a 404.` }],
+          ),
+        });
+      }
 
-        for (const r of (givingRedirects.results || [])) {
-          listRows.push({
-            href: '/giving',
-            filter: 'giving',
-            search: `${r.path} ${r.url} ${r.label || ''} giving`.toLowerCase(),
-            cells: [
-              primaryCell('/' + String(r.path).replace(/^\/+/, ''), r.label || 'Giving or payment link'),
-              `<span title="${escapeHtml(r.url)}">${escapeHtml(short(r.url))}</span>`,
-              'Giving',
-              r.active ? statusPill('good', 'Live') : statusPill('plain', 'Off'),
-            ],
-            actions: `<a class="tlc-edit" href="/giving">Manage in Giving</a>`,
-          });
-        }
+      for (const r of (givingRedirects.results || [])) {
+        listRows.push({
+          href: '/giving',
+          filter: r.active ? 'hand-made' : 'off',
+          search: `${r.path} ${r.url} ${r.label || ''} giving`.toLowerCase(),
+          cells: [
+            primaryCell('/' + String(r.path).replace(/^\/+/, ''), r.label || 'Giving or payment link'),
+            `<span title="${escapeHtml(r.url)}">${escapeHtml(short(r.url))}</span>`,
+            'Giving',
+            r.active ? statusPill('good', 'Live') : statusPill('plain', 'Off'),
+          ],
+          actions: `<a class="tlc-edit" href="/giving">Manage in Giving</a>`,
+        });
+      }
 
-        // Written automatically when a page address changed. These are the rows
-        // that keep old bulletins and Google results working, which is why the
-        // section note tells staff to leave them alone.
-        for (const r of (autoRedirects.results || [])) {
-          listRows.push({
-            filter: 'automatic',
-            search: `${r.from_slug} ${r.to_slug}`.toLowerCase(),
-            cells: [
-              primaryCell(r.from_slug, 'Old address, kept working'),
-              escapeHtml(r.to_slug),
-              'Automatic',
-              statusPill('auto', '301'),
-            ],
-            actions: '<span style="color:var(--tlc-muted);font-size:12.5px;">Leave it</span>',
-          });
-        }
+      // Written automatically when a page address changed. These are the rows
+      // that keep old bulletins and Google results working, which is why the
+      // section note tells staff to leave them alone.
+      for (const r of (autoRedirects.results || [])) {
+        listRows.push({
+          filter: 'automatic',
+          search: `${r.from_slug} ${r.to_slug}`.toLowerCase(),
+          cells: [
+            primaryCell(r.from_slug, 'Old address, kept working'),
+            escapeHtml(r.to_slug),
+            'Automatic',
+            statusPill('auto', '301'),
+          ],
+          actions: '<span style="color:var(--tlc-muted);font-size:12.5px;">Leave it</span>',
+        });
+      }
 
-        // Short links are not stored anywhere — they are derived from each
-        // page's address — but they are addresses that answer on the site, so
-        // hiding them here would make this list a half-truth.
-        for (const p of withShortLinks(pageRows.results || [])) {
-          if (!p.shortLink || p.shortLink === p.slug) continue;
-          listRows.push({
-            href: `/pages/${encodeURIComponent(p.id)}/link`,
-            filter: p.shortLinkClash ? 'clash' : 'short',
-            search: `${p.shortLink} ${p.slug} ${p.title}`.toLowerCase(),
-            cells: [
-              primaryCell(p.shortLink, `Short link for ${p.menu_label || p.title}`),
-              escapeHtml(p.slug),
-              'Short link',
-              p.shortLinkClash ? statusPill('bad', 'Link clash') : statusPill('good', 'Live'),
-            ],
-            actions: `<a class="tlc-edit" href="/pages/${encodeURIComponent(p.id)}/link">Change</a>`,
-            warn: p.shortLinkClash ? `${p.shortLinkClash.link} is also wanted by ${p.shortLinkClash.withTitle}, so this short link is switched off.` : '',
-            warnCta: p.shortLinkClash ? { label: 'Fix short link', href: `/pages/${encodeURIComponent(p.id)}/link` } : null,
-          });
-        }
+      // Short links are not stored anywhere — they are derived from each page's
+      // address — but they are addresses that answer on the site, so hiding them
+      // here would make this list a half-truth.
+      for (const p of withShortLinks(pageRows.results || [])) {
+        if (!p.shortLink || p.shortLink === p.slug) continue;
+        listRows.push({
+          href: `/pages/${encodeURIComponent(p.id)}/link`,
+          filter: p.shortLinkClash ? ['automatic', 'off'] : 'automatic',
+          search: `${p.shortLink} ${p.slug} ${p.title}`.toLowerCase(),
+          cells: [
+            primaryCell(p.shortLink, `Short link for ${p.menu_label || p.title}`),
+            escapeHtml(p.slug),
+            'Short link',
+            p.shortLinkClash ? statusPill('bad', 'Link clash') : statusPill('good', 'Live'),
+          ],
+          actions: `<a class="tlc-edit" href="/pages/${encodeURIComponent(p.id)}/link">Change</a>`,
+          warn: p.shortLinkClash ? `${p.shortLinkClash.link} is also wanted by ${p.shortLinkClash.withTitle}, so this short link is switched off.` : '',
+          warnCta: p.shortLinkClash ? { label: 'Fix short link', href: `/pages/${encodeURIComponent(p.id)}/link` } : null,
+        });
+      }
 
-        const renderField = s => `
-          <div class="form-group" style="border-bottom:1px solid var(--border);padding-bottom:20px;margin-bottom:20px;">
-            <label>${escapeHtml(s.label || s.key)}</label>
-            ${s.hint ? `<div style="font-size:12px;color:var(--gray);margin-bottom:8px;">${escapeHtml(s.hint)}</div>` : ''}
-            <input type="text" name="${escapeHtml(s.key)}" value="${escapeHtml(s.value || '')}" style="font-family:var(--mono,monospace);font-size:13px;">
-          </div>`;
-        const redirectFields = (settings.results || []).map(renderField).join('');
+      // The drawer, for adding one or editing a hand-made row. Automatic 301s
+      // and short links are not editable here on purpose — they are derived from
+      // a page, and the place to change them is that page.
+      const editPath = path.startsWith('/redirects/edit/') ? decodeURIComponent(path.slice('/redirects/edit/'.length)) : '';
+      const editing = editPath
+        ? await env.DB.prepare("SELECT path, url, label, active FROM redirects WHERE path = ? AND category != 'giving'").bind(editPath).first().catch(() => null)
+        : null;
+      const showDrawer = path === '/redirects/new' || !!editing;
 
-        const customRowsHtml = (customRedirects.results || []).length === 0
-          ? `<div style="font-size:13px;color:var(--gray);padding:12px 0;">No hand-made redirects yet.</div>`
-          : customRedirects.results.map(r => `
-            <form id="r-${escapeHtml(r.path)}" method="POST" action="/redirects/update" style="display:grid;grid-template-columns:1fr 2fr 1fr auto auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
-              <input type="hidden" name="original_path" value="${escapeHtml(r.path)}">
-              <input type="hidden" name="category" value="general">
-              <input type="hidden" name="active" value="1">
-              <input type="text" name="path" value="${escapeHtml(r.path)}" style="font-family:var(--mono,monospace);font-size:13px;">
-              <input type="url" name="url" value="${escapeHtml(r.url || '')}" style="font-size:13px;">
-              <input type="text" name="label" value="${escapeHtml(r.label || '')}" placeholder="Label" style="font-size:13px;">
-              <button type="submit" class="btn btn-sm btn-secondary">Save</button>
-              <button type="submit" formaction="/redirects/delete/${encodeURIComponent(r.path)}" formnovalidate class="btn btn-sm btn-danger" onclick="return confirm('Delete /${escapeHtml(r.path)}?')">Delete</button>
-            </form>`).join('');
-
-        return html(`
-${sidebarShell('settings', currentUser, '', await badgeCounts(env, currentUser))}
+      return html(`
+${sidebarShell('redirects', currentUser, '', await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
     key: 'redirects',
-    title: 'Redirects',
-    purpose: 'Short links you can say out loud — timothystl.org/zoom — and the 301s written automatically when a page address changes.',
-    search: 'Search redirects',
-    filters: [
-      { label: 'All', value: 'all' },
-      { label: 'Hand-made', value: 'handmade' },
-      { label: 'Short links', value: 'short' },
-      { label: 'Automatic', value: 'automatic' },
-      { label: 'Giving', value: 'giving' },
-      { label: 'Off', value: 'off' },
-    ],
-    columns: [
-      { label: 'Short link', width: '1.6fr' },
-      { label: 'Goes to', width: '2.2fr' },
-      { label: 'Kind', width: '1fr' },
-      { label: 'Status', width: '.9fr' },
-    ],
+    title: sectionCfg('redirects').title,
+    purpose: sectionCfg('redirects').purpose,
+    action: { label: sectionCfg('redirects').action, href: '/redirects/new' },
+    search: sectionCfg('redirects').search,
+    filters: filtersOf('redirects'),
+    columns: columnsOf('redirects'),
     rows: listRows,
     noun: 'redirect',
     empty: 'No redirects yet.',
-    note: 'The automatic rows were written when somebody renamed a page. Leave them alone — they are what keeps last year’s bulletins and Google’s results pointing somewhere real.',
+    note: sectionCfg('redirects').note,
   })}
-  <div class="tlc-section" style="padding-top:0;">
-    <form method="POST" action="/settings/update">
-      <div class="card">
-        <div class="card-title">Built-in Redirects</div>
-        <div style="font-size:13px;color:var(--gray);margin-bottom:18px;">Where the site's own short links point (<code>/zoom</code>, <code>/councilfiles</code>). The <code>/give</code> link and the giving page live under <a href="/giving" style="color:var(--steel);">Giving</a>.</div>
-        ${redirectFields}
-        <div class="btn-row" style="margin-top:4px;">
-          <button type="submit" class="btn btn-primary">Save redirect URLs →</button>
-        </div>
-      </div>
-    </form>
-    <div class="card" style="margin-top:20px;">
-      <div class="card-title">Hand-made redirects</div>
-      <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">Short links that send visitors to any URL. Example: <code>/mdo</code> → <code>https://mdo.timothystl.org</code>. Edit a row and Save, or Delete to remove.</div>
-      ${customRowsHtml}
-      <form method="POST" action="/redirects/add" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
-        <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sage);margin-bottom:12px;">Add new redirect</div>
-        <div style="display:grid;grid-template-columns:1fr 2fr 1fr;gap:12px;align-items:end;">
-          <div class="form-group" style="margin:0;">
-            <label>Path (no slash)</label>
-            <input type="text" name="path" placeholder="e.g. mdo" style="font-family:var(--mono,monospace);">
-          </div>
-          <div class="form-group" style="margin:0;">
-            <label>Destination URL</label>
-            <input type="url" name="url" placeholder="https://...">
-          </div>
-          <div class="form-group" style="margin:0;">
-            <label>Label (optional)</label>
-            <input type="text" name="label" placeholder="e.g. Mother's Day Out">
-          </div>
-        </div>
-        <div class="btn-row" style="margin-top:12px;">
-          <button type="submit" class="btn btn-primary">Add redirect →</button>
-        </div>
-      </form>
-    </div>
-  </div>
+  ${showDrawer ? renderDrawer({
+    key: 'redirect',
+    title: editing ? `Edit /${editing.path}` : 'New redirect',
+    sub: 'A short address on timothystl.org that sends visitors somewhere else.',
+    action: editing ? '/redirects/update' : '/redirects/add',
+    cancelHref: '/redirects',
+    saveLabel: editing ? 'Save changes' : 'Add redirect',
+    deleteAction: editing ? `/redirects/delete/${encodeURIComponent(editing.path)}` : '',
+    deleteConfirm: editing ? `Delete /${editing.path}? Anybody who has that address written down will get a 404.` : '',
+    fields: [
+      ...(editing ? [{ kind: 'html', html: `<input type="hidden" name="original_path" value="${escapeHtml(editing.path)}">` }] : []),
+      { kind: 'html', html: `<input type="hidden" name="category" value="general">` },
+      { name: 'path', label: 'Short address', value: editing?.path || '', required: true, placeholder: 'zoom',
+        hint: 'Without the slash. Entering "zoom" makes timothystl.org/zoom work.' },
+      { name: 'url', type: 'url', label: 'Goes to', value: editing?.url || '', required: true, placeholder: 'https://…',
+        hint: 'The full address including https://.' },
+      { name: 'label', label: 'Label', value: editing?.label || '', placeholder: 'What this is for',
+        hint: 'Only shown here, so the next person knows why it exists.' },
+      { kind: 'toggle', name: 'active', label: 'Live on the site', value: editing ? !!editing.active : true,
+        hint: 'Switched off, the address stops working and falls through to the 404 page. Nothing is deleted.' },
+    ],
+  }) : ''}
 </div>`, 'Redirects');
-      }
+    }
 
-      // Save settings
-      if (path === '/settings/update' && method === 'POST') {
-        const form = await request.formData();
-        const settings = await env.DB.prepare('SELECT key FROM site_settings').all();
-        for (const s of settings.results) {
-          const val = form.get(s.key);
-          if (val !== null) {
-            await env.DB.prepare('UPDATE site_settings SET value = ? WHERE key = ?').bind(val, s.key).run();
-          }
-        }
-        return new Response('', { status: 302, headers: { Location: '/settings?msg=saved' } });
+    // ── SETTINGS ─────────────────────────────────────────────────
+    // The handful of `site_settings` rows the rest of the site reads. Every one
+    // is listed with what reads it, because the reason this screen is dangerous
+    // is that a value looks harmless until you know four other things depend on
+    // it. Anything not in this table is theme-owned and lives in code.
+    if (path === '/settings' && method === 'GET') {
+      const SETTINGS_VIEW = [
+        { key: 'church_address_line', label: 'Church address', group: 'church-details', used: 'Map blocks · footer · invoices', href: '/pages/details' },
+        { key: 'church_address_city', label: 'City, state and ZIP', group: 'church-details', used: 'Map blocks · footer · invoices', href: '/pages/details' },
+        { key: 'church_phone', label: 'Office phone', group: 'church-details', used: 'Contact page · footer', href: '/pages/details' },
+        { key: 'church_email', label: 'Office email', group: 'church-details', used: 'Contact page · footer', href: '/pages/details' },
+        { key: 'church_service_times', label: 'Service times', group: 'church-details', used: 'Service-times blocks · sidebar layout', href: '/pages/details' },
+        { key: 'give_url', label: 'Online giving link', group: 'links', used: 'Give blocks · newsletter · gym invoices', href: '/giving' },
+        { key: 'zoom_url', label: 'Zoom meeting link', group: 'links', used: 'The /zoom short link' },
+        { key: 'councilfiles_url', label: 'Council files link', group: 'links', used: 'The /councilfiles short link' },
+        { key: 'gym_rate_per_hour', label: 'Gym rate per hour', group: 'gym-rentals', used: 'Gym invoices · booking portal', href: '/gym-rentals' },
+        { key: 'gym_hold_hours', label: 'Gym hold duration', group: 'gym-rentals', used: 'Booking portal · hold expiry', href: '/gym-rentals' },
+        { key: 'gym_payment_link', label: 'Gym payment link', group: 'gym-rentals', used: 'Invoices · confirmation emails', href: '/gym-rentals' },
+        { key: 'gcal_calendar_id', label: 'Gym calendar ID', group: 'gym-rentals', used: 'Confirmed bookings → Google Calendar', href: '/gym-rentals' },
+        { key: 'gym_admin_email', label: 'Gym booking notifications', group: 'notifications', used: 'Holds, confirmations, recurring requests', href: '/gym-rentals' },
+        { key: 'turnstile_site_key', label: 'Spam check site key', group: 'notifications', used: 'Contact, prayer and signup forms', href: '/filtered' },
+      ];
+      const stored = await env.DB.prepare('SELECT key, value, label, hint FROM site_settings').all().catch(() => ({ results: [] }));
+      const byKey = new Map((stored.results || []).map((r) => [r.key, r]));
+      const msg = url.searchParams.get('msg');
+      const alertHtml = msg === 'saved' ? `<div class="alert alert-success">✓ Setting saved.</div>`
+        : msg === 'settings-error' ? `<div class="alert alert-error">That is not a setting this screen manages.</div>` : '';
+
+      const editKey = path === '/settings' ? (url.searchParams.get('edit') || '') : '';
+      const editRow = SETTINGS_VIEW.find((s) => s.key === editKey) || null;
+
+      const listRows = SETTINGS_VIEW.map((s) => {
+        const row = byKey.get(s.key);
+        const value = String(row?.value || '').trim();
+        // Where a setting has a screen of its own — church details, giving, the
+        // gym — that screen is the place to change it. Sending somebody there
+        // rather than duplicating the field is what stops two forms writing the
+        // same key and disagreeing about what it means.
+        const editHref = s.href || `/settings?edit=${encodeURIComponent(s.key)}`;
+        return {
+          href: editHref,
+          filter: s.group,
+          search: `${s.label} ${s.key} ${value}`.toLowerCase(),
+          cells: [
+            primaryCell(s.label, s.used),
+            value
+              ? `<code style="font-size:12.5px;word-break:break-all;">${escapeHtml(value.length > 70 ? value.slice(0, 69) + '…' : value)}</code>`
+              : `<span style="color:var(--tlc-muted);">Not set</span>`,
+          ],
+          actions: rowActions({ label: s.href ? 'Open' : 'Edit', href: editHref }),
+          warn: value ? '' : `Nothing is set, so ${s.used.split(' · ')[0].toLowerCase()} falls back to whatever is hardcoded.`,
+          warnCta: { label: s.href ? 'Open' : 'Set it', href: editHref },
+        };
+      });
+
+      return html(`
+${sidebarShell('settings', currentUser, '', await badgeCounts(env, currentUser))}
+<div class="tlc-wrap">
+  ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
+  ${renderListSection({
+    key: 'settings',
+    title: sectionCfg('settings').title,
+    purpose: sectionCfg('settings').purpose,
+    search: sectionCfg('settings').search,
+    filters: filtersOf('settings'),
+    columns: columnsOf('settings'),
+    rows: listRows,
+    noun: 'setting',
+    empty: 'No settings yet.',
+    note: sectionCfg('settings').note,
+  })}
+  ${editRow ? renderDrawer({
+    key: 'setting',
+    title: editRow.label,
+    sub: `Read by: ${editRow.used}`,
+    action: '/settings/update',
+    cancelHref: '/settings',
+    fields: [
+      { kind: 'html', html: `<input type="hidden" name="key" value="${escapeHtml(editRow.key)}">` },
+      { name: 'value', label: editRow.label, value: byKey.get(editRow.key)?.value || '',
+        hint: byKey.get(editRow.key)?.hint || '' },
+      { kind: 'static', label: 'Stored as', html: `<code>${escapeHtml(editRow.key)}</code>` },
+    ],
+  }) : ''}
+</div>`, 'Settings');
+    }
+
+    // Save one setting. Only the keys this screen lists can be written — the
+    // form used to accept any key in the body, so a crafted POST could set
+    // something no form ever showed (AW-11).
+    if (path === '/settings/update' && method === 'POST') {
+      const SETTABLE = new Set(['church_address_line', 'church_address_city', 'church_phone', 'church_email',
+        'church_service_times', 'give_url', 'zoom_url', 'councilfiles_url', 'gym_rate_per_hour', 'gym_hold_hours',
+        'gym_payment_link', 'gcal_calendar_id', 'gym_admin_email', 'turnstile_site_key']);
+      const form = await request.formData();
+      const key = String(form.get('key') || '');
+      if (!SETTABLE.has(key)) {
+        return new Response('', { status: 302, headers: { Location: '/settings?msg=settings-error' } });
       }
-    } // end redirects tab
+      const value = String(form.get('value') ?? '');
+      const before = await env.DB.prepare('SELECT value FROM site_settings WHERE key = ?').bind(key).first().catch(() => null);
+      await env.DB.prepare('INSERT INTO site_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').bind(key, value).run();
+      await logAudit(env.DB, currentUser, 'update', 'settings', key, key, { value: before?.value ?? null }, { value });
+      return new Response('', { status: 302, headers: { Location: '/settings?msg=saved' } });
+    }
 
     // ── GIVING TAB ───────────────────────────────────────────────
     // Consolidates: the base Tithe.ly link (give_url, moved out of Redirects), the
@@ -7213,8 +7499,12 @@ ${sidebarShell('settings', currentUser, '', await badgeCounts(env, currentUser))
       const form = await request.formData();
       const amount = parseInt(form.get('amount'), 10);
       const tierUrl = (form.get('url') || '').trim();
-      const isDefault = form.get('is_default') !== null ? 1 : 0;
-      const active = form.get('active') !== null ? 1 : 0;
+      // A toggle posts a hidden 0 first so "off" is distinguishable from "the form
+      // never showed this field". That means get() always returns something —
+      // the last value is the answer, so the check is for a 1 being present.
+      const on = (n) => (form.getAll(n).includes('1') ? 1 : 0);
+      const isDefault = on('is_default');
+      const active = on('active');
       if (!amount || amount < 1) return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-error' } });
       if (tierUrl) {
         let proto = '';
@@ -7233,8 +7523,12 @@ ${sidebarShell('settings', currentUser, '', await badgeCounts(env, currentUser))
       const id = parseInt(form.get('id'), 10);
       const amount = parseInt(form.get('amount'), 10);
       const tierUrl = (form.get('url') || '').trim();
-      const isDefault = form.get('is_default') !== null ? 1 : 0;
-      const active = form.get('active') !== null ? 1 : 0;
+      // A toggle posts a hidden 0 first so "off" is distinguishable from "the form
+      // never showed this field". That means get() always returns something —
+      // the last value is the answer, so the check is for a 1 being present.
+      const on = (n) => (form.getAll(n).includes('1') ? 1 : 0);
+      const isDefault = on('is_default');
+      const active = on('active');
       if (!id || !amount || amount < 1) return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-error' } });
       if (tierUrl) {
         let proto = '';
@@ -7256,8 +7550,12 @@ ${sidebarShell('settings', currentUser, '', await badgeCounts(env, currentUser))
       const form = await request.formData();
       const name = (form.get('name') || '').trim();
       const tithelyFundId = (form.get('tithely_fund_id') || '').trim();
-      const isDefault = form.get('is_default') !== null ? 1 : 0;
-      const active = form.get('active') !== null ? 1 : 0;
+      // A toggle posts a hidden 0 first so "off" is distinguishable from "the form
+      // never showed this field". That means get() always returns something —
+      // the last value is the answer, so the check is for a 1 being present.
+      const on = (n) => (form.getAll(n).includes('1') ? 1 : 0);
+      const isDefault = on('is_default');
+      const active = on('active');
       if (!name) return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-error' } });
       if (isDefault) await env.DB.prepare('UPDATE give_funds SET is_default = 0').run();
       const maxSort = await env.DB.prepare('SELECT MAX(sort_order) as m FROM give_funds').first();
@@ -7271,8 +7569,12 @@ ${sidebarShell('settings', currentUser, '', await badgeCounts(env, currentUser))
       const id = parseInt(form.get('id'), 10);
       const name = (form.get('name') || '').trim();
       const tithelyFundId = (form.get('tithely_fund_id') || '').trim();
-      const isDefault = form.get('is_default') !== null ? 1 : 0;
-      const active = form.get('active') !== null ? 1 : 0;
+      // A toggle posts a hidden 0 first so "off" is distinguishable from "the form
+      // never showed this field". That means get() always returns something —
+      // the last value is the answer, so the check is for a 1 being present.
+      const on = (n) => (form.getAll(n).includes('1') ? 1 : 0);
+      const isDefault = on('is_default');
+      const active = on('active');
       if (!id || !name) return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-error' } });
       if (isDefault) await env.DB.prepare('UPDATE give_funds SET is_default = 0 WHERE id != ?').bind(id).run();
       await env.DB.prepare('UPDATE give_funds SET name = ?, tithely_fund_id = ?, is_default = ?, active = ? WHERE id = ?')
@@ -7283,6 +7585,27 @@ ${sidebarShell('settings', currentUser, '', await badgeCounts(env, currentUser))
       const id = parseInt(path.slice('/giving-funds/delete/'.length), 10);
       await env.DB.prepare('DELETE FROM give_funds WHERE id = ?').bind(id).run();
       return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-deleted' } });
+    }
+    // Dragging a fund or an amount posts the whole resulting order, and the
+    // server renumbers from scratch in steps of 10 — a diff would let a dropped
+    // row leave two of them claiming one position.
+    if ((path === '/giving-funds/reorder' || path === '/giving-tiers/reorder') && method === 'POST') {
+      const table = path === '/giving-funds/reorder' ? 'give_funds' : 'give_amount_tiers';
+      const form = await request.formData();
+      let ids = [];
+      try { ids = JSON.parse(form.get('order') || '[]'); } catch (_) {}
+      for (let i = 0; i < ids.length; i++) {
+        await env.DB.prepare(`UPDATE ${table} SET sort_order = ? WHERE id = ?`).bind((i + 1) * 10, parseInt(ids[i], 10)).run();
+      }
+      return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-saved' } });
+    }
+    // The row's switch. Showing or hiding one is the change made most often, so
+    // it is one click on the list rather than a trip through the drawer.
+    if (path.startsWith('/giving-funds/toggle/') && method === 'POST') {
+      const id = parseInt(path.slice('/giving-funds/toggle/'.length), 10);
+      const form = await request.formData();
+      await env.DB.prepare('UPDATE give_funds SET active = ? WHERE id = ?').bind(form.get('value') === '1' ? 1 : 0, id).run();
+      return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-updated' } });
     }
 
     if (path === '/giving' && method === 'GET') {
@@ -7299,6 +7622,8 @@ ${sidebarShell('settings', currentUser, '', await badgeCounts(env, currentUser))
         <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
           ${chmsFunds.map(f => `<button type="button" class="btn btn-sm" style="background:var(--mist);color:var(--steel);${existingFundNames.has((f.name||'').trim().toLowerCase()) ? 'opacity:.45;' : ''}" data-fund-name="${escapeHtml(f.name || '')}" onclick="document.querySelector('form[action=\\'/giving-funds/add\\'] input[name=name]').value=this.dataset.fundName">${escapeHtml(f.name || '')}</button>`).join('')}
         </div>`;
+      const keepRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'give_keep_in_step'").first().catch(() => null);
+      const keepInStep = !keepRow || keepRow.value !== '0';
       const msg = url.searchParams.get('msg');
       const alertHtml = msg === 'giving-saved'   ? `<div class="alert alert-success">✓ Saved.</div>`
         : msg === 'giving-added'   ? `<div class="alert alert-success">✓ Added.</div>`
@@ -7309,43 +7634,59 @@ ${sidebarShell('settings', currentUser, '', await badgeCounts(env, currentUser))
         : msg === 'redirect-deleted' ? `<div class="alert alert-info">Link deleted.</div>`
         : msg === 'giving-error' || msg === 'redirect-error' ? `<div class="alert alert-error">Check the fields — a valid amount and any URLs entered must be http(s) links.</div>` : '';
 
-      const tierRowsHtml = tiers.results.length === 0
-        ? `<div style="font-size:13px;color:var(--gray);padding:12px 0;">No amount tiers yet — the give.timothystl.org page falls back to the base Tithe.ly link below for every amount.</div>`
-        : tiers.results.map(t => `
-          <form method="POST" action="/giving-tiers/update" style="display:grid;grid-template-columns:.7fr 2.4fr auto auto auto auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
-            <input type="hidden" name="id" value="${t.id}">
-            <div style="display:flex;align-items:center;gap:4px;">
-              <span style="font-family:var(--mono,monospace);font-size:13px;color:var(--gray);">$</span>
-              <input type="number" name="amount" min="1" value="${t.amount}" style="font-family:var(--mono,monospace);font-size:13px;">
-            </div>
-            <input type="url" name="url" value="${(t.url||'').replace(/"/g,'&quot;')}" placeholder="Override link (blank = auto-built from base link)" style="font-size:12px;">
-            <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--gray);white-space:nowrap;">
-              <input type="checkbox" name="is_default" value="1" ${t.is_default ? 'checked' : ''}> Default
-            </label>
-            <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--gray);white-space:nowrap;">
-              <input type="checkbox" name="active" value="1" ${t.active ? 'checked' : ''}> Active
-            </label>
-            <button type="submit" class="btn btn-sm btn-secondary">Save</button>
-            <button type="submit" formaction="/giving-tiers/delete/${t.id}" formnovalidate class="btn btn-sm btn-danger" onclick="return confirm('Delete the \\$${t.amount} tier?')">Delete</button>
-          </form>`).join('');
+      // Funds and Amount Tiers sit side by side, because they are the two
+      // halves of one question — what somebody can give to, and how much —
+      // and reading them together is the only way to see what the page
+      // actually offers. Each row is a grip, a name, a state and one action;
+      // the fields live in a drawer rather than in the row, so a list of eight
+      // funds does not become a wall of forty inputs.
+      const defaultFund = funds.results.find((f) => f.is_default);
+      const fundListHtml = panelList({
+        id: 'give-funds',
+        reorderAction: '/giving-funds/reorder',
+        empty: 'No funds yet — the giving page shows no fund selector until at least one exists.',
+        rows: funds.results.map((f) => ({
+          id: f.id,
+          name: f.name || 'Untitled fund',
+          sub: f.is_default ? 'Default when nobody chooses'
+            : (f.tithely_fund_id ? 'Restricted' : 'Uses the fund in the base link'),
+          state: toggleCell(`/giving-funds/toggle/${f.id}`, !!f.active, `Show the ${f.name || 'untitled'} fund`),
+          editHref: `/giving?fund=${f.id}`,
+        })),
+      });
 
-      const fundRowsHtml = funds.results.length === 0
-        ? `<div style="font-size:13px;color:var(--gray);padding:12px 0;">No funds yet — the give.timothystl.org page has no fund selector until at least one fund exists.</div>`
-        : funds.results.map(f => `
-          <form method="POST" action="/giving-funds/update" style="display:grid;grid-template-columns:1.4fr 1.6fr auto auto auto auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
-            <input type="hidden" name="id" value="${f.id}">
-            <input type="text" name="name" value="${(f.name||'').replace(/"/g,'&quot;')}" style="font-size:13px;">
-            <input type="text" name="tithely_fund_id" value="${(f.tithely_fund_id||'').replace(/"/g,'&quot;')}" placeholder="Tithe.ly fundId (blank = base link's own fund)" style="font-family:var(--mono,monospace);font-size:12px;">
-            <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--gray);white-space:nowrap;">
-              <input type="checkbox" name="is_default" value="1" ${f.is_default ? 'checked' : ''}> Default
-            </label>
-            <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--gray);white-space:nowrap;">
-              <input type="checkbox" name="active" value="1" ${f.active ? 'checked' : ''}> Active
-            </label>
-            <button type="submit" class="btn btn-sm btn-secondary">Save</button>
-            <button type="submit" formaction="/giving-funds/delete/${f.id}" formnovalidate class="btn btn-sm btn-danger" onclick="return confirm('Delete the ${(f.name||'').replace(/'/g,"\\'")} fund?')">Delete</button>
-          </form>`).join('');
+      const defaultTier = tiers.results.find((t) => t.is_default);
+      const tierListHtml = panelList({
+        id: 'give-tiers',
+        reorderAction: '/giving-tiers/reorder',
+        empty: 'No amounts yet — the giving page falls back to the base Tithe.ly link for every gift.',
+        rows: tiers.results.map((t) => ({
+          id: t.id,
+          name: `$${t.amount}`,
+          mid: t.is_default ? 'Default' : (t.url ? 'Own link' : '—'),
+          state: t.active ? statusPill('good', 'Showing') : statusPill('plain', 'Hidden'),
+          action: `<a class="tlc-edit" href="/giving?tier=${t.id}">Edit</a>`,
+        })),
+      });
 
+      // Exactly one of each should be the default. Nought or two is a real
+      // fault on the live page — with none, nothing is preselected; with two,
+      // which one wins depends on row order — so it is said here rather than
+      // left for somebody to notice on their phone.
+      const defaultWarning = (label, list, href) => {
+        const n = list.filter((r) => r.is_default && r.active).length;
+        if (n === 1) return '';
+        return `<p class="tlc-note" style="margin:10px 0 0;"><span class="tlc-note-mark">▲</span><span>${
+          n === 0
+            ? `No ${label} is marked Default, so the giving page preselects nothing.`
+            : `${n} ${label}s are marked Default. Only one can win, and which one depends on the order above.`
+        } <a href="${href}" style="color:var(--tlc-blue);">Fix it</a></span></p>`;
+      };
+
+      const editFund = url.searchParams.get('fund');
+      const editTier = url.searchParams.get('tier');
+      const fundRec = editFund && editFund !== 'new' ? funds.results.find((f) => String(f.id) === editFund) : null;
+      const tierRec = editTier && editTier !== 'new' ? tiers.results.find((t) => String(t.id) === editTier) : null;
       const givingRowsHtml = givingLinks.results.length === 0
         ? `<div style="font-size:13px;color:var(--gray);padding:12px 0;">No vendor/market links yet.</div>`
         : givingLinks.results.map(r => `
@@ -7369,9 +7710,49 @@ ${sidebarShell('settings', currentUser, '', await badgeCounts(env, currentUser))
       return html(`
 ${sidebarShell('giving', currentUser)}
 <div class="wrap">
-  <div class="page-title">Giving</div>
-  <div class="page-sub">The base Tithe.ly link, the amount tiers shown on give.timothystl.org, and one-off vendor/market payment links.</div>
-  <p class="tlc-note" style="margin:0 0 18px;"><span class="tlc-note-mark">◆</span><span>Every link here is tagged <strong>Gift</strong> or <strong>Payment</strong>. A Gift is receipted as a donation on somebody&rsquo;s year-end statement; a Payment — gym rent, a registration fee, a vendor invoice — is not. Getting that wrong puts a non-donation on a tax document, which is why new links default to Payment.</span></p>
+  <h1 class="tlc-title">${escapeHtml(sectionCfg('giving').title)}</h1>
+  <p class="tlc-purpose" style="margin:6px 0 18px;">${escapeHtml(sectionCfg('giving').purpose)}</p>
+
+  <!-- The giving page exists at two addresses. One set of blocks, two places it
+       appears — the standalone card address, and the same thing inside the site
+       for somebody already browsing. -->
+  <div class="tlc-panel" style="margin-bottom:18px;">
+    <div class="tlc-panel-head">
+      <span class="tlc-panel-title">The giving page</span>
+      <span class="tlc-panel-right">One set of blocks · two places it appears</span>
+    </div>
+    <div class="tlc-panel-body">
+      <div class="tlc-give-surfaces">
+        <div class="tlc-give-surface">
+          <span class="tlc-give-badge">Standalone</span>
+          <span class="tlc-give-addr">give.timothystl.org</span>
+          <p class="tlc-give-note">No header, no menu — one job. This is the address on the plate cards, the NFC tap, and anything printed.</p>
+          <div class="tlc-give-btns">
+            <a class="tlc-action" href="/giving/page">Edit this page</a>
+            <a class="tlc-tap-btn" href="https://give.timothystl.org" target="_blank" rel="noopener">View live ↗</a>
+          </div>
+        </div>
+        <div class="tlc-give-surface">
+          <span class="tlc-give-badge">On the site</span>
+          <span class="tlc-give-addr">timothystl.org/give</span>
+          <p class="tlc-give-note">The same blocks with the normal header, menu, and footer, so someone browsing the site can land here without leaving it.</p>
+          <div class="tlc-give-btns">
+            <a class="tlc-action" href="/giving/page">Edit this page</a>
+            <a class="tlc-tap-btn" href="https://timothystl.org/give" target="_blank" rel="noopener">View live ↗</a>
+          </div>
+        </div>
+      </div>
+      <div class="tlc-give-sync">
+        <span>Kept in step: edit either one and the other follows. Only the header and footer differ.</span>
+        <form method="POST" action="/giving/keep-in-step" style="margin:0;">
+          <input type="hidden" name="value" value="${keepInStep ? '0' : '1'}">
+          <button type="submit" class="tlc-switch${keepInStep ? ' is-on' : ''}" role="switch" aria-checked="${keepInStep ? 'true' : 'false'}" aria-label="Keep the two giving pages in step"><span class="tlc-switch-knob"></span></button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <p class="tlc-note" style="margin:0 0 18px;"><span class="tlc-note-mark">◆</span><span>Every link below is tagged <strong>Gift</strong> or <strong>Payment</strong>. A Gift is receipted as a donation on somebody&rsquo;s year-end statement; a Payment — gym rent, a registration fee, a vendor invoice — is not. Getting that wrong puts a non-donation on a tax document, which is why new links default to Payment.</span></p>
   ${alertHtml}
 
   <form method="POST" action="/giving/base-url">
@@ -7388,62 +7769,14 @@ ${sidebarShell('giving', currentUser)}
     </div>
   </form>
 
-  <div class="card" style="margin-top:20px;">
-    <div class="card-title">Amount Tiers</div>
-    <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">The chip amounts shown on give.timothystl.org. Each one automatically gets a Tithe.ly link built from the Base Tithe.ly Link above with the right amount appended — <strong>you don't need to generate or paste a link per tier.</strong> The optional link field below is only for the rare case where a specific tier should go somewhere else entirely (a different fund, a different form) — leave it blank for the normal case.</div>
-    ${tierRowsHtml}
-    <form method="POST" action="/giving-tiers/add" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
-      <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sage);margin-bottom:12px;">Add new tier</div>
-      <div style="display:grid;grid-template-columns:.7fr 2.4fr auto auto;gap:12px;align-items:end;">
-        <div class="form-group" style="margin:0;">
-          <label>Amount ($)</label>
-          <input type="number" name="amount" min="1" placeholder="e.g. 100" style="font-family:var(--mono,monospace);">
-        </div>
-        <div class="form-group" style="margin:0;">
-          <label>Override link (optional)</label>
-          <input type="url" name="url" placeholder="Leave blank — usually not needed">
-        </div>
-        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--charcoal);white-space:nowrap;padding-bottom:10px;">
-          <input type="checkbox" name="is_default"> Default
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--charcoal);white-space:nowrap;padding-bottom:10px;">
-          <input type="checkbox" name="active" value="1" checked> Active
-        </label>
-      </div>
-      <div class="btn-row" style="margin-top:12px;">
-        <button type="submit" class="btn btn-primary">Add tier →</button>
-      </div>
-    </form>
+  <div class="tlc-give-cols" style="margin-top:20px;">
+    ${panel('Funds', fundListHtml + defaultWarning('fund', funds.results, '/giving?fund=' + (defaultFund?.id || (funds.results[0]?.id ?? 'new'))), {
+      right: '<a class="tlc-edit" href="/giving?fund=new">+ Add fund</a>', pad: false })}
+    ${panel('Amount tiers', tierListHtml + defaultWarning('amount', tiers.results, '/giving?tier=' + (defaultTier?.id || (tiers.results[0]?.id ?? 'new'))), {
+      right: '<a class="tlc-edit" href="/giving?tier=new">+ Add amount</a>', pad: false })}
   </div>
 
-  <div class="card" style="margin-top:20px;">
-    <div class="card-title">Funds</div>
-    <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">The fund selector shown on give.timothystl.org. Each fund needs its own Tithe.ly <code>fundId</code> — get this the same way as the base link (generate a link for that fund from Tithe.ly's dashboard and copy the <code>fundId</code> value out of the URL). Leave the fund ID blank for a fund that should use whichever fund is already in the Base Tithe.ly Link above (typically your "General Fund" row). Exactly one fund should be Default — that's what's selected when the page first loads.</div>
-    ${fundRowsHtml}
-    <form method="POST" action="/giving-funds/add" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
-      <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sage);margin-bottom:12px;">Add new fund</div>
-      ${chmsSuggestionsHtml}
-      <div style="display:grid;grid-template-columns:1.4fr 1.6fr auto auto;gap:12px;align-items:end;">
-        <div class="form-group" style="margin:0;">
-          <label>Fund name</label>
-          <input type="text" name="name" placeholder="e.g. Building Fund">
-        </div>
-        <div class="form-group" style="margin:0;">
-          <label>Tithe.ly fund ID (optional)</label>
-          <input type="text" name="tithely_fund_id" placeholder="Blank = same fund as base link" style="font-family:var(--mono,monospace);">
-        </div>
-        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--charcoal);white-space:nowrap;padding-bottom:10px;">
-          <input type="checkbox" name="is_default"> Default
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--charcoal);white-space:nowrap;padding-bottom:10px;">
-          <input type="checkbox" name="active" value="1" checked> Active
-        </label>
-      </div>
-      <div class="btn-row" style="margin-top:12px;">
-        <button type="submit" class="btn btn-primary">Add fund →</button>
-      </div>
-    </form>
-  </div>
+  <p class="tlc-note" style="margin:14px 0 0;"><span class="tlc-note-mark">◆</span><span>Every amount builds its own Tithe.ly link from the base link above, with the amount appended in cents. You never need to make a link per amount — the override field in the drawer is only for an amount that should go somewhere else entirely, such as a different fund.</span></p>
 
   <div class="card" style="margin-top:20px;">
     <div class="card-title">Giving &amp; payment links</div>
@@ -7486,7 +7819,92 @@ ${sidebarShell('giving', currentUser)}
       </div>
     </form>
   </div>
+  ${(editFund || editTier) ? renderDrawer(editFund ? {
+    key: 'give-fund',
+    title: fundRec ? fundRec.name || 'Untitled fund' : 'New fund',
+    sub: 'A fund is one of the choices in the "Give to" dropdown on the giving page.',
+    action: fundRec ? '/giving-funds/update' : '/giving-funds/add',
+    cancelHref: '/giving',
+    saveLabel: fundRec ? 'Save changes' : 'Add fund',
+    deleteAction: fundRec ? `/giving-funds/delete/${fundRec.id}` : '',
+    deleteConfirm: fundRec ? `Delete the ${fundRec.name || 'untitled'} fund? Anybody mid-gift on the page will simply see one fewer choice.` : '',
+    fields: [
+      ...(fundRec ? [{ kind: 'html', html: `<input type="hidden" name="id" value="${fundRec.id}">` }] : []),
+      { name: 'name', label: 'Fund name', value: fundRec?.name || '', required: true, placeholder: 'Building Fund' },
+      ...(chmsSuggestionsHtml && !fundRec ? [{ kind: 'html', html: chmsSuggestionsHtml }] : []),
+      { name: 'tithely_fund_id', label: 'Tithe.ly fund ID', value: fundRec?.tithely_fund_id || '',
+        placeholder: 'Leave blank to use the base link’s own fund',
+        hint: 'Generate a link for this fund in Tithe.ly and copy the fundId out of the URL. Blank means whatever fund is already in the base link — which is the normal setup for a plain General Fund row.' },
+      { kind: 'toggle', name: 'is_default', label: 'Selected by default', value: !!fundRec?.is_default,
+        hint: 'Exactly one fund should be the default — it is what the page has chosen before anybody touches it.' },
+      { kind: 'toggle', name: 'active', label: 'Offered on the giving page', value: fundRec ? !!fundRec.active : true },
+    ],
+  } : {
+    key: 'give-tier',
+    title: tierRec ? `$${tierRec.amount}` : 'New amount',
+    sub: 'One of the amount buttons on the giving page.',
+    action: tierRec ? '/giving-tiers/update' : '/giving-tiers/add',
+    cancelHref: '/giving',
+    saveLabel: tierRec ? 'Save changes' : 'Add amount',
+    deleteAction: tierRec ? `/giving-tiers/delete/${tierRec.id}` : '',
+    deleteConfirm: tierRec ? `Delete the $${tierRec.amount} button? Givers can still type any amount they like.` : '',
+    fields: [
+      ...(tierRec ? [{ kind: 'html', html: `<input type="hidden" name="id" value="${tierRec.id}">` }] : []),
+      { kind: 'number', name: 'amount', label: 'Amount ($)', value: tierRec?.amount ?? '', min: 1 },
+      { name: 'url', type: 'url', label: 'Override link', value: tierRec?.url || '',
+        placeholder: 'Leave blank — this is usually not needed',
+        hint: 'Blank is right almost always: the link is built from the base link with this amount appended. Fill it in only if this one amount should go somewhere else entirely.' },
+      { kind: 'toggle', name: 'is_default', label: 'Preselected', value: !!tierRec?.is_default,
+        hint: 'Exactly one amount should be preselected when the page loads.' },
+      { kind: 'toggle', name: 'active', label: 'Showing on the giving page', value: tierRec ? !!tierRec.active : true },
+    ],
+  }) : ''}
 </div>`, 'Giving');
+    }
+
+    if (path === '/giving/keep-in-step' && method === 'POST') {
+      if (!hasPermission(currentUser, 'giving_manage')) return new Response('Access denied.', { status: 403 });
+      const form = await request.formData();
+      const next = form.get('value') === '1' ? '1' : '0';
+      await env.DB.prepare("INSERT OR REPLACE INTO site_settings (key, value, label, hint) VALUES ('give_keep_in_step', ?, 'Giving pages kept in step', 'When on, give.timothystl.org and /give show the same blocks.')")
+        .bind(next).run();
+      await logAudit(env.DB, currentUser, 'update', 'giving', 'keep_in_step', 'Giving pages kept in step', null, { value: next });
+      return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-saved' } });
+    }
+
+    // The giving page is still rendered by give-landing.js rather than by the
+    // block editor, so "Edit this page" explains where its parts actually live
+    // instead of opening an editor that would not control it. Converting it is
+    // a deliberate change to the church's donation page, not a side effect of
+    // this screen.
+    if (path === '/giving/page' && method === 'GET') {
+      if (!hasPermission(currentUser, 'giving_manage')) return new Response('Access denied.', { status: 403 });
+      return html(`
+${sidebarShell('giving', currentUser, `<a href="/giving">← Giving</a>`, await badgeCounts(env, currentUser))}
+<div class="wrap">
+  <div class="page-title">The giving page</div>
+  <div class="page-sub">Where each part of give.timothystl.org and /give is edited.</div>
+  <div class="alert alert-info">This page is not yet a block-editor page. Everything on it that changes is edited from the Giving screen; the narrative sections are still in code, because it is the church's donation page and moving it wants a deliberate change with somebody watching.</div>
+  <div class="card">
+    <div class="card-title">What is editable today</div>
+    <ul style="font-family:var(--sans);font-size:14px;line-height:2;color:var(--charcoal);padding-left:20px;">
+      <li><strong>Amount chips</strong> and which is preselected — <a href="/giving" style="color:var(--steel);">Giving → Amount Tiers</a></li>
+      <li><strong>Funds</strong> in the "Give to" dropdown — <a href="/giving" style="color:var(--steel);">Giving → Funds</a></li>
+      <li><strong>The base Tithe.ly link</strong> every amount is built from — <a href="/giving" style="color:var(--steel);">Giving → Base link</a></li>
+      <li><strong>Vendor and market links</strong> — <a href="/giving" style="color:var(--steel);">Giving → Giving &amp; payment links</a></li>
+    </ul>
+  </div>
+  <div class="card">
+    <div class="card-title">Still in code</div>
+    <div style="font-family:var(--sans);font-size:14px;line-height:1.8;color:var(--charcoal);">
+      The hero banner, the "What Your Generosity Makes Possible" ministry ladder, and the leadership-giving section are written in <code>give-landing.js</code>. They are narrative copy rather than amount/link pairs, which is why they were never made data.
+    </div>
+  </div>
+  <div class="btn-row">
+    <a href="https://give.timothystl.org" target="_blank" class="btn btn-primary">View give.timothystl.org ↗</a>
+    <a href="https://timothystl.org/give" target="_blank" class="btn btn-secondary">View /give ↗</a>
+  </div>
+</div>`, 'The giving page');
     }
 
     // ── USER MANAGEMENT ────────────────────────────────────────
@@ -7537,25 +7955,16 @@ ${sidebarShell('users', currentUser, '', await badgeCounts(env, currentUser))}
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
     key: 'users',
-    title: 'Users',
-    purpose: 'Who can get into this admin, and exactly what each of them can reach.',
-    action: { label: '+ Invite user', href: '/users/new' },
-    search: 'Search users',
-    filters: [
-      { label: 'All', value: 'all' },
-      { label: 'Active', value: 'active' },
-      { label: 'Disabled', value: 'disabled' },
-    ],
-    columns: [
-      { label: 'User', width: '2.4fr' },
-      { label: 'Access', width: '1.8fr' },
-      { label: 'Last login', width: '1fr' },
-      { label: 'Status', width: '.9fr' },
-    ],
+    title: sectionCfg('users').title,
+    purpose: sectionCfg('users').purpose,
+    action: { label: sectionCfg('users').action, href: '/users/new' },
+    search: sectionCfg('users').search,
+    filters: filtersOf('users'),
+    columns: columnsOf('users'),
     rows: listRows,
     noun: 'user',
     empty: 'No users yet.',
-    note: 'Disabling an account keeps its history in the audit log; deleting does not. Disable somebody who has left, and delete only an account made by mistake.',
+    note: sectionCfg('users').note,
   })}
 </div>`, 'Users');
     }
@@ -7702,6 +8111,7 @@ ${sidebarShell('users', currentUser)}
         const d = new Date(iso);
         return isNaN(d) ? iso : d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
       };
+      const cap = (s) => String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1);
 
       const listRows = rows.results.map((row) => {
         const summary = diffSummary(row.before_state, row.after_state);
@@ -7710,20 +8120,25 @@ ${sidebarShell('users', currentUser)}
           filter: auditGroup(row),
           search: `${row.username || ''} ${row.action} ${row.entity_type} ${row.entity_label || ''} ${summary}`.toLowerCase(),
           cells: [
-            // The diff is the sub-line, because "what changed" is the reason
-            // anybody opens this screen — not the entity type or the id.
+            // "Published · Page · Home", with the diff underneath. The action
+            // is folded into this cell rather than given a pill of its own,
+            // because on this screen every row is an action — a column of them
+            // would be a column of noise. The diff is the sub-line, since
+            // "what changed" is the reason anybody opens this screen.
             primaryCell(
-              `${row.action === 'rollback' ? 'Rolled back' : row.action} ${String(row.entity_type || '').replace(/_/g, ' ')}${row.entity_label ? ` — ${row.entity_label}` : ''}`,
+              [row.action === 'rollback' ? 'Rolled back' : cap(row.action),
+                cap(String(row.entity_type || '').replace(/_/g, ' ')),
+                row.entity_label].filter(Boolean).join(' · '),
               summary || 'No field-level record of this change'
             ),
             escapeHtml(row.username || 'the system'),
             escapeHtml(when(row.created_at)),
-            statusPill(actionTone(row.action), row.action),
+            auditCanRollback(row)
+              ? `<form method="POST" action="/rollback/${row.id}" style="margin:0;" onsubmit="return confirm('Put this back the way it was? The rollback is itself recorded here.')"><button type="submit" class="tlc-edit" style="background:none;border:0;cursor:pointer;font:inherit;color:inherit;padding:0;">Roll back</button></form>`
+              // A dead button is worse than none; say why instead.
+              : `<span style="color:var(--tlc-muted);font-size:12px;" title="${escapeHtml(note)}">${escapeHtml(note)}</span>`,
           ],
-          actions: auditCanRollback(row)
-            ? `<form method="POST" action="/rollback/${row.id}" style="display:inline;margin:0;" onsubmit="return confirm('Put this back the way it was? The rollback is itself recorded here.')"><button type="submit" class="tlc-edit" style="background:none;border:0;cursor:pointer;font:inherit;color:inherit;">Roll back</button></form>`
-            // A dead button is worse than none; say why instead.
-            : `<span style="color:var(--tlc-muted);font-size:12px;" title="${escapeHtml(note)}">—</span>`,
+          actions: '',
         };
       });
 
@@ -7738,21 +8153,11 @@ ${sidebarShell('audit', currentUser, '', await badgeCounts(env, currentUser))}
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
     key: 'audit',
-    title: 'Audit log',
-    purpose: 'Who changed what, and what it looked like before. Every change made through this admin is here.',
-    search: 'Search the log',
-    filters: [
-      { label: 'All', value: 'all' },
-      { label: 'Content', value: 'content' },
-      { label: 'People & ops', value: 'ops' },
-      { label: 'Rolled back', value: 'rolled-back' },
-    ],
-    columns: [
-      { label: 'Change', width: '3fr' },
-      { label: 'Who', width: '1fr' },
-      { label: 'When', width: '1.2fr' },
-      { label: 'Action', width: '.9fr' },
-    ],
+    title: sectionCfg('audit').title,
+    purpose: sectionCfg('audit').purpose,
+    search: sectionCfg('audit').search,
+    filters: filtersOf('audit'),
+    columns: columnsOf('audit'),
     rows: listRows,
     noun: 'entry', nounPlural: 'entries',
     empty: 'Nothing has been changed yet.',
@@ -7873,18 +8278,35 @@ ${sidebarShell('audit', currentUser, '', await badgeCounts(env, currentUser))}
 
     const rows = newsletters.results;
 
+    // How many an issue went to, or — for one not yet sent — how many it would
+    // go to today. Both answer the question somebody brings to this column;
+    // the difference between them is exactly the difference between "Sent" and
+    // everything else, which the Status column already states.
+    const audienceNow = await env.DB.prepare('SELECT COUNT(*) AS n FROM newsletter_subscribers').first().catch(() => null);
+
+    const dateCell = (r, sent) => {
+      const iso = r.published_at || r.scheduled_send_at || r.sent_at || '';
+      if (!iso) return 'No date yet';
+      const d = new Date(iso.length <= 10 ? iso + 'T12:00:00' : iso);
+      if (isNaN(d)) return escapeHtml(iso);
+      const when = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      return `${sent ? 'Sent' : 'Sends'} ${escapeHtml(when)}`;
+    };
+
     const listRows = rows.map((r) => {
       const st = issueStatus(r);
       const sent = isNewsletterSent(r);
-      const when = r.published_at || (r.created_at || '').split('T')[0] || '—';
+      const sends = sent
+        ? (Number.isFinite(r.sent_count) && r.sent_count > 0 ? String(r.sent_count) : '—')
+        : (audienceNow?.n > 0 ? String(audienceNow.n) : '—');
       return {
         href: `/edit/${r.id}`,
-        filter: sent ? 'sent' : (r.approval_status === 'pending' ? 'pending' : 'draft'),
-        search: `${r.subject || ''} ${st.label}`.toLowerCase(),
+        filter: sent ? 'sent' : (r.approval_status === 'pending' ? 'awaiting-approval' : 'draft'),
+        search: `${r.subject || ''} ${st.label} ${sendSummary(r)}`.toLowerCase(),
         cells: [
-          primaryCell(r.subject || 'Untitled issue',
-            (r.format === 'quick' ? 'Quick announcement · ' : 'Weekly · ') + sendSummary(r)),
-          escapeHtml(when),
+          primaryCell(r.subject || 'Untitled issue'),
+          escapeHtml(sends),
+          dateCell(r, sent),
           statusPill(st.tone, st.label),
         ],
         // A sent issue offers Duplicate rather than Edit — the row's own action
@@ -7901,25 +8323,19 @@ ${sidebarShell('newsletter', currentUser, `<a href="https://timothystl.org/news"
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
     key: 'newsletter',
-    title: 'Newsletter',
-    purpose: 'The weekly email and its archive on the website. A sent issue keeps its send record and cannot be changed.',
-    action: { label: '+ Write newsletter', href: '/new' },
-    search: 'Search issues',
-    filters: [
-      { label: 'All', value: 'all' },
-      { label: 'Drafts', value: 'draft' },
-      { label: 'Awaiting approval', value: 'pending' },
-      { label: 'Sent', value: 'sent' },
-    ],
-    columns: [
-      { label: 'Issue', width: '3fr' },
-      { label: 'Date', width: '1fr' },
-      { label: 'Status', width: '1.2fr' },
-    ],
+    title: sectionCfg('newsletter').title,
+    purpose: sectionCfg('newsletter').purpose,
+    action: { label: sectionCfg('newsletter').action, href: '/new' },
+    search: sectionCfg('newsletter').search,
+    filters: filtersOf('newsletter'),
+    columns: columnsOf('newsletter'),
     rows: listRows,
     noun: 'issue', nounPlural: 'issues',
     empty: 'No newsletters yet.',
-    note: 'Once an issue has been sent it is read-only — around 600 people already have a copy, and the archive on the website has to keep saying what was actually sent. Duplicate it as a draft to work from a copy.',
+    // The design's one ◆ line. The read-only rule is not stated here because the
+    // row says it in a place you cannot miss — a sent issue offers Duplicate as
+    // draft and View, never Edit — and the editor says it again if you open one.
+    note: sectionCfg('newsletter').note,
   })}
 </div>`, 'TLC Newsletter Admin');
   }

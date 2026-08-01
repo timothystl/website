@@ -8,7 +8,7 @@ import {
   BLOCKS, BLOCK_KEYS, parseBlocks, serializeBlocks, blockOn,
   AUDIENCES, normalizeAudience, subjectAdvice, preheaderAdvice,
   SUBJECT_LIMIT, PREHEADER_LIMIT, isSent, canEdit, approvalState,
-  issueStatus, sendSummary,
+  issueStatus, sendSummary, parseSubscriberCsv,
 } from './newsletter.js';
 
 let pass = 0, fail = 0;
@@ -149,6 +149,49 @@ group('the issue list');
     'a sent issue keeps its real send record');
   ok(sendSummary({ status: 'sent', sent_count: 1 }).includes('1 subscriber'), 'pluralised properly');
   eq(sendSummary({ status: 'sent' }), 'Sent', 'a sent issue with no record still reads sensibly');
+}
+
+
+group('the subscriber CSV import');
+{
+  // A real Brevo export: header row, quoted fields, first and last apart.
+  const brevo = parseSubscriberCsv(
+    'EMAIL,FIRSTNAME,LASTNAME,SMS\n' +
+    '"jane@example.com","Jane","Smith",\n' +
+    '"bob@example.com","Bob","",\n');
+  eq(brevo.rows.length, 2, 'both people are read');
+  eq(brevo.rows[0].email, 'jane@example.com', 'the address comes from the EMAIL column');
+  eq(brevo.rows[0].name, 'Jane Smith', 'and the name is assembled from first and last');
+  eq(brevo.rows[1].name, 'Bob', 'an empty last name does not leave a trailing space');
+
+  // A spreadsheet somebody keeps by hand: one "Name" column, different order.
+  const byHand = parseSubscriberCsv('Name,Email\nAnn Brown,ann@example.com\n');
+  eq(byHand.rows[0].email, 'ann@example.com', 'column order does not matter');
+  eq(byHand.rows[0].name, 'Ann Brown', 'a single Name column is used as-is');
+
+  // No header at all. The first line is data, and a cell that looks like an
+  // address is treated as one — a file that arrives without a header is the
+  // common case, not an error.
+  const bare = parseSubscriberCsv('ann@example.com\nbob@example.com\n');
+  eq(bare.rows.length, 2, 'a headerless file still imports');
+  eq(bare.rows[0].name, '', 'with no name invented');
+
+  // Semicolons and tabs separate too — Excel exports both depending on locale.
+  eq(parseSubscriberCsv('a@b.com;Ann').rows[0].name, 'Ann', 'semicolons separate');
+  eq(parseSubscriberCsv('a@b.com\tAnn').rows[0].name, 'Ann', 'so do tabs');
+
+  // Nothing is rejected silently. A line with no address is counted, because
+  // somebody pasting 200 lines and getting 180 back needs to know about the 20.
+  const messy = parseSubscriberCsv('Email,Name\nann@example.com,Ann\n,Nobody\njust some text\n');
+  eq(messy.rows.length, 1, 'only the usable row is imported');
+  eq(messy.skipped, 2, 'and the rest are counted, not dropped quietly');
+
+  // The same address twice in one file is one person.
+  const dup = parseSubscriberCsv('Email\nann@example.com\nANN@example.com\n');
+  eq(dup.rows.length, 1, 'a repeated address is imported once, case-insensitively');
+
+  eq(parseSubscriberCsv('').rows.length, 0, 'an empty paste imports nothing');
+  eq(parseSubscriberCsv(null).rows.length, 0, 'and so does nothing at all');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
