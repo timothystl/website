@@ -129,68 +129,79 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
 .audit-entity{color:var(--gray);}
 .pending-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#C9973A;margin-left:6px;vertical-align:middle;}
 
-/* ── HEADER NAVIGATION ─────────────────────────────────────
-   Spec: screens/00b-header-nav.html. This REPLACES the sidebar — there is no
-   hamburger, no off-canvas state and no white util bar for sign-out. */
-.tlc-nav{position:sticky;top:0;z-index:100;font-family:var(--tlc-sans);}
-.tlc-nav-bar{display:flex;align-items:center;gap:14px;padding:0 18px;height:58px;background:#1E2D4A;color:#EDF2F7;}
-.tlc-nav-brand{flex:none;display:flex;align-items:center;gap:10px;padding-right:16px;border-right:1px solid rgba(237,242,247,.18);text-decoration:none;}
-.tlc-nav-mark{width:26px;height:26px;border-radius:8px;background:#C9973A;color:#1E2D4A;font:600 13px/26px var(--tlc-sans);text-align:center;flex:none;}
-.tlc-nav-brand-text{display:flex;flex-direction:column;gap:1px;}
-.tlc-nav-brand-name{font:600 13.5px/1.1 var(--tlc-sans);color:#FAF7F1;white-space:nowrap;}
-.tlc-nav-brand-sub{font:700 9.5px/1 var(--tlc-sans);letter-spacing:.16em;text-transform:uppercase;color:#C9973A;white-space:nowrap;}
-.tlc-nav-version{font-weight:400;letter-spacing:0;text-transform:none;color:#6B7F99;}
-/* The group strip is the flexible child, so it is the one that runs short
-   first — and it scrolls rather than wrapping, truncating, or hiding behind a
-   "More". A chip cut mid-word is the failure this spec exists to prevent. */
-.tlc-nav-groups{flex:1;min-width:0;display:flex;align-items:center;gap:3px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-ms-overflow-style:none;}
-.tlc-nav-groups::-webkit-scrollbar{display:none;}
-.tlc-nav-chip{flex:none;display:flex;align-items:center;gap:7px;padding:8px 13px;border-radius:9px;font:500 13.5px/1 var(--tlc-sans);color:#C6D0DC;text-decoration:none;white-space:nowrap;}
-.tlc-nav-chip:hover{color:#FFFFFF;}
-.tlc-nav-chip.is-on{font-weight:600;color:#FFFFFF;background:#27496E;box-shadow:inset 0 0 0 1px rgba(255,255,255,.16);}
-.tlc-nav-dot{flex:none;width:7px;height:7px;border-radius:50%;background:#5A7191;}
-.tlc-nav-chip.is-on .tlc-nav-dot{background:#E0A82E;}
-.tlc-nav-badge{flex:none;padding:1px 7px;border-radius:999px;background:rgba(201,151,58,.22);color:#E8C070;font:700 10.5px/1.6 var(--tlc-sans);}
-/* Never wraps — "Sign out" cannot break onto a second line inside a 58px bar. */
-.tlc-nav-right{flex:none;display:flex;align-items:center;gap:10px;white-space:nowrap;}
-.tlc-nav-right a{font:600 12.5px/1 var(--tlc-sans);color:#AFC0D2;text-decoration:none;white-space:nowrap;}
-.tlc-nav-right a:hover{color:#FFFFFF;}
-.tlc-nav-k{padding:7px 11px;border:1px solid rgba(196,206,223,.35);border-radius:8px;background:transparent;font:500 12.5px/1 var(--tlc-sans);color:#AFC0D2;cursor:pointer;white-space:nowrap;}
-.tlc-nav-k:hover{color:#FFFFFF;border-color:rgba(196,206,223,.6);}
-.tlc-nav-rule{width:1px;height:20px;background:rgba(237,242,247,.18);}
-.tlc-nav-user{font:500 12.5px/1 var(--tlc-sans);color:#8598B0;white-space:nowrap;}
-.tlc-nav-out{color:#C9973A !important;}
-/* Row two — the sections of the selected group. The gold underline is the whole
-   active treatment: no pill, no fill. */
-.tlc-nav-sub{display:flex;align-items:center;gap:2px;padding:0 18px;height:44px;background:#FFFDF9;border-bottom:1px solid #E7DFD1;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;}
-.tlc-nav-sub::-webkit-scrollbar{display:none;}
-.tlc-nav-tab{flex:none;display:flex;align-items:center;gap:6px;padding:0 13px;height:44px;font:500 13.5px/44px var(--tlc-sans);color:#6A6858;text-decoration:none;white-space:nowrap;}
-.tlc-nav-tab:hover{color:#1E2D4A;}
-.tlc-nav-tab.is-on{font-weight:600;color:#1E2D4A;box-shadow:inset 0 -2px 0 #C9973A;}
-.tlc-nav-tabbadge{padding:1px 7px;border-radius:999px;background:#FAF0DC;color:#7A5B18;font:700 10.5px/1.6 var(--tlc-sans);}
-/* The per-screen back-links that used to live in the util bar. */
+/* ── THE SHELL: SIDEBAR + CONTEXT BAR ──────────────────────
+   Spec: screens/00b-header-nav.html (revised).
+
+   ⚠ The sidebar STAYS. Twenty-one sections in five groups is more than a
+   horizontal bar can hold honestly, and a list you read top to bottom beats
+   chips you have to scroll. What the build got wrong was never the sidebar —
+   it was hiding it behind a hamburger. So there is no translateX(-100%), no
+   .is-open, no backdrop and no toggle: it is simply on screen, and the content
+   sits BESIDE it rather than under it.
+
+   Above the content, a slim context bar — the one good idea from the editor's
+   top bar, kept and cut down. It reports; it does not navigate. */
+body{padding-left:228px;}
+.sidebar{position:fixed;top:0;left:0;width:228px;height:100vh;background:var(--steel);
+  display:flex;flex-direction:column;overflow-y:auto;z-index:100;}
+.sidebar-brand{padding:20px 20px 18px;border-bottom:1px solid rgba(255,255,255,.12);margin-bottom:8px;flex-shrink:0;}
+.sidebar-brand-name{font-family:var(--sans);font-size:14px;font-weight:800;color:#fff;}
+.sidebar-brand-sub{font-family:var(--sans);font-size:11px;color:var(--amber);font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-top:2px;}
+.sidebar-user{padding:0 20px 8px;font-family:var(--sans);font-size:11px;color:rgba(255,255,255,.55);}
+.sidebar-group{padding:8px 0 12px;}
+.sidebar-group-label{font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.4);padding:4px 20px 6px 23px;}
+.sidebar-item{display:flex;align-items:center;gap:10px;padding:9px 20px 9px 23px;color:rgba(255,255,255,.78);font-size:13px;font-weight:600;text-decoration:none;}
+.sidebar-item:hover{color:#fff;background:rgba(255,255,255,.06);}
+.sidebar-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.35);flex-shrink:0;}
+.sidebar-footer{margin-top:auto;padding:14px 20px 18px;border-top:1px solid rgba(255,255,255,.12);display:flex;flex-direction:column;gap:8px;flex-shrink:0;}
+.sidebar-footer a{font-family:var(--sans);color:rgba(255,255,255,.6);font-size:12px;font-weight:600;text-decoration:none;}
+.sidebar-footer a:hover{color:#fff;}
+
+/* ── THE CONTEXT BAR ───────────────────────────────────────
+   46px, the same navy as the sidebar so the two read as one shell, and it sits
+   above the CONTENT COLUMN only — it starts where the sidebar ends.
+
+   ⚠ It is not navigation. No tabs, no chips, no menus, and the crumbs are not
+   links. Its whole job is to say where you are and to keep the two things you
+   reach for from any screen one click away. */
+.tlc-ctx{display:flex;align-items:center;gap:14px;height:46px;padding:0 26px;background:#1E2D4A;
+  color:#EDF2F7;position:sticky;top:0;z-index:90;}
+.tlc-ctx-trail{flex:1;min-width:0;display:flex;align-items:center;gap:8px;overflow:hidden;}
+.tlc-ctx-group{font:500 12.5px/1 var(--tlc-sans);color:#8598B0;white-space:nowrap;}
+.tlc-ctx-sep{font:400 12.5px/1 var(--tlc-sans);color:#4E6180;}
+.tlc-ctx-section{font:600 13.5px/1 var(--tlc-sans);color:#FFFFFF;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tlc-ctx-wait{flex:none;padding:1px 9px;border-radius:999px;background:rgba(201,151,58,.22);color:#E8C070;
+  font:700 10.5px/1.7 var(--tlc-sans);white-space:nowrap;}
+.tlc-ctx-right{flex:none;display:flex;align-items:center;gap:12px;white-space:nowrap;}
+.tlc-ctx-right a{font:600 12.5px/1 var(--tlc-sans);color:#AFC0D2;text-decoration:none;white-space:nowrap;}
+.tlc-ctx-right a:hover{color:#FFFFFF;}
+.tlc-ctx-k{padding:6px 11px;border:1px solid rgba(196,206,223,.35);border-radius:8px;background:transparent;
+  font:500 12.5px/1 var(--tlc-sans);color:#AFC0D2;cursor:pointer;white-space:nowrap;}
+.tlc-ctx-k:hover{color:#FFFFFF;border-color:rgba(196,206,223,.6);}
+/* The per-screen back-links. They go in the content area, above the h1 — not
+   in the context bar, which reports rather than navigates. */
 .tlc-nav-back{padding:16px 26px 0;display:flex;gap:16px;flex-wrap:wrap;}
 .tlc-nav-back a{font:600 13px/1 var(--tlc-sans);color:#2E7EA6;text-decoration:none;}
 .tlc-nav-back a:hover{text-decoration:underline;}
-/* Below 820px — a phone held sideways, the only place six chips genuinely
-   cannot be reached by a short swipe — the labels drop and the chips become
-   their dots. The ACTIVE chip keeps its label, so you can always see where you
-   are. The label survives as the title attribute. */
-@media (max-width:820px){
-  .tlc-nav-chip{padding:8px 0;width:30px;justify-content:center;}
-  .tlc-nav-chip .tlc-nav-chip-label{display:none;}
-  .tlc-nav-chip.is-on{width:auto;padding:8px 13px;}
-  .tlc-nav-chip.is-on .tlc-nav-chip-label{display:inline;}
-  .tlc-nav-bar{gap:10px;padding:0 12px;}
-  .tlc-nav-brand{padding-right:12px;}
-  .tlc-nav-brand-text{display:none;}
-  .tlc-nav-right a:not(.tlc-nav-out){display:none;}
+
+/* The ONLY responsive rule for the sidebar: below 900px a phone genuinely
+   cannot spare 228px, so it becomes a slide-over. On every laptop and desktop
+   it is fixed and visible. */
+@media (max-width:900px){
+  body{padding-left:0;}
+  .sidebar{transform:translateX(-100%);transition:transform .2s ease;}
+  .sidebar.is-open{transform:translateX(0);box-shadow:2px 0 16px rgba(0,0,0,.25);}
+  .sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:99;}
+  .sidebar-backdrop.is-open{display:block;}
+  .sidebar-toggle{display:inline-flex;}
+  .tlc-ctx{padding:0 16px;}
+  .wrap,.wrap-wide{padding:20px 16px;}
   .tlc-nav-back{padding:14px 16px 0;}
 }
-@media (max-width:880px){
-  .wrap{padding:20px 16px;}
-  .wrap-wide{padding:20px 16px;}
-}
+.sidebar-backdrop{display:none;}
+.sidebar-toggle{display:none;align-items:center;background:transparent;border:0;padding:6px;margin:0 0 0 -6px;
+  cursor:pointer;color:#AFC0D2;flex:none;}
+.sidebar-toggle svg{display:block;width:22px;height:22px;}
 /* ── DASHBOARD ─────────────────────────────────────────────── */
 .dash-header{font-family:var(--serif);font-size:24px;color:var(--steel);}
 .dash-sub{font-family:var(--sans);font-size:13px;color:var(--gray);margin-top:2px;}
@@ -224,6 +235,35 @@ ${PANEL_LIST_CSS}
 ${NEWSLETTER_CSS}
 ${TOAST_CSS}
 ${CMDK_CSS}
+/* ── THE SIDEBAR ───────────────────────────────────────────────
+   Straight from the Foundations spec, down to the numbers: 228px, its own
+   scroll, identical on every screen — only the active row changes. The active
+   row is RAISED (a lighter navy plus a hairline inset), not recoloured with a
+   gold bar; that was mine. */
+.sidebar{background:var(--tlc-sidebar);width:228px;font-family:var(--tlc-sans);}
+.sidebar-brand{padding:16px 18px 14px;border-bottom:1px solid rgba(237,242,247,.12);margin-bottom:0;}
+.sidebar-brand-name{font:600 16px/1.2 var(--tlc-sans);color:#FAF7F1;}
+.sidebar-brand-sub{font:700 11.5px/1 var(--tlc-sans);color:var(--tlc-gold);letter-spacing:.16em;text-transform:uppercase;margin-top:5px;}
+.sidebar-version{font:400 11px/1 var(--tlc-sans);color:#6B7F99;text-transform:none;letter-spacing:0;margin-left:6px;}
+.sidebar-user{padding:10px 18px;font-size:12.5px;color:#8598B0;border-bottom:1px solid rgba(237,242,247,.12);}
+.sidebar-group{padding:8px 0 4px;}
+.sidebar-group-label{font:700 10.5px/1 var(--tlc-sans);letter-spacing:.14em;text-transform:uppercase;color:var(--tlc-gold-label);padding:8px 18px 8px 20px;}
+.sidebar-item{display:flex;align-items:center;gap:11px;margin:1px 8px;padding:9px 12px;border-radius:9px;color:var(--tlc-nav-label);font:500 13.5px/1.35 var(--tlc-sans);text-decoration:none;}
+.sidebar-item:hover{color:#fff;background:rgba(255,255,255,.06);}
+.sidebar-label{flex:1;min-width:0;}
+.sidebar-dot{flex:none;width:7px;height:7px;border-radius:50%;background:var(--tlc-nav-dot);}
+/* A child row's marker is an elbow, not a circle — it draws the relationship
+   rather than asserting it with indentation alone. */
+.sidebar-tick{flex:none;width:7px;height:7px;border-radius:0 0 0 3px;border-left:1px solid var(--tlc-nav-dot);border-bottom:1px solid var(--tlc-nav-dot);background:transparent;font-size:0;line-height:0;}
+.sidebar-item-child{padding-left:26px;}
+.sidebar-item-active{background:var(--tlc-nav-raised);color:#FFFFFF;font-weight:600;box-shadow:inset 0 0 0 1px rgba(255,255,255,.16);}
+.sidebar-item-active .sidebar-dot{background:var(--tlc-gold-bright);}
+.sidebar-item-active .sidebar-tick{border-color:var(--tlc-gold-bright);}
+.sidebar-badge{flex:none;padding:1px 7px;border-radius:999px;background:rgba(201,151,58,.22);color:#E8C070;font:700 10.5px/1.6 var(--tlc-sans);}
+.sidebar-footer{border-top:1px solid rgba(237,242,247,.12);}
+.sidebar-footer a{font-size:11.5px;color:#8397AF;}
+.sidebar-footer a:last-child{font-size:12.5px;color:var(--tlc-gold);}
+.sidebar-signout{color:var(--tlc-gold) !important;}
 </style>
 </head>
 <body>${body}
@@ -273,145 +313,173 @@ ${CMDK_JS}
 // shows, so the sidebar and the worklist can never disagree. Pass
 // { gym, pages, newsletter }; a bare number is read as the newsletter count so
 // the pre-redesign call sites keep working.
-// ── HEADER NAVIGATION ────────────────────────────────────────
-// Spec: screens/00b-header-nav.html, which supersedes Foundations' sidebar.
-//
-// This REPLACES the navy sidebar rather than sitting on top of it. In the build
-// the sidebar had become `position:fixed; translateX(-100%)` behind a hamburger
-// in a white util bar — off-canvas on every screen, with all the correct
-// styling underneath invisible until somebody found the toggle. The editors
-// already wore a bar; extending it to the rest means one piece of chrome across
-// the whole product and gives the content area back the 228px.
-//
-// The permission logic, group order, group membership and badge rules are the
-// sidebar's, unchanged. Only the geometry moved.
-//
-// Two rows:
-//   1. 58px navy — brand, group chips, and the right cluster (⌘K, View site,
-//      username, Sign out). Never scrolls away. Identical on every screen.
-//   2. 44px parchment — the sections of the SELECTED group only. Hidden
-//      entirely when that group has one section, so Dashboard shows no row two.
-export function headerNav(activeTab, user, extraLinks = '', badges = {}) {
+// ── SIDEBAR SHELL ─────────────────────────────────────────────
+// Left sidebar navigation (grouped by task area) + a slim utility bar for
+// per-page back-links / external-view links + sign out. Replaces the old
+// horizontal topbarHtml() tab strip.
+// pendingCount: number of newsletters awaiting approval (shown as a dot on the News & Events item)
+// badges: counts of things needing a human — the same numbers the Dashboard
+// shows, so the sidebar and the worklist can never disagree. Pass
+// { gym, pages, newsletter }; a bare number is read as the newsletter count so
+// the pre-redesign call sites keep working.
+export function sidebarShell(activeTab, user, extraLinks = '', badges = {}) {
   const hp = (p) => hasPermission(user, p);
   const b = typeof badges === 'number' ? { newsletter: badges } : (badges || {});
 
   // A badge is only shown to somebody who can act on it. Telling a ministry
   // leader that three gym requests are waiting is noise they cannot clear.
-  const at = (n, canSee) => (n > 0 && canSee) ? n : 0;
+  const badge = (n, canSee, title) => (n > 0 && canSee)
+    ? `<span class="sidebar-badge" title="${escapeHtml(title)}">${n}</span>` : '';
 
-  // One declaration per section: the tab, where it goes, who may see it, and
-  // what number rides on it. The chips, the tabs and the group badges are all
-  // derived from this, so a section cannot appear in one and not the other.
-  const GROUPS = [
-    { key: 'dash', label: 'Dashboard', items: [
-      { tab: 'dashboard', label: 'Dashboard', href: '/dashboard', can: true },
-    ] },
-    { key: 'web', label: 'Website', items: [
-      { tab: 'pages', label: 'Pages', href: '/pages', can: hp('pages_edit') || hp('pages_edit_own'),
-        badge: at(b.pages, hp('pages_edit') || hp('pages_edit_own')),
-        title: `${b.pages} page(s) with unpublished edits` },
-      // Ministries, Partners, News, Sermons and Christian Ed are ordinary tabs
-      // after Pages now. The sidebar drew the parent/child relationship with an
-      // elbow; here adjacency is enough, and the spec says so outright.
-      { tab: 'ministries', label: 'Ministries', href: '/ministries', can: hp('ministries_edit') },
-      { tab: 'partners', label: 'Partners', href: '/partners', can: hp('pages_edit') },
-      { tab: 'news', label: 'News &amp; Events', href: '/newsitems', can: hp('news_edit') },
-      { tab: 'sermons', label: 'Sermons', href: '/sermons', can: hp('sermons_edit') },
-      { tab: 'christian-education', label: 'Christian Ed', href: '/christian-education', can: hp('news_edit') },
-      { tab: 'menu', label: 'Menu', href: '/menu', can: hp('pages_edit') },
-      { tab: 'notices', label: 'Notices', href: '/notices', can: hp('notices_edit') },
-      { tab: 'link-cards', label: 'NFC Taps', href: '/link-cards', can: hp('links_edit') },
-      { tab: 'redirects', label: 'Redirects', href: '/redirects', can: hp('settings_manage') },
-    ] },
-    { key: 'email', label: 'Email', items: [
-      { tab: 'newsletter', label: 'Newsletter', href: '/newsletters', can: hp('newsletter_edit') || hp('newsletter_approve'),
-        badge: at(b.newsletter, hp('newsletter_approve')),
-        title: `${b.newsletter} newsletter(s) awaiting approval` },
-      { tab: 'subscribers', label: 'Subscribers', href: '/subscribers', can: hp('settings_manage') },
-      // Not in the design's nav — it shipped after the handoff. It is mail held
-      // back from the office inbox, so this is where somebody looks for it.
-      { tab: 'filtered', label: 'Filtered Mail', href: '/filtered', can: hp('settings_manage') },
-    ] },
-    { key: 'money', label: 'Money &amp; Building', items: [
-      { tab: 'giving', label: 'Giving', href: '/giving', can: hp('giving_manage') },
-      { tab: 'gym', label: 'Gym Rentals', href: '/gym-rentals', can: hp('gym_manage'),
-        badge: at(b.gym, hp('gym_manage')), title: `${b.gym} gym request(s) waiting for review` },
-      { tab: 'payroll', label: 'Payroll', href: '/payroll', can: hp('payroll_manage') },
-    ] },
-    { key: 'people', label: 'People &amp; Access', items: [
-      { tab: 'staff', label: 'Staff', href: '/staff', can: hp('staff_edit') },
-      { tab: 'users', label: 'Users', href: '/users', can: hp('users_manage') },
-      { tab: 'audit', label: 'Audit Log', href: '/audit-log', can: hp('audit_view') },
-    ] },
-    { key: 'setup', label: 'Setup', items: [
-      { tab: 'media', label: 'Media', href: '/media', can: hp('pages_edit') || hp('ministries_edit') },
-      { tab: 'settings', label: 'Settings', href: '/settings', can: hp('settings_manage') },
-    ] },
-  ];
+  const navItem = (href, label, active, extra = '', depth = 0) =>
+    `<a href="${href}" class="sidebar-item${active ? ' sidebar-item-active' : ''}${depth ? ' sidebar-item-child' : ''}">`
+    + (depth ? `<span class="sidebar-tick" aria-hidden="true">└</span>` : `<span class="sidebar-dot"></span>`)
+    + `<span class="sidebar-label">${label}</span>${extra}</a>`;
 
-  // A group the user has no permission for is not rendered at all — permissions
-  // hide whole groups, exactly as before.
-  const visible = GROUPS
-    .map((g) => Object.assign({}, g, { items: g.items.filter((i) => i.can) }))
-    .filter((g) => g.items.length);
+  // ── THE FIVE GROUPS ──
+  // Order, grouping and nesting are the design's `NAV` and `CHILD_OF`, kept in
+  // that order deliberately: it groups by *what you came here to do* — put
+  // something on the website, send an email, deal with money, manage people,
+  // set the place up — rather than by which table the data lives in. Ministries,
+  // Partners, News, Sermons and Christian Ed nest under Pages because that is
+  // what they produce; they are separate only because different people own them.
+  const showNews = hp('news_edit');
+  const pagesChildren = [
+    hp('ministries_edit') ? navItem('/ministries', 'Ministries', activeTab === 'ministries', '', 1) : '',
+    hp('pages_edit')      ? navItem('/partners', 'Partners', activeTab === 'partners', '', 1) : '',
+    showNews              ? navItem('/newsitems', 'News &amp; Events', activeTab === 'news', '', 1) : '',
+    hp('sermons_edit')    ? navItem('/sermons', 'Sermons', activeTab === 'sermons', '', 1) : '',
+    hp('news_edit')       ? navItem('/christian-education', 'Christian Ed', activeTab === 'christian-education', '', 1) : '',
+  ].filter(Boolean).join('');
 
-  const active = visible.find((g) => g.items.some((i) => i.tab === activeTab)) || visible[0];
-  const sections = active ? active.items : [];
+  const canPages = hp('pages_edit') || hp('pages_edit_own');
+  const websiteItems = [
+    canPages ? navItem('/pages', 'Pages', activeTab === 'pages', badge(b.pages, canPages, `${b.pages} page(s) with unpublished edits`)) : '',
+    pagesChildren,
+    hp('pages_edit')      ? navItem('/menu', 'Menu', activeTab === 'menu') : '',
+    hp('notices_edit')    ? navItem('/notices', 'Notices', activeTab === 'notices') : '',
+    hp('links_edit')      ? navItem('/link-cards', 'NFC Taps', activeTab === 'link-cards') : '',
+    hp('settings_manage') ? navItem('/redirects', 'Redirects', activeTab === 'redirects') : '',
+  ].filter(Boolean).join('');
 
-  const groupBadge = (g) => g.items.reduce((n, i) => n + (i.badge || 0), 0);
+  // ── EMAIL ──
+  // Filtered Mail is not in the design's nav — it shipped after the handoff was
+  // written. It is mail held back from the office inbox, so this is where
+  // somebody would look for it.
+  const canDraft = hp('newsletter_edit') || hp('newsletter_approve');
+  const emailItems = [
+    canDraft ? navItem('/newsletters', 'Newsletter', activeTab === 'newsletter', badge(b.newsletter, hp('newsletter_approve'), `${b.newsletter} newsletter(s) awaiting approval`)) : '',
+    hp('settings_manage') ? navItem('/subscribers', 'Subscribers', activeTab === 'subscribers') : '',
+    hp('settings_manage') ? navItem('/filtered', 'Filtered Mail', activeTab === 'filtered') : '',
+  ].filter(Boolean).join('');
 
-  const chips = visible.map((g) => {
-    const on = active && g.key === active.key;
-    const n = groupBadge(g);
-    // A chip is a link to the group's first section, not a menu that opens.
-    return `<a class="tlc-nav-chip${on ? ' is-on' : ''}" href="${g.items[0].href}" title="${g.label.replace(/&amp;/g, '&')}">`
-      + `<span class="tlc-nav-dot" aria-hidden="true"></span>`
-      + `<span class="tlc-nav-chip-label">${g.label}</span>`
-      + (n ? `<span class="tlc-nav-badge">${n}</span>` : '')
-      + `</a>`;
-  }).join('');
+  // ── MONEY & BUILDING ──
+  const moneyItems = [
+    hp('giving_manage')   ? navItem('/giving', 'Giving', activeTab === 'giving') : '',
+    hp('gym_manage')      ? navItem('/gym-rentals', 'Gym Rentals', activeTab === 'gym', badge(b.gym, hp('gym_manage'), `${b.gym} gym request(s) waiting for review`)) : '',
+    hp('payroll_manage')  ? navItem('/payroll', 'Payroll', activeTab === 'payroll') : '',
+  ].filter(Boolean).join('');
 
-  const tabs = sections.map((i) => {
-    const on = i.tab === activeTab;
-    return `<a class="tlc-nav-tab${on ? ' is-on' : ''}" href="${i.href}"${on ? ' aria-current="page"' : ''}>${i.label}`
-      + (i.badge ? `<span class="tlc-nav-tabbadge" title="${escapeHtml(i.title || '')}">${i.badge}</span>` : '')
-      + `</a>`;
-  }).join('');
+  // ── PEOPLE & ACCESS ──
+  const peopleItems = [
+    hp('staff_edit')      ? navItem('/staff', 'Staff', activeTab === 'staff') : '',
+    hp('users_manage')    ? navItem('/users', 'Users', activeTab === 'users') : '',
+    hp('audit_view')      ? navItem('/audit-log', 'Audit Log', activeTab === 'audit') : '',
+  ].filter(Boolean).join('');
 
-  return `<header class="tlc-nav">
-  <div class="tlc-nav-bar">
-    <a class="tlc-nav-brand" href="/dashboard">
-      <span class="tlc-nav-mark" aria-hidden="true">T</span>
-      <span class="tlc-nav-brand-text">
-        <span class="tlc-nav-brand-name">Timothy Lutheran</span>
-        <span class="tlc-nav-brand-sub">Admin <span class="tlc-nav-version">${VERSION}</span></span>
-      </span>
-    </a>
-    <nav class="tlc-nav-groups" id="tlc-nav-groups" aria-label="Sections">${chips}</nav>
-    <div class="tlc-nav-right">
-      <button type="button" class="tlc-nav-k" id="tlc-k-open">⌘K</button>
+  // ── SETUP ──
+  const setupItems = [
+    (hp('pages_edit') || hp('ministries_edit')) ? navItem('/media', 'Media', activeTab === 'media') : '',
+    hp('settings_manage') ? navItem('/settings', 'Settings', activeTab === 'settings') : '',
+  ].filter(Boolean).join('');
+
+  return `<div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <div class="sidebar-brand-name">Timothy Lutheran</div>
+    <div class="sidebar-brand-sub">Admin <span class="sidebar-version">${VERSION}</span></div>
+  </div>
+  <div class="sidebar-user">${user ? escapeHtml(user.username) : ''}</div>
+  <div class="sidebar-group">
+    ${navItem('/dashboard', 'Dashboard', activeTab === 'dashboard')}
+  </div>
+  ${websiteItems ? `<div class="sidebar-group"><div class="sidebar-group-label">Website</div>${websiteItems}</div>` : ''}
+  ${emailItems ? `<div class="sidebar-group"><div class="sidebar-group-label">Email</div>${emailItems}</div>` : ''}
+  ${moneyItems ? `<div class="sidebar-group"><div class="sidebar-group-label">Money &amp; Building</div>${moneyItems}</div>` : ''}
+  ${peopleItems ? `<div class="sidebar-group"><div class="sidebar-group-label">People &amp; Access</div>${peopleItems}</div>` : ''}
+  ${setupItems ? `<div class="sidebar-group"><div class="sidebar-group-label">Setup</div>${setupItems}</div>` : ''}
+  <div class="sidebar-footer">
+    <a href="#" id="tlc-k-open">⌘K searches every section</a>
+    <a href="/logout" class="sidebar-signout">Sign out</a>
+  </div>
+</aside>
+${CMDK_HTML}
+${contextBar(activeTab, b)}
+${extraLinks ? `<div class="tlc-nav-back">${extraLinks}</div>` : ''}`;
+}
+
+// ── THE CONTEXT BAR ──────────────────────────────────────────
+// Spec: screens/00b-header-nav.html. 46px, the same navy as the sidebar so the
+// two read as one shell, above the CONTENT COLUMN only.
+//
+// ⚠ It reports; it does not navigate. No tabs, no chips, no menus, and the
+// crumbs are not links — the spec's "get this wrong and it shows" leads with
+// putting section tabs or group chips in here. Sign out is NOT duplicated: it
+// lives in the sidebar foot, and having it in both would be two answers to one
+// question.
+export function contextBar(activeTab, badges = {}) {
+  const t = TRAIL[activeTab] || { group: 'Admin', section: 'Admin' };
+  const waiting = t.waits ? Number(badges[t.waits] || 0) : 0;
+  return `<div class="tlc-ctx">
+    <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+    </button>
+    <div class="tlc-ctx-trail">
+      <span class="tlc-ctx-group">${escapeHtml(t.group)}</span>
+      <span class="tlc-ctx-sep" aria-hidden="true">/</span>
+      <span class="tlc-ctx-section">${escapeHtml(t.section)}</span>
+      ${waiting ? `<span class="tlc-ctx-wait">${waiting} waiting</span>` : ''}
+    </div>
+    <div class="tlc-ctx-right">
+      <button type="button" class="tlc-ctx-k" id="tlc-k-open-2">⌘K</button>
       <a href="https://timothystl.org" target="_blank" rel="noopener">View site ↗</a>
       <a href="https://connect.timothystl.org" target="_blank" rel="noopener">Connect ↗</a>
-      <span class="tlc-nav-rule" aria-hidden="true"></span>
-      <span class="tlc-nav-user">${user ? escapeHtml(user.username) : ''}</span>
-      <a class="tlc-nav-out" href="/logout">Sign out</a>
     </div>
-  </div>
-  ${sections.length > 1 ? `<nav class="tlc-nav-sub" id="tlc-nav-sub" aria-label="${(active && active.label.replace(/&amp;/g, '&')) || ''}">${tabs}</nav>` : ''}
-</header>
-${extraLinks ? `<div class="tlc-nav-back">${extraLinks}</div>` : ''}
-${CMDK_HTML}
-<script>(function(){
-  // Selecting a group scrolls it into view — on a narrow window the active chip
-  // can otherwise be off the end of a strip that gives no sign it scrolls.
-  for (var id of ['tlc-nav-groups','tlc-nav-sub']) {
-    var el = document.getElementById(id); if (!el) continue;
-    var on = el.querySelector('.is-on'); if (!on) continue;
-    var off = on.offsetLeft - (el.clientWidth - on.offsetWidth) / 2;
-    if (el.scrollWidth > el.clientWidth) el.scrollLeft = Math.max(0, off);
-  }
-})();</script>`;
+  </div>`;
 }
+
+// Where each screen sits, for the trail. `waits` names the badge whose count
+// becomes the amber "N waiting" pill beside the section — the same numbers the
+// sidebar badges and the dashboard worklist read, so they cannot disagree.
+//
+// Dashboard's group reads "Admin", as the spec says: it belongs to no group.
+const TRAIL = {
+  dashboard: { group: 'Admin', section: 'Dashboard' },
+  pages: { group: 'Website', section: 'Pages', waits: 'pages' },
+  ministries: { group: 'Website', section: 'Ministry pages' },
+  partners: { group: 'Website', section: 'Partner ministries' },
+  news: { group: 'Website', section: 'News & Events' },
+  sermons: { group: 'Website', section: 'Sermons' },
+  'christian-education': { group: 'Website', section: 'Christian Education' },
+  menu: { group: 'Website', section: 'Menu' },
+  notices: { group: 'Website', section: 'Notices' },
+  'link-cards': { group: 'Website', section: 'Taps & links' },
+  redirects: { group: 'Website', section: 'Redirects' },
+  newsletter: { group: 'Email', section: 'Newsletter', waits: 'newsletter' },
+  subscribers: { group: 'Email', section: 'Subscribers' },
+  filtered: { group: 'Email', section: 'Filtered mail' },
+  giving: { group: 'Money & Building', section: 'Giving' },
+  gym: { group: 'Money & Building', section: 'Gym rentals', waits: 'gym' },
+  payroll: { group: 'Money & Building', section: 'Payroll' },
+  staff: { group: 'People & Access', section: 'Staff directory' },
+  users: { group: 'People & Access', section: 'Users' },
+  audit: { group: 'People & Access', section: 'Audit log' },
+  media: { group: 'Setup', section: 'Media' },
+  settings: { group: 'Setup', section: 'Settings' },
+  voters: { group: 'Website', section: 'Voters page' },
+  scheduler: { group: 'Admin', section: 'Schedule builder' },
+};
+
 
 // ── LOGIN PAGE ───────────────────────────────────────────────
 export function loginPage(error = '', success = '') {

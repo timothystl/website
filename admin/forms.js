@@ -10,7 +10,7 @@
 // and forwarding it on to ChMS exactly as if it had come through cleanly.
 
 import { scoreSubmission, signFormToken, verifyFormToken } from './spam.js';
-import { html, headerNav, escapeHtml, formatDate } from './helpers.js';
+import { html, sidebarShell, escapeHtml, formatDate } from './helpers.js';
 import { hasPermission, logAudit } from './auth.js';
 import { renderListSection, renderDrawer, primaryCell } from './ui.js';
 import { section as sectionCfg, columnsOf, filtersOf } from './sections.js';
@@ -303,7 +303,7 @@ export async function handleFilteredRoutes(request, env, path, method, currentUs
     }) : '';
 
     return html(`
-${headerNav('filtered', currentUser)}
+${sidebarShell('filtered', currentUser)}
 <div class="tlc-wrap">
   ${notice ? `<div class="tlc-section" style="padding-bottom:0;">${notice}</div>` : ''}
   ${renderListSection({

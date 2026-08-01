@@ -258,7 +258,7 @@ export function renderListSection(cfg) {
 }
 
 // One script for every list section on the page. Included once by
-// headerNav(); it discovers sections rather than being wired per section, so
+// sidebarShell(); it discovers sections rather than being wired per section, so
 // a new section needs no script of its own.
 // The state word beside a drawer toggle follows the switch. Rendering it once
 // server-side and leaving it stale would be worse than not having it — it
@@ -1126,8 +1126,13 @@ export const CMDK_JS = `(function(){
   });
   scrim.addEventListener('click', close);
   input.addEventListener('input', function(){ clearTimeout(timer); timer = setTimeout(search, 160); });
-  var trigger = document.getElementById('tlc-k-open');
-  if (trigger) trigger.addEventListener('click', function(e){ e.preventDefault(); open(); });
+  // Two triggers: the line in the sidebar foot and the chip in the context bar.
+  // The chip is the one somebody actually sees, but the foot line is where the
+  // shortcut is explained, so both open it rather than one being decorative.
+  ['tlc-k-open', 'tlc-k-open-2'].forEach(function (id) {
+    var trigger = document.getElementById(id);
+    if (trigger) trigger.addEventListener('click', function (e) { e.preventDefault(); open(); });
+  });
 })();`;
 
 export const CMDK_HTML = `<div class="tlc-k-scrim" id="tlc-k-scrim"></div>

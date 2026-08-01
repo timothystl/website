@@ -340,45 +340,42 @@ group('login and the account screens');
 }
 
 
-// ── the header nav ───────────────────────────────────────────────────────────
-// Spec: screens/00b-header-nav.html. It replaces the sidebar rather than
-// sitting on top of it, and the failure it exists to prevent is a chip that
-// cannot be reached — cut mid-word, wrapped, or hidden behind a "More".
-group('the header nav');
+// ── the shell ────────────────────────────────────────────────────────────────
+// Spec: screens/00b-header-nav.html, revised. The sidebar STAYS — the build's
+// mistake was hiding it behind a hamburger, not having it. What this asserts is
+// that every way of hiding it is gone, and that the context bar above the
+// content reports rather than navigates.
+group('the shell');
 {
   const shell = readFileSync(new URL('./helpers.js', import.meta.url), 'utf8');
 
-  ok(!shell.includes('.sidebar{'), 'the sidebar CSS is gone, not merely overridden');
-  ok(!shell.includes('.sidebar-toggle{'), 'and the hamburger with it');
-  ok(!shell.includes('.util-bar{'), 'and the white util bar that held sign-out');
-  // Comments stripped: the note explaining what the sidebar had become still
-  // mentions it, and that is prose rather than a rule.
-  const navCss = shell.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
-  ok(!navCss.includes('translateX(-100%)'), 'there is no off-canvas state left');
+  // The sidebar, as Foundations specifies it.
+  ok(shell.includes('.sidebar{position:fixed;top:0;left:0;width:228px'), 'the sidebar is 228px and on screen');
+  ok(shell.includes('body{padding-left:228px;}'), 'and the content sits beside it, not under it');
+  ok(!shell.includes('.wrap{max-width:860px'), 'the narrow content column is gone');
 
-  ok(shell.includes('height:58px;background:#1E2D4A'), 'row one is 58px navy');
-  ok(shell.includes('height:44px;background:#FFFDF9'), 'row two is 44px parchment');
-  ok(shell.includes('box-shadow:inset 0 -2px 0 #C9973A'), 'the active tab is a gold underline');
-  ok(shell.includes('background:#27496E;box-shadow:inset 0 0 0 1px rgba(255,255,255,.16)'),
-    'and the active chip is raised, not recoloured');
+  // Every way of hiding it, gone — except the one the spec allows.
+  const dflt = shell.slice(shell.indexOf('.sidebar{'));
+  ok(!dflt.slice(0, dflt.indexOf('}')).includes('translateX'), 'no off-canvas default');
+  ok(shell.includes('.sidebar-backdrop{display:none;}'), 'no backdrop unless the slide-over is on');
+  ok(shell.includes('.sidebar-toggle{display:none;'), 'and no hamburger on a desktop');
+  ok(shell.includes('@media (max-width:900px)'), 'below 900px it may slide over — the only responsive rule');
 
-  // Both strips scroll. Neither wraps, truncates, or collapses into a menu.
-  const scroll = shell.split('scrollbar-width:none').length - 1;
-  ok(scroll >= 2, 'both strips scroll with the scrollbar chrome hidden');
-  ok(shell.includes('.tlc-nav-groups{flex:1;min-width:0;'),
-    'the group strip is the flexible child, so it runs short before the brand or sign-out');
-  ok(shell.includes('.tlc-nav-right{flex:none;'), 'the right cluster never shrinks');
-  ok(shell.includes('white-space:nowrap'), 'and Sign out cannot break onto a second line');
-  ok(!shell.includes('More ▾'), 'nothing collapses behind a More');
+  // The context bar. Same navy as the sidebar, so the two read as one shell.
+  ok(shell.includes('.tlc-ctx{display:flex;align-items:center;gap:14px;height:46px;padding:0 26px;background:#1E2D4A'),
+    'the context bar is 46px of the same navy');
+  ok(shell.includes('.tlc-ctx-group{font:500 12.5px/1 var(--tlc-sans);color:#8598B0'), 'the group crumb is quiet');
+  ok(shell.includes('.tlc-ctx-section{font:600 13.5px/1 var(--tlc-sans);color:#FFFFFF'), 'the section crumb leads');
+  ok(shell.includes('.tlc-ctx-sep{font:400 12.5px/1 var(--tlc-sans);color:#4E6180'), 'with the separator between them');
 
-  // Below 820px the chips become their dots — except the active one, which
-  // keeps its label so you can always see where you are.
-  ok(shell.includes('@media (max-width:820px)'), 'the phone breakpoint is the spec’s 820');
-  ok(shell.includes('.tlc-nav-chip.is-on .tlc-nav-chip-label{display:inline;}'),
-    'the active chip keeps its label when the rest drop to dots');
+  // ⚠ It reports; it does not navigate. The spec's own "get this wrong and it
+  // shows" leads with putting tabs or chips in here.
+  ok(!shell.includes('tlc-ctx-tab'), 'there are no tabs in the context bar');
+  ok(!shell.includes('tlc-nav-chip'), 'and no group chips anywhere');
 
-  // Content is full width — the 860px cap was a symptom of the sidebar.
-  ok(shell.includes('.wrap{max-width:none;'), 'the content area is full width');
+  // Sign out lives in the sidebar foot, in gold, and is not duplicated.
+  ok(shell.includes('.sidebar-signout{color:var(--tlc-gold) !important;}'), 'Sign out is gold in the sidebar foot');
+  ok(!shell.includes('util-bar-signout'), 'and the white util bar that held it is gone');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
