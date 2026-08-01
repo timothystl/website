@@ -4,7 +4,7 @@
 import { html, sidebarShell, formatDate, tinymceEditorSection, escapeHtml } from './helpers.js';
 import { sendTransactionalEmail } from './email.js';
 import { renderListSection, primaryCell, statusPill } from './ui.js';
-import { section as sectionCfg } from './sections.js';
+import { section as sectionCfg, columnsOf, filtersOf } from './sections.js';
 
 // ── IMAGE HELPERS ───────────────────────────────────────────
 export function extractImageKeys(body, origin) {
@@ -2460,31 +2460,42 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
       // ── GROUPS LIST ──────────────────────────────────────────
       if (path === '/gym-rentals/groups' && method === 'GET') {
         const groups = await env.DB.prepare('SELECT * FROM gym_groups ORDER BY name').all();
-        const groupsHtml = groups.results.length === 0
-          ? `<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No groups yet. Add your first rental group.</div>`
-          : groups.results.map(g => `
-<div class="ni-row">
-  <div style="flex:1;">
-    <div style="font-family:var(--serif);font-size:16px;color:var(--steel);">${g.name}</div>
-    <div style="font-family:var(--sans);font-size:12px;color:var(--gray);margin-top:3px;">${[g.contact,g.email,g.phone].filter(Boolean).join(' · ')}</div>
-  </div>
-  <div class="ni-meta">Max ${g.max_active_holds||3} holds</div>
-  <span class="badge ${g.active ? 'badge-active' : 'badge-expired'}">${g.active ? 'Active' : 'Inactive'}</span>
-  <div class="ni-actions">
-    <a href="/gym-rentals/groups/edit/${g.id}" class="btn btn-sm btn-secondary">Edit</a>
-  </div>
-</div>`).join('');
+        const listRows = (groups.results || []).map((g) => ({
+          href: `/gym-rentals/groups/edit/${g.id}`,
+          filter: g.active ? 'active' : 'inactive',
+          search: `${g.name} ${g.contact || ''} ${g.email || ''}`.toLowerCase(),
+          cells: [
+            primaryCell(g.name, g.access_token ? 'Has a booking link' : 'No booking link yet'),
+            primaryCell(g.contact || 'No contact on file', [g.email, g.phone].filter(Boolean).join(' · ')),
+            `<span>${g.max_active_holds || 3}</span>`,
+            g.active ? statusPill('good', 'Active') : statusPill('plain', 'Inactive'),
+          ],
+          actions: `<a class="tlc-edit" href="/gym-rentals/groups/edit/${g.id}">Edit</a>`,
+          // A group with no token has no way in — the whole mechanic is that
+          // they book through a private link rather than an account.
+          warn: g.active && !g.access_token
+            ? 'This group is active but has no booking link, so there is no way for them to book. Open it and generate one.' : '',
+          warnCta: g.active && !g.access_token
+            ? { label: 'Open group', href: `/gym-rentals/groups/edit/${g.id}` } : null,
+        }));
         return html(`
-${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">Gym rentals</a>`)}
 <div class="tlc-wrap">
-  <div class="page-title">Rental groups</div>
-  <div class="page-sub">Each group gets a private booking link. Share it with them — no login required.</div>
-  ${gymAlert}
-  <div class="btn-row" style="margin-bottom:28px;">
-    <a href="/gym-rentals/groups/new" class="btn btn-primary">+ Add Group</a>
-  </div>
-  <div class="card">${groupsHtml}</div>
-</div>`, 'Rental Groups');
+  ${gymAlert ? `<div class="tlc-section" style="padding-bottom:0;">${gymAlert}</div>` : ''}
+  ${renderListSection({
+    key: 'gym-groups',
+    title: sectionCfg('gymGroups').title,
+    purpose: sectionCfg('gymGroups').purpose,
+    action: { label: sectionCfg('gymGroups').action, href: '/gym-rentals/groups/new' },
+    search: sectionCfg('gymGroups').search,
+    filters: filtersOf('gymGroups'),
+    columns: columnsOf('gymGroups'),
+    rows: listRows,
+    noun: 'group',
+    empty: 'No groups yet. Add the first one and it gets its own booking link.',
+    note: sectionCfg('gymGroups').note,
+  })}
+</div>`, 'Rental groups — TLC Admin');
       }
 
       // ── NEW GROUP FORM ───────────────────────────────────────
@@ -3094,9 +3105,15 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 .bcal-legend span{display:flex;align-items:center;gap:6px;}
 </style>
 <div class="tlc-wrap">
-  <div class="page-title">Blocked dates</div>
-  <div class="page-sub">Click dates to select them, then save. Already-blocked dates (red) can be clicked to unblock.</div>
-  ${gymAlert}
+  <div class="tlc-section" style="padding-bottom:0;">
+    <header class="tlc-section-head">
+      <div class="tlc-section-headings">
+        <h1 class="tlc-title">${escapeHtml(sectionCfg('gymBlocked').title)}</h1>
+        <p class="tlc-purpose">${escapeHtml(sectionCfg('gymBlocked').purpose)}</p>
+      </div>
+    </header>
+    ${gymAlert}
+  </div>
   <div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border);">
       <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);">Select dates to block or unblock</div>
@@ -3108,6 +3125,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
       </div>
     </div>
     ${calHtml}
+    <p class="tlc-note" style="margin:0 0 14px;"><span class="tlc-note-mark">◆</span><span>${escapeHtml(sectionCfg('gymBlocked').note)}</span></p>
     <div class="bcal-legend" style="margin-bottom:16px;">
       <span><span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:#fce8e8;border:1px solid #e8a0a0;"></span> Currently blocked</span>
       <span><span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:var(--amber);"></span> Selected to block</span>
@@ -4025,70 +4043,57 @@ ${sidebarShell('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
       // ── ALL BOOKINGS LIST ─────────────────────────────────────
       if (path === '/gym-rentals/bookings' && method === 'GET') {
         const today = new Date().toISOString().split('T')[0];
-        const [upcoming, past] = await Promise.all([
-          env.DB.prepare(`SELECT b.*, g.name as group_name FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id WHERE b.booking_date >= ? AND b.status IN ('confirmed','hold') ORDER BY b.booking_date, b.start_time`).bind(today).all(),
-          env.DB.prepare(`SELECT b.*, g.name as group_name FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id WHERE b.booking_date < ? ORDER BY b.booking_date DESC LIMIT 30`).bind(today).all(),
-        ]);
-        const statusBadge = s => s === 'confirmed' ? `<span class="badge badge-active">Confirmed</span>`
-          : s === 'hold'      ? `<span class="badge" style="background:#FFF3D6;color:#7A4F00;">Hold</span>`
-          : s === 'cancelled' ? `<span class="badge badge-expired">Cancelled</span>`
-          : s === 'released'  ? `<span class="badge badge-expired">Released</span>`
-          : s === 'expired'   ? `<span class="badge badge-expired">Expired</span>`
-          : `<span class="badge">${s}</span>`;
-        const bRow = (b, actions = true) => `
-<div class="ni-row">
-  <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--steel);min-width:100px;">${fmtBookingDate(b.booking_date)}</div>
-  <div style="font-family:var(--serif);font-size:15px;color:var(--charcoal);flex:1;">${b.group_name||'—'}</div>
-  <div class="ni-meta">${fmt12h(b.start_time)} \u2013 ${fmt12h(b.end_time)}</div>
-  ${statusBadge(b.status)}
-  ${actions && (b.status === 'confirmed' || b.status === 'hold') ? `<div class="ni-actions" style="display:flex;gap:6px;flex-wrap:wrap;">
-    ${b.status === 'hold' ? `<form method="POST" action="/gym-rentals/bookings/confirm-admin/${b.id}" style="display:contents;" onsubmit="return confirm('Confirm this hold and generate an invoice?')"><button type="submit" class="btn btn-sm btn-primary">Confirm</button></form>` : ''}
-    <form method="POST" action="/gym-rentals/bookings/cancel/${b.id}" style="display:contents;" onsubmit="return confirm('Cancel this booking? The group will be notified.')">
-      <button type="submit" class="btn btn-sm btn-danger">Cancel</button>
-    </form>
-  </div>` : ''}
-</div>`;
-        const groupByOrg = (rows, showActions) => {
-          const groups = {};
-          const order = [];
-          for (const b of rows) {
-            const name = b.group_name || '— Unassigned —';
-            if (!groups[name]) { groups[name] = []; order.push(name); }
-            groups[name].push(b);
-          }
-          return order.map(name => `
-<details open style="margin-bottom:10px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
-  <summary style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:11px 16px;background:var(--mist);font-family:var(--sans);font-size:13px;font-weight:700;color:var(--steel);list-style:none;-webkit-appearance:none;">
-    <span>${name}</span>
-    <span style="font-size:12px;font-weight:400;color:var(--gray);">${groups[name].length} booking${groups[name].length !== 1 ? 's' : ''}</span>
-  </summary>
-  ${groups[name].map(b => bRow(b, showActions)).join('')}
-</details>`).join('');
-        };
-        const upHtml = upcoming.results.length === 0
-          ? `<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No upcoming bookings.</div>`
-          : groupByOrg(upcoming.results, true);
-        const pastHtml = past.results.length === 0
-          ? `<div style="text-align:center;padding:24px;color:var(--gray);font-size:13px;">No past bookings on record.</div>`
-          : groupByOrg(past.results, false);
+        // One list, newest-relevant first: everything still to come, then the
+        // recent past. The old screen split them into two accordions grouped by
+        // organisation, which meant "when is Southside next in" had two places
+        // to look and neither was sorted by date.
+        const rows = await env.DB.prepare(
+          `SELECT b.*, g.name as group_name FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id
+           ORDER BY CASE WHEN b.booking_date >= ? THEN 0 ELSE 1 END, b.booking_date, b.start_time`
+        ).bind(today).all().catch(() => ({ results: [] }));
+
+        const TONE = { confirmed: ['good', 'Confirmed'], hold: ['warn', 'Hold'],
+          released: ['plain', 'Released'], expired: ['plain', 'Expired'], cancelled: ['plain', 'Cancelled'] };
+        const listRows = (rows.results || []).map((b) => {
+          const [tone, label] = TONE[b.status] || ['plain', b.status];
+          const past = b.booking_date < today;
+          return {
+            href: b.group_id ? `/gym-rentals/groups/${b.group_id}` : '/gym-rentals',
+            filter: b.status === 'confirmed' ? 'confirmed' : b.status === 'hold' ? 'holds' : 'released',
+            search: `${b.group_name || ''} ${b.booking_date}`.toLowerCase(),
+            cells: [
+              primaryCell(b.group_name || 'Unassigned', past ? 'Past' : 'Upcoming'),
+              primaryCell(fmtBookingDate(b.booking_date), `${fmt12h(b.start_time)} – ${fmt12h(b.end_time)}`),
+              `<span>${b.created_at ? escapeHtml(formatDate(String(b.created_at).slice(0, 10))) : ''}</span>`,
+              statusPill(tone, label),
+            ],
+            actions: (b.status === 'hold' || b.status === 'confirmed') && !past
+              ? (b.status === 'hold'
+                  ? `<form method="POST" action="/gym-rentals/bookings/confirm-admin/${b.id}" style="display:inline;margin:0;" onsubmit="return confirm('Confirm this hold and generate an invoice?')"><button type="submit" class="tlc-gym-approve">Approve</button></form>`
+                  : '')
+                + `<form method="POST" action="/gym-rentals/bookings/cancel/${b.id}" style="display:inline;margin:0;" onsubmit="return confirm('Cancel this booking? The group will be notified.')"><button type="submit" class="tlc-gym-release">Cancel</button></form>`
+              : '<span style="color:var(--tlc-muted);font-size:12.5px;">—</span>',
+          };
+        });
+
         return html(`
-${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">Gym rentals</a>`)}
 <div class="tlc-wrap">
-  <div class="page-title">All bookings</div>
-  <div class="page-sub">Upcoming and past gym rentals.</div>
-  ${gymAlert}
-  <div class="btn-row" style="margin-bottom:28px;">
-    <a href="/gym-rentals/bookings/new" class="btn btn-primary">+ New Booking</a>
-  </div>
-  <div class="card">
-    <div class="card-title">Upcoming</div>
-    ${upHtml}
-  </div>
-  <div class="card">
-    <div class="card-title">Recent Past (last 30)</div>
-    ${pastHtml}
-  </div>
-</div>`, 'All Bookings');
+  ${gymAlert ? `<div class="tlc-section" style="padding-bottom:0;">${gymAlert}</div>` : ''}
+  ${renderListSection({
+    key: 'gym-bookings',
+    title: sectionCfg('gymBookings').title,
+    purpose: sectionCfg('gymBookings').purpose,
+    action: { label: '+ New booking', href: '/gym-rentals/bookings/new' },
+    search: sectionCfg('gymBookings').search,
+    filters: filtersOf('gymBookings'),
+    columns: columnsOf('gymBookings'),
+    rows: listRows,
+    noun: 'booking',
+    empty: 'Nothing booked yet.',
+    note: sectionCfg('gymBookings').note,
+  })}
+</div>`, 'All bookings — TLC Admin');
       }
 
       // ── CONFIRM GROUP WITH CUSTOM PRICE ──────────────────────
@@ -4443,37 +4448,52 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         const invoices = await env.DB.prepare(
           `SELECT i.*, g.name as group_name FROM gym_invoices i LEFT JOIN gym_groups g ON g.id = i.group_id ORDER BY i.created_at DESC LIMIT 100`
         ).all();
-        const invRowHtml = invoices.results.length === 0
-          ? `<div style="text-align:center;padding:40px;color:var(--gray);font-size:14px;">No invoices yet. Invoices are generated automatically when a booking is created.</div>`
-          : invoices.results.map(inv => {
-              const invNum = `GYM-${inv.id.toString().padStart(4,'0')}`;
-              return `
-<div class="ni-row">
-  <div style="font-family:var(--sans);font-size:12px;font-weight:700;color:var(--gray);min-width:72px;">${invNum}</div>
-  <div style="flex:1;">
-    <div style="font-family:var(--serif);font-size:15px;color:var(--steel);">${inv.group_name||'—'}</div>
-    <div style="font-family:var(--sans);font-size:12px;color:var(--gray);">${formatDate(inv.invoice_date)}</div>
-  </div>
-  <div style="font-family:var(--sans);font-size:16px;font-weight:700;color:var(--charcoal);">$${parseFloat(inv.total_amount||0).toFixed(2)}</div>
-  <span class="badge ${inv.status==='paid'?'badge-active':'badge-pinned'}">${inv.status==='paid'?'Paid':'Unpaid'}</span>
-  <div class="ni-actions">
-    <a href="/gym-rentals/invoices/view/${inv.id}" class="btn btn-sm btn-secondary">View</a>
-    <form method="POST" action="/gym-rentals/invoices/toggle-paid/${inv.id}" style="display:contents;">
-      <button type="submit" class="btn btn-sm ${inv.status==='paid'?'btn-danger':'btn-sage'}">${inv.status==='paid'?'Mark Unpaid':'Mark Paid'}</button>
-    </form>
-    <form method="POST" action="/gym-rentals/invoices/delete/${inv.id}" style="display:contents;" onsubmit="return confirm('Delete invoice ${invNum}? This cannot be undone.')">
-      <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-    </form>
-  </div>
-</div>`; }).join('');
+        const money = (n) => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        // Local: the dashboard's fmtShort is scoped to that handler.
+        const shortDate = (d) => d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+        const listRows = (invoices.results || []).map((inv) => {
+          const num = `GYM-${inv.id.toString().padStart(4, '0')}`;
+          const paid = inv.status === 'paid';
+          return {
+            href: `/gym-rentals/invoices/view/${inv.id}`,
+            filter: paid ? 'paid' : 'unpaid',
+            search: `${inv.group_name || ''} ${num}`.toLowerCase(),
+            cells: [
+              primaryCell(inv.group_name || 'Unassigned', num),
+              primaryCell(
+                inv.period_start ? `${shortDate(inv.period_start)} – ${shortDate(inv.period_end)}` : formatDate(inv.invoice_date),
+                `${Number(inv.total_hours || 0)} hrs at ${money(inv.rate)}/hr`),
+              `<span style="font-weight:600;">${escapeHtml(money(inv.total_amount))}</span>`,
+              paid ? statusPill('good', 'Paid') : statusPill('warn', 'Unpaid'),
+            ],
+            actions: `<a class="tlc-edit" href="/gym-rentals/invoices/view/${inv.id}">View</a>`
+              + `<form method="POST" action="/gym-rentals/invoices/toggle-paid/${inv.id}" style="display:inline;margin:0;">`
+              + `<button type="submit" class="tlc-edit" style="background:none;border:0;cursor:pointer;">${paid ? 'Mark unpaid' : 'Mark paid'}</button></form>`,
+            // An invoice that billed at nothing is not a comp — it is a rate
+            // that was blank when the booking was confirmed.
+            warn: Number(inv.total_amount || 0) === 0
+              ? 'This invoice bills nothing. If that is not deliberate, check the hourly rate in settings and regenerate it.' : '',
+            warnCta: Number(inv.total_amount || 0) === 0
+              ? { label: 'Gym settings', href: '/gym-rentals/settings' } : null,
+          };
+        });
         return html(`
-${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">Gym rentals</a>`)}
 <div class="tlc-wrap">
-  <div class="page-title">Invoices</div>
-  <div class="page-sub">Invoice history and payment tracking.</div>
-  ${gymAlert}
-  <div class="card">${invRowHtml}</div>
-</div>`, 'Invoices');
+  ${gymAlert ? `<div class="tlc-section" style="padding-bottom:0;">${gymAlert}</div>` : ''}
+  ${renderListSection({
+    key: 'gym-invoices',
+    title: sectionCfg('gymInvoices').title,
+    purpose: sectionCfg('gymInvoices').purpose,
+    search: sectionCfg('gymInvoices').search,
+    filters: filtersOf('gymInvoices'),
+    columns: columnsOf('gymInvoices'),
+    rows: listRows,
+    noun: 'invoice',
+    empty: 'No invoices yet. One is generated when a hold is confirmed.',
+    note: sectionCfg('gymInvoices').note,
+  })}
+</div>`, 'Invoices — TLC Admin');
       }
 
       // ── INVOICE VIEW / PRINT ──────────────────────────────────
@@ -4698,36 +4718,53 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/invoices">\u2190 Invoi
 
       // ── RECURRING LIST ────────────────────────────────────────
       if (path === '/gym-rentals/recurring' && method === 'GET') {
-        const DOW_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        const DOW_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
         const recs = await env.DB.prepare(
-          `SELECT r.*, g.name as group_name FROM gym_recurrences r LEFT JOIN gym_groups g ON g.id = r.group_id ORDER BY r.created_at DESC`
-        ).all();
-        const statusBadge = s => s === 'approved' ? `<span class="badge badge-confirmed">Approved</span>`
-          : s === 'rejected' ? `<span class="badge badge-expired">Rejected</span>`
-          : `<span class="badge badge-upcoming">Pending</span>`;
-        const recsHtml = recs.results.length === 0
-          ? `<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No recurring requests yet.</div>`
-          : recs.results.map(r => `
-<div class="ni-row">
-  <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--steel);min-width:80px;">${DOW_NAMES[r.day_of_week]}s</div>
-  <div style="font-family:var(--serif);font-size:15px;color:var(--charcoal);flex:1;">${r.group_name||'—'}</div>
-  <div class="ni-meta">${fmt12h(r.start_time)} – ${fmt12h(r.end_time)}</div>
-  <div class="ni-meta">${formatDate(r.start_date)} – ${formatDate(r.end_date)}</div>
-  ${statusBadge(r.status)}
-  <div class="ni-actions">
-    <a href="/gym-rentals/recurring/review/${r.id}" class="btn btn-sm btn-secondary">View</a>
-  </div>
-</div>`).join('');
+          `SELECT r.*, g.name as group_name FROM gym_recurrences r LEFT JOIN gym_groups g ON g.id = r.group_id
+           ORDER BY CASE WHEN r.status='pending_review' THEN 0 ELSE 1 END, r.created_at DESC`
+        ).all().catch(() => ({ results: [] }));
+
+        const listRows = (recs.results || []).map((r) => {
+          const pending = r.status !== 'approved' && r.status !== 'rejected';
+          const dates = r.start_date && r.end_date
+            ? Math.floor((new Date(r.end_date) - new Date(r.start_date)) / 6048e5) + 1 : null;
+          return {
+            href: `/gym-rentals/recurring/review/${r.id}`,
+            filter: pending ? 'needs-review' : r.status === 'approved' ? 'approved' : 'declined',
+            search: `${r.group_name || ''} ${DOW_NAMES[r.day_of_week] || ''}`.toLowerCase(),
+            cells: [
+              primaryCell(r.group_name || 'Unassigned', pending ? 'Waiting for a decision' : ''),
+              primaryCell(`${DOW_NAMES[r.day_of_week] || ''}s, ${fmt12h(r.start_time)} – ${fmt12h(r.end_time)}`,
+                dates ? `${dates} dates` : ''),
+              `<span>${escapeHtml(formatDate(r.start_date))} – ${escapeHtml(formatDate(r.end_date))}</span>`,
+              pending ? statusPill('warn', 'Needs review')
+                : r.status === 'approved' ? statusPill('good', 'Approved') : statusPill('plain', 'Declined'),
+            ],
+            actions: `<a class="${pending ? 'tlc-gym-approve' : 'tlc-edit'}" href="/gym-rentals/recurring/review/${r.id}">${pending ? 'Review' : 'Open'}</a>`,
+            // These are the only rows where nothing happens at all until
+            // somebody acts — a hold at least expires on its own.
+            warn: pending ? 'Nothing happens on this request until somebody reviews it. Approving generates every date at once.' : '',
+            warnCta: pending ? { label: 'Review it', href: `/gym-rentals/recurring/review/${r.id}` } : null,
+          };
+        });
+
         return html(`
-${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">Gym rentals</a>`)}
 <div class="tlc-wrap">
-  <div class="page-title">Recurring requests</div>
-  <div class="page-sub">All recurring rental requests from groups.</div>
-  ${gymAlert}
-  <div class="card">
-    ${recsHtml}
-  </div>
-</div>`, 'Recurring Requests');
+  ${gymAlert ? `<div class="tlc-section" style="padding-bottom:0;">${gymAlert}</div>` : ''}
+  ${renderListSection({
+    key: 'gym-recurring',
+    title: sectionCfg('gymRecurring').title,
+    purpose: sectionCfg('gymRecurring').purpose,
+    search: sectionCfg('gymRecurring').search,
+    filters: filtersOf('gymRecurring'),
+    columns: columnsOf('gymRecurring'),
+    rows: listRows,
+    noun: 'request',
+    empty: 'No recurring requests. Groups ask for these from their booking portal.',
+    note: sectionCfg('gymRecurring').note,
+  })}
+</div>`, 'Recurring requests — TLC Admin');
       }
 
       // ── RECURRING REVIEW / APPROVE / REJECT ───────────────────
@@ -4787,6 +4824,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/recurring">← Recurring</a>`)}
 <div class="tlc-wrap">
   <div class="page-title">Recurring request</div>
+  <div class="page-sub">A group asking for the same slot every week. Approving generates every date at once, so conflicts are worth reading first.</div>
   ${msgAlert}
   <div class="card">
     <div class="card-title">Request Details</div>

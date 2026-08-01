@@ -278,25 +278,30 @@ group('one palette');
   // Read as text rather than importing, because what matters is what ships in
   // the stylesheet — a value can be correct in a constant and wrong in the CSS.
   const shell = readFileSync(new URL('./helpers.js', import.meta.url), 'utf8');
+  // The palette itself lives in ADMIN_UI_CSS now, so anything about tokens has
+  // to read both. The radii and font-stack assertions below stay on the legacy
+  // shell on purpose: ui.js carries the redesign's own values — a 3px elbow, a
+  // 5px chip — which Foundations specifies and Task 1's audit never covered.
+  const allCss = shell + readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
 
   for (const [hex, was] of [['#0A3C5C', 'the old steel'], ['#D4922A', 'the old amber'],
                             ['#3D3530', 'the old charcoal'], ['#7A6E60', 'the old grey']]) {
-    ok(!shell.includes(hex), `the shell carries no ${hex} — ${was}`);
+    ok(!allCss.includes(hex), `the shell carries no ${hex} — ${was}`);
   }
 
   // Georgia is legal only as the serif fallback, never as the face itself.
   // Line comments are stripped first — a comment mentioning the fallback is
   // prose, not a font declaration, and failing on it would teach whoever hits
   // this to weaken the assertion rather than fix the CSS.
-  const css = shell.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
+  const css = allCss.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
   const georgia = css.split('Georgia').length - 1;
   const asFallback = css.split("'Lora',Georgia").length - 1;
   eq(georgia, asFallback, 'Georgia appears only behind Lora, never on its own');
 
   ok(!shell.includes('-apple-system'), 'the system font stack is gone — the admin is Source Sans 3');
-  ok(shell.includes("--steel:#1E2D4A"), 'the legacy names point at the Foundations values');
-  ok(shell.includes("--amber:#C9973A"), 'including the amber');
-  ok(shell.includes("--border:#E7DFD1"), 'and one border colour');
+  ok(allCss.includes("--steel:#1E2D4A"), 'the legacy names point at the Foundations values');
+  ok(allCss.includes("--amber:#C9973A"), 'including the amber');
+  ok(allCss.includes("--border:#E7DFD1"), 'and one border colour');
 
   // Radii: 8 (inputs, chips, buttons), 9 (nav rows, search), 11–12 (cards),
   // 999 (pills, toggles). Anything else is somebody eyeballing it.
@@ -308,10 +313,11 @@ group('one palette');
   // for "needs attention" — a focused field is not a problem.
   ok(shell.includes('rgba(46,126,166,.15)'), 'the focus ring is blue, not amber');
 
-  // One :root in the admin shell. The gym module has a second, and that one is
-  // deliberate — see the note on it: the renter portal is a standalone document
-  // with no shell CSS, so its tokens are the only ones it has.
-  eq(shell.split(':root{').length - 1, 1, 'the shell declares exactly one :root');
+  // Exactly one :root in the admin shell — the legacy names are folded into
+  // ADMIN_UI_CSS's block rather than declared in a second one. The gym module
+  // has its own, and that one is deliberate: the renter portal is a standalone
+  // document with no shell CSS, so its tokens are the only ones it has.
+  eq(allCss.split(':root{').length - 1, 1, 'the shell declares exactly one :root');
 }
 
 
@@ -332,8 +338,50 @@ group('login and the account screens');
   ok(shell.includes('.login-title{font:500 25px/1.2 var(--serif);color:#1E2D4A;'), 'the title is Lora 25 navy');
 
   // The eyebrow is the same on all four screens. It was the old amber.
-  const eyebrows = shell.split("letter-spacing:.16em;text-transform:uppercase;color:#C9973A").length - 1;
+  // Matched on the account screens' own markup — the header nav's brand uses
+  // the same type treatment, and counting both would make this assertion pass
+  // for the wrong reason.
+  const eyebrows = shell.split("letter-spacing:.16em;text-transform:uppercase;color:#C9973A;margin-bottom:8px;").length - 1;
   eq(eyebrows, 4, 'all four account screens carry the gold eyebrow at .16em');
+}
+
+
+// ── the shell ────────────────────────────────────────────────────────────────
+// Spec: screens/00b-header-nav.html, revised. The sidebar STAYS — the build's
+// mistake was hiding it behind a hamburger, not having it. What this asserts is
+// that every way of hiding it is gone, and that the context bar above the
+// content reports rather than navigates.
+group('the shell');
+{
+  const shell = readFileSync(new URL('./helpers.js', import.meta.url), 'utf8');
+
+  // The sidebar, as Foundations specifies it.
+  ok(shell.includes('.sidebar{position:fixed;top:0;left:0;width:228px'), 'the sidebar is 228px and on screen');
+  ok(shell.includes('body{padding-left:228px;}'), 'and the content sits beside it, not under it');
+  ok(!shell.includes('.wrap{max-width:860px'), 'the narrow content column is gone');
+
+  // Every way of hiding it, gone — except the one the spec allows.
+  const dflt = shell.slice(shell.indexOf('.sidebar{'));
+  ok(!dflt.slice(0, dflt.indexOf('}')).includes('translateX'), 'no off-canvas default');
+  ok(shell.includes('.sidebar-backdrop{display:none;}'), 'no backdrop unless the slide-over is on');
+  ok(shell.includes('.sidebar-toggle{display:none;'), 'and no hamburger on a desktop');
+  ok(shell.includes('@media (max-width:900px)'), 'below 900px it may slide over — the only responsive rule');
+
+  // The context bar. Same navy as the sidebar, so the two read as one shell.
+  ok(shell.includes('.tlc-ctx{display:flex;align-items:center;gap:14px;height:46px;padding:0 26px;background:#1E2D4A'),
+    'the context bar is 46px of the same navy');
+  ok(shell.includes('.tlc-ctx-group{font:500 12.5px/1 var(--tlc-sans);color:#8598B0'), 'the group crumb is quiet');
+  ok(shell.includes('.tlc-ctx-section{font:600 13.5px/1 var(--tlc-sans);color:#FFFFFF'), 'the section crumb leads');
+  ok(shell.includes('.tlc-ctx-sep{font:400 12.5px/1 var(--tlc-sans);color:#4E6180'), 'with the separator between them');
+
+  // ⚠ It reports; it does not navigate. The spec's own "get this wrong and it
+  // shows" leads with putting tabs or chips in here.
+  ok(!shell.includes('tlc-ctx-tab'), 'there are no tabs in the context bar');
+  ok(!shell.includes('tlc-nav-chip'), 'and no group chips anywhere');
+
+  // Sign out lives in the sidebar foot, in gold, and is not duplicated.
+  ok(shell.includes('.sidebar-signout{color:var(--tlc-gold) !important;}'), 'Sign out is gold in the sidebar foot');
+  ok(!shell.includes('util-bar-signout'), 'and the white util bar that held it is gone');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

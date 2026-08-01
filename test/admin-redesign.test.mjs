@@ -314,7 +314,6 @@ group('badges match the worklist');
   has(body, 'Southside Volleyball', 'and names who is waiting');
   has(body, '<span class="sidebar-badge"', 'the sidebar carries a badge');
   // The badge and the worklist read the same query, so the number must match.
-  // Match the gym badge by its own title — the sidebar carries several.
   const badge = body.match(/class="sidebar-badge" title="(\d+) gym request[^"]*">(\d+)</);
   eq(badge && badge[2], '3', 'and it is the same number the worklist shows');
 }
@@ -1111,7 +1110,10 @@ group('⌘K searches every section, within permissions');
 
   const shell = await (await call(env, '/dashboard', { cookie })).text();
   has(shell, 'tlc-k-input', 'the palette is in the shared shell, so it is on every screen');
-  has(shell, '⌘K searches every section', 'and the sidebar says so');
+  has(shell, '⌘K searches every section', 'the sidebar foot explains the shortcut');
+  // And the context bar carries the chip, so it is reachable without scrolling
+  // a column to the bottom.
+  has(shell, 'class="tlc-ctx-k" id="tlc-k-open-2">⌘K<', 'and the context bar offers it');
 
   const res = await call(env, '/api/search?q=egg', { cookie });
   eq(res.status, 200, 'search responds');
@@ -1279,7 +1281,7 @@ group('payroll lives in the shared shell now');
   const body = await (await call(env, '/payroll', { cookie })).text();
 
   // PY-3: it used to be a standalone document whose only way out was a Sign
-  // Out button. It is a fragment inside sidebarShell() now.
+  // Out button. It is a fragment inside the shared shell now.
   has(body, 'class="sidebar"', 'it has the admin sidebar');
   has(body, 'tlc-k-open', 'and the ⌘K palette, like every other screen');
   has(body, 'Enter hours and exceptions', 'the purpose line is the design’s');
@@ -1317,20 +1319,64 @@ group('payroll access is gated on its own permission');
   eq((await call(env, '/sb/rest/v1/church_staff', { cookie })).status, 401, 'nor read Supabase through the proxy');
 }
 
-group('the sidebar is the design’s five groups');
+group('the shell is the sidebar plus a context bar');
 {
   const { db, env } = await boot();
   const { cookie } = signIn(db);
   const body = await (await call(env, '/dashboard', { cookie })).text();
+
+  // ⚠ The sidebar STAYS. The revised spec is explicit that the build's mistake
+  // was never the sidebar — it was hiding it behind a hamburger. Twenty-one
+  // sections in five groups is more than a horizontal bar holds honestly.
+  has(body, 'class="sidebar"', 'the sidebar is there');
   for (const g of ['Website', 'Email', 'Money &amp; Building', 'People &amp; Access', 'Setup']) {
-    has(body, `>${g}<`, `${g} is a group`);
+    has(body, `>${g}</div>`, `${g} is a group`);
   }
-  // Redirects and Settings are separate sections in the design, and they are
-  // separate addresses here — /settings used to render the redirects screen.
   has(body, 'href="/redirects"', 'Redirects has its own address');
   has(body, 'href="/settings"', 'and so does Settings');
-  // The page-producing sections nest under Pages rather than sitting beside it.
-  has(body, 'sidebar-item-child', 'Ministries and the rest are nested');
+  has(body, 'sidebar-item-child', 'the five children of Pages keep their elbow');
+
+  // What IS gone: every way of hiding it. No off-canvas default, no backdrop
+  // shown, no toggle script — the hamburger survives only below 900px, where a
+  // phone genuinely cannot spare 228px.
+  const shellCss = await (await call(env, '/dashboard', { cookie })).text();
+  // The DEFAULT rule must not translate it away. The one inside the 900px
+  // media query is the legitimate slide-over, so match the first occurrence
+  // only — asserting on the whole stylesheet would fail on the rule the spec
+  // actually asks for.
+  const firstSidebarRule = shellCss.slice(shellCss.indexOf('.sidebar{'));
+  ok(!firstSidebarRule.slice(0, firstSidebarRule.indexOf('}')).includes('translateX'),
+    'the sidebar does not start off-canvas');
+  ok(shellCss.includes('body{padding-left:228px;}'), 'and the content sits beside it, not under it');
+  ok(shellCss.includes('@media (max-width:900px)'), 'the slide-over is the one responsive rule');
+
+  // The context bar reports; it does not navigate.
+  has(body, 'class="tlc-ctx"', 'the context bar is above the content');
+  has(body, 'class="tlc-ctx-group">Admin<', 'Dashboard’s group reads Admin');
+  has(body, 'class="tlc-ctx-section">Dashboard<', 'with the section beside it');
+  has(body, 'View site ↗', 'and the two global actions');
+  has(body, 'Connect ↗', 'both of them');
+  ok(!body.includes('tlc-ctx-tab'), 'no tabs in it');
+  ok(!body.includes('class="tlc-nav-chip'), 'and no group chips — the sidebar navigates');
+
+  // Sign out is in the sidebar foot, and NOT duplicated in the bar.
+  has(body, 'class="sidebar-signout"', 'Sign out is in the sidebar foot');
+  eq((body.match(/Sign out/g) || []).length, 1, 'and appears exactly once in the shell');
+
+  // The trail follows the screen.
+  const gym = await (await call(env, '/gym-rentals', { cookie })).text();
+  has(gym, 'class="tlc-ctx-group">Money &amp; Building<', 'a gym screen names its group');
+  has(gym, 'class="tlc-ctx-section">Gym rentals<', 'and its section');
+}
+
+group('the sidebar hides whole groups, not rows');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ['ministries_edit']);
+  const body = await (await call(env, '/ministries', { cookie })).text();
+  has(body, '>Website</div>', 'the group they can reach is there');
+  ok(!body.includes('>Money &amp; Building</div>'), 'a group they cannot reach is not rendered');
+  ok(!body.includes('href="/payroll"'), 'and nothing inside one leaks as a link');
 }
 
 group('the per-screen reference files');
@@ -1475,6 +1521,51 @@ group('a newsletter can carry a fourth and fifth note');
   }), env, ctx);
   const nastyHtml = await nasty.text();
   ok(!nastyHtml.includes('<script>alert(1)'), 'a heading cannot smuggle markup into the email');
+}
+
+group('the gym sub-screens use the shared pattern');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const now = new Date().toISOString();
+  db.prepare("INSERT INTO gym_groups (id,name,contact,email,active,access_token) VALUES (1,'Southside Volleyball','Ann','a@b.co',1,'tok')").run();
+  db.prepare("INSERT INTO gym_groups (id,name,contact,email,active) VALUES (2,'No Link Club','Bo','b@c.co',1)").run();
+  db.prepare("INSERT INTO gym_invoices (group_id,invoice_date,period_start,period_end,total_hours,rate,total_amount,status,created_at) VALUES (1,?,?,?,26,25,650,'unpaid',?)")
+    .run('2026-08-01', '2026-08-01', '2026-08-31', now);
+
+  const groups = await (await call(env, '/gym-rentals/groups', { cookie })).text();
+  has(groups, 'tlc-section', 'Rental groups is a list section now');
+  has(groups, 'Southside Volleyball', 'with the groups in it');
+  has(groups, 'Every group that rents the gym', 'and the purpose line from sections.js');
+  // A group with no token cannot be booked with — the whole mechanic is a
+  // private link rather than an account.
+  has(groups, 'has no booking link', 'a group with no link is flagged');
+
+  const inv = await (await call(env, '/gym-rentals/invoices', { cookie })).text();
+  has(inv, '$650.00', 'Invoices shows the amount');
+  has(inv, 'Unpaid', 'and whether it is paid');
+  has(inv, 'hrs at $25.00/hr', 'and the rate it billed at');
+  ok(!inv.includes('class="ni-row"'), 'neither screen is hand-built rows any more');
+
+  db.prepare("INSERT INTO gym_bookings (group_id,booking_date,start_time,end_time,status,created_at) VALUES (1,'2099-01-14','18:00','20:00','hold',?)").run(now);
+  const bookings = await (await call(env, '/gym-rentals/bookings', { cookie })).text();
+  has(bookings, 'Every hold and confirmed booking', 'All bookings is a list section');
+  has(bookings, 'Southside Volleyball', 'with the bookings in it');
+  ok(!bookings.includes('<details open'), 'and not two accordions grouped by organisation');
+
+  db.prepare("INSERT INTO gym_recurrences (group_id,day_of_week,start_time,end_time,start_date,end_date,status,created_at) VALUES (1,2,'18:00','20:00','2099-01-01','2099-03-01','pending_review',?)").run(now);
+  const rec = await (await call(env, '/gym-rentals/recurring', { cookie })).text();
+  has(rec, 'Needs review', 'Recurring requests flags what is waiting');
+  has(rec, 'Nothing happens on this request until somebody reviews it',
+    'and says so, because these are the only rows that never resolve themselves');
+
+  // ⚠ Blocked dates keeps its CALENDAR. You block "the week of the Christmas
+  // Market" by seeing the month; a table of dates would be a worse interface
+  // than the one it replaced. It wears the shared header and note instead.
+  const blocked = await (await call(env, '/gym-rentals/blocked', { cookie })).text();
+  has(blocked, 'cal-grid', 'Blocked dates is still a calendar');
+  has(blocked, 'Days the gym cannot be booked', 'with the shared purpose line');
+  has(blocked, 'does not cancel bookings already confirmed', 'and the rule it enforces');
 }
 
 group('the taps are counted');

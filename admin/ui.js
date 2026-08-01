@@ -586,7 +586,14 @@ export function panel(titleText, bodyHtml, { right = '', pad = true, id = '' } =
 // pre-redesign styles without fighting them while sections are converted one
 // at a time.
 export const ADMIN_UI_CSS = `
-:root{
+/* The pre-redesign variable names, folded in here so the admin shell declares
+   exactly ONE :root. They are kept because ~150 call sites across the worker
+   and the gym module use them; what changed is what they point at. Not a
+   second palette — the bridge to the --tlc-* tokens below. */
+:root{--steel:#1E2D4A;--amber:#C9973A;--sage:#4A5E3A;--warm:#FAF7F1;--linen:#F4EFE5;--mist:#E7EEF7;
+  --border:#E7DFD1;--charcoal:#1A1A2A;--gray:#6A6858;--white:#fff;
+  --sans:'Source Sans 3',Arial,sans-serif;--serif:'Lora',Georgia,serif;
+
   --tlc-sidebar:${PALETTE.sidebarNavy};--tlc-nav-raised:${PALETTE.navyRaised};
   --tlc-navy:${PALETTE.navy};--tlc-ink:${PALETTE.navyInk};--tlc-text:${PALETTE.ink};
   --tlc-gold:${PALETTE.gold};--tlc-gold-label:${PALETTE.goldLabel};--tlc-gold-bright:${PALETTE.goldBright};
@@ -1126,8 +1133,13 @@ export const CMDK_JS = `(function(){
   });
   scrim.addEventListener('click', close);
   input.addEventListener('input', function(){ clearTimeout(timer); timer = setTimeout(search, 160); });
-  var trigger = document.getElementById('tlc-k-open');
-  if (trigger) trigger.addEventListener('click', function(e){ e.preventDefault(); open(); });
+  // Two triggers: the line in the sidebar foot and the chip in the context bar.
+  // The chip is the one somebody actually sees, but the foot line is where the
+  // shortcut is explained, so both open it rather than one being decorative.
+  ['tlc-k-open', 'tlc-k-open-2'].forEach(function (id) {
+    var trigger = document.getElementById(id);
+    if (trigger) trigger.addEventListener('click', function (e) { e.preventDefault(); open(); });
+  });
 })();`;
 
 export const CMDK_HTML = `<div class="tlc-k-scrim" id="tlc-k-scrim"></div>

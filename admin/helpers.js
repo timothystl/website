@@ -5,7 +5,7 @@ import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, TOGGLE_WORD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 
-export const VERSION = 'v3.12.1'; // minor: one palette, and eight of the eleven design fix-list tasks
+export const VERSION = 'v4.0.0'; // major: the shell — sidebar always visible, plus a context bar above the content
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
@@ -25,20 +25,12 @@ export function html(body, title = 'TLC Admin', extraHead = '') {
 <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600&family=Source+Sans+3:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 ${extraHead}
 <style>
-/* ── ONE PALETTE ──────────────────────────────────────────────────────────
-   These names are the pre-redesign ones and are kept, because ~150 call sites
-   across the worker and the gym module use them. What changed is what they
-   point at: the Foundations values, so anything not explicitly restyled still
-   comes out in the right scheme and the right typefaces rather than the old
-   teal-and-orange one.
-
-   The new --tlc-* tokens live in ADMIN_UI_CSS below. These are the bridge —
-   not a second palette. */
-:root{--steel:#1E2D4A;--amber:#C9973A;--sage:#4A5E3A;--warm:#FAF7F1;--linen:#F4EFE5;--mist:#E7EEF7;--border:#E7DFD1;--charcoal:#1A1A2A;--gray:#6A6858;--white:#fff;--sans:'Source Sans 3',Arial,sans-serif;--serif:'Lora',Georgia,serif;}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:var(--sans);background:var(--warm);color:var(--charcoal);min-height:100vh;}
-.wrap{max-width:860px;margin-left:0;padding:40px 28px;}
-.wrap-wide{max-width:none;margin-left:0;padding:24px 32px;}
+/* Full width under the header — a table constrained to 860px in a 1600px
+   window was a symptom of the sidebar, not a choice. */
+.wrap{max-width:none;margin-left:0;padding:20px 26px;}
+.wrap-wide{max-width:none;margin-left:0;padding:20px 26px;}
 .page-title{font:500 25px/1.15 var(--serif);color:#1E2D4A;margin-bottom:4px;}
 .page-sub{font:400 13.5px/1.5 var(--sans);color:#6A6858;margin-bottom:24px;max-width:56em;text-wrap:pretty;}
 .card{background:#FFFDF9;border:1px solid #E7DFD1;border-radius:12px;padding:18px 20px;margin-bottom:16px;}
@@ -127,38 +119,79 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
 .audit-entity{color:var(--gray);}
 .pending-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#C9973A;margin-left:6px;vertical-align:middle;}
 
-/* ── SIDEBAR SHELL ─────────────────────────────────────────── */
-.sidebar{position:fixed;top:0;left:0;width:236px;height:100vh;background:var(--steel);display:flex;flex-direction:column;overflow-y:auto;z-index:100;transform:translateX(-100%);transition:transform .2s ease;}
-.sidebar.is-open{transform:translateX(0);box-shadow:2px 0 16px rgba(0,0,0,.25);}
+/* ── THE SHELL: SIDEBAR + CONTEXT BAR ──────────────────────
+   Spec: screens/00b-header-nav.html (revised).
+
+   ⚠ The sidebar STAYS. Twenty-one sections in five groups is more than a
+   horizontal bar can hold honestly, and a list you read top to bottom beats
+   chips you have to scroll. What the build got wrong was never the sidebar —
+   it was hiding it behind a hamburger. So there is no translateX(-100%), no
+   .is-open, no backdrop and no toggle: it is simply on screen, and the content
+   sits BESIDE it rather than under it.
+
+   Above the content, a slim context bar — the one good idea from the editor's
+   top bar, kept and cut down. It reports; it does not navigate. */
+body{padding-left:228px;}
+.sidebar{position:fixed;top:0;left:0;width:228px;height:100vh;background:var(--steel);
+  display:flex;flex-direction:column;overflow-y:auto;z-index:100;}
 .sidebar-brand{padding:20px 20px 18px;border-bottom:1px solid rgba(255,255,255,.12);margin-bottom:8px;flex-shrink:0;}
 .sidebar-brand-name{font-family:var(--sans);font-size:14px;font-weight:800;color:#fff;}
 .sidebar-brand-sub{font-family:var(--sans);font-size:11px;color:var(--amber);font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-top:2px;}
 .sidebar-user{padding:0 20px 8px;font-family:var(--sans);font-size:11px;color:rgba(255,255,255,.55);}
 .sidebar-group{padding:8px 0 12px;}
 .sidebar-group-label{font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.4);padding:4px 20px 6px 23px;}
-.sidebar-item{display:flex;align-items:center;gap:10px;padding:9px 20px 9px 23px;color:rgba(255,255,255,.78);font-size:13px;font-weight:600;text-decoration:none;border-left:3px solid transparent;}
+.sidebar-item{display:flex;align-items:center;gap:10px;padding:9px 20px 9px 23px;color:rgba(255,255,255,.78);font-size:13px;font-weight:600;text-decoration:none;}
 .sidebar-item:hover{color:#fff;background:rgba(255,255,255,.06);}
 .sidebar-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.35);flex-shrink:0;}
-.sidebar-item-active{background:rgba(212,146,42,.16);border-left-color:var(--amber);color:#fff;font-weight:700;}
-.sidebar-item-active .sidebar-dot{background:var(--amber);}
 .sidebar-footer{margin-top:auto;padding:14px 20px 18px;border-top:1px solid rgba(255,255,255,.12);display:flex;flex-direction:column;gap:8px;flex-shrink:0;}
 .sidebar-footer a{font-family:var(--sans);color:rgba(255,255,255,.6);font-size:12px;font-weight:600;text-decoration:none;}
 .sidebar-footer a:hover{color:#fff;}
-.sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:99;}
-.sidebar-backdrop.is-open{display:block;}
-.util-bar{margin-left:0;display:flex;align-items:center;gap:16px;padding:10px 28px;border-bottom:1px solid var(--border);background:#fff;min-height:20px;}
-.util-bar-links{flex:1;display:flex;gap:16px;flex-wrap:wrap;}
-.util-bar-links a{font-family:var(--sans);font-size:12px;font-weight:700;color:var(--steel);text-decoration:none;}
-.util-bar-links a:hover{text-decoration:underline;}
-.util-bar-signout{font-family:var(--sans);font-size:12px;font-weight:700;color:var(--gray);text-decoration:none;}
-.util-bar-signout:hover{color:var(--charcoal);}
-.sidebar-toggle{display:inline-flex;align-items:center;background:transparent;border:0;padding:6px;margin:0;cursor:pointer;color:var(--steel);flex-shrink:0;}
-.sidebar-toggle svg{display:block;width:22px;height:22px;}
-@media (max-width:880px){
-  .util-bar{padding:10px 16px;}
-  .wrap{padding:24px 16px;}
-  .wrap-wide{padding:20px 16px;}
+
+/* ── THE CONTEXT BAR ───────────────────────────────────────
+   46px, the same navy as the sidebar so the two read as one shell, and it sits
+   above the CONTENT COLUMN only — it starts where the sidebar ends.
+
+   ⚠ It is not navigation. No tabs, no chips, no menus, and the crumbs are not
+   links. Its whole job is to say where you are and to keep the two things you
+   reach for from any screen one click away. */
+.tlc-ctx{display:flex;align-items:center;gap:14px;height:46px;padding:0 26px;background:#1E2D4A;
+  color:#EDF2F7;position:sticky;top:0;z-index:90;}
+.tlc-ctx-trail{flex:1;min-width:0;display:flex;align-items:center;gap:8px;overflow:hidden;}
+.tlc-ctx-group{font:500 12.5px/1 var(--tlc-sans);color:#8598B0;white-space:nowrap;}
+.tlc-ctx-sep{font:400 12.5px/1 var(--tlc-sans);color:#4E6180;}
+.tlc-ctx-section{font:600 13.5px/1 var(--tlc-sans);color:#FFFFFF;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tlc-ctx-wait{flex:none;padding:1px 9px;border-radius:999px;background:rgba(201,151,58,.22);color:#E8C070;
+  font:700 10.5px/1.7 var(--tlc-sans);white-space:nowrap;}
+.tlc-ctx-right{flex:none;display:flex;align-items:center;gap:12px;white-space:nowrap;}
+.tlc-ctx-right a{font:600 12.5px/1 var(--tlc-sans);color:#AFC0D2;text-decoration:none;white-space:nowrap;}
+.tlc-ctx-right a:hover{color:#FFFFFF;}
+.tlc-ctx-k{padding:6px 11px;border:1px solid rgba(196,206,223,.35);border-radius:8px;background:transparent;
+  font:500 12.5px/1 var(--tlc-sans);color:#AFC0D2;cursor:pointer;white-space:nowrap;}
+.tlc-ctx-k:hover{color:#FFFFFF;border-color:rgba(196,206,223,.6);}
+/* The per-screen back-links. They go in the content area, above the h1 — not
+   in the context bar, which reports rather than navigates. */
+.tlc-nav-back{padding:16px 26px 0;display:flex;gap:16px;flex-wrap:wrap;}
+.tlc-nav-back a{font:600 13px/1 var(--tlc-sans);color:#2E7EA6;text-decoration:none;}
+.tlc-nav-back a:hover{text-decoration:underline;}
+
+/* The ONLY responsive rule for the sidebar: below 900px a phone genuinely
+   cannot spare 228px, so it becomes a slide-over. On every laptop and desktop
+   it is fixed and visible. */
+@media (max-width:900px){
+  body{padding-left:0;}
+  .sidebar{transform:translateX(-100%);transition:transform .2s ease;}
+  .sidebar.is-open{transform:translateX(0);box-shadow:2px 0 16px rgba(0,0,0,.25);}
+  .sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:99;}
+  .sidebar-backdrop.is-open{display:block;}
+  .sidebar-toggle{display:inline-flex;}
+  .tlc-ctx{padding:0 16px;}
+  .wrap,.wrap-wide{padding:20px 16px;}
+  .tlc-nav-back{padding:14px 16px 0;}
 }
+.sidebar-backdrop{display:none;}
+.sidebar-toggle{display:none;align-items:center;background:transparent;border:0;padding:6px;margin:0 0 0 -6px;
+  cursor:pointer;color:#AFC0D2;flex:none;}
+.sidebar-toggle svg{display:block;width:22px;height:22px;}
 /* ── DASHBOARD ─────────────────────────────────────────────── */
 .dash-header{font-family:var(--serif);font-size:24px;color:var(--steel);}
 .dash-sub{font-family:var(--sans);font-size:13px;color:var(--gray);margin-top:2px;}
@@ -220,6 +253,7 @@ ${CMDK_CSS}
 .sidebar-footer{border-top:1px solid rgba(237,242,247,.12);}
 .sidebar-footer a{font-size:11.5px;color:#8397AF;}
 .sidebar-footer a:last-child{font-size:12.5px;color:var(--tlc-gold);}
+.sidebar-signout{color:var(--tlc-gold) !important;}
 </style>
 </head>
 <body>${body}
@@ -260,6 +294,15 @@ ${CMDK_JS}
   });
 }
 
+// ── SIDEBAR SHELL ─────────────────────────────────────────────
+// Left sidebar navigation (grouped by task area) + a slim utility bar for
+// per-page back-links / external-view links + sign out. Replaces the old
+// horizontal topbarHtml() tab strip.
+// pendingCount: number of newsletters awaiting approval (shown as a dot on the News & Events item)
+// badges: counts of things needing a human — the same numbers the Dashboard
+// shows, so the sidebar and the worklist can never disagree. Pass
+// { gym, pages, newsletter }; a bare number is read as the newsletter count so
+// the pre-redesign call sites keep working.
 // ── SIDEBAR SHELL ─────────────────────────────────────────────
 // Left sidebar navigation (grouped by task area) + a slim utility bar for
 // per-page back-links / external-view links + sign out. Replaces the old
@@ -357,23 +400,76 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}) {
   ${setupItems ? `<div class="sidebar-group"><div class="sidebar-group-label">Setup</div>${setupItems}</div>` : ''}
   <div class="sidebar-footer">
     <a href="#" id="tlc-k-open">⌘K searches every section</a>
-    <a href="https://connect.timothystl.org" target="_blank">Connect ↗</a>
+    <a href="/logout" class="sidebar-signout">Sign out</a>
   </div>
 </aside>
 ${CMDK_HTML}
-<div class="util-bar">
-  <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
-  </button>
-  <div class="util-bar-links">${extraLinks}</div>
-  <a href="/logout" class="util-bar-signout">Sign out</a>
-</div>
-<script>(function(){
-var sb=document.getElementById('sidebar'),bd=document.getElementById('sidebar-backdrop'),btn=document.getElementById('sidebar-toggle');
-function close(){sb.classList.remove('is-open');bd.classList.remove('is-open');btn&&btn.setAttribute('aria-expanded','false');}
-if(btn&&sb&&bd){btn.addEventListener('click',function(){var open=sb.classList.toggle('is-open');bd.classList.toggle('is-open',open);btn.setAttribute('aria-expanded',open?'true':'false');});bd.addEventListener('click',close);}
-})();</script>`;
+${contextBar(activeTab, b)}
+${extraLinks ? `<div class="tlc-nav-back">${extraLinks}</div>` : ''}`;
 }
+
+// ── THE CONTEXT BAR ──────────────────────────────────────────
+// Spec: screens/00b-header-nav.html. 46px, the same navy as the sidebar so the
+// two read as one shell, above the CONTENT COLUMN only.
+//
+// ⚠ It reports; it does not navigate. No tabs, no chips, no menus, and the
+// crumbs are not links — the spec's "get this wrong and it shows" leads with
+// putting section tabs or group chips in here. Sign out is NOT duplicated: it
+// lives in the sidebar foot, and having it in both would be two answers to one
+// question.
+export function contextBar(activeTab, badges = {}) {
+  const t = TRAIL[activeTab] || { group: 'Admin', section: 'Admin' };
+  const waiting = t.waits ? Number(badges[t.waits] || 0) : 0;
+  return `<div class="tlc-ctx">
+    <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+    </button>
+    <div class="tlc-ctx-trail">
+      <span class="tlc-ctx-group">${escapeHtml(t.group)}</span>
+      <span class="tlc-ctx-sep" aria-hidden="true">/</span>
+      <span class="tlc-ctx-section">${escapeHtml(t.section)}</span>
+      ${waiting ? `<span class="tlc-ctx-wait">${waiting} waiting</span>` : ''}
+    </div>
+    <div class="tlc-ctx-right">
+      <button type="button" class="tlc-ctx-k" id="tlc-k-open-2">⌘K</button>
+      <a href="https://timothystl.org" target="_blank" rel="noopener">View site ↗</a>
+      <a href="https://connect.timothystl.org" target="_blank" rel="noopener">Connect ↗</a>
+    </div>
+  </div>`;
+}
+
+// Where each screen sits, for the trail. `waits` names the badge whose count
+// becomes the amber "N waiting" pill beside the section — the same numbers the
+// sidebar badges and the dashboard worklist read, so they cannot disagree.
+//
+// Dashboard's group reads "Admin", as the spec says: it belongs to no group.
+const TRAIL = {
+  dashboard: { group: 'Admin', section: 'Dashboard' },
+  pages: { group: 'Website', section: 'Pages', waits: 'pages' },
+  ministries: { group: 'Website', section: 'Ministry pages' },
+  partners: { group: 'Website', section: 'Partner ministries' },
+  news: { group: 'Website', section: 'News & Events' },
+  sermons: { group: 'Website', section: 'Sermons' },
+  'christian-education': { group: 'Website', section: 'Christian Education' },
+  menu: { group: 'Website', section: 'Menu' },
+  notices: { group: 'Website', section: 'Notices' },
+  'link-cards': { group: 'Website', section: 'Taps & links' },
+  redirects: { group: 'Website', section: 'Redirects' },
+  newsletter: { group: 'Email', section: 'Newsletter', waits: 'newsletter' },
+  subscribers: { group: 'Email', section: 'Subscribers' },
+  filtered: { group: 'Email', section: 'Filtered mail' },
+  giving: { group: 'Money & Building', section: 'Giving' },
+  gym: { group: 'Money & Building', section: 'Gym rentals', waits: 'gym' },
+  payroll: { group: 'Money & Building', section: 'Payroll' },
+  staff: { group: 'People & Access', section: 'Staff directory' },
+  users: { group: 'People & Access', section: 'Users' },
+  audit: { group: 'People & Access', section: 'Audit log' },
+  media: { group: 'Setup', section: 'Media' },
+  settings: { group: 'Setup', section: 'Settings' },
+  voters: { group: 'Website', section: 'Voters page' },
+  scheduler: { group: 'Admin', section: 'Schedule builder' },
+};
+
 
 // ── LOGIN PAGE ───────────────────────────────────────────────
 export function loginPage(error = '', success = '') {

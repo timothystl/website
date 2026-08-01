@@ -87,6 +87,46 @@ export const SECTIONS = {
     label: 'Gym Rentals', glyph: '⛹', title: 'Gym rentals', purpose: 'Groups book through their own portal link. Holds lapse in 48 hours; recurring requests wait for you; invoices bill at the hourly rate from settings.',
     action: '+ Add booking', variants: [['a', 'Calendar first'], ['b', 'Queue first']]
   },
+  // ── GYM SUB-SCREENS ──
+  // No screen file each — 16-gym.html specifies the top-level layouts, and
+  // Task 4 asks for these to use the shared pattern rather than staying
+  // hand-built. Purposes say what the screen is for in plain English, which is
+  // the rule for a list with no spec of its own.
+  gymGroups: {
+    label: 'Rental groups', glyph: '⛹', title: 'Rental groups',
+    purpose: 'Every group that rents the gym. Each has its own booking-portal link — no login, just the address.',
+    action: '+ Add group', search: 'Search groups', filters: ['All', 'Active', 'Inactive'],
+    columns: [['Group', '2.2fr'], ['Contact', '2fr'], ['Holds', '.8fr'], ['Status', '1fr']],
+    note: 'Deactivating a group stops its portal link working without deleting the bookings it already has.'
+  },
+  gymBookings: {
+    label: 'All bookings', glyph: '▤', title: 'All bookings',
+    purpose: 'Every hold and confirmed booking, newest first — the long view behind the queue on the main screen.',
+    search: 'Search bookings', filters: ['All', 'Holds', 'Confirmed', 'Released'],
+    columns: [['Group', '1.8fr'], ['When', '1.8fr'], ['Booked', '1.2fr'], ['Status', '1.2fr']],
+    note: 'Confirming and releasing happen on the Gym Rentals screen, so there is one place a booking changes.'
+  },
+  gymInvoices: {
+    label: 'Invoices', glyph: '≡', title: 'Invoices',
+    purpose: 'One invoice per group per confirmation, with what it billed at. Marking one paid is a record, not a payment.',
+    search: 'Search invoices', filters: ['All', 'Unpaid', 'Paid'],
+    columns: [['Group', '1.9fr'], ['Period', '1.6fr'], ['Amount', '1fr'], ['Status', '1fr']],
+    note: 'Invoices bill at the hourly rate from settings at the moment they are generated — changing the rate later does not rewrite an invoice already sent.'
+  },
+  gymRecurring: {
+    label: 'Recurring requests', glyph: '↻', title: 'Recurring requests',
+    purpose: 'A group asking for the same slot every week. These wait for a person — nothing happens until somebody reviews one.',
+    search: 'Search requests', filters: ['All', 'Needs review', 'Approved', 'Declined'],
+    columns: [['Group', '2fr'], ['Pattern', '2.2fr'], ['Dates', '1.4fr'], ['Status', '1.2fr']],
+    note: 'Conflicts are flagged, never auto-resolved — approving one generates every date at once, so a clash is worth seeing first.'
+  },
+  gymBlocked: {
+    label: 'Blocked dates', glyph: '⊘', title: 'Blocked dates',
+    purpose: 'Days the gym cannot be booked — a market, a funeral, a floor refinish. Renters see them greyed out.',
+    action: '+ Block a date', search: 'Search blocked dates', filters: ['All', 'Upcoming', 'Past'],
+    columns: [['Date', '1.4fr'], ['Reason', '3fr'], ['', '1fr']],
+    note: 'Blocking a date does not cancel bookings already confirmed on it — those are flagged on the calendar instead, so somebody has to be told.'
+  },
   users: {
     label: 'Users', glyph: '⚿', title: 'Users', purpose: 'Who can get into this admin, and exactly what each of them can reach.',
     action: '+ New user', search: 'Search users', filters: ['All', 'Active', 'Disabled'],
