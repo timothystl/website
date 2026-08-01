@@ -1040,11 +1040,8 @@ these are the gaps I have not closed:
 | Screen | What is missing |
 |---|---|
 | 02 Pages | `Links out` and `Clash` status pills; the drawer reached by a `Details` action rather than by the row |
-| 05 News | pinned rows sorting to the top with a pin marker before the title |
-| 06 Sermons | the `YouTube` / `Audio` / `Text only` media pill |
-| 10 Taps | the four tap cards above the toolbar, with taps-this-month and card count |
+| 10 Taps | *taps this month* on each card — needs tap counting built first (see below); the cards themselves are done |
 | 16 Gym | "Calendar first" as the genuine default layout, with the queue beside the month rather than below it |
-| 20 Audit | the drawer, read-only, with sand-filled fields |
 | 22 Editor | the info-card slot on banner blocks, and the starter picker on New page |
 
 None of those are blocked; they are simply not done yet.
@@ -1100,6 +1097,52 @@ The submit handler that waits for in-flight image uploads and strips leftover
 only in the pastor's-note copy but was wired to the whole form, so folding the
 builders together without it would have quietly shipped broken images in a
 sent newsletter.
+
+#### Per-screen, part two (v3.7.0, 2026-08-01)
+
+- **Sermons' media pill is the design's three words** — `YouTube` / `Audio` /
+  `Text only`. It said `No recording` in amber, which dressed a perfectly
+  normal state up as a fault: a sermon with no recording is a good text card on
+  the site, and adding a link later upgrades it with no other edit. `Text only`
+  is neutral-toned for that reason.
+- **A pinned news post carries its marker before the title.** The rows already
+  sorted pinned-first; the marker's job is to explain why a row is at the top,
+  not to help you find it, so it is small and sits where reading starts. The
+  old "Pinned to top" sub-line under the *date* answered a question nobody was
+  asking there.
+- **The newspaper emoji is gone.** "No emoji anywhere in the admin chrome" —
+  the fallback icon is a typographic glyph like every other one.
+- **The audit log has its read-only drawer.** `renderDrawer({ readOnly: true })`
+  is a real option now rather than a regex stripping the save button: no save,
+  no delete, and Cancel reads `Close`. Fields use `.tlc-static`, which is a
+  **sand fill** — the spec's "never grey out text to signal read-only", because
+  grey text reads as broken and a filled field reads as a fact.
+
+#### ⚠ The NFC taps did not answer (fixed v3.7.0, 2026-08-01)
+
+Found while adding the last piece of the Taps screen. The premise of the whole
+feature — the design states it as a rule — is:
+
+> The physical tag only ever holds its short address: `/tap1 … /tap4`.
+> Re-pointing happens here; nothing is reprogrammed.
+
+**That only holds if the short address resolves, and it did not.** `taps` is
+its own table; `/api/redirects`, which `site-worker.js` fetches and caches to
+resolve short links, read only the `redirects` table. So the admin let
+somebody re-point a tap and the tap 404'd — a tag printed and stuck to a pew
+rack would have gone nowhere.
+
+`/api/redirects` now merges both, with a hand-made redirect at the same path
+winning so the office can override one without touching the Taps screen. A tap
+switched off stops resolving rather than sending people somewhere stale.
+`test/admin-redesign.test.mjs` covers all four cases.
+
+**"Taps this month" is still not on the cards, and deliberately.** The `taps`
+table has a `scans` column that *nothing has ever written* — showing a count
+off it would be showing a zero, or worse, a number somebody trusted. Counting
+needs the resolution to happen somewhere that can record it, and today it
+happens from a cached list in `site-worker.js`. That is a real piece of work,
+not a display change.
 
 #### The handoff's own open questions (§8), as answered
 

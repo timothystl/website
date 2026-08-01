@@ -1902,8 +1902,25 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
 
     // ── PUBLIC: custom redirects API ── only active rows resolve for visitors
     if (path === '/api/redirects' && method === 'GET') {
-      const rows = await env.DB.prepare('SELECT path, url, label FROM redirects WHERE active != 0 ORDER BY path').all();
-      return new Response(JSON.stringify({ redirects: rows.results }), {
+      // ⚠ The four NFC taps are in their own table and are served from here
+      // too. They were not, which meant /tap1 … /tap4 — the addresses actually
+      // printed on the physical tags — resolved to nothing: the admin let
+      // somebody re-point a tap, and the tap 404'd. The whole premise of the
+      // feature is "the tag only ever holds its short address, so re-pointing
+      // is a click"; that only holds if the short address answers.
+      //
+      // A hand-made redirect at the same path wins, so the office can always
+      // override one without touching the taps screen.
+      const [rows, taps] = await Promise.all([
+        env.DB.prepare('SELECT path, url, label FROM redirects WHERE active != 0 ORDER BY path').all(),
+        env.DB.prepare('SELECT id, name, destination FROM taps WHERE active != 0 ORDER BY id').all().catch(() => ({ results: [] })),
+      ]);
+      const byPath = new Map();
+      for (const t of (taps.results || [])) {
+        if (t.destination) byPath.set(`tap${t.id}`, { path: `tap${t.id}`, url: t.destination, label: t.name || `Tap ${t.id}` });
+      }
+      for (const r of (rows.results || [])) byPath.set(r.path, r);
+      return new Response(JSON.stringify({ redirects: [...byPath.values()] }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
       });
     }
@@ -3303,11 +3320,16 @@ document.getElementById('upload-form').addEventListener('submit', async function
       // cope: a sermon with a link gets a play thumbnail, one without gets a
       // text-only card. Nothing here needs a setting — the row reports which
       // state each sermon is in so it is obvious what is missing.
+      // The design's three words: YouTube / Audio / Text only. "Text only" is
+      // deliberately not a warning — a sermon with no recording is a perfectly
+      // good text card on the site, and adding a link later upgrades it with
+      // no other edit. Calling it "No recording" in amber made a normal state
+      // look like a fault.
       const mediaCell = (n) => {
         const kinds = [];
-        if (n.youtube_url) kinds.push('Video');
+        if (n.youtube_url) kinds.push('YouTube');
         if (n.audio_url) kinds.push('Audio');
-        return kinds.length ? statusPill('good', kinds.join(' + ')) : statusPill('warn', 'No recording');
+        return kinds.length ? statusPill('good', kinds.join(' + ')) : statusPill('plain', 'Text only');
       };
 
       const rows = [];
@@ -4888,13 +4910,18 @@ ${classesJs}
           filter: [state, item.value || ''].filter(Boolean),
           search: `${item.title} ${item.summary || ''} ${valueByKey(item.value)?.short || ''}`.toLowerCase(),
           cells: [
+            // The pin marker sits BEFORE the title, where the eye starts —
+            // the rows are already sorted pinned-first, so the marker's job is
+            // to explain why this row is up here, not to be found. No emoji in
+            // the admin chrome; the fallback is a typographic glyph like every
+            // other icon in the pattern.
             `<div class="tlc-primary">
-              <span class="tlc-primary-icon">${item.image_url ? `<img src="${escapeHtml(item.image_url)}" alt="">` : '📰'}</span>
+              <span class="tlc-primary-icon tlc-primary-icon--file">${item.image_url ? `<img src="${escapeHtml(item.image_url)}" alt="">` : '▤'}</span>
               <span class="tlc-primary-text">
-                <span class="tlc-primary-title">${escapeHtml(item.title)}${item.value ? ` ${valueChip(item.value)}` : ''}</span>
+                <span class="tlc-primary-title">${item.pinned ? '<span class="tlc-pin" title="Pinned to the top" aria-label="Pinned">▲</span>' : ''}${escapeHtml(item.title)}${item.value ? ` ${valueChip(item.value)}` : ''}</span>
                 <span class="tlc-primary-sub">${escapeHtml((item.summary || '').slice(0, 80))}</span>
               </span></div>`,
-            `${escapeHtml(item.publish_date || '—')}${item.pinned ? '<span class="tlc-primary-sub">Pinned to top</span>' : ''}`,
+            escapeHtml(item.publish_date || '—'),
             expires,
             status,
           ],
@@ -8210,6 +8237,7 @@ ${sidebarShell('users', currentUser)}
         const summary = diffSummary(row.before_state, row.after_state);
         const note = rollbackNote(row);
         return {
+          href: `/audit-log?entry=${row.id}`,
           filter: auditGroup(row),
           search: `${row.username || ''} ${row.action} ${row.entity_type} ${row.entity_label || ''} ${summary}`.toLowerCase(),
           cells: [
@@ -8235,6 +8263,27 @@ ${sidebarShell('users', currentUser)}
         };
       });
 
+      // The drawer, read-only end to end. The spec is explicit that it has no
+      // save and no delete, and that read-only fields are a sand FILL rather
+      // than greyed text — grey text reads as broken, a filled field reads as
+      // "this is a fact, not a question".
+      const entryId = url.searchParams.get('entry');
+      const entry = entryId ? rows.results.find((r) => String(r.id) === entryId) : null;
+      const auditDrawer = entry ? renderDrawer({
+        key: 'audit',
+        title: [entry.action === 'rollback' ? 'Rolled back' : cap(entry.action),
+          cap(String(entry.entity_type || '').replace(/_/g, ' ')), entry.entity_label].filter(Boolean).join(' · '),
+        sub: 'Audit entry · read-only',
+        action: '', cancelHref: '/audit-log', readOnly: true,
+        fields: [
+          { kind: 'static', label: 'What changed', html: escapeHtml(diffSummary(entry.before_state, entry.after_state) || 'No field-level record of this change') },
+          { kind: 'static', label: 'Who', value: entry.username || 'the system' },
+          { kind: 'static', label: 'When', value: when(entry.created_at) },
+          { kind: 'static', label: 'Can it be rolled back?',
+            value: auditCanRollback(entry) ? 'Yes — the previous value was recorded.' : rollbackNote(entry) },
+        ],
+      }) : '';
+
       const pagination = totalPages > 1 ? `<div class="tlc-section" style="padding-top:0;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">${
         Array.from({ length: totalPages }, (_, i) => i + 1).map((p) =>
           `<a href="/audit-log?page=${p}" class="tlc-filter${p === pageNum ? ' is-on' : ''}">${p}</a>`).join('')
@@ -8256,6 +8305,7 @@ ${sidebarShell('audit', currentUser, '', await badgeCounts(env, currentUser))}
     empty: 'Nothing has been changed yet.',
     note: 'Rolling a change back does not erase it. The original entry stays, and the rollback is recorded as its own entry — so the log always says everything that happened, including the undoing.',
   })}
+  ${auditDrawer}
   ${pagination}
 </div>`, 'Audit Log');
     }
