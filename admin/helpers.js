@@ -5,7 +5,7 @@ import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, TOGGLE_WORD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 
-export const VERSION = 'v3.5.1'; // minor: the per-screen pass, part one — value chips, avatars and thumbnails, spec wording
+export const VERSION = 'v3.6.0'; // minor: one rich-text builder (fixes AC-3), block palette in the design's order
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
@@ -538,376 +538,49 @@ function tlcUploadHandler(blobInfo) {
   });
 }
 
-export function tinymceEditorSection(existingBody = '') {
-  const safe = (existingBody || '').replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
-  return `<div class="form-group">
-  <label>Full text <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, shown when reader clicks "Read more"</span></label>
-  <textarea id="body-editor" name="body"></textarea>
-</div>
-<script>
-_onTinymce(function(){
-tinymce.init({
-  selector: '#body-editor',
-  plugins: 'image link lists blockquote table code',
-  toolbar: 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image | table | code',
-  menubar: false,
-  min_height: 320,
-  skin: 'oxide',
-  content_css: 'default',
-  convert_urls: false,
-  image_advtab: false,
-  image_caption: false,
-  object_resizing: true,
-  resize_img_proportional: true,
-  automatic_uploads: true,
-  images_upload_handler: ${tlcUploadHandler},
-  paste_data_images: true,
-  content_style: 'img { margin: 8px; max-width: 100%; height: auto; }',
-  setup: function(editor) {
-    editor.on('change input', function() { editor.save(); });
-    editor.on('NodeChange', function() {
-      editor.dom.select('img').forEach(function(img) {
-        if (!img.style.margin) { img.style.margin = '8px'; img.style.maxWidth = '100%'; img.style.height = 'auto'; }
-      });
-    });
-  },
-  init_instance_callback: function(editor) {
-    var initialBody = \`${safe}\`;
-    if (initialBody.trim()) editor.setContent(initialBody);
-  }
-
-});
-});
-if (!window._tlcSubmitWired) {
-  window._tlcSubmitWired = true;
-  document.querySelector('form').addEventListener('submit', function(e) {
-    if (window._tlcSubmitting) return;
-    var eds = window.tinymce ? tinymce.editors : [];
-    if (!eds.length) return;
-    e.preventDefault();
-    window._tlcSubmitting = true;
-    var form = e.target;
-    var submitter = e.submitter;
-    if (submitter && submitter.name) {
-      var hid = document.createElement('input');
-      hid.type = 'hidden';
-      hid.name = submitter.name;
-      hid.value = submitter.value;
-      form.appendChild(hid);
-    }
-    var done = function() {
-      eds.forEach(function(ed) { ed.save(); });
-      // Strip any remaining blob: image references that failed to upload —
-      // they'd render as broken icons in the sent email.
-      form.querySelectorAll('textarea').forEach(function(t) {
-        if (t.value && t.value.indexOf('blob:') !== -1) {
-          t.value = t.value.replace(/<img[^>]*src=["']blob:[^"']*["'][^>]*>/gi, '');
-        }
-      });
-      form.submit();
-    };
-    Promise.all(eds.map(function(ed) { return ed.uploadImages(); })).then(done, done);
-  });
-}
-<\/script>`;
+// ── ONE RICH-TEXT FIELD BUILDER ──────────────────────────────
+// There used to be seven near-identical copies of this, ~500 lines of them.
+// That was AC-10 in the July 2026 review, and the reason it mattered is
+// AC-3, which sat unfixed underneath it: the content is interpolated into an
+// inline <script>, and every copy escaped backslash, backtick and $ — but not
+// `</script>`.
+//
+// ⚠ The HTML parser ends a script block at the first `</script` REGARDLESS of
+// JavaScript string context. Somebody with content-edit rights could save a
+// post containing it, break out of the init block, and run script in the
+// session of any admin who later opened that screen. Escaping it in one place
+// is the whole point of there being one place.
+function jsString(value) {
+  return String(value == null ? '' : value)
+    .replace(/\\/g, '\\\\')
+    .replace(/`/g, '\\`')
+    .replace(/\$/g, '\\$')
+    // Split the closing tag so the parser never sees it. The string still
+    // reads as "</script>" once JavaScript joins it back up.
+    .replace(/<\/(script)/gi, '<\\/$1');
 }
 
-// TinyMCE editor for ministry post body field
-export function tinymcePostSection(existingBody = '') {
-  const safe = (existingBody || '').replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
-  return `<div class="form-group">
-  <label>Post content</label>
-  <textarea id="post-editor" name="body"></textarea>
-</div>
-<script>
-_onTinymce(function(){
-tinymce.init({
-  selector: '#post-editor',
-  plugins: 'image link lists blockquote table code',
-  toolbar: 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image | table | code',
-  menubar: false,
-  min_height: 400,
-  skin: 'oxide',
-  content_css: 'default',
-  convert_urls: false,
-  image_advtab: false,
-  automatic_uploads: true,
-  images_upload_handler: ${tlcUploadHandler},
-  paste_data_images: true,
-  content_style: 'img { margin: 8px; max-width: 100%; height: auto; }',
-  setup: function(editor) {
-    editor.on('change input', function() { editor.save(); });
-    editor.on('NodeChange', function() {
-      editor.dom.select('img').forEach(function(img) {
-        if (!img.style.margin) { img.style.margin = '8px'; img.style.maxWidth = '100%'; img.style.height = 'auto'; }
-      });
-    });
-  },
-  init_instance_callback: function(editor) {
-    var initial = \`${safe}\`;
-    if (initial.trim()) editor.setContent(initial);
-  }
-});
-});
-if (!window._tlcSubmitWired) {
-  window._tlcSubmitWired = true;
-  document.querySelector('form').addEventListener('submit', function(e) {
-    if (window._tlcSubmitting) return;
-    var eds = window.tinymce ? tinymce.editors : [];
-    if (!eds.length) return;
-    e.preventDefault();
-    window._tlcSubmitting = true;
-    var form = e.target;
-    var submitter = e.submitter;
-    if (submitter && submitter.name) {
-      var hid = document.createElement('input');
-      hid.type = 'hidden';
-      hid.name = submitter.name;
-      hid.value = submitter.value;
-      form.appendChild(hid);
-    }
-    var done = function() {
-      eds.forEach(function(ed) { ed.save(); });
-      // Strip any remaining blob: image references that failed to upload —
-      // they'd render as broken icons in the sent email.
-      form.querySelectorAll('textarea').forEach(function(t) {
-        if (t.value && t.value.indexOf('blob:') !== -1) {
-          t.value = t.value.replace(/<img[^>]*src=["']blob:[^"']*["'][^>]*>/gi, '');
-        }
-      });
-      form.submit();
-    };
-    Promise.all(eds.map(function(ed) { return ed.uploadImages(); })).then(done, done);
-  });
-}
-<\/script>`;
-}
+// Every rich-text field in the admin comes from here. The toolbar is the same
+// on all of them — the design's own note is "painted on all of them, not just
+// the first", because a field that looks like a plain textarea gets typed into
+// like one.
+const TINY_TOOLBAR = 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image | table | code';
 
-// TinyMCE editor for sermon notes / outline field
-export function tinymceSermonSection(existingOutline = '') {
-  const safe = (existingOutline || '').replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
-  return `<div class="form-group">
-  <label>Notes / outline</label>
-  <textarea id="sermon-editor" name="outline"></textarea>
-</div>
-<script>
-_onTinymce(function(){
-tinymce.init({
-  selector: '#sermon-editor',
-  plugins: 'image link lists blockquote table code',
-  toolbar: 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image | table | code',
-  menubar: false,
-  min_height: 300,
-  skin: 'oxide',
-  content_css: 'default',
-  convert_urls: false,
-  image_advtab: false,
-  automatic_uploads: true,
-  images_upload_handler: ${tlcUploadHandler},
-  paste_data_images: true,
-  content_style: 'img { margin: 8px; max-width: 100%; height: auto; }',
-  setup: function(editor) {
-    editor.on('change input', function() { editor.save(); });
-    editor.on('NodeChange', function() {
-      editor.dom.select('img').forEach(function(img) {
-        if (!img.style.margin) { img.style.margin = '8px'; img.style.maxWidth = '100%'; img.style.height = 'auto'; }
-      });
-    });
-  },
-  init_instance_callback: function(editor) {
-    var initial = \`${safe}\`;
-    if (initial.trim()) editor.setContent(initial);
-  }
-});
-});
-if (!window._tlcSubmitWired) {
-  window._tlcSubmitWired = true;
-  document.querySelector('form').addEventListener('submit', function(e) {
-    if (window._tlcSubmitting) return;
-    var eds = window.tinymce ? tinymce.editors : [];
-    if (!eds.length) return;
-    e.preventDefault();
-    window._tlcSubmitting = true;
-    var form = e.target;
-    var submitter = e.submitter;
-    if (submitter && submitter.name) {
-      var hid = document.createElement('input');
-      hid.type = 'hidden';
-      hid.name = submitter.name;
-      hid.value = submitter.value;
-      form.appendChild(hid);
-    }
-    var done = function() {
-      eds.forEach(function(ed) { ed.save(); });
-      // Strip any remaining blob: image references that failed to upload —
-      // they'd render as broken icons in the sent email.
-      form.querySelectorAll('textarea').forEach(function(t) {
-        if (t.value && t.value.indexOf('blob:') !== -1) {
-          t.value = t.value.replace(/<img[^>]*src=["']blob:[^"']*["'][^>]*>/gi, '');
-        }
-      });
-      form.submit();
-    };
-    Promise.all(eds.map(function(ed) { return ed.uploadImages(); })).then(done, done);
-  });
-}
-<\/script>`;
-}
-
-// TinyMCE editor for youth page content field
-export function tinymceYouthSection(existingContent = '') {
-  const safe = (existingContent || '').replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
-  return `<div class="form-group">
-  <label>Page content</label>
-  <textarea id="youth-editor" name="content"></textarea>
-</div>
-<script>
-_onTinymce(function(){
-tinymce.init({
-  selector: '#youth-editor',
-  plugins: 'image link lists blockquote table code',
-  toolbar: 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image | table | code',
-  menubar: false,
-  min_height: 400,
-  skin: 'oxide',
-  content_css: 'default',
-  convert_urls: false,
-  image_advtab: false,
-  automatic_uploads: true,
-  images_upload_handler: ${tlcUploadHandler},
-  paste_data_images: true,
-  content_style: 'img { margin: 8px; max-width: 100%; height: auto; }',
-  setup: function(editor) {
-    editor.on('change input', function() { editor.save(); });
-    editor.on('NodeChange', function() {
-      editor.dom.select('img').forEach(function(img) {
-        if (!img.style.margin) { img.style.margin = '8px'; img.style.maxWidth = '100%'; img.style.height = 'auto'; }
-      });
-    });
-  },
-  init_instance_callback: function(editor) {
-    var initial = \`${safe}\`;
-    if (initial.trim()) editor.setContent(initial);
-  }
-});
-});
-if (!window._tlcSubmitWired) {
-  window._tlcSubmitWired = true;
-  document.querySelector('form').addEventListener('submit', function(e) {
-    if (window._tlcSubmitting) return;
-    var eds = window.tinymce ? tinymce.editors : [];
-    if (!eds.length) return;
-    e.preventDefault();
-    window._tlcSubmitting = true;
-    var form = e.target;
-    var submitter = e.submitter;
-    if (submitter && submitter.name) {
-      var hid = document.createElement('input');
-      hid.type = 'hidden';
-      hid.name = submitter.name;
-      hid.value = submitter.value;
-      form.appendChild(hid);
-    }
-    var done = function() {
-      eds.forEach(function(ed) { ed.save(); });
-      // Strip any remaining blob: image references that failed to upload —
-      // they'd render as broken icons in the sent email.
-      form.querySelectorAll('textarea').forEach(function(t) {
-        if (t.value && t.value.indexOf('blob:') !== -1) {
-          t.value = t.value.replace(/<img[^>]*src=["']blob:[^"']*["'][^>]*>/gi, '');
-        }
-      });
-      form.submit();
-    };
-    Promise.all(eds.map(function(ed) { return ed.uploadImages(); })).then(done, done);
-  });
-}
-<\/script>`;
-}
-
-// TinyMCE editor for page content blocks
-export function tinymcePageSection(existingContent = '') {
-  const safe = (existingContent || '').replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
-  return `<div class="form-group">
-  <label>Block content</label>
-  <textarea id="page-editor" name="content"></textarea>
-</div>
-<script>
-_onTinymce(function(){
-tinymce.init({
-  selector: '#page-editor',
-  plugins: 'image link lists blockquote table code',
-  toolbar: 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image | table | code',
-  menubar: false,
-  min_height: 300,
-  skin: 'oxide',
-  content_css: 'default',
-  convert_urls: false,
-  image_advtab: false,
-  automatic_uploads: true,
-  images_upload_handler: ${tlcUploadHandler},
-  paste_data_images: true,
-  content_style: 'img { margin: 8px; max-width: 100%; height: auto; }',
-  setup: function(editor) {
-    editor.on('change input', function() { editor.save(); });
-    editor.on('NodeChange', function() {
-      editor.dom.select('img').forEach(function(img) {
-        if (!img.style.margin) { img.style.margin = '8px'; img.style.maxWidth = '100%'; img.style.height = 'auto'; }
-      });
-    });
-  },
-  init_instance_callback: function(editor) {
-    var initial = \`${safe}\`;
-    if (initial.trim()) editor.setContent(initial);
-  }
-});
-});
-if (!window._tlcSubmitWired) {
-  window._tlcSubmitWired = true;
-  document.querySelector('form').addEventListener('submit', function(e) {
-    if (window._tlcSubmitting) return;
-    var eds = window.tinymce ? tinymce.editors : [];
-    if (!eds.length) return;
-    e.preventDefault();
-    window._tlcSubmitting = true;
-    var form = e.target;
-    var submitter = e.submitter;
-    if (submitter && submitter.name) {
-      var hid = document.createElement('input');
-      hid.type = 'hidden';
-      hid.name = submitter.name;
-      hid.value = submitter.value;
-      form.appendChild(hid);
-    }
-    var done = function() {
-      eds.forEach(function(ed) { ed.save(); });
-      // Strip any remaining blob: image references that failed to upload —
-      // they'd render as broken icons in the sent email.
-      form.querySelectorAll('textarea').forEach(function(t) {
-        if (t.value && t.value.indexOf('blob:') !== -1) {
-          t.value = t.value.replace(/<img[^>]*src=["']blob:[^"']*["'][^>]*>/gi, '');
-        }
-      });
-      form.submit();
-    };
-    Promise.all(eds.map(function(ed) { return ed.uploadImages(); })).then(done, done);
-  });
-}
-<\/script>`;
-}
-
-// Simple TinyMCE editor for short text notes
-export function tinymceNoteSection(id, name, existingContent = '', minHeight = 140) {
-  const safe = (existingContent || '').replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
-  return `<textarea id="${id}" name="${name}"></textarea>
+export function tinymceField({ id, name, value = '', minHeight = 200, label = '', labelNote = '', wrap = true }) {
+  const field = `<textarea id="${escapeHtml(id)}" name="${escapeHtml(name)}"></textarea>`;
+  const head = label
+    ? `<label>${escapeHtml(label)}${labelNote ? ` <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">${escapeHtml(labelNote)}</span>` : ''}</label>`
+    : '';
+  const body = wrap ? `<div class="form-group">\n  ${head}\n  ${field}\n</div>` : field;
+  return `${body}
 <script>
 _onTinymce(function(){
 tinymce.init({
   selector: '#${id}',
   plugins: 'image link lists blockquote table code',
-  toolbar: 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image | table | code',
+  toolbar: '${TINY_TOOLBAR}',
   menubar: false,
-  min_height: ${minHeight},
+  min_height: ${Number(minHeight) || 200},
   skin: 'oxide',
   content_css: 'default',
   convert_urls: false,
@@ -925,58 +598,19 @@ tinymce.init({
     });
   },
   init_instance_callback: function(editor) {
-    var initial = \`${safe}\`;
+    var initial = \`${jsString(value)}\`;
     if (initial.trim()) { editor.setContent(initial); editor.save(); }
   }
 });
-});
-<\/script>`;
-}
 
-// TinyMCE editor for pastor's note
-export function tinymcePastorSection(existingBody = '') {
-  const safe = (existingBody || '').replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
-  return `
-<div class="form-group">
-  <label>Your message this week</label>
-  <textarea id="pastor-editor" name="pastor_note"></textarea>
-</div>
-<script>
-_onTinymce(function(){
-tinymce.init({
-  selector: '#pastor-editor',
-  plugins: 'image link lists blockquote table code',
-  toolbar: 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image | table | code',
-  menubar: false,
-  min_height: 200,
-  skin: 'oxide',
-  content_css: 'default',
-  convert_urls: false,
-  image_advtab: false,
-  image_caption: false,
-  object_resizing: true,
-  resize_img_proportional: true,
-  automatic_uploads: true,
-  images_upload_handler: ${tlcUploadHandler},
-  paste_data_images: true,
-  content_style: 'img { margin: 8px; max-width: 100%; height: auto; }',
-  setup: function(editor) {
-    editor.on('change input', function() { editor.save(); });
-    editor.on('NodeChange', function() {
-      editor.dom.select('img').forEach(function(img) {
-        if (!img.style.margin) { img.style.margin = '8px'; img.style.maxWidth = '100%'; img.style.height = 'auto'; }
-      });
-    });
-  },
-  init_instance_callback: function(editor) {
-    var initialBody = \`${safe}\`;
-    if (initialBody.trim()) editor.setContent(initialBody);
-  }
-});
-});
+// Submitting has to wait for images still uploading, or a pasted photo goes
+// out as a blob: reference that resolves to nothing in an inbox. Wired once
+// per page however many editors are on it — the flag is on window, not on the
+// field, because the handler is on the form.
 if (!window._tlcSubmitWired) {
   window._tlcSubmitWired = true;
-  document.querySelector('form').addEventListener('submit', function(e) {
+  var f = document.querySelector('form');
+  if (f) f.addEventListener('submit', function(e) {
     if (window._tlcSubmitting) return;
     var eds = window.tinymce ? tinymce.editors : [];
     if (!eds.length) return;
@@ -984,6 +618,9 @@ if (!window._tlcSubmitWired) {
     window._tlcSubmitting = true;
     var form = e.target;
     var submitter = e.submitter;
+    // A submit button's own name/value is lost when the form is submitted
+    // programmatically, and several screens branch on it (Publish vs Save as
+    // draft), so it is carried across by hand.
     if (submitter && submitter.name) {
       var hid = document.createElement('input');
       hid.type = 'hidden';
@@ -993,8 +630,8 @@ if (!window._tlcSubmitWired) {
     }
     var done = function() {
       eds.forEach(function(ed) { ed.save(); });
-      // Strip any remaining blob: image references that failed to upload —
-      // they'd render as broken icons in the sent email.
+      // Strip any blob: image that failed to upload — it would render as a
+      // broken icon in the sent email.
       form.querySelectorAll('textarea').forEach(function(t) {
         if (t.value && t.value.indexOf('blob:') !== -1) {
           t.value = t.value.replace(/<img[^>]*src=["']blob:[^"']*["'][^>]*>/gi, '');
@@ -1005,5 +642,16 @@ if (!window._tlcSubmitWired) {
     Promise.all(eds.map(function(ed) { return ed.uploadImages(); })).then(done, done);
   });
 }
+});
 <\/script>`;
 }
+
+// The seven call sites, each now one line. Kept as named functions rather than
+// inlined so the routes do not have to know the id and name of every field.
+export const tinymceEditorSection = (v = '') => tinymceField({ id: 'body-editor', name: 'body', value: v, minHeight: 260, label: 'Full text', labelNote: '— optional, shown when reader clicks "Read more"' });
+export const tinymcePostSection = (v = '') => tinymceField({ id: 'post-editor', name: 'body', value: v, minHeight: 260, label: 'Post content' });
+export const tinymceSermonSection = (v = '') => tinymceField({ id: 'sermon-editor', name: 'outline', value: v, minHeight: 260, label: 'Notes / outline' });
+export const tinymceYouthSection = (v = '') => tinymceField({ id: 'youth-editor', name: 'content', value: v, minHeight: 320, label: 'Page content' });
+export const tinymcePageSection = (v = '') => tinymceField({ id: 'page-editor', name: 'content', value: v, minHeight: 320, label: 'Block content' });
+export const tinymcePastorSection = (v = '') => tinymceField({ id: 'pastor-editor', name: 'pastor_note', value: v, minHeight: 200, label: 'Your message this week' });
+export const tinymceNoteSection = (id, name, v = '', minHeight = 140) => tinymceField({ id, name, value: v, minHeight, wrap: false });

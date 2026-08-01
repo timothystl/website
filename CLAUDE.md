@@ -1043,12 +1043,63 @@ these are the gaps I have not closed:
 | 05 News | pinned rows sorting to the top with a pin marker before the title |
 | 06 Sermons | the `YouTube` / `Audio` / `Text only` media pill |
 | 10 Taps | the four tap cards above the toolbar, with taps-this-month and card count |
-| 13 Newsletter | a real rich-text toolbar on *every* rich field, not just the first |
 | 16 Gym | "Calendar first" as the genuine default layout, with the queue beside the month rather than below it |
 | 20 Audit | the drawer, read-only, with sand-filled fields |
-| 22 Editor | device switcher (real widths, not zoom), the info-card slot on banner blocks, the starter picker, the block library's grouping |
+| 22 Editor | the info-card slot on banner blocks, and the starter picker on New page |
 
 None of those are blocked; they are simply not done yet.
+
+#### Newsletter fields and the editor palette (v3.6.0, 2026-08-01)
+
+**Two of the four "editor spec" items turned out to be already built**, and
+saying so is more useful than building them twice:
+
+- **The device switcher exists and is real widths, not a zoom** — `WIDTHS` in
+  `admin/ministry-editor.html` is `{desktop: 900, tablet: 620, phone: 390}` and
+  `fitPaper()` sets `style.width`. It also scales *down* when the canvas is
+  narrower than the chosen width, which is a fit-to-viewport fallback rather
+  than the mechanism; with the rails now collapsible it fires less often.
+- **The block library was already grouped.** What was wrong is that it led with
+  Content; the design leads with **Structure**, because that is what an empty
+  page needs first. Groups are now the design's four, in its order:
+  `Structure · Content · Dates · Sign up`.
+
+⚠ **The palette's opening tab was the string `'Content'`, written in the editor
+state.** Reordering `GROUPS` left the palette opening on the *second* group.
+It resolves from the config now (`groups[0].name`), and `test/editor.test.mjs`
+already asserted against `GROUPS[0]` — so the test was right and the editor was
+wrong, which is the way round you want it.
+
+`admin/blocks.test.mjs` now also asserts every block type appears in **exactly
+one** group. A type defined but listed nowhere can be rendered by the engine
+and never inserted by a human — the kind of gap nobody notices until somebody
+asks for that block.
+
+#### ⚠ AC-3 is fixed: the rich-text field could be escaped from
+
+The newsletter spec asks for "a real toolbar on every rich field, not just the
+first". Every field already had one. What the fields did **not** have was safe
+escaping, and looking at seven near-identical builders to check that is what
+found it.
+
+Saved content is interpolated into an inline `<script>`. All seven builders
+escaped backslash, backtick and `$` — and none escaped `</script>`. **The HTML
+parser ends a script block at the first `</script` regardless of JavaScript
+string context**, so somebody with content-edit rights could save a post
+containing it, break out of the init block, and run script in the session of
+any admin who later opened that screen. That was AC-3 in the July 2026 review,
+open since.
+
+`tinymceField()` in `admin/helpers.js` is now the **one** builder — which is
+also AC-10, the reason AC-3 survived: any escaping fix had to be made seven
+times. `jsString()` splits the closing tag so the parser never sees it, and
+`admin/ui.test.mjs` asserts it directly.
+
+The submit handler that waits for in-flight image uploads and strips leftover
+`blob:` images went into the shared builder rather than being lost — it lived
+only in the pastor's-note copy but was wired to the whole form, so folding the
+builders together without it would have quietly shipped broken images in a
+sent newsletter.
 
 #### The handoff's own open questions (§8), as answered
 
@@ -1527,7 +1578,7 @@ core modules · `GY-` gym module · `PY-` payroll.
 | AW-2 | High | Admin worker | Stored XSS in admin UI via unescaped DB content → cross-privilege escalation (low-perm editor → admin) |
 | AC-1 | High | Core | Session cookie missing `Secure` flag (`auth.js`) |
 | AC-2 | High | Core | Email templates interpolate titles/subjects/URLs into broadcast HTML with **no** escaping (`email.js`) |
-| AC-3 | High | Core | `</script>` in saved editor content breaks out of the inline TinyMCE init block (`helpers.js`) |
+| AC-3 | ~~High~~ **FIXED v3.6.0** | Core | `</script>` in saved editor content breaks out of the inline TinyMCE init block (`helpers.js`) — one builder now, `jsString()` splits the tag |
 | AC-4 | High | Core | No UNIQUE constraint on `gym_bookings(booking_date,start_time,end_time)` — schema half of GY-1 |
 | VS-3 | High | Scheduler | Breeze/Resend/Worker **secrets stored plaintext** in localStorage AND synced to D1 in plaintext |
 | VS-4 | High | Scheduler | RSVP tokens generated with `Math.random()` — guessable; sole authenticator for `/rsvp` |
@@ -1611,7 +1662,7 @@ GY-7, PY-6. Modal/keyboard accessibility — VS-7, VS-12, PY-7, PY-8, GY-12.
 - **AC-7** (Medium, perf) — Missing indexes on hot columns: `news_items(publish_date,expire_date,pinned)`, `gym_bookings(group_id,booking_date,status)`, `audit_log(created_at,entity_type)`, `sessions(user_id)`.
 - **AC-8** (Medium, security) — CSP (helpers.js 181) allows `'unsafe-inline'` + `'unsafe-eval'`, defeating it as an XSS backstop. Move to nonce-based inline scripts.
 - **AC-9** (Medium, correctness) — Email footers (email.js 124/307) hardcode the stale Breeze give URL; a managed `give_url` setting exists. Thread it in.
-- **AC-10** (Medium, maint) — ~500 lines of 6 near-identical TinyMCE builders (helpers.js 397-865) — any escaping fix (AC-3) must be applied 6×. Extract one parameterized builder.
+- **AC-10** (Medium, maint) — ~~~500 lines of 6 near-identical TinyMCE builders — any escaping fix (AC-3) must be applied 6×.~~ **FIXED v3.6.0**: one `tinymceField()` builder; the seven call sites are one line each.
 - **AC-11** (Medium, design/security) — Christian Ed tab gated by unrelated `news_edit` (helpers.js 204); no `christian_ed` permission exists. Granting News editing silently grants Bible-class management. Add a dedicated permission.
 - **AC-12** (Medium, security) — PBKDF2 at 100k iterations (auth.js 24/36); OWASP guidance ~600k. Iteration count is embedded in the hash so it's upgradeable on next login.
 - **AC-13** (Low, design) — `settings_manage` bundles Subscribers (PII) + Redirects. Split if finer control wanted.

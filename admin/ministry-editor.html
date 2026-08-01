@@ -339,7 +339,10 @@ var S = {
   // the id and the address are separate things.
   slug: SLUG, path: '/' + SLUG, title: '', status: 'live', updatedAt: '',
   blocks: [], config: null, media: [],
-  selectedId: null, device: 'desktop', group: 'Content', paletteOpen: true,
+  // The opening palette group is whatever the config lists first, not a name
+  // written here — a hardcoded 'Content' silently outlived a reorder of
+  // GROUPS, and the palette opened on the second group.
+  selectedId: null, device: 'desktop', group: null, paletteOpen: true,
   changes: [], history: [], saved: null, dirty: false,
   dragId: null, dragType: null, dragSection: null, dropIndex: null,
   picker: null, toast: null, hint: true, loadError: '',
@@ -536,7 +539,11 @@ function paletteGroups() {
 
 function renderPalette() {
   var tabs = '';
-  paletteGroups().forEach(function (g) {
+  var groups = paletteGroups();
+  // Null means "whatever comes first" — resolved here rather than at start-up
+  // so it is still right if the config is reordered.
+  if (!S.group && groups.length) S.group = groups[0].name;
+  groups.forEach(function (g) {
     tabs += '<button type="button" class="ed-pal-tab" data-group="' + esc(g.name) + '" aria-pressed="' + (g.name === S.group) + '">' + esc(g.name) + '</button>';
   });
   el.edPalTabs.innerHTML = tabs;
