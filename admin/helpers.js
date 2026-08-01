@@ -283,7 +283,7 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}) {
   // ── COMMUNICATION ──
   const canDraft = hp('newsletter_edit') || hp('newsletter_approve');
   const commItems = [
-    canDraft ? navItem('/', 'Newsletter', activeTab === 'newsletter', badge(b.newsletter, hp('newsletter_approve'), `${b.newsletter} newsletter(s) awaiting approval`)) : '',
+    canDraft ? navItem('/newsletters', 'Newsletter', activeTab === 'newsletter', badge(b.newsletter, hp('newsletter_approve'), `${b.newsletter} newsletter(s) awaiting approval`)) : '',
     hp('settings_manage') ? navItem('/subscribers', 'Subscribers', activeTab === 'subscribers') : '',
     hp('settings_manage') ? navItem('/filtered', 'Filtered Mail', activeTab === 'filtered') : '',
   ].filter(Boolean).join('');

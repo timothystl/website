@@ -138,7 +138,7 @@ Extend current `tlc-admin-worker.js` with new tabs:
 
 | Tab | Who Uses It | Status |
 |-----|-------------|--------|
-| Newsletter | Pastor/office | **DONE** — format picker, Brevo email, draft/published split |
+| Newsletter | Pastor/office | **DONE** — format picker, Brevo email, draft/published split · **on the shared pattern** at `/newsletters` (2026-08-01), with a live preview built by the real email builder and sent issues locked server-side; see "Phase 5" below |
 | News & Events | Pastor/office | **DONE** — DB wired, API live at /api/news · **on the shared pattern**. Split from Newsletter in v3.0.0: `/newsitems` is News only, the newsletter list stays at `/` |
 | Ministries | Office staff | **DONE** — ministry page content management, now including the block-based **page editor** at `/ministries/editor/:slug` (see "Ministry Page Editor" below); also covers Youth Pages (TinyMCE editor, youth_pages DB table) and the Voters Assembly special page (Zoom link + file upload), both folded in as cards rather than separate tabs |
 | Sermons | Pastor/office | **DONE** — sermon series + standalone sermon notes, powers /sermons · **on the shared pattern**, series with their sermons indented beneath |
@@ -577,6 +577,59 @@ live.
   must never be shown a church website with no navigation.
 
 Run: `node admin/menu.test.mjs`.
+
+#### Phase 5 — the newsletter composer (2026-08-01)
+
+Most of the composer already existed: the format picker, subject, date, six
+TinyMCE fields (pastor, secondary, WOL, LASM, tertiary, quick body), the news
+and Bible-class pickers, editable event rows and both CTAs. The handoff's
+"restore the full editor" was largely already true. What this phase added is
+the part that was missing and the part that was unsafe.
+
+- **`admin/newsletter.js` holds the rules**, pure and tested: what counts as
+  sent, what a sent issue still allows, block defaults, audience, and the
+  subject/preheader guidance.
+- **A sent issue is read-only, enforced server-side.** `/publish` checks
+  `canEdit()` *before reading anything from the form*, so a stale tab or a
+  crafted POST cannot get partway in. Around 600 people already have a copy;
+  the archive on the website has to keep saying what was actually sent.
+  `isSent()` is deliberately generous — `status`, `sent_at`, `beehiiv_id` or
+  `brevo_campaign_id` — because an issue that reached anybody is locked
+  whichever field recorded it. A test tampers with a sent issue by direct POST
+  and asserts the subject and body are untouched.
+- **The list offers "Duplicate as draft" instead of Edit** on a sent row, so
+  what is possible is visible before anyone clicks into a locked screen.
+- **Blocks: absent means everything ON.** An issue written before `blocks`
+  existed has none stored, and defaulting to off would silently ship an empty
+  newsletter. The same trap sits in the save path: the new-newsletter form
+  renders no switches, so an empty `block_seen` stores **NULL**, not an
+  all-false object. `block_seen` records which switches the form actually
+  showed — a checkbox posts nothing when off, so without it an unrendered
+  switch would read as "off".
+- **The pastor's note is locked on** in both directions — `parseBlocks` and
+  `serializeBlocks` — so a direct write cannot switch it off.
+- **The preview is built by `buildEmailHtml`, the function the send path
+  uses.** `POST /newsletter/preview` takes the live form values and returns the
+  real email. A separately-written preview would drift, and nobody would find
+  out until an issue had gone out. Switched-off blocks are absent from the
+  preview too, so it cannot flatter what will actually send.
+- **Sends record `sent_at` and `sent_count`**, so "Sent July 24 to 609
+  subscribers" is a fact rather than an estimate. (The handoff writes
+  "24 July"; every other date in this admin reads American, and so do its
+  readers.)
+- **The newsletter list is addressed `/newsletters`.** `/` redirects to the
+  dashboard, so the list — which is the unmatched fall-through — needed a real
+  address; every `?msg=` redirect now points there.
+- **`approvalState()` is honest about the two-person rule.** With only one
+  approver it says the step is a formality, and approving your own submission
+  is flagged as weaker rather than silently allowed. Still waiting on Andrew's
+  second `newsletter_approve` account.
+
+Not built: the `extras` JSON ("+ Add another note"), `include_sermon` /
+`include_bulletin` as content (their switches exist and are stored, but the
+email builder does not yet render a This Sunday or bulletin section).
+
+Run: `node admin/newsletter.test.mjs`.
 
 #### The handoff's own open questions (§8), as answered
 

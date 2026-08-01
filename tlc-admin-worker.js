@@ -39,6 +39,10 @@ import { orderPages, filterPages, pageStatus, slugify, uniqueSlug, pageRename,
          withShortLinks, shortLinkFor, shortLinkRoutes } from './admin/pages.js';
 import { MENUS, menuTree, publicMenu, orphanPages, menuWarnings, renumber,
          normalizeMenu, normalizeKind, normalizeStyle, normalizeDepth } from './admin/menu.js';
+import { BLOCKS as NL_BLOCKS, parseBlocks as parseNlBlocks, serializeBlocks as serializeNlBlocks,
+         blockOn, AUDIENCES, normalizeAudience, subjectAdvice, preheaderAdvice,
+         isSent as isNewsletterSent, canEdit as canEditNewsletter, approvalState,
+         issueStatus, sendSummary } from './admin/newsletter.js';
 import { screenSubmission, formConfig, forwardToChms, officeEmailHtml, officeSubject,
          handleFilteredRoutes, heldCount, OFFICE_EMAIL } from './admin/forms.js';
 
@@ -785,7 +789,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-08-01-2'; // bumped: menu_items — the navigation as its own table (phase 4)
+    const SCHEMA_VERSION = '2026-08-01-3'; // bumped: newsletter preheader/audience/blocks (phase 5)
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -1272,6 +1276,13 @@ export default {
     // at the top of admin/menu.js for why this is a join table rather than more
     // columns on `pages`. Seeded from the nav as it stands today, with explicit
     // ids and INSERT OR IGNORE, so rearranging it in the admin survives deploys.
+    // Newsletter composer (phase 5). All nullable — an issue written before
+    // these existed must still open and still send exactly as it did.
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN preheader TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare("ALTER TABLE newsletters ADD COLUMN audience TEXT DEFAULT 'everyone'").run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN blocks TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN sent_at TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN sent_count INTEGER').run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_MENU_ITEMS).run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_menu_items_menu ON menu_items(menu, sort_order)').run(); } catch (_) {}
     for (const m of MENU_SEED) {
@@ -3245,7 +3256,7 @@ ${sidebarShell('sermons', currentUser, `<a href="${n.series_id ? '/sermons/notes
 
     // ── NEWSLETTER + NEWS PERMISSION GUARD ──
     // Routes under /new, /publish, /edit/, /delete/, /send-email/, /newsitems require news or newsletter permission
-    const isNewsletterRoute = ['/new', '/publish'].includes(path) || path.startsWith('/edit/') || path.startsWith('/send-email/') || path.startsWith('/delete/') || path.startsWith('/newsletter/duplicate/');
+    const isNewsletterRoute = ['/new', '/publish', '/newsletter/preview'].includes(path) || path.startsWith('/edit/') || path.startsWith('/send-email/') || path.startsWith('/delete/') || path.startsWith('/newsletter/duplicate/');
     const isNewsItemRoute = path === '/newsitems' || path.startsWith('/newsitems/');
     if (isNewsletterRoute && !hasPermission(currentUser, 'newsletter_edit') && !hasPermission(currentUser, 'newsletter_approve')) {
       return new Response('Access denied.', { status: 403 });
@@ -3525,6 +3536,24 @@ addEvent();
     // ── PUBLISH / SAVE ──
     if (path === '/publish' && method === 'POST') {
       const form = await request.formData();
+      // ── THE LOCK ──
+      // A sent issue is read-only, enforced here rather than only in the UI.
+      // Once ~600 people have a copy in their inbox, the archived copy on the
+      // website has to keep saying what was actually sent — editing it would
+      // make the archive a lie. Checked before anything is read from the form
+      // so a crafted POST cannot get partway in.
+      {
+        const lockId = form.get('newsletter_id');
+        if (lockId) {
+          const existing = await env.DB.prepare(
+            'SELECT status, approval_status, sent_at, beehiiv_id, brevo_campaign_id FROM newsletters WHERE id = ?'
+          ).bind(lockId).first();
+          const verdict = canEditNewsletter(existing);
+          if (!verdict.ok) {
+            return new Response('', { status: 302, headers: { Location: `/edit/${lockId}?msg=locked` } });
+          }
+        }
+      }
       const subject = form.get('subject') || '';
       const publishedAt = form.get('published_at') || new Date().toISOString().split('T')[0];
       const action = form.get('action') || 'publish';
@@ -3533,6 +3562,20 @@ addEvent();
       const emailSend = form.get('email_send') || 'none';
       // Test sends stay as drafts — only 'all' or 'none' (website-only) publishes to the archive
       const status = (action === 'publish' && emailSend !== 'test') ? 'published' : 'draft';
+
+      const preheader = form.get('preheader') || '';
+      const audience = normalizeAudience(form.get('audience'));
+      // Only the switches the form actually rendered are considered. A checkbox
+      // posts nothing when off, so `block_seen` records which ones were on the
+      // page — without it, a form that never showed a switch would read as
+      // "off" and silently drop that section from the issue.
+      // A form that rendered no switches at all (the new-newsletter form) must
+      // store NULL, not an all-false object — null means "defaults, everything
+      // on", whereas all-false would silently ship an empty issue.
+      const seenBlocks = form.getAll('block_seen');
+      const blocksJson = seenBlocks.length
+        ? serializeNlBlocks(Object.fromEntries(seenBlocks.map((k) => [k, form.get('block_' + k) === '1'])))
+        : null;
 
       // Strip <img src="blob:..."> tags — these are temporary in-browser URLs
       // that render as broken icons in email if the upload didn't finish.
@@ -3611,16 +3654,16 @@ addEvent();
       if (editId) {
         // Update existing newsletter
         await env.DB.prepare(
-          'UPDATE newsletters SET subject=?, pastor_note=?, ministry_content=?, ministry_type=?, published_at=?, format=?, cta_url=?, cta_label=?, status=?, wol_content=?, lasm_content=?, secondary_note=?, news_item_ids=?, tertiary_note=?, tertiary_cta_label=?, tertiary_cta_url=?, bible_classes=? WHERE id=?'
-        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, editId).run();
+          'UPDATE newsletters SET subject=?, pastor_note=?, ministry_content=?, ministry_type=?, published_at=?, format=?, cta_url=?, cta_label=?, status=?, wol_content=?, lasm_content=?, secondary_note=?, news_item_ids=?, tertiary_note=?, tertiary_cta_label=?, tertiary_cta_url=?, bible_classes=?, preheader=?, audience=?, blocks=? WHERE id=?'
+        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, preheader, audience, blocksJson, editId).run();
         newsletterId = parseInt(editId, 10);
         // Replace events
         await env.DB.prepare('DELETE FROM events WHERE newsletter_id = ?').bind(newsletterId).run();
       } else {
         // Insert new newsletter
         const result = await env.DB.prepare(
-          'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson).run();
+          'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, preheader, audience, blocks) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, preheader, audience, blocksJson).run();
         newsletterId = result.meta.last_row_id;
       }
 
@@ -3636,7 +3679,7 @@ addEvent();
         await env.DB.prepare("UPDATE newsletters SET status = 'draft', approval_status = 'pending' WHERE id = ?").bind(newsletterId).run();
         return new Response('', {
           status: 302,
-          headers: { Location: `/?msg=submitted&subject=${encodeURIComponent(subject)}` }
+          headers: { Location: `/newsletters?msg=submitted&subject=${encodeURIComponent(subject)}` }
         });
       }
 
@@ -3665,7 +3708,7 @@ addEvent();
       const redirectMsg = (action === 'publish' && emailSend !== 'test') ? 'published' : 'draft';
       return new Response('', {
         status: 302,
-        headers: { Location: `/?msg=${encodeURIComponent(redirectMsg)}&subject=${encodeURIComponent(subject)}${emailSuffix}` }
+        headers: { Location: `/newsletters?msg=${encodeURIComponent(redirectMsg)}&subject=${encodeURIComponent(subject)}${emailSuffix}` }
       });
     }
 
@@ -3883,14 +3926,14 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
       if (!hasPermission(currentUser, 'newsletter_approve')) return new Response('Access denied.', { status: 403 });
       const id = path.split('/').pop();
       await env.DB.prepare("UPDATE newsletters SET status = 'published', approval_status = 'approved', approved_by_username = ? WHERE id = ?").bind(currentUser.username, id).run();
-      return new Response('', { status: 302, headers: { Location: '/?msg=approved' } });
+      return new Response('', { status: 302, headers: { Location: '/newsletters?msg=approved' } });
     }
 
     if (path.startsWith('/newsletter/reject/') && method === 'POST') {
       if (!hasPermission(currentUser, 'newsletter_approve')) return new Response('Access denied.', { status: 403 });
       const id = path.split('/').pop();
       await env.DB.prepare("UPDATE newsletters SET status = 'draft', approval_status = NULL, approved_by_username = NULL WHERE id = ?").bind(id).run();
-      return new Response('', { status: 302, headers: { Location: '/?msg=rejected' } });
+      return new Response('', { status: 302, headers: { Location: '/newsletters?msg=rejected' } });
     }
 
     // ── EDIT EXISTING NEWSLETTER (GET) ──
@@ -3976,16 +4019,87 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
       const copiedNotice = url.searchParams.get('copied') === '1'
         ? `<div class="alert alert-success">✓ Duplicated as a new draft. Update the subject, date, and content, then publish when ready.</div>`
         : '';
-      return html(`
-${sidebarShell('news', currentUser, `<a href="/newsitems">← News &amp; Events</a>`)}
-<div class="wrap">
-  <div class="page-title">Edit newsletter</div>
-  ${copiedNotice}
-  <div class="page-sub" style="color:var(--amber);font-weight:700;">You are editing a ${row.status === 'draft' ? 'draft' : 'published'} newsletter. Changes will go live immediately when you publish.</div>
+      const nlLocked = !canEditNewsletter(row).ok;
+      const nlBlocks = parseNlBlocks(row.blocks);
+      const subjAdvice = subjectAdvice(row.subject || '');
+      const preAdvice = preheaderAdvice(row.preheader || '');
+      const lockedMsg = url.searchParams.get('msg') === 'locked'
+        ? `<div class="alert alert-error">That issue has already been sent, so it cannot be changed. Duplicate it as a draft to work from a copy.</div>` : '';
 
-  <form method="POST" action="/publish" enctype="multipart/form-data">
+      // Every block gets a switch except the pastor's note, which is locked on:
+      // an issue without it is not a newsletter. Switching one off hides it from
+      // the email AND from the form, so a light week is a few clicks rather than
+      // deleting content you will want back next week — the words stay put.
+      const blockSwitches = NL_BLOCKS.map((b) => `<label class="tlc-toggle" style="padding:7px 0;">
+    <input type="checkbox" name="block_${b.key}" value="1"${nlBlocks[b.key] ? ' checked' : ''}${b.locked || nlLocked ? ' disabled' : ''}${b.locked ? '' : ' data-nlblock="1"'}>
+    <span class="tlc-toggle-track"><span class="tlc-toggle-knob"></span></span>
+    <span class="tlc-toggle-label">${escapeHtml(b.label)}${b.locked ? ' <span style="color:var(--tlc-muted);font-size:11.5px;">— always in</span>' : ''}</span>
+  </label>${b.locked ? '' : `<input type="hidden" name="block_seen" value="${b.key}">`}`).join('');
+
+      return html(`
+${sidebarShell('newsletter', currentUser, `<a href="/newsletters">← All issues</a>`, await badgeCounts(env, currentUser))}
+<div class="wrap">
+  <div class="page-title">${nlLocked ? 'Sent newsletter' : 'Edit newsletter'}</div>
+  ${copiedNotice}
+  ${lockedMsg}
+  ${nlLocked
+    ? `<div class="alert alert-info"><strong>${escapeHtml(sendSummary(row))}.</strong> A sent issue is read-only — the archive on the website has to keep saying what was actually sent. To work from a copy, duplicate it as a draft.
+        <form method="POST" action="/newsletter/duplicate/${editId}" style="margin-top:10px;"><button type="submit" class="btn btn-sm btn-primary">Duplicate as draft</button></form></div>`
+    : `<div class="page-sub" style="color:var(--amber);font-weight:700;">You are editing a ${row.status === 'draft' ? 'draft' : 'published'} newsletter. Changes will go live immediately when you publish.</div>`}
+
+  <form method="POST" action="/publish" enctype="multipart/form-data" id="nl-form">
   <input type="hidden" name="newsletter_id" value="${editId}">
   <input type="hidden" name="format" id="format-input" value="${fmt}">
+
+  <div class="card" style="background:var(--tlc-parchment);">
+    <div class="card-title">What goes in this issue</div>
+    <div style="font-size:13px;color:var(--gray);margin-bottom:10px;">Switch a section off and it disappears from the email — the words stay saved for next week.</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:2px 18px;">${blockSwitches}</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Inbox</div>
+    <div class="form-group">
+      <label>Preview text <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— the grey line after the subject in an inbox</span></label>
+      <input type="text" name="preheader" value="${escapeHtml(row.preheader || '')}" ${nlLocked ? 'readonly' : ''} placeholder="e.g. Advent begins Sunday, plus the Christmas Market dates">
+      <div style="font-size:12px;color:${preAdvice.tone === 'warn' ? '#8a6a00' : 'var(--gray)'};margin-top:4px;">${escapeHtml(preAdvice.text)}</div>
+    </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label>Who gets it</label>
+      <select name="audience" ${nlLocked ? 'disabled' : ''}>
+        ${AUDIENCES.map((a) => `<option value="${a.key}"${normalizeAudience(row.audience) === a.key ? ' selected' : ''}>${escapeHtml(a.label)}</option>`).join('')}
+      </select>
+      <div style="font-size:12px;color:var(--gray);margin-top:4px;">Brevo decides the actual list; this records who the issue was written for.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Preview</div>
+    <div style="font-size:13px;color:var(--gray);margin-bottom:10px;">Rendered by the same builder that sends the email, so what you see here and what lands in an inbox cannot drift apart.</div>
+    <button type="button" class="btn btn-sm btn-secondary" id="nl-preview-btn">Update preview</button>
+    <iframe id="nl-preview" title="Email preview" style="width:100%;height:520px;border:1px solid var(--border);border-radius:10px;margin-top:12px;background:#fff;"></iframe>
+  </div>
+  <script>(function(){
+    var btn = document.getElementById('nl-preview-btn');
+    var frame = document.getElementById('nl-preview');
+    if (!btn || !frame) return;
+    function refresh(){
+      var form = document.getElementById('nl-form');
+      if (!form) return;
+      // TinyMCE keeps its content in an iframe until asked, so a preview taken
+      // straight from the textareas would show the last saved text rather than
+      // what is on screen.
+      if (window.tinymce && tinymce.triggerSave) { try { tinymce.triggerSave(); } catch(e){} }
+      btn.textContent = 'Updating…'; btn.disabled = true;
+      fetch('/newsletter/preview', { method: 'POST', body: new FormData(form) })
+        .then(function(r){ return r.text(); })
+        .then(function(html){ frame.srcdoc = html; })
+        .catch(function(){ frame.srcdoc = '<p style="font-family:sans-serif;padding:20px;color:#8A4A4A;">Could not build the preview just now.</p>'; })
+        .finally(function(){ btn.textContent = 'Update preview'; btn.disabled = false; });
+    }
+    btn.addEventListener('click', refresh);
+    refresh();
+  })();</script>
 
   <div class="card">
     <div class="card-title">Format</div>
@@ -4191,7 +4305,7 @@ ${classesJs}
       if (!listId && listType === 'all') {
         return new Response('', {
           status: 302,
-          headers: { Location: `/?msg=emailed&emailerr=${encodeURIComponent('BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}` }
+          headers: { Location: `/newsletters?msg=emailed&emailerr=${encodeURIComponent('BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}` }
         });
       }
 
@@ -4200,11 +4314,19 @@ ${classesJs}
       const { row, emailHtml } = payload;
       const result = await sendBrevoNewsletter(env, { subject: row.subject, htmlContent: emailHtml, listIds: [listId] });
 
-      // Sending to all = publish the newsletter so it appears on the website
+      // Sending to all = publish the newsletter so it appears on the website,
+      // and record what actually went out. sent_at is what locks the issue from
+      // then on, and sent_count is what the list shows instead of guessing —
+      // "Sent 24 July to 609 subscribers" is a fact, not an estimate.
       if (listType === 'all' && result.success) {
+        let recipients = null;
+        try {
+          const c = await env.DB.prepare('SELECT COUNT(*) AS n FROM newsletter_subscribers').first();
+          recipients = c ? c.n : null;
+        } catch (_) { recipients = null; }
         await env.DB.prepare(
-          "UPDATE newsletters SET status = 'published', approval_status = 'approved', approved_by_username = ?, published_at = COALESCE(published_at, ?) WHERE id = ?"
-        ).bind(currentUser.username, new Date().toISOString().split('T')[0], id).run();
+          "UPDATE newsletters SET status = 'published', approval_status = 'approved', approved_by_username = ?, published_at = COALESCE(published_at, ?), sent_at = COALESCE(sent_at, ?), sent_count = COALESCE(sent_count, ?) WHERE id = ?"
+        ).bind(currentUser.username, new Date().toISOString().split('T')[0], new Date().toISOString(), recipients, id).run();
       }
 
       const suffix = result.success
@@ -4212,7 +4334,7 @@ ${classesJs}
         : `&emailerr=${encodeURIComponent(result.error)}`;
       return new Response('', {
         status: 302,
-        headers: { Location: `/?msg=emailed&subject=${encodeURIComponent(row.subject)}${suffix}` }
+        headers: { Location: `/newsletters?msg=emailed&subject=${encodeURIComponent(row.subject)}${suffix}` }
       });
     }
 
@@ -4231,14 +4353,14 @@ ${classesJs}
       if (!listId) {
         return new Response('', {
           status: 302,
-          headers: { Location: `/?msg=emailed&emailerr=${encodeURIComponent('BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}` }
+          headers: { Location: `/newsletters?msg=emailed&emailerr=${encodeURIComponent('BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}` }
         });
       }
       const scheduledDate = scheduledAtSubmitted ? new Date(scheduledAtSubmitted) : null;
       if (!scheduledDate || isNaN(scheduledDate.getTime()) || scheduledDate.getTime() <= Date.now()) {
         return new Response('', {
           status: 302,
-          headers: { Location: `/?msg=emailed&emailerr=${encodeURIComponent('Pick a valid date/time in the future to schedule this send.')}` }
+          headers: { Location: `/newsletters?msg=emailed&emailerr=${encodeURIComponent('Pick a valid date/time in the future to schedule this send.')}` }
         });
       }
       const scheduledAtIso = scheduledDate.toISOString();
@@ -4271,7 +4393,7 @@ ${classesJs}
         : `&emailerr=${encodeURIComponent(result.error)}`;
       return new Response('', {
         status: 302,
-        headers: { Location: `/?msg=emailed&subject=${encodeURIComponent(row.subject)}${suffix}` }
+        headers: { Location: `/newsletters?msg=emailed&subject=${encodeURIComponent(row.subject)}${suffix}` }
       });
     }
 
@@ -4287,14 +4409,74 @@ ${classesJs}
         if (!result.success) {
           return new Response('', {
             status: 302,
-            headers: { Location: `/?msg=emailed&emailerr=${encodeURIComponent(result.error)}` }
+            headers: { Location: `/newsletters?msg=emailed&emailerr=${encodeURIComponent(result.error)}` }
           });
         }
       }
       await env.DB.prepare(
         'UPDATE newsletters SET scheduled_send_at = NULL, scheduled_list_type = NULL, brevo_campaign_id = NULL WHERE id = ?'
       ).bind(id).run();
-      return new Response('', { status: 302, headers: { Location: `/?msg=emailed&scheduled=cancelled` } });
+      return new Response('', { status: 302, headers: { Location: `/newsletters?msg=emailed&scheduled=cancelled` } });
+    }
+
+    // ── LIVE EMAIL PREVIEW ──
+    // Rendered by buildEmailHtml — the exact function the send path uses — from
+    // the values currently in the form. That is the whole point: a preview
+    // written separately would drift from the email, and nobody would find out
+    // until an issue had already gone to ~600 people.
+    if (path === '/newsletter/preview' && method === 'POST') {
+      if (!hasPermission(currentUser, 'newsletter_edit') && !hasPermission(currentUser, 'newsletter_approve')) {
+        return new Response('Access denied.', { status: 403 });
+      }
+      const f = await request.formData();
+      const fmt = f.get('format') || 'weekly';
+      const on = (key) => f.get('block_' + key) === '1';
+
+      // Events come from the form as they are being edited, so the preview
+      // shows unsaved changes rather than what is in the database.
+      const evIds = f.getAll('event_ids');
+      const events = on('events') ? evIds.map((eid) => ({
+        event_date: f.get(`event_date_${eid}`) || '',
+        event_name: f.get(`event_name_${eid}`) || '',
+        event_time: f.get(`event_time_${eid}`) || '',
+        event_desc: f.get(`event_desc_${eid}`) || '',
+      })).filter((e) => e.event_name || e.event_date) : [];
+
+      let newsItems = [];
+      const newsIds = on('news') ? f.getAll('news_item_ids').filter(Boolean) : [];
+      if (newsIds.length) {
+        try {
+          const ph = newsIds.map(() => '?').join(',');
+          const nr = await env.DB.prepare(`SELECT id, title, summary, body, image_url FROM news_items WHERE id IN (${ph})`).bind(...newsIds).all();
+          const map = Object.fromEntries((nr.results || []).map((r) => [String(r.id), r]));
+          newsItems = newsIds.map((n) => map[n]).filter(Boolean);
+        } catch (_) { newsItems = []; }
+      }
+
+      let classes = [];
+      if (on('classes')) { try { classes = JSON.parse(f.get('bible_classes_json') || '[]'); } catch (_) { classes = []; } }
+
+      const emailHtml = buildEmailHtml(
+        f.get('subject') || '(no subject yet)',
+        f.get('pastor_note') || f.get('quick_body') || '',
+        events,
+        on('wol') ? (f.get('wol_content') || '') : '',
+        on('lasm') ? (f.get('lasm_content') || '') : '',
+        f.get('published_at') || new Date().toISOString().split('T')[0],
+        newsItems,
+        on('secondary') ? (f.get('secondary_note') || '') : '',
+        f.get('newsletter_id') || null,
+        fmt,
+        on('cta') ? (f.get('cta_url') || '') : '',
+        on('cta') ? (f.get('cta_label') || '') : '',
+        on('tertiary') ? (f.get('tertiary_note') || '') : '',
+        on('tertiary') ? (f.get('tertiary_cta_label') || '') : '',
+        on('tertiary') ? (f.get('tertiary_cta_url') || '') : '',
+        classes
+      );
+      return new Response(emailHtml, {
+        headers: { 'Content-Type': 'text/html; charset=utf-8', 'X-Robots-Tag': 'noindex, nofollow' },
+      });
     }
 
     // ── DELETE ──
@@ -4306,7 +4488,9 @@ ${classesJs}
       }
       await env.DB.prepare('DELETE FROM events WHERE newsletter_id = ?').bind(id).run();
       await env.DB.prepare('DELETE FROM newsletters WHERE id = ?').bind(id).run();
-      return new Response('', { status: 302, headers: { Location: '/newsitems' } });
+      // Back to the newsletter list, which is where the issue lived — News &
+      // Events is a different section now.
+      return new Response('', { status: 302, headers: { Location: '/newsletters?msg=deleted' } });
     }
 
     // ── DUPLICATE ──
@@ -7295,7 +7479,7 @@ ${sidebarShell('audit', currentUser)}
 
     // ── DASHBOARD ──
     const newsletters = await env.DB.prepare(
-      "SELECT id, subject, published_at, format, status, created_at FROM newsletters ORDER BY CASE WHEN status = 'draft' THEN 0 ELSE 1 END, published_at DESC"
+      "SELECT id, subject, published_at, format, status, created_at, approval_status, scheduled_send_at, sent_at, sent_count, beehiiv_id, brevo_campaign_id FROM newsletters ORDER BY CASE WHEN status = 'draft' THEN 0 ELSE 1 END, published_at DESC"
     ).all();
 
     const msgParam = url.searchParams.get('msg');
@@ -7369,88 +7553,55 @@ ${sidebarShell('audit', currentUser)}
     }
 
     const rows = newsletters.results;
-    const drafts = rows.filter(r => r.status === 'draft');
-    const published = rows.filter(r => r.status !== 'draft');
 
-    const fmtLabel = (r) => r.format === 'quick'
-      ? `<span class="badge" style="background:#e8f0fe;color:#1a3060;margin-left:8px;">⚡ Quick</span>`
-      : '';
-
-    const draftRowHtml = drafts.length === 0 ? '' : `
-<div class="card" style="border-color:var(--amber);">
-  <div class="card-title">Drafts <span class="badge badge-draft" style="vertical-align:middle;margin-left:8px;">${drafts.length} draft${drafts.length !== 1 ? 's' : ''}</span></div>
-  ${drafts.map(r => `
-<div class="newsletter-row">
-  <div class="newsletter-date">${r.published_at || r.created_at || ''}</div>
-  <div class="newsletter-subject">${r.subject}${fmtLabel(r)}</div>
-  <div class="newsletter-actions">
-    <a href="/edit/${r.id}" class="btn btn-sm btn-secondary">Edit</a>
-    <form method="POST" action="/newsletter/duplicate/${r.id}" style="display:contents;">
-      <button type="submit" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Copy</button>
-    </form>
-    <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Send to test list?')">
-      <input type="hidden" name="list_type" value="test">
-      <button type="submit" class="btn btn-sm" style="background:var(--mist);color:var(--steel);border:1px solid var(--border);">Send test</button>
-    </form>
-    <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Send to ALL subscribers? This cannot be undone.')">
-      <input type="hidden" name="list_type" value="all">
-      <button type="submit" class="btn btn-sm btn-primary">Send to all</button>
-    </form>
-    <form method="POST" action="/delete/${r.id}" style="display:contents;" onsubmit="return confirm('Delete this draft?')">
-      <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-    </form>
-  </div>
-</div>`).join('')}
-</div>`;
-
-    const publishedRowHtml = published.length === 0
-      ? `<div style="text-align:center;padding:40px;color:var(--gray);font-family:var(--sans);font-size:14px;">No newsletters published yet.</div>`
-      : published.map(r => `
-<div class="newsletter-row">
-  <div class="newsletter-date">${r.published_at || ''}</div>
-  <div class="newsletter-subject">${r.subject}${fmtLabel(r)}</div>
-  <div class="newsletter-actions">
-    <a href="/edit/${r.id}" class="btn btn-sm btn-secondary">Edit</a>
-    <form method="POST" action="/newsletter/duplicate/${r.id}" style="display:contents;">
-      <button type="submit" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Copy</button>
-    </form>
-    ${hasPermission(currentUser, 'newsletter_approve') ? `
-    <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Resend to test list?')">
-      <input type="hidden" name="list_type" value="test">
-      <button type="submit" class="btn btn-sm" style="background:var(--mist);color:var(--steel);border:1px solid var(--border);">Resend test</button>
-    </form>
-    <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Resend to ALL subscribers? This will send again to everyone.')">
-      <input type="hidden" name="list_type" value="all">
-      <button type="submit" class="btn btn-sm btn-primary">Resend to all</button>
-    </form>` : ''}
-    ${hasPermission(currentUser, 'newsletter_approve') ? `<form method="POST" action="/delete/${r.id}" style="display:contents;" onsubmit="return confirm('Delete this newsletter?')">
-      <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-    </form>` : ''}
-  </div>
-</div>`).join('');
+    const listRows = rows.map((r) => {
+      const st = issueStatus(r);
+      const sent = isNewsletterSent(r);
+      const when = r.published_at || (r.created_at || '').split('T')[0] || '—';
+      return {
+        href: `/edit/${r.id}`,
+        filter: sent ? 'sent' : (r.approval_status === 'pending' ? 'pending' : 'draft'),
+        search: `${r.subject || ''} ${st.label}`.toLowerCase(),
+        cells: [
+          primaryCell(r.subject || 'Untitled issue',
+            (r.format === 'quick' ? 'Quick announcement · ' : 'Weekly · ') + sendSummary(r)),
+          escapeHtml(when),
+          statusPill(st.tone, st.label),
+        ],
+        // A sent issue offers Duplicate rather than Edit — the row's own action
+        // says what is possible before anybody clicks into a locked screen.
+        actions: sent
+          ? `<form method="POST" action="/newsletter/duplicate/${r.id}" style="display:inline;margin:0;"><button type="submit" class="tlc-edit" style="background:none;border:0;cursor:pointer;font:inherit;color:inherit;">Duplicate as draft</button></form><a class="tlc-edit" href="/edit/${r.id}">View</a>`
+          : `<a class="tlc-edit" href="/edit/${r.id}">Edit</a>`,
+      };
+    });
 
     return html(`
-${sidebarShell('newsletter', currentUser, `<a href="https://timothystl.org/news" target="_blank">View archive →</a>`)}
-<div class="wrap">
-  <div class="page-title">Newsletters</div>
-  <div class="page-sub">Write your weekly update and publish to the website.</div>
-  ${alertHtml}
-  <div class="btn-row" style="margin-bottom:28px;">
-    <a href="/new" class="btn btn-primary">+ Write newsletter</a>
-  </div>
-  ${draftRowHtml}
-  <div class="card">
-    <div class="card-title">Past newsletters</div>
-    ${publishedRowHtml}
-  </div>
-  <div style="margin-top:24px;padding:16px 20px;background:var(--mist);border-radius:10px;border-left:3px solid var(--steel);">
-    <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--steel);margin-bottom:8px;">Your workflow</div>
-    <div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);line-height:1.9;">
-      <strong>1.</strong> Click "Write newsletter" — pick Weekly or Quick Announcement<br>
-      <strong>2.</strong> Fill in your content, add events if needed<br>
-      <strong>3.</strong> Hit Publish — it goes live on timothystl.org/news immediately
-    </div>
-  </div>
+${sidebarShell('newsletter', currentUser, `<a href="https://timothystl.org/news" target="_blank">View archive →</a>`, await badgeCounts(env, currentUser))}
+<div class="tlc-wrap">
+  ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
+  ${renderListSection({
+    key: 'newsletter',
+    title: 'Newsletter',
+    purpose: 'The weekly email and its archive on the website. A sent issue keeps its send record and cannot be changed.',
+    action: { label: '+ Write newsletter', href: '/new' },
+    search: 'Search issues',
+    filters: [
+      { label: 'All', value: 'all' },
+      { label: 'Drafts', value: 'draft' },
+      { label: 'Awaiting approval', value: 'pending' },
+      { label: 'Sent', value: 'sent' },
+    ],
+    columns: [
+      { label: 'Issue', width: '3fr' },
+      { label: 'Date', width: '1fr' },
+      { label: 'Status', width: '1.2fr' },
+    ],
+    rows: listRows,
+    noun: 'issue', nounPlural: 'issues',
+    empty: 'No newsletters yet.',
+    note: 'Once an issue has been sent it is read-only — around 600 people already have a copy, and the archive on the website has to keep saying what was actually sent. Duplicate it as a draft to work from a copy.',
+  })}
 </div>`, 'TLC Newsletter Admin');
   }
 };
