@@ -3,6 +3,14 @@
 
 import { formatDate } from './helpers.js';
 
+// Short plain-text fields that end up in a broadcast email — a note heading, a
+// subject — are typed by staff and land in six hundred inboxes. Rich bodies are
+// deliberately not run through this: they come from the editor and are HTML on
+// purpose. (The wider AC-2 sweep over this file is still open.)
+const esc = (v) => String(v == null ? '' : v)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
 // ── BREVO EMAIL SEND ─────────────────────────────────────────
 // Pass scheduledAt (ISO-8601 datetime) to have Brevo hold and auto-send the
 // campaign at that time instead of sending immediately.
@@ -72,7 +80,7 @@ export async function sendTransactionalEmail(env, { subject, htmlContent, toEmai
 
 // ── BUILD EMAIL HTML ─────────────────────────────────────────
 // Layout: header · 2/3 pastor note + 1/3 events · main news · secondary news · WOL+LASM · additional posts · footer
-export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmContent, publishedAt, newsItems = [], secondaryNote = '', newsletterId = null, format = 'weekly', ctaUrl = '', ctaLabel = '', tertiaryNote = '', tertiaryCtaLabel = '', tertiaryCtaUrl = '', bibleClasses = []) {
+export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmContent, publishedAt, newsItems = [], secondaryNote = '', newsletterId = null, format = 'weekly', ctaUrl = '', ctaLabel = '', tertiaryNote = '', tertiaryCtaLabel = '', tertiaryCtaUrl = '', bibleClasses = [], extraNotes = []) {
   const dateStr = formatDate(publishedAt);
   const isQuick = format === 'quick';
 
@@ -221,7 +229,7 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
   </tr></table>
 </td></tr>`).join('') : '';
 
-  const calendarLink = `<a href="https://timothystl.org/calendar" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;color:#D4922A;text-decoration:none;">View full calendar →</a>`;
+  const calendarLink = `<a href="https://timothystl.org/calendar" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;color:#D4922A;text-decoration:none;">View full calendar</a>`;
   const eventsSidebar = eventsRowsHtml ? `
 <div style="background:#F7F3EC;border-radius:8px;padding:14px;">
   <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#D4922A;margin-bottom:10px;">Upcoming</div>
@@ -241,7 +249,7 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
   <div style="font-family:'Lora',Georgia,serif;font-size:20px;color:#0A3C5C;margin-bottom:8px;">${mainNews.title}</div>
   ${mainNewsImg}
   ${(mainNews.summary || mainNews.body) ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:14px;color:#3D3530;line-height:1.75;margin-bottom:10px;">${truncate(mainNews.summary || fixBodyImgSrcs(mainNews.body), 280)}</div>` : ''}
-  <a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#D4922A;text-decoration:none;">Read more →</a>
+  <a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#D4922A;text-decoration:none;">Read more</a>
 </td></tr>` : '';
 
   const secondaryNewsImg = secondaryNews && secondaryNews.image_url ? `<img src="${fixImgSrc(secondaryNews.image_url)}" alt="" style="width:100%;max-height:200px;object-fit:contain;background:#F7F3EC;border-radius:8px;display:block;margin-bottom:8px;">` : '';
@@ -250,7 +258,7 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
   <div style="font-family:'Lora',Georgia,serif;font-size:17px;color:#0A3C5C;margin-bottom:6px;">${secondaryNews.title}</div>
   ${secondaryNewsImg}
   ${(secondaryNews.summary || secondaryNews.body) ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:13px;color:#3D3530;line-height:1.7;margin-bottom:8px;">${truncate(secondaryNews.summary || fixBodyImgSrcs(secondaryNews.body), 200)}</div>` : ''}
-  <a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#D4922A;text-decoration:none;">Read more →</a>
+  <a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#D4922A;text-decoration:none;">Read more</a>
 </td></tr>` : '';
 
   // WOL + LASM side by side — full width when only one is present
@@ -279,6 +287,17 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
   </div>
 </td></tr>` : '';
 
+  // Extra notes — the fourth block onward. Each is optional and each is its own
+  // block rather than one long one, so a thank-you and a correction in the same
+  // week read as two things. A heading is optional; without one the note simply
+  // starts. Titles are escaped because they are typed, and land in an email
+  // that goes to six hundred people.
+  const extraNotesHtml = (extraNotes || []).map((n) => `
+<tr><td style="padding-top:20px;border-top:1px solid #E8E0D0;">
+  ${n.title ? `<div style="font-family:Georgia,'Times New Roman',serif;font-size:17px;color:#0A3C5C;margin-bottom:8px;">${esc(n.title)}</div>` : ''}
+  <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:14px;color:#3D3530;line-height:1.8;">${n.body}</div>
+</td></tr>`).join('');
+
   // Additional posts (3rd item onward — compact)
   const additionalNewsHtml = additionalNews.length ? `
 <tr><td style="padding-top:20px;border-top:1px solid #E8E0D0;">
@@ -288,7 +307,7 @@ export function buildEmailHtml(subject, pastorNote, events, wolContent, lasmCont
     <tr><td style="padding:11px 0;border-bottom:1px solid #F0E8DC;">
       <div style="font-family:'Lora',Georgia,serif;font-size:15px;color:#0A3C5C;margin-bottom:4px;">${item.title}</div>
       ${(item.summary || item.body) ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;color:#3D3530;line-height:1.65;margin-bottom:6px;">${truncate(item.summary || fixBodyImgSrcs(item.body), 150)}</div>` : ''}
-      <a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;color:#D4922A;text-decoration:none;">Read more →</a>
+      <a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;color:#D4922A;text-decoration:none;">Read more</a>
     </td></tr>`).join('')}
   </table>
 </td></tr>` : '';
@@ -332,7 +351,7 @@ img{max-width:100% !important;height:auto !important;}
         <table width="100%" cellpadding="0" cellspacing="0">
           <tr>
             <td class="pastor-col" width="390" valign="top" style="padding-right:18px;border-right:1px solid #E8E0D0;">
-              ${pastorNote ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:15px;color:#3D3530;line-height:1.85;">${truncate(pastorNote, 500)}</div><div style="margin-top:10px;"><a href="https://timothystl.org/${newsletterId ? 'news/' + newsletterId : 'news'}" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#D4922A;text-decoration:none;">Read the full letter →</a></div>` : ''}
+              ${pastorNote ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:15px;color:#3D3530;line-height:1.85;">${truncate(pastorNote, 500)}</div><div style="margin-top:10px;"><a href="https://timothystl.org/${newsletterId ? 'news/' + newsletterId : 'news'}" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;font-weight:700;color:#D4922A;text-decoration:none;">Read the full letter</a></div>` : ''}
             </td>
             <td class="spacer-col" width="16"></td>
             <td class="events-col" width="165" valign="top">${eventsSidebar}</td>
@@ -346,6 +365,7 @@ img{max-width:100% !important;height:auto !important;}
           ${secondaryNewsHtml}
           ${ministryRowHtml}
           ${tertiaryNoteHtml}
+          ${extraNotesHtml}
           ${additionalNewsHtml}
           ${bibleClasses && bibleClasses.length ? `
 <tr><td style="padding-top:22px;border-top:1px solid #E8E0D0;">
@@ -361,7 +381,7 @@ img{max-width:100% !important;height:auto !important;}
       </tr></table>
     </td></tr>`).join('')}
   </table>
-  <div style="margin-top:10px;"><a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;color:#C9973A;text-decoration:none;">View full calendar →</a></div>
+  <div style="margin-top:10px;"><a href="https://timothystl.org/news" style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;color:#C9973A;text-decoration:none;">View full calendar</a></div>
 </td></tr>` : ''}
         </table>
         <!-- FOOTER -->

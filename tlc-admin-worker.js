@@ -22,7 +22,7 @@ const STATIC_PAGES = [
   { slug: 'calendar',   label: 'Calendar' },
 ];
 import { html, sidebarShell, loginPage, setupPage, forgotPasswordPage, resetPasswordPage, permissionCheckboxes, formatDate, escapeHtml, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection } from './admin/helpers.js';
-import { renderListSection, renderDrawer, primaryCell, statusPill, valueChip, valueChips, panel, countLabel, pluralise,
+import { renderListSection, renderDrawer, renderFormSection, primaryCell, statusPill, valueChip, valueChips, panel, countLabel, pluralise,
          rowActions, toggleCell, panelList } from './admin/ui.js';
 import { SECTIONS, section as sectionCfg, columnsOf, filtersOf } from './admin/sections.js';
 import { dayKey, pruneBefore, countInMonth, tapCountLabel, everCounted, validTapId } from './admin/taps.js';
@@ -48,7 +48,8 @@ import { diffSummary, auditGroup, canRollback as auditCanRollback, rollbackNote,
 import { BLOCKS as NL_BLOCKS, parseBlocks as parseNlBlocks, serializeBlocks as serializeNlBlocks,
          blockOn, AUDIENCES, normalizeAudience, subjectAdvice, preheaderAdvice,
          isSent as isNewsletterSent, canEdit as canEditNewsletter, approvalState,
-         issueStatus, sendSummary, parseSubscriberCsv } from './admin/newsletter.js';
+         issueStatus, sendSummary, parseSubscriberCsv,
+         parseExtras, extrasFromForm, serializeExtras, MAX_EXTRA_NOTES } from './admin/newsletter.js';
 import { screenSubmission, formConfig, forwardToChms, officeEmailHtml, officeSubject,
          handleFilteredRoutes, heldCount, OFFICE_EMAIL } from './admin/forms.js';
 
@@ -361,7 +362,7 @@ async function getChmsFundSuggestions(env) {
 // newsletter's content and renders it to the same email HTML both paths send.
 async function buildNewsletterEmailPayload(env, id) {
   const row = await env.DB.prepare(
-    'SELECT subject, pastor_note, wol_content, lasm_content, secondary_note, published_at, format, cta_url, cta_label, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, news_item_ids FROM newsletters WHERE id = ?'
+    'SELECT subject, pastor_note, wol_content, lasm_content, secondary_note, published_at, format, cta_url, cta_label, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, news_item_ids, extra_notes FROM newsletters WHERE id = ?'
   ).bind(id).first();
   if (!row) return null;
 
@@ -382,7 +383,7 @@ async function buildNewsletterEmailPayload(env, id) {
     selectedNewsItems = selectedNewsIds.map(nid => newsMap[nid]).filter(Boolean);
   }
 
-  const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at, selectedNewsItems, row.secondary_note || '', id, row.format || 'weekly', row.cta_url || '', row.cta_label || '', row.tertiary_note || '', row.tertiary_cta_label || '', row.tertiary_cta_url || '', JSON.parse(row.bible_classes || '[]'));
+  const emailHtml = buildEmailHtml(row.subject, row.pastor_note, eventsRows.results, row.wol_content || '', row.lasm_content || '', row.published_at, selectedNewsItems, row.secondary_note || '', id, row.format || 'weekly', row.cta_url || '', row.cta_label || '', row.tertiary_note || '', row.tertiary_cta_label || '', row.tertiary_cta_url || '', JSON.parse(row.bible_classes || '[]'), parseExtras(row.extra_notes));
   return { row, emailHtml };
 }
 
@@ -806,7 +807,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-08-01-8'; // bumped: tap_hits (the NFC taps are counted now)
+    const SCHEMA_VERSION = '2026-08-01-9'; // bumped: newsletters.extra_notes (a fourth and fifth note)
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -1365,6 +1366,10 @@ export default {
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN preheader TEXT').run(); } catch (_) {}
     try { await env.DB.prepare("ALTER TABLE newsletters ADD COLUMN audience TEXT DEFAULT 'everyone'").run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN blocks TEXT').run(); } catch (_) {}
+    // A fourth and fifth free-form note. JSON rather than more columns, because
+    // how many notes an issue carries is a property of the issue — a week
+    // needing three extras should not need a migration. See admin/newsletter.js.
+    try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN extra_notes TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN sent_at TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE newsletters ADD COLUMN sent_count INTEGER').run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_MENU_ITEMS).run(); } catch (_) {}
@@ -1775,7 +1780,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
     <a href="https://timothystl.org">← Back to site</a>
   </div>
 </div>
-<div class="wrap">
+<div class="tlc-wrap">
   <h1>News &amp; Updates</h1>
   <p class="sub">Weekly newsletters from Pastor and the Timothy Lutheran family.</p>
   ${listHtml}
@@ -2432,7 +2437,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
   <div style="height:18px;"></div>
   <div class="tlc-dash-grid">
     ${panel('This Sunday', sundayHtml + sermonLine, { pad: true })}
-    ${panel('Last 24 hours', tailHtml, { right: `<a href="/audit-log" style="color:var(--tlc-blue);text-decoration:none;">Full log →</a>` })}
+    ${panel('Last 24 hours', tailHtml, { right: `<a href="/audit-log" style="color:var(--tlc-blue);text-decoration:none;">Full log</a>` })}
   </div>`;
 
       const overviewBody = `
@@ -2441,7 +2446,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
     ${panel(`Needs you${tasks.length ? ` · ${tasks.length}` : ''}`, tasksHtml, { pad: false })}
     <div class="tlc-stack">
       ${jumpHtml ? panel('Jump to', `<div class="tlc-jump">${jumpHtml}</div>`) : ''}
-      ${panel('Last 24 hours', tailHtml, { right: `<a href="/audit-log" style="color:var(--tlc-blue);text-decoration:none;">Full log →</a>` })}
+      ${panel('Last 24 hours', tailHtml, { right: `<a href="/audit-log" style="color:var(--tlc-blue);text-decoration:none;">Full log</a>` })}
     </div>
   </div>`;
 
@@ -2706,7 +2711,7 @@ ${sidebarShell('media', currentUser, '', await badgeCounts(env, currentUser))}
   </div>`).join('');
 
         return html(`
-${sidebarShell('menu', currentUser, `<a href="https://timothystl.org" target="_blank">View site →</a>`, await badgeCounts(env, currentUser))}
+${sidebarShell('menu', currentUser, `<a href="https://timothystl.org" target="_blank">View site</a>`, await badgeCounts(env, currentUser))}
 <div class="tlc-menu-wrap">
   <div class="tlc-section-head" style="margin-bottom:14px;">
     <div class="tlc-section-headings">
@@ -2858,7 +2863,7 @@ ${sidebarShell('menu', currentUser, `<a href="https://timothystl.org" target="_b
         const { pageRows } = await loadMenu();
         return html(`
 ${sidebarShell('menu', currentUser, `<a href="/menu">← Menu</a>`, await badgeCounts(env, currentUser))}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">Add a menu item</div>
   <div class="page-sub">A menu item can point at one of your pages, at an outside site, or at a short link.</div>
   <div class="card">
@@ -2968,7 +2973,7 @@ ${sidebarShell('menu', currentUser, `<a href="/menu">← Menu</a>`, await badgeC
         });
 
         return html(`
-${sidebarShell('partners', currentUser, `<a href="https://timothystl.org/about/values" target="_blank">View values page →</a>`, await badgeCounts(env, currentUser))}
+${sidebarShell('partners', currentUser, `<a href="https://timothystl.org/about/values" target="_blank">View values page</a>`, await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -2996,7 +3001,7 @@ ${sidebarShell('partners', currentUser, `<a href="https://timothystl.org/about/v
         const preset = normalizeValue(url.searchParams.get('value'));
         return html(`
 ${sidebarShell('partners', currentUser, `<a href="/partners">← All partners</a>`, await badgeCounts(env, currentUser))}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">${isNew ? 'Add a partner' : escapeHtml(p.name)}</div>
   <div class="page-sub">Shown on the values page and in the dashboard's values report, paired to one core value.</div>
   <div class="card">
@@ -3291,7 +3296,7 @@ ${PAYROLL_HTML}`, 'Payroll');
           </div>`).join('');
       return html(`
 ${sidebarShell('voters', currentUser)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">Voters Page</div>
   <div class="page-sub">Manage the members-only voters page content at timothystl.org/voters</div>
   ${alertHtml}
@@ -3477,7 +3482,7 @@ document.getElementById('upload-form').addEventListener('submit', async function
       }
 
       return html(`
-${sidebarShell('sermons', currentUser, `<a href="/sermons/new-series">+ Add series</a> <a href="/sermons/new-note">+ Standalone sermon</a> <a href="https://timothystl.org/sermons" target="_blank">View page →</a>`, await badgeCounts(env, currentUser))}
+${sidebarShell('sermons', currentUser, `<a href="https://timothystl.org/sermons" target="_blank">View page</a>`, await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -3485,6 +3490,10 @@ ${sidebarShell('sermons', currentUser, `<a href="/sermons/new-series">+ Add seri
     title: sectionCfg('sermons').title,
     purpose: sectionCfg('sermons').purpose,
     action: { label: sectionCfg('sermons').action, href: '/sermons/new-series' },
+    // Beside the primary button rather than up in the topbar. A sermon with no
+    // series is a real thing to add, and putting it next to the sign-out link
+    // made it look like part of the chrome rather than part of this screen.
+    altActions: [{ label: '+ Standalone sermon', href: '/sermons/new-note' }],
     search: sectionCfg('sermons').search,
     filters: filtersOf('sermons'),
     columns: columnsOf('sermons'),
@@ -3496,29 +3505,74 @@ ${sidebarShell('sermons', currentUser, `<a href="/sermons/new-series">+ Add seri
 </div>`, 'Sermons Admin');
     }
 
+    // ── SERMONS: THE TWO FORMS, ONCE EACH ──
+    // Series and sermons each had a New and an Edit that were the same fields
+    // twice, on the old chrome. One builder apiece, through the shared renderer.
+    const seriesFormHtml = (r = null) => renderFormSection({
+      title: r ? (r.title || 'Edit series') : 'New series',
+      purpose: r
+        ? 'The series and its date range, as they read on the sermons page.'
+        : 'A run of sermons under one heading. Add the sermons themselves once it exists.',
+      action: r ? `/sermons/edit-series/${r.id}` : '/sermons/new-series',
+      cancelHref: '/sermons',
+      saveLabel: r ? 'Save changes' : 'Create series',
+      deleteAction: r ? `/sermons/delete-series/${r.id}` : '',
+      deleteConfirm: r ? `Delete “${r.title}” and every sermon in it? This cannot be undone.` : '',
+      deleteLabel: 'Delete series',
+      fields: [
+        { name: 'title', label: 'Series title', value: r ? r.title : '', required: true, placeholder: 'The Shepherd’s Way' },
+        { kind: 'textarea', name: 'description', label: 'Description', rows: 3, value: r ? (r.description || '') : '',
+          placeholder: 'What the series is about.' },
+        { name: 'date_range', label: 'Date range', value: r ? (r.date_range || '') : '', placeholder: 'Lent 2026 · March–April',
+          hint: 'Free text — it is read, not sorted on.' },
+        { name: 'playlist_url', type: 'url', label: 'YouTube playlist', value: r ? (r.playlist_url || '') : '',
+          placeholder: 'https://www.youtube.com/playlist?list=…', hint: 'Optional.' },
+        { kind: 'toggle', name: 'active', label: 'The current series', value: r ? !!r.active : false,
+          on: 'Current', off: 'Past series',
+          hint: 'One series at a time is the current one. Turning this on turns it off everywhere else.' },
+      ],
+    });
+
+    const noteFormHtml = (n, seriesRows, presetSeries = '') => {
+      const isNew = !n;
+      const back = (n && n.series_id) || presetSeries ? `/sermons/notes/${(n && n.series_id) || presetSeries}` : '/sermons';
+      return renderFormSection({
+        title: isNew ? 'New sermon' : n.title || 'Edit sermon',
+        purpose: 'A sermon with no recording is a good text card on the site. Adding a link later upgrades it with no other edit.',
+        action: isNew ? '/sermons/new-note' : `/sermons/edit-note/${n.id}`,
+        cancelHref: back,
+        saveLabel: isNew ? 'Add sermon' : 'Save changes',
+        deleteAction: isNew ? '' : `/sermons/delete-note/${n.id}`,
+        deleteConfirm: `Delete “${(n && n.title) || 'this sermon'}”?`,
+        deleteLabel: 'Delete sermon',
+        wide: true,
+        fields: [
+          { kind: 'choice', name: 'series_id', label: 'Series',
+            value: String((n && n.series_id) || presetSeries || ''),
+            options: [{ value: '', label: '— Standalone sermon —' }]
+              .concat(seriesRows.map((x) => ({ value: String(x.id), label: x.title }))),
+            hint: 'A standalone sermon stands on its own on the sermons page.' },
+          { kind: 'date', name: 'date', label: 'Date', value: n ? (n.date || '') : '' },
+          { name: 'title', label: 'Sermon title', value: n ? n.title : '', required: true, placeholder: 'You prepare a table before me' },
+          { name: 'scripture', label: 'Scripture', value: n ? (n.scripture || '') : '', placeholder: 'Psalm 23:5' },
+          { kind: 'html', html: tinymceSermonSection(n ? n.outline : '') },
+          { name: 'youtube_url', type: 'url', label: 'YouTube link', value: n ? (n.youtube_url || '') : '',
+            placeholder: 'https://…', hint: 'Optional. With one, the card gains a play button.' },
+        ],
+      });
+    };
+
     if (path === '/sermons/new-series' && method === 'GET') {
       return html(`
-${sidebarShell('sermons', currentUser, `<a href="/sermons">← Back</a>`)}
-<div class="wrap">
-  <div class="page-title">New Sermon Series</div>
-  <form method="POST" action="/sermons/new-series">
-    <div class="card">
-      <div class="form-group"><label>Series title</label><input type="text" name="title" required placeholder="e.g. The Shepherd's Way"></div>
-      <div class="form-group"><label>Description</label><textarea name="description" placeholder="Brief description shown on the sermons page..."></textarea></div>
-      <div class="form-group"><label>Date range</label><input type="text" name="date_range" placeholder="e.g. Lent 2025 · March–April"></div>
-      <div class="form-group"><label>YouTube playlist URL</label><input type="text" name="playlist_url" placeholder="https://www.youtube.com/playlist?list=..."></div>
-      <div class="checkbox-row"><input type="checkbox" name="active" value="1" id="active"><label for="active" style="display:inline;text-transform:none;letter-spacing:0;font-size:14px;">Mark as active (current series)</label></div>
-      <div class="btn-row" style="margin-top:20px;"><button type="submit" class="btn btn-primary">Create series</button><a href="/sermons" class="btn" style="background:var(--linen);color:var(--charcoal);">Cancel</a></div>
-    </div>
-  </form>
-</div>`, 'New Series');
+${sidebarShell('sermons', currentUser, `<a href="/sermons">All sermons</a>`)}
+<div class="tlc-wrap">${seriesFormHtml()}</div>`, 'New series — TLC Admin');
     }
 
     if (path === '/sermons/new-series' && method === 'POST') {
       const form = await request.formData();
       const title = (form.get('title') || '').trim();
       if (!title) return new Response('', { status: 302, headers: { Location: '/sermons' } });
-      const active = form.get('active') === '1' ? 1 : 0;
+      const active = form.getAll('active').includes('1') ? 1 : 0;
       if (active) await env.DB.prepare('UPDATE sermon_series SET active = 0').run();
       await env.DB.prepare('INSERT INTO sermon_series (title, description, date_range, playlist_url, active) VALUES (?, ?, ?, ?, ?)')
         .bind(title, form.get('description') || '', form.get('date_range') || '', form.get('playlist_url') || '', active).run();
@@ -3530,27 +3584,15 @@ ${sidebarShell('sermons', currentUser, `<a href="/sermons">← Back</a>`)}
       const s = await env.DB.prepare('SELECT * FROM sermon_series WHERE id = ?').bind(id).first();
       if (!s) return new Response('Not found', { status: 404 });
       return html(`
-${sidebarShell('sermons', currentUser, `<a href="/sermons">← Back</a>`)}
-<div class="wrap">
-  <div class="page-title">Edit Series</div>
-  <form method="POST" action="/sermons/edit-series/${id}">
-    <div class="card">
-      <div class="form-group"><label>Series title</label><input type="text" name="title" required value="${s.title}"></div>
-      <div class="form-group"><label>Description</label><textarea name="description">${s.description || ''}</textarea></div>
-      <div class="form-group"><label>Date range</label><input type="text" name="date_range" value="${s.date_range || ''}"></div>
-      <div class="form-group"><label>YouTube playlist URL</label><input type="text" name="playlist_url" value="${s.playlist_url || ''}"></div>
-      <div class="checkbox-row"><input type="checkbox" name="active" value="1" id="active" ${s.active ? 'checked' : ''}><label for="active" style="display:inline;text-transform:none;letter-spacing:0;font-size:14px;">Mark as active (current series)</label></div>
-      <div class="btn-row" style="margin-top:20px;"><button type="submit" class="btn btn-primary">Save changes</button><a href="/sermons/notes/${id}" class="btn btn-secondary">Manage sermons</a><a href="/sermons" class="btn" style="background:var(--linen);color:var(--charcoal);">Cancel</a></div>
-    </div>
-  </form>
-</div>`, 'Edit Series');
+${sidebarShell('sermons', currentUser, `<a href="/sermons/notes/${id}">Sermons in this series</a>`)}
+<div class="tlc-wrap">${seriesFormHtml(s)}</div>`, 'Edit series — TLC Admin');
     }
 
     if (path.startsWith('/sermons/edit-series/') && method === 'POST') {
       const id = path.split('/').pop();
       const form = await request.formData();
       const title = (form.get('title') || '').trim();
-      const active = form.get('active') === '1' ? 1 : 0;
+      const active = form.getAll('active').includes('1') ? 1 : 0;
       if (active) await env.DB.prepare('UPDATE sermon_series SET active = 0').run();
       await env.DB.prepare('UPDATE sermon_series SET title=?, description=?, date_range=?, playlist_url=?, active=? WHERE id=?')
         .bind(title, form.get('description') || '', form.get('date_range') || '', form.get('playlist_url') || '', active, id).run();
@@ -3587,7 +3629,7 @@ ${sidebarShell('sermons', currentUser, `<a href="/sermons">← Back</a>`)}
 </div>`).join('');
       return html(`
 ${sidebarShell('sermons', currentUser, `<a href="/sermons">← All series</a>`)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">${s.title}</div>
   <div class="page-sub">${s.date_range || 'Sermons in this series'}</div>
   <div class="btn-row" style="margin-bottom:20px;">
@@ -3601,24 +3643,9 @@ ${sidebarShell('sermons', currentUser, `<a href="/sermons">← All series</a>`)}
     if (path === '/sermons/new-note' && method === 'GET') {
       const seriesId = url.searchParams.get('series_id') || '';
       const allSeries = await env.DB.prepare('SELECT id, title FROM sermon_series ORDER BY active DESC, id DESC').all();
-      const seriesOptions = allSeries.results.map(s => `<option value="${s.id}" ${s.id == seriesId ? 'selected' : ''}>${s.title}</option>`).join('');
       return html(`
-${sidebarShell('sermons', currentUser, `<a href="${seriesId ? '/sermons/notes/' + seriesId : '/sermons'}">← Back</a>`)}
-<div class="wrap">
-  <div class="page-title">Add Sermon</div>
-  <form method="POST" action="/sermons/new-note">
-    <input type="hidden" name="series_id" value="${seriesId}">
-    <div class="card">
-      <div class="form-group"><label>Series (optional)</label><select name="series_id"><option value="">— Standalone sermon —</option>${seriesOptions}</select></div>
-      <div class="form-group"><label>Date</label><input type="date" name="date"></div>
-      <div class="form-group"><label>Sermon title</label><input type="text" name="title" required placeholder="e.g. You prepare a table before me"></div>
-      <div class="form-group"><label>Scripture reference</label><input type="text" name="scripture" placeholder="e.g. Psalm 23:5"></div>
-      ${tinymceSermonSection()}
-      <div class="form-group"><label>YouTube link (optional)</label><input type="text" name="youtube_url" placeholder="Link to this specific service recording"></div>
-      <div class="btn-row" style="margin-top:20px;"><button type="submit" class="btn btn-primary">Add sermon</button><a href="${seriesId ? '/sermons/notes/' + seriesId : '/sermons'}" class="btn" style="background:var(--linen);color:var(--charcoal);">Cancel</a></div>
-    </div>
-  </form>
-</div>`, 'Add Sermon', TINYMCE_HEAD);
+${sidebarShell('sermons', currentUser, `<a href="${seriesId ? '/sermons/notes/' + seriesId : '/sermons'}">All sermons</a>`)}
+<div class="tlc-wrap">${noteFormHtml(null, allSeries.results, seriesId)}</div>`, 'New sermon — TLC Admin', TINYMCE_HEAD);
     }
 
     if (path === '/sermons/new-note' && method === 'POST') {
@@ -3637,29 +3664,9 @@ ${sidebarShell('sermons', currentUser, `<a href="${seriesId ? '/sermons/notes/' 
       const n = await env.DB.prepare('SELECT * FROM sermon_notes WHERE id = ?').bind(id).first();
       if (!n) return new Response('Not found', { status: 404 });
       const allSeries = await env.DB.prepare('SELECT id, title FROM sermon_series ORDER BY active DESC, id DESC').all();
-      const seriesOptions = allSeries.results.map(s => `<option value="${s.id}" ${s.id == n.series_id ? 'selected' : ''}>${s.title}</option>`).join('');
       return html(`
-${sidebarShell('sermons', currentUser, `<a href="${n.series_id ? '/sermons/notes/' + n.series_id : '/sermons'}">← Back</a>`)}
-<div class="wrap">
-  <div class="page-title">Edit Sermon</div>
-  <form method="POST" action="/sermons/edit-note/${id}">
-    <div class="card">
-      <div class="form-group"><label>Series (optional)</label><select name="series_id"><option value="">— Standalone sermon —</option>${seriesOptions}</select></div>
-      <div class="form-group"><label>Date</label><input type="date" name="date" value="${n.date || ''}"></div>
-      <div class="form-group"><label>Sermon title</label><input type="text" name="title" required value="${n.title}"></div>
-      <div class="form-group"><label>Scripture reference</label><input type="text" name="scripture" value="${n.scripture || ''}"></div>
-      ${tinymceSermonSection(n.outline)}
-      <div class="form-group"><label>YouTube link (optional)</label><input type="text" name="youtube_url" value="${n.youtube_url || ''}"></div>
-      <div class="btn-row" style="margin-top:20px;">
-        <button type="submit" class="btn btn-primary">Save changes</button>
-        <a href="${n.series_id ? '/sermons/notes/' + n.series_id : '/sermons'}" class="btn" style="background:var(--linen);color:var(--charcoal);">Cancel</a>
-        <form method="POST" action="/sermons/delete-note/${id}" style="margin:0;" onsubmit="return confirm('Delete this sermon?')">
-          <button type="submit" class="btn btn-danger">Delete sermon</button>
-        </form>
-      </div>
-    </div>
-  </form>
-</div>`, 'Edit Sermon', TINYMCE_HEAD);
+${sidebarShell('sermons', currentUser, `<a href="${n.series_id ? '/sermons/notes/' + n.series_id : '/sermons'}">All sermons</a>`)}
+<div class="tlc-wrap">${noteFormHtml(n, allSeries.results)}</div>`, 'Edit sermon — TLC Admin', TINYMCE_HEAD);
     }
 
     if (path.startsWith('/sermons/edit-note/') && method === 'POST') {
@@ -3693,6 +3700,46 @@ ${sidebarShell('sermons', currentUser, `<a href="${n.series_id ? '/sermons/notes
     }
 
     // ── NEW NEWSLETTER FORM ──
+    // The extra note slots. All of them are rendered so TinyMCE can initialise
+    // each one at load; the unused ones are simply hidden, and "+ Add another
+    // note" reveals the next. Creating an editor instance on click would be a
+    // second way for a rich field to exist, and that is how one of them ends up
+    // behaving differently from the rest.
+    const extraNoteFields = (list) => {
+      const rows = [];
+      for (let i = 0; i < MAX_EXTRA_NOTES; i++) {
+        const n = list[i] || { title: '', body: '' };
+        const shown = i < Math.max(list.length, 1);
+        rows.push(`<div class="tlc-extra-note" data-extra="${i}"${shown ? '' : ' hidden'}>
+          <div class="form-group">
+            <label>Heading <span style="font-weight:400;color:var(--gray);">(optional)</span></label>
+            <input type="text" name="extra_title_${i}" value="${escapeHtml(n.title || '')}" placeholder="e.g. Thank you">
+          </div>
+          <div class="form-group">
+            ${tinymceNoteSection(`extra-editor-${i}`, `extra_note_${i}`, n.body || '', 140)}
+          </div>
+        </div>`);
+      }
+      return rows.join('');
+    };
+    const extraNotesScript = `<script>
+    (function(){
+      var btn = document.getElementById('add-extra-note');
+      if (!btn) return;
+      var slots = Array.prototype.slice.call(document.querySelectorAll('.tlc-extra-note'));
+      function sync(){
+        var next = slots.filter(function(s){ return s.hasAttribute('hidden'); })[0];
+        btn.style.display = next ? '' : 'none';
+      }
+      btn.addEventListener('click', function(){
+        var next = slots.filter(function(s){ return s.hasAttribute('hidden'); })[0];
+        if (next) next.removeAttribute('hidden');
+        sync();
+      });
+      sync();
+    })();
+    </script>`;
+
     if (path === '/new' && method === 'GET') {
       const today = new Date().toISOString().split('T')[0];
       // Fetch recent news items available for email inclusion
@@ -3733,7 +3780,7 @@ ${sidebarShell('sermons', currentUser, `<a href="${n.series_id ? '/sermons/notes
         </div>`).join('') : '';
       return html(`
 ${sidebarShell('news', currentUser, `<a href="/newsitems">← News &amp; Events</a>`)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">New newsletter</div>
   <div class="page-sub">Write your update, add events, and publish to the website.</div>
 
@@ -3828,6 +3875,13 @@ ${sidebarShell('news', currentUser, `<a href="/newsitems">← News &amp; Events<
           </div>
         </div>
       </div>
+      <div class="card">
+        <div class="card-title">More notes <span class="tag">Optional</span></div>
+        <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">A fourth and fifth block, below everything else — a thank-you, a correction, a one-off appeal. Each appears only if you write something in it.</div>
+        ${extraNoteFields([])}
+        <button type="button" class="add-event-btn" id="add-extra-note">+ Add another note</button>
+        ${extraNotesScript}
+      </div>
     </div>
 
     <!-- QUICK ANNOUNCEMENT FIELDS -->
@@ -3867,7 +3921,7 @@ ${sidebarShell('news', currentUser, `<a href="/newsitems">← News &amp; Events<
     </div>
 
     <div class="btn-row" style="margin-top:8px;">
-      ${hasPermission(currentUser, 'newsletter_approve') ? `<button type="submit" name="action" value="publish" class="btn btn-primary">Publish →</button>` : ''}
+      ${hasPermission(currentUser, 'newsletter_approve') ? `<button type="submit" name="action" value="publish" class="btn btn-primary">Publish</button>` : ''}
       <button type="submit" name="action" value="draft" class="btn btn-secondary">Save as draft</button>
       <a href="/" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
     </div>
@@ -4007,6 +4061,11 @@ addEvent();
       const wolContent = fmt === 'weekly' ? stripBlobImgs(form.get('wol_content') || '') : '';
       const lasmContent = fmt === 'weekly' ? stripBlobImgs(form.get('lasm_content') || '') : '';
       const tertiaryNote = fmt === 'weekly' ? stripBlobImgs(form.get('tertiary_note') || '') : '';
+      // Blank slots collapse, so filling the third box without the second
+      // does not leave a hole in the email.
+      const extraNotesJson = fmt === 'weekly'
+        ? serializeExtras(extrasFromForm(form).map((n) => ({ title: n.title, body: stripBlobImgs(n.body) })))
+        : '[]';
       const tertiaryCtaLabel = fmt === 'weekly' ? form.get('tertiary_cta_label') || '' : '';
       const tertiaryCtaUrl = fmt === 'weekly' ? form.get('tertiary_cta_url') || '' : '';
       // Legacy fields kept for DB compat but no longer used in the form
@@ -4074,16 +4133,16 @@ addEvent();
       if (editId) {
         // Update existing newsletter
         await env.DB.prepare(
-          'UPDATE newsletters SET subject=?, pastor_note=?, ministry_content=?, ministry_type=?, published_at=?, format=?, cta_url=?, cta_label=?, status=?, wol_content=?, lasm_content=?, secondary_note=?, news_item_ids=?, tertiary_note=?, tertiary_cta_label=?, tertiary_cta_url=?, bible_classes=?, preheader=?, audience=?, blocks=? WHERE id=?'
-        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, preheader, audience, blocksJson, editId).run();
+          'UPDATE newsletters SET subject=?, pastor_note=?, ministry_content=?, ministry_type=?, published_at=?, format=?, cta_url=?, cta_label=?, status=?, wol_content=?, lasm_content=?, secondary_note=?, news_item_ids=?, tertiary_note=?, tertiary_cta_label=?, tertiary_cta_url=?, bible_classes=?, preheader=?, audience=?, blocks=?, extra_notes=? WHERE id=?'
+        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, preheader, audience, blocksJson, extraNotesJson, editId).run();
         newsletterId = parseInt(editId, 10);
         // Replace events
         await env.DB.prepare('DELETE FROM events WHERE newsletter_id = ?').bind(newsletterId).run();
       } else {
         // Insert new newsletter
         const result = await env.DB.prepare(
-          'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, preheader, audience, blocks) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, preheader, audience, blocksJson).run();
+          'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, preheader, audience, blocks, extra_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(subject, savedNote, ministryContent, ministryType, publishedAt, fmt, ctaUrl, ctaLabel, status, wolContent, lasmContent, secondaryNote, newsIdsStr, tertiaryNote, tertiaryCtaLabel, tertiaryCtaUrl, bibleClassesJson, preheader, audience, blocksJson, extraNotesJson).run();
         newsletterId = result.meta.last_row_id;
       }
 
@@ -4140,60 +4199,49 @@ addEvent();
     // The add form lives on its own address rather than under the list, so
     // this section reads the same as every other one: a list, and one action
     // that opens a form.
+    // ── CHRISTIAN ED: THE FORM, ONCE ──
+    // Add and Edit were two copies of the same fields on the old chrome. One
+    // builder, through the shared renderer.
+    const ceFormHtml = (c = null) => {
+      const isNew = !c;
+      const ACCENT_OPTS = [['mid', 'Navy'], ['teal', 'Teal'], ['steel', 'Steel'], ['sage', 'Moss'], ['amber', 'Gold'], ['plum', 'Plum']];
+      return renderFormSection({
+        title: isNew ? 'New class' : c.title || 'Edit class',
+        purpose: isNew
+          ? 'It appears on /education and in the newsletter’s class picker as soon as you save.'
+          : 'Changes reach /education and the newsletter picker as soon as you save.',
+        action: isNew ? '/christian-education/create' : `/christian-education/update/${c.id}`,
+        cancelHref: '/christian-education',
+        saveLabel: isNew ? 'Add class' : 'Save changes',
+        deleteAction: isNew ? '' : `/christian-education/delete/${c.id}`,
+        deleteConfirm: `Delete “${(c && c.title) || 'this class'}”? It disappears from /education.`,
+        fields: [
+          { name: 'title', label: 'Class title', value: c ? c.title : '', required: true, placeholder: 'Men’s Bible Study' },
+          { name: 'label', label: 'Eyebrow', value: c ? (c.label || '') : '', placeholder: 'Saturday mornings',
+            hint: 'The small line above the title on the website.' },
+          { name: 'schedule', label: 'Schedule', value: c ? (c.schedule || '') : '', placeholder: 'Saturdays · 8:00 AM' },
+          { kind: 'textarea', name: 'description', label: 'Description', rows: 3, value: c ? (c.description || '') : '',
+            placeholder: 'What the class is, and who it is for.' },
+          { name: 'leader', label: 'Leader', value: c ? (c.leader || '') : '', placeholder: 'Pastor Matt' },
+          { name: 'location', label: 'Location', value: c ? (c.location || '') : '', placeholder: 'Fellowship Hall' },
+          { kind: 'html', html: `<div class="tlc-field"><label class="tlc-label">Core value</label>${valueChips('value', c ? c.value : null)}<p class="tlc-hint">Which of the four this class serves.</p></div>` },
+          { kind: 'choice', name: 'accent', label: 'Accent colour', value: c ? (c.accent || 'mid') : 'mid',
+            options: ACCENT_OPTS.map(([v, l]) => ({ value: v, label: l })) },
+          { kind: 'number', name: 'sort_order', label: 'Order', value: c ? (c.sort_order || 0) : 0, min: 0, step: 1,
+            hint: 'Lower numbers come first on the education page.' },
+          { kind: 'toggle', name: 'active', label: 'Running', value: c ? !!c.active : true,
+            on: 'Running', off: 'Paused',
+            hint: 'Paused takes it off the website and out of the newsletter picker without deleting it.' },
+        ],
+      });
+    };
+
     if ((path === '/christian-education' || path === '/christian-education/new') && method === 'GET') {
-      const ACCENT_OPTS = [['mid','Navy'],['teal','Teal'],['steel','Steel'],['sage','Moss'],['amber','Gold'],['plum','Plum']];
 
       if (path === '/christian-education/new') {
         return html(`
-${sidebarShell('christian-education', currentUser, `<a href="/christian-education">← All classes</a>`, await badgeCounts(env, currentUser))}
-<div class="wrap">
-  <div class="page-title">Add a class</div>
-  <div class="page-sub">It appears on /education and in the newsletter's class picker as soon as you save.</div>
-  <div class="card">
-    <form method="POST" action="/christian-education/create">
-      <div class="form-group">
-        <label>Title <span style="color:#B85C3A;">*</span></label>
-        <input type="text" name="title" required placeholder="e.g. Men's Bible Study">
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-        <div class="form-group" style="margin:0;">
-          <label>Eyebrow label <span style="font-weight:400;color:var(--gray);">(small text above title)</span></label>
-          <input type="text" name="label" placeholder="e.g. Saturday Mornings">
-        </div>
-        <div class="form-group" style="margin:0;">
-          <label>Schedule</label>
-          <input type="text" name="schedule" placeholder="e.g. Saturdays · 8:00 AM">
-        </div>
-      </div>
-      <div class="form-group">
-        <label>Description</label>
-        <textarea name="description" rows="3" placeholder="Brief description shown on the website..."></textarea>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
-        <div class="form-group" style="margin:0;">
-          <label>Leader</label>
-          <input type="text" name="leader" placeholder="e.g. Pastor Matt">
-        </div>
-        <div class="form-group" style="margin:0;">
-          <label>Location</label>
-          <input type="text" name="location" placeholder="e.g. Fellowship Hall">
-        </div>
-        <div class="form-group" style="margin:0;">
-          <label>Accent color</label>
-          <select name="accent">${ACCENT_OPTS.map(([v,l]) => `<option value="${v}">${l}</option>`).join('')}</select>
-        </div>
-      </div>
-      <div class="form-group">
-        <label>Core value</label>
-        ${valueChips('value', null)}
-      </div>
-      <div class="btn-row" style="margin-top:16px;">
-        <button type="submit" class="btn btn-primary">Add class</button>
-        <a href="/christian-education" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
-      </div>
-    </form>
-  </div>
-</div>`, 'Add a class');
+${sidebarShell('christian-education', currentUser, `<a href="/christian-education">All classes</a>`, await badgeCounts(env, currentUser))}
+<div class="tlc-wrap">${ceFormHtml()}</div>`, 'New class — TLC Admin');
       }
 
       const ceRows = await env.DB.prepare('SELECT * FROM bible_classes ORDER BY sort_order, id').all();
@@ -4219,7 +4267,7 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
       }));
 
       return html(`
-${sidebarShell('christian-education', currentUser, `<a href="https://timothystl.org/education" target="_blank">View page →</a>`, await badgeCounts(env, currentUser))}
+${sidebarShell('christian-education', currentUser, `<a href="https://timothystl.org/education" target="_blank">View page</a>`, await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   ${ceAlert ? `<div class="tlc-section" style="padding-bottom:0;">${ceAlert}</div>` : ''}
   ${renderListSection({
@@ -4242,8 +4290,13 @@ ${sidebarShell('christian-education', currentUser, `<a href="https://timothystl.
       const ceForm = await request.formData();
       const title = (ceForm.get('title') || '').trim();
       if (!title) return new Response('', { status: 302, headers: { Location: '/christian-education?msg=error' } });
-      await env.DB.prepare('INSERT INTO bible_classes (title, label, description, leader, location, schedule, accent, value, active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, (SELECT COALESCE(MAX(sort_order),0)+1 FROM bible_classes))')
-        .bind(title, (ceForm.get('label')||'').trim()||null, (ceForm.get('description')||'').trim()||null, (ceForm.get('leader')||'').trim()||null, (ceForm.get('location')||'').trim()||null, (ceForm.get('schedule')||'').trim()||null, ceForm.get('accent')||'mid', normalizeValue(ceForm.get('value'))).run();
+      // ⚠ A toggle posts a hidden `0` ahead of its checkbox, so `get()` returns
+      // the 0 whether or not the box is ticked. `getAll(...).includes('1')` is
+      // the only reading that is true when the switch is actually on.
+      const ceActive = ceForm.getAll('active').includes('1') ? 1 : 0;
+      const ceSort = parseInt(ceForm.get('sort_order') || '0', 10) || 0;
+      await env.DB.prepare('INSERT INTO bible_classes (title, label, description, leader, location, schedule, accent, value, active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .bind(title, (ceForm.get('label')||'').trim()||null, (ceForm.get('description')||'').trim()||null, (ceForm.get('leader')||'').trim()||null, (ceForm.get('location')||'').trim()||null, (ceForm.get('schedule')||'').trim()||null, ceForm.get('accent')||'mid', normalizeValue(ceForm.get('value')), ceActive, ceSort).run();
       return new Response('', { status: 302, headers: { Location: '/christian-education?msg=saved' } });
     }
 
@@ -4251,64 +4304,9 @@ ${sidebarShell('christian-education', currentUser, `<a href="https://timothystl.
       const ceId = path.split('/').pop();
       const ceRow = await env.DB.prepare('SELECT * FROM bible_classes WHERE id = ?').bind(ceId).first();
       if (!ceRow) return new Response('Not found', { status: 404 });
-      const ACCENT_OPTS = [['mid','Navy'],['teal','Teal'],['steel','Steel'],['sage','Moss'],['amber','Gold'],['plum','Plum']];
       return html(`
-${sidebarShell('christian-education', currentUser, `<a href="/christian-education">← All classes</a>`)}
-<div class="wrap">
-  <div class="page-title">Edit class</div>
-  <form method="POST" action="/christian-education/update/${ceId}">
-    <div class="card">
-      <div class="form-group">
-        <label>Title <span style="color:#B85C3A;">*</span></label>
-        <input type="text" name="title" required value="${ceRow.title.replace(/"/g,'&quot;')}">
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-        <div class="form-group" style="margin:0;">
-          <label>Eyebrow label <span style="font-weight:400;color:var(--gray);">(small text above title)</span></label>
-          <input type="text" name="label" value="${(ceRow.label||'').replace(/"/g,'&quot;')}" placeholder="e.g. Sunday Morning">
-        </div>
-        <div class="form-group" style="margin:0;">
-          <label>Schedule</label>
-          <input type="text" name="schedule" value="${(ceRow.schedule||'').replace(/"/g,'&quot;')}" placeholder="e.g. Sundays · 9:30 AM">
-        </div>
-      </div>
-      <div class="form-group">
-        <label>Description</label>
-        <textarea name="description" rows="4">${ceRow.description||''}</textarea>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:16px;">
-        <div class="form-group" style="margin:0;">
-          <label>Leader</label>
-          <input type="text" name="leader" value="${(ceRow.leader||'').replace(/"/g,'&quot;')}" placeholder="e.g. Pastor Matt">
-        </div>
-        <div class="form-group" style="margin:0;">
-          <label>Location</label>
-          <input type="text" name="location" value="${(ceRow.location||'').replace(/"/g,'&quot;')}" placeholder="e.g. Fellowship Hall">
-        </div>
-        <div class="form-group" style="margin:0;">
-          <label>Accent color</label>
-          <select name="accent">${ACCENT_OPTS.map(([v,l]) => `<option value="${v}"${ceRow.accent===v?' selected':''}>${l}</option>`).join('')}</select>
-        </div>
-        <div class="form-group" style="margin:0;">
-          <label>Sort order</label>
-          <input type="number" name="sort_order" value="${ceRow.sort_order||0}" min="0" style="width:80px;">
-        </div>
-      </div>
-      <div class="form-group" style="margin-top:16px;">
-        <label>Core value</label>
-        ${valueChips('value', ceRow.value)}
-      </div>
-      <div class="checkbox-row" style="margin-top:14px;">
-        <input type="checkbox" name="active" id="ce-active" value="1"${ceRow.active ? ' checked' : ''}>
-        <label for="ce-active">Active (shown on website and in newsletter editor)</label>
-      </div>
-      <div style="margin-top:20px;display:flex;gap:10px;">
-        <button type="submit" class="btn btn-primary">Save changes</button>
-        <a href="/christian-education" class="btn btn-secondary">Cancel</a>
-      </div>
-    </div>
-  </form>
-</div>`, 'Edit Class');
+${sidebarShell('christian-education', currentUser, `<a href="/christian-education">All classes</a>`)}
+<div class="tlc-wrap">${ceFormHtml(ceRow)}</div>`, 'Edit class — TLC Admin');
     }
 
     if (path.startsWith('/christian-education/update/') && method === 'POST') {
@@ -4317,7 +4315,7 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
       const title = (ceForm.get('title') || '').trim();
       if (!title) return new Response('', { status: 302, headers: { Location: `/christian-education/edit/${ceId}?msg=error` } });
       await env.DB.prepare('UPDATE bible_classes SET title=?, label=?, description=?, leader=?, location=?, schedule=?, accent=?, value=?, active=?, sort_order=? WHERE id=?')
-        .bind(title, (ceForm.get('label')||'').trim()||null, (ceForm.get('description')||'').trim()||null, (ceForm.get('leader')||'').trim()||null, (ceForm.get('location')||'').trim()||null, (ceForm.get('schedule')||'').trim()||null, ceForm.get('accent')||'mid', normalizeValue(ceForm.get('value')), ceForm.get('active') === '1' ? 1 : 0, parseInt(ceForm.get('sort_order')||'0'), ceId).run();
+        .bind(title, (ceForm.get('label')||'').trim()||null, (ceForm.get('description')||'').trim()||null, (ceForm.get('leader')||'').trim()||null, (ceForm.get('location')||'').trim()||null, (ceForm.get('schedule')||'').trim()||null, ceForm.get('accent')||'mid', normalizeValue(ceForm.get('value')), ceForm.getAll('active').includes('1') ? 1 : 0, parseInt(ceForm.get('sort_order')||'0', 10) || 0, ceId).run();
       return new Response('', { status: 302, headers: { Location: '/christian-education?msg=saved' } });
     }
 
@@ -4595,6 +4593,13 @@ ${sidebarShell('newsletter', currentUser, '', await badgeCounts(env, currentUser
           </div>
         </div>
       </div>
+      <div class="card">
+        <div class="card-title">More notes <span class="tag">Optional</span></div>
+        <div style="font-size:12px;color:var(--gray);margin-bottom:10px;">A fourth and fifth block, below everything else — a thank-you, a correction, a one-off appeal. Each appears only if you write something in it.</div>
+        ${extraNoteFields(parseExtras(row.extra_notes))}
+        <button type="button" class="add-event-btn" id="add-extra-note">+ Add another note</button>
+        ${extraNotesScript}
+      </div>
     </div>
 
     <div id="quick-fields" style="display:${fmt==='quick'?'':'none'}">
@@ -4632,7 +4637,7 @@ ${sidebarShell('newsletter', currentUser, '', await badgeCounts(env, currentUser
     </div>` : ''}
 
     <div class="btn-row" style="margin-top:8px;">
-      ${hasPermission(currentUser, 'newsletter_approve') ? `<button type="submit" name="action" value="publish" class="btn btn-primary">Publish →</button>` : ''}
+      ${hasPermission(currentUser, 'newsletter_approve') ? `<button type="submit" name="action" value="publish" class="btn btn-primary">Publish</button>` : ''}
       <button type="submit" name="action" value="draft" class="btn btn-secondary">Save as draft</button>
       <a href="/newsletters" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
     </div>
@@ -4929,7 +4934,8 @@ ${classesJs}
         on('tertiary') ? (f.get('tertiary_note') || '') : '',
         on('tertiary') ? (f.get('tertiary_cta_label') || '') : '',
         on('tertiary') ? (f.get('tertiary_cta_url') || '') : '',
-        classes
+        classes,
+        extrasFromForm(f)
       );
       return new Response(emailHtml, {
         headers: { 'Content-Type': 'text/html; charset=utf-8', 'X-Robots-Tag': 'noindex, nofollow' },
@@ -4958,11 +4964,14 @@ ${classesJs}
       const eventsRows = await env.DB.prepare('SELECT * FROM events WHERE newsletter_id = ? ORDER BY sort_order').bind(id).all();
       const copyPublishedAt = row.published_at || new Date().toISOString().split('T')[0];
       const result = await env.DB.prepare(
-        'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, extra_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       ).bind(
         `Copy of ${row.subject}`, row.pastor_note, row.ministry_content, row.ministry_type, copyPublishedAt, row.format,
         row.cta_url, row.cta_label, 'draft', row.wol_content, row.lasm_content, row.secondary_note,
-        row.news_item_ids, row.tertiary_note, row.tertiary_cta_label, row.tertiary_cta_url, row.bible_classes
+        row.news_item_ids, row.tertiary_note, row.tertiary_cta_label, row.tertiary_cta_url, row.bible_classes,
+        // A copy carries the extra notes too — the whole point of duplicating a
+        // sent issue is to start from what actually went out.
+        row.extra_notes || '[]'
       ).run();
       const newId = result.meta.last_row_id;
       for (const e of eventsRows.results) {
@@ -5032,7 +5041,7 @@ ${classesJs}
       });
 
       return html(`
-${sidebarShell('news', currentUser, `<a href="https://timothystl.org/news" target="_blank">View site →</a>`, await badgeCounts(env, currentUser))}
+${sidebarShell('news', currentUser, `<a href="https://timothystl.org/news" target="_blank">View site</a>`, await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -5053,93 +5062,69 @@ ${sidebarShell('news', currentUser, `<a href="https://timothystl.org/news" targe
     }
 
     // ── NEWS ITEMS: NEW FORM ──
-    if (path === '/newsitems/new' && method === 'GET') {
+    // ── NEWS ITEMS: THE FORM, ONCE ──
+    // New and Edit were two near-identical copies of the same 90 lines, on the
+    // old chrome. One builder now, through the shared form renderer, so a post
+    // opened from the redesigned list stays in the redesign.
+    const newsFormHtml = (item = null) => {
+      const isNew = !item;
       const today = new Date().toISOString().split('T')[0];
-      const expire = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const in90 = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const ch = item ? (item.channels == null ? 'web' : item.channels) : 'web,email';
+      const on = (k) => (item ? ch.includes(k) : (k === 'web' || k === 'email'));
+      const box = (name, label, checked) =>
+        `<label class="tlc-choice"><input type="checkbox" name="${name}" value="1"${checked ? ' checked' : ''}><span>${label}</span></label>`;
+      return renderFormSection({
+        title: isNew ? 'New post' : item.title || 'Edit post',
+        purpose: isNew
+          ? 'Announcements and dated events. A post with an expire date drops off the site on its own.'
+          : 'Changes reach the website as soon as you save.',
+        action: isNew ? '/newsitems/create' : `/newsitems/update/${item.id}`,
+        cancelHref: '/newsitems',
+        saveLabel: isNew ? 'Save and publish' : 'Save changes',
+        deleteAction: isNew ? '' : `/newsitems/delete/${item.id}`,
+        deleteConfirm: `Delete “${(item && item.title) || 'this post'}”? It disappears from the website.`,
+        wide: true,
+        note: 'Expiry is what keeps the site honest — a post with an expire date disappears without anyone remembering to delete it.',
+        fields: [
+          { name: 'title', label: 'Title', value: item ? item.title : '', required: true, placeholder: 'Easter services — April 20' },
+          { kind: 'textarea', name: 'summary', label: 'Summary', rows: 3, value: item ? (item.summary || '') : '',
+            placeholder: 'Two or three sentences.', hint: 'What shows on the card, before anybody clicks through.' },
+          // ⚠ The value column has existed since v3.0.0 and the list filters on
+          // it, but no form ever set one — so every post was untagged and the
+          // filter could never match. Same shape of bug as the tap counter.
+          { kind: 'html', html: `<div class="tlc-field"><label class="tlc-label">Value</label>${valueChips('value', item ? item.value : null)}<p class="tlc-hint">Which of the four this post serves. Used by the filters and the values report.</p></div>` },
+          { kind: 'html', html: tinymceEditorSection(item ? (item.body || '') : '') },
+          { kind: 'html', html: `<div class="tlc-field"><label class="tlc-label">Header image</label>
+            <input type="hidden" name="image_url" id="image_url_val" value="">
+            <input type="file" id="image_url_file" accept="image/*">
+            <div id="image-url-status" class="tlc-hint"></div>
+            <div id="image-url-preview" style="display:none;margin-top:8px;max-width:240px;"></div>
+            <p class="tlc-hint">Optional. Shown as the card thumbnail.</p></div>` },
+          { kind: 'choice', name: 'theme', label: 'Theme', value: item ? (item.theme || '') : '',
+            options: [{ value: '', label: '— none —' }].concat(THEMES.map((t) => ({ value: t, label: t }))) },
+          { kind: 'choice', name: 'content_type', label: 'Content type', value: item ? (item.content_type || '') : '',
+            options: [{ value: '', label: '— none —' }].concat(CONTENT_TYPES.map((t) => ({ value: t, label: t }))) },
+          { kind: 'html', html: `<div class="tlc-field"><label class="tlc-label">Where it appears</label>
+            <div class="tlc-choices">${box('ch_web', 'Website', on('web'))}${box('ch_email', 'Email newsletter', on('email'))}${box('ch_bulletin', 'Bulletin', on('bulletin'))}${box('ch_social', 'Social media', on('social'))}</div>
+            <p class="tlc-hint">The weekly email pulls from the posts ticked for it, rather than asking you to retype them.</p></div>` },
+          { kind: 'date', name: 'publish_date', label: 'Publish date', value: item ? (item.publish_date || '') : today },
+          { kind: 'date', name: 'event_date', label: 'Event date', value: item ? (item.event_date || '') : '',
+            hint: 'Optional. A post with one sorts by the event rather than by when it was written.' },
+          { kind: 'date', name: 'expire_date', label: 'Expire date', value: item ? (item.expire_date || '') : in90,
+            hint: 'The post hides itself after this date. Clear it only for something genuinely permanent.' },
+          { kind: 'toggle', name: 'pinned', label: 'Pin to the top', value: item ? !!item.pinned : false,
+            on: 'Pinned', off: 'In date order',
+            hint: 'A pinned post sits above the rest until you unpin it.' },
+        ],
+      });
+    };
+
+    if (path === '/newsitems/new' && method === 'GET') {
       return html(`
-${sidebarShell('news', currentUser, `<a href="/newsitems">← Back</a>`)}
-<div class="wrap">
-  <div class="page-title">New news item</div>
-  <div class="page-sub">This will appear on the website homepage and news page immediately.</div>
-  <form method="POST" action="/newsitems/create">
-    <div class="card">
-      <div class="card-title">Content</div>
-      <div class="form-group">
-        <label>Title <span style="color:#B85C3A;">*</span></label>
-        <input type="text" name="title" required placeholder="e.g. Easter services — April 20">
-      </div>
-      <div class="form-group">
-        <label>Summary <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— shown on cards (2–3 sentences)</span></label>
-        <textarea name="summary" style="min-height:80px;" placeholder="Short description shown on the homepage and news page cards."></textarea>
-      </div>
-      ${tinymceEditorSection()}
-      <div class="form-group">
-        <label>Header image <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, shown on the card thumbnail</span></label>
-        <input type="hidden" name="image_url" id="image_url_val" value="">
-        <input type="file" id="image_url_file" accept="image/*">
-        <div id="image-url-status" style="font-size:12px;color:var(--gray);margin-top:6px;"></div>
-        <div id="image-url-preview" style="display:none;margin-top:8px;max-width:240px;"></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-title">Classification</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
-        <div class="form-group" style="margin:0;">
-          <label>Theme <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional</span></label>
-          <select name="theme" style="width:100%;font-family:var(--sans);font-size:14px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;">
-            <option value="">— none —</option>
-            ${THEMES.map(t => `<option value="${t}">${t}</option>`).join('')}
-          </select>
-        </div>
-        <div class="form-group" style="margin:0;">
-          <label>Content type <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional</span></label>
-          <select name="content_type" style="width:100%;font-family:var(--sans);font-size:14px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;">
-            <option value="">— none —</option>
-            ${CONTENT_TYPES.map(t => `<option value="${t}">${t}</option>`).join('')}
-          </select>
-        </div>
-      </div>
-      <div class="form-group" style="margin:0;">
-        <label>Channels <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— where should this appear?</span></label>
-        <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:6px;">
-          <label style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:400;cursor:pointer;text-transform:none;letter-spacing:0;"><input type="checkbox" name="ch_web" value="1" checked> Website</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:400;cursor:pointer;text-transform:none;letter-spacing:0;"><input type="checkbox" name="ch_email" value="1" checked> Email newsletter</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:400;cursor:pointer;text-transform:none;letter-spacing:0;"><input type="checkbox" name="ch_bulletin" value="1"> Bulletin</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:400;cursor:pointer;text-transform:none;letter-spacing:0;"><input type="checkbox" name="ch_social" value="1"> Social media</label>
-        </div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-title">Scheduling</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
-        <div class="form-group" style="margin:0;">
-          <label>Publish date</label>
-          <input type="date" name="publish_date" value="${today}">
-        </div>
-        <div class="form-group" style="margin:0;">
-          <label>Event date <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, sorts by this date</span></label>
-          <input type="date" name="event_date">
-        </div>
-        <div class="form-group" style="margin:0;">
-          <label>Expire date <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— auto-hides after this date</span></label>
-          <input type="date" name="expire_date" value="${expire}">
-        </div>
-      </div>
-      <div class="form-group" style="margin-top:18px;margin-bottom:0;">
-        <label>Pin to top</label>
-        <div class="checkbox-row">
-          <input type="checkbox" name="pinned" id="pinned" value="1">
-          <span onclick="document.getElementById('pinned').click()">Show this item first, above all other news</span>
-        </div>
-      </div>
-    </div>
-    <div class="btn-row">
-      <button type="submit" class="btn btn-primary">Save &amp; publish →</button>
-      <a href="/newsitems" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
-    </div>
-  </form>
-</div>
-${newsImageUploadScript()}`, 'TLC Admin — New News Item', TINYMCE_HEAD);
+${sidebarShell('news', currentUser, `<a href="/newsitems">All posts</a>`)}
+<div class="tlc-wrap">${newsFormHtml()}</div>
+${newsImageUploadScript()}`, 'New post — TLC Admin', TINYMCE_HEAD);
     }
 
     // ── NEWS ITEMS: CREATE (POST) ──
@@ -5154,7 +5139,9 @@ ${newsImageUploadScript()}`, 'TLC Admin — New News Item', TINYMCE_HEAD);
       const publish_date = form.get('publish_date') || new Date().toISOString().split('T')[0];
       const event_date = form.get('event_date') || '';
       const expire_date = form.get('expire_date') || '';
-      const pinned = form.get('pinned') === '1' ? 1 : 0;
+      // A toggle posts a hidden 0 ahead of its checkbox, so get() always sees
+      // the 0. getAll() is the only reading that is true when it is really on.
+      const pinned = form.getAll('pinned').includes('1') ? 1 : 0;
       const theme = form.get('theme') || '';
       const content_type = form.get('content_type') || '';
       const channels = [
@@ -5164,102 +5151,22 @@ ${newsImageUploadScript()}`, 'TLC Admin — New News Item', TINYMCE_HEAD);
         form.get('ch_social') === '1' && 'social',
       ].filter(Boolean).join(',') || 'web';
       const newItemResult = await env.DB.prepare(
-        'INSERT INTO news_items (title, summary, body, image_url, publish_date, event_date, expire_date, pinned, theme, content_type, channels) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(title, summary, body, image_url, publish_date, event_date || null, expire_date || null, pinned, theme || null, content_type || null, channels).run();
+        'INSERT INTO news_items (title, summary, body, image_url, publish_date, event_date, expire_date, pinned, theme, content_type, channels, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(title, summary, body, image_url, publish_date, event_date || null, expire_date || null, pinned, theme || null, content_type || null, channels, normalizeValue(form.get('value')) || null).run();
       await logAudit(env.DB, currentUser, 'create', 'news_item', newItemResult.meta.last_row_id, title, null, { title, summary, publish_date, expire_date, pinned });
       return new Response('', { status: 302, headers: { Location: '/newsitems?msg=saved' } });
     }
 
     // ── NEWS ITEMS: EDIT FORM ──
+    // ── NEWS ITEMS: EDIT FORM ──
     if (path.startsWith('/newsitems/edit/') && method === 'GET') {
       const id = path.split('/').pop();
       const item = await env.DB.prepare('SELECT * FROM news_items WHERE id = ?').bind(id).first();
       if (!item) return new Response('Not found', { status: 404 });
-      const v = (val) => (val || '').replace(/"/g, '&quot;');
       return html(`
-${sidebarShell('news', currentUser, `<a href="/newsitems">← Back</a>`)}
-<div class="wrap">
-  <div class="page-title">Edit news item</div>
-  <div class="page-sub">Changes go live immediately when you save.</div>
-  <form method="POST" action="/newsitems/update/${item.id}">
-    <div class="card">
-      <div class="card-title">Content</div>
-      <div class="form-group">
-        <label>Title <span style="color:#B85C3A;">*</span></label>
-        <input type="text" name="title" required value="${v(item.title)}">
-      </div>
-      <div class="form-group">
-        <label>Summary <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— shown on cards (2–3 sentences)</span></label>
-        <textarea name="summary" style="min-height:80px;">${item.summary || ''}</textarea>
-      </div>
-      ${tinymceEditorSection(item.body || '')}
-      <div class="form-group">
-        <label>Header image <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, shown on the card thumbnail</span></label>
-        <input type="hidden" name="image_url" id="image_url_val" value="">
-        <input type="file" id="image_url_file" accept="image/*">
-        <div id="image-url-status" style="font-size:12px;color:var(--gray);margin-top:6px;"></div>
-        <div id="image-url-preview" style="display:none;margin-top:8px;max-width:240px;"></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-title">Classification</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
-        <div class="form-group" style="margin:0;">
-          <label>Theme <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional</span></label>
-          <select name="theme" style="width:100%;font-family:var(--sans);font-size:14px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;">
-            <option value="">— none —</option>
-            ${THEMES.map(t => `<option value="${t}"${item.theme === t ? ' selected' : ''}>${t}</option>`).join('')}
-          </select>
-        </div>
-        <div class="form-group" style="margin:0;">
-          <label>Content type <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional</option></span></label>
-          <select name="content_type" style="width:100%;font-family:var(--sans);font-size:14px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;">
-            <option value="">— none —</option>
-            ${CONTENT_TYPES.map(t => `<option value="${t}"${item.content_type === t ? ' selected' : ''}>${t}</option>`).join('')}
-          </select>
-        </div>
-      </div>
-      <div class="form-group" style="margin:0;">
-        <label>Channels <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— where should this appear?</span></label>
-        <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:6px;">
-          <label style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:400;cursor:pointer;text-transform:none;letter-spacing:0;"><input type="checkbox" name="ch_web" value="1"${(item.channels == null || item.channels.includes('web')) ? ' checked' : ''}> Website</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:400;cursor:pointer;text-transform:none;letter-spacing:0;"><input type="checkbox" name="ch_email" value="1"${(item.channels || '').includes('email') ? ' checked' : ''}> Email newsletter</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:400;cursor:pointer;text-transform:none;letter-spacing:0;"><input type="checkbox" name="ch_bulletin" value="1"${(item.channels || '').includes('bulletin') ? ' checked' : ''}> Bulletin</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:400;cursor:pointer;text-transform:none;letter-spacing:0;"><input type="checkbox" name="ch_social" value="1"${(item.channels || '').includes('social') ? ' checked' : ''}> Social media</label>
-        </div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-title">Scheduling</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
-        <div class="form-group" style="margin:0;">
-          <label>Publish date</label>
-          <input type="date" name="publish_date" value="${item.publish_date || ''}">
-        </div>
-        <div class="form-group" style="margin:0;">
-          <label>Event date <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— optional, sorts by this date</span></label>
-          <input type="date" name="event_date" value="${item.event_date || ''}">
-        </div>
-        <div class="form-group" style="margin:0;">
-          <label>Expire date</label>
-          <input type="date" name="expire_date" value="${item.expire_date || ''}">
-        </div>
-      </div>
-      <div class="form-group" style="margin-top:18px;margin-bottom:0;">
-        <label>Pin to top</label>
-        <div class="checkbox-row">
-          <input type="checkbox" name="pinned" id="pinned" value="1"${item.pinned ? ' checked' : ''}>
-          <span onclick="document.getElementById('pinned').click()">Show this item first, above all other news</span>
-        </div>
-      </div>
-    </div>
-    <div class="btn-row">
-      <button type="submit" class="btn btn-primary">Save changes →</button>
-      <a href="/newsitems" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
-    </div>
-  </form>
-</div>
-${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item', TINYMCE_HEAD);
+${sidebarShell('news', currentUser, `<a href="/newsitems">All posts</a>`)}
+<div class="tlc-wrap">${newsFormHtml(item)}</div>
+${newsImageUploadScript(item.image_url || '')}`, 'Edit post — TLC Admin', TINYMCE_HEAD);
     }
 
     // ── NEWS ITEMS: UPDATE (POST) ──
@@ -5275,7 +5182,9 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
       const publish_date = form.get('publish_date') || '';
       const event_date = form.get('event_date') || '';
       const expire_date = form.get('expire_date') || '';
-      const pinned = form.get('pinned') === '1' ? 1 : 0;
+      // A toggle posts a hidden 0 ahead of its checkbox, so get() always sees
+      // the 0. getAll() is the only reading that is true when it is really on.
+      const pinned = form.getAll('pinned').includes('1') ? 1 : 0;
       const theme = form.get('theme') || '';
       const content_type = form.get('content_type') || '';
       const channels = [
@@ -5286,8 +5195,8 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
       ].filter(Boolean).join(',') || 'web';
       const beforeItem = await env.DB.prepare('SELECT title, summary, body, image_url, publish_date, event_date, expire_date, pinned FROM news_items WHERE id = ?').bind(id).first();
       await env.DB.prepare(
-        'UPDATE news_items SET title=?, summary=?, body=?, image_url=?, publish_date=?, event_date=?, expire_date=?, pinned=?, theme=?, content_type=?, channels=? WHERE id=?'
-      ).bind(title, summary, body, image_url, publish_date, event_date || null, expire_date || null, pinned, theme || null, content_type || null, channels, id).run();
+        'UPDATE news_items SET title=?, summary=?, body=?, image_url=?, publish_date=?, event_date=?, expire_date=?, pinned=?, theme=?, content_type=?, channels=?, value=? WHERE id=?'
+      ).bind(title, summary, body, image_url, publish_date, event_date || null, expire_date || null, pinned, theme || null, content_type || null, channels, normalizeValue(form.get('value')) || null, id).run();
       await logAudit(env.DB, currentUser, 'update', 'news_item', id, title, beforeItem, { title, summary, publish_date, expire_date, pinned });
       return new Response('', { status: 302, headers: { Location: '/newsitems?msg=saved' } });
     }
@@ -5489,7 +5398,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages/details">Church details</a
       { kind: 'static', label: 'Content',
         html: outboundUrl(detailsPage)
           ? '<span style="color:var(--tlc-muted);">This page sends visitors to another site, so there is nothing to edit here.</span>'
-          : `<a href="/pages/${encodeURIComponent(detailsPage.id)}/edit" style="color:var(--tlc-blue);font-weight:600;text-decoration:none;">Open in page editor →</a>` },
+          : `<a href="/pages/${encodeURIComponent(detailsPage.id)}/edit" style="color:var(--tlc-blue);font-weight:600;text-decoration:none;">Open in page editor</a>` },
     ],
   }) : ''}
 </div>`, 'Pages — TLC Admin');
@@ -5579,7 +5488,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages/details">Church details</a
         };
         return html(`
 ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">Church details</div>
   <div class="page-sub">The address, phone number, email and service times the whole site reads. Change them here once and every page that shows them follows — no need to edit each page.</div>
   ${saved ? `<div class="alert alert-success">✓ Saved. Every page that shows these will pick them up within a couple of minutes.</div>` : ''}
@@ -5588,7 +5497,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`)}
       ${(rows.results || []).map(field).join('') || '<div style="color:var(--gray);font-size:14px;">Nothing to edit yet.</div>'}
     </div>
     <div class="btn-row">
-      <button type="submit" class="btn btn-primary">Save →</button>
+      <button type="submit" class="btn btn-primary">Save</button>
       <a href="/pages" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
     </div>
   </form>
@@ -6131,7 +6040,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/voters">Voters Assembly pag
       if (path === '/ministries/add' && method === 'GET') {
         return html(`
 ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministries</a>`)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">New ministry page</div>
   <div class="page-sub">Create a new ministry landing page.</div>
   <form method="POST" action="/ministries/create">
@@ -6154,7 +6063,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministr
       </div>
     </div>
     <div class="btn-row">
-      <button type="submit" class="btn btn-primary">Create ministry →</button>
+      <button type="submit" class="btn btn-primary">Create ministry</button>
       <a href="/ministries" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
     </div>
   </form>
@@ -6202,7 +6111,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministr
 </div>` : '';
         return html(`
 ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministries</a>`)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">${page.title}</div>
   <div class="page-sub">Banner image, buttons and video slots for this page.</div>
   <div class="alert alert-info" style="margin-bottom:20px;">
@@ -6264,7 +6173,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministr
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
             <div class="form-group" style="margin:0;">
               <label>Button label</label>
-              <input type="text" name="cta_label" value="${(page.cta_label || '').replace(/"/g, '&quot;')}" placeholder="e.g. Sign up to volunteer →">
+              <input type="text" name="cta_label" value="${(page.cta_label || '').replace(/"/g, '&quot;')}" placeholder="e.g. Sign up to volunteer">
             </div>
             <div class="form-group" style="margin:0;">
               <label>Button URL</label>
@@ -6287,7 +6196,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministr
         </div>
       </div>
       <div class="btn-row" style="margin-top:24px;">
-        <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save &amp; Publish →</button>
+        <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save &amp; Publish</button>
         <a href="/ministries" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
       </div>
     </form>
@@ -6431,7 +6340,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministr
 
         return html(`
 ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministries</a>`)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">${page.title} — Posts</div>
   <div class="page-sub">Upcoming posts show at top. Past posts roll down automatically by date.</div>
   ${alertHtml}
@@ -6442,7 +6351,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministr
     ${listHtml}
   </div>
   <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border);">
-    <a href="/ministries/edit/${slug}" style="font-family:var(--sans);font-size:13px;color:var(--gray);text-decoration:none;">⚙ Edit the ${page.title} page description →</a>
+    <a href="/ministries/edit/${slug}" style="font-family:var(--sans);font-size:13px;color:var(--gray);text-decoration:none;">⚙ Edit the ${page.title} page description</a>
   </div>
 </div>`, `${page.title} Posts`);
       }
@@ -6455,7 +6364,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministr
         const today = new Date().toISOString().split('T')[0];
         return html(`
 ${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">← Posts</a>`)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">New post — ${page.title}</div>
   <form method="POST" action="/ministries/${slug}/posts/create">
     <div class="card">
@@ -6487,7 +6396,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">�
       ${tinymcePostSection()}
     </div>
     <div class="btn-row">
-      <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save &amp; Publish →</button>
+      <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save &amp; Publish</button>
       <a href="/ministries/${slug}/posts" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
     </div>
   </form>
@@ -6503,7 +6412,9 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">�
         const event_date = form.get('event_date') || null;
         const expire_date = form.get('expire_date') || null;
         const body = form.get('body') || '';
-        const pinned = form.get('pinned') === '1' ? 1 : 0;
+        // A toggle posts a hidden 0 ahead of its checkbox, so get() always sees
+      // the 0. getAll() is the only reading that is true when it is really on.
+      const pinned = form.getAll('pinned').includes('1') ? 1 : 0;
         const newPostResult = await env.DB.prepare(
           'INSERT INTO ministry_posts (ministry_slug, title, post_date, event_date, expire_date, body, pinned) VALUES (?, ?, ?, ?, ?, ?, ?)'
         ).bind(slug, title, post_date, event_date, expire_date, body, pinned).run();
@@ -6521,7 +6432,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">�
         if (!post || !page) return new Response('Not found', { status: 404 });
         return html(`
 ${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">← Posts</a>`)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">Edit post — ${page.title}</div>
   <form method="POST" action="/ministries/${slug}/posts/update/${id}">
     <div class="card">
@@ -6553,7 +6464,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">�
       ${tinymcePostSection(post.body || '')}
     </div>
     <div class="btn-row">
-      <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save changes →</button>
+      <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save changes</button>
       <a href="/ministries/${slug}/posts" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
     </div>
   </form>
@@ -6571,7 +6482,9 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">�
         const event_date = form.get('event_date') || null;
         const expire_date = form.get('expire_date') || null;
         const body = form.get('body') || '';
-        const pinned = form.get('pinned') === '1' ? 1 : 0;
+        // A toggle posts a hidden 0 ahead of its checkbox, so get() always sees
+      // the 0. getAll() is the only reading that is true when it is really on.
+      const pinned = form.getAll('pinned').includes('1') ? 1 : 0;
         const beforePost = await env.DB.prepare('SELECT title, post_date, event_date, expire_date, body, pinned FROM ministry_posts WHERE id = ? AND ministry_slug = ?').bind(id, slug).first();
         await env.DB.prepare(
           'UPDATE ministry_posts SET title = ?, post_date = ?, event_date = ?, expire_date = ?, body = ?, pinned = ? WHERE id = ? AND ministry_slug = ?'
@@ -6679,7 +6592,7 @@ ${sidebarShell('notices', currentUser, '', await badgeCounts(env, currentUser))}
         const preselect = url.searchParams.get('page') || STATIC_PAGES[0].slug;
         return html(`
 ${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">New notice</div>
   <div class="page-sub">Choose which page it appears on and write the content. It publishes immediately.</div>
   <div class="card">
@@ -6694,7 +6607,7 @@ ${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)
       </div>
       ${tinymcePageSection('')}
       <div class="btn-row" style="margin-top:24px;">
-        <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save &amp; Publish →</button>
+        <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save &amp; Publish</button>
         <a href="/notices" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
       </div>
     </form>
@@ -6725,7 +6638,7 @@ ${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)
         const publishedChecked = n.published === 1 ? 'checked' : '';
         return html(`
 ${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">${escapeHtml(n.label)}</div>
   <div class="page-sub">Shown on the ${pageLabel(n.page_slug)} page.</div>
   <div class="card">
@@ -6748,7 +6661,7 @@ ${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)
       </div>
       ${tinymcePageSection(n.body || '')}
       <div class="btn-row" style="margin-top:24px;">
-        <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save &amp; Publish →</button>
+        <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save &amp; Publish</button>
         <a href="/notices" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
       </div>
     </form>
@@ -6825,7 +6738,7 @@ ${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)
         });
 
         return html(`
-${sidebarShell('staff', currentUser, `<a href="https://timothystl.org/about" target="_blank">View About page →</a>`, await badgeCounts(env, currentUser))}
+${sidebarShell('staff', currentUser, `<a href="https://timothystl.org/about" target="_blank">View About page</a>`, await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -6861,7 +6774,7 @@ function staffMove(id, direction) {
         const nextOrder = 10;
         return html(`
 ${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">Add Staff Member</div>
   <div class="card">
     <form method="POST" action="/staff/create">
@@ -6873,7 +6786,7 @@ ${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`)}
       </div>
       <div class="form-group"><label>Bio <span style="font-size:11px;color:var(--gray);">(optional)</span></label><textarea name="bio" rows="6" placeholder="Short biography..." style="width:100%;font-family:var(--sans);font-size:14px;padding:10px;border:1px solid var(--border);border-radius:var(--r-sm);resize:vertical;"></textarea></div>
       <div class="btn-row" style="margin-top:16px;">
-        <button type="submit" class="btn btn-primary">Save →</button>
+        <button type="submit" class="btn btn-primary">Save</button>
         <a href="/staff" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
       </div>
     </form>
@@ -6907,7 +6820,7 @@ ${staffPhotoUploadScript()}`, 'New Staff Member');
         if (!m) return new Response('Not found', { status: 404 });
         return html(`
 ${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">Edit — ${esc(m.name)}</div>
   <div class="card">
     <form method="POST" action="/staff/update/${m.id}">
@@ -6919,7 +6832,7 @@ ${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`)}
       </div>
       <div class="form-group"><label>Bio</label><textarea name="bio" rows="8" style="width:100%;font-family:var(--sans);font-size:14px;padding:10px;border:1px solid var(--border);border-radius:var(--r-sm);resize:vertical;">${esc(m.bio||'')}</textarea></div>
       <div class="btn-row" style="margin-top:16px;">
-        <button type="submit" class="btn btn-primary">Save →</button>
+        <button type="submit" class="btn btn-primary">Save</button>
         <a href="/staff" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
       </div>
     </form>
@@ -7064,7 +6977,7 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
         const cfg = sectionCfg('links');
         const activeTap = taps.find((t) => t.id === which);
         return html(`
-${sidebarShell('link-cards', currentUser, `<a href="https://links.timothystl.org" target="_blank">View link page →</a>`, await badgeCounts(env, currentUser))}
+${sidebarShell('link-cards', currentUser, `<a href="https://links.timothystl.org" target="_blank">View link page</a>`, await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   <div class="tlc-section" style="padding-bottom:0;">
@@ -7101,7 +7014,7 @@ ${sidebarShell('link-cards', currentUser, `<a href="https://links.timothystl.org
         if (!t) return new Response('Not found', { status: 404 });
         return html(`
 ${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; links</a>`, await badgeCounts(env, currentUser))}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">Re-point /tap${t.id}</div>
   <div class="page-sub">${escapeHtml(t.name)} — ${escapeHtml(t.placement || 'placement not recorded')}</div>
   <div class="alert alert-info">The physical tag holds nothing but <code>/tap${t.id}</code>. Changing where that lands is this form — the tag itself is never reprogrammed, so anything already handed out keeps working.</div>
@@ -7157,51 +7070,47 @@ ${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; 
         return new Response('', { status: 302, headers: { Location: '/link-cards?msg=saved' } });
       }
 
-      // Form helper (new & edit)
-      const cardFormHtml = (c = {}) => {
+      // Form helper (new & edit) — one config through the shared renderer, so
+      // this reads as the same admin as the list it was opened from. The design
+      // puts "Which tap" on this form, which is what makes moving a card
+      // between tags a matter of picking one rather than retyping the card.
+      const cardFormHtml = (c = {}, taps = []) => {
         const isNew = !c.id;
-        const action = isNew ? '/link-cards/create' : `/link-cards/update/${c.id}`;
-        const colorOpts = COLOR_OPTIONS.map(v => `<option value="${v}" ${(c.icon_color||'sky')===v?'selected':''}>${COLOR_LABELS[v]}</option>`).join('');
-        return `<form method="POST" action="${action}">
-          <div class="card">
-            <div class="card-title">${isNew ? 'New Card' : 'Edit Card'}</div>
-            <div class="form-group">
-              <label>Title <span style="color:#B85C3A;">*</span></label>
-              <input type="text" name="title" value="${esc(c.title||'')}" required placeholder="e.g. Get Connected">
-            </div>
-            <div class="form-group">
-              <label>Description <span style="font-weight:400;color:var(--gray);">(optional)</span></label>
-              <input type="text" name="description" value="${esc(c.description||'')}" placeholder="One-line tagline shown under the title">
-            </div>
-            <div class="form-group">
-              <label>URL <span style="color:#B85C3A;">*</span></label>
-              <input type="url" name="url" value="${esc(c.url||'')}" required placeholder="https://...">
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
-              <div class="form-group" style="margin:0;">
-                <label>Icon emoji</label>
-                <input type="text" name="icon_emoji" value="${esc(c.icon_emoji||'🔗')}" placeholder="🔗" maxlength="4" style="font-size:22px;">
-              </div>
-              <div class="form-group" style="margin:0;">
-                <label>Icon color</label>
-                <select name="icon_color">${colorOpts}</select>
-              </div>
-              <div class="form-group" style="margin:0;">
-                <label>Sort order</label>
-                <input type="number" name="sort_order" value="${c.sort_order||0}" min="0" step="1">
-              </div>
-            </div>
-          </div>
-          <div class="btn-row">
-            <button class="btn btn-primary" type="submit">${isNew ? 'Add card' : 'Save changes'}</button>
-            <a href="/link-cards" class="btn btn-secondary">Cancel</a>
-          </div>
-        </form>`;
+        return renderFormSection({
+          title: isNew ? 'New card' : c.title || 'Edit card',
+          purpose: isNew
+            ? 'A card is what somebody sees after tapping a tag. The tag itself is unchanged by anything on this form.'
+            : 'Shown on the taps this card belongs to. Changing it here changes what every tag pointing at it shows.',
+          action: isNew ? '/link-cards/create' : `/link-cards/update/${c.id}`,
+          cancelHref: '/link-cards',
+          saveLabel: isNew ? 'Add card' : 'Save changes',
+          deleteAction: isNew ? '' : `/link-cards/delete/${c.id}`,
+          deleteConfirm: `Delete “${c.title || 'this card'}”? Anybody tapping the tag stops seeing it.`,
+          fields: [
+            { name: 'title', label: 'Card title', value: c.title || '', required: true, placeholder: 'Get Connected' },
+            { name: 'description', label: 'Description', value: c.description || '', placeholder: 'One line under the title',
+              hint: 'Optional. It is the line somebody reads to decide whether to tap.' },
+            { name: 'url', type: 'url', label: 'Goes to', value: c.url || '', required: true, placeholder: 'https://…' },
+            ...(taps.length ? [{
+              kind: 'chips', name: 'tap', label: 'Which tap', value: c.tap == null ? '' : String(c.tap),
+              options: [{ value: '', label: 'Every tap' }].concat(taps.map((t) => ({ value: String(t.id), label: `/tap${t.id} · ${t.name}` }))),
+              hint: 'Move a card between taps without retyping it. “Every tap” shows it behind all four.',
+            }] : []),
+            { name: 'icon_emoji', label: 'Icon', value: c.icon_emoji || '🔗', placeholder: '🔗' },
+            { kind: 'choice', name: 'icon_color', label: 'Icon colour', value: c.icon_color || 'sky',
+              options: COLOR_OPTIONS.map((v) => ({ value: v, label: COLOR_LABELS[v] })) },
+            { kind: 'number', name: 'sort_order', label: 'Order', value: c.sort_order || 0, min: 0, step: 1,
+              hint: 'Lower numbers come first.' },
+          ],
+        });
       };
+      const tapsForForm = async () => (await env.DB.prepare('SELECT id, name FROM taps ORDER BY id')
+        .all().catch(() => ({ results: [] }))).results || [];
 
       // New form
       if (path === '/link-cards/new' && method === 'GET') {
-        return html(sidebarShell('link-cards', currentUser) + `<div class="wrap">${cardFormHtml()}</div>`, 'New Card — TLC Admin');
+        return html(sidebarShell('link-cards', currentUser)
+          + `<div class="tlc-wrap">${cardFormHtml({}, await tapsForForm())}</div>`, 'New card — TLC Admin');
       }
 
       // Create
@@ -7210,8 +7119,10 @@ ${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; 
         const title = (fd.get('title')||'').trim();
         const cardUrl = (fd.get('url')||'').trim();
         if (!title || !isSafeCardUrl(cardUrl)) return new Response('', { status: 302, headers: { Location: '/link-cards/new' } });
-        await env.DB.prepare('INSERT INTO link_cards (title, description, url, icon_emoji, icon_color, sort_order, active) VALUES (?, ?, ?, ?, ?, ?, 1)')
-          .bind(title, (fd.get('description')||'').trim(), cardUrl, (fd.get('icon_emoji')||'🔗').trim(), (fd.get('icon_color')||'sky'), parseInt(fd.get('sort_order')||'0',10)).run();
+        // Blank means "every tap", which is a real answer and not a missing one.
+        const newTap = String(fd.get('tap') || '').trim();
+        await env.DB.prepare('INSERT INTO link_cards (title, description, url, icon_emoji, icon_color, sort_order, tap, active) VALUES (?, ?, ?, ?, ?, ?, ?, 1)')
+          .bind(title, (fd.get('description')||'').trim(), cardUrl, (fd.get('icon_emoji')||'🔗').trim(), (fd.get('icon_color')||'sky'), parseInt(fd.get('sort_order')||'0',10), newTap ? parseInt(newTap, 10) : null).run();
         return new Response('', { status: 302, headers: { Location: '/link-cards?msg=saved' } });
       }
 
@@ -7220,7 +7131,8 @@ ${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; 
       if (editMatch && method === 'GET') {
         const c = await env.DB.prepare('SELECT * FROM link_cards WHERE id = ?').bind(parseInt(editMatch[1],10)).first();
         if (!c) return new Response('Not found', { status: 404 });
-        return html(sidebarShell('link-cards', currentUser) + `<div class="wrap">${cardFormHtml(c)}</div>`, 'Edit Card — TLC Admin');
+        return html(sidebarShell('link-cards', currentUser)
+          + `<div class="tlc-wrap">${cardFormHtml(c, await tapsForForm())}</div>`, 'Edit card — TLC Admin');
       }
 
       // Update
@@ -7230,8 +7142,9 @@ ${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; 
         const title = (fd.get('title')||'').trim();
         const cardUrl = (fd.get('url')||'').trim();
         if (!title || !isSafeCardUrl(cardUrl)) return new Response('', { status: 302, headers: { Location: `/link-cards/edit/${updateMatch[1]}` } });
-        await env.DB.prepare('UPDATE link_cards SET title=?, description=?, url=?, icon_emoji=?, icon_color=?, sort_order=? WHERE id=?')
-          .bind(title, (fd.get('description')||'').trim(), cardUrl, (fd.get('icon_emoji')||'🔗').trim(), (fd.get('icon_color')||'sky'), parseInt(fd.get('sort_order')||'0',10), parseInt(updateMatch[1],10)).run();
+        const upTap = String(fd.get('tap') || '').trim();
+        await env.DB.prepare('UPDATE link_cards SET title=?, description=?, url=?, icon_emoji=?, icon_color=?, sort_order=?, tap=? WHERE id=?')
+          .bind(title, (fd.get('description')||'').trim(), cardUrl, (fd.get('icon_emoji')||'🔗').trim(), (fd.get('icon_color')||'sky'), parseInt(fd.get('sort_order')||'0',10), upTap ? parseInt(upTap, 10) : null, parseInt(updateMatch[1],10)).run();
         return new Response('', { status: 302, headers: { Location: '/link-cards?msg=saved' } });
       }
 
@@ -8019,7 +7932,7 @@ ${sidebarShell('settings', currentUser, '', await badgeCounts(env, currentUser))
 
       return html(`
 ${sidebarShell('giving', currentUser)}
-<div class="wrap">
+<div class="tlc-wrap">
   <h1 class="tlc-title">${escapeHtml(sectionCfg('giving').title)}</h1>
   <p class="tlc-purpose" style="margin:6px 0 18px;">${escapeHtml(sectionCfg('giving').purpose)}</p>
 
@@ -8074,7 +7987,7 @@ ${sidebarShell('giving', currentUser)}
         <input type="url" name="give_url" value="${(baseUrlRow?.value||'').replace(/"/g,'&quot;')}" style="font-family:var(--mono,monospace);font-size:13px;">
       </div>
       <div class="btn-row" style="margin-top:4px;">
-        <button type="submit" class="btn btn-primary">Save →</button>
+        <button type="submit" class="btn btn-primary">Save</button>
       </div>
     </div>
   </form>
@@ -8125,7 +8038,7 @@ ${sidebarShell('giving', currentUser)}
         Tagging a payment as a gift would put a non-donation on a tax statement, so this defaults to Payment and has to be changed on purpose.
       </div>
       <div class="btn-row" style="margin-top:12px;">
-        <button type="submit" class="btn btn-primary">Add link →</button>
+        <button type="submit" class="btn btn-primary">Add link</button>
       </div>
     </form>
   </div>
@@ -8191,7 +8104,7 @@ ${sidebarShell('giving', currentUser)}
       if (!hasPermission(currentUser, 'giving_manage')) return new Response('Access denied.', { status: 403 });
       return html(`
 ${sidebarShell('giving', currentUser, `<a href="/giving">← Giving</a>`, await badgeCounts(env, currentUser))}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">The giving page</div>
   <div class="page-sub">Where each part of give.timothystl.org and /give is edited.</div>
   <div class="alert alert-info">This page is not yet a block-editor page. Everything on it that changes is edited from the Giving screen; the narrative sections are still in code, because it is the church's donation page and moving it wants a deliberate change with somebody watching.</div>
@@ -8282,7 +8195,7 @@ ${sidebarShell('users', currentUser, '', await badgeCounts(env, currentUser))}
     if (path === '/users/new' && method === 'GET') {
       return html(`
 ${sidebarShell('users', currentUser)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">New user</div>
   <form method="POST" action="/users/new">
     <div class="card">
@@ -8293,7 +8206,7 @@ ${sidebarShell('users', currentUser)}
       <div class="form-group"><label>Permissions</label>${permissionCheckboxes([])}</div>
     </div>
     <div class="btn-row">
-      <button type="submit" class="btn btn-primary">Create user →</button>
+      <button type="submit" class="btn btn-primary">Create user</button>
       <a href="/users" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
     </div>
   </form>
@@ -8327,7 +8240,7 @@ ${sidebarShell('users', currentUser)}
       try { selectedPerms = JSON.parse(u.permissions || '[]'); } catch(_) {}
       return html(`
 ${sidebarShell('users', currentUser)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">Edit user: ${escapeHtml(u.username)}</div>
   <form method="POST" action="/users/edit/${u.id}">
     <div class="card">
@@ -8348,7 +8261,7 @@ ${sidebarShell('users', currentUser)}
       </div>
     </div>
     <div class="btn-row">
-      <button type="submit" class="btn btn-primary">Save changes →</button>
+      <button type="submit" class="btn btn-primary">Save changes</button>
       <a href="/users" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
     </div>
   </form>
@@ -8651,7 +8564,7 @@ ${sidebarShell('audit', currentUser, '', await badgeCounts(env, currentUser))}
     });
 
     return html(`
-${sidebarShell('newsletter', currentUser, `<a href="https://timothystl.org/news" target="_blank">View archive →</a>`, await badgeCounts(env, currentUser))}
+${sidebarShell('newsletter', currentUser, `<a href="https://timothystl.org/news" target="_blank">View archive</a>`, await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({

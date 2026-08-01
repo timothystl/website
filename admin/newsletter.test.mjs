@@ -9,6 +9,7 @@ import {
   AUDIENCES, normalizeAudience, subjectAdvice, preheaderAdvice,
   SUBJECT_LIMIT, PREHEADER_LIMIT, isSent, canEdit, approvalState,
   issueStatus, sendSummary, parseSubscriberCsv,
+  parseExtras, extrasFromForm, serializeExtras, MAX_EXTRA_NOTES,
 } from './newsletter.js';
 
 let pass = 0, fail = 0;
@@ -192,6 +193,46 @@ group('the subscriber CSV import');
 
   eq(parseSubscriberCsv('').rows.length, 0, 'an empty paste imports nothing');
   eq(parseSubscriberCsv(null).rows.length, 0, 'and so does nothing at all');
+}
+
+
+// ── extra notes ──────────────────────────────────────────────────────────────
+// The pastor's note, a secondary and a tertiary were the three free-form blocks
+// an issue could carry. Some weeks need a fourth or a fifth.
+group('extra notes');
+{
+  eq(parseExtras('[]').length, 0, 'an issue with none has none');
+  eq(parseExtras(null).length, 0, 'and neither does one written before the column existed');
+  eq(parseExtras('not json').length, 0, 'a corrupt value is empty rather than a crash');
+  eq(parseExtras({ title: 'x' }).length, 0, 'and so is something that is not a list');
+
+  const two = parseExtras([{ title: 'Thank you', body: '<p>To everyone who helped.</p>' }, { title: '', body: '<p>A correction.</p>' }]);
+  eq(two.length, 2, 'two notes come back as two');
+  eq(two[0].title, 'Thank you', 'with their headings');
+  eq(two[1].title, '', 'a heading is optional — the note simply starts');
+
+  // A note with no body is not a note. Dropped here rather than at render time,
+  // so a slot somebody opened and thought better of never reaches the email.
+  eq(parseExtras([{ title: 'Heading only', body: '' }]).length, 0, 'a heading with no body is not a note');
+  eq(parseExtras([{ title: '', body: '   ' }]).length, 0, 'nor is whitespace');
+
+  // Blank slots collapse, so filling the third box without the second does not
+  // leave a hole in the email.
+  const form = new Map([
+    ['extra_title_0', ''], ['extra_note_0', ''],
+    ['extra_title_1', ''], ['extra_note_1', ''],
+    ['extra_title_2', 'Late addition'], ['extra_note_2', '<p>One more thing.</p>'],
+  ]);
+  const fromForm = extrasFromForm({ get: (k) => form.get(k) });
+  eq(fromForm.length, 1, 'only the filled slot is kept');
+  eq(fromForm[0].title, 'Late addition', 'and it keeps its heading');
+
+  // Bounded, so a crafted POST cannot make an issue of arbitrary length.
+  const many = parseExtras(Array.from({ length: 20 }, (_, i) => ({ title: 't' + i, body: '<p>x</p>' })));
+  eq(many.length, MAX_EXTRA_NOTES, 'no more than the form can offer is ever stored');
+
+  eq(JSON.parse(serializeExtras([{ title: 'A', body: '<p>b</p>' }])).length, 1, 'serialising round-trips');
+  eq(serializeExtras([]), '[]', 'and empty is an empty list, not null');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

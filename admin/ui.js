@@ -158,7 +158,7 @@ export function primaryCell(title, sub, { icon = '', iconClass = '' } = {}) {
 // JavaScript disabled — you just see every row.
 export function renderListSection(cfg) {
   const {
-    key, title, purpose = '', action = null, search = '', filters = [],
+    key, title, purpose = '', action = null, altActions = [], search = '', filters = [],
     columns = [], rows = [], note = '', noun = 'item', nounPlural = '',
     empty = 'Nothing here yet.', headerExtra = '',
   } = cfg;
@@ -217,14 +217,17 @@ export function renderListSection(cfg) {
       <h1 class="tlc-title">${esc(title)}</h1>
       ${purpose ? `<p class="tlc-purpose">${esc(purpose)}</p>` : ''}
     </div>
-    ${action
-      // Some sections create the thing outright rather than opening a form
-      // (a new page is made and its editor opened). That must be a POST — a
-      // GET that mutates gets fired by a link prefetch or a browser refresh.
-      ? (action.method === 'POST'
-          ? `<form method="POST" action="${esc(action.href)}" style="margin:0;"><button type="submit" class="tlc-action">${esc(action.label)}</button></form>`
-          : `<a class="tlc-action" href="${esc(action.href)}">${esc(action.label)}</a>`)
-      : ''}
+    ${(action || altActions.length) ? `<div class="tlc-section-actions">
+      ${altActions.map((a) => `<a class="tlc-action-quiet" href="${esc(a.href)}"${a.newTab ? ' target="_blank" rel="noopener"' : ''}>${esc(a.label)}</a>`).join('')}
+      ${action
+        // Some sections create the thing outright rather than opening a form
+        // (a new page is made and its editor opened). That must be a POST — a
+        // GET that mutates gets fired by a link prefetch or a browser refresh.
+        ? (action.method === 'POST'
+            ? `<form method="POST" action="${esc(action.href)}" style="margin:0;"><button type="submit" class="tlc-action">${esc(action.label)}</button></form>`
+            : `<a class="tlc-action" href="${esc(action.href)}">${esc(action.label)}</a>`)
+        : ''}
+    </div>` : ''}
   </header>
   ${headerExtra}
   ${(search || filters.length) ? `<div class="tlc-bar">
@@ -393,6 +396,58 @@ export function renderDrawer(cfg) {
 </aside>`;
 }
 
+// ── THE EDIT FORM, ONCE ──────────────────────────────────────
+// The list screens were converted first, and the forms behind their "+ New"
+// and "Edit" actions were left on the old chrome — so clicking Edit dropped
+// staff out of the redesign and into the previous admin, mid-task. That is
+// worse than either style on its own: it reads as two different programs.
+//
+// Same field vocabulary as `renderDrawer`, laid out as a page rather than a
+// slide-over, because these forms keep their own addresses — a warning row, a
+// redirect after saving, and a bookmark all point at them. **A form here is a
+// config, exactly like a list is.** If you are hand-writing `<div class="wrap">`
+// and `<label>` in a route handler, that is the bug this exists to remove.
+//
+// `body` is an escape hatch for the one thing the field vocabulary genuinely
+// cannot express — a TinyMCE editor, an event repeater, an image picker. It is
+// rendered inside the same card, so a form that needs one still looks like
+// every other form.
+export function renderFormSection(cfg) {
+  const {
+    title, purpose = '', action, method = 'POST', fields = [], body = '',
+    saveLabel = 'Save changes', cancelHref = '', cancelLabel = 'Cancel',
+    deleteAction = '', deleteConfirm = 'Delete this? This cannot be undone.',
+    deleteLabel = 'Delete', note = '', enctype = '', extraHead = '', wide = false,
+  } = cfg;
+
+  return `<div class="tlc-section">
+  <header class="tlc-section-head">
+    <div class="tlc-section-headings">
+      <h1 class="tlc-title">${esc(title)}</h1>
+      ${purpose ? `<p class="tlc-purpose">${esc(purpose)}</p>` : ''}
+    </div>
+    ${cancelHref ? `<a class="tlc-drawer-close" href="${esc(cancelHref)}">${esc(cancelLabel)}</a>` : ''}
+  </header>
+  ${extraHead}
+  <form method="${esc(method)}" action="${esc(action)}"${enctype ? ` enctype="${esc(enctype)}"` : ''} class="tlc-form${wide ? ' tlc-form--wide' : ''}">
+    <div class="tlc-form-card">
+      ${fields.map((f) => renderField(f)).join('')}
+      ${body}
+    </div>
+    ${note ? `<p class="tlc-note"><span class="tlc-note-mark">◆</span><span>${esc(note)}</span></p>` : ''}
+    <div class="tlc-form-foot">
+      ${deleteAction
+        ? `<button type="submit" class="tlc-drawer-delete" formaction="${esc(deleteAction)}" formnovalidate onclick="return confirm('${esc(deleteConfirm).replace(/'/g, '&#39;')}')">${esc(deleteLabel)}</button>`
+        : '<span></span>'}
+      <div class="tlc-drawer-foot-right">
+        ${cancelHref ? `<a class="tlc-btn-quiet" href="${esc(cancelHref)}">${esc(cancelLabel)}</a>` : ''}
+        <button type="submit" class="tlc-btn-primary">${esc(saveLabel)}</button>
+      </div>
+    </div>
+  </form>
+</div>`;
+}
+
 function renderField(f) {
   const id = `fld-${esc(f.name || f.key || Math.random().toString(36).slice(2))}`;
   const label = f.label ? `<label class="tlc-label" for="${id}">${esc(f.label)}</label>` : '';
@@ -546,6 +601,14 @@ export const ADMIN_UI_CSS = `
 .tlc-action{flex:none;display:inline-flex;align-items:center;background:var(--tlc-ink);color:var(--tlc-cream);font:600 13.5px var(--tlc-sans);padding:10px 17px;border-radius:8px;text-decoration:none;border:0;cursor:pointer;}
 .tlc-action:hover{background:#2A3E62;}
 .tlc-action:hover{background:#16273F;}
+/* A section's second and third actions sit beside the primary one rather than
+   in the topbar. They were in the topbar, which put "add a series" further from
+   the list it adds to than the sign-out link — and made the one blue button
+   look like the only thing you could do. Quiet, so the primary still leads. */
+.tlc-section-actions{flex:none;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.tlc-action-quiet{flex:none;display:inline-flex;align-items:center;background:#fff;color:var(--tlc-navy);
+  font:600 13px var(--tlc-sans);padding:9px 15px;border:1px solid var(--tlc-edge);border-radius:8px;text-decoration:none;}
+.tlc-action-quiet:hover{border-color:var(--tlc-blue);}
 .tlc-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
 .tlc-search{flex:1;min-width:200px;max-width:340px;display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--tlc-edge);border-radius:8px;padding:0 12px;}
 .tlc-search-icon{color:var(--tlc-muted);font-size:14px;}
@@ -725,6 +788,78 @@ export const ADMIN_UI_CSS = `
 .tlc-drawer-delete{background:none;border:0;color:#8A4A4A;font:600 13px var(--tlc-sans);cursor:pointer;padding:8px 4px;}
 .tlc-btn-primary{background:var(--tlc-navy);color:#fff;border:0;border-radius:8px;padding:10px 18px;font:600 13px var(--tlc-sans);cursor:pointer;}
 .tlc-btn-quiet{background:#fff;color:var(--tlc-body);border:1px solid var(--tlc-edge);border-radius:8px;padding:9px 16px;font:600 13px var(--tlc-sans);text-decoration:none;cursor:pointer;}
+/* The edit form as a page. Narrow on purpose — a form is read one field at a
+   time, and a field box running the whole width of a desk monitor is harder to
+   scan, not easier. The wide option opts out for the few that carry an editor. */
+.tlc-form{max-width:620px;}
+.tlc-form--wide{max-width:none;}
+.tlc-form-card{background:var(--tlc-card);border:1px solid var(--tlc-edge);border-radius:12px;padding:20px 22px 6px;}
+.tlc-form-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px;}
+/* The forms carry the old markup for the things the field vocabulary cannot
+   express — a TinyMCE box, an event repeater. Restyled here rather than
+   rewritten, so a form with one of those still reads as one form. */
+.tlc-form-card .form-group{margin-bottom:16px;}
+.tlc-form-card .form-group > label{display:block;font:600 10.5px/1 var(--tlc-sans);letter-spacing:.12em;text-transform:uppercase;color:var(--tlc-muted);margin-bottom:6px;}
+.tlc-form-card input[type=text],.tlc-form-card input[type=password],.tlc-form-card input[type=email],
+.tlc-form-card input[type=url],.tlc-form-card input[type=number],.tlc-form-card input[type=date],
+.tlc-form-card input[type=time],.tlc-form-card textarea,.tlc-form-card select{
+  width:100%;border:1px solid var(--tlc-edge);border-radius:8px;padding:9px 11px;
+  font:400 13.5px var(--tlc-sans);color:var(--tlc-ink);background:#fff;outline:none;}
+.tlc-form-card input:focus,.tlc-form-card textarea:focus,.tlc-form-card select:focus{
+  border-color:var(--tlc-blue);box-shadow:0 0 0 3px rgba(46,126,166,.14);}
+/* ── THE LONG-TAIL FORMS ──────────────────────────────────────────────────
+   Some forms carry things the field vocabulary cannot express — three video
+   slots, a banner picker, an event repeater. Converting each to a config would
+   mean rewriting markup that works, so instead their own classes are restyled
+   inside .tlc-wrap: change the wrapper and the page inherits the redesign,
+   with its fields and its POST handler untouched.
+
+   Scoped to .tlc-wrap on purpose. Anything still on the old shell keeps the
+   old look rather than getting half of each. */
+.tlc-wrap .page-title{font:500 25px/1.2 var(--tlc-serif);color:var(--tlc-navy);margin:0 0 4px;}
+.tlc-wrap .page-sub{font-size:13.5px;line-height:1.6;color:var(--tlc-muted);margin:0 0 20px;max-width:64ch;text-wrap:pretty;}
+.tlc-wrap .card{background:var(--tlc-card);border:1px solid var(--tlc-edge);border-radius:12px;padding:20px 22px;margin-bottom:16px;}
+.tlc-wrap .card-title{font:600 10.5px/1 var(--tlc-sans);letter-spacing:.12em;text-transform:uppercase;color:var(--tlc-muted);
+  margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--tlc-divider);}
+.tlc-wrap .form-group{margin-bottom:16px;}
+.tlc-wrap .form-group > label{display:block;font:600 10.5px/1 var(--tlc-sans);letter-spacing:.12em;text-transform:uppercase;
+  color:var(--tlc-muted);margin-bottom:6px;}
+.tlc-wrap input[type=text],.tlc-wrap input[type=password],.tlc-wrap input[type=email],.tlc-wrap input[type=url],
+.tlc-wrap input[type=number],.tlc-wrap input[type=date],.tlc-wrap input[type=time],.tlc-wrap textarea,.tlc-wrap select{
+  width:100%;border:1px solid var(--tlc-edge);border-radius:8px;padding:9px 11px;font:400 13.5px var(--tlc-sans);
+  color:var(--tlc-ink);background:#fff;outline:none;}
+.tlc-wrap input:focus,.tlc-wrap textarea:focus,.tlc-wrap select:focus{border-color:var(--tlc-blue);box-shadow:0 0 0 3px rgba(46,126,166,.14);}
+.tlc-wrap .btn-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:16px;}
+.tlc-wrap .btn{display:inline-flex;align-items:center;gap:8px;font:600 13px var(--tlc-sans);padding:10px 18px;
+  border-radius:8px;border:1px solid var(--tlc-edge);background:#fff;color:var(--tlc-navy);text-decoration:none;cursor:pointer;
+  transition:border-color .15s,background .15s;}
+.tlc-wrap .btn:hover{border-color:var(--tlc-blue);transform:none;}
+.tlc-wrap .btn-primary,.tlc-wrap .btn-secondary{background:var(--tlc-ink);color:var(--tlc-cream);border-color:var(--tlc-ink);}
+.tlc-wrap .btn-primary:hover,.tlc-wrap .btn-secondary:hover{background:#16273F;border-color:#16273F;}
+.tlc-wrap .btn-secondary{background:#fff;color:var(--tlc-navy);border-color:var(--tlc-edge);}
+.tlc-wrap .btn-secondary:hover{background:#fff;border-color:var(--tlc-blue);}
+.tlc-wrap .btn-danger{background:#fff;color:#8C3A28;border-color:#E4C8C8;}
+.tlc-wrap .btn-danger:hover{background:#F7E4DE;border-color:#E4C8C8;}
+.tlc-wrap .btn-sage{background:#fff;color:var(--tlc-navy);border-color:var(--tlc-edge);}
+.tlc-wrap .btn-sm{font-size:12.5px;padding:7px 13px;}
+.tlc-wrap .checkbox-row{display:flex;align-items:center;gap:9px;margin-top:6px;}
+.tlc-wrap .checkbox-row input[type=checkbox]{width:15px;height:15px;accent-color:var(--tlc-blue);}
+.tlc-wrap .checkbox-row span,.tlc-wrap .checkbox-row label{font:600 13px var(--tlc-sans);color:var(--tlc-body);
+  text-transform:none;letter-spacing:0;margin:0;cursor:pointer;}
+.tlc-wrap .alert{border-radius:10px;padding:13px 16px;font-size:13.5px;line-height:1.55;margin-bottom:18px;}
+.tlc-wrap .alert-success{background:#EDF0E4;border-left:3px solid #3F5424;color:#3F5424;}
+.tlc-wrap .alert-error{background:#F7E4DE;border-left:3px solid #8C3A28;color:#8C3A28;}
+.tlc-wrap .alert-info{background:#E7EEF7;border-left:3px solid var(--tlc-navy);color:var(--tlc-navy);}
+.tlc-wrap .tag{font:700 9.5px var(--tlc-sans);letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;
+  border-radius:5px;background:var(--tlc-parchment);color:var(--tlc-muted);}
+
+/* A short list of tick boxes — "where this appears", not a status. Each one is
+   a target big enough to hit, because these are read and clicked in a row. */
+.tlc-choices{display:flex;flex-wrap:wrap;gap:8px;}
+.tlc-choice{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--tlc-edge);border-radius:8px;
+  padding:8px 12px;background:#fff;cursor:pointer;font:600 12.5px var(--tlc-sans);color:var(--tlc-body);}
+.tlc-choice:has(input:checked){background:#F2F7FA;border-color:var(--tlc-blue);color:var(--tlc-navy);}
+.tlc-choice input{width:15px;height:15px;accent-color:var(--tlc-blue);cursor:pointer;}
 .tlc-field{margin-bottom:16px;}
 .tlc-label{display:block;font:600 10.5px/1 var(--tlc-sans);letter-spacing:.12em;text-transform:uppercase;color:var(--tlc-muted);margin-bottom:6px;}
 .tlc-field input[type=text],.tlc-field input[type=email],.tlc-field input[type=url],.tlc-field input[type=number],.tlc-field input[type=date],.tlc-field textarea,.tlc-field select{width:100%;border:1px solid var(--tlc-edge);border-radius:8px;padding:9px 11px;font:400 13.5px var(--tlc-sans);color:var(--tlc-ink);background:#fff;outline:none;}

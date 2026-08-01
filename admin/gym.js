@@ -234,7 +234,7 @@ function buildGymInvoiceEmailHtml(inv, group, bookingOrBookings, paymentLink = P
     <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#C9973A;margin-bottom:10px;">Payment</div>
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
       <tr><td align="center">
-        <a href="${payLink}" style="display:inline-block;background:#00DB72;color:white;font-weight:700;font-size:16px;padding:14px 48px;border-radius:6px;text-decoration:none;letter-spacing:.01em;">Pay Online →</a>
+        <a href="${payLink}" style="display:inline-block;background:#00DB72;color:white;font-weight:700;font-size:16px;padding:14px 48px;border-radius:6px;text-decoration:none;letter-spacing:.01em;">Pay Online</a>
       </td></tr>
     </table>
     <div style="font-size:13px;color:#7A6E60;text-align:center;margin-bottom:16px;">— or —</div>
@@ -537,7 +537,7 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
       const paymentLink = await getPaymentLink(env);
       const _alertAmt = url.searchParams.get('amount');
       const _payLink = _alertAmt ? `${paymentLink}&amount=${_alertAmt}` : paymentLink;
-      const _payBtn = `<div style="margin-top:12px;"><a href="${_payLink}" target="_blank" style="display:inline-block;background:#00DB72;color:white;font-weight:700;font-size:14px;padding:10px 28px;border-radius:6px;text-decoration:none;">Pay Invoice Online →</a></div>`;
+      const _payBtn = `<div style="margin-top:12px;"><a href="${_payLink}" target="_blank" style="display:inline-block;background:#00DB72;color:white;font-weight:700;font-size:14px;padding:10px 28px;border-radius:6px;text-decoration:none;">Pay Invoice Online</a></div>`;
       const portalAlert = (portalMsg || '').startsWith('holds') ? `<div class="alert alert-success">✓ ${_pc} hold${_pc===1?'':'s'} placed! The church office will review and confirm your dates — you'll receive an invoice by email once confirmed.${_ps > 0 ? ` (${_ps} slot${_ps===1?'':'s'} were already taken and skipped.)` : ''}</div>`
         : portalMsg === 'nohold' ? `<div class="alert alert-error">No slots could be booked — they may have been taken or blocked. Please choose different times.</div>`
         : portalMsg === 'noselect' ? `<div class="alert alert-error">No dates were selected. Please use the pattern selector or tap individual slots before submitting.</div>`
@@ -692,7 +692,7 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
       <div style="display:flex;gap:6px;flex-wrap:wrap;" id="dow-toggles"></div>
     </div>
     <div id="pat-hour-sections" style="display:flex;flex-direction:column;gap:14px;margin-bottom:16px;"></div>
-    <button id="pat-apply-btn" onclick="applyPattern()" disabled style="background:var(--steel);color:white;font-size:13px;font-weight:700;padding:10px 18px;border-radius:6px;border:none;cursor:pointer;opacity:.5;">Apply to date range →</button>
+    <button id="pat-apply-btn" onclick="applyPattern()" disabled style="background:var(--steel);color:white;font-size:13px;font-weight:700;padding:10px 18px;border-radius:6px;border:none;cursor:pointer;opacity:.5;">Apply to date range</button>
     <div id="pat-result" style="font-size:12px;color:var(--sage);margin-top:10px;font-weight:600;display:none;"></div>
   </div>
 
@@ -1117,7 +1117,7 @@ document.getElementById('req-form-wrap').style.display = 'none';
 
         return portalHtml(`
 ${portalHeader}
-<div class="wrap">
+<div class="tlc-wrap">
   ${errAlert}
   ${portalNav('new')}
   <div class="card">
@@ -1160,7 +1160,7 @@ ${portalHeader}
       </div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
         <div>
-          <button type="submit" formaction="/gym/book/${token}/hold" class="btn btn-amber">Submit Rental Request →</button>
+          <button type="submit" formaction="/gym/book/${token}/hold" class="btn btn-amber">Submit Rental Request</button>
           <div style="font-size:11px;color:var(--gray);margin-top:5px;">The church office will review and confirm your date.<br>You'll receive an invoice by email once confirmed.</div>
         </div>
       </div>
@@ -1382,7 +1382,7 @@ function calcTotal() {
     ${expireCountdown ? `<div style="font-size:12px;color:#B85C3A;margin-top:3px;font-weight:600;">⏳ ${expireCountdown}</div>` : ''}
   </div>
   <span style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;white-space:nowrap;background:${badgeBg};color:${badgeColor};">${badgeText}</span>
-  ${isHold ? `<button onclick="askCancelModal('${b.id}')" style="background:transparent;color:#B85C3A;border:1px solid #B85C3A;font-size:12px;font-weight:700;padding:8px 14px;border-radius:6px;cursor:pointer;">Cancel</button>` : `<a href="${payHref}" target="_blank" style="background:var(--sage);color:white;font-size:12px;font-weight:700;padding:8px 14px;border-radius:6px;text-decoration:none;">Pay Online →</a>`}
+  ${isHold ? `<button onclick="askCancelModal('${b.id}')" style="background:transparent;color:#B85C3A;border:1px solid #B85C3A;font-size:12px;font-weight:700;padding:8px 14px;border-radius:6px;cursor:pointer;">Cancel</button>` : `<a href="${payHref}" target="_blank" style="background:var(--sage);color:white;font-size:12px;font-weight:700;padding:8px 14px;border-radius:6px;text-decoration:none;">Pay Online</a>`}
 </div>`;
             }).join('');
 
@@ -1531,7 +1531,7 @@ document.getElementById('cancel-confirm-btn').addEventListener('click', function
           try {
             await sendTransactionalEmail(env, {
               subject: `${created} hold(s) placed — ${group.name}`,
-              htmlContent: `<p><strong>${group.name}</strong> placed ${created} hold(s) via the booking portal.</p><ul>${slotLines}</ul>${skipped > 0 ? `<p>(${skipped} slot(s) skipped due to conflicts.)</p>` : ''}<p>Notes: ${notes || '—'}</p><p><a href="https://admin.timothystl.org/gym-rentals">Review at admin.timothystl.org/gym-rentals →</a></p>`,
+              htmlContent: `<p><strong>${group.name}</strong> placed ${created} hold(s) via the booking portal.</p><ul>${slotLines}</ul>${skipped > 0 ? `<p>(${skipped} slot(s) skipped due to conflicts.)</p>` : ''}<p>Notes: ${notes || '—'}</p><p><a href="https://admin.timothystl.org/gym-rentals">Review at admin.timothystl.org/gym-rentals</a></p>`,
               toEmails: [adminEmail],
             });
           } catch (_) {}
@@ -1626,7 +1626,7 @@ document.getElementById('cancel-confirm-btn').addEventListener('click', function
           : '';
         return portalHtml(`
 ${portalHeader}
-<div class="wrap">
+<div class="tlc-wrap">
   ${portalNav('rec')}
   <div class="card">
     <div class="card-title" style="margin-bottom:4px;">Recurring Rental Request</div>
@@ -1663,7 +1663,7 @@ ${portalHeader}
         ${await (async () => { const {rate: _rr, rateType: _rt} = await getGroupRate(env, group); return `Rental rate is ${_rt === 'daily' ? `$${_rr.toFixed(2)}/day` : _rt === 'lump' ? `$${_rr.toFixed(2)} flat rate` : `$${_rr.toFixed(2)}/hr`}.`; })()} You will receive a monthly invoice once your request is approved.
       </div>
       <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;">
-        <button type="submit" class="btn btn-primary">Submit Request →</button>
+        <button type="submit" class="btn btn-primary">Submit Request</button>
         <a href="/gym/book/${token}" class="btn btn-secondary" style="text-decoration:none;background:var(--linen);color:var(--steel);">Cancel</a>
       </div>
     </form>
@@ -2238,7 +2238,7 @@ ${portalHeader}
       ${invoiceRows || '<p class="gympanel-empty">No invoices yet. One is generated when a hold is confirmed.</p>'}
       <p class="gympanel-foot">
         <span>Rate $${escapeHtml(rateRow?.value || '25.00')}/hour · from <a href="/gym-rentals/settings">settings</a></span>
-        <a href="/gym-rentals/invoices">All invoices →</a>
+        <a href="/gym-rentals/invoices">All invoices</a>
       </p>
     </section>
   </div>`;
@@ -2318,12 +2318,12 @@ ${sidebarShell('gym', currentUser)}
     <div class="stat-card">
       <div class="stat-label">Unpaid invoices</div>
       <div class="stat-num" style="color:var(--amber);">${unpaidInvoicesRow?.n || 0}</div>
-      <div class="stat-note"><a href="/gym-rentals/invoices" style="color:inherit;">View invoices →</a></div>
+      <div class="stat-note"><a href="/gym-rentals/invoices" style="color:inherit;">View invoices</a></div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Active groups</div>
       <div class="stat-num" style="color:var(--steel);">${activeGroupsRow?.n || 0}</div>
-      <div class="stat-note"><a href="/gym-rentals/groups" style="color:inherit;">Manage groups →</a></div>
+      <div class="stat-note"><a href="/gym-rentals/groups" style="color:inherit;">Manage groups</a></div>
     </div>
   </div>
   <div class="btn-row" style="margin-bottom:16px;">
@@ -2333,7 +2333,7 @@ ${sidebarShell('gym', currentUser)}
     <a href="/gym-rentals/merge-holds" class="btn btn-secondary">Consolidate Bookings</a>
     <a href="/gym-rentals/detect-patterns" class="btn btn-secondary">Detect Patterns</a>
     <a href="/gym-rentals/settings" class="btn btn-secondary">Settings</a>
-    <a href="/gym-rentals/test-gcal" class="btn btn-secondary" style="margin-left:auto;">Test GCal →</a>
+    <a href="/gym-rentals/test-gcal" class="btn btn-secondary" style="margin-left:auto;">Test GCal</a>
   </div>
   <!-- ⚠ Shown in BOTH layouts, deliberately. Calendar first is now the default,
        and the bulk tools below carry the invoice generation, the price-setting
@@ -2426,7 +2426,7 @@ document.addEventListener('change', function(e) {
           </div>`).join('');
         return html(`
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">Gym Rental Settings</div>
   <div class="page-sub">Rate, holds, notifications, and Google Calendar sync for the gym rental scheduler.</div>
   ${gymAlert}
@@ -2434,7 +2434,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
     <div class="card">
       ${fieldsHtml}
       <div class="btn-row" style="margin-top:4px;">
-        <button type="submit" class="btn btn-primary">Save settings →</button>
+        <button type="submit" class="btn btn-primary">Save settings</button>
       </div>
     </div>
   </form>
@@ -2471,7 +2471,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 </div>`).join('');
         return html(`
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">Rental Groups</div>
   <div class="page-sub">Each group gets a private booking link. Share it with them — no login required.</div>
   ${gymAlert}
@@ -2486,7 +2486,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
       if (path === '/gym-rentals/groups/new' && method === 'GET') {
         return html(`
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>`)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">Add Rental Group</div>
   <div class="page-sub">After saving, you'll see their private booking link to share.</div>
   <div class="card">
@@ -2520,7 +2520,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>
         <textarea name="notes" maxlength="1000" placeholder="Internal notes about this group…"></textarea>
       </div>
       <div class="btn-row">
-        <button type="submit" class="btn btn-primary">Save &amp; Get Link →</button>
+        <button type="submit" class="btn btn-primary">Save &amp; Get Link</button>
         <a href="/gym-rentals/groups" class="btn btn-secondary">Cancel</a>
       </div>
     </form>
@@ -2558,7 +2558,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>
         const esc = v => (v||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
         return html(`
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>`)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">${g.name}</div>
   <div class="page-sub">Edit group details and manage their booking link.</div>
   ${editAlert}
@@ -2631,7 +2631,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>
         <textarea name="notes" maxlength="1000">${(g.notes||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</textarea>
       </div>
       <div class="btn-row">
-        <button type="submit" class="btn btn-primary">Save changes →</button>
+        <button type="submit" class="btn btn-primary">Save changes</button>
       </div>
     </form>
     <hr style="border:none;border-top:1px solid var(--border);margin:24px 0;">
@@ -2759,7 +2759,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>
 </div>`).join('');
         return html(`
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Gym Rentals</a>`)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">Google Calendar — Connection Test</div>
   <div class="page-sub">Checks secrets, access token, and creates a test event on your calendar.</div>
   <div class="card">${stepsHtml}</div>
@@ -2830,7 +2830,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Gym Rentals</a>`)
 
           return html(`
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">Consolidate Bookings</div>
   <div class="page-sub">Merge consecutive same-day bookings (e.g. three 1-hour holds → one 3-hour hold). No data is lost — only combined.</div>
   <div class="card">
@@ -2987,7 +2987,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 
           return html(`
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">Detect Recurring Patterns</div>
   <div class="page-sub">Groups holds with the same day-of-week and time into recurrence records, so invoices show a clean summary ("Every Monday 5–8 PM, June–August: 13 sessions") instead of individual date lines.</div>
   <div class="card">
@@ -3088,7 +3088,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 .bcal-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--gray);margin-top:12px;}
 .bcal-legend span{display:flex;align-items:center;gap:6px;}
 </style>
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">Blocked Dates</div>
   <div class="page-sub">Click dates to select them, then save. Already-blocked dates (red) can be clicked to unblock.</div>
   ${gymAlert}
@@ -3278,7 +3278,7 @@ updateSummary();
 
         return html(`
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">New Booking</div>
   <div class="page-sub">Click dates, set times, then review before sending an invoice.</div>
   ${errAlert}
@@ -3368,7 +3368,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
       <input type="hidden" id="num-months" value="${numMonths}">
       <input type="hidden" name="slots" id="slots-json">
       <div class="btn-row">
-        <button type="submit" class="btn btn-primary" id="review-btn" disabled>Review →</button>
+        <button type="submit" class="btn btn-primary" id="review-btn" disabled>Review</button>
         <a href="/gym-rentals" class="btn btn-secondary">Cancel</a>
       </div>
     </form>
@@ -3816,7 +3816,7 @@ div.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020 !i
 
         return html(`
 ${sidebarShell('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">Review Booking</div>
   <div class="page-sub">${group.name} — $${rate.toFixed(2)}${rateLabel}</div>
   ${skippedAlert}
@@ -3848,7 +3848,7 @@ ${sidebarShell('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
       <input type="hidden" name="rate_type" value="${rate_type}">
       <input type="hidden" name="notes" value="${notes.replace(/"/g,'&quot;')}">
       <div class="btn-row">
-        <button type="submit" class="btn btn-primary">Confirm &amp; Send Invoice →</button>
+        <button type="submit" class="btn btn-primary">Confirm &amp; Send Invoice</button>
         <a href="${editBack}" class="btn btn-secondary">← Edit</a>
       </div>
     </form>
@@ -3977,7 +3977,7 @@ ${sidebarShell('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
               Amount: <strong>$${totalAmount.toFixed(2)}</strong><br>
               Dates (${bookings.length}):</p>
               <ul>${datesList}</ul>
-              <p><a href="https://admin.timothystl.org/gym-rentals/invoices/view/${invoiceId}">View invoice in admin →</a></p>
+              <p><a href="https://admin.timothystl.org/gym-rentals/invoices/view/${invoiceId}">View invoice in admin</a></p>
             </div>`;
             const adminSubject = group.email
               ? `[Gym] Invoice ${invNum} sent → ${group.name}`
@@ -4068,7 +4068,7 @@ ${sidebarShell('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
           : groupByOrg(past.results, false);
         return html(`
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">All Bookings</div>
   <div class="page-sub">Upcoming and past gym rentals.</div>
   ${gymAlert}
@@ -4135,7 +4135,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 
           return html(`
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">Set Price &amp; Confirm — ${group.name}</div>
   <div class="page-sub">Review all pending holds for this group, set the invoice total, then confirm.</div>
   <div class="card">
@@ -4171,7 +4171,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         <input type="text" name="notes" placeholder="e.g. Season rate — Aug 2025 – Mar 2026">
       </div>
       <div class="btn-row">
-        <button type="submit" class="btn btn-primary" onclick="return confirm('Confirm all ${holds.results.length} holds for ${group.name.replace(/'/g,"\\'")} and send invoice?')">Confirm &amp; Send Invoice →</button>
+        <button type="submit" class="btn btn-primary" onclick="return confirm('Confirm all ${holds.results.length} holds for ${group.name.replace(/'/g,"\\'")} and send invoice?')">Confirm &amp; Send Invoice</button>
         <a href="/gym-rentals" class="btn btn-secondary" style="text-decoration:none;">Cancel</a>
       </div>
     </form>
@@ -4463,7 +4463,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 </div>`; }).join('');
         return html(`
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">Invoices</div>
   <div class="page-sub">Invoice history and payment tracking.</div>
   ${gymAlert}
@@ -4557,7 +4557,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 
         return html(`
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/invoices">\u2190 Invoices</a>`)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">Invoice ${invNum}</div>
   <div class="page-sub">${group?.name||'\u2014'}</div>
   ${viewAlert}
@@ -4715,7 +4715,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/invoices">\u2190 Invoi
 </div>`).join('');
         return html(`
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">Recurring Requests</div>
   <div class="page-sub">All recurring rental requests from groups.</div>
   ${gymAlert}
@@ -4780,7 +4780,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 
         return html(`
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/recurring">← Recurring</a>`)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">Recurring Request</div>
   ${msgAlert}
   <div class="card">
@@ -4828,7 +4828,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/recurring">← Recurri
         <label>Month</label>
         <select name="month" required>${monthOpts}</select>
       </div>
-      <button type="submit" class="btn btn-primary" style="flex-shrink:0;">Generate Invoice →</button>
+      <button type="submit" class="btn btn-primary" style="flex-shrink:0;">Generate Invoice</button>
     </form>
   </div>`;
   })() : ''}
