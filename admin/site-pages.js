@@ -44,7 +44,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "home-2",
@@ -74,7 +79,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "home-3",
@@ -104,7 +114,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       }
     ]
   },
@@ -147,7 +162,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "about-2",
@@ -177,7 +197,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "about-3",
@@ -207,7 +232,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "about-4",
@@ -237,7 +267,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "about-5",
@@ -267,7 +302,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       }
     ]
   },
@@ -310,7 +350,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "worship-2",
@@ -340,7 +385,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "worship-3",
@@ -375,7 +425,12 @@ export const SITE_PAGES = [
             "url": "https://www.youtube.com/@TimothySTL"
           }
         ],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "worship-4",
@@ -405,7 +460,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "worship-5",
@@ -435,7 +495,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "worship-6",
@@ -465,7 +530,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "worship-7",
@@ -495,7 +565,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "worship-8",
@@ -525,7 +600,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "worship-9",
@@ -560,7 +640,12 @@ export const SITE_PAGES = [
             "url": "https://www.youtube.com/@TimothySTL"
           }
         ],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       }
     ]
   },
@@ -603,7 +688,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "education-2",
@@ -633,7 +723,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "education-3",
@@ -663,7 +758,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       }
     ]
   },
@@ -706,7 +806,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "sermons-2",
@@ -741,7 +846,12 @@ export const SITE_PAGES = [
             "url": "https://www.youtube.com/@TimothySTL"
           }
         ],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       }
     ]
   },
@@ -784,7 +894,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "ministries-2",
@@ -814,7 +929,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "ministries-3",
@@ -844,7 +964,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "ministries-4",
@@ -874,7 +999,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "ministries-5",
@@ -909,7 +1039,12 @@ export const SITE_PAGES = [
             "url": "https://serve.timothystl.org"
           }
         ],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       }
     ]
   },
@@ -952,7 +1087,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "youthfamily-2",
@@ -982,7 +1122,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "youthfamily-3",
@@ -1012,7 +1157,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "youthfamily-4",
@@ -1047,7 +1197,12 @@ export const SITE_PAGES = [
             "url": "mailto:dce@timothystl.org"
           }
         ],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       }
     ]
   },
@@ -1090,7 +1245,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "news-2",
@@ -1120,7 +1280,47 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
+      },
+      {
+        "id": "news-3",
+        "type": "calendar",
+        "title": "What's coming up",
+        "subtitle": "",
+        "eyebrow": "On the calendar",
+        "body": "",
+        "url": "",
+        "spaceAbove": 64,
+        "spaceBelow": 64,
+        "gap": 32,
+        "height": 48,
+        "split": "40",
+        "side": "left",
+        "cols": 2,
+        "count": 3,
+        "locked": false,
+        "bg": 0,
+        "ink": 0,
+        "size": "m",
+        "photo": "",
+        "photoAlt": "",
+        "video": "",
+        "stamp": "",
+        "tone": 0,
+        "corner": "tr",
+        "hidden": false,
+        "items": [],
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       }
     ]
   },
@@ -1163,7 +1363,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "calendar-2",
@@ -1193,7 +1398,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       }
     ]
   },
@@ -1236,7 +1446,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "contact-2",
@@ -1266,7 +1481,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "contact-3",
@@ -1296,7 +1516,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       }
     ]
   },
@@ -1339,7 +1564,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "give-2",
@@ -1369,7 +1599,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "give-3",
@@ -1404,7 +1639,12 @@ export const SITE_PAGES = [
             "url": "https://serve.timothystl.org"
           }
         ],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       }
     ]
   },
@@ -1447,7 +1687,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "music-2",
@@ -1477,7 +1722,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "music-3",
@@ -1507,7 +1757,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "music-4",
@@ -1537,7 +1792,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "music-5",
@@ -1576,7 +1836,12 @@ export const SITE_PAGES = [
             "url": "mailto:jinah@timothystl.org"
           }
         ],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       }
     ]
   },
@@ -1619,7 +1884,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "stephen-2",
@@ -1649,7 +1919,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "stephen-3",
@@ -1688,7 +1963,12 @@ export const SITE_PAGES = [
             "url": "mailto:dinger@timothystl.org"
           }
         ],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "stephen-4",
@@ -1718,7 +1998,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       }
     ]
   },
@@ -1761,7 +2046,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "foodpantry-2",
@@ -1791,7 +2081,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "foodpantry-3",
@@ -1821,7 +2116,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "foodpantry-4",
@@ -1860,7 +2160,12 @@ export const SITE_PAGES = [
             "url": "mailto:dinger@timothystl.org"
           }
         ],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       }
     ]
   },
@@ -1903,7 +2208,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "bees-2",
@@ -1933,7 +2243,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "bees-3",
@@ -1963,7 +2278,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "bees-4",
@@ -2002,7 +2322,12 @@ export const SITE_PAGES = [
             "url": "mailto:dinger@timothystl.org"
           }
         ],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       }
     ]
   },
@@ -2045,7 +2370,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "christmasmarket-2",
@@ -2075,7 +2405,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "christmasmarket-3",
@@ -2105,7 +2440,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "christmasmarket-4",
@@ -2144,7 +2484,12 @@ export const SITE_PAGES = [
             "url": "mailto:dinger@timothystl.org"
           }
         ],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       }
     ]
   },
@@ -2187,7 +2532,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "ccs-2",
@@ -2217,7 +2567,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "ccs-3",
@@ -2247,7 +2602,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "ccs-4",
@@ -2282,7 +2642,12 @@ export const SITE_PAGES = [
             "url": "https://give.tithe.ly/?formId=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8&locationId=fe6ddef2-d6d2-4c85-adfd-f19eac997d38&fundId=49cdc381-ff0e-4b7e-b029-091f206850c1&frequency=one-time"
           }
         ],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       }
     ]
   },
@@ -2325,7 +2690,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "wol-2",
@@ -2355,7 +2725,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "wol-3",
@@ -2390,7 +2765,12 @@ export const SITE_PAGES = [
             "url": "https://wordoflifeschool.net"
           }
         ],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       }
     ]
   },
@@ -2433,7 +2813,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "youth-2",
@@ -2463,7 +2848,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "youth-3",
@@ -2498,7 +2888,12 @@ export const SITE_PAGES = [
             "url": "mailto:dce@timothystl.org"
           }
         ],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       }
     ]
   },
@@ -2541,7 +2936,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "sundayschool-2",
@@ -2571,7 +2971,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "sundayschool-3",
@@ -2606,7 +3011,12 @@ export const SITE_PAGES = [
             "url": "mailto:dce@timothystl.org"
           }
         ],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       }
     ]
   },
@@ -2649,7 +3059,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "confirmation-2",
@@ -2679,7 +3094,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "confirmation-3",
@@ -2714,7 +3134,12 @@ export const SITE_PAGES = [
             "url": "mailto:dce@timothystl.org"
           }
         ],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       }
     ]
   },
@@ -2757,7 +3182,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "vbs-2",
@@ -2787,7 +3217,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "vbs-3",
@@ -2822,7 +3257,12 @@ export const SITE_PAGES = [
             "url": "mailto:dce@timothystl.org"
           }
         ],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       }
     ]
   },
@@ -2865,7 +3305,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "egghunt-2",
@@ -2895,7 +3340,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "egghunt-3",
@@ -2930,7 +3380,12 @@ export const SITE_PAGES = [
             "url": "mailto:dinger@timothystl.org"
           }
         ],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       }
     ]
   },
@@ -2973,7 +3428,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "family-2",
@@ -3003,7 +3463,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "family-3",
@@ -3038,7 +3503,12 @@ export const SITE_PAGES = [
             "url": "mailto:dce@timothystl.org"
           }
         ],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       }
     ]
   },
@@ -3081,7 +3551,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       },
       {
         "id": "prayer-2",
@@ -3111,7 +3586,12 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [],
-        "links": []
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       }
     ]
   }

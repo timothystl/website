@@ -1041,10 +1041,11 @@ these are the gaps I have not closed:
 |---|---|
 | 02 Pages | ~~`Links out` and `Clash` status pills; the drawer reached by a `Details` action~~ — **done v3.9.0**, below |
 | 10 Taps | *taps this month* on each card — needs tap counting built first (see below); the cards themselves are done |
-| 16 Gym | "Calendar first" as the genuine default layout, with the queue beside the month rather than below it |
-| 22 Editor | the info-card slot on banner blocks, and the starter picker on New page |
+| 16 Gym | ~~"Calendar first" as the genuine default layout~~ — **done v3.9.0**, below |
+| 22 Editor | ~~the info-card slot on banner blocks, and the starter picker on New page~~ — **done v3.9.0**, below |
 
-None of those are blocked; they are simply not done yet.
+Only the Taps count is left, and it is blocked on counting existing at all —
+see "⚠ The NFC taps did not answer" above.
 
 #### The Pages screen, to its spec (v3.9.0, 2026-08-01)
 
@@ -1090,6 +1091,59 @@ None of those are blocked; they are simply not done yet.
 - A ministry leader (`pages_edit_own`) gets the same drawer **read-only** — they
   edit their pages' words, not the site's shape — and the POST refuses them
   rather than relying on a hidden button.
+
+#### Gym calendar-first, and the editor's last two pieces (v3.9.0, 2026-08-01)
+
+**Gym Rentals now opens on the month.** The design's two variants were built as
+two *separate* screens, with Queue as the default; the spec's default is
+Calendar first, and its calendar layout is the month **plus** two panels, not
+the month alone.
+
+- **`/gym-rentals` is Calendar first**; `?view=queue` is the other weighting.
+  The month is what somebody wants to see before deciding anything; the queue is
+  what they act on once they have.
+- **Two panels under the month** — *Requests to review* (amber, recurring
+  requests first, then holds, each with Approve and Release) and *Invoices*
+  (Paid / Unpaid pills, the amount, and the rate it billed at). They are **not**
+  a second copy of the queue: the queue is every booking, these are only the
+  rows where somebody has to do something.
+- **Approving from the panel is not approving blind.** A hold that would
+  double-book carries its conflict in the sub-line *and* in the confirm text.
+  The panel exists so somebody can act without reading the whole list, which is
+  exactly why it cannot hide the one thing that would stop them.
+- Month arrows keep whichever layout you are in, rather than always landing on
+  the calendar.
+
+**The info card** (`22-page-editor.html` §"The info card") is a **slot on a
+banner, not a block** — available on Welcome banner, Page banner and Callout
+box, off by default, `Off · Right · Left`.
+
+- **A floating block would mean asking the office to position it**, and refusing
+  to ask that is the whole point of this editor. When the card is on, the
+  banner becomes two columns and the *text* narrows; the card can never overlap
+  the words and is never dragged. A browser test measures the two rectangles
+  and asserts they do not intersect.
+- **"Card shows" is a short list, not a blank canvas**: Service times · Address
+  & directions · Contact · A short list of links · Free text. The first three
+  read the church-details record — the same keys the map block and the sidebar
+  read — so changing the phone number once changes every card on the site.
+  Free text is the only option that asks anybody to type anything.
+- **A block without the slot cannot be given a card**, whatever arrives:
+  `sanitizeBlock` gates `card` on `def.infoCard`, so a stale tab, a crafted
+  POST, or a block type losing the slot all end up with `off` rather than a
+  card rendered somewhere unintended.
+- **The card's links are their own array** (`cardLinks`). A welcome banner
+  already uses `links` for its buttons, and one array doing two jobs is how a
+  button ends up inside the card.
+- The gold eyebrow is edited **on the page**, like every other text.
+
+**Starters.** `+ New page` now opens a picker — Homepage · Simple text page ·
+Ministry page · Sign-up page — instead of creating an untitled page outright.
+An empty page is the hardest thing to start from; the office's first question
+is always "what goes on it?", and a starter answers it with a page to edit down.
+A new page still begins as a **draft**, out of the menu. `starterBlocks(title)`
+keeps its old meaning (the ministry starter) so every existing caller is
+unchanged; the second argument picks another.
 
 #### Newsletter fields and the editor palette (v3.6.0, 2026-08-01)
 

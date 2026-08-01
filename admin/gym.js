@@ -1790,6 +1790,14 @@ ${portalHeader}
           env.DB.prepare("SELECT COUNT(*) as n FROM gym_invoices WHERE status='unpaid'").first(),
           env.DB.prepare("SELECT COUNT(*) as n FROM gym_groups WHERE active=1").first(),
         ]);
+        // The most recent invoices, for the panel the design puts beside the
+        // month. Unpaid first, because that is the half of the list somebody
+        // opens this screen to act on.
+        const invoiceRes = await env.DB.prepare(
+          "SELECT i.id, i.period_start, i.period_end, i.total_hours, i.total_amount, i.status, g.name as group_name " +
+          "FROM gym_invoices i LEFT JOIN gym_groups g ON g.id = i.group_id " +
+          "ORDER BY CASE WHEN i.status='unpaid' THEN 0 ELSE 1 END, i.created_at DESC LIMIT 8"
+        ).all().catch(() => ({ results: [] }));
         const sumHours = rows => rows.reduce((s, b) => s + calcHours(b.start_time, b.end_time), 0);
         const holdHrs = sumHours(holdHrsRow.results);
         const confHrs = sumHours(confHrsRow.results);
@@ -1962,6 +1970,11 @@ ${portalHeader}
           confirmedHtml = order.map(n => orgAccordion(n, groups[n], 'confirmed')).join('');
         }
 
+        // Calendar first is the default. The month is what somebody wants to
+        // see before deciding anything; the queue is what they act on once they
+        // have. `?view=queue` gives the reverse weighting.
+        const gymView = url.searchParams.get('view') === 'queue' ? 'queue' : 'calendar';
+
         // ── CALENDAR VIEW ──
         // Built from the bookings already fetched above, so switching layout
         // costs no extra queries. Read-only on purpose: every action that
@@ -2027,8 +2040,8 @@ ${portalHeader}
     <span style="display:flex;align-items:center;gap:10px;">
       <span class="gymcal-title">${escapeHtml(monthLabel)}</span>
       <span class="gymcal-navs">
-        <a class="gymcal-arrow" href="/gym-rentals?view=calendar&m=${shiftMonth(-1)}" aria-label="Previous month">&lsaquo;</a>
-        <a class="gymcal-arrow" href="/gym-rentals?view=calendar&m=${shiftMonth(1)}" aria-label="Next month">&rsaquo;</a>
+        <a class="gymcal-arrow" href="/gym-rentals?view=${gymView}&m=${shiftMonth(-1)}" aria-label="Previous month">&lsaquo;</a>
+        <a class="gymcal-arrow" href="/gym-rentals?view=${gymView}&m=${shiftMonth(1)}" aria-label="Next month">&rsaquo;</a>
       </span>
     </span>
     <span class="gymcal-legend">
@@ -2042,9 +2055,8 @@ ${portalHeader}
     ${['S','M','T','W','T','F','S'].map((d) => `<div class="gymcal-dow">${d}</div>`).join('')}
     ${cells}
   </div>
-  <p class="tlc-note" style="margin:14px 16px 16px;"><span class="tlc-note-mark">◆</span><span>This view is for seeing the shape of a month. Confirming, releasing and invoicing all happen in the Queue view, so there is only ever one place a booking changes.</span></p>`;
+  <p class="tlc-note" style="margin:14px 16px 16px;"><span class="tlc-note-mark">◆</span><span>Click a day to book it. Everything else about a booking — confirming, releasing, invoicing — happens in the queue, so there is only ever one place a booking changes.</span></p>`;
 
-        const gymView = url.searchParams.get('view') === 'calendar' ? 'calendar' : 'queue';
 
         // ── THE QUEUE, AS THE DESIGN DRAWS IT ──────────────────
         // One list: recurring requests waiting for review, holds ticking down,
@@ -2164,6 +2176,73 @@ ${portalHeader}
           });
         }
 
+        // ── THE TWO PANELS BESIDE THE MONTH ────────────────────
+        // Calendar first is the month, and under it two panels: what is waiting
+        // for a decision, and what has been billed. They are not a second copy
+        // of the queue — the queue is every booking, these are only the rows
+        // where somebody has to do something, which is what makes the pair
+        // worth having on the same screen as the month.
+        const reviewRows = [];
+        for (const r of pendingRes.results) {
+          reviewRows.push(`<div class="gympanel-row">
+      <span class="gympanel-main">
+        <span class="gympanel-name">${escapeHtml(r.group_name || 'Unassigned')}</span>
+        <span class="gympanel-sub">${escapeHtml(`${DOW_FULL[r.day_of_week]}s, ${fmt12h(r.start_time)}–${fmt12h(r.end_time)} · ${fmtShort(r.start_date)} – ${fmtShort(r.end_date)}`)}</span>
+      </span>
+      <a class="tlc-gym-approve" href="/gym-rentals/recurring/review/${r.id}">Review</a>
+    </div>`);
+        }
+        for (const b of holdItems) {
+          const left = hoursLeft(b.isGroup ? b.groupHoldExpires : b.hold_expires_at);
+          const c = conflictOf(b);
+          const ids = b.isGroup ? b.groupIds : [b.id];
+          const when = b.isRecurring
+            ? `${DOW_FULL[b.rec_dow]}s, ${fmt12h(b.start_time)}–${fmt12h(b.end_time)}`
+            : `${fmtBookingDate(b.booking_date)}, ${fmt12h(b.start_time)}–${fmt12h(b.end_time)}`;
+          // A hold that would double-book says so here as well as in the queue.
+          // The panel exists so somebody can approve without reading the whole
+          // list; approving blind is exactly what that must not mean.
+          const note = c.bad ? ' · ' + c.text : (left === null ? '' : left <= 0 ? ' · expired' : ` · ${left}h left`);
+          reviewRows.push(`<div class="gympanel-row${c.bad ? ' gympanel-row--bad' : ''}">
+      <span class="gympanel-main">
+        <span class="gympanel-name">${escapeHtml(b.group_name || 'Unassigned')}</span>
+        <span class="gympanel-sub">${escapeHtml(when + note)}</span>
+      </span>
+      <form method="POST" action="/gym-rentals/bookings/${ids.length > 1 ? 'bulk-confirm' : `confirm-admin/${b.id}`}" style="margin:0;" onsubmit="return confirm('${c.bad ? 'This slot conflicts with something already booked. ' : ''}Confirm ${ids.length > 1 ? `all ${ids.length} bookings` : 'this hold'} and generate an invoice?')">${
+        ids.length > 1 ? ids.map((i) => `<input type="hidden" name="ids" value="${i}">`).join('') : ''
+      }<button type="submit" class="tlc-gym-approve">Approve</button></form>
+      <form method="POST" action="/gym-rentals/bookings/${ids.length > 1 ? 'bulk-release' : `release/${b.id}`}" style="margin:0;" onsubmit="return confirm('Release ${ids.length > 1 ? `all ${ids.length} holds` : 'this hold'}? The slot goes back.')">${
+        ids.length > 1 ? ids.map((i) => `<input type="hidden" name="ids" value="${i}">`).join('') : ''
+      }<button type="submit" class="tlc-gym-release">Release</button></form>
+    </div>`);
+        }
+
+        const money = (n) => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const invoiceRows = (invoiceRes.results || []).map((v) => `<div class="gympanel-row">
+      <span class="gympanel-main">
+        <span class="gympanel-name">${escapeHtml(v.group_name || 'Unassigned')}</span>
+        <span class="gympanel-sub">${escapeHtml(`${fmtShort(v.period_start)} – ${fmtShort(v.period_end)} · ${Number(v.total_hours || 0)} hrs`)}</span>
+      </span>
+      <span class="gympanel-amount">${escapeHtml(money(v.total_amount))}</span>
+      ${statusPill(v.status === 'paid' ? 'good' : 'warn', v.status === 'paid' ? 'Paid' : 'Unpaid')}
+      <a class="tlc-gym-open" href="/gym-rentals/invoices/view/${v.id}">Open</a>
+    </div>`).join('');
+
+        const panelsHtml = `<div class="gympanels">
+    <section class="gympanel gympanel--review">
+      <h2 class="gympanel-head">Requests to review</h2>
+      ${reviewRows.join('') || '<p class="gympanel-empty">Nothing waiting. Holds and recurring requests land here.</p>'}
+    </section>
+    <section class="gympanel">
+      <h2 class="gympanel-head">Invoices</h2>
+      ${invoiceRows || '<p class="gympanel-empty">No invoices yet. One is generated when a hold is confirmed.</p>'}
+      <p class="gympanel-foot">
+        <span>Rate $${escapeHtml(rateRow?.value || '25.00')}/hour · from <a href="/gym-rentals/settings">settings</a></span>
+        <a href="/gym-rentals/invoices">All invoices →</a>
+      </p>
+    </section>
+  </div>`;
+
         const queueHtml = renderListSection({
           key: 'gym-queue',
           title: sectionCfg('gym').title,
@@ -2187,8 +2266,8 @@ ${portalHeader}
           empty: 'Nothing waiting and nothing booked.',
           headerExtra: `<div class="tlc-bar" style="border:0;padding-bottom:0;">
             <nav class="tlc-seg" aria-label="Gym view">
-              <a href="/gym-rentals?view=calendar" class="${gymView === 'calendar' ? 'is-on' : ''}">Calendar first</a>
-              <a href="/gym-rentals" class="${gymView === 'queue' ? 'is-on' : ''}">Queue first</a>
+              <a href="/gym-rentals" class="${gymView === 'calendar' ? 'is-on' : ''}">Calendar first</a>
+              <a href="/gym-rentals?view=queue" class="${gymView === 'queue' ? 'is-on' : ''}">Queue first</a>
             </nav>
             <span style="font-size:12.5px;color:var(--tlc-muted);">Billing at $${escapeHtml(rateRow?.value || '25.00')}/hr · <a href="/gym-rentals/settings" style="color:var(--tlc-blue);">change</a></span>
           </div>`,
@@ -2215,11 +2294,13 @@ ${sidebarShell('gym', currentUser)}
     </header>
     <div class="tlc-bar" style="border:0;">
       <nav class="tlc-seg" aria-label="Gym view">
-        <a href="/gym-rentals?view=calendar" class="is-on">Calendar first</a>
-        <a href="/gym-rentals">Queue first</a>
+        <a href="/gym-rentals" class="is-on">Calendar first</a>
+        <a href="/gym-rentals?view=queue">Queue first</a>
       </nav>
+      <span style="font-size:12.5px;color:var(--tlc-muted);">Billing at $${escapeHtml(rateRow?.value || '25.00')}/hr · <a href="/gym-rentals/settings" style="color:var(--tlc-blue);">change</a></span>
     </div>
     <div class="tlc-panel">${calendarHtml}</div>
+    ${panelsHtml}
   </div>` : queueHtml}
 
   <div class="tlc-section" style="padding-top:0;">

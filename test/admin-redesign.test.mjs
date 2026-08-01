@@ -377,6 +377,35 @@ group('short links on the Pages screen');
   eq(moved.headers.get('location'), '/pages/beliefs/details', 'namely the drawer');
 }
 
+group('a new page starts from a starter');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  const picker = await (await call(env, '/pages/new', { cookie })).text();
+  has(picker, 'Starts as', 'the action opens a starter picker rather than creating a page outright');
+  has(picker, 'Homepage', 'with the homepage starter');
+  has(picker, 'Simple text page', 'the plain one');
+  has(picker, 'Ministry page', 'the ministry one');
+  has(picker, 'Sign-up page', 'and the sign-up one');
+  has(picker, 'begins as a draft', 'and says nothing reaches the site until Publish');
+
+  const made = await worker.fetch(new Request('https://admin.timothystl.org/pages/new', {
+    method: 'POST',
+    headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
+    body: 'title=Plan+a+Visit&starter=home',
+  }), env, ctx);
+  eq(made.status, 302, 'creating one lands in the editor');
+  const row = db.prepare("SELECT * FROM pages WHERE title='Plan a Visit'").get();
+  ok(row, 'the page exists');
+  eq(row.status, 'draft', 'as a draft — a new page is never live by accident');
+  eq(row.slug, '/plan-a-visit', 'with an address derived from its name');
+  eq(row.published_blocks, null, 'and nothing published');
+  const blocks = JSON.parse(row.blocks);
+  ok(blocks.length > 1, 'the starter put a working page in the draft');
+  eq(blocks[0].card, 'right', 'and the homepage starter switched the info card on');
+}
+
 group('a page can stand in for another site');
 {
   const { db, env } = await boot();
@@ -815,8 +844,9 @@ group('gym rentals ships both layouts');
     .run(`${month}-21`, now);
   db.prepare("INSERT INTO gym_blocked_dates (date,reason) VALUES (?,'Christmas Market')").run(`${month}-24`);
 
-  const queue = await (await call(env, '/gym-rentals', { cookie })).text();
-  eq((await call(env, '/gym-rentals', { cookie })).status, 200, 'the queue view responds');
+  // Queue first is the other layout, reached deliberately.
+  const queue = await (await call(env, '/gym-rentals?view=queue', { cookie })).text();
+  eq((await call(env, '/gym-rentals?view=queue', { cookie })).status, 200, 'the queue view responds');
   has(queue, 'Calendar first', 'the design’s layout toggle is present');
   has(queue, 'Queue first', 'both ways round');
   has(queue, 'Southside Volleyball', 'a group appears in the queue');
@@ -833,18 +863,39 @@ group('gym rentals ships both layouts');
   // A hold on a blocked date is the one thing on this screen that is wrong.
   db.prepare("INSERT INTO gym_bookings (group_id,booking_date,start_time,end_time,status,created_at) VALUES (1,?,'18:00','20:00','hold',?)")
     .run(`${month}-24`, now);
-  const clash = await (await call(env, '/gym-rentals', { cookie })).text();
+  const clash = await (await call(env, '/gym-rentals?view=queue', { cookie })).text();
   has(clash, 'Blocked date', 'a hold on a blocked date says so in the Conflicts column');
   has(clash, 'will double-book the gym', 'and grows a warning row saying what approving it would do');
 
-  const cal = await (await call(env, '/gym-rentals?view=calendar', { cookie })).text();
-  eq((await call(env, '/gym-rentals?view=calendar', { cookie })).status, 200, 'the calendar view responds');
-  has(cal, 'gymcal-grid', 'the month grid renders');
+  // Calendar first is the DEFAULT — the month is what somebody wants to see
+  // before deciding anything, so a bare /gym-rentals must land on it.
+  const cal = await (await call(env, '/gym-rentals', { cookie })).text();
+  eq((await call(env, '/gym-rentals', { cookie })).status, 200, 'the calendar view responds');
+  has(cal, 'gymcal-grid', 'the month grid renders by default');
   has(cal, 'gymcal-chip--hold', 'a hold is colour-coded');
   has(cal, 'gymcal-chip--confirmed', 'and so is a confirmed booking');
   has(cal, 'Christmas Market', 'a blocked date is shown with its reason');
-  has(cal, 'Confirming, releasing and invoicing all happen in the Queue view',
-    'the calendar says where bookings actually change, so there is one place to do it');
+  has(cal, 'Everything else about a booking', 'the calendar says where bookings actually change');
+
+  // The two panels the design puts under the month.
+  has(cal, 'Requests to review', 'the review panel sits under the month');
+  has(cal, 'tlc-gym-release', 'where a hold can be released as well as approved');
+  has(cal, 'Invoices', 'and the invoice panel beside it');
+  has(cal, 'Rate $', 'which says what it is billing at');
+
+  // Paid and Unpaid are told apart, which is the whole reason the panel is
+  // worth having rather than a count of unpaid invoices.
+  db.prepare("INSERT INTO gym_invoices (group_id,invoice_date,period_start,period_end,total_hours,rate,total_amount,status,created_at) VALUES (1,?,?,?,26,25,650,'unpaid',?)")
+    .run(`${month}-01`, `${month}-01`, `${month}-31`, now);
+  db.prepare("INSERT INTO gym_invoices (group_id,invoice_date,period_start,period_end,total_hours,rate,total_amount,status,created_at) VALUES (1,?,?,?,2,25,50,'paid',?)")
+    .run(`${month}-01`, `${month}-01`, `${month}-31`, now);
+  const withInvoices = await (await call(env, '/gym-rentals', { cookie })).text();
+  has(withInvoices, 'Unpaid', 'an unpaid invoice says so');
+  has(withInvoices, '>Paid<', 'and a paid one is told apart from it');
+  has(withInvoices, '$650.00', 'with the amount, not a count');
+  // Approving from the panel must not mean approving blind.
+  has(cal, 'This slot conflicts with something already booked',
+    'a conflicting hold warns before it is approved from the panel');
 
   // Month navigation must not lose the view.
   has(cal, 'view=calendar&m=', 'month navigation keeps the calendar view');

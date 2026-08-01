@@ -875,6 +875,31 @@ a.gymcal-chip:hover{filter:brightness(.96);}
 .gymcal-more{font-size:10.5px;color:var(--tlc-muted);}
 .gymcal-key{display:flex;gap:18px;flex-wrap:wrap;padding:11px 16px;border-top:1px solid var(--tlc-edge);font-size:12px;color:var(--tlc-body);}
 .gymcal-key span{display:flex;align-items:center;gap:6px;}
+/* The two panels the design puts under the month in Calendar first: what is
+   waiting for a decision, and what has been billed. Side by side on a desk,
+   stacked on anything narrower — a two-column split at 700px would put an
+   Approve button and a Release button a thumb's width apart. */
+.gympanels{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;}
+@media (max-width:900px){.gympanels{grid-template-columns:1fr;}}
+.gympanel{border:1px solid var(--tlc-edge);border-radius:12px;background:var(--tlc-card);overflow:hidden;}
+/* Waiting-for-you is amber the way every other "needs attention" is amber. */
+.gympanel--review{border-color:#E6C98E;background:#FDF8EC;}
+.gympanel-head{margin:0;padding:12px 16px;background:var(--tlc-sand);border-bottom:1px solid var(--tlc-edge);font:600 11px var(--tlc-sans);letter-spacing:.12em;text-transform:uppercase;color:var(--tlc-muted);}
+.gympanel--review .gympanel-head{background:transparent;border-bottom-color:#F0DCB0;color:#7A5B18;}
+.gympanel-row{display:flex;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid var(--tlc-divider);}
+.gympanel--review .gympanel-row{border-bottom-color:#F3E6CB;}
+.gympanel-row--bad .gympanel-sub{color:#8A3A28;font-weight:600;}
+.gympanel-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
+.gympanel-name{font:600 13.5px/1.35 var(--tlc-sans);color:var(--tlc-navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.gympanel-sub{font-size:12px;color:var(--tlc-muted);}
+.gympanel-amount{font:600 13.5px var(--tlc-sans);color:var(--tlc-navy);white-space:nowrap;}
+.gympanel-empty{margin:0;padding:18px 16px;font-size:13px;color:var(--tlc-muted);}
+.gympanel-foot{margin:0;padding:11px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--tlc-muted);}
+.gympanel-foot a{color:var(--tlc-blue);font-weight:600;text-decoration:none;}
+/* Release is destructive and reads that way, but quietly — it is the ordinary
+   other half of Approve, not a warning. */
+.tlc-gym-release{display:inline-flex;align-items:center;font:600 12.5px var(--tlc-sans);color:#8C3A28;background:#fff;border:1px solid #E4C8C8;border-radius:7px;padding:7px 14px;cursor:pointer;white-space:nowrap;}
+.tlc-gym-release:hover{background:#F7E4DE;}
 .gymcal-swatch{width:11px;height:11px;border-radius:3px;display:inline-block;}
 .gymcal-swatch--blocked{background:#EFEFEF;border:1px solid #DDD9D0;}
 @media (max-width:720px){.gymcal-cell{min-height:64px;}.gymcal-chip{font-size:9px;}}

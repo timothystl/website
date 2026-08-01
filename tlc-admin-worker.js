@@ -32,7 +32,8 @@ import { handleGymRoutes, sweepExpiredItems, extractImageKeys } from './admin/gy
 import { migrateLegacyPage, starterBlocks, sanitizeBlocks, sanitizeBlock, parseBlocks, newBlock,
          renderPage, renderBlock, BLOCK_DEFS, BLOCK_TYPE_KEYS, GROUPS, BG, INK, SIZES, SPLITS, TONES,
          STAMP_PRESETS, safeUrl, esc as escBlock, editorPhoneCss, blocksClientConfig, makeBlockId,
-         TEMPLATES, templateOf, wrapTemplate, BLOCK_CSS, cleanText } from './admin/blocks.js';
+         TEMPLATES, templateOf, wrapTemplate, BLOCK_CSS, cleanText,
+         STARTERS, starterOf } from './admin/blocks.js';
 import PAYROLL_HTML from './admin/payroll.html';
 import SCHEDULER_HTML from './admin/scheduler.html';
 import MINISTRY_EDITOR_HTML from './admin/ministry-editor.html';
@@ -5285,7 +5286,8 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
       // to from a warning row. `/pages/details` (church details, two segments)
       // is a different screen and does not match this shape.
       const detailsMatch = path.match(/^\/pages\/([^/]+)\/details$/);
-      if ((path === '/pages' || detailsMatch) && method === 'GET') {
+      const newPage = path === '/pages/new' && method === 'GET';
+      if ((path === '/pages' || detailsMatch || newPage) && method === 'GET') {
         // Anything whose scheduled time has passed goes live before the list is
         // drawn, so staff never see a page still labelled "scheduled" after the
         // moment it was meant to publish.
@@ -5386,7 +5388,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages/details">Church details</a
     key: 'pages',
     title: sectionCfg('pages').title,
     purpose: sectionCfg('pages').purpose,
-    action: { label: sectionCfg('pages').action, href: '/pages/new', method: 'POST' },
+    action: { label: sectionCfg('pages').action, href: '/pages/new' },
     search: sectionCfg('pages').search,
     filters: filtersOf('pages'),
     columns: columnsOf('pages'),
@@ -5395,6 +5397,23 @@ ${sidebarShell('pages', currentUser, `<a href="/pages/details">Church details</a
     empty: 'No pages to show.',
     note: sectionCfg('pages').note,
   })}
+  ${newPage ? renderDrawer({
+    key: 'page-new',
+    title: 'New page',
+    sub: 'Pick what it starts as. Every starter is a working page you edit down, and every new page begins as a draft — nothing reaches the site until you press Publish.',
+    action: '/pages/new',
+    cancelHref: '/pages',
+    saveLabel: 'Create and open the editor',
+    fields: [
+      { name: 'title', label: 'Page name', value: '', required: true, placeholder: 'Plan a Visit',
+        hint: 'The address is generated from this, and can be changed afterwards.' },
+      // Four options is four chips. A select would hide three of them behind a
+      // click, on the one decision this screen exists to ask.
+      { kind: 'chips', name: 'starter', label: 'Starts as', value: STARTERS[0].key,
+        options: STARTERS.map((s) => ({ value: s.key, label: s.label })),
+        hint: STARTERS.map((s) => `${s.label} — ${s.note}`).join(' · ') },
+    ],
+  }) : ''}
   ${detailsPage ? renderDrawer({
     key: 'page-details',
     title: detailsPage.menu_label || detailsPage.title,
@@ -5543,22 +5562,32 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`)}
       }
 
       // ── New page ──
-      // Creates a draft and drops staff straight into the editor with the Page
-      // tab open, rather than asking them to fill in a form first.
+      // Creates a draft from the chosen starter and drops staff straight into
+      // the editor with the Page tab open. A starter rather than an empty page
+      // because an empty page is the hardest thing to start from — the first
+      // question is always "what goes on it?", and a working set of blocks
+      // answers that with something to edit down.
       if (path === '/pages/new' && method === 'POST') {
         const now = new Date().toISOString();
+        const form = await request.formData();
+        const title = String(form.get('title') || '').trim().slice(0, 200) || 'New page';
+        const starter = starterOf(String(form.get('starter') || ''));
         let id = 'page-' + Math.random().toString(36).slice(2, 8);
         for (let i = 0; i < 5; i++) {
           const clash = await env.DB.prepare('SELECT id FROM pages WHERE id = ?').bind(id).first();
           if (!clash) break;
           id = 'page-' + Math.random().toString(36).slice(2, 8);
         }
-        const blocks = sanitizeBlocks(starterBlocks('New page'));
+        const taken = await env.DB.prepare('SELECT slug FROM pages').all().catch(() => ({ results: [] }));
+        const slug = uniqueSlug(slugify(title), new Set((taken.results || []).map((p) => p.slug)));
+        const blocks = sanitizeBlocks(starterBlocks(title, starter.key));
+        // status 'draft' and out of the menu: a new page is never live by
+        // accident, whatever it was started from.
         await env.DB.prepare(
           "INSERT INTO pages (id, title, menu_label, slug, parent_id, sort, template, status, in_menu, seo_description, blocks, updated_at, updated_by) " +
-          "VALUES (?, 'New page', '', ?, NULL, 999, 'standard', 'draft', 0, '', ?, ?, ?)"
-        ).bind(id, '/' + id, JSON.stringify(blocks), now, currentUser?.username || '').run();
-        await logAudit(env.DB, currentUser, 'create', 'page', id, 'New page', null, { title: 'New page', slug: '/' + id });
+          "VALUES (?, ?, '', ?, NULL, 999, 'standard', 'draft', 0, '', ?, ?, ?)"
+        ).bind(id, title, slug, JSON.stringify(blocks), now, currentUser?.username || '').run();
+        await logAudit(env.DB, currentUser, 'create', 'page', id, title, null, { title, slug, starter: starter.key });
         return new Response('', { status: 302, headers: { Location: `/pages/${id}/edit?tab=page` } });
       }
 
