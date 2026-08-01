@@ -1040,12 +1040,12 @@ these are the gaps I have not closed:
 | Screen | What is missing |
 |---|---|
 | 02 Pages | ~~`Links out` and `Clash` status pills; the drawer reached by a `Details` action~~ — **done v3.9.0**, below |
-| 10 Taps | *taps this month* on each card — needs tap counting built first (see below); the cards themselves are done |
+| 10 Taps | ~~*taps this month* on each card — needs tap counting built first~~ — **done v3.10.0**, below |
 | 16 Gym | ~~"Calendar first" as the genuine default layout~~ — **done v3.9.0**, below |
 | 22 Editor | ~~the info-card slot on banner blocks, and the starter picker on New page~~ — **done v3.9.0**, below |
 
-Only the Taps count is left, and it is blocked on counting existing at all —
-see "⚠ The NFC taps did not answer" above.
+**Nothing is left on this list.** The Taps count was the last one, and it needed
+counting to exist at all — see "The taps are counted" below.
 
 #### The Pages screen, to its spec (v3.9.0, 2026-08-01)
 
@@ -1242,12 +1242,51 @@ winning so the office can override one without touching the Taps screen. A tap
 switched off stops resolving rather than sending people somewhere stale.
 `test/admin-redesign.test.mjs` covers all four cases.
 
-**"Taps this month" is still not on the cards, and deliberately.** The `taps`
-table has a `scans` column that *nothing has ever written* — showing a count
-off it would be showing a zero, or worse, a number somebody trusted. Counting
-needs the resolution to happen somewhere that can record it, and today it
-happens from a cached list in `site-worker.js`. That is a real piece of work,
-not a display change.
+**"Taps this month" was not on the cards until v3.10.0** — see below. The
+`taps` table had a `scans` column that *nothing had ever written*, and counting
+needed the resolution to happen somewhere that could record it.
+
+#### The taps are counted (v3.10.0, 2026-08-01)
+
+`admin/taps.js` holds the rules, pure and tested; the counting itself is split
+across the two Workers because that is where the two halves of the problem are.
+
+- **A tap resolves in `site-worker.js`, which cannot reach D1.** So it tells the
+  admin Worker — `POST /api/tap-hit` — and **does not wait for the answer**. The
+  302 is returned first and the beacon rides on `ctx.waitUntil`.
+- **⚠ Nothing about counting may sit in the visitor's path.** A tag is stuck to
+  a pew rack; the number is a nice-to-have. That is why this is a beacon rather
+  than a second redirect hop through the admin: the cached list is what keeps a
+  tag working through an admin outage, and a count is not worth trading that
+  for. `/api/tap-hit` always answers 200 for the same reason — a malformed body
+  or an unknown id must never come back as something that looks like the tap
+  itself failing. `test/site-taps.test.mjs` asserts the tag still resolves with
+  the counting endpoint throwing, and with no `ExecutionContext` at all.
+- **The filter is about machines, not malice.** A crawler walking /tap1…/tap4 or
+  a browser prefetching a link is what would actually make this number a lie —
+  not somebody attacking a church's tap counter. So `countsAsTap()` drops
+  prefetches (`Sec-Purpose` / `Purpose` / `X-Moz`), known bots, and requests
+  with no user-agent, and there is **no shared secret to configure**: a feature
+  that silently does nothing until somebody sets a Worker secret is a feature
+  that silently does nothing. The copy in `site-worker.js` must stay in step
+  with the tested one in `admin/taps.js`.
+- **Only a tap that resolved is counted**, so a mistyped `/tap9` or a
+  switched-off tag never shows up as usage. Ids are validated against the rows
+  that exist — the id *is* the printed address, not a sequence to extend.
+- **`tap_hits` is one row per tap per day.** `taps.scans` is the lifetime total
+  and cannot answer "this month"; one row per hit would answer everything and
+  grow without bound for a number nobody will slice that finely. Four taps ×
+  365 days is 1,460 rows a year and the write is a single upsert. Buckets older
+  than 400 days are pruned **when somebody opens the screen** — often enough for
+  four rows a day, and it cannot quietly stop the way a cron trigger can.
+- **⚠ A tap that has never been counted says "Not counted yet", not "0".** This
+  is the same trap that kept the number off the card in the first place,
+  surviving the fix by one deploy: counting starts when this ships, so the next
+  morning every tap would have read "0 taps this month" — indistinguishable from
+  "the tags are broken", and worth somebody checking four tags that are fine.
+  Once there is a lifetime total, a real zero is worth reporting as zero.
+
+Run: `node admin/taps.test.mjs`, `node test/site-taps.test.mjs`.
 
 #### Four security fixes from the July review (v3.8.0, 2026-08-01)
 

@@ -61,6 +61,13 @@ jobs:
       - name: Admin routes, against the real Worker
         run: node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs
 
+      # The site worker's own suite. It lives in test/ with the browser ones but
+      # needs no browser — it drives site-worker.js directly with fetch stubbed.
+      # Named rather than globbed because everything else in test/ does need
+      # Chromium; see the note at the bottom.
+      - name: Site worker
+        run: node test/site-taps.test.mjs
+
 # Not run here, and why:
 #
 # The Playwright suites need a Chromium binary. Adding it is a real change in
