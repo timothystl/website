@@ -10,6 +10,7 @@ import {
   esc, pluralise, countLabel, toneOf, statusPill, valueChip, valueSelect,
   primaryCell, renderListSection, renderDrawer, TONES, PALETTE,
 } from './ui.js';
+import { readFileSync } from 'node:fs';
 import { tinymceField } from './helpers.js';
 import { VALUES, VALUE_KEYS, valueByKey, normalizeValue } from './values.js';
 
@@ -264,6 +265,53 @@ group('the rich-text field cannot be escaped from');
   // The id and name are attribute-escaped, since both reach markup.
   const q = tinymceField({ id: 'a"b', name: 'c"d', value: '' });
   lacks(q, 'id="a"b"', 'a quote in an id cannot break out of the attribute');
+}
+
+
+// ── one palette ──────────────────────────────────────────────────────────────
+// The shell used to open with the pre-redesign :root and append the new tokens
+// after it, so anything not explicitly restyled came out in the old
+// teal-and-orange scheme and the wrong typefaces. These assertions are what
+// stop that creeping back one hardcoded hex at a time.
+group('one palette');
+{
+  // Read as text rather than importing, because what matters is what ships in
+  // the stylesheet — a value can be correct in a constant and wrong in the CSS.
+  const shell = readFileSync(new URL('./helpers.js', import.meta.url), 'utf8');
+
+  for (const [hex, was] of [['#0A3C5C', 'the old steel'], ['#D4922A', 'the old amber'],
+                            ['#3D3530', 'the old charcoal'], ['#7A6E60', 'the old grey']]) {
+    ok(!shell.includes(hex), `the shell carries no ${hex} — ${was}`);
+  }
+
+  // Georgia is legal only as the serif fallback, never as the face itself.
+  // Line comments are stripped first — a comment mentioning the fallback is
+  // prose, not a font declaration, and failing on it would teach whoever hits
+  // this to weaken the assertion rather than fix the CSS.
+  const css = shell.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
+  const georgia = css.split('Georgia').length - 1;
+  const asFallback = css.split("'Lora',Georgia").length - 1;
+  eq(georgia, asFallback, 'Georgia appears only behind Lora, never on its own');
+
+  ok(!shell.includes('-apple-system'), 'the system font stack is gone — the admin is Source Sans 3');
+  ok(shell.includes("--steel:#1E2D4A"), 'the legacy names point at the Foundations values');
+  ok(shell.includes("--amber:#C9973A"), 'including the amber');
+  ok(shell.includes("--border:#E7DFD1"), 'and one border colour');
+
+  // Radii: 8 (inputs, chips, buttons), 9 (nav rows, search), 11–12 (cards),
+  // 999 (pills, toggles). Anything else is somebody eyeballing it.
+  const radii = [...shell.matchAll(/border-radius:(\d+)px/g)].map((m) => Number(m[1]));
+  const illegal = [...new Set(radii.filter((r) => ![8, 9, 11, 12, 999].includes(r)))];
+  eq(illegal.join(','), '', 'every radius is one of the four legal values');
+
+  // The focus ring is blue. It was amber, which is the colour this admin uses
+  // for "needs attention" — a focused field is not a problem.
+  ok(shell.includes('rgba(46,126,166,.15)'), 'the focus ring is blue, not amber');
+
+  // One :root in the admin shell. The gym module has a second, and that one is
+  // deliberate — see the note on it: the renter portal is a standalone document
+  // with no shell CSS, so its tokens are the only ones it has.
+  eq(shell.split(':root{').length - 1, 1, 'the shell declares exactly one :root');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -768,7 +768,7 @@ export default {
           { src: 'https://timothystl.org/images/android-chrome-192x192.png', sizes: '192x192', type: 'image/png' },
           { src: 'https://timothystl.org/images/android-chrome-512x512.png', sizes: '512x512', type: 'image/png' },
         ],
-        theme_color: '#0A3C5C',
+        theme_color: '#1E2D4A',
         background_color: '#FAF7F0',
         display: 'standalone',
         start_url: '/',

@@ -307,7 +307,12 @@ function portalHtml(body, title = 'Gym Rental Portal') {
 <title>${title}</title>
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;600;700;800&family=Lora:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
 <style>
-:root{--steel:#1E2D4A;--amber:#C9973A;--sage:#4A5E3A;--warm:#FAF7F0;--linen:#F2EDE2;--mist:#EDF5F8;--border:#E8E0D0;--charcoal:#1A1A2A;--gray:#6B7280;--white:#fff;--sans:'Source Sans 3',Arial,sans-serif;--serif:'Lora',Georgia,serif;}
+/* ⚠ NOT the admin shell — this is the PUBLIC renter portal, a standalone
+   document with no sidebar and no ADMIN_UI_CSS. Its :root is the only set of
+   tokens it has, so deleting it (as the fix list asks) would leave the page
+   a renter sees with no styling at all. The values are aligned to Foundations
+   instead, which is what that instruction was actually after. */
+:root{--steel:#1E2D4A;--amber:#C9973A;--sage:#4A5E3A;--warm:#FAF7F1;--linen:#F4EFE5;--mist:#E7EEF7;--border:#E7DFD1;--charcoal:#1A1A2A;--gray:#6A6858;--white:#fff;--sans:'Source Sans 3',Arial,sans-serif;--serif:'Lora',Georgia,serif;}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:var(--sans);background:var(--warm);color:var(--charcoal);min-height:100vh;}
 .portal-header{background:var(--steel);border-bottom:3px solid var(--amber);padding:18px 24px;text-align:center;}
@@ -3375,7 +3380,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
   </div>
 </div>
 <style>
-.scal-wrap{position:relative;}.scal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:8px;}.scal-nav-btn{background:var(--mist,#EDF5F8);border:1px solid var(--border,#E8E0D0);cursor:pointer;padding:8px 18px;border-radius:6px;font-size:18px;line-height:1;font-weight:700;transition:background .15s;flex-shrink:0;color:var(--steel,#1E2D4A);touch-action:manipulation;}.scal-nav-btn:hover{background:var(--border,#E8E0D0);}.scal-nav-btn:disabled{opacity:.35;cursor:default;}.scal-nav-label{font-family:var(--serif,Georgia,serif);font-size:18px;font-weight:700;text-align:center;flex:1;color:var(--steel,#1E2D4A);}.scal-month{display:none;}.scal-month.active{display:block;}
+.scal-wrap{position:relative;}.scal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:8px;}.scal-nav-btn{background:var(--mist,#EDF5F8);border:1px solid var(--border,#E7DFD1);cursor:pointer;padding:8px 18px;border-radius:6px;font-size:18px;line-height:1;font-weight:700;transition:background .15s;flex-shrink:0;color:var(--steel,#1E2D4A);touch-action:manipulation;}.scal-nav-btn:hover{background:var(--border,#E7DFD1);}.scal-nav-btn:disabled{opacity:.35;cursor:default;}.scal-nav-label{font-family:var(--serif,Georgia,serif);font-size:18px;font-weight:700;text-align:center;flex:1;color:var(--steel,#1E2D4A);}.scal-month{display:none;}.scal-month.active{display:block;}
 .scal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
 .scal-dow{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray,#6B7280);padding:6px 0;text-align:center;}
 .adm-cell{border-radius:6px;text-align:center;padding:10px 2px;font-size:13px;font-weight:700;border:2px solid transparent;transition:background .12s,border-color .12s,transform .1s;line-height:1;font-family:inherit;color:var(--steel,#1E2D4A);min-width:0;overflow:hidden;}
@@ -3385,13 +3390,13 @@ div.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020 !i
 .adm-booked{background:#F7D0D0;color:#9B4040;}
 .adm-blocked{background:#E8EDF3;color:#CBD5E1;}
 .adm-past{color:#CBD5E1;}
-.date-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border,#E8E0D0);flex-wrap:wrap;}
+.date-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border,#E7DFD1);flex-wrap:wrap;}
 .date-row:last-child{border-bottom:none;}
 .date-row-label{font-family:var(--sans,Arial,sans-serif);font-size:13px;font-weight:700;color:var(--steel,#1E2D4A);min-width:160px;}
-.date-row select{font-size:13px;padding:6px 10px;border:1px solid var(--border,#E8E0D0);border-radius:6px;background:white;color:var(--charcoal,#1A1A2A);min-width:110px;}
+.date-row select{font-size:13px;padding:6px 10px;border:1px solid var(--border,#E7DFD1);border-radius:6px;background:white;color:var(--charcoal,#1A1A2A);min-width:110px;}
 .date-row .btn-rm{background:none;border:1px solid #ddd;border-radius:4px;color:#999;cursor:pointer;font-size:14px;padding:4px 8px;line-height:1;}
 .date-row .btn-rm:hover{background:#fce8e8;border-color:#B85C3A;color:#B85C3A;}
-.pat-btn{font-family:var(--sans,Arial,sans-serif);font-size:12px;font-weight:700;padding:5px 10px;border-radius:6px;border:1px solid var(--border,#E8E0D0);background:white;cursor:pointer;color:var(--steel,#1E2D4A);transition:background .12s,border-color .12s;}
+.pat-btn{font-family:var(--sans,Arial,sans-serif);font-size:12px;font-weight:700;padding:5px 10px;border-radius:6px;border:1px solid var(--border,#E7DFD1);background:white;cursor:pointer;color:var(--steel,#1E2D4A);transition:background .12s,border-color .12s;}
 .pat-btn.active{background:#1E2D4A;color:white;border-color:#1E2D4A;}
 </style>
 <script>
