@@ -631,6 +631,31 @@ email builder does not yet render a This Sunday or bulletin section).
 
 Run: `node admin/newsletter.test.mjs`.
 
+#### Phase 6 — Staff, Users, Subscribers (2026-08-01)
+
+Three more sections onto the shared pattern. Little new behaviour — the value
+is that these are now the same screen as the other nine.
+
+- **Staff** — Person / Email / Order / Photo. The per-person photo crop the
+  handoff asks for (`photo_position`, `photo_zoom`) **already existed**, and is
+  already read everywhere a staff photo appears; only the note explaining it is
+  new. Somebody with no photo gets a warning row, because the About page falls
+  back to initials and nobody notices.
+- **Users** — User / Access / Last login / Status. Access reads "Full access"
+  or "Custom access (N of 16)". `permissionCheckboxes()` now prints each
+  permission key in monospace beside its plain-language name, so this screen
+  and the routes that gate on it use the same word — which is the point of
+  having renamed them all in v3.0.0. Presets sit above and only ever tick
+  boxes: they grant nothing the list does not then show. A user with no email
+  gets a warning row, since without one a forgotten password cannot be reset.
+- **Subscribers** — Person / Source / Joined / Status, merging the Brevo list
+  and the local signup table on the address so nobody appears twice. Somebody
+  who signed up on the website but has not reached Brevo is surfaced as its
+  own filter rather than being invisible. When Brevo cannot be read the screen
+  still shows the website signups instead of going blank.
+
+Run: the section is covered by `test/admin-redesign.test.mjs`.
+
 #### The handoff's own open questions (§8), as answered
 
 Andrew answered these on 2026-08-01. They gate later phases, so they are

@@ -653,5 +653,58 @@ group('newsletter access control');
   eq((await post(env, '/newsletter/preview', cookie, 'subject=x')).status, 403, 'nor build a preview');
 }
 
+
+// ── phase 6: staff, users, subscribers ───────────────────────────────────────
+group('staff, users and subscribers on the shared pattern');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  db.prepare("INSERT INTO staff_members (name,title,email,photo_url,display_order) VALUES ('Andrew Dinger','Lead Pastor','dinger@timothystl.org','/images/a.jpg',10)").run();
+  db.prepare("INSERT INTO staff_members (name,title,email,display_order) VALUES ('Chau Vo','Pastor',NULL,20)").run();
+  db.prepare("INSERT INTO newsletter_subscribers (email,name,subscribed_at) VALUES ('a@b.co','Ann Brown','2026-05-01T00:00:00Z')").run();
+
+  for (const [path, label] of [['/staff', 'Staff'], ['/users', 'Users'], ['/subscribers', 'Subscribers']]) {
+    const res = await call(env, path, { cookie });
+    eq(res.status, 200, `${label} responds 200`);
+    const body = await res.text();
+    lacks(body, 'D1_ERROR', `${label} has no database error`);
+    lacks(body, 'no such column', `${label} names no missing column`);
+    has(body, 'tlc-section', `${label} renders through the shared pattern`);
+    has(body, 'tlc-note-mark', `${label} states the rule it enforces`);
+  }
+
+  const staff = await (await call(env, '/staff', { cookie })).text();
+  has(staff, 'Andrew Dinger', 'a staff member appears');
+  has(staff, 'Lead Pastor', 'with their role as the sub-line');
+  has(staff, 'No photo', 'and somebody without a photo is flagged');
+  has(staff, 'crop is set once', 'the note explains why the crop lives on the person');
+
+  const users = await (await call(env, '/users', { cookie })).text();
+  has(users, 'Full access', 'the admin account reads as full access');
+  has(users, 'Disabling an account keeps its history', 'the note distinguishes disable from delete');
+
+  const subs = await (await call(env, '/subscribers', { cookie })).text();
+  has(subs, 'Ann Brown', 'a website signup appears');
+  has(subs, 'Never delete somebody to unsubscribe', 'the note states the rule that matters');
+  // Brevo is unreachable in the harness, so the error path must still render
+  // the website signups rather than showing an empty screen.
+  has(subs, 'Website signup', 'website signups show even when Brevo cannot be read');
+}
+
+group('the permission checkboxes are the truth');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const body = await (await call(env, '/users/new', { cookie })).text();
+  // Each row prints its key so the screen and the code use the same word.
+  for (const key of ['newsletter_edit', 'pages_edit', 'notices_edit', 'pages_edit_own', 'payroll_manage']) {
+    has(body, `<code class="tlc-perm-key">${key}</code>`, `the drawer shows the ${key} key in monospace`);
+  }
+  has(body, 'tlc-preset', 'presets sit above the checkboxes');
+  has(body, 'Office staff', 'including the office preset');
+  has(body, 'Ministry leader', 'and the ministry-leader preset');
+  has(body, 'Full access', 'and full access');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

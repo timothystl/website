@@ -2,8 +2,8 @@
 // Extracted from tlc-admin-worker.js
 
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
-import { PERMISSIONS, hasPermission } from './auth.js';
-import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS } from './ui.js';
+import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
+import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS } from './ui.js';
 
 export const VERSION = 'v3.0.6'; // major: the admin overhaul — one pattern across every section, new IA, renamed permissions
 
@@ -177,6 +177,7 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
 .filter-pill.active{background:var(--steel);color:#fff;border-color:var(--steel);}
 ${ADMIN_UI_CSS}
 ${MENU_CSS}
+${PRESET_CSS}
 /* ── SIDEBAR, REDESIGNED ───────────────────────────────────────
    Three groups, the page-producing sections nested under Pages, a gold inset
    bar plus a gold dot on the active item, and badges that count only things a
@@ -437,14 +438,40 @@ export function setupPage(error = '') {
 }
 
 // ── PERMISSION CHECKBOXES ─────────────────────────────────────
+// The checkboxes are the truth; the presets above them are shortcuts that tick
+// a set of them. Each row prints its permission key in monospace so this screen
+// and the code that gates on it are using the same word — which is the point of
+// having renamed them all in v3.0.0.
 export function permissionCheckboxes(selectedPerms = []) {
   const selected = Array.isArray(selectedPerms) ? selectedPerms : JSON.parse(selectedPerms || '[]');
-  return `<div class="perm-grid">${Object.entries(PERMISSIONS).map(([key, label]) =>
-    `<div class="perm-row">
+  const presets = Object.entries(PERMISSION_PRESETS).map(([name, keys]) =>
+    `<button type="button" class="tlc-preset" data-perms="${escapeHtml(JSON.stringify(keys))}">${escapeHtml(name)}</button>`
+  ).join('');
+  const rows = Object.entries(PERMISSIONS).map(([key, label]) =>
+    `<label class="tlc-perm">
       <input type="checkbox" id="perm_${key}" name="perm_${key}" value="1"${selected.includes(key) ? ' checked' : ''}>
-      <label for="perm_${key}">${label}</label>
-    </div>`
-  ).join('')}</div>`;
+      <span class="tlc-perm-name">${escapeHtml(label)}</span>
+      <code class="tlc-perm-key">${escapeHtml(key)}</code>
+    </label>`
+  ).join('');
+  return `<div class="tlc-presets" id="perm-presets">${presets}</div>
+<div class="tlc-perms" id="perm-list">${rows}</div>
+<script>(function(){
+  var wrap = document.getElementById('perm-presets');
+  var list = document.getElementById('perm-list');
+  if (!wrap || !list) return;
+  wrap.addEventListener('click', function (e) {
+    var btn = e.target.closest('.tlc-preset');
+    if (!btn) return;
+    var want;
+    try { want = JSON.parse(btn.getAttribute('data-perms')); } catch (_) { return; }
+    // A preset sets the boxes and nothing else — it grants nothing the list
+    // does not then show, which is what keeps the checkboxes the truth.
+    list.querySelectorAll('input[type=checkbox]').forEach(function (cb) {
+      cb.checked = want.indexOf(cb.id.replace(/^perm_/, '')) > -1;
+    });
+  });
+})();<\/script>`;
 }
 
 // ── ESCAPE HTML ──────────────────────────────────────────────
