@@ -173,7 +173,14 @@ export function renderListSection(cfg) {
       <h1 class="tlc-title">${esc(title)}</h1>
       ${purpose ? `<p class="tlc-purpose">${esc(purpose)}</p>` : ''}
     </div>
-    ${action ? `<a class="tlc-action" href="${esc(action.href)}">${esc(action.label)}</a>` : ''}
+    ${action
+      // Some sections create the thing outright rather than opening a form
+      // (a new page is made and its editor opened). That must be a POST — a
+      // GET that mutates gets fired by a link prefetch or a browser refresh.
+      ? (action.method === 'POST'
+          ? `<form method="POST" action="${esc(action.href)}" style="margin:0;"><button type="submit" class="tlc-action">${esc(action.label)}</button></form>`
+          : `<a class="tlc-action" href="${esc(action.href)}">${esc(action.label)}</a>`)
+      : ''}
   </header>
   ${headerExtra}
   ${(search || filters.length) ? `<div class="tlc-bar">
@@ -377,7 +384,7 @@ export const ADMIN_UI_CSS = `
 .tlc-section-headings{min-width:0;}
 .tlc-title{font:500 25px/1.2 var(--tlc-serif);color:var(--tlc-navy);margin:0;}
 .tlc-purpose{margin:6px 0 0;font-size:13.5px;line-height:1.6;color:var(--tlc-body);max-width:62em;text-wrap:pretty;}
-.tlc-action{flex:none;display:inline-flex;align-items:center;background:var(--tlc-navy);color:#fff;font-size:13px;font-weight:600;padding:10px 18px;border-radius:8px;text-decoration:none;}
+.tlc-action{flex:none;display:inline-flex;align-items:center;background:var(--tlc-navy);color:#fff;font:600 13px var(--tlc-sans);padding:10px 18px;border-radius:8px;text-decoration:none;border:0;cursor:pointer;}
 .tlc-action:hover{background:#16273F;}
 .tlc-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
 .tlc-search{flex:1;min-width:200px;max-width:340px;display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--tlc-edge);border-radius:8px;padding:0 12px;}

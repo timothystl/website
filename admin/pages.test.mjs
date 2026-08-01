@@ -1,6 +1,7 @@
 // Node test harness for admin/pages.js — run with: node admin/pages.test.mjs
 // No test framework (the repo has no build step or dev dependencies).
-import { orderPages, filterPages, pageStatus, menuTree, slugify, uniqueSlug, pageRename, PILLS } from './pages.js';
+import { orderPages, filterPages, pageStatus, menuTree, slugify, uniqueSlug, pageRename, PILLS,
+         shortLinkFor, shortLinkClashes, withShortLinks, shortLinkRoutes } from './pages.js';
 import { newBlock, sanitizeBlocks } from './blocks.js';
 
 let pass = 0, fail = 0;
@@ -141,6 +142,110 @@ group('renaming');
 group('pill wording');
 for (const [key, p] of Object.entries(PILLS)) {
   ok(p.label && p.bg && p.fg, `${key} pill has a label and colours`);
+}
+
+
+// ── short links ──────────────────────────────────────────────────────────────
+group('short links');
+{
+  const P = (id, slug, over, title) => ({ id, slug, title: title || id, status: 'published', short_link: over || null });
+
+  eq(shortLinkFor(P('a', '/about')), '/about', 'a top-level page’s short link is its own address');
+  eq(shortLinkFor(P('b', '/about/beliefs')), '/beliefs', 'a child page shortens to its last segment');
+  eq(shortLinkFor(P('c', '/a/b/c')), '/c', 'however deep it sits');
+  eq(shortLinkFor(P('h', '/')), null, 'the homepage has no short link — / has no last segment');
+  eq(shortLinkFor(null), null, 'a missing page does not throw');
+
+  // The override exists so a volunteer can resolve a clash; it is normalised so
+  // "visit", "/visit" and "/visit/" all mean the same thing.
+  eq(shortLinkFor(P('d', '/about/plan-a-visit', 'visit')), '/visit', 'an override wins over the derived value');
+  eq(shortLinkFor(P('e', '/x/y', '/visit')), '/visit', 'a leading slash in the override is fine');
+  eq(shortLinkFor(P('f', '/x/y', 'visit/')), '/visit', 'and a trailing one');
+  eq(shortLinkFor(P('g', '/x/y', '   ')), '/y', 'a blank override falls back to the derived value');
+}
+
+group('short link clashes');
+{
+  const P = (id, slug, title, over) => ({ id, slug, title, status: 'published', short_link: over || null });
+
+  // Nothing colliding.
+  {
+    const c = shortLinkClashes([P('1', '/about', 'About'), P('2', '/about/beliefs', 'Beliefs')]);
+    eq(c.size, 0, 'distinct short links do not clash');
+  }
+
+  // A top-level page reached at its own address is identity, not a collision.
+  {
+    const c = shortLinkClashes([P('1', '/worship', 'Worship')]);
+    eq(c.size, 0, 'a page whose short link is its own address is not clashing with itself');
+  }
+
+  // Two children deriving one short link — both flagged, neither guessed.
+  {
+    const pages = [P('1', '/worship/sermons', 'Sermons'), P('2', '/media/sermons', 'Sermon Archive')];
+    const c = shortLinkClashes(pages);
+    eq(c.size, 2, 'both pages wanting /sermons are flagged, not just the loser');
+    eq(c.get('1').link, '/sermons', 'the clashing link is named');
+    eq(c.get('1').withTitle, 'Sermon Archive', 'and so is the other page, so the message is actionable');
+    eq(c.get('2').withTitle, 'Sermons', 'from both sides');
+  }
+
+  // A short link that shadows a different page's real address. The real address
+  // must win — otherwise /sermons quietly stops reaching the Sermons page.
+  {
+    const pages = [P('1', '/sermons', 'Sermons'), P('2', '/worship/sermons', 'Sunday Sermons')];
+    const c = shortLinkClashes(pages);
+    eq(c.has('2'), true, 'a short link shadowing a real address is refused');
+    eq(c.get('2').reason, 'address', 'and says why');
+    eq(c.get('2').withTitle, 'Sermons', 'naming the page that actually lives there');
+    eq(c.has('1'), false, 'the page that really is at that address is not blamed');
+  }
+
+  // Resolving a clash by overriding one side clears both.
+  {
+    const pages = [P('1', '/worship/sermons', 'Sermons'), P('2', '/media/sermons', 'Archive', 'archive')];
+    eq(shortLinkClashes(pages).size, 0, 'giving one of them a different short link clears the clash');
+  }
+
+  // The homepage never participates.
+  {
+    const c = shortLinkClashes([{ id: 'h', slug: '/', title: 'Home', status: 'published' }, P('1', '/a/home', 'Home Groups')]);
+    eq(c.size, 0, 'the homepage has no short link to clash with');
+  }
+}
+
+group('publishable short-link routes');
+{
+  const P = (id, slug, title, over, status) => ({ id, slug, title, short_link: over || null, status: status || 'published' });
+
+  {
+    const r = shortLinkRoutes([P('1', '/about', 'About'), P('2', '/about/beliefs', 'Beliefs')]);
+    eq(r['/beliefs'], '/about/beliefs', 'a child page publishes its short link');
+    eq('/about' in r, false, 'a page already at its own address needs no route');
+  }
+  {
+    // A clash must publish NOTHING, or the address said out loud on Sunday
+    // silently points at whichever page happened to sort first.
+    const r = shortLinkRoutes([P('1', '/worship/sermons', 'Sermons'), P('2', '/media/sermons', 'Archive')]);
+    eq(Object.keys(r).length, 0, 'a clashing short link is published for neither page');
+  }
+  {
+    const r = shortLinkRoutes([P('1', '/about/beliefs', 'Beliefs', null, 'draft')]);
+    eq(Object.keys(r).length, 0, 'a draft page does not publish a short link');
+  }
+}
+
+group('short links decorated onto a list');
+{
+  const rows = [
+    { id: '1', slug: '/worship/sermons', title: 'Sermons', status: 'published' },
+    { id: '2', slug: '/media/sermons', title: 'Archive', status: 'published' },
+    { id: '3', slug: '/about/beliefs', title: 'Beliefs', status: 'published' },
+  ];
+  const out = withShortLinks(rows);
+  eq(out[0].shortLink, '/sermons', 'the link is attached to the row');
+  ok(out[0].shortLinkClash, 'and so is the clash');
+  eq(out[2].shortLinkClash, null, 'a clean row carries no clash');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

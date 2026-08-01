@@ -35,7 +35,8 @@ import PAYROLL_HTML from './admin/payroll.html';
 import MINISTRY_EDITOR_HTML from './admin/ministry-editor.html';
 import { PAGE_SEEDS } from './admin/page-seeds.js';
 import { SITE_PAGES } from './admin/site-pages.js';
-import { orderPages, filterPages, pageStatus, slugify, uniqueSlug, pageRename } from './admin/pages.js';
+import { orderPages, filterPages, pageStatus, slugify, uniqueSlug, pageRename,
+         withShortLinks, shortLinkFor, shortLinkRoutes } from './admin/pages.js';
 import { screenSubmission, formConfig, forwardToChms, officeEmailHtml, officeSubject,
          handleFilteredRoutes, heldCount, OFFICE_EMAIL } from './admin/forms.js';
 
@@ -782,7 +783,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-07-31-5'; // bumped: v3 overhaul — core-value tagging, partners, ministry menu visibility
+    const SCHEMA_VERSION = '2026-08-01-1'; // bumped: short links on pages (phase 3)
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -1261,6 +1262,10 @@ export default {
     // it just stops being listed. The old admin conflated the two.
     try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN in_menu INTEGER DEFAULT 1').run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_PARTNERS).run(); } catch (_) {}
+    // Short links (phase 3). Nullable on purpose: the link is derived from the
+    // last segment of the address so it cannot drift when a page is renamed.
+    // This column is only ever set by hand, and only to resolve a clash.
+    try { await env.DB.prepare('ALTER TABLE pages ADD COLUMN short_link TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_news_items_value ON news_items(value)').run(); } catch (_) {}
     for (const p of PARTNER_SEED) {
       try {
@@ -1341,7 +1346,7 @@ export default {
         seo_description: r.seo_description || '',
       });
       const rows = await env.DB.prepare(
-        "SELECT id, title, menu_label, slug, parent_id, sort, template, in_menu, seo_description, published_blocks " +
+        "SELECT id, title, menu_label, slug, parent_id, sort, template, status, in_menu, short_link, seo_description, published_blocks " +
         "FROM pages WHERE status = 'published' ORDER BY sort ASC, title ASC"
       ).all().catch(() => ({ results: [] }));
       const list = rows.results || [];
@@ -1363,7 +1368,22 @@ export default {
         pages: list.map(publicPage),
         rendered,
         css: Object.keys(rendered).length ? BLOCK_CSS : '',
-        redirects: (redirects.results || []).reduce((acc, r) => (acc[r.from_slug] = r.to_slug, acc), {}),
+        // Two kinds of alternate address, deliberately merged into one map so
+        // the router resolves both the same way and neither can be forgotten:
+        // the short links derived from each page's last address segment, and
+        // the 301s written when a page was renamed. A clashing short link
+        // publishes nothing at all — see shortLinkRoutes().
+        //
+        // Order matters: rename 301s are applied LAST so they win. An old
+        // address is a promise already made to the world — it is in bulletins
+        // and in Google — whereas a short link is a convenience the office can
+        // change in a click. Letting a short link shadow a retired address
+        // would silently break exactly the inbound links page_redirects exists
+        // to protect.
+        redirects: Object.assign(
+          shortLinkRoutes(list),
+          (redirects.results || []).reduce((acc, r) => (acc[r.from_slug] = r.to_slug, acc), {})
+        ),
       }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=120' }
       });
@@ -4375,14 +4395,21 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
         // moment it was meant to publish.
         await promoteScheduledPages(env);
         const filter = url.searchParams.get('filter') || 'all';
+        const msg = url.searchParams.get('msg');
+        const alertHtml = msg === 'linksaved' ? `<div class="alert alert-success">✓ Short link saved.</div>`
+          : msg === 'linkcleared' ? `<div class="alert alert-info">Short link reset — it now follows the page address again.</div>` : '';
         const rows = await env.DB.prepare(
-          'SELECT id, title, menu_label, slug, parent_id, sort, template, status, in_menu, owner_username, blocks, published_blocks, publish_at, updated_at, updated_by FROM pages ORDER BY sort ASC, title ASC'
+          'SELECT id, title, menu_label, slug, parent_id, sort, template, status, in_menu, owner_username, short_link, blocks, published_blocks, publish_at, updated_at, updated_by FROM pages ORDER BY sort ASC, title ASC'
         ).all().catch(() => ({ results: [] }));
         const all = (rows.results || []).filter(owns);
 
         const ordered = orderPages(all);
+        // Clashes are computed over EVERY page, not just the filtered view — a
+        // ministry leader filtering to their own drafts must still be told that
+        // their short link collides with a page they cannot see.
+        const linked = withShortLinks(orderPages((rows.results || [])));
+        const linkById = Object.fromEntries(linked.map((p) => [p.id, p]));
         const shown = filterPages(ordered, filter);
-        const draftCount = ordered.filter((p) => p.hasDraftEdits).length;
         const parentName = (id) => {
           const p = ordered.find((x) => x.id === id);
           return p ? (p.menu_label || p.title) : '';
@@ -4394,57 +4421,145 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
           return when + (p.updated_by ? ' · ' + p.updated_by : '');
         };
 
-        const rowsHtml = shown.map((p) => {
+        const listRows = shown.map((p) => {
           const s = pageStatus(p);
-          return `<tr>
-  <td>
-    <div style="font-weight:600;color:var(--steel);${p.parent_id ? 'padding-left:22px;' : ''}">
-      <a href="/pages/${escapeHtml(p.id)}/edit" style="color:inherit;text-decoration:none;">${escapeHtml(p.menu_label || p.title)}</a>
-      ${p.slug === '/' ? '<span style="margin-left:8px;display:inline-block;padding:2px 7px;border-radius:4px;background:var(--linen);color:var(--gray);font-size:10px;font-weight:700;letter-spacing:.08em;">HOME</span>' : ''}
-    </div>
-    <div style="font-size:12px;color:var(--gray);${p.parent_id ? 'padding-left:22px;' : ''}">${p.blockCount} block${p.blockCount === 1 ? '' : 's'}${p.neverPublished ? ' · never published' : ''}</div>
-  </td>
-  <td style="font-size:13px;color:var(--gray);white-space:nowrap;">${escapeHtml(p.slug)}</td>
-  <td style="font-size:13px;color:var(--gray);white-space:nowrap;">${p.in_menu ? (p.parent_id ? 'Under ' + escapeHtml(parentName(p.parent_id)) : 'Top level') : '—'}</td>
-  <td><span style="display:inline-block;padding:3px 9px;border-radius:999px;font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:${s.bg};color:${s.fg};">${escapeHtml(s.label)}</span></td>
-  <td style="font-size:13px;color:var(--gray);white-space:nowrap;">${escapeHtml(edited(p))}${p.owner_username ? `<div style="font-size:12px;">Assigned to ${escapeHtml(p.owner_username)}</div>` : ''}</td>
-  <td style="text-align:right;white-space:nowrap;">
-    <a href="/pages/${escapeHtml(p.id)}/edit" class="btn btn-sm btn-primary">Edit page →</a>
-  </td>
-</tr>`;
-        }).join('');
+          const link = linkById[p.id] || { shortLink: null, shortLinkClash: null };
+          const clash = link.shortLinkClash;
+          const tone = s.label === 'Published' ? 'good'
+            : s.label === 'Scheduled' ? 'auto'
+            : s.label === 'Not in menu' ? 'plain' : 'warn';
 
-        const tab = (key, label) => `<a href="/pages${key === 'all' ? '' : '?filter=' + key}" class="btn btn-sm"${filter === key
-          ? ' style="background:var(--steel);color:#fff;border:1px solid var(--steel);"'
-          : ' style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);"'}>${label}</a>`;
+          // A clash replaces the status pill rather than sitting beside it.
+          // Two pills on one row makes a volunteer choose which to believe.
+          const statusCell = clash ? statusPill('bad', 'Link clash') : statusPill(tone, s.label);
+
+          const sub = [
+            p.parent_id ? 'Under ' + parentName(p.parent_id) : 'Top level',
+            pluralise(p.blockCount, 'block'),
+            p.neverPublished ? 'never published' : edited(p),
+            p.owner_username ? 'assigned to ' + p.owner_username : '',
+          ].filter(Boolean).join(' · ');
+
+          return {
+            href: `/pages/${encodeURIComponent(p.id)}/edit`,
+            filter: [
+              p.hasDraftEdits || p.status === 'draft' ? 'drafts' : 'published',
+              p.in_menu ? '' : 'off-menu',
+              clash ? 'clash' : '',
+            ].filter(Boolean),
+            search: `${p.title} ${p.menu_label || ''} ${p.slug} ${link.shortLink || ''}`.toLowerCase(),
+            cells: [
+              primaryCell(p.menu_label || p.title, sub, { icon: p.slug === '/' ? '⌂' : '' }),
+              escapeHtml(p.slug),
+              link.shortLink
+                ? `<a href="/pages/${encodeURIComponent(p.id)}/link" style="color:var(--tlc-blue);text-decoration:none;">${escapeHtml(link.shortLink)}</a>`
+                : '<span style="color:var(--tlc-muted);">—</span>',
+              statusCell,
+            ],
+            actions: `<a class="tlc-edit" href="/pages/${encodeURIComponent(p.id)}/link">Short link</a><a class="tlc-edit" href="/pages/${encodeURIComponent(p.id)}/edit">Open editor</a>`,
+            warn: clash
+              ? (clash.reason === 'address'
+                  ? `${clash.link} is the real address of the ${clash.withTitle} page — this short link would shadow it, so it is switched off.`
+                  : `${clash.link} is already taken by the ${clash.withTitle} page — give one of them a different short link.`)
+              : '',
+            warnCta: clash ? { label: 'Fix short link', href: `/pages/${encodeURIComponent(p.id)}/link` } : null,
+          };
+        });
 
         return html(`
-${sidebarShell('pages', currentUser)}
-<div class="wrap wrap-wide">
-  <div class="page-title">All pages</div>
-  <div class="page-sub">${all.length} page${all.length === 1 ? '' : 's'}${draftCount ? ' · ' + draftCount + ' with unpublished changes' : ''}. Open one to lay it out — drag blocks into the order you want, edit the words on the page itself, then publish.</div>
-  <div class="btn-row" style="margin-bottom:20px;justify-content:space-between;">
-    <span style="display:flex;gap:8px;">${tab('all', 'All')}${tab('published', 'Published')}${tab('drafts', 'Drafts')}</span>
-    <span style="display:flex;gap:8px;">
-      <a href="/pages/details" class="btn btn-sm btn-secondary">Church details</a>
-      <form method="POST" action="/pages/new" style="margin:0;"><button type="submit" class="btn btn-primary">+ New page</button></form>
-    </span>
-  </div>
+${sidebarShell('pages', currentUser, `<a href="/pages/details">Church details</a>`, await badgeCounts(env, currentUser))}
+<div class="tlc-wrap">
+  ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
+  ${renderListSection({
+    key: 'pages',
+    title: 'Pages',
+    purpose: 'Every page on the site except the ministry pages, which have their own screen. Opening a row goes straight to the page editor.',
+    action: { label: '+ New page', href: '/pages/new', method: 'POST' },
+    search: 'Search pages',
+    filters: [
+      { label: 'All', value: 'all' },
+      { label: 'Live', value: 'published' },
+      { label: 'Draft edits', value: 'drafts' },
+      { label: 'Not in menu', value: 'off-menu' },
+    ],
+    columns: [
+      { label: 'Page', width: '2.6fr' },
+      { label: 'Address', width: '1.4fr' },
+      { label: 'Short link', width: '1.1fr' },
+      { label: 'Status', width: '1fr' },
+    ],
+    rows: listRows,
+    noun: 'page',
+    empty: filter === 'drafts' ? 'No pages have unpublished changes.' : 'No pages to show.',
+    note: 'A short link is the last part of the address, so /beliefs works as well as /about/beliefs — an address you can say out loud. It follows the page automatically; the only reason to set one by hand is to settle a clash.',
+  })}
+</div>`, 'Pages — TLC Admin');
+      }
+
+      // ── Short link (GET form) ──
+      // Reached from the "Fix short link" warning and from the row's own action.
+      // Deliberately its own small screen rather than a field buried in the page
+      // editor: the person sent here by a clash warning is here for one reason.
+      if (path.startsWith('/pages/') && path.endsWith('/link') && method === 'GET') {
+        const id = decodeURIComponent(path.slice('/pages/'.length, -('/link'.length)));
+        const all = await env.DB.prepare(
+          'SELECT id, title, menu_label, slug, parent_id, status, short_link FROM pages'
+        ).all().catch(() => ({ results: [] }));
+        const page = (all.results || []).find((p) => p.id === id);
+        if (!page) return new Response('Not found', { status: 404 });
+        if (!owns(page)) return denied();
+        const linked = withShortLinks(all.results || []).find((p) => p.id === id);
+        const derived = shortLinkFor(Object.assign({}, page, { short_link: null }));
+
+        return html(`
+${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await badgeCounts(env, currentUser))}
+<div class="wrap">
+  <div class="page-title">Short link</div>
+  <div class="page-sub">${escapeHtml(page.menu_label || page.title)} — currently at <strong>${escapeHtml(page.slug)}</strong></div>
+  ${linked && linked.shortLinkClash ? `<div class="alert alert-error">
+    <strong>${escapeHtml(linked.shortLinkClash.link)} is already taken.</strong>
+    ${linked.shortLinkClash.reason === 'address'
+      ? `It is the real address of the ${escapeHtml(linked.shortLinkClash.withTitle)} page. Until this is changed, the short link is switched off — the real page keeps the address.`
+      : `The ${escapeHtml(linked.shortLinkClash.withTitle)} page wants it too. Until one of them is changed, neither short link works — nothing is guessed.`}
+  </div>` : ''}
   <div class="card">
-    <table style="width:100%;border-collapse:collapse;font-family:var(--sans);">
-      <thead><tr style="text-align:left;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--gray);">
-        <th scope="col" style="padding:6px 0;">Page</th><th scope="col">Address</th><th scope="col">In menu</th>
-        <th scope="col">Status</th><th scope="col">Last edited</th><th scope="col"></th>
-      </tr></thead>
-      <tbody id="pBody">${rowsHtml}</tbody>
-    </table>
-    ${shown.length ? '' : `<div style="padding:28px;text-align:center;color:var(--gray);font-size:14px;">No pages ${filter === 'drafts' ? 'have unpublished changes' : 'to show'}.</div>`}
+    <form method="POST" action="/pages/${escapeHtml(page.id)}/link">
+      <div class="form-group">
+        <label>Short link</label>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-family:var(--sans);font-size:14px;color:var(--gray);">timothystl.org/</span>
+          <input type="text" name="short_link" value="${escapeHtml((page.short_link || '').replace(/^\/+/, ''))}" placeholder="${escapeHtml((derived || '/').replace(/^\/+/, ''))}" style="flex:1;">
+        </div>
+        <div style="font-size:12px;color:var(--gray);margin-top:6px;">
+          Leave it blank to follow the page address automatically${derived ? ` — which would give <strong>${escapeHtml(derived)}</strong>` : ''}.
+          Setting one by hand is only needed to settle a clash; a hand-set link stays put even if the page is renamed.
+        </div>
+      </div>
+      <div class="btn-row" style="margin-top:20px;">
+        <button type="submit" class="btn btn-primary">Save short link</button>
+        <a href="/pages" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
+      </div>
+    </form>
   </div>
-</div>
-<style>
-#pBody tr{border-top:1px solid var(--border);}
-#pBody td{padding:12px 8px 12px 0;vertical-align:middle;}
-</style>`, 'Pages — TLC Admin');
+</div>`, 'Short link');
+      }
+
+      // ── Short link (POST) ──
+      if (path.startsWith('/pages/') && path.endsWith('/link') && method === 'POST') {
+        const id = decodeURIComponent(path.slice('/pages/'.length, -('/link'.length)));
+        const page = await env.DB.prepare('SELECT id, title, slug, short_link FROM pages WHERE id = ?').bind(id).first();
+        if (!page) return new Response('Not found', { status: 404 });
+        if (!owns(page)) return denied();
+        const form = await request.formData();
+        // Normalised the same way shortLinkFor() reads it, so what is stored and
+        // what is displayed cannot disagree. Anything that is not a plain
+        // address segment is dropped rather than stored and quietly ignored.
+        const raw = String(form.get('short_link') || '').trim().replace(/^\/+|\/+$/g, '')
+          .toLowerCase().replace(/[^a-z0-9\-\/]+/g, '-').replace(/^-+|-+$/g, '');
+        await env.DB.prepare('UPDATE pages SET short_link = ? WHERE id = ?').bind(raw || null, id).run();
+        await logAudit(env.DB, currentUser, 'update', 'page_short_link', id, page.title,
+          { short_link: page.short_link }, { short_link: raw || null });
+        return new Response('', { status: 302, headers: { Location: `/pages?msg=${raw ? 'linksaved' : 'linkcleared'}` } });
       }
 
       // ── Church details ──
@@ -6133,8 +6248,13 @@ ${sidebarShell('subscribers', currentUser)}
       // Show settings form
       if (path === '/settings' && method === 'GET') {
         const REDIRECT_KEYS = ['zoom_url', 'councilfiles_url'];
-        const settings = await env.DB.prepare(`SELECT key, value, label, hint FROM site_settings WHERE key IN (${REDIRECT_KEYS.map(() => '?').join(',')}) ORDER BY rowid`).bind(...REDIRECT_KEYS).all();
-        const customRedirects = await env.DB.prepare("SELECT path, url, label, category, active FROM redirects WHERE category != 'giving' ORDER BY path").all();
+        const [settings, customRedirects, givingRedirects, autoRedirects, pageRows] = await Promise.all([
+          env.DB.prepare(`SELECT key, value, label, hint FROM site_settings WHERE key IN (${REDIRECT_KEYS.map(() => '?').join(',')}) ORDER BY rowid`).bind(...REDIRECT_KEYS).all().catch(() => ({ results: [] })),
+          env.DB.prepare("SELECT path, url, label, category, active FROM redirects WHERE category != 'giving' ORDER BY path").all().catch(() => ({ results: [] })),
+          env.DB.prepare("SELECT path, url, label, active FROM redirects WHERE category = 'giving' ORDER BY path").all().catch(() => ({ results: [] })),
+          env.DB.prepare('SELECT from_slug, to_slug, created_at FROM page_redirects ORDER BY from_slug').all().catch(() => ({ results: [] })),
+          env.DB.prepare("SELECT id, title, menu_label, slug, parent_id, status, short_link FROM pages WHERE status = 'published'").all().catch(() => ({ results: [] })),
+        ]);
         const msg = url.searchParams.get('msg');
         const alertHtml = msg === 'saved' ? `<div class="alert alert-success">✓ Settings saved.</div>`
           : msg === 'redirect-added'   ? `<div class="alert alert-success">✓ Redirect added.</div>`
@@ -6142,71 +6262,169 @@ ${sidebarShell('subscribers', currentUser)}
           : msg === 'redirect-deleted' ? `<div class="alert alert-info">Redirect deleted.</div>`
           : msg === 'redirect-error'   ? `<div class="alert alert-error">Path and URL are both required.</div>` : '';
 
+        const short = (u, n = 44) => {
+          const s = String(u || '').replace(/^https?:\/\//, '');
+          return s.length > n ? s.slice(0, n - 1) + '…' : s;
+        };
+
+        // Three kinds in one list, because a volunteer looking for "where does
+        // /zoom go" should not have to know which table it lives in.
+        const listRows = [];
+
+        for (const r of (customRedirects.results || [])) {
+          listRows.push({
+            href: `/settings#r-${encodeURIComponent(r.path)}`,
+            filter: r.active ? 'handmade' : 'off',
+            search: `${r.path} ${r.url} ${r.label || ''}`.toLowerCase(),
+            cells: [
+              primaryCell('/' + String(r.path).replace(/^\/+/, ''), r.label || 'No label'),
+              `<span title="${escapeHtml(r.url)}">${escapeHtml(short(r.url))}</span>`,
+              'Hand-made',
+              r.active ? statusPill('good', 'Live') : statusPill('plain', 'Off'),
+            ],
+            actions: `<a class="tlc-edit" href="/settings#r-${encodeURIComponent(r.path)}">Edit</a>`,
+          });
+        }
+
+        for (const r of (givingRedirects.results || [])) {
+          listRows.push({
+            href: '/giving',
+            filter: 'giving',
+            search: `${r.path} ${r.url} ${r.label || ''} giving`.toLowerCase(),
+            cells: [
+              primaryCell('/' + String(r.path).replace(/^\/+/, ''), r.label || 'Giving or payment link'),
+              `<span title="${escapeHtml(r.url)}">${escapeHtml(short(r.url))}</span>`,
+              'Giving',
+              r.active ? statusPill('good', 'Live') : statusPill('plain', 'Off'),
+            ],
+            actions: `<a class="tlc-edit" href="/giving">Manage in Giving</a>`,
+          });
+        }
+
+        // Written automatically when a page address changed. These are the rows
+        // that keep old bulletins and Google results working, which is why the
+        // section note tells staff to leave them alone.
+        for (const r of (autoRedirects.results || [])) {
+          listRows.push({
+            filter: 'automatic',
+            search: `${r.from_slug} ${r.to_slug}`.toLowerCase(),
+            cells: [
+              primaryCell(r.from_slug, 'Old address, kept working'),
+              escapeHtml(r.to_slug),
+              'Automatic',
+              statusPill('auto', '301'),
+            ],
+            actions: '<span style="color:var(--tlc-muted);font-size:12.5px;">Leave it</span>',
+          });
+        }
+
+        // Short links are not stored anywhere — they are derived from each
+        // page's address — but they are addresses that answer on the site, so
+        // hiding them here would make this list a half-truth.
+        for (const p of withShortLinks(pageRows.results || [])) {
+          if (!p.shortLink || p.shortLink === p.slug) continue;
+          listRows.push({
+            href: `/pages/${encodeURIComponent(p.id)}/link`,
+            filter: p.shortLinkClash ? 'clash' : 'short',
+            search: `${p.shortLink} ${p.slug} ${p.title}`.toLowerCase(),
+            cells: [
+              primaryCell(p.shortLink, `Short link for ${p.menu_label || p.title}`),
+              escapeHtml(p.slug),
+              'Short link',
+              p.shortLinkClash ? statusPill('bad', 'Link clash') : statusPill('good', 'Live'),
+            ],
+            actions: `<a class="tlc-edit" href="/pages/${encodeURIComponent(p.id)}/link">Change</a>`,
+            warn: p.shortLinkClash ? `${p.shortLinkClash.link} is also wanted by ${p.shortLinkClash.withTitle}, so this short link is switched off.` : '',
+            warnCta: p.shortLinkClash ? { label: 'Fix short link', href: `/pages/${encodeURIComponent(p.id)}/link` } : null,
+          });
+        }
+
         const renderField = s => `
           <div class="form-group" style="border-bottom:1px solid var(--border);padding-bottom:20px;margin-bottom:20px;">
-            <label>${(s.label||s.key).replace(/&/g,'&amp;')}</label>
-            ${s.hint ? `<div style="font-size:12px;color:var(--gray);margin-bottom:8px;">${s.hint.replace(/&/g,'&amp;')}</div>` : ''}
-            <input type="text" name="${s.key.replace(/"/g,'&quot;')}" value="${(s.value||'').replace(/"/g,'&quot;').replace(/&/g,'&amp;')}" style="font-family:var(--mono,monospace);font-size:13px;">
+            <label>${escapeHtml(s.label || s.key)}</label>
+            ${s.hint ? `<div style="font-size:12px;color:var(--gray);margin-bottom:8px;">${escapeHtml(s.hint)}</div>` : ''}
+            <input type="text" name="${escapeHtml(s.key)}" value="${escapeHtml(s.value || '')}" style="font-family:var(--mono,monospace);font-size:13px;">
           </div>`;
-        const redirectFields = settings.results.map(renderField).join('');
+        const redirectFields = (settings.results || []).map(renderField).join('');
 
-        // Hidden category=general + active=1 preserve existing behavior exactly — this
-        // section never had an active toggle before and shouldn't get one now.
-        const customRowsHtml = customRedirects.results.length === 0
-          ? `<div style="font-size:13px;color:var(--gray);padding:12px 0;">No custom redirects yet.</div>`
+        const customRowsHtml = (customRedirects.results || []).length === 0
+          ? `<div style="font-size:13px;color:var(--gray);padding:12px 0;">No hand-made redirects yet.</div>`
           : customRedirects.results.map(r => `
-            <form method="POST" action="/redirects/update" style="display:grid;grid-template-columns:1fr 2fr 1fr auto auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
-              <input type="hidden" name="original_path" value="${r.path.replace(/"/g,'&quot;')}">
+            <form id="r-${escapeHtml(r.path)}" method="POST" action="/redirects/update" style="display:grid;grid-template-columns:1fr 2fr 1fr auto auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+              <input type="hidden" name="original_path" value="${escapeHtml(r.path)}">
               <input type="hidden" name="category" value="general">
               <input type="hidden" name="active" value="1">
-              <input type="text" name="path" value="${r.path.replace(/"/g,'&quot;')}" style="font-family:var(--mono,monospace);font-size:13px;">
-              <input type="url" name="url" value="${(r.url||'').replace(/"/g,'&quot;')}" style="font-size:13px;">
-              <input type="text" name="label" value="${(r.label||'').replace(/"/g,'&quot;')}" placeholder="Label" style="font-size:13px;">
+              <input type="text" name="path" value="${escapeHtml(r.path)}" style="font-family:var(--mono,monospace);font-size:13px;">
+              <input type="url" name="url" value="${escapeHtml(r.url || '')}" style="font-size:13px;">
+              <input type="text" name="label" value="${escapeHtml(r.label || '')}" placeholder="Label" style="font-size:13px;">
               <button type="submit" class="btn btn-sm btn-secondary">Save</button>
-              <button type="submit" formaction="/redirects/delete/${encodeURIComponent(r.path)}" formnovalidate class="btn btn-sm btn-danger" onclick="return confirm('Delete /${r.path.replace(/'/g,"\\'")}?')">Delete</button>
+              <button type="submit" formaction="/redirects/delete/${encodeURIComponent(r.path)}" formnovalidate class="btn btn-sm btn-danger" onclick="return confirm('Delete /${escapeHtml(r.path)}?')">Delete</button>
             </form>`).join('');
 
         return html(`
-${sidebarShell('settings', currentUser)}
-<div class="wrap">
-  <div class="page-title">Redirects</div>
-  <div class="page-sub">Manage short links and redirect URLs used across the site. Changes take effect immediately.</div>
-  ${alertHtml}
-  <form method="POST" action="/settings/update">
-    <div class="card">
-      <div class="card-title">Built-in Redirects</div>
-      <div style="font-size:13px;color:var(--gray);margin-bottom:18px;">These are the URLs that short links on the site point to (<code>/zoom</code>, <code>/councilfiles</code>). Edit here — no code change required. (The <code>/give</code> link and giving page now live under the <a href="/giving" style="color:var(--steel);">Giving</a> tab.)</div>
-      ${redirectFields}
-      <div class="btn-row" style="margin-top:4px;">
-        <button type="submit" class="btn btn-primary">Save redirect URLs →</button>
-      </div>
-    </div>
-  </form>
-
-  <div class="card" style="margin-top:20px;">
-    <div class="card-title">Custom Redirects</div>
-    <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">Add short links that redirect visitors to any URL. Example: <code>/mdo</code> → <code>https://mdo.timothystl.org</code>. Works when someone types the URL directly in the browser. Edit the fields below and click Save, or Delete to remove.</div>
-    ${customRowsHtml}
-    <form method="POST" action="/redirects/add" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
-      <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sage);margin-bottom:12px;">Add new redirect</div>
-      <div style="display:grid;grid-template-columns:1fr 2fr 1fr;gap:12px;align-items:end;">
-        <div class="form-group" style="margin:0;">
-          <label>Path (no slash)</label>
-          <input type="text" name="path" placeholder="e.g. mdo" style="font-family:var(--mono,monospace);">
+${sidebarShell('settings', currentUser, '', await badgeCounts(env, currentUser))}
+<div class="tlc-wrap">
+  ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
+  ${renderListSection({
+    key: 'redirects',
+    title: 'Redirects',
+    purpose: 'Short links you can say out loud — timothystl.org/zoom — and the 301s written automatically when a page address changes.',
+    search: 'Search redirects',
+    filters: [
+      { label: 'All', value: 'all' },
+      { label: 'Hand-made', value: 'handmade' },
+      { label: 'Short links', value: 'short' },
+      { label: 'Automatic', value: 'automatic' },
+      { label: 'Giving', value: 'giving' },
+      { label: 'Off', value: 'off' },
+    ],
+    columns: [
+      { label: 'Short link', width: '1.6fr' },
+      { label: 'Goes to', width: '2.2fr' },
+      { label: 'Kind', width: '1fr' },
+      { label: 'Status', width: '.9fr' },
+    ],
+    rows: listRows,
+    noun: 'redirect',
+    empty: 'No redirects yet.',
+    note: 'The automatic rows were written when somebody renamed a page. Leave them alone — they are what keeps last year’s bulletins and Google’s results pointing somewhere real.',
+  })}
+  <div class="tlc-section" style="padding-top:0;">
+    <form method="POST" action="/settings/update">
+      <div class="card">
+        <div class="card-title">Built-in Redirects</div>
+        <div style="font-size:13px;color:var(--gray);margin-bottom:18px;">Where the site's own short links point (<code>/zoom</code>, <code>/councilfiles</code>). The <code>/give</code> link and the giving page live under <a href="/giving" style="color:var(--steel);">Giving</a>.</div>
+        ${redirectFields}
+        <div class="btn-row" style="margin-top:4px;">
+          <button type="submit" class="btn btn-primary">Save redirect URLs →</button>
         </div>
-        <div class="form-group" style="margin:0;">
-          <label>Destination URL</label>
-          <input type="url" name="url" placeholder="https://...">
-        </div>
-        <div class="form-group" style="margin:0;">
-          <label>Label (optional)</label>
-          <input type="text" name="label" placeholder="e.g. Mother's Day Out">
-        </div>
-      </div>
-      <div class="btn-row" style="margin-top:12px;">
-        <button type="submit" class="btn btn-primary">Add redirect →</button>
       </div>
     </form>
+    <div class="card" style="margin-top:20px;">
+      <div class="card-title">Hand-made redirects</div>
+      <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">Short links that send visitors to any URL. Example: <code>/mdo</code> → <code>https://mdo.timothystl.org</code>. Edit a row and Save, or Delete to remove.</div>
+      ${customRowsHtml}
+      <form method="POST" action="/redirects/add" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+        <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sage);margin-bottom:12px;">Add new redirect</div>
+        <div style="display:grid;grid-template-columns:1fr 2fr 1fr;gap:12px;align-items:end;">
+          <div class="form-group" style="margin:0;">
+            <label>Path (no slash)</label>
+            <input type="text" name="path" placeholder="e.g. mdo" style="font-family:var(--mono,monospace);">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label>Destination URL</label>
+            <input type="url" name="url" placeholder="https://...">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label>Label (optional)</label>
+            <input type="text" name="label" placeholder="e.g. Mother's Day Out">
+          </div>
+        </div>
+        <div class="btn-row" style="margin-top:12px;">
+          <button type="submit" class="btn btn-primary">Add redirect →</button>
+        </div>
+      </form>
+    </div>
   </div>
 </div>`, 'Redirects');
       }

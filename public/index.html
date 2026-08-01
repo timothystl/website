@@ -2967,6 +2967,13 @@ window.showPage = function(id, addHistory) {
   // are one page. Send it there rather than to the 404, so the address is safe
   // to say from the pulpit and to print on a flyer.
   if (path === 'events') { window.showPage('news'); return; }
+  // Every ministry answers on both /youth and /ministries/youth. The short one
+  // is what goes on a flyer; the long one is what somebody guesses after
+  // landing on the Ministries hub. Neither should 404.
+  if (path.indexOf('ministries/') === 0) {
+    var mSlug = path.slice('ministries/'.length);
+    if (mSlug && document.getElementById('page-' + mSlug)) { window.showPage(mSlug, false); return; }
+  }
   var nlDetailMatch = path.match(/^news\/(\d+)$/);
   if (nlDetailMatch) {
     window.showPage('news', false);
