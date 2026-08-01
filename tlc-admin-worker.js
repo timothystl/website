@@ -6269,39 +6269,60 @@ ${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)
         const msg = url.searchParams.get('msg');
         const alertHtml = msg === 'saved' ? `<div class="alert alert-success">✓ Staff member saved.</div>`
           : msg === 'deleted' ? `<div class="alert alert-info">Staff member removed.</div>` : '';
-        const rows = members.results.map((m, i) => `
-          <div class="ni-row" style="align-items:center;">
-            <div style="display:flex;flex-direction:column;gap:2px;">
-              <button type="button" onclick="staffMove(${m.id},'up')" ${i === 0 ? 'disabled' : ''} class="btn btn-sm" style="padding:2px 8px;line-height:1;${i === 0 ? 'opacity:.3;' : ''}" title="Move up">▲</button>
-              <button type="button" onclick="staffMove(${m.id},'down')" ${i === members.results.length - 1 ? 'disabled' : ''} class="btn btn-sm" style="padding:2px 8px;line-height:1;${i === members.results.length - 1 ? 'opacity:.3;' : ''}" title="Move down">▼</button>
-            </div>
-            <div style="position:relative;font-size:28px;width:44px;height:44px;border-radius:50%;background:var(--mist);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;">
-              <span style="font-family:var(--serif);font-size:14px;color:var(--steel);">${esc(m.name).split(' ').map(w=>w[0]).join('').slice(0,2)}</span>
-              ${m.photo_url ? `<img src="${esc(staffPhotoSrc(m.photo_url))}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:${esc(isSafeObjectPosition(m.photo_position) ? m.photo_position : '50% 50%')};transform:scale(${safeZoomFactor(m.photo_zoom)});" onerror="this.style.display='none'">` : ''}
-            </div>
-            <div style="flex:1;">
-              <div class="ni-title">${esc(m.name)}</div>
-              <div class="ni-meta">${esc(m.title || '')}${m.email ? ' · ' + esc(m.email) : ''}</div>
-            </div>
-            <div class="ni-actions">
-              <a href="/staff/edit/${m.id}" class="btn btn-sm btn-secondary">Edit</a>
-              <form method="POST" action="/staff/delete/${m.id}" onsubmit="return confirm('Remove ${esc(m.name)} from staff?')" style="margin:0;">
-                <button type="submit" class="btn btn-sm btn-danger">Remove</button>
-              </form>
-            </div>
-          </div>`).join('');
+        const list = members.results;
+
+        const listRows = list.map((m, i) => {
+          const initials = esc(m.name).split(' ').map((w) => w[0]).join('').slice(0, 2);
+          const avatar = m.photo_url
+            ? `<img src="${esc(staffPhotoSrc(m.photo_url))}" alt="" style="width:100%;height:100%;object-fit:cover;object-position:${esc(isSafeObjectPosition(m.photo_position) ? m.photo_position : '50% 50%')};transform:scale(${safeZoomFactor(m.photo_zoom)});">`
+            : `<span style="font-family:var(--tlc-serif);font-size:12px;">${initials}</span>`;
+          return {
+            href: `/staff/edit/${m.id}`,
+            filter: m.photo_url ? 'photo' : 'nophoto',
+            search: `${m.name} ${m.title || ''} ${m.email || ''}`.toLowerCase(),
+            cells: [
+              primaryCell(m.name, m.title || 'No role given', { icon: avatar }),
+              m.email ? escapeHtml(m.email) : '<span style="color:var(--tlc-muted);">—</span>',
+              `${m.display_order ?? 0}`,
+              m.photo_url ? statusPill('good', 'Photo set') : statusPill('warn', 'No photo'),
+            ],
+            // Reordering stays a pair of buttons rather than drag-and-drop:
+            // this list is short, and the order it produces is the order on the
+            // About page, so being able to nudge one person is the whole need.
+            actions: `<button type="button" class="tlc-edit" style="background:none;border:0;cursor:pointer;font:inherit;${i === 0 ? 'opacity:.3;' : ''}" ${i === 0 ? 'disabled' : ''} onclick="staffMove(${m.id},'up')" title="Move up">▲</button>`
+              + `<button type="button" class="tlc-edit" style="background:none;border:0;cursor:pointer;font:inherit;${i === list.length - 1 ? 'opacity:.3;' : ''}" ${i === list.length - 1 ? 'disabled' : ''} onclick="staffMove(${m.id},'down')" title="Move down">▼</button>`
+              + `<a class="tlc-edit" href="/staff/edit/${m.id}">Edit</a>`,
+            warn: m.photo_url ? '' : 'No photo, so this person shows as initials on the About page.',
+            warnCta: m.photo_url ? null : { label: 'Add one', href: `/staff/edit/${m.id}` },
+          };
+        });
+
         return html(`
-${sidebarShell('staff', currentUser)}
-<div class="wrap">
-  <div class="page-title">Staff &amp; Leadership</div>
-  <div class="page-sub">Manage the staff cards shown on the About page. Use the ▲/▼ buttons to reorder.</div>
-  ${alertHtml}
-  <div class="btn-row" style="margin-bottom:28px;">
-    <a href="/staff/new" class="btn btn-primary">+ Add staff member</a>
-  </div>
-  <div class="card" style="padding:0;overflow:hidden;">
-    ${members.results.length === 0 ? '<div style="padding:40px;text-align:center;color:var(--gray);">No staff members yet.</div>' : rows}
-  </div>
+${sidebarShell('staff', currentUser, `<a href="https://timothystl.org/about" target="_blank">View About page →</a>`, await badgeCounts(env, currentUser))}
+<div class="tlc-wrap">
+  ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
+  ${renderListSection({
+    key: 'staff',
+    title: 'Staff directory',
+    purpose: 'One record per person. Every page that shows staff reads from here — edit once and the whole site follows.',
+    action: { label: '+ Add person', href: '/staff/new' },
+    search: 'Search staff',
+    filters: [
+      { label: 'All', value: 'all' },
+      { label: 'With a photo', value: 'photo' },
+      { label: 'No photo', value: 'nophoto' },
+    ],
+    columns: [
+      { label: 'Person', width: '2.4fr' },
+      { label: 'Email', width: '1.8fr' },
+      { label: 'Order', width: '.6fr' },
+      { label: 'Photo', width: '1fr' },
+    ],
+    rows: listRows,
+    noun: 'person', nounPlural: 'people',
+    empty: 'No staff members yet.',
+    note: 'The photo crop is set once on the person and reused everywhere their picture appears — which is what stops heads being cut off differently on each page.',
+  })}
 </div>
 <script>
 function staffMove(id, direction) {
@@ -6680,57 +6701,77 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
       const localTotal = await env.DB.prepare('SELECT COUNT(*) as cnt FROM newsletter_subscribers').first();
       const localRecent = await env.DB.prepare('SELECT email, name, subscribed_at FROM newsletter_subscribers ORDER BY subscribed_at DESC LIMIT 50').all();
 
-      const brevoRowsHtml = brevoError
-        ? `<div style="padding:16px;color:#B85C3A;font-size:14px;">⚠ ${brevoError} <a href="https://app.brevo.com" target="_blank" style="color:var(--steel);">Open Brevo ↗</a></div>`
-        : brevoContacts.length === 0
-          ? `<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No contacts found in this Brevo list.</div>`
-          : brevoContacts.map(c => {
-              const name = [c.attributes?.FIRSTNAME, c.attributes?.LASTNAME].filter(Boolean).join(' ');
-              return `
-<div style="display:flex;align-items:center;gap:16px;padding:10px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
-  <div style="flex:1;min-width:200px;">
-    <div style="font-size:14px;color:var(--charcoal);">${c.email}</div>
-    ${name ? `<div style="font-size:12px;color:var(--gray);">${name}</div>` : ''}
-  </div>
-  <div style="font-size:11px;padding:2px 8px;border-radius:20px;background:${c.emailBlacklisted ? '#f5e6e6' : '#e6f5ea'};color:${c.emailBlacklisted ? '#B85C3A' : '#2E7A4A'};flex-shrink:0;">${c.emailBlacklisted ? 'unsubscribed' : 'active'}</div>
-</div>`;
-            }).join('');
+      // One list, both sources. Brevo is the record of who actually receives the
+      // email; the local table is who signed up on the website. A person can be
+      // in both, so they are merged on the address rather than shown twice.
+      const bySource = new Map();
+      for (const s of localRecent.results) {
+        bySource.set(String(s.email || '').toLowerCase(), { joined: s.subscribed_at, name: s.name });
+      }
+      const listRows = brevoContacts.map((c) => {
+        const email = String(c.email || '');
+        const local = bySource.get(email.toLowerCase());
+        const name = [c.attributes?.FIRSTNAME, c.attributes?.LASTNAME].filter(Boolean).join(' ') || local?.name || '';
+        const unsub = !!c.emailBlacklisted;
+        bySource.delete(email.toLowerCase());
+        return {
+          filter: unsub ? 'unsubscribed' : 'active',
+          search: `${email} ${name}`.toLowerCase(),
+          cells: [
+            primaryCell(name || email, name ? email : 'No name on file'),
+            local ? 'Website signup' : 'Added in Brevo',
+            escapeHtml((local?.joined || '').slice(0, 10) || '—'),
+            unsub ? statusPill('plain', 'Unsubscribed') : statusPill('good', 'Active'),
+          ],
+          actions: '',
+        };
+      });
+      // Anyone who signed up on the website but has not reached Brevo yet.
+      for (const [email, s] of bySource) {
+        listRows.push({
+          filter: 'pending',
+          search: `${email} ${s.name || ''}`.toLowerCase(),
+          cells: [
+            primaryCell(s.name || email, s.name ? email : 'No name on file'),
+            'Website signup',
+            escapeHtml((s.joined || '').slice(0, 10) || '—'),
+            statusPill('warn', 'Not in Brevo'),
+          ],
+          actions: '',
+          warn: 'Signed up on the website but not showing in the Brevo list yet.',
+        });
+      }
 
-      const localRowsHtml = localRecent.results.length === 0
-        ? `<div style="text-align:center;padding:24px;color:var(--gray);font-size:14px;">No website signups yet.</div>`
-        : localRecent.results.map(s => `
-<div style="display:flex;align-items:center;gap:16px;padding:10px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
-  <div style="flex:1;min-width:200px;">
-    <div style="font-size:14px;color:var(--charcoal);">${s.email}</div>
-    ${s.name ? `<div style="font-size:12px;color:var(--gray);">${s.name}</div>` : ''}
-  </div>
-  <div style="font-size:12px;color:var(--gray);flex-shrink:0;">${s.subscribed_at ? s.subscribed_at.slice(0,10) : ''}</div>
-</div>`).join('');
+      const errorBanner = brevoError
+        ? `<div class="alert alert-error">⚠ ${escapeHtml(brevoError)} <a href="https://app.brevo.com" target="_blank" style="color:var(--steel);">Open Brevo ↗</a><br><span style="font-size:13px;">The website signups below are still accurate; only the Brevo side could not be read.</span></div>`
+        : '';
 
       return html(`
-${sidebarShell('subscribers', currentUser)}
-<div class="wrap">
-  <div class="page-title">Newsletter Subscribers</div>
-  <div class="page-sub">All subscribers from your Brevo list. Manage full list at <a href="https://app.brevo.com" target="_blank" style="color:var(--steel);">app.brevo.com ↗</a></div>
-  <div class="card" style="margin-bottom:20px;display:flex;gap:32px;flex-wrap:wrap;">
-    <div>
-      <div style="font-family:var(--serif);font-size:36px;color:var(--steel);font-weight:700;">${brevoTotal !== null ? brevoTotal : '—'}</div>
-      <div style="font-size:13px;color:var(--gray);margin-top:4px;">Total in Brevo list</div>
-    </div>
-    <div>
-      <div style="font-family:var(--serif);font-size:36px;color:var(--steel);font-weight:700;">${localTotal ? localTotal.cnt : 0}</div>
-      <div style="font-size:13px;color:var(--gray);margin-top:4px;">Signed up via website</div>
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-title">All Brevo subscribers</div>
-    ${brevoRowsHtml}
-  </div>
-  <div class="card">
-    <div class="card-title">Website signups (recent 50)</div>
-    <div style="font-size:12px;color:var(--gray);margin-bottom:12px;">These are automatically added to Brevo when they sign up.</div>
-    ${localRowsHtml}
-  </div>
+${sidebarShell('subscribers', currentUser, `<a href="https://app.brevo.com" target="_blank">Open Brevo ↗</a>`, await badgeCounts(env, currentUser))}
+<div class="tlc-wrap">
+  ${errorBanner ? `<div class="tlc-section" style="padding-bottom:0;">${errorBanner}</div>` : ''}
+  ${renderListSection({
+    key: 'subscribers',
+    title: 'Subscribers',
+    purpose: `Everyone who gets the newsletter${brevoTotal !== null ? ` — ${pluralise(brevoTotal, 'person', 'people')} in the Brevo list` : ''}.`,
+    search: 'Search subscribers',
+    filters: [
+      { label: 'All', value: 'all' },
+      { label: 'Active', value: 'active' },
+      { label: 'Unsubscribed', value: 'unsubscribed' },
+      { label: 'Not in Brevo', value: 'pending' },
+    ],
+    columns: [
+      { label: 'Person', width: '2.6fr' },
+      { label: 'Source', width: '1.2fr' },
+      { label: 'Joined', width: '1fr' },
+      { label: 'Status', width: '1.1fr' },
+    ],
+    rows: listRows,
+    noun: 'subscriber',
+    empty: 'No subscribers yet.',
+    note: 'This is a read-only mirror. Never delete somebody to unsubscribe them — an unsubscribe comes back from Brevo and deleting the record here would simply let them be added again next time they fill in a form.',
+  })}
 </div>`, 'Subscribers');
     }
 
@@ -7235,43 +7276,63 @@ ${sidebarShell('giving', currentUser)}
       const alertHtml = msg === 'created' ? `<div class="alert alert-success">✓ User created.</div>`
         : msg === 'updated' ? `<div class="alert alert-success">✓ User updated.</div>`
         : msg === 'deleted' ? `<div class="alert alert-info">User deleted.</div>` : '';
-      const deriveRoleLabel = (perms) => {
+
+      const accessLabel = (perms) => {
         if (perms.length === 0) return 'No access';
-        if (perms.length === ALL_PERMISSIONS.length && ALL_PERMISSIONS.every(p => perms.includes(p))) return 'Full access';
+        if (ALL_PERMISSIONS.every((p) => perms.includes(p))) return 'Full access';
         if (perms.length === 1) return `${PERMISSIONS[perms[0]] || perms[0]} only`;
         return `Custom access (${perms.length} of ${ALL_PERMISSIONS.length})`;
       };
-      const listHtml = users.results.map(u => {
+
+      const listRows = users.results.map((u) => {
         let perms = [];
-        try { perms = JSON.parse(u.permissions || '[]'); } catch(_) {}
-        const permLabels = perms.map(p => (PERMISSIONS[p] || p)).join(', ') || 'None';
+        try { perms = JSON.parse(u.permissions || '[]'); } catch (_) { perms = []; }
         const initials = (u.username || '?').slice(0, 2).toUpperCase();
-        return `<div class="user-row">
-  <div class="dash-avatar" style="width:36px;height:36px;font-size:12px;">${escapeHtml(initials)}</div>
-  <div style="flex:1;min-width:160px;">
-    <div class="user-name">${escapeHtml(u.username)}${!u.active ? ' <span class="badge badge-expired">Inactive</span>' : ''}</div>
-    <div class="user-meta">${u.email ? escapeHtml(u.email) : '<span style="color:#B85C3A;font-size:12px;">No email — can\'t reset password</span>'}</div>
-  </div>
-  <span class="badge badge-upcoming" title="${escapeHtml(permLabels)}">${escapeHtml(deriveRoleLabel(perms))}</span>
-  <div class="user-meta">${u.last_login ? 'Last login: ' + u.last_login.split('T')[0] : 'Never logged in'}</div>
-  <div class="ni-actions">
-    <a href="/users/edit/${u.id}" class="btn btn-sm btn-secondary">Edit access</a>
-    ${u.id !== currentUser.id ? `<form method="POST" action="/users/delete/${u.id}" style="display:contents;" onsubmit="return confirm('Delete this user? This cannot be undone.')">
-      <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-    </form>` : ''}
-  </div>
-</div>`;
-      }).join('') || '<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No users yet.</div>';
+        const lastLogin = u.last_login ? u.last_login.split('T')[0] : 'Never';
+        return {
+          href: `/users/edit/${u.id}`,
+          filter: u.active ? 'active' : 'disabled',
+          search: `${u.username} ${u.email || ''} ${perms.join(' ')}`.toLowerCase(),
+          cells: [
+            primaryCell(u.username, u.email || 'No email on file', { icon: escapeHtml(initials) }),
+            `<span title="${escapeHtml(perms.map((p) => PERMISSIONS[p] || p).join(', ') || 'None')}">${escapeHtml(accessLabel(perms))}</span>`,
+            escapeHtml(lastLogin),
+            u.active ? statusPill('good', 'Active') : statusPill('plain', 'Disabled'),
+          ],
+          actions: `<a class="tlc-edit" href="/users/edit/${u.id}">Edit access</a>`,
+          // Without an email there is no way to send a reset link, so the
+          // account is one forgotten password away from being unusable.
+          warn: u.email ? '' : `${u.username} has no email address, so a forgotten password cannot be reset.`,
+          warnCta: u.email ? null : { label: 'Add one', href: `/users/edit/${u.id}` },
+        };
+      });
+
       return html(`
-${sidebarShell('users', currentUser)}
-<div class="wrap">
-  <div class="page-title">User Management</div>
-  <div class="page-sub">Manage admin portal accounts and permissions.</div>
-  ${alertHtml}
-  <div class="btn-row" style="margin-bottom:24px;">
-    <a href="/users/new" class="btn btn-primary">+ Invite user</a>
-  </div>
-  <div class="card">${listHtml}</div>
+${sidebarShell('users', currentUser, '', await badgeCounts(env, currentUser))}
+<div class="tlc-wrap">
+  ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
+  ${renderListSection({
+    key: 'users',
+    title: 'Users',
+    purpose: 'Who can get into this admin, and exactly what each of them can reach.',
+    action: { label: '+ Invite user', href: '/users/new' },
+    search: 'Search users',
+    filters: [
+      { label: 'All', value: 'all' },
+      { label: 'Active', value: 'active' },
+      { label: 'Disabled', value: 'disabled' },
+    ],
+    columns: [
+      { label: 'User', width: '2.4fr' },
+      { label: 'Access', width: '1.8fr' },
+      { label: 'Last login', width: '1fr' },
+      { label: 'Status', width: '.9fr' },
+    ],
+    rows: listRows,
+    noun: 'user',
+    empty: 'No users yet.',
+    note: 'Disabling an account keeps its history in the audit log; deleting does not. Disable somebody who has left, and delete only an account made by mistake.',
+  })}
 </div>`, 'Users');
     }
 

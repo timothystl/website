@@ -575,3 +575,10 @@ export const MENU_CSS = `
 .tlc-menu-hint{padding:12px 16px;font-size:12.5px;line-height:1.6;color:var(--tlc-body);background:var(--tlc-parchment);border-top:1px solid var(--tlc-edge);text-wrap:pretty;}
 .tlc-menu-empty{padding:26px 16px;text-align:center;font-size:13px;color:var(--tlc-muted);}
 `;
+
+// Presets sit above the permission checkboxes in the Users drawer.
+export const PRESET_CSS = `
+.tlc-presets{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;}
+.tlc-preset{font:600 12.5px var(--tlc-sans);color:var(--tlc-navy);background:#fff;border:1px solid var(--tlc-edge);border-radius:999px;padding:8px 15px;cursor:pointer;}
+.tlc-preset:hover{border-color:var(--tlc-blue);background:#E7EFF5;}
+`;
