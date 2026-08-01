@@ -59,7 +59,11 @@
 .tlc-pay-laynote{font-size:12.5px;color:var(--tlc-muted);}
 .tlc-pay-group{font:600 10.5px/1 var(--tlc-sans);letter-spacing:.12em;text-transform:uppercase;color:var(--tlc-muted);margin:22px 0 10px;}
 .tlc-pay-card{border:1px solid var(--tlc-edge);border-radius:11px;overflow:hidden;background:#fff;margin-bottom:14px;}
-.tlc-pay-card-bar{padding:11px 16px;background:#1D3557;color:#fff;font:600 13.5px var(--tlc-sans);}
+/* ⚠ Was a filled #1D3557 band. The palette note in admin/ui.js says it
+   outright — sidebar navy is sidebar only, never a page. A second navy
+   band inside the page reads as a second nav. This is the treatment every
+   other table header in the admin uses. */
+.tlc-pay-card-bar{padding:11px 16px;background:#F4EFE5;color:#8A8271;font:600 10.5px/1 var(--tlc-sans);letter-spacing:.12em;text-transform:uppercase;}
 .tlc-pay-li{display:flex;align-items:baseline;justify-content:space-between;gap:14px;padding:10px 16px;border-bottom:1px solid var(--tlc-divider);}
 .tlc-pay-li:last-child{border-bottom:0;}
 .tlc-pay-li-label{font-size:13px;color:var(--tlc-body);}
@@ -70,7 +74,7 @@
 .tlc-pay-li.is-total .tlc-pay-li-label{font:600 13.5px var(--tlc-sans);color:var(--tlc-ink);}
 .tlc-pay-li.is-total .tlc-pay-li-val{font-size:15px;}
 .tlc-pay-tbl{border:1px solid var(--tlc-edge);border-radius:11px;overflow:hidden;background:#fff;margin-bottom:16px;}
-.tlc-pay-tbl-bar{padding:11px 16px;background:#1D3557;color:#F5E4C0;font:700 11px var(--tlc-sans);letter-spacing:.14em;text-transform:uppercase;}
+.tlc-pay-tbl-bar{padding:11px 16px;background:#F4EFE5;color:#8A8271;font:600 10.5px/1 var(--tlc-sans);letter-spacing:.12em;text-transform:uppercase;}
 .tlc-pay-tgrid{display:grid;grid-template-columns:2fr 1fr 1.4fr 1fr 1fr;gap:12px;align-items:center;}
 .tlc-pay-right{text-align:right;}
 .tlc-pay-cards2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
