@@ -284,9 +284,13 @@ export const DB_INIT_SESSIONS = `CREATE TABLE IF NOT EXISTS sessions (
   created_at TEXT NOT NULL
 )`;
 
+// user_id is nullable on purpose: logAudit binds null for anything the system
+// did on its own — a scheduled page going live, a hold lapsing — and those are
+// exactly the entries somebody later wants to find. It was NOT NULL until
+// 2026-08-01, which meant every such INSERT threw and was silently swallowed.
 export const DB_INIT_AUDIT_LOG = `CREATE TABLE IF NOT EXISTS audit_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER NOT NULL,
+  user_id INTEGER,
   username TEXT NOT NULL,
   action TEXT NOT NULL,
   entity_type TEXT NOT NULL,

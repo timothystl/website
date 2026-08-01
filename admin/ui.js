@@ -610,3 +610,89 @@ export const GYM_CAL_CSS = `
 .gymcal-swatch--blocked{background:#F4F2EE;border:1px solid var(--tlc-edge);}
 @media (max-width:720px){.gymcal-cell{min-height:64px;}.gymcal-chip{font-size:9px;}}
 `;
+
+// ── ⌘K ───────────────────────────────────────────────────────
+// One search over every section. Results are permission-scoped server-side —
+// searching is not a way around a gate — so this is only the presentation.
+export const CMDK_CSS = `
+.tlc-k-scrim{position:fixed;inset:0;background:rgba(18,36,61,.38);z-index:300;display:none;}
+.tlc-k-scrim.is-open{display:block;}
+.tlc-k{position:fixed;top:12vh;left:50%;transform:translateX(-50%);width:min(560px,92vw);background:#fff;border:1px solid var(--tlc-edge);border-radius:13px;box-shadow:0 18px 50px rgba(18,36,61,.28);z-index:301;display:none;overflow:hidden;font-family:var(--tlc-sans);}
+.tlc-k.is-open{display:block;}
+.tlc-k-input{width:100%;border:0;border-bottom:1px solid var(--tlc-edge);padding:16px 18px;font:400 16px var(--tlc-sans);color:var(--tlc-ink);outline:none;}
+.tlc-k-list{max-height:52vh;overflow-y:auto;}
+.tlc-k-item{display:flex;align-items:center;gap:12px;padding:11px 18px;text-decoration:none;border-bottom:1px solid var(--tlc-divider);}
+.tlc-k-item:last-child{border-bottom:0;}
+.tlc-k-item.is-sel,.tlc-k-item:hover{background:#E7EFF5;}
+.tlc-k-sec{flex:none;font:600 9.5px var(--tlc-sans);letter-spacing:.1em;text-transform:uppercase;color:var(--tlc-muted);background:var(--tlc-sand);border-radius:999px;padding:4px 9px;}
+.tlc-k-label{flex:1;min-width:0;font:600 13.5px var(--tlc-sans);color:var(--tlc-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.tlc-k-meta{flex:none;font-size:11.5px;color:var(--tlc-muted);max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.tlc-k-empty{padding:22px 18px;font-size:13.5px;color:var(--tlc-muted);}
+.tlc-k-hint{padding:9px 18px;border-top:1px solid var(--tlc-edge);background:var(--tlc-parchment);font-size:11.5px;color:var(--tlc-muted);}
+`;
+
+export const CMDK_JS = `(function(){
+  var scrim = document.getElementById('tlc-k-scrim');
+  var box = document.getElementById('tlc-k');
+  if (!scrim || !box) return;
+  var input = box.querySelector('.tlc-k-input');
+  var list = box.querySelector('.tlc-k-list');
+  var sel = 0, items = [], timer = null;
+
+  function open(){ scrim.classList.add('is-open'); box.classList.add('is-open'); input.value=''; render([]); input.focus(); }
+  function close(){ scrim.classList.remove('is-open'); box.classList.remove('is-open'); }
+  function render(rs){
+    items = rs;
+    if (!rs.length) {
+      list.innerHTML = '<div class="tlc-k-empty">' +
+        (input.value.trim().length < 2 ? 'Type at least two letters.' : 'Nothing matching that.') + '</div>';
+      return;
+    }
+    sel = 0;
+    list.innerHTML = rs.map(function(r,i){
+      return '<a class="tlc-k-item' + (i===0?' is-sel':'') + '" href="' + r.href + '">' +
+        '<span class="tlc-k-sec">' + r.section + '</span>' +
+        '<span class="tlc-k-label">' + r.label + '</span>' +
+        '<span class="tlc-k-meta">' + (r.meta || '') + '</span></a>';
+    }).join('');
+  }
+  function move(d){
+    if (!items.length) return;
+    var nodes = list.querySelectorAll('.tlc-k-item');
+    nodes[sel] && nodes[sel].classList.remove('is-sel');
+    sel = (sel + d + nodes.length) % nodes.length;
+    nodes[sel].classList.add('is-sel');
+    nodes[sel].scrollIntoView({ block: 'nearest' });
+  }
+  function search(){
+    var q = input.value.trim();
+    if (q.length < 2) { render([]); return; }
+    fetch('/api/search?q=' + encodeURIComponent(q))
+      .then(function(r){ return r.json(); })
+      .then(function(d){ render(d.results || []); })
+      .catch(function(){ render([]); });
+  }
+
+  document.addEventListener('keydown', function(e){
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); open(); return; }
+    if (!box.classList.contains('is-open')) return;
+    if (e.key === 'Escape') { close(); return; }
+    if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
+    if (e.key === 'Enter') {
+      var node = list.querySelectorAll('.tlc-k-item')[sel];
+      if (node) { e.preventDefault(); location.href = node.getAttribute('href'); }
+    }
+  });
+  scrim.addEventListener('click', close);
+  input.addEventListener('input', function(){ clearTimeout(timer); timer = setTimeout(search, 160); });
+  var trigger = document.getElementById('tlc-k-open');
+  if (trigger) trigger.addEventListener('click', function(e){ e.preventDefault(); open(); });
+})();`;
+
+export const CMDK_HTML = `<div class="tlc-k-scrim" id="tlc-k-scrim"></div>
+<div class="tlc-k" id="tlc-k" role="dialog" aria-modal="true" aria-label="Search every section">
+  <input class="tlc-k-input" type="search" placeholder="Search every section…" aria-label="Search every section" autocomplete="off">
+  <div class="tlc-k-list"></div>
+  <div class="tlc-k-hint">↑ ↓ to move · Enter to open · Esc to close</div>
+</div>`;

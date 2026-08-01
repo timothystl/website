@@ -3,7 +3,7 @@
 
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
-import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS } from './ui.js';
+import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 
 export const VERSION = 'v3.0.9'; // major: the admin overhaul — one pattern across every section, new IA, renamed permissions
 
@@ -179,6 +179,7 @@ ${ADMIN_UI_CSS}
 ${MENU_CSS}
 ${PRESET_CSS}
 ${GYM_CAL_CSS}
+${CMDK_CSS}
 /* ── SIDEBAR, REDESIGNED ───────────────────────────────────────
    Three groups, the page-producing sections nested under Pages, a gold inset
    bar plus a gold dot on the active item, and badges that count only things a
@@ -221,6 +222,7 @@ function prepSchedule(form){
   return confirm('Schedule this newsletter to send via Brevo?');
 }
 ${LIST_SECTION_JS}
+${CMDK_JS}
 </script>
 </body>
 </html>`, {
@@ -280,6 +282,7 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}) {
     hp('notices_edit')    ? navItem('/notices', 'Notices', activeTab === 'notices') : '',
     hp('links_edit')      ? navItem('/link-cards', 'Links', activeTab === 'link-cards') : '',
     hp('settings_manage') ? navItem('/settings', 'Redirects', activeTab === 'settings') : '',
+    (hp('pages_edit') || hp('ministries_edit')) ? navItem('/media', 'Media', activeTab === 'media') : '',
   ].filter(Boolean).join('');
 
   // ── COMMUNICATION ──
@@ -315,9 +318,11 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}) {
   ${commItems ? `<div class="sidebar-group"><div class="sidebar-group-label">Communication</div>${commItems}</div>` : ''}
   ${opsItems ? `<div class="sidebar-group"><div class="sidebar-group-label">People &amp; Ops</div>${opsItems}</div>` : ''}
   <div class="sidebar-footer">
+    <a href="#" id="tlc-k-open">⌘K searches every section</a>
     <a href="https://connect.timothystl.org" target="_blank">Connect ↗</a>
   </div>
 </aside>
+${CMDK_HTML}
 <div class="util-bar">
   <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
