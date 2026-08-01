@@ -115,11 +115,27 @@ export function valueSelect(name, selected, { allowNone = true } = {}) {
   return `<select name="${esc(name)}">${opts}</select>`;
 }
 
+// Four values is four options, so the spec asks for chips rather than a select
+// — the whole choice visible at once, each in its own colour, and a selected
+// one marked by its `solid` border rather than by being recoloured.
+export function valueChips(name, selected, { allowNone = true } = {}) {
+  const one = (v) => `<label class="tlc-vchip">
+    <input type="radio" name="${esc(name)}" value="${esc(v.key)}"${v.key === selected ? ' checked' : ''}>
+    <span style="background:${esc(v.tint)};color:${esc(v.ink)};--tlc-chip-solid:${esc(v.solid)};">${esc(v.short)} · ${esc(v.name)}</span>
+  </label>`;
+  const none = `<label class="tlc-vchip tlc-vchip--none">
+    <input type="radio" name="${esc(name)}" value=""${!valueByKey(selected) ? ' checked' : ''}>
+    <span>No value</span>
+  </label>`;
+  return `<div class="tlc-vchips" role="radiogroup">${VALUES.map(one).join('')}${allowNone ? none : ''}</div>`;
+}
+
 // ── THE PRIMARY CELL ─────────────────────────────────────────
 // The first column always carries a sub-line: the second-most-useful fact
 // about the row, so the drawer is not needed just to tell two rows apart.
-export function primaryCell(title, sub, { icon = '' } = {}) {
-  return `<div class="tlc-primary">${icon ? `<span class="tlc-primary-icon">${icon}</span>` : ''}<span class="tlc-primary-text"><span class="tlc-primary-title">${esc(title)}</span>${sub ? `<span class="tlc-primary-sub">${esc(sub)}</span>` : ''}</span></div>`;
+export function primaryCell(title, sub, { icon = '', iconClass = '' } = {}) {
+  const ic = icon ? `<span class="tlc-primary-icon${iconClass ? ` tlc-primary-icon--${esc(iconClass)}` : ''}">${icon}</span>` : '';
+  return `<div class="tlc-primary">${ic}<span class="tlc-primary-text"><span class="tlc-primary-title">${esc(title)}</span>${sub ? `<span class="tlc-primary-sub">${esc(sub)}</span>` : ''}</span></div>`;
 }
 
 // ── THE LIST SECTION ─────────────────────────────────────────
@@ -577,6 +593,11 @@ export const ADMIN_UI_CSS = `
 .tlc-edit:hover{text-decoration:underline;}
 .tlc-primary{display:flex;align-items:center;gap:10px;min-width:0;}
 .tlc-primary-icon{flex:none;width:30px;height:30px;border-radius:50%;background:var(--tlc-sand);display:flex;align-items:center;justify-content:center;font-size:14px;overflow:hidden;}
+/* A person is a round 52px avatar; a file is a 64x48 rectangle. They are
+   different things and the spec sizes them differently — a square thumbnail of
+   a landscape photo tells you less than the photo does. */
+.tlc-primary-icon--person{width:52px;height:52px;font-size:16px;}
+.tlc-primary-icon--file{width:64px;height:48px;border-radius:6px;}
 .tlc-primary-icon img{width:100%;height:100%;object-fit:cover;}
 .tlc-primary-text{min-width:0;display:flex;flex-direction:column;gap:2px;}
 .tlc-primary-title{font:600 13.5px/1.3 var(--tlc-sans);color:var(--tlc-ink);}
@@ -723,10 +744,22 @@ export const ADMIN_UI_CSS = `
 .tlc-chip span{display:inline-flex;align-items:center;font:600 12.5px var(--tlc-sans);color:var(--tlc-body);background:var(--tlc-parchment);border:1px solid var(--tlc-edge);border-radius:8px;padding:8px 13px;}
 .tlc-chip input:checked + span{border:2px solid var(--tlc-blue);background:#E7EEF7;color:var(--tlc-ink);padding:7px 12px;}
 .tlc-chip input:focus-visible + span{box-shadow:0 0 0 3px rgba(46,126,166,.25);}
+/* The four values as chips. Each keeps its own colour when selected — only the
+   2px border is added — so a chosen value still reads as that value. */
+.tlc-vchips{display:flex;flex-wrap:wrap;gap:8px;}
+.tlc-vchip{position:relative;cursor:pointer;}
+.tlc-vchip input{position:absolute;opacity:0;width:0;height:0;}
+.tlc-vchip span{display:inline-flex;align-items:center;font:600 12px var(--tlc-sans);border:1px solid transparent;border-radius:8px;padding:8px 13px;opacity:.72;}
+.tlc-vchip input:checked + span{opacity:1;border:2px solid var(--tlc-chip-solid);padding:7px 12px;}
+.tlc-vchip input:focus-visible + span{box-shadow:0 0 0 3px rgba(46,126,166,.25);}
+.tlc-vchip--none span{background:var(--tlc-parchment);color:var(--tlc-muted);border:1px solid var(--tlc-edge);--tlc-chip-solid:var(--tlc-muted);}
 .tlc-perms{display:flex;flex-direction:column;gap:2px;border:1px solid var(--tlc-edge);border-radius:9px;padding:6px;background:var(--tlc-parchment);}
 .tlc-perm{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:6px;cursor:pointer;}
 .tlc-perm:hover{background:#fff;}
-.tlc-perm input{margin:0;}
+/* A granted permission is visibly granted — scanning the list for what somebody
+   can reach should not mean reading twenty checkboxes one at a time. */
+.tlc-perm:has(input:checked){background:#F2F7FA;}
+.tlc-perm input{margin:0;accent-color:var(--tlc-blue);}
 .tlc-perm-name{flex:1;font-size:13px;color:var(--tlc-ink);}
 .tlc-perm-key{font:400 11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--tlc-muted);}
 .tlc-photo{display:flex;align-items:center;gap:12px;}

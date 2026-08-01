@@ -1010,6 +1010,46 @@ started: the device switcher (Desktop · Tablet · Phone as *real widths*, not a
 zoom), the info-card slot on banner blocks, the starter picker on New page, and
 the block library's full grouping. Recorded here so the next pass has the list.
 
+#### The per-screen pass, part one (v3.5.0, 2026-08-01)
+
+`screens/01-…` through `screens/21-…` each carry a written spec under the
+reference render: how the screen is built, its columns and widths, its filter
+chips *in order*, its drawer fields *in order* with the helper text under each,
+the rules the build must honour, and a "get this wrong and it shows" list.
+`admin/sections.js` already had the titles, filters and columns. This pass is
+the rest.
+
+What changed:
+
+- **The four values are chips, not a select** (`valueChips()` in `admin/ui.js`),
+  on Ministries, Partners, News and Christian Ed. Four options is four chips —
+  a select hides three of them behind a click. Each keeps its own colour when
+  selected; only the 2px `solid` border is added.
+- **A person is a round 52px avatar; a file is a 64×48 rectangle.** They were
+  the same 30px circle. A square crop of a landscape photo tells you less than
+  the photo does, and Media's whole job is showing you the photo.
+- **Staff's Photo column reads `Set` / `No photo yet`**, the spec's words.
+- **Redirects says `Redirecting`, not `Live`** — every other screen's "Live"
+  means "on the website", and a redirect is not a page.
+- **A ticked permission sits on `#F2F7FA` with a blue checkbox.** Scanning what
+  somebody can reach should not mean reading twenty checkboxes one at a time.
+
+**Still to do, and the list is the point.** Working from the per-screen specs,
+these are the gaps I have not closed:
+
+| Screen | What is missing |
+|---|---|
+| 02 Pages | `Links out` and `Clash` status pills; the drawer reached by a `Details` action rather than by the row |
+| 05 News | pinned rows sorting to the top with a pin marker before the title |
+| 06 Sermons | the `YouTube` / `Audio` / `Text only` media pill |
+| 10 Taps | the four tap cards above the toolbar, with taps-this-month and card count |
+| 13 Newsletter | a real rich-text toolbar on *every* rich field, not just the first |
+| 16 Gym | "Calendar first" as the genuine default layout, with the queue beside the month rather than below it |
+| 20 Audit | the drawer, read-only, with sand-filled fields |
+| 22 Editor | device switcher (real widths, not zoom), the info-card slot on banner blocks, the starter picker, the block library's grouping |
+
+None of those are blocked; they are simply not done yet.
+
 #### The handoff's own open questions (§8), as answered
 
 Andrew answered these on 2026-08-01. They gate later phases, so they are

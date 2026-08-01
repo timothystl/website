@@ -22,7 +22,7 @@ const STATIC_PAGES = [
   { slug: 'calendar',   label: 'Calendar' },
 ];
 import { html, sidebarShell, loginPage, setupPage, forgotPasswordPage, resetPasswordPage, permissionCheckboxes, formatDate, escapeHtml, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection } from './admin/helpers.js';
-import { renderListSection, renderDrawer, primaryCell, statusPill, valueChip, valueSelect, panel, countLabel, pluralise,
+import { renderListSection, renderDrawer, primaryCell, statusPill, valueChip, valueChips, panel, countLabel, pluralise,
          rowActions, toggleCell, panelList } from './admin/ui.js';
 import { SECTIONS, section as sectionCfg, columnsOf, filtersOf } from './admin/sections.js';
 import { VALUES, valueByKey, normalizeValue } from './admin/values.js';
@@ -2489,7 +2489,7 @@ ${sidebarShell('dashboard', currentUser, '', badges)}
             search: `${m.filename} ${m.alt || ''} ${uses.join(' ')}`.toLowerCase(),
             cells: [
               primaryCell(m.filename, uses.length ? `On ${uses.slice(0, 3).join(', ')}` : 'Used nowhere', {
-                icon: m.kind === 'photo' ? `<img src="${escapeHtml(thumb)}" alt="">` : '▶',
+                icon: m.kind === 'photo' ? `<img src="${escapeHtml(thumb)}" alt="">` : '▶', iconClass: 'file',
               }),
               // Missing alt text reads as a pill, not an empty box — the design
               // makes the gap look like something wrong rather than something
@@ -2916,7 +2916,7 @@ ${sidebarShell('partners', currentUser, `<a href="/partners">← All partners</a
         </div>
         <div class="form-group" style="margin:0;">
           <label>Core value <span style="color:#B85C3A;">*</span></label>
-          ${valueSelect('value', p?.value || preset, { allowNone: false })}
+          ${valueChips('value', p?.value || preset, { allowNone: false })}
         </div>
       </div>
       <div class="form-group">
@@ -4064,7 +4064,7 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
       </div>
       <div class="form-group">
         <label>Core value</label>
-        ${valueSelect('value', null)}
+        ${valueChips('value', null)}
       </div>
       <div class="btn-row" style="margin-top:16px;">
         <button type="submit" class="btn btn-primary">Add class</button>
@@ -4175,7 +4175,7 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
       </div>
       <div class="form-group" style="margin-top:16px;">
         <label>Core value</label>
-        ${valueSelect('value', ceRow.value)}
+        ${valueChips('value', ceRow.value)}
       </div>
       <div class="checkbox-row" style="margin-top:14px;">
         <input type="checkbox" name="active" id="ce-active" value="1"${ceRow.active ? ' checked' : ''}>
@@ -6017,7 +6017,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministr
       </div>
       <div class="form-group">
         <label>Core value <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— which of the church's four values this ministry carries</span></label>
-        ${valueSelect('value', page.value)}
+        ${valueChips('value', page.value)}
         <div style="font-size:12px;color:var(--gray);margin-top:4px;">Used by the values report on the dashboard and by the public values page. Leave blank if it genuinely does not belong to one.</div>
       </div>
       <div class="form-group">
@@ -6607,10 +6607,10 @@ ${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)
             filter: m.photo_url ? 'on-the-website' : 'hidden',
             search: `${m.name} ${m.title || ''} ${m.email || ''}`.toLowerCase(),
             cells: [
-              primaryCell(m.name, m.title || 'No role given', { icon: avatar }),
+              primaryCell(m.name, m.title || 'No role given', { icon: avatar, iconClass: 'person' }),
               m.email ? escapeHtml(m.email) : '<span style="color:var(--tlc-muted);">—</span>',
               `${m.display_order ?? 0}`,
-              m.photo_url ? statusPill('good', 'Photo set') : statusPill('warn', 'No photo'),
+              m.photo_url ? statusPill('good', 'Set') : statusPill('warn', 'No photo yet'),
             ],
             // Reordering stays a pair of buttons rather than drag-and-drop:
             // this list is short, and the order it produces is the order on the
@@ -7338,7 +7338,7 @@ ${sidebarShell('subscribers', currentUser, `<a href="https://app.brevo.com" targ
             primaryCell('/' + String(r.path).replace(/^\/+/, ''), r.label || 'No label'),
             `<span title="${escapeHtml(r.url)}">${escapeHtml(short(r.url))}</span>`,
             'Hand-made',
-            r.active ? statusPill('good', 'Live') : statusPill('plain', 'Off'),
+            r.active ? statusPill('good', 'Redirecting') : statusPill('plain', 'Off'),
           ],
           actions: rowActions(
             { label: 'Edit', href: `/redirects/edit/${encodeURIComponent(r.path)}` },
@@ -7357,7 +7357,7 @@ ${sidebarShell('subscribers', currentUser, `<a href="https://app.brevo.com" targ
             primaryCell('/' + String(r.path).replace(/^\/+/, ''), r.label || 'Giving or payment link'),
             `<span title="${escapeHtml(r.url)}">${escapeHtml(short(r.url))}</span>`,
             'Giving',
-            r.active ? statusPill('good', 'Live') : statusPill('plain', 'Off'),
+            r.active ? statusPill('good', 'Redirecting') : statusPill('plain', 'Off'),
           ],
           actions: `<a class="tlc-edit" href="/giving">Manage in Giving</a>`,
         });
@@ -7393,7 +7393,7 @@ ${sidebarShell('subscribers', currentUser, `<a href="https://app.brevo.com" targ
             primaryCell(p.shortLink, `Short link for ${p.menu_label || p.title}`),
             escapeHtml(p.slug),
             'Short link',
-            p.shortLinkClash ? statusPill('bad', 'Link clash') : statusPill('good', 'Live'),
+            p.shortLinkClash ? statusPill('bad', 'Link clash') : statusPill('good', 'Redirecting'),
           ],
           actions: `<a class="tlc-edit" href="/pages/${encodeURIComponent(p.id)}/link">Change</a>`,
           warn: p.shortLinkClash ? `${p.shortLinkClash.link} is also wanted by ${p.shortLinkClash.withTitle}, so this short link is switched off.` : '',

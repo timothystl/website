@@ -1247,5 +1247,36 @@ group('the sidebar is the design’s five groups');
   has(body, 'sidebar-item-child', 'Ministries and the rest are nested');
 }
 
+group('the per-screen reference files');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const now = new Date().toISOString();
+
+  // 04-partners / 03-ministries / 05-news / 07-ed: "Core value: chips".
+  // Four options is four chips, not a select that hides three of them.
+  const partners = await (await call(env, '/partners/new', { cookie })).text();
+  has(partners, 'tlc-vchips', 'the core value is chosen from chips');
+  has(partners, 'role="radiogroup"', 'operable by keyboard');
+  ok(!/<select name="value"/.test(partners), 'and not from a select');
+
+  // 15-staff: a person is a round 52px avatar, and the Photo column reads
+  // "Set" / "No photo yet".
+  db.prepare("INSERT INTO staff_members (name,title,email,display_order) VALUES ('Jane Doe','Organist','j@x.co',1)").run();
+  const staff = await (await call(env, '/staff', { cookie })).text();
+  has(staff, 'tlc-primary-icon--person', 'a person gets the round avatar');
+  has(staff, 'No photo yet', 'and the spec’s own wording for a missing one');
+
+  // 11-redirects: the status column reads Redirecting, not Live.
+  db.prepare("INSERT INTO redirects (path,url,label,category,active) VALUES ('zoom','https://z.example','Zoom','general',1)").run();
+  const red = await (await call(env, '/redirects', { cookie })).text();
+  has(red, 'Redirecting', 'a live redirect says what it does');
+
+  // 12-media: a file is a 64x48 rectangle, not a round avatar.
+  db.prepare("INSERT INTO ministry_media (url,filename,kind,created_at) VALUES ('/i/a.jpg','a.jpg','photo',?)").run(now);
+  const media = await (await call(env, '/media', { cookie })).text();
+  has(media, 'tlc-primary-icon--file', 'a file gets the rectangular thumbnail');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
