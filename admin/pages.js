@@ -69,6 +69,94 @@ export function menuTree(rows) {
   }));
 }
 
+// ── SHORT LINKS ──────────────────────────────────────────────
+// Every page answers on a short address as well as its real one, so `/beliefs`
+// works as well as `/about/beliefs` — the difference between something you can
+// say from the pulpit and something you have to spell out.
+//
+// The short link is the last segment of the address, derived rather than typed,
+// so it cannot drift when a page is renamed. `short_link` on the row overrides
+// it, and that column exists for exactly one reason: it is how a volunteer
+// resolves a clash.
+//
+// The homepage has none — `/` has no last segment, and a short link for the
+// front page would be a second address for the thing already at the root.
+export function shortLinkFor(page) {
+  if (!page || page.slug === '/') return null;
+  const override = String(page.short_link || '').trim();
+  if (override) return '/' + override.replace(/^\/+|\/+$/g, '');
+  const segment = String(page.slug || '').split('/').filter(Boolean).pop();
+  return segment ? '/' + segment : null;
+}
+
+// Two pages wanting one short link is a real situation — /worship/sermons and a
+// top-level Sermons page both derive `/sermons` — and the rule is that it is
+// **flagged, never guessed**. Silently giving it to whichever page sorted first
+// would mean an address said out loud on Sunday quietly pointing at the wrong
+// page, which nobody would notice until somebody complained.
+//
+// A short link that collides with another page's *real* address is the same
+// problem: the real address must win, so the short link is refused rather than
+// shadowing a page that already answers there.
+export function shortLinkClashes(pages) {
+  const byLink = new Map();
+  const addresses = new Map();
+  for (const p of pages) addresses.set(p.slug, p);
+
+  for (const p of pages) {
+    const link = shortLinkFor(p);
+    if (!link) continue;
+    // A top-level page's short link is its own address. That is identity, not
+    // a collision — /about is reached at /about.
+    if (link === p.slug) continue;
+    const list = byLink.get(link) || [];
+    list.push(p);
+    byLink.set(link, list);
+  }
+
+  const out = new Map();
+  for (const [link, list] of byLink) {
+    const realPage = addresses.get(link);
+    // Somebody else's actual address.
+    if (realPage && !list.includes(realPage)) {
+      for (const p of list) out.set(p.id, { link, withTitle: realPage.menu_label || realPage.title, reason: 'address' });
+      continue;
+    }
+    if (list.length > 1) {
+      for (const p of list) {
+        const other = list.find((x) => x.id !== p.id);
+        out.set(p.id, { link, withTitle: other ? (other.menu_label || other.title) : '', reason: 'short' });
+      }
+    }
+  }
+  return out;
+}
+
+// Decorates a list with `shortLink` and `shortLinkClash` in one pass, so the
+// Pages screen and the public API cannot disagree about which links are safe.
+export function withShortLinks(pages) {
+  const clashes = shortLinkClashes(pages);
+  return pages.map((p) => Object.assign({}, p, {
+    shortLink: shortLinkFor(p),
+    shortLinkClash: clashes.get(p.id) || null,
+  }));
+}
+
+// The short links that are safe to publish: everything except a clash and
+// except a link that is already a page's own address. Returned as
+// shortLink → slug so the public router can resolve one without a second
+// lookup table.
+export function shortLinkRoutes(pages) {
+  const out = {};
+  for (const p of withShortLinks(pages)) {
+    if (!p.shortLink || p.shortLinkClash) continue;
+    if (p.shortLink === p.slug) continue;
+    if (p.status !== 'published') continue;
+    out[p.shortLink] = p.slug;
+  }
+  return out;
+}
+
 // Renaming a page regenerates its address. This is the one place a well-meaning
 // volunteer can break an inbound link, so the caller always writes a redirect
 // from the old address — see pageRename below.

@@ -494,6 +494,39 @@ Menu screen persists to `pages`. It also gives Word of Life's site as
 `wordoflifestl.org`; the real one, already linked from `/wol`, is
 `wordoflifeschool.net`, and that is what is seeded.
 
+#### Phase 3 — short links, clashes, redirects (2026-08-01)
+
+- **A short link is derived, not typed.** `shortLinkFor()` in `admin/pages.js`
+  takes the last segment of the address, so `/beliefs` works as well as
+  `/about/beliefs` — the difference between an address you can say from the
+  pulpit and one you have to spell out. Because it is derived, it cannot drift
+  when a page is renamed. `pages.short_link` overrides it and exists for
+  exactly one reason: resolving a clash.
+- **A clash is flagged, never guessed.** Two pages both deriving `/sermons`
+  both get a `LINK CLASH` pill and a warning row naming the other page, and
+  **neither** short link is published. Silently giving it to whichever page
+  sorted first would mean an address announced on Sunday quietly reaching the
+  wrong page — the kind of thing nobody notices until somebody complains. A
+  short link that collides with another page's *real* address is refused for
+  the same reason: the real address wins.
+- **Rename 301s beat short links.** `/api/pages` merges both into one
+  `redirects` map, with `page_redirects` applied **last** so it wins. An old
+  address is a promise already made — it is in bulletins and in Google —
+  whereas a short link is a convenience the office can change in a click.
+  Getting this order backwards silently breaks the very inbound links
+  `page_redirects` exists to protect. Covered by a test that asserts the
+  precedence directly.
+- **The Redirects screen shows all four kinds in one list** — hand-made,
+  automatic (from renames), derived short links, and giving — because somebody
+  asking "where does /zoom go" should not have to know which table it lives in.
+  Short links are shown even though they are stored nowhere; hiding them would
+  make the list a half-truth.
+- **Automatic 301s on rename were already built** (`pageRename()` +
+  `page_redirects`, from the site editor). Phase 3 did not need to add them.
+- **Ministries answer on both addresses** — `/music` and `/ministries/music`,
+  resolved in `public/index.html`'s router, canonicalising to the short one.
+  An unknown ministry still 404s.
+
 #### The handoff's own open questions (§8), as answered
 
 Andrew answered these on 2026-08-01. They gate later phases, so they are

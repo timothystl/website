@@ -305,5 +305,111 @@ group('badges match the worklist');
   eq(badge && badge[2], '3', 'and it is the same number the worklist shows');
 }
 
+
+// ── phase 3: short links, clashes, redirects ─────────────────────────────────
+group('short links on the Pages screen');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const now = new Date().toISOString();
+
+  ok(db.prepare('PRAGMA table_info(pages)').all().some((c) => c.name === 'short_link'),
+    'pages carries a short_link override column');
+
+  // The Worker seeds the real site's pages on boot. Clear them so this test
+  // owns its fixture and asserts against addresses it chose.
+  db.prepare('DELETE FROM pages').run();
+  const mk = (id, title, slug, parent) => db.prepare(
+    "INSERT INTO pages (id,title,slug,parent_id,sort,template,status,in_menu,blocks,published_blocks,updated_at) VALUES (?,?,?,?,0,'standard','published',1,'[]','[]',?)"
+  ).run(id, title, slug, parent || null, now);
+
+  mk('about', 'About Us', '/about');
+  mk('beliefs', 'What We Believe', '/about/beliefs', 'about');
+
+  let body = await (await call(env, '/pages', { cookie })).text();
+  has(body, 'Short link', 'the Pages list has a Short link column');
+  has(body, '/beliefs', 'a child page shows its derived short link');
+  lacks(body, 'Link clash', 'nothing clashes yet');
+
+  // Two pages both deriving /sermons.
+  mk('sermons', 'Sermons', '/worship/sermons');
+  mk('archive', 'Sermon Archive', '/media/sermons');
+  body = await (await call(env, '/pages', { cookie })).text();
+  has(body, 'Link clash', 'a collision is flagged');
+  has(body, 'already taken by the', 'with a warning row that names the other page');
+  has(body, 'Fix short link', 'and an action to resolve it');
+
+  // Resolving it by hand clears both.
+  const res = await worker.fetch(new Request('https://admin.timothystl.org/pages/archive/link', {
+    method: 'POST',
+    headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
+    body: 'short_link=archive',
+  }), env, ctx);
+  eq(res.status, 302, 'saving a short link redirects');
+  eq(db.prepare("SELECT short_link FROM pages WHERE id='archive'").get().short_link, 'archive', 'and stores it normalised');
+
+  body = await (await call(env, '/pages', { cookie })).text();
+  lacks(body, 'Link clash', 'giving one of them a different short link clears the clash');
+
+  // The form itself.
+  const form = await (await call(env, '/pages/beliefs/link', { cookie })).text();
+  has(form, 'timothystl.org/', 'the short-link form shows the address it builds');
+  has(form, 'follow the page address automatically', 'and explains what blank means');
+}
+
+group('short links reach the public API');
+{
+  const { db, env } = await boot();
+  const now = new Date().toISOString();
+  db.prepare('DELETE FROM pages').run();
+  const mk = (id, title, slug, parent, blocks) => db.prepare(
+    "INSERT INTO pages (id,title,slug,parent_id,sort,template,status,in_menu,blocks,published_blocks,updated_at) VALUES (?,?,?,?,0,'standard','published',1,?,?,?)"
+  ).run(id, title, slug, parent || null, blocks || '[]', blocks || '[]', now);
+
+  mk('about', 'About Us', '/about');
+  mk('beliefs', 'What We Believe', '/about/beliefs', 'about');
+
+  let api = await (await call(env, '/api/pages')).json();
+  eq(api.redirects['/beliefs'], '/about/beliefs', 'a short link is published as a route');
+  eq('/about' in api.redirects, false, 'a page already at its own address needs no route');
+
+  // A clash publishes nothing at all — better a 404 than an address said out
+  // loud on Sunday quietly reaching the wrong page.
+  mk('s1', 'Sermons', '/worship/sermons');
+  mk('s2', 'Archive', '/media/sermons');
+  api = await (await call(env, '/api/pages')).json();
+  eq('/sermons' in api.redirects, false, 'a clashing short link is published for neither page');
+
+  // A rename 301 must beat a short link on the same address: the old address
+  // is a promise already in bulletins and in Google.
+  db.prepare("INSERT INTO page_redirects (from_slug,to_slug,created_at) VALUES ('/beliefs','/about/what-we-believe',?)").run(now);
+  api = await (await call(env, '/api/pages')).json();
+  eq(api.redirects['/beliefs'], '/about/what-we-believe',
+    'a rename 301 wins over a short link wanting the same address');
+}
+
+group('the Redirects screen shows every kind');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const now = new Date().toISOString();
+  db.prepare("INSERT INTO redirects (path,url,label,category,active) VALUES ('zoom','https://us02web.zoom.us/j/314','Zoom','general',1)").run();
+  db.prepare("INSERT INTO redirects (path,url,label,category,active) VALUES ('market','https://square.link/x','Market vendor','giving',1)").run();
+  db.prepare("INSERT INTO page_redirects (from_slug,to_slug,created_at) VALUES ('/about/our-staff','/about/staff',?)").run(now);
+  db.prepare('DELETE FROM pages').run();
+  db.prepare("INSERT INTO pages (id,title,slug,parent_id,sort,template,status,in_menu,blocks,published_blocks,updated_at) VALUES ('b','Beliefs','/about/beliefs',NULL,0,'standard','published',1,'[]','[]',?)").run(now);
+
+  const body = await (await call(env, '/settings', { cookie })).text();
+  has(body, '/zoom', 'a hand-made redirect appears');
+  has(body, 'Hand-made', 'labelled by kind');
+  has(body, '/about/our-staff', 'an automatic 301 from a rename appears');
+  has(body, 'Automatic', 'labelled as automatic');
+  has(body, 'Leave it', 'and staff are told not to touch it');
+  has(body, '/beliefs', 'a derived short link appears too');
+  has(body, 'Short link', 'labelled as such');
+  has(body, 'Giving', 'and a giving link, managed elsewhere but listed here');
+  has(body, 'last year’s bulletins', 'the section note explains why automatics matter');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
