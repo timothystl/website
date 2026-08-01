@@ -656,6 +656,28 @@ is that these are now the same screen as the other nine.
 
 Run: the section is covered by `test/admin-redesign.test.mjs`.
 
+#### Phase 7 (part) — Gym Rentals, both layouts (2026-08-01)
+
+Andrew's answer to §8.3 was "ship both with a toggle", so `/gym-rentals` now
+has **Queue** and **Calendar** views.
+
+- **The queue view is the screen that already existed**, untouched. It carries
+  the bulk confirm/release/delete, the per-org accordions, the invoice
+  generation and the Google Calendar push — the parts with real money and real
+  bookings behind them. Rewriting that to fit a list config would have risked a
+  lot to gain consistency on the one screen where consistency matters least,
+  because only one person uses it.
+- **The calendar view is read-only, deliberately.** It is built from the
+  bookings already fetched for the queue, so switching costs no extra queries,
+  and it says on its face that confirming, releasing and invoicing happen in
+  the Queue view. Two places to confirm a hold would be two places to get it
+  wrong.
+- Holds are amber, confirmed bookings green, blocked dates greyed with their
+  reason. Month navigation preserves the view.
+
+Still to do in Phase 7: Giving (the two page surfaces, the keep-in-step flag,
+and Gift-vs-Payment tagging on links).
+
 #### The handoff's own open questions (§8), as answered
 
 Andrew answered these on 2026-08-01. They gate later phases, so they are
@@ -670,8 +692,8 @@ recorded here rather than left in the handoff.
    unchanged by the v3.0.0 rename, so the account can be made from the Users
    tab today. Until a second person holds it, the approval step has only one
    possible approver and is effectively a formality.
-3. **Gym Rentals layout** (calendar-first vs queue-first) — deferred to
-   Phase 7, not yet answered.
+3. **Gym Rentals layout** — answered 2026-08-01: **both, behind a toggle**.
+   See "Phase 7 (part)" above.
 4. **Dashboard layouts** — answered by shipping: both, behind a toggle.
 5. **CFNA / Concordia newsletter blocks** — still open, and it only matters
    once Phase 5 starts.

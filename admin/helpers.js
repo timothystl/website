@@ -3,7 +3,7 @@
 
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
-import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS } from './ui.js';
+import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS } from './ui.js';
 
 export const VERSION = 'v3.0.6'; // major: the admin overhaul — one pattern across every section, new IA, renamed permissions
 
@@ -178,6 +178,7 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
 ${ADMIN_UI_CSS}
 ${MENU_CSS}
 ${PRESET_CSS}
+${GYM_CAL_CSS}
 /* ── SIDEBAR, REDESIGNED ───────────────────────────────────────
    Three groups, the page-producing sections nested under Pages, a gold inset
    bar plus a gold dot on the active item, and badges that count only things a

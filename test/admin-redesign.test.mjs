@@ -706,5 +706,39 @@ group('the permission checkboxes are the truth');
   has(body, 'Full access', 'and full access');
 }
 
+
+// ── phase 7: gym, both layouts ───────────────────────────────────────────────
+group('gym rentals ships both layouts');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const now = new Date().toISOString();
+  const month = now.slice(0, 7);
+  db.prepare("INSERT INTO gym_groups (id,name,contact,email,active) VALUES (1,'Southside Volleyball','Ann','a@b.co',1)").run();
+  db.prepare("INSERT INTO gym_bookings (group_id,booking_date,start_time,end_time,status,created_at) VALUES (1,?,'18:00','20:00','hold',?)")
+    .run(`${month}-14`, now);
+  db.prepare("INSERT INTO gym_bookings (group_id,booking_date,start_time,end_time,status,created_at) VALUES (1,?,'18:00','20:00','confirmed',?)")
+    .run(`${month}-21`, now);
+  db.prepare("INSERT INTO gym_blocked_dates (date,reason) VALUES (?,'Christmas Market')").run(`${month}-24`);
+
+  const queue = await (await call(env, '/gym-rentals', { cookie })).text();
+  eq((await call(env, '/gym-rentals', { cookie })).status, 200, 'the queue view responds');
+  has(queue, 'Gym view', 'the layout toggle is present');
+  has(queue, 'Southside Volleyball', 'and the queue still lists holds by group');
+  has(queue, 'Confirm All', 'with its bulk actions intact');
+
+  const cal = await (await call(env, '/gym-rentals?view=calendar', { cookie })).text();
+  eq((await call(env, '/gym-rentals?view=calendar', { cookie })).status, 200, 'the calendar view responds');
+  has(cal, 'gymcal-grid', 'the month grid renders');
+  has(cal, 'gymcal-chip--hold', 'a hold is colour-coded');
+  has(cal, 'gymcal-chip--confirmed', 'and so is a confirmed booking');
+  has(cal, 'Christmas Market', 'a blocked date is shown with its reason');
+  has(cal, 'Confirming, releasing and invoicing all happen in the Queue view',
+    'the calendar says where bookings actually change, so there is one place to do it');
+
+  // Month navigation must not lose the view.
+  has(cal, 'view=calendar&m=', 'month navigation keeps the calendar view');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

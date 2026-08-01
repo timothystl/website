@@ -1,7 +1,7 @@
 // ── GYM RENTAL HELPERS & ROUTE HANDLER ──────────────────────
 // Extracted from tlc-admin-worker.js
 
-import { html, sidebarShell, formatDate, tinymceEditorSection } from './helpers.js';
+import { html, sidebarShell, formatDate, tinymceEditorSection, escapeHtml } from './helpers.js';
 import { sendTransactionalEmail } from './email.js';
 
 // ── IMAGE HELPERS ───────────────────────────────────────────
@@ -1960,6 +1960,71 @@ ${portalHeader}
           confirmedHtml = order.map(n => orgAccordion(n, groups[n], 'confirmed')).join('');
         }
 
+        // ── CALENDAR VIEW ──
+        // Built from the bookings already fetched above, so switching layout
+        // costs no extra queries. Read-only on purpose: every action that
+        // changes a booking lives in the queue view, where the confirmations
+        // and invoice generation already are. Two places to confirm a hold
+        // would be two places to get it wrong.
+        const calMonth = url.searchParams.get('m') || new Date().toISOString().slice(0, 7);
+        const [calY, calM] = calMonth.split('-').map(Number);
+        const monthStart = new Date(Date.UTC(calY, calM - 1, 1));
+        const daysInMonth = new Date(Date.UTC(calY, calM, 0)).getUTCDate();
+        const leading = monthStart.getUTCDay();
+        const blockedRes = await env.DB.prepare('SELECT date, reason FROM gym_blocked_dates').all().catch(() => ({ results: [] }));
+        const blockedBy = {};
+        for (const b of (blockedRes.results || [])) blockedBy[b.date] = b.reason || 'Blocked';
+
+        const byDate = {};
+        const addTo = (b, kind) => {
+          const d = b.booking_date;
+          if (!d || d.slice(0, 7) !== calMonth) return;
+          (byDate[d] = byDate[d] || []).push({ kind, b });
+        };
+        for (const b of confirmedRes.results) addTo(b, 'confirmed');
+        for (const b of holdsRes.results) addTo(b, 'hold');
+
+        const shiftMonth = (delta) => {
+          const d = new Date(Date.UTC(calY, calM - 1 + delta, 1));
+          return d.toISOString().slice(0, 7);
+        };
+        const monthLabel = monthStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+
+        let cells = '';
+        for (let i = 0; i < leading; i++) cells += '<div class="gymcal-cell gymcal-cell--pad"></div>';
+        for (let day = 1; day <= daysInMonth; day++) {
+          const iso = `${calY}-${String(calM).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          const items = byDate[iso] || [];
+          const blocked = blockedBy[iso];
+          const chips = items.slice(0, 3).map((it) =>
+            `<span class="gymcal-chip gymcal-chip--${it.kind}" title="${escapeHtml((it.b.group_name || 'Unassigned') + ' · ' + (it.b.start_time || '') + '–' + (it.b.end_time || ''))}">${escapeHtml((it.b.group_name || 'Unassigned').slice(0, 14))}</span>`
+          ).join('');
+          const more = items.length > 3 ? `<span class="gymcal-more">+${items.length - 3} more</span>` : '';
+          cells += `<div class="gymcal-cell${blocked ? ' gymcal-cell--blocked' : ''}${iso === today ? ' gymcal-cell--today' : ''}">
+      <span class="gymcal-day">${day}</span>
+      ${blocked ? `<span class="gymcal-blocked" title="${escapeHtml(blocked)}">${escapeHtml(blocked.slice(0, 18))}</span>` : ''}
+      ${chips}${more}
+    </div>`;
+        }
+
+        const calendarHtml = `<div class="gymcal-head">
+    <a class="gymcal-nav" href="/gym-rentals?view=calendar&m=${shiftMonth(-1)}">← ${new Date(Date.UTC(calY, calM - 2, 1)).toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' })}</a>
+    <span class="gymcal-title">${escapeHtml(monthLabel)}</span>
+    <a class="gymcal-nav" href="/gym-rentals?view=calendar&m=${shiftMonth(1)}">${new Date(Date.UTC(calY, calM, 1)).toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' })} →</a>
+  </div>
+  <div class="gymcal-grid">
+    ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d) => `<div class="gymcal-dow">${d}</div>`).join('')}
+    ${cells}
+  </div>
+  <div class="gymcal-key">
+    <span><i class="gymcal-swatch gymcal-chip--confirmed"></i>Confirmed</span>
+    <span><i class="gymcal-swatch gymcal-chip--hold"></i>Hold, awaiting review</span>
+    <span><i class="gymcal-swatch gymcal-swatch--blocked"></i>Blocked date</span>
+  </div>
+  <p class="tlc-note" style="margin:14px 16px 0;"><span class="tlc-note-mark">◆</span><span>This view is for seeing the shape of a month. Confirming, releasing and invoicing all happen in the Queue view, so there is only ever one place a booking changes.</span></p>`;
+
+        const gymView = url.searchParams.get('view') === 'calendar' ? 'calendar' : 'queue';
+
         const confirmAllBtn = holdsRes.results.length >= 1
           ? `<form method="POST" action="/gym-rentals/bookings/confirm-all-holds" onsubmit="return confirm('Confirm all ${holdsRes.results.length} holds and generate invoices?')" style="display:inline;"><button type="submit" class="btn btn-sm btn-primary">Confirm All (${holdsRes.results.length})</button></form>`
           : '';
@@ -1968,10 +2033,19 @@ ${portalHeader}
 ${sidebarShell('gym', currentUser)}
 <style>details > summary { list-style: none; } details > summary::-webkit-details-marker { display: none; }</style>
 <div class="wrap">
-  <div class="page-title">Gym Rentals</div>
-  <div class="page-sub">Manage rental groups, bookings, and schedules.</div>
+  <div class="tlc-dash-head" style="margin-bottom:16px;">
+    <div>
+      <h1 class="tlc-title">Gym Rentals</h1>
+      <p class="tlc-purpose">Requests to review, what is booked, and the invoices that follow. Holds lapse after 48 hours if nobody confirms them.</p>
+    </div>
+    <nav class="tlc-seg" aria-label="Gym view">
+      <a href="/gym-rentals" class="${gymView === 'queue' ? 'is-on' : ''}">Queue</a>
+      <a href="/gym-rentals?view=calendar" class="${gymView === 'calendar' ? 'is-on' : ''}">Calendar</a>
+    </nav>
+  </div>
   ${gymAlert}
-  <div class="stat-row">
+  ${gymView === 'calendar' ? `<div class="tlc-panel" style="margin-bottom:20px;">${calendarHtml}</div>` : ''}
+  <div class="stat-row"${gymView === 'calendar' ? ' style="display:none;"' : ''}>
     <div class="stat-card">
       <div class="stat-label">Pending holds</div>
       <div class="stat-num" style="color:var(--steel);">${holdsRes.results.length}</div>
@@ -2003,6 +2077,7 @@ ${sidebarShell('gym', currentUser)}
     <a href="/gym-rentals/settings" class="btn btn-secondary">Settings</a>
     <a href="/gym-rentals/test-gcal" class="btn btn-secondary" style="margin-left:auto;">Test GCal →</a>
   </div>
+  <div${gymView === 'calendar' ? ' style="display:none;"' : ''}>
   <div style="background:var(--mist);border:1px solid var(--border);border-radius:10px;padding:12px 18px;margin-bottom:24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
     <div style="font-size:14px;color:var(--charcoal);">Rental rate: <strong>$${rateRow?.value || '25.00'}/hr</strong></div>
     <a href="/gym-rentals/settings" style="font-size:13px;color:var(--teal,#2E7EA6);text-decoration:none;border-bottom:1px solid currentColor;">Change rate →</a>
@@ -2030,6 +2105,7 @@ ${sidebarShell('gym', currentUser)}
     </div>
     ${confirmedHtml}
   </div>
+</div>
 </div>
 <script>
 function getChecked(cls) {
