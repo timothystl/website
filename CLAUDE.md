@@ -149,7 +149,8 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Gym Rentals | Office staff (Dinger) | **DONE** — full rental management at /gym-rentals |
 | Users | Admins | **DONE** — user accounts + per-tab permission checkboxes |
 | Subscribers | Office staff | **DONE** — newsletter subscriber list |
-| Redirects | Office staff | **DONE** — admin-managed URL redirects + Zoom/council-files links (renamed from "Settings"; gym rate config lives under Gym Rentals, giving-related links moved to the new Giving tab) |
+| Redirects | Office staff | **DONE** — admin-managed URL redirects at `/redirects`, all four kinds in one list (hand-made, automatic 301s from renames, derived short links, giving) · **on the shared pattern** with a drawer |
+| Settings | Office staff — requires `settings_manage` | **DONE** (v3.1.0) — the `site_settings` keys the rest of the site reads, each with what reads it; anything with a screen of its own links there rather than duplicating the field |
 | Giving | Office staff — requires `giving_manage` permission | **DONE** (2026-07-27) — base Tithe.ly link, give.timothystl.org's amount tiers + per-tier links, and vendor/market one-off payment links (Tithe.ly or Square); see below |
 | Payroll | Office staff (Dinger) — requires `payroll_manage` permission | **DONE** — combined biweekly payroll (church staff + MDO preschool staff); see "Payroll & Supabase" below |
 | Audit Log | Admins | **DONE** — change history + rollback, requires `audit_view` |
@@ -445,13 +446,13 @@ there are **16** keys: the spec's 14 with the spec's meanings, plus those two.
 
 #### Sections converted so far
 
-Notices · Christian Ed · News & Events · Sermons · Ministries · Partners, plus
-the Dashboard and the sidebar. Everything else still renders its pre-redesign
-markup and is reachable from the new sidebar — the conversion is section by
-section on purpose.
+Every list section now reads from `admin/sections.js` (see below). Gym Rentals,
+Payroll and the Giving link table keep their bespoke screens on purpose.
 
-- **The sidebar is three groups** with the page-producing sections nested under
-  Pages. Badges only show to somebody who can act on them.
+- **The sidebar is the design's five groups** — Website, Email, Money &
+  Building, People & Access, Setup, with Dashboard above them unlabelled —
+  and the page-producing sections nested under Pages. Badges only show to
+  somebody who can act on them.
 - **Newsletter and News & Events are now separate sections.** `/newsitems` is
   News only; the newsletter list stays at `/`. The newsletter approval/send
   redirects were repointed from `/newsitems?msg=…` to `/?msg=…` so they land
@@ -736,6 +737,80 @@ Under two characters returns nothing rather than the whole database. The
 palette lives in `sidebarShell()`, so it is on every screen.
 
 Run: `node admin/audit.test.mjs`.
+
+#### The mockup-match pass (v3.1.0, 2026-08-01)
+
+The first nine phases were built having looked at six of the twenty-six
+mockups, writing every screen's wording from the README's prose. Andrew's
+verdict — *"the editors don't look like the design mockups I gave you, the
+organization of tabs isn't the same"* — was right, and this pass is the fix.
+
+- **`admin/sections.js` is the design's own `SECTIONS` config, lifted verbatim**
+  from `Admin Sections Prototype.dc.html`. Every screen's title, purpose line,
+  action label, search placeholder, filter set, column layout and `◆` note is
+  read from it. **If you are typing one of those strings into a route handler,
+  that is the bug.** `admin/sections.test.mjs` pins the values that had
+  drifted, so the same mistake cannot be made twice quietly.
+- **The IA is the design's `NAV`** — Website · Email · Money & Building ·
+  People & Access · Setup, Dashboard above them with no heading, and
+  Ministries/Partners/News/Sermons/Christian Ed nested under Pages (the
+  design's `CHILD_OF`). The old three-group arrangement was mine.
+- **Redirects and Settings are two sections, not one.** `/settings` used to
+  render the redirects screen; it is now the Settings list — the `site_settings`
+  keys the rest of the site reads, each with what reads it. Redirects moved to
+  `/redirects` with a drawer for adding and editing. **`/settings/update` now
+  allowlists the keys it will write** — it previously accepted any key in the
+  body, which was AW-11 in the July 2026 review.
+- **A setting with a screen of its own links to that screen** rather than
+  offering a second field writing the same key. Church details go to
+  `/pages/details`, giving to `/giving`, the gym ones to `/gym-rentals`. Two
+  forms writing one key is two places to disagree about what it means.
+- **Giving's Funds and Amount Tiers are two panels side by side**, each row a
+  grip, a name, a state and one action, with the fields in a drawer — eight
+  funds is eight rows rather than forty inputs. `panelList()` in `admin/ui.js`
+  is that shape, once. Reordering posts the whole resulting order and the
+  server renumbers from scratch, same contract as the menu.
+- **⚠ A toggle posts a hidden `0` ahead of its checkbox**, so
+  `form.get(name) !== null` is *always* true and reads as on. The giving and
+  redirect handlers had exactly that shape; they now check
+  `form.getAll(name).includes('1')`. A test asserts an unticked Default really
+  stores 0 — without it, editing any fund would have silently made it the
+  default.
+- **The newsletter editor is two columns** — the form, and a sticky live
+  preview with an inbox strip above it that mirrors the subject and preview
+  text as you type. The body redraws on a pause, through `POST
+  /newsletter/preview`, which is the same `buildEmailHtml` the send path uses.
+  Format is two small pills (Weekly / Special edition), not the two large
+  cards.
+- **The newsletter list gained its `Sends` column** — how many an issue went
+  to, or for one not yet sent, how many it would go to today.
+- **The audit log folds the action into the Change cell** ("Published · Page ·
+  Home") instead of carrying a pill column of its own. On a screen where every
+  row is an action, a column of them is a column of noise.
+- **Subscribers filters by source** (Website / Added by office / Bounced) and
+  its action is **Import CSV** — a real import, additive only, that adds to
+  both the local table and Brevo and never removes or overwrites anybody.
+  `parseSubscriberCsv()` in `admin/newsletter.js` reads whatever columns it can
+  find rather than demanding a layout, and *counts* unusable rows instead of
+  dropping them quietly. A bounce and an unsubscribe are shown apart, and a
+  bounce is only ever reported when Brevo actually says so — every blacklisted
+  address is not a bounce, and guessing would send the office chasing people
+  who simply opted out.
+- **A status column has a 126px floor** (`minmax` in `renderListSection`'s
+  grid, from the design's own `grid()`): a pill that wraps reads as two broken
+  words rather than one status.
+
+Not done, and deliberately: Gym Rentals and Payroll keep their bespoke screens
+(Gym because the money and the bookings are behind it and one person uses it;
+Payroll is Phase 8 and unstarted). Filtered Mail is not in the design's IA at
+all — it shipped after the handoff — and sits under Email, which is where
+somebody would look for held mail.
+
+**One question is still open**, and it is the only place the handoff
+contradicts itself: the mockups render a row's warning row **above** the row it
+refers to (visible in `pages.png` and `media.png`), while README §3 says it
+"grows a warning row beneath it". Warnings currently render beneath. Settle it
+before changing them.
 
 #### The handoff's own open questions (§8), as answered
 

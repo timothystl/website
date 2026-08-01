@@ -164,3 +164,79 @@ export function sendSummary(row) {
   if (count) return `Sent to ${count}`;
   return 'Sent';
 }
+
+// ── SUBSCRIBER IMPORT ────────────────────────────────────────
+// The Subscribers screen's one action is Import CSV, and the file it gets is
+// whatever the office exported from somewhere else — Brevo, Breeze, a
+// spreadsheet somebody keeps by hand. So this reads the *columns it can find*
+// rather than demanding a fixed layout: any header containing "email" is the
+// address, and a name is assembled from whichever of name / first / last exist.
+// A file with no header row still works, because a cell that looks like an
+// address is treated as one.
+//
+// Nothing is rejected for being malformed. A row with no address is counted
+// and reported, not silently dropped — somebody who pastes 200 lines and gets
+// 180 back needs to know about the other 20.
+export function parseSubscriberCsv(text) {
+  const lines = String(text || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const rows = [];
+  const seen = new Set();
+  let skipped = 0;
+
+  if (!lines.length) return { rows, skipped };
+
+  const cellsOf = (line) => splitCsvLine(line).map((c) => c.trim().replace(/^"|"$/g, '').trim());
+  const looksLikeEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+
+  // Work out the columns from the first line, but only if it is a header —
+  // a first line that already holds an address is data, not a header.
+  const first = cellsOf(lines[0]);
+  const isHeader = !first.some(looksLikeEmail);
+  let emailCol = -1, nameCol = -1, firstCol = -1, lastCol = -1;
+  if (isHeader) {
+    first.forEach((h, i) => {
+      const k = h.toLowerCase().replace(/[^a-z]/g, '');
+      if (emailCol < 0 && k.includes('email')) emailCol = i;
+      else if (k === 'firstname' || k === 'first' || k === 'fname') firstCol = i;
+      else if (k === 'lastname' || k === 'last' || k === 'lname' || k === 'surname') lastCol = i;
+      else if (nameCol < 0 && k.includes('name')) nameCol = i;
+    });
+  }
+
+  for (const line of lines.slice(isHeader ? 1 : 0)) {
+    const cells = cellsOf(line);
+    // Fall back to whichever cell looks like an address, so a headerless or
+    // oddly-ordered file still imports.
+    const email = (emailCol >= 0 && looksLikeEmail(cells[emailCol] || '') ? cells[emailCol] : cells.find(looksLikeEmail)) || '';
+    if (!email) { skipped++; continue; }
+    const key = email.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const name = (nameCol >= 0 ? cells[nameCol] : '')
+      || [firstCol >= 0 ? cells[firstCol] : '', lastCol >= 0 ? cells[lastCol] : ''].filter(Boolean).join(' ')
+      || cells.filter((c) => c && c !== email && !looksLikeEmail(c))[0]
+      || '';
+    rows.push({ email, name: name.trim() });
+  }
+  return { rows, skipped };
+}
+
+// Minimal CSV field splitter: commas separate, double quotes group, "" is a
+// literal quote. Enough for an exported contact list; deliberately not a
+// general CSV parser.
+function splitCsvLine(line) {
+  const out = [];
+  let cur = '', inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+      else if (ch === '"') inQuotes = false;
+      else cur += ch;
+    } else if (ch === '"') inQuotes = true;
+    else if (ch === ',' || ch === '\t' || ch === ';') { out.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  out.push(cur);
+  return out;
+}

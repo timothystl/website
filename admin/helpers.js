@@ -3,9 +3,9 @@
 
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
-import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
+import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 
-export const VERSION = 'v3.0.10'; // major: the admin overhaul — one pattern across every section, new IA, renamed permissions
+export const VERSION = 'v3.1.0'; // minor: the mockup-match pass — the design's five-group IA, Redirects and Settings split apart, Giving's fund/amount panels, the two-column newsletter editor
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
@@ -179,9 +179,12 @@ ${ADMIN_UI_CSS}
 ${MENU_CSS}
 ${PRESET_CSS}
 ${GYM_CAL_CSS}
+${PANEL_LIST_CSS}
+${NEWSLETTER_CSS}
 ${CMDK_CSS}
 /* ── SIDEBAR, REDESIGNED ───────────────────────────────────────
-   Three groups, the page-producing sections nested under Pages, a gold inset
+   Five groups from the design's NAV, the page-producing sections nested under
+   Pages, a gold inset
    bar plus a gold dot on the active item, and badges that count only things a
    human still has to do. */
 .sidebar{background:var(--tlc-sidebar);width:246px;font-family:var(--tlc-sans);}
@@ -222,6 +225,7 @@ function prepSchedule(form){
   return confirm('Schedule this newsletter to send via Brevo?');
 }
 ${LIST_SECTION_JS}
+${PANEL_LIST_JS}
 ${CMDK_JS}
 </script>
 </body>
@@ -260,11 +264,13 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}) {
     + (depth ? `<span class="sidebar-tick" aria-hidden="true">└</span>` : `<span class="sidebar-dot"></span>`)
     + `<span class="sidebar-label">${label}</span>${extra}</a>`;
 
-  // ── WEBSITE ──
-  // Ministries, Partners, News, Sermons and Christian Ed all produce pages on
-  // the website; they are split out only because different people own them and
-  // they carry extra data. Nesting them under Pages says exactly that. Menu,
-  // Notices, Links and Redirects are site-wide tools, so they sit at top level.
+  // ── THE FIVE GROUPS ──
+  // Order, grouping and nesting are the design's `NAV` and `CHILD_OF`, kept in
+  // that order deliberately: it groups by *what you came here to do* — put
+  // something on the website, send an email, deal with money, manage people,
+  // set the place up — rather than by which table the data lives in. Ministries,
+  // Partners, News, Sermons and Christian Ed nest under Pages because that is
+  // what they produce; they are separate only because different people own them.
   const showNews = hp('news_edit');
   const pagesChildren = [
     hp('ministries_edit') ? navItem('/ministries', 'Ministries', activeTab === 'ministries', '', 1) : '',
@@ -280,27 +286,39 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}) {
     pagesChildren,
     hp('pages_edit')      ? navItem('/menu', 'Menu', activeTab === 'menu') : '',
     hp('notices_edit')    ? navItem('/notices', 'Notices', activeTab === 'notices') : '',
-    hp('links_edit')      ? navItem('/link-cards', 'Links', activeTab === 'link-cards') : '',
-    hp('settings_manage') ? navItem('/settings', 'Redirects', activeTab === 'settings') : '',
-    (hp('pages_edit') || hp('ministries_edit')) ? navItem('/media', 'Media', activeTab === 'media') : '',
+    hp('links_edit')      ? navItem('/link-cards', 'NFC Taps', activeTab === 'link-cards') : '',
+    hp('settings_manage') ? navItem('/redirects', 'Redirects', activeTab === 'redirects') : '',
   ].filter(Boolean).join('');
 
-  // ── COMMUNICATION ──
+  // ── EMAIL ──
+  // Filtered Mail is not in the design's nav — it shipped after the handoff was
+  // written. It is mail held back from the office inbox, so this is where
+  // somebody would look for it.
   const canDraft = hp('newsletter_edit') || hp('newsletter_approve');
-  const commItems = [
+  const emailItems = [
     canDraft ? navItem('/newsletters', 'Newsletter', activeTab === 'newsletter', badge(b.newsletter, hp('newsletter_approve'), `${b.newsletter} newsletter(s) awaiting approval`)) : '',
     hp('settings_manage') ? navItem('/subscribers', 'Subscribers', activeTab === 'subscribers') : '',
     hp('settings_manage') ? navItem('/filtered', 'Filtered Mail', activeTab === 'filtered') : '',
   ].filter(Boolean).join('');
 
-  // ── PEOPLE & OPS ──
-  const opsItems = [
-    hp('staff_edit')      ? navItem('/staff', 'Staff', activeTab === 'staff') : '',
-    hp('gym_manage')      ? navItem('/gym-rentals', 'Gym Rentals', activeTab === 'gym', badge(b.gym, hp('gym_manage'), `${b.gym} gym request(s) waiting for review`)) : '',
-    hp('users_manage')    ? navItem('/users', 'Users', activeTab === 'users') : '',
+  // ── MONEY & BUILDING ──
+  const moneyItems = [
     hp('giving_manage')   ? navItem('/giving', 'Giving', activeTab === 'giving') : '',
+    hp('gym_manage')      ? navItem('/gym-rentals', 'Gym Rentals', activeTab === 'gym', badge(b.gym, hp('gym_manage'), `${b.gym} gym request(s) waiting for review`)) : '',
     hp('payroll_manage')  ? navItem('/payroll', 'Payroll', activeTab === 'payroll') : '',
+  ].filter(Boolean).join('');
+
+  // ── PEOPLE & ACCESS ──
+  const peopleItems = [
+    hp('staff_edit')      ? navItem('/staff', 'Staff', activeTab === 'staff') : '',
+    hp('users_manage')    ? navItem('/users', 'Users', activeTab === 'users') : '',
     hp('audit_view')      ? navItem('/audit-log', 'Audit Log', activeTab === 'audit') : '',
+  ].filter(Boolean).join('');
+
+  // ── SETUP ──
+  const setupItems = [
+    (hp('pages_edit') || hp('ministries_edit')) ? navItem('/media', 'Media', activeTab === 'media') : '',
+    hp('settings_manage') ? navItem('/settings', 'Settings', activeTab === 'settings') : '',
   ].filter(Boolean).join('');
 
   return `<div class="sidebar-backdrop" id="sidebar-backdrop"></div>
@@ -311,12 +329,13 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}) {
   </div>
   <div class="sidebar-user">${user ? escapeHtml(user.username) : ''}</div>
   <div class="sidebar-group">
-    <div class="sidebar-group-label">Overview</div>
     ${navItem('/dashboard', 'Dashboard', activeTab === 'dashboard')}
   </div>
   ${websiteItems ? `<div class="sidebar-group"><div class="sidebar-group-label">Website</div>${websiteItems}</div>` : ''}
-  ${commItems ? `<div class="sidebar-group"><div class="sidebar-group-label">Communication</div>${commItems}</div>` : ''}
-  ${opsItems ? `<div class="sidebar-group"><div class="sidebar-group-label">People &amp; Ops</div>${opsItems}</div>` : ''}
+  ${emailItems ? `<div class="sidebar-group"><div class="sidebar-group-label">Email</div>${emailItems}</div>` : ''}
+  ${moneyItems ? `<div class="sidebar-group"><div class="sidebar-group-label">Money &amp; Building</div>${moneyItems}</div>` : ''}
+  ${peopleItems ? `<div class="sidebar-group"><div class="sidebar-group-label">People &amp; Access</div>${peopleItems}</div>` : ''}
+  ${setupItems ? `<div class="sidebar-group"><div class="sidebar-group-label">Setup</div>${setupItems}</div>` : ''}
   <div class="sidebar-footer">
     <a href="#" id="tlc-k-open">⌘K searches every section</a>
     <a href="https://connect.timothystl.org" target="_blank">Connect ↗</a>

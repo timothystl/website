@@ -135,7 +135,11 @@ export function renderListSection(cfg) {
   } = cfg;
 
   const plural = nounPlural || noun + 's';
-  const grid = columns.map((c) => c.width || '1fr').join(' ') + ' auto';
+  // A status, media or photo column holds a pill, and a pill that wraps reads
+  // as two broken words rather than one status — so those get a floor of 126px
+  // however the fractions divide up. Everything else is free to shrink. The
+  // trailing track is the row's actions.
+  const grid = columns.map((c) => (/status|media|photo/i.test(c.label || '') ? `minmax(126px,${c.width || '1fr'})` : (c.width || '1fr'))).join(' ') + ' 118px';
 
   const head = columns.map((c) => `<span class="tlc-th${c.align === 'right' ? ' tlc-right' : ''}">${esc(c.label)}</span>`).join('')
     + `<span class="tlc-th tlc-right"></span>`;
@@ -167,6 +171,14 @@ export function renderListSection(cfg) {
 
   const filtersHtml = filters.map((f, i) => `<button type="button" class="tlc-filter${i === 0 ? ' is-on' : ''}" data-value="${esc(f.value)}">${esc(f.label)}</button>`).join('');
 
+  // The four core values filter from their own row of tinted chips, below the
+  // plain filters — that is how the design separates "which kind of thing" from
+  // "which value it carries". They are additive: picking a value narrows
+  // whatever the row above already selected.
+  const chipsHtml = (cfg.chipFilters || []).map((c) =>
+    `<button type="button" class="tlc-chipfilter" data-value="${esc(c.value)}" style="background:${esc(c.tint)};color:${esc(c.ink)};">${esc(c.label)}</button>`
+  ).join('');
+
   return `<section class="tlc-section" id="sec-${esc(key)}" data-noun="${esc(noun)}" data-noun-plural="${esc(plural)}">
   <header class="tlc-section-head">
     <div class="tlc-section-headings">
@@ -186,6 +198,10 @@ export function renderListSection(cfg) {
   ${(search || filters.length) ? `<div class="tlc-bar">
     ${search ? `<label class="tlc-search"><span class="tlc-search-icon" aria-hidden="true">⌕</span><input type="search" placeholder="${esc(search)}" aria-label="${esc(search)}"></label>` : ''}
     ${filtersHtml ? `<div class="tlc-filters">${filtersHtml}</div>` : ''}
+    ${chipsHtml ? '' : '<span class="tlc-count"></span>'}
+  </div>` : ''}
+  ${chipsHtml ? `<div class="tlc-bar tlc-bar--chips">
+    <div class="tlc-filters">${chipsHtml}</div>
     <span class="tlc-count"></span>
   </div>` : ''}
   <div class="tlc-table">
@@ -219,7 +235,7 @@ function wire(sec){
     var q=(input&&input.value||'').trim().toLowerCase();
     var shown=0,reachable=0;
     rows.forEach(function(r){
-      var inFilter=matchesFilter(r);
+      var inFilter=matchesFilter(r)&&(!chip||(' '+(r.getAttribute('data-filter')||'')+' ').indexOf(' '+chip+' ')>-1);
       if(inFilter) reachable++;
       var hit=inFilter&&(!q||(r.getAttribute('data-search')||'').indexOf(q)>-1);
       r.hidden=!hit; if(hit) shown++;
@@ -229,10 +245,20 @@ function wire(sec){
       ? (reachable+' '+(reachable===1?noun:plural)+' shown')
       : (shown+' of '+reachable+' shown');
   }
+  var chips=Array.prototype.slice.call(sec.querySelectorAll('.tlc-chipfilter'));
+  var chip=null;
   if(input) input.addEventListener('input',apply);
   pills.forEach(function(p){p.addEventListener('click',function(){
     pills.forEach(function(o){o.classList.remove('is-on');});
     p.classList.add('is-on'); active=p.getAttribute('data-value'); apply();
+  });});
+  // A value chip narrows whatever the row above already selected, and clicking
+  // the active one clears it — so "Live" and "Grow" can be asked together.
+  chips.forEach(function(c){c.addEventListener('click',function(){
+    var v=c.getAttribute('data-value');
+    if(chip===v){chip=null;c.classList.remove('is-on');}
+    else{chips.forEach(function(o){o.classList.remove('is-on');});c.classList.add('is-on');chip=v;}
+    apply();
   });});
   // The whole row is the target, but a link or button inside it wins — the ⋯
   // menu and an inline form must not be swallowed by the row's own navigation.
@@ -244,6 +270,19 @@ function wire(sec){
   apply();
 }
 Array.prototype.slice.call(document.querySelectorAll('.tlc-section')).forEach(wire);
+// One handler for every ⋯ menu on the page: open on click, close on anything
+// else, so two menus can never be open at once.
+document.addEventListener('click',function(e){
+  var btn=e.target.closest('.tlc-more-btn');
+  var open=document.querySelector('.tlc-more.is-open');
+  if(open&&(!btn||!open.contains(btn))){open.classList.remove('is-open');open.querySelector('.tlc-more-btn').setAttribute('aria-expanded','false');}
+  if(btn){var wrap=btn.closest('.tlc-more');var now=!wrap.classList.contains('is-open');wrap.classList.toggle('is-open',now);btn.setAttribute('aria-expanded',now?'true':'false');}
+});
+document.addEventListener('keydown',function(e){
+  if(e.key!=='Escape')return;
+  var open=document.querySelector('.tlc-more.is-open');
+  if(open){open.classList.remove('is-open');open.querySelector('.tlc-more-btn').setAttribute('aria-expanded','false');}
+});
 })();`;
 
 // ── THE DRAWER ───────────────────────────────────────────────
@@ -354,6 +393,43 @@ function renderField(f) {
   }
 }
 
+
+// ── ROW ACTIONS ──────────────────────────────────────────────
+// The design gives every row an `Edit` link and a `⋯` overflow. Anything
+// destructive or rarely-wanted lives behind the ⋯ rather than sitting in the
+// row where it can be hit by accident.
+//
+// items: [{ label, href } | { label, action, confirm } | { label, hidden }]
+export function rowActions(primary, items = []) {
+  const menu = items.filter(Boolean).map((i) => {
+    if (i.action) {
+      return `<form method="POST" action="${esc(i.action)}" style="margin:0;"${i.confirm ? ` onsubmit="return confirm('${esc(i.confirm).replace(/'/g, '&#39;')}')"` : ''}>
+        ${Object.entries(i.fields || {}).map(([k, v]) => `<input type="hidden" name="${esc(k)}" value="${esc(v)}">`).join('')}
+        <button type="submit" class="tlc-menu-item${i.danger ? ' is-danger' : ''}">${esc(i.label)}</button>
+      </form>`;
+    }
+    return `<a class="tlc-menu-item" href="${esc(i.href)}">${esc(i.label)}</a>`;
+  }).join('');
+
+  return `${primary ? `<a class="tlc-edit" href="${esc(primary.href)}">${esc(primary.label)}</a>` : ''}`
+    + (menu ? `<span class="tlc-more">
+      <button type="button" class="tlc-more-btn" aria-haspopup="true" aria-expanded="false" aria-label="More actions">⋯</button>
+      <span class="tlc-menu">${menu}</span>
+    </span>` : '');
+}
+
+// A row cell that is a switch rather than a pill — used where the design shows
+// one (a ministry's "In menu"). It posts on change, so there is no Save step
+// for something that reads as instant.
+export function toggleCell(action, on, label) {
+  return `<form method="POST" action="${esc(action)}" style="margin:0;">
+    <input type="hidden" name="value" value="${on ? '0' : '1'}">
+    <button type="submit" class="tlc-switch${on ? ' is-on' : ''}" role="switch" aria-checked="${on ? 'true' : 'false'}" aria-label="${esc(label || 'Toggle')}">
+      <span class="tlc-switch-knob"></span>
+    </button>
+  </form>`;
+}
+
 // ── PANELS ───────────────────────────────────────────────────
 // For the bespoke screens (Dashboard, Menu, Giving, Gym, Payroll) that are not
 // flat lists but must still look like they belong.
@@ -395,6 +471,25 @@ export const ADMIN_UI_CSS = `
 .tlc-filter:hover{border-color:var(--tlc-blue);}
 .tlc-filter.is-on{background:#E7EFF5;border-color:var(--tlc-blue);color:var(--tlc-navy);}
 .tlc-count{margin-left:auto;font-size:12.5px;color:var(--tlc-muted);white-space:nowrap;}
+.tlc-bar--chips{margin-top:-6px;}
+.tlc-chipfilter{font:600 12px var(--tlc-sans);border:1px solid transparent;border-radius:999px;padding:7px 14px;cursor:pointer;opacity:.62;}
+.tlc-chipfilter:hover{opacity:.85;}
+.tlc-chipfilter.is-on{opacity:1;box-shadow:inset 0 0 0 1.5px currentColor;}
+/* ── Row overflow menu ── */
+.tlc-more{position:relative;display:inline-flex;}
+.tlc-more-btn{background:none;border:0;cursor:pointer;color:var(--tlc-muted);font-size:15px;line-height:1;padding:4px 6px;border-radius:6px;}
+.tlc-more-btn:hover{background:var(--tlc-sand);color:var(--tlc-ink);}
+.tlc-menu{position:absolute;top:100%;right:0;min-width:170px;background:#fff;border:1px solid var(--tlc-edge);border-radius:9px;box-shadow:0 8px 24px rgba(18,36,61,.14);padding:5px;z-index:40;display:none;flex-direction:column;}
+.tlc-more.is-open .tlc-menu{display:flex;}
+.tlc-menu-item{display:block;width:100%;text-align:left;background:none;border:0;cursor:pointer;font:500 13px var(--tlc-sans);color:var(--tlc-ink);padding:8px 10px;border-radius:6px;text-decoration:none;}
+.tlc-menu-item:hover{background:var(--tlc-sand);}
+.tlc-menu-item.is-danger{color:#8A4A4A;}
+/* ── Switch cell ── */
+.tlc-switch{width:38px;height:22px;border-radius:999px;border:0;background:#D9D3C6;position:relative;cursor:pointer;padding:0;}
+.tlc-switch.is-on{background:#4A7C4E;}
+.tlc-switch-knob{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .15s;}
+.tlc-switch.is-on .tlc-switch-knob{transform:translateX(16px);}
+.tlc-switch:focus-visible{outline:2px solid var(--tlc-blue);outline-offset:2px;}
 .tlc-table{border:1px solid var(--tlc-edge);border-radius:12px;background:var(--tlc-parchment);overflow:hidden;}
 .tlc-thead{display:grid;gap:14px;padding:11px 18px;background:var(--tlc-sand);border-bottom:1px solid var(--tlc-edge);}
 .tlc-th{font:600 10.5px/1 var(--tlc-sans);letter-spacing:.12em;text-transform:uppercase;color:var(--tlc-muted);}
@@ -428,6 +523,28 @@ export const ADMIN_UI_CSS = `
 .tlc-empty{padding:34px 18px;text-align:center;font-size:13.5px;color:var(--tlc-muted);}
 .tlc-note{display:flex;gap:9px;align-items:baseline;margin:14px 0 0;font-size:13px;line-height:1.65;color:var(--tlc-body);max-width:66em;text-wrap:pretty;}
 .tlc-note-mark{flex:none;color:var(--tlc-gold);font-size:11px;}
+/* ── Giving surfaces ── */
+.tlc-give-surfaces{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+@media (max-width:820px){.tlc-give-surfaces{grid-template-columns:1fr;}}
+.tlc-give-surface{border:1px solid var(--tlc-edge);border-radius:11px;background:#fff;padding:14px 16px;display:flex;flex-direction:column;gap:6px;}
+.tlc-give-badge{align-self:flex-start;font:600 9.5px var(--tlc-sans);letter-spacing:.12em;text-transform:uppercase;color:var(--tlc-muted);background:var(--tlc-sand);border-radius:999px;padding:4px 9px;}
+.tlc-give-addr{font:600 15px var(--tlc-sans);color:var(--tlc-navy);overflow-wrap:anywhere;}
+.tlc-give-note{margin:0;font-size:12.5px;line-height:1.55;color:var(--tlc-body);text-wrap:pretty;}
+.tlc-give-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;align-items:center;}
+.tlc-give-sync{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:12px;padding:11px 14px;border:1px solid var(--tlc-edge);border-radius:10px;background:var(--tlc-parchment);font-size:13px;color:var(--tlc-body);text-wrap:pretty;}
+/* ── NFC taps ── */
+.tlc-taps{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px;margin-bottom:18px;}
+.tlc-tap{border:1px solid var(--tlc-edge);border-radius:12px;background:var(--tlc-parchment);padding:13px 15px;display:flex;flex-direction:column;gap:4px;}
+.tlc-tap.is-on{border-color:var(--tlc-blue);box-shadow:inset 0 0 0 1px var(--tlc-blue);background:#fff;}
+.tlc-tap-head{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.tlc-tap-n{font:700 13px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--tlc-navy);}
+.tlc-tap-name{font:600 13.5px var(--tlc-sans);color:var(--tlc-ink);}
+.tlc-tap-where{font-size:11.5px;color:var(--tlc-muted);text-wrap:pretty;}
+.tlc-tap-dest{font-size:11.5px;color:var(--tlc-blue);overflow-wrap:anywhere;}
+.tlc-tap-count{font-size:11.5px;color:var(--tlc-muted);}
+.tlc-tap-actions{display:flex;gap:8px;margin-top:7px;flex-wrap:wrap;}
+.tlc-tap-btn{font:600 11.5px var(--tlc-sans);color:var(--tlc-navy);background:#fff;border:1px solid var(--tlc-edge);border-radius:7px;padding:6px 10px;text-decoration:none;}
+.tlc-tap-btn:hover{border-color:var(--tlc-blue);}
 /* ── Panels ── */
 .tlc-panel{border:1px solid var(--tlc-edge);border-radius:12px;background:var(--tlc-parchment);overflow:hidden;}
 .tlc-panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 16px;background:var(--tlc-sand);border-bottom:1px solid var(--tlc-edge);}
@@ -696,3 +813,117 @@ export const CMDK_HTML = `<div class="tlc-k-scrim" id="tlc-k-scrim"></div>
   <div class="tlc-k-list"></div>
   <div class="tlc-k-hint">↑ ↓ to move · Enter to open · Esc to close</div>
 </div>`;
+
+// ── SORTABLE PANEL LIST ──────────────────────────────────────
+// The shape the design uses inside a panel where order is the point and the
+// rows are small: a grip, a name with a sub-line, an optional middle note, a
+// state, and one action. Giving's Funds and Amount Tiers are both this, side
+// by side — which is why it is a renderer rather than markup written twice.
+//
+// Reordering posts the whole resulting order to `action`, never a diff, for
+// the same reason the menu does: the server renumbers from scratch, so a
+// dropped row cannot leave two items claiming one position.
+export function panelList({ id, reorderAction = '', rows = [], empty = 'Nothing here yet.' }) {
+  if (!rows.length) return `<p class="tlc-plist-empty">${esc(empty)}</p>`;
+  const body = rows.map((r) => `<div class="tlc-pl"${reorderAction ? ' draggable="true"' : ''} data-id="${esc(r.id)}">
+    ${reorderAction ? '<span class="tlc-pl-grip" aria-hidden="true">⠿</span>' : ''}
+    <span class="tlc-pl-text">
+      <span class="tlc-pl-name">${r.nameHtml != null ? r.nameHtml : esc(r.name)}</span>
+      ${r.sub ? `<span class="tlc-pl-sub">${esc(r.sub)}</span>` : ''}
+    </span>
+    ${r.mid != null ? `<span class="tlc-pl-mid">${esc(r.mid)}</span>` : ''}
+    <span class="tlc-pl-state">${r.state || ''}</span>
+    <span class="tlc-pl-act">${r.action || (r.editHref ? `<a class="tlc-edit" href="${esc(r.editHref)}">Edit</a>` : '')}</span>
+  </div>`).join('');
+  return `<div class="tlc-plist" id="${esc(id)}"${reorderAction ? ` data-sortlist="${esc(reorderAction)}"` : ''}>${body}</div>`;
+}
+
+export const PANEL_LIST_CSS = `
+.tlc-plist{display:flex;flex-direction:column;}
+.tlc-plist-empty{margin:0;padding:16px;font-size:13px;color:var(--tlc-muted);text-wrap:pretty;}
+.tlc-pl{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--tlc-divider);background:var(--tlc-parchment);}
+.tlc-pl:last-child{border-bottom:0;}
+.tlc-pl.is-drag{opacity:.45;}
+.tlc-pl.is-over{box-shadow:inset 0 2px 0 var(--tlc-blue);}
+.tlc-pl-grip{flex:none;cursor:grab;color:var(--tlc-muted);font-size:14px;line-height:1;user-select:none;}
+.tlc-pl-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
+.tlc-pl-name{font:600 13.5px/1.35 var(--tlc-sans);color:var(--tlc-ink);overflow-wrap:anywhere;}
+.tlc-pl-sub{font-size:12px;line-height:1.4;color:var(--tlc-muted);text-wrap:pretty;}
+.tlc-pl-mid{flex:none;font-size:12.5px;color:var(--tlc-muted);}
+.tlc-pl-state{flex:none;display:flex;align-items:center;}
+.tlc-pl-act{flex:none;display:flex;align-items:center;}
+.tlc-give-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;}
+@media (max-width:900px){.tlc-give-cols{grid-template-columns:1fr;}}
+`;
+
+export const NEWSLETTER_CSS = `
+/* ── The newsletter editor ──
+   Two halves: what you are writing, and what it will look like. The preview
+   sticks so it stays in view while the form scrolls past it — a preview you
+   have to scroll back up to check is one nobody checks. */
+.tlc-nl-crumb{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px;}
+.tlc-nl-when{margin:10px 0 0;font-size:13px;color:var(--tlc-muted);}
+.tlc-nl-cols{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:18px;align-items:start;padding:18px 26px 40px;max-width:1180px;}
+.tlc-nl-form .card:first-child{margin-top:0;}
+.tlc-nl-preview{position:sticky;top:18px;display:flex;flex-direction:column;gap:0;}
+.tlc-nl-preview-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;}
+.tlc-nl-inbox{display:flex;flex-direction:column;gap:4px;padding:13px 15px;border:1px solid var(--tlc-edge);border-radius:11px 11px 0 0;border-bottom:0;background:var(--tlc-sand);}
+.tlc-nl-inbox-subj{font:600 13.5px/1.35 var(--tlc-sans);color:var(--tlc-ink);text-wrap:pretty;}
+.tlc-nl-inbox-pre{font-size:12.5px;line-height:1.45;color:var(--tlc-muted);text-wrap:pretty;}
+.tlc-nl-frame{width:100%;height:min(62vh,560px);border:1px solid var(--tlc-edge);border-radius:0 0 11px 11px;background:#fff;display:block;}
+/* Two small pills, not two big cards: the format is a choice between two
+   things, not a menu worth a third of the screen. */
+.tlc-fmt{display:flex;flex-direction:column;align-items:flex-start;gap:8px;}
+.tlc-fmt-pill{font:600 13px var(--tlc-sans);color:var(--tlc-body);background:var(--tlc-parchment);border:1px solid var(--tlc-edge);border-radius:8px;padding:8px 16px;cursor:pointer;}
+.tlc-fmt-pill.is-on{background:#fff;border-color:var(--tlc-blue);color:var(--tlc-navy);box-shadow:0 0 0 1px var(--tlc-blue) inset;}
+.tlc-fmt-pill:disabled{opacity:.55;cursor:default;}
+/* Below this the two columns cannot both be read, and a preview squeezed to
+   half of a phone is worse than one you scroll to. */
+@media (max-width:1060px){
+  .tlc-nl-cols{grid-template-columns:1fr;padding:18px 20px 40px;}
+  .tlc-nl-preview{position:static;}
+}
+`;
+
+export const PANEL_LIST_JS = `(function(){
+  // Wires every [data-sortlist] on the page. Same contract as the menu: on
+  // drop, the whole resulting order is posted to the list's action.
+  var dragged = null;
+  function rows(list){ return Array.prototype.slice.call(list.querySelectorAll('.tlc-pl')); }
+  function save(list){
+    var f = document.createElement('form');
+    f.method = 'POST'; f.action = list.dataset.sortlist; f.style.display = 'none';
+    var i = document.createElement('input');
+    i.type = 'hidden'; i.name = 'order';
+    i.value = JSON.stringify(rows(list).map(function(r){ return r.dataset.id; }));
+    f.appendChild(i); document.body.appendChild(f); f.submit();
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('[data-sortlist]'), function(list){
+    list.addEventListener('dragstart', function(e){
+      var row = e.target.closest('.tlc-pl'); if (!row || !list.contains(row)) return;
+      dragged = row; row.classList.add('is-drag');
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', row.dataset.id); } catch(_){}
+    });
+    list.addEventListener('dragend', function(){
+      if (dragged) dragged.classList.remove('is-drag');
+      rows(list).forEach(function(r){ r.classList.remove('is-over'); });
+      dragged = null;
+    });
+    list.addEventListener('dragover', function(e){
+      if (!dragged || !list.contains(dragged)) return;
+      e.preventDefault();
+      var row = e.target.closest('.tlc-pl');
+      rows(list).forEach(function(r){ r.classList.remove('is-over'); });
+      if (row && row !== dragged) row.classList.add('is-over');
+    });
+    list.addEventListener('drop', function(e){
+      if (!dragged || !list.contains(dragged)) return;
+      e.preventDefault();
+      var row = e.target.closest('.tlc-pl');
+      if (row && row !== dragged) list.insertBefore(dragged, row);
+      rows(list).forEach(function(r){ r.classList.remove('is-over'); });
+      save(list);
+    });
+  });
+})();`;

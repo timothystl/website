@@ -74,8 +74,8 @@ group('the one-line summary');
 group('grouping');
 {
   eq(auditGroup({ entity_type: 'news_item', action: 'update' }), 'content', 'a news post is content');
-  eq(auditGroup({ entity_type: 'user', action: 'update' }), 'ops', 'a user is people & ops');
-  eq(auditGroup({ entity_type: 'gym_booking', action: 'create' }), 'ops', 'so is a booking');
+  eq(auditGroup({ entity_type: 'user', action: 'update' }), 'people-ops', 'a user is people & ops');
+  eq(auditGroup({ entity_type: 'gym_booking', action: 'create' }), 'people-ops', 'so is a booking');
   eq(auditGroup({ entity_type: 'news_item', action: 'rollback' }), 'rolled-back', 'a rollback is its own group');
   // A type nobody has classified yet must land somewhere, or it vanishes from
   // every filter and effectively from the log.

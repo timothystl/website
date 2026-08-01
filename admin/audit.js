@@ -95,7 +95,7 @@ const OPS_ENTITIES = new Set([
 export function auditGroup(row) {
   if (!row) return 'content';
   if (row.action === 'rollback') return 'rolled-back';
-  return OPS_ENTITIES.has(row.entity_type) ? 'ops' : 'content';
+  return OPS_ENTITIES.has(row.entity_type) ? 'people-ops' : 'content';
 }
 
 // Which entries can be put back. An update is reversible because the before
