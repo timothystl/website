@@ -10,6 +10,7 @@ import {
   esc, pluralise, countLabel, toneOf, statusPill, valueChip, valueSelect,
   primaryCell, renderListSection, renderDrawer, TONES, PALETTE,
 } from './ui.js';
+import { tinymceField } from './helpers.js';
 import { VALUES, VALUE_KEYS, valueByKey, normalizeValue } from './values.js';
 
 let pass = 0, fail = 0;
@@ -233,6 +234,36 @@ group('the Foundations spec’s small parts');
   has(c, 'role="radiogroup"', 'as a real radio group, so it is operable by keyboard');
   has(c, 'value="gift" checked', 'with the stored value selected');
   lacks(c, '<select', 'and no select in sight');
+}
+
+group('the rich-text field cannot be escaped from');
+{
+  // ⚠ AC-3. The content is interpolated into an inline <script>, and the HTML
+  // parser ends a script block at the first `</script` REGARDLESS of JavaScript
+  // string context. Seven near-identical builders each escaped backslash,
+  // backtick and $ — and none of them escaped this. Somebody with
+  // content-edit rights could have saved a post containing it and run script
+  // in the session of any admin who later opened that screen.
+  const out = tinymceField({ id: 'x', name: 'x', value: '</script><img src=x onerror=alert(1)>' });
+  lacks(out, '</script><img', 'a closing script tag in saved content does not close the block');
+  has(out, '<\\/script>', 'it is split so the parser never sees it');
+  // And it must still be the same string once JavaScript joins it up.
+  eq(JSON.parse('"' + '<\\/script>'.replace(/\\\//g, '\\/').replace(/\\\//g, '/') + '"'), '</script>',
+    'the escape is a JS escape, not a mangling — the content round-trips');
+
+  // The other three, which were already handled, must stay handled.
+  const t = tinymceField({ id: 'y', name: 'y', value: 'a`b${c}d\\e' });
+  has(t, '\\`', 'a backtick is escaped');
+  has(t, '\\$', 'and a dollar');
+
+  // Every field gets the same toolbar — the design's "painted on all of them,
+  // not just the first".
+  has(out, 'bold italic underline', 'the toolbar is on it');
+  has(t, 'bold italic underline', 'and on the next one too');
+
+  // The id and name are attribute-escaped, since both reach markup.
+  const q = tinymceField({ id: 'a"b', name: 'c"d', value: '' });
+  lacks(q, 'id="a"b"', 'a quote in an id cannot break out of the attribute');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -231,11 +231,14 @@ export const BLOCK_DEFS = {
   },
 };
 
+// The design's own four groups, in its order. Structure leads because that is
+// what somebody reaches for first on an empty page — the banner and the shape
+// of it — and Content is what they fill it with afterwards.
 export const GROUPS = [
-  { name: 'Content',         types: ['text', 'textphoto', 'columns', 'video', 'gallery', 'sermon', 'news', 'posts', 'staff', 'faq'] },
-  { name: 'Dates & details', types: ['servicetimes', 'events', 'times', 'calendar', 'map', 'download'] },
-  { name: 'Structure',       types: ['slideshow', 'hero', 'quicklinks', 'callout', 'alert', 'buttons', 'partners', 'spacer'] },
-  { name: 'Sign up & give',  types: ['form', 'newsletter', 'give'] },
+  { name: 'Structure', types: ['alert', 'hero', 'slideshow', 'quicklinks', 'buttons', 'callout', 'partners', 'spacer'] },
+  { name: 'Content',   types: ['text', 'textphoto', 'video', 'columns', 'gallery', 'faq', 'sermon', 'news', 'staff', 'posts'] },
+  { name: 'Dates',     types: ['servicetimes', 'map', 'events', 'times', 'download', 'calendar'] },
+  { name: 'Sign up',   types: ['form', 'newsletter', 'give'] },
 ];
 
 export const BLOCK_TYPE_KEYS = Object.keys(BLOCK_DEFS);
