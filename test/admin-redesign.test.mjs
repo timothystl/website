@@ -740,5 +740,43 @@ group('gym rentals ships both layouts');
   has(cal, 'view=calendar&m=', 'month navigation keeps the calendar view');
 }
 
+
+// ── phase 7: giving — gift vs payment ────────────────────────────────────────
+group('gift and payment are tagged apart');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  ok(db.prepare('PRAGMA table_info(redirects)').all().some((c) => c.name === 'give_kind'),
+    'giving links carry a gift-or-payment tag');
+
+  db.prepare("INSERT INTO redirects (path,url,label,category,active,give_kind) VALUES ('vendor','https://square.link/x','Market vendor deposit','giving',1,'payment')").run();
+  db.prepare("INSERT INTO redirects (path,url,label,category,active,give_kind) VALUES ('memorial','https://give.tithe.ly/y','Memorial gift','giving',1,'gift')").run();
+
+  const body = await (await call(env, '/giving', { cookie })).text();
+  eq((await call(env, '/giving', { cookie })).status, 200, 'the Giving screen renders');
+  has(body, 'Market vendor deposit', 'a payment link appears');
+  has(body, 'Memorial gift', 'and a gift link');
+  has(body, 'year-end statement', 'the note explains what the distinction is for');
+  has(body, 'default to Payment', 'and which way a new link errs');
+
+  // The safer default has to hold on the write path, not just in the form.
+  const res = await worker.fetch(new Request('https://admin.timothystl.org/redirects/add', {
+    method: 'POST',
+    headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
+    body: 'category=giving&path=untagged&url=https%3A%2F%2Fexample.org%2Fpay&label=No+tag+given&active=1',
+  }), env, ctx);
+  eq(res.status, 302, 'adding a link without a tag succeeds');
+  eq(db.prepare("SELECT give_kind FROM redirects WHERE path='untagged'").get().give_kind, 'payment',
+    'and defaults to Payment — a mis-tagged gift would put a non-donation on a tax statement');
+
+  const res2 = await worker.fetch(new Request('https://admin.timothystl.org/redirects/add', {
+    method: 'POST',
+    headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
+    body: 'category=giving&path=realgift&url=https%3A%2F%2Fexample.org%2Fgive&label=A+gift&active=1&give_kind=gift',
+  }), env, ctx);
+  eq(res2.status, 302, 'and an explicit gift is accepted');
+  eq(db.prepare("SELECT give_kind FROM redirects WHERE path='realgift'").get().give_kind, 'gift', 'as a gift');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

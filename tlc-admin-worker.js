@@ -789,7 +789,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-08-01-3'; // bumped: newsletter preheader/audience/blocks (phase 5)
+    const SCHEMA_VERSION = '2026-08-01-4'; // bumped: gift-vs-payment tagging on giving links (phase 7)
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -832,6 +832,12 @@ export default {
     // staff retire an old one-off link without losing the audit trail of what it was.
     try { await env.DB.prepare("ALTER TABLE redirects ADD COLUMN category TEXT NOT NULL DEFAULT 'general'").run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE redirects ADD COLUMN active INTEGER NOT NULL DEFAULT 1').run(); } catch (_) {}
+    // Gift vs Payment (phase 7). A Gift is receipted as a donation at year end;
+    // a Payment — gym rent, a registration fee, a vendor invoice — is not.
+    // Defaults to 'payment' because every row that exists today is a vendor or
+    // market link, and because the two mistakes are not equal: wrongly
+    // receipting a non-donation as tax-deductible is the more serious one.
+    try { await env.DB.prepare("ALTER TABLE redirects ADD COLUMN give_kind TEXT NOT NULL DEFAULT 'payment'").run(); } catch (_) {}
     // Giving tab: admin-editable amount tiers for give.timothystl.org (added 2026-07-27,
     // replacing the amounts/links that were previously hardcoded in the website repo's
     // give-landing.js). Blank url means "fall back to the base give_url setting" — same
@@ -6614,6 +6620,9 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
       const rLabel= (form.get('label')|| '').trim();
       const rCategory = (form.get('category') || 'general').trim() === 'giving' ? 'giving' : 'general';
       const rActive = form.get('active') !== null ? 1 : 0;
+      // Anything but an explicit 'gift' is a payment. Defaulting the other way
+      // would let a typo put a non-donation on somebody's tax statement.
+      const rGiveKind = form.get('give_kind') === 'gift' ? 'gift' : 'payment';
       const redirectBackTo = rCategory === 'giving' ? '/giving' : '/settings';
       if (!hasPermission(currentUser, rCategory === 'giving' ? 'giving_manage' : 'settings_manage')) {
         return new Response('Access denied.', { status: 403 });
@@ -6624,7 +6633,7 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
       if (parsedProtocol !== 'http:' && parsedProtocol !== 'https:') {
         return new Response('', { status: 302, headers: { Location: redirectBackTo + '?msg=redirect-error' } });
       }
-      await env.DB.prepare('INSERT OR REPLACE INTO redirects (path, url, label, category, active) VALUES (?, ?, ?, ?, ?)').bind(rPath, rUrl, rLabel, rCategory, rActive).run();
+      await env.DB.prepare('INSERT OR REPLACE INTO redirects (path, url, label, category, active, give_kind) VALUES (?, ?, ?, ?, ?, ?)').bind(rPath, rUrl, rLabel, rCategory, rActive, rGiveKind).run();
       return new Response('', { status: 302, headers: { Location: redirectBackTo + '?msg=redirect-added' } });
     }
     if (path === '/redirects/update' && method === 'POST') {
@@ -6635,6 +6644,9 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
       const rLabel= (form.get('label')|| '').trim();
       const rCategory = (form.get('category') || 'general').trim() === 'giving' ? 'giving' : 'general';
       const rActive = form.get('active') !== null ? 1 : 0;
+      // Anything but an explicit 'gift' is a payment. Defaulting the other way
+      // would let a typo put a non-donation on somebody's tax statement.
+      const rGiveKind = form.get('give_kind') === 'gift' ? 'gift' : 'payment';
       const redirectBackTo = rCategory === 'giving' ? '/giving' : '/settings';
       if (!hasPermission(currentUser, rCategory === 'giving' ? 'giving_manage' : 'settings_manage')) {
         return new Response('Access denied.', { status: 403 });
@@ -6648,7 +6660,7 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
       if (rPath !== originalPath) {
         await env.DB.prepare('DELETE FROM redirects WHERE path = ?').bind(originalPath).run();
       }
-      await env.DB.prepare('INSERT OR REPLACE INTO redirects (path, url, label, category, active) VALUES (?, ?, ?, ?, ?)').bind(rPath, rUrl, rLabel, rCategory, rActive).run();
+      await env.DB.prepare('INSERT OR REPLACE INTO redirects (path, url, label, category, active, give_kind) VALUES (?, ?, ?, ?, ?, ?)').bind(rPath, rUrl, rLabel, rCategory, rActive, rGiveKind).run();
       return new Response('', { status: 302, headers: { Location: redirectBackTo + '?msg=redirect-updated' } });
     }
     if (path.startsWith('/redirects/delete/') && method === 'POST') {
@@ -7082,7 +7094,7 @@ ${sidebarShell('settings', currentUser, '', await badgeCounts(env, currentUser))
       const baseUrlRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'give_url'").first();
       const tiers = await env.DB.prepare('SELECT * FROM give_amount_tiers ORDER BY sort_order').all();
       const funds = await env.DB.prepare('SELECT * FROM give_funds ORDER BY sort_order').all();
-      const givingLinks = await env.DB.prepare("SELECT path, url, label, category, active FROM redirects WHERE category = 'giving' ORDER BY path").all();
+      const givingLinks = await env.DB.prepare("SELECT path, url, label, category, active, give_kind FROM redirects WHERE category = 'giving' ORDER BY path").all();
       const chmsFunds = await getChmsFundSuggestions(env);
       const existingFundNames = new Set(funds.results.map(f => (f.name || '').trim().toLowerCase()));
       const chmsSuggestionsHtml = chmsFunds.length === 0 ? '' : `
@@ -7142,12 +7154,16 @@ ${sidebarShell('settings', currentUser, '', await badgeCounts(env, currentUser))
       const givingRowsHtml = givingLinks.results.length === 0
         ? `<div style="font-size:13px;color:var(--gray);padding:12px 0;">No vendor/market links yet.</div>`
         : givingLinks.results.map(r => `
-          <form method="POST" action="/redirects/update" style="display:grid;grid-template-columns:1fr 2fr 1.3fr auto auto auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+          <form method="POST" action="/redirects/update" style="display:grid;grid-template-columns:1fr 2fr 1.3fr auto auto auto auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
             <input type="hidden" name="original_path" value="${r.path.replace(/"/g,'&quot;')}">
             <input type="hidden" name="category" value="giving">
             <input type="text" name="path" value="${r.path.replace(/"/g,'&quot;')}" style="font-family:var(--mono,monospace);font-size:13px;">
             <input type="url" name="url" value="${(r.url||'').replace(/"/g,'&quot;')}" style="font-size:13px;">
             <input type="text" name="label" value="${(r.label||'').replace(/"/g,'&quot;')}" placeholder="e.g. Smith Catering — Fall Festival deposit" style="font-size:13px;">
+            <select name="give_kind" style="font-size:12px;padding:6px 8px;">
+              <option value="payment"${(r.give_kind || 'payment') === 'payment' ? ' selected' : ''}>Payment</option>
+              <option value="gift"${r.give_kind === 'gift' ? ' selected' : ''}>Gift</option>
+            </select>
             <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--gray);white-space:nowrap;">
               <input type="checkbox" name="active" value="1" ${r.active ? 'checked' : ''}> Active
             </label>
@@ -7160,6 +7176,7 @@ ${sidebarShell('giving', currentUser)}
 <div class="wrap">
   <div class="page-title">Giving</div>
   <div class="page-sub">The base Tithe.ly link, the amount tiers shown on give.timothystl.org, and one-off vendor/market payment links.</div>
+  <p class="tlc-note" style="margin:0 0 18px;"><span class="tlc-note-mark">◆</span><span>Every link here is tagged <strong>Gift</strong> or <strong>Payment</strong>. A Gift is receipted as a donation on somebody&rsquo;s year-end statement; a Payment — gym rent, a registration fee, a vendor invoice — is not. Getting that wrong puts a non-donation on a tax document, which is why new links default to Payment.</span></p>
   ${alertHtml}
 
   <form method="POST" action="/giving/base-url">
@@ -7234,13 +7251,13 @@ ${sidebarShell('giving', currentUser)}
   </div>
 
   <div class="card" style="margin-top:20px;">
-    <div class="card-title">Vendor / Market Links</div>
+    <div class="card-title">Giving &amp; payment links</div>
     <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">One-off payment links — a Christmas Market vendor deposit, a rental, anything one-time. Paste in a prefilled link from either <strong>Tithe.ly</strong> (dashboard → Giving Form → Create Custom Link) or <strong>Square</strong> (Square's own Checkout link tool) — any http(s) link works. Give it a short slug and a label, then share <code>timothystl.org/&lt;slug&gt;</code>. Uncheck Active to retire an old one without deleting the record. (Gym rental invoices already email their own Tithe.ly pay link automatically — nothing to add here for those.)</div>
     ${givingRowsHtml}
     <form method="POST" action="/redirects/add" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
       <input type="hidden" name="category" value="giving">
       <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sage);margin-bottom:12px;">Add new link</div>
-      <div style="display:grid;grid-template-columns:1fr 2fr 1.3fr auto;gap:12px;align-items:end;">
+      <div style="display:grid;grid-template-columns:1fr 2fr 1.3fr 1.2fr auto;gap:12px;align-items:end;">
         <div class="form-group" style="margin:0;">
           <label>Slug (no slash)</label>
           <input type="text" name="path" placeholder="e.g. smith-catering" style="font-family:var(--mono,monospace);">
@@ -7253,9 +7270,21 @@ ${sidebarShell('giving', currentUser)}
           <label>Label</label>
           <input type="text" name="label" placeholder="e.g. Smith Catering — Fall Festival deposit">
         </div>
+        <div class="form-group" style="margin:0;">
+          <label>Gift or payment</label>
+          <select name="give_kind">
+            <option value="payment">Payment — not receipted</option>
+            <option value="gift">Gift — receipted as a donation</option>
+          </select>
+        </div>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--charcoal);white-space:nowrap;padding-bottom:10px;">
           <input type="checkbox" name="active" value="1" checked> Active
         </label>
+      </div>
+      <div style="margin-top:10px;font-size:13px;line-height:1.6;color:var(--gray);">
+        <strong>Gift</strong> money is receipted as a donation on somebody's year-end giving statement.
+        <strong>Payment</strong> money — gym rent, a registration fee, a vendor invoice — is not.
+        Tagging a payment as a gift would put a non-donation on a tax statement, so this defaults to Payment and has to be changed on purpose.
       </div>
       <div class="btn-row" style="margin-top:12px;">
         <button type="submit" class="btn btn-primary">Add link →</button>
