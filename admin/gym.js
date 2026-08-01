@@ -2335,7 +2335,11 @@ ${sidebarShell('gym', currentUser)}
     <a href="/gym-rentals/settings" class="btn btn-secondary">Settings</a>
     <a href="/gym-rentals/test-gcal" class="btn btn-secondary" style="margin-left:auto;">Test GCal →</a>
   </div>
-  <div${gymView === 'calendar' ? ' style="display:none;"' : ''}>
+  <!-- ⚠ Shown in BOTH layouts, deliberately. Calendar first is now the default,
+       and the bulk tools below carry the invoice generation, the price-setting
+       and the Google Calendar push — one person's whole job. Hiding them on
+       the default view would be dropping them in everything but name. -->
+  <div>
   <div style="background:var(--mist);border:1px solid var(--border);border-radius:10px;padding:12px 18px;margin-bottom:24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
     <div style="font-size:13px;color:var(--charcoal);">Pending holds: <strong>${holdHrs} hrs</strong> <span style="color:var(--gray);">($${(holdHrs * rate).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})})</span></div>
     <div style="font-size:13px;color:var(--charcoal);">Confirmed (upcoming): <strong>${confHrs} hrs</strong> <span style="color:var(--gray);">($${(confHrs * rate).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})})</span></div>

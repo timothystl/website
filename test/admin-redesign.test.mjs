@@ -893,6 +893,12 @@ group('gym rentals ships both layouts');
   has(withInvoices, 'Unpaid', 'an unpaid invoice says so');
   has(withInvoices, '>Paid<', 'and a paid one is told apart from it');
   has(withInvoices, '$650.00', 'with the amount, not a count');
+
+  // ⚠ Calendar first is the default now, so the bulk tools must be on it too.
+  // They carry the invoice generation, the price-setting and the calendar push;
+  // hiding them on the view everybody lands on would be dropping them.
+  has(cal, 'By organisation', 'the bulk tools are on the default view as well');
+  has(cal, 'Confirm All', 'including confirming a whole group at one price');
   // Approving from the panel must not mean approving blind.
   has(cal, 'This slot conflicts with something already booked',
     'a conflicting hold warns before it is approved from the panel');

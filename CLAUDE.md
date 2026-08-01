@@ -1113,6 +1113,12 @@ the month alone.
   exactly why it cannot hide the one thing that would stop them.
 - Month arrows keep whichever layout you are in, rather than always landing on
   the calendar.
+- **⚠ The "By organisation" bulk tools are on BOTH layouts now.** They used to
+  be hidden in the calendar view, which was harmless while Queue was the
+  default and a regression the moment Calendar became it — they carry the
+  invoice generation, the price-setting and the Google Calendar push, so
+  hiding them on the view everybody lands on would be dropping them in
+  everything but name.
 
 **The info card** (`22-page-editor.html` §"The info card") is a **slot on a
 banner, not a block** — available on Welcome banner, Page banner and Callout
