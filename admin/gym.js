@@ -3105,9 +3105,15 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 .bcal-legend span{display:flex;align-items:center;gap:6px;}
 </style>
 <div class="tlc-wrap">
-  <div class="page-title">Blocked dates</div>
-  <div class="page-sub">Click dates to select them, then save. Already-blocked dates (red) can be clicked to unblock.</div>
-  ${gymAlert}
+  <div class="tlc-section" style="padding-bottom:0;">
+    <header class="tlc-section-head">
+      <div class="tlc-section-headings">
+        <h1 class="tlc-title">${escapeHtml(sectionCfg('gymBlocked').title)}</h1>
+        <p class="tlc-purpose">${escapeHtml(sectionCfg('gymBlocked').purpose)}</p>
+      </div>
+    </header>
+    ${gymAlert}
+  </div>
   <div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border);">
       <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);">Select dates to block or unblock</div>
@@ -3119,6 +3125,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
       </div>
     </div>
     ${calHtml}
+    <p class="tlc-note" style="margin:0 0 14px;"><span class="tlc-note-mark">◆</span><span>${escapeHtml(sectionCfg('gymBlocked').note)}</span></p>
     <div class="bcal-legend" style="margin-bottom:16px;">
       <span><span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:#fce8e8;border:1px solid #e8a0a0;"></span> Currently blocked</span>
       <span><span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:var(--amber);"></span> Selected to block</span>
@@ -4036,70 +4043,57 @@ ${sidebarShell('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
       // ── ALL BOOKINGS LIST ─────────────────────────────────────
       if (path === '/gym-rentals/bookings' && method === 'GET') {
         const today = new Date().toISOString().split('T')[0];
-        const [upcoming, past] = await Promise.all([
-          env.DB.prepare(`SELECT b.*, g.name as group_name FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id WHERE b.booking_date >= ? AND b.status IN ('confirmed','hold') ORDER BY b.booking_date, b.start_time`).bind(today).all(),
-          env.DB.prepare(`SELECT b.*, g.name as group_name FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id WHERE b.booking_date < ? ORDER BY b.booking_date DESC LIMIT 30`).bind(today).all(),
-        ]);
-        const statusBadge = s => s === 'confirmed' ? `<span class="badge badge-active">Confirmed</span>`
-          : s === 'hold'      ? `<span class="badge" style="background:#FFF3D6;color:#7A4F00;">Hold</span>`
-          : s === 'cancelled' ? `<span class="badge badge-expired">Cancelled</span>`
-          : s === 'released'  ? `<span class="badge badge-expired">Released</span>`
-          : s === 'expired'   ? `<span class="badge badge-expired">Expired</span>`
-          : `<span class="badge">${s}</span>`;
-        const bRow = (b, actions = true) => `
-<div class="ni-row">
-  <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--steel);min-width:100px;">${fmtBookingDate(b.booking_date)}</div>
-  <div style="font-family:var(--serif);font-size:15px;color:var(--charcoal);flex:1;">${b.group_name||'—'}</div>
-  <div class="ni-meta">${fmt12h(b.start_time)} \u2013 ${fmt12h(b.end_time)}</div>
-  ${statusBadge(b.status)}
-  ${actions && (b.status === 'confirmed' || b.status === 'hold') ? `<div class="ni-actions" style="display:flex;gap:6px;flex-wrap:wrap;">
-    ${b.status === 'hold' ? `<form method="POST" action="/gym-rentals/bookings/confirm-admin/${b.id}" style="display:contents;" onsubmit="return confirm('Confirm this hold and generate an invoice?')"><button type="submit" class="btn btn-sm btn-primary">Confirm</button></form>` : ''}
-    <form method="POST" action="/gym-rentals/bookings/cancel/${b.id}" style="display:contents;" onsubmit="return confirm('Cancel this booking? The group will be notified.')">
-      <button type="submit" class="btn btn-sm btn-danger">Cancel</button>
-    </form>
-  </div>` : ''}
-</div>`;
-        const groupByOrg = (rows, showActions) => {
-          const groups = {};
-          const order = [];
-          for (const b of rows) {
-            const name = b.group_name || '— Unassigned —';
-            if (!groups[name]) { groups[name] = []; order.push(name); }
-            groups[name].push(b);
-          }
-          return order.map(name => `
-<details open style="margin-bottom:10px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
-  <summary style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:11px 16px;background:var(--mist);font-family:var(--sans);font-size:13px;font-weight:700;color:var(--steel);list-style:none;-webkit-appearance:none;">
-    <span>${name}</span>
-    <span style="font-size:12px;font-weight:400;color:var(--gray);">${groups[name].length} booking${groups[name].length !== 1 ? 's' : ''}</span>
-  </summary>
-  ${groups[name].map(b => bRow(b, showActions)).join('')}
-</details>`).join('');
-        };
-        const upHtml = upcoming.results.length === 0
-          ? `<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No upcoming bookings.</div>`
-          : groupByOrg(upcoming.results, true);
-        const pastHtml = past.results.length === 0
-          ? `<div style="text-align:center;padding:24px;color:var(--gray);font-size:13px;">No past bookings on record.</div>`
-          : groupByOrg(past.results, false);
+        // One list, newest-relevant first: everything still to come, then the
+        // recent past. The old screen split them into two accordions grouped by
+        // organisation, which meant "when is Southside next in" had two places
+        // to look and neither was sorted by date.
+        const rows = await env.DB.prepare(
+          `SELECT b.*, g.name as group_name FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id
+           ORDER BY CASE WHEN b.booking_date >= ? THEN 0 ELSE 1 END, b.booking_date, b.start_time`
+        ).bind(today).all().catch(() => ({ results: [] }));
+
+        const TONE = { confirmed: ['good', 'Confirmed'], hold: ['warn', 'Hold'],
+          released: ['plain', 'Released'], expired: ['plain', 'Expired'], cancelled: ['plain', 'Cancelled'] };
+        const listRows = (rows.results || []).map((b) => {
+          const [tone, label] = TONE[b.status] || ['plain', b.status];
+          const past = b.booking_date < today;
+          return {
+            href: b.group_id ? `/gym-rentals/groups/${b.group_id}` : '/gym-rentals',
+            filter: b.status === 'confirmed' ? 'confirmed' : b.status === 'hold' ? 'holds' : 'released',
+            search: `${b.group_name || ''} ${b.booking_date}`.toLowerCase(),
+            cells: [
+              primaryCell(b.group_name || 'Unassigned', past ? 'Past' : 'Upcoming'),
+              primaryCell(fmtBookingDate(b.booking_date), `${fmt12h(b.start_time)} – ${fmt12h(b.end_time)}`),
+              `<span>${b.created_at ? escapeHtml(formatDate(String(b.created_at).slice(0, 10))) : ''}</span>`,
+              statusPill(tone, label),
+            ],
+            actions: (b.status === 'hold' || b.status === 'confirmed') && !past
+              ? (b.status === 'hold'
+                  ? `<form method="POST" action="/gym-rentals/bookings/confirm-admin/${b.id}" style="display:inline;margin:0;" onsubmit="return confirm('Confirm this hold and generate an invoice?')"><button type="submit" class="tlc-gym-approve">Approve</button></form>`
+                  : '')
+                + `<form method="POST" action="/gym-rentals/bookings/cancel/${b.id}" style="display:inline;margin:0;" onsubmit="return confirm('Cancel this booking? The group will be notified.')"><button type="submit" class="tlc-gym-release">Cancel</button></form>`
+              : '<span style="color:var(--tlc-muted);font-size:12.5px;">—</span>',
+          };
+        });
+
         return html(`
-${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">Gym rentals</a>`)}
 <div class="tlc-wrap">
-  <div class="page-title">All bookings</div>
-  <div class="page-sub">Upcoming and past gym rentals.</div>
-  ${gymAlert}
-  <div class="btn-row" style="margin-bottom:28px;">
-    <a href="/gym-rentals/bookings/new" class="btn btn-primary">+ New Booking</a>
-  </div>
-  <div class="card">
-    <div class="card-title">Upcoming</div>
-    ${upHtml}
-  </div>
-  <div class="card">
-    <div class="card-title">Recent Past (last 30)</div>
-    ${pastHtml}
-  </div>
-</div>`, 'All Bookings');
+  ${gymAlert ? `<div class="tlc-section" style="padding-bottom:0;">${gymAlert}</div>` : ''}
+  ${renderListSection({
+    key: 'gym-bookings',
+    title: sectionCfg('gymBookings').title,
+    purpose: sectionCfg('gymBookings').purpose,
+    action: { label: '+ New booking', href: '/gym-rentals/bookings/new' },
+    search: sectionCfg('gymBookings').search,
+    filters: filtersOf('gymBookings'),
+    columns: columnsOf('gymBookings'),
+    rows: listRows,
+    noun: 'booking',
+    empty: 'Nothing booked yet.',
+    note: sectionCfg('gymBookings').note,
+  })}
+</div>`, 'All bookings — TLC Admin');
       }
 
       // ── CONFIRM GROUP WITH CUSTOM PRICE ──────────────────────
@@ -4724,36 +4718,53 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/invoices">\u2190 Invoi
 
       // ── RECURRING LIST ────────────────────────────────────────
       if (path === '/gym-rentals/recurring' && method === 'GET') {
-        const DOW_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        const DOW_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
         const recs = await env.DB.prepare(
-          `SELECT r.*, g.name as group_name FROM gym_recurrences r LEFT JOIN gym_groups g ON g.id = r.group_id ORDER BY r.created_at DESC`
-        ).all();
-        const statusBadge = s => s === 'approved' ? `<span class="badge badge-confirmed">Approved</span>`
-          : s === 'rejected' ? `<span class="badge badge-expired">Rejected</span>`
-          : `<span class="badge badge-upcoming">Pending</span>`;
-        const recsHtml = recs.results.length === 0
-          ? `<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No recurring requests yet.</div>`
-          : recs.results.map(r => `
-<div class="ni-row">
-  <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--steel);min-width:80px;">${DOW_NAMES[r.day_of_week]}s</div>
-  <div style="font-family:var(--serif);font-size:15px;color:var(--charcoal);flex:1;">${r.group_name||'—'}</div>
-  <div class="ni-meta">${fmt12h(r.start_time)} – ${fmt12h(r.end_time)}</div>
-  <div class="ni-meta">${formatDate(r.start_date)} – ${formatDate(r.end_date)}</div>
-  ${statusBadge(r.status)}
-  <div class="ni-actions">
-    <a href="/gym-rentals/recurring/review/${r.id}" class="btn btn-sm btn-secondary">View</a>
-  </div>
-</div>`).join('');
+          `SELECT r.*, g.name as group_name FROM gym_recurrences r LEFT JOIN gym_groups g ON g.id = r.group_id
+           ORDER BY CASE WHEN r.status='pending_review' THEN 0 ELSE 1 END, r.created_at DESC`
+        ).all().catch(() => ({ results: [] }));
+
+        const listRows = (recs.results || []).map((r) => {
+          const pending = r.status !== 'approved' && r.status !== 'rejected';
+          const dates = r.start_date && r.end_date
+            ? Math.floor((new Date(r.end_date) - new Date(r.start_date)) / 6048e5) + 1 : null;
+          return {
+            href: `/gym-rentals/recurring/review/${r.id}`,
+            filter: pending ? 'needs-review' : r.status === 'approved' ? 'approved' : 'declined',
+            search: `${r.group_name || ''} ${DOW_NAMES[r.day_of_week] || ''}`.toLowerCase(),
+            cells: [
+              primaryCell(r.group_name || 'Unassigned', pending ? 'Waiting for a decision' : ''),
+              primaryCell(`${DOW_NAMES[r.day_of_week] || ''}s, ${fmt12h(r.start_time)} – ${fmt12h(r.end_time)}`,
+                dates ? `${dates} dates` : ''),
+              `<span>${escapeHtml(formatDate(r.start_date))} – ${escapeHtml(formatDate(r.end_date))}</span>`,
+              pending ? statusPill('warn', 'Needs review')
+                : r.status === 'approved' ? statusPill('good', 'Approved') : statusPill('plain', 'Declined'),
+            ],
+            actions: `<a class="${pending ? 'tlc-gym-approve' : 'tlc-edit'}" href="/gym-rentals/recurring/review/${r.id}">${pending ? 'Review' : 'Open'}</a>`,
+            // These are the only rows where nothing happens at all until
+            // somebody acts — a hold at least expires on its own.
+            warn: pending ? 'Nothing happens on this request until somebody reviews it. Approving generates every date at once.' : '',
+            warnCta: pending ? { label: 'Review it', href: `/gym-rentals/recurring/review/${r.id}` } : null,
+          };
+        });
+
         return html(`
-${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">Gym rentals</a>`)}
 <div class="tlc-wrap">
-  <div class="page-title">Recurring requests</div>
-  <div class="page-sub">All recurring rental requests from groups.</div>
-  ${gymAlert}
-  <div class="card">
-    ${recsHtml}
-  </div>
-</div>`, 'Recurring Requests');
+  ${gymAlert ? `<div class="tlc-section" style="padding-bottom:0;">${gymAlert}</div>` : ''}
+  ${renderListSection({
+    key: 'gym-recurring',
+    title: sectionCfg('gymRecurring').title,
+    purpose: sectionCfg('gymRecurring').purpose,
+    search: sectionCfg('gymRecurring').search,
+    filters: filtersOf('gymRecurring'),
+    columns: columnsOf('gymRecurring'),
+    rows: listRows,
+    noun: 'request',
+    empty: 'No recurring requests. Groups ask for these from their booking portal.',
+    note: sectionCfg('gymRecurring').note,
+  })}
+</div>`, 'Recurring requests — TLC Admin');
       }
 
       // ── RECURRING REVIEW / APPROVE / REJECT ───────────────────

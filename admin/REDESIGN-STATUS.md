@@ -23,15 +23,15 @@ still needs converting before Task 6 is genuinely done.
 | `/edit/` | `tlc-admin-worker.js:4350` | `restyled` | `13-newsletter.html` · Same composer. |
 | `/filtered` | `admin/forms.js:212` | `pattern` | — · No screen file (postdates the handoff); built to Task 7's columns and filters. |
 | `/gym-rentals/api/group-rate` | `admin/gym.js:3232` | `restyled` | — |
-| `/gym-rentals/blocked` | `admin/gym.js:3026` | `restyled` | — |
-| `/gym-rentals/bookings` | `admin/gym.js:4021` | `restyled` | — |
+| `/gym-rentals/blocked` | `admin/gym.js:3026` | `pattern` | — |
+| `/gym-rentals/bookings` | `admin/gym.js:4021` | `pattern` | — |
 | `/gym-rentals/bookings/new` | `admin/gym.js:3241` | `restyled` | — |
 | `/gym-rentals/groups` | `admin/gym.js:2456` | `pattern` | — |
 | `/gym-rentals/groups/edit/` | `admin/gym.js:2548` | `restyled` | — |
 | `/gym-rentals/groups/new` | `admin/gym.js:2486` | `restyled` | — |
 | `/gym-rentals/invoices` | `admin/gym.js:4437` | `pattern` | — |
 | `/gym-rentals/invoices/view/` | `admin/gym.js:4475` | `restyled` | — |
-| `/gym-rentals/recurring` | `admin/gym.js:4695` | `restyled` | — |
+| `/gym-rentals/recurring` | `admin/gym.js:4695` | `pattern` | — |
 | `/gym-rentals/recurring/review/` | `admin/gym.js:4729` | `restyled` | — |
 | `/gym-rentals/settings` | `admin/gym.js:2419` | `restyled` | — |
 | `/gym-rentals/test-gcal` | `admin/gym.js:2688` | `restyled` | — |

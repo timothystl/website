@@ -1546,6 +1546,26 @@ group('the gym sub-screens use the shared pattern');
   has(inv, 'Unpaid', 'and whether it is paid');
   has(inv, 'hrs at $25.00/hr', 'and the rate it billed at');
   ok(!inv.includes('class="ni-row"'), 'neither screen is hand-built rows any more');
+
+  db.prepare("INSERT INTO gym_bookings (group_id,booking_date,start_time,end_time,status,created_at) VALUES (1,'2099-01-14','18:00','20:00','hold',?)").run(now);
+  const bookings = await (await call(env, '/gym-rentals/bookings', { cookie })).text();
+  has(bookings, 'Every hold and confirmed booking', 'All bookings is a list section');
+  has(bookings, 'Southside Volleyball', 'with the bookings in it');
+  ok(!bookings.includes('<details open'), 'and not two accordions grouped by organisation');
+
+  db.prepare("INSERT INTO gym_recurrences (group_id,day_of_week,start_time,end_time,start_date,end_date,status,created_at) VALUES (1,2,'18:00','20:00','2099-01-01','2099-03-01','pending_review',?)").run(now);
+  const rec = await (await call(env, '/gym-rentals/recurring', { cookie })).text();
+  has(rec, 'Needs review', 'Recurring requests flags what is waiting');
+  has(rec, 'Nothing happens on this request until somebody reviews it',
+    'and says so, because these are the only rows that never resolve themselves');
+
+  // ⚠ Blocked dates keeps its CALENDAR. You block "the week of the Christmas
+  // Market" by seeing the month; a table of dates would be a worse interface
+  // than the one it replaced. It wears the shared header and note instead.
+  const blocked = await (await call(env, '/gym-rentals/blocked', { cookie })).text();
+  has(blocked, 'cal-grid', 'Blocked dates is still a calendar');
+  has(blocked, 'Days the gym cannot be booked', 'with the shared purpose line');
+  has(blocked, 'does not cancel bookings already confirmed', 'and the rule it enforces');
 }
 
 group('the taps are counted');
