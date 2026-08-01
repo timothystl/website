@@ -5,7 +5,7 @@ import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 
-export const VERSION = 'v3.1.0'; // minor: the mockup-match pass — the design's five-group IA, Redirects and Settings split apart, Giving's fund/amount panels, the two-column newsletter editor
+export const VERSION = 'v3.1.1'; // minor: the mockup-match pass — the design's five-group IA, Redirects and Settings split apart, Giving's fund/amount panels, the two-column newsletter editor
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
