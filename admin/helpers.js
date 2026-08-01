@@ -5,7 +5,7 @@ import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 
-export const VERSION = 'v3.3.0'; // minor: payroll period approval + email to the bookkeeper, clickable gym calendar
+export const VERSION = 'v3.3.1'; // minor: payroll period approval + email to the bookkeeper, clickable gym calendar
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
