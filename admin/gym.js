@@ -4,7 +4,7 @@
 import { html, headerNav, formatDate, tinymceEditorSection, escapeHtml } from './helpers.js';
 import { sendTransactionalEmail } from './email.js';
 import { renderListSection, primaryCell, statusPill } from './ui.js';
-import { section as sectionCfg } from './sections.js';
+import { section as sectionCfg, columnsOf, filtersOf } from './sections.js';
 
 // ── IMAGE HELPERS ───────────────────────────────────────────
 export function extractImageKeys(body, origin) {
@@ -2460,31 +2460,42 @@ ${headerNav('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
       // ── GROUPS LIST ──────────────────────────────────────────
       if (path === '/gym-rentals/groups' && method === 'GET') {
         const groups = await env.DB.prepare('SELECT * FROM gym_groups ORDER BY name').all();
-        const groupsHtml = groups.results.length === 0
-          ? `<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No groups yet. Add your first rental group.</div>`
-          : groups.results.map(g => `
-<div class="ni-row">
-  <div style="flex:1;">
-    <div style="font-family:var(--serif);font-size:16px;color:var(--steel);">${g.name}</div>
-    <div style="font-family:var(--sans);font-size:12px;color:var(--gray);margin-top:3px;">${[g.contact,g.email,g.phone].filter(Boolean).join(' · ')}</div>
-  </div>
-  <div class="ni-meta">Max ${g.max_active_holds||3} holds</div>
-  <span class="badge ${g.active ? 'badge-active' : 'badge-expired'}">${g.active ? 'Active' : 'Inactive'}</span>
-  <div class="ni-actions">
-    <a href="/gym-rentals/groups/edit/${g.id}" class="btn btn-sm btn-secondary">Edit</a>
-  </div>
-</div>`).join('');
+        const listRows = (groups.results || []).map((g) => ({
+          href: `/gym-rentals/groups/edit/${g.id}`,
+          filter: g.active ? 'active' : 'inactive',
+          search: `${g.name} ${g.contact || ''} ${g.email || ''}`.toLowerCase(),
+          cells: [
+            primaryCell(g.name, g.access_token ? 'Has a booking link' : 'No booking link yet'),
+            primaryCell(g.contact || 'No contact on file', [g.email, g.phone].filter(Boolean).join(' · ')),
+            `<span>${g.max_active_holds || 3}</span>`,
+            g.active ? statusPill('good', 'Active') : statusPill('plain', 'Inactive'),
+          ],
+          actions: `<a class="tlc-edit" href="/gym-rentals/groups/edit/${g.id}">Edit</a>`,
+          // A group with no token has no way in — the whole mechanic is that
+          // they book through a private link rather than an account.
+          warn: g.active && !g.access_token
+            ? 'This group is active but has no booking link, so there is no way for them to book. Open it and generate one.' : '',
+          warnCta: g.active && !g.access_token
+            ? { label: 'Open group', href: `/gym-rentals/groups/edit/${g.id}` } : null,
+        }));
         return html(`
-${headerNav('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
+${headerNav('gym', currentUser, `<a href="/gym-rentals">Gym rentals</a>`)}
 <div class="tlc-wrap">
-  <div class="page-title">Rental groups</div>
-  <div class="page-sub">Each group gets a private booking link. Share it with them — no login required.</div>
-  ${gymAlert}
-  <div class="btn-row" style="margin-bottom:28px;">
-    <a href="/gym-rentals/groups/new" class="btn btn-primary">+ Add Group</a>
-  </div>
-  <div class="card">${groupsHtml}</div>
-</div>`, 'Rental Groups');
+  ${gymAlert ? `<div class="tlc-section" style="padding-bottom:0;">${gymAlert}</div>` : ''}
+  ${renderListSection({
+    key: 'gym-groups',
+    title: sectionCfg('gymGroups').title,
+    purpose: sectionCfg('gymGroups').purpose,
+    action: { label: sectionCfg('gymGroups').action, href: '/gym-rentals/groups/new' },
+    search: sectionCfg('gymGroups').search,
+    filters: filtersOf('gymGroups'),
+    columns: columnsOf('gymGroups'),
+    rows: listRows,
+    noun: 'group',
+    empty: 'No groups yet. Add the first one and it gets its own booking link.',
+    note: sectionCfg('gymGroups').note,
+  })}
+</div>`, 'Rental groups — TLC Admin');
       }
 
       // ── NEW GROUP FORM ───────────────────────────────────────
@@ -4443,37 +4454,52 @@ ${headerNav('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         const invoices = await env.DB.prepare(
           `SELECT i.*, g.name as group_name FROM gym_invoices i LEFT JOIN gym_groups g ON g.id = i.group_id ORDER BY i.created_at DESC LIMIT 100`
         ).all();
-        const invRowHtml = invoices.results.length === 0
-          ? `<div style="text-align:center;padding:40px;color:var(--gray);font-size:14px;">No invoices yet. Invoices are generated automatically when a booking is created.</div>`
-          : invoices.results.map(inv => {
-              const invNum = `GYM-${inv.id.toString().padStart(4,'0')}`;
-              return `
-<div class="ni-row">
-  <div style="font-family:var(--sans);font-size:12px;font-weight:700;color:var(--gray);min-width:72px;">${invNum}</div>
-  <div style="flex:1;">
-    <div style="font-family:var(--serif);font-size:15px;color:var(--steel);">${inv.group_name||'—'}</div>
-    <div style="font-family:var(--sans);font-size:12px;color:var(--gray);">${formatDate(inv.invoice_date)}</div>
-  </div>
-  <div style="font-family:var(--sans);font-size:16px;font-weight:700;color:var(--charcoal);">$${parseFloat(inv.total_amount||0).toFixed(2)}</div>
-  <span class="badge ${inv.status==='paid'?'badge-active':'badge-pinned'}">${inv.status==='paid'?'Paid':'Unpaid'}</span>
-  <div class="ni-actions">
-    <a href="/gym-rentals/invoices/view/${inv.id}" class="btn btn-sm btn-secondary">View</a>
-    <form method="POST" action="/gym-rentals/invoices/toggle-paid/${inv.id}" style="display:contents;">
-      <button type="submit" class="btn btn-sm ${inv.status==='paid'?'btn-danger':'btn-sage'}">${inv.status==='paid'?'Mark Unpaid':'Mark Paid'}</button>
-    </form>
-    <form method="POST" action="/gym-rentals/invoices/delete/${inv.id}" style="display:contents;" onsubmit="return confirm('Delete invoice ${invNum}? This cannot be undone.')">
-      <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-    </form>
-  </div>
-</div>`; }).join('');
+        const money = (n) => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        // Local: the dashboard's fmtShort is scoped to that handler.
+        const shortDate = (d) => d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+        const listRows = (invoices.results || []).map((inv) => {
+          const num = `GYM-${inv.id.toString().padStart(4, '0')}`;
+          const paid = inv.status === 'paid';
+          return {
+            href: `/gym-rentals/invoices/view/${inv.id}`,
+            filter: paid ? 'paid' : 'unpaid',
+            search: `${inv.group_name || ''} ${num}`.toLowerCase(),
+            cells: [
+              primaryCell(inv.group_name || 'Unassigned', num),
+              primaryCell(
+                inv.period_start ? `${shortDate(inv.period_start)} – ${shortDate(inv.period_end)}` : formatDate(inv.invoice_date),
+                `${Number(inv.total_hours || 0)} hrs at ${money(inv.rate)}/hr`),
+              `<span style="font-weight:600;">${escapeHtml(money(inv.total_amount))}</span>`,
+              paid ? statusPill('good', 'Paid') : statusPill('warn', 'Unpaid'),
+            ],
+            actions: `<a class="tlc-edit" href="/gym-rentals/invoices/view/${inv.id}">View</a>`
+              + `<form method="POST" action="/gym-rentals/invoices/toggle-paid/${inv.id}" style="display:inline;margin:0;">`
+              + `<button type="submit" class="tlc-edit" style="background:none;border:0;cursor:pointer;">${paid ? 'Mark unpaid' : 'Mark paid'}</button></form>`,
+            // An invoice that billed at nothing is not a comp — it is a rate
+            // that was blank when the booking was confirmed.
+            warn: Number(inv.total_amount || 0) === 0
+              ? 'This invoice bills nothing. If that is not deliberate, check the hourly rate in settings and regenerate it.' : '',
+            warnCta: Number(inv.total_amount || 0) === 0
+              ? { label: 'Gym settings', href: '/gym-rentals/settings' } : null,
+          };
+        });
         return html(`
-${headerNav('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
+${headerNav('gym', currentUser, `<a href="/gym-rentals">Gym rentals</a>`)}
 <div class="tlc-wrap">
-  <div class="page-title">Invoices</div>
-  <div class="page-sub">Invoice history and payment tracking.</div>
-  ${gymAlert}
-  <div class="card">${invRowHtml}</div>
-</div>`, 'Invoices');
+  ${gymAlert ? `<div class="tlc-section" style="padding-bottom:0;">${gymAlert}</div>` : ''}
+  ${renderListSection({
+    key: 'gym-invoices',
+    title: sectionCfg('gymInvoices').title,
+    purpose: sectionCfg('gymInvoices').purpose,
+    search: sectionCfg('gymInvoices').search,
+    filters: filtersOf('gymInvoices'),
+    columns: columnsOf('gymInvoices'),
+    rows: listRows,
+    noun: 'invoice',
+    empty: 'No invoices yet. One is generated when a hold is confirmed.',
+    note: sectionCfg('gymInvoices').note,
+  })}
+</div>`, 'Invoices — TLC Admin');
       }
 
       // ── INVOICE VIEW / PRINT ──────────────────────────────────

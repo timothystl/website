@@ -26,10 +26,10 @@ still needs converting before Task 6 is genuinely done.
 | `/gym-rentals/blocked` | `admin/gym.js:3026` | `restyled` | — |
 | `/gym-rentals/bookings` | `admin/gym.js:4021` | `restyled` | — |
 | `/gym-rentals/bookings/new` | `admin/gym.js:3241` | `restyled` | — |
-| `/gym-rentals/groups` | `admin/gym.js:2456` | `restyled` | — |
+| `/gym-rentals/groups` | `admin/gym.js:2456` | `pattern` | — |
 | `/gym-rentals/groups/edit/` | `admin/gym.js:2548` | `restyled` | — |
 | `/gym-rentals/groups/new` | `admin/gym.js:2486` | `restyled` | — |
-| `/gym-rentals/invoices` | `admin/gym.js:4437` | `restyled` | — |
+| `/gym-rentals/invoices` | `admin/gym.js:4437` | `pattern` | — |
 | `/gym-rentals/invoices/view/` | `admin/gym.js:4475` | `restyled` | — |
 | `/gym-rentals/recurring` | `admin/gym.js:4695` | `restyled` | — |
 | `/gym-rentals/recurring/review/` | `admin/gym.js:4729` | `restyled` | — |

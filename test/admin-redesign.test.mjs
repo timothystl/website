@@ -1512,6 +1512,31 @@ group('a newsletter can carry a fourth and fifth note');
   ok(!nastyHtml.includes('<script>alert(1)'), 'a heading cannot smuggle markup into the email');
 }
 
+group('the gym sub-screens use the shared pattern');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const now = new Date().toISOString();
+  db.prepare("INSERT INTO gym_groups (id,name,contact,email,active,access_token) VALUES (1,'Southside Volleyball','Ann','a@b.co',1,'tok')").run();
+  db.prepare("INSERT INTO gym_groups (id,name,contact,email,active) VALUES (2,'No Link Club','Bo','b@c.co',1)").run();
+  db.prepare("INSERT INTO gym_invoices (group_id,invoice_date,period_start,period_end,total_hours,rate,total_amount,status,created_at) VALUES (1,?,?,?,26,25,650,'unpaid',?)")
+    .run('2026-08-01', '2026-08-01', '2026-08-31', now);
+
+  const groups = await (await call(env, '/gym-rentals/groups', { cookie })).text();
+  has(groups, 'tlc-section', 'Rental groups is a list section now');
+  has(groups, 'Southside Volleyball', 'with the groups in it');
+  has(groups, 'Every group that rents the gym', 'and the purpose line from sections.js');
+  // A group with no token cannot be booked with — the whole mechanic is a
+  // private link rather than an account.
+  has(groups, 'has no booking link', 'a group with no link is flagged');
+
+  const inv = await (await call(env, '/gym-rentals/invoices', { cookie })).text();
+  has(inv, '$650.00', 'Invoices shows the amount');
+  has(inv, 'Unpaid', 'and whether it is paid');
+  has(inv, 'hrs at $25.00/hr', 'and the rate it billed at');
+  ok(!inv.includes('class="ni-row"'), 'neither screen is hand-built rows any more');
+}
+
 group('the taps are counted');
 {
   // \u26a0 Until now `taps.scans` was a column nothing ever wrote to. Resolution
