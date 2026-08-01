@@ -5,7 +5,7 @@
 // Last modified: 2026-03-27
 
 
-import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes } from './admin/db.js';
+import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes } from './admin/db.js';
 
 // Static pages that can carry self-serve notices (matches the SPA's page ids in public/index.html)
 const STATIC_PAGES = [
@@ -22,7 +22,9 @@ const STATIC_PAGES = [
   { slug: 'calendar',   label: 'Calendar' },
 ];
 import { html, sidebarShell, loginPage, setupPage, forgotPasswordPage, resetPasswordPage, permissionCheckboxes, formatDate, escapeHtml, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection } from './admin/helpers.js';
-import { hashPassword, verifyPassword, createSession, getSession, deleteSession, sessionCookieHeader, clearSessionCookieHeader, logAudit, hasPermission, ALL_PERMISSIONS, PERMISSIONS } from './admin/auth.js';
+import { renderListSection, renderDrawer, primaryCell, statusPill, valueChip, valueSelect, panel, countLabel, pluralise } from './admin/ui.js';
+import { VALUES, valueByKey, normalizeValue } from './admin/values.js';
+import { hashPassword, verifyPassword, createSession, getSession, deleteSession, sessionCookieHeader, clearSessionCookieHeader, logAudit, hasPermission, ALL_PERMISSIONS, PERMISSIONS, PERMISSION_PRESETS, migratePermissionKeys } from './admin/auth.js';
 import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHtml, cancelBrevoCampaign } from './admin/email.js';
 import { handleGymRoutes, sweepExpiredItems, extractImageKeys } from './admin/gym.js';
 import { migrateLegacyPage, starterBlocks, sanitizeBlocks, sanitizeBlock, parseBlocks, newBlock,
@@ -99,7 +101,7 @@ async function pageEditors(env) {
   try {
     const rows = await env.DB.prepare('SELECT username, permissions FROM users WHERE active = 1 ORDER BY username').all();
     return (rows.results || [])
-      .filter((u) => { try { return JSON.parse(u.permissions || '[]').some((p) => p === 'site_pages' || p === 'site_pages_own'); } catch { return false; } })
+      .filter((u) => { try { return JSON.parse(u.permissions || '[]').some((p) => p === 'pages_edit' || p === 'pages_edit_own'); } catch { return false; } })
       .map((u) => u.username);
   } catch (_) { return []; }
 }
@@ -257,6 +259,32 @@ async function sharedEditorApi(path, method, request, env, ctx, currentUser, P) 
 // `env` is shared by every request in an isolate, so caching against it would
 // serve yesterday's sermon until Cloudflare happened to recycle the isolate.
 const PAGE_DATA_CACHE = new WeakMap();
+
+// ── BADGE / WORKLIST COUNTS ──────────────────────────────────
+// The sidebar badges and the Dashboard's "Needs you" list are the same three
+// numbers, computed here once so they can never disagree — a badge saying 3
+// beside a worklist showing 2 teaches a volunteer to distrust both.
+//
+// Each count is scoped to the permission that could act on it, and every query
+// is defensive: a missing table on a fresh database must not take the whole
+// sidebar down.
+async function badgeCounts(env, user) {
+  const n = async (sql) => {
+    try { return (await env.DB.prepare(sql).first())?.n || 0; } catch (_) { return 0; }
+  };
+  const canGym = hasPermission(user, 'gym_manage');
+  const canPages = hasPermission(user, 'pages_edit') || hasPermission(user, 'pages_edit_own');
+  const canApprove = hasPermission(user, 'newsletter_approve');
+  const [gym, pages, newsletter] = await Promise.all([
+    canGym ? n("SELECT COUNT(*) AS n FROM gym_bookings WHERE status='hold'") : 0,
+    // A page counts as needing attention when its draft differs from what is
+    // live, or when it has never been published at all. Same rule as the Pages
+    // list's own Draft pill (admin/pages.js), so the two always agree.
+    canPages ? n("SELECT COUNT(*) AS n FROM pages WHERE status='draft' OR COALESCE(blocks,'') <> COALESCE(published_blocks,'')") : 0,
+    canApprove ? n("SELECT COUNT(*) AS n FROM newsletters WHERE approval_status='pending'") : 0,
+  ]);
+  return { gym, pages, newsletter };
+}
 
 async function pageData(env, reqKey) {
   if (reqKey && PAGE_DATA_CACHE.has(reqKey)) return PAGE_DATA_CACHE.get(reqKey);
@@ -754,7 +782,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-07-31-4'; // bumped: form_submissions, the spam-screening queue behind the public forms
+    const SCHEMA_VERSION = '2026-07-31-5'; // bumped: v3 overhaul — core-value tagging, partners, ministry menu visibility
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -1220,10 +1248,63 @@ export default {
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_ministry_posts_slug ON ministry_posts(ministry_slug)').run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_events_newsletter_id ON events(newsletter_id)').run(); } catch (_) {}
 
+    // ── v3.0.0 OVERHAUL ──
+    // Core-value tagging. One nullable column per table that carries a value,
+    // holding 'acceptance' | 'worship' | 'education' | 'outreach'. Nullable on
+    // purpose: an untagged row is a normal state, and back-filling guesses
+    // would put words in the church's mouth.
+    try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN value TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN value TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE bible_classes ADD COLUMN value TEXT').run(); } catch (_) {}
+    // Menu visibility, separate from published state. Taking a ministry out of
+    // the header must not unpublish it — the page stays live at its address,
+    // it just stops being listed. The old admin conflated the two.
+    try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN in_menu INTEGER DEFAULT 1').run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_PARTNERS).run(); } catch (_) {}
+    try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_news_items_value ON news_items(value)').run(); } catch (_) {}
+    for (const p of PARTNER_SEED) {
+      try {
+        await env.DB.prepare(
+          'INSERT OR IGNORE INTO partners (id, name, short_name, value, blurb, site_url, also_note, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(p.id, p.name, p.short_name, p.value, p.blurb, p.site_url, p.also_note, p.sort_order).run();
+      } catch (_) {}
+    }
+
     // Mark schema as current so subsequent requests skip the whole block.
     try { await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run(); } catch (_) {}
     try { await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES ('version', ?)").bind(SCHEMA_VERSION).run(); } catch (_) {}
     } // end if (!schemaOk)
+
+    // ── ONE-TIME PERMISSION RENAME (v3.0.0) ──
+    // Deliberately outside the schema block above. That block re-runs on every
+    // SCHEMA_VERSION bump, and this migration must run exactly once, ever:
+    // `pages_edit` means the notice banners going in and the site editor coming
+    // out, so a second pass would silently demote every site editor to
+    // notices-only. See migratePermissionKeys() in admin/auth.js.
+    const PERM_RENAME_MARKER = 'perm_rename_v3';
+    let permsRenamed = false;
+    try {
+      const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key = ?").bind(PERM_RENAME_MARKER).first();
+      permsRenamed = row?.value === 'done';
+    } catch (_) { /* table may not exist on a brand-new database */ }
+    if (!permsRenamed) {
+      try {
+        const users = await env.DB.prepare('SELECT id, permissions FROM users').all();
+        for (const u of (users.results || [])) {
+          let current = [];
+          try { current = JSON.parse(u.permissions || '[]'); } catch (_) { current = []; }
+          const next = migratePermissionKeys(current);
+          if (JSON.stringify(next) !== JSON.stringify(current)) {
+            await env.DB.prepare('UPDATE users SET permissions = ? WHERE id = ?').bind(JSON.stringify(next), u.id).run();
+          }
+        }
+        // Only stamp the marker once every row has been rewritten. If the loop
+        // throws part-way the marker stays unset and the next request retries —
+        // a half-migrated user table is the one outcome worth a second attempt.
+        await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run();
+        await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, 'done')").bind(PERM_RENAME_MARKER).run();
+      } catch (_) { /* retried on the next request */ }
+    }
 
     // ── PUBLIC: serve uploaded docs from R2 ──
     if (path.startsWith('/docs/') && method === 'GET') {
@@ -1302,6 +1383,33 @@ export default {
       ).bind(today, today, limit).all();
       return new Response(JSON.stringify(rows.results), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
+      });
+    }
+
+    // ── PUBLIC: the four values and their partner ministries ──
+    // Returns all four values in the church's own order, each with whichever
+    // partner is paired to it and how many ministries carry it. A value with
+    // no partner comes back with `partner: null` rather than being omitted, so
+    // the values page can say so plainly instead of quietly showing three.
+    if (path === '/api/values' && method === 'GET') {
+      const q = async (sql) => { try { return (await env.DB.prepare(sql).all()).results || []; } catch (_) { return []; } };
+      const [partners, counts] = await Promise.all([
+        q('SELECT name, short_name, value, blurb, site_url, also_note FROM partners'),
+        q("SELECT value, slug, title FROM youth_pages WHERE value IS NOT NULL AND value <> '' AND COALESCE(in_menu,1) = 1"),
+      ]);
+      const byValue = Object.fromEntries(partners.map((p) => [p.value, p]));
+      const payload = VALUES.map((v) => ({
+        key: v.key,
+        short: v.short,
+        name: v.name,
+        blurb: v.blurb,
+        ink: v.ink,
+        tint: v.tint,
+        partner: byValue[v.key] || null,
+        ministries: counts.filter((m) => m.value === v.key).map((m) => ({ slug: m.slug, title: m.title })),
+      }));
+      return new Response(JSON.stringify(payload), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=600' }
       });
     }
 
@@ -1875,158 +1983,445 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
 
     // ── DASHBOARD (new post-login landing page) ──
     if (path === '/dashboard' && method === 'GET') {
+      // Two layouts behind one toggle. "Needs you" is the daily home screen —
+      // a worklist you clear, not a wall of numbers. "Overview" is the tiles
+      // for anyone who wants the shape of the week at a glance.
+      const view = url.searchParams.get('view') === 'overview' ? 'overview' : 'needs';
       const canNews = hasPermission(currentUser, 'news_edit');
       const canDraft = hasPermission(currentUser, 'newsletter_edit') || hasPermission(currentUser, 'newsletter_approve');
       const canApprove = hasPermission(currentUser, 'newsletter_approve');
       const canGym = hasPermission(currentUser, 'gym_manage');
+      const canPages = hasPermission(currentUser, 'pages_edit') || hasPermission(currentUser, 'pages_edit_own');
       const canMinistries = hasPermission(currentUser, 'ministries_edit');
 
-      const [draftRow, pendingRow, gymHoldRow, liveNewsRow] = await Promise.all([
-        env.DB.prepare("SELECT COUNT(*) as n FROM newsletters WHERE status='draft'").first(),
-        env.DB.prepare("SELECT COUNT(*) as n FROM newsletters WHERE approval_status='pending'").first(),
-        canGym ? env.DB.prepare("SELECT COUNT(*) as n FROM gym_bookings WHERE status='hold'").first() : Promise.resolve({ n: 0 }),
-        env.DB.prepare("SELECT COUNT(*) as n FROM news_items WHERE expire_date IS NULL OR expire_date >= date('now')").first(),
-      ]);
+      const badges = await badgeCounts(env, currentUser);
+      const q = async (sql, ...binds) => {
+        try { return (await env.DB.prepare(sql).bind(...binds).all()).results || []; } catch (_) { return []; }
+      };
+      const one = async (sql, ...binds) => {
+        try { return await env.DB.prepare(sql).bind(...binds).first(); } catch (_) { return null; }
+      };
 
-      const statCards = [];
-      if (canDraft) statCards.push({ label: 'Drafts waiting', num: draftRow.n, color: 'var(--amber)', note: draftRow.n === 1 ? '1 newsletter in progress' : `${draftRow.n} newsletters in progress` });
-      if (canApprove) statCards.push({ label: 'Pending approval', num: pendingRow.n, color: '#B85C3A', note: pendingRow.n > 0 ? 'Waiting on your review' : 'All caught up' });
-      if (canGym) statCards.push({ label: 'Gym holds', num: gymHoldRow.n, color: 'var(--steel)', note: gymHoldRow.n > 0 ? 'Need confirm or release' : 'No pending holds' });
-      if (canNews) statCards.push({ label: 'Live news items', num: liveNewsRow.n, color: 'var(--sage)', note: 'Currently on the site' });
+      // ── "Needs you": the worklist ────────────────────────────
+      // Each entry is a glyph, what needs doing, the specifics, and one button
+      // that deep-links to the screen where it gets done. Anything that cannot
+      // name a specific next action does not belong here.
+      const tasks = [];
 
-      // ── "Needs your attention" ──
-      const attn = [];
-      if (canApprove) {
-        const pendingNl = await env.DB.prepare("SELECT id, subject, created_at FROM newsletters WHERE approval_status='pending' ORDER BY created_at ASC").all();
-        for (const r of pendingNl.results) {
-          const ageMs = Date.now() - new Date(r.created_at || 0).getTime();
-          const recent = ageMs < 2 * 24 * 60 * 60 * 1000;
-          attn.push({ dot: recent ? 'var(--amber)' : 'var(--gray)', title: `&ldquo;${escapeHtml(r.subject)}&rdquo; newsletter`, meta: 'Awaiting approval', action: 'Review', href: `/edit/${r.id}` });
-        }
+      if (canGym && badges.gym > 0) {
+        const groups = await q(
+          `SELECT gg.name AS name, COUNT(*) AS n
+             FROM gym_bookings gb LEFT JOIN gym_groups gg ON gg.id = gb.group_id
+            WHERE gb.status='hold' GROUP BY gb.group_id ORDER BY MIN(gb.hold_expires_at) ASC LIMIT 4`
+        );
+        tasks.push({
+          glyph: '🏀',
+          title: `${pluralise(badges.gym, 'gym request', 'gym requests')} waiting for review`,
+          detail: groups.map((g) => escapeHtml(g.name || 'Unassigned group')).join(' · ') || 'Holds lapse after 48 hours if nobody confirms them.',
+          action: 'Review', href: '/gym-rentals',
+        });
       }
-      if (canGym) {
-        const holds = await env.DB.prepare(
-          `SELECT gb.group_id, gg.name as group_name, COUNT(*) as n, MIN(gb.hold_expires_at) as soonest
-           FROM gym_bookings gb LEFT JOIN gym_groups gg ON gg.id = gb.group_id
-           WHERE gb.status='hold' GROUP BY gb.group_id ORDER BY soonest ASC`
-        ).all();
-        for (const g of holds.results) {
-          const expiringSoon = g.soonest && (new Date(g.soonest).getTime() - Date.now()) < 48 * 60 * 60 * 1000;
-          attn.push({
-            dot: expiringSoon ? '#B85C3A' : 'var(--steel)',
-            title: `${g.n} gym hold${g.n !== 1 ? 's' : ''} from ${escapeHtml(g.group_name || 'Unassigned')}`,
-            meta: expiringSoon ? 'Hold expiring soon' : 'Awaiting confirmation',
-            action: 'Confirm', href: '/gym-rentals',
-          });
-        }
+
+      if (canPages && badges.pages > 0) {
+        const drafts = await q(
+          `SELECT title, updated_by, updated_at FROM pages
+            WHERE status='draft' OR COALESCE(blocks,'') <> COALESCE(published_blocks,'')
+            ORDER BY COALESCE(updated_at,'') DESC LIMIT 4`
+        );
+        tasks.push({
+          glyph: '📄',
+          title: `${pluralise(badges.pages, 'page has', 'pages have')} unpublished edits`,
+          detail: drafts.map((d) => `${escapeHtml(d.title)}${d.updated_by ? ` (${escapeHtml(d.updated_by)})` : ''}`).join(' · '),
+          action: 'Open', href: '/pages?filter=draft',
+        });
       }
-      if (canNews) {
-        const soonExpire = await env.DB.prepare(
-          "SELECT id, title, expire_date FROM news_items WHERE expire_date IS NOT NULL AND expire_date >= date('now') AND expire_date <= date('now','+3 days') ORDER BY expire_date ASC"
-        ).all();
-        for (const it of soonExpire.results) {
-          attn.push({ dot: '#B85C3A', title: `&ldquo;${escapeHtml(it.title)}&rdquo; news item`, meta: `Expires ${it.expire_date}`, action: 'Extend', href: `/newsitems/edit/${it.id}` });
-        }
+
+      if (canApprove && badges.newsletter > 0) {
+        const pending = await q("SELECT id, subject FROM newsletters WHERE approval_status='pending' ORDER BY created_at ASC LIMIT 3");
+        tasks.push({
+          glyph: '✉️',
+          title: `${pluralise(badges.newsletter, 'newsletter is', 'newsletters are')} awaiting approval`,
+          detail: pending.map((p) => `“${escapeHtml(p.subject || 'Untitled')}”`).join(' · '),
+          action: 'Review', href: pending.length === 1 ? `/edit/${pending[0].id}` : '/',
+        });
       }
+
       // Held mail is invisible by design — the sender is told it went through —
-      // so the only way anyone learns a real message was caught is if it shows
-      // up here. This is what makes holding safe rather than silently lossy.
+      // so this row is the only way anyone learns a real prayer request was
+      // caught. Removing it makes holding silently lossy.
       if (hasPermission(currentUser, 'settings_manage')) {
-        const n = await heldCount(env);
-        if (n > 0) {
-          attn.push({
-            dot: '#B85C3A',
-            title: `${n} website message${n !== 1 ? 's' : ''} held as spam`,
-            meta: 'Release anything that turns out to be real',
+        const held = await heldCount(env);
+        if (held > 0) {
+          tasks.push({
+            glyph: '🛡️',
+            title: `${pluralise(held, 'website message', 'website messages')} held as spam`,
+            detail: 'Release anything that turns out to be a real person writing in.',
             action: 'Review', href: '/filtered',
           });
         }
       }
-      if (canMinistries) {
-        const slugLabels = { confirmation: 'Confirmation', sundayschool: 'Sunday School', vbs: 'VBS', egghunt: 'Egg Hunt', family: 'Family Ministry' };
-        const slugs = Object.keys(slugLabels);
-        const placeholders = slugs.map(() => '?').join(',');
-        const yp = await env.DB.prepare(`SELECT slug, content FROM youth_pages WHERE slug IN (${placeholders})`).bind(...slugs).all();
-        const haveContent = new Set(yp.results.filter(r => r.content && r.content.trim()).map(r => r.slug));
-        for (const slug of slugs) {
-          if (!haveContent.has(slug)) attn.push({ dot: 'var(--gray)', title: `${slugLabels[slug]} page still empty`, meta: 'Youth page needs content', action: 'Nudge', href: '/ministries' });
+
+      if (canNews) {
+        const soon = await q(
+          "SELECT id, title, expire_date FROM news_items WHERE expire_date IS NOT NULL AND expire_date >= date('now') AND expire_date <= date('now','+3 days') ORDER BY expire_date ASC LIMIT 4"
+        );
+        if (soon.length) {
+          tasks.push({
+            glyph: '📰',
+            title: `${pluralise(soon.length, 'news post', 'news posts')} about to expire`,
+            detail: soon.map((s) => `“${escapeHtml(s.title)}” on ${escapeHtml(s.expire_date)}`).join(' · '),
+            action: 'Extend', href: soon.length === 1 ? `/newsitems/edit/${soon[0].id}` : '/newsitems?filter=live',
+          });
         }
       }
-      const attnCapped = attn.slice(0, 6);
 
-      const attnHtml = attnCapped.length === 0
-        ? `<div style="text-align:center;padding:32px;color:var(--gray);font-family:var(--sans);font-size:14px;">You&rsquo;re all caught up. 🎉</div>`
-        : attnCapped.map(a => `<div class="attn-row">
-  <span class="attn-dot" style="background:${a.dot};"></span>
-  <div class="attn-title">${a.title}<span class="attn-meta">${a.meta}</span></div>
-  <a href="${a.href}" class="btn btn-sm" style="background:var(--mist);color:var(--steel);">${a.action}</a>
-</div>`).join('');
+      if (canMinistries) {
+        const emptyPages = await q(
+          "SELECT slug, title FROM youth_pages WHERE COALESCE(TRIM(content),'') = '' AND COALESCE(TRIM(blocks),'') = '' ORDER BY slug LIMIT 5"
+        );
+        if (emptyPages.length) {
+          tasks.push({
+            glyph: '✏️',
+            title: `${pluralise(emptyPages.length, 'ministry page is', 'ministry pages are')} still empty`,
+            detail: emptyPages.map((p) => escapeHtml(p.title || p.slug)).join(' · '),
+            action: 'Fill in', href: '/ministries',
+          });
+        }
+      }
 
-      // ── Quick add ──
-      const quickAdd = [
-        canNews ? `<a href="/newsitems/new" class="btn btn-primary" style="width:100%;justify-content:center;">+ News item</a>` : '',
-        canDraft ? `<a href="/new" class="btn" style="width:100%;justify-content:center;background:var(--mist);color:var(--steel);">+ Newsletter draft</a>` : '',
-        canGym ? `<a href="/gym-rentals" class="btn" style="width:100%;justify-content:center;background:var(--mist);color:var(--steel);">+ Gym booking</a>` : '',
-      ].filter(Boolean).join('');
+      const tasksHtml = tasks.length === 0
+        ? `<div class="tlc-task-clear">Nothing is waiting on you. 🎉</div>`
+        : tasks.map((t) => `<div class="tlc-task">
+    <span class="tlc-task-glyph" aria-hidden="true">${t.glyph}</span>
+    <span class="tlc-task-text">
+      <span class="tlc-task-title">${t.title}</span>
+      ${t.detail ? `<span class="tlc-task-detail">${t.detail}</span>` : ''}
+    </span>
+    <a class="tlc-task-btn" href="${t.href}">${t.action}</a>
+  </div>`).join('');
 
-      // ── Recent activity (audit log) ──
-      const activityRes = await env.DB.prepare('SELECT username, action, entity_type, entity_label, created_at FROM audit_log ORDER BY created_at DESC LIMIT 6').all();
+      // ── Our Four Values ──────────────────────────────────────
+      // The only screen in the admin that reports on the church's own stated
+      // priorities rather than on content mechanics: how many ministries carry
+      // each value, what has been posted under it lately, and which partner
+      // ministry is paired to it.
+      const [ministryCounts, recentPosts, partnerRows] = await Promise.all([
+        q("SELECT value, COUNT(*) AS n FROM youth_pages WHERE value IS NOT NULL AND value <> '' GROUP BY value"),
+        q(`SELECT yp.value AS value, COUNT(*) AS n
+             FROM ministry_posts mp JOIN youth_pages yp ON yp.slug = mp.ministry_slug
+            WHERE COALESCE(mp.post_date, mp.created_at) >= date('now','-30 days')
+            GROUP BY yp.value`),
+        q('SELECT name, short_name, value, site_url, also_note FROM partners'),
+      ]);
+      const mCount = Object.fromEntries(ministryCounts.map((r) => [r.value, r.n]));
+      const pCount = Object.fromEntries(recentPosts.map((r) => [r.value, r.n]));
+      const partnerByValue = Object.fromEntries(partnerRows.map((r) => [r.value, r]));
+
+      const valuesHtml = VALUES.map((v) => {
+        const ministries = mCount[v.key] || 0;
+        const posts = pCount[v.key] || 0;
+        const partner = partnerByValue[v.key];
+        return `<div class="tlc-value-card" style="background:${v.tint};">
+    <div class="tlc-value-top" style="background:${v.ink};">
+      <span class="tlc-value-short">${escapeHtml(v.short)}</span>
+      <span class="tlc-value-name">${escapeHtml(v.name)}</span>
+    </div>
+    <div class="tlc-value-body">
+      <span class="tlc-value-stat">${pluralise(ministries, 'ministry', 'ministries')} · ${pluralise(posts, 'recent post', 'recent posts')}</span>
+      <span class="tlc-value-partner">${partner
+        ? `Partner · <b>${escapeHtml(partner.name)}</b>`
+        : 'No partner ministry paired to this value yet.'}</span>
+      ${posts === 0 ? `<span class="tlc-value-quiet">Nothing new posted under this value in a month.</span>` : ''}
+    </div>
+  </div>`;
+      }).join('');
+
+      // ── This Sunday ──────────────────────────────────────────
+      // Read from the one church-details record every page reads, so the
+      // dashboard cannot drift from the footer and the contact page.
+      const svcRow = await one("SELECT value FROM site_settings WHERE key='church_service_times'");
+      const services = parseServiceTimes(svcRow?.value || '');
+      const nextSermon = await one(
+        `SELECT n.title, n.date, n.scripture, n.youtube_url, n.audio_url, s.title AS series
+           FROM sermon_notes n LEFT JOIN sermon_series s ON s.id = n.series_id
+          ORDER BY COALESCE(n.date,'') DESC, n.id DESC LIMIT 1`
+      );
+      const sundayHtml = services.length
+        ? services.map((s) => `<div class="tlc-sunday">
+      <span class="tlc-sunday-time">${escapeHtml(s.time)}</span>
+      <span class="tlc-sunday-what">${escapeHtml(s.day)}${s.note ? `<span class="tlc-sunday-note">${escapeHtml(s.note)}</span>` : ''}</span>
+    </div>`).join('')
+        : `<div class="tlc-task-clear" style="padding:20px;">No service times set yet.</div>`;
+      const sermonLine = nextSermon
+        ? `<div class="tlc-sunday" style="border-bottom:0;padding-top:12px;">
+      <span class="tlc-sunday-time">Sermon</span>
+      <span class="tlc-sunday-what">${escapeHtml(nextSermon.title || 'Untitled')}
+        <span class="tlc-sunday-note">${[nextSermon.series, nextSermon.scripture].filter(Boolean).map(escapeHtml).join(' · ') || 'No series or reading recorded'}${(nextSermon.youtube_url || nextSermon.audio_url) ? '' : ' · no recording attached'}</span>
+      </span>
+    </div>`
+        : '';
+
+      // ── Last 24 hours ────────────────────────────────────────
+      const tail = await q(
+        "SELECT username, action, entity_type, entity_label, created_at FROM audit_log WHERE created_at >= datetime('now','-1 day') ORDER BY created_at DESC LIMIT 8"
+      );
       const timeAgo = (iso) => {
         if (!iso) return '';
-        const diffMs = Date.now() - new Date(iso).getTime();
-        const mins = Math.round(diffMs / 60000);
+        const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
         if (mins < 1) return 'just now';
-        if (mins < 60) return `${mins} minute${mins !== 1 ? 's' : ''} ago`;
+        if (mins < 60) return pluralise(mins, 'minute') + ' ago';
         const hrs = Math.round(mins / 60);
-        if (hrs < 24) return `${hrs} hour${hrs !== 1 ? 's' : ''} ago`;
-        const days = Math.round(hrs / 24);
-        return `${days} day${days !== 1 ? 's' : ''} ago`;
+        if (hrs < 24) return pluralise(hrs, 'hour') + ' ago';
+        return pluralise(Math.round(hrs / 24), 'day') + ' ago';
       };
-      const activityHtml = activityRes.results.length === 0
-        ? `<div style="text-align:center;padding:20px;color:var(--gray);font-family:var(--sans);font-size:13px;">No activity yet.</div>`
-        : activityRes.results.map(a => `<div class="activity-row"><strong>${escapeHtml(a.username || 'Someone')}</strong> ${escapeHtml(a.action)}d a ${escapeHtml((a.entity_type || '').replace(/_/g, ' '))}${a.entity_label ? `: &ldquo;${escapeHtml(a.entity_label)}&rdquo;` : ''}<span class="activity-time">${timeAgo(a.created_at)}</span></div>`).join('');
+      const tailHtml = tail.length === 0
+        ? `<div class="tlc-task-clear" style="padding:20px;">Nothing changed in the last day.</div>`
+        : tail.map((a) => `<div class="tlc-tail">
+      <b>${escapeHtml(a.username || 'Someone')}</b> ${escapeHtml(a.action)}d a ${escapeHtml((a.entity_type || '').replace(/_/g, ' '))}${a.entity_label ? ` — “${escapeHtml(a.entity_label)}”` : ''}
+      <span class="tlc-tail-when">${timeAgo(a.created_at)}</span>
+    </div>`).join('');
+
+      // ── "Overview": the same week as four numbers ────────────
+      const [liveNews, liveMinistries, subscribers, upcomingBookings] = await Promise.all([
+        canNews ? one("SELECT COUNT(*) AS n FROM news_items WHERE expire_date IS NULL OR expire_date >= date('now')") : null,
+        one("SELECT COUNT(*) AS n FROM youth_pages"),
+        hasPermission(currentUser, 'settings_manage') ? one('SELECT COUNT(*) AS n FROM newsletter_subscribers') : null,
+        canGym ? one("SELECT COUNT(*) AS n FROM gym_bookings WHERE status='confirmed' AND booking_date >= date('now')") : null,
+      ]);
+      const tiles = [
+        liveNews ? { label: 'Live on the site', num: liveNews.n, note: 'News posts not yet expired' } : null,
+        liveMinistries ? { label: 'Ministry pages', num: liveMinistries.n, note: 'Each one owned by somebody' } : null,
+        subscribers ? { label: 'Subscribers', num: subscribers.n, note: 'Receiving the newsletter' } : null,
+        upcomingBookings ? { label: 'Gym bookings', num: upcomingBookings.n, note: 'Confirmed, still to come' } : null,
+      ].filter(Boolean);
+      const tilesHtml = tiles.length
+        ? `<div class="tlc-tiles">${tiles.map((t) => `<div class="tlc-tile">
+      <span class="tlc-tile-label">${escapeHtml(t.label)}</span>
+      <span class="tlc-tile-num">${t.num}</span>
+      <span class="tlc-tile-note">${escapeHtml(t.note)}</span>
+    </div>`).join('')}</div>`
+        : '';
+      const jumpHtml = [
+        canNews ? '<a href="/newsitems/new">+ News post</a>' : '',
+        canDraft ? '<a href="/new">+ Newsletter</a>' : '',
+        hasPermission(currentUser, 'notices_edit') ? '<a href="/notices/add">+ Notice</a>' : '',
+        canGym ? '<a href="/gym-rentals">Gym rentals</a>' : '',
+        canPages ? '<a href="/pages">All pages</a>' : '',
+      ].filter(Boolean).join('');
 
       const hour = new Date().getHours();
-      const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-      const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-      const initials = (currentUser.username || '?').slice(0, 2).toUpperCase();
+      const partOfDay = hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
+      const weekday = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+      const longDate = new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' });
 
-      const statCardsHtml = statCards.map(s => `<div class="stat-card">
-  <div class="stat-label">${s.label}</div>
-  <div class="stat-num" style="color:${s.color};">${s.num}</div>
-  <div class="stat-note">${s.note}</div>
-</div>`).join('');
+      const needsBody = `
+  ${panel(`Needs you${tasks.length ? ` · ${tasks.length}` : ''}`, tasksHtml, { right: escapeHtml(longDate), pad: false })}
+  <div class="tlc-eyebrow">
+    <span class="tlc-eyebrow-label">Our four values</span>
+    <span class="tlc-eyebrow-note">From our neighbourhood to the nations</span>
+  </div>
+  <div class="tlc-values">${valuesHtml}</div>
+  <div style="height:18px;"></div>
+  <div class="tlc-dash-grid">
+    ${panel('This Sunday', sundayHtml + sermonLine, { pad: true })}
+    ${panel('Last 24 hours', tailHtml, { right: `<a href="/audit-log" style="color:var(--tlc-blue);text-decoration:none;">Full log →</a>` })}
+  </div>`;
+
+      const overviewBody = `
+  ${tilesHtml}
+  <div class="tlc-dash-grid">
+    ${panel(`Needs you${tasks.length ? ` · ${tasks.length}` : ''}`, tasksHtml, { pad: false })}
+    <div class="tlc-stack">
+      ${jumpHtml ? panel('Jump to', `<div class="tlc-jump">${jumpHtml}</div>`) : ''}
+      ${panel('Last 24 hours', tailHtml, { right: `<a href="/audit-log" style="color:var(--tlc-blue);text-decoration:none;">Full log →</a>` })}
+    </div>
+  </div>`;
 
       return html(`
-${sidebarShell('dashboard', currentUser)}
-<div class="wrap-wide">
-  <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:8px;">
+${sidebarShell('dashboard', currentUser, '', badges)}
+<div class="tlc-dash">
+  <div class="tlc-dash-head">
     <div>
-      <div class="dash-header">${greeting}, ${escapeHtml(currentUser.username)}</div>
-      <div class="dash-sub">${today} — here&rsquo;s what needs attention</div>
+      <h1 class="tlc-dash-greeting">${escapeHtml(weekday)} ${partOfDay}</h1>
+      <p class="tlc-dash-sub">What needs you today, what happens Sunday, and what changed since yesterday.</p>
     </div>
-    <div class="dash-avatar">${initials}</div>
+    <nav class="tlc-seg" aria-label="Dashboard view">
+      <a href="/dashboard" class="${view === 'needs' ? 'is-on' : ''}">Needs you</a>
+      <a href="/dashboard?view=overview" class="${view === 'overview' ? 'is-on' : ''}">Overview</a>
+    </nav>
   </div>
-  ${statCards.length ? `<div class="stat-row">${statCardsHtml}</div>` : ''}
-  <div class="dash-grid">
-    <div class="card" style="margin-bottom:0;">
-      <div class="card-title">Needs your attention</div>
-      ${attnHtml}
-    </div>
-    <div>
-      ${quickAdd ? `<div class="card">
-        <div class="card-title">Quick add</div>
-        <div style="display:flex;flex-direction:column;gap:10px;">${quickAdd}</div>
-      </div>` : ''}
-      <div class="card" style="margin-bottom:0;">
-        <div class="card-title">Recent activity</div>
-        ${activityHtml}
-      </div>
-    </div>
-  </div>
+  ${view === 'overview' ? overviewBody : needsBody}
 </div>`, 'Dashboard — TLC Admin');
     }
 
+    // ── PARTNERS ───────────────────────────────────────────────
+    // Four partner ministries, one per core value. The pairing is what the
+    // dashboard's values report and the public /values page both read.
+    if (path === '/partners' || path.startsWith('/partners/')) {
+      if (!hasPermission(currentUser, 'pages_edit')) {
+        return new Response('Access denied.', { status: 403 });
+      }
+
+      if (path === '/partners' && method === 'GET') {
+        const rows = await env.DB.prepare('SELECT * FROM partners ORDER BY sort_order, id').all();
+        const msg = url.searchParams.get('msg');
+        const alertHtml = msg === 'saved' ? `<div class="alert alert-success">✓ Partner saved.</div>`
+          : msg === 'deleted' ? `<div class="alert alert-info">Partner removed.</div>`
+          : msg === 'taken' ? `<div class="alert alert-error">Another partner already carries that value. Each value has exactly one partner.</div>` : '';
+
+        const byValue = Object.fromEntries(rows.results.map((r) => [r.value, r]));
+
+        // One row per value, not one per record — so a value with no partner
+        // is visible as a gap rather than silently absent. The values page
+        // makes the same promise, and this is where it gets kept.
+        const listRows = VALUES.map((v) => {
+          const p = byValue[v.key];
+          if (!p) {
+            return {
+              href: `/partners/new?value=${v.key}`,
+              filter: 'missing',
+              search: `${v.short} ${v.name}`.toLowerCase(),
+              cells: [
+                primaryCell(`No partner for ${v.short}`, 'Nothing is paired to this value yet'),
+                valueChip(v.key),
+                '—',
+              ],
+              actions: `<a class="tlc-edit" href="/partners/new?value=${v.key}">Add one</a>`,
+              warn: `The values page will say this value has no partner rather than quietly showing three.`,
+              warnCta: { label: 'Add a partner', href: `/partners/new?value=${v.key}` },
+            };
+          }
+          const host = (p.site_url || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
+          return {
+            href: `/partners/edit/${p.id}`,
+            filter: 'paired',
+            search: `${p.name} ${p.short_name || ''} ${v.short} ${v.name} ${host}`.toLowerCase(),
+            cells: [
+              primaryCell(p.name, p.blurb || ''),
+              valueChip(p.value),
+              host ? `<a href="${escapeHtml(p.site_url)}" target="_blank" rel="noopener">${escapeHtml(host)}</a>` : '—',
+            ],
+            warn: p.also_note ? `Also on this record: ${p.also_note}` : '',
+          };
+        });
+
+        return html(`
+${sidebarShell('partners', currentUser, `<a href="https://timothystl.org/about/values" target="_blank">View values page →</a>`, await badgeCounts(env, currentUser))}
+<div class="tlc-wrap">
+  ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
+  ${renderListSection({
+    key: 'partners',
+    title: 'Partners',
+    purpose: 'One partner ministry per core value — who carries each of the four values out into the world alongside us.',
+    action: { label: '+ Add partner', href: '/partners/new' },
+    search: 'Search partners',
+    filters: [],
+    columns: [
+      { label: 'Partner', width: '3fr' },
+      { label: 'Value', width: '.9fr' },
+      { label: 'Their site', width: '1.3fr' },
+    ],
+    rows: listRows,
+    noun: 'partner',
+    empty: 'No partners yet.',
+    note: 'Exactly one partner per value — the database enforces it. There is no Status column here because every partner is shown; if one should come off the values page, remove the record rather than hiding it.',
+  })}
+</div>`, 'Partners');
+      }
+
+      // ── New / edit form ──
+      const isNew = path === '/partners/new';
+      if ((isNew || path.startsWith('/partners/edit/')) && method === 'GET') {
+        const id = isNew ? null : path.slice('/partners/edit/'.length);
+        const p = isNew ? null : await env.DB.prepare('SELECT * FROM partners WHERE id = ?').bind(id).first();
+        if (!isNew && !p) return new Response('Not found', { status: 404 });
+        const preset = normalizeValue(url.searchParams.get('value'));
+        return html(`
+${sidebarShell('partners', currentUser, `<a href="/partners">← All partners</a>`, await badgeCounts(env, currentUser))}
+<div class="wrap">
+  <div class="page-title">${isNew ? 'Add a partner' : escapeHtml(p.name)}</div>
+  <div class="page-sub">Shown on the values page and in the dashboard's values report, paired to one core value.</div>
+  <div class="card">
+    <form method="POST" action="${isNew ? '/partners/create' : `/partners/update/${p.id}`}">
+      <div class="form-group">
+        <label>Name <span style="color:#B85C3A;">*</span></label>
+        <input type="text" name="name" required value="${escapeHtml(p?.name || '')}" placeholder="e.g. Christian Friends of New Americans">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="form-group" style="margin:0;">
+          <label>Short name <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— used where space is tight</span></label>
+          <input type="text" name="short_name" value="${escapeHtml(p?.short_name || '')}" placeholder="e.g. CFNA">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Core value <span style="color:#B85C3A;">*</span></label>
+          ${valueSelect('value', p?.value || preset, { allowNone: false })}
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Blurb</label>
+        <textarea name="blurb" rows="3" placeholder="A sentence or two about what they do.">${escapeHtml(p?.blurb || '')}</textarea>
+      </div>
+      <div class="form-group">
+        <label>Their website</label>
+        <input type="text" name="site_url" value="${escapeHtml(p?.site_url || '')}" placeholder="https://example.org">
+      </div>
+      <div class="form-group">
+        <label>Also on this record <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— a person or project named alongside the partner</span></label>
+        <input type="text" name="also_note" value="${escapeHtml(p?.also_note || '')}" placeholder="e.g. Pastor Rall and Mary Ann, missionaries to Papua New Guinea">
+      </div>
+      <div class="btn-row" style="margin-top:20px;">
+        <button type="submit" class="btn btn-primary">${isNew ? 'Add partner' : 'Save changes'}</button>
+        <a href="/partners" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
+        ${isNew ? '' : `<form method="POST" action="/partners/delete/${p.id}" style="display:inline;margin:0;" onsubmit="return confirm('Remove this partner? The value will show as unpaired until another is added.')"><button type="submit" class="btn btn-sm btn-danger">Delete</button></form>`}
+      </div>
+    </form>
+  </div>
+</div>`, isNew ? 'Add a partner' : 'Edit partner');
+      }
+
+      if ((path === '/partners/create' || path.startsWith('/partners/update/')) && method === 'POST') {
+        const form = await request.formData();
+        const name = (form.get('name') || '').trim();
+        const value = normalizeValue(form.get('value'));
+        if (!name || !value) return new Response('', { status: 302, headers: { Location: '/partners?msg=taken' } });
+        const fields = [
+          name,
+          (form.get('short_name') || '').trim() || null,
+          value,
+          (form.get('blurb') || '').trim() || null,
+          (form.get('site_url') || '').trim() || null,
+          (form.get('also_note') || '').trim() || null,
+        ];
+        try {
+          if (path === '/partners/create') {
+            await env.DB.prepare(
+              'INSERT INTO partners (name, short_name, value, blurb, site_url, also_note, sort_order) VALUES (?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order),0)+10 FROM partners))'
+            ).bind(...fields).run();
+            await logAudit(env.DB, currentUser, 'create', 'partner', value, name, null, { name, value });
+          } else {
+            const id = path.slice('/partners/update/'.length);
+            const before = await env.DB.prepare('SELECT * FROM partners WHERE id = ?').bind(id).first();
+            await env.DB.prepare(
+              'UPDATE partners SET name = ?, short_name = ?, value = ?, blurb = ?, site_url = ?, also_note = ? WHERE id = ?'
+            ).bind(...fields, id).run();
+            await logAudit(env.DB, currentUser, 'update', 'partner', value, name, before, { name, value });
+          }
+        } catch (_) {
+          // UNIQUE(value) — the one-per-value rule, refused by the database
+          // rather than silently overwriting whoever was already there.
+          return new Response('', { status: 302, headers: { Location: '/partners?msg=taken' } });
+        }
+        return new Response('', { status: 302, headers: { Location: '/partners?msg=saved' } });
+      }
+
+      if (path.startsWith('/partners/delete/') && method === 'POST') {
+        const id = path.slice('/partners/delete/'.length);
+        const before = await env.DB.prepare('SELECT * FROM partners WHERE id = ?').bind(id).first();
+        await env.DB.prepare('DELETE FROM partners WHERE id = ?').bind(id).run();
+        if (before) await logAudit(env.DB, currentUser, 'delete', 'partner', before.value, before.name, before, null);
+        return new Response('', { status: 302, headers: { Location: '/partners?msg=deleted' } });
+      }
+    }
     // ── PAYROLL PAGE (auth-gated, no secondary login needed) ──
     if (path === '/payroll' && method === 'GET') {
       if (!hasPermission(currentUser, 'payroll_manage')) {
@@ -2106,7 +2501,7 @@ ${sidebarShell('dashboard', currentUser)}
     }
 
     // ── VOTERS PAGE ADMIN ──
-    if ((path === '/voters' || path === '/voters-add-file' || path === '/voters-delete-file') && !hasPermission(currentUser, 'pages_edit')) {
+    if ((path === '/voters' || path === '/voters-add-file' || path === '/voters-delete-file') && !hasPermission(currentUser, 'notices_edit')) {
       return new Response('Access denied.', { status: 403 });
     }
     if (path === '/voters' && method === 'GET') {
@@ -2239,66 +2634,101 @@ document.getElementById('upload-form').addEventListener('submit', async function
       return new Response('Access denied.', { status: 403 });
     }
     if (path === '/sermons' && method === 'GET') {
-      const alertHtml = url.searchParams.get('saved') ? `<div class="alert alert-success">Saved!</div>` : '';
-      const series = await env.DB.prepare('SELECT * FROM sermon_series ORDER BY active DESC, sort_order ASC, id DESC').all();
-      const standaloneNotes = await env.DB.prepare('SELECT * FROM sermon_notes WHERE series_id IS NULL OR series_id = 0 ORDER BY date DESC, id DESC').all();
-      const noteCounts = await env.DB.prepare('SELECT series_id, COUNT(*) as cnt FROM sermon_notes WHERE series_id IS NOT NULL GROUP BY series_id').all();
-      const noteCountMap = Object.fromEntries(noteCounts.results.map(r => [r.series_id, r.cnt]));
+      const alertHtml = url.searchParams.get('saved') ? `<div class="alert alert-success">✓ Saved.</div>` : '';
+      const [series, notes] = await Promise.all([
+        env.DB.prepare('SELECT * FROM sermon_series ORDER BY active DESC, sort_order ASC, id DESC').all(),
+        env.DB.prepare('SELECT * FROM sermon_notes ORDER BY COALESCE(date, \'\') DESC, id DESC').all(),
+      ]);
+      const bySeries = {};
+      const standalone = [];
+      for (const n of notes.results) {
+        if (n.series_id) (bySeries[n.series_id] = bySeries[n.series_id] || []).push(n);
+        else standalone.push(n);
+      }
 
-      const seriesHtml = series.results.length === 0
-        ? `<div style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">No series yet. Add your first one below.</div>`
-        : series.results.map(s => `
-<div style="display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
-  <div style="flex:1;min-width:160px;">
-    ${s.active ? `<span class="badge badge-active" style="margin-bottom:4px;">Active</span><br>` : ''}
-    <div style="font-family:var(--serif);font-size:17px;color:var(--steel);">${s.title}</div>
-    ${s.date_range ? `<div style="font-size:12px;color:var(--gray);">${s.date_range}</div>` : ''}
-  </div>
-  <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;">
-    <a href="/sermons/new-note?series_id=${s.id}" class="btn btn-sm btn-primary">+ Add sermon</a>
-    <a href="/sermons/edit-series/${s.id}" class="btn btn-sm btn-secondary">Edit</a>
-    <a href="/sermons/notes/${s.id}" class="btn btn-sm" style="background:var(--mist);color:var(--steel);border:1px solid var(--border);">Sermons (${noteCountMap[s.id] || 0})</a>
-    <form method="POST" action="/sermons/delete-series/${s.id}" style="display:contents;" onsubmit="return confirm('Delete this series and all its sermons?')">
-      <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-    </form>
-  </div>
-</div>`).join('');
+      // The library has no recordings attached yet, and the site is built to
+      // cope: a sermon with a link gets a play thumbnail, one without gets a
+      // text-only card. Nothing here needs a setting — the row reports which
+      // state each sermon is in so it is obvious what is missing.
+      const mediaCell = (n) => {
+        const kinds = [];
+        if (n.youtube_url) kinds.push('Video');
+        if (n.audio_url) kinds.push('Audio');
+        return kinds.length ? statusPill('good', kinds.join(' + ')) : statusPill('plain', 'No recording');
+      };
 
-      const standaloneHtml = standaloneNotes.results.length === 0
-        ? `<div style="text-align:center;padding:24px;color:var(--gray);font-size:14px;">No standalone sermons.</div>`
-        : standaloneNotes.results.map(n => `
-<div style="display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
-  <div style="flex:1;min-width:160px;">
-    <div style="font-family:var(--serif);font-size:15px;color:var(--steel);">${n.title || '(untitled)'}</div>
-    ${n.date ? `<div style="font-size:12px;color:var(--gray);">${n.date}</div>` : ''}
-  </div>
-  <div style="display:flex;gap:8px;flex-shrink:0;">
-    <a href="/sermons/edit-note/${n.id}" class="btn btn-sm btn-secondary">Edit</a>
-    <form method="POST" action="/sermons/delete-note/${n.id}" style="display:contents;" onsubmit="return confirm('Delete this sermon?')">
-      <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-    </form>
-  </div>
-</div>`).join('');
+      const rows = [];
+      for (const s of series.results) {
+        const kids = bySeries[s.id] || [];
+        const withMedia = kids.filter((n) => n.youtube_url || n.audio_url).length;
+        rows.push({
+          href: `/sermons/edit-series/${s.id}`,
+          filter: ['series', s.active ? 'active' : ''].filter(Boolean),
+          search: `${s.title} ${s.date_range || ''}`.toLowerCase(),
+          cells: [
+            primaryCell(s.title, s.date_range || pluralise(kids.length, 'sermon')),
+            escapeHtml(s.date_range || '—'),
+            '',
+            kids.length ? statusPill(withMedia === kids.length ? 'good' : 'plain', `${withMedia}/${kids.length} with media`) : statusPill('plain', 'No sermons yet'),
+          ],
+          actions: `<a class="tlc-edit" href="/sermons/new-note?series_id=${s.id}">+ Sermon</a><a class="tlc-edit" href="/sermons/edit-series/${s.id}">Edit</a>`,
+        });
+        for (const n of kids) {
+          rows.push({
+            child: true,
+            href: `/sermons/edit-note/${n.id}`,
+            filter: ['sermon', (n.youtube_url || n.audio_url) ? 'with-media' : 'no-media'],
+            search: `${n.title || ''} ${n.scripture || ''} ${s.title}`.toLowerCase(),
+            cells: [
+              primaryCell(n.title || '(untitled)', s.title),
+              escapeHtml(n.date || '—'),
+              escapeHtml(n.scripture || '—'),
+              mediaCell(n),
+            ],
+          });
+        }
+      }
+      for (const n of standalone) {
+        rows.push({
+          href: `/sermons/edit-note/${n.id}`,
+          filter: ['sermon', 'standalone', (n.youtube_url || n.audio_url) ? 'with-media' : 'no-media'],
+          search: `${n.title || ''} ${n.scripture || ''}`.toLowerCase(),
+          cells: [
+            primaryCell(n.title || '(untitled)', 'Not part of a series'),
+            escapeHtml(n.date || '—'),
+            escapeHtml(n.scripture || '—'),
+            mediaCell(n),
+          ],
+        });
+      }
 
       return html(`
-${sidebarShell('sermons', currentUser, `<a href="https://timothystl.org/sermons" target="_blank">View page →</a>`)}
-<div class="wrap">
-  <div class="page-title">Sermon Series</div>
-  <div class="page-sub">Manage the current series and individual sermons shown on timothystl.org/sermons</div>
-  ${alertHtml}
-  <div class="btn-row" style="margin-bottom:24px;">
-    <a href="/sermons/new-series" class="btn btn-primary">+ Add series</a>
-    <a href="/sermons/new-note" class="btn btn-secondary">+ Add standalone sermon</a>
-  </div>
-  <div class="card">
-    <div class="card-title">Sermon series</div>
-    ${seriesHtml}
-  </div>
-  <div class="card" style="margin-top:20px;">
-    <div class="card-title">Standalone sermons <span class="tag">${standaloneNotes.results.length} total</span></div>
-    <div style="font-size:12px;color:var(--gray);margin-bottom:12px;">Sermons not attached to any series. These appear on the public sermons page.</div>
-    ${standaloneHtml}
-  </div>
+${sidebarShell('sermons', currentUser, `<a href="/sermons/new-series">+ Add series</a> <a href="/sermons/new-note">+ Standalone sermon</a> <a href="https://timothystl.org/sermons" target="_blank">View page →</a>`, await badgeCounts(env, currentUser))}
+<div class="tlc-wrap">
+  ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
+  ${renderListSection({
+    key: 'sermons',
+    title: 'Sermons',
+    purpose: 'The sermon library — series, and the sermons inside them. This is what the website’s Latest sermon block reads.',
+    action: { label: '+ Add series', href: '/sermons/new-series' },
+    search: 'Search sermons and series',
+    filters: [
+      { label: 'All', value: 'all' },
+      { label: 'Series', value: 'series' },
+      { label: 'With a recording', value: 'with-media' },
+      { label: 'No recording', value: 'no-media' },
+    ],
+    columns: [
+      { label: 'Series / sermon', width: '2.6fr' },
+      { label: 'Date', width: '1fr' },
+      { label: 'Scripture', width: '1.2fr' },
+      { label: 'Media', width: '1.2fr' },
+    ],
+    rows,
+    noun: 'entry', nounPlural: 'entries',
+    empty: 'No series or sermons yet.',
+    note: 'A sermon with no recording is not broken. The website shows a text-only card — series, title, date and reading — and turns it into a play button by itself the moment a link is pasted here.',
+  })}
 </div>`, 'Sermons Admin');
     }
 
@@ -2880,7 +3310,7 @@ addEvent();
         await env.DB.prepare("UPDATE newsletters SET status = 'draft', approval_status = 'pending' WHERE id = ?").bind(newsletterId).run();
         return new Response('', {
           status: 302,
-          headers: { Location: `/newsitems?msg=submitted&subject=${encodeURIComponent(subject)}` }
+          headers: { Location: `/?msg=submitted&subject=${encodeURIComponent(subject)}` }
         });
       }
 
@@ -2909,7 +3339,7 @@ addEvent();
       const redirectMsg = (action === 'publish' && emailSend !== 'test') ? 'published' : 'draft';
       return new Response('', {
         status: 302,
-        headers: { Location: `/newsitems?msg=${encodeURIComponent(redirectMsg)}&subject=${encodeURIComponent(subject)}${emailSuffix}` }
+        headers: { Location: `/?msg=${encodeURIComponent(redirectMsg)}&subject=${encodeURIComponent(subject)}${emailSuffix}` }
       });
     }
 
@@ -2918,43 +3348,19 @@ addEvent();
     const isCeRoute = path === '/christian-education' || path.startsWith('/christian-education/');
     if (isCeRoute && !hasPermission(currentUser, 'news_edit')) return new Response('Access denied.', { status: 403 });
 
-    if (path === '/christian-education' && method === 'GET') {
-      const ceRows = await env.DB.prepare('SELECT * FROM bible_classes ORDER BY sort_order, id').all();
-      const ceMsg = url.searchParams.get('msg');
-      const ceAlert = ceMsg === 'saved' ? `<div class="alert alert-success">✓ Class saved.</div>`
-        : ceMsg === 'deleted' ? `<div class="alert alert-info">Class removed.</div>`
-        : ceMsg === 'error' ? `<div class="alert alert-error">Title is required.</div>` : '';
+    // The add form lives on its own address rather than under the list, so
+    // this section reads the same as every other one: a list, and one action
+    // that opens a form.
+    if ((path === '/christian-education' || path === '/christian-education/new') && method === 'GET') {
       const ACCENT_OPTS = [['mid','Navy'],['teal','Teal'],['steel','Steel'],['sage','Moss'],['amber','Gold'],['plum','Plum']];
-      const classListHtml = ceRows.results.length === 0
-        ? `<div style="text-align:center;padding:40px;color:var(--gray);font-size:14px;">No classes yet. Add your first class below.</div>`
-        : ceRows.results.map(c => `<div style="display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid var(--border);">
-          <div style="flex:1;">
-            <div style="font-family:var(--sans);font-size:14px;font-weight:700;color:var(--charcoal);">${c.title}${!c.active ? ' <span style="font-size:11px;font-weight:400;color:var(--gray);">(hidden)</span>' : ''}</div>
-            ${c.label ? `<div style="font-size:12px;color:var(--gray);">${c.label}${c.schedule ? ' · ' + c.schedule : ''}</div>` : (c.schedule ? `<div style="font-size:12px;color:var(--gray);">${c.schedule}</div>` : '')}
-          </div>
-          <div style="display:flex;gap:8px;">
-            <a href="/christian-education/edit/${c.id}" class="btn btn-sm btn-secondary">Edit</a>
-            <form method="POST" action="/christian-education/toggle/${c.id}" style="margin:0;">
-              <button type="submit" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">${c.active ? 'Hide' : 'Show'}</button>
-            </form>
-            <form method="POST" action="/christian-education/delete/${c.id}" onsubmit="return confirm('Delete this class?')" style="margin:0;">
-              <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-            </form>
-          </div>
-        </div>`).join('');
-      return html(`
-${sidebarShell('christian-education', currentUser, `<a href="https://timothystl.org/education" target="_blank">View page →</a>`)}
+
+      if (path === '/christian-education/new') {
+        return html(`
+${sidebarShell('christian-education', currentUser, `<a href="/christian-education">← All classes</a>`, await badgeCounts(env, currentUser))}
 <div class="wrap">
-  <div class="page-title">Christian Education</div>
-  <div class="page-sub">Manage Bible classes shown on the <strong>/education</strong> page and available in the newsletter editor.</div>
-  ${ceAlert}
+  <div class="page-title">Add a class</div>
+  <div class="page-sub">It appears on /education and in the newsletter's class picker as soon as you save.</div>
   <div class="card">
-    <div class="card-title">Classes</div>
-    <div style="font-size:12px;color:var(--gray);margin-bottom:14px;">Active classes appear on the website and in the newsletter editor. Drag-to-reorder is not yet supported — use the sort order field on the edit form instead.</div>
-    ${classListHtml}
-  </div>
-  <div class="card" style="margin-top:16px;">
-    <div class="card-title">Add a class</div>
     <form method="POST" action="/christian-education/create">
       <div class="form-group">
         <label>Title <span style="color:#B85C3A;">*</span></label>
@@ -2988,11 +3394,66 @@ ${sidebarShell('christian-education', currentUser, `<a href="https://timothystl.
           <select name="accent">${ACCENT_OPTS.map(([v,l]) => `<option value="${v}">${l}</option>`).join('')}</select>
         </div>
       </div>
-      <div style="margin-top:16px;">
+      <div class="form-group">
+        <label>Core value</label>
+        ${valueSelect('value', null)}
+      </div>
+      <div class="btn-row" style="margin-top:16px;">
         <button type="submit" class="btn btn-primary">Add class</button>
+        <a href="/christian-education" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
       </div>
     </form>
   </div>
+</div>`, 'Add a class');
+      }
+
+      const ceRows = await env.DB.prepare('SELECT * FROM bible_classes ORDER BY sort_order, id').all();
+      const ceMsg = url.searchParams.get('msg');
+      const ceAlert = ceMsg === 'saved' ? `<div class="alert alert-success">✓ Class saved.</div>`
+        : ceMsg === 'deleted' ? `<div class="alert alert-info">Class removed.</div>`
+        : ceMsg === 'error' ? `<div class="alert alert-error">Title is required.</div>` : '';
+
+      const rows = ceRows.results.map((c) => ({
+        href: `/christian-education/edit/${c.id}`,
+        filter: [c.active ? 'active' : 'paused', c.value || 'untagged'],
+        search: `${c.title} ${c.label || ''} ${c.schedule || ''} ${c.leader || ''}`.toLowerCase(),
+        cells: [
+          primaryCell(c.title, [c.label, c.location].filter(Boolean).join(' · ')),
+          escapeHtml(c.schedule || '—'),
+          escapeHtml(c.leader || '—'),
+          valueChip(c.value),
+          c.active ? statusPill('good', 'On the website') : statusPill('plain', 'Paused'),
+        ],
+        actions: `<form method="POST" action="/christian-education/toggle/${c.id}" style="display:inline;margin:0;"><button type="submit" class="tlc-edit" style="background:none;border:0;cursor:pointer;font:inherit;color:inherit;">${c.active ? 'Pause' : 'Resume'}</button></form><a class="tlc-edit" href="/christian-education/edit/${c.id}">Edit</a>`,
+      }));
+
+      return html(`
+${sidebarShell('christian-education', currentUser, `<a href="https://timothystl.org/education" target="_blank">View page →</a>`, await badgeCounts(env, currentUser))}
+<div class="tlc-wrap">
+  ${ceAlert ? `<div class="tlc-section" style="padding-bottom:0;">${ceAlert}</div>` : ''}
+  ${renderListSection({
+    key: 'christian-ed',
+    title: 'Christian Ed',
+    purpose: 'Every class the church offers. This is what /education shows and what the newsletter offers in its class picker.',
+    action: { label: '+ Add class', href: '/christian-education/new' },
+    search: 'Search classes',
+    filters: [
+      { label: 'All', value: 'all' },
+      { label: 'On the website', value: 'active' },
+      { label: 'Paused', value: 'paused' },
+    ],
+    columns: [
+      { label: 'Class', width: '2.2fr' },
+      { label: 'Schedule', width: '1.3fr' },
+      { label: 'Leader', width: '1fr' },
+      { label: 'Value', width: '.8fr' },
+      { label: 'Status', width: '1.1fr' },
+    ],
+    rows,
+    noun: 'class', nounPlural: 'classes',
+    empty: 'No classes yet.',
+    note: 'Pausing a class keeps it in this list but takes it off the website — the right move for something that breaks for the summer and comes back. Delete only when a class is genuinely finished.',
+  })}
 </div>`, 'Christian Education');
     }
 
@@ -3000,8 +3461,8 @@ ${sidebarShell('christian-education', currentUser, `<a href="https://timothystl.
       const ceForm = await request.formData();
       const title = (ceForm.get('title') || '').trim();
       if (!title) return new Response('', { status: 302, headers: { Location: '/christian-education?msg=error' } });
-      await env.DB.prepare('INSERT INTO bible_classes (title, label, description, leader, location, schedule, accent, active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, 1, (SELECT COALESCE(MAX(sort_order),0)+1 FROM bible_classes))')
-        .bind(title, (ceForm.get('label')||'').trim()||null, (ceForm.get('description')||'').trim()||null, (ceForm.get('leader')||'').trim()||null, (ceForm.get('location')||'').trim()||null, (ceForm.get('schedule')||'').trim()||null, ceForm.get('accent')||'mid').run();
+      await env.DB.prepare('INSERT INTO bible_classes (title, label, description, leader, location, schedule, accent, value, active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, (SELECT COALESCE(MAX(sort_order),0)+1 FROM bible_classes))')
+        .bind(title, (ceForm.get('label')||'').trim()||null, (ceForm.get('description')||'').trim()||null, (ceForm.get('leader')||'').trim()||null, (ceForm.get('location')||'').trim()||null, (ceForm.get('schedule')||'').trim()||null, ceForm.get('accent')||'mid', normalizeValue(ceForm.get('value'))).run();
       return new Response('', { status: 302, headers: { Location: '/christian-education?msg=saved' } });
     }
 
@@ -3052,6 +3513,10 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
           <input type="number" name="sort_order" value="${ceRow.sort_order||0}" min="0" style="width:80px;">
         </div>
       </div>
+      <div class="form-group" style="margin-top:16px;">
+        <label>Core value</label>
+        ${valueSelect('value', ceRow.value)}
+      </div>
       <div class="checkbox-row" style="margin-top:14px;">
         <input type="checkbox" name="active" id="ce-active" value="1"${ceRow.active ? ' checked' : ''}>
         <label for="ce-active">Active (shown on website and in newsletter editor)</label>
@@ -3070,8 +3535,8 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
       const ceForm = await request.formData();
       const title = (ceForm.get('title') || '').trim();
       if (!title) return new Response('', { status: 302, headers: { Location: `/christian-education/edit/${ceId}?msg=error` } });
-      await env.DB.prepare('UPDATE bible_classes SET title=?, label=?, description=?, leader=?, location=?, schedule=?, accent=?, active=?, sort_order=? WHERE id=?')
-        .bind(title, (ceForm.get('label')||'').trim()||null, (ceForm.get('description')||'').trim()||null, (ceForm.get('leader')||'').trim()||null, (ceForm.get('location')||'').trim()||null, (ceForm.get('schedule')||'').trim()||null, ceForm.get('accent')||'mid', ceForm.get('active') === '1' ? 1 : 0, parseInt(ceForm.get('sort_order')||'0'), ceId).run();
+      await env.DB.prepare('UPDATE bible_classes SET title=?, label=?, description=?, leader=?, location=?, schedule=?, accent=?, value=?, active=?, sort_order=? WHERE id=?')
+        .bind(title, (ceForm.get('label')||'').trim()||null, (ceForm.get('description')||'').trim()||null, (ceForm.get('leader')||'').trim()||null, (ceForm.get('location')||'').trim()||null, (ceForm.get('schedule')||'').trim()||null, ceForm.get('accent')||'mid', normalizeValue(ceForm.get('value')), ceForm.get('active') === '1' ? 1 : 0, parseInt(ceForm.get('sort_order')||'0'), ceId).run();
       return new Response('', { status: 302, headers: { Location: '/christian-education?msg=saved' } });
     }
 
@@ -3092,14 +3557,14 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
       if (!hasPermission(currentUser, 'newsletter_approve')) return new Response('Access denied.', { status: 403 });
       const id = path.split('/').pop();
       await env.DB.prepare("UPDATE newsletters SET status = 'published', approval_status = 'approved', approved_by_username = ? WHERE id = ?").bind(currentUser.username, id).run();
-      return new Response('', { status: 302, headers: { Location: '/newsitems?msg=approved' } });
+      return new Response('', { status: 302, headers: { Location: '/?msg=approved' } });
     }
 
     if (path.startsWith('/newsletter/reject/') && method === 'POST') {
       if (!hasPermission(currentUser, 'newsletter_approve')) return new Response('Access denied.', { status: 403 });
       const id = path.split('/').pop();
       await env.DB.prepare("UPDATE newsletters SET status = 'draft', approval_status = NULL, approved_by_username = NULL WHERE id = ?").bind(id).run();
-      return new Response('', { status: 302, headers: { Location: '/newsitems?msg=rejected' } });
+      return new Response('', { status: 302, headers: { Location: '/?msg=rejected' } });
     }
 
     // ── EDIT EXISTING NEWSLETTER (GET) ──
@@ -3400,7 +3865,7 @@ ${classesJs}
       if (!listId && listType === 'all') {
         return new Response('', {
           status: 302,
-          headers: { Location: `/newsitems?msg=emailed&emailerr=${encodeURIComponent('BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}` }
+          headers: { Location: `/?msg=emailed&emailerr=${encodeURIComponent('BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}` }
         });
       }
 
@@ -3421,7 +3886,7 @@ ${classesJs}
         : `&emailerr=${encodeURIComponent(result.error)}`;
       return new Response('', {
         status: 302,
-        headers: { Location: `/newsitems?msg=emailed&subject=${encodeURIComponent(row.subject)}${suffix}` }
+        headers: { Location: `/?msg=emailed&subject=${encodeURIComponent(row.subject)}${suffix}` }
       });
     }
 
@@ -3440,14 +3905,14 @@ ${classesJs}
       if (!listId) {
         return new Response('', {
           status: 302,
-          headers: { Location: `/newsitems?msg=emailed&emailerr=${encodeURIComponent('BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}` }
+          headers: { Location: `/?msg=emailed&emailerr=${encodeURIComponent('BREVO_LIST_ID secret is not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.')}` }
         });
       }
       const scheduledDate = scheduledAtSubmitted ? new Date(scheduledAtSubmitted) : null;
       if (!scheduledDate || isNaN(scheduledDate.getTime()) || scheduledDate.getTime() <= Date.now()) {
         return new Response('', {
           status: 302,
-          headers: { Location: `/newsitems?msg=emailed&emailerr=${encodeURIComponent('Pick a valid date/time in the future to schedule this send.')}` }
+          headers: { Location: `/?msg=emailed&emailerr=${encodeURIComponent('Pick a valid date/time in the future to schedule this send.')}` }
         });
       }
       const scheduledAtIso = scheduledDate.toISOString();
@@ -3480,7 +3945,7 @@ ${classesJs}
         : `&emailerr=${encodeURIComponent(result.error)}`;
       return new Response('', {
         status: 302,
-        headers: { Location: `/newsitems?msg=emailed&subject=${encodeURIComponent(row.subject)}${suffix}` }
+        headers: { Location: `/?msg=emailed&subject=${encodeURIComponent(row.subject)}${suffix}` }
       });
     }
 
@@ -3496,14 +3961,14 @@ ${classesJs}
         if (!result.success) {
           return new Response('', {
             status: 302,
-            headers: { Location: `/newsitems?msg=emailed&emailerr=${encodeURIComponent(result.error)}` }
+            headers: { Location: `/?msg=emailed&emailerr=${encodeURIComponent(result.error)}` }
           });
         }
       }
       await env.DB.prepare(
         'UPDATE newsletters SET scheduled_send_at = NULL, scheduled_list_type = NULL, brevo_campaign_id = NULL WHERE id = ?'
       ).bind(id).run();
-      return new Response('', { status: 302, headers: { Location: `/newsitems?msg=emailed&scheduled=cancelled` } });
+      return new Response('', { status: 302, headers: { Location: `/?msg=emailed&scheduled=cancelled` } });
     }
 
     // ── DELETE ──
@@ -3544,289 +4009,86 @@ ${classesJs}
     // ── NEWS & EVENTS: COMBINED LIST (Newsletter + News Posts) ──
     if (path === '/newsitems' && method === 'GET') {
       await sweepExpiredItems(env, new URL(request.url).origin);
-      const [itemsRes, nlRes] = await Promise.all([
-        env.DB.prepare('SELECT * FROM news_items ORDER BY pinned DESC, COALESCE(event_date, publish_date) ASC').all(),
-        env.DB.prepare("SELECT id, subject, published_at, format, status, approval_status, created_at, scheduled_send_at, scheduled_list_type FROM newsletters ORDER BY CASE WHEN status = 'draft' THEN 0 ELSE 1 END, published_at DESC").all(),
-      ]);
+      const itemsRes = await env.DB.prepare(
+        'SELECT * FROM news_items ORDER BY pinned DESC, COALESCE(event_date, publish_date) DESC, id DESC'
+      ).all();
       const today = new Date().toISOString().split('T')[0];
+      const soon = new Date(Date.now() + 3 * 864e5).toISOString().split('T')[0];
       const msgParam = url.searchParams.get('msg');
-      const subjectParam = decodeURIComponent(url.searchParams.get('subject') || '');
-      const emailedParam = url.searchParams.get('emailed');
-      const emailErrParam = url.searchParams.get('emailerr');
-      const scheduledParam = url.searchParams.get('scheduled');
-      let alertHtml = '';
-      if (msgParam === 'saved') alertHtml = `<div class="alert alert-success">✓ News item saved.</div>`;
-      if (msgParam === 'deleted') alertHtml = `<div class="alert alert-info">Item deleted.</div>`;
-      if (msgParam === 'published') {
-        const siteNewsUrl = 'https://timothystl.org/news';
-        const fbShareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(siteNewsUrl)}`;
-        const tweetText = subjectParam
-          ? `📖 ${subjectParam} — read our latest update at ${siteNewsUrl}`
-          : `Our latest update from Timothy Lutheran Church: ${siteNewsUrl}`;
-        const twitterShareUrl = `https://x.com/intent/post?text=${encodeURIComponent(tweetText)}`;
-        const bskyText = subjectParam
-          ? `📖 ${subjectParam}\n\nOur weekly update from Timothy Lutheran Church:\n${siteNewsUrl}`
-          : `Our latest update from Timothy Lutheran Church:\n${siteNewsUrl}`;
-        const bskyShareUrl = `https://bsky.app/intent/compose?text=${encodeURIComponent(bskyText)}`;
-        const igCaption = subjectParam
-          ? `📖 ${subjectParam}\n\nOur weekly update is live — read it at timothystl.org/news\n\n@timothystl\n#TimothyLutheran #LindenwoordPark #StLouis #church`
-          : `Our latest newsletter is live at timothystl.org/news\n\n@timothystl\n#TimothyLutheran #LindenwoordPark #StLouis #church`;
-        const igCaptionJs = igCaption.replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$/g,'\\$');
-        alertHtml = `
-<div class="alert alert-success" style="margin-bottom:0;border-radius:10px 10px 0 0;">
-  ✓ Newsletter published to website archive.${emailedParam === 'test' ? ' Email sent to test list.' : emailedParam === 'all' ? ' Email sent to all subscribers.' : ''}${emailErrParam ? ` ⚠️ Email error: ${emailErrParam}` : ''}
-</div>
-<div style="background:#f0f7f0;border:1px solid #b8d4b8;border-top:none;border-radius:0 0 10px 10px;padding:18px 20px;margin-bottom:20px;">
-  <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#2a4d2a;margin-bottom:14px;">📣 Share to social media</div>
-  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;">
-    <a href="${fbShareUrl}" target="_blank" style="display:inline-flex;align-items:center;gap:7px;font-family:var(--sans);font-size:13px;font-weight:700;background:#1877F2;color:white;padding:9px 18px;border-radius:6px;text-decoration:none;">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M24 12.07C24 5.41 18.63 0 12 0S0 5.41 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.04V9.41c0-3.02 1.8-4.7 4.54-4.7 1.31 0 2.68.24 2.68.24v2.97h-1.5c-1.5 0-1.96.93-1.96 1.89v2.26h3.32l-.53 3.49h-2.79V24C19.61 23.1 24 18.1 24 12.07z"/></svg>
-      Share on Facebook
-    </a>
-    <a href="${twitterShareUrl}" target="_blank" style="display:inline-flex;align-items:center;gap:7px;font-family:var(--sans);font-size:13px;font-weight:700;background:#000;color:white;padding:9px 18px;border-radius:6px;text-decoration:none;">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="white"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.748l7.73-8.835L1.254 2.25H8.08l4.259 5.63 5.905-5.63zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-      Post on X
-    </a>
-    <a href="${bskyShareUrl}" target="_blank" style="display:inline-flex;align-items:center;gap:7px;font-family:var(--sans);font-size:13px;font-weight:700;background:#0085ff;color:white;padding:9px 18px;border-radius:6px;text-decoration:none;">
-      <svg width="16" height="14" viewBox="0 0 360 320" fill="white"><path d="M180 142c-16.3-31.1-60.7-89.4-102-120C38 0 0 5 0 72c0 29 15.6 121.3 26.2 144C85.4 342 153.9 310.4 180 310.4c26 0 94.6 31.6 153.8-94.4C344.4 193.3 360 101 360 72c0-67-38-72-78-50C240.7 52.6 196.3 110.9 180 142z"/></svg>
-      Post on Bluesky
-    </a>
-    <a href="https://www.instagram.com" target="_blank" style="display:inline-flex;align-items:center;gap:7px;font-family:var(--sans);font-size:13px;font-weight:700;background:linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);color:white;padding:9px 18px;border-radius:6px;text-decoration:none;">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
-      Open Instagram
-    </a>
-  </div>
-  <div style="font-family:var(--sans);font-size:12px;font-weight:600;color:var(--gray);margin-bottom:6px;">Caption for Instagram — copy and paste:</div>
-  <div id="ig-cap" style="font-family:var(--sans);font-size:13px;background:white;border:1px solid #ccd4cc;border-radius:6px;padding:12px 14px;line-height:1.8;white-space:pre-wrap;color:var(--charcoal);">${igCaption.replace(/</g,'&lt;')}</div>
-  <button onclick="navigator.clipboard.writeText(\`${igCaptionJs}\`).then(()=>{this.textContent='✓ Copied!';this.style.background='#e8f5e9';setTimeout(()=>{this.textContent='Copy caption';this.style.background='';},2000)})" style="margin-top:8px;font-family:var(--sans);font-size:12px;font-weight:700;background:white;border:1px solid #aab8aa;border-radius:6px;padding:6px 16px;cursor:pointer;transition:background .2s;">Copy caption</button>
-</div>`;
-      } else if (msgParam === 'submitted') {
-        alertHtml = `<div class="alert alert-info">Newsletter submitted for approval. An approver will review it before it goes live.</div>`;
-      } else if (msgParam === 'approved') {
-        alertHtml = `<div class="alert alert-success">✓ Newsletter approved and published.</div>`;
-      } else if (msgParam === 'rejected') {
-        alertHtml = `<div class="alert alert-info">Newsletter returned to draft for revisions.</div>`;
-      } else if (msgParam === 'draft') {
-        alertHtml = emailedParam === 'test'
-          ? `<div class="alert alert-success">✓ Test email sent to test list. Newsletter saved as draft — not yet published to the website.</div>`
-          : `<div class="alert alert-info">Draft saved.</div>`;
-      } else if (msgParam === 'emailed') {
-        const sentTo = emailedParam === 'test' ? 'test list' : 'all subscribers';
-        alertHtml = emailErrParam
-          ? `<div class="alert alert-error">Email failed: ${emailErrParam}</div>`
-          : scheduledParam === '1'
-            ? `<div class="alert alert-success">✓ "${subjectParam}" scheduled with Brevo.</div>`
-            : scheduledParam === 'cancelled'
-              ? `<div class="alert alert-info">Scheduled send cancelled.</div>`
-              : `<div class="alert alert-success">✓ "${subjectParam}" sent to ${sentTo}.</div>`;
-      }
+      const alertHtml = msgParam === 'saved' ? `<div class="alert alert-success">✓ News post saved.</div>`
+        : msgParam === 'deleted' ? `<div class="alert alert-info">Post deleted.</div>` : '';
 
-      // ── News items HTML ──
-      const soon = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      const statusLabel = { active: 'Live', upcoming: 'Upcoming', expired: 'Expired', expiring: 'Expiring soon' };
-      const themeIcon = { 'Christmas Market': '🎄', 'Beekeepers': '🐝', 'Music': '🎵', 'Stephen Ministry': '🤝', 'Food Pantry': '🥫' };
-      let liveCount = 0, upcomingCount = 0, expiredCount = 0;
-      const listHtml = itemsRes.results.length === 0
-        ? `<div style="text-align:center;padding:40px;color:var(--gray);font-size:14px;">No news items yet. Add your first announcement.</div>`
-        : itemsRes.results.map(item => {
-            let status = 'active';
-            if (item.publish_date && item.publish_date > today) status = 'upcoming';
-            else if (item.expire_date && item.expire_date < today) status = 'expired';
-            else if (item.expire_date && item.expire_date <= soon) status = 'expiring';
-            if (status === 'active' || status === 'expiring') liveCount++;
-            else if (status === 'upcoming') upcomingCount++;
-            else if (status === 'expired') expiredCount++;
-            const icon = themeIcon[item.theme] || '📰';
-            return `<div class="ni-row" data-status="${status}" data-pinned="${item.pinned ? 1 : 0}">
-  <div class="icon-tile">${icon}</div>
-  ${item.pinned ? `<span class="badge badge-pinned">Pinned</span>` : ''}
-  <span class="badge badge-${status}">${statusLabel[status]}</span>
-  <div class="ni-title">${item.title}</div>
-  <div class="ni-meta">${item.event_date ? 'Event: ' + item.event_date + ' · ' : ''}Published: ${item.publish_date || ''}${item.expire_date ? ' → ' + item.expire_date : ''}</div>
-  <div class="ni-actions">
-    <a href="/newsitems/edit/${item.id}" class="btn btn-sm btn-secondary">Edit</a>
-    <form method="POST" action="/newsitems/delete/${item.id}" onsubmit="return confirm('Delete this item?')" style="margin:0;">
-      <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-    </form>
-  </div>
-</div>`;
-          }).join('');
-      const countsSummary = `${liveCount} live · ${upcomingCount} upcoming · ${expiredCount} expired`;
+      const listRows = itemsRes.results.map((item) => {
+        let state = 'live';
+        if (item.publish_date && item.publish_date > today) state = 'scheduled';
+        else if (item.expire_date && item.expire_date < today) state = 'expired';
+        const expiringSoon = state === 'live' && item.expire_date && item.expire_date <= soon;
 
-      // ── Newsletter HTML ──
-      const nRows = nlRes.results;
-      const canApprove = hasPermission(currentUser, 'newsletter_approve');
-      const pending = nRows.filter(r => r.status === 'draft' && r.approval_status === 'pending');
-      const drafts = nRows.filter(r => r.status === 'draft' && r.approval_status !== 'pending');
-      const published = nRows.filter(r => r.status !== 'draft');
-      const fmtLabel = (r) => r.format === 'quick'
-        ? `<span class="badge" style="background:#e8f0fe;color:#1a3060;margin-left:8px;">⚡ Quick</span>`
-        : '';
-      // A scheduled_send_at in the past just means Brevo already sent it — treat only
-      // future timestamps as "still pending" for the badge/cancel-button logic below.
-      const isPendingSchedule = (r) => r.scheduled_send_at && new Date(r.scheduled_send_at).getTime() > Date.now();
-      // Rendered server-side (Workers run in UTC) — pin the display to the
-      // church's own timezone so the badge matches what staff actually picked.
-      const scheduleBadge = (r) => isPendingSchedule(r)
-        ? `<span class="badge" style="background:#e6f0ff;color:#1a3c6e;margin-left:8px;">⏰ Scheduled for ${new Date(r.scheduled_send_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Chicago' })} CT${r.scheduled_list_type === 'test' ? ' (test list)' : ''}</span>`
-        : '';
-      const scheduleControls = (r) => {
-        if (!canApprove) return '';
-        if (isPendingSchedule(r)) {
-          return `<form method="POST" action="/newsletter/cancel-schedule/${r.id}" style="display:contents;" onsubmit="return confirm('Cancel the scheduled send?')">
-      <button type="submit" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel schedule</button>
-    </form>`;
-        }
-        return `<button type="button" class="btn btn-sm" style="background:var(--mist);color:var(--steel);border:1px solid var(--border);" onclick="toggleSchedule(${r.id})">Schedule send</button>
-    <div id="sched-row-${r.id}" style="display:none;flex-basis:100%;margin-top:10px;">
-      <form method="POST" action="/schedule-email/${r.id}" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;" onsubmit="return prepSchedule(this)">
-        <input type="datetime-local" required style="font-family:var(--sans);font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;">
-        <input type="hidden" name="scheduled_at">
-        <button type="submit" class="btn btn-sm btn-primary">Confirm schedule</button>
-        <button type="button" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);" onclick="toggleSchedule(${r.id})">Cancel</button>
-      </form>
-    </div>`;
-      };
-      const pendingSectionHtml = (pending.length === 0 || !canApprove) ? '' : `<div style="margin-bottom:16px;border:2px solid #D4922A;border-radius:8px;overflow:hidden;">
-  <div style="background:#FFF3D6;padding:8px 16px;border-bottom:1px solid #D4922A;">
-    <span style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7A4F00;">⏳ Awaiting Approval — ${pending.length}</span>
-  </div>
-  ${pending.map(r => `<div class="newsletter-row">
-  <div class="newsletter-date">${r.published_at || r.created_at || ''}</div>
-  <div class="newsletter-subject">${r.subject}${fmtLabel(r)} <span class="badge badge-pending">Pending</span></div>
-  <div class="newsletter-actions">
-    <a href="/edit/${r.id}" class="btn btn-sm btn-secondary">Preview</a>
-    <form method="POST" action="/newsletter/approve/${r.id}" style="display:contents;" onsubmit="return confirm('Approve and publish this newsletter?')">
-      <button type="submit" class="btn btn-sm btn-sage">Approve</button>
-    </form>
-    <form method="POST" action="/newsletter/reject/${r.id}" style="display:contents;" onsubmit="return confirm('Return this newsletter to draft?')">
-      <button type="submit" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Return to draft</button>
-    </form>
-  </div>
-</div>`).join('')}
-</div>`;
-      const draftSectionHtml = drafts.length === 0 ? '' : `<div style="margin-bottom:16px;border:1px solid var(--amber);border-radius:8px;overflow:hidden;">
-  <div style="background:#FFF8EC;padding:8px 16px;border-bottom:1px solid var(--amber);">
-    <span style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#A07010;">Drafts — ${drafts.length}</span>
-  </div>
-  ${drafts.map(r => `<div class="newsletter-row">
-  <div class="newsletter-date">${r.published_at || r.created_at || ''}</div>
-  <div class="newsletter-subject">${r.subject}${fmtLabel(r)}${scheduleBadge(r)}</div>
-  <div class="newsletter-actions">
-    <a href="/edit/${r.id}" class="btn btn-sm btn-secondary">Edit</a>
-    <form method="POST" action="/newsletter/duplicate/${r.id}" style="display:contents;">
-      <button type="submit" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Copy</button>
-    </form>
-    ${canApprove ? `<form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Send to test list?')">
-      <input type="hidden" name="list_type" value="test">
-      <button type="submit" class="btn btn-sm" style="background:var(--mist);color:var(--steel);border:1px solid var(--border);">Send test</button>
-    </form>
-    <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Send to ALL subscribers? This cannot be undone.')">
-      <input type="hidden" name="list_type" value="all">
-      <button type="submit" class="btn btn-sm btn-primary">Send to all</button>
-    </form>
-    ${scheduleControls(r)}` : ''}
-    <form method="POST" action="/delete/${r.id}" style="display:contents;" onsubmit="return confirm('Delete this draft?')">
-      <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-    </form>
-  </div>
-</div>`).join('')}
-</div>`;
-      const publishedHtml = published.length === 0
-        ? `<div style="text-align:center;padding:40px;color:var(--gray);font-family:var(--sans);font-size:14px;">No newsletters published yet.</div>`
-        : published.map(r => `<div class="newsletter-row">
-  <div class="newsletter-date">${r.published_at || ''}</div>
-  <div class="newsletter-subject">${r.subject}${fmtLabel(r)}${scheduleBadge(r)}</div>
-  <div class="newsletter-actions">
-    <a href="/edit/${r.id}" class="btn btn-sm btn-secondary">Edit</a>
-    <form method="POST" action="/newsletter/duplicate/${r.id}" style="display:contents;">
-      <button type="submit" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Copy</button>
-    </form>
-    ${hasPermission(currentUser, 'newsletter_approve') ? `
-    <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Resend to test list?')">
-      <input type="hidden" name="list_type" value="test">
-      <button type="submit" class="btn btn-sm" style="background:var(--mist);color:var(--steel);border:1px solid var(--border);">Resend test</button>
-    </form>
-    <form method="POST" action="/send-email/${r.id}" style="display:contents;" onsubmit="return confirm('Resend to ALL subscribers? This will send again to everyone.')">
-      <input type="hidden" name="list_type" value="all">
-      <button type="submit" class="btn btn-sm btn-primary">Resend to all</button>
-    </form>
-    ${scheduleControls(r)}` : ''}
-    ${hasPermission(currentUser, 'newsletter_approve') ? `<form method="POST" action="/delete/${r.id}" style="display:contents;" onsubmit="return confirm('Delete this newsletter?')">
-      <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-    </form>` : ''}
-  </div>
-</div>`).join('');
+        const status = state === 'scheduled' ? statusPill('auto', 'Scheduled')
+          : state === 'expired' ? statusPill('plain', 'Expired')
+          : expiringSoon ? statusPill('warn', 'Expiring')
+          : statusPill('good', 'Live');
+
+        // The expire date is the field that matters on this screen: a post
+        // carrying one disappears on its own, which is the whole reason the
+        // site does not go stale. A post without one never leaves, so it is
+        // called out rather than left blank.
+        const expires = item.expire_date
+          ? escapeHtml(item.expire_date)
+          : `<span style="color:#7A5B18;">Never</span>`;
+
+        return {
+          href: `/newsitems/edit/${item.id}`,
+          filter: [state, item.pinned ? 'pinned' : ''].filter(Boolean),
+          search: `${item.title} ${item.summary || ''} ${valueByKey(item.value)?.short || ''}`.toLowerCase(),
+          cells: [
+            primaryCell(item.title, [
+              item.pinned ? 'Pinned to the top' : '',
+              item.event_date ? `Event ${item.event_date}` : '',
+              item.summary || '',
+            ].filter(Boolean).join(' · ').slice(0, 96)),
+            valueChip(item.value),
+            escapeHtml(item.publish_date || '—'),
+            expires,
+            status,
+          ],
+          warn: !item.expire_date
+            ? 'No expiry date, so this post stays on the site until somebody removes it by hand.'
+            : '',
+          warnCta: !item.expire_date ? { label: 'Set one', href: `/newsitems/edit/${item.id}` } : null,
+        };
+      });
 
       return html(`
-${sidebarShell('news', currentUser, `<a href="https://timothystl.org/news" target="_blank">View site →</a>`, pending.length)}
-<style>details > summary { list-style: none; } details > summary::-webkit-details-marker { display: none; }</style>
-<div class="wrap">
-  <div class="page-title">News &amp; Events</div>
-  <div class="page-sub">Manage newsletters and website announcements. <span class="count-pill">${countsSummary}</span></div>
-  ${alertHtml}
-  <details open style="margin-bottom:16px;border:1px solid var(--border);border-radius:10px;overflow:hidden;">
-    <summary style="cursor:pointer;display:flex;align-items:center;padding:14px 20px;background:var(--steel);color:white;font-family:var(--sans);font-size:14px;font-weight:700;letter-spacing:.04em;">
-      Newsletter
-    </summary>
-    <div style="padding:20px;">
-      <div class="btn-row" style="margin-bottom:20px;">
-        <a href="/new" class="btn btn-primary">+ Write newsletter</a>
-      </div>
-      ${pendingSectionHtml}
-      ${draftSectionHtml}
-      <div class="card" style="margin-bottom:0;">
-        <div class="card-title">Past newsletters</div>
-        ${publishedHtml}
-      </div>
-    </div>
-  </details>
-  <details open style="margin-bottom:16px;border:1px solid var(--border);border-radius:10px;overflow:hidden;">
-    <summary style="cursor:pointer;display:flex;align-items:center;padding:14px 20px;background:var(--steel);color:white;font-family:var(--sans);font-size:14px;font-weight:700;letter-spacing:.04em;">
-      News Posts
-    </summary>
-    <div style="padding:20px;">
-      <div class="btn-row" style="margin-bottom:16px;">
-        <a href="/newsitems/new" class="btn btn-primary">+ Add news item</a>
-      </div>
-      <div class="btn-row" style="margin-bottom:20px;" id="ni-filters">
-        <button type="button" class="filter-pill active" data-filter="all">All</button>
-        <button type="button" class="filter-pill" data-filter="live">Live</button>
-        <button type="button" class="filter-pill" data-filter="upcoming">Upcoming</button>
-        <button type="button" class="filter-pill" data-filter="pinned">Pinned</button>
-      </div>
-      <div class="card" style="margin-bottom:0;">
-        <div class="card-title">All items</div>
-        <div id="ni-list">${listHtml}</div>
-      </div>
-      <div style="margin-top:16px;padding:14px 18px;background:var(--mist);border-radius:8px;border-left:3px solid var(--steel);">
-        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--steel);margin-bottom:5px;">How it works</div>
-        <div style="font-size:13px;color:var(--charcoal);line-height:1.9;">
-          Items appear on the homepage and /news page automatically.<br>
-          <strong>Pinned</strong> items always show first. Items auto-hide after their expire date.
-        </div>
-      </div>
-    </div>
-  </details>
-</div>
-<script>(function(){
-var wrap=document.getElementById('ni-filters');
-if(!wrap)return;
-wrap.addEventListener('click',function(e){
-  var btn=e.target.closest('.filter-pill');
-  if(!btn)return;
-  wrap.querySelectorAll('.filter-pill').forEach(function(b){b.classList.remove('active');});
-  btn.classList.add('active');
-  var f=btn.dataset.filter;
-  document.querySelectorAll('#ni-list .ni-row').forEach(function(row){
-    var show = f==='all'
-      || (f==='live' && row.dataset.status==='active')
-      || (f==='upcoming' && row.dataset.status==='upcoming')
-      || (f==='pinned' && row.dataset.pinned==='1');
-    row.style.display = show ? '' : 'none';
-  });
-});
-})();</script>`, 'TLC Admin — News & Events');
+${sidebarShell('news', currentUser, `<a href="https://timothystl.org/news" target="_blank">View site →</a>`, await badgeCounts(env, currentUser))}
+<div class="tlc-wrap">
+  ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
+  ${renderListSection({
+    key: 'news',
+    title: 'News &amp; Events',
+    purpose: 'Everything on /news — announcements, events, and the calendar below them. One page, so nobody has to guess where to look.',
+    action: { label: '+ Add post', href: '/newsitems/new' },
+    search: 'Search posts',
+    filters: [
+      { label: 'All', value: 'all' },
+      { label: 'Live', value: 'live' },
+      { label: 'Scheduled', value: 'scheduled' },
+      { label: 'Expired', value: 'expired' },
+      { label: 'Pinned', value: 'pinned' },
+    ],
+    columns: [
+      { label: 'Post', width: '2.6fr' },
+      { label: 'Value', width: '.9fr' },
+      { label: 'Published', width: '1fr' },
+      { label: 'Expires', width: '1fr' },
+      { label: 'Status', width: '.9fr' },
+    ],
+    rows: listRows,
+    noun: 'post',
+    empty: 'No news posts yet.',
+    note: 'A post with an expiry date takes itself off the website on that day. That one field is what keeps the site from filling up with last year’s announcements — set it when you write the post, not later.',
+  })}
+</div>`, 'TLC Admin — News & Events');
     }
 
     // ── NEWS ITEMS: NEW FORM ──
@@ -4093,14 +4355,14 @@ ${newsImageUploadScript(item.image_url || '')}`, 'TLC Admin — Edit News Item',
     // database.
 
     if (path === '/pages' || path.startsWith('/pages/')) {
-      // Two roles. Office staff hold `site_pages` and can do everything. A
-      // ministry leader holds `site_pages_own` and can edit the pages assigned
+      // Two roles. Office staff hold `pages_edit` and can do everything. A
+      // ministry leader holds `pages_edit_own` and can edit the pages assigned
       // to them — the words and the blocks — but cannot rename the site's
       // structure, move things around the menu, create pages, delete them, or
       // touch the church details. Enforced here, not in the UI: hiding a
       // control is a courtesy, this is the control.
-      const fullAccess = hasPermission(currentUser, 'site_pages');
-      const ownOnly = !fullAccess && hasPermission(currentUser, 'site_pages_own');
+      const fullAccess = hasPermission(currentUser, 'pages_edit');
+      const ownOnly = !fullAccess && hasPermission(currentUser, 'pages_edit_own');
       if (!fullAccess && !ownOnly) return new Response('Access denied.', { status: 403 });
       const owns = (row) => fullAccess || (row && row.owner_username && row.owner_username === currentUser?.username);
       const denied = () => new Response('Access denied.', { status: 403 });
@@ -4659,7 +4921,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`)}
         // moment it was meant to publish.
         await promoteScheduledPages(env);
         const pages = await env.DB.prepare(
-          'SELECT slug, title, has_posts, updated_at, blocks, published_blocks, page_status, publish_at FROM youth_pages ORDER BY rowid'
+          'SELECT slug, title, has_posts, updated_at, blocks, published_blocks, page_status, publish_at, value, in_menu FROM youth_pages ORDER BY rowid'
         ).all();
         const msg = url.searchParams.get('msg');
         let alertHtml = '';
@@ -4677,108 +4939,64 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`)}
           for (const r of countRows.results) countMap[r.ministry_slug] = r.cnt;
         } catch (_) {}
 
-        const PILL = {
-          draft:     { label: 'Draft',     bg: '#F5E4C0', fg: '#7A5A12' },
-          live:      { label: 'Live',      bg: '#DCE6D6', fg: '#3B4C2E' },
-          scheduled: { label: 'Scheduled', bg: '#E4EEF4', fg: '#1E5C7A' },
-          hidden:    { label: 'Hidden',    bg: '#EDE9E0', fg: '#6A6858' },
-        };
+        const TONE = { draft: 'warn', live: 'good', scheduled: 'auto', hidden: 'plain' };
+        const LABEL = { draft: 'Draft', live: 'Live', scheduled: 'Scheduled', hidden: 'Hidden' };
 
         const rows = pages.results.map((p) => {
           const draftCount = sanitizeBlocks(parseBlocks(p.blocks)).length;
-          const status = PILL[p.page_status] ? p.page_status : 'live';
-          const pill = PILL[status];
+          const status = LABEL[p.page_status] ? p.page_status : 'live';
+          const postCount = countMap[p.slug] || 0;
+          const inMenu = p.in_menu === null || p.in_menu === undefined ? 1 : p.in_menu;
           const when = status === 'scheduled' && p.publish_at
             ? new Date(p.publish_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
             : (p.updated_at ? p.updated_at.split('T')[0] : 'Not yet edited');
-          const postCount = countMap[p.slug] || 0;
-          return `<tr class="mrow" data-name="${escapeHtml((p.title + ' ' + p.slug).toLowerCase())}" data-status="${status}" data-updated="${escapeHtml(p.updated_at || '')}">
-  <td>
-    <div style="font-weight:600;color:var(--steel);">${escapeHtml(p.title)}</div>
-    <div style="font-size:12px;color:var(--gray);">/${escapeHtml(p.slug)} · ${draftCount} block${draftCount === 1 ? '' : 's'}${postCount ? ' · ' + postCount + ' post' + (postCount === 1 ? '' : 's') : ''}</div>
-  </td>
-  <td><span style="display:inline-block;padding:3px 9px;border-radius:999px;font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:${pill.bg};color:${pill.fg};">${pill.label}</span></td>
-  <td style="font-size:13px;color:var(--gray);white-space:nowrap;">${escapeHtml(when)}</td>
-  <td style="text-align:right;white-space:nowrap;">
-    ${p.has_posts ? `<a href="/ministries/${escapeHtml(p.slug)}/posts" class="btn btn-sm btn-sage">Posts${postCount > 0 ? ' (' + postCount + ')' : ''}</a>` : ''}
-    <a href="/ministries/edit/${escapeHtml(p.slug)}" class="btn btn-sm btn-secondary">Banner &amp; settings</a>
-    <a href="/ministries/editor/${escapeHtml(p.slug)}" class="btn btn-sm btn-primary">Edit page →</a>
-    ${!CORE_SLUGS.includes(p.slug) ? `<form method="POST" action="/ministries/delete/${escapeHtml(p.slug)}" onsubmit="return confirm('Delete this ministry page?')" style="display:inline;margin:0;"><button type="submit" class="btn btn-sm btn-danger">Delete</button></form>` : ''}
-  </td>
-</tr>`;
-        }).join('');
+
+          return {
+            // The row's primary action is the editor, not a settings form —
+            // laying the page out is the thing people come here to do.
+            href: `/ministries/editor/${encodeURIComponent(p.slug)}`,
+            filter: [status, inMenu ? 'in-menu' : 'off-menu', p.value || 'untagged'].filter(Boolean),
+            search: `${p.title} ${p.slug} ${valueByKey(p.value)?.short || ''} ${valueByKey(p.value)?.name || ''}`.toLowerCase(),
+            cells: [
+              primaryCell(p.title, `/${p.slug} · ${pluralise(draftCount, 'block')}${postCount ? ` · ${pluralise(postCount, 'post')}` : ''} · ${when}`),
+              valueChip(p.value),
+              // Menu visibility is deliberately its own column, not folded
+              // into Status. Taking a ministry out of the header leaves the
+              // page live at its address — it just stops being listed.
+              inMenu ? statusPill('good', 'In menu') : statusPill('plain', 'Not listed'),
+              statusPill(TONE[status], LABEL[status]),
+            ],
+            actions: `${p.has_posts ? `<a class="tlc-edit" href="/ministries/${encodeURIComponent(p.slug)}/posts">Posts</a>` : ''}<a class="tlc-edit" href="/ministries/edit/${encodeURIComponent(p.slug)}">Details</a><a class="tlc-edit" href="/ministries/editor/${encodeURIComponent(p.slug)}">Open editor</a>`,
+            warn: !p.value ? 'No core value on this ministry, so it is missing from the values report on the dashboard.' : '',
+            warnCta: !p.value ? { label: 'Tag it', href: `/ministries/edit/${encodeURIComponent(p.slug)}` } : null,
+          };
+        });
+
+        const valueFilters = VALUES.map((v) => ({ label: v.short, value: v.key }));
 
         return html(`
-${sidebarShell('ministries', currentUser)}
-<div class="wrap wrap-wide">
-  <div class="page-title">Ministries</div>
-  <div class="page-sub">${pages.results.length} pages. Open one to rearrange it — drag blocks into the order you want, edit the words on the page itself, then publish.</div>
-  ${alertHtml}
-  <div class="btn-row" style="margin-bottom:20px;">
-    <a href="/ministries/add" class="btn btn-primary">+ New ministry page</a>
-    <a href="/manual#ministry-editor" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">How the page editor works</a>
-  </div>
-  <div class="card">
-    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
-      <input id="mSearch" type="search" placeholder="Search pages…" style="flex:1;min-width:200px;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-family:var(--sans);font-size:14px;">
-      <select id="mStatus" style="padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-family:var(--sans);font-size:14px;">
-        <option value="">All statuses</option>
-        <option value="live">Live</option>
-        <option value="draft">Draft</option>
-        <option value="scheduled">Scheduled</option>
-        <option value="hidden">Hidden</option>
-      </select>
-      <select id="mSort" style="padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-family:var(--sans);font-size:14px;">
-        <option value="recent">Sort: recently updated</option>
-        <option value="name">Sort: name</option>
-      </select>
-    </div>
-    <table style="width:100%;border-collapse:collapse;font-family:var(--sans);">
-      <thead><tr style="text-align:left;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--gray);">
-        <th scope="col" style="padding:6px 0;">Page</th><th scope="col">Status</th><th scope="col">Updated</th><th scope="col"></th>
-      </tr></thead>
-      <tbody id="mBody">${rows}</tbody>
-    </table>
-    <div id="mNone" style="display:none;padding:28px;text-align:center;color:var(--gray);font-size:14px;">No pages match that.</div>
-  </div>
-  <div class="card" style="margin-top:20px;">
-    <div class="card-title">Voters Assembly page</div>
-    <div class="card-sub" style="font-size:13px;color:var(--gray);">Zoom link &amp; council report downloads · /voters</div>
-    <div class="btn-row" style="margin-top:12px;"><a href="/voters" class="btn btn-sm btn-secondary">Edit</a></div>
-  </div>
-</div>
-<style>
-#mBody tr{border-top:1px solid var(--border);}
-#mBody td{padding:12px 8px 12px 0;vertical-align:middle;}
-</style>
-<script>
-(function(){
-  var body = document.getElementById('mBody');
-  var all = Array.prototype.slice.call(body.querySelectorAll('tr'));
-  function apply(){
-    var q = document.getElementById('mSearch').value.trim().toLowerCase();
-    var st = document.getElementById('mStatus').value;
-    var sort = document.getElementById('mSort').value;
-    var shown = 0;
-    all.forEach(function(tr){
-      var hit = (!q || tr.dataset.name.indexOf(q) > -1) && (!st || tr.dataset.status === st);
-      tr.style.display = hit ? '' : 'none';
-      if (hit) shown++;
-    });
-    document.getElementById('mNone').style.display = shown ? 'none' : '';
-    var sorted = all.slice().sort(function(a,b){
-      if (sort === 'name') return a.dataset.name.localeCompare(b.dataset.name);
-      return (b.dataset.updated || '').localeCompare(a.dataset.updated || '');
-    });
-    sorted.forEach(function(tr){ body.appendChild(tr); });
-  }
-  ['mSearch','mStatus','mSort'].forEach(function(id){
-    document.getElementById(id).addEventListener('input', apply);
-    document.getElementById(id).addEventListener('change', apply);
-  });
-  apply();
-})();
-</script>`, 'Ministries Admin');
+${sidebarShell('ministries', currentUser, `<a href="/voters">Voters Assembly page</a> <a href="/manual#ministry-editor">How the editor works</a>`, await badgeCounts(env, currentUser))}
+<div class="tlc-wrap">
+  ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
+  ${renderListSection({
+    key: 'ministries',
+    title: 'Ministries',
+    purpose: 'Every ministry page on the website. Open one to lay it out — drag blocks into the order you want, edit the words in place, then publish.',
+    action: { label: '+ New ministry page', href: '/ministries/add' },
+    search: 'Search ministries',
+    filters: [{ label: 'All', value: 'all' }, ...valueFilters, { label: 'Not listed', value: 'off-menu' }, { label: 'Draft', value: 'draft' }],
+    columns: [
+      { label: 'Ministry', width: '2.8fr' },
+      { label: 'Value', width: '.9fr' },
+      { label: 'In menu', width: '1fr' },
+      { label: 'Status', width: '.9fr' },
+    ],
+    rows,
+    noun: 'ministry', nounPlural: 'ministries',
+    empty: 'No ministry pages yet.',
+    note: 'In menu and Status are two different things. Switching a ministry out of the menu leaves the page live at its own address — it just stops being listed in the header. Unpublishing is what takes it off the website.',
+  })}
+</div>`, 'Ministries Admin');
       }
 
       // ── Add ministry form (GET) ──
@@ -4869,6 +5087,19 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministr
       <div class="form-group">
         <label>Page title</label>
         <input type="text" name="title" value="${(page.title || '').replace(/"/g, '&quot;')}" required>
+      </div>
+      <div class="form-group">
+        <label>Core value <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— which of the church's four values this ministry carries</span></label>
+        ${valueSelect('value', page.value)}
+        <div style="font-size:12px;color:var(--gray);margin-top:4px;">Used by the values report on the dashboard and by the public values page. Leave blank if it genuinely does not belong to one.</div>
+      </div>
+      <div class="form-group">
+        <input type="hidden" name="in_menu" value="0">
+        <div class="checkbox-row">
+          <input type="checkbox" name="in_menu" value="1" id="in_menu" ${(page.in_menu === null || page.in_menu === undefined || page.in_menu) ? 'checked' : ''}>
+          <span><label for="in_menu" style="display:inline;text-transform:none;letter-spacing:0;font-size:14px;font-weight:600;">List this ministry in the website menu</label></span>
+        </div>
+        <div style="font-size:12px;color:var(--gray);margin-top:4px;">Unticking this only removes it from the menu. The page stays live at /${escapeHtml(slug)} and every link to it keeps working.</div>
       </div>
       ${tinymceYouthSection(page.content || '')}
       <div class="card" style="margin-top:24px;">
@@ -4988,12 +5219,17 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministr
         const vid2Title = form.get('vid_2_title') || '';
         const vid3Url = form.get('vid_3_url') || '';
         const vid3Title = form.get('vid_3_title') || '';
+        // normalizeValue() is the guard on the write path: a stale tab or a
+        // hand-rolled POST cannot put 'Grow' in the column where every reader
+        // expects 'education'.
+        const value = normalizeValue(form.get('value'));
+        const inMenu = form.get('in_menu') === '1' ? 1 : 0;
         const now = new Date().toISOString();
-        const beforePage = await env.DB.prepare('SELECT title, content, cta_label, cta_url FROM youth_pages WHERE slug = ?').bind(slug).first();
+        const beforePage = await env.DB.prepare('SELECT title, content, cta_label, cta_url, value, in_menu FROM youth_pages WHERE slug = ?').bind(slug).first();
         await env.DB.prepare(
-          'UPDATE youth_pages SET title = ?, content = ?, cta_label = ?, cta_url = ?, cta_label_2 = ?, cta_url_2 = ?, hero_image_url = ?, ministry_image_url = ?, vid_1_url = ?, vid_1_title = ?, vid_2_url = ?, vid_2_title = ?, vid_3_url = ?, vid_3_title = ?, updated_at = ? WHERE slug = ?'
-        ).bind(title, content, ctaLabel, ctaUrl, ctaLabel2, ctaUrl2, heroImageUrl, ministryImageUrl, vid1Url, vid1Title, vid2Url, vid2Title, vid3Url, vid3Title, now, slug).run();
-        await logAudit(env.DB, currentUser, 'update', 'ministry_page', slug, title, beforePage, { title, content: content.substring(0, 200), ctaLabel, ctaUrl });
+          'UPDATE youth_pages SET title = ?, content = ?, cta_label = ?, cta_url = ?, cta_label_2 = ?, cta_url_2 = ?, hero_image_url = ?, ministry_image_url = ?, vid_1_url = ?, vid_1_title = ?, vid_2_url = ?, vid_2_title = ?, vid_3_url = ?, vid_3_title = ?, value = ?, in_menu = ?, updated_at = ? WHERE slug = ?'
+        ).bind(title, content, ctaLabel, ctaUrl, ctaLabel2, ctaUrl2, heroImageUrl, ministryImageUrl, vid1Url, vid1Title, vid2Url, vid2Title, vid3Url, vid3Title, value, inMenu, now, slug).run();
+        await logAudit(env.DB, currentUser, 'update', 'ministry_page', slug, title, beforePage, { title, content: content.substring(0, 200), ctaLabel, ctaUrl, value, in_menu: inMenu });
         return new Response('', { status: 302, headers: { Location: '/ministries?msg=saved' } });
       }
 
@@ -5224,7 +5460,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">�
     if (path.startsWith('/pages/') && method === 'GET') {
       return new Response('', { status: 302, headers: { Location: '/notices' + path.slice('/pages'.length) } });
     }
-    if (path.startsWith('/notices') && !hasPermission(currentUser, 'pages_edit')) {
+    if (path.startsWith('/notices') && !hasPermission(currentUser, 'notices_edit')) {
       return new Response('Access denied.', { status: 403 });
     }
     if (path.startsWith('/notices')) {
@@ -5240,55 +5476,69 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">�
           : msg === 'created' ? `<div class="alert alert-success">✓ Notice added.</div>`
           : msg === 'deleted' ? `<div class="alert alert-info">Notice deleted.</div>` : '';
 
-        const byPage = {};
-        rows.results.forEach(r => { (byPage[r.page_slug] = byPage[r.page_slug] || []).push(r); });
+        // Position is per page, so a notice's rank only means anything next to
+        // the others on the same page. Numbering them 1..n as displayed beats
+        // showing the raw column, which is zero-based and gappy after deletes.
+        const rankByPage = {};
+        const list = rows.results.map((n) => {
+          rankByPage[n.page_slug] = (rankByPage[n.page_slug] || 0) + 1;
+          return { ...n, rank: rankByPage[n.page_slug] };
+        });
 
-        const rowHtml = n => {
+        const listRows = list.map((n) => {
           const isEmpty = !n.body || !n.body.trim();
           const isHidden = n.published === 0;
-          const updated = n.updated_at ? new Date(n.updated_at).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) : '—';
-          let statusHtml;
-          if (isEmpty) statusHtml = '<em style="color:var(--gray);">Empty — hidden on site</em>';
-          else if (isHidden) statusHtml = '<span style="color:#8a6a00;">⏸ Hidden (content saved)</span>';
-          else statusHtml = '<span style="color:#2a5c2a;">✓ Published</span>';
-          return `<tr>
-            <td><strong>${escapeHtml(n.label)}</strong></td>
-            <td style="font-size:13px;color:var(--gray);">${statusHtml}</td>
-            <td style="font-size:12px;color:var(--gray);">${updated}</td>
-            <td style="text-align:right;white-space:nowrap;">
-              <a href="/notices/edit/${n.id}" class="btn btn-sm btn-secondary">Edit</a>
-              <form method="POST" action="/notices/delete/${n.id}" onsubmit="return confirm('Delete this notice?')" style="display:inline;margin:0;"><button type="submit" class="btn btn-sm btn-danger">Delete</button></form>
-            </td>
-          </tr>`;
-        };
-
-        const groupsHtml = STATIC_PAGES.map(p => {
-          const pageRows = byPage[p.slug] || [];
-          return `<div style="margin-bottom:28px;">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-    <div style="font-family:var(--sans);font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);">${p.label}</div>
-    <a href="/notices/add?page=${p.slug}" style="font-family:var(--sans);font-size:12px;font-weight:700;color:var(--steel);text-decoration:none;">+ Add notice</a>
-  </div>
-  ${pageRows.length ? `<div class="card" style="padding:0;overflow:hidden;">
-    <table style="width:100%;border-collapse:collapse;">
-      <tbody style="font-family:var(--sans);">
-        ${pageRows.map(rowHtml).join('')}
-      </tbody>
-    </table>
-  </div>` : `<div style="font-size:13px;color:var(--gray);font-style:italic;padding:2px 2px 0;">No notices on this page yet.</div>`}
-</div>`;
-        }).join('');
+          const updated = n.updated_at
+            ? new Date(n.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            : 'Never edited';
+          // A notice with no content is the failure this section actually sees:
+          // somebody made the row, meant to come back, and the banner has been
+          // silently absent ever since. It gets a warning row, not just a pill.
+          const status = isEmpty ? statusPill('warn', 'Empty')
+            : isHidden ? statusPill('plain', 'Hidden')
+            : statusPill('good', 'Live');
+          return {
+            href: `/notices/edit/${n.id}`,
+            filter: isEmpty ? 'empty' : (isHidden ? 'hidden' : 'live'),
+            search: `${n.label} ${pageLabel(n.page_slug)}`.toLowerCase(),
+            cells: [
+              primaryCell(n.label, `Last edited ${updated}`),
+              escapeHtml(pageLabel(n.page_slug)),
+              `${n.rank}`,
+              status,
+            ],
+            warn: isEmpty ? 'Nothing has been written in this notice, so no banner appears on the page.' : '',
+            warnCta: isEmpty ? { label: 'Write it', href: `/notices/edit/${n.id}` } : null,
+          };
+        });
 
         return html(`
-${sidebarShell('notices', currentUser)}
-<div class="wrap">
-  <div class="page-title">Notices</div>
-  <div class="page-sub">Banners and announcements shown on the website's static pages. Add as many as you need to any page — no developer required.</div>
-  ${alertHtml}
-  <div class="btn-row" style="margin-bottom:28px;">
-    <a href="/notices/add" class="btn btn-primary">+ Add notice</a>
-  </div>
-  ${groupsHtml}
+${sidebarShell('notices', currentUser, '', await badgeCounts(env, currentUser))}
+<div class="tlc-wrap">
+  ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
+  ${renderListSection({
+    key: 'notices',
+    title: 'Notices',
+    purpose: 'Short banners pinned to one page — a service change, a closing, a one-week announcement.',
+    action: { label: '+ Add notice', href: '/notices/add' },
+    search: 'Search notices',
+    filters: [
+      { label: 'All', value: 'all' },
+      { label: 'Live', value: 'live' },
+      { label: 'Hidden', value: 'hidden' },
+      { label: 'Empty', value: 'empty' },
+    ],
+    columns: [
+      { label: 'Notice', width: '2.4fr' },
+      { label: 'On page', width: '1.3fr' },
+      { label: 'Position', width: '.7fr' },
+      { label: 'Status', width: '.9fr' },
+    ],
+    rows: listRows,
+    noun: 'notice',
+    empty: 'No notices on any page yet.',
+    note: 'A notice is deliberately not part of the page. Switching one off takes one click and leaves the page itself untouched — which is why a Sunday closing belongs here rather than in the page editor.',
+  })}
 </div>`, 'Notices');
       }
 
@@ -6576,9 +6826,22 @@ ${sidebarShell('audit', currentUser)}
       alertHtml = `<div class="alert alert-info">Draft saved. Use "Send test" or "Send to all" below to email it when ready.</div>`;
     } else if (msgParam === 'emailed') {
       const sentTo = emailedParam === 'test' ? 'test list' : 'all subscribers';
+      const scheduledParam = url.searchParams.get('scheduled');
       alertHtml = emailErrParam
-        ? `<div class="alert alert-error">Email failed: ${emailErrParam}</div>`
-        : `<div class="alert alert-success">✓ "${subjectParam}" sent to ${sentTo}.</div>`;
+        ? `<div class="alert alert-error">Email failed: ${escapeHtml(emailErrParam)}</div>`
+        : scheduledParam === '1'
+          ? `<div class="alert alert-success">✓ "${escapeHtml(subjectParam)}" scheduled with Brevo.</div>`
+          : scheduledParam === 'cancelled'
+            ? `<div class="alert alert-info">Scheduled send cancelled.</div>`
+            : `<div class="alert alert-success">✓ "${escapeHtml(subjectParam)}" sent to ${sentTo}.</div>`;
+    } else if (msgParam === 'submitted') {
+      // The approval flow used to redirect into News & Events, which is now a
+      // separate section. These land here, where the issue actually lives.
+      alertHtml = `<div class="alert alert-info">Newsletter submitted for approval. An approver will review it before it goes live.</div>`;
+    } else if (msgParam === 'approved') {
+      alertHtml = `<div class="alert alert-success">✓ Newsletter approved and published.</div>`;
+    } else if (msgParam === 'rejected') {
+      alertHtml = `<div class="alert alert-info">Newsletter returned to draft for revisions.</div>`;
     }
 
     const rows = newsletters.results;
