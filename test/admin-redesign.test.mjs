@@ -1319,5 +1319,38 @@ group('per-screen, part two');
   ok(!/drawer-audit[\s\S]*?tlc-drawer-delete/.test(audit), 'nor a delete');
 }
 
+group('the NFC taps actually answer');
+{
+  // ⚠ The premise of the whole feature is "the tag only ever holds its short
+  // address — /tap1 … /tap4 — so re-pointing is a click and nothing is
+  // reprogrammed". That only holds if the short address resolves. It did not:
+  // taps live in their own table and /api/redirects read only `redirects`, so
+  // every physical tag 404'd while the admin happily let you re-point it.
+  const { db, env } = await boot();
+  const api = async () => (await (await call(env, '/api/redirects')).json()).redirects;
+
+  const seeded = await api();
+  const tap1 = seeded.find((r) => r.path === 'tap1');
+  ok(!!tap1, 'the tap short link is served: ' + JSON.stringify(seeded.map((r) => r.path)));
+  ok(/links\.timothystl\.org/.test(tap1.url), 'pointing where the tap says: ' + tap1.url);
+
+  // Re-pointing a tap changes where the tag lands, with nothing reprogrammed.
+  db.prepare("UPDATE taps SET destination='https://give.timothystl.org' WHERE id=1").run();
+  const after = (await api()).find((r) => r.path === 'tap1');
+  eq(after.url, 'https://give.timothystl.org', 're-pointing a tap moves the address');
+
+  // A switched-off tap stops answering rather than sending people somewhere
+  // stale.
+  db.prepare('UPDATE taps SET active=0 WHERE id=1').run();
+  ok(!(await api()).some((r) => r.path === 'tap1'), 'a tap switched off stops resolving');
+
+  // A hand-made redirect at the same path wins, so the office can override one
+  // without going near the taps screen.
+  db.prepare('UPDATE taps SET active=1 WHERE id=1').run();
+  db.prepare("INSERT INTO redirects (path,url,label,category,active) VALUES ('tap1','https://override.example','Override','general',1)").run();
+  eq((await api()).find((r) => r.path === 'tap1').url, 'https://override.example',
+    'a hand-made redirect beats the tap');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

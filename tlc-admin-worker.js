@@ -1902,8 +1902,25 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
 
     // ── PUBLIC: custom redirects API ── only active rows resolve for visitors
     if (path === '/api/redirects' && method === 'GET') {
-      const rows = await env.DB.prepare('SELECT path, url, label FROM redirects WHERE active != 0 ORDER BY path').all();
-      return new Response(JSON.stringify({ redirects: rows.results }), {
+      // ⚠ The four NFC taps are in their own table and are served from here
+      // too. They were not, which meant /tap1 … /tap4 — the addresses actually
+      // printed on the physical tags — resolved to nothing: the admin let
+      // somebody re-point a tap, and the tap 404'd. The whole premise of the
+      // feature is "the tag only ever holds its short address, so re-pointing
+      // is a click"; that only holds if the short address answers.
+      //
+      // A hand-made redirect at the same path wins, so the office can always
+      // override one without touching the taps screen.
+      const [rows, taps] = await Promise.all([
+        env.DB.prepare('SELECT path, url, label FROM redirects WHERE active != 0 ORDER BY path').all(),
+        env.DB.prepare('SELECT id, name, destination FROM taps WHERE active != 0 ORDER BY id').all().catch(() => ({ results: [] })),
+      ]);
+      const byPath = new Map();
+      for (const t of (taps.results || [])) {
+        if (t.destination) byPath.set(`tap${t.id}`, { path: `tap${t.id}`, url: t.destination, label: t.name || `Tap ${t.id}` });
+      }
+      for (const r of (rows.results || [])) byPath.set(r.path, r);
+      return new Response(JSON.stringify({ redirects: [...byPath.values()] }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
       });
     }
