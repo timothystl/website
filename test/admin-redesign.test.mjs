@@ -312,11 +312,12 @@ group('badges match the worklist');
   const body = await (await call(env, '/dashboard', { cookie })).text();
   has(body, '3 gym requests waiting for review', 'the worklist counts the holds');
   has(body, 'Southside Volleyball', 'and names who is waiting');
-  has(body, '<span class="sidebar-badge"', 'the sidebar carries a badge');
-  // The badge and the worklist read the same query, so the number must match.
-  // Match the gym badge by its own title — the sidebar carries several.
-  const badge = body.match(/class="sidebar-badge" title="(\d+) gym request[^"]*">(\d+)</);
-  eq(badge && badge[2], '3', 'and it is the same number the worklist shows');
+  has(body, 'tlc-nav-badge', 'the nav carries a badge');
+  // A group chip's badge is the sum of its sections'. Gym is the only thing
+  // waiting here, so Money & Building shows exactly what the worklist does —
+  // the two read one query set, and a mismatch would be the bug.
+  const chip = body.match(/tlc-nav-chip[^>]*>[\s\S]*?Money &amp; Building[\s\S]*?class="tlc-nav-badge">(\d+)</);
+  eq(chip && chip[1], '3', 'and it is the same number the worklist shows');
 }
 
 
@@ -1111,7 +1112,9 @@ group('⌘K searches every section, within permissions');
 
   const shell = await (await call(env, '/dashboard', { cookie })).text();
   has(shell, 'tlc-k-input', 'the palette is in the shared shell, so it is on every screen');
-  has(shell, '⌘K searches every section', 'and the sidebar says so');
+  // ⌘K is a visible chip in the bar now, not small print at the bottom of a
+  // column nobody scrolled to.
+  has(shell, 'class="tlc-nav-k" id="tlc-k-open">⌘K<', 'and the bar offers it');
 
   const res = await call(env, '/api/search?q=egg', { cookie });
   eq(res.status, 200, 'search responds');
@@ -1279,8 +1282,8 @@ group('payroll lives in the shared shell now');
   const body = await (await call(env, '/payroll', { cookie })).text();
 
   // PY-3: it used to be a standalone document whose only way out was a Sign
-  // Out button. It is a fragment inside sidebarShell() now.
-  has(body, 'class="sidebar"', 'it has the admin sidebar');
+  // Out button. It is a fragment inside the shared shell now.
+  has(body, 'class="tlc-nav-bar"', 'it wears the admin header');
   has(body, 'tlc-k-open', 'and the ⌘K palette, like every other screen');
   has(body, 'Enter hours and exceptions', 'the purpose line is the design’s');
 
@@ -1317,20 +1320,52 @@ group('payroll access is gated on its own permission');
   eq((await call(env, '/sb/rest/v1/church_staff', { cookie })).status, 401, 'nor read Supabase through the proxy');
 }
 
-group('the sidebar is the design’s five groups');
+group('the header nav is the design’s six groups');
 {
   const { db, env } = await boot();
   const { cookie } = signIn(db);
   const body = await (await call(env, '/dashboard', { cookie })).text();
-  for (const g of ['Website', 'Email', 'Money &amp; Building', 'People &amp; Access', 'Setup']) {
-    has(body, `>${g}<`, `${g} is a group`);
+  for (const g of ['Dashboard', 'Website', 'Email', 'Money &amp; Building', 'People &amp; Access', 'Setup']) {
+    has(body, `>${g}</span>`, `${g} is a group chip`);
   }
-  // Redirects and Settings are separate sections in the design, and they are
-  // separate addresses here — /settings used to render the redirects screen.
-  has(body, 'href="/redirects"', 'Redirects has its own address');
-  has(body, 'href="/settings"', 'and so does Settings');
-  // The page-producing sections nest under Pages rather than sitting beside it.
-  has(body, 'sidebar-item-child', 'Ministries and the rest are nested');
+
+  // It is a REPLACEMENT, not an addition. The spec's own "get this wrong and
+  // it shows" leads with keeping the sidebar and putting the bar on top of it.
+  ok(!body.includes('class="sidebar"'), 'the sidebar is gone');
+  ok(!body.includes('sidebar-toggle'), 'and so is the hamburger');
+  ok(!body.includes('util-bar'), 'and the white util bar it lived in');
+  has(body, 'class="tlc-nav-bar"', 'row one is the navy bar');
+
+  // Dashboard has one section, so row two is not rendered at all.
+  ok(!body.includes('class="tlc-nav-sub"'), 'Dashboard shows no second row — it has one section');
+
+  // Row two shows the SELECTED group's sections. On a Website screen that is
+  // where Redirects and Settings' siblings live; Settings is in Setup, so it is
+  // reachable by its chip rather than being on every screen.
+  const web = await (await call(env, '/pages', { cookie })).text();
+  has(web, 'class="tlc-nav-sub"', 'a group with several sections gets row two');
+  has(web, 'href="/redirects"', 'Redirects has its own address');
+  has(web, 'href="/ministries"', 'and Ministries is an ordinary tab after Pages');
+  has(web, 'tlc-nav-tab is-on', 'the current section is marked');
+  // The sidebar drew the parent/child relationship with an elbow. Adjacency is
+  // enough now, and the spec says so — so there is nothing left to nest.
+  ok(!web.includes('sidebar-item-child'), 'nothing is nested any more');
+
+  const setup = await (await call(env, '/settings', { cookie })).text();
+  has(setup, 'href="/settings"', 'and Settings has its own address in Setup');
+}
+
+group('the nav hides whole groups, not rows');
+{
+  const { db, env } = await boot();
+  // A ministry leader: content only. The spec is explicit that permissions
+  // hide whole groups.
+  const { cookie } = signIn(db, ['ministries_edit']);
+  const body = await (await call(env, '/ministries', { cookie })).text();
+  has(body, '>Website</span>', 'the group they can reach is there');
+  ok(!body.includes('>Money &amp; Building</span>'), 'a group they cannot reach is not rendered');
+  ok(!body.includes('>People &amp; Access</span>'), 'nor another');
+  ok(!body.includes('href="/payroll"'), 'and nothing inside one leaks as a link');
 }
 
 group('the per-screen reference files');

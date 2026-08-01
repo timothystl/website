@@ -258,7 +258,7 @@ export function renderListSection(cfg) {
 }
 
 // One script for every list section on the page. Included once by
-// sidebarShell(); it discovers sections rather than being wired per section, so
+// headerNav(); it discovers sections rather than being wired per section, so
 // a new section needs no script of its own.
 // The state word beside a drawer toggle follows the switch. Rendering it once
 // server-side and leaving it stale would be worse than not having it — it

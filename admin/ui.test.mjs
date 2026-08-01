@@ -332,8 +332,53 @@ group('login and the account screens');
   ok(shell.includes('.login-title{font:500 25px/1.2 var(--serif);color:#1E2D4A;'), 'the title is Lora 25 navy');
 
   // The eyebrow is the same on all four screens. It was the old amber.
-  const eyebrows = shell.split("letter-spacing:.16em;text-transform:uppercase;color:#C9973A").length - 1;
+  // Matched on the account screens' own markup — the header nav's brand uses
+  // the same type treatment, and counting both would make this assertion pass
+  // for the wrong reason.
+  const eyebrows = shell.split("letter-spacing:.16em;text-transform:uppercase;color:#C9973A;margin-bottom:8px;").length - 1;
   eq(eyebrows, 4, 'all four account screens carry the gold eyebrow at .16em');
+}
+
+
+// ── the header nav ───────────────────────────────────────────────────────────
+// Spec: screens/00b-header-nav.html. It replaces the sidebar rather than
+// sitting on top of it, and the failure it exists to prevent is a chip that
+// cannot be reached — cut mid-word, wrapped, or hidden behind a "More".
+group('the header nav');
+{
+  const shell = readFileSync(new URL('./helpers.js', import.meta.url), 'utf8');
+
+  ok(!shell.includes('.sidebar{'), 'the sidebar CSS is gone, not merely overridden');
+  ok(!shell.includes('.sidebar-toggle{'), 'and the hamburger with it');
+  ok(!shell.includes('.util-bar{'), 'and the white util bar that held sign-out');
+  // Comments stripped: the note explaining what the sidebar had become still
+  // mentions it, and that is prose rather than a rule.
+  const navCss = shell.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
+  ok(!navCss.includes('translateX(-100%)'), 'there is no off-canvas state left');
+
+  ok(shell.includes('height:58px;background:#1E2D4A'), 'row one is 58px navy');
+  ok(shell.includes('height:44px;background:#FFFDF9'), 'row two is 44px parchment');
+  ok(shell.includes('box-shadow:inset 0 -2px 0 #C9973A'), 'the active tab is a gold underline');
+  ok(shell.includes('background:#27496E;box-shadow:inset 0 0 0 1px rgba(255,255,255,.16)'),
+    'and the active chip is raised, not recoloured');
+
+  // Both strips scroll. Neither wraps, truncates, or collapses into a menu.
+  const scroll = shell.split('scrollbar-width:none').length - 1;
+  ok(scroll >= 2, 'both strips scroll with the scrollbar chrome hidden');
+  ok(shell.includes('.tlc-nav-groups{flex:1;min-width:0;'),
+    'the group strip is the flexible child, so it runs short before the brand or sign-out');
+  ok(shell.includes('.tlc-nav-right{flex:none;'), 'the right cluster never shrinks');
+  ok(shell.includes('white-space:nowrap'), 'and Sign out cannot break onto a second line');
+  ok(!shell.includes('More ▾'), 'nothing collapses behind a More');
+
+  // Below 820px the chips become their dots — except the active one, which
+  // keeps its label so you can always see where you are.
+  ok(shell.includes('@media (max-width:820px)'), 'the phone breakpoint is the spec’s 820');
+  ok(shell.includes('.tlc-nav-chip.is-on .tlc-nav-chip-label{display:inline;}'),
+    'the active chip keeps its label when the rest drop to dots');
+
+  // Content is full width — the 860px cap was a symptom of the sidebar.
+  ok(shell.includes('.wrap{max-width:none;'), 'the content area is full width');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

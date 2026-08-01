@@ -21,7 +21,7 @@ const STATIC_PAGES = [
   { slug: 'news',       label: 'News & Events' },
   { slug: 'calendar',   label: 'Calendar' },
 ];
-import { html, sidebarShell, loginPage, setupPage, forgotPasswordPage, resetPasswordPage, permissionCheckboxes, formatDate, escapeHtml, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection } from './admin/helpers.js';
+import { html, headerNav, loginPage, setupPage, forgotPasswordPage, resetPasswordPage, permissionCheckboxes, formatDate, escapeHtml, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection } from './admin/helpers.js';
 import { renderListSection, renderDrawer, renderFormSection, primaryCell, statusPill, valueChip, valueChips, panel, countLabel, pluralise,
          rowActions, toggleCell, panelList } from './admin/ui.js';
 import { SECTIONS, section as sectionCfg, columnsOf, filtersOf } from './admin/sections.js';
@@ -2451,7 +2451,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
   </div>`;
 
       return html(`
-${sidebarShell('dashboard', currentUser, '', badges)}
+${headerNav('dashboard', currentUser, '', badges)}
 <div class="tlc-dash">
   <div class="tlc-dash-head">
     <div>
@@ -2613,7 +2613,7 @@ ${sidebarShell('dashboard', currentUser, '', badges)}
         });
 
         return html(`
-${sidebarShell('media', currentUser, '', await badgeCounts(env, currentUser))}
+${headerNav('media', currentUser, '', await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -2711,7 +2711,7 @@ ${sidebarShell('media', currentUser, '', await badgeCounts(env, currentUser))}
   </div>`).join('');
 
         return html(`
-${sidebarShell('menu', currentUser, `<a href="https://timothystl.org" target="_blank">View site</a>`, await badgeCounts(env, currentUser))}
+${headerNav('menu', currentUser, `<a href="https://timothystl.org" target="_blank">View site</a>`, await badgeCounts(env, currentUser))}
 <div class="tlc-menu-wrap">
   <div class="tlc-section-head" style="margin-bottom:14px;">
     <div class="tlc-section-headings">
@@ -2862,7 +2862,7 @@ ${sidebarShell('menu', currentUser, `<a href="https://timothystl.org" target="_b
       if (path === '/menu/new' && method === 'GET') {
         const { pageRows } = await loadMenu();
         return html(`
-${sidebarShell('menu', currentUser, `<a href="/menu">← Menu</a>`, await badgeCounts(env, currentUser))}
+${headerNav('menu', currentUser, `<a href="/menu">← Menu</a>`, await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   <div class="page-title">Add a menu item</div>
   <div class="page-sub">A menu item can point at one of your pages, at an outside site, or at a short link.</div>
@@ -2973,7 +2973,7 @@ ${sidebarShell('menu', currentUser, `<a href="/menu">← Menu</a>`, await badgeC
         });
 
         return html(`
-${sidebarShell('partners', currentUser, `<a href="https://timothystl.org/about/values" target="_blank">View values page</a>`, await badgeCounts(env, currentUser))}
+${headerNav('partners', currentUser, `<a href="https://timothystl.org/about/values" target="_blank">View values page</a>`, await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -3000,7 +3000,7 @@ ${sidebarShell('partners', currentUser, `<a href="https://timothystl.org/about/v
         if (!isNew && !p) return new Response('Not found', { status: 404 });
         const preset = normalizeValue(url.searchParams.get('value'));
         return html(`
-${sidebarShell('partners', currentUser, `<a href="/partners">← All partners</a>`, await badgeCounts(env, currentUser))}
+${headerNav('partners', currentUser, `<a href="/partners">← All partners</a>`, await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   <div class="page-title">${isNew ? 'Add a partner' : escapeHtml(p.name)}</div>
   <div class="page-sub">Shown on the values page and in the dashboard's values report, paired to one core value.</div>
@@ -3115,7 +3115,7 @@ ${sidebarShell('partners', currentUser, `<a href="/partners">← All partners</a
       // fix the rest of the admin gets. It used to be a standalone document
       // whose only way back out was a Sign Out button (PY-3).
       return html(`
-${sidebarShell('payroll', currentUser, '', await badgeCounts(env, currentUser))}
+${headerNav('payroll', currentUser, '', await badgeCounts(env, currentUser))}
 ${PAYROLL_HTML}`, 'Payroll');
     }
 
@@ -3295,7 +3295,7 @@ ${PAYROLL_HTML}`, 'Payroll');
             </form>
           </div>`).join('');
       return html(`
-${sidebarShell('voters', currentUser)}
+${headerNav('voters', currentUser)}
 <div class="tlc-wrap">
   <div class="page-title">Voters page</div>
   <div class="page-sub">Manage the members-only voters page content at timothystl.org/voters</div>
@@ -3482,7 +3482,7 @@ document.getElementById('upload-form').addEventListener('submit', async function
       }
 
       return html(`
-${sidebarShell('sermons', currentUser, `<a href="https://timothystl.org/sermons" target="_blank">View page</a>`, await badgeCounts(env, currentUser))}
+${headerNav('sermons', currentUser, `<a href="https://timothystl.org/sermons" target="_blank">View page</a>`, await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -3564,7 +3564,7 @@ ${sidebarShell('sermons', currentUser, `<a href="https://timothystl.org/sermons"
 
     if (path === '/sermons/new-series' && method === 'GET') {
       return html(`
-${sidebarShell('sermons', currentUser, `<a href="/sermons">All sermons</a>`)}
+${headerNav('sermons', currentUser, `<a href="/sermons">All sermons</a>`)}
 <div class="tlc-wrap">${seriesFormHtml()}</div>`, 'New series — TLC Admin');
     }
 
@@ -3584,7 +3584,7 @@ ${sidebarShell('sermons', currentUser, `<a href="/sermons">All sermons</a>`)}
       const s = await env.DB.prepare('SELECT * FROM sermon_series WHERE id = ?').bind(id).first();
       if (!s) return new Response('Not found', { status: 404 });
       return html(`
-${sidebarShell('sermons', currentUser, `<a href="/sermons/notes/${id}">Sermons in this series</a>`)}
+${headerNav('sermons', currentUser, `<a href="/sermons/notes/${id}">Sermons in this series</a>`)}
 <div class="tlc-wrap">${seriesFormHtml(s)}</div>`, 'Edit series — TLC Admin');
     }
 
@@ -3628,7 +3628,7 @@ ${sidebarShell('sermons', currentUser, `<a href="/sermons/notes/${id}">Sermons i
   </div>
 </div>`).join('');
       return html(`
-${sidebarShell('sermons', currentUser, `<a href="/sermons">← All series</a>`)}
+${headerNav('sermons', currentUser, `<a href="/sermons">← All series</a>`)}
 <div class="tlc-wrap">
   <div class="page-title">${s.title}</div>
   <div class="page-sub">${s.date_range || 'Sermons in this series'}</div>
@@ -3644,7 +3644,7 @@ ${sidebarShell('sermons', currentUser, `<a href="/sermons">← All series</a>`)}
       const seriesId = url.searchParams.get('series_id') || '';
       const allSeries = await env.DB.prepare('SELECT id, title FROM sermon_series ORDER BY active DESC, id DESC').all();
       return html(`
-${sidebarShell('sermons', currentUser, `<a href="${seriesId ? '/sermons/notes/' + seriesId : '/sermons'}">All sermons</a>`)}
+${headerNav('sermons', currentUser, `<a href="${seriesId ? '/sermons/notes/' + seriesId : '/sermons'}">All sermons</a>`)}
 <div class="tlc-wrap">${noteFormHtml(null, allSeries.results, seriesId)}</div>`, 'New sermon — TLC Admin', TINYMCE_HEAD);
     }
 
@@ -3665,7 +3665,7 @@ ${sidebarShell('sermons', currentUser, `<a href="${seriesId ? '/sermons/notes/' 
       if (!n) return new Response('Not found', { status: 404 });
       const allSeries = await env.DB.prepare('SELECT id, title FROM sermon_series ORDER BY active DESC, id DESC').all();
       return html(`
-${sidebarShell('sermons', currentUser, `<a href="${n.series_id ? '/sermons/notes/' + n.series_id : '/sermons'}">All sermons</a>`)}
+${headerNav('sermons', currentUser, `<a href="${n.series_id ? '/sermons/notes/' + n.series_id : '/sermons'}">All sermons</a>`)}
 <div class="tlc-wrap">${noteFormHtml(n, allSeries.results)}</div>`, 'Edit sermon — TLC Admin', TINYMCE_HEAD);
     }
 
@@ -3779,7 +3779,7 @@ ${sidebarShell('sermons', currentUser, `<a href="${n.series_id ? '/sermons/notes
           </div>
         </div>`).join('') : '';
       return html(`
-${sidebarShell('news', currentUser, `<a href="/newsitems">← News &amp; Events</a>`)}
+${headerNav('news', currentUser, `<a href="/newsitems">← News &amp; Events</a>`)}
 <div class="tlc-wrap">
   <div class="page-title">New newsletter</div>
   <div class="page-sub">Write your update, add events, and publish to the website.</div>
@@ -4240,7 +4240,7 @@ addEvent();
 
       if (path === '/christian-education/new') {
         return html(`
-${sidebarShell('christian-education', currentUser, `<a href="/christian-education">All classes</a>`, await badgeCounts(env, currentUser))}
+${headerNav('christian-education', currentUser, `<a href="/christian-education">All classes</a>`, await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">${ceFormHtml()}</div>`, 'New class — TLC Admin');
       }
 
@@ -4267,7 +4267,7 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
       }));
 
       return html(`
-${sidebarShell('christian-education', currentUser, `<a href="https://timothystl.org/education" target="_blank">View page</a>`, await badgeCounts(env, currentUser))}
+${headerNav('christian-education', currentUser, `<a href="https://timothystl.org/education" target="_blank">View page</a>`, await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   ${ceAlert ? `<div class="tlc-section" style="padding-bottom:0;">${ceAlert}</div>` : ''}
   ${renderListSection({
@@ -4306,7 +4306,7 @@ ${sidebarShell('christian-education', currentUser, `<a href="https://timothystl.
       const ceRow = await env.DB.prepare('SELECT * FROM bible_classes WHERE id = ?').bind(ceId).first();
       if (!ceRow) return new Response('Not found', { status: 404 });
       return html(`
-${sidebarShell('christian-education', currentUser, `<a href="/christian-education">All classes</a>`)}
+${headerNav('christian-education', currentUser, `<a href="/christian-education">All classes</a>`)}
 <div class="tlc-wrap">${ceFormHtml(ceRow)}</div>`, 'Edit class — TLC Admin');
     }
 
@@ -4468,7 +4468,7 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
           ].filter(Boolean).join(' · ');
 
       return html(`
-${sidebarShell('newsletter', currentUser, '', await badgeCounts(env, currentUser))}
+${headerNav('newsletter', currentUser, '', await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   <div class="tlc-section" style="padding-bottom:0;">
     <h1 class="tlc-title">${escapeHtml(sectionCfg('newsletter').title)}</h1>
@@ -5042,7 +5042,7 @@ ${classesJs}
       });
 
       return html(`
-${sidebarShell('news', currentUser, `<a href="https://timothystl.org/news" target="_blank">View site</a>`, await badgeCounts(env, currentUser))}
+${headerNav('news', currentUser, `<a href="https://timothystl.org/news" target="_blank">View site</a>`, await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -5123,7 +5123,7 @@ ${sidebarShell('news', currentUser, `<a href="https://timothystl.org/news" targe
 
     if (path === '/newsitems/new' && method === 'GET') {
       return html(`
-${sidebarShell('news', currentUser, `<a href="/newsitems">All posts</a>`)}
+${headerNav('news', currentUser, `<a href="/newsitems">All posts</a>`)}
 <div class="tlc-wrap">${newsFormHtml()}</div>
 ${newsImageUploadScript()}`, 'New post — TLC Admin', TINYMCE_HEAD);
     }
@@ -5165,7 +5165,7 @@ ${newsImageUploadScript()}`, 'New post — TLC Admin', TINYMCE_HEAD);
       const item = await env.DB.prepare('SELECT * FROM news_items WHERE id = ?').bind(id).first();
       if (!item) return new Response('Not found', { status: 404 });
       return html(`
-${sidebarShell('news', currentUser, `<a href="/newsitems">All posts</a>`)}
+${headerNav('news', currentUser, `<a href="/newsitems">All posts</a>`)}
 <div class="tlc-wrap">${newsFormHtml(item)}</div>
 ${newsImageUploadScript(item.image_url || '')}`, 'Edit post — TLC Admin', TINYMCE_HEAD);
     }
@@ -5340,7 +5340,7 @@ ${newsImageUploadScript(item.image_url || '')}`, 'Edit post — TLC Admin', TINY
         const detailsClash = detailsLink ? detailsLink.shortLinkClash : null;
 
         return html(`
-${sidebarShell('pages', currentUser, `<a href="/pages/details">Church details</a>`, await badgeCounts(env, currentUser))}
+${headerNav('pages', currentUser, `<a href="/pages/details">Church details</a>`, await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -5488,7 +5488,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages/details">Church details</a
 </div>`;
         };
         return html(`
-${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`)}
+${headerNav('pages', currentUser, `<a href="/pages">← All pages</a>`)}
 <div class="tlc-wrap">
   <div class="page-title">Church details</div>
   <div class="page-sub">The address, phone number, email and service times the whole site reads. Change them here once and every page that shows them follows — no need to edit each page.</div>
@@ -6017,7 +6017,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`)}
 
         const cfg = sectionCfg('ministries');
         return html(`
-${sidebarShell('ministries', currentUser, `<a href="/voters">Voters Assembly page</a> <a href="/manual#ministry-editor">How the editor works</a>`, await badgeCounts(env, currentUser))}
+${headerNav('ministries', currentUser, `<a href="/voters">Voters Assembly page</a> <a href="/manual#ministry-editor">How the editor works</a>`, await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -6040,7 +6040,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/voters">Voters Assembly pag
       // ── Add ministry form (GET) ──
       if (path === '/ministries/add' && method === 'GET') {
         return html(`
-${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministries</a>`)}
+${headerNav('ministries', currentUser, `<a href="/ministries">← All ministries</a>`)}
 <div class="tlc-wrap">
   <div class="page-title">New ministry page</div>
   <div class="page-sub">Create a new ministry landing page.</div>
@@ -6111,7 +6111,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministr
   </div>`).join('')}
 </div>` : '';
         return html(`
-${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministries</a>`)}
+${headerNav('ministries', currentUser, `<a href="/ministries">← All ministries</a>`)}
 <div class="tlc-wrap">
   <div class="page-title">${page.title}</div>
   <div class="page-sub">Banner image, buttons and video slots for this page.</div>
@@ -6340,7 +6340,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministr
             }).join('');
 
         return html(`
-${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministries</a>`)}
+${headerNav('ministries', currentUser, `<a href="/ministries">← All ministries</a>`)}
 <div class="tlc-wrap">
   <div class="page-title">${page.title} — Posts</div>
   <div class="page-sub">Upcoming posts show at top. Past posts roll down automatically by date.</div>
@@ -6364,7 +6364,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministr
         if (!page) return new Response('Not found', { status: 404 });
         const today = new Date().toISOString().split('T')[0];
         return html(`
-${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">← Posts</a>`)}
+${headerNav('ministries', currentUser, `<a href="/ministries/${slug}/posts">← Posts</a>`)}
 <div class="tlc-wrap">
   <div class="page-title">New post — ${page.title}</div>
   <form method="POST" action="/ministries/${slug}/posts/create">
@@ -6432,7 +6432,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">�
         const post = await env.DB.prepare('SELECT * FROM ministry_posts WHERE id = ? AND ministry_slug = ?').bind(id, slug).first();
         if (!post || !page) return new Response('Not found', { status: 404 });
         return html(`
-${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">← Posts</a>`)}
+${headerNav('ministries', currentUser, `<a href="/ministries/${slug}/posts">← Posts</a>`)}
 <div class="tlc-wrap">
   <div class="page-title">Edit post — ${page.title}</div>
   <form method="POST" action="/ministries/${slug}/posts/update/${id}">
@@ -6569,7 +6569,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">�
         });
 
         return html(`
-${sidebarShell('notices', currentUser, '', await badgeCounts(env, currentUser))}
+${headerNav('notices', currentUser, '', await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -6592,7 +6592,7 @@ ${sidebarShell('notices', currentUser, '', await badgeCounts(env, currentUser))}
       if (path === '/notices/add' && method === 'GET') {
         const preselect = url.searchParams.get('page') || STATIC_PAGES[0].slug;
         return html(`
-${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)}
+${headerNav('notices', currentUser, `<a href="/notices">← All notices</a>`)}
 <div class="tlc-wrap">
   <div class="page-title">New notice</div>
   <div class="page-sub">Choose which page it appears on and write the content. It publishes immediately.</div>
@@ -6638,7 +6638,7 @@ ${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)
         if (!n) return new Response('Not found', { status: 404 });
         const publishedChecked = n.published === 1 ? 'checked' : '';
         return html(`
-${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)}
+${headerNav('notices', currentUser, `<a href="/notices">← All notices</a>`)}
 <div class="tlc-wrap">
   <div class="page-title">${escapeHtml(n.label)}</div>
   <div class="page-sub">Shown on the ${pageLabel(n.page_slug)} page.</div>
@@ -6739,7 +6739,7 @@ ${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)
         });
 
         return html(`
-${sidebarShell('staff', currentUser, `<a href="https://timothystl.org/about" target="_blank">View About page</a>`, await badgeCounts(env, currentUser))}
+${headerNav('staff', currentUser, `<a href="https://timothystl.org/about" target="_blank">View About page</a>`, await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -6774,7 +6774,7 @@ function staffMove(id, direction) {
       if (path === '/staff/new' && method === 'GET') {
         const nextOrder = 10;
         return html(`
-${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`)}
+${headerNav('staff', currentUser, `<a href="/staff">← All staff</a>`)}
 <div class="tlc-wrap">
   <div class="page-title">Add staff Member</div>
   <div class="card">
@@ -6820,7 +6820,7 @@ ${staffPhotoUploadScript()}`, 'New Staff Member');
         const m = await env.DB.prepare('SELECT * FROM staff_members WHERE id = ?').bind(id).first();
         if (!m) return new Response('Not found', { status: 404 });
         return html(`
-${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`)}
+${headerNav('staff', currentUser, `<a href="/staff">← All staff</a>`)}
 <div class="tlc-wrap">
   <div class="page-title">Edit — ${esc(m.name)}</div>
   <div class="card">
@@ -6978,7 +6978,7 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
         const cfg = sectionCfg('links');
         const activeTap = taps.find((t) => t.id === which);
         return html(`
-${sidebarShell('link-cards', currentUser, `<a href="https://links.timothystl.org" target="_blank">View link page</a>`, await badgeCounts(env, currentUser))}
+${headerNav('link-cards', currentUser, `<a href="https://links.timothystl.org" target="_blank">View link page</a>`, await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   <div class="tlc-section" style="padding-bottom:0;">
@@ -7014,7 +7014,7 @@ ${sidebarShell('link-cards', currentUser, `<a href="https://links.timothystl.org
         const t = await env.DB.prepare('SELECT * FROM taps WHERE id = ?').bind(id).first();
         if (!t) return new Response('Not found', { status: 404 });
         return html(`
-${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; links</a>`, await badgeCounts(env, currentUser))}
+${headerNav('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; links</a>`, await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   <div class="page-title">Re-point /tap${t.id}</div>
   <div class="page-sub">${escapeHtml(t.name)} — ${escapeHtml(t.placement || 'placement not recorded')}</div>
@@ -7110,7 +7110,7 @@ ${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; 
 
       // New form
       if (path === '/link-cards/new' && method === 'GET') {
-        return html(sidebarShell('link-cards', currentUser)
+        return html(headerNav('link-cards', currentUser)
           + `<div class="tlc-wrap">${cardFormHtml({}, await tapsForForm())}</div>`, 'New card — TLC Admin');
       }
 
@@ -7132,7 +7132,7 @@ ${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; 
       if (editMatch && method === 'GET') {
         const c = await env.DB.prepare('SELECT * FROM link_cards WHERE id = ?').bind(parseInt(editMatch[1],10)).first();
         if (!c) return new Response('Not found', { status: 404 });
-        return html(sidebarShell('link-cards', currentUser)
+        return html(headerNav('link-cards', currentUser)
           + `<div class="tlc-wrap">${cardFormHtml(c, await tapsForForm())}</div>`, 'Edit card — TLC Admin');
       }
 
@@ -7396,7 +7396,7 @@ ${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; 
         : '') + (subMsg ? `<div class="alert alert-success">✓ ${escapeHtml(subMsg)}</div>` : '');
 
       return html(`
-${sidebarShell('subscribers', currentUser, `<a href="https://app.brevo.com" target="_blank">Open Brevo ↗</a>`, await badgeCounts(env, currentUser))}
+${headerNav('subscribers', currentUser, `<a href="https://app.brevo.com" target="_blank">Open Brevo ↗</a>`, await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   ${errorBanner ? `<div class="tlc-section" style="padding-bottom:0;">${errorBanner}</div>` : ''}
   ${renderListSection({
@@ -7542,7 +7542,7 @@ ${sidebarShell('subscribers', currentUser, `<a href="https://app.brevo.com" targ
       const showDrawer = path === '/redirects/new' || !!editing;
 
       return html(`
-${sidebarShell('redirects', currentUser, '', await badgeCounts(env, currentUser))}
+${headerNav('redirects', currentUser, '', await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -7640,7 +7640,7 @@ ${sidebarShell('redirects', currentUser, '', await badgeCounts(env, currentUser)
       });
 
       return html(`
-${sidebarShell('settings', currentUser, '', await badgeCounts(env, currentUser))}
+${headerNav('settings', currentUser, '', await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -7932,7 +7932,7 @@ ${sidebarShell('settings', currentUser, '', await badgeCounts(env, currentUser))
           </form>`).join('');
 
       return html(`
-${sidebarShell('giving', currentUser)}
+${headerNav('giving', currentUser)}
 <div class="tlc-wrap">
   <h1 class="tlc-title">${escapeHtml(sectionCfg('giving').title)}</h1>
   <p class="tlc-purpose" style="margin:6px 0 18px;">${escapeHtml(sectionCfg('giving').purpose)}</p>
@@ -8104,7 +8104,7 @@ ${sidebarShell('giving', currentUser)}
     if (path === '/giving/page' && method === 'GET') {
       if (!hasPermission(currentUser, 'giving_manage')) return new Response('Access denied.', { status: 403 });
       return html(`
-${sidebarShell('giving', currentUser, `<a href="/giving">← Giving</a>`, await badgeCounts(env, currentUser))}
+${headerNav('giving', currentUser, `<a href="/giving">← Giving</a>`, await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   <div class="page-title">The giving page</div>
   <div class="page-sub">Where each part of give.timothystl.org and /give is edited.</div>
@@ -8174,7 +8174,7 @@ ${sidebarShell('giving', currentUser, `<a href="/giving">← Giving</a>`, await 
       });
 
       return html(`
-${sidebarShell('users', currentUser, '', await badgeCounts(env, currentUser))}
+${headerNav('users', currentUser, '', await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -8195,7 +8195,7 @@ ${sidebarShell('users', currentUser, '', await badgeCounts(env, currentUser))}
 
     if (path === '/users/new' && method === 'GET') {
       return html(`
-${sidebarShell('users', currentUser)}
+${headerNav('users', currentUser)}
 <div class="tlc-wrap">
   <div class="page-title">New user</div>
   <form method="POST" action="/users/new">
@@ -8240,7 +8240,7 @@ ${sidebarShell('users', currentUser)}
       let selectedPerms = [];
       try { selectedPerms = JSON.parse(u.permissions || '[]'); } catch(_) {}
       return html(`
-${sidebarShell('users', currentUser)}
+${headerNav('users', currentUser)}
 <div class="tlc-wrap">
   <div class="page-title">Edit user: ${escapeHtml(u.username)}</div>
   <form method="POST" action="/users/edit/${u.id}">
@@ -8394,7 +8394,7 @@ ${sidebarShell('users', currentUser)}
       }</div>` : '';
 
       return html(`
-${sidebarShell('audit', currentUser, '', await badgeCounts(env, currentUser))}
+${headerNav('audit', currentUser, '', await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -8565,7 +8565,7 @@ ${sidebarShell('audit', currentUser, '', await badgeCounts(env, currentUser))}
     });
 
     return html(`
-${sidebarShell('newsletter', currentUser, `<a href="https://timothystl.org/news" target="_blank">View archive</a>`, await badgeCounts(env, currentUser))}
+${headerNav('newsletter', currentUser, `<a href="https://timothystl.org/news" target="_blank">View archive</a>`, await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
