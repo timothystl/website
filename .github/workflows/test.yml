@@ -40,16 +40,19 @@ jobs:
           node --check give-landing.js
           for f in admin/*.js; do node --check "$f"; done
 
-      - name: Pure-module suites
+      # Globbed rather than listed. A named list goes stale the moment somebody
+      # adds a suite — which happened the first time this workflow met a new
+      # one — and a suite that silently never runs is worse than no suite.
+      # Every admin/*.test.mjs runs under plain node; the browser suites live in
+      # test/ and are covered by the note at the bottom of this file.
+      - name: Admin module suites
         run: |
-          node admin/ui.test.mjs
-          node admin/auth.test.mjs
-          node admin/blocks.test.mjs
-          node admin/pages.test.mjs
-          node admin/spam.test.mjs
-
-      - name: Suites backed by SQLite
-        run: node admin/forms.test.mjs
+          set -e
+          shopt -s nullglob
+          for f in admin/*.test.mjs; do
+            echo "── $f"
+            node "$f"
+          done
 
       # Boots the real Worker against SQLite and requests every redesigned
       # screen. test/html-loader.mjs is what makes the Worker importable in
