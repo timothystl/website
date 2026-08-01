@@ -389,6 +389,58 @@ export const INITIAL_SETTINGS = [
     value: 'Sunday | 8:00 am | Traditional\nSunday | 9:30 am | Vietnamese worship · Hội Thánh Việt\nSunday | 10:45 am | Contemporary' },
 ];
 
+// ── PARTNERS ─────────────────────────────────────────────────
+// One partner ministry per core value. The pairing is the point: the Dashboard
+// cards, the public /values page and the About page all show a value alongside
+// the ministry that carries it into the world.
+//
+// `value` is UNIQUE so the one-per-value rule is the database's job, not a
+// convention somebody has to remember. A value with no partner is a real state
+// — the values page says so plainly rather than quietly showing three.
+export const DB_INIT_PARTNERS = `CREATE TABLE IF NOT EXISTS partners (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  short_name TEXT,
+  value TEXT NOT NULL UNIQUE,
+  blurb TEXT,
+  site_url TEXT,
+  also_note TEXT,
+  sort_order INTEGER DEFAULT 0
+)`;
+
+// Seeded with INSERT OR IGNORE, so editing a partner in the admin is never
+// undone by a later deploy. Explicit ids keep the seed stable across re-runs.
+//
+// NOTE ON THE WORD OF LIFE ADDRESS: the design handoff lists wordoflifestl.org.
+// The school's real site — the one this repo already links to from /wol and
+// from the newsletter — is wordoflifeschool.net, so that is what is seeded
+// here. If the handoff's address turns out to be a new domain, change it in
+// the admin rather than here.
+export const PARTNER_SEED = [
+  {
+    id: 1, name: 'Lindenwood Area Senior Ministry', short_name: 'LASM', value: 'acceptance',
+    blurb: 'Neighbours in Lindenwood Park cared for close to home — rides, visits, and company for seniors in the streets around the church.',
+    site_url: 'https://lasmstl.org', also_note: null, sort_order: 10,
+  },
+  {
+    id: 2, name: 'Concordia Seminary St. Louis', short_name: 'Concordia Seminary', value: 'worship',
+    blurb: 'Pastors formed for the whole church a few miles from our door, and vicars and field workers who serve among us while they train.',
+    site_url: 'https://csl.edu', also_note: null, sort_order: 20,
+  },
+  {
+    id: 3, name: 'Word of Life Lutheran School', short_name: 'Word of Life', value: 'education',
+    blurb: 'Families formed together through Lutheran education, community, and care — a partner school, not a separate world.',
+    site_url: 'https://wordoflifeschool.net', also_note: null, sort_order: 30,
+  },
+  {
+    id: 4, name: 'Christian Friends of New Americans', short_name: 'CFNA', value: 'outreach',
+    blurb: 'Welcoming refugees and immigrants to St. Louis with food, English, health care, and the Gospel — from our neighbourhood to the nations.',
+    site_url: 'https://cfna-stl.org',
+    also_note: 'Pastor Rall and Mary Ann, missionaries to Papua New Guinea',
+    sort_order: 40,
+  },
+];
+
 // Service times are stored as one editable text box rather than a table of
 // their own: three lines that staff can retype without learning a new screen.
 export function parseServiceTimes(value) {

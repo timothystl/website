@@ -1,29 +1,89 @@
 // ── AUTH: sessions, passwords, permissions, audit log ────────
 
+// The permission key is the contract between this screen and every route that
+// gates on it, so the two must use the same word. The Users drawer prints each
+// key in monospace beside its plain-language name for exactly that reason.
+//
+// Ordered as the drawer shows them: content first, then site structure, then
+// people and money.
 export const PERMISSIONS = {
-  newsletter_edit:    'Newsletter — draft & edit',
-  newsletter_approve: 'Newsletter — approve & send',
-  news_edit:          'News & Events',
-  ministries_edit:    'Ministries & Youth Pages',
+  newsletter_edit:    'Write newsletters',
+  newsletter_approve: 'Approve & send newsletters',
+  news_edit:          'News & events',
+  ministries_edit:    'Ministry pages',
   sermons_edit:       'Sermons',
-  pages_edit:         'Notices',
-  // The site editor: every page on the public site. Separate from pages_edit
-  // (which is the notice banners) so a ministry leader can be given their own
-  // pages without also being handed the notice bar on every page.
-  site_pages:         'Website pages — all pages, and the menu',
-  site_pages_own:     'Website pages — only the pages assigned to them',
+  // The site editor: every page on the public site, and the menu. Distinct
+  // from notices_edit (the banner bar that can sit on any page) so a ministry
+  // leader can be given their own pages without also being handed the notice
+  // bar on every page in the site.
+  pages_edit:         'Website pages & menu',
+  pages_edit_own:     'Website pages — only their own',
+  notices_edit:       'Notice banners',
   staff_edit:         'Staff profiles',
-  settings_manage:    'Settings & Subscribers',
-  gym_manage:         'Gym Rentals',
+  links_edit:         'Taps & links',
+  settings_manage:    'Settings & subscribers',
+  gym_manage:         'Gym rentals',
+  giving_manage:      'Giving',
+  payroll_manage:     'Payroll',
   users_manage:       'User management',
   audit_view:         'Audit log & rollback',
-  links_edit:         'Link tree (links.timothystl.org)',
-  payroll_manage:     'Payroll',
-  giving_manage:      'Giving (amounts, links, vendor/market payments)',
 };
 
 // All permissions — used to create the first admin account
 export const ALL_PERMISSIONS = Object.keys(PERMISSIONS);
+
+// ── PERMISSION RENAME (v3.0.0) ───────────────────────────────
+// The redesign made the permission names match the sections they open. Two of
+// them swapped meaning in the process, which is why this is a table rather
+// than a rename in place:
+//
+//   pages_edit      used to mean the notice banners  → notices_edit
+//   site_pages      used to mean the site editor     → pages_edit
+//   site_pages_own                                   → pages_edit_own
+//
+// Because `pages_edit` exists on both sides with two different meanings, the
+// migration must build a fresh list from the old one. Rewriting entries in
+// place would turn an old notices editor into a full site editor the moment
+// the two rules ran in the wrong order.
+export const PERMISSION_RENAMES = {
+  pages_edit: 'notices_edit',
+  site_pages: 'pages_edit',
+  site_pages_own: 'pages_edit_own',
+};
+
+// Pure so it can be tested without a database. Unknown keys are dropped rather
+// than carried forward — a permission nobody checks is a permission nobody can
+// reason about.
+//
+// ⚠ THIS IS NOT IDEMPOTENT, AND IT CANNOT BE. `pages_edit` means the notice
+// banners on the way in and the site editor on the way out, so a row holding
+// the new `pages_edit` is indistinguishable from a row holding the old one.
+// Run it twice and you demote every site editor to notices-only.
+//
+// The caller must therefore gate it on a one-time marker that is independent
+// of SCHEMA_VERSION (which re-runs the whole migration block on every bump).
+// See PERM_RENAME_MARKER in tlc-admin-worker.js.
+export function migratePermissionKeys(perms) {
+  const list = Array.isArray(perms) ? perms : [];
+  const out = [];
+  for (const p of list) {
+    const renamed = Object.prototype.hasOwnProperty.call(PERMISSION_RENAMES, p)
+      ? PERMISSION_RENAMES[p]
+      : (Object.prototype.hasOwnProperty.call(PERMISSIONS, p) ? p : null);
+    if (renamed && !out.includes(renamed)) out.push(renamed);
+  }
+  return out;
+}
+
+// Preset bundles shown above the checkboxes in the Users drawer. They are
+// shortcuts that tick a set of boxes — the checkboxes remain the truth, and a
+// preset never grants anything the boxes do not then show.
+export const PERMISSION_PRESETS = {
+  'Office staff': ['newsletter_edit', 'news_edit', 'ministries_edit', 'sermons_edit', 'pages_edit', 'notices_edit', 'staff_edit', 'links_edit', 'settings_manage'],
+  'Ministry leader': ['pages_edit_own', 'ministries_edit', 'news_edit'],
+  'Bookkeeper': ['gym_manage', 'giving_manage', 'payroll_manage'],
+  'Full access': ALL_PERMISSIONS,
+};
 
 // ── PASSWORD HASHING (PBKDF2-SHA256) ─────────────────────────
 

@@ -3,8 +3,9 @@
 
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, hasPermission } from './auth.js';
+import { ADMIN_UI_CSS, LIST_SECTION_JS } from './ui.js';
 
-export const VERSION = 'v2.1.2'; // minor bump: spam screening on the public forms, with the Filtered Mail review queue
+export const VERSION = 'v3.0.0'; // major: the admin overhaul — one pattern across every section, new IA, renamed permissions
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
@@ -18,7 +19,10 @@ export function html(body, title = 'TLC Admin', extraHead = '') {
 <link rel="icon" href="https://timothystl.org/favicon.ico" sizes="any">
 <link rel="icon" href="https://timothystl.org/images/favicon-32x32.png" type="image/png" sizes="32x32">
 <link rel="apple-touch-icon" href="https://timothystl.org/apple-touch-icon.png" sizes="180x180">
-<meta name="theme-color" content="#0A3C5C">
+<meta name="theme-color" content="#12243D">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600&family=Source+Sans+3:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 ${extraHead}
 <style>
 :root{--steel:#0A3C5C;--amber:#D4922A;--sage:#6B8F71;--warm:#FAF7F0;--linen:#F2EDE2;--mist:#EDF5F8;--border:#E8E0D0;--charcoal:#3D3530;--gray:#7A6E60;--white:#fff;--sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;--serif:Georgia,'Times New Roman',serif;}
@@ -171,6 +175,31 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
 .count-pill{font-family:var(--sans);font-size:12px;color:var(--gray);}
 .filter-pill{font-family:var(--sans);font-size:12px;font-weight:700;color:var(--gray);background:var(--linen);border:1px solid var(--border);border-radius:999px;padding:6px 14px;cursor:pointer;}
 .filter-pill.active{background:var(--steel);color:#fff;border-color:var(--steel);}
+${ADMIN_UI_CSS}
+/* ── SIDEBAR, REDESIGNED ───────────────────────────────────────
+   Three groups, the page-producing sections nested under Pages, a gold inset
+   bar plus a gold dot on the active item, and badges that count only things a
+   human still has to do. */
+.sidebar{background:var(--tlc-sidebar);width:246px;font-family:var(--tlc-sans);}
+.sidebar-brand{padding:18px 20px 15px;border-bottom:1px solid rgba(255,255,255,.1);margin-bottom:6px;}
+.sidebar-brand-name{font:600 15px/1.2 var(--tlc-serif);color:#fff;letter-spacing:.01em;}
+.sidebar-brand-sub{font:700 10.5px/1 var(--tlc-sans);color:var(--tlc-gold);letter-spacing:.14em;text-transform:uppercase;margin-top:5px;}
+.sidebar-version{opacity:.55;font-weight:400;text-transform:none;letter-spacing:0;}
+.sidebar-user{padding:0 20px 10px;font-size:12px;color:rgba(255,255,255,.5);}
+.sidebar-group{padding:6px 0 10px;}
+.sidebar-group-label{font:700 10px/1 var(--tlc-sans);letter-spacing:.14em;text-transform:uppercase;color:var(--tlc-gold);padding:6px 20px 7px 21px;opacity:.85;}
+.sidebar-item{display:flex;align-items:center;gap:10px;padding:8px 16px 8px 21px;color:rgba(255,255,255,.76);font-size:13px;font-weight:500;text-decoration:none;border-left:3px solid transparent;}
+.sidebar-item:hover{color:#fff;background:rgba(255,255,255,.05);}
+.sidebar-label{flex:1;min-width:0;}
+.sidebar-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.3);flex:none;}
+.sidebar-tick{flex:none;width:6px;font-size:11px;line-height:1;color:rgba(255,255,255,.3);}
+.sidebar-item-child{padding-left:34px;font-size:12.5px;}
+.sidebar-item-active{background:rgba(201,151,58,.15);border-left-color:var(--tlc-gold);color:#fff;font-weight:600;}
+.sidebar-item-active .sidebar-dot,.sidebar-item-active .sidebar-tick{background:var(--tlc-gold);color:var(--tlc-gold);}
+.sidebar-item-active .sidebar-tick{background:none;}
+.sidebar-badge{flex:none;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--tlc-gold);color:var(--tlc-gold-ink);font:700 10.5px/18px var(--tlc-sans);text-align:center;}
+.sidebar-footer{border-top:1px solid rgba(255,255,255,.1);}
+.sidebar-footer a{font-size:12px;color:rgba(255,255,255,.55);}
 </style>
 </head>
 <body>${body}
@@ -188,13 +217,17 @@ function prepSchedule(form){
   hidden.value = d.toISOString();
   return confirm('Schedule this newsletter to send via Brevo?');
 }
+${LIST_SECTION_JS}
 </script>
 </body>
 </html>`, {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'private, max-age=10',
-      'Content-Security-Policy': "default-src 'self'; script-src 'self' https://cdn.tiny.cloud 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://cdn.tiny.cloud; font-src https://cdn.tiny.cloud; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.tiny.cloud; frame-src 'self' https://cdn.tiny.cloud;"
+      // fonts.googleapis.com serves the Lora / Source Sans 3 stylesheet and
+      // fonts.gstatic.com the font files themselves — the redesign's type
+      // system needs both, and a blocked font silently falls back to Georgia.
+      'Content-Security-Policy': "default-src 'self'; script-src 'self' https://cdn.tiny.cloud 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://cdn.tiny.cloud https://fonts.googleapis.com; font-src 'self' https://cdn.tiny.cloud https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.tiny.cloud; frame-src 'self' https://cdn.tiny.cloud;"
     }
   });
 }
@@ -204,32 +237,60 @@ function prepSchedule(form){
 // per-page back-links / external-view links + sign out. Replaces the old
 // horizontal topbarHtml() tab strip.
 // pendingCount: number of newsletters awaiting approval (shown as a dot on the News & Events item)
-export function sidebarShell(activeTab, user, extraLinks = '', pendingCount = 0) {
+// badges: counts of things needing a human — the same numbers the Dashboard
+// shows, so the sidebar and the worklist can never disagree. Pass
+// { gym, pages, newsletter }; a bare number is read as the newsletter count so
+// the pre-redesign call sites keep working.
+export function sidebarShell(activeTab, user, extraLinks = '', badges = {}) {
   const hp = (p) => hasPermission(user, p);
-  const newsActive = activeTab === 'news' || activeTab === 'newsletter';
-  const showNewsTab = hp('news_edit') || hp('newsletter_edit') || hp('newsletter_approve');
-  const pendingDot = pendingCount > 0 && hp('newsletter_approve') ? `<span class="pending-dot" title="${pendingCount} newsletter(s) awaiting approval"></span>` : '';
+  const b = typeof badges === 'number' ? { newsletter: badges } : (badges || {});
 
-  const navItem = (href, label, active, extra = '') =>
-    `<a href="${href}" class="sidebar-item${active ? ' sidebar-item-active' : ''}"><span class="sidebar-dot"></span>${label}${extra}</a>`;
+  // A badge is only shown to somebody who can act on it. Telling a ministry
+  // leader that three gym requests are waiting is noise they cannot clear.
+  const badge = (n, canSee, title) => (n > 0 && canSee)
+    ? `<span class="sidebar-badge" title="${escapeHtml(title)}">${n}</span>` : '';
 
-  const contentItems = [
-    hp('site_pages')      ? navItem('/pages', 'Pages', activeTab === 'pages') : '',
-    showNewsTab ? navItem('/newsitems', 'News &amp; Events', newsActive, pendingDot) : '',
-    hp('ministries_edit') ? navItem('/ministries', 'Ministries', activeTab === 'ministries') : '',
-    hp('sermons_edit')    ? navItem('/sermons', 'Sermons', activeTab === 'sermons') : '',
-    hp('news_edit')       ? navItem('/christian-education', 'Christian Ed', activeTab === 'christian-education') : '',
-    hp('pages_edit')      ? navItem('/notices', 'Notices', activeTab === 'notices') : '',
-    hp('links_edit')      ? navItem('/link-cards', 'Links', activeTab === 'link-cards') : '',
+  const navItem = (href, label, active, extra = '', depth = 0) =>
+    `<a href="${href}" class="sidebar-item${active ? ' sidebar-item-active' : ''}${depth ? ' sidebar-item-child' : ''}">`
+    + (depth ? `<span class="sidebar-tick" aria-hidden="true">└</span>` : `<span class="sidebar-dot"></span>`)
+    + `<span class="sidebar-label">${label}</span>${extra}</a>`;
+
+  // ── WEBSITE ──
+  // Ministries, Partners, News, Sermons and Christian Ed all produce pages on
+  // the website; they are split out only because different people own them and
+  // they carry extra data. Nesting them under Pages says exactly that. Menu,
+  // Notices, Links and Redirects are site-wide tools, so they sit at top level.
+  const showNews = hp('news_edit');
+  const pagesChildren = [
+    hp('ministries_edit') ? navItem('/ministries', 'Ministries', activeTab === 'ministries', '', 1) : '',
+    hp('pages_edit')      ? navItem('/partners', 'Partners', activeTab === 'partners', '', 1) : '',
+    showNews              ? navItem('/newsitems', 'News &amp; Events', activeTab === 'news', '', 1) : '',
+    hp('sermons_edit')    ? navItem('/sermons', 'Sermons', activeTab === 'sermons', '', 1) : '',
+    hp('news_edit')       ? navItem('/christian-education', 'Christian Ed', activeTab === 'christian-education', '', 1) : '',
   ].filter(Boolean).join('');
 
+  const canPages = hp('pages_edit') || hp('pages_edit_own');
+  const websiteItems = [
+    canPages ? navItem('/pages', 'Pages', activeTab === 'pages', badge(b.pages, canPages, `${b.pages} page(s) with unpublished edits`)) : '',
+    pagesChildren,
+    hp('notices_edit')    ? navItem('/notices', 'Notices', activeTab === 'notices') : '',
+    hp('links_edit')      ? navItem('/link-cards', 'Links', activeTab === 'link-cards') : '',
+    hp('settings_manage') ? navItem('/settings', 'Redirects', activeTab === 'settings') : '',
+  ].filter(Boolean).join('');
+
+  // ── COMMUNICATION ──
+  const canDraft = hp('newsletter_edit') || hp('newsletter_approve');
+  const commItems = [
+    canDraft ? navItem('/', 'Newsletter', activeTab === 'newsletter', badge(b.newsletter, hp('newsletter_approve'), `${b.newsletter} newsletter(s) awaiting approval`)) : '',
+    hp('settings_manage') ? navItem('/subscribers', 'Subscribers', activeTab === 'subscribers') : '',
+    hp('settings_manage') ? navItem('/filtered', 'Filtered Mail', activeTab === 'filtered') : '',
+  ].filter(Boolean).join('');
+
+  // ── PEOPLE & OPS ──
   const opsItems = [
     hp('staff_edit')      ? navItem('/staff', 'Staff', activeTab === 'staff') : '',
-    hp('gym_manage')      ? navItem('/gym-rentals', 'Gym Rentals', activeTab === 'gym') : '',
+    hp('gym_manage')      ? navItem('/gym-rentals', 'Gym Rentals', activeTab === 'gym', badge(b.gym, hp('gym_manage'), `${b.gym} gym request(s) waiting for review`)) : '',
     hp('users_manage')    ? navItem('/users', 'Users', activeTab === 'users') : '',
-    hp('settings_manage') ? navItem('/filtered', 'Filtered Mail', activeTab === 'filtered') : '',
-    hp('settings_manage') ? navItem('/subscribers', 'Subscribers', activeTab === 'subscribers') : '',
-    hp('settings_manage') ? navItem('/settings', 'Redirects', activeTab === 'settings') : '',
     hp('giving_manage')   ? navItem('/giving', 'Giving', activeTab === 'giving') : '',
     hp('payroll_manage')  ? navItem('/payroll', 'Payroll', activeTab === 'payroll') : '',
     hp('audit_view')      ? navItem('/audit-log', 'Audit Log', activeTab === 'audit') : '',
@@ -239,17 +300,18 @@ export function sidebarShell(activeTab, user, extraLinks = '', pendingCount = 0)
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-brand">
     <div class="sidebar-brand-name">Timothy Lutheran</div>
-    <div class="sidebar-brand-sub">Admin <span style="opacity:.6;font-weight:400;text-transform:none;letter-spacing:0;">${VERSION}</span></div>
+    <div class="sidebar-brand-sub">Admin <span class="sidebar-version">${VERSION}</span></div>
   </div>
   <div class="sidebar-user">${user ? escapeHtml(user.username) : ''}</div>
   <div class="sidebar-group">
     <div class="sidebar-group-label">Overview</div>
     ${navItem('/dashboard', 'Dashboard', activeTab === 'dashboard')}
   </div>
-  ${contentItems ? `<div class="sidebar-group"><div class="sidebar-group-label">Content</div>${contentItems}</div>` : ''}
+  ${websiteItems ? `<div class="sidebar-group"><div class="sidebar-group-label">Website</div>${websiteItems}</div>` : ''}
+  ${commItems ? `<div class="sidebar-group"><div class="sidebar-group-label">Communication</div>${commItems}</div>` : ''}
   ${opsItems ? `<div class="sidebar-group"><div class="sidebar-group-label">People &amp; Ops</div>${opsItems}</div>` : ''}
   <div class="sidebar-footer">
-    <a href="https://connect.timothystl.org" target="_blank">Connect</a>
+    <a href="https://connect.timothystl.org" target="_blank">Connect ↗</a>
   </div>
 </aside>
 <div class="util-bar">

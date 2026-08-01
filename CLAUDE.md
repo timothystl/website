@@ -77,7 +77,8 @@ points staff there.
 | page-events | /events | Exists |
 | page-contact | /contact | Exists |
 | page-prayer | /prayer | Exists |
-| page-news | /news | Exists — fetches live from admin API + newsletter archive |
+| page-news | /news | Exists — fetches live from admin API + newsletter archive, with the Google Calendar embedded below the posts (2026-08-01) |
+| page-values | /about/values | Exists (2026-08-01) — the four core values and the partner ministry paired to each, from `/api/values`. Nested under About via `NESTED_PATHS` in `public/index.html` |
 | page-404 | (any unknown path) | Exists — shown for unrecognized URLs |
 
 ---
@@ -138,11 +139,11 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Tab | Who Uses It | Status |
 |-----|-------------|--------|
 | Newsletter | Pastor/office | **DONE** — format picker, Brevo email, draft/published split |
-| News & Events | Pastor/office | **DONE** — DB wired, API live at /api/news |
+| News & Events | Pastor/office | **DONE** — DB wired, API live at /api/news · **on the shared pattern**. Split from Newsletter in v3.0.0: `/newsitems` is News only, the newsletter list stays at `/` |
 | Ministries | Office staff | **DONE** — ministry page content management, now including the block-based **page editor** at `/ministries/editor/:slug` (see "Ministry Page Editor" below); also covers Youth Pages (TinyMCE editor, youth_pages DB table) and the Voters Assembly special page (Zoom link + file upload), both folded in as cards rather than separate tabs |
-| Sermons | Pastor/office | **DONE** — sermon series + standalone sermon notes, powers /sermons |
-| Christian Ed | Pastor/office | **DONE** — Bible class schedule (`bible_classes` table), powers /education |
-| Notices | Office staff | **DONE** — self-serve banner notices per static page (renamed from "Pages") |
+| Sermons | Pastor/office | **DONE** — sermon series + standalone sermon notes, powers /sermons · **on the shared pattern**, series with their sermons indented beneath |
+| Christian Ed | Pastor/office | **DONE** — Bible class schedule (`bible_classes` table), powers /education · **on the shared pattern** |
+| Notices | Office staff — requires `notices_edit` | **DONE** — self-serve banner notices per static page (renamed from "Pages"; the permission was `pages_edit` before v3.0.0) · **on the shared pattern** |
 | Links | Office staff | **DONE** — manages link cards shown at links.timothystl.org (`link_cards` table) |
 | Staff | Office staff | **DONE** — staff directory (photos, bios, emails) shown on /about |
 | Gym Rentals | Office staff (Dinger) | **DONE** — full rental management at /gym-rentals |
@@ -152,7 +153,8 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Giving | Office staff — requires `giving_manage` permission | **DONE** (2026-07-27) — base Tithe.ly link, give.timothystl.org's amount tiers + per-tier links, and vendor/market one-off payment links (Tithe.ly or Square); see below |
 | Payroll | Office staff (Dinger) — requires `payroll_manage` permission | **DONE** — combined biweekly payroll (church staff + MDO preschool staff); see "Payroll & Supabase" below |
 | Audit Log | Admins | **DONE** — change history + rollback, requires `audit_view` |
-| Pages | Office staff (`site_pages`) or a ministry leader for their own pages (`site_pages_own`) | **DONE** (2026-07-31) — every page on the public site, with the block editor at `/pages/:id/edit`; see "Site Editor" below |
+| Partners | Office staff — requires `pages_edit` | **DONE** (2026-08-01) — one partner ministry per core value (`partners` table), feeding the dashboard's values report and the public /about/values page |
+| Pages | Office staff (`pages_edit`) or a ministry leader for their own pages (`pages_edit_own`) | **DONE** (2026-07-31) — every page on the public site, with the block editor at `/pages/:id/edit`; see "Site Editor" below. Both permissions were renamed in v3.0.0 (from `site_pages` / `site_pages_own`) |
 | Filtered Mail | Office staff — requires `settings_manage` | **DONE** (2026-07-31) — review queue for public-form submissions held as spam; see "Form Spam Screening" below |
 | Connect | External link in sidebar footer | **DONE** — single link out to `connect.timothystl.org` (renamed 2026-07-22 from `chms.timothystl.org`, itself changed 2026-07-20 from two separate "Scheduler"/"Volunteer Admin" links; see the chms repo's own CLAUDE.md) |
 
@@ -371,6 +373,143 @@ blocks, paste), `site-roles` (roles, locked blocks, undo),
 `site-pages` (generated nav, published pages, fallback) and `ministries-list`.
 Run any with `node <path>`. Chromium is at `/opt/pw-browsers/chromium`.
 
+### The v3.0.0 Admin Overhaul (added 2026-08-01) — Phases 0–2 of 9
+
+Built from the design handoff in `design_handoff_admin_overhaul/`. Andrew's own
+summary of the old admin was **"nothing matches"** — every screen had grown its
+own table, its own filters, its own idea of what a status looked like. The fix
+is not new features: it is **one pattern, applied to every section**, so that
+learning one screen teaches all of them.
+
+**This is phases 0–2 of a nine-phase plan.** What is NOT built yet: the Menu
+editor (4), the full newsletter composer (5), Staff/Users/Subscribers on the
+pattern (6), Gym and Giving (7), Payroll (8), Media / audit rollback / ⌘K (9).
+`design_handoff_admin_overhaul/IMPLEMENTATION-PHASES.md` is the build order.
+
+- **`admin/ui.js` is the pattern, once.** `renderListSection()` takes a config
+  and emits the whole thing: title, one action, purpose line, search + filter
+  pills + count, table, and one `◆` note stating the rule the section enforces.
+  `renderDrawer()` does the same for the edit panel. **If you find yourself
+  hand-rolling a table in a route handler, that is the bug** — adding a section
+  means writing a config. `LIST_SECTION_JS` is included once by `sidebarShell()`
+  and discovers sections, so a new one needs no script of its own.
+- **Five status tones and only five** (`TONES` in `admin/ui.js`): green live,
+  amber needs attention, red broken, grey deliberately off, blue-grey automatic.
+  An unrecognised tone clamps to grey rather than rendering unstyled.
+- **The count label is scoped to the filter, not the table.** "3 of 8 shown"
+  where 8 is what the *active filter* can reach. "5 of 12" when only 5 can ever
+  be shown teaches a volunteer that seven rows are hiding somewhere.
+  `test/list-section.test.mjs` pins this down in a real browser.
+- **A row that needs attention grows a warning row beneath it**, with its own
+  action label — never a modal, never a silent failure. An untagged ministry, a
+  notice with no body, a news post with no expiry date.
+- **`admin/values.js` is the one place the four values live.** Stored keys are
+  `acceptance` / `worship` / `education` / `outreach`; the short names (Welcome,
+  Receive, Grow, Go) are display only, so renaming a label never touches the
+  database. `normalizeValue()` guards every write path.
+- **Dashboard ships both layouts** behind a toggle — "Needs you" (the default,
+  a worklist you clear) and "Overview" (stat tiles). `badgeCounts()` computes
+  the sidebar badges and the worklist from **one** query set, so a badge saying
+  3 beside a worklist showing 2 is impossible.
+- **The dashboard has no payroll task.** The spec asks for "payroll period
+  closing within 3 days"; payroll lives in Supabase and the Worker holds no
+  server-side Supabase credentials (the `/sb` proxy only forwards browser
+  calls), so it cannot be computed here. Deliberately omitted, not forgotten.
+
+#### ⚠ Permissions were renamed — and the migration must never run twice
+
+The names now match the sections they open. Two of them **swapped meaning**:
+
+| Old key | New key | Opens |
+|---|---|---|
+| `pages_edit` (meant Notices) | `notices_edit` | Notices, Voters |
+| `site_pages` | `pages_edit` | Pages + the site editor |
+| `site_pages_own` | `pages_edit_own` | A ministry leader's own pages |
+
+`migratePermissionKeys()` in `admin/auth.js` is **deliberately not idempotent
+and cannot be made so** — a row holding the new `pages_edit` is indistinguishable
+from one holding the old. A second pass demotes every site editor to
+notices-only. It is therefore gated on `PERM_RENAME_MARKER` (`perm_rename_v3` in
+`_schema_version`), which is **independent of `SCHEMA_VERSION`** because that
+re-runs on every bump. `admin/auth.test.mjs` asserts the non-idempotence on
+purpose; `test/admin-redesign.test.mjs` proves a forced `SCHEMA_VERSION` bump
+does not demote anyone. Do not "fix" the non-idempotence without checking the
+marker is still there.
+
+The handoff called these "the 14 real permission names" but its list has no key
+for Notices and none for the ministry-leader role. Following it literally would
+have ungated Notices and deleted a role the site editor enforces server-side, so
+there are **16** keys: the spec's 14 with the spec's meanings, plus those two.
+
+#### Sections converted so far
+
+Notices · Christian Ed · News & Events · Sermons · Ministries · Partners, plus
+the Dashboard and the sidebar. Everything else still renders its pre-redesign
+markup and is reachable from the new sidebar — the conversion is section by
+section on purpose.
+
+- **The sidebar is three groups** with the page-producing sections nested under
+  Pages. Badges only show to somebody who can act on them.
+- **Newsletter and News & Events are now separate sections.** `/newsitems` is
+  News only; the newsletter list stays at `/`. The newsletter approval/send
+  redirects were repointed from `/newsitems?msg=…` to `/?msg=…` so they land
+  where the issue actually lives.
+- **Ministries separates "In menu" from "Status"** — the distinction the old
+  admin conflated. `youth_pages.in_menu` takes a ministry out of the header
+  while the page stays live at its address.
+- **Partners** (`partners` table) is one record per value, with `UNIQUE(value)`
+  so the one-per-value rule is the database's job. A value with no partner shows
+  as a gap rather than quietly showing three. Seeded with `INSERT OR IGNORE`, so
+  editing a partner is never undone by a deploy.
+- **Sermons needed no schema change** — `sermon_notes` already had
+  `youtube_url` and `audio_url`, and the site's sermon block already branches on
+  them (it renders a text-only card with no play affordance when neither is set).
+  The handoff's "the sermon library does NOT exist yet — build it" was stale.
+- **Christian Ed's add form moved** to `/christian-education/new` so the section
+  reads like every other one: a list, and one action that opens a form.
+
+#### Public site
+
+- **`/about/values`** — a new page, a child of About in the address bar and the
+  mobile nav. `NESTED_PATHS` / `tlcPathFor()` in `public/index.html` is the one
+  place a nested address is described, so the router, `showPage()` and the
+  canonical/OG tags cannot drift.
+- **`/about`'s value cards read from `/api/values`**, falling back to the
+  hardcoded markup if the admin is unreachable — a visitor must never see a page
+  that looks like the church has no values.
+- **The calendar is embedded on `/news`** below the posts (lazily — the iframe
+  gets its `src` only when the page opens). **`/calendar` stays live as its own
+  page** (Andrew's call — it is bookmarked and printed on flyers), so unlike the
+  handoff there is no `/calendar` → `/news` redirect. `/events` routes to `/news`.
+
+#### Where the handoff was stale or wrong
+
+It was written against v1.91.0, before the site editor (v2.0.0) and Filtered
+Mail shipped. Beyond the sermon library and the permission list above: it marks
+`pages` as a NEW table (it exists), and it proposes a **`menu_items` table** for
+the Menu editor — rejected, because the public nav is already generated from
+`pages` (`in_menu` / `parent_id` / `sort` / `menu_label`) and a second table
+would be a second source of truth for the same nav. When Phase 4 is built, the
+Menu screen persists to `pages`. It also gives Word of Life's site as
+`wordoflifestl.org`; the real one, already linked from `/wol`, is
+`wordoflifeschool.net`, and that is what is seeded.
+
+#### Tests
+
+`node admin/ui.test.mjs` (renderers, count scoping, tone clamping, toggles
+posting a 0), `node admin/auth.test.mjs` (the rename, and its non-idempotence),
+`node test/list-section.test.mjs` (the shared pattern in a browser), and
+`node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
+— which boots the **real Worker** against `node:sqlite` behind a D1 shim and
+requests every redesigned screen, once seeded and once against empty tables.
+`test/html-loader.mjs` is what makes the Worker importable in Node at all (it
+uses Wrangler's `import … from './x.html'` text-module syntax).
+
+`test/ministries-list.test.mjs` was deleted — it lifted the old bespoke
+Ministries table out of the Worker source. `test/list-section.test.mjs` replaces
+it and covers all twenty sections instead of one. The shared pattern has **no
+sort control**; each section states its own order.
+
 ### Site Editor (added 2026-07-31)
 
 The block editor extended from ministry pages to **every page on the site**,
@@ -511,6 +650,7 @@ settings access.
 
 ### Access Control
 - Staff admin password: full access (all tabs) — permissions are granted per-account, per-tab via the Users tab's checkboxes (see `PERMISSIONS` in `admin/auth.js`)
+- **v3.0.0 renamed three keys** — `pages_edit`→`notices_edit`, `site_pages`→`pages_edit`, `site_pages_own`→`pages_edit_own`. See "The v3.0.0 Admin Overhaul" above; the migration must never run twice.
 - Youth content editing now lives under the **Ministries** tab (`ministries_edit` permission), not a separate "Youth Pages" tab
 - **Payroll** requires the dedicated `payroll_manage` permission — not bundled into `settings_manage` (see "Payroll & Supabase" above)
 - **Giving** requires the dedicated `giving_manage` permission — not bundled into `settings_manage` (see "Giving Tab" above)

@@ -111,6 +111,7 @@
   </div>
   <div class="nav-mobile" id="navMobile">
     <button onclick="showPage('about');closeMobileNav()">About</button>
+    <button onclick="showPage('values');closeMobileNav()" style="padding-left:26px;">&#8627; Our Values</button>
     <button onclick="showPage('worship');closeMobileNav()">Worship</button>
     <button onclick="showPage('education');closeMobileNav()">Learn / Christian Ed</button>
     <button onclick="showPage('sermons');closeMobileNav()">Sermons</button>
@@ -237,11 +238,18 @@
         </div>
         <div>
           <span class="eyebrow eyebrow--sage" style="margin-bottom:16px;">Our core values</span>
-          <div class="about-values">
+          <!-- Filled from /api/values so the value blurbs and their partner
+               ministries are edited in one place and every page follows. The
+               markup below is the fallback shown if the admin is unreachable —
+               same four values, just without the partners. -->
+          <div class="about-values" id="about-values">
             <div class="value-card"><h4>Worship</h4><p>Gathering as God's people, celebrating His grace, receiving His gifts of Word and Sacrament.</p></div>
             <div class="value-card"><h4>Acceptance</h4><p>Intentionally welcoming and loving all people as Jesus does.</p></div>
             <div class="value-card"><h4>Christian Education</h4><p>Equipping people for a lifelong journey with Christ.</p></div>
             <div class="value-card"><h4>Outreach</h4><p>Sharing the love of Jesus with those who don't yet know Him.</p></div>
+          </div>
+          <div style="margin-top:18px;">
+            <button class="btn btn-outline" onclick="showPage('values')">Our values and partners →</button>
           </div>
         </div>
       </div>
@@ -818,7 +826,41 @@
         <div id="news-empty" style="display:none;text-align:center;padding:40px;color:var(--gray);font-family:var(--sans);font-size:14px;">No newsletters yet — check back soon.</div>
       </div>
     </section>
+
+    <!-- CALENDAR, embedded below the posts. News, events and the calendar are
+         one page now: somebody asking "what's happening" should not have to
+         guess which of three pages to open. /calendar stays live as its own
+         page for anyone who has bookmarked it or printed it on a flyer. -->
+    <section class="section section--white" id="news-calendar-section">
+      <div class="wrap">
+        <span class="eyebrow">On the calendar</span>
+        <h2>What's coming up</h2>
+        <div style="border-radius:var(--r-md);overflow:hidden;border:1px solid var(--border);margin-top:18px;">
+          <iframe id="gcal-frame-news" src="" data-src="https://calendar.google.com/calendar/embed?src=calendar%40timothystl.org&src=c_7f6d3db77b48c01af48592e21b2743d22fdf2b221d9d3c4e0c02680b73b89041%40group.calendar.google.com&ctz=America%2FChicago&mode=MONTH&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0" style="border:0;display:block;width:100%;height:600px;" frameborder="0" scrolling="no" title="Timothy Lutheran Church calendar" loading="lazy"></iframe>
+        </div>
+        <div style="margin-top:12px;">
+          <a href="https://calendar.google.com/calendar/embed?src=calendar%40timothystl.org&ctz=America%2FChicago" target="_blank" rel="noopener" style="font-family:var(--sans);font-size:13px;color:var(--mid);font-weight:600;">Open in Google Calendar →</a>
+        </div>
+      </div>
+    </section>
   </div>
+</div>
+
+<!-- VALUES — /about/values -->
+<div id="page-values" class="page">
+  <div class="page-hero">
+    <span class="eyebrow eyebrow--light" style="display:block;text-align:center;">What we are for</span>
+    <h1>Our Four Values</h1>
+    <p>Worship, Acceptance, Christian Education, Outreach — and the ministries who carry each of them with us.</p>
+  </div>
+  <div id="notices-values"></div>
+  <section class="section section--white">
+    <div class="wrap">
+      <div id="values-list" style="display:grid;gap:22px;">
+        <p style="font-family:var(--sans);font-size:14px;color:var(--gray);">Loading…</p>
+      </div>
+    </div>
+  </section>
 </div>
 
 <!-- CALENDAR -->
@@ -2243,6 +2285,86 @@ async function loadConcertBlock() {
 
 // Load staff from admin API
 var staffLoaded = false;
+// ── THE FOUR VALUES AND THEIR PARTNERS ──────────────────────
+// One fetch feeds two surfaces: the value cards on /about and the full
+// /about/values page. Both read the same record, so a partner's name is typed
+// once and every page follows.
+//
+// If the admin is unreachable, /about keeps the hardcoded cards already in the
+// markup and the values page says so rather than showing an empty grid — a
+// visitor should never be shown a page that looks like the church has no
+// values.
+var TLC_VALUES_CACHE = null;
+function loadValues() {
+  if (TLC_VALUES_CACHE) return Promise.resolve(TLC_VALUES_CACHE);
+  return fetch('https://admin.timothystl.org/api/values')
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) { TLC_VALUES_CACHE = Array.isArray(d) && d.length ? d : null; return TLC_VALUES_CACHE; })
+    .catch(function () { return null; });
+}
+
+function renderAboutValues() {
+  var host = document.getElementById('about-values');
+  if (!host) return;
+  loadValues().then(function (vals) {
+    if (!vals) return;   // keep the hardcoded fallback already on the page
+    host.innerHTML = vals.map(function (v) {
+      return '<div class="value-card">'
+        + '<h4>' + tlcEsc(v.name) + '</h4>'
+        + '<p>' + tlcEsc(v.blurb) + '</p>'
+        + (v.partner
+            ? '<p style="font-size:13px;color:var(--gray);margin-top:6px;">With <strong>' + tlcEsc(v.partner.name) + '</strong></p>'
+            : '')
+        + '</div>';
+    }).join('');
+  });
+}
+
+function renderValuesPage() {
+  var host = document.getElementById('values-list');
+  if (!host) return;
+  loadValues().then(function (vals) {
+    if (!vals) {
+      host.innerHTML = '<p style="font-family:var(--sans);font-size:14px;color:var(--gray);">'
+        + 'Our four values are Worship, Acceptance, Christian Education, and Outreach. '
+        + 'The details could not be loaded just now — please try again shortly.</p>';
+      return;
+    }
+    host.innerHTML = vals.map(function (v) {
+      var ministries = (v.ministries || []).map(function (m) {
+        return '<a href="/' + encodeURIComponent(m.slug) + '" style="font-family:var(--sans);font-size:13px;color:var(--mid);font-weight:600;text-decoration:none;">' + tlcEsc(m.title) + '</a>';
+      }).join('<span style="color:var(--border);"> · </span>');
+      // A value with no partner says so. Quietly showing three would make the
+      // church look like it has three values.
+      var partner = v.partner
+        ? '<p style="font-family:var(--sans);font-size:14px;color:var(--charcoal);margin:0;">'
+            + 'Alongside us in this: <strong>' + tlcEsc(v.partner.name) + '</strong>'
+            + (v.partner.site_url ? ' — <a href="' + tlcEsc(v.partner.site_url) + '" target="_blank" rel="noopener" style="color:var(--mid);font-weight:600;">their site →</a>' : '')
+            + '</p>'
+            + (v.partner.blurb ? '<p style="font-family:var(--sans);font-size:14px;color:var(--gray);margin:6px 0 0;">' + tlcEsc(v.partner.blurb) + '</p>' : '')
+            + (v.partner.also_note ? '<p style="font-family:var(--sans);font-size:13px;color:var(--gray);margin:6px 0 0;">' + tlcEsc(v.partner.also_note) + '</p>' : '')
+        : '<p style="font-family:var(--sans);font-size:14px;color:var(--gray);margin:0;">We do not have a partner ministry paired to this value at the moment.</p>';
+      return '<article style="border:1px solid var(--border);border-radius:var(--r-md);overflow:hidden;">'
+        + '<div style="background:' + tlcEsc(v.ink) + ';padding:16px 22px;">'
+          + '<span style="display:block;font-family:var(--serif);font-size:24px;color:#fff;">' + tlcEsc(v.short) + '</span>'
+          + '<span style="display:block;font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.8);margin-top:5px;">' + tlcEsc(v.name) + '</span>'
+        + '</div>'
+        + '<div style="padding:20px 22px;background:' + tlcEsc(v.tint) + ';">'
+          + '<p style="font-family:var(--sans);font-size:15px;line-height:1.65;color:var(--charcoal);margin:0 0 14px;">' + tlcEsc(v.blurb) + '</p>'
+          + partner
+          + (ministries ? '<p style="font-family:var(--sans);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gray);margin:16px 0 6px;">Here at Timothy</p><div>' + ministries + '</div>' : '')
+        + '</div>'
+      + '</article>';
+    }).join('');
+  });
+}
+
+function tlcEsc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 async function loadStaff() {
   if (staffLoaded) return;
   staffLoaded = true;
@@ -2716,6 +2838,7 @@ var PAGE_META = {
   'youth':        { title: 'Youth Ministry — Timothy Lutheran Church',                                    desc: 'Faith formation, community, and service for students in grades 7–12 at Timothy Lutheran Church.' },
   'wol':          { title: 'Word of Life School — Timothy Lutheran Church',                               desc: 'Word of Life Lutheran School serves families through faith-based education in St. Louis.' },
   'calendar':     { title: 'Calendar — Timothy Lutheran Church',                                          desc: 'Upcoming events and services at Timothy Lutheran Church in St. Louis.' },
+  'values':       { title: 'Our Four Values — Timothy Lutheran Church',                                   desc: 'Worship, Acceptance, Christian Education, and Outreach — the four values of Timothy Lutheran Church in St. Louis, and the partner ministries who carry each of them with us.' },
   'sundayschool': { title: 'Sunday School — Timothy Lutheran Church',                                     desc: 'Sunday School at Timothy Lutheran Church in Lindenwood Park, St. Louis.' },
   'confirmation': { title: 'Confirmation — Timothy Lutheran Church',                                      desc: 'Confirmation program at Timothy Lutheran Church for students exploring and affirming their faith.' },
   'vbs':          { title: 'Vacation Bible School — Timothy Lutheran Church',                             desc: 'Vacation Bible School at Timothy Lutheran Church in St. Louis — fun, faith, and community for kids.' },
@@ -2724,6 +2847,12 @@ var PAGE_META = {
   'voters':       { title: 'Voters Assembly — Timothy Lutheran Church',                                   desc: 'Voters Assembly information for Timothy Lutheran Church members.', noindex: true },
   '404':          { title: 'Page Not Found — Timothy Lutheran Church',                                    desc: 'The page you were looking for could not be found.', noindex: true },
 };
+// Pages that sit beneath another in the address bar without being a separate
+// page div. showPage(), the router and the canonical/OG tags all read this, so
+// an address is described once and cannot drift between them.
+var NESTED_PATHS = { values: '/about/values' };
+function tlcPathFor(id) { return id === 'home' ? '/' : (NESTED_PATHS[id] || '/' + id); }
+
 function updatePageMeta(id) {
   var m = PAGE_META[id] || PAGE_META['home'];
   document.title = m.title;
@@ -2734,13 +2863,13 @@ function updatePageMeta(id) {
   var ogDesc = document.querySelector('meta[property="og:description"]');
   if (ogDesc) ogDesc.setAttribute('content', m.desc);
   var ogUrl = document.querySelector('meta[property="og:url"]');
-  if (ogUrl) ogUrl.setAttribute('content', 'https://timothystl.org' + (id === 'home' ? '/' : '/' + id));
+  if (ogUrl) ogUrl.setAttribute('content', 'https://timothystl.org' + tlcPathFor(id));
   var twTitle = document.querySelector('meta[name="twitter:title"]');
   if (twTitle) twTitle.setAttribute('content', m.title);
   var twDesc = document.querySelector('meta[name="twitter:description"]');
   if (twDesc) twDesc.setAttribute('content', m.desc);
   var canon = document.querySelector('link[rel="canonical"]');
-  if (canon) canon.setAttribute('href', 'https://timothystl.org' + (id === 'home' ? '/' : '/' + id));
+  if (canon) canon.setAttribute('href', 'https://timothystl.org' + tlcPathFor(id));
   var robots = document.querySelector('meta[name="robots"]');
   if (m.noindex) {
     if (!robots) { robots = document.createElement('meta'); robots.name = 'robots'; document.head.appendChild(robots); }
@@ -2755,7 +2884,7 @@ window.showPage = function(id, addHistory) {
   document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
   var page = document.getElementById('page-'+id);
   if(page){page.classList.add('active');window.scrollTo(0,0);}
-  var url = (id === 'home') ? '/' : '/'+id;
+  var url = tlcPathFor(id);
   if(addHistory === false){
     history.replaceState({page:id},'',url);
   } else {
@@ -2769,6 +2898,10 @@ window.showPage = function(id, addHistory) {
     if (nlArchive) nlArchive.style.display = '';
     if (nlDetail) nlDetail.style.display = 'none';
     loadNewsletters(); loadNewsItems();
+    // The calendar iframe is only given its src when the page is actually
+    // opened, so /news costs no more to load than it did before.
+    var newsCal = document.getElementById('gcal-frame-news');
+    if (newsCal && !newsCal.getAttribute('src')) { newsCal.src = newsCal.dataset.src; }
   }
   if (id === 'calendar') {
     var gcalFrame = document.getElementById('gcal-frame');
@@ -2782,7 +2915,8 @@ window.showPage = function(id, addHistory) {
   if (id === 'voters') { loadVotersPage(); }
   if (id === 'home') { loadNotices('home'); }
   if (id === 'worship') { loadNotices('worship'); }
-  if (id === 'about') { loadNotices('about'); loadStaff(); }
+  if (id === 'about') { loadNotices('about'); loadStaff(); renderAboutValues(); }
+  if (id === 'values') { loadNotices('values'); renderValuesPage(); }
   if (id === 'education') { loadNotices('education'); loadBibleClasses(); }
   if (id === 'sermons') { loadNotices('sermons'); }
   if (id === 'ministries') { loadNotices('ministries'); }
@@ -2826,6 +2960,13 @@ window.showPage = function(id, addHistory) {
     }).catch(function(){ window.location.replace('https://drive.google.com/drive/folders/1pgqJ32H3HS7SNYnnf7rOswC5c87IAzA4?usp=drive_link'); });
     return;
   }
+  // Nested addresses, resolved before the plain page-<path> lookup below —
+  // '/about/values' has no element called 'page-about/values'.
+  if (path === 'about/values') { window.showPage('values', false); return; }
+  // /events has never been a page of its own; news, events and the calendar
+  // are one page. Send it there rather than to the 404, so the address is safe
+  // to say from the pulpit and to print on a flyer.
+  if (path === 'events') { window.showPage('news'); return; }
   var nlDetailMatch = path.match(/^news\/(\d+)$/);
   if (nlDetailMatch) {
     window.showPage('news', false);

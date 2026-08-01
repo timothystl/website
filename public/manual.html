@@ -104,6 +104,7 @@ li{margin-bottom:6px;}
     <a href="#site-pages-tab">Pages (the whole website)</a>
     <a href="#ministries-tab">Ministries</a>
     <a href="#ministry-editor">— The page editor</a>
+    <a href="#partners-tab">Partners</a>
     <a href="#sermons-tab">Sermons</a>
     <a href="#christian-ed-tab">Christian Ed</a>
     <a href="#pages-tab">Notices</a>
@@ -396,11 +397,20 @@ li{margin-bottom:6px;}
     <span class="toc-anchor" id="admin-portal"></span>
     <h2>Admin Portal</h2>
     <p>The admin portal lives at <a href="https://admin.timothystl.org" target="_blank"><strong>admin.timothystl.org</strong></a>. Sign in with your admin username and password. Contact the office for credentials.</p>
-    <p><span class="badge badge--sage">Live</span> Signing in takes you to the <strong>Dashboard</strong> — a summary of what needs attention (draft newsletters, pending approvals, gym holds, expiring news items) plus quick-add buttons and recent activity. Navigation lives in the left sidebar, grouped into Overview, Content, and People &amp; Ops. The sidebar stays tucked away behind the menu icon in the top bar — tap it to open the sidebar, tap outside it to close.</p>
+    <p><span class="badge badge--sage">Live</span> Signing in takes you to the <strong>Dashboard</strong>. It has two views, switched with the buttons at the top right:</p>
+    <ul>
+      <li><strong>Needs you</strong> (the one it opens on) — a worklist you clear. Gym requests waiting, pages with edits nobody has published, newsletters awaiting approval, website messages held as spam, news posts about to expire. Each one has a single button that takes you to the screen where you deal with it. When there is nothing, it says so.</li>
+      <li><strong>Overview</strong> — the same week as four numbers, for when you want the shape of things rather than a list of jobs.</li>
+    </ul>
+    <p>Below the worklist, <strong>Our Four Values</strong> reports on the church's own priorities rather than on the website's plumbing: how many ministries carry each value, how much has been posted under it in the last month, and which partner ministry is paired to it. A value with nothing new says so plainly.</p>
+    <p>Navigation lives in the left sidebar, in three groups — <strong>Website</strong>, <strong>Communication</strong>, and <strong>People &amp; Ops</strong>. Ministries, Partners, News &amp; Events, Sermons and Christian Ed sit indented under <strong>Pages</strong>, because all five of them produce pages on the website; they are separate screens only because different people look after them. A number beside an item is a count of things still waiting on a person, and it is the same number the Dashboard shows. The sidebar stays tucked away behind the menu icon in the top bar — tap it to open, tap outside it to close.</p>
+    <p><strong>Every list screen works the same way.</strong> A title and one button for adding something; a sentence saying what the screen is for; a search box and filter buttons with a count beside them; then the list. Click any row to open it. A row that needs attention grows a strip underneath it saying what is wrong and offering to fix it — a notice with nothing written in it, a news post with no expiry date, a ministry with no core value. At the bottom of every screen there is one line beginning with ◆ explaining the one rule that screen enforces. Learn one screen and you have learned all of them.</p>
 
     <span class="toc-anchor" id="news-events"></span>
     <h3>News &amp; Events tab</h3>
     <p><span class="badge badge--sage">Live</span> Post news items and events that appear on the <code>/news</code> page. Each item has a title, summary (shown on the card), optional full body text (shown on "Read More"), optional card thumbnail image URL, publish date, and expiry date (items hide automatically after they expire). Check <strong>Pinned</strong> to keep an item at the top of the list regardless of date.</p>
+    <p><strong>The expiry date is the field that matters.</strong> A post that has one takes itself off the website on that day, which is the only thing keeping the site from filling up with last year's announcements. A post without one is flagged in the list, because it will sit there until somebody remembers to remove it. Set it when you write the post, not later.</p>
+    <p><strong>News and the Newsletter are two separate screens now.</strong> News &amp; Events is this one. The newsletter lives under <em>Communication</em> in the sidebar. The <code>/news</code> page on the website shows both, with the church calendar embedded underneath — so anyone asking "what's happening" has one page to look at. <code>/calendar</code> still works as its own page for anyone who has bookmarked it or printed it on a flyer.</p>
     <p>To add a photo <em>inside</em> the body text: drag and drop an image file into the editor, or copy-paste one — it uploads to Cloudflare automatically. The card thumbnail field (above the editor) still requires a pasted URL.</p>
 
     <span class="toc-anchor" id="newsletter"></span>
@@ -421,7 +431,7 @@ li{margin-bottom:6px;}
 
     <span class="toc-anchor" id="ministries-tab"></span>
     <h3>Ministries tab</h3>
-    <p><span class="badge badge--sage">Live</span> Manage the content of ministry landing pages — Music, Stephen Ministry, Food Pantry, Urban Beekeepers, and Christmas Market. <strong>Edit page →</strong> opens the drag-and-drop page editor (see <a href="#ministry-editor">The ministry page editor</a> below), where you arrange the page yourself. <em>Banner &amp; settings</em> keeps the page banner photo and a few older options. You can update the page description, button text and links, and photos without touching any code. Changes appear on the site immediately. This tab also covers Youth &amp; Family sub-pages (<code>/youth</code>, <code>/sundayschool</code>, <code>/confirmation</code>, <code>/vbs</code>, <code>/egghunt</code>, <code>/family</code> — TinyMCE editors, what used to be a separate "Youth Pages" tab) and the Voters Assembly page (<code>/voters</code> — Zoom link + council document upload, what used to be a separate "Special Pages" tab).</p>
+    <p><span class="badge badge--sage">Live</span> Manage the content of ministry landing pages — Music, Stephen Ministry, Food Pantry, Urban Beekeepers, and Christmas Market. <strong>Edit page →</strong> opens the drag-and-drop page editor (see <a href="#ministry-editor">The ministry page editor</a> below), where you arrange the page yourself. <em>Details</em> keeps the page banner photo, the core value, whether it is listed in the menu, and a few older options. <strong>&ldquo;In menu&rdquo; and &ldquo;Status&rdquo; are two different things:</strong> unticking <em>List this ministry in the website menu</em> only takes it out of the header — the page stays live at its own address and every link to it keeps working. Unpublishing is what takes a page off the website. You can update the page description, button text and links, and photos without touching any code. Changes appear on the site immediately. This tab also covers Youth &amp; Family sub-pages (<code>/youth</code>, <code>/sundayschool</code>, <code>/confirmation</code>, <code>/vbs</code>, <code>/egghunt</code>, <code>/family</code> — TinyMCE editors, what used to be a separate "Youth Pages" tab) and the Voters Assembly page (<code>/voters</code> — Zoom link + council document upload, what used to be a separate "Special Pages" tab).</p>
 
     <span class="toc-anchor" id="ministry-editor"></span>
     <h3>The ministry page editor</h3>
@@ -451,6 +461,17 @@ li{margin-bottom:6px;}
 
     <p style="background:var(--mist);border-left:3px solid var(--mid);padding:12px 16px;border-radius:0 8px 8px 0;"><strong>Your page is waiting as a draft.</strong> Every ministry page — banner, headings, paragraphs, buttons, all of it — has already been loaded into the editor for you. Nothing on the live site has changed. Open a page, look it over, fix anything that reads oddly, and press <strong>Publish</strong> when you are happy. From that point the editor is where that page is edited.</p>
 
+    <span class="toc-anchor" id="partners-tab"></span>
+    <h3>Partners tab</h3>
+    <p><span class="badge badge--sage">Live</span> Timothy has four core values — Worship, Acceptance, Christian Education, and Outreach — and one partner ministry paired to each of them. This screen is where those four records live. They appear on the website at <code>/about/values</code>, on the About page, and in the Our Four Values panel on the Dashboard.</p>
+    <p>Each partner has a name, a short name for where space is tight, a sentence or two about what they do, their website, and a line for anyone named alongside them — that last one is how Pastor Rall and Mary Ann, missionaries to Papua New Guinea, are named on the Christian Friends of New Americans record.</p>
+    <p><strong>Exactly one partner per value.</strong> The system will not let you give two partners the same value; it will tell you the value is already taken rather than quietly replacing whoever was there. If a value has no partner, the list shows it as a gap and the website says so on the values page — better than looking like the church only has three values.</p>
+
+    <span class="toc-anchor" id="core-values"></span>
+    <h3>Tagging things with a core value</h3>
+    <p><span class="badge badge--sage">Live</span> Ministries, news posts and Bible classes can each be tagged with one of the four values. The tag shows as a small coloured chip in the list and you can filter by it. It is what the Dashboard's Our Four Values panel counts, and what fills in the ministries listed under each value on <code>/about/values</code>.</p>
+    <p>Leaving something untagged is fine — not everything belongs to one value, and the screen will not nag you into a wrong answer. It does point out untagged ministries, because a ministry with no value simply will not appear in that report.</p>
+
     <span class="toc-anchor" id="sermons-tab"></span>
     <h3>Sermons tab</h3>
     <p><span class="badge badge--sage">Live</span> Add and edit sermon entries. Each sermon has a title, date, preacher, series name, and YouTube link. Sermons appear on the <code>/sermons</code> page in reverse-chronological order.</p>
@@ -462,6 +483,7 @@ li{margin-bottom:6px;}
     <span class="toc-anchor" id="pages-tab"></span>
     <h3>Notices tab</h3>
     <p><span class="badge badge--sage">Live</span> Manage toggleable content blocks that appear on various pages — seasonal worship blocks (Advent, Christmas, Lent, Holy Week, Thanksgiving), the Community Concert announcement on the Music page, and other dynamic sections. Each block has a rich-text editor and a <strong>"Show this block on the website"</strong> checkbox. Uncheck to hide; the content stays saved for next time. See also: <a href="#seasonal-worship">Seasonal worship blocks</a> and <a href="#community-concerts">Community Concerts</a> above. (This tab was renamed from "Pages" — same feature, new name.)</p>
+    <p><strong>A notice is deliberately not part of the page.</strong> That is the whole point of it living here: switching a Sunday closing off takes one click and leaves the page itself untouched. The list flags any notice you have created but never written anything in, because an empty notice shows nothing on the site and it is easy to forget you started one.</p>
     <div class="callout callout--sky"><p><strong>Images in any rich-text editor:</strong> Drag and drop a photo into the editor, or copy-paste one. It uploads to Cloudflare automatically — no separate upload step needed. This works in Notices, News &amp; Events, Ministries, and Christian Ed body editors.</p></div>
 
     <span class="toc-anchor" id="links-tab"></span>
