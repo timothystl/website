@@ -5,7 +5,7 @@ import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 
-export const VERSION = 'v3.0.9'; // major: the admin overhaul — one pattern across every section, new IA, renamed permissions
+export const VERSION = 'v3.0.10'; // major: the admin overhaul — one pattern across every section, new IA, renamed permissions
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
