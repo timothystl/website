@@ -21,7 +21,7 @@ still needs converting before Task 6 is genuinely done.
 | --- | --- | --- | --- |
 | `/dashboard` | `tlc-admin-worker.js:2198` | `restyled` | `01-dashboard.html` |
 | `/edit/` | `tlc-admin-worker.js:4350` | `restyled` | `13-newsletter.html` · Same composer. |
-| `/filtered` | `admin/forms.js:212` | `restyled` | — · Postdates the handoff — no screen file. Task 7. |
+| `/filtered` | `admin/forms.js:212` | `pattern` | — · No screen file (postdates the handoff); built to Task 7's columns and filters. |
 | `/gym-rentals/api/group-rate` | `admin/gym.js:3232` | `restyled` | — |
 | `/gym-rentals/blocked` | `admin/gym.js:3026` | `restyled` | — |
 | `/gym-rentals/bookings` | `admin/gym.js:4021` | `restyled` | — |

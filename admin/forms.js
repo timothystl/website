@@ -12,6 +12,8 @@
 import { scoreSubmission, signFormToken, verifyFormToken } from './spam.js';
 import { html, sidebarShell, escapeHtml, formatDate } from './helpers.js';
 import { hasPermission, logAudit } from './auth.js';
+import { renderListSection, renderDrawer, primaryCell } from './ui.js';
+import { section as sectionCfg, columnsOf, filtersOf } from './sections.js';
 import { sendTransactionalEmail } from './email.js';
 
 export const OFFICE_EMAIL = 'dinger@timothystl.org';
@@ -209,7 +211,9 @@ export async function handleFilteredRoutes(request, env, path, method, currentUs
     return new Response('Access denied.', { status: 403 });
   }
 
-  if (path === '/filtered' && method === 'GET') {
+  // `/filtered/:id` renders the same list with that message's drawer open, so
+  // the drawer is a real address a warning row can link straight to.
+  if ((path === '/filtered' || /^\/filtered\/\d+$/.test(path)) && method === 'GET') {
     await pruneSubmissions(env);
     const url = new URL(request.url);
     const msg = url.searchParams.get('msg') || '';
@@ -225,35 +229,14 @@ export async function handleFilteredRoutes(request, env, path, method, currentUs
     const held = rows.results.filter(r => r.status === 'held');
     const released = rows.results.filter(r => r.status === 'released');
 
-    const card = (r) => {
-      let reasons = [];
-      try { reasons = JSON.parse(r.reasons || '[]'); } catch (_) {}
-      const kindLabel = r.kind === 'prayer' ? 'Prayer form' : r.kind === 'subscribe' ? 'Newsletter signup' : 'Contact form';
-      const isHeld = r.status === 'held';
-      return `
-<div class="card" style="margin-bottom:14px;">
-  <div style="display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;">
-    <div style="font-family:var(--serif);font-size:16px;color:var(--charcoal);">${r.name ? escapeHtml(r.name) : '(no name)'}</div>
-    <div style="font-size:13px;color:var(--gray);">${r.email ? escapeHtml(r.email) : '(no email)'}</div>
-    <div style="flex:1;"></div>
-    <span style="font-size:11px;padding:2px 8px;border-radius:20px;background:var(--linen);color:var(--gray);">${kindLabel}</span>
-    <span style="font-size:11px;padding:2px 8px;border-radius:20px;background:${isHeld ? '#f5e6e6' : '#e6f5ea'};color:${isHeld ? '#B85C3A' : '#2E7A4A'};">${isHeld ? 'held' : 'released'}</span>
-  </div>
-  <div style="font-size:12px;color:var(--gray);margin-top:4px;">${r.created_at ? formatDate(String(r.created_at).slice(0, 10)) : ''}${r.released_by ? ` · released by ${escapeHtml(r.released_by)}` : ''}</div>
-  <div style="white-space:pre-wrap;font-size:14px;color:var(--charcoal);margin:12px 0;padding:12px;background:var(--linen);border-radius:8px;max-height:260px;overflow:auto;">${escapeHtml(r.message || '')}</div>
-  <div style="font-size:12px;color:var(--gray);">Why it was held: ${reasons.length ? escapeHtml(reasons.join(' · ')) : 'no reason recorded'} <span style="opacity:.7;">(score ${r.score})</span></div>
-  ${isHeld ? `
-  <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
-    <form method="POST" action="/filtered/release" onsubmit="return confirm('Send this message through to the office inbox?');" style="display:inline;">
-      <input type="hidden" name="id" value="${r.id}">
-      <button type="submit" class="btn btn-primary btn-sm">This is real — send it to me</button>
-    </form>
-    <form method="POST" action="/filtered/delete" onsubmit="return confirm('Delete this message for good?');" style="display:inline;">
-      <input type="hidden" name="id" value="${r.id}">
-      <button type="submit" class="btn btn-sm" style="background:var(--mist);color:var(--steel);">Delete</button>
-    </form>
-  </div>` : ''}
-</div>`;
+    const KIND = { prayer: 'Prayer form', subscribe: 'Newsletter signup' };
+    const kindOf = (r) => KIND[r.kind] || 'Contact form';
+    const reasonsOf = (r) => { try { return JSON.parse(r.reasons || '[]'); } catch (_) { return []; } };
+    // The first line of the message is the nearest thing these have to a
+    // subject — there is no subject field on a contact form.
+    const subjectOf = (r) => {
+      const first = String(r.message || '').split('\n').find((l) => l.trim()) || '';
+      return first.trim().slice(0, 90) || '(no message)';
     };
 
     let turnstileKey = '';
@@ -268,42 +251,91 @@ export async function handleFilteredRoutes(request, env, path, method, currentUs
       : msg === 'release-failed' ? `<div class="alert alert-error">Could not send that message — check the Brevo key and try again.</div>`
       : '';
 
+    const listRows = rows.results.map((r) => {
+      const isHeld = r.status === 'held';
+      const reasons = reasonsOf(r);
+      return {
+        href: `/filtered/${r.id}`,
+        filter: isHeld ? 'held' : 'released',
+        search: `${r.name || ''} ${r.email || ''} ${r.message || ''}`.toLowerCase(),
+        cells: [
+          primaryCell(r.name || '(no name)', r.email || '(no email)'),
+          primaryCell(subjectOf(r), kindOf(r)),
+          `<span>${r.created_at ? escapeHtml(formatDate(String(r.created_at).slice(0, 10))) : ''}</span>`,
+          `<span title="score ${escapeHtml(String(r.score))}">${reasons.length ? escapeHtml(reasons.join(' · ')) : 'no reason recorded'}</span>`,
+        ],
+        actions: `<a class="tlc-edit" href="/filtered/${r.id}">Read</a>`,
+        // Held mail is invisible by design — the sender is told it went
+        // through. The row says what holding actually costs if it was wrong.
+        warn: isHeld && r.kind === 'prayer'
+          ? 'A prayer request. Nobody has seen this but you, and the sender believes it arrived.' : '',
+        warnCta: isHeld && r.kind === 'prayer' ? { label: 'Read it', href: `/filtered/${r.id}` } : null,
+      };
+    });
+
+    // The drawer is read-only: this is somebody else's message, not a record to
+    // edit. The one action it carries is releasing it to the inbox.
+    const openId = path.startsWith('/filtered/') ? parseInt(path.slice('/filtered/'.length), 10) : 0;
+    const open = openId ? rows.results.find((r) => r.id === openId) : null;
+    const drawer = open ? renderDrawer({
+      key: 'filtered',
+      title: open.name || '(no name)',
+      sub: `${kindOf(open)} · ${open.created_at ? formatDate(String(open.created_at).slice(0, 10)) : ''}`,
+      action: '/filtered/release',
+      cancelHref: '/filtered',
+      readOnly: true,
+      fields: [
+        { kind: 'static', label: 'From', value: open.email || '(no email)' },
+        { kind: 'static', label: 'Message',
+          html: `<div style="white-space:pre-wrap;max-height:320px;overflow:auto;">${escapeHtml(open.message || '')}</div>` },
+        { kind: 'static', label: 'Why it was held',
+          value: `${reasonsOf(open).join(' · ') || 'no reason recorded'} (score ${open.score})` },
+        ...(open.released_by ? [{ kind: 'static', label: 'Released by', value: open.released_by }] : []),
+        ...(open.status === 'held' ? [{ kind: 'html', html: `
+          <input type="hidden" name="id" value="${open.id}">
+          <div class="tlc-form-foot" style="margin-top:20px;">
+            <button type="submit" class="tlc-drawer-delete" formaction="/filtered/delete" formnovalidate
+              onclick="return confirm('Delete this message for good?')">Delete</button>
+            <button type="submit" class="tlc-btn-primary"
+              onclick="return confirm('Send this through to the office inbox?')">Release to inbox</button>
+          </div>` }] : []),
+      ],
+    }) : '';
+
     return html(`
 ${sidebarShell('filtered', currentUser)}
 <div class="tlc-wrap">
-  <div class="page-title">Filtered Mail</div>
-  <div class="page-sub">Messages the website held back as spam. Nothing here was emailed to you — release anything that turns out to be real.</div>
-  ${notice}
-  <div class="card" style="margin-bottom:20px;display:flex;gap:32px;flex-wrap:wrap;">
-    <div>
-      <div style="font-family:var(--serif);font-size:36px;color:${held.length ? '#B85C3A' : 'var(--steel)'};font-weight:700;">${held.length}</div>
-      <div style="font-size:13px;color:var(--gray);margin-top:4px;">Waiting for review</div>
+  ${notice ? `<div class="tlc-section" style="padding-bottom:0;">${notice}</div>` : ''}
+  ${renderListSection({
+    key: 'filtered',
+    title: sectionCfg('filtered').title,
+    purpose: sectionCfg('filtered').purpose,
+    search: sectionCfg('filtered').search,
+    filters: filtersOf('filtered'),
+    columns: columnsOf('filtered'),
+    rows: listRows,
+    noun: 'message',
+    empty: 'Nothing has been held. Everything the forms received went straight to the office.',
+    note: sectionCfg('filtered').note,
+  })}
+  ${drawer}
+  <div class="tlc-section" style="padding-top:0;">
+    <div class="card">
+      <div class="card-title">Extra protection (optional)</div>
+      <div style="font-size:13px;color:var(--gray);line-height:1.6;margin-bottom:14px;">
+        If spam still gets through, Cloudflare Turnstile adds a quiet "are you human?" check to the
+        contact and prayer forms — most visitors never see anything but a tick. Create a widget at
+        <a href="https://dash.cloudflare.com/?to=/:account/turnstile" target="_blank" style="color:var(--steel);">dash.cloudflare.com → Turnstile</a>
+        for <strong>timothystl.org</strong>, paste the <em>site key</em> below, and give the
+        <em>secret key</em> to whoever maintains the site (it is set on the worker as
+        <code>TURNSTILE_SECRET_KEY</code>). Until both halves are in place nothing changes on the site.
+      </div>
+      <form method="POST" action="/filtered/turnstile" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+        <input type="text" name="site_key" value="${escapeHtml(turnstileKey)}" placeholder="0x4AAAAAAA…" style="flex:1;min-width:260px;">
+        <button type="submit" class="btn btn-primary btn-sm">Save</button>
+      </form>
     </div>
-    <div>
-      <div style="font-family:var(--serif);font-size:36px;color:var(--sage);font-weight:700;">${deliveredRow?.n || 0}</div>
-      <div style="font-size:13px;color:var(--gray);margin-top:4px;">Delivered to you (last 30 days)</div>
-    </div>
-  </div>
-  ${held.length ? held.map(card).join('') : `<div class="card" style="text-align:center;padding:32px;color:var(--gray);font-size:14px;">Nothing held right now. 🎉</div>`}
-  ${released.length ? `<div class="page-title" style="font-size:18px;margin:28px 0 12px;">Released</div>${released.map(card).join('')}` : ''}
-  <div class="card" style="margin-top:28px;">
-    <div class="card-title">Extra protection (optional)</div>
-    <div style="font-size:13px;color:var(--gray);line-height:1.6;margin-bottom:14px;">
-      If spam still gets through, Cloudflare Turnstile adds a quiet "are you human?" check to the
-      contact and prayer forms — most visitors never see anything but a tick. Create a widget at
-      <a href="https://dash.cloudflare.com/?to=/:account/turnstile" target="_blank" style="color:var(--steel);">dash.cloudflare.com → Turnstile</a>
-      for <strong>timothystl.org</strong>, paste the <em>site key</em> below, and give the
-      <em>secret key</em> to whoever maintains the site (it is set on the worker as
-      <code>TURNSTILE_SECRET_KEY</code>). Until both halves are in place nothing changes on the site.
-    </div>
-    <form method="POST" action="/filtered/turnstile" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-      <input type="text" name="site_key" value="${escapeHtml(turnstileKey)}" placeholder="0x4AAAAAAA…" class="form-input" style="flex:1;min-width:260px;">
-      <button type="submit" class="btn btn-primary btn-sm">Save</button>
-    </form>
-  </div>
-  <div style="font-size:12px;color:var(--gray);margin-top:24px;line-height:1.6;">
-    Held messages stay here until you release or delete them. Released ones are cleared after 90 days,
-    and the record of delivered messages after 30 — the email in your inbox is the copy that keeps.
+    <p class="tlc-note"><span class="tlc-note-mark">◆</span><span>Held messages stay here until you release or delete them. Released ones are cleared after 90 days, and the record of delivered messages after 30 — the email in your inbox is the copy that keeps. ${deliveredRow?.n || 0} delivered in the last 30 days.</span></p>
   </div>
 </div>`, 'Filtered Mail');
   }

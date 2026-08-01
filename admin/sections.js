@@ -93,6 +93,16 @@ export const SECTIONS = {
     columns: [['User', '1.8fr'], ['Access', '1.8fr'], ['Last login', '1.2fr'], ['Status', '1fr']],
     note: 'Presets are just shortcuts — the checkboxes are the truth, and they map one-to-one to the permission names in the code.'
   },
+  // Postdates the design handoff, so it has no screen file — but it sits
+  // between Newsletter and Subscribers in the Email group and looked like
+  // neither. Columns and filters are Task 7 of the fix list.
+  filtered: {
+    label: 'Filtered Mail', glyph: '⚑', title: 'Filtered mail',
+    purpose: 'Messages the website held back as spam. Nothing here was emailed to you — release anything that turns out to be real.',
+    search: 'Search held mail', filters: ['All', 'Held', 'Released'],
+    columns: [['From', '1.8fr'], ['Subject', '2.4fr'], ['Held', '1fr'], ['Why', '1.4fr']],
+    note: 'Nothing is ever rejected outright — a real prayer request must never be lost, so anything that scores past the threshold is held here rather than dropped.'
+  },
   subscribers: {
     label: 'Subscribers', glyph: '✉', title: 'Subscribers', purpose: 'People signed up for the weekly email, whether they joined on the website or were added by the office.',
     action: 'Import CSV', search: 'Search by email or name', filters: ['All', 'Website', 'Added by office', 'Bounced'],
