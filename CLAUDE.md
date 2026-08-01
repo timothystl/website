@@ -494,6 +494,26 @@ Menu screen persists to `pages`. It also gives Word of Life's site as
 `wordoflifestl.org`; the real one, already linked from `/wol`, is
 `wordoflifeschool.net`, and that is what is seeded.
 
+#### The handoff's own open questions (§8), as answered
+
+Andrew answered these on 2026-08-01. They gate later phases, so they are
+recorded here rather than left in the handoff.
+
+1. **Pay rates** — church staff rates are entered by hand and saved; MDO pay
+   comes from the MDO app. See "Where a pay rate comes from" under Payroll &
+   Supabase below. **No code change needed — the current design already does
+   this.**
+2. **A second `newsletter_approve` holder** — Andrew is creating the account.
+   Phase 5's two-person send depends on it, and the permission key is
+   unchanged by the v3.0.0 rename, so the account can be made from the Users
+   tab today. Until a second person holds it, the approval step has only one
+   possible approver and is effectively a formality.
+3. **Gym Rentals layout** (calendar-first vs queue-first) — deferred to
+   Phase 7, not yet answered.
+4. **Dashboard layouts** — answered by shipping: both, behind a toggle.
+5. **CFNA / Concordia newsletter blocks** — still open, and it only matters
+   once Phase 5 starts.
+
 #### Tests
 
 `node admin/ui.test.mjs` (renderers, count scoping, tone clamping, toggles
@@ -647,6 +667,29 @@ which was visible in page source). Access is gated by the **`payroll_manage`**
 permission (separate from `settings_manage`, which used to be the tab's only
 gate) so payroll can be restricted to office staff without granting full
 settings access.
+
+#### Where a pay rate comes from (confirmed by Andrew, 2026-08-01)
+
+Two sources, and they must not be conflated. This answers open question §8.1 in
+`design_handoff_admin_overhaul/` — **the invented rates in that handoff were
+only ever in the prototype. There are no hardcoded rates anywhere in this
+repo, and none should ever be added.**
+
+| Who | Rate lives in | How it gets there |
+|---|---|---|
+| Church staff | `church_staff` (Supabase) — `pay_type`, `hourly_rate`, `base_salary_biweekly` | **Typed in by hand** in the Payroll tab's staff form and saved |
+| MDO staff | the MDO app's own `staff` table — `pay_type`, `hourly_rate`, `salary_biweekly` | **Pulled from myMDO**, read-only, alongside `staff_hours` |
+
+`loadMdoData()` in `admin/payroll.html` already reads MDO rates from the MDO
+app, and the staff form already saves church rates. **The current design is
+correct as built** — this note exists so a future phase does not "helpfully"
+add a rate field for MDO staff (which would create a second, silently
+diverging source of truth for what someone is paid) or try to import church
+rates from anywhere.
+
+When Phase 8 rebuilds the Payroll UI, it rebuilds the *screens* on the shared
+pattern. It does not move this data and does not change where a rate comes
+from.
 
 ### Access Control
 - Staff admin password: full access (all tabs) — permissions are granted per-account, per-tab via the Users tab's checkboxes (see `PERMISSIONS` in `admin/auth.js`)
