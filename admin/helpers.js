@@ -5,7 +5,7 @@ import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, TOGGLE_WORD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 
-export const VERSION = 'v3.9.1'; // minor: the last four per-screen gaps — Pages, gym calendar-first, the info card, starters
+export const VERSION = 'v3.10.0'; // minor: the NFC taps are counted — taps this month, the last per-screen gap
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {

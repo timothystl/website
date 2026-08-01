@@ -25,6 +25,7 @@ import { html, sidebarShell, loginPage, setupPage, forgotPasswordPage, resetPass
 import { renderListSection, renderDrawer, primaryCell, statusPill, valueChip, valueChips, panel, countLabel, pluralise,
          rowActions, toggleCell, panelList } from './admin/ui.js';
 import { SECTIONS, section as sectionCfg, columnsOf, filtersOf } from './admin/sections.js';
+import { dayKey, pruneBefore, countInMonth, tapCountLabel, everCounted, validTapId } from './admin/taps.js';
 import { VALUES, valueByKey, normalizeValue } from './admin/values.js';
 import { hashPassword, verifyPassword, createSession, getSession, deleteSession, sessionCookieHeader, clearSessionCookieHeader, logAudit, hasPermission, ALL_PERMISSIONS, PERMISSIONS, PERMISSION_PRESETS, migratePermissionKeys } from './admin/auth.js';
 import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHtml, cancelBrevoCampaign } from './admin/email.js';
@@ -332,7 +333,9 @@ async function pageData(env, reqKey) {
 // origin (the public site at timothystl.org POSTs to them). Every other
 // state-changing request must originate from admin.timothystl.org itself.
 const ADMIN_ORIGIN = 'https://admin.timothystl.org';
-const PUBLIC_CROSS_ORIGIN_POSTS = new Set(['/api/contact', '/api/prayer', '/api/subscribe']);
+// `/api/tap-hit` is called server-to-server by site-worker.js when it resolves
+// one of the /tapN short addresses, so it has no Origin to check against.
+const PUBLIC_CROSS_ORIGIN_POSTS = new Set(['/api/contact', '/api/prayer', '/api/subscribe', '/api/tap-hit']);
 
 // Real ChMS fund names — read-only, cross-Worker call — shown as suggestions in the
 // Giving tab's Funds card so staff can pick a real fund name instead of retyping one from
@@ -803,7 +806,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-08-01-7'; // bumped: pages.external_url (a page that links out)
+    const SCHEMA_VERSION = '2026-08-01-8'; // bumped: tap_hits (the NFC taps are counted now)
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -1047,6 +1050,18 @@ export default {
         destination TEXT NOT NULL,
         scans INTEGER NOT NULL DEFAULT 0,
         active INTEGER NOT NULL DEFAULT 1
+      )`).run();
+    } catch (_) {}
+    // One row per tap per day. `taps.scans` is the lifetime total and cannot
+    // answer "this month", which is the only question the screen asks; one row
+    // per hit would answer everything and grow without bound for a number
+    // nobody will slice that finely. See admin/taps.js.
+    try {
+      await env.DB.prepare(`CREATE TABLE IF NOT EXISTS tap_hits (
+        tap_id INTEGER NOT NULL,
+        day TEXT NOT NULL,
+        hits INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (tap_id, day)
       )`).run();
     } catch (_) {}
     // The tap a card belongs to. NULL means "shows on every tap", which is the
@@ -1952,6 +1967,40 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
       for (const r of (rows.results || [])) byPath.set(r.path, r);
       return new Response(JSON.stringify({ redirects: [...byPath.values()] }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
+      });
+    }
+
+    // ── PUBLIC: a tap was used ───────────────────────────────────────────────
+    // Recorded here because this is the only place that can write to D1 — the
+    // resolution itself happens in site-worker.js from a cached list, which is
+    // exactly why the count did not exist until now.
+    //
+    // ⚠ Best-effort by design. The site worker sends this with waitUntil and
+    // never waits for it, and this route always answers 200. A tap that fails
+    // to be counted is a missing number; a tap that fails to *resolve* is a
+    // physical tag on a pew rack that goes nowhere. The second one must never
+    // be able to happen because of the first, so nothing about counting is
+    // allowed to sit in the visitor's path or to report an error into it.
+    if (path === '/api/tap-hit' && method === 'POST') {
+      try {
+        const body = await request.json().catch(() => ({}));
+        const known = await env.DB.prepare('SELECT id FROM taps').all().catch(() => ({ results: [] }));
+        const id = validTapId(body && body.tap, (known.results || []).map((r) => r.id));
+        // Not a tag that exists. Dropped rather than creating a bucket for a
+        // tap nobody has — the ids are the printed addresses, not a sequence.
+        if (id) {
+          const now = new Date();
+          await env.DB.prepare(
+            'INSERT INTO tap_hits (tap_id, day, hits) VALUES (?, ?, 1) ' +
+            'ON CONFLICT(tap_id, day) DO UPDATE SET hits = hits + 1'
+          ).bind(id, dayKey(now)).run();
+          // The lifetime figure lives on the tap row, so "has this ever been
+          // counted?" needs no scan of the buckets.
+          await env.DB.prepare('UPDATE taps SET scans = COALESCE(scans, 0) + 1 WHERE id = ?').bind(id).run();
+        }
+      } catch (_) {}
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
       });
     }
 
@@ -6939,12 +6988,24 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
         if (msg === 'deleted') alertHtml = `<div class="alert alert-info">Card deleted.</div>`;
         if (msg === 'repointed') alertHtml = `<div class="alert alert-success">✓ Tap re-pointed. The physical tag is unchanged — it already only holds its short address.</div>`;
 
-        const [cardRows, tapRows] = await Promise.all([
+        const nowForTaps = new Date();
+        // Old buckets are cleared here rather than on a schedule: this runs
+        // whenever somebody opens the screen, which is often enough for a table
+        // gaining four rows a day, and it cannot quietly stop the way a cron
+        // trigger can. It is also never in a visitor's path.
+        await env.DB.prepare('DELETE FROM tap_hits WHERE day < ?')
+          .bind(pruneBefore(nowForTaps)).run().catch(() => {});
+        const [cardRows, tapRows, hitRows] = await Promise.all([
           env.DB.prepare('SELECT * FROM link_cards ORDER BY sort_order, id').all().catch(() => ({ results: [] })),
           env.DB.prepare('SELECT * FROM taps ORDER BY id').all().catch(() => ({ results: [] })),
+          // Only this month's buckets — the card asks one question and this is
+          // the whole answer to it.
+          env.DB.prepare('SELECT tap_id, day, hits FROM tap_hits WHERE day >= ?')
+            .bind(nowForTaps.toISOString().slice(0, 7) + '-01').all().catch(() => ({ results: [] })),
         ]);
         const cards = cardRows.results || [];
         const taps = tapRows.results || [];
+        const hits = hitRows.results || [];
         const which = parseInt(url.searchParams.get('tap') || '0', 10);
 
         // The whole mechanic of this screen: the tag holds nothing but /tapN.
@@ -6961,6 +7022,10 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
     <span class="tlc-tap-name">${escapeHtml(t.name)}</span>
     <span class="tlc-tap-where">${escapeHtml(t.placement || 'Placement not recorded')}</span>
     <span class="tlc-tap-dest">Lands on ${escapeHtml(String(t.destination || '').replace(/^https?:\/\//, ''))}</span>
+    <span class="tlc-tap-taps">${escapeHtml(tapCountLabel({
+      month: countInMonth(hits, t.id, nowForTaps),
+      everCounted: everCounted(t),
+    }))}</span>
     <span class="tlc-tap-count">${pluralise(count, 'card')}</span>
     <div class="tlc-tap-actions">
       <a class="tlc-tap-btn" href="/link-cards?tap=${on ? '' : t.id}">${on ? 'Show all cards' : 'Show its cards'}</a>

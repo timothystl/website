@@ -1438,6 +1438,64 @@ group('the NFC taps actually answer');
     'a hand-made redirect beats the tap');
 }
 
+group('the taps are counted');
+{
+  // \u26a0 Until now `taps.scans` was a column nothing ever wrote to. Resolution
+  // happens in site-worker.js from a cached list, which cannot reach D1 \u2014 so
+  // this endpoint is the only place a tap can be recorded, and it is why the
+  // count was a real piece of work rather than a display change.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const hit = (tap) => worker.fetch(new Request('https://admin.timothystl.org/api/tap-hit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tap }),
+  }), env, ctx);
+
+  // No Origin at all: this is called server-to-server by the site worker, so it
+  // has to be on the cross-origin allowlist or the CSRF gate blocks every tap.
+  const first = await hit(1);
+  eq(first.status, 200, 'a tap is recorded without an Origin header');
+
+  await hit(1);
+  await hit(2);
+  const day = new Date().toISOString().slice(0, 10);
+  eq(db.prepare('SELECT hits FROM tap_hits WHERE tap_id=1 AND day=?').get(day).hits, 2,
+    'two taps on one tag on one day are one row counting two');
+  eq(db.prepare('SELECT hits FROM tap_hits WHERE tap_id=2 AND day=?').get(day).hits, 1,
+    'a different tag is a different row');
+  eq(db.prepare('SELECT scans FROM taps WHERE id=1').get().scans, 2,
+    'and the lifetime total on the tap row follows');
+
+  // The ids are the printed addresses, not a sequence to extend.
+  const bogus = await hit(97);
+  eq(bogus.status, 200, 'a tap id that does not exist still answers 200');
+  eq(db.prepare('SELECT COUNT(*) n FROM tap_hits WHERE tap_id=97').get().n, 0,
+    'but records nothing \u2014 there is no tag 97');
+
+  // \u26a0 Nothing about counting may reach the visitor. The site worker sends this
+  // with waitUntil and never waits; this route must never answer with an error
+  // that could be mistaken for the tap itself failing.
+  const junk = await worker.fetch(new Request('https://admin.timothystl.org/api/tap-hit', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: 'not json at all',
+  }), env, ctx);
+  eq(junk.status, 200, 'a malformed body is swallowed rather than reported');
+
+  // The screen. A tap that has been counted shows its month; one that never has
+  // says so rather than showing a zero somebody would read as "tags broken".
+  db.prepare("INSERT INTO tap_hits (tap_id,day,hits) VALUES (1,'2020-01-01',999)").run();
+  const screen = await (await call(env, '/link-cards', { cookie })).text();
+  has(screen, '2 taps this month', 'the card shows the month\u2019s figure');
+  has(screen, 'Not counted yet', 'and a tap nothing has recorded says exactly that');
+  ok(!/>0 taps this month/.test(screen), 'never a bare zero on an uncounted tag');
+  ok(!screen.includes('1001 taps'), 'an old bucket is not counted into this month');
+
+  // Opening the screen is what clears old buckets \u2014 often enough for a table
+  // gaining four rows a day, and it cannot quietly stop the way a cron can.
+  eq(db.prepare("SELECT COUNT(*) n FROM tap_hits WHERE day='2020-01-01'").get().n, 0,
+    'buckets past the retention window are pruned when somebody looks');
+}
+
 group('the July review\u2019s open security items');
 {
   const { db, env } = await boot();

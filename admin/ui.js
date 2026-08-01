@@ -639,6 +639,11 @@ export const ADMIN_UI_CSS = `
 .tlc-tap-name{font:600 13.5px var(--tlc-sans);color:var(--tlc-ink);}
 .tlc-tap-where{font-size:11.5px;color:var(--tlc-muted);text-wrap:pretty;}
 .tlc-tap-dest{font-size:11.5px;color:var(--tlc-blue);overflow-wrap:anywhere;}
+/* How much the tag is actually being used — the reason to keep it on the wall,
+   or the reason to move it. Set in the ink the rest of the card's facts use,
+   with the figure itself weighted, so it reads as information rather than as a
+   status somebody has to act on. */
+.tlc-tap-taps{font:600 12px var(--tlc-sans);color:var(--tlc-body);}
 .tlc-tap-count{font-size:11.5px;color:var(--tlc-muted);}
 .tlc-tap-actions{display:flex;gap:8px;margin-top:7px;flex-wrap:wrap;}
 .tlc-tap-btn{font:600 11.5px var(--tlc-sans);color:var(--tlc-navy);background:#fff;border:1px solid var(--tlc-edge);border-radius:7px;padding:6px 10px;text-decoration:none;}

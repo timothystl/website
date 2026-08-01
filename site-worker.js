@@ -110,6 +110,46 @@ async function getRedirects() {
   return redirectCache || [];
 }
 
+// ── NFC TAPS ────────────────────────────────────────────────────────────────
+// A tap resolves here, from the cached redirect list, which is why nothing has
+// ever counted one: this Worker cannot write to D1. So it tells the admin
+// Worker instead, and does not wait for the answer.
+//
+// ⚠ The order matters and is not an accident. The 302 is returned first and the
+// beacon rides on waitUntil, so the visitor never waits for the count and a
+// broken or unreachable admin cannot stop a physical tag from working. A tag is
+// stuck to a pew rack; the number is a nice-to-have. If those two ever come
+// into conflict, the tag wins.
+//
+// The filter is about machines, not malice — a crawler walking /tap1…/tap4 or a
+// browser prefetching a link is what would actually make this number a lie.
+// Kept in step with countsAsTap() in admin/taps.js, which is the tested copy.
+const TAP_BOT_UA = /bot|crawl|spider|slurp|facebookexternalhit|whatsapp|telegram|discord|preview|monitor|curl|wget|python-requests|headless|lighthouse|pingdom|uptime/i;
+
+function countsAsTap(request) {
+  const h = request.headers;
+  const purpose = ((h.get('Sec-Purpose') || '') + ' ' + (h.get('Purpose') || '') + ' ' + (h.get('X-Moz') || '')).toLowerCase();
+  if (/prefetch|prerender/.test(purpose)) return false;
+  const ua = h.get('User-Agent') || '';
+  if (!ua || TAP_BOT_UA.test(ua)) return false;
+  return true;
+}
+
+function recordTap(request, ctx, path) {
+  const m = /^tap(\d+)$/.exec(path);
+  if (!m) return;
+  if (!countsAsTap(request)) return;
+  const beacon = fetch('https://admin.timothystl.org/api/tap-hit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tap: Number(m[1]) }),
+  }).catch(() => {});
+  // waitUntil keeps the request alive long enough for the POST to land without
+  // the visitor waiting on it. Without ctx (a test harness, an older runtime)
+  // the fetch is simply fire-and-forget — a missed count, never a missed tap.
+  if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(beacon);
+}
+
 async function getSettingUrl(key, fallback) {
   const now = Date.now();
   if (settingsCache[key] && now - (settingsCacheTime[key] || 0) < CACHE_TTL) {
@@ -164,7 +204,7 @@ async function getGiveFunds() {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     try {
     const url = new URL(request.url);
 
@@ -224,10 +264,14 @@ export default {
         });
       }
 
-      // Custom redirects from DB
+      // Custom redirects from DB — which is also where the four NFC taps
+      // resolve, since /api/redirects merges them in.
       const redirects = await getRedirects();
       const match = redirects.find(r => r.path === path);
       if (match && isSafeRedirectUrl(match.url)) {
+        // Counted only once the tap has resolved to somewhere real, so a
+        // mistyped /tap9 or a switched-off tag never shows up as a tap.
+        recordTap(request, ctx, path);
         return new Response(null, {
           status: 302,
           headers: { 'Location': match.url }
