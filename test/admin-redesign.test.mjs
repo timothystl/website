@@ -411,5 +411,105 @@ group('the Redirects screen shows every kind');
   has(body, 'last year’s bulletins', 'the section note explains why automatics matter');
 }
 
+
+// ── phase 4: the menu ────────────────────────────────────────────────────────
+group('the menu is seeded from the nav as it stands');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  const header = db.prepare("SELECT * FROM menu_items WHERE menu='header' ORDER BY sort_order").all();
+  const footer = db.prepare("SELECT * FROM menu_items WHERE menu='footer' ORDER BY sort_order").all();
+  ok(header.length >= 8, 'the header is seeded');
+  ok(footer.length >= 8, 'and so is the footer');
+  eq(header.filter((i) => i.style === 'button').length, 1, 'exactly one button in the header');
+  eq(header.find((i) => i.style === 'button').page_id, 'give', 'and it is Give');
+
+  // The case `pages` could not express, and the reason this is its own table.
+  const gives = db.prepare("SELECT menu FROM menu_items WHERE page_id='give'").all().map((r) => r.menu);
+  ok(gives.includes('header') && gives.includes('footer'), 'one page appears in both menus');
+
+  // External items have no page row at all.
+  const ext = db.prepare("SELECT * FROM menu_items WHERE kind='external'").all();
+  ok(ext.length >= 3, 'the outside sites are menu items with no page behind them');
+  ok(ext.some((i) => i.target.includes('wordoflifeschool.net')), 'including Word of Life');
+
+  const body = await (await call(env, '/menu', { cookie })).text();
+  eq((await call(env, '/menu', { cookie })).status, 200, 'the Menu screen renders');
+  has(body, 'Live preview', 'with a live preview of the real bar');
+  has(body, 'Word of Life School', 'listing the outside links');
+  has(body, 'Live pages not in the menu', 'and the orphan panel');
+  has(body, 'Drag a row by its', 'explaining how to reorder');
+}
+
+group('the menu never records a page address');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  // Rename a page's address directly; every menu item pointing at it must move
+  // with it, because none of them wrote the address down.
+  db.prepare("UPDATE pages SET slug='/plan-a-visit' WHERE id='about'").run();
+  const api = await (await call(env, '/api/pages')).json();
+  const about = api.menu.header.find((i) => i.label === 'About');
+  eq(about && about.href, '/plan-a-visit', 'renaming a page moves its menu item with it');
+}
+
+group('broken menu items are flagged, never dropped');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  db.prepare("UPDATE pages SET status='draft' WHERE id='worship'").run();
+
+  const body = await (await call(env, '/menu', { cookie })).text();
+  has(body, 'is a draft', 'the admin flags an item pointing at a draft page');
+  has(body, 'Worship', 'and still shows it, so a human can decide');
+
+  // The site must not render it.
+  const api = await (await call(env, '/api/pages')).json();
+  ok(!api.menu.header.some((i) => i.label === 'Worship'), 'but the site leaves it out entirely');
+}
+
+group('removing a menu item leaves the page alone');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const item = db.prepare("SELECT id FROM menu_items WHERE menu='header' AND page_id='sermons'").get();
+  const res = await worker.fetch(new Request(`https://admin.timothystl.org/menu/remove/${item.id}`, {
+    method: 'POST', headers: { cookie, origin: 'https://admin.timothystl.org' },
+  }), env, ctx);
+  eq(res.status, 302, 'removing redirects');
+  eq(db.prepare('SELECT COUNT(*) AS n FROM menu_items WHERE id = ?').get(item.id).n, 0, 'the item is gone');
+  eq(db.prepare("SELECT status FROM pages WHERE id='sermons'").get().status, 'published', 'the page is untouched and still live');
+
+  const body = await (await call(env, '/menu', { cookie })).text();
+  has(body, 'Live pages not in the menu', 'and it reappears in the orphan panel');
+}
+
+group('reordering renumbers from scratch');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const ids = db.prepare("SELECT id FROM menu_items WHERE menu='header' ORDER BY sort_order").all().map((r) => r.id);
+  const reversed = ids.slice().reverse().map((id) => ({ id, menu: 'header', depth: 0 }));
+  const res = await worker.fetch(new Request('https://admin.timothystl.org/menu/reorder', {
+    method: 'POST',
+    headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
+    body: 'order=' + encodeURIComponent(JSON.stringify(reversed)),
+  }), env, ctx);
+  eq(res.status, 302, 'reordering redirects');
+  const after = db.prepare("SELECT id FROM menu_items WHERE menu='header' ORDER BY sort_order").all().map((r) => r.id);
+  eq(after.join(','), ids.slice().reverse().join(','), 'the new order is stored');
+  // No two items may claim one position.
+  const orders = db.prepare("SELECT sort_order FROM menu_items WHERE menu='header'").all().map((r) => r.sort_order);
+  eq(new Set(orders).size, orders.length, 'and every position is unique');
+}
+
+group('menu access control');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ['notices_edit'], 'office');
+  eq((await call(env, '/menu', { cookie })).status, 403, 'the menu needs pages_edit');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

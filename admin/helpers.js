@@ -3,7 +3,7 @@
 
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, hasPermission } from './auth.js';
-import { ADMIN_UI_CSS, LIST_SECTION_JS } from './ui.js';
+import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS } from './ui.js';
 
 export const VERSION = 'v3.0.4'; // major: the admin overhaul — one pattern across every section, new IA, renamed permissions
 
@@ -176,6 +176,7 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
 .filter-pill{font-family:var(--sans);font-size:12px;font-weight:700;color:var(--gray);background:var(--linen);border:1px solid var(--border);border-radius:999px;padding:6px 14px;cursor:pointer;}
 .filter-pill.active{background:var(--steel);color:#fff;border-color:var(--steel);}
 ${ADMIN_UI_CSS}
+${MENU_CSS}
 /* ── SIDEBAR, REDESIGNED ───────────────────────────────────────
    Three groups, the page-producing sections nested under Pages, a gold inset
    bar plus a gold dot on the active item, and badges that count only things a
@@ -273,6 +274,7 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}) {
   const websiteItems = [
     canPages ? navItem('/pages', 'Pages', activeTab === 'pages', badge(b.pages, canPages, `${b.pages} page(s) with unpublished edits`)) : '',
     pagesChildren,
+    hp('pages_edit')      ? navItem('/menu', 'Menu', activeTab === 'menu') : '',
     hp('notices_edit')    ? navItem('/notices', 'Notices', activeTab === 'notices') : '',
     hp('links_edit')      ? navItem('/link-cards', 'Links', activeTab === 'link-cards') : '',
     hp('settings_manage') ? navItem('/settings', 'Redirects', activeTab === 'settings') : '',

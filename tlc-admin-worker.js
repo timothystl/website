@@ -5,7 +5,7 @@
 // Last modified: 2026-03-27
 
 
-import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes } from './admin/db.js';
+import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes } from './admin/db.js';
 
 // Static pages that can carry self-serve notices (matches the SPA's page ids in public/index.html)
 const STATIC_PAGES = [
@@ -37,6 +37,8 @@ import { PAGE_SEEDS } from './admin/page-seeds.js';
 import { SITE_PAGES } from './admin/site-pages.js';
 import { orderPages, filterPages, pageStatus, slugify, uniqueSlug, pageRename,
          withShortLinks, shortLinkFor, shortLinkRoutes } from './admin/pages.js';
+import { MENUS, menuTree, publicMenu, orphanPages, menuWarnings, renumber,
+         normalizeMenu, normalizeKind, normalizeStyle, normalizeDepth } from './admin/menu.js';
 import { screenSubmission, formConfig, forwardToChms, officeEmailHtml, officeSubject,
          handleFilteredRoutes, heldCount, OFFICE_EMAIL } from './admin/forms.js';
 
@@ -783,7 +785,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-08-01-1'; // bumped: short links on pages (phase 3)
+    const SCHEMA_VERSION = '2026-08-01-2'; // bumped: menu_items — the navigation as its own table (phase 4)
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -1266,6 +1268,19 @@ export default {
     // last segment of the address so it cannot drift when a page is renamed.
     // This column is only ever set by hand, and only to resolve a clash.
     try { await env.DB.prepare('ALTER TABLE pages ADD COLUMN short_link TEXT').run(); } catch (_) {}
+    // The navigation (phase 4). One row per appearance in a menu — see the note
+    // at the top of admin/menu.js for why this is a join table rather than more
+    // columns on `pages`. Seeded from the nav as it stands today, with explicit
+    // ids and INSERT OR IGNORE, so rearranging it in the admin survives deploys.
+    try { await env.DB.prepare(DB_INIT_MENU_ITEMS).run(); } catch (_) {}
+    try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_menu_items_menu ON menu_items(menu, sort_order)').run(); } catch (_) {}
+    for (const m of MENU_SEED) {
+      try {
+        await env.DB.prepare(
+          'INSERT OR IGNORE INTO menu_items (id, menu, label, kind, page_id, target, style, depth, sort_order, visible) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)'
+        ).bind(m.id, m.menu, m.label || null, m.kind, m.page_id || null, m.target || null, m.style || 'link', m.depth || 0, m.sort_order).run();
+      } catch (_) {}
+    }
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_news_items_value ON news_items(value)').run(); } catch (_) {}
     for (const p of PARTNER_SEED) {
       try {
@@ -1361,11 +1376,23 @@ export default {
         rendered[r.id] = fixUrl(renderPage(blocks, { slug: r.id, template: r.template, data, children, withCss: false }));
       }
       const redirects = await env.DB.prepare('SELECT from_slug, to_slug FROM page_redirects').all().catch(() => ({ results: [] }));
+      // The navigation, resolved server-side so the site never has to work out
+      // what a menu item points at. Broken and switched-off items are already
+      // filtered out by publicMenu() — the admin shows them flagged, the site
+      // must not show them at all.
+      const menuRows = await env.DB.prepare('SELECT * FROM menu_items ORDER BY menu, sort_order, id').all().catch(() => ({ results: [] }));
+      const menuPages = new Map(list.map((p) => [p.id, p]));
+      const strip = (i) => ({ label: i.label, href: i.href, style: i.style, kind: i.kind,
+        children: (i.children || []).map((c) => ({ label: c.label, href: c.href, kind: c.kind })) });
       return new Response(JSON.stringify({
         // The church details, so the footer reads the same record the map
         // block and the sidebar do. Staff change a phone number once.
         details: { settings: data.settings, services: data.services },
         pages: list.map(publicPage),
+        menu: {
+          header: publicMenu(menuRows.results || [], menuPages, 'header').map(strip),
+          footer: publicMenu(menuRows.results || [], menuPages, 'footer').map(strip),
+        },
         rendered,
         css: Object.keys(rendered).length ? BLOCK_CSS : '',
         // Two kinds of alternate address, deliberately merged into one map so
@@ -2274,6 +2301,285 @@ ${sidebarShell('dashboard', currentUser, '', badges)}
 </div>`, 'Dashboard — TLC Admin');
     }
 
+    // ── MENU ───────────────────────────────────────────────────
+    // The second genuinely bespoke screen: a tree with drag-and-drop and a live
+    // preview of the real header. Gated on pages_edit — whoever owns the site's
+    // structure owns its navigation.
+    if (path === '/menu' || path.startsWith('/menu/')) {
+      if (!hasPermission(currentUser, 'pages_edit')) {
+        return new Response('Access denied.', { status: 403 });
+      }
+
+      const loadMenu = async () => {
+        const [items, pages] = await Promise.all([
+          env.DB.prepare('SELECT * FROM menu_items ORDER BY menu, sort_order, id').all().catch(() => ({ results: [] })),
+          env.DB.prepare('SELECT id, title, menu_label, slug, status FROM pages ORDER BY title').all().catch(() => ({ results: [] })),
+        ]);
+        const list = items.results || [];
+        const pageRows = pages.results || [];
+        return { list, pageRows, byId: new Map(pageRows.map((p) => [p.id, p])) };
+      };
+
+      if (path === '/menu' && method === 'GET') {
+        const { list, pageRows, byId } = await loadMenu();
+        const msg = url.searchParams.get('msg');
+        const alertHtml = msg === 'saved' ? `<div class="alert alert-success">✓ Menu saved.</div>`
+          : msg === 'added' ? `<div class="alert alert-success">✓ Added to the menu.</div>`
+          : msg === 'removed' ? `<div class="alert alert-info">Removed from the menu. The page itself is untouched and still live.</div>` : '';
+
+        const header = menuTree(list, byId, 'header');
+        const footer = menuTree(list, byId, 'footer');
+        const orphans = orphanPages(pageRows, list);
+        const warnings = menuWarnings(list, byId);
+
+        // The preview is rendered from the real items, so it cannot flatter the
+        // menu it describes. Top level only — that is what the bar shows.
+        const previewHtml = header.filter((i) => i.visible && !i.broken).map((i) =>
+          `<span class="tlc-preview-item${i.style === 'button' ? ' tlc-preview-item--button' : ''}">${escapeHtml(i.label)}</span>`
+        ).join('');
+
+        const itemHtml = (i) => `<div class="tlc-mi${i.depth ? ' is-child' : ''}${i.broken ? ' tlc-mi-broken' : ''}" draggable="true" data-id="${i.id}" data-depth="${i.depth}">
+    <span class="tlc-mi-grip" aria-hidden="true">⠿</span>
+    <span class="tlc-mi-body">
+      <span class="tlc-mi-label">${escapeHtml(i.label)}</span>
+      <span class="tlc-mi-sub">${i.href ? escapeHtml(i.href) : 'No destination'}</span>
+    </span>
+    <span class="tlc-mi-kind">${escapeHtml(i.kind === 'page' ? 'Page' : i.kind === 'external' ? 'Link' : 'Short')}</span>
+    ${i.style === 'button' ? '<span class="tlc-mi-kind" style="background:#FBF1DC;color:#7A5B18;">Button</span>' : ''}
+    <form method="POST" action="/menu/remove/${i.id}" style="margin:0;" onsubmit="return confirm('Take this out of the menu? The page stays live at its address.')">
+      <button type="submit" class="tlc-mi-x" title="Remove from the menu" aria-label="Remove ${escapeHtml(i.label)} from the menu">✕</button>
+    </form>
+  </div>${i.broken ? `<div class="tlc-mi-warn">▲ ${escapeHtml(i.brokenReason)}</div>` : ''}`;
+
+        const listHtml = (tree, menu) => tree.length === 0
+          ? `<div class="tlc-menu-empty">Nothing in the ${menu} yet — add a page from the panel on the right.</div>`
+          : tree.map((i) => itemHtml(i) + i.children.map(itemHtml).join('')).join('');
+
+        const orphanHtml = orphans.length === 0
+          ? `<div class="tlc-menu-empty">Every live page is in a menu.</div>`
+          : orphans.map((p) => `<div class="tlc-orphan">
+    <span class="tlc-orphan-body">
+      <span class="tlc-mi-label">${escapeHtml(p.menu_label || p.title)}</span>
+      <span class="tlc-mi-sub">${escapeHtml(p.slug)} · live, never added to a menu</span>
+    </span>
+    <form method="POST" action="/menu/add" style="margin:0;display:flex;gap:6px;">
+      <input type="hidden" name="page_id" value="${escapeHtml(p.id)}">
+      <button type="submit" name="menu" value="header" class="tlc-orphan-btn">Header</button>
+      <button type="submit" name="menu" value="footer" class="tlc-orphan-btn">Footer</button>
+    </form>
+  </div>`).join('');
+
+        return html(`
+${sidebarShell('menu', currentUser, `<a href="https://timothystl.org" target="_blank">View site →</a>`, await badgeCounts(env, currentUser))}
+<div class="tlc-menu-wrap">
+  <div class="tlc-section-head" style="margin-bottom:14px;">
+    <div class="tlc-section-headings">
+      <h1 class="tlc-title">Menu</h1>
+      <p class="tlc-purpose">The order and shape of the header and footer. An item can point at a page, an outside site, or a short link — and the label in the bar can be shorter than the page name.</p>
+    </div>
+    <a class="tlc-action" href="/menu/new">+ Add item</a>
+  </div>
+  ${alertHtml}
+  ${warnings.length ? `<div class="alert alert-error" style="margin:0 0 14px;">${warnings.map(escapeHtml).join('<br>')}</div>` : ''}
+
+  <div class="tlc-preview">
+    <div class="tlc-preview-bar">
+      <span class="tlc-preview-brand"><span class="tlc-preview-mark">T</span>Timothy Lutheran</span>
+      ${previewHtml}
+    </div>
+    <div class="tlc-preview-note">Live preview · top level only</div>
+  </div>
+
+  <div class="tlc-menu-cols">
+    <div style="display:flex;flex-direction:column;gap:16px;">
+      ${panel('Header menu', `<div id="menu-header" data-menu="header">${listHtml(header, 'header')}</div>
+        <div class="tlc-menu-hint">Drag a row by its ⠿ handle to reorder it. Drop it <strong>onto another item’s name</strong> to nest it underneath. Two levels is the limit — a third is a menu nobody can use on a phone.</div>`,
+        { right: 'Drag to reorder · drop onto an item to nest', pad: false })}
+      ${panel('Footer menu', `<div id="menu-footer" data-menu="footer">${listHtml(footer, 'footer')}</div>
+        <div class="tlc-menu-hint">The footer is a flat list — no nesting.</div>`,
+        { right: 'Drag to reorder', pad: false })}
+    </div>
+    <div>
+      ${panel('Live pages not in the menu', orphanHtml + `<div class="tlc-menu-hint">Nothing here is broken. These pages are live and reachable by their address — they are simply not listed in a menu, which is right for a thank-you page or a one-off landing page.</div>`, { pad: false })}
+    </div>
+  </div>
+</div>
+<form id="menu-order-form" method="POST" action="/menu/reorder" style="display:none;">
+  <input type="hidden" name="order" id="menu-order-input">
+</form>
+<script>(function(){
+  // Reordering posts the whole resulting order rather than a diff: the server
+  // renumbers from scratch, so a dropped row can never leave the list in a
+  // state where two items claim the same position.
+  var dragged = null;
+  function rows(list){ return Array.prototype.slice.call(list.querySelectorAll('.tlc-mi')); }
+  function save(){
+    var out = [];
+    ['header','footer'].forEach(function(m){
+      var list = document.getElementById('menu-' + m);
+      if (!list) return;
+      rows(list).forEach(function(r){
+        out.push({ id: parseInt(r.dataset.id,10), menu: m, depth: parseInt(r.dataset.depth,10) || 0 });
+      });
+    });
+    document.getElementById('menu-order-input').value = JSON.stringify(out);
+    document.getElementById('menu-order-form').submit();
+  }
+  function wire(list){
+    list.addEventListener('dragstart', function(e){
+      var row = e.target.closest('.tlc-mi'); if (!row) return;
+      dragged = row; row.classList.add('is-drag');
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', row.dataset.id); } catch(_){}
+    });
+    list.addEventListener('dragend', function(){
+      if (dragged) dragged.classList.remove('is-drag');
+      rows(document).forEach(function(r){ r.classList.remove('is-over','is-nest'); });
+      dragged = null;
+    });
+    list.addEventListener('dragover', function(e){
+      if (!dragged) return;
+      e.preventDefault();
+      var row = e.target.closest('.tlc-mi');
+      rows(document).forEach(function(r){ r.classList.remove('is-over','is-nest'); });
+      if (!row || row === dragged) return;
+      // Dropping onto the NAME nests; dropping anywhere else on the row
+      // reorders. Nesting is header-only and never onto another child.
+      var onName = !!e.target.closest('.tlc-mi-label');
+      var canNest = list.dataset.menu === 'header' && onName && row.dataset.depth === '0';
+      row.classList.add(canNest ? 'is-nest' : 'is-over');
+    });
+    list.addEventListener('drop', function(e){
+      if (!dragged) return;
+      e.preventDefault();
+      var row = e.target.closest('.tlc-mi');
+      var onName = !!e.target.closest('.tlc-mi-label');
+      var canNest = list.dataset.menu === 'header' && onName && row && row.dataset.depth === '0';
+      if (row && row !== dragged) {
+        if (canNest) {
+          dragged.dataset.depth = '1';
+          row.parentNode.insertBefore(dragged, row.nextSibling);
+        } else {
+          dragged.dataset.depth = list.dataset.menu === 'header' ? dragged.dataset.depth : '0';
+          row.parentNode.insertBefore(dragged, row);
+        }
+      } else if (!row) {
+        list.appendChild(dragged);
+      }
+      save();
+    });
+  }
+  ['menu-header','menu-footer'].forEach(function(id){
+    var el = document.getElementById(id); if (el) wire(el);
+  });
+})();</script>`, 'Menu');
+      }
+
+      // ── Reorder (POST) ──
+      if (path === '/menu/reorder' && method === 'POST') {
+        const form = await request.formData();
+        let order = [];
+        try { order = JSON.parse(form.get('order') || '[]'); } catch (_) { order = []; }
+        for (const menu of MENUS) {
+          const inMenu = order.filter((o) => normalizeMenu(o.menu) === menu);
+          for (const row of renumber(inMenu, menu)) {
+            await env.DB.prepare('UPDATE menu_items SET menu = ?, sort_order = ?, depth = ? WHERE id = ?')
+              .bind(row.menu, row.sort_order, row.depth, row.id).run().catch(() => {});
+          }
+        }
+        await logAudit(env.DB, currentUser, 'update', 'menu', 'order', 'Menu order', null, { count: order.length });
+        return new Response('', { status: 302, headers: { Location: '/menu?msg=saved' } });
+      }
+
+      // ── Add a live page to a menu (POST) ──
+      if (path === '/menu/add' && method === 'POST') {
+        const form = await request.formData();
+        const pageId = String(form.get('page_id') || '');
+        const menu = normalizeMenu(form.get('menu'));
+        const page = await env.DB.prepare('SELECT id, title, menu_label FROM pages WHERE id = ?').bind(pageId).first();
+        if (!page) return new Response('', { status: 302, headers: { Location: '/menu' } });
+        const max = await env.DB.prepare('SELECT COALESCE(MAX(sort_order),0) AS m FROM menu_items WHERE menu = ?').bind(menu).first();
+        await env.DB.prepare(
+          "INSERT INTO menu_items (menu, label, kind, page_id, style, depth, sort_order, visible) VALUES (?, ?, 'page', ?, 'link', 0, ?, 1)"
+        ).bind(menu, page.menu_label || page.title, pageId, ((max && max.m) || 0) + 10).run();
+        await logAudit(env.DB, currentUser, 'create', 'menu_item', pageId, page.title, null, { menu });
+        return new Response('', { status: 302, headers: { Location: '/menu?msg=added' } });
+      }
+
+      // ── Remove an item (POST) ──
+      // The page is untouched — it stays live at its address and reappears in
+      // the orphan panel. Nothing is ever lost by tidying the menu.
+      if (path.startsWith('/menu/remove/') && method === 'POST') {
+        const id = path.slice('/menu/remove/'.length);
+        const before = await env.DB.prepare('SELECT * FROM menu_items WHERE id = ?').bind(id).first();
+        await env.DB.prepare('DELETE FROM menu_items WHERE id = ?').bind(id).run();
+        if (before) await logAudit(env.DB, currentUser, 'delete', 'menu_item', String(id), before.label || '', before, null);
+        return new Response('', { status: 302, headers: { Location: '/menu?msg=removed' } });
+      }
+
+      // ── New item (GET form) ──
+      if (path === '/menu/new' && method === 'GET') {
+        const { pageRows } = await loadMenu();
+        return html(`
+${sidebarShell('menu', currentUser, `<a href="/menu">← Menu</a>`, await badgeCounts(env, currentUser))}
+<div class="wrap">
+  <div class="page-title">Add a menu item</div>
+  <div class="page-sub">A menu item can point at one of your pages, at an outside site, or at a short link.</div>
+  <div class="card">
+    <form method="POST" action="/menu/create">
+      <div class="form-group">
+        <label>Which menu</label>
+        <select name="menu"><option value="header">Header</option><option value="footer">Footer</option></select>
+      </div>
+      <div class="form-group">
+        <label>Label <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— what appears in the bar; can be shorter than the page name</span></label>
+        <input type="text" name="label" placeholder="e.g. Visit">
+      </div>
+      <div class="form-group">
+        <label>Point at a page</label>
+        <select name="page_id">
+          <option value="">— Not a page —</option>
+          ${pageRows.filter((p) => p.status === 'published').map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.menu_label || p.title)} (${escapeHtml(p.slug)})</option>`).join('')}
+        </select>
+        <div style="font-size:12px;color:var(--gray);margin-top:4px;">The address is always read from the page, so renaming it moves this item too. Leave blank if you are linking somewhere else.</div>
+      </div>
+      <div class="form-group">
+        <label>…or a web address</label>
+        <input type="text" name="target" placeholder="https://wordoflifeschool.net, or /zoom">
+      </div>
+      <div class="form-group">
+        <div class="checkbox-row">
+          <input type="checkbox" name="style" value="button" id="mi-btn">
+          <span><label for="mi-btn" style="display:inline;text-transform:none;letter-spacing:0;font-size:14px;font-weight:600;">Show as a button</label></span>
+        </div>
+        <div style="font-size:12px;color:var(--gray);margin-top:4px;">One item should be a button — Give is it. A second stops the first standing out.</div>
+      </div>
+      <div class="btn-row" style="margin-top:20px;">
+        <button type="submit" class="btn btn-primary">Add to menu</button>
+        <a href="/menu" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>`, 'Add a menu item');
+      }
+
+      if (path === '/menu/create' && method === 'POST') {
+        const form = await request.formData();
+        const menu = normalizeMenu(form.get('menu'));
+        const pageId = String(form.get('page_id') || '').trim();
+        const target = String(form.get('target') || '').trim();
+        const label = String(form.get('label') || '').trim();
+        if (!pageId && !target) return new Response('', { status: 302, headers: { Location: '/menu/new' } });
+        const kind = pageId ? 'page' : (target.startsWith('/') ? 'short' : 'external');
+        const style = normalizeStyle(form.get('style'));
+        const max = await env.DB.prepare('SELECT COALESCE(MAX(sort_order),0) AS m FROM menu_items WHERE menu = ?').bind(menu).first();
+        await env.DB.prepare(
+          'INSERT INTO menu_items (menu, label, kind, page_id, target, style, depth, sort_order, visible) VALUES (?, ?, ?, ?, ?, ?, 0, ?, 1)'
+        ).bind(menu, label || null, kind, pageId || null, pageId ? null : target, style, ((max && max.m) || 0) + 10).run();
+        await logAudit(env.DB, currentUser, 'create', 'menu_item', pageId || target, label, null, { menu, kind });
+        return new Response('', { status: 302, headers: { Location: '/menu?msg=added' } });
+      }
+    }
     // ── PARTNERS ───────────────────────────────────────────────
     // Four partner ministries, one per core value. The pairing is what the
     // dashboard's values report and the public /values page both read.

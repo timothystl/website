@@ -2504,7 +2504,7 @@ function loadSitePages() {
       if (!d || !Array.isArray(d.pages)) return null;
       sitePagesData = d;
       if (d.css && !document.getElementById('tlcb-css')) document.head.insertAdjacentHTML('beforeend', d.css);
-      buildNav(d.pages);
+      buildNav(d.pages, d.menu);
       fillFooter(d.details);
       return d;
     })
@@ -2535,12 +2535,57 @@ function fillFooter(details) {
 // The navigation is generated from the pages table, so adding a page and
 // ticking "Show in menu" is all it takes. The markup below is the fallback: if
 // this never runs, the hardcoded nav that shipped with the page stays put.
-function buildNav(pages) {
-  var top = pages.filter(function (p) { return p.in_menu && !p.parent; });
+function buildNav(pages, menu) {
+  var esc = function (s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); };
+  // A menu item's href is a page address, an outside URL, or a short link. Only
+  // the first can be shown without a page load, so the others stay real links.
+  var slugToId = {};
+  (pages || []).forEach(function (p) { slugToId[p.slug] = p.id; });
+  var entry = function (item, extraStyle, cls) {
+    var id = item.kind === 'page' ? slugToId[item.href] : null;
+    var style = extraStyle ? ' style="' + extraStyle + '"' : '';
+    var klass = cls ? ' class="' + cls + '"' : '';
+    if (id && document.getElementById('page-' + id)) {
+      return '<button onclick="showPage(\'' + id + '\')"' + klass + style + '>' + esc(item.label) + '</button>';
+    }
+    var target = /^https?:/.test(item.href || '') ? ' target="_blank" rel="noopener"' : '';
+    return '<a href="' + esc(item.href || '#') + '"' + target + klass + style + '>' + esc(item.label) + '</a>';
+  };
+
+  // The admin-managed menu is the source of truth when there is one. The
+  // page-derived nav below is the fallback for a site whose menu has never been
+  // saved, and for the moments admin.timothystl.org is unreachable — a visitor
+  // must never be shown a church website with no navigation.
+  var header = menu && menu.header && menu.header.length ? menu.header : null;
+  if (header) {
+    var desktopEl = document.querySelector('.nav-links');
+    if (desktopEl) {
+      desktopEl.innerHTML = header.map(function (i) {
+        return '<li>' + entry(i, '', i.style === 'button' ? 'nav-cta' : '') + '</li>';
+      }).join('');
+    }
+    var mobileEl = document.getElementById('navMobile');
+    if (mobileEl) {
+      var out = '';
+      header.forEach(function (i) {
+        out += entry(i, '', '').replace('showPage(', 'closeMobileNav(),showPage(');
+        (i.children || []).forEach(function (c) {
+          out += entry(c, 'padding-left:32px;', '').replace('showPage(', 'closeMobileNav(),showPage(');
+        });
+      });
+      // The footer's outside links are the ones worth repeating on a phone.
+      ((menu && menu.footer) || []).filter(function (i) { return i.kind !== 'page'; })
+        .forEach(function (i) { out += entry(i, '', ''); });
+      mobileEl.innerHTML = out;
+    }
+    return;
+  }
+
+  // ── fallback: derive the nav from the pages themselves ──
+  var top = (pages || []).filter(function (p) { return p.in_menu && !p.parent; });
   if (!top.length) return;
   var kids = function (id) { return pages.filter(function (p) { return p.in_menu && p.parent === id; }); };
   var go = function (p) { return "showPage('" + p.id + "')"; };
-  var esc = function (s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); };
 
   var desktop = document.querySelector('.nav-links');
   if (desktop) {
