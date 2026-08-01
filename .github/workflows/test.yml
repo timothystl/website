@@ -1,0 +1,76 @@
+name: Tests
+
+# The repo had no pull-request CI at all until now: deploy.yml only fires on
+# push to main, so a pull request reported no checks and every suite was a
+# local step somebody had to remember. This runs the Node suites on every PR
+# and on main.
+#
+# Only the suites that need no browser run here. The Playwright suites in
+# test/ (editor*, site-*, whole-page, public-page, list-section) drive real
+# Chromium and are left out deliberately rather than half-wired — see the note
+# at the bottom of this file.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  node-tests:
+    name: Node test suites
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # node:sqlite — which admin/forms.test.mjs and test/admin-redesign.test.mjs
+      # use as the D1 stand-in — needs Node 22.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # A parse error in the Worker is worth catching before any suite runs,
+      # since most of them import it and would fail with a less obvious message.
+      - name: Syntax-check the workers and admin modules
+        run: |
+          node --check tlc-admin-worker.js
+          node --check site-worker.js
+          node --check tlc-links-worker.js
+          node --check give-landing.js
+          for f in admin/*.js; do node --check "$f"; done
+
+      - name: Pure-module suites
+        run: |
+          node admin/ui.test.mjs
+          node admin/auth.test.mjs
+          node admin/blocks.test.mjs
+          node admin/pages.test.mjs
+          node admin/spam.test.mjs
+
+      - name: Suites backed by SQLite
+        run: node admin/forms.test.mjs
+
+      # Boots the real Worker against SQLite and requests every redesigned
+      # screen. test/html-loader.mjs is what makes the Worker importable in
+      # Node at all — it uses Wrangler's `import x from './y.html'` syntax,
+      # which Node has no format for.
+      - name: Admin routes, against the real Worker
+        run: node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs
+
+# Not run here, and why:
+#
+# The Playwright suites need a Chromium binary. Adding it is a real change in
+# what this workflow costs and how long a PR waits, and several of those suites
+# take minutes each, so wiring them up is a deliberate decision rather than
+# something to slip in alongside the Node ones. Run them locally:
+#
+#   node test/list-section.test.mjs      # the shared list pattern
+#   node test/editor.test.mjs            # the block editor shell
+#   node test/site-editor.test.mjs       # the pages rail and Page tab
+#   node test/public-page.test.mjs       # the live site
+#   ... and editor-edit, editor-dnd, editor-media, editor-publish,
+#       editor-resize, editor-sections, site-roles, site-pages, whole-page
+#
+# Chromium is at /opt/pw-browsers/chromium in the Claude Code environment, or
+# set CHROME_PATH.
