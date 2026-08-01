@@ -95,8 +95,20 @@ ok((await shown()).length === 0, 'a search with no hits shows nothing');
 ok(await p.locator('.tlc-empty').isVisible(), 'and the empty state appears');
 ok((await count()) === '0 of 3 shown', 'the count says zero rather than going blank');
 
+// Two different empty states, because they call for two different actions.
+// The spec's own wording, and it quotes back what was actually typed.
+{
+  const t = await p.$eval('.tlc-empty-title', (n) => n.textContent);
+  const h = await p.$eval('.tlc-empty-help', (n) => n.textContent);
+  ok(t.includes('zzz'), 'a fruitless search quotes what was typed: ' + t);
+  ok(h.includes('Try fewer words'), 'and says what to try: ' + h);
+}
+
 await p.fill('.tlc-search input', ''); await p.waitForTimeout(100);
 ok((await shown()).length === 3, 'clearing the search restores every row');
+// .tlc-empty carries an explicit display, which beats the UA's
+// [hidden]{display:none} — so hiding it has to be restated in CSS or the
+// empty state sits under a full table forever.
 ok(await p.locator('.tlc-empty').isHidden(), 'and hides the empty state again');
 
 // ── filters ──

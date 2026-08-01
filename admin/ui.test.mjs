@@ -194,9 +194,45 @@ group('drawer');
 // ── palette ──────────────────────────────────────────────────────────────────
 group('palette');
 {
+  // Straight from the Foundations spec. These are asserted because they had
+  // already drifted once: the sidebar was a darker navy of my own invention
+  // and the tone colours were approximations.
   eq(PALETTE.gold, '#C9973A', 'gold is the one accent');
   eq(PALETTE.navy, '#1D3557', 'navy');
-  eq(PALETTE.sidebarNavy, '#12243D', 'the sidebar is its own darker navy');
+  eq(PALETTE.sidebarNavy, '#1D3557', 'the sidebar is that same navy, not a darker one');
+  eq(PALETTE.navyRaised, '#27496E', 'the active nav row is raised, not recoloured');
+  eq(PALETTE.navyInk, '#1E2D4A', 'headings and primary buttons');
+  eq(PALETTE.card, '#FFFDF9', 'cards are one step brighter than the background');
+  eq(PALETTE.parchment, '#FAF7F1', 'and the background is the warm white');
+
+  eq(TONES.good.bg + TONES.good.fg, '#EDF0E4' + '#3F5424', 'Good');
+  eq(TONES.warn.bg + TONES.warn.fg, '#FAF0DC' + '#7A5B18', 'Waiting');
+  eq(TONES.bad.bg + TONES.bad.fg, '#F7E4DE' + '#8C3A28', 'Problem');
+  eq(TONES.plain.bg + TONES.plain.fg, '#EFE7D9' + '#6A6858', 'Neutral');
+}
+
+group('the Foundations spec’s small parts');
+{
+  // "the word is not optional" — a switch alone says only that a setting
+  // exists, and which way is on is a convention nobody agreed to.
+  const d = renderDrawer({
+    key: 'k', title: 'T', action: '/x',
+    fields: [{ kind: 'toggle', name: 'active', label: 'On the website', value: 1, on: 'Showing', off: 'Hidden' }],
+  });
+  has(d, 'tlc-toggle-state', 'a toggle carries a state word');
+  has(d, 'data-off="Hidden"', 'and knows what to say when it is switched off');
+  has(d, '>Showing<', 'reading the current state, not a fixed label');
+
+  // Four options or fewer is chips, not a select — the whole decision at once.
+  const c = renderDrawer({
+    key: 'k', title: 'T', action: '/x',
+    fields: [{ kind: 'chips', name: 'kind', label: 'Kind', value: 'gift',
+      options: [{ value: 'gift', label: 'Gift' }, { value: 'payment', label: 'Payment' }] }],
+  });
+  has(c, 'tlc-chips', 'a chip choice renders');
+  has(c, 'role="radiogroup"', 'as a real radio group, so it is operable by keyboard');
+  has(c, 'value="gift" checked', 'with the stored value selected');
+  lacks(c, '<select', 'and no select in sight');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -136,6 +136,41 @@ await page.reload({ waitUntil: 'domcontentloaded' });
 await page.waitForSelector('.ed-paper .tlcb');
 eq(await page.locator('#edHint').isVisible(), false, 'tip stays dismissed after a reload');
 
+group('the block rail folds away');
+{
+  // Andrew: "i want the 2 sidebars to be able to collapse left so that there
+  // is more screen space to edit the page we are working on."
+  const railW = () => page.$eval('#edBlockRail', (n) => n.getBoundingClientRect().width);
+  const paperW = () => page.$eval('.ed-paper', (n) => n.getBoundingClientRect().width);
+
+  const openW = await railW();
+  const paperBefore = await paperW();
+  ok(openW > 150, 'the block rail starts open: ' + openW);
+
+  await page.click('#edRailToggle');
+  await page.waitForTimeout(220);
+  const shutW = await railW();
+  ok(shutW < 40, 'collapsing folds it to a spine: ' + shutW);
+  ok(await paperW() > paperBefore, 'and the page being edited gets the width back');
+  eq(await page.getAttribute('#edRailToggle', 'aria-expanded'), 'false', 'the button says it is collapsed');
+  eq(await page.locator('#edRail').isVisible(), false, 'the block list itself is hidden, not just narrow');
+
+  await page.click('#edRailToggle');
+  await page.waitForTimeout(220);
+  ok(await railW() > 150, 'and it comes back');
+
+  // The choice sticks — collapsing on every page you open would be worse than
+  // not having the control.
+  await page.click('#edRailToggle');
+  await page.waitForTimeout(220);
+  await page.reload();
+  await page.waitForSelector('.ed-paper .tlcb');
+  await page.waitForTimeout(250);
+  ok(await railW() < 40, 'the rail is still collapsed after a reload');
+  await page.click('#edRailToggle');
+  await page.waitForTimeout(220);
+}
+
 group('no layout overflow');
 const overflow = await page.evaluate(() => document.body.scrollWidth - document.body.clientWidth);
 ok(overflow <= 1, 'editor shell does not scroll horizontally (got ' + overflow + ')');
