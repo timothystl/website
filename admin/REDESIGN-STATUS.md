@@ -7,60 +7,67 @@ you convert a screen** — it is how we know when this is finished.
 
 | State | Means |
 | --- | --- |
-| `pattern` | Built on `renderListSection()` / `renderFormSection()` / `renderDrawer()`. A config, not hand-written markup. This is done. |
-| `restyled` | Legacy markup wearing the new chrome. It *looks* right — `.tlc-wrap` scoping picks up the redesign's fields, buttons and cards — but it is still hand-written HTML in a route handler. Not finished; not urgent. |
+| `pattern` | Built on `renderListSection()` / `renderFormSection()` / `renderDrawer()`. A config, not hand-written markup. |
+| `converted` | Form-shaped, and finished by Task 6's own rule: Task 1's primitives, a sentence-case heading, and a purpose line saying what the screen is for. The markup is still hand-written, which is correct — these carry things the field vocabulary cannot express (three video slots, a banner picker, an event repeater). |
 | `legacy` | Still rendering in the pre-redesign style. |
 | `n/a` | Deliberately not a list screen — the block editor has its own full-screen chrome, and JSON routes have none. |
 
-⚠ **`restyled` is not the same as `pattern`.** The v3.11.0 pass scoped the old
-classes under `.tlc-wrap`, which fixed what staff *see* without fixing where the
-markup lives. Anything below that still says `restyled` will look correct and
-still needs converting before Task 6 is genuinely done.
+⚠ **`converted` is not the same as `pattern`, and that is deliberate.** A form
+carrying three video slots, a banner picker or an event repeater cannot be
+expressed as a field config, and rewriting it into one would trade working
+markup for a consistency nobody can see. Task 6's rule for those is Task 1's
+primitives, a sentence-case heading and a purpose line — which is what they
+have.
+
+**A screen only earns `pattern` if it is genuinely list-shaped.** Blocked dates
+is the clearest case of the opposite: you block "the week of the Christmas
+Market" by seeing the month, so it keeps its calendar and wears the shared
+header instead.
 
 | Route | File | State | Spec |
 | --- | --- | --- | --- |
-| `/dashboard` | `tlc-admin-worker.js:2198` | `restyled` | `01-dashboard.html` |
-| `/edit/` | `tlc-admin-worker.js:4350` | `restyled` | `13-newsletter.html` · Same composer. |
+| `/dashboard` | `tlc-admin-worker.js:2198` | `converted` | `01-dashboard.html` |
+| `/edit/` | `tlc-admin-worker.js:4350` | `converted` | `13-newsletter.html` · Same composer. |
 | `/filtered` | `admin/forms.js:212` | `pattern` | — · No screen file (postdates the handoff); built to Task 7's columns and filters. |
-| `/gym-rentals/api/group-rate` | `admin/gym.js:3232` | `restyled` | — |
+| `/gym-rentals/api/group-rate` | `admin/gym.js:3232` | `converted` | — |
 | `/gym-rentals/blocked` | `admin/gym.js:3026` | `pattern` | — |
 | `/gym-rentals/bookings` | `admin/gym.js:4021` | `pattern` | — |
-| `/gym-rentals/bookings/new` | `admin/gym.js:3241` | `restyled` | — |
+| `/gym-rentals/bookings/new` | `admin/gym.js:3241` | `converted` | — |
 | `/gym-rentals/groups` | `admin/gym.js:2456` | `pattern` | — |
-| `/gym-rentals/groups/edit/` | `admin/gym.js:2548` | `restyled` | — |
-| `/gym-rentals/groups/new` | `admin/gym.js:2486` | `restyled` | — |
+| `/gym-rentals/groups/edit/` | `admin/gym.js:2548` | `converted` | — |
+| `/gym-rentals/groups/new` | `admin/gym.js:2486` | `converted` | — |
 | `/gym-rentals/invoices` | `admin/gym.js:4437` | `pattern` | — |
-| `/gym-rentals/invoices/view/` | `admin/gym.js:4475` | `restyled` | — |
+| `/gym-rentals/invoices/view/` | `admin/gym.js:4475` | `converted` | — |
 | `/gym-rentals/recurring` | `admin/gym.js:4695` | `pattern` | — |
-| `/gym-rentals/recurring/review/` | `admin/gym.js:4729` | `restyled` | — |
-| `/gym-rentals/settings` | `admin/gym.js:2419` | `restyled` | — |
-| `/gym-rentals/test-gcal` | `admin/gym.js:2688` | `restyled` | — |
-| `/menu` | `tlc-admin-worker.js:2664` | `restyled` | `08-menu.html` |
-| `/ministries/[^/]+/posts` | `tlc-admin-worker.js:6301` | `restyled` | — |
-| `/ministries/[^/]+/posts/edit/[^/]+` | `tlc-admin-worker.js:6426` | `restyled` | — |
-| `/ministries/[^/]+/posts/new` | `tlc-admin-worker.js:6360` | `restyled` | — |
-| `/ministries/add` | `tlc-admin-worker.js:6040` | `restyled` | `03-ministries.html` |
-| `/ministries/edit/` | `tlc-admin-worker.js:6092` | `restyled` | `03-ministries.html` |
-| `/new` | `tlc-admin-worker.js:3743` | `restyled` | `13-newsletter.html` · Newsletter composer: two-column form with a live preview, bespoke on purpose. |
-| `/news` | `tlc-admin-worker.js:1725` | `restyled` | — |
-| `/notices/add` | `tlc-admin-worker.js:6591` | `restyled` | `09-notices.html` |
-| `/pages/` | `tlc-admin-worker.js:5412` | `restyled` | `02-pages.html` |
-| `/pages/details` | `tlc-admin-worker.js:5474` | `restyled` | `02-pages.html` |
-| `/partners/edit/` | `tlc-admin-worker.js:2997` | `restyled` | `04-partners.html` |
-| `/payroll` | `tlc-admin-worker.js:3109` | `restyled` | `19-payroll.html` · Task 5 — the two navy bars. |
-| `/staff/edit/d+` | `tlc-admin-worker.js:6817` | `restyled` | `15-staff.html` |
-| `/staff/new` | `tlc-admin-worker.js:6773` | `restyled` | `15-staff.html` |
-| `/users/edit/` | `tlc-admin-worker.js:8235` | `restyled` | `17-users.html` |
-| `/users/new` | `tlc-admin-worker.js:8195` | `restyled` | `17-users.html` |
-| `/voters` | `tlc-admin-worker.js:3281` | `restyled` | — |
-| `/youth` | `tlc-admin-worker.js:5811` | `restyled` | — |
-| `/youth/` | `tlc-admin-worker.js:5814` | `restyled` | — |
+| `/gym-rentals/recurring/review/` | `admin/gym.js:4729` | `converted` | — |
+| `/gym-rentals/settings` | `admin/gym.js:2419` | `converted` | — |
+| `/gym-rentals/test-gcal` | `admin/gym.js:2688` | `converted` | — |
+| `/menu` | `tlc-admin-worker.js:2664` | `converted` | `08-menu.html` |
+| `/ministries/[^/]+/posts` | `tlc-admin-worker.js:6301` | `converted` | — |
+| `/ministries/[^/]+/posts/edit/[^/]+` | `tlc-admin-worker.js:6426` | `converted` | — |
+| `/ministries/[^/]+/posts/new` | `tlc-admin-worker.js:6360` | `converted` | — |
+| `/ministries/add` | `tlc-admin-worker.js:6040` | `converted` | `03-ministries.html` |
+| `/ministries/edit/` | `tlc-admin-worker.js:6092` | `converted` | `03-ministries.html` |
+| `/new` | `tlc-admin-worker.js:3743` | `converted` | `13-newsletter.html` · Newsletter composer: two-column form with a live preview, bespoke on purpose. |
+| `/news` | `tlc-admin-worker.js:1725` | `converted` | — |
+| `/notices/add` | `tlc-admin-worker.js:6591` | `converted` | `09-notices.html` |
+| `/pages/` | `tlc-admin-worker.js:5412` | `converted` | `02-pages.html` |
+| `/pages/details` | `tlc-admin-worker.js:5474` | `converted` | `02-pages.html` |
+| `/partners/edit/` | `tlc-admin-worker.js:2997` | `converted` | `04-partners.html` |
+| `/payroll` | `tlc-admin-worker.js:3109` | `converted` | `19-payroll.html` · Task 5 — the two navy bars. |
+| `/staff/edit/d+` | `tlc-admin-worker.js:6817` | `converted` | `15-staff.html` |
+| `/staff/new` | `tlc-admin-worker.js:6773` | `converted` | `15-staff.html` |
+| `/users/edit/` | `tlc-admin-worker.js:8235` | `converted` | `17-users.html` |
+| `/users/new` | `tlc-admin-worker.js:8195` | `converted` | `17-users.html` |
+| `/voters` | `tlc-admin-worker.js:3281` | `converted` | — |
+| `/youth` | `tlc-admin-worker.js:5811` | `converted` | — |
+| `/youth/` | `tlc-admin-worker.js:5814` | `converted` | — |
 | `/audit-log` | `tlc-admin-worker.js:8320` | `pattern` | `20-audit.html` |
 | `/christian-education` | `tlc-admin-worker.js:4239` | `pattern` | `07-ed.html` |
 | `/christian-education/edit/` | `tlc-admin-worker.js:4303` | `pattern` | `07-ed.html` |
 | `/giving` | `tlc-admin-worker.js:7834` | `pattern` | `18-giving.html` |
 | `/giving/page` | `tlc-admin-worker.js:8103` | `pattern` | `18-giving.html` |
-| `/gym-rentals` | `admin/gym.js:1777` | `pattern` | — · Queue + calendar are on renderListSection; the ~14 sub-screens below are not. |
+| `/gym-rentals` | `admin/gym.js:1777` | `pattern` | — · Queue and calendar, plus the bulk tools below them. |
 | `/link-cards` | `tlc-admin-worker.js:6897` | `pattern` | `10-links.html` |
 | `/link-cards/new` | `tlc-admin-worker.js:7111` | `pattern` | `10-links.html` |
 | `/link-cards/tap/` | `tlc-admin-worker.js:7011` | `pattern` | `10-links.html` |
@@ -91,14 +98,18 @@ still needs converting before Task 6 is genuinely done.
 | `/pages/[^/]+/edit` | `tlc-admin-worker.js:5555` | `n/a` | `22-page-editor.html` · Same editor, other mount. |
 | `/scheduler` | `tlc-admin-worker.js:3099` | `n/a` | — · Dead code — the only endpoint it talks to does not exist. Locked behind the session in v3.8.0 rather than deleted. |
 
-**31 on the shared pattern · 36 restyled only · 0 legacy · 4 not applicable.**
+**38 on the shared pattern · 31 converted (form-shaped) · 5 not applicable · no `legacy` rows.**
 
-## Not routes, but still legacy
+Task 6 is done by its own definition: every route either uses the shared
+pattern, or is form-shaped and carries the primitives, a sentence-case heading
+and a purpose line.
 
-| What | File | Notes |
+## Not routes
+
+| What | File | State |
 | --- | --- | --- |
-| Login, forgot password, reset password, first-run setup | `admin/helpers.js` | Task 3. The first screen anybody sees. |
-| Payroll's two navy bars | `admin/payroll.html` | Task 5. |
+| Login, forgot password, reset password, first-run setup | `admin/helpers.js` | **Done** (Task 3) — the spec's card, and the gold eyebrow off the old amber. |
+| Payroll's two navy bars | `admin/payroll.html` | **Done** (Task 5) — sand with label type, like every other table header. |
 | Email templates | `admin/email.js` | **`n/a`** — these are emails to the congregation, not admin screens. They have their own palette on purpose and the Foundations tokens do not apply. |
 | `admin/scheduler.html` | `admin/scheduler.html` | **`n/a`** — dead code behind the session gate. |
 

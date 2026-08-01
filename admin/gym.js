@@ -4824,6 +4824,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">Gym rentals</a>`)}
 ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/recurring">← Recurring</a>`)}
 <div class="tlc-wrap">
   <div class="page-title">Recurring request</div>
+  <div class="page-sub">A group asking for the same slot every week. Approving generates every date at once, so conflicts are worth reading first.</div>
   ${msgAlert}
   <div class="card">
     <div class="card-title">Request Details</div>

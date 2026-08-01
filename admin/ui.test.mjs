@@ -278,25 +278,30 @@ group('one palette');
   // Read as text rather than importing, because what matters is what ships in
   // the stylesheet — a value can be correct in a constant and wrong in the CSS.
   const shell = readFileSync(new URL('./helpers.js', import.meta.url), 'utf8');
+  // The palette itself lives in ADMIN_UI_CSS now, so anything about tokens has
+  // to read both. The radii and font-stack assertions below stay on the legacy
+  // shell on purpose: ui.js carries the redesign's own values — a 3px elbow, a
+  // 5px chip — which Foundations specifies and Task 1's audit never covered.
+  const allCss = shell + readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
 
   for (const [hex, was] of [['#0A3C5C', 'the old steel'], ['#D4922A', 'the old amber'],
                             ['#3D3530', 'the old charcoal'], ['#7A6E60', 'the old grey']]) {
-    ok(!shell.includes(hex), `the shell carries no ${hex} — ${was}`);
+    ok(!allCss.includes(hex), `the shell carries no ${hex} — ${was}`);
   }
 
   // Georgia is legal only as the serif fallback, never as the face itself.
   // Line comments are stripped first — a comment mentioning the fallback is
   // prose, not a font declaration, and failing on it would teach whoever hits
   // this to weaken the assertion rather than fix the CSS.
-  const css = shell.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
+  const css = allCss.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
   const georgia = css.split('Georgia').length - 1;
   const asFallback = css.split("'Lora',Georgia").length - 1;
   eq(georgia, asFallback, 'Georgia appears only behind Lora, never on its own');
 
   ok(!shell.includes('-apple-system'), 'the system font stack is gone — the admin is Source Sans 3');
-  ok(shell.includes("--steel:#1E2D4A"), 'the legacy names point at the Foundations values');
-  ok(shell.includes("--amber:#C9973A"), 'including the amber');
-  ok(shell.includes("--border:#E7DFD1"), 'and one border colour');
+  ok(allCss.includes("--steel:#1E2D4A"), 'the legacy names point at the Foundations values');
+  ok(allCss.includes("--amber:#C9973A"), 'including the amber');
+  ok(allCss.includes("--border:#E7DFD1"), 'and one border colour');
 
   // Radii: 8 (inputs, chips, buttons), 9 (nav rows, search), 11–12 (cards),
   // 999 (pills, toggles). Anything else is somebody eyeballing it.
@@ -308,10 +313,11 @@ group('one palette');
   // for "needs attention" — a focused field is not a problem.
   ok(shell.includes('rgba(46,126,166,.15)'), 'the focus ring is blue, not amber');
 
-  // One :root in the admin shell. The gym module has a second, and that one is
-  // deliberate — see the note on it: the renter portal is a standalone document
-  // with no shell CSS, so its tokens are the only ones it has.
-  eq(shell.split(':root{').length - 1, 1, 'the shell declares exactly one :root');
+  // Exactly one :root in the admin shell — the legacy names are folded into
+  // ADMIN_UI_CSS's block rather than declared in a second one. The gym module
+  // has its own, and that one is deliberate: the renter portal is a standalone
+  // document with no shell CSS, so its tokens are the only ones it has.
+  eq(allCss.split(':root{').length - 1, 1, 'the shell declares exactly one :root');
 }
 
 

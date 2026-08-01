@@ -25,16 +25,6 @@ export function html(body, title = 'TLC Admin', extraHead = '') {
 <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600&family=Source+Sans+3:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 ${extraHead}
 <style>
-/* ── ONE PALETTE ──────────────────────────────────────────────────────────
-   These names are the pre-redesign ones and are kept, because ~150 call sites
-   across the worker and the gym module use them. What changed is what they
-   point at: the Foundations values, so anything not explicitly restyled still
-   comes out in the right scheme and the right typefaces rather than the old
-   teal-and-orange one.
-
-   The new --tlc-* tokens live in ADMIN_UI_CSS below. These are the bridge —
-   not a second palette. */
-:root{--steel:#1E2D4A;--amber:#C9973A;--sage:#4A5E3A;--warm:#FAF7F1;--linen:#F4EFE5;--mist:#E7EEF7;--border:#E7DFD1;--charcoal:#1A1A2A;--gray:#6A6858;--white:#fff;--sans:'Source Sans 3',Arial,sans-serif;--serif:'Lora',Georgia,serif;}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:var(--sans);background:var(--warm);color:var(--charcoal);min-height:100vh;}
 /* Full width under the header — a table constrained to 860px in a 1600px

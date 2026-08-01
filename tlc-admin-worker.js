@@ -6367,6 +6367,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministr
 ${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">← Posts</a>`)}
 <div class="tlc-wrap">
   <div class="page-title">New post — ${page.title}</div>
+  <div class="page-sub">A dated update on this ministry's own page — a recap, a photo, a change of plan. It appears above the page's standing content.</div>
   <form method="POST" action="/ministries/${slug}/posts/create">
     <div class="card">
       <div class="form-group">
@@ -6435,6 +6436,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">�
 ${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">← Posts</a>`)}
 <div class="tlc-wrap">
   <div class="page-title">Edit post — ${page.title}</div>
+  <div class="page-sub">Changes reach the ministry page as soon as you save.</div>
   <form method="POST" action="/ministries/${slug}/posts/update/${id}">
     <div class="card">
       <div class="form-group">
@@ -6776,7 +6778,8 @@ function staffMove(id, direction) {
         return html(`
 ${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`)}
 <div class="tlc-wrap">
-  <div class="page-title">Add staff Member</div>
+  <div class="page-title">Add a person</div>
+  <div class="page-sub">One record per person. Every page that shows staff reads from here — add someone once and the whole site follows.</div>
   <div class="card">
     <form method="POST" action="/staff/create">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
@@ -6822,7 +6825,8 @@ ${staffPhotoUploadScript()}`, 'New Staff Member');
         return html(`
 ${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`)}
 <div class="tlc-wrap">
-  <div class="page-title">Edit — ${esc(m.name)}</div>
+  <div class="page-title">${esc(m.name)}</div>
+  <div class="page-sub">The photo crop set here is reused everywhere this person appears, so a head is never cut off on one page and not another.</div>
   <div class="card">
     <form method="POST" action="/staff/update/${m.id}">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
@@ -8198,6 +8202,7 @@ ${sidebarShell('users', currentUser, '', await badgeCounts(env, currentUser))}
 ${sidebarShell('users', currentUser)}
 <div class="tlc-wrap">
   <div class="page-title">New user</div>
+  <div class="page-sub">Who can get into this admin, and exactly what they can reach. Presets are shortcuts — the checkboxes are the truth.</div>
   <form method="POST" action="/users/new">
     <div class="card">
       <div class="form-group"><label>Username <span style="color:#B85C3A;">*</span></label><input type="text" name="username" required autocomplete="off"></div>
@@ -8242,7 +8247,8 @@ ${sidebarShell('users', currentUser)}
       return html(`
 ${sidebarShell('users', currentUser)}
 <div class="tlc-wrap">
-  <div class="page-title">Edit user: ${escapeHtml(u.username)}</div>
+  <div class="page-title">${escapeHtml(u.username)}</div>
+  <div class="page-sub">What this person can reach. Changing it takes effect the next time they load a screen, not at their next sign-in.</div>
   <form method="POST" action="/users/edit/${u.id}">
     <div class="card">
       <div class="form-group"><label>Username</label><input type="text" name="username" value="${(u.username || '').replace(/"/g,'&quot;')}" required autocomplete="off"></div>
