@@ -441,6 +441,58 @@ export const PARTNER_SEED = [
   },
 ];
 
+// ── THE NAVIGATION ───────────────────────────────────────────
+// One row per *appearance* in a menu, not one per page — see the note at the
+// top of admin/menu.js for why this is a join table and not more columns on
+// `pages`. A `page` item stores only page_id: the address is always read from
+// `pages`, so renaming a page moves every menu item pointing at it for free.
+export const DB_INIT_MENU_ITEMS = `CREATE TABLE IF NOT EXISTS menu_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  menu TEXT NOT NULL DEFAULT 'header',
+  label TEXT,
+  kind TEXT NOT NULL DEFAULT 'page',
+  page_id TEXT,
+  target TEXT,
+  style TEXT NOT NULL DEFAULT 'link',
+  depth INTEGER NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  visible INTEGER NOT NULL DEFAULT 1
+)`;
+
+// Seeded from the navigation as it stands in public/index.html today, so the
+// first time anyone opens the Menu screen it already describes the live site
+// rather than an empty list they have to rebuild from memory.
+//
+// Seeded with INSERT OR IGNORE against an explicit id, so rearranging the menu
+// in the admin is never undone by a later deploy.
+export const MENU_SEED = [
+  // Header — the bar as it is today. Labels differ from page titles where the
+  // bar needs to be shorter ("Learn" for Christian Education).
+  { id: 1,  menu: 'header', label: 'About',          kind: 'page', page_id: 'about',       sort_order: 10 },
+  { id: 2,  menu: 'header', label: 'Worship',        kind: 'page', page_id: 'worship',     sort_order: 20 },
+  { id: 3,  menu: 'header', label: 'Learn',          kind: 'page', page_id: 'education',   sort_order: 30 },
+  { id: 4,  menu: 'header', label: 'Sermons',        kind: 'page', page_id: 'sermons',     sort_order: 40 },
+  { id: 5,  menu: 'header', label: 'Ministries',     kind: 'page', page_id: 'ministries',  sort_order: 50 },
+  { id: 6,  menu: 'header', label: 'News & Events',  kind: 'page', page_id: 'news',        sort_order: 60 },
+  { id: 7,  menu: 'header', label: 'Calendar',       kind: 'page', page_id: 'calendar',    sort_order: 70 },
+  { id: 8,  menu: 'header', label: 'Contact',        kind: 'page', page_id: 'contact',     sort_order: 80 },
+  // The one button. A second would stop the first standing out.
+  { id: 9,  menu: 'header', label: 'Give',           kind: 'page', page_id: 'give',        sort_order: 90, style: 'button' },
+
+  // Footer — pages, then the partner sites the footer has always linked out to.
+  { id: 20, menu: 'footer', label: 'About',          kind: 'page', page_id: 'about',       sort_order: 10 },
+  { id: 21, menu: 'footer', label: 'Worship',        kind: 'page', page_id: 'worship',     sort_order: 20 },
+  { id: 22, menu: 'footer', label: 'Sermons',        kind: 'page', page_id: 'sermons',     sort_order: 30 },
+  { id: 23, menu: 'footer', label: 'Ministries',     kind: 'page', page_id: 'ministries',  sort_order: 40 },
+  { id: 24, menu: 'footer', label: 'News & Events',  kind: 'page', page_id: 'news',        sort_order: 50 },
+  { id: 25, menu: 'footer', label: 'Contact',        kind: 'page', page_id: 'contact',     sort_order: 60 },
+  { id: 26, menu: 'footer', label: 'Prayer Request', kind: 'page', page_id: 'prayer',      sort_order: 70 },
+  { id: 27, menu: 'footer', label: 'Give',           kind: 'page', page_id: 'give',        sort_order: 80 },
+  { id: 28, menu: 'footer', label: 'Word of Life School', kind: 'external', target: 'https://wordoflifeschool.net', sort_order: 90 },
+  { id: 29, menu: 'footer', label: "Mother's Day Out",    kind: 'external', target: 'https://mdo.timothystl.org',   sort_order: 100 },
+  { id: 30, menu: 'footer', label: 'Volunteer Sign-up',   kind: 'external', target: 'https://serve.timothystl.org', sort_order: 110 },
+];
+
 // Service times are stored as one editable text box rather than a table of
 // their own: three lines that staff can retype without learning a new screen.
 export function parseServiceTimes(value) {

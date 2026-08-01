@@ -153,6 +153,7 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Giving | Office staff — requires `giving_manage` permission | **DONE** (2026-07-27) — base Tithe.ly link, give.timothystl.org's amount tiers + per-tier links, and vendor/market one-off payment links (Tithe.ly or Square); see below |
 | Payroll | Office staff (Dinger) — requires `payroll_manage` permission | **DONE** — combined biweekly payroll (church staff + MDO preschool staff); see "Payroll & Supabase" below |
 | Audit Log | Admins | **DONE** — change history + rollback, requires `audit_view` |
+| Menu | Office staff — requires `pages_edit` | **DONE** (2026-08-01) — the header and footer as a drag-and-drop tree with a live preview (`menu_items` table); see "Phase 4 — the Menu" below |
 | Partners | Office staff — requires `pages_edit` | **DONE** (2026-08-01) — one partner ministry per core value (`partners` table), feeding the dashboard's values report and the public /about/values page |
 | Pages | Office staff (`pages_edit`) or a ministry leader for their own pages (`pages_edit_own`) | **DONE** (2026-07-31) — every page on the public site, with the block editor at `/pages/:id/edit`; see "Site Editor" below. Both permissions were renamed in v3.0.0 (from `site_pages` / `site_pages_own`) |
 | Filtered Mail | Office staff — requires `settings_manage` | **DONE** (2026-07-31) — review queue for public-form submissions held as spam; see "Form Spam Screening" below |
@@ -526,6 +527,56 @@ Menu screen persists to `pages`. It also gives Word of Life's site as
 - **Ministries answer on both addresses** — `/music` and `/ministries/music`,
   resolved in `public/index.html`'s router, canonicalising to the short one.
   An unknown ministry still 404s.
+
+#### Phase 4 — the Menu (2026-08-01)
+
+**The earlier decision to extend `pages` was reversed, on new information.**
+The navigation carries things `pages` cannot express: outside sites (Word of
+Life, MDO, the volunteer site) have no page row at all, and one page appears
+in *both* menus — Give is a button in the header and a plain link in the
+footer. A page row has one `sort`, one `parent_id` and one `in_menu`, so
+"appears twice, in different places, under different labels" has nowhere to
+live.
+
+`menu_items` is therefore a **join table, not a second source of truth**:
+
+| Table | Answers |
+|---|---|
+| `pages` | what a page *is*, and where it lives. One row per page. |
+| `menu_items` | what the *navigation looks like*. One row per appearance. |
+
+- **A menu item never records a page's address.** A `page` item stores
+  `page_id` and nothing else; the label falls back to the page's own and the
+  address is always read from `pages`. Renaming a page moves every menu item
+  pointing at it, with nothing to update by hand. `admin/menu.test.mjs` and
+  `test/admin-redesign.test.mjs` both assert this directly — it is the
+  property that makes the join table safe.
+- **Depth, not a parent pointer.** An item at depth 1 belongs to the nearest
+  preceding depth-0 item, which is exactly what "drop onto an item's name to
+  nest" expresses. Reordering is a list operation, so a child cannot be
+  orphaned by moving its parent — it holds no reference to lose. A leading
+  item is clamped to depth 0 (nothing above it to nest under).
+- **Broken items are flagged, never dropped.** An item pointing at a deleted
+  or draft page stays in the admin list, marked, with the reason. Silently
+  removing it would hide the mistake until a visitor mentioned the gap.
+  `publicMenu()` filters broken and hidden items so the *site* never shows
+  them — the admin and the site deliberately differ here.
+- **Removing an item never touches the page.** It reappears in the "Live pages
+  not in the menu" panel. Nothing is lost by tidying the menu.
+- **Orphans are not an error.** A thank-you page or a one-off landing page is
+  meant to be reachable only by link, so the panel says so rather than nagging.
+- **Reordering posts the whole resulting order**, and the server renumbers from
+  scratch in steps of 10. A diff would let a dropped row leave two items
+  claiming one position; a test asserts every position is unique afterwards.
+- **Seeded from the nav as it stands** (`MENU_SEED` in `admin/db.js`), with
+  explicit ids and `INSERT OR IGNORE`, so the first person to open the screen
+  sees the live site rather than an empty list — and rearranging it survives
+  deploys.
+- **`buildNav()` reads `menu` from `/api/pages`** and falls back to the
+  page-derived nav, which itself falls back to the hardcoded markup. A visitor
+  must never be shown a church website with no navigation.
+
+Run: `node admin/menu.test.mjs`.
 
 #### The handoff's own open questions (§8), as answered
 
