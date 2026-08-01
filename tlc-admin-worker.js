@@ -768,7 +768,7 @@ export default {
           { src: 'https://timothystl.org/images/android-chrome-192x192.png', sizes: '192x192', type: 'image/png' },
           { src: 'https://timothystl.org/images/android-chrome-512x512.png', sizes: '512x512', type: 'image/png' },
         ],
-        theme_color: '#0A3C5C',
+        theme_color: '#1E2D4A',
         background_color: '#FAF7F0',
         display: 'standalone',
         start_url: '/',
@@ -3297,7 +3297,7 @@ ${PAYROLL_HTML}`, 'Payroll');
       return html(`
 ${sidebarShell('voters', currentUser)}
 <div class="tlc-wrap">
-  <div class="page-title">Voters Page</div>
+  <div class="page-title">Voters page</div>
   <div class="page-sub">Manage the members-only voters page content at timothystl.org/voters</div>
   ${alertHtml}
   <form method="POST" action="/voters">
@@ -4278,6 +4278,7 @@ ${sidebarShell('christian-education', currentUser, `<a href="https://timothystl.
     search: sectionCfg('ed').search,
     columns: columnsOf('ed'),
     filters: filtersOf('ed'),
+    valueChips: sectionCfg('ed').valueChips,
     rows,
     noun: 'class', nounPlural: 'classes',
     empty: 'No classes yet.',
@@ -5051,7 +5052,7 @@ ${sidebarShell('news', currentUser, `<a href="https://timothystl.org/news" targe
     action: { label: sectionCfg('news').action, href: '/newsitems/new' },
     search: sectionCfg('news').search,
     filters: filtersOf('news'),
-    chipFilters: VALUES.map((v) => ({ label: `${v.short} · ${v.name}`, value: v.key, tint: v.tint, ink: v.ink, solid: v.solid })),
+    valueChips: sectionCfg('news').valueChips,
     columns: columnsOf('news'),
     rows: listRows,
     noun: 'post',
@@ -6026,7 +6027,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/voters">Voters Assembly pag
     action: { label: cfg.action, href: '/ministries/add' },
     search: cfg.search,
     filters: filtersOf('ministries'),
-    chipFilters: VALUES.map((v) => ({ label: `${v.short} · ${v.name}`, value: v.key, tint: v.tint, ink: v.ink, solid: v.solid })),
+    valueChips: sectionCfg('ministries').valueChips,
     columns: columnsOf('ministries'),
     rows: listRows,
     noun: 'ministry', nounPlural: 'ministries',
@@ -6775,7 +6776,7 @@ function staffMove(id, direction) {
         return html(`
 ${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`)}
 <div class="tlc-wrap">
-  <div class="page-title">Add Staff Member</div>
+  <div class="page-title">Add staff Member</div>
   <div class="card">
     <form method="POST" action="/staff/create">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">

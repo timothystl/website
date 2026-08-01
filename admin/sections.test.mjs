@@ -93,5 +93,27 @@ group('section() is strict');
   ok(threw, 'an unknown key throws rather than rendering a screen with no title');
 }
 
+
+// ── the design's copy, and its value chips ───────────────────────────────────
+group('copy and value chips');
+{
+  // A trailing newline in a label turns up as a stray line break in the nav.
+  for (const [key, cfg] of Object.entries(SECTIONS)) {
+    eq(cfg.label, String(cfg.label).trim(), `${key}'s label has no stray whitespace`);
+  }
+
+  // The Sermons note used to describe today's data ("no recordings are attached
+  // yet"), which stops being true the moment somebody adds one. It states the
+  // rule now.
+  ok(SECTIONS.sermons.note.includes('upgrades itself'), 'the sermons note states the rule');
+  ok(!SECTIONS.sermons.note.includes('No recordings are attached yet'),
+    'and not a snapshot of what the database happened to hold');
+
+  // The design puts the four tinted value chips after the plain filters on
+  // exactly these three. Declared in the config so no route restates them.
+  const withChips = Object.entries(SECTIONS).filter(([, c]) => c.valueChips).map(([k]) => k).sort();
+  eq(withChips.join(','), 'ed,ministries,news', 'value chips are on Ministries, News and Christian Ed');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -147,7 +147,15 @@ group('the Filtered Mail page');
   const body = await page.text();
   ok(body.includes('Sarah Glover'), 'the held message is listed');
   ok(body.includes('bulk-mail opt-out line'), 'with the reason it was held');
-  ok(body.includes('This is real — send it to me'), 'and a way to release it');
+
+  // Releasing moved into the drawer (Task 7), which is a real address — so the
+  // list links to it and the action lives one click in, not on every row.
+  ok(/href="\/filtered\/\d+"/.test(body), 'the row opens a drawer at its own address');
+  const drawer = await (await handleFilteredRoutes(
+    new Request('https://admin.timothystl.org/filtered/1'), env, '/filtered/1', 'GET', admin, {})).text();
+  ok(drawer.includes('Release to inbox'), 'and the drawer carries the release action');
+  ok(drawer.includes('Lumitoon Studios, we create engaging'), 'showing the whole message, not a preview');
+  ok(drawer.includes('/filtered/delete'), 'with delete beside it');
 
   const denied = await handleFilteredRoutes(new Request('https://admin.timothystl.org/filtered'), env,
     '/filtered', 'GET', { id: 2, username: 'youth', permissions: JSON.stringify(['ministries_edit']) }, {});

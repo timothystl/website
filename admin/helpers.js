@@ -5,7 +5,7 @@ import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, TOGGLE_WORD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 
-export const VERSION = 'v3.11.1'; // minor: every edit screen is the redesign, and a fourth and fifth newsletter note
+export const VERSION = 'v3.12.0'; // minor: one palette, and eight of the eleven design fix-list tasks
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
@@ -25,75 +25,84 @@ export function html(body, title = 'TLC Admin', extraHead = '') {
 <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600&family=Source+Sans+3:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 ${extraHead}
 <style>
-:root{--steel:#0A3C5C;--amber:#D4922A;--sage:#6B8F71;--warm:#FAF7F0;--linen:#F2EDE2;--mist:#EDF5F8;--border:#E8E0D0;--charcoal:#3D3530;--gray:#7A6E60;--white:#fff;--sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;--serif:Georgia,'Times New Roman',serif;}
+/* ── ONE PALETTE ──────────────────────────────────────────────────────────
+   These names are the pre-redesign ones and are kept, because ~150 call sites
+   across the worker and the gym module use them. What changed is what they
+   point at: the Foundations values, so anything not explicitly restyled still
+   comes out in the right scheme and the right typefaces rather than the old
+   teal-and-orange one.
+
+   The new --tlc-* tokens live in ADMIN_UI_CSS below. These are the bridge —
+   not a second palette. */
+:root{--steel:#1E2D4A;--amber:#C9973A;--sage:#4A5E3A;--warm:#FAF7F1;--linen:#F4EFE5;--mist:#E7EEF7;--border:#E7DFD1;--charcoal:#1A1A2A;--gray:#6A6858;--white:#fff;--sans:'Source Sans 3',Arial,sans-serif;--serif:'Lora',Georgia,serif;}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:var(--sans);background:var(--warm);color:var(--charcoal);min-height:100vh;}
 .wrap{max-width:860px;margin-left:0;padding:40px 28px;}
 .wrap-wide{max-width:none;margin-left:0;padding:24px 32px;}
-.page-title{font-family:var(--serif);font-size:28px;color:var(--steel);margin-bottom:4px;}
-.page-sub{font-family:var(--sans);font-size:14px;color:var(--gray);margin-bottom:32px;}
-.card{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:28px;margin-bottom:20px;}
-.card-title{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border);}
+.page-title{font:500 25px/1.15 var(--serif);color:#1E2D4A;margin-bottom:4px;}
+.page-sub{font:400 13.5px/1.5 var(--sans);color:#6A6858;margin-bottom:24px;max-width:56em;text-wrap:pretty;}
+.card{background:#FFFDF9;border:1px solid #E7DFD1;border-radius:12px;padding:18px 20px;margin-bottom:16px;}
+.card-title{font:600 10.5px/1 var(--sans);letter-spacing:.12em;text-transform:uppercase;color:#8A8271;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid #EFE7D9;}
 .form-group{margin-bottom:18px;}
-label{display:block;font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:6px;}
-input[type=text],input[type=password],input[type=date],input[type=time],input[type=email],textarea,select{width:100%;background:var(--white);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-family:var(--sans);font-size:14px;color:var(--charcoal);outline:none;transition:border-color .2s,box-shadow .2s;}
-input:focus,textarea:focus,select:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(212,146,42,.12);}
+label{display:block;font:600 10.5px/1 var(--sans);letter-spacing:.12em;text-transform:uppercase;color:#8A8271;margin-bottom:6px;}
+input[type=text],input[type=password],input[type=date],input[type=time],input[type=email],input[type=url],input[type=number],textarea,select{width:100%;background:#fff;border:1px solid #E7DFD1;border-radius:8px;padding:9px 11px;font-family:var(--sans);font-size:13.5px;color:var(--charcoal);outline:none;transition:border-color .15s,box-shadow .15s;}
+input:focus,textarea:focus,select:focus{border-color:#2E7EA6;box-shadow:0 0 0 3px rgba(46,126,166,.15);}
 textarea{min-height:100px;resize:vertical;line-height:1.65;}
-.btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--sans);font-size:14px;font-weight:700;padding:11px 24px;border-radius:6px;border:none;cursor:pointer;text-decoration:none;transition:background .2s,transform .15s;line-height:1;}
-.btn:hover{transform:translateY(-1px);}
-.btn-primary{background:var(--steel);color:white;}
-.btn-primary:hover{background:#2A5470;}
-.btn-secondary{background:var(--amber);color:var(--steel);}
-.btn-secondary:hover{background:#C07D1E;color:white;}
-.btn-sage{background:var(--sage);color:white;}
-.btn-sage:hover{background:#5a7860;}
-.btn-danger{background:#B85C3A;color:white;}
-.btn-danger:hover{background:#9a4a2e;}
-.btn-sm{font-size:12px;padding:7px 14px;}
+.btn{display:inline-flex;align-items:center;gap:8px;font:600 13.5px/1 var(--sans);padding:10px 17px;border-radius:8px;border:1px solid transparent;cursor:pointer;text-decoration:none;transition:background .15s,border-color .15s;}
+
+.btn-primary{background:#1E2D4A;color:#F5E4C0;border-color:#1E2D4A;}
+.btn-primary:hover{background:#2A3E62;border-color:#2A3E62;}
+.btn-secondary{background:#FAF7F1;color:#1E2D4A;border-color:#E7DFD1;}
+.btn-secondary:hover{border-color:#2E7EA6;}
+.btn-sage{background:#FAF7F1;color:#1E2D4A;border-color:#E7DFD1;}
+.btn-sage:hover{border-color:#2E7EA6;}
+.btn-danger{background:transparent;color:#9A3B2E;border-color:transparent;}
+.btn-danger:hover{background:#F7E4DE;}
+.btn-sm{font-size:12.5px;padding:7px 13px;}
 .btn-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;}
-.event-block{background:var(--linen);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:12px;position:relative;}
+.event-block{background:#FAF7F1;border:1px solid #E7DFD1;border-radius:12px;padding:18px;margin-bottom:12px;position:relative;}
 .event-block .event-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .event-block .remove-event{position:absolute;top:12px;right:12px;background:none;border:none;cursor:pointer;color:var(--gray);font-size:18px;line-height:1;}
 .event-block .remove-event:hover{color:#B85C3A;}
-.add-event-btn{background:var(--mist);border:1px dashed var(--border);border-radius:8px;padding:14px;width:100%;text-align:center;cursor:pointer;font-family:var(--sans);font-size:13px;font-weight:700;color:var(--sage);transition:background .2s;}
-.add-event-btn:hover{background:var(--linen);}
-.alert{padding:14px 18px;border-radius:8px;font-family:var(--sans);font-size:14px;margin-bottom:20px;}
-.alert-success{background:#e8f5e9;border-left:3px solid var(--sage);color:#1a3d1f;}
-.alert-error{background:#fce8e8;border-left:3px solid #B85C3A;color:#7a1f1f;}
-.alert-info{background:var(--mist);border-left:3px solid var(--steel);color:var(--steel);}
+.add-event-btn{background:#FAF7F1;border:1px dashed #E7DFD1;border-radius:8px;padding:12px;width:100%;text-align:center;cursor:pointer;font:600 13px var(--sans);color:#2E7EA6;transition:background .15s,border-color .15s;}
+.add-event-btn:hover{background:#F4EFE5;border-color:#2E7EA6;}
+.alert{padding:13px 16px;border-radius:12px;border:1px solid;font:400 13.5px/1.55 var(--sans);margin-bottom:18px;}
+.alert-success{background:#EDF0E4;border-color:#D8E0C6;color:#3F5424;}
+.alert-error{background:#F7E4DE;border-color:#E4C8C8;color:#8C3A28;}
+.alert-info{background:#E7EEF7;border-color:#D3DEEC;color:#1E2D4A;}
 .newsletter-row{display:flex;align-items:center;gap:16px;padding:14px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
 .newsletter-row:last-child{border-bottom:none;}
 .newsletter-date{font-family:var(--sans);font-size:11px;font-weight:700;color:var(--gray);min-width:100px;}
-.newsletter-subject{font-family:var(--serif);font-size:16px;color:var(--steel);flex:1;}
+.newsletter-subject{font:500 16px/1.3 var(--serif);color:#1E2D4A;flex:1;}
 .newsletter-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
 .radio-row{display:flex;gap:16px;margin-top:6px;}
 .radio-row label{font-family:var(--sans);font-size:13px;font-weight:600;color:var(--charcoal);letter-spacing:0;text-transform:none;display:flex;align-items:center;gap:6px;cursor:pointer;}
 .radio-row input[type=radio]{width:auto;}
-.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--steel);}
-.login-card{background:white;border-radius:20px;padding:40px;width:100%;max-width:360px;text-align:center;}
-.login-title{font-family:var(--serif);font-size:24px;color:var(--steel);margin-bottom:4px;}
-.login-sub{font-family:var(--sans);font-size:13px;color:var(--gray);margin-bottom:28px;}
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#1E2D4A;}
+.login-card{background:#FFFDF9;border-radius:12px;padding:36px 34px;width:100%;max-width:380px;text-align:center;box-shadow:0 18px 44px rgba(11,22,44,.28);}
+.login-title{font:500 25px/1.2 var(--serif);color:#1E2D4A;margin-bottom:4px;}
+.login-sub{font:400 13.5px/1.5 var(--sans);color:#6A6858;margin-bottom:26px;}
 .login-card .form-group{text-align:left;}
 .divider{border:none;border-top:1px solid var(--border);margin:24px 0;}
-.tag{font-family:var(--sans);font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--mist);color:var(--steel);}
-.preview-box{background:var(--linen);border:1px solid var(--border);border-radius:10px;padding:20px;margin-top:16px;font-size:13px;color:var(--gray);font-style:italic;}
+.tag{font:600 11px/1.6 var(--sans);padding:3px 10px;border-radius:999px;background:#EFE7D9;color:#6A6858;}
+.preview-box{background:#F4EFE5;border:1px solid #E7DFD1;border-radius:12px;padding:20px;margin-top:16px;font-size:13px;color:var(--gray);font-style:italic;}
 .ni-row{display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;}
 .ni-row:last-child{border-bottom:none;}
-.ni-title{font-family:var(--serif);font-size:16px;color:var(--steel);flex:1;min-width:160px;}
+.ni-title{font:500 16px/1.3 var(--serif);color:#1E2D4A;flex:1;min-width:160px;}
 .ni-meta{font-family:var(--sans);font-size:11px;color:var(--gray);white-space:nowrap;}
 .ni-actions{display:flex;gap:8px;flex-shrink:0;}
-.badge{font-family:var(--sans);font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;}
-.badge-active{background:#e8f5e9;color:#1a3d1f;}
-.badge-expired{background:#fce8e8;color:#7a1f1f;}
-.badge-upcoming{background:var(--mist);color:var(--steel);}
-.badge-pinned{background:#FFF3D6;color:#7A4F00;}
+.badge{font:600 11px/1.6 var(--sans);padding:3px 10px;border-radius:999px;white-space:nowrap;}
+.badge-active{background:#EDF0E4;color:#3F5424;}
+.badge-expired{background:#F7E4DE;color:#8C3A28;}
+.badge-upcoming{background:#EFE7D9;color:#6A6858;}
+.badge-pinned{background:#FAF0DC;color:#7A5B18;}
 .checkbox-row{display:flex;align-items:center;gap:8px;margin-top:6px;}
 .checkbox-row input[type=checkbox]{width:auto;}
 .checkbox-row span{font-family:var(--sans);font-size:13px;font-weight:600;color:var(--charcoal);cursor:pointer;}
 .format-picker{display:flex;gap:14px;margin-bottom:24px;flex-wrap:wrap;}
-.format-card{flex:1;min-width:180px;border:2px solid var(--border);border-radius:12px;padding:20px 18px;text-align:left;background:white;cursor:pointer;transition:border-color .18s,background .18s;}
-.format-card:hover{border-color:var(--steel);background:var(--mist);}
-.format-card.active{border-color:var(--steel);background:var(--mist);}
+.format-card{flex:1;min-width:180px;border:1px solid #E7DFD1;border-radius:12px;padding:20px 18px;text-align:left;background:white;cursor:pointer;transition:border-color .18s,background .18s;}
+.format-card:hover{border-color:#2E7EA6;background:#FAF7F1;}
+.format-card.active{border:2px solid #1E2D4A;background:#E7EEF7;}
 .format-card-icon{font-size:26px;margin-bottom:8px;}
 .format-card-name{font-family:var(--sans);font-size:14px;font-weight:700;color:var(--steel);}
 .format-card-desc{font-family:var(--sans);font-size:12px;color:var(--gray);margin-top:4px;line-height:1.5;}
@@ -116,7 +125,7 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
 .audit-who{color:var(--steel);font-weight:700;}
 .audit-action{text-transform:capitalize;}
 .audit-entity{color:var(--gray);}
-.pending-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#D4922A;margin-left:6px;vertical-align:middle;}
+.pending-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#C9973A;margin-left:6px;vertical-align:middle;}
 
 /* ── SIDEBAR SHELL ─────────────────────────────────────────── */
 .sidebar{position:fixed;top:0;left:0;width:236px;height:100vh;background:var(--steel);display:flex;flex-direction:column;overflow-y:auto;z-index:100;transform:translateX(-100%);transition:transform .2s ease;}
@@ -170,7 +179,7 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
 .activity-row{padding:10px 0;border-bottom:1px solid var(--border);font-family:var(--sans);font-size:13px;color:var(--charcoal);}
 .activity-row:last-child{border-bottom:none;}
 .activity-time{display:block;font-size:11px;color:var(--gray);margin-top:2px;}
-.icon-tile{width:44px;height:44px;border-radius:10px;background:var(--mist);color:var(--steel);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
+.icon-tile{width:44px;height:44px;border-radius:12px;background:var(--mist);color:var(--steel);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
 .badge-expiring{background:#FFF3D6;color:#7A4F00;}
 .count-pill{font-family:var(--sans);font-size:12px;color:var(--gray);}
 .filter-pill{font-family:var(--sans);font-size:12px;font-weight:700;color:var(--gray);background:var(--linen);border:1px solid var(--border);border-radius:999px;padding:6px 14px;cursor:pointer;}
@@ -371,7 +380,7 @@ export function loginPage(error = '', success = '') {
   return html(`
 <div class="login-wrap">
   <div class="login-card">
-    <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#D4922A;margin-bottom:8px;">Timothy Lutheran Church</div>
+    <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#C9973A;margin-bottom:8px;">Timothy Lutheran Church</div>
     <div class="login-title">Admin Portal</div>
     <div class="login-sub">Sign in to manage the website</div>
     ${success ? `<div class="alert alert-success">${success}</div>` : ''}
@@ -399,7 +408,7 @@ export function forgotPasswordPage(msg = '', error = '') {
   return html(`
 <div class="login-wrap">
   <div class="login-card">
-    <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#D4922A;margin-bottom:8px;">Timothy Lutheran Church</div>
+    <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#C9973A;margin-bottom:8px;">Timothy Lutheran Church</div>
     <div class="login-title">Reset Password</div>
     <div class="login-sub">Enter your email and we'll send you a reset link.</div>
     ${error ? `<div class="alert alert-error">${error}</div>` : ''}
@@ -424,7 +433,7 @@ export function resetPasswordPage(token, error = '') {
   return html(`
 <div class="login-wrap">
   <div class="login-card">
-    <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#D4922A;margin-bottom:8px;">Timothy Lutheran Church</div>
+    <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#C9973A;margin-bottom:8px;">Timothy Lutheran Church</div>
     <div class="login-title">Set New Password</div>
     <div class="login-sub">Choose a new password for your account.</div>
     ${error ? `<div class="alert alert-error">${error}</div>` : ''}
@@ -449,7 +458,7 @@ export function setupPage(error = '') {
   return html(`
 <div class="login-wrap">
   <div class="login-card" style="max-width:420px;">
-    <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#D4922A;margin-bottom:8px;">Timothy Lutheran Church</div>
+    <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#C9973A;margin-bottom:8px;">Timothy Lutheran Church</div>
     <div class="login-title">Admin Setup</div>
     <div class="login-sub">Create your admin account to get started. This screen only appears once.</div>
     ${error ? `<div class="alert alert-error">${error}</div>` : ''}
