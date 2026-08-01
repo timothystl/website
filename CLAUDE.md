@@ -849,12 +849,12 @@ Requested · Conflicts · Status`, with `Approve` and `Open` on every row.
   the CSP for every screen to suit one page would be the wrong trade. Only
   eleven PostgREST queries were ever made, so `sbQuery()` is that subset with
   the SDK's shape — `sb.from(t).select().eq()` still reads the same.
-- **The design's Status column is not invented.** The mockup reads Approved /
-  Submitted / Imported / Unmatched; this repo has no approval state on a period
-  entry, and a green APPROVED beside a row nobody had looked at would be a lie.
-  It says the thing that is true and actually blocks a payroll run: `Needs
-  hours` / `Hours in` / `Salaried` / `From MDO`, with the period badge counting
-  who is still missing.
+- **The design's Status column is real, not a label.** It reads `Needs hours`
+  → `Ready` → `Approved`, in the order the work happens. Approved is a stored
+  fact — see "Checking a payroll row off" below. It was deliberately left out
+  of the first build because nothing wrote it, and a green APPROVED beside a
+  row nobody had looked at would have been a lie; Andrew then asked for the
+  check-off, so it is stored now.
 - **There is no "Import from childcare app" button**, because there is no
   import step — MDO hours are read live every time the period changes. A button
   labelled Import would imply a staleness that does not exist. The row says
@@ -877,6 +877,37 @@ rewritten anyway and leaving them would have meant touching payroll twice:
 `admin/helpers.js` also gained `X-Robots-Tag: noindex, nofollow` on every admin
 page — `/payroll` carried it itself, and folding it into the shell would
 otherwise have quietly dropped it.
+
+#### Checking a payroll row off (2026-08-01)
+
+Andrew asked for it after seeing the rebuilt screen: *"an approved but for
+payroll would be good to check off that it is reviewed."* Every row now carries
+an **Approve** button that records who checked those figures and when.
+
+- **`payroll_reviews` is a new Supabase table** — `(period_start, source,
+  staff_id, reviewed_at, reviewed_by)` with `UNIQUE(period_start, source,
+  staff_id)`. Additive; nothing existing was altered. RLS mirrors
+  `church_staff_period_entries` beside it (`allow all` for public) because the
+  real boundary is the Worker's `/sb` proxy, which requires a session holding
+  `payroll_manage` before it forwards anything at all.
+- **A table of its own, not columns on `church_staff_period_entries`**, because
+  MDO staff have no row there — their hours live in the childcare app's tables
+  — and a review that could only cover half the payroll would be worse than
+  none. `source` is `church` or `mdo`.
+- **The row IS the fact.** Present means reviewed, absent means not;
+  un-approving deletes the row rather than flipping a boolean. There is no
+  `false`, so a failed write leaves somebody unchecked rather than in a state
+  that half-claims a review.
+- **Nothing is approvable until its figures exist.** An hourly person with no
+  hours entered gets no button at all — one that silently did nothing would be
+  worse than none.
+- **The period badge names the outstanding step, in order**: `N still need
+  hours` outranks `N left to check`, which outranks `Approved`. Telling
+  somebody "3 left to check" while two people have no hours at all would point
+  them at the wrong job.
+- **Printing is deliberately not gated on it.** A report is often printed to
+  *do* the checking. The badge says where the run has got to; it does not
+  block.
 
 **Tests:** `node test/payroll.test.mjs` drives the real page in Chromium against
 a stubbed Supabase. It pins the arithmetic with worked figures (a $3,966
@@ -1042,11 +1073,12 @@ app ("myMDO") backed by its own **Supabase** project (project ref
 this repo's D1/KV — Supabase is otherwise not used anywhere else on the site.
 
 The admin **Payroll** tab (`admin/payroll.html`, served at `/payroll`) combines
-that MDO clock/PTO data (read-only) with two new tables of its own — also in
-the same Supabase project, not D1 — `church_staff` and
+that MDO clock/PTO data (read-only) with three tables of its own — also in
+the same Supabase project, not D1 — `church_staff`,
 `church_staff_period_entries` (name, pay type, hourly rate or salary, housing
-allowance, HSA, 403(b), mileage, PTO) — to produce one combined biweekly
-payroll report (MDO + church staff) with CSV export.
+allowance, HSA, 403(b), mileage, PTO) and `payroll_reviews` (who checked a row
+off, and when) — to produce one combined biweekly payroll report (MDO + church
+staff) with CSV export.
 
 `tlc-admin-worker.js` exposes a `/sb/*` reverse proxy so the browser-side
 Supabase client (`admin/payroll.html`) can reach Supabase through the admin

@@ -89,6 +89,13 @@
 .tlc-pay-err{margin:0 0 14px;padding:13px 16px;border:1px solid #E4C8C8;border-radius:10px;background:#FAEFEF;color:#8A4A4A;font-size:13.5px;}
 .tlc-pay-saved{font:600 12px var(--tlc-sans);color:#3B4C2E;opacity:0;transition:opacity .2s;}
 .tlc-pay-saved.is-on{opacity:1;}
+.tlc-pay-status{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+/* Approve is a plain button until it is pressed, then a quiet green tick.
+   A row that is done should recede — the eye belongs on the ones that are not. */
+.tlc-pay-check{font:600 12px var(--tlc-sans);color:var(--tlc-navy);background:#fff;border:1px solid var(--tlc-edge);border-radius:7px;padding:5px 11px;cursor:pointer;white-space:nowrap;}
+.tlc-pay-check:hover{border-color:var(--tlc-blue);}
+.tlc-pay-check:disabled{opacity:.5;cursor:default;}
+.tlc-pay-check.is-on{background:#EAF1E5;border-color:#C9DCBD;color:#3B4C2E;padding:5px 9px;}
 @media (max-width:860px){
   .tlc-pay-grid,.tlc-pay-tgrid{grid-template-columns:1fr;gap:6px;}
   .tlc-pay-thead{display:none;}
@@ -238,6 +245,7 @@ function sbQuery(table) {
     order(c) { params.push('order=' + encodeURIComponent(c) + '.asc'); return api; },
     insert(rec) { method = 'POST'; body = rec; return api; },
     update(rec) { method = 'PATCH'; body = rec; return api; },
+    remove() { method = 'DELETE'; return api; },
     upsert(rec, opts) {
       method = 'POST'; body = rec;
       prefer = 'resolution=merge-duplicates';
@@ -286,11 +294,22 @@ let mdoStaff = [];
 let mdoPeriodMap = new Map();
 let mdoPtoMap = new Map();
 let mdoError = '';
+// Who has been checked off in this period. The key is source + staff id; the
+// value is when. A person is reviewed when they are in here — there is no
+// false, because a row that failed to save simply is not present, and half-set
+// is the one state a review must never be in.
+let reviewed = new Map();
 let payView = 'entry';
 let payLayout = 'cards';
 let lastFocus = null;
 
 const $ = (id) => document.getElementById(id);
+
+// Who is signed in, read off the shell's own sidebar rather than passed in —
+// so a review records a person, not just a time. Blank if the fragment is
+// rendered outside the shell (which is how the test harness loads it).
+const WHO = (document.querySelector('.sidebar-user') || {}).textContent
+  ? document.querySelector('.sidebar-user').textContent.trim() : '';
 
 // ════════════════════════════════════════════════════════════
 // MONEY
@@ -427,11 +446,20 @@ async function onPeriodChange(value) {
   $('entryPeriodLabel').textContent = 'Pay period · ' + periodLabel(periodStart, periodEnd);
   $('entryPays').textContent = paysOnLabel(periodEnd);
 
-  const [entriesRes] = await Promise.all([
+  const [entriesRes, reviewRes] = await Promise.all([
     sb.from('church_staff_period_entries').select('*').eq('period_start', periodStart),
+    sb.from('payroll_reviews').select('source,staff_id,reviewed_at,reviewed_by').eq('period_start', periodStart),
     loadMdoData(periodStart, periodEnd),
   ]);
   if (entriesRes.error) showError('This period’s hours could not be read: ' + entriesRes.error.message);
+
+  // If the review list cannot be read, everybody shows as unchecked. That is
+  // the safe way round: it asks for a second look at something already looked
+  // at, rather than reporting a review that never happened.
+  reviewed = new Map();
+  (reviewRes.data || []).forEach((r) => {
+    reviewed.set(r.source + ':' + r.staff_id, { at: r.reviewed_at, by: r.reviewed_by });
+  });
 
   periodEntries = {};
   (entriesRes.data || []).forEach((e) => { periodEntries[e.staff_id] = e; });
@@ -504,15 +532,75 @@ function pill(tone, label) {
     + (tones[tone] || tones.plain) + '">' + esc(label) + '</span>';
 }
 
-// The design's Status column reads Approved / Submitted / Imported /
-// Unmatched. This repo has no approval state on a period entry, and inventing
-// one that nothing writes would put a green APPROVED beside a row nobody had
-// looked at. What the status says instead is the thing that is actually true
-// and actually blocks a payroll run: whether the hours are in.
-function entryStatus(kind, hoursEntered) {
-  if (kind === 'mdo') return { tone: 'plain', label: 'From MDO' };
-  if (kind === 'salary') return { tone: 'plain', label: 'Salaried' };
-  return hoursEntered ? { tone: 'good', label: 'Hours in' } : { tone: 'warn', label: 'Needs hours' };
+// The design's Status column. Three states, in the order they actually happen:
+//
+//   Needs hours  — an hourly person with nothing entered. Nothing can be
+//                  reviewed until this is fixed, so it outranks everything.
+//   Ready        — the figures are in and nobody has checked them yet.
+//   Approved     — somebody has checked them, and it says who and when.
+//
+// Approved is a real stored fact (a row in payroll_reviews), not a label. It
+// was left out of the first build precisely because nothing wrote it, and a
+// green APPROVED beside a row nobody had looked at would have been a lie.
+function entryStatus(source, staffId, kind, hoursEntered) {
+  if (kind === 'hourly' && !hoursEntered) return { tone: 'warn', label: 'Needs hours', can: false };
+  const r = reviewed.get(source + ':' + staffId);
+  if (r) return { tone: 'good', label: 'Approved', can: true, on: true, at: r.at, by: r.by };
+  return { tone: 'plain', label: 'Ready', can: true, on: false };
+}
+
+function reviewedTitle(st) {
+  if (!st.on) return '';
+  const when = st.at ? new Date(st.at) : null;
+  const stamp = when && !isNaN(when)
+    ? when.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' at '
+      + when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    : '';
+  return 'Checked' + (st.by ? ' by ' + st.by : '') + (stamp ? ' on ' + stamp : '') + '. Click to undo.';
+}
+
+// The cell is the pill plus the one action that changes it. A person whose
+// hours are missing gets neither — there is nothing to approve yet, and a
+// button that silently does nothing is worse than no button.
+function reviewCell(source, staffId, st) {
+  if (!st.can) return pill(st.tone, st.label);
+  return pill(st.tone, st.label)
+    + '<button type="button" class="tlc-pay-check' + (st.on ? ' is-on' : '') + '"'
+    + ' data-review-source="' + esc(source) + '" data-review-staff="' + esc(staffId) + '"'
+    + ' aria-pressed="' + (st.on ? 'true' : 'false') + '"'
+    + ' title="' + esc(st.on ? reviewedTitle(st) : 'Mark these figures as checked') + '">'
+    + (st.on ? '✓' : 'Approve') + '</button>';
+}
+
+// The period's own state, in the order the work actually happens: hours have
+// to be in before anything can be checked, and everything has to be checked
+// before the run is done. Whichever step is outstanding is the one it names —
+// telling somebody "3 left to check" while two people have no hours at all
+// would point them at the wrong job.
+function renderPeriodState() {
+  const missing = churchStaff.filter((s) => s.pay_type === 'hourly'
+    && !(Number((periodEntries[s.id] || {}).hours_worked) > 0)).length;
+  if (missing) {
+    $('entryState').innerHTML = pill('warn', missing + (missing === 1 ? ' still needs hours' : ' still need hours'));
+    return;
+  }
+  const people = payablePeople();
+  const unchecked = people.filter((k) => !reviewed.has(k)).length;
+  $('entryState').innerHTML = unchecked
+    ? pill('plain', unchecked + ' left to check')
+    : pill('good', people.length ? 'Approved' : 'Nothing to pay');
+}
+
+// Everybody who appears as a row this period, keyed the way reviews are —
+// so "how many are left" and "which button did you press" cannot disagree.
+function payablePeople() {
+  const keys = churchStaff.map((s) => 'church:' + s.id);
+  mdoStaff.forEach((s) => {
+    const h = mdoPeriodMap.get(s.id) || 0;
+    const pto = mdoPtoMap.get(s.id) || 0;
+    if (s.pay_type === 'salary' || h > 0 || pto > 0) keys.push('mdo:' + s.id);
+  });
+  return keys;
 }
 
 function renderEntry(periodStart) {
@@ -523,7 +611,7 @@ function renderEntry(periodStart) {
     const isSalary = s.pay_type === 'salary';
     const hoursVal = entry.hours_worked === undefined || entry.hours_worked === null ? '' : entry.hours_worked;
     const ptoVal = entry.pto_hours_used === undefined || entry.pto_hours_used === null ? '' : entry.pto_hours_used;
-    const st = entryStatus(isSalary ? 'salary' : 'hourly', Number(hoursVal) > 0);
+    const st = entryStatus('church', s.id, isSalary ? 'salary' : 'hourly', Number(hoursVal) > 0);
     rows.push('<div class="tlc-pay-row tlc-pay-grid">'
       + '<span class="tlc-pay-name"><b>' + esc(s.name) + '</b><span>' + esc(s.role || 'Church staff') + '</span></span>'
       + '<span>' + pill('plain', isSalary ? 'Salaried' : 'Hourly') + '</span>'
@@ -535,7 +623,7 @@ function renderEntry(periodStart) {
       + '<span><span class="tlc-pay-inwrap"><input class="tlc-pay-in" type="number" min="0" step="0.25" value="' + esc(ptoVal)
         + '" placeholder="0" data-staff="' + esc(s.id) + '" data-field="pto_hours_used" data-period="' + esc(periodStart)
         + '" aria-label="PTO used by ' + esc(s.name) + '"><small>hrs</small></span></span>'
-      + '<span>' + pill(st.tone, st.label) + '</span>'
+      + '<span class="tlc-pay-status">' + reviewCell('church', s.id, st) + '</span>'
       + '</div>');
   });
 
@@ -544,23 +632,19 @@ function renderEntry(periodStart) {
     const h = mdoPeriodMap.get(s.id) || 0;
     const pto = mdoPtoMap.get(s.id) || 0;
     if (!isSalary && h === 0 && pto === 0) return;
-    const st = entryStatus('mdo');
+    const st = entryStatus('mdo', s.id, isSalary ? 'salary' : 'hourly', true);
     rows.push('<div class="tlc-pay-row tlc-pay-grid">'
       + '<span class="tlc-pay-name"><b>' + esc(s.name) + '</b><span>' + esc(s.role || 'Childcare') + '</span></span>'
       + '<span>' + pill('plain', isSalary ? 'Salaried' : 'Childcare app') + '</span>'
       + '<span class="' + (isSalary ? 'tlc-pay-na' : 'tlc-pay-num') + '">' + (isSalary ? 'n/a' : hrs(h)) + '</span>'
       + '<span class="tlc-pay-num">' + hrs(pto) + '</span>'
-      + '<span>' + pill(st.tone, st.label) + '</span>'
+      + '<span class="tlc-pay-status">' + reviewCell('mdo', s.id, st) + '</span>'
       + '</div>');
   });
 
   $('entryRows').innerHTML = rows.length ? rows.join('') : '<div class="tlc-pay-empty">Nobody to pay in this period.</div>';
 
-  // The period's own state, stated as the thing that stops it being printed.
-  const missing = churchStaff.filter((s) => s.pay_type === 'hourly' && !(Number((periodEntries[s.id] || {}).hours_worked) > 0)).length;
-  $('entryState').innerHTML = missing
-    ? pill('warn', missing + (missing === 1 ? ' still needs hours' : ' still need hours'))
-    : pill('good', 'Ready to print');
+  renderPeriodState();
 
   const liveText = mdoError
     ? 'The childcare app could not be reached, so no childcare hours are included below — this report is incomplete.'
@@ -579,6 +663,37 @@ document.addEventListener('input', (e) => {
   const el = e.target;
   if (!el.classList || !el.classList.contains('tlc-pay-in')) return;
   scheduleHoursSave(el.dataset.staff, el.dataset.period);
+});
+
+// Checking somebody off, and un-checking them. Delegated like everything else
+// on this page so a name never reaches JS source.
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-review-staff]');
+  if (!btn) return;
+  const source = btn.dataset.reviewSource;
+  const staffId = btn.dataset.reviewStaff;
+  const periodStart = ($('periodSelect').value || '').split('|')[0];
+  if (!periodStart) return;
+  const key = source + ':' + staffId;
+  const wasOn = reviewed.has(key);
+
+  btn.disabled = true;
+  const { error } = wasOn
+    ? await sb.from('payroll_reviews').remove()
+      .eq('period_start', periodStart).eq('source', source).eq('staff_id', staffId)
+    : await sb.from('payroll_reviews')
+      .upsert({ period_start: periodStart, source, staff_id: staffId, reviewed_by: WHO },
+        { onConflict: 'period_start,source,staff_id' });
+  btn.disabled = false;
+
+  // Only touch the local record once the write has actually landed. Flipping
+  // it first and rolling back on failure would leave a green tick on screen
+  // for a moment on a row nobody had approved.
+  if (error) { showError('That could not be saved: ' + error.message); return; }
+  showError('');
+  if (wasOn) reviewed.delete(key); else reviewed.set(key, { at: new Date().toISOString(), by: WHO });
+  renderEntry(periodStart);
+  flashSaved();
 });
 
 function scheduleHoursSave(staffId, periodStart) {
@@ -607,10 +722,7 @@ async function doHoursSave(staffId, periodStart) {
   const [ps, pend] = $('periodSelect').value.split('|');
   // Only the parts that depend on the number are redrawn — rewriting the row
   // would take the focus out of the box somebody is still typing in.
-  const missing = churchStaff.filter((s) => s.pay_type === 'hourly' && !(Number((periodEntries[s.id] || {}).hours_worked) > 0)).length;
-  $('entryState').innerHTML = missing
-    ? pill('warn', missing + (missing === 1 ? ' still needs hours' : ' still need hours'))
-    : pill('good', 'Ready to print');
+  renderPeriodState();
   renderReport(ps, pend);
   flashSaved();
 }

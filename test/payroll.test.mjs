@@ -50,11 +50,44 @@ const MDO_STAFF = [
 const MDO_HOURS = [{ staff_id: 'm1', work_date: null, hours_worked: 40 }];
 
 let mdoDown = false;
+// payroll_reviews is held for real in the stub, so approving and un-approving
+// round-trip the way they do against Postgres — a test that accepted any POST
+// would not notice the page sending a delete that never matched anything.
+let REVIEWS = [];
 
 const srv = http.createServer((q, r) => {
   const u = new URL(q.url, 'http://x');
   if (u.pathname.startsWith('/sb/rest/v1/')) {
     const table = u.pathname.slice('/sb/rest/v1/'.length);
+
+    if (table === 'payroll_reviews') {
+      const val = (k) => {
+        const raw = u.searchParams.get(k);
+        return raw ? raw.replace(/^eq\./, '') : null;
+      };
+      if (q.method === 'GET') {
+        r.writeHead(200, { 'Content-Type': 'application/json' });
+        return r.end(JSON.stringify(REVIEWS));
+      }
+      if (q.method === 'DELETE') {
+        const src = val('source'), sid = val('staff_id');
+        REVIEWS = REVIEWS.filter((x) => !(x.source === src && x.staff_id === sid));
+        r.writeHead(200, { 'Content-Type': 'application/json' });
+        return r.end('[]');
+      }
+      let raw = '';
+      q.on('data', (c) => { raw += c; });
+      return q.on('end', () => {
+        try {
+          const rec = JSON.parse(raw);
+          REVIEWS = REVIEWS.filter((x) => !(x.source === rec.source && x.staff_id === rec.staff_id));
+          REVIEWS.push({ ...rec, reviewed_at: '2026-08-01T10:00:00Z' });
+        } catch (_) { /* the page sent nothing usable */ }
+        r.writeHead(200, { 'Content-Type': 'application/json' });
+        r.end('[]');
+      });
+    }
+
     if (q.method !== 'GET') { r.writeHead(200, { 'Content-Type': 'application/json' }); return r.end('[]'); }
     if (mdoDown && ['staff', 'staff_hours', 'staff_clock_events', 'staff_pto_entries'].includes(table)) {
       r.writeHead(500, { 'Content-Type': 'application/json' });
@@ -72,7 +105,8 @@ const srv = http.createServer((q, r) => {
     return r.end(JSON.stringify(body));
   }
   r.writeHead(200, { 'Content-Type': 'text/html' });
-  r.end(`<!doctype html><html><head><meta charset="utf-8"><style>${ADMIN_UI_CSS}${PANEL_LIST_CSS}</style></head><body>${FRAGMENT}</body></html>`);
+  r.end(`<!doctype html><html><head><meta charset="utf-8"><style>${ADMIN_UI_CSS}${PANEL_LIST_CSS}</style></head>`
+    + `<body><span class="sidebar-user">dinger</span>${FRAGMENT}</body></html>`);
 });
 await new Promise((r) => srv.listen(0, r));
 const base = 'http://localhost:' + srv.address().port;
@@ -113,6 +147,53 @@ group('enter & approve');
   // The status column says the thing that actually blocks a payroll run.
   ok((await text('#entryRows')).includes('Needs hours'), 'somebody with no hours yet is flagged');
   ok((await text('#entryState')).includes('still needs hours'), 'and the period says so in its own badge');
+
+  // Nothing can be approved until its figures exist, so that row gets no
+  // button — one that silently did nothing would be worse than none.
+  const noBtn = await p.$('[data-review-staff="c3"]');
+  ok(noBtn === null, 'a person with no hours yet has no Approve button');
+  ok(await p.$('[data-review-staff="c1"]') !== null, 'somebody whose figures are in does');
+}
+
+group('checking a row off as reviewed');
+{
+  // Approved is a stored fact, not a label: a row in payroll_reviews.
+  ok((await text('#entryRows')).includes('Ready'), 'a row with figures but no review reads as Ready');
+
+  await p.click('[data-review-staff="c1"]');
+  await p.waitForTimeout(250);
+  ok((await text('#entryRows')).includes('Approved'), 'approving one says so');
+  ok(REVIEWS.length === 1 && REVIEWS[0].staff_id === 'c1', 'and it really was written: ' + JSON.stringify(REVIEWS));
+  ok(REVIEWS[0].reviewed_by === 'dinger', 'with who did it, taken from the signed-in user');
+
+  // MDO people can be checked off too — a review covering only half the
+  // payroll would be worse than none.
+  await p.click('[data-review-staff="m1"]');
+  await p.waitForTimeout(250);
+  ok(REVIEWS.some((x) => x.source === 'mdo' && x.staff_id === 'm1'), 'a childcare person can be approved as well');
+
+  // Un-checking deletes the row rather than flipping a flag, so "reviewed"
+  // can never be half-set.
+  await p.click('[data-review-staff="c1"]');
+  await p.waitForTimeout(250);
+  ok(!REVIEWS.some((x) => x.staff_id === 'c1'), 'un-approving removes the record: ' + JSON.stringify(REVIEWS));
+  ok((await text('#entryRows')).includes('Ready'), 'and the row goes back to Ready');
+
+  // It survives a reload — that is the whole point of storing it.
+  const p3 = await ctx.newPage();
+  await p3.goto(base);
+  await p3.waitForTimeout(700);
+  const after = (await p3.$eval('#entryRows', (n) => n.textContent)).replace(/\s+/g, ' ');
+  ok(after.includes('Approved'), 'the childcare approval is still there after a reload');
+  await p3.close();
+}
+
+group('the period badge names the outstanding step');
+{
+  // With somebody still missing hours, that outranks everything — telling
+  // Dinger "2 left to check" while two people have no hours would point him
+  // at the wrong job.
+  ok((await text('#entryState')).includes('still needs hours'), 'missing hours outrank unchecked rows');
 }
 
 group('the childcare app is read, not imported');
