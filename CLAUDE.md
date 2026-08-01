@@ -1246,6 +1246,72 @@ switched off stops resolving rather than sending people somewhere stale.
 `taps` table had a `scans` column that *nothing had ever written*, and counting
 needed the resolution to happen somewhere that could record it.
 
+#### Every edit screen is the redesign now (v3.11.0, 2026-08-01)
+
+Andrew, after clicking Edit on a link card: *"the next page goes to the old
+style, this also happened on the news and events when editing a post. and
+classes."*
+
+**The list screens were converted and the forms behind them were not.** Every
+"+ New" and "Edit" dropped staff out of the redesign and into the previous
+admin, mid-task — which reads as two different programs rather than as one.
+
+- **`renderFormSection()` in `admin/ui.js` is the edit form, once** — the same
+  field vocabulary as `renderDrawer`, laid out as a page because these forms
+  keep their own addresses (a warning row, a redirect after saving and a
+  bookmark all point at them). **A form is a config, exactly like a list is.**
+- **Converted to configs:** link cards, news posts, Bible classes, sermon
+  series, sermons. Each had a New and an Edit that were the same fields written
+  twice; they are one builder apiece now.
+- **The long tail is restyled, not rewritten.** Ministries, notices, staff,
+  users, menu, partners, voters and the giving screens carry things the field
+  vocabulary cannot express — three video slots, a banner picker, an event
+  repeater. Their own classes are restyled **scoped to `.tlc-wrap`**, so
+  changing the wrapper inherits the redesign with the fields and the POST
+  handler untouched. Anything still on the old shell keeps the old look rather
+  than getting half of each.
+- **⚠ Converting a checkbox to a toggle changes how it must be read.** A toggle
+  posts a hidden `0` ahead of its checkbox, so `form.get(name)` returns the `0`
+  whether or not it is ticked. Christian Ed's `active`, news `pinned` and the
+  sermon series `active` all had to move to `getAll(name).includes('1')` in the
+  same commit as the form. Getting this wrong silently saves every class as
+  paused.
+- **⚠ A news post could never be tagged with a value.** The column has existed
+  since v3.0.0 and the list filters on it, but no form ever set one — so the
+  filter could never match anything. Found while rewriting the form. Same shape
+  as the tap counter: a column nothing wrote to.
+
+**Sermons' two actions moved beside the primary button.** They were in the
+topbar, which put "add a series" further from the list it adds to than the sign
+out link. `renderListSection` takes `altActions` now — quiet siblings, so the
+one blue button still leads.
+
+**The arrows are gone.** 90 of them, across the admin and the emails: `Save →`,
+`View page →`, `Publish →`. Arrows that are genuinely a separator — `Settings →
+Bookkeeper email`, `hold → confirmed`, the audit log's before/after — are left,
+because those are sentences rather than decoration.
+
+#### A fourth and fifth newsletter note (v3.11.0, 2026-08-01)
+
+The pastor's note, a secondary and a tertiary were the three free-form blocks
+an issue could carry. `newsletters.extra_notes` adds more.
+
+- **JSON, not more columns.** How many notes an issue carries is a property of
+  the issue, not of the schema — a week needing three extras should not need a
+  migration. `parseExtras` / `extrasFromForm` / `serializeExtras` in
+  `admin/newsletter.js`, pure and tested.
+- **A note with no body is not a note**, dropped at parse rather than at render,
+  so a slot somebody opened and thought better of never reaches the email, the
+  preview or the archive. Blank slots collapse, so filling the third box
+  without the second leaves no hole.
+- **All the slots are rendered and the unused ones hidden**; "+ Add another
+  note" reveals the next. Creating a TinyMCE instance on click would be a second
+  way for a rich field to exist, and that is how one ends up behaving
+  differently from the rest.
+- **A heading is escaped.** It is typed by staff and lands in six hundred
+  inboxes. `email.js` gained a local `esc` for short plain-text fields — a step
+  toward AC-2, not the whole sweep.
+
 #### The taps are counted (v3.10.0, 2026-08-01)
 
 `admin/taps.js` holds the rules, pure and tested; the counting itself is split
@@ -1647,7 +1713,7 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 
 ### Still Needs to Be Built
 - **`/volunteer` short-URL redirect does not actually exist** — confirmed live 2026-07-20 while chasing the 2026-07-20 volunteer→serve rebrand: the Redirects tab in `admin.timothystl.org` has no `/volunteer` entry at all. This table's earlier documentation of `/volunteer → volunteer.timothystl.org` as an existing "Utility Redirect" was aspirational/planned, not a live row — `site-worker.js` has no hardcoded fallback either (confirmed by grep), so `timothystl.org/volunteer` simply falls through to the normal 404 page today, not to a dead external host. Nothing broke as part of the volunteer.timothystl.org→serve.timothystl.org cutover (see the chms repo's own CLAUDE.md). If a short link is wanted, an admin can add one via the Redirects tab: path `/volunteer` (or `/serve`), target `https://serve.timothystl.org` — optional, not a fix for anything broken.
-- **links.timothystl.org "Volunteer" card still points at the old host** — the live `link_cards` D1 row (managed via the Links tab) was seeded long before this rebrand and still has `https://volunteer.timothystl.org` as its URL; the code-level seed constant was updated but that only affects a table that's empty on first run, not an already-populated one. Needs a manual edit via the Links tab: update the URL to `https://serve.timothystl.org` (and optionally rename the title to "Serve").
+- ~~**links.timothystl.org "Volunteer" card still points at the old host**~~ — **not true, checked 2026-08-01.** Andrew looked and the live card already reads `serve.timothystl.org`; the seed constant says the same. This entry was written as a prediction about a row nobody had looked at, and it stayed on the list long enough to waste his time. Nothing to do.
 - **`/confirmation`, `/sundayschool`, `/vbs`, `/egghunt`, `/family`** — Youth sub-pages. Admin portal has the youth_pages table, but these slugs need content entered by the youth director.
 - **Christmas Market annual content** — Page structure is built. Needs dates, description, photos, and Google Form link for vendors entered via the admin Ministries tab each year.
 - **Ministry page editor rollout** — every ministry page now has a full-page block draft waiting in the editor (banner and all sections). The office reviews each one and presses Publish; until then the live page renders from its hardcoded markup exactly as before. Once a page is published from the editor, its hardcoded section markup in `public/index.html` is dead and can be deleted.

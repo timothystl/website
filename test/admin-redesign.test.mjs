@@ -1438,6 +1438,45 @@ group('the NFC taps actually answer');
     'a hand-made redirect beats the tap');
 }
 
+group('a newsletter can carry a fourth and fifth note');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  // The composer offers the slots and the button that reveals them.
+  const form = await (await call(env, '/new', { cookie })).text();
+  has(form, 'More notes', 'the composer offers more than the three fixed notes');
+  has(form, '+ Add another note', 'behind a button, so an unused slot is not clutter');
+  has(form, 'extra_note_0', 'with a real field behind it');
+
+  db.prepare("INSERT INTO newsletters (id,subject,pastor_note,format,status,published_at,extra_notes) VALUES (9,'Test issue','<p>Note</p>','weekly','draft','2026-08-01',?)")
+    .run(JSON.stringify([{ title: 'Thank you', body: '<p>To everyone who helped.</p>' }]));
+
+  const edit = await (await call(env, '/edit/9', { cookie })).text();
+  has(edit, 'Thank you', 'an issue that has one shows it when reopened');
+  has(edit, 'To everyone who helped', 'with its words');
+
+  // The preview is built by the same function the send path uses, so an extra
+  // note that shows here is one that will actually go out.
+  const preview = await worker.fetch(new Request('https://admin.timothystl.org/newsletter/preview', {
+    method: 'POST',
+    headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
+    body: 'subject=Test&format=weekly&pastor_note=%3Cp%3EHi%3C%2Fp%3E&extra_title_0=Thank+you&extra_note_0=%3Cp%3EGrateful%3C%2Fp%3E',
+  }), env, ctx);
+  const previewHtml = await preview.text();
+  has(previewHtml, 'Thank you', 'the preview shows the extra note');
+  has(previewHtml, 'Grateful', 'and its body');
+
+  // A heading is typed by staff and lands in six hundred inboxes.
+  const nasty = await worker.fetch(new Request('https://admin.timothystl.org/newsletter/preview', {
+    method: 'POST',
+    headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
+    body: 'subject=Test&format=weekly&extra_title_0=%3Cscript%3Ealert(1)%3C%2Fscript%3E&extra_note_0=%3Cp%3Ex%3C%2Fp%3E',
+  }), env, ctx);
+  const nastyHtml = await nasty.text();
+  ok(!nastyHtml.includes('<script>alert(1)'), 'a heading cannot smuggle markup into the email');
+}
+
 group('the taps are counted');
 {
   // \u26a0 Until now `taps.scans` was a column nothing ever wrote to. Resolution

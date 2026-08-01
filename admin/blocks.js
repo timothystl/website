@@ -1004,7 +1004,7 @@ function renderInfoCard(b, opts) {
     const city = st.address_city || '';
     const maps = line || city ? `https://maps.google.com/?q=${encodeURIComponent([line, city].filter(Boolean).join(', '))}` : '';
     body = (line || city)
-      ? row(line, city) + (maps ? `<div class="tlcb-card-row"><a class="tlcb-card-link" href="${esc(maps)}">Get directions →</a></div>` : '')
+      ? row(line, city) + (maps ? `<div class="tlcb-card-row"><a class="tlcb-card-link" href="${esc(maps)}">Get directions</a></div>` : '')
       : `<p class="tlcb-note">No address set yet — add it under Church details.</p>`;
   } else if (b.cardShows === 'contact') {
     const phone = st.phone || '';
@@ -1018,8 +1018,8 @@ function renderInfoCard(b, opts) {
       ? links.map((l) => {
         const href = safeUrl(l.url);
         return `<div class="tlcb-card-row">${href && !opts.editing
-          ? `<a class="tlcb-card-link" href="${esc(href)}">${esc(l.title || '')} →</a>`
-          : `<span class="tlcb-card-link">${esc(l.title || '')} →</span>`}</div>`;
+          ? `<a class="tlcb-card-link" href="${esc(href)}">${esc(l.title || '')}</a>`
+          : `<span class="tlcb-card-link">${esc(l.title || '')}</span>`}</div>`;
       }).join('')
       : `<p class="tlcb-note">No links yet — add them in the inspector.</p>`;
   } else {
@@ -1125,7 +1125,7 @@ function renderInner(b, opts) {
           ${sm.series ? `<span class="tlcb-eyebrow">${esc(sm.series)}</span>` : ''}
           <span class="tlcb-sermon-t">${esc(sm.title || '')}</span>
           <span class="tlcb-sermon-m">${esc([sm.date, sm.scripture].filter(Boolean).join(' · '))}</span>
-          ${opts.editing ? '<span class="tlcb-note">All sermons →</span>' : '<a class="tlcb-sermon-all" href="/sermons">All sermons →</a>'}
+          ${opts.editing ? '<span class="tlcb-note">All sermons</span>' : '<a class="tlcb-sermon-all" href="/sermons">All sermons</a>'}
         </div>
       </div></div>`;
   }

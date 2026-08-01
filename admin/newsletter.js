@@ -55,6 +55,51 @@ export function blockOn(raw, key) {
 }
 
 // ── WHO GETS IT ──────────────────────────────────────────────
+// ── EXTRA NOTES ──────────────────────────────────────────────
+// The pastor's note, a secondary note and a tertiary note were the three
+// free-form blocks an issue could carry. Some weeks need a fourth or a fifth —
+// a thank-you, a correction, a one-off appeal that belongs beside the rest
+// rather than squeezed into one of the three.
+//
+// Stored as JSON rather than as more columns, because "how many notes" is a
+// property of an issue and not of the schema: a week needing three extras
+// should not need a migration. The form offers a fixed number of slots; the
+// data does not care.
+export const MAX_EXTRA_NOTES = 3;
+
+export function parseExtras(raw) {
+  let list = raw;
+  if (typeof raw === 'string') {
+    try { list = JSON.parse(raw); } catch (_) { return []; }
+  }
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((x) => ({
+      title: String((x && x.title) || '').slice(0, 120).trim(),
+      body: String((x && x.body) || '').trim(),
+    }))
+    // A note with no body is not a note. Dropping it here rather than at render
+    // time means an empty slot somebody opened and thought better of never
+    // reaches the email, the preview, or the archive.
+    .filter((x) => x.body)
+    .slice(0, MAX_EXTRA_NOTES);
+}
+
+// Reads the numbered fields the form posts back. Blank slots collapse, so
+// filling in the third box without the second does not leave a hole.
+export function extrasFromForm(form) {
+  const out = [];
+  for (let i = 0; i < MAX_EXTRA_NOTES; i++) {
+    out.push({
+      title: String(form.get(`extra_title_${i}`) || ''),
+      body: String(form.get(`extra_note_${i}`) || ''),
+    });
+  }
+  return parseExtras(out);
+}
+
+export const serializeExtras = (list) => JSON.stringify(parseExtras(list));
+
 export const AUDIENCES = [
   { key: 'everyone', label: 'Everyone' },
   { key: 'church',   label: 'Church only' },

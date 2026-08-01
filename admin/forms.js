@@ -270,7 +270,7 @@ export async function handleFilteredRoutes(request, env, path, method, currentUs
 
     return html(`
 ${sidebarShell('filtered', currentUser)}
-<div class="wrap">
+<div class="tlc-wrap">
   <div class="page-title">Filtered Mail</div>
   <div class="page-sub">Messages the website held back as spam. Nothing here was emailed to you — release anything that turns out to be real.</div>
   ${notice}
