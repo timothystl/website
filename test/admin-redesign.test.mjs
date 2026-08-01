@@ -511,5 +511,147 @@ group('menu access control');
   eq((await call(env, '/menu', { cookie })).status, 403, 'the menu needs pages_edit');
 }
 
+
+// ── phase 5: the newsletter ──────────────────────────────────────────────────
+const form = (obj) => {
+  const b = new URLSearchParams();
+  for (const [k, v] of Object.entries(obj)) {
+    if (Array.isArray(v)) v.forEach((x) => b.append(k, x)); else b.append(k, v);
+  }
+  return b.toString();
+};
+const post = (env, path, cookie, body) => worker.fetch(new Request('https://admin.timothystl.org' + path, {
+  method: 'POST',
+  headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
+  body,
+}), env, ctx);
+
+group('the newsletter list');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  db.prepare("INSERT INTO newsletters (id,subject,pastor_note,published_at,status) VALUES (1,'Advent begins','<p>Hi</p>','2026-12-01','draft')").run();
+  db.prepare("INSERT INTO newsletters (id,subject,pastor_note,published_at,status,sent_at,sent_count) VALUES (2,'Last week','<p>Hi</p>','2026-07-24','published','2026-07-24T10:00:00Z',609)").run();
+
+  // The list is the unmatched fall-through, addressed as /newsletters — '/'
+  // itself redirects to the dashboard.
+  const body = await (await call(env, '/newsletters', { cookie })).text();
+  has(body, 'Advent begins', 'a draft appears');
+  // en-US ordering: the handoff writes "24 July", but every other date in
+  // this admin reads American and so do its readers.
+  has(body, 'Sent July 24 to 609 subscribers', 'a sent issue keeps its real send record');
+  has(body, 'Duplicate as draft', 'and offers duplication rather than editing');
+  has(body, 'read-only', 'the section note states the rule');
+}
+
+group('a sent issue cannot be modified by any path');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  db.prepare("INSERT INTO newsletters (id,subject,pastor_note,published_at,status,sent_at) VALUES (7,'Already sent','<p>Original</p>','2026-07-24','published','2026-07-24T10:00:00Z')").run();
+
+  // The direct POST — the path a stale tab or a crafted request takes.
+  const res = await post(env, '/publish', cookie, form({
+    newsletter_id: '7', subject: 'Rewritten', pastor_note: '<p>Tampered</p>',
+    published_at: '2026-07-24', format: 'weekly', action: 'publish',
+  }));
+  eq(res.status, 302, 'the write is refused with a redirect');
+  has(res.headers.get('location'), 'msg=locked', 'and says why');
+
+  const after = db.prepare('SELECT subject, pastor_note FROM newsletters WHERE id=7').get();
+  eq(after.subject, 'Already sent', 'the subject is untouched');
+  eq(after.pastor_note, '<p>Original</p>', 'and so is the body — the archive still says what was sent');
+
+  // The editor shows it read-only rather than pretending it is editable.
+  const page = await (await call(env, '/edit/7', { cookie })).text();
+  has(page, 'Sent newsletter', 'the editor titles it as sent');
+  has(page, 'read-only', 'explains the lock');
+  has(page, 'Duplicate as draft', 'and offers the way forward');
+}
+
+group('duplicating a sent issue gives an editable draft');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  db.prepare("INSERT INTO newsletters (id,subject,pastor_note,published_at,status,sent_at) VALUES (8,'Sent issue','<p>Body</p>','2026-07-24','published','2026-07-24T10:00:00Z')").run();
+  const res = await post(env, '/newsletter/duplicate/8', cookie, '');
+  eq(res.status, 302, 'duplication redirects');
+  const copy = db.prepare("SELECT * FROM newsletters WHERE id <> 8 ORDER BY id DESC LIMIT 1").get();
+  ok(copy, 'a copy exists');
+  eq(copy.status, 'draft', 'and it is a draft');
+  eq(copy.sent_at, null, 'with no send record of its own');
+  eq(canEditsCheck(copy), true, 'so it can be edited');
+}
+function canEditsCheck(row) {
+  return !(row.status === 'sent' || row.sent_at || row.beehiiv_id || row.brevo_campaign_id);
+}
+
+group('block switches survive a save');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  db.prepare("INSERT INTO newsletters (id,subject,pastor_note,published_at,status) VALUES (9,'Light week','<p>Hi</p>','2026-12-01','draft')").run();
+
+  // Every switch was on the page; two of them were turned off.
+  const keys = ['secondary','news','events','classes','sermon','wol','lasm','tertiary','cta','bulletin'];
+  await post(env, '/publish', cookie, form(Object.assign({
+    newsletter_id: '9', subject: 'Light week', published_at: '2026-12-01',
+    format: 'weekly', action: 'draft', pastor_note: '<p>Hi</p>',
+    block_seen: keys,
+  }, Object.fromEntries(keys.filter((k) => k !== 'wol' && k !== 'lasm').map((k) => ['block_' + k, '1'])))));
+
+  const saved = JSON.parse(db.prepare('SELECT blocks FROM newsletters WHERE id=9').get().blocks);
+  eq(saved.wol, false, 'a switch turned off is stored off');
+  eq(saved.lasm, false, 'for each one');
+  eq(saved.news, true, 'a switch left on stays on');
+  eq(saved.pastor, true, 'and the locked block is always on');
+}
+
+group('a brand-new issue does not save itself empty');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  // The new-newsletter form renders no block switches at all. If that were read
+  // as "everything off", a first issue would ship with nothing in it.
+  await post(env, '/publish', cookie, form({
+    subject: 'First issue', published_at: '2026-12-01', format: 'weekly',
+    action: 'draft', pastor_note: '<p>Hello</p>',
+  }));
+  const row = db.prepare("SELECT blocks FROM newsletters WHERE subject='First issue'").get();
+  eq(row.blocks, null, 'no switches on the form stores null, not all-false');
+}
+
+group('the preview is built by the same code that sends');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const res = await post(env, '/newsletter/preview', cookie, form({
+    subject: 'Preview me', published_at: '2026-12-01', format: 'weekly',
+    pastor_note: '<p>A word from the pastor</p>',
+    block_pastor: '1', block_wol: '1', wol_content: '<p>School news</p>',
+  }));
+  eq(res.status, 200, 'the preview renders');
+  const html = await res.text();
+  has(html, 'A word from the pastor', 'and contains what was typed');
+  has(html, 'School news', 'including a block that is switched on');
+
+  // A switched-off block must be absent from the preview, or the preview lies
+  // about what will be sent.
+  const off = await (await post(env, '/newsletter/preview', cookie, form({
+    subject: 'Preview me', published_at: '2026-12-01', format: 'weekly',
+    pastor_note: '<p>A word from the pastor</p>',
+    wol_content: '<p>School news</p>',
+  }))).text();
+  ok(!off.includes('School news'), 'a switched-off block is absent from the preview too');
+}
+
+group('newsletter access control');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ['news_edit'], 'newsonly');
+  eq((await call(env, '/new', { cookie })).status, 403, 'news_edit alone cannot write newsletters');
+  eq((await post(env, '/newsletter/preview', cookie, 'subject=x')).status, 403, 'nor build a preview');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
