@@ -353,22 +353,51 @@ group('short links on the Pages screen');
   has(body, 'already taken by the', 'with a warning row that names the other page');
   has(body, 'Fix short link', 'and an action to resolve it');
 
-  // Resolving it by hand clears both.
-  const res = await worker.fetch(new Request('https://admin.timothystl.org/pages/archive/link', {
+  // Resolving it by hand clears both. The short link is a field in the Details
+  // drawer now, not a screen of its own — one place a page's name, address and
+  // short link are edited rather than two that can disagree.
+  const res = await worker.fetch(new Request('https://admin.timothystl.org/pages/archive/details', {
     method: 'POST',
     headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
-    body: 'short_link=archive',
+    body: 'title=Sermon+Archive&slug=%2Fmedia%2Fsermons&short_link=archive&external_url=',
   }), env, ctx);
-  eq(res.status, 302, 'saving a short link redirects');
-  eq(db.prepare("SELECT short_link FROM pages WHERE id='archive'").get().short_link, 'archive', 'and stores it normalised');
+  eq(res.status, 302, 'saving the details redirects');
+  eq(db.prepare("SELECT short_link FROM pages WHERE id='archive'").get().short_link, 'archive', 'and stores the short link normalised');
 
   body = await (await call(env, '/pages', { cookie })).text();
   lacks(body, 'Link clash', 'giving one of them a different short link clears the clash');
 
-  // The form itself.
-  const form = await (await call(env, '/pages/beliefs/link', { cookie })).text();
-  has(form, 'timothystl.org/', 'the short-link form shows the address it builds');
-  has(form, 'follow the page address automatically', 'and explains what blank means');
+  // The drawer itself, and the old address still leads to it.
+  const drawer = await (await call(env, '/pages/beliefs/details', { cookie })).text();
+  has(drawer, 'Short link', 'the drawer carries the short-link field');
+  has(drawer, 'Clear it to switch off', 'and explains what blank means');
+  has(drawer, 'Open in page editor', 'with content reached from here rather than edited here');
+  const moved = await call(env, '/pages/beliefs/link', { cookie });
+  eq(moved.status, 302, 'the old short-link address still leads somewhere');
+  eq(moved.headers.get('location'), '/pages/beliefs/details', 'namely the drawer');
+}
+
+group('a page can stand in for another site');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const now = new Date().toISOString();
+  db.prepare('DELETE FROM pages').run();
+  db.prepare(
+    "INSERT INTO pages (id,title,slug,parent_id,sort,template,status,in_menu,blocks,published_blocks,external_url,updated_at) " +
+    "VALUES ('mdo','Mother’s Day Out','/mdo',NULL,0,'standard','published',1,'[]','[]','https://mdo.timothystl.org',?)"
+  ).run(now);
+
+  const body = await (await call(env, '/pages', { cookie })).text();
+  has(body, 'Links out', 'the list says the page links out');
+  has(body, 'mdo.timothystl.org', 'and where to');
+  lacks(body, '/pages/mdo/edit', 'with no editor to open — there is nothing in it to edit');
+
+  // The public API sends the visitor to the other site rather than rendering a
+  // page that would redirect out from under them.
+  const api = await (await call(env, '/api/pages')).json();
+  eq(api.redirects['/mdo'], 'https://mdo.timothystl.org', 'the address resolves to the outside site');
+  ok(!api.rendered.mdo, 'and nothing is rendered for it');
 }
 
 group('short links reach the public API');
