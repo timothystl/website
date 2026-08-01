@@ -170,13 +170,22 @@ export async function deleteSession(db, request) {
   if (token) await db.prepare('DELETE FROM sessions WHERE token = ?').bind(token).run();
 }
 
+// AC-1: `Secure` was missing. Without it the browser will send the session
+// cookie over plain HTTP, so anything that can downgrade or intercept a
+// request — a hostile network, an http:// link somebody clicks — gets a
+// working admin session. The admin is HTTPS-only in practice, which is
+// exactly why the flag costs nothing and closes the case where it is not.
+//
+// It is on the clear header too: a browser will refuse to overwrite a Secure
+// cookie with a non-Secure one, so signing out has to match or the cookie
+// survives the sign-out.
 export function sessionCookieHeader(token) {
   const exp = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toUTCString();
-  return `tlc_session=${token}; Path=/; Expires=${exp}; HttpOnly; SameSite=Strict`;
+  return `tlc_session=${token}; Path=/; Expires=${exp}; HttpOnly; Secure; SameSite=Strict`;
 }
 
 export function clearSessionCookieHeader() {
-  return 'tlc_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict';
+  return 'tlc_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict';
 }
 
 // ── PERMISSION HELPERS ────────────────────────────────────────

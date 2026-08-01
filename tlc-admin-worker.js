@@ -34,6 +34,7 @@ import { migrateLegacyPage, starterBlocks, sanitizeBlocks, sanitizeBlock, parseB
          STAMP_PRESETS, safeUrl, esc as escBlock, editorPhoneCss, blocksClientConfig, makeBlockId,
          TEMPLATES, templateOf, wrapTemplate, BLOCK_CSS, cleanText } from './admin/blocks.js';
 import PAYROLL_HTML from './admin/payroll.html';
+import SCHEDULER_HTML from './admin/scheduler.html';
 import MINISTRY_EDITOR_HTML from './admin/ministry-editor.html';
 import { PAGE_SEEDS } from './admin/page-seeds.js';
 import { SITE_PAGES } from './admin/site-pages.js';
@@ -662,12 +663,20 @@ export default {
       return await this._fetch(request, env, ctx);
     } catch (e) {
       const detail = e && (e.stack || e.message) ? (e.stack || e.message) : String(e);
+      // AW-1: this used to return the full stack to EVERY caller. The comment
+      // said "admin portal is staff-only", but this handler also wraps the
+      // login page and the public POST endpoints — /api/contact, /api/prayer,
+      // /api/subscribe — which anyone on the internet can reach. A stack trace
+      // names files, line numbers and often the shape of a query.
+      //
+      // The detail still exists; it goes to the log, where the person who
+      // needs it can get at it and a stranger cannot.
       console.error('Admin worker error:', detail);
-      // Admin portal is staff-only — surface the underlying error so it can
-      // actually be debugged without digging through Cloudflare tail logs.
+      const ref = crypto.randomUUID().slice(0, 8);
+      console.error('Admin worker error ref:', ref);
       return new Response(
-        'Something went wrong. Please try again or contact the site administrator.\n\n' +
-        '--- Error detail (share this with the developer) ---\n' + detail,
+        'Something went wrong. Please try again, or send this reference to the site administrator.\n\n'
+        + 'Reference: ' + ref + '\n',
         { status: 500, headers: { 'Content-Type': 'text/plain' } }
       );
     }
@@ -3002,6 +3011,26 @@ ${sidebarShell('partners', currentUser, `<a href="/partners">← All partners</a
       }
     }
     // ── PAYROLL PAGE (auth-gated, no secondary login needed) ──
+    // ── WORSHIP SCHEDULE BUILDER (legacy) ──────────────────────
+    // VS-2: this lived in public/ and was served by the site worker to anybody
+    // who typed timothystl.org/scheduler.html — the whole staff scheduling
+    // tool, wide open. It is behind the admin session now.
+    //
+    // It is also dead: the only endpoint it talks to, /admin/api/scheduler/data,
+    // does not exist anywhere in this repo, so it can neither load nor save.
+    // Kept rather than deleted because Andrew asked for it locked, not removed,
+    // and because the schedules it used to hold may still be wanted. Staff are
+    // pointed at connect.timothystl.org for real scheduling.
+    if (path === '/scheduler' && method === 'GET') {
+      return new Response(SCHEDULER_HTML, {
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'X-Robots-Tag': 'noindex, nofollow',
+          'Cache-Control': 'private, no-store',
+        },
+      });
+    }
+
     if (path === '/payroll' && method === 'GET') {
       if (!hasPermission(currentUser, 'payroll_manage')) {
         return new Response('Access denied.', { status: 403 });
