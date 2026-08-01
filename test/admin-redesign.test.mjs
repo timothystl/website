@@ -819,6 +819,91 @@ group('gym rentals ships both layouts');
 
   // Month navigation must not lose the view.
   has(cal, 'view=calendar&m=', 'month navigation keeps the calendar view');
+
+  // Clicking a day books it. The date is carried through, so the form opens
+  // already filled in rather than asking again for what was just clicked.
+  has(cal, `/gym-rentals/bookings/new?dt=${month}-21`, 'a day links to the booking form with its own date');
+  has(cal, 'gymcal-day--open', 'and is styled as something you can click');
+  has(cal, 'Book this day', 'with a label for anybody not using a mouse');
+  // A blocked date and a date already gone are not bookable, so they do not
+  // pretend to be.
+  ok(!cal.includes(`/gym-rentals/bookings/new?dt=${month}-24`), 'a blocked date is not offered');
+  has(cal, 'gymcal-cell--past', 'and days already gone are marked as such');
+  // A booking on the calendar links to the group it belongs to.
+  has(cal, '/gym-rentals/groups/1', 'a booking links to its group');
+}
+
+group('payroll emails its report to the bookkeeper');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const report = {
+    periodStart: '2026-07-16', periodEnd: '2026-07-31', periodLabel: 'Jul 16 – Jul 31, 2026',
+    approved: true, approvedBy: 'dinger', total: 7630,
+    groups: [{ name: 'Church staff', subtotal: 5190, people: [
+      { name: '<img src=x onerror=alert(1)>', kind: 'Salaried', basis: '—', pto: 0, gross: 3966 },
+    ] }],
+  };
+  const post = (body) => worker.fetch(new Request('https://admin.timothystl.org/payroll/email', {
+    method: 'POST',
+    headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }), env, ctx);
+
+  // Without an address there is nothing to send to, and it says which setting.
+  const noAddr = await post(report);
+  eq(noAddr.status, 400, 'with no bookkeeper address set it refuses');
+  ok((await noAddr.json()).error.includes('Settings'), 'and names where to set one');
+
+  db.prepare("INSERT INTO site_settings (key,value) VALUES ('payroll_bookkeeper_email','books@example.com') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+
+  // Brevo is stubbed so the test asserts what was actually built and sent.
+  const sent = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (u, init) => {
+    if (String(u).includes('brevo')) { sent.push(JSON.parse(init.body)); return new Response('{}', { status: 201 }); }
+    return realFetch(u, init);
+  };
+  env.BREVO_API_KEY = 'test-key';
+
+  const ok1 = await post(report);
+  globalThis.fetch = realFetch;
+
+  eq(ok1.status, 200, 'with an address it sends');
+  eq((await ok1.json()).to, 'books@example.com', 'and reports where it went');
+  eq(sent.length, 1, 'exactly one email');
+  eq(sent[0].to[0].email, 'books@example.com', 'to the bookkeeper');
+  ok(sent[0].subject.includes('Jul 16'), 'with the period in the subject: ' + sent[0].subject);
+  ok(sent[0].htmlContent.includes('$7,630.00'), 'and the combined total in the body');
+  ok(sent[0].htmlContent.includes('Approved by dinger'), 'saying it was signed off, and by whom');
+
+  // The page posts figures, not markup. A name is escaped on the way in, so it
+  // cannot become HTML in something that lands in an outside inbox.
+  ok(!sent[0].htmlContent.includes('<img src=x'), 'a name cannot smuggle markup into the email');
+  ok(sent[0].htmlContent.includes('&lt;img'), 'it is escaped instead');
+
+  // An unapproved run says so, rather than looking final.
+  const sent2 = [];
+  globalThis.fetch = async (u, init) => {
+    if (String(u).includes('brevo')) { sent2.push(JSON.parse(init.body)); return new Response('{}', { status: 201 }); }
+    return realFetch(u, init);
+  };
+  await post({ ...report, approved: false, incomplete: true });
+  globalThis.fetch = realFetch;
+  ok(sent2[0].htmlContent.includes('Not yet approved'), 'an unapproved run is labelled as such');
+  ok(sent2[0].htmlContent.includes('Incomplete'), 'and so is one missing its childcare figures');
+}
+
+group('emailing payroll needs the payroll permission');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ALL_PERMISSIONS.filter((p) => p !== 'payroll_manage'), 'nopay2');
+  const res = await worker.fetch(new Request('https://admin.timothystl.org/payroll/email', {
+    method: 'POST',
+    headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/json' },
+    body: '{}',
+  }), env, ctx);
+  eq(res.status, 403, 'somebody without payroll_manage cannot mail the report out');
 }
 
 

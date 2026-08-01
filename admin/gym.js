@@ -2005,11 +2005,19 @@ ${portalHeader}
           const chips = items.slice(0, 3).map((it) => {
             const tone = blocked ? 'conflict' : it.kind;
             const label = (it.b.group_name || 'Unassigned').slice(0, 14) + (it.kind === 'hold' ? ' · hold' : '');
-            return `<span class="gymcal-chip gymcal-chip--${tone}" title="${escapeHtml((it.b.group_name || 'Unassigned') + ' · ' + fmt12h(it.b.start_time) + '–' + fmt12h(it.b.end_time) + (blocked ? ' — on a blocked date' : ''))}">${escapeHtml(label)}</span>`;
+            const where = it.b.group_id ? `/gym-rentals/groups/${it.b.group_id}` : '/gym-rentals';
+            return `<a class="gymcal-chip gymcal-chip--${tone}" href="${where}" title="${escapeHtml((it.b.group_name || 'Unassigned') + ' · ' + fmt12h(it.b.start_time) + '–' + fmt12h(it.b.end_time) + (blocked ? ' — on a blocked date' : ''))}">${escapeHtml(label)}</a>`;
           }).join('');
           const more = items.length > 3 ? `<span class="gymcal-more">+${items.length - 3} more</span>` : '';
-          cells += `<div class="gymcal-cell${blocked ? ' gymcal-cell--blocked' : ''}${iso === today ? ' gymcal-cell--today' : ''}">
-      <span class="gymcal-day">${day}</span>
+          // The day itself is the link: clicking it opens the booking form with
+          // that date already filled in. The chips inside it are separate links
+          // to the group they belong to, so "what is this?" and "book this day"
+          // are two different clicks rather than one ambiguous one.
+          const past = iso < today;
+          cells += `<div class="gymcal-cell${blocked ? ' gymcal-cell--blocked' : ''}${iso === today ? ' gymcal-cell--today' : ''}${past ? ' gymcal-cell--past' : ''}">
+      ${past || blocked
+        ? `<span class="gymcal-day">${day}</span>`
+        : `<a class="gymcal-day gymcal-day--open" href="/gym-rentals/bookings/new?dt=${iso}" title="Book ${escapeHtml(fmtBookingDate(iso))}">${day}<span class="gymcal-add" aria-hidden="true">+</span><span class="tlc-sr">Book this day</span></a>`}
       ${blocked ? `<span class="gymcal-blocked" title="${escapeHtml(blocked)}">${escapeHtml(blocked.slice(0, 18))}</span>` : ''}
       ${chips}${more}
     </div>`;

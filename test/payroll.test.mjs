@@ -50,11 +50,39 @@ const MDO_STAFF = [
 const MDO_HOURS = [{ staff_id: 'm1', work_date: null, hours_worked: 40 }];
 
 let mdoDown = false;
+// payroll_periods is held for real in the stub, so approving and taking it
+// back round-trip the way they do against Postgres — a test that accepted any
+// POST would not notice the page sending a delete that never matched anything.
+let APPROVALS = [];
 
 const srv = http.createServer((q, r) => {
   const u = new URL(q.url, 'http://x');
   if (u.pathname.startsWith('/sb/rest/v1/')) {
     const table = u.pathname.slice('/sb/rest/v1/'.length);
+
+    if (table === 'payroll_periods') {
+      if (q.method === 'GET') {
+        r.writeHead(200, { 'Content-Type': 'application/json' });
+        return r.end(JSON.stringify(APPROVALS));
+      }
+      if (q.method === 'DELETE') {
+        APPROVALS = [];
+        r.writeHead(200, { 'Content-Type': 'application/json' });
+        return r.end('[]');
+      }
+      let raw = '';
+      q.on('data', (c) => { raw += c; });
+      return q.on('end', () => {
+        try {
+          const rec = JSON.parse(raw);
+          APPROVALS = [{ ...rec, approved_at: '2026-08-01T10:00:00Z' }];
+        } catch (_) { /* the page sent nothing usable */ }
+        r.writeHead(200, { 'Content-Type': 'application/json' });
+        r.end('[]');
+      });
+    }
+    if (table === 'x-email') { /* unreachable; keeps the shape obvious */ }
+
     if (q.method !== 'GET') { r.writeHead(200, { 'Content-Type': 'application/json' }); return r.end('[]'); }
     if (mdoDown && ['staff', 'staff_hours', 'staff_clock_events', 'staff_pto_entries'].includes(table)) {
       r.writeHead(500, { 'Content-Type': 'application/json' });
@@ -72,7 +100,8 @@ const srv = http.createServer((q, r) => {
     return r.end(JSON.stringify(body));
   }
   r.writeHead(200, { 'Content-Type': 'text/html' });
-  r.end(`<!doctype html><html><head><meta charset="utf-8"><style>${ADMIN_UI_CSS}${PANEL_LIST_CSS}</style></head><body>${FRAGMENT}</body></html>`);
+  r.end(`<!doctype html><html><head><meta charset="utf-8"><style>${ADMIN_UI_CSS}${PANEL_LIST_CSS}</style></head>`
+    + `<body><span class="sidebar-user">dinger</span>${FRAGMENT}</body></html>`);
 });
 await new Promise((r) => srv.listen(0, r));
 const base = 'http://localhost:' + srv.address().port;
@@ -113,6 +142,65 @@ group('enter & approve');
   // The status column says the thing that actually blocks a payroll run.
   ok((await text('#entryRows')).includes('Needs hours'), 'somebody with no hours yet is flagged');
   ok((await text('#entryState')).includes('still needs hours'), 'and the period says so in its own badge');
+
+}
+
+group('approving the period');
+{
+  // One decision about one run, not a tick beside eleven names.
+  ok(await p.$('[data-review-staff]') === null, 'there is no per-row Approve button');
+  ok(await p.$('#approvePeriodBtn') !== null, 'there is one Approve period button');
+
+  const summary = await text('#periodSummary');
+  ok(/hours from/.test(summary), 'the footer says what the run adds up to: ' + summary);
+
+  // Somebody still has no hours, so approving asks rather than refuses — the
+  // office may know that person genuinely worked none.
+  p.once('dialog', (d) => d.accept());
+  await p.click('#approvePeriodBtn');
+  await p.waitForTimeout(300);
+
+  ok(APPROVALS.length === 1, 'the approval was written: ' + JSON.stringify(APPROVALS));
+  ok(APPROVALS[0].approved_by === 'dinger', 'with who did it, taken from the signed-in user');
+  ok((await text('#entryState')).includes('Approved'), 'the period badge says Approved');
+  ok((await text('#periodSummary')).includes('Approved by dinger'), 'and the footer says who and when');
+  ok((await text('#entryRows')).includes('Approved'), 'every row in it reads Approved too');
+  ok((await p.$eval('#approvePeriodBtn', (n) => n.textContent)).includes('Take back'),
+    'and the button offers to undo rather than repeating itself');
+
+  // Taking it back deletes the row rather than flipping a flag, so approved
+  // can never be half-set.
+  p.once('dialog', (d) => d.accept());
+  await p.click('#approvePeriodBtn');
+  await p.waitForTimeout(300);
+  ok(APPROVALS.length === 0, 'taking it back removes the record');
+  ok((await text('#entryRows')).includes('Ready'), 'and the rows go back to Ready');
+
+  // Approve again so the reload check below has something to find.
+  p.once('dialog', (d) => d.accept());
+  await p.click('#approvePeriodBtn');
+  await p.waitForTimeout(300);
+
+  const p3 = await ctx.newPage();
+  await p3.goto(base);
+  await p3.waitForTimeout(700);
+  ok((await p3.$eval('#entryState', (n) => n.textContent)).includes('Approved'),
+    'the approval is still there after a reload');
+  await p3.close();
+}
+
+group('a person with no hours is named before the run is signed off');
+{
+  // Dismissing the confirm must leave the approval exactly as it was.
+  p.once('dialog', (d) => d.accept());
+  await p.click('#approvePeriodBtn');           // take it back
+  await p.waitForTimeout(250);
+  let asked = '';
+  p.once('dialog', (d) => { asked = d.message(); d.dismiss(); });
+  await p.click('#approvePeriodBtn');
+  await p.waitForTimeout(250);
+  ok(asked.includes('Sam Reed'), 'the person missing hours is named, not just counted: ' + asked);
+  ok(APPROVALS.length === 0, 'and saying no really does not approve it');
 }
 
 group('the childcare app is read, not imported');

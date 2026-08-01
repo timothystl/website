@@ -2998,6 +2998,93 @@ ${sidebarShell('payroll', currentUser, '', await badgeCounts(env, currentUser))}
 ${PAYROLL_HTML}`, 'Payroll');
     }
 
+    // Email the gross-pay report to the bookkeeper. The page posts the figures
+    // rather than rendered HTML, and the table is built here with everything
+    // escaped — a staff name must not be able to become markup in something
+    // that lands in an outside inbox.
+    if (path === '/payroll/email' && method === 'POST') {
+      if (!hasPermission(currentUser, 'payroll_manage')) {
+        return new Response(JSON.stringify({ error: 'Access denied.' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+      }
+      const to = (await env.DB.prepare("SELECT value FROM site_settings WHERE key='payroll_bookkeeper_email'").first().catch(() => null))?.value || '';
+      if (!to.trim()) {
+        return new Response(JSON.stringify({ error: 'No bookkeeper address is set. Add one under Settings → Bookkeeper email.' }), {
+          status: 400, headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      let body;
+      try { body = await request.json(); } catch (_) {
+        return new Response(JSON.stringify({ error: 'Could not read the report.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      const money = (n) => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const groups = Array.isArray(body.groups) ? body.groups : [];
+      if (!groups.length) {
+        return new Response(JSON.stringify({ error: 'There is nothing to send.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      const th = 'padding:8px 10px;background:#F4EFE5;border-bottom:1px solid #E7DFD1;font:700 10.5px/1.4 Arial,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#8A8271;text-align:left;';
+      const td = 'padding:9px 10px;border-bottom:1px solid #EFE7D9;font:400 13px/1.45 Arial,sans-serif;color:#3A3A4A;';
+      const tdR = td + 'text-align:right;white-space:nowrap;';
+      const table = groups.map((g) => `
+        <tr><td colspan="5" style="padding:16px 10px 6px;font:700 11px/1.4 Arial,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#1E2D4A;">${escapeHtml(g.name)}</td></tr>
+        <tr><th style="${th}">Person</th><th style="${th}">Paid as</th><th style="${th}">Hours / salary</th><th style="${th}">PTO used</th><th style="${th}text-align:right;">Gross</th></tr>
+        ${(g.people || []).map((p) => `<tr>
+          <td style="${td}"><strong>${escapeHtml(p.name)}</strong></td>
+          <td style="${td}">${escapeHtml(p.kind)}</td>
+          <td style="${td}">${escapeHtml(p.basis)}</td>
+          <td style="${tdR}">${escapeHtml(Number(p.pto || 0).toFixed(2))} hrs</td>
+          <td style="${tdR}">${escapeHtml(money(p.gross))}</td>
+        </tr>`).join('')}
+        <tr>
+          <td colspan="4" style="${td}background:#FAF7F1;font-weight:700;">${escapeHtml(g.name)} subtotal</td>
+          <td style="${tdR}background:#FAF7F1;font-weight:700;">${escapeHtml(money(g.subtotal))}</td>
+        </tr>`).join('');
+
+      const label = String(body.periodLabel || '').slice(0, 80);
+      // Whether it was signed off is on the face of the email, because that is
+      // the difference between "here are the figures" and "these are final".
+      const stateLine = body.approved
+        ? `<p style="margin:0 0 4px;font:400 13px/1.5 Arial,sans-serif;color:#3B4C2E;">Approved${body.approvedBy ? ' by ' + escapeHtml(String(body.approvedBy).slice(0, 60)) : ''}.</p>`
+        : `<p style="margin:0 0 4px;font:400 13px/1.5 Arial,sans-serif;color:#7A5B18;">Not yet approved — these figures may still change.</p>`;
+      const warn = body.incomplete
+        ? `<p style="margin:12px 0;padding:11px 13px;border:1px solid #E4C8C8;border-radius:8px;background:#FAEFEF;font:400 13px/1.5 Arial,sans-serif;color:#8A4A4A;"><strong>Incomplete:</strong> the childcare app could not be reached, so no MDO staff are included below.</p>`
+        : '';
+
+      const emailHtml = `<div style="max-width:680px;margin:0 auto;padding:22px;background:#FBF8F3;font-family:Arial,sans-serif;">
+        <h1 style="margin:0 0 4px;font:600 21px/1.25 Georgia,serif;color:#1E2D4A;">Timothy Lutheran — gross pay</h1>
+        <p style="margin:0 0 4px;font:400 14px/1.5 Arial,sans-serif;color:#4A4860;">Pay period ${escapeHtml(label)}</p>
+        ${stateLine}
+        ${warn}
+        <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #E7DFD1;border-radius:10px;overflow:hidden;margin-top:14px;">${table}</table>
+        <p style="margin:16px 0 0;padding:14px 16px;border:1px solid #E6C98E;border-radius:10px;background:#FDF8EC;font:400 14px/1.5 Arial,sans-serif;color:#1E2D4A;">
+          <strong style="font-size:17px;">Combined total ${escapeHtml(money(body.total))}</strong><br>
+          <span style="font-size:12.5px;color:#4A4860;">Gross, before withholding. Taxes, withholding and bank details stay with the payroll service.</span>
+        </p>
+        <p style="margin:18px 0 0;font:400 12px/1.5 Arial,sans-serif;color:#8A8271;">Sent from the Timothy Lutheran admin by ${escapeHtml(currentUser?.username || 'the office')}.</p>
+      </div>`;
+
+      // sendTransactionalEmail RETURNS {error}, it does not throw — a bare
+      // try/catch here would report success on every failure.
+      let sent;
+      try {
+        sent = await sendTransactionalEmail(env, {
+          toEmails: to.split(',').map((x) => x.trim()).filter(Boolean),
+          subject: `Payroll — ${label}`,
+          htmlContent: emailHtml,
+        });
+      } catch (e) {
+        sent = { error: e.message };
+      }
+      if (!sent || sent.error) {
+        return new Response(JSON.stringify({ error: 'It could not be sent: ' + (sent?.error || 'unknown error') }), {
+          status: 502, headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      await logAudit(env.DB, currentUser, 'email', 'payroll', String(body.periodStart || ''), `Payroll ${label}`, null, { to, total: body.total });
+      return new Response(JSON.stringify({ ok: true, to }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
     // ── GYM ADMIN ROUTES (auth + gym_manage) ───────────────────
     if (path.startsWith('/gym-rentals')) {
       if (!hasPermission(currentUser, 'gym_manage')) {
@@ -7386,6 +7473,7 @@ ${sidebarShell('redirects', currentUser, '', await badgeCounts(env, currentUser)
         { key: 'gcal_calendar_id', label: 'Gym calendar ID', group: 'gym-rentals', used: 'Confirmed bookings → Google Calendar', href: '/gym-rentals' },
         { key: 'gym_admin_email', label: 'Gym booking notifications', group: 'notifications', used: 'Holds, confirmations, recurring requests', href: '/gym-rentals' },
         { key: 'turnstile_site_key', label: 'Spam check site key', group: 'notifications', used: 'Contact, prayer and signup forms', href: '/filtered' },
+        { key: 'payroll_bookkeeper_email', label: 'Bookkeeper email', group: 'notifications', used: 'Where Payroll’s Email report sends to' },
       ];
       const stored = await env.DB.prepare('SELECT key, value, label, hint FROM site_settings').all().catch(() => ({ results: [] }));
       const byKey = new Map((stored.results || []).map((r) => [r.key, r]));
@@ -7458,7 +7546,8 @@ ${sidebarShell('settings', currentUser, '', await badgeCounts(env, currentUser))
     if (path === '/settings/update' && method === 'POST') {
       const SETTABLE = new Set(['church_address_line', 'church_address_city', 'church_phone', 'church_email',
         'church_service_times', 'give_url', 'zoom_url', 'councilfiles_url', 'gym_rate_per_hour', 'gym_hold_hours',
-        'gym_payment_link', 'gcal_calendar_id', 'gym_admin_email', 'turnstile_site_key']);
+        'gym_payment_link', 'gcal_calendar_id', 'gym_admin_email', 'turnstile_site_key',
+        'payroll_bookkeeper_email']);
       const form = await request.formData();
       const key = String(form.get('key') || '');
       if (!SETTABLE.has(key)) {
