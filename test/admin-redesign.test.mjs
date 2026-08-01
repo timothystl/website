@@ -788,9 +788,25 @@ group('gym rentals ships both layouts');
 
   const queue = await (await call(env, '/gym-rentals', { cookie })).text();
   eq((await call(env, '/gym-rentals', { cookie })).status, 200, 'the queue view responds');
-  has(queue, 'Gym view', 'the layout toggle is present');
-  has(queue, 'Southside Volleyball', 'and the queue still lists holds by group');
-  has(queue, 'Confirm All', 'with its bulk actions intact');
+  has(queue, 'Calendar first', 'the design’s layout toggle is present');
+  has(queue, 'Queue first', 'both ways round');
+  has(queue, 'Southside Volleyball', 'a group appears in the queue');
+  has(queue, 'Conflicts', 'the design’s Conflicts column');
+  has(queue, 'tlc-gym-approve', 'a hold carries the Approve action');
+  has(queue, 'tlc-gym-open', 'and Open beside it');
+  has(queue, 'Groups book through their own portal link', 'the purpose line is the design’s');
+  // The bulk tools carry the invoice generation and the calendar push. They
+  // moved below the queue; they were not replaced by it.
+  has(queue, 'Confirm All', 'the bulk actions are intact');
+  has(queue, 'By organisation', 'under their own heading');
+  has(queue, '/gym-rentals/invoices', 'and invoices are still reachable');
+
+  // A hold on a blocked date is the one thing on this screen that is wrong.
+  db.prepare("INSERT INTO gym_bookings (group_id,booking_date,start_time,end_time,status,created_at) VALUES (1,?,'18:00','20:00','hold',?)")
+    .run(`${month}-24`, now);
+  const clash = await (await call(env, '/gym-rentals', { cookie })).text();
+  has(clash, 'Blocked date', 'a hold on a blocked date says so in the Conflicts column');
+  has(clash, 'will double-book the gym', 'and grows a warning row saying what approving it would do');
 
   const cal = await (await call(env, '/gym-rentals?view=calendar', { cookie })).text();
   eq((await call(env, '/gym-rentals?view=calendar', { cookie })).status, 200, 'the calendar view responds');
@@ -1083,6 +1099,51 @@ group('Giving: funds and amounts are two panels, side by side');
 
   await call(env, '/giving-funds/toggle/1', { method: 'POST', cookie, form: { value: '0' } });
   eq(db.prepare('SELECT active FROM give_funds WHERE id=1').get().active, 0, 'the row switch hides a fund in one click');
+}
+
+group('payroll lives in the shared shell now');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const body = await (await call(env, '/payroll', { cookie })).text();
+
+  // PY-3: it used to be a standalone document whose only way out was a Sign
+  // Out button. It is a fragment inside sidebarShell() now.
+  has(body, 'class="sidebar"', 'it has the admin sidebar');
+  has(body, 'tlc-k-open', 'and the ⌘K palette, like every other screen');
+  has(body, 'Enter hours and exceptions', 'the purpose line is the design’s');
+
+  // The design's chrome.
+  has(body, 'Pay period', 'the pay-period picker is labelled');
+  has(body, 'Enter &amp; approve', 'the two views are the design’s');
+  has(body, 'Report', 'both of them');
+  has(body, 'Print report', 'with Print report');
+  has(body, 'Export CSV', 'and Export CSV');
+  has(body, 'Detail cards', 'and the report’s three layouts');
+  has(body, 'One line each', 'one line each');
+  has(body, 'Totals only', 'and totals only');
+
+  // The CDN script is gone — the page runs under the admin CSP now, which
+  // allows no third-party script host.
+  ok(!body.includes('cdn.jsdelivr.net'), 'the Supabase CDN bundle is no longer loaded');
+  ok(body.includes('/sb/rest/v1/'), 'it talks to Supabase through the permission-gated proxy instead');
+
+  // ⚠ The one rule that must not be broken: MDO rates are read from the MDO
+  // app and are never editable here. A second place to set what somebody is
+  // paid is a second answer to what they are owed.
+  has(body, 'Rates for church staff are entered here', 'the screen says where a church rate comes from');
+  has(body, 'live in the MDO app and are read from it', 'and that MDO rates are read, not set');
+
+  const res = await call(env, '/payroll', { cookie });
+  eq(res.headers.get('x-robots-tag'), 'noindex, nofollow', 'and it is still noindex, as the standalone page was');
+}
+
+group('payroll access is gated on its own permission');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ALL_PERMISSIONS.filter((p) => p !== 'payroll_manage'), 'nopay');
+  eq((await call(env, '/payroll', { cookie })).status, 403, 'somebody without payroll_manage cannot open it');
+  eq((await call(env, '/sb/rest/v1/church_staff', { cookie })).status, 401, 'nor read Supabase through the proxy');
 }
 
 group('the sidebar is the design’s five groups');

@@ -1,1606 +1,998 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <link rel="icon" type="image/png" href="/images/logo/myMDO_app_icon.png">
-  <meta charset="UTF-8">
-  <meta name="robots" content="noindex, nofollow">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Church Payroll — Timothy Lutheran</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <style>
-    :root {
-      --navy:       #01294A;
-      --navy-lt:    #013d6b;
-      --sun:        #F5B731;
-      --sun-pale:   #FFF8E1;
-      --green:      #5BAD8B;
-      --green-pale: #EAF5EF;
-      --tang:       #E97D55;
-      --tang-pale:  #FDEEE8;
-      --cream:      #FDFAF0;
-      --linen:      #FAF7ED;
-      --warm-gray:  #F5F0E4;
-      --border:     #E8E0CC;
-      --text:       #2E2A22;
-      --text-muted: #7A6E5A;
-      --white:      #FFFFFF;
-      --red:        #C0392B;
-      --font-head:  'Lora', Georgia, serif;
-      --font-body:  'Nunito', system-ui, sans-serif;
-    }
-
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      font-family: var(--font-body);
-      background: var(--linen);
-      color: var(--text);
-      min-height: 100vh;
-    }
-
-    /* ── Login ── */
-    #loginScreen {
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: var(--navy);
-    }
-
-    .login-card {
-      background: var(--white);
-      border-radius: 16px;
-      padding: 40px 36px;
-      width: 100%;
-      max-width: 380px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.25);
-    }
-
-    .login-card h1 {
-      font-family: var(--font-head);
-      font-size: 1.4rem;
-      color: var(--navy);
-      margin-bottom: 6px;
-      text-align: center;
-    }
-
-    .login-card .subtitle {
-      text-align: center;
-      color: var(--text-muted);
-      font-size: 0.85rem;
-      margin-bottom: 28px;
-    }
-
-    .form-group { margin-bottom: 16px; }
-
-    .form-group label {
-      display: block;
-      font-size: 0.8rem;
-      font-weight: 700;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-bottom: 6px;
-    }
-
-    .form-group input, .form-group select {
-      width: 100%;
-      padding: 10px 12px;
-      border: 1.5px solid var(--border);
-      border-radius: 8px;
-      font-family: var(--font-body);
-      font-size: 0.95rem;
-      color: var(--text);
-      background: var(--white);
-      transition: border-color 0.15s;
-    }
-
-    .form-group input:focus, .form-group select:focus {
-      outline: none;
-      border-color: var(--navy);
-    }
-
-    .btn-primary {
-      width: 100%;
-      padding: 11px;
-      background: var(--navy);
-      color: var(--white);
-      border: none;
-      border-radius: 8px;
-      font-family: var(--font-body);
-      font-size: 0.95rem;
-      font-weight: 700;
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-
-    .btn-primary:hover { background: var(--navy-lt); }
-    .btn-primary:disabled { opacity: 0.6; cursor: default; }
-
-    .btn-secondary {
-      padding: 8px 16px;
-      background: var(--warm-gray);
-      color: var(--text);
-      border: 1.5px solid var(--border);
-      border-radius: 8px;
-      font-family: var(--font-body);
-      font-size: 0.85rem;
-      font-weight: 700;
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-
-    .btn-secondary:hover { background: var(--border); }
-
-    .btn-danger {
-      padding: 6px 12px;
-      background: transparent;
-      color: var(--red);
-      border: 1.5px solid var(--red);
-      border-radius: 6px;
-      font-family: var(--font-body);
-      font-size: 0.8rem;
-      font-weight: 700;
-      cursor: pointer;
-    }
-
-    .btn-danger:hover { background: #fdecea; }
-
-    .btn-sm {
-      padding: 6px 12px;
-      font-size: 0.8rem;
-    }
-
-    .error-msg {
-      color: var(--red);
-      font-size: 0.85rem;
-      margin-top: 10px;
-      text-align: center;
-    }
-
-    .hidden { display: none !important; }
-
-    /* ── Dashboard layout ── */
-    #dashboard {
-      max-width: 960px;
-      margin: 0 auto;
-      padding: 24px 16px 60px;
-    }
-
-    .page-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 28px;
-      padding-bottom: 16px;
-      border-bottom: 2px solid var(--border);
-    }
-
-    .page-header h1 {
-      font-family: var(--font-head);
-      font-size: 1.5rem;
-      color: var(--navy);
-    }
-
-    .page-header .subtitle {
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      margin-top: 2px;
-    }
-
-    /* ── Cards / sections ── */
-    .card {
-      background: var(--white);
-      border: 1.5px solid var(--border);
-      border-radius: 12px;
-      padding: 20px 24px;
-      margin-bottom: 20px;
-    }
-
-    .card-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 16px;
-    }
-
-    .card-header h2 {
-      font-family: var(--font-head);
-      font-size: 1.05rem;
-      color: var(--navy);
-    }
-
-    .toggle-btn {
-      background: none;
-      border: none;
-      cursor: pointer;
-      color: var(--text-muted);
-      font-size: 0.85rem;
-      font-family: var(--font-body);
-      padding: 4px 8px;
-    }
-
-    /* ── Staff table ── */
-    .table-scroll {
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-    }
-
-    .staff-table {
-      width: 100%;
-      min-width: 640px;
-      border-collapse: collapse;
-      font-size: 0.88rem;
-    }
-
-    .staff-table th {
-      text-align: left;
-      padding: 8px 10px;
-      background: var(--warm-gray);
-      color: var(--text-muted);
-      font-size: 0.75rem;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      border-bottom: 1.5px solid var(--border);
-    }
-
-    .staff-table td {
-      padding: 10px 10px;
-      border-bottom: 1px solid var(--warm-gray);
-      vertical-align: middle;
-    }
-
-    .staff-table tr:last-child td { border-bottom: none; }
-
-    .staff-table tr:hover td { background: var(--linen); }
-
-    .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 20px;
-      font-size: 0.75rem;
-      font-weight: 700;
-    }
-
-    .badge-salary { background: var(--sun-pale); color: #7a5800; }
-    .badge-hourly { background: var(--green-pale); color: #2a6646; }
-
-    /* ── Period selector ── */
-    .period-row {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-
-    .period-row select {
-      flex: 1;
-      min-width: 220px;
-      padding: 9px 12px;
-      border: 1.5px solid var(--border);
-      border-radius: 8px;
-      font-family: var(--font-body);
-      font-size: 0.9rem;
-      background: var(--white);
-    }
-
-    /* ── Hours entry ── */
-    .hours-grid {
-      display: grid;
-      gap: 12px;
-    }
-
-    .hours-row {
-      display: grid;
-      grid-template-columns: 1fr 100px 100px 100px;
-      grid-template-areas: "name hw pu pe";
-      gap: 10px;
-      align-items: end;
-      padding: 10px 12px;
-      background: var(--linen);
-      border-radius: 8px;
-      font-size: 0.88rem;
-    }
-
-    .hours-row .staff-info  { grid-area: name; }
-    .hours-row .hf-hours    { grid-area: hw; }
-    .hours-row .hf-pto-used { grid-area: pu; }
-    .hours-row .hf-pto-earned { grid-area: pe; }
-
-    .hours-row .staff-name { font-weight: 700; }
-    .hours-row .staff-role { color: var(--text-muted); font-size: 0.8rem; }
-
-    .hours-row input[type="number"] {
-      padding: 6px 8px;
-      border: 1.5px solid var(--border);
-      border-radius: 6px;
-      font-family: var(--font-body);
-      font-size: 0.88rem;
-      text-align: right;
-      width: 100%;
-    }
-
-    .hours-row input[type="number"]:focus {
-      outline: none;
-      border-color: var(--navy);
-    }
-
-    .hours-col-label {
-      font-size: 0.72rem;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      font-weight: 700;
-      text-align: right;
-      margin-bottom: 4px;
-    }
-
-    /* ── Mobile: stack name above a 3-across input row instead of squeezing 4 fixed columns ── */
-    @media (max-width: 640px) {
-      .hours-row {
-        grid-template-columns: 1fr 1fr 1fr;
-        grid-template-areas:
-          "name name name"
-          "hw pu pe";
-        row-gap: 10px;
-      }
-
-      .staff-table { min-width: 560px; }
-    }
-
-    /* ── Report ── */
-    #reportSection { margin-top: 8px; }
-
-    .report-header {
-      margin-bottom: 20px;
-    }
-
-    .report-header h2 {
-      font-family: var(--font-head);
-      font-size: 1.3rem;
-      color: var(--navy);
-    }
-
-    .report-header .report-period {
-      font-size: 0.9rem;
-      color: var(--text-muted);
-      margin-top: 2px;
-    }
-
-    .staff-block {
-      border: 1.5px solid var(--border);
-      border-radius: 10px;
-      overflow: hidden;
-      margin-bottom: 16px;
-    }
-
-    .staff-block-header {
-      background: var(--navy);
-      color: var(--white);
-      padding: 10px 16px;
-      display: flex;
-      align-items: baseline;
-      gap: 10px;
-    }
-
-    .staff-block-header .sname {
-      font-weight: 800;
-      font-size: 0.95rem;
-    }
-
-    .staff-block-header .srole {
-      font-size: 0.8rem;
-      opacity: 0.75;
-    }
-
-    .staff-block-header .spay {
-      margin-left: auto;
-      font-size: 0.78rem;
-      opacity: 0.7;
-    }
-
-    .line-items {
-      padding: 12px 16px;
-    }
-
-    .line-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      padding: 4px 0;
-      font-size: 0.88rem;
-    }
-
-    .line-item .li-label { color: var(--text-muted); }
-    .line-item .li-val   { font-weight: 600; font-variant-numeric: tabular-nums; }
-    .line-item .li-neg   { color: var(--red); }
-
-    .line-item.divider {
-      border-top: 1.5px solid var(--border);
-      margin-top: 6px;
-      padding-top: 8px;
-    }
-
-    .line-item.total {
-      font-size: 1rem;
-      font-weight: 800;
-      color: var(--navy);
-    }
-
-    .line-item.pto-row { font-size: 0.82rem; }
-
-    .report-section-label {
-      font-family: var(--font-head);
-      font-size: 0.85rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--text-muted);
-      margin: 20px 0 8px;
-      padding-bottom: 4px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .report-section-label:first-child { margin-top: 0; }
-
-    .report-subtotal {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 8px 16px;
-      background: var(--warm-gray);
-      border-radius: 8px;
-      font-size: 0.88rem;
-      font-weight: 700;
-      color: var(--navy);
-      margin: 4px 0 12px;
-    }
-
-    .report-grand-total {
-      background: var(--navy);
-      color: var(--white);
-      padding: 14px 20px;
-      border-radius: 10px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 1.1rem;
-      font-weight: 800;
-      margin-top: 8px;
-    }
-
-    .print-bar {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 16px;
-    }
-
-    .btn-print {
-      padding: 9px 20px;
-      background: var(--sun);
-      color: var(--navy);
-      border: none;
-      border-radius: 8px;
-      font-family: var(--font-body);
-      font-size: 0.9rem;
-      font-weight: 800;
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-
-    .btn-print:hover { background: #e0a820; }
-
-    .save-indicator {
-      font-size: 0.8rem;
-      color: var(--green);
-      font-weight: 700;
-    }
-
-    /* ── Modal ── */
-    .modal-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(1,41,74,0.55);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-      padding: 16px;
-    }
-
-    .modal-box {
-      background: var(--white);
-      border-radius: 14px;
-      padding: 28px;
-      width: 100%;
-      max-width: 520px;
-      max-height: 90vh;
-      overflow-y: auto;
-    }
-
-    .modal-box h2 {
-      font-family: var(--font-head);
-      font-size: 1.1rem;
-      color: var(--navy);
-      margin-bottom: 20px;
-    }
-
-    .modal-footer {
-      display: flex;
-      gap: 10px;
-      justify-content: flex-end;
-      margin-top: 24px;
-    }
-
-    .form-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-    }
-
-    .form-row-3 {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 12px;
-    }
-
-    .field-hint {
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      margin-top: 4px;
-    }
-
-    /* ── Print table (screen: hidden; print: shown) ── */
-    #printTable { display: none; }
-
-    .pt-header { margin-bottom: 10px; }
-    .pt-header h2 { font-size: 1rem; font-family: var(--font-head); color: var(--navy); }
-    .pt-header .pt-period { font-size: 0.8rem; color: var(--text-muted); }
-
-    .pt-section { margin-bottom: 14px; }
-    .pt-section-label {
-      font-size: 0.72rem; font-weight: 800; text-transform: uppercase;
-      letter-spacing: 0.07em; color: var(--text-muted);
-      border-bottom: 1.5px solid var(--border); padding-bottom: 2px; margin-bottom: 4px;
-    }
-
-    .pt-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
-    .pt-table th {
-      text-align: left; padding: 3px 8px;
-      background: var(--warm-gray); font-size: 0.72rem; color: var(--text-muted);
-      text-transform: uppercase; letter-spacing: 0.04em;
-      border-bottom: 1.5px solid var(--border);
-    }
-    .pt-table td { padding: 3px 8px; border-bottom: 1px solid var(--warm-gray); }
-    .pt-table tr:last-child td { border-bottom: none; }
-    .pt-table .pt-name { font-weight: 700; }
-    .pt-table .pt-num { text-align: right; font-variant-numeric: tabular-nums; }
-    .pt-table .pt-sub td {
-      font-weight: 800; background: var(--warm-gray);
-      border-top: 1.5px solid var(--border); padding: 4px 8px;
-    }
-    .pt-total {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 7px 10px; margin-top: 8px;
-      background: var(--navy); color: var(--white);
-      border-radius: 6px; font-weight: 800; font-size: 0.9rem;
-    }
-
-    @page { size: portrait; margin: 0.5in; }
-
-    /* ── Print styles ── */
-    @media print {
-      #loginScreen, .page-header, #staffPanelCard, .period-row,
-      #hoursCard, .print-bar, .toggle-btn, #reportSection { display: none !important; }
-
-      #printTable { display: block !important; }
-
-      body { background: white; font-size: 9pt; }
-      #dashboard { padding: 0; max-width: 100%; }
-      .card { border: none; padding: 0; margin: 0; box-shadow: none; }
-
-      .pt-table { font-size: 8.5pt; }
-      .pt-table th { font-size: 7.5pt; }
-      .pt-total { background: #01294A !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; font-size: 9pt; }
-      .pt-table .pt-sub td { background: #f0ece0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    }
-  </style>
-</head>
-<body>
-
-<!-- ══ DASHBOARD ══ -->
-<div id="dashboard">
-  <div class="page-header">
-    <div>
-      <h1>Church Payroll</h1>
-      <div class="subtitle">Timothy Lutheran Church</div>
-    </div>
-    <button class="btn-secondary" id="logoutBtn">Sign Out</button>
+<!-- ══════════════════════════════════════════════════════════════
+     PAYROLL — Phase 8 of the admin overhaul.
+
+     This page used to be a standalone document: its own fonts, its own
+     login CSS, its own navy, no sidebar, and a Sign Out button as the only
+     way back. That was PY-3 in the July 2026 review — a dead end that would
+     never inherit any accessibility or mobile fix made to the shared shell.
+
+     It is now a fragment. The Worker serves it inside html() + sidebarShell(),
+     so it has the same chrome, the same ⌘K palette and the same sidebar as
+     every other screen, and the layout is the design's: a pay-period picker,
+     Enter & approve / Report, and three report layouts.
+
+     WHERE THE DATA LIVES, and why that shapes this file:
+     church staff and their period entries are in Supabase (`church_staff`,
+     `church_staff_period_entries`), and MDO staff and hours are in the MDO
+     app's own Supabase tables. The Worker holds no server-side Supabase
+     credentials — the /sb proxy only forwards browser calls, after checking
+     the admin session and payroll_manage. So this page fetches its own data
+     client-side, and everything below the markup is that.
+
+     ⚠ WHERE A PAY RATE COMES FROM: church rates are typed in here and saved.
+     MDO rates are read from the MDO app and are NOT editable here. Do not add
+     a rate field for an MDO person — it would create a second, silently
+     diverging answer to what somebody is paid.
+     ══════════════════════════════════════════════════════════════ -->
+<style>
+.tlc-pay{padding:18px 26px 40px;max-width:1180px;font-family:var(--tlc-sans);}
+.tlc-pay-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:16px 0 18px;}
+.tlc-pay-plabel{font:600 10.5px/1 var(--tlc-sans);letter-spacing:.12em;text-transform:uppercase;color:var(--tlc-muted);}
+.tlc-pay-period{position:relative;}
+.tlc-pay-period select{appearance:none;-webkit-appearance:none;font:600 14px var(--tlc-sans);color:var(--tlc-navy);background:#fff;border:1px solid var(--tlc-edge);border-radius:9px;padding:10px 34px 10px 14px;cursor:pointer;min-width:210px;}
+.tlc-pay-period::after{content:'▾';position:absolute;right:13px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--tlc-muted);font-size:12px;}
+.tlc-pay-pays{display:block;margin-top:3px;font-size:11.5px;color:var(--tlc-muted);}
+.tlc-pay-spacer{flex:1;}
+.tlc-pay-btn{font:600 12.5px var(--tlc-sans);color:var(--tlc-navy);background:#fff;border:1px solid var(--tlc-edge);border-radius:8px;padding:9px 16px;cursor:pointer;text-decoration:none;white-space:nowrap;}
+.tlc-pay-btn:hover{border-color:var(--tlc-blue);}
+.tlc-pay-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:13px 18px;background:var(--tlc-sand);border-bottom:1px solid var(--tlc-edge);}
+.tlc-pay-head-title{font:600 15px var(--tlc-sans);color:var(--tlc-ink);}
+.tlc-pay-head-right{margin-left:auto;font-size:12.5px;color:var(--tlc-muted);}
+.tlc-pay-live{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 18px;background:#EDF4F8;border-bottom:1px solid var(--tlc-edge);font-size:13px;color:var(--tlc-body);}
+.tlc-pay-live-mark{flex:none;color:var(--tlc-blue);font-size:15px;}
+.tlc-pay-grid{display:grid;grid-template-columns:2fr 1fr 1.1fr 1fr minmax(126px,1.3fr);gap:12px;align-items:center;}
+.tlc-pay-thead{padding:11px 18px;background:var(--tlc-parchment);border-bottom:1px solid var(--tlc-edge);font:600 10.5px/1 var(--tlc-sans);letter-spacing:.12em;text-transform:uppercase;color:var(--tlc-muted);}
+.tlc-pay-row{padding:12px 18px;border-bottom:1px solid var(--tlc-divider);}
+.tlc-pay-row:last-child{border-bottom:0;}
+.tlc-pay-name{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.tlc-pay-name b{font:600 13.5px/1.35 var(--tlc-sans);color:var(--tlc-ink);}
+.tlc-pay-name span{font-size:12px;color:var(--tlc-muted);}
+.tlc-pay-num{font:600 13px var(--tlc-sans);color:var(--tlc-body);white-space:nowrap;}
+.tlc-pay-na{font-size:12.5px;color:var(--tlc-muted);}
+.tlc-pay-in{width:74px;font:600 13px var(--tlc-sans);color:var(--tlc-ink);border:1px solid var(--tlc-edge);border-radius:7px;padding:6px 8px;background:#fff;text-align:right;}
+.tlc-pay-in:focus{outline:2px solid var(--tlc-blue);outline-offset:-1px;}
+.tlc-pay-inwrap{display:flex;align-items:center;gap:6px;}
+.tlc-pay-inwrap small{font-size:11px;color:var(--tlc-muted);}
+.tlc-pay-layouts{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+.tlc-pay-lay{font:500 12.5px var(--tlc-sans);color:var(--tlc-body);background:var(--tlc-parchment);border:1px solid var(--tlc-edge);border-radius:8px;padding:8px 14px;cursor:pointer;}
+.tlc-pay-lay.is-on{font-weight:600;border:2px solid var(--tlc-blue);background:#E4EEF4;color:var(--tlc-navy);}
+.tlc-pay-laynote{font-size:12.5px;color:var(--tlc-muted);}
+.tlc-pay-group{font:600 10.5px/1 var(--tlc-sans);letter-spacing:.12em;text-transform:uppercase;color:var(--tlc-muted);margin:22px 0 10px;}
+.tlc-pay-card{border:1px solid var(--tlc-edge);border-radius:11px;overflow:hidden;background:#fff;margin-bottom:14px;}
+.tlc-pay-card-bar{padding:11px 16px;background:#1D3557;color:#fff;font:600 13.5px var(--tlc-sans);}
+.tlc-pay-li{display:flex;align-items:baseline;justify-content:space-between;gap:14px;padding:10px 16px;border-bottom:1px solid var(--tlc-divider);}
+.tlc-pay-li:last-child{border-bottom:0;}
+.tlc-pay-li-label{font-size:13px;color:var(--tlc-body);}
+.tlc-pay-li-val{font:600 13px var(--tlc-sans);color:var(--tlc-navy);white-space:nowrap;}
+.tlc-pay-li.is-muted .tlc-pay-li-label,.tlc-pay-li.is-muted .tlc-pay-li-val{color:#A69C89;font-weight:500;}
+.tlc-pay-li.is-neg .tlc-pay-li-val{color:#8A4A4A;}
+.tlc-pay-li.is-total{background:var(--tlc-parchment);border-top:1px solid var(--tlc-edge);}
+.tlc-pay-li.is-total .tlc-pay-li-label{font:600 13.5px var(--tlc-sans);color:var(--tlc-ink);}
+.tlc-pay-li.is-total .tlc-pay-li-val{font-size:15px;}
+.tlc-pay-tbl{border:1px solid var(--tlc-edge);border-radius:11px;overflow:hidden;background:#fff;margin-bottom:16px;}
+.tlc-pay-tbl-bar{padding:11px 16px;background:#1D3557;color:#F5E4C0;font:700 11px var(--tlc-sans);letter-spacing:.14em;text-transform:uppercase;}
+.tlc-pay-tgrid{display:grid;grid-template-columns:2fr 1fr 1.4fr 1fr 1fr;gap:12px;align-items:center;}
+.tlc-pay-right{text-align:right;}
+.tlc-pay-cards2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+@media (max-width:820px){.tlc-pay-cards2{grid-template-columns:1fr;}}
+.tlc-pay-stat{border:1px solid var(--tlc-edge);border-radius:12px;overflow:hidden;background:#fff;}
+.tlc-pay-stat-big{font:500 34px/1 var(--tlc-serif);color:var(--tlc-navy);padding:18px 18px 12px;display:block;}
+.tlc-pay-stat-row{display:flex;align-items:baseline;gap:8px;padding:7px 18px;font-size:13px;color:var(--tlc-body);}
+.tlc-pay-stat-row:last-child{padding-bottom:16px;}
+.tlc-pay-dots{flex:1;border-bottom:1px dotted var(--tlc-edge);transform:translateY(-3px);}
+.tlc-pay-stat-row b{font:600 13px var(--tlc-sans);color:var(--tlc-ink);}
+.tlc-pay-combined{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-top:16px;padding:16px 20px;border:1px solid #E6C98E;border-radius:12px;background:#FDF8EC;}
+.tlc-pay-combined-l{font:700 11px var(--tlc-sans);letter-spacing:.14em;text-transform:uppercase;color:#7A5B18;}
+.tlc-pay-combined-n{margin-left:auto;font:500 30px/1 var(--tlc-serif);color:var(--tlc-navy);}
+.tlc-pay-combined-s{display:block;margin-top:4px;font-size:12.5px;color:var(--tlc-body);letter-spacing:0;text-transform:none;font-weight:400;}
+.tlc-pay-empty{padding:34px 18px;text-align:center;font-size:14px;color:var(--tlc-muted);}
+.tlc-pay-err{margin:0 0 14px;padding:13px 16px;border:1px solid #E4C8C8;border-radius:10px;background:#FAEFEF;color:#8A4A4A;font-size:13.5px;}
+.tlc-pay-saved{font:600 12px var(--tlc-sans);color:#3B4C2E;opacity:0;transition:opacity .2s;}
+.tlc-pay-saved.is-on{opacity:1;}
+@media (max-width:860px){
+  .tlc-pay-grid,.tlc-pay-tgrid{grid-template-columns:1fr;gap:6px;}
+  .tlc-pay-thead{display:none;}
+  .tlc-pay-row{padding:14px 16px;}
+}
+@media print{
+  .sidebar,.util-bar,.tlc-pay-bar,.tlc-pay-layouts,.tlc-k-scrim,.tlc-k,.sidebar-backdrop{display:none !important;}
+  .tlc-pay{padding:0;max-width:none;}
+  .tlc-pay-card,.tlc-pay-tbl,.tlc-pay-stat{break-inside:avoid;}
+}
+</style>
+
+<div class="tlc-pay">
+  <h1 class="tlc-title">Payroll</h1>
+  <p class="tlc-purpose">Enter hours and exceptions, approve the period, then print the gross-pay report — church staff and Timothy MDO, with a combined total. Withholding, taxes, and bank details stay with the payroll service.</p>
+
+  <div class="tlc-pay-bar">
+    <span class="tlc-pay-plabel">Pay period</span>
+    <span>
+      <span class="tlc-pay-period"><select id="periodSelect" aria-label="Pay period"></select></span>
+      <span class="tlc-pay-pays" id="paysOn"></span>
+    </span>
+    <nav class="tlc-seg" aria-label="Payroll view">
+      <a href="#" id="viewEntry" class="is-on">Enter &amp; approve</a>
+      <a href="#" id="viewReport">Report</a>
+    </nav>
+    <span class="tlc-pay-spacer"></span>
+    <button type="button" class="tlc-pay-btn" id="printBtn">Print report</button>
+    <button type="button" class="tlc-pay-btn" id="exportBtn">Export CSV</button>
   </div>
 
-  <!-- Staff Management -->
-  <div class="card" id="staffPanelCard">
-    <div class="card-header">
-      <h2>Church Staff</h2>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <button class="btn-secondary btn-sm" id="addStaffBtn">+ Add Staff</button>
-        <button class="toggle-btn" id="staffToggleBtn">Hide ▲</button>
+  <p class="tlc-pay-err" id="payError" hidden></p>
+
+  <!-- ── ENTER & APPROVE ─────────────────────────────────────── -->
+  <section id="entryView">
+    <div class="tlc-panel" style="background:#fff;">
+      <div class="tlc-pay-head">
+        <span class="tlc-pay-head-title" id="entryPeriodLabel">Pay period</span>
+        <span id="entryState"></span>
+        <span class="tlc-pay-head-right" id="entryPays"></span>
       </div>
-    </div>
-    <div id="staffPanelBody">
-      <div class="table-scroll">
-        <table class="staff-table" id="staffTable">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Role</th>
-              <th>Pay Type</th>
-              <th>Rate / Salary</th>
-              <th>Housing</th>
-              <th>Mileage</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="staffTableBody">
-            <tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:20px;">Loading…</td></tr>
-          </tbody>
-        </table>
+      <!-- The design draws an "Import from childcare app" button here. There is
+           no import step: MDO hours are read live from the childcare app every
+           time the period changes, so a button labelled Import would imply a
+           staleness that does not exist. It says what is actually true, and
+           offers the one thing that is real — fetching again. -->
+      <div class="tlc-pay-live" id="mdoLive">
+        <span class="tlc-pay-live-mark" aria-hidden="true">↻</span>
+        <span id="mdoLiveText">Reading childcare hours…</span>
+        <span style="margin-left:auto;"><button type="button" class="tlc-pay-btn" id="refreshMdoBtn">Read again</button></span>
       </div>
+      <div class="tlc-pay-thead tlc-pay-grid">
+        <span>Person</span><span>Paid as</span><span>Hours</span><span>PTO used</span><span>Status</span>
+      </div>
+      <div id="entryRows"><div class="tlc-pay-empty">Loading…</div></div>
     </div>
-  </div>
 
-  <!-- Period Selector -->
-  <div class="card">
-    <div class="card-header" style="margin-bottom:0;">
-      <h2>Pay Period</h2>
-    </div>
-    <div class="period-row" style="margin-top:14px;">
-      <select id="periodSelect"></select>
-      <span id="savingIndicator" class="save-indicator hidden">✓ Saved</span>
-    </div>
-  </div>
+    <p class="tlc-note" style="margin:14px 0 0;"><span class="tlc-note-mark">◆</span><span>Church hours are typed here and save on their own. Childcare hours come from the MDO app and cannot be edited here — one number for what somebody worked, in one place.</span></p>
 
-  <!-- Hours Entry (hourly staff) -->
-  <div class="card hidden" id="hoursCard">
-    <div class="card-header">
-      <h2>Enter Hours &amp; PTO Used</h2>
-      <span style="font-size:0.8rem;color:var(--text-muted);">Church hourly staff only — enter here before printing · auto-saves</span>
+    <div class="tlc-panel" style="margin-top:22px;">
+      <div class="tlc-panel-head">
+        <span class="tlc-panel-title">Church staff</span>
+        <span class="tlc-panel-right"><button type="button" class="tlc-pay-btn" id="addStaffBtn">+ Add person</button></span>
+      </div>
+      <div class="tlc-panel-body tlc-panel-body-flush"><div id="staffRows"><div class="tlc-pay-empty">Loading…</div></div></div>
     </div>
-    <div class="hours-grid" id="hoursGrid"></div>
-  </div>
+    <p class="tlc-note" style="margin:10px 0 0;"><span class="tlc-note-mark">◆</span><span>Rates for church staff are entered here. Rates for childcare staff live in the MDO app and are read from it — there is deliberately no field for them here, because two places to set what somebody is paid is two places to be wrong.</span></p>
+  </section>
 
-  <!-- Payroll Report -->
-  <div class="card" id="reportCard">
-    <div class="print-bar">
-      <button class="btn-print" id="printBtn" onclick="window.print()">🖨 Print Report</button>
-      <button class="btn-print" id="exportBtn" onclick="exportCsv()" style="background:var(--green);margin-left:8px;">⬇ Export CSV</button>
+  <!-- ── REPORT ──────────────────────────────────────────────── -->
+  <section id="reportView" hidden>
+    <div class="tlc-pay-layouts">
+      <span class="tlc-pay-plabel">Layout</span>
+      <button type="button" class="tlc-pay-lay is-on" data-layout="cards">Detail cards</button>
+      <button type="button" class="tlc-pay-lay" data-layout="table">One line each</button>
+      <button type="button" class="tlc-pay-lay" data-layout="summary">Totals only</button>
+      <span class="tlc-pay-laynote" id="layoutNote">Matches the report you print today — every line item per person.</span>
     </div>
-    <div id="reportSection">
-      <p style="color:var(--text-muted);font-size:0.9rem;">Select a pay period above to generate the report.</p>
-    </div>
-    <!-- Compact table rendered for print only -->
-    <div id="printTable"></div>
-  </div>
+    <div id="reportBody"><div class="tlc-pay-empty">Loading…</div></div>
+  </section>
 </div>
 
-<!-- ══ STAFF MODAL ══ -->
-<div class="modal-backdrop hidden" id="staffModal">
-  <div class="modal-box">
-    <h2 id="modalTitle">Add Staff Member</h2>
-
-    <div class="form-row">
-      <div class="form-group">
-        <label>Full Name *</label>
-        <input type="text" id="fName" placeholder="Jane Doe">
+<!-- ── ADD / EDIT A PERSON ───────────────────────────────────── -->
+<div class="tlc-drawer-scrim" id="staffScrim"></div>
+<aside class="tlc-drawer" id="staffDrawer" role="dialog" aria-modal="true" aria-labelledby="staffDrawerTitle">
+  <div class="tlc-drawer-form">
+    <header class="tlc-drawer-head">
+      <div>
+        <h2 class="tlc-drawer-title" id="staffDrawerTitle">Add a person</h2>
+        <p class="tlc-drawer-sub">Church staff only. Childcare staff come from the MDO app.</p>
       </div>
-      <div class="form-group">
-        <label>Role / Title</label>
-        <input type="text" id="fRole" placeholder="Lead Pastor">
+      <button type="button" class="tlc-drawer-close" id="staffCancelBtn">Close</button>
+    </header>
+    <div class="tlc-drawer-body">
+      <div class="tlc-field"><label class="tlc-label" for="fName">Full name</label><input type="text" id="fName" placeholder="Jane Doe" required></div>
+      <div class="tlc-field"><label class="tlc-label" for="fRole">Role</label><input type="text" id="fRole" placeholder="Lead Pastor"></div>
+      <div class="tlc-field"><label class="tlc-label" for="fPayType">Paid as</label>
+        <select id="fPayType"><option value="salary">Salaried — a fixed amount each period</option><option value="hourly">Hourly — hours entered each period</option></select>
       </div>
-    </div>
-
-    <div class="form-group">
-      <label>Pay Type *</label>
-      <select id="fPayType">
-        <option value="salary">Salary (biweekly)</option>
-        <option value="hourly">Hourly</option>
-      </select>
-    </div>
-
-    <div id="salaryFields">
-      <div class="form-group">
-        <label>Base Salary — Biweekly ($)</label>
-        <input type="number" id="fBaseSalary" min="0" step="0.01" placeholder="0.00">
+      <div class="tlc-field" id="salaryField"><label class="tlc-label" for="fBaseSalary">Base salary per period ($)</label><input type="number" id="fBaseSalary" min="0" step="0.01" placeholder="0.00"></div>
+      <div class="tlc-field" id="hourlyField" hidden><label class="tlc-label" for="fHourlyRate">Hourly rate ($)</label><input type="number" id="fHourlyRate" min="0" step="0.01" placeholder="0.00"></div>
+      <div class="tlc-field"><label class="tlc-label" for="fHousing">Housing allowance per period ($)</label><input type="number" id="fHousing" min="0" step="0.01" placeholder="0.00"><p class="tlc-hint">Clergy housing — a separate tax designation, not part of salary.</p></div>
+      <div class="tlc-field"><label class="tlc-label" for="fOptOut">Insurance opt-out per period ($)</label><input type="number" id="fOptOut" min="0" step="0.01" placeholder="0.00"></div>
+      <div class="tlc-field"><label class="tlc-label" for="fHSA">HSA contribution per period ($)</label><input type="number" id="fHSA" min="0" step="0.01" placeholder="0.00"></div>
+      <div class="tlc-field"><label class="tlc-label" for="fMileage">Mileage per period ($)</label><input type="number" id="fMileage" min="0" step="0.01" placeholder="0.00"></div>
+      <div class="tlc-field"><label class="tlc-label" for="f403bType">403(b) deduction</label>
+        <select id="f403bType"><option value="fixed">A fixed amount each period</option><option value="percent">A percentage of base earnings</option></select>
       </div>
+      <div class="tlc-field"><label class="tlc-label" for="f403bAmount" id="f403bLabel">403(b) amount ($)</label><input type="number" id="f403bAmount" min="0" step="0.0001" placeholder="0.00"><p class="tlc-hint" id="f403bHint">The dollar amount deducted each period.</p></div>
+      <p class="tlc-pay-err" id="staffError" hidden>A name is required.</p>
     </div>
-
-    <div id="hourlyFields" class="hidden">
-      <div class="form-group">
-        <label>Hourly Rate ($/hr)</label>
-        <input type="number" id="fHourlyRate" min="0" step="0.01" placeholder="0.00">
+    <footer class="tlc-drawer-foot">
+      <button type="button" class="tlc-drawer-delete" id="staffRemoveBtn" hidden>Remove</button>
+      <span></span>
+      <div class="tlc-drawer-foot-right">
+        <span class="tlc-pay-saved" id="savedFlash">✓ Saved</span>
+        <button type="button" class="tlc-btn-primary" id="staffSaveBtn">Save</button>
       </div>
-    </div>
-
-    <div class="form-row">
-      <div class="form-group">
-        <label>Housing Allowance — Biweekly ($)</label>
-        <input type="number" id="fHousing" min="0" step="0.01" placeholder="0.00">
-        <div class="field-hint">Clergy housing — separate tax designation</div>
-      </div>
-      <div class="form-group">
-        <label>Insurance Opt-Out — Biweekly ($)</label>
-        <input type="number" id="fOptOut" min="0" step="0.01" placeholder="0.00">
-      </div>
-    </div>
-
-    <div class="form-row">
-      <div class="form-group">
-        <label>HSA Contribution — Biweekly ($)</label>
-        <input type="number" id="fHSA" min="0" step="0.01" placeholder="0.00">
-      </div>
-      <div class="form-group">
-        <label>Mileage — Biweekly ($)</label>
-        <input type="number" id="fMileage" min="0" step="0.01" placeholder="0.00">
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label>403(b) Deduction Type</label>
-      <select id="f403bType">
-        <option value="fixed">Fixed dollar amount per period</option>
-        <option value="percent">Percentage of base earnings</option>
-      </select>
-    </div>
-
-    <div class="form-group">
-      <label id="f403bAmountLabel">403(b) Amount ($)</label>
-      <input type="number" id="f403bAmount" min="0" step="0.0001" placeholder="0.00">
-      <div class="field-hint" id="f403bHint">Enter dollar amount deducted each period.</div>
-    </div>
-
-    <p id="modalError" class="error-msg hidden">Please fill in all required fields.</p>
-
-    <div class="modal-footer">
-      <button class="btn-secondary" id="modalCancelBtn">Cancel</button>
-      <button class="btn-primary" id="modalSaveBtn" style="width:auto;padding:10px 24px;">Save</button>
-    </div>
+    </footer>
   </div>
-</div>
+</aside>
 
 <script>
-// ============================================================
-// SUPABASE SETUP
-// ============================================================
-const SUPABASE_URL      = window.location.origin + '/sb';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRhaGRzdG9wc3VteG5xdmRjbG15Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxMzM3NDYsImV4cCI6MjA4NzcwOTc0Nn0.PGuSZcnwGaG0Tes6li04JeNBAKDP4oJ6eGwhuYYXO_E';
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// ════════════════════════════════════════════════════════════
+// SUPABASE, WITHOUT THE SDK
+// ════════════════════════════════════════════════════════════
+// The page used to pull @supabase/supabase-js off a CDN. Folding it into the
+// shared shell means it now runs under the admin's Content-Security-Policy,
+// which does not allow a third-party script host — and widening the CSP for
+// every screen to suit one page would be the wrong trade.
+//
+// Only eleven queries are made, all of them plain PostgREST. This is that
+// subset, with the same shape as the SDK so the call sites read the same:
+// await sb.from('x').select('*').eq('a', 1).order('name') → { data, error }.
+const SB_BASE = window.location.origin + '/sb/rest/v1/';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRhaGRzdG9wc3VteG5xdmRjbG15Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxMzM3NDYsImV4cCI6MjA4NzcwOTc0Nn0.PGuSZcnwGaG0Tes6li04JeNBAKDP4oJ6eGwhuYYXO_E';
 
-// ============================================================
-// CONSTANTS
-// ============================================================
+function sbQuery(table) {
+  const params = [];
+  let method = 'GET', body = null, prefer = '';
+  const api = {
+    select(cols) { params.push('select=' + encodeURIComponent(cols || '*')); return api; },
+    eq(c, v) { params.push(encodeURIComponent(c) + '=eq.' + encodeURIComponent(v)); return api; },
+    lt(c, v) { params.push(encodeURIComponent(c) + '=lt.' + encodeURIComponent(v)); return api; },
+    gte(c, v) { params.push(encodeURIComponent(c) + '=gte.' + encodeURIComponent(v)); return api; },
+    lte(c, v) { params.push(encodeURIComponent(c) + '=lte.' + encodeURIComponent(v)); return api; },
+    order(c) { params.push('order=' + encodeURIComponent(c) + '.asc'); return api; },
+    insert(rec) { method = 'POST'; body = rec; return api; },
+    update(rec) { method = 'PATCH'; body = rec; return api; },
+    upsert(rec, opts) {
+      method = 'POST'; body = rec;
+      prefer = 'resolution=merge-duplicates';
+      if (opts && opts.onConflict) params.push('on_conflict=' + encodeURIComponent(opts.onConflict));
+      return api;
+    },
+    then(resolve, reject) { return run().then(resolve, reject); },
+  };
+  async function run() {
+    const url = SB_BASE + table + (params.length ? '?' + params.join('&') : '');
+    const headers = { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY };
+    if (body) { headers['Content-Type'] = 'application/json'; headers.Prefer = prefer ? prefer + ',return=representation' : 'return=representation'; }
+    let res;
+    try {
+      res = await Promise.race([
+        fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined, credentials: 'same-origin' }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('Supabase did not answer within 15 seconds.')), 15000)),
+      ]);
+    } catch (e) {
+      return { data: null, error: { message: e.message } };
+    }
+    // A 401 here means the admin session lapsed, not that payroll is broken.
+    if (res.status === 401) return { data: null, error: { message: 'Your session has expired. Sign in again.', code: 'UNAUTHENTICATED' } };
+    const text = await res.text();
+    let json = null;
+    try { json = text ? JSON.parse(text) : null; } catch (_) { json = null; }
+    if (!res.ok) return { data: null, error: { message: (json && (json.message || json.hint)) || ('Supabase returned ' + res.status), code: json && json.code } };
+    return { data: json, error: null };
+  }
+  return api;
+}
+const sb = { from: sbQuery };
+
+// ════════════════════════════════════════════════════════════
+// CONSTANTS & STATE
+// ════════════════════════════════════════════════════════════
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const PAYROLL_ANCHOR_END = '2026-03-01';
 
-// ============================================================
-// STATE
-// ============================================================
-let churchStaff     = [];    // active staff records
-let periodEntries   = {};    // staffId -> {hours_worked, pto_hours_used, pto_hours_earned}
-let ptoCumulative   = {};    // staffId -> {earned, used} — all periods BEFORE current
-let editingStaffId  = null;
-let savePending     = {};    // staffId -> setTimeout handle
-let mdoStaff        = [];
-let mdoPeriodMap    = new Map();
-let mdoPtoMap       = new Map(); // staffId -> pto_hours_used
+let churchStaff = [];
+let periodEntries = {};
+let ptoCumulative = {};
+let editingStaffId = null;
+let savePending = {};
+let mdoStaff = [];
+let mdoPeriodMap = new Map();
+let mdoPtoMap = new Map();
+let mdoError = '';
+let payView = 'entry';
+let payLayout = 'cards';
+let lastFocus = null;
 
-const MDO_ROOMS = {
-    bear: '🐻 Bear Room', bee: '🐝 Bee Room', turtle: '🐢 Turtle Room',
-    goose: '🪿 Goose Room', owl: '🦉 Owl Room', summer: '☀️ Summer Camp'
-};
+const $ = (id) => document.getElementById(id);
 
-// ============================================================
-// INIT
-// ============================================================
-showDashboard();
+// ════════════════════════════════════════════════════════════
+// MONEY
+// ════════════════════════════════════════════════════════════
+// Every gross is rounded to cents BEFORE it is added to anything. Summing
+// unrounded values and rounding the total afterwards makes a printed subtotal
+// disagree with the rows above it by a cent, which is exactly the kind of
+// thing that costs somebody an afternoon (PY-6).
+const cents = (n) => Math.round((Number(n) || 0) * 100);
+const fromCents = (c) => c / 100;
+const money = (n) => '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const hrs = (n) => (Number(n) || 0).toFixed(2) + ' hrs';
 
-document.getElementById('logoutBtn').addEventListener('click', () => {
-    window.location.href = '/logout';
-});
-
-async function showDashboard() {
-    buildPeriodDropdown();
-    await loadStaff();
-    const sel = document.getElementById('periodSelect');
-    if (sel.value) await onPeriodChange(sel.value);
+function esc(str) {
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-// ============================================================
-// PAY PERIOD DROPDOWN
-// ============================================================
-function buildPeriodDropdown() {
-    const sel    = document.getElementById('periodSelect');
-    const fmt    = d => d.toISOString().split('T')[0];
-    const anchor = new Date(PAYROLL_ANCHOR_END + 'T00:00:00');
-    const earliest = new Date('2026-01-01T00:00:00');
-    const latest   = new Date();
-    latest.setFullYear(latest.getFullYear() + 2);
-
-    let endDate = new Date(anchor);
-    while (endDate > earliest) endDate.setDate(endDate.getDate() - 14);
-    endDate.setDate(endDate.getDate() + 14);
-
-    const periods = [];
-    while (endDate <= latest) {
-        const startDate = new Date(endDate);
-        startDate.setDate(endDate.getDate() - 13);
-        periods.push({ start: fmt(startDate), end: fmt(endDate) });
-        endDate.setDate(endDate.getDate() + 14);
-    }
-
-    const todayStr = new Date().toISOString().split('T')[0];
-    let defaultIdx = 0;
-    periods.forEach((p, i) => { if (p.end <= todayStr) defaultIdx = i; });
-
-    sel.innerHTML = '';
-    periods.forEach((p, i) => {
-        const opt = document.createElement('option');
-        opt.value = p.start + '|' + p.end;
-        opt.textContent = periodLabel(p.start, p.end);
-        if (i === defaultIdx) opt.selected = true;
-        sel.appendChild(opt);
-    });
-
-    sel.addEventListener('change', () => onPeriodChange(sel.value));
-}
-
-function periodLabel(start, end) {
-    const [sy, sm, sd] = start.split('-').map(Number);
-    const [,   em, ed] = end.split('-').map(Number);
-    return MONTH_NAMES[sm-1] + ' ' + sd + ' – ' + MONTH_NAMES[em-1] + ' ' + ed + ', ' + sy;
-}
-
-// ============================================================
-// STAFF MANAGEMENT
-// ============================================================
-async function loadStaff() {
-    const tbody = document.getElementById('staffTableBody');
-    let result;
-    try {
-        result = await Promise.race([
-            sb.from('church_staff').select('*').eq('active', true).order('name'),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Request timed out after 15s')), 15000)),
-        ]);
-    } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--red);padding:20px;">
-            Network error: ${err.message}<br><small style="color:var(--text-muted)">Check that Supabase is reachable from the admin worker</small></td></tr>`;
-        return;
-    }
-    const { data, error } = result;
-    if (error) {
-        console.error('loadStaff error:', error);
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--red);padding:20px;">
-            Error loading staff: ${error.message || JSON.stringify(error)}<br>
-            <small style="color:var(--text-muted)">Code: ${error.code || '—'} · Hint: ${error.hint || 'none'}</small>
-        </td></tr>`;
-        return;
-    }
-    churchStaff = data || [];
-    renderStaffTable();
-}
-
-function renderStaffTable() {
-    const tbody = document.getElementById('staffTableBody');
-    if (!churchStaff.length) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:20px;">No staff added yet. Click "+ Add Staff" to begin.</td></tr>';
-        return;
-    }
-    tbody.innerHTML = churchStaff.map(s => {
-        const rate = s.pay_type === 'hourly'
-            ? '$' + Number(s.hourly_rate).toFixed(2) + '/hr'
-            : '$' + fmtMoney(s.base_salary_biweekly) + '/period';
-        return `<tr>
-            <td><strong>${esc(s.name)}</strong></td>
-            <td style="color:var(--text-muted)">${esc(s.role || '—')}</td>
-            <td><span class="badge badge-${s.pay_type}">${s.pay_type}</span></td>
-            <td>${rate}</td>
-            <td>${s.housing_allowance_biweekly > 0 ? '$' + fmtMoney(s.housing_allowance_biweekly) : '—'}</td>
-            <td>${s.mileage_biweekly > 0 ? '$' + fmtMoney(s.mileage_biweekly) : '—'}</td>
-            <td style="text-align:right;white-space:nowrap;">
-                <button class="btn-secondary btn-sm" onclick="openEditStaff('${s.id}')">Edit</button>
-                &nbsp;
-                <button class="btn-danger" onclick="deactivateStaff('${s.id}', '${esc(s.name)}')">Remove</button>
-            </td>
-        </tr>`;
-    }).join('');
-}
-
-// Staff panel toggle
-document.getElementById('staffToggleBtn').addEventListener('click', () => {
-    const body = document.getElementById('staffPanelBody');
-    const btn  = document.getElementById('staffToggleBtn');
-    const hidden = body.style.display === 'none';
-    body.style.display = hidden ? '' : 'none';
-    btn.textContent = hidden ? 'Hide ▲' : 'Show ▼';
-});
-
-document.getElementById('addStaffBtn').addEventListener('click', openAddStaff);
-
-function openAddStaff() {
-    editingStaffId = null;
-    document.getElementById('modalTitle').textContent = 'Add Staff Member';
-    clearModalForm();
-    document.getElementById('staffModal').classList.remove('hidden');
-}
-
-function openEditStaff(id) {
-    editingStaffId = id;
-    const s = churchStaff.find(x => x.id === id);
-    if (!s) return;
-    document.getElementById('modalTitle').textContent = 'Edit Staff Member';
-    document.getElementById('fName').value       = s.name;
-    document.getElementById('fRole').value       = s.role || '';
-    document.getElementById('fPayType').value    = s.pay_type;
-    document.getElementById('fBaseSalary').value = s.base_salary_biweekly || '';
-    document.getElementById('fHourlyRate').value = s.hourly_rate || '';
-    document.getElementById('fHousing').value    = s.housing_allowance_biweekly || '';
-    document.getElementById('fOptOut').value     = s.insurance_opt_out_biweekly || '';
-    document.getElementById('fHSA').value        = s.hsa_contribution_biweekly || '';
-    document.getElementById('fMileage').value    = s.mileage_biweekly || '';
-    document.getElementById('f403bType').value   = s.retirement_403b_type || 'fixed';
-    document.getElementById('f403bAmount').value = s.retirement_403b_amount || '';
-    togglePayTypeFields();
-    toggle403bFields();
-    document.getElementById('staffModal').classList.remove('hidden');
-}
-
-function clearModalForm() {
-    ['fName','fRole','fBaseSalary','fHourlyRate','fHousing','fOptOut','fHSA','fMileage','f403bAmount'].forEach(id => {
-        document.getElementById(id).value = '';
-    });
-    document.getElementById('fPayType').value  = 'salary';
-    document.getElementById('f403bType').value = 'fixed';
-    togglePayTypeFields();
-    toggle403bFields();
-    document.getElementById('modalError').classList.add('hidden');
-}
-
-document.getElementById('fPayType').addEventListener('change', togglePayTypeFields);
-document.getElementById('f403bType').addEventListener('change', toggle403bFields);
-
-function togglePayTypeFields() {
-    const isSalary = document.getElementById('fPayType').value === 'salary';
-    document.getElementById('salaryFields').classList.toggle('hidden', !isSalary);
-    document.getElementById('hourlyFields').classList.toggle('hidden', isSalary);
-}
-
-function toggle403bFields() {
-    const isPercent = document.getElementById('f403bType').value === 'percent';
-    document.getElementById('f403bAmountLabel').textContent = isPercent ? '403(b) Percentage (e.g. 0.05 = 5%)' : '403(b) Amount ($)';
-    document.getElementById('f403bHint').textContent = isPercent
-        ? 'Enter as decimal: 0.05 = 5% of base earnings.'
-        : 'Enter dollar amount deducted each period.';
-}
-
-document.getElementById('modalCancelBtn').addEventListener('click', closeModal);
-document.getElementById('staffModal').addEventListener('click', e => {
-    if (e.target === document.getElementById('staffModal')) closeModal();
-});
-
-function closeModal() {
-    document.getElementById('staffModal').classList.add('hidden');
-    editingStaffId = null;
-}
-
-document.getElementById('modalSaveBtn').addEventListener('click', saveStaff);
-
-async function saveStaff() {
-    const name = document.getElementById('fName').value.trim();
-    if (!name) {
-        document.getElementById('modalError').classList.remove('hidden');
-        return;
-    }
-
-    const payType  = document.getElementById('fPayType').value;
-    const b403type = document.getElementById('f403bType').value;
-
-    const record = {
-        name,
-        role:                        document.getElementById('fRole').value.trim() || null,
-        pay_type:                    payType,
-        hourly_rate:                 payType === 'hourly' ? (parseFloat(document.getElementById('fHourlyRate').value) || 0) : 0,
-        base_salary_biweekly:        payType === 'salary' ? (parseFloat(document.getElementById('fBaseSalary').value) || 0) : 0,
-        housing_allowance_biweekly:  parseFloat(document.getElementById('fHousing').value)  || 0,
-        insurance_opt_out_biweekly:  parseFloat(document.getElementById('fOptOut').value)   || 0,
-        hsa_contribution_biweekly:   parseFloat(document.getElementById('fHSA').value)      || 0,
-        mileage_biweekly:            parseFloat(document.getElementById('fMileage').value)  || 0,
-        retirement_403b_type:        b403type,
-        retirement_403b_amount:      parseFloat(document.getElementById('f403bAmount').value) || 0,
-        active:                      true,
-    };
-
-    const btn = document.getElementById('modalSaveBtn');
-    btn.disabled    = true;
-    btn.textContent = 'Saving…';
-
-    let error;
-    if (editingStaffId) {
-        ({ error } = await sb.from('church_staff').update(record).eq('id', editingStaffId));
-    } else {
-        ({ error } = await sb.from('church_staff').insert(record));
-    }
-
-    btn.disabled    = false;
-    btn.textContent = 'Save';
-
-    if (error) { alert('Error saving: ' + error.message); return; }
-
-    closeModal();
-    await loadStaff();
-    const sel = document.getElementById('periodSelect');
-    if (sel.value) await onPeriodChange(sel.value);
-}
-
-async function deactivateStaff(id, name) {
-    if (!confirm('Remove ' + name + ' from the church staff list?')) return;
-    const { error } = await sb.from('church_staff').update({ active: false }).eq('id', id);
-    if (error) { alert('Error: ' + error.message); return; }
-    await loadStaff();
-    const sel = document.getElementById('periodSelect');
-    if (sel.value) await onPeriodChange(sel.value);
-}
-
-// ============================================================
-// PERIOD CHANGE — load entries, render hours section + report
-// ============================================================
-async function onPeriodChange(value) {
-    if (!value) return;
-    const [periodStart, periodEnd] = value.split('|');
-
-    // Load MDO staff data and church period entries in parallel
-    const [{ data: entries }] = await Promise.all([
-        sb.from('church_staff_period_entries')
-            .select('*')
-            .eq('period_start', periodStart),
-        loadMdoData(periodStart, periodEnd),
-    ]);
-
-    periodEntries = {};
-    (entries || []).forEach(e => { periodEntries[e.staff_id] = e; });
-
-    // Fetch all entries BEFORE this period for PTO running balance
-    const { data: priorEntries } = await sb.from('church_staff_period_entries')
-        .select('staff_id, pto_hours_earned, pto_hours_used')
-        .lt('period_start', periodStart);
-
-    ptoCumulative = {};
-    (priorEntries || []).forEach(e => {
-        if (!ptoCumulative[e.staff_id]) ptoCumulative[e.staff_id] = { earned: 0, used: 0 };
-        ptoCumulative[e.staff_id].earned += Number(e.pto_hours_earned);
-        ptoCumulative[e.staff_id].used   += Number(e.pto_hours_used);
-    });
-
-    renderHoursSection(periodStart);
-    renderReport(periodStart, periodEnd);
-}
-
-// ============================================================
-// MDO STAFF DATA
-// ============================================================
-async function loadMdoData(periodStart, periodEnd) {
-    const [staffRes, hoursRes, clockRes, ptoRes] = await Promise.all([
-        sb.from('staff')
-            .select('id, name, role, pay_type, hourly_rate, salary_biweekly, room_id, active')
-            .eq('active', true)
-            .order('name'),
-        sb.from('staff_hours')
-            .select('staff_id, work_date, hours_worked')
-            .gte('work_date', periodStart)
-            .lte('work_date', periodEnd),
-        sb.from('staff_clock_events')
-            .select('staff_id, clock_in, clock_out, work_date')
-            .gte('work_date', periodStart)
-            .lte('work_date', periodEnd),
-        sb.from('staff_pto_entries')
-            .select('staff_id, pto_hours_used')
-            .eq('period_start', periodStart),
-    ]);
-
-    mdoStaff = staffRes.data || [];
-    mdoPtoMap = new Map();
-    (ptoRes.data || []).forEach(p => { if (p.pto_hours_used > 0) mdoPtoMap.set(p.staff_id, parseFloat(p.pto_hours_used)); });
-
-    const manualKeys = new Set((hoursRes.data || []).map(h => h.staff_id + '|' + h.work_date));
-
-    function clockHrs(ev) {
-        if (!ev.clock_in || !ev.clock_out) return 0;
-        const ms = new Date(ev.clock_out) - new Date(ev.clock_in);
-        return ms < 600000 ? 0 : Math.round(ms / 3600000 * 100) / 100;
-    }
-
-    mdoPeriodMap = new Map();
-    (hoursRes.data || []).forEach(h => {
-        mdoPeriodMap.set(h.staff_id, (mdoPeriodMap.get(h.staff_id) || 0) + parseFloat(h.hours_worked));
-    });
-    (clockRes.data || []).forEach(ev => {
-        if (manualKeys.has(ev.staff_id + '|' + ev.work_date)) return;
-        const hrs = clockHrs(ev);
-        if (hrs > 0) mdoPeriodMap.set(ev.staff_id, (mdoPeriodMap.get(ev.staff_id) || 0) + hrs);
-    });
-}
-
-// ============================================================
-// HOURS ENTRY SECTION
-// ============================================================
-function renderHoursSection(periodStart) {
-    const hourlyStaff = churchStaff.filter(s => s.pay_type === 'hourly');
-    const card = document.getElementById('hoursCard');
-
-    if (!hourlyStaff.length) { card.classList.add('hidden'); return; }
-    card.classList.remove('hidden');
-
-    const grid = document.getElementById('hoursGrid');
-    grid.innerHTML = hourlyStaff.map(s => {
-        const entry = periodEntries[s.id] || {};
-        const hw  = entry.hours_worked    ?? '';
-        const pu  = entry.pto_hours_used  ?? '';
-        const pe  = entry.pto_hours_earned ?? '';
-        return `<div class="hours-row">
-            <div class="staff-info">
-                <div class="staff-name">${esc(s.name)}</div>
-                <div class="staff-role">${esc(s.role || '')}</div>
-            </div>
-            <div class="hf-hours">
-                <div class="hours-col-label">Hrs Worked</div>
-                <input type="number" min="0" step="0.25" value="${hw}" placeholder="0"
-                    data-staff="${s.id}" data-field="hours_worked"
-                    onchange="scheduleHoursSave('${s.id}', '${periodStart}')"
-                    oninput="scheduleHoursSave('${s.id}', '${periodStart}')">
-            </div>
-            <div class="hf-pto-used">
-                <div class="hours-col-label">PTO Used</div>
-                <input type="number" min="0" step="0.25" value="${pu}" placeholder="0"
-                    data-staff="${s.id}" data-field="pto_hours_used"
-                    onchange="scheduleHoursSave('${s.id}', '${periodStart}')"
-                    oninput="scheduleHoursSave('${s.id}', '${periodStart}')">
-            </div>
-            <div class="hf-pto-earned">
-                <div class="hours-col-label">PTO Earned</div>
-                <input type="number" min="0" step="0.25" value="${pe}" placeholder="0"
-                    data-staff="${s.id}" data-field="pto_hours_earned"
-                    onchange="scheduleHoursSave('${s.id}', '${periodStart}')"
-                    oninput="scheduleHoursSave('${s.id}', '${periodStart}')">
-            </div>
-        </div>`;
-    }).join('');
-}
-
-function scheduleHoursSave(staffId, periodStart) {
-    clearTimeout(savePending[staffId]);
-    savePending[staffId] = setTimeout(() => doHoursSave(staffId, periodStart), 600);
-}
-
-async function doHoursSave(staffId, periodStart) {
-    const inputs = document.querySelectorAll(`input[data-staff="${staffId}"]`);
-    let hw = 0, pu = 0, pe = 0;
-    inputs.forEach(inp => {
-        const v = parseFloat(inp.value) || 0;
-        if (inp.dataset.field === 'hours_worked')    hw = v;
-        if (inp.dataset.field === 'pto_hours_used')  pu = v;
-        if (inp.dataset.field === 'pto_hours_earned') pe = v;
-    });
-
-    const { error } = await sb.from('church_staff_period_entries')
-        .upsert({ staff_id: staffId, period_start: periodStart, hours_worked: hw, pto_hours_used: pu, pto_hours_earned: pe },
-                { onConflict: 'staff_id,period_start' });
-
-    if (!error) {
-        // Update local state and re-render report
-        periodEntries[staffId] = { staff_id: staffId, period_start: periodStart, hours_worked: hw, pto_hours_used: pu, pto_hours_earned: pe };
-        const sel = document.getElementById('periodSelect');
-        const [ps, pe2] = sel.value.split('|');
-        renderReport(ps, pe2);
-        flashSaved();
-    }
-}
-
-function flashSaved() {
-    const el = document.getElementById('savingIndicator');
-    el.classList.remove('hidden');
-    clearTimeout(flashSaved._t);
-    flashSaved._t = setTimeout(() => el.classList.add('hidden'), 1800);
-}
-
-// ============================================================
-// REPORT RENDERING
-// ============================================================
-function exportCsv() {
-    const sel = document.getElementById('periodSelect');
-    if (!sel.value) { alert('Select a pay period first.'); return; }
-    const [periodStart, periodEnd] = sel.value.split('|');
-    const label = periodLabel(periodStart, periodEnd);
-
-    const activeMdo    = mdoStaff.filter(s => calcMdoGross(s) > 0);
-    const activeChurch = churchStaff.filter(s => calcGross(s) > 0);
-
-    const q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
-    const rows = [];
-
-    // Title + period go in a single cell (column A only) so long text here doesn't
-    // force a spreadsheet app to auto-widen column B past what its data needs —
-    // that was pushing the whole table past one printed page width.
-    rows.push([q('TLC Payroll — ' + label)]);
-    rows.push([]);
-
-    if (activeMdo.length) {
-        rows.push([q('MDO Staff'), q('Type'), q('Rate'), q('Hours'), q('PTO Hours'), q('Gross Pay')]);
-        let mdoTotal = 0;
-        activeMdo.forEach(s => {
-            const isSalary = s.pay_type === 'salary';
-            const hours    = mdoPeriodMap.get(s.id) || 0;
-            const pto      = mdoPtoMap.get(s.id)    || 0;
-            const gross    = calcMdoGross(s);
-            mdoTotal += gross;
-            rows.push([
-                q(s.name),
-                q(isSalary ? 'Salary' : 'Hourly'),
-                q(isSalary ? '' : Number(s.hourly_rate).toFixed(2)),
-                q(isSalary ? '' : hours.toFixed(2)),
-                q(pto > 0 ? pto.toFixed(2) : ''),
-                q(gross.toFixed(2)),
-            ]);
-        });
-        rows.push([q('MDO Subtotal'), '', '', '', '', q(mdoTotal.toFixed(2))]);
-        rows.push([]);
-    }
-
-    if (activeChurch.length) {
-        rows.push([q('Church Staff'), q('Type'), q('Base/Earnings'), q('Housing'), q('Ins Opt-Out'), q('HSA'), q('Mileage'), q('403(b)'), q('Gross Pay')]);
-        let churchTotal = 0;
-        activeChurch.forEach(s => {
-            const isSalary = s.pay_type === 'salary';
-            const entry    = periodEntries[s.id] || {};
-            const hours    = Number(entry.hours_worked || 0);
-            const ptoUsed  = Number(entry.pto_hours_used || 0);
-            const base     = isSalary ? Number(s.base_salary_biweekly) : (hours + ptoUsed) * Number(s.hourly_rate);
-            const b403     = calc403b(s, base);
-            const gross    = calcGross(s);
-            churchTotal += gross;
-            rows.push([
-                q(s.name),
-                q(isSalary ? 'Salary' : 'Hourly'),
-                q(isSalary ? Number(s.base_salary_biweekly).toFixed(2) : hours.toFixed(2) + ' @ ' + Number(s.hourly_rate).toFixed(2)),
-                q(Number(s.housing_allowance_biweekly) > 0 ? Number(s.housing_allowance_biweekly).toFixed(2) : ''),
-                q(Number(s.insurance_opt_out_biweekly) > 0 ? Number(s.insurance_opt_out_biweekly).toFixed(2) : ''),
-                q(Number(s.hsa_contribution_biweekly) > 0 ? Number(s.hsa_contribution_biweekly).toFixed(2) : ''),
-                q(Number(s.mileage_biweekly) > 0 ? Number(s.mileage_biweekly).toFixed(2) : ''),
-                q(b403 > 0 ? ('-' + b403.toFixed(2)) : ''),
-                q(gross.toFixed(2)),
-            ]);
-        });
-        rows.push([q('Church Subtotal'), '', '', '', '', '', '', '', q(churchTotal.toFixed(2))]);
-        rows.push([]);
-    }
-
-    const grandTotal = activeMdo.reduce((t,s) => t + calcMdoGross(s), 0)
-                     + activeChurch.reduce((t,s) => t + calcGross(s), 0);
-    rows.push([q('TOTAL GROSS PAY'), '', '', '', '', '', '', '', q(grandTotal.toFixed(2))]);
-
-    const csv = rows.map(r => r.join(',')).join('\r\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'payroll-' + periodStart + '.csv';
-    a.click();
-    URL.revokeObjectURL(a.href);
-}
-
-function renderReport(periodStart, periodEnd) {
-    const section = document.getElementById('reportSection');
-    const label   = periodLabel(periodStart, periodEnd);
-    let grandTotal = 0;
-
-    // Filter zero-pay staff
-    const activeMdo    = mdoStaff.filter(s => calcMdoGross(s) > 0);
-    const activeChurch = churchStaff.filter(s => calcGross(s) > 0);
-
-    // ── MDO section ──
-    let mdoHtml = '', mdoTotal = 0;
-    if (activeMdo.length) {
-        activeMdo.forEach(s => {
-            const gross = calcMdoGross(s);
-            mdoTotal   += gross;
-            grandTotal += gross;
-            mdoHtml    += renderMdoStaffBlock(s, gross);
-        });
-        mdoHtml += `<div class="report-subtotal"><span>MDO Subtotal</span><span>$${fmtMoney(mdoTotal)}</span></div>`;
-    }
-
-    // ── Church section ──
-    let churchHtml = '', churchTotal = 0;
-    if (activeChurch.length) {
-        churchHtml = '<div class="report-section-label">Church Staff</div>';
-        activeChurch.forEach(s => {
-            const gross  = calcGross(s);
-            churchTotal += gross;
-            grandTotal  += gross;
-            churchHtml  += renderStaffBlock(s, periodStart, gross);
-        });
-        churchHtml += `<div class="report-subtotal"><span>Church Subtotal</span><span>$${fmtMoney(churchTotal)}</span></div>`;
-    }
-
-    if (!activeMdo.length && !activeChurch.length) {
-        section.innerHTML = '<p style="color:var(--text-muted);font-size:0.9rem;">No staff found for this period.</p>';
-        return;
-    }
-
-    section.innerHTML = `
-        <div class="report-header">
-            <h2>Timothy Lutheran — Combined Payroll</h2>
-            <div class="report-period">Pay Period: ${label}</div>
-        </div>
-        ${mdoHtml}
-        ${churchHtml}
-        <div class="report-grand-total">
-            <span>Total Gross Pay</span>
-            <span>$${fmtMoney(grandTotal)}</span>
-        </div>`;
-
-    renderPrintTable(activeMdo, activeChurch, mdoTotal, churchTotal, grandTotal, label);
-}
-
-function renderPrintTable(activeMdo, activeChurch, mdoTotal, churchTotal, grandTotal, label) {
-    const el = document.getElementById('printTable');
-
-    // MDO table rows
-    const mdoRows = activeMdo.map(s => {
-        const isSalary = s.pay_type === 'salary';
-        const hours    = mdoPeriodMap.get(s.id) || 0;
-        const pto      = mdoPtoMap.get(s.id)    || 0;
-        const gross    = calcMdoGross(s);
-        return `<tr>
-            <td class="pt-name">${esc(s.name)}</td>
-            <td>${isSalary ? 'Salary' : '$' + Number(s.hourly_rate).toFixed(2) + '/hr'}</td>
-            <td class="pt-num">${isSalary ? '—' : hours.toFixed(2)}</td>
-            <td class="pt-num">${pto > 0 ? pto.toFixed(2) : '—'}</td>
-            <td class="pt-num">$${fmtMoney(gross)}</td>
-        </tr>`;
-    }).join('');
-
-    const mdoSection = activeMdo.length ? `
-        <div class="pt-section">
-            <div class="pt-section-label">MDO Staff</div>
-            <table class="pt-table">
-                <thead><tr>
-                    <th>Name</th><th>Rate</th>
-                    <th class="pt-num">Hours</th><th class="pt-num">PTO</th>
-                    <th class="pt-num">Gross Pay</th>
-                </tr></thead>
-                <tbody>
-                    ${mdoRows}
-                    <tr class="pt-sub">
-                        <td colspan="4">MDO Subtotal</td>
-                        <td class="pt-num">$${fmtMoney(mdoTotal)}</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>` : '';
-
-    // Church table rows
-    const churchRows = activeChurch.map(s => {
-        const isSalary = s.pay_type === 'salary';
-        const entry    = periodEntries[s.id] || {};
-        const hours    = Number(entry.hours_worked || 0);
-        const ptoUsed  = Number(entry.pto_hours_used || 0);
-        const earnings = isSalary ? Number(s.base_salary_biweekly) : (hours + ptoUsed) * Number(s.hourly_rate);
-        const b403     = calc403b(s, earnings);
-        const gross    = calcGross(s);
-        const fmt = v => v > 0 ? '$' + fmtMoney(v) : '—';
-        return `<tr>
-            <td class="pt-name">${esc(s.name)}</td>
-            <td class="pt-num">${isSalary ? '$' + fmtMoney(s.base_salary_biweekly) : hours.toFixed(2) + ' hrs @ $' + Number(s.hourly_rate).toFixed(2)}</td>
-            <td class="pt-num">${fmt(s.housing_allowance_biweekly)}</td>
-            <td class="pt-num">${fmt(s.insurance_opt_out_biweekly)}</td>
-            <td class="pt-num">${fmt(s.hsa_contribution_biweekly)}</td>
-            <td class="pt-num">${fmt(s.mileage_biweekly)}</td>
-            <td class="pt-num">${b403 > 0 ? '−$' + fmtMoney(b403) : '—'}</td>
-            <td class="pt-num">$${fmtMoney(gross)}</td>
-        </tr>`;
-    }).join('');
-
-    const churchSection = activeChurch.length ? `
-        <div class="pt-section">
-            <div class="pt-section-label">Church Staff</div>
-            <table class="pt-table">
-                <thead><tr>
-                    <th>Name</th><th class="pt-num">Base / Earnings</th>
-                    <th class="pt-num">Housing</th><th class="pt-num">Ins Opt-Out</th>
-                    <th class="pt-num">HSA</th><th class="pt-num">Mileage</th>
-                    <th class="pt-num">403(b)</th><th class="pt-num">Gross Pay</th>
-                </tr></thead>
-                <tbody>
-                    ${churchRows}
-                    <tr class="pt-sub">
-                        <td colspan="7">Church Subtotal</td>
-                        <td class="pt-num">$${fmtMoney(churchTotal)}</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>` : '';
-
-    el.innerHTML = `
-        <div class="pt-header">
-            <h2>Timothy Lutheran — Combined Payroll</h2>
-            <div class="pt-period">Pay Period: ${label}</div>
-        </div>
-        ${mdoSection}
-        ${churchSection}
-        <div class="pt-total">
-            <span>Total Gross Pay</span>
-            <span>$${fmtMoney(grandTotal)}</span>
-        </div>`;
-}
-
-function renderMdoStaffBlock(s, gross) {
-    const isSalary = s.pay_type === 'salary';
-    const hours    = mdoPeriodMap.get(s.id) || 0;
-    const room     = MDO_ROOMS[s.room_id] || 'Float';
-
-    const pto = mdoPtoMap.get(s.id) || 0;
-    let earningsLines = '';
-    if (isSalary) {
-        earningsLines = lineItem('Salary', s.salary_biweekly);
-    } else {
-        earningsLines = lineItem('Pay Rate', '$' + Number(s.hourly_rate).toFixed(2) + '/hr', true)
-                      + lineItem('Hours Worked', hours.toFixed(2) + ' hrs', true)
-                      + (pto > 0 ? lineItem('PTO Used', pto.toFixed(2) + ' hrs', true) : '');
-    }
-
-    return `<div class="staff-block">
-        <div class="staff-block-header">
-            <span class="sname">${esc(s.name)}</span>
-        </div>
-        <div class="line-items">
-            ${earningsLines}
-            <div class="line-item divider total">
-                <span>Gross Pay</span>
-                <span>$${fmtMoney(gross)}</span>
-            </div>
-        </div>
-    </div>`;
-}
-
-function calcMdoGross(s) {
-    if (s.pay_type === 'salary') return Number(s.salary_biweekly);
-    const hours  = mdoPeriodMap.get(s.id) || 0;
-    const pto    = mdoPtoMap.get(s.id)    || 0;
-    return (hours + pto) * Number(s.hourly_rate);
-}
-
-function renderStaffBlock(s, periodStart, gross) {
-    const isSalary  = s.pay_type === 'salary';
-    const entry     = periodEntries[s.id] || {};
-    const hours     = Number(entry.hours_worked   || 0);
-    const ptoUsed   = Number(entry.pto_hours_used  || 0);
-    const ptoEarned = Number(entry.pto_hours_earned || 0);
-
-    const prior      = ptoCumulative[s.id] || { earned: 0, used: 0 };
-    const ptoBalance = (prior.earned + ptoEarned) - (prior.used + ptoUsed);
-
-    const b403 = calc403b(s, isSalary ? s.base_salary_biweekly : hours * s.hourly_rate);
-
-    const rateChip = isSalary
-        ? `$${fmtMoney(s.base_salary_biweekly)}/period`
-        : `$${Number(s.hourly_rate).toFixed(2)}/hr`;
-
-    let earningsLine = '';
-    if (isSalary) {
-        earningsLine = lineItem('Base Salary', s.base_salary_biweekly);
-    } else {
-        earningsLine = lineItem('Pay Rate', '$' + Number(s.hourly_rate).toFixed(2) + '/hr', true)
-                     + lineItem('Hours Worked', hours.toFixed(2) + ' hrs', true);
-    }
-
-    const housingLine   = s.housing_allowance_biweekly  > 0 ? lineItem('Housing Allowance', s.housing_allowance_biweekly)  : '';
-    const optOutLine    = s.insurance_opt_out_biweekly   > 0 ? lineItem('Insurance Opt-Out', s.insurance_opt_out_biweekly)   : '';
-    const hsaLine       = s.hsa_contribution_biweekly    > 0 ? lineItem('HSA Contribution',  s.hsa_contribution_biweekly)    : '';
-    const mileageLine   = s.mileage_biweekly             > 0 ? lineItem('Mileage',           s.mileage_biweekly)             : '';
-    const b403Label     = s.retirement_403b_type === 'percent'
-        ? `403(b) Deduction (${(s.retirement_403b_amount * 100).toFixed(2).replace(/\.?0+$/, '')}%)`
-        : '403(b) Deduction';
-    const b403Line      = b403 > 0 ? lineItemNeg(b403Label, b403) : '';
-
-    let ptoLines = '';
-    if (!isSalary && ptoUsed > 0) {
-        ptoLines = `
-            <div class="line-item pto-row">
-                <span class="li-label">PTO Used</span>
-                <span class="li-val">${ptoUsed.toFixed(2)} hrs</span>
-            </div>
-            <div class="line-item pto-row">
-                <span class="li-label">PTO Balance</span>
-                <span class="li-val" style="color:${ptoBalance < 0 ? 'var(--red)' : 'var(--green)'};">${ptoBalance.toFixed(2)} hrs remaining</span>
-            </div>`;
-    }
-
-    return `<div class="staff-block">
-        <div class="staff-block-header">
-            <span class="sname">${esc(s.name)}</span>
-        </div>
-        <div class="line-items">
-            ${earningsLine}
-            ${housingLine}
-            ${optOutLine}
-            ${hsaLine}
-            ${mileageLine}
-            ${b403Line}
-            ${ptoLines}
-            <div class="line-item divider total">
-                <span>Gross Pay</span>
-                <span>$${fmtMoney(gross)}</span>
-            </div>
-        </div>
-    </div>`;
-}
-
-function lineItem(label, amount, plainText = false) {
-    const val = plainText ? esc(String(amount)) : '$' + fmtMoney(amount);
-    return `<div class="line-item">
-        <span class="li-label">${esc(label)}</span>
-        <span class="li-val">${val}</span>
-    </div>`;
-}
-
-function lineItemNeg(label, amount) {
-    return `<div class="line-item">
-        <span class="li-label">${esc(label)}</span>
-        <span class="li-val li-neg">−$${fmtMoney(amount)}</span>
-    </div>`;
-}
-
-// ============================================================
+// ════════════════════════════════════════════════════════════
 // PAY CALCULATIONS
-// ============================================================
+// ════════════════════════════════════════════════════════════
 function calc403b(s, baseEarnings) {
-    if (!s.retirement_403b_amount) return 0;
-    if (s.retirement_403b_type === 'percent') {
-        return baseEarnings * Number(s.retirement_403b_amount);
-    }
-    return Number(s.retirement_403b_amount);
+  if (!s.retirement_403b_amount) return 0;
+  if (s.retirement_403b_type === 'percent') return baseEarnings * Number(s.retirement_403b_amount);
+  return Number(s.retirement_403b_amount);
+}
+
+// The base earnings figure, computed ONCE and used by both the gross and the
+// line items. They used to be computed separately — the gross counted PTO in
+// the 403(b) base and the printed line item did not, so the line items on a
+// person's card did not add up to their own Gross Pay (PY-2).
+function baseEarnings(s) {
+  const entry = periodEntries[s.id] || {};
+  if (s.pay_type === 'salary') return Number(s.base_salary_biweekly) || 0;
+  const hours = Number(entry.hours_worked || 0);
+  const ptoUsed = Number(entry.pto_hours_used || 0);
+  return (hours + ptoUsed) * (Number(s.hourly_rate) || 0);
 }
 
 function calcGross(s) {
-    const entry    = periodEntries[s.id] || {};
-    const hours    = Number(entry.hours_worked   || 0);
-    const ptoUsed  = Number(entry.pto_hours_used || 0);
-    const base     = s.pay_type === 'salary' ? Number(s.base_salary_biweekly) : (hours + ptoUsed) * Number(s.hourly_rate);
-    const b403     = calc403b(s, base);
-    return base
-        + Number(s.housing_allowance_biweekly)
-        + Number(s.insurance_opt_out_biweekly)
-        + Number(s.hsa_contribution_biweekly)
-        + Number(s.mileage_biweekly)
-        - b403;
+  const base = baseEarnings(s);
+  return fromCents(cents(base)
+    + cents(s.housing_allowance_biweekly) + cents(s.insurance_opt_out_biweekly)
+    + cents(s.hsa_contribution_biweekly) + cents(s.mileage_biweekly)
+    - cents(calc403b(s, base)));
 }
 
-// ============================================================
-// UTILITIES
-// ============================================================
-function fmtMoney(n) {
-    return Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function calcMdoGross(s) {
+  if (s.pay_type === 'salary') return fromCents(cents(s.salary_biweekly));
+  const hours = mdoPeriodMap.get(s.id) || 0;
+  const pto = mdoPtoMap.get(s.id) || 0;
+  return fromCents(cents((hours + pto) * (Number(s.hourly_rate) || 0)));
 }
 
-function esc(str) {
-    if (!str) return '';
-    return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+// ════════════════════════════════════════════════════════════
+// PAY PERIODS
+// ════════════════════════════════════════════════════════════
+// Dates are formatted from local components throughout. Parsing "2026-07-16"
+// as local midnight and then formatting it through toISOString() would shift
+// it a day for anybody west of UTC (PY-11).
+function periodLabel(start, end) {
+  const [sy, sm, sd] = start.split('-').map(Number);
+  const [, em, ed] = end.split('-').map(Number);
+  return MONTH_NAMES[sm - 1] + ' ' + sd + ' – ' + MONTH_NAMES[em - 1] + ' ' + ed + ', ' + sy;
 }
+
+function paysOnLabel(end) {
+  const [y, m, d] = end.split('-').map(Number);
+  const pay = new Date(y, m - 1, d + 4);
+  return 'Pays ' + MONTH_NAMES[pay.getMonth()] + ' ' + pay.getDate();
+}
+
+function buildPeriodDropdown() {
+  const sel = $('periodSelect');
+  const fmt = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const anchor = new Date(PAYROLL_ANCHOR_END + 'T00:00:00');
+  const earliest = new Date('2026-01-01T00:00:00');
+  const latest = new Date();
+  latest.setFullYear(latest.getFullYear() + 2);
+
+  let endDate = new Date(anchor);
+  while (endDate > earliest) endDate.setDate(endDate.getDate() - 14);
+  endDate.setDate(endDate.getDate() + 14);
+
+  const periods = [];
+  while (endDate <= latest) {
+    const startDate = new Date(endDate);
+    startDate.setDate(endDate.getDate() - 13);
+    periods.push({ start: fmt(startDate), end: fmt(endDate) });
+    endDate.setDate(endDate.getDate() + 14);
+  }
+
+  const todayStr = fmt(new Date());
+  let defaultIdx = 0;
+  periods.forEach((p, i) => { if (p.end <= todayStr) defaultIdx = i; });
+
+  sel.innerHTML = '';
+  periods.forEach((p, i) => {
+    const opt = document.createElement('option');
+    opt.value = p.start + '|' + p.end;
+    opt.textContent = periodLabel(p.start, p.end);
+    if (i === defaultIdx) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  sel.addEventListener('change', () => onPeriodChange(sel.value));
+}
+
+// ════════════════════════════════════════════════════════════
+// LOADING
+// ════════════════════════════════════════════════════════════
+function showError(msg) {
+  const el = $('payError');
+  if (!msg) { el.hidden = true; el.textContent = ''; return; }
+  el.hidden = false;
+  el.textContent = msg;
+}
+
+async function loadStaff() {
+  const { data, error } = await sb.from('church_staff').select('*').eq('active', true).order('name');
+  if (error) {
+    showError('Church staff could not be read: ' + error.message);
+    $('staffRows').innerHTML = '<div class="tlc-pay-empty">Could not read the staff list.</div>';
+    return;
+  }
+  churchStaff = data || [];
+  renderStaffRows();
+}
+
+async function onPeriodChange(value) {
+  if (!value) return;
+  const [periodStart, periodEnd] = value.split('|');
+  $('paysOn').textContent = paysOnLabel(periodEnd);
+  $('entryPeriodLabel').textContent = 'Pay period · ' + periodLabel(periodStart, periodEnd);
+  $('entryPays').textContent = paysOnLabel(periodEnd);
+
+  const [entriesRes] = await Promise.all([
+    sb.from('church_staff_period_entries').select('*').eq('period_start', periodStart),
+    loadMdoData(periodStart, periodEnd),
+  ]);
+  if (entriesRes.error) showError('This period’s hours could not be read: ' + entriesRes.error.message);
+
+  periodEntries = {};
+  (entriesRes.data || []).forEach((e) => { periodEntries[e.staff_id] = e; });
+
+  const { data: priorEntries } = await sb.from('church_staff_period_entries')
+    .select('staff_id,pto_hours_earned,pto_hours_used').lt('period_start', periodStart);
+  ptoCumulative = {};
+  (priorEntries || []).forEach((e) => {
+    if (!ptoCumulative[e.staff_id]) ptoCumulative[e.staff_id] = { earned: 0, used: 0 };
+    ptoCumulative[e.staff_id].earned += Number(e.pto_hours_earned);
+    ptoCumulative[e.staff_id].used += Number(e.pto_hours_used);
+  });
+
+  renderEntry(periodStart);
+  renderReport(periodStart, periodEnd);
+}
+
+async function loadMdoData(periodStart, periodEnd) {
+  mdoError = '';
+  const [staffRes, hoursRes, clockRes, ptoRes] = await Promise.all([
+    sb.from('staff').select('id,name,role,pay_type,hourly_rate,salary_biweekly,room_id,active').eq('active', true).order('name'),
+    sb.from('staff_hours').select('staff_id,work_date,hours_worked').gte('work_date', periodStart).lte('work_date', periodEnd),
+    sb.from('staff_clock_events').select('staff_id,clock_in,clock_out,work_date').gte('work_date', periodStart).lte('work_date', periodEnd),
+    sb.from('staff_pto_entries').select('staff_id,pto_hours_used').eq('period_start', periodStart),
+  ]);
+
+  // A failed MDO query used to be swallowed by `|| []`, so a payroll run would
+  // quietly under-report the childcare staff and nobody would know until
+  // somebody was short in their pay (PY-9). It is now said out loud.
+  const failed = [staffRes, hoursRes, clockRes, ptoRes].find((r) => r.error);
+  if (failed) {
+    mdoError = failed.error.message;
+    mdoStaff = []; mdoPeriodMap = new Map(); mdoPtoMap = new Map();
+    return;
+  }
+
+  mdoStaff = staffRes.data || [];
+  mdoPtoMap = new Map();
+  (ptoRes.data || []).forEach((p) => { if (p.pto_hours_used > 0) mdoPtoMap.set(p.staff_id, parseFloat(p.pto_hours_used)); });
+
+  const manualKeys = new Set((hoursRes.data || []).map((h) => h.staff_id + '|' + h.work_date));
+  const clockHrs = (ev) => {
+    if (!ev.clock_in || !ev.clock_out) return 0;
+    const ms = new Date(ev.clock_out) - new Date(ev.clock_in);
+    return ms < 600000 ? 0 : Math.round(ms / 3600000 * 100) / 100;
+  };
+
+  mdoPeriodMap = new Map();
+  (hoursRes.data || []).forEach((h) => {
+    mdoPeriodMap.set(h.staff_id, (mdoPeriodMap.get(h.staff_id) || 0) + parseFloat(h.hours_worked));
+  });
+  (clockRes.data || []).forEach((ev) => {
+    if (manualKeys.has(ev.staff_id + '|' + ev.work_date)) return;
+    const h = clockHrs(ev);
+    if (h > 0) mdoPeriodMap.set(ev.staff_id, (mdoPeriodMap.get(ev.staff_id) || 0) + h);
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// ENTER & APPROVE
+// ════════════════════════════════════════════════════════════
+function pill(tone, label) {
+  const tones = {
+    good: 'background:#EAF1E5;border:1px solid #C9DCBD;color:#3B4C2E',
+    warn: 'background:#FBF1DC;border:1px solid #EBD5A6;color:#7A5B18',
+    bad: 'background:#FAEFEF;border:1px solid #E4C8C8;color:#8A4A4A',
+    plain: 'background:#F1EFEA;border:1px solid #E0DACE;color:#6A6858',
+  };
+  return '<span style="display:inline-block;padding:3px 9px;border-radius:999px;font:600 10.5px/1.5 var(--tlc-sans);letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;'
+    + (tones[tone] || tones.plain) + '">' + esc(label) + '</span>';
+}
+
+// The design's Status column reads Approved / Submitted / Imported /
+// Unmatched. This repo has no approval state on a period entry, and inventing
+// one that nothing writes would put a green APPROVED beside a row nobody had
+// looked at. What the status says instead is the thing that is actually true
+// and actually blocks a payroll run: whether the hours are in.
+function entryStatus(kind, hoursEntered) {
+  if (kind === 'mdo') return { tone: 'plain', label: 'From MDO' };
+  if (kind === 'salary') return { tone: 'plain', label: 'Salaried' };
+  return hoursEntered ? { tone: 'good', label: 'Hours in' } : { tone: 'warn', label: 'Needs hours' };
+}
+
+function renderEntry(periodStart) {
+  const rows = [];
+
+  churchStaff.forEach((s) => {
+    const entry = periodEntries[s.id] || {};
+    const isSalary = s.pay_type === 'salary';
+    const hoursVal = entry.hours_worked === undefined || entry.hours_worked === null ? '' : entry.hours_worked;
+    const ptoVal = entry.pto_hours_used === undefined || entry.pto_hours_used === null ? '' : entry.pto_hours_used;
+    const st = entryStatus(isSalary ? 'salary' : 'hourly', Number(hoursVal) > 0);
+    rows.push('<div class="tlc-pay-row tlc-pay-grid">'
+      + '<span class="tlc-pay-name"><b>' + esc(s.name) + '</b><span>' + esc(s.role || 'Church staff') + '</span></span>'
+      + '<span>' + pill('plain', isSalary ? 'Salaried' : 'Hourly') + '</span>'
+      + '<span>' + (isSalary
+        ? '<span class="tlc-pay-na">n/a</span>'
+        : '<span class="tlc-pay-inwrap"><input class="tlc-pay-in" type="number" min="0" step="0.25" value="' + esc(hoursVal)
+          + '" placeholder="0" data-staff="' + esc(s.id) + '" data-field="hours_worked" data-period="' + esc(periodStart)
+          + '" aria-label="Hours worked by ' + esc(s.name) + '"><small>hrs</small></span>') + '</span>'
+      + '<span><span class="tlc-pay-inwrap"><input class="tlc-pay-in" type="number" min="0" step="0.25" value="' + esc(ptoVal)
+        + '" placeholder="0" data-staff="' + esc(s.id) + '" data-field="pto_hours_used" data-period="' + esc(periodStart)
+        + '" aria-label="PTO used by ' + esc(s.name) + '"><small>hrs</small></span></span>'
+      + '<span>' + pill(st.tone, st.label) + '</span>'
+      + '</div>');
+  });
+
+  mdoStaff.forEach((s) => {
+    const isSalary = s.pay_type === 'salary';
+    const h = mdoPeriodMap.get(s.id) || 0;
+    const pto = mdoPtoMap.get(s.id) || 0;
+    if (!isSalary && h === 0 && pto === 0) return;
+    const st = entryStatus('mdo');
+    rows.push('<div class="tlc-pay-row tlc-pay-grid">'
+      + '<span class="tlc-pay-name"><b>' + esc(s.name) + '</b><span>' + esc(s.role || 'Childcare') + '</span></span>'
+      + '<span>' + pill('plain', isSalary ? 'Salaried' : 'Childcare app') + '</span>'
+      + '<span class="' + (isSalary ? 'tlc-pay-na' : 'tlc-pay-num') + '">' + (isSalary ? 'n/a' : hrs(h)) + '</span>'
+      + '<span class="tlc-pay-num">' + hrs(pto) + '</span>'
+      + '<span>' + pill(st.tone, st.label) + '</span>'
+      + '</div>');
+  });
+
+  $('entryRows').innerHTML = rows.length ? rows.join('') : '<div class="tlc-pay-empty">Nobody to pay in this period.</div>';
+
+  // The period's own state, stated as the thing that stops it being printed.
+  const missing = churchStaff.filter((s) => s.pay_type === 'hourly' && !(Number((periodEntries[s.id] || {}).hours_worked) > 0)).length;
+  $('entryState').innerHTML = missing
+    ? pill('warn', missing + (missing === 1 ? ' still needs hours' : ' still need hours'))
+    : pill('good', 'Ready to print');
+
+  const liveText = mdoError
+    ? 'The childcare app could not be reached, so no childcare hours are included below — this report is incomplete.'
+    : mdoStaff.length
+      ? mdoStaff.length + ' childcare staff read live from the MDO app · hours and rates come from there, not from here'
+      : 'No childcare staff found for this period.';
+  $('mdoLiveText').textContent = liveText;
+  $('mdoLive').style.background = mdoError ? '#FAEFEF' : '#EDF4F8';
+}
+
+// PY-1: names used to be interpolated into inline onclick handlers, so an
+// apostrophe broke the button and a crafted name ran script. Everything is
+// delegated off data attributes now, and nothing user-supplied reaches JS
+// source at all.
+document.addEventListener('input', (e) => {
+  const el = e.target;
+  if (!el.classList || !el.classList.contains('tlc-pay-in')) return;
+  scheduleHoursSave(el.dataset.staff, el.dataset.period);
+});
+
+function scheduleHoursSave(staffId, periodStart) {
+  clearTimeout(savePending[staffId]);
+  savePending[staffId] = setTimeout(() => doHoursSave(staffId, periodStart), 600);
+}
+
+async function doHoursSave(staffId, periodStart) {
+  const inputs = document.querySelectorAll('input[data-staff="' + CSS.escape(staffId) + '"]');
+  let hw = 0, pu = 0;
+  inputs.forEach((inp) => {
+    const v = parseFloat(inp.value) || 0;
+    if (inp.dataset.field === 'hours_worked') hw = v;
+    if (inp.dataset.field === 'pto_hours_used') pu = v;
+  });
+  const existing = periodEntries[staffId] || {};
+  const pe = Number(existing.pto_hours_earned || 0);
+
+  const { error } = await sb.from('church_staff_period_entries')
+    .upsert({ staff_id: staffId, period_start: periodStart, hours_worked: hw, pto_hours_used: pu, pto_hours_earned: pe },
+      { onConflict: 'staff_id,period_start' });
+  if (error) { showError('That did not save: ' + error.message); return; }
+
+  showError('');
+  periodEntries[staffId] = { staff_id: staffId, period_start: periodStart, hours_worked: hw, pto_hours_used: pu, pto_hours_earned: pe };
+  const [ps, pend] = $('periodSelect').value.split('|');
+  // Only the parts that depend on the number are redrawn — rewriting the row
+  // would take the focus out of the box somebody is still typing in.
+  const missing = churchStaff.filter((s) => s.pay_type === 'hourly' && !(Number((periodEntries[s.id] || {}).hours_worked) > 0)).length;
+  $('entryState').innerHTML = missing
+    ? pill('warn', missing + (missing === 1 ? ' still needs hours' : ' still need hours'))
+    : pill('good', 'Ready to print');
+  renderReport(ps, pend);
+  flashSaved();
+}
+
+function flashSaved() {
+  const el = $('savedFlash');
+  el.classList.add('is-on');
+  clearTimeout(flashSaved._t);
+  flashSaved._t = setTimeout(() => el.classList.remove('is-on'), 1800);
+}
+
+// ════════════════════════════════════════════════════════════
+// THE STAFF LIST
+// ════════════════════════════════════════════════════════════
+function renderStaffRows() {
+  if (!churchStaff.length) {
+    $('staffRows').innerHTML = '<div class="tlc-pay-empty">No church staff yet. Add the first person to begin.</div>';
+    return;
+  }
+  $('staffRows').innerHTML = churchStaff.map((s) => {
+    const rate = s.pay_type === 'hourly'
+      ? money(s.hourly_rate) + '/hr'
+      : money(s.base_salary_biweekly) + '/period';
+    return '<div class="tlc-pl">'
+      + '<span class="tlc-pl-text"><span class="tlc-pl-name">' + esc(s.name) + '</span>'
+      + '<span class="tlc-pl-sub">' + esc(s.role || 'No role recorded') + ' · ' + esc(rate) + '</span></span>'
+      + '<span class="tlc-pl-act"><button type="button" class="tlc-edit" data-edit-staff="' + esc(s.id) + '">Edit</button></span>'
+      + '</div>';
+  }).join('');
+}
+
+// ════════════════════════════════════════════════════════════
+// THE REPORT
+// ════════════════════════════════════════════════════════════
+function lineItem(label, value, opts) {
+  const o = opts || {};
+  return '<div class="tlc-pay-li' + (o.muted ? ' is-muted' : '') + (o.neg ? ' is-neg' : '') + (o.total ? ' is-total' : '') + '">'
+    + '<span class="tlc-pay-li-label">' + esc(label) + '</span>'
+    + '<span class="tlc-pay-li-val">' + esc(value) + '</span></div>';
+}
+
+function churchLines(s) {
+  const entry = periodEntries[s.id] || {};
+  const isSalary = s.pay_type === 'salary';
+  const ptoUsed = Number(entry.pto_hours_used || 0);
+  const base = baseEarnings(s);
+  const out = [];
+  if (isSalary) {
+    out.push(lineItem('Base Salary', money(s.base_salary_biweekly)));
+  } else {
+    out.push(lineItem('Pay Rate', money(s.hourly_rate) + '/hr'));
+    out.push(lineItem('Hours Worked', hrs(entry.hours_worked || 0)));
+  }
+  if (Number(s.housing_allowance_biweekly) > 0) out.push(lineItem('Housing Allowance', money(s.housing_allowance_biweekly)));
+  if (Number(s.insurance_opt_out_biweekly) > 0) out.push(lineItem('Insurance Opt-Out', money(s.insurance_opt_out_biweekly)));
+  if (Number(s.hsa_contribution_biweekly) > 0) out.push(lineItem('HSA Contribution', money(s.hsa_contribution_biweekly)));
+  if (Number(s.mileage_biweekly) > 0) out.push(lineItem('Mileage', money(s.mileage_biweekly)));
+  const b403 = calc403b(s, base);
+  if (b403 > 0) {
+    const label = s.retirement_403b_type === 'percent'
+      ? '403(b) Deduction (' + (s.retirement_403b_amount * 100).toFixed(2).replace(/\.?0+$/, '') + '%)'
+      : '403(b) Deduction';
+    out.push(lineItem(label, '−' + money(b403), { neg: true }));
+  }
+  out.push(lineItem('PTO used', hrs(ptoUsed), { muted: ptoUsed === 0 }));
+  return out.join('');
+}
+
+function mdoLines(s) {
+  const isSalary = s.pay_type === 'salary';
+  const pto = mdoPtoMap.get(s.id) || 0;
+  const out = [];
+  if (isSalary) out.push(lineItem('Base Salary', money(s.salary_biweekly)));
+  else {
+    out.push(lineItem('Pay Rate', money(s.hourly_rate) + '/hr'));
+    out.push(lineItem('Hours Worked', hrs(mdoPeriodMap.get(s.id) || 0)));
+  }
+  out.push(lineItem('PTO used', hrs(pto), { muted: pto === 0 }));
+  return out.join('');
+}
+
+function reportGroups() {
+  const church = churchStaff.filter((s) => calcGross(s) > 0).map((s) => ({
+    name: s.name, title: s.role || 'Church staff',
+    kind: s.pay_type === 'salary' ? 'Salaried' : 'Hourly',
+    basis: s.pay_type === 'salary' ? '—' : hrs((periodEntries[s.id] || {}).hours_worked || 0) + ' @ ' + money(s.hourly_rate),
+    pto: Number((periodEntries[s.id] || {}).pto_hours_used || 0),
+    hours: s.pay_type === 'salary' ? 0 : Number((periodEntries[s.id] || {}).hours_worked || 0),
+    salaried: s.pay_type === 'salary',
+    gross: calcGross(s), lines: churchLines(s),
+  }));
+  const mdo = mdoStaff.filter((s) => calcMdoGross(s) > 0).map((s) => ({
+    name: s.name, title: s.role || 'Childcare',
+    kind: s.pay_type === 'salary' ? 'Salaried' : 'Childcare app',
+    basis: s.pay_type === 'salary' ? '—' : hrs(mdoPeriodMap.get(s.id) || 0) + ' @ ' + money(s.hourly_rate),
+    pto: mdoPtoMap.get(s.id) || 0,
+    hours: s.pay_type === 'salary' ? 0 : (mdoPeriodMap.get(s.id) || 0),
+    salaried: s.pay_type === 'salary',
+    gross: calcMdoGross(s), lines: mdoLines(s),
+  }));
+  return [
+    { key: 'church', name: 'Church staff', people: church },
+    { key: 'mdo', name: 'Timothy MDO', people: mdo },
+  ];
+}
+
+function subtotal(people) { return fromCents(people.reduce((n, p) => n + cents(p.gross), 0)); }
+
+function renderReport(periodStart, periodEnd) {
+  const groups = reportGroups();
+  const total = fromCents(groups.reduce((n, g) => n + cents(subtotal(g.people)), 0));
+  const body = $('reportBody');
+
+  if (!groups.some((g) => g.people.length)) {
+    body.innerHTML = '<div class="tlc-pay-empty">Nobody has pay recorded in this period yet.</div>';
+    return;
+  }
+
+  const incomplete = mdoError
+    ? '<p class="tlc-pay-err">The childcare app could not be reached, so no MDO staff are in this report. Do not send it to the payroll service until it can be read.</p>'
+    : '';
+
+  if (payLayout === 'cards') {
+    body.innerHTML = incomplete + groups.filter((g) => g.people.length).map((g) =>
+      '<div class="tlc-pay-group">' + esc(g.name) + '</div>'
+      + g.people.map((p) => '<div class="tlc-pay-card">'
+        + '<div class="tlc-pay-card-bar">' + esc(p.name) + '</div>'
+        + p.lines
+        + lineItem('Gross Pay', money(p.gross), { total: true })
+        + '</div>').join('')
+      + '<div class="tlc-pay-card"><div class="tlc-pay-li is-total">'
+      + '<span class="tlc-pay-li-label">' + esc(g.name) + ' subtotal</span>'
+      + '<span class="tlc-pay-li-val">' + money(subtotal(g.people)) + '</span></div></div>'
+    ).join('') + combinedBar(groups, total, periodStart, periodEnd);
+    return;
+  }
+
+  if (payLayout === 'table') {
+    body.innerHTML = incomplete + groups.filter((g) => g.people.length).map((g) =>
+      '<div class="tlc-pay-tbl">'
+      + '<div class="tlc-pay-tbl-bar">' + esc(g.name) + '</div>'
+      + '<div class="tlc-pay-thead tlc-pay-tgrid"><span>Person</span><span>Paid as</span><span>Hours / salary</span><span>PTO used</span><span class="tlc-pay-right">Gross</span></div>'
+      + g.people.map((p) => '<div class="tlc-pay-row tlc-pay-tgrid">'
+        + '<span class="tlc-pay-name"><b>' + esc(p.name) + '</b></span>'
+        + '<span class="tlc-pay-na">' + esc(p.kind) + '</span>'
+        + '<span class="tlc-pay-na">' + esc(p.basis) + '</span>'
+        + '<span class="tlc-pay-num">' + hrs(p.pto) + '</span>'
+        + '<span class="tlc-pay-num tlc-pay-right">' + money(p.gross) + '</span>'
+        + '</div>').join('')
+      + '<div class="tlc-pay-li is-total"><span class="tlc-pay-li-label">' + esc(g.name) + ' subtotal</span>'
+      + '<span class="tlc-pay-li-val">' + money(subtotal(g.people)) + '</span></div>'
+      + '</div>'
+    ).join('') + combinedBar(groups, total, periodStart, periodEnd);
+    return;
+  }
+
+  body.innerHTML = incomplete + '<div class="tlc-pay-cards2">' + groups.map((g) => {
+    const salaried = fromCents(g.people.filter((p) => p.salaried).reduce((n, p) => n + cents(p.gross), 0));
+    const hourly = fromCents(g.people.filter((p) => !p.salaried).reduce((n, p) => n + cents(p.gross), 0));
+    const hours = g.people.reduce((n, p) => n + p.hours, 0);
+    const pto = g.people.reduce((n, p) => n + p.pto, 0);
+    return '<div class="tlc-pay-stat">'
+      + '<div class="tlc-pay-tbl-bar">' + esc(g.name) + '</div>'
+      + '<span class="tlc-pay-stat-big">' + money(subtotal(g.people)) + '</span>'
+      + statRow('Salaried', money(salaried)) + statRow('Hourly', money(hourly))
+      + statRow('People paid', String(g.people.length))
+      + statRow('Hours recorded', hours.toFixed(2)) + statRow('PTO used', hrs(pto))
+      + '</div>';
+  }).join('') + '</div>' + combinedBar(groups, total, periodStart, periodEnd);
+}
+
+function statRow(label, value) {
+  return '<div class="tlc-pay-stat-row"><span>' + esc(label) + '</span><span class="tlc-pay-dots"></span><b>' + esc(value) + '</b></div>';
+}
+
+function combinedBar(groups, total, periodStart, periodEnd) {
+  const church = groups.find((g) => g.key === 'church').people.length;
+  const mdo = groups.find((g) => g.key === 'mdo').people.length;
+  return '<div class="tlc-pay-combined"><span class="tlc-pay-combined-l">Combined total · ' + esc(periodLabel(periodStart, periodEnd))
+    + '<span class="tlc-pay-combined-s">' + church + ' church · ' + mdo + ' MDO · gross, before withholding</span></span>'
+    + '<span class="tlc-pay-combined-n">' + money(total) + '</span></div>';
+}
+
+// ════════════════════════════════════════════════════════════
+// VIEWS
+// ════════════════════════════════════════════════════════════
+function setView(v) {
+  payView = v;
+  $('entryView').hidden = v !== 'entry';
+  $('reportView').hidden = v !== 'report';
+  $('viewEntry').classList.toggle('is-on', v === 'entry');
+  $('viewReport').classList.toggle('is-on', v === 'report');
+}
+$('viewEntry').addEventListener('click', (e) => { e.preventDefault(); setView('entry'); });
+$('viewReport').addEventListener('click', (e) => { e.preventDefault(); setView('report'); });
+
+const LAYOUT_NOTES = {
+  cards: 'Matches the report you print today — every line item per person.',
+  table: 'Compact enough to scan or reconcile against the service.',
+  summary: 'Subtotals only — safe to share with council.',
+};
+document.querySelectorAll('.tlc-pay-lay').forEach((b) => {
+  b.addEventListener('click', () => {
+    payLayout = b.dataset.layout;
+    document.querySelectorAll('.tlc-pay-lay').forEach((x) => x.classList.toggle('is-on', x === b));
+    $('layoutNote').textContent = LAYOUT_NOTES[payLayout];
+    const [ps, pe] = $('periodSelect').value.split('|');
+    renderReport(ps, pe);
+  });
+});
+
+// Printing prints the report, whichever view you happen to be looking at —
+// nobody means "print the hours entry boxes".
+$('printBtn').addEventListener('click', () => { setView('report'); setTimeout(() => window.print(), 60); });
+$('refreshMdoBtn').addEventListener('click', () => onPeriodChange($('periodSelect').value));
+
+// ════════════════════════════════════════════════════════════
+// CSV
+// ════════════════════════════════════════════════════════════
+// A cell starting = + - @ is a formula to a spreadsheet, so a name or note
+// beginning with one would execute on open. Prefixed with a quote (PY-5).
+function csvCell(v) {
+  let s = String(v === null || v === undefined ? '' : v);
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  return '"' + s.replace(/"/g, '""') + '"';
+}
+
+$('exportBtn').addEventListener('click', () => {
+  const sel = $('periodSelect');
+  if (!sel.value) return;
+  const [periodStart, periodEnd] = sel.value.split('|');
+  const groups = reportGroups();
+  const rows = [[csvCell('TLC Payroll — ' + periodLabel(periodStart, periodEnd))], []];
+
+  groups.filter((g) => g.people.length).forEach((g) => {
+    rows.push([csvCell(g.name), csvCell('Paid as'), csvCell('Hours / salary'), csvCell('PTO used'), csvCell('Gross')]);
+    g.people.forEach((p) => {
+      rows.push([csvCell(p.name), csvCell(p.kind), csvCell(p.basis), csvCell(p.pto.toFixed(2)), csvCell(p.gross.toFixed(2))]);
+    });
+    rows.push([csvCell(g.name + ' subtotal'), '', '', '', csvCell(subtotal(g.people).toFixed(2))]);
+    rows.push([]);
+  });
+
+  const total = fromCents(groups.reduce((n, g) => n + cents(subtotal(g.people)), 0));
+  rows.push([csvCell('TOTAL GROSS PAY'), '', '', '', csvCell(total.toFixed(2))]);
+  if (mdoError) rows.push([csvCell('WARNING: the childcare app could not be read, so MDO staff are missing from this export.')]);
+
+  const blob = new Blob([rows.map((r) => r.join(',')).join('\r\n')], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'payroll-' + periodStart + '.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+// ════════════════════════════════════════════════════════════
+// THE PERSON DRAWER
+// ════════════════════════════════════════════════════════════
+// PY-7/PY-8: it is a real dialog now — Escape closes it, focus moves in and
+// comes back to whatever opened it, and every field has a label tied to it.
+function openDrawer(title) {
+  lastFocus = document.activeElement;
+  $('staffDrawerTitle').textContent = title;
+  $('staffDrawer').classList.add('is-open');
+  $('staffScrim').classList.add('is-open');
+  $('staffError').hidden = true;
+  setTimeout(() => $('fName').focus(), 30);
+}
+function closeDrawer() {
+  $('staffDrawer').classList.remove('is-open');
+  $('staffScrim').classList.remove('is-open');
+  editingStaffId = null;
+  if (lastFocus && lastFocus.focus) lastFocus.focus();
+}
+$('staffCancelBtn').addEventListener('click', closeDrawer);
+$('staffScrim').addEventListener('click', closeDrawer);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && $('staffDrawer').classList.contains('is-open')) closeDrawer();
+});
+
+function clearForm() {
+  ['fName','fRole','fBaseSalary','fHourlyRate','fHousing','fOptOut','fHSA','fMileage','f403bAmount']
+    .forEach((id) => { $(id).value = ''; });
+  $('fPayType').value = 'salary';
+  $('f403bType').value = 'fixed';
+  togglePayType();
+  toggle403b();
+}
+
+$('addStaffBtn').addEventListener('click', () => {
+  editingStaffId = null;
+  $('staffRemoveBtn').hidden = true;
+  clearForm();
+  openDrawer('Add a person');
+});
+
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-edit-staff]');
+  if (!btn) return;
+  const s = churchStaff.find((x) => String(x.id) === btn.dataset.editStaff);
+  if (!s) return;
+  editingStaffId = s.id;
+  $('fName').value = s.name;
+  $('fRole').value = s.role || '';
+  $('fPayType').value = s.pay_type;
+  $('fBaseSalary').value = s.base_salary_biweekly || '';
+  $('fHourlyRate').value = s.hourly_rate || '';
+  $('fHousing').value = s.housing_allowance_biweekly || '';
+  $('fOptOut').value = s.insurance_opt_out_biweekly || '';
+  $('fHSA').value = s.hsa_contribution_biweekly || '';
+  $('fMileage').value = s.mileage_biweekly || '';
+  $('f403bType').value = s.retirement_403b_type || 'fixed';
+  $('f403bAmount').value = s.retirement_403b_amount || '';
+  togglePayType();
+  toggle403b();
+  $('staffRemoveBtn').hidden = false;
+  openDrawer(s.name);
+});
+
+function togglePayType() {
+  const isSalary = $('fPayType').value === 'salary';
+  $('salaryField').hidden = !isSalary;
+  $('hourlyField').hidden = isSalary;
+}
+function toggle403b() {
+  const isPercent = $('f403bType').value === 'percent';
+  $('f403bLabel').textContent = isPercent ? '403(b) percentage' : '403(b) amount ($)';
+  $('f403bHint').textContent = isPercent
+    ? 'As a decimal: 0.05 is 5% of base earnings.'
+    : 'The dollar amount deducted each period.';
+}
+$('fPayType').addEventListener('change', togglePayType);
+$('f403bType').addEventListener('change', toggle403b);
+
+$('staffSaveBtn').addEventListener('click', async () => {
+  const name = $('fName').value.trim();
+  if (!name) { $('staffError').hidden = false; $('fName').focus(); return; }
+  const payType = $('fPayType').value;
+  const record = {
+    name,
+    role: $('fRole').value.trim() || null,
+    pay_type: payType,
+    hourly_rate: payType === 'hourly' ? (parseFloat($('fHourlyRate').value) || 0) : 0,
+    base_salary_biweekly: payType === 'salary' ? (parseFloat($('fBaseSalary').value) || 0) : 0,
+    housing_allowance_biweekly: parseFloat($('fHousing').value) || 0,
+    insurance_opt_out_biweekly: parseFloat($('fOptOut').value) || 0,
+    hsa_contribution_biweekly: parseFloat($('fHSA').value) || 0,
+    mileage_biweekly: parseFloat($('fMileage').value) || 0,
+    retirement_403b_type: $('f403bType').value,
+    retirement_403b_amount: parseFloat($('f403bAmount').value) || 0,
+    active: true,
+  };
+  const btn = $('staffSaveBtn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  const { error } = editingStaffId
+    ? await sb.from('church_staff').update(record).eq('id', editingStaffId)
+    : await sb.from('church_staff').insert(record);
+  btn.disabled = false; btn.textContent = 'Save';
+  if (error) { showError('That did not save: ' + error.message); return; }
+  closeDrawer();
+  await loadStaff();
+  await onPeriodChange($('periodSelect').value);
+});
+
+$('staffRemoveBtn').addEventListener('click', async () => {
+  if (!editingStaffId) return;
+  const s = churchStaff.find((x) => x.id === editingStaffId);
+  if (!confirm('Remove ' + (s ? s.name : 'this person') + ' from the church staff list? Their past periods stay in the record.')) return;
+  const { error } = await sb.from('church_staff').update({ active: false }).eq('id', editingStaffId);
+  if (error) { showError('That did not save: ' + error.message); return; }
+  closeDrawer();
+  await loadStaff();
+  await onPeriodChange($('periodSelect').value);
+});
+
+// ════════════════════════════════════════════════════════════
+// GO
+// ════════════════════════════════════════════════════════════
+(async function start() {
+  buildPeriodDropdown();
+  await loadStaff();
+  const sel = $('periodSelect');
+  if (sel.value) await onPeriodChange(sel.value);
+})();
 </script>
-</body>
-</html>

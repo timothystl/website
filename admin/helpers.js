@@ -5,7 +5,7 @@ import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 
-export const VERSION = 'v3.1.1'; // minor: the mockup-match pass — the design's five-group IA, Redirects and Settings split apart, Giving's fund/amount panels, the two-column newsletter editor
+export const VERSION = 'v3.2.0'; // minor: Gym and Payroll rebuilt to the design mockups — Payroll folded into the shared shell (phase 8)
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
@@ -233,6 +233,10 @@ ${CMDK_JS}
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'private, max-age=10',
+      // The whole admin is behind a session, so a crawler cannot reach these
+      // anyway — but /payroll used to carry this header itself and folding it
+      // into the shared shell would otherwise have quietly dropped it.
+      'X-Robots-Tag': 'noindex, nofollow',
       // fonts.googleapis.com serves the Lora / Source Sans 3 stylesheet and
       // fonts.gstatic.com the font files themselves — the redesign's type
       // system needs both, and a blocked font silently falls back to Georgia.

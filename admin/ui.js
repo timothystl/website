@@ -717,14 +717,29 @@ export const GYM_CAL_CSS = `
 .gymcal-cell--blocked{background:#F4F2EE;}
 .gymcal-day{font:600 11.5px var(--tlc-sans);color:var(--tlc-muted);}
 .gymcal-chip{display:block;font:600 10.5px/1.35 var(--tlc-sans);padding:3px 6px;border-radius:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.gymcal-chip--confirmed{background:#EAF1E5;color:#3B4C2E;}
-.gymcal-chip--hold{background:#FBF1DC;color:#7A5B18;}
+/* The design's four tones. Confirmed is blue rather than green because green
+   is the pill colour for "live" everywhere else and a calendar full of it
+   would read as reassurance rather than information. */
+.gymcal-chip--confirmed{background:#E4EEF4;color:#1E4A60;border:1px solid #C7DCE8;}
+.gymcal-chip--hold{background:#FBF1DC;color:#7A5B18;border:1px solid #EBD5A6;}
+.gymcal-chip--conflict{background:#FAEFEF;color:#8A4A4A;border:1px solid #E4C8C8;}
+.gymcal-legend{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:11.5px;color:var(--tlc-body);}
+.gymcal-legend span{display:flex;align-items:center;gap:6px;}
+.gymcal-navs{display:flex;gap:4px;align-items:center;}
+.gymcal-arrow{font:600 13px var(--tlc-sans);color:var(--tlc-muted);text-decoration:none;padding:2px 6px;border-radius:5px;}
+.gymcal-arrow:hover{color:var(--tlc-navy);background:var(--tlc-parchment);}
+/* Approve is the loud one and Open the quiet one, because on this screen
+   approving is the decision and opening is just looking. */
+.tlc-gym-approve{display:inline-flex;align-items:center;font:600 12.5px var(--tlc-sans);background:var(--tlc-navy);color:#fff;border:1px solid var(--tlc-navy);border-radius:7px;padding:7px 14px;cursor:pointer;text-decoration:none;white-space:nowrap;}
+.tlc-gym-approve:hover{background:var(--tlc-ink);}
+.tlc-gym-open{display:inline-flex;align-items:center;font:600 12.5px var(--tlc-sans);color:var(--tlc-navy);background:#fff;border:1px solid var(--tlc-edge);border-radius:7px;padding:7px 14px;text-decoration:none;white-space:nowrap;margin-left:6px;}
+.tlc-gym-open:hover{border-color:var(--tlc-blue);}
 .gymcal-blocked{font:600 10px var(--tlc-sans);color:#6A6858;text-transform:uppercase;letter-spacing:.06em;}
 .gymcal-more{font-size:10.5px;color:var(--tlc-muted);}
 .gymcal-key{display:flex;gap:18px;flex-wrap:wrap;padding:11px 16px;border-top:1px solid var(--tlc-edge);font-size:12px;color:var(--tlc-body);}
 .gymcal-key span{display:flex;align-items:center;gap:6px;}
 .gymcal-swatch{width:11px;height:11px;border-radius:3px;display:inline-block;}
-.gymcal-swatch--blocked{background:#F4F2EE;border:1px solid var(--tlc-edge);}
+.gymcal-swatch--blocked{background:#EFEFEF;border:1px solid #DDD9D0;}
 @media (max-width:720px){.gymcal-cell{min-height:64px;}.gymcal-chip{font-size:9px;}}
 `;
 
