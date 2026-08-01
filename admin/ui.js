@@ -364,7 +364,7 @@ export function renderDrawer(cfg) {
   const {
     key, title, sub = '', action, fields = [], method = 'POST',
     deleteAction = '', deleteConfirm = 'Delete this? This cannot be undone.',
-    saveLabel = 'Save changes', cancelHref = '', open = true,
+    saveLabel = 'Save changes', cancelHref = '', open = true, readOnly = false,
   } = cfg;
 
   const body = fields.map((f) => renderField(f)).join('');
@@ -381,12 +381,12 @@ export function renderDrawer(cfg) {
     </header>
     <div class="tlc-drawer-body">${body}</div>
     <footer class="tlc-drawer-foot">
-      ${deleteAction
+      ${!readOnly && deleteAction
         ? `<button type="submit" class="tlc-drawer-delete" formaction="${esc(deleteAction)}" formnovalidate onclick="return confirm('${esc(deleteConfirm).replace(/'/g, '&#39;')}')">Delete</button>`
         : '<span></span>'}
       <div class="tlc-drawer-foot-right">
-        ${cancelHref ? `<a class="tlc-btn-quiet" href="${esc(cancelHref)}">Cancel</a>` : ''}
-        <button type="submit" class="tlc-btn-primary">${esc(saveLabel)}</button>
+        ${cancelHref ? `<a class="tlc-btn-quiet" href="${esc(cancelHref)}">${readOnly ? 'Close' : 'Cancel'}</a>` : ''}
+        ${readOnly ? '' : `<button type="submit" class="tlc-btn-primary">${esc(saveLabel)}</button>`}
       </div>
     </footer>
   </form>
@@ -598,6 +598,10 @@ export const ADMIN_UI_CSS = `
    a landscape photo tells you less than the photo does. */
 .tlc-primary-icon--person{width:52px;height:52px;font-size:16px;}
 .tlc-primary-icon--file{width:64px;height:48px;border-radius:6px;}
+/* A pinned row is already sorted to the top; the marker explains why it is
+   there rather than helping you find it, so it is small and sits before the
+   title where reading starts. */
+.tlc-pin{display:inline-block;margin-right:6px;font-size:10px;line-height:1;color:var(--tlc-gold);vertical-align:1px;}
 .tlc-primary-icon img{width:100%;height:100%;object-fit:cover;}
 .tlc-primary-text{min-width:0;display:flex;flex-direction:column;gap:2px;}
 .tlc-primary-title{font:600 13.5px/1.3 var(--tlc-sans);color:var(--tlc-ink);}
@@ -724,7 +728,9 @@ export const ADMIN_UI_CSS = `
 .tlc-field input[readonly],.tlc-field textarea[readonly]{background:var(--tlc-sand);}
 .tlc-field input:focus,.tlc-field textarea:focus,.tlc-field select:focus{border-color:var(--tlc-blue);box-shadow:0 0 0 3px rgba(46,126,166,.14);}
 .tlc-hint{margin:5px 0 0;font-size:12.5px;line-height:1.5;color:var(--tlc-muted);text-wrap:pretty;}
-.tlc-static{font-size:13.5px;color:var(--tlc-body);}
+/* A read-only field is a filled field, never greyed text. Grey text reads as
+   broken; a sand fill reads as "this is a fact, not a question". */
+.tlc-static{font-size:13.5px;color:var(--tlc-body);background:var(--tlc-sand);border:1px solid var(--tlc-edge);border-radius:8px;padding:9px 11px;text-wrap:pretty;}
 .tlc-field-toggle{display:flex;flex-direction:column;gap:4px;}
 .tlc-toggle{display:flex;align-items:center;gap:10px;cursor:pointer;}
 .tlc-toggle input{position:absolute;opacity:0;width:0;height:0;}

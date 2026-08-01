@@ -1040,11 +1040,8 @@ these are the gaps I have not closed:
 | Screen | What is missing |
 |---|---|
 | 02 Pages | `Links out` and `Clash` status pills; the drawer reached by a `Details` action rather than by the row |
-| 05 News | pinned rows sorting to the top with a pin marker before the title |
-| 06 Sermons | the `YouTube` / `Audio` / `Text only` media pill |
 | 10 Taps | the four tap cards above the toolbar, with taps-this-month and card count |
 | 16 Gym | "Calendar first" as the genuine default layout, with the queue beside the month rather than below it |
-| 20 Audit | the drawer, read-only, with sand-filled fields |
 | 22 Editor | the info-card slot on banner blocks, and the starter picker on New page |
 
 None of those are blocked; they are simply not done yet.
@@ -1100,6 +1097,26 @@ The submit handler that waits for in-flight image uploads and strips leftover
 only in the pastor's-note copy but was wired to the whole form, so folding the
 builders together without it would have quietly shipped broken images in a
 sent newsletter.
+
+#### Per-screen, part two (v3.7.0, 2026-08-01)
+
+- **Sermons' media pill is the design's three words** — `YouTube` / `Audio` /
+  `Text only`. It said `No recording` in amber, which dressed a perfectly
+  normal state up as a fault: a sermon with no recording is a good text card on
+  the site, and adding a link later upgrades it with no other edit. `Text only`
+  is neutral-toned for that reason.
+- **A pinned news post carries its marker before the title.** The rows already
+  sorted pinned-first; the marker's job is to explain why a row is at the top,
+  not to help you find it, so it is small and sits where reading starts. The
+  old "Pinned to top" sub-line under the *date* answered a question nobody was
+  asking there.
+- **The newspaper emoji is gone.** "No emoji anywhere in the admin chrome" —
+  the fallback icon is a typographic glyph like every other one.
+- **The audit log has its read-only drawer.** `renderDrawer({ readOnly: true })`
+  is a real option now rather than a regex stripping the save button: no save,
+  no delete, and Cancel reads `Close`. Fields use `.tlc-static`, which is a
+  **sand fill** — the spec's "never grey out text to signal read-only", because
+  grey text reads as broken and a filled field reads as a fact.
 
 #### The handoff's own open questions (§8), as answered
 

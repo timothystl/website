@@ -1278,5 +1278,46 @@ group('the per-screen reference files');
   has(media, 'tlc-primary-icon--file', 'a file gets the rectangular thumbnail');
 }
 
+group('per-screen, part two');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const now = new Date().toISOString();
+  const today = now.slice(0, 10);
+
+  // 06-sermons: the media pill is YouTube / Audio / Text only. "Text only" is
+  // NOT a warning — a sermon with no recording is a good text card, and
+  // adding a link later upgrades it with no other edit.
+  db.prepare("INSERT INTO sermon_notes (id,title,date,scripture,youtube_url) VALUES (1,'With video',?,'John 1','https://youtu.be/x')").run(today);
+  db.prepare("INSERT INTO sermon_notes (id,title,date,scripture) VALUES (2,'No recording',?,'Luke 2')").run(today);
+  const serm = await (await call(env, '/sermons', { cookie })).text();
+  has(serm, 'YouTube', 'a sermon with a video says YouTube, not "Video"');
+  has(serm, 'Text only', 'and one without says Text only');
+  // Not a blanket string check: the section's ◆ note legitimately reads "No
+  // recordings are attached yet". What must not exist is a PILL saying it.
+  ok(!/tlc-pill[^>]*>\s*No recording/.test(serm), 'a normal state is not dressed up as a fault');
+  ok(!/warn[^>]*>\s*Text only/.test(serm), 'and Text only is not amber');
+
+  // 05-news: pinned rows carry a marker BEFORE the title, and sort to the top.
+  db.prepare("INSERT INTO news_items (id,title,summary,publish_date,expire_date,pinned) VALUES (1,'Pinned post','s',?,?,1)").run(today, '2099-01-01');
+  db.prepare("INSERT INTO news_items (id,title,summary,publish_date,expire_date,pinned) VALUES (2,'Ordinary post','s',?,?,0)").run(today, '2099-01-01');
+  const news = await (await call(env, '/newsitems', { cookie })).text();
+  has(news, 'tlc-pin', 'a pinned post carries a pin marker');
+  ok(news.indexOf('tlc-pin') < news.indexOf('Pinned post'), 'the marker sits before the title');
+  ok(news.indexOf('Pinned post') < news.indexOf('Ordinary post'), 'and pinned rows sort to the top');
+  // "No emoji anywhere in the admin chrome."
+  ok(!news.includes('\u{1F4F0}'), 'the newspaper emoji is gone — icons are typographic glyphs');
+
+  // 20-audit: a read-only drawer. No save, no delete; fields are sand-filled
+  // rather than greyed, because grey text reads as broken.
+  db.prepare("INSERT INTO audit_log (user_id,username,action,entity_type,entity_id,entity_label,before_state,after_state,created_at) VALUES (NULL,'office','update','news_item','1','Pinned post','{\"title\":\"Old\"}','{\"title\":\"New\"}',?)").run(now);
+  const logRow = db.prepare("SELECT id FROM audit_log ORDER BY id DESC LIMIT 1").get();
+  const audit = await (await call(env, `/audit-log?entry=${logRow.id}`, { cookie })).text();
+  has(audit, 'Audit entry · read-only', 'the drawer says what it is');
+  has(audit, 'tlc-static', 'its fields are static, not inputs');
+  ok(!/drawer-audit[\s\S]*?tlc-btn-primary/.test(audit), 'and it offers no save');
+  ok(!/drawer-audit[\s\S]*?tlc-drawer-delete/.test(audit), 'nor a delete');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
