@@ -582,3 +582,31 @@ export const PRESET_CSS = `
 .tlc-preset{font:600 12.5px var(--tlc-sans);color:var(--tlc-navy);background:#fff;border:1px solid var(--tlc-edge);border-radius:999px;padding:8px 15px;cursor:pointer;}
 .tlc-preset:hover{border-color:var(--tlc-blue);background:#E7EFF5;}
 `;
+
+// ── GYM CALENDAR ─────────────────────────────────────────────
+// The month view on the Gym Rentals screen. Read-only: every action that
+// changes a booking lives in the Queue view, so there is one place a hold gets
+// confirmed rather than two.
+export const GYM_CAL_CSS = `
+.gymcal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--tlc-edge);background:var(--tlc-sand);}
+.gymcal-title{font:500 17px var(--tlc-serif);color:var(--tlc-navy);}
+.gymcal-nav{font:600 12.5px var(--tlc-sans);color:var(--tlc-navy);text-decoration:none;border:1px solid var(--tlc-edge);background:#fff;border-radius:7px;padding:6px 12px;}
+.gymcal-nav:hover{border-color:var(--tlc-blue);}
+.gymcal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--tlc-divider);}
+.gymcal-dow{background:var(--tlc-parchment);padding:7px 8px;font:600 10.5px var(--tlc-sans);letter-spacing:.1em;text-transform:uppercase;color:var(--tlc-muted);text-align:center;}
+.gymcal-cell{background:#fff;min-height:92px;padding:6px 7px;display:flex;flex-direction:column;gap:3px;}
+.gymcal-cell--pad{background:var(--tlc-parchment);}
+.gymcal-cell--today{box-shadow:inset 0 0 0 2px var(--tlc-gold);}
+.gymcal-cell--blocked{background:#F4F2EE;}
+.gymcal-day{font:600 11.5px var(--tlc-sans);color:var(--tlc-muted);}
+.gymcal-chip{display:block;font:600 10.5px/1.35 var(--tlc-sans);padding:3px 6px;border-radius:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.gymcal-chip--confirmed{background:#EAF1E5;color:#3B4C2E;}
+.gymcal-chip--hold{background:#FBF1DC;color:#7A5B18;}
+.gymcal-blocked{font:600 10px var(--tlc-sans);color:#6A6858;text-transform:uppercase;letter-spacing:.06em;}
+.gymcal-more{font-size:10.5px;color:var(--tlc-muted);}
+.gymcal-key{display:flex;gap:18px;flex-wrap:wrap;padding:11px 16px;border-top:1px solid var(--tlc-edge);font-size:12px;color:var(--tlc-body);}
+.gymcal-key span{display:flex;align-items:center;gap:6px;}
+.gymcal-swatch{width:11px;height:11px;border-radius:3px;display:inline-block;}
+.gymcal-swatch--blocked{background:#F4F2EE;border:1px solid var(--tlc-edge);}
+@media (max-width:720px){.gymcal-cell{min-height:64px;}.gymcal-chip{font-size:9px;}}
+`;
