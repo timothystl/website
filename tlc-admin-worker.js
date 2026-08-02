@@ -885,7 +885,7 @@ export default {
           { src: 'https://timothystl.org/images/android-chrome-512x512.png', sizes: '512x512', type: 'image/png' },
         ],
         theme_color: '#1E2D4A',
-        background_color: '#FAF7F0',
+        background_color: '#FAF7F1',
         display: 'standalone',
         start_url: '/',
       }), { headers: { 'Content-Type': 'application/manifest+json', 'Cache-Control': 'public, max-age=3600' } });
@@ -1892,19 +1892,19 @@ export default {
       }
 
       const listHtml = newsletters.length === 0
-        ? `<p style="text-align:center;padding:48px 0;color:#7A6E60;font-family:'Source Sans 3',Arial,sans-serif;">No newsletters yet — check back soon.</p>`
+        ? `<p style="text-align:center;padding:48px 0;color:#6A6858;font-family:'Source Sans 3',Arial,sans-serif;">No newsletters yet — check back soon.</p>`
         : newsletters.map(n => {
             const dateStr = formatDate(n.published_at);
             const eventsHtml = n.events && n.events.length
               ? `<div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;">${n.events.map(e =>
-                  `<span style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;background:#EDF5F8;color:#0A3C5C;padding:3px 10px;border-radius:999px;">${e.event_date ? new Date(e.event_date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' · ' : ''}${e.event_name}</span>`
+                  `<span style="font-family:'Source Sans 3',Arial,sans-serif;font-size:12px;background:#E7EEF7;color:#1E2D4A;padding:3px 10px;border-radius:999px;">${e.event_date ? new Date(e.event_date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' · ' : ''}${e.event_name}</span>`
                 ).join('')}</div>`
               : '';
             return `
-<div style="padding:24px 0;border-bottom:1px solid #E8E0D0;">
-  <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#D4922A;margin-bottom:6px;">${dateStr}</div>
-  <div style="font-family:'Lora',Georgia,serif;font-size:20px;color:#0A3C5C;margin-bottom:8px;">${n.subject}</div>
-  ${n.pastor_note ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:14px;color:#3D3530;line-height:1.75;">${n.pastor_note.replace(/\n/g,'<br>').substring(0,240)}${n.pastor_note.length > 240 ? '…' : ''}</div>` : ''}
+<div style="padding:24px 0;border-bottom:1px solid #E7DFD1;">
+  <div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#C9973A;margin-bottom:6px;">${dateStr}</div>
+  <div style="font-family:'Lora',Georgia,serif;font-size:20px;color:#1E2D4A;margin-bottom:8px;">${n.subject}</div>
+  ${n.pastor_note ? `<div style="font-family:'Source Sans 3',Arial,sans-serif;font-size:14px;color:#1A1A2A;line-height:1.75;">${n.pastor_note.replace(/\n/g,'<br>').substring(0,240)}${n.pastor_note.length > 240 ? '…' : ''}</div>` : ''}
   ${eventsHtml}
 </div>`;
           }).join('');
@@ -1918,15 +1918,15 @@ export default {
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;600;700;800&family=Lora:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:'Source Sans 3',Arial,sans-serif;background:#FAF7F0;color:#3D3530;min-height:100vh;}
-.topbar{background:#0A3C5C;border-bottom:3px solid #D4922A;padding:0 28px;height:56px;display:flex;align-items:center;justify-content:space-between;}
+body{font-family:'Source Sans 3',Arial,sans-serif;background:#FAF7F1;color:#1A1A2A;min-height:100vh;}
+.topbar{background:#1E2D4A;border-bottom:3px solid #C9973A;padding:0 28px;height:56px;display:flex;align-items:center;justify-content:space-between;}
 .topbar-brand{font-size:14px;font-weight:800;color:white;}
-.topbar-sub{font-size:11px;color:#D4922A;font-style:italic;font-family:'Lora',Georgia,serif;}
+.topbar-sub{font-size:11px;color:#C9973A;font-style:italic;font-family:'Lora',Georgia,serif;}
 .topbar-links a{font-size:13px;font-weight:600;color:rgba(255,255,255,.75);text-decoration:none;margin-left:20px;}
 .topbar-links a:hover{color:white;}
 .wrap{max-width:720px;margin:0 auto;padding:48px 28px;}
-h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6px;}
-.sub{font-size:14px;color:#7A6E60;margin-bottom:36px;}
+h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6px;}
+.sub{font-size:14px;color:#6A6858;margin-bottom:36px;}
 </style>
 </head>
 <body>
@@ -6484,54 +6484,63 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministr
           'SELECT id, title, post_date, event_date, expire_date, pinned, created_at FROM ministry_posts WHERE ministry_slug = ? ORDER BY pinned DESC, COALESCE(event_date, post_date) ASC, id ASC'
         ).bind(slug).all();
         const msg = url.searchParams.get('msg');
-        const alertHtml = msg === 'postsaved' ? `<div class="alert alert-success">✓ Post saved.</div>`
-          : msg === 'postdeleted' ? `<div class="alert alert-info">Post deleted.</div>` : '';
         const today = new Date().toISOString().split('T')[0];
-        const esc = s => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        const base = `/ministries/${encodeURIComponent(slug)}/posts`;
 
-        const listHtml = posts.results.length === 0
-          ? `<div style="text-align:center;padding:40px;color:var(--gray);font-size:14px;">No posts yet. Add your first one.</div>`
-          : posts.results.map(p => {
-              const sortDate = p.event_date || p.post_date;
-              const upcoming = sortDate && sortDate >= today;
-              const expired = p.expire_date && p.expire_date < today;
-              const editUrl = '/ministries/' + slug + '/posts/edit/' + p.id;
-              const deleteUrl = '/ministries/' + slug + '/posts/delete/' + p.id;
-              let badge = '';
-              if (p.pinned) badge += '<span class="badge badge-pinned">Pinned</span>';
-              if (expired) badge += '<span class="badge badge-expired">Expired</span>';
-              else if (sortDate) badge += '<span class="badge badge-' + (upcoming ? 'upcoming' : 'active') + '">' + (upcoming ? 'Upcoming' : 'Past') + '</span>';
-              const metaParts = [];
-              if (p.event_date) metaParts.push('Event: ' + p.event_date);
-              else if (p.post_date) metaParts.push('Posted: ' + p.post_date);
-              if (p.expire_date) metaParts.push('Expires: ' + p.expire_date);
-              return '<div class="ni-row">' +
-                badge +
-                '<div class="ni-title">' + esc(p.title) + '</div>' +
-                '<div class="ni-meta">' + metaParts.join(' · ') + '</div>' +
-                '<div class="ni-actions">' +
-                '<a href="' + editUrl + '" class="btn btn-sm btn-secondary">Edit</a>' +
-                '<form method="POST" action="' + deleteUrl + '" onsubmit="return confirm(\'Delete this post?\')" style="margin:0;">' +
-                '<button type="submit" class="btn btn-sm btn-danger">Delete</button>' +
-                '</form></div></div>';
-            }).join('');
+        // Task 15 #1. This was the last hand-rolled table in the admin — its own
+        // .ni-row markup, its own badges, its own empty state. It is a config
+        // now, so it inherits search, the filter pills, the scoped count label,
+        // the two empty states and the warning rows from the shared pattern.
+        const rows = posts.results.map((p) => {
+          const when = p.event_date || p.post_date;
+          const upcoming = when && when >= today;
+          const expired = p.expire_date && p.expire_date < today;
+          // Expired outranks everything: a post the site is no longer showing
+          // should not read "Upcoming" because its event date has not passed.
+          const status = expired ? statusPill('plain', 'Expired')
+            : upcoming ? statusPill('good', 'Upcoming')
+            : statusPill('auto', 'Past');
+          return {
+            href: `${base}/edit/${p.id}`,
+            filter: [
+              expired ? 'expired' : (upcoming ? 'upcoming' : 'past'),
+              p.pinned ? 'pinned' : '',
+            ].filter(Boolean),
+            search: `${p.title} ${when || ''}`.toLowerCase(),
+            cells: [
+              // The pin marker leads the title, as on News: its job is to
+              // explain why a row is at the top, not to help you find it.
+              primaryCell((p.pinned ? '⌖ ' : '') + p.title, p.event_date ? 'Event' : 'Posted'),
+              escapeHtml(when || '—'),
+              escapeHtml(p.expire_date || 'Never'),
+              status,
+            ],
+            // A post with no expiry never comes down on its own, which is the
+            // one way a ministry page goes stale without anybody noticing.
+            warn: p.expire_date ? '' : 'This post has no expiry date, so it stays on the page until somebody deletes it by hand.',
+            warnCta: p.expire_date ? null : { label: 'Set one', href: `${base}/edit/${p.id}` },
+          };
+        });
+
+        const section = renderListSection({
+          key: 'ministryPosts',
+          ...SECTIONS.ministryPosts,
+          title: `${page.title} — posts`,
+          action: { label: SECTIONS.ministryPosts.action, href: `${base}/new` },
+          filters: filtersOf('ministryPosts'),
+          columns: columnsOf('ministryPosts'),
+          rows,
+          noun: 'post', nounPlural: 'posts',
+          empty: 'No posts on this page yet.',
+        });
 
         return html(`
-${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministries</a>`)}
+${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministries</a> <a href="/ministries/edit/${encodeURIComponent(slug)}">Edit the ${escapeHtml(page.title)} page</a>`)}
 <div class="tlc-wrap">
-  <div class="page-title">${page.title} — Posts</div>
-  <div class="page-sub">Upcoming posts show at top. Past posts roll down automatically by date.</div>
-  ${alertHtml}
-  <div class="btn-row" style="margin-bottom:28px;">
-    <a href="/ministries/${slug}/posts/new" class="btn btn-primary">+ New post</a>
-  </div>
-  <div class="card">
-    ${listHtml}
-  </div>
-  <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border);">
-    <a href="/ministries/edit/${slug}" style="font-family:var(--sans);font-size:13px;color:var(--gray);text-decoration:none;">⚙ Edit the ${page.title} page description</a>
-  </div>
-</div>`, `${page.title} Posts`);
+  ${msg === 'postsaved' ? `<div class="alert alert-success">Post saved — it is on the ${escapeHtml(page.title)} page now.</div>` : ''}
+  ${msg === 'postdeleted' ? `<div class="alert alert-info">Post deleted.</div>` : ''}
+  ${section}
+</div>`, `${page.title} posts`);
       }
 
       // ── New post form (GET) ──
@@ -6768,31 +6777,59 @@ ${sidebarShell('notices', currentUser, '', await badgeCounts(env, currentUser))}
       }
 
       // ── Add notice (GET) ──
-      if (path === '/notices/add' && method === 'GET') {
-        const preselect = url.searchParams.get('page') || STATIC_PAGES[0].slug;
-        return html(`
+      // Task 15 #2. Add and edit are ONE FORM IN TWO STATES, and they used to
+      // be built twice — which is how `add` ended up with no Visibility control
+      // at all while `edit` had one, and how the two could drift again on the
+      // next change. One builder now; the only differences are the ones that
+      // are genuinely different: where it posts, and whether there is anything
+      // to delete yet.
+      //
+      // Both addresses are kept. /notices/add is on the sidebar, on the list's
+      // action button and in people's bookmarks; folding the CODE together is
+      // the point, not renaming the door.
+      const noticeForm = (n, isNew) => `
 ${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)}
 <div class="tlc-wrap">
-  <div class="page-title">New notice</div>
-  <div class="page-sub">Choose which page it appears on and write the content. It publishes immediately.</div>
+  <div class="page-title">${isNew ? 'New notice' : escapeHtml(n.label)}</div>
+  <div class="page-sub">${isNew
+    ? 'Choose which page it appears on and write the content.'
+    : `Shown on the ${pageLabel(n.page_slug)} page.`}</div>
   <div class="card">
-    <form method="POST" action="/notices/create">
+    <form method="POST" action="${isNew ? '/notices/create' : `/notices/update/${n.id}`}">
       <div class="form-group">
-        <label>Page <span style="color:#B85C3A;">*</span></label>
-        <select name="page_slug">${pageOptionsHtml(preselect)}</select>
+        <label>Page${isNew ? ' <span style="color:#8C3A28;">*</span>' : ''}</label>
+        <select name="page_slug">${pageOptionsHtml(n.page_slug)}</select>
       </div>
       <div class="form-group">
-        <label>Internal label <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— for your reference in this list, not shown on the site</span></label>
-        <input type="text" name="label" required placeholder="e.g. Lent midweek services">
+        <label>Internal label${isNew ? ' <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">— for your reference in this list, not shown on the site</span>' : ''}</label>
+        <input type="text" name="label" value="${escapeHtml(n.label || '')}" required${isNew ? ' placeholder="e.g. Lent midweek services"' : ''}>
       </div>
-      ${tinymcePageSection('')}
+      <div class="card" style="margin-bottom:24px;background:var(--mist);border:1px solid var(--ice);">
+        <div class="card-title">Visibility</div>
+        <label style="display:flex;align-items:center;gap:12px;font-family:var(--sans);font-size:14px;cursor:pointer;">
+          <input type="checkbox" name="published" value="1"${n.published === 1 ? ' checked' : ''} style="width:18px;height:18px;cursor:pointer;">
+          Show this notice on the website
+        </label>
+        <div style="font-size:12px;color:var(--gray);margin-top:8px;">Uncheck to hide without deleting it — useful between seasons or events.</div>
+      </div>
+      ${tinymcePageSection(n.body || '')}
       <div class="btn-row" style="margin-top:24px;">
-        <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save &amp; Publish</button>
+        <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save</button>
         <a href="/notices" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
       </div>
     </form>
   </div>
-</div>`, 'New Notice', TINYMCE_HEAD);
+</div>`;
+
+      if (path === '/notices/add' && method === 'GET') {
+        // A new notice arrives with the Visibility box already ticked, so the
+        // old "publishes immediately" behaviour is what happens if you change
+        // nothing — but writing one ahead of a season and leaving it hidden is
+        // now possible, which it simply was not before.
+        return html(noticeForm({
+          page_slug: url.searchParams.get('page') || STATIC_PAGES[0].slug,
+          label: '', body: '', published: 1,
+        }, true), 'New notice', TINYMCE_HEAD);
       }
 
       // ── Create notice (POST) ──
@@ -6801,11 +6838,15 @@ ${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)
         const pageSlug = form.get('page_slug') || STATIC_PAGES[0].slug;
         const label = form.get('label') || 'Untitled notice';
         const body = form.get('content') || '';
+        // ⚠ This was a hardcoded 1 while the add form showed no control. It
+        // shows one now, ticked by default, so it has to be read — otherwise
+        // unticking it would look like it worked and publish anyway.
+        const published = form.has('published') ? 1 : 0;
         const now = new Date().toISOString();
         const maxPos = await env.DB.prepare('SELECT COALESCE(MAX(position), -1) as m FROM notices WHERE page_slug = ?').bind(pageSlug).first();
         await env.DB.prepare(
-          'INSERT INTO notices (page_slug, label, body, published, position, updated_at) VALUES (?, ?, ?, 1, ?, ?)'
-        ).bind(pageSlug, label, body, (maxPos ? maxPos.m : -1) + 1, now).run();
+          'INSERT INTO notices (page_slug, label, body, published, position, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+        ).bind(pageSlug, label, body, published, (maxPos ? maxPos.m : -1) + 1, now).run();
         await logAudit(env.DB, currentUser, 'create', 'notice', pageSlug, label, null, { pageSlug, label });
         return new Response('', { status: 302, headers: { Location: '/notices?msg=created' } });
       }
@@ -6815,38 +6856,7 @@ ${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)
         const id = path.slice('/notices/edit/'.length);
         const n = await env.DB.prepare('SELECT * FROM notices WHERE id = ?').bind(id).first();
         if (!n) return new Response('Not found', { status: 404 });
-        const publishedChecked = n.published === 1 ? 'checked' : '';
-        return html(`
-${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)}
-<div class="tlc-wrap">
-  <div class="page-title">${escapeHtml(n.label)}</div>
-  <div class="page-sub">Shown on the ${pageLabel(n.page_slug)} page.</div>
-  <div class="card">
-    <form method="POST" action="/notices/update/${n.id}">
-      <div class="form-group">
-        <label>Page</label>
-        <select name="page_slug">${pageOptionsHtml(n.page_slug)}</select>
-      </div>
-      <div class="form-group">
-        <label>Internal label</label>
-        <input type="text" name="label" value="${escapeHtml(n.label)}" required>
-      </div>
-      <div class="card" style="margin-bottom:24px;background:var(--mist);border:1px solid var(--ice);">
-        <div class="card-title">Visibility</div>
-        <label style="display:flex;align-items:center;gap:12px;font-family:var(--sans);font-size:14px;cursor:pointer;">
-          <input type="checkbox" name="published" value="1" ${publishedChecked} style="width:18px;height:18px;cursor:pointer;">
-          Show this notice on the website
-        </label>
-        <div style="font-size:12px;color:var(--gray);margin-top:8px;">Uncheck to hide without deleting it — useful between seasons or events.</div>
-      </div>
-      ${tinymcePageSection(n.body || '')}
-      <div class="btn-row" style="margin-top:24px;">
-        <button type="submit" class="btn btn-primary" style="font-size:15px;padding:14px 32px;">Save &amp; Publish</button>
-        <a href="/notices" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
-      </div>
-    </form>
-  </div>
-</div>`, `Edit — ${n.label}`, TINYMCE_HEAD);
+        return html(noticeForm(n, false), `Edit — ${n.label}`, TINYMCE_HEAD);
       }
 
       // ── Save notice (POST) ──

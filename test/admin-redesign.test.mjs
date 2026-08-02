@@ -1196,6 +1196,33 @@ group('screens say what the design says');
   }
 }
 
+// Task 15 #1 and #2 — the two of the five that were real.
+group('the last two borderline routes are on the shared pattern');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  // #1. A ministry's posts list was the last hand-rolled table in the admin:
+  // its own .ni-row markup, its own badges, its own empty state. As a config
+  // it inherits search, filter pills, the scoped count and warning rows.
+  const posts = await (await call(env, '/ministries/music/posts', { cookie })).text();
+  has(posts, 'tlc-section', 'the posts list renders through renderListSection');
+  has(posts, 'Dated updates on one ministry page', "and uses the config's purpose line");
+  has(posts, 'tlc-filter', 'so it has filter pills');
+  has(posts, 'tlc-count', 'and the scoped count label');
+  has(posts, 'takes itself down', "and the section's ◆ note");
+  ok(!posts.includes('class="ni-row"'), 'the hand-rolled row markup is gone');
+
+  // #2. Add and edit are one builder. The tell is the control that used to
+  // exist on only one of them — `add` had no Visibility card at all, which is
+  // exactly the kind of thing two copies of a form drift into.
+  const add = await (await call(env, '/notices/add', { cookie })).text();
+  has(add, 'New notice', 'the add form still answers on its own address');
+  has(add, 'Show this notice on the website', 'and now carries Visibility, like edit');
+  has(add, 'name="published" value="1" checked', 'ticked by default, so the old behaviour is the default');
+  has(add, 'action="/notices/create"', 'posting to create');
+}
+
 group('rows carry an overflow menu');
 {
   const { db, env } = await boot();

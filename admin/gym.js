@@ -237,12 +237,12 @@ function buildGymInvoiceEmailHtml(inv, group, bookingOrBookings, paymentLink = P
         <a href="${payLink}" style="display:inline-block;background:#00DB72;color:white;font-weight:700;font-size:16px;padding:14px 48px;border-radius:6px;text-decoration:none;letter-spacing:.01em;">Pay Online</a>
       </td></tr>
     </table>
-    <div style="font-size:13px;color:#7A6E60;text-align:center;margin-bottom:16px;">— or —</div>
+    <div style="font-size:13px;color:#6A6858;text-align:center;margin-bottom:16px;">— or —</div>
     <div style="font-size:14px;color:#4A4860;line-height:1.75;">Make your check payable to <strong>Timothy Lutheran Church</strong> and bring it to the church office or mail to:<br><br>Timothy Lutheran Church<br>6704 Fyler Ave, St. Louis, MO 63139</div>
-    <div style="font-size:13px;color:#7A6E60;margin-top:12px;">Questions? <a href="mailto:office@timothystl.org" style="color:#2E7EA6;">office@timothystl.org</a></div>
+    <div style="font-size:13px;color:#6A6858;margin-top:12px;">Questions? <a href="mailto:office@timothystl.org" style="color:#2E7EA6;">office@timothystl.org</a></div>
   </div>
 </td></tr>
-<tr><td style="background:#F7F3EC;padding:20px 36px;text-align:center;font-size:12px;color:#7A6E60;">
+<tr><td style="background:#F7F3EC;padding:20px 36px;text-align:center;font-size:12px;color:#6A6858;">
   Timothy Lutheran Church · 6704 Fyler Ave, St. Louis, MO 63139
 </td></tr>
 </table>
@@ -3406,7 +3406,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
   </div>
 </div>
 <style>
-.scal-wrap{position:relative;}.scal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:8px;}.scal-nav-btn{background:var(--mist,#EDF5F8);border:1px solid var(--border,#E7DFD1);cursor:pointer;padding:8px 18px;border-radius:8px;font-size:18px;line-height:1;font-weight:700;transition:background .15s;flex-shrink:0;color:var(--steel,#1E2D4A);touch-action:manipulation;}.scal-nav-btn:hover{background:var(--border,#E7DFD1);}.scal-nav-btn:disabled{opacity:.35;cursor:default;}.scal-nav-label{font-family:var(--serif,Georgia,serif);font-size:18px;font-weight:700;text-align:center;flex:1;color:var(--steel,#1E2D4A);}.scal-month{display:none;}.scal-month.active{display:block;}
+.scal-wrap{position:relative;}.scal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:8px;}.scal-nav-btn{background:var(--mist,#E7EEF7);border:1px solid var(--border,#E7DFD1);cursor:pointer;padding:8px 18px;border-radius:8px;font-size:18px;line-height:1;font-weight:700;transition:background .15s;flex-shrink:0;color:var(--steel,#1E2D4A);touch-action:manipulation;}.scal-nav-btn:hover{background:var(--border,#E7DFD1);}.scal-nav-btn:disabled{opacity:.35;cursor:default;}.scal-nav-label{font-family:var(--serif,Georgia,serif);font-size:18px;font-weight:700;text-align:center;flex:1;color:var(--steel,#1E2D4A);}.scal-month{display:none;}.scal-month.active{display:block;}
 .scal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
 .scal-dow{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray,#6B7280);padding:6px 0;text-align:center;}
 .adm-cell{border-radius:8px;text-align:center;padding:10px 2px;font-size:13px;font-weight:700;border:2px solid transparent;transition:background .12s,border-color .12s,transform .1s;line-height:1;font-family:inherit;color:var(--steel,#1E2D4A);min-width:0;overflow:hidden;}
