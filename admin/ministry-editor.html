@@ -69,11 +69,12 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
 /* A paired row is bracketed down the left edge, so you can see two blocks sit
    side by side without going to the canvas. Dragging one out breaks the pair
    and the bracket goes with it, because it is computed from the list. */
-.ed-row--pair-top,.ed-row--pair-bottom{position:relative;margin-left:9px;}
-.ed-row--pair-top::before,.ed-row--pair-bottom::before{content:'';position:absolute;left:-9px;width:7px;
+.ed-row--run-top,.ed-row--run-mid,.ed-row--run-bottom{position:relative;margin-left:9px;}
+.ed-row--run-top::before,.ed-row--run-mid::before,.ed-row--run-bottom::before{content:'';position:absolute;left:-9px;width:7px;
   border-left:2px solid #2E7EA6;}
-.ed-row--pair-top::before{top:8px;bottom:-4px;border-top:2px solid #2E7EA6;border-radius:3px 0 0 0;}
-.ed-row--pair-bottom::before{top:-4px;bottom:8px;border-bottom:2px solid #2E7EA6;border-radius:0 0 0 3px;}
+.ed-row--run-top::before{top:8px;bottom:-4px;border-top:2px solid #2E7EA6;border-radius:3px 0 0 0;}
+.ed-row--run-mid::before{top:-4px;bottom:-4px;}
+.ed-row--run-bottom::before{top:-4px;bottom:8px;border-bottom:2px solid #2E7EA6;border-radius:0 0 0 3px;}
 .ed-row.is-dragging{opacity:.4;}
 .ed-row-grip{color:#B8BECB;font-size:13px;cursor:grab;}
 .ed-row-glyph{width:16px;text-align:center;color:#2E7EA6;}
@@ -512,14 +513,19 @@ function renderTop() {
 // Which indexes begin a pair, walked from the top the same way pairHalves()
 // walks the list — so a third consecutive half starts a new row here too. Any
 // other rule would let the rail draw a bracket the page does not honour.
-function isPairStart(i) {
-  var starts = {}, k = 0;
-  while (k < S.blocks.length) {
-    var a = S.blocks[k], b2 = S.blocks[k + 1];
-    if (a && a.width === 'half' && b2 && b2.width === 'half') { starts[k] = true; k += 2; continue; }
-    k += 1;
-  }
-  return !!starts[i];
+// Where a RUN of half blocks starts and ends, walked the same way
+// pairHalves() walks the list — so the rail cannot bracket a grouping the page
+// does not draw. A run is every consecutive half; a full-width block ends it.
+function runEdges(i) {
+  var b = S.blocks[i];
+  if (!b || b.width !== 'half') return '';
+  var prev = S.blocks[i - 1], next = S.blocks[i + 1];
+  var first = !prev || prev.width !== 'half';
+  var last = !next || next.width !== 'half';
+  if (first && last) return '';          // a lone half brackets nothing
+  if (first) return ' ed-row--run-top';
+  if (last) return ' ed-row--run-bottom';
+  return ' ed-row--run-mid';
 }
 
 function renderRail() {
@@ -532,12 +538,7 @@ function renderRail() {
     // here without going to the canvas. The pair is computed the same way the
     // renderer computes it — two consecutive halves, a third starting a new
     // row — so the rail cannot claim a pairing the page does not draw.
-    var prev = S.blocks[i - 1];
-    var pairCls = '';
-    if (b.width === 'half') {
-      if (isPairStart(i)) pairCls = ' ed-row--pair-top';
-      else if (prev && prev.width === 'half' && isPairStart(i - 1)) pairCls = ' ed-row--pair-bottom';
-    }
+    var pairCls = runEdges(i);
     html += '<button type="button" role="option" class="ed-row' + pairCls + (b.hidden ? ' is-hidden' : '') + (S.dragId === b.id ? ' is-dragging' : '') + '"' +
       ' draggable="true" data-id="' + esc(b.id) + '" data-index="' + i + '"' +
       ' aria-selected="' + (b.id === S.selectedId) + '"' +
@@ -1329,7 +1330,7 @@ function inspectorSections(b, d) {
   out += '<div class="ed-sec"><span class="ed-lab">Block width</span><div class="ed-chips">' +
     chip('width', 'full', 'Full', b.width !== 'half') +
     chip('width', 'half', 'Half', b.width === 'half') +
-    '</div><span class="ed-note">Two Half blocks in a row sit side by side. A Half on its own stays half width, and everything stacks on a phone.</span></div>';
+    '</div><span class="ed-note">Half blocks next to each other share two columns and fill in around a tall one. A Half on its own stays half width, and everything stacks on a phone.</span></div>';
 
   // 4. Spacing
   out += '<div class="ed-sec"><span class="ed-lab">Spacing</span>' +
