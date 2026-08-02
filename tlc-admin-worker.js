@@ -8,6 +8,10 @@
 import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes } from './admin/db.js';
 
 // Static pages that can carry self-serve notices (matches the SPA's page ids in public/index.html)
+// The one address the link cards are shown at. A tap pointing anywhere else
+// is a working tag with no cards behind it — see the Taps screen.
+const LINKS_HOST_RE = /^https?:\/\/links\.timothystl\.org(\/|$)/i;
+
 const STATIC_PAGES = [
   { slug: 'home',       label: 'Home' },
   { slug: 'about',      label: 'About' },
@@ -1697,8 +1701,14 @@ export default {
 
     // ── PUBLIC: link cards API ──
     if (path === '/api/link-cards' && method === 'GET') {
-      const rows = await env.DB.prepare("SELECT id, title, description, url, icon_emoji, icon_color, COALESCE(kind, 'link') AS kind FROM link_cards WHERE active = 1 ORDER BY sort_order, id").all();
-      return new Response(JSON.stringify({ cards: rows.results || [] }), {
+      // The taps ride along so the links page can work out which one it is
+      // being viewed as — from the address the office typed into "Lands on",
+      // so there is nothing to keep in step between the two workers.
+      const [rows, tapRows] = await Promise.all([
+        env.DB.prepare("SELECT id, title, description, url, icon_emoji, icon_color, COALESCE(kind, 'link') AS kind, tap FROM link_cards WHERE active = 1 ORDER BY sort_order, id").all(),
+        env.DB.prepare('SELECT id, destination FROM taps WHERE active = 1 ORDER BY id').all().catch(() => ({ results: [] })),
+      ]);
+      return new Response(JSON.stringify({ cards: rows.results || [], taps: tapRows.results || [] }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=60' }
       });
     }
@@ -3180,7 +3190,7 @@ ${PAYROLL_HTML}`, 'Payroll');
           <td style="${td}"><strong>${escapeHtml(p.name)}</strong></td>
           <td style="${td}">${escapeHtml(p.kind)}</td>
           <td style="${td}">${escapeHtml(p.basis)}</td>
-          <td style="${tdR}">${escapeHtml(Number(p.pto || 0).toFixed(2))} hrs</td>
+          <td style="${tdR}">${p.salaried ? 'n/a' : escapeHtml(Number(p.pto || 0).toFixed(2)) + ' hrs'}</td>
           <td style="${tdR}">${escapeHtml(money(p.gross))}</td>
         </tr>`).join('')}
         <tr>
@@ -6958,6 +6968,11 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
         const tapPanel = taps.length === 0 ? '' : `<div class="tlc-taps">${taps.map((t) => {
           const count = cards.filter((c) => c.tap === t.id).length;
           const on = which === t.id;
+          // Cards are shown by the links page, which only exists at one
+          // address. A tap landing anywhere else — the giving page, say — is a
+          // perfectly good tag, but assigning cards to it does nothing, and
+          // that is worth saying here rather than leaving to be discovered.
+          const showsCards = LINKS_HOST_RE.test(String(t.destination || ''));
           return `<div class="tlc-tap${on ? ' is-on' : ''}">
     <div class="tlc-tap-head">
       <span class="tlc-tap-n">/tap${t.id}</span>
@@ -6971,6 +6986,7 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
       everCounted: everCounted(t),
     }))}</span>
     <span class="tlc-tap-count">${pluralise(count, 'card')}</span>
+    ${showsCards ? '' : `<span class="tlc-tap-warn">This tap lands somewhere other than the links page, so it shows no cards${count ? ` — the ${pluralise(count, 'card')} here ${count === 1 ? 'is' : 'are'} not visible to anybody` : ''}. Re-point it at links.timothystl.org to use cards.</span>`}
     <div class="tlc-tap-actions">
       <a class="tlc-tap-btn" href="/link-cards?tap=${on ? '' : t.id}">${on ? 'Show all cards' : 'Show its cards'}</a>
       <a class="tlc-tap-btn" href="/link-cards/tap/${t.id}">Re-point</a>
@@ -7066,6 +7082,7 @@ ${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; 
       <div class="form-group">
         <label>Lands on <span style="color:#B85C3A;">*</span></label>
         <input type="text" name="destination" value="${escapeHtml(t.destination || '')}" required placeholder="https://links.timothystl.org">
+        <p class="tlc-hint" style="margin-top:6px;">This is also how the links page knows which tap it is: an address under links.timothystl.org shows this tap's cards, plus every card set to show on all taps. Point it anywhere else and the tag still works — it just carries no cards.</p>
       </div>
       <div class="form-group">
         <input type="hidden" name="active" value="0">

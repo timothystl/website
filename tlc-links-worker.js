@@ -55,6 +55,35 @@ function renderSignupCard(c, n) {
   </div>`;
 }
 
+// Which tap is this page being viewed as? Worked out from the address, by
+// matching against the "Lands on" the office typed on the Re-point form —
+// so a tap moved in the admin brings its cards with it and there is nothing
+// to keep in step between the two workers.
+//
+// Trailing slashes and case are ignored: these are short addresses printed on
+// cards and said out loud, and /Welcome/ is nobody's idea of a different page.
+function normPath(p) {
+  const s = String(p || '/').replace(/\/+$/, '').toLowerCase();
+  return s === '' ? '/' : s;
+}
+
+function tapForRequest(url, taps) {
+  const host = url.host.toLowerCase();
+  const here = normPath(url.pathname);
+  let root = null;
+  for (const t of taps) {
+    let dest;
+    try { dest = new URL(t.destination); } catch (_) { continue; }
+    if (dest.host.toLowerCase() !== host) continue;   // a tap landing elsewhere is not this page
+    const p = normPath(dest.pathname);
+    if (p === here) return t.id;
+    if (p === '/' && root === null) root = t.id;
+  }
+  // An address nobody has claimed shows the link tree rather than an empty
+  // page — a mistyped or shared URL should still be the church's links.
+  return root;
+}
+
 function renderCards(cards) {
   return cards
     .filter(c => isFormCard(c) || isSafeCardUrl(c.url))
@@ -271,9 +300,18 @@ END:VCARD`,
       if (res.ok) {
         const data = await res.json();
         const active = (data.cards || []).filter(c => c.active !== 0);
-        if (active.length > 0) cardsHtml = renderCards(active);
+        const taps = data.taps || [];
+        // A card with no tap of its own shows behind all of them — which is
+        // what every card was before taps existed, so nothing has to be
+        // reassigned for this to be correct on day one.
+        const tapId = taps.length ? tapForRequest(url, taps) : null;
+        const visible = tapId === null ? active : active.filter(c => c.tap == null || c.tap === tapId);
+        if (visible.length > 0) cardsHtml = renderCards(visible);
       }
     } catch (_) {}
+    // Everything, rather than nothing, when the admin cannot be read: a tap
+    // that shows the wrong set for a minute is better than one that 404s in
+    // somebody's hand.
     if (!cardsHtml) cardsHtml = FALLBACK_CARDS_HTML;
 
     return new Response(buildHtml(cardsHtml), {

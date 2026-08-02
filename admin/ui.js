@@ -721,6 +721,10 @@ export const ADMIN_UI_CSS = `
    status somebody has to act on. */
 .tlc-tap-taps{font:600 12px var(--tlc-sans);color:var(--tlc-body);}
 .tlc-tap-count{font-size:11.5px;color:var(--tlc-muted);}
+/* A tap landing somewhere other than the links page cannot show cards at all.
+   Said on the card rather than left to be discovered, because assigning one
+   and seeing nothing happen looks like the admin is broken. */
+.tlc-tap-warn{font:600 11.5px/1.45 var(--tlc-sans);color:${TONES.bad.fg};background:${TONES.bad.bg};border-radius:7px;padding:6px 9px;margin-top:3px;text-wrap:pretty;}
 .tlc-tap-actions{display:flex;gap:8px;margin-top:7px;flex-wrap:wrap;}
 .tlc-tap-btn{font:600 11.5px var(--tlc-sans);color:var(--tlc-navy);background:#fff;border:1px solid var(--tlc-edge);border-radius:7px;padding:6px 10px;text-decoration:none;}
 .tlc-tap-btn:hover{border-color:var(--tlc-blue);}

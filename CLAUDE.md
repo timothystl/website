@@ -1394,6 +1394,60 @@ prayer request are real forms elsewhere on the site but they post to ChMS with
 their own screening; adding them here would be a second, unscreened way in. If
 they are ever wanted, they go through `screenSubmission()` like the rest.
 
+#### Each tap serves its own cards (v4.2.0, 2026-08-02)
+
+`link_cards.tap` had existed since v3.x and the admin let you move a card
+between taps — but the public API never returned the column and the links
+worker served the same page at every address, so "Move to /tap2" changed
+nothing a visitor could see. Andrew: *"yes wire up the taps so each one shows
+its own cards"*.
+
+- **The address is the only configuration.** `tapForRequest()` in
+  `tlc-links-worker.js` matches the request's host and path against each tap's
+  `destination` — the field the office already fills in on the Re-point form.
+  Nothing is set twice, so re-pointing a tap moves its cards with it and the
+  two Workers cannot drift. Trailing slashes and case are ignored: these are
+  addresses printed on cards and said out loud.
+- **A card with no tap shows behind all of them**, which is what every card
+  was before taps existed — so nothing had to be reassigned for this to be
+  correct on the day it shipped.
+- **An unclaimed address falls back to the root tap**, not to an empty page. A
+  mistyped or forwarded URL should still be the church's links.
+- **`/api/link-cards` returns `taps` alongside `cards`.** One response, one
+  cache entry, filtered per-request in the links worker — so every tap's page
+  shares the same cached subrequest.
+- **When the admin cannot be read, every built-in card is served.** A tap
+  showing the wrong set for a minute beats one that comes up empty in
+  somebody's hand.
+- **⚠ Tap 3 lands on `give.timothystl.org`, a different Worker.** Cards
+  assigned to it can never appear anywhere. The Taps screen says so on that
+  tap's own card, and names how many cards are going unseen — assigning one and
+  seeing nothing happen otherwise reads as the admin being broken.
+  `LINKS_HOST_RE` in `tlc-admin-worker.js` is the one place that address is
+  described.
+
+Run: `node test/links-page.test.mjs` (also in CI).
+
+#### Payroll: a salaried person has no PTO column (v4.2.0, 2026-08-02)
+
+Andrew: *"on payroll salaried staff should not have a pto column"*. PTO is an
+hourly idea — a salaried person is paid the same whether or not they take the
+day off, so hours "used" against them cost nothing, and a number in that column
+adding into the period's PTO total says the run was affected by something that
+never touched it. The Hours column already read `n/a` for a salaried person;
+PTO now does the same, through one predicate (`takesPto`).
+
+- **The entry screen drops the input entirely for a salaried church person.**
+  With no inputs on the row, `doHoursSave` is never triggered for them, so
+  anything already stored is left alone rather than overwritten with zero. That
+  is deliberate: switching somebody back to hourly restores what was there.
+- **`reportGroups` zeroes it at the source**, so a group's PTO total is right
+  whatever a salaried person may still have stored against them.
+- **The CSV and the emailed report read `n/a`, not `0.00`.** A zero in a
+  spreadsheet reads as "took none", which is a different claim from "the column
+  does not apply" — so the email payload carries `salaried` rather than letting
+  the Worker infer it from the numbers.
+
 #### Four security fixes from the July review (v3.8.0, 2026-08-01)
 
 **VS-2 — the Worship Schedule Builder was public.** `public/scheduler.html`

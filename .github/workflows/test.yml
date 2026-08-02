@@ -68,6 +68,12 @@ jobs:
       - name: Site worker
         run: node test/site-taps.test.mjs
 
+      # The links page, same shape: drives tlc-links-worker.js directly with
+      # the admin API stubbed. Covers which cards each tap shows, and the
+      # sign-up card that has no address to check.
+      - name: Links page
+        run: node test/links-page.test.mjs
+
 # Not run here, and why:
 #
 # The Playwright suites need a Chromium binary. Adding it is a real change in
