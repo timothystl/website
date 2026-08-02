@@ -838,15 +838,23 @@ aside.tlcb-card{background:#FFFFFF;border-radius:18px;padding:34px 32px;box-shad
   display:flex;flex-direction:column;position:relative;z-index:1;}
 .tlcb-card-eyebrow{font:700 12.5px/1.4 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#C9973A;}
 .tlcb-card-eyebrow:empty::before{content:attr(data-ph);opacity:.45;}
-.tlcb-card-row{display:flex;flex-direction:column;gap:3px;padding:20px 0;border-bottom:1px solid #E7DFD1;}
+/* ⚠ NO BORDER PER ROW. The spec's own row list carries an explicit
+   { rule: true } between the times and the address, which only makes sense if
+   the rows themselves have no rule. Bordering every row AND stacking 20px of
+   padding on each is what made this card run to nearly 500px on the homepage —
+   about twice the height of the one it reproduces. One hairline, not six. */
+.tlcb-card-row{display:flex;flex-direction:column;gap:2px;padding:9px 0;}
+.tlcb-card-row--tight{padding:7px 0;}
+.tlcb-card-rule{height:1px;background:#E7DFD1;margin:11px 0;}
+.tlcb-card-row--tight .tlcb-card-link{margin-top:5px;}
 .tlcb-card-free{display:block;font-size:14.5px;line-height:1.65;}
 .tlcb-card-free p{margin:0 0 8px;}
 .tlcb-card-free p:last-child{margin-bottom:0;}
 .tlcb-card-free a{color:#2E7EA6;}
 .tlcb-card-row:last-child{border-bottom:0;padding-bottom:0;}
 .tlcb-card-body > :first-child{padding-top:20px;}
-.tlcb-card-1{font:400 30px/1.2 Lora,Georgia,serif;color:#1E2D4A;}
-.tlcb-card-2{font:400 15px/1.5 'Source Sans 3',sans-serif;color:#4A4860;}
+.tlcb-card-1{font:400 24px/1.15 Lora,Georgia,serif;color:#1E2D4A;}
+.tlcb-card-2{font:400 13.5px/1.5 'Source Sans 3',sans-serif;color:#4A4860;}
 .tlcb-card-link{font:600 15px/1.5 'Source Sans 3',sans-serif;color:#2E7EA6;text-decoration:none;}
 .tlcb-card-link:hover{text-decoration:underline;}
 .tlcb-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
@@ -953,7 +961,7 @@ function phoneRules(p) {
     `${p}.tlcb-band--card-left .tlcb-band-text{order:0!important;}`,
     `${p}.tlcb-band--card-left .tlcb-card{order:1!important;}`,
     `${p}aside.tlcb-card{padding:24px 22px!important;}`,
-    `${p}.tlcb-card-1{font-size:24px!important;}`,
+    `${p}.tlcb-card-1{font-size:21px!important;}`,
   ].join('\n  ');
 }
 
@@ -1093,6 +1101,11 @@ function renderInfoCard(b, opts) {
       <span class="tlcb-card-1">${esc(primary)}</span>
       ${secondary ? `<span class="tlcb-card-2">${esc(secondary)}</span>` : ''}
     </div>`;
+  // The spec's own row list has an explicit { rule: true } between the times
+  // and the address, which means the ROWS carry no borders — one hairline in
+  // the whole card, not one per row. Bordering every row is what made this
+  // twice the height it should be.
+  const ruleRow = '<div class="tlcb-card-rule"></div>';
 
   // ── TASK 13a ─────────────────────────────────────────────────────────────
   // Two bugs with one cause, and the cause was reading CARD_KINDS.times.rows as
@@ -1108,8 +1121,13 @@ function renderInfoCard(b, opts) {
   const groupServices = (rows) => {
     const order = [];
     const byLabel = new Map();
+    const days = new Set(rows.map((r) => r.day).filter(Boolean));
+    const oneDay = days.size <= 1;
     for (const r of rows) {
-      const label = [r.day, r.note].filter(Boolean).join(' · ');
+      // "Sunday · English worship" on every line repeats what the eyebrow
+      // already said and wraps to two lines in a 415px card. The day earns its
+      // place only when the services are not all on the same one.
+      const label = oneDay ? (r.note || r.day || '') : [r.day, r.note].filter(Boolean).join(' · ');
       if (!byLabel.has(label)) { byLabel.set(label, []); order.push(label); }
       byLabel.get(label).push(String(r.time || '').trim());
     }
@@ -1127,19 +1145,27 @@ function renderInfoCard(b, opts) {
 
   // The address and phone rows, shared by the composed services card and the
   // address/contact cards, so there is one description of each.
+  // ⚠ THE ADDRESS IS ONE ROW, NOT FOUR. Every .tlcb-card-row carries 20px of
+  // padding top and bottom plus a hairline, so emitting the street, the city,
+  // the landmark and the directions link as separate rows made the card about
+  // twice the height it should be — which is exactly what happened on the
+  // homepage the first time this shipped. The live card stacks those lines
+  // inside ONE row; the row is the unit of separation, not the line.
   const addressRows = () => {
     const line = st.address_line || '';
     const city = st.address_city || '';
     const near = st.address_near || '';
     if (!line && !city) return '';
     const maps = `https://maps.google.com/?q=${encodeURIComponent([line, city].filter(Boolean).join(', '))}`;
-    return `<div class="tlcb-card-row"><span class="tlcb-card-2">${esc(line)}</span></div>`
-      + (city ? `<div class="tlcb-card-row"><span class="tlcb-card-2">${esc(city)}</span></div>` : '')
-      + (near ? `<div class="tlcb-card-row"><span class="tlcb-card-2">${esc(near)}</span></div>` : '')
-      + `<div class="tlcb-card-row"><a class="tlcb-card-link" href="${esc(maps)}">Get directions</a></div>`;
+    return `<div class="tlcb-card-row tlcb-card-row--tight">`
+      + `<span class="tlcb-card-2">${esc(line)}</span>`
+      + (city ? `<span class="tlcb-card-2">${esc(city)}</span>` : '')
+      + (near ? `<span class="tlcb-card-2">${esc(near)}</span>` : '')
+      + `<a class="tlcb-card-link" href="${esc(maps)}">Get directions</a>`
+      + `</div>`;
   };
   const phoneRow = () => (st.phone
-    ? `<div class="tlcb-card-row"><a class="tlcb-card-link" href="tel:${esc(String(st.phone).replace(/[^0-9+]/g, ''))}">${esc(st.phone)}</a></div>`
+    ? `<div class="tlcb-card-row tlcb-card-row--tight"><a class="tlcb-card-link" href="tel:${esc(String(st.phone).replace(/[^0-9+]/g, ''))}">${esc(st.phone)}</a></div>`
     : '');
 
   let body = '';
@@ -1152,7 +1178,7 @@ function renderInfoCard(b, opts) {
     } else {
       const times = groupServices(services).map((g) => row(g.time, g.label)).join('');
       const rest = addressRows() + phoneRow();
-      body = times + rest;
+      body = times + (rest ? ruleRow + rest : '');
     }
   } else if (b.cardShows === 'address') {
     // `pageData()` strips the `church_` prefix, so these are the same keys the
