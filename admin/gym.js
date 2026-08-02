@@ -415,11 +415,13 @@ input:focus,select:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(201
   .pcal-nav{min-width:44px !important;min-height:44px !important;}
   .pmode-btn{min-height:44px !important;}
   .phdr-link{min-height:44px !important;display:inline-flex !important;align-items:center !important;}
-  /* Removing a date is destructive-ish and sits beside a smaller chip ✕, so it
-     gets the full target rather than the desktop 32. */
-  .bk-row > .bk-x{width:44px;height:44px;}
-  .bk-time .bk-x{width:28px;height:28px;}
-  .bk-time{padding:5px 7px 5px 12px;}
+  /* ⚠ The basket's 44px/28px rules are NOT here. The portal renders a second
+     stylesheet in the body, and the basket's desktop sizes live there — later
+     in source, equal in specificity — so rules written here silently lose at
+     every width. That is the same cascade-order trap that once hid the
+     hamburger, and it shipped the 390px basket pass defeated. The phone rules
+     sit at the END of that body stylesheet, beside the desktop sizes they
+     override. */
 }
 </style>
 </head>
@@ -810,17 +812,24 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
 
 </div>
 
-<!-- Sticky request bar -->
-<div id="req-bar" style="display:none;position:sticky;bottom:0;left:0;right:0;background:var(--steel);color:white;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:3px solid var(--amber);z-index:100;">
+<!-- Sticky request bar. Styled by the .req-bar rules in the head — the
+     inline style carries ONLY display:none. It used to restate the whole
+     bar inline, including display:flex AFTER the display:none, so the later
+     one won and an empty bar reading zero slots sat on screen until the
+     first script ran. It also meant the class rules, the 30vh cap among
+     them, never applied to anything. -->
+<div id="req-bar" class="req-bar" style="display:none">
   <div>
-    <div style="font-size:15px;font-weight:700;" id="req-bar-count">0 slots</div>
-    <div style="font-size:12px;opacity:.75;margin-top:2px;" id="req-bar-detail"></div>
+    <div class="req-bar-count" id="req-bar-count">0 slots</div>
+    <div class="req-bar-detail" id="req-bar-detail"></div>
   </div>
   <button class="btn btn-amber" onclick="scrollToForm()">Review your request</button>
 </div>
 
 <style>
-.scal-month{display:none;}.scal-month.active{display:block;}
+/* .scal-month show/hide lives in the head stylesheet with the rest of the
+   calendar rules — it was declared identically in both sheets, and two
+   declarations of one selector is how the basket rules above got defeated. */
 .slot-btn{min-height:44px;border:none;border-radius:8px;font-size:12px;font-weight:700;color:white;cursor:pointer;padding:6px 4px;transition:transform .1s,filter .1s;}
 .slot-btn:hover{filter:brightness(1.08);}.slot-btn:active{transform:scale(.94);}
 .slot-btn:disabled{cursor:default;}
@@ -848,6 +857,19 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
    a near-miss for the chip beside it. */
 .bk-row > .bk-x{width:32px;height:32px;border-radius:8px;font-size:17px;flex:none;}
 .bk-row > .bk-x:hover{background:#F7E4DE;color:#8C3A28;}
+/* ⚠ THIS BLOCK STAYS AT THE END OF THIS STYLESHEET. These phone sizes lived
+   in the head stylesheet first, where the desktop rules above — later in
+   source, equal in specificity — silently won at every width, and the 390px
+   basket pass shipped defeated. A media query does not outrank anything; it
+   only narrows when a rule applies. Declared after the desktop sizes, in the
+   same sheet, source order agrees with intent. */
+@media(max-width:480px){
+  /* Removing a date is destructive-ish and sits beside a smaller chip ✕, so
+     it gets the full 44px target rather than the desktop 32. */
+  .bk-row > .bk-x{width:44px;height:44px;}
+  .bk-time .bk-x{width:28px;height:28px;}
+  .bk-time{padding:5px 7px 5px 12px;}
+}
 </style>
 
 <script>

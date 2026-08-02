@@ -18,7 +18,7 @@ import http from 'node:http'; import path from 'node:path';
 import { createRequire } from 'node:module'; import { execSync } from 'node:child_process';
 const gr = execSync('npm root -g').toString().trim();
 const { chromium } = createRequire(path.join(gr, 'x.js'))('playwright');
-import { html, sidebarShell } from '../admin/helpers.js';
+import { html, sidebarShell, loginPage } from '../admin/helpers.js';
 import { PERMISSIONS } from '../admin/auth.js';
 
 // Somebody with every permission, so the sidebar renders every group — which
@@ -32,8 +32,12 @@ const body = sidebarShell('gym', USER, '', {})
   + '<div class="card">Content</div></div>';
 
 const page = await html(body, 'Gym rentals').text();
+const login = await loginPage().text();
 
-const srv = http.createServer((q, r) => { r.writeHead(200, { 'Content-Type': 'text/html' }); r.end(page); });
+const srv = http.createServer((q, r) => {
+  r.writeHead(200, { 'Content-Type': 'text/html' });
+  r.end(q.url.startsWith('/login') ? login : page);
+});
 await new Promise((r) => srv.listen(0, r));
 const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium' });
 const ctx = await b.newContext();
@@ -126,6 +130,27 @@ group('two columns, and the content gets the rest');
   ok(Math.round(ctxBar.x) === 228, `the context bar starts at the content column (got ${Math.round(ctxBar.x)})`);
 }
 
+group('the merged sidebar kept the Foundations values');
+{
+  // The colour-and-type block used to be a SECOND set of .sidebar* rules after
+  // the interpolated stylesheets, winning on source order alone. It was merged
+  // into the shell block; these are the values that came from the later block
+  // and would quietly revert to the early ones if the merge ever regressed.
+  const st = await p.$eval('.sidebar', (n) => {
+    const c = getComputedStyle(n);
+    return { bg: c.backgroundColor, overflow: c.overflow, position: c.position };
+  });
+  ok(st.bg === 'rgb(29, 53, 87)', `the rail is the spec navy #1D3557 (got ${st.bg})`);
+  ok(st.overflow === 'hidden' && st.position === 'sticky', 'and kept its shell geometry');
+
+  const item = await p.$eval('.sidebar-item', (n) => {
+    const c = getComputedStyle(n);
+    return { size: c.fontSize, radius: c.borderRadius, pad: c.paddingLeft };
+  });
+  ok(item.size === '13.5px', `nav rows are 13.5px (got ${item.size})`);
+  ok(item.radius === '9px' && item.pad === '12px', 'with the rounded raised-row geometry');
+}
+
 group('a wide table cannot push the content column off screen');
 {
   // min-width:0 on the flex child. Without it the column refuses to shrink
@@ -205,6 +230,30 @@ group('below 900px the rail is a slide-over, and the content takes the width');
   await p.waitForTimeout(260);
   const closed = await box('.sidebar');
   ok(closed.right <= 1, 'Escape closes it again');
+}
+
+group('the login page fills the viewport');
+{
+  // The regression this catches shipped: body{display:flex} made the shell a
+  // flex ROW, and on the four screens with no sidebar (login, forgot, reset,
+  // setup) the wrapper was the only flex item with no width — so the navy
+  // backdrop shrank to fit its 380px card and sat as a strip on the left of
+  // the viewport, warm page colour filling the rest. Every string assertion
+  // stayed green. Only a browser asked "how wide is it?" would have noticed.
+  await p.setViewportSize({ width: 1280, height: 800 });
+  await p.goto('http://localhost:' + srv.address().port + '/login');
+  await p.waitForTimeout(120);
+
+  const wrap = await box('.login-wrap');
+  ok(wrap.w >= 1270, `the navy backdrop spans the viewport (got ${Math.round(wrap.w)} of 1280)`);
+  ok(wrap.h >= 800, 'and its full height');
+
+  const card = await box('.login-card');
+  const off = Math.abs((card.x + card.w / 2) - 640);
+  ok(off < 2, `the card is centred (midpoint off by ${Math.round(off)}px)`);
+
+  const navy = await p.$eval('.login-wrap', (n) => getComputedStyle(n).backgroundColor);
+  ok(navy === 'rgb(30, 45, 74)', `on the Foundations navy (got ${navy})`);
 }
 
 group('no script errors');
