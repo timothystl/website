@@ -66,6 +66,14 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
   background:#FBF8F3;border:1px solid #DDE3ED;color:#1E2D4A;}
 .ed-row[aria-selected="true"]{background:#E4EEF4;border-color:#2E7EA6;font-weight:600;}
 .ed-row.is-hidden .ed-row-label{color:#8A8898;}
+/* A paired row is bracketed down the left edge, so you can see two blocks sit
+   side by side without going to the canvas. Dragging one out breaks the pair
+   and the bracket goes with it, because it is computed from the list. */
+.ed-row--pair-top,.ed-row--pair-bottom{position:relative;margin-left:9px;}
+.ed-row--pair-top::before,.ed-row--pair-bottom::before{content:'';position:absolute;left:-9px;width:7px;
+  border-left:2px solid #2E7EA6;}
+.ed-row--pair-top::before{top:8px;bottom:-4px;border-top:2px solid #2E7EA6;border-radius:3px 0 0 0;}
+.ed-row--pair-bottom::before{top:-4px;bottom:8px;border-bottom:2px solid #2E7EA6;border-radius:0 0 0 3px;}
 .ed-row.is-dragging{opacity:.4;}
 .ed-row-grip{color:#B8BECB;font-size:13px;cursor:grab;}
 .ed-row-glyph{width:16px;text-align:center;color:#2E7EA6;}
@@ -501,13 +509,36 @@ function renderTop() {
   el.edView.href = 'https://timothystl.org' + S.path;
 }
 
+// Which indexes begin a pair, walked from the top the same way pairHalves()
+// walks the list — so a third consecutive half starts a new row here too. Any
+// other rule would let the rail draw a bracket the page does not honour.
+function isPairStart(i) {
+  var starts = {}, k = 0;
+  while (k < S.blocks.length) {
+    var a = S.blocks[k], b2 = S.blocks[k + 1];
+    if (a && a.width === 'half' && b2 && b2.width === 'half') { starts[k] = true; k += 2; continue; }
+    k += 1;
+  }
+  return !!starts[i];
+}
+
 function renderRail() {
   var html = '';
   for (var i = 0; i < S.blocks.length; i++) {
     var b = S.blocks[i];
     var d = def(b.type);
     if (S.dropIndex === i) html += '<div class="ed-drop" aria-hidden="true"></div>';
-    html += '<button type="button" role="option" class="ed-row' + (b.hidden ? ' is-hidden' : '') + (S.dragId === b.id ? ' is-dragging' : '') + '"' +
+    // A paired row is bracketed down the left edge, so the pairing is visible
+    // here without going to the canvas. The pair is computed the same way the
+    // renderer computes it — two consecutive halves, a third starting a new
+    // row — so the rail cannot claim a pairing the page does not draw.
+    var prev = S.blocks[i - 1];
+    var pairCls = '';
+    if (b.width === 'half') {
+      if (isPairStart(i)) pairCls = ' ed-row--pair-top';
+      else if (prev && prev.width === 'half' && isPairStart(i - 1)) pairCls = ' ed-row--pair-bottom';
+    }
+    html += '<button type="button" role="option" class="ed-row' + pairCls + (b.hidden ? ' is-hidden' : '') + (S.dragId === b.id ? ' is-dragging' : '') + '"' +
       ' draggable="true" data-id="' + esc(b.id) + '" data-index="' + i + '"' +
       ' aria-selected="' + (b.id === S.selectedId) + '"' +
       ' aria-label="' + esc(d.label) + ' block, position ' + (i + 1) + ' of ' + S.blocks.length +
@@ -777,6 +808,7 @@ function styleVars(b) {
   ];
   if (b.type === 'textphoto') v.push('--tlcb-cols:' + cols);
   if (b.type === 'columns') v.push('--tlcb-cols:repeat(' + b.cols + ',1fr)');
+  if (b.type === 'cardgrid') v.push('--tlcb-cols:repeat(' + b.cols + ',1fr)');
   if (b.type === 'hero' && b.photo) v.push("--tlcb-hero-img:url('" + String(b.photo).replace(/["'\\()\s<>;{}]/g, '') + "')");
   return v.join(';');
 }
@@ -1258,6 +1290,24 @@ function inspectorSections(b, d) {
       '</div><span class="ed-note">Columns stack on a phone automatically.</span></div>';
   }
 
+  // 1b. Card grid — cards per row, alignment, and the coloured top rule.
+  // Four options or fewer is chips, not a select: a select hides three of the
+  // four choices behind a click.
+  if (b.type === 'cardgrid') {
+    out += '<div class="ed-sec"><span class="ed-lab">Cards per row</span><div class="ed-chips">' +
+      chip('cols', '2', '2', b.cols === 2) + chip('cols', '3', '3', b.cols === 3) +
+      chip('cols', '4', '4', b.cols === 4) +
+      '</div><span class="ed-note">Cards stack on a phone whatever you pick here.</span></div>';
+    out += '<div class="ed-sec"><span class="ed-lab">Alignment</span><div class="ed-chips">' +
+      chip('align', 'left', 'Left', b.align !== 'center') +
+      chip('align', 'center', 'Centre', b.align === 'center') +
+      '</div></div>';
+    out += '<div class="ed-sec"><span class="ed-lab">Card top rule</span><div class="ed-chips">' +
+      chip('topRule', '0', 'Off', !b.topRule) +
+      chip('topRule', '1', 'On', !!b.topRule) +
+      '</div><span class="ed-note">A coloured hairline across the top of every card in this grid.</span></div>';
+  }
+
   // 2 + 3. Photo position and column split
   if (b.type === 'textphoto') {
     out += '<div class="ed-sec"><span class="ed-lab">Photo position</span><div class="ed-chips">' +
@@ -1271,6 +1321,15 @@ function inspectorSections(b, d) {
       C.SPLITS.map(function (s) { return chip('split', s.key, s.label, s.key === b.split); }).join('') +
       '</div><span class="ed-note">Columns stack automatically on a phone.</span></div>';
   }
+
+  // 3b. Block width (Task 13c) — on EVERY block, above Spacing.
+  // Two consecutive Half blocks pair into one row. A half with no half
+  // neighbour sits at half width with the right side empty; that is a
+  // legitimate layout, so the note says so rather than warning about it.
+  out += '<div class="ed-sec"><span class="ed-lab">Block width</span><div class="ed-chips">' +
+    chip('width', 'full', 'Full', b.width !== 'half') +
+    chip('width', 'half', 'Half', b.width === 'half') +
+    '</div><span class="ed-note">Two Half blocks in a row sit side by side. A Half on its own stays half width, and everything stacks on a phone.</span></div>';
 
   // 4. Spacing
   out += '<div class="ed-sec"><span class="ed-lab">Spacing</span>' +
@@ -1421,6 +1480,23 @@ function inspectorAction(action, value) {
       var structural = false;
       while (items.length < n) { items.push({ title: '', body: '' }); structural = true; }
       patch(b.id, structural ? { cols: n, items: items } : { cols: n }, 'Changed to ' + n + ' columns', structural ? 'rerender' : 'style');
+      break;
+    }
+    case 'width': {
+      // Structural: whether this block pairs with its neighbour changes the
+      // markup around both, so the Worker re-renders rather than the editor
+      // patching a custom property.
+      patch(b.id, { width: value === 'half' ? 'half' : 'full' },
+        value === 'half' ? 'Half width' : 'Full width', 'rerender');
+      break;
+    }
+    case 'align': {
+      patch(b.id, { align: value === 'center' ? 'center' : 'left' },
+        value === 'center' ? 'Centred' : 'Left-aligned', 'rerender');
+      break;
+    }
+    case 'topRule': {
+      patch(b.id, { topRule: value === '1' }, value === '1' ? 'Top rule on' : 'Top rule off', 'rerender');
       break;
     }
     case 'count': {

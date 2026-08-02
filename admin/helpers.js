@@ -5,7 +5,7 @@ import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, SIDEBAR_JS, TOGGLE_WORD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 
-export const VERSION = 'v4.8.1'; // minor: the form width rule, warning rows above their row, Connect and the arrow glyphs gone
+export const VERSION = 'v4.9.0'; // minor: the renter portal on the public brand, the card grid block, half-width blocks, Task 16's palette sweep
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
@@ -426,7 +426,7 @@ export const GROUPS = {
 // shows, so the sidebar and the worklist can never disagree. Pass
 // { gym, pages, newsletter }; a bare number is read as the newsletter count so
 // the pre-redesign call sites keep working.
-export function sidebarShell(activeTab, user, extraLinks = '', badges = {}) {
+export function sidebarShell(activeTab, user, extraLinks = '', badges = {}, crumb = '') {
   const hp = (p) => hasPermission(user, p);
   const b = typeof badges === 'number' ? { newsletter: badges } : (badges || {});
 
@@ -544,7 +544,7 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}) {
 </aside>
 ${CMDK_HTML}
 <div class="tlc-main">
-${contextBar(activeTab, b)}
+${contextBar(activeTab, b, crumb)}
 ${extraLinks ? `<div class="tlc-nav-back">${extraLinks}</div>` : ''}`;
 }
 
@@ -557,7 +557,7 @@ ${extraLinks ? `<div class="tlc-nav-back">${extraLinks}</div>` : ''}`;
 // putting section tabs or group chips in here. Sign out is NOT duplicated: it
 // lives in the sidebar foot, and having it in both would be two answers to one
 // question.
-export function contextBar(activeTab, badges = {}) {
+export function contextBar(activeTab, badges = {}, crumb = '') {
   const t = TRAIL[activeTab] || { group: 'Admin', section: 'Admin' };
   const waiting = t.waits ? Number(badges[t.waits] || 0) : 0;
   return `<div class="tlc-ctx">
@@ -568,6 +568,7 @@ export function contextBar(activeTab, badges = {}) {
       <span class="tlc-ctx-group">${escapeHtml(t.group)}</span>
       <span class="tlc-ctx-sep" aria-hidden="true">/</span>
       <span class="tlc-ctx-section">${escapeHtml(t.section)}</span>
+      ${crumb ? `<span class="tlc-ctx-sep" aria-hidden="true">/</span><span class="tlc-ctx-section">${escapeHtml(crumb)}</span>` : ''}
       ${waiting ? `<span class="tlc-ctx-wait">${waiting} waiting</span>` : ''}
     </div>
     <div class="tlc-ctx-right">

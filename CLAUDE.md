@@ -1394,6 +1394,58 @@ prayer request are real forms elsewhere on the site but they post to ChMS with
 their own screening; adding them here would be a second, unscreened way in. If
 they are ever wanted, they go through `screenSubmission()` like the rest.
 
+#### The renter portal follows the brand, and the calendar stops saying it twice (v4.9.0, 2026-08-02)
+
+Tasks 17b and 18. The portal keeping its own `:root` was right and still is — a
+renter must never get the admin sidebar, the context bar or the ⌘K chip. But
+*"not an admin screen"* had been read as *"not styled"*, and those are different
+things.
+
+- **It wears the public site's moss masthead now** — logo, "from our
+  Neighborhood to the Nations", the gold rule — so it reads as
+  `timothystl.org/worship` rather than as nothing in particular. The three
+  stacked boxes (brand, title, rate strip) are one block: what this is, whose it
+  is, what it costs.
+- **The insurance notice moved to the confirm step.** It was the first thing on
+  the page: an obligation that comes *after* booking, put above the calendar, so
+  a renter had to take in a compliance requirement before finding out whether
+  their date was even free.
+- **The calendar encoded availability twice, in colour only** — a red numeral
+  *and* a red dot. Red numerals read as errors, the dot was redundant, and
+  colour alone fails for anyone who cannot separate the two hues. Available days
+  are a navy numeral in an outlined cell that raises on hover; unavailable days
+  are the numeral alone in grey, no cell, not clickable. **Absence of affordance
+  is the signal**, so the legend is gone too.
+- **⚠ The client repainted every dot green or red in two places**, which would
+  have undone that redraw the first time anybody pressed Clear. Both aligned.
+  The hour-slot buttons *inside* a day still use red for a taken hour — a
+  different control, not covered by this.
+- **"Request this booking", not "Submit".** The office prices and approves it,
+  and saying so is the difference between a renter expecting a booking and
+  expecting an invoice.
+
+**⚠ Two items of Task 18 are deliberately NOT done.** The per-row ✕ on the
+request basket, and a phone-first redraw at 390px. Both are a genuine redesign
+of a flow with real money and real bookings behind it — the same call as the
+giving page in Phase 7: a deliberate change with somebody watching, not folded
+into the end of a pass. `FIXES.md` says exactly what is missing.
+
+#### ⚠ `node --check` does not catch a broken module (v4.9.0, 2026-08-02)
+
+Hit three times in one session, and the third time proved the CI step was not
+doing its job. **`node --check` parses these files as CommonJS scripts.** Most
+of the CSS and client-side JS in this repo lives inside template literals, and a
+stray backtick in one — a comment quoting `flex:1`, or a UI label — terminates
+the literal and breaks the *module* while still parsing fine as a script.
+Verified: `--check` passed on a `gym.js` that could not be imported at all.
+
+CI now imports every `admin/*.js` for real, as ESM, right after the syntax
+check. Those modules are declarations and config objects at the top level, so
+importing them runs nothing.
+
+The rule for these files: **describe a label in a comment; do not quote one, and
+never use a backtick.**
+
 #### Forms have a width again, and three rulings land (v4.8.0, 2026-08-02)
 
 Andrew: *"there should be a max width, 1900px is too wide"*. That is FIXES

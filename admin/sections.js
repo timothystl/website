@@ -127,6 +127,22 @@ export const SECTIONS = {
     columns: [['Date', '1.4fr'], ['Reason', '3fr'], ['', '1fr']],
     note: 'Blocking a date does not cancel bookings already confirmed on it — those are flagged on the calendar instead, so somebody has to be told.'
   },
+  // Task 15 #1 — the one clear miss of the five. A list of posts belonging to
+  // a ministry is list-shaped by any reading, and it was the last hand-rolled
+  // table in the admin. Its `/new` and `/edit/` siblings are forms and
+  // correctly stay as they are.
+  //
+  // No screen file: the handoff never drew it, so the wording follows the rule
+  // for a list with no spec — say what the screen is for in plain English.
+  // `title` is completed at the call site with the ministry's own name, since
+  // one config serves every ministry.
+  ministryPosts: {
+    label: 'Posts', glyph: '✎', title: 'Posts',
+    purpose: 'Dated updates on one ministry page — a practice change, a trip deadline, a thank-you. Upcoming ones lead; past ones roll down on their own.',
+    action: '+ New post', search: 'Search posts', filters: ['All', 'Upcoming', 'Past', 'Pinned', 'Expired'],
+    columns: [['Post', '2.6fr'], ['When', '1.6fr'], ['Expires', '1.2fr'], ['Status', '1fr']],
+    note: 'A post with an expiry date takes itself down. That is what keeps a ministry page honest without anybody remembering to come back.'
+  },
   users: {
     label: 'Users', glyph: '⚿', title: 'Users', purpose: 'Who can get into this admin, and exactly what each of them can reach.',
     action: '+ New user', search: 'Search users', filters: ['All', 'Active', 'Disabled'],

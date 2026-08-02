@@ -394,6 +394,7 @@ export const INITIAL_SETTINGS = [
   // so a phone number changes in one place and no deploy is needed.
   { key: 'church_address_line', value: '6704 Fyler Ave',            label: 'Street address',  hint: 'Shown on the map block, contact page, and page sidebars.' },
   { key: 'church_address_city', value: 'St. Louis, MO 63139',       label: 'City, state, ZIP', hint: 'The second line of the address.' },
+  { key: 'church_address_near', value: 'Corner of Fyler & Ivanhoe',  label: 'Landmark',        hint: 'How somebody finds it from the road — shown under the address on the welcome card. Leave blank to omit.' },
   { key: 'church_phone',        value: '(314) 781-8673',            label: 'Church phone',    hint: 'Shown wherever the site lists a phone number.' },
   { key: 'church_email',        value: 'office@timothystl.org',     label: 'Church email',    hint: 'The public contact address for the church office.' },
   { key: 'church_service_times', label: 'Service times', hint: 'One line per service: Day | Time | Note. Shown by the Service times block and page sidebars.',

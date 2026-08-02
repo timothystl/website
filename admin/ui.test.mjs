@@ -300,6 +300,35 @@ group('one palette');
     ok(!allCss.includes(hex), `the shell carries no ${hex} — ${was}`);
   }
 
+  // ── TASK 16: THE CONGREGATION SEES THE SAME BRAND ────────────
+  // email.js and the newsletter archive were marked `n/a` on the reading that
+  // they go to the congregation rather than to staff, so Foundations does not
+  // apply. That reading was never in the spec and it was wrong: those were not
+  // a different palette, they were the PRE-REDESIGN one. Nobody decided the
+  // congregation should keep the old brand — it just never got swept. The
+  // people most likely to notice are the ones who see the email on Thursday
+  // and the website on Sunday.
+  {
+    const emailSrc = readFileSync(new URL('./email.js', import.meta.url), 'utf8');
+    for (const [hex, was] of [['#0A3C5C', 'the old steel'], ['#D4922A', 'the old amber'],
+                              ['#3D3530', 'the old charcoal'], ['#7A6E60', 'the old grey'],
+                              ['#E8E0D0', 'the old border']]) {
+      ok(!emailSrc.includes(hex), `the emails carry no ${hex} — ${was}`);
+    }
+    ok(emailSrc.includes('#1E2D4A') && emailSrc.includes('#C9973A'),
+      'and they are on the Foundations navy and gold');
+
+    // ⚠ Email is not a browser. Three constraints that do NOT travel from
+    // Task 1, and each would break a real inbox if "fixed" later:
+    ok(!/var\(--[a-z-]+\)/.test(emailSrc),
+      'no CSS variables in email — half the clients drop them and render black on white');
+    ok(emailSrc.includes("'Lora',Georgia,serif") || emailSrc.includes('Lora,Georgia,serif'),
+      'the serif keeps its Georgia fallback — most clients will land on it, and that is intended');
+    ok(emailSrc.includes("Arial"), 'and the sans keeps its Arial fallback');
+    ok(/border-left:\s*3px/.test(emailSrc),
+      'the note block keeps its 3px accent — that is an email convention, not the admin stripe Task 1 drops');
+  }
+
   // Georgia is legal only as the serif fallback, never as the face itself.
   // Line comments are stripped first — a comment mentioning the fallback is
   // prose, not a font declaration, and failing on it would teach whoever hits

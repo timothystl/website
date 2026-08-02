@@ -1196,6 +1196,33 @@ group('screens say what the design says');
   }
 }
 
+// Task 15 #1 and #2 — the two of the five that were real.
+group('the last two borderline routes are on the shared pattern');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  // #1. A ministry's posts list was the last hand-rolled table in the admin:
+  // its own .ni-row markup, its own badges, its own empty state. As a config
+  // it inherits search, filter pills, the scoped count and warning rows.
+  const posts = await (await call(env, '/ministries/music/posts', { cookie })).text();
+  has(posts, 'tlc-section', 'the posts list renders through renderListSection');
+  has(posts, 'Dated updates on one ministry page', "and uses the config's purpose line");
+  has(posts, 'tlc-filter', 'so it has filter pills');
+  has(posts, 'tlc-count', 'and the scoped count label');
+  has(posts, 'takes itself down', "and the section's ◆ note");
+  ok(!posts.includes('class="ni-row"'), 'the hand-rolled row markup is gone');
+
+  // #2. Add and edit are one builder. The tell is the control that used to
+  // exist on only one of them — `add` had no Visibility card at all, which is
+  // exactly the kind of thing two copies of a form drift into.
+  const add = await (await call(env, '/notices/add', { cookie })).text();
+  has(add, 'New notice', 'the add form still answers on its own address');
+  has(add, 'Show this notice on the website', 'and now carries Visibility, like edit');
+  has(add, 'name="published" value="1" checked', 'ticked by default, so the old behaviour is the default');
+  has(add, 'action="/notices/create"', 'posting to create');
+}
+
 group('rows carry an overflow menu');
 {
   const { db, env } = await boot();
@@ -1374,6 +1401,72 @@ group('the renter portal has its own origin');
   setOrigin('javascript:alert(1)');
   eq((await portalGet()).status, 200, 'an unsafe address is ignored rather than half-honoured');
   setOrigin('');
+
+  // ── Tasks 17b and 18: the renter portal ──────────────────────────────
+  const portal = await (await portalGet()).text();
+
+  // 17b. The portal keeps its own :root — a renter must never get the admin
+  // sidebar or the ⌘K chip — but "not an admin screen" had been read as "not
+  // styled". It takes the public site's moss masthead now.
+  has(portal, '#4A5E3A', 'the portal wears the public site\'s moss masthead');
+  has(portal, 'from our Neighborhood to the Nations', 'with the site\'s own brand line');
+  lacks(portal, 'class="sidebar"', 'and none of the admin chrome');
+  lacks(portal, 'tlc-ctx', 'no context bar either');
+
+  // 18.1. The insurance notice is an obligation that comes AFTER booking. At
+  // the top of the page it made somebody read a compliance requirement before
+  // finding out whether their date was even free.
+  const insuranceAt = portal.indexOf('certificate of insurance');
+  const calendarAt = portal.indexOf('scal-month');
+  ok(insuranceAt > -1 && calendarAt > -1 && insuranceAt > calendarAt,
+    'the insurance notice sits after the calendar, at the confirm step');
+
+  // 18.2. Both tabs feed one request, so the second is named for what it is.
+  has(portal, '>Recurring dates<', 'the second tab is Recurring dates');
+  lacks(portal, 'Repeat weekly pattern', 'not a competing flow');
+
+  // 18.3. Availability was encoded twice, in colour only — a red numeral AND a
+  // red dot. Red numerals read as errors, and colour alone fails for anyone
+  // who cannot separate the two hues.
+  // Scoped to the DAY CELLS. The hour-slot buttons inside a day still use red
+  // for a taken hour, and that is a different control the spec does not touch —
+  // asserting no red anywhere on the page would fail for the wrong reason.
+  lacks(portal, 'font-weight:700;color:#D17070', 'no unavailable day is a red numeral');
+  has(portal, 'color:#A9A396', 'unavailable days are grey, with no cell and no dot');
+  lacks(portal, 'Fully booked</span>', 'and the colour legend is gone — the drawing says it');
+
+  // "Request", not "Confirm" — the office prices and approves it.
+  has(portal, '>Request this booking<', 'the submit button says request');
+  has(portal, 'Nothing is charged now', 'and says so in one line beneath');
+
+  // ── Task 19 items 1-5: the hierarchy on this screen was upside down ──
+  // You come here to edit a group. The booking link is a utility, and it was
+  // the loudest thing on the page — above the group's own name, in the mist
+  // tint with a heavy navy border, which means SELECTED everywhere else.
+  const detailsAt = groupPage.indexOf('name="name"');
+  const linkAt = groupPage.indexOf('id="portal-link"');
+  ok(detailsAt > -1 && linkAt > -1 && detailsAt < linkAt,
+    'the group record comes first and the booking link sits beneath it');
+  lacks(groupPage, 'background:var(--mist);border-color:var(--steel);',
+    'the link card is a plain card, not the selected treatment');
+  lacks(groupPage, '📋', 'and the clipboard glyph is gone — no emoji in the admin');
+
+  // Copy is the card's primary action and can never be pushed out of view.
+  has(groupPage, 'id="portal-copy" class="btn btn-primary btn-sm" style="flex:none;"',
+    'Copy is a navy primary that cannot be squeezed out of the row');
+  has(groupPage, 'flex:1;min-width:0', 'and the field flexes rather than sitting in a grid');
+
+  // Regenerate invalidates a link already in other people's inboxes. It is a
+  // text button at the card foot, and the consequence is in the confirm where
+  // it can actually stop somebody — not folded into the button label.
+  has(groupPage, '>Regenerate link<', 'Regenerate is quiet and plainly labelled');
+  lacks(groupPage, 'Regenerate token (old link stops working)', 'the warning is out of the label');
+  has(groupPage, 'The link you have already shared will stop working',
+    'and names what breaks, in the confirm');
+
+  // The third crumb — an editor appends the record it is editing.
+  has(groupPage, 'class="tlc-ctx-section">Hoops<',
+    'the context bar names the group you are in');
 }
 
 group('an approved payroll period is locked server-side');

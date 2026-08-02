@@ -237,12 +237,12 @@ function buildGymInvoiceEmailHtml(inv, group, bookingOrBookings, paymentLink = P
         <a href="${payLink}" style="display:inline-block;background:#00DB72;color:white;font-weight:700;font-size:16px;padding:14px 48px;border-radius:6px;text-decoration:none;letter-spacing:.01em;">Pay Online</a>
       </td></tr>
     </table>
-    <div style="font-size:13px;color:#7A6E60;text-align:center;margin-bottom:16px;">— or —</div>
+    <div style="font-size:13px;color:#6A6858;text-align:center;margin-bottom:16px;">— or —</div>
     <div style="font-size:14px;color:#4A4860;line-height:1.75;">Make your check payable to <strong>Timothy Lutheran Church</strong> and bring it to the church office or mail to:<br><br>Timothy Lutheran Church<br>6704 Fyler Ave, St. Louis, MO 63139</div>
-    <div style="font-size:13px;color:#7A6E60;margin-top:12px;">Questions? <a href="mailto:office@timothystl.org" style="color:#2E7EA6;">office@timothystl.org</a></div>
+    <div style="font-size:13px;color:#6A6858;margin-top:12px;">Questions? <a href="mailto:office@timothystl.org" style="color:#2E7EA6;">office@timothystl.org</a></div>
   </div>
 </td></tr>
-<tr><td style="background:#F7F3EC;padding:20px 36px;text-align:center;font-size:12px;color:#7A6E60;">
+<tr><td style="background:#F7F3EC;padding:20px 36px;text-align:center;font-size:12px;color:#6A6858;">
   Timothy Lutheran Church · 6704 Fyler Ave, St. Louis, MO 63139
 </td></tr>
 </table>
@@ -614,7 +614,6 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
               disabled = true;
               clickAttr = '';
             } else if (allTaken) {
-              dotColor = '#D17070';
               disabled = true;
               clickAttr = '';
             } else {
@@ -624,9 +623,18 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
             }
 
             if (disabled) {
-              rows += `<td style="padding:3px;vertical-align:top;"><div style="width:100%;border:2px solid transparent;border-radius:8px;padding:6px 2px;display:flex;flex-direction:column;align-items:center;gap:4px;"><div style="font-size:12px;font-weight:700;color:${isPast||!hasValidHours?'#CBD5E1':'#D17070'};">${day}</div><div id="dot-${ds}" style="width:8px;height:8px;border-radius:50%;background:${dotColor};"></div></div></td>`;
+              // Unavailable: the numeral ALONE, no cell, no dot, not clickable.
+              // Absence of affordance is the signal — a red numeral reads as an
+              // error, and a dot beside it says the same thing twice in the one
+              // channel that fails for anyone who cannot separate the two hues.
+              // The tooltip is what tells the two unavailable kinds apart.
+              rows += `<td style="padding:3px;vertical-align:top;"><div title="${isPast ? 'Already past' : (!hasValidHours ? 'Not rentable this day' : 'Fully booked')}" style="width:100%;border:2px solid transparent;border-radius:8px;padding:6px 2px;display:flex;flex-direction:column;align-items:center;gap:4px;"><div style="font-size:12px;font-weight:700;color:#A9A396;">${day}</div></div></td>`;
             } else {
-              rows += `<td style="padding:3px;vertical-align:top;"><button ${clickAttr} id="cell-${ds}" data-date="${ds}" style="width:100%;border:2px solid var(--border);border-radius:8px;padding:6px 2px;background:white;color:var(--steel);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;"><div style="font-size:12px;font-weight:700;">${day}</div><div id="dot-${ds}" style="width:8px;height:8px;border-radius:50%;background:${dotColor};"></div></button></td>`;
+              // Available: a normal navy numeral in an outlined cell. The cell
+              // IS the affordance, so no green dot is needed to say so. The
+              // gold dot below still appears once a slot is in the request —
+              // that is a different fact from "you may book this".
+              rows += `<td style="padding:3px;vertical-align:top;"><button ${clickAttr} id="cell-${ds}" data-date="${ds}" title="Open ${ds}" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:6px 2px;background:#FFFDF9;color:var(--steel);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;transition:box-shadow 140ms ease,transform 140ms ease;" onmouseover="this.style.boxShadow='0 4px 10px rgba(11,22,44,.09)';this.style.transform='translateY(-1px)';" onmouseout="this.style.boxShadow='';this.style.transform='';"><div style="font-size:12px;font-weight:700;">${day}</div><div id="dot-${ds}" style="width:8px;height:8px;border-radius:50%;background:transparent;"></div></button></td>`;
             }
 
             curDow++;
@@ -648,39 +656,47 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
         const rateDisplay = _calRateType === 'daily' ? `$${_calRate.toFixed(2)}/day` : _calRateType === 'lump' ? `$${_calRate.toFixed(2)} flat rate` : `$${_calRate.toFixed(2)}/hr`;
 
         return portalHtml(`
-<div style="background:var(--steel);border-bottom:3px solid var(--amber);padding:16px 20px;">
-  <div style="max-width:820px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-    <div>
-      <div style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--amber);margin-bottom:3px;">Timothy Lutheran Church</div>
-      <div style="font-family:var(--serif);font-size:19px;color:white;">Gym Rental — ${group.name}</div>
-    </div>
-    <div style="display:flex;gap:8px;">
-      <a href="/gym/book/${token}" style="font-size:13px;font-weight:700;padding:8px 16px;border-radius:8px;border:none;cursor:pointer;background:var(--amber);color:var(--steel);text-decoration:none;">Book</a>
-      <a href="/gym/book/${token}/history" style="font-size:13px;font-weight:700;padding:8px 16px;border-radius:8px;border:none;cursor:pointer;background:rgba(255,255,255,.15);color:white;text-decoration:none;">My Bookings</a>
-    </div>
+<!-- ── TASK 17b: THE PUBLIC SITE'S SHELL, NOT THE ADMIN'S ──────────────────
+     The portal keeping its own :root was right and still is — a renter must
+     never get the admin sidebar, the context bar or the ⌘K chip. But "not an
+     admin screen" had been taken to mean "not styled", and those are different
+     things. A renter sees the same moss masthead, the same gold rule and the
+     same logo as every other public page, so this reads as timothystl.org/
+     worship rather than as nothing in particular.
+     "Book" is gone from the buttons: you are on it. -->
+<div style="background:#4A5E3A;border-bottom:3px solid var(--amber);">
+  <div style="max-width:1080px;margin:0 auto;padding:0 20px;height:64px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+    <a href="https://timothystl.org" style="display:flex;align-items:center;gap:12px;text-decoration:none;">
+      <img src="https://timothystl.org/logo.png" alt="Timothy Lutheran Church" style="width:44px;height:44px;border-radius:50%;flex-shrink:0;object-fit:contain;background:white;padding:3px;">
+      <span>
+        <span style="font-family:var(--sans);font-size:14px;font-weight:800;color:white;display:block;">Timothy Lutheran Church</span>
+        <span style="font-family:var(--sans);font-size:10px;font-weight:600;color:#E8C070;display:block;letter-spacing:.04em;">from our Neighborhood to the Nations</span>
+      </span>
+    </a>
+    <a href="/gym/book/${token}/history" style="font-size:13px;font-weight:700;padding:8px 16px;border-radius:8px;background:rgba(255,255,255,.15);color:white;text-decoration:none;white-space:nowrap;">My bookings</a>
+  </div>
+</div>
+
+<!-- One block, not three stacked boxes: what this is, whose it is, and what it
+     costs, in the order somebody reads them. -->
+<div style="background:var(--steel);padding:20px;">
+  <div style="max-width:820px;margin:0 auto;">
+    <div style="font-family:var(--serif);font-size:24px;color:white;">Gym rental</div>
+    <div style="font-size:13px;color:rgba(255,255,255,.72);margin-top:2px;">${escapeHtml(group.name)}</div>
+    <div style="font-size:13.5px;color:#AFC0D2;margin-top:10px;">${rateDisplay} · Mon–Fri 5–9 PM · Sat 8 AM–8 PM · Sun 1–8 PM</div>
   </div>
 </div>
 
 <div style="max-width:820px;margin:0 auto;padding:20px 20px 120px;">
   ${portalAlert}
 
-  <!-- Insurance banner -->
-  <div style="display:flex;gap:12px;align-items:flex-start;background:#FFF8EC;border:1px solid #E8C87A;border-radius:12px;padding:14px 16px;margin-bottom:16px;">
-    <div style="font-size:20px;line-height:1;">📋</div>
-    <div style="font-size:13px;color:#5A4200;line-height:1.5;">
-      <strong>Before your rental date:</strong> email a certificate of insurance naming Timothy Lutheran Church as additional insured to <a href="mailto:dinger@timothystl.org" style="color:#2E7EA6;">dinger@timothystl.org</a>.
-    </div>
-  </div>
 
   <!-- Rate info -->
-  <div style="background:var(--white);border:1px solid var(--border);border-radius:12px;padding:10px 16px;font-size:13px;color:var(--charcoal);margin-bottom:18px;">
-    <strong style="color:var(--steel);">${rateDisplay}</strong> · Mon–Fri 5–9 PM · Sat 8 AM–8 PM · Sun 1–8 PM
-  </div>
 
   <!-- Mode toggle -->
   <div style="display:flex;gap:0;margin-bottom:16px;background:var(--linen);border-radius:12px;padding:4px;">
-    <button id="btn-mode-tap" onclick="setMode('tap')" style="flex:1;font-size:13px;font-weight:700;padding:10px;border-radius:8px;border:none;cursor:pointer;background:white;color:var(--steel);box-shadow:0 1px 3px rgba(0,0,0,.1);">Tap individual times</button>
-    <button id="btn-mode-pattern" onclick="setMode('pattern')" style="flex:1;font-size:13px;font-weight:700;padding:10px;border-radius:8px;border:none;cursor:pointer;background:transparent;color:var(--gray);box-shadow:none;">Repeat weekly pattern</button>
+    <button id="btn-mode-tap" onclick="setMode('tap')" style="flex:1;font-size:13px;font-weight:700;padding:10px;border-radius:8px;border:none;cursor:pointer;background:white;color:var(--steel);box-shadow:0 1px 3px rgba(0,0,0,.1);">Pick dates</button>
+    <button id="btn-mode-pattern" onclick="setMode('pattern')" style="flex:1;font-size:13px;font-weight:700;padding:10px;border-radius:8px;border:none;cursor:pointer;background:transparent;color:var(--gray);box-shadow:none;">Recurring dates</button>
   </div>
 
   <!-- Pattern panel -->
@@ -715,12 +731,7 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
     <div id="cal-months-wrap">
       ${calMonthsHtml}
     </div>
-    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--gray);margin-top:14px;">
-      <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:50%;background:#5A9E6F;display:inline-block;"></span> Open slots</span>
-      <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:50%;background:var(--amber);display:inline-block;"></span> You've selected</span>
-      <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:50%;background:#D17070;display:inline-block;"></span> Fully booked</span>
-      <span style="display:flex;align-items:center;gap:5px;color:#CBD5E1;">— Not rentable this day</span>
-    </div>
+    <div style="font-size:11.5px;color:var(--gray);margin-top:14px;">Tap a day to see its hours. Days you cannot book are greyed out. Everything you pick is listed below before you send it.</div>
   </div>
 
   <!-- Day slot panel (shown when a day is tapped) -->
@@ -748,11 +759,25 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
           <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:6px;">Notes <span style="font-weight:400;text-transform:none;">(optional)</span></label>
           <textarea name="notes" rows="2" maxlength="500" placeholder="e.g. Basketball practice" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-family:var(--sans);font-size:14px;"></textarea>
         </div>
+        <!-- ⚠ THE INSURANCE NOTICE BELONGS HERE, not at the top of the page.
+             It was the first thing a renter read: an obligation that comes
+             AFTER booking, put above the calendar, so somebody had to take in
+             a compliance requirement before finding out whether the date they
+             wanted was even free. Here it is actionable, and it goes in the
+             confirmation email too. -->
+        <div style="display:flex;gap:12px;align-items:flex-start;background:#FAF0DC;border:1px solid #EBD5A6;border-radius:12px;padding:14px 16px;margin-bottom:16px;">
+          <div style="font-size:13px;color:#7A5B18;line-height:1.5;">
+            <strong>Before your rental date:</strong> email a certificate of insurance naming Timothy Lutheran Church as additional insured to <a href="mailto:dinger@timothystl.org" style="color:#1E2D4A;">dinger@timothystl.org</a>.
+          </div>
+        </div>
         <div style="display:flex;gap:12px;flex-wrap:wrap;">
-          <button type="submit" class="btn btn-amber">Submit Rental Request &rarr;</button>
+          <button type="submit" class="btn btn-amber">Request this booking</button>
           <button type="button" onclick="clearAll()" style="background:var(--linen);color:var(--steel);font-weight:700;padding:12px 26px;border-radius:8px;border:none;font-size:14px;cursor:pointer;">Clear</button>
         </div>
-        <div style="font-size:11px;color:var(--gray);margin-top:8px;">The office reviews and confirms — you'll get an emailed invoice once confirmed.</div>
+        <!-- "Request", not "Confirm" — the office prices and approves it, and
+             saying so here is the difference between a renter expecting a
+             booking and expecting an invoice. -->
+        <div style="font-size:11px;color:var(--gray);margin-top:8px;">The office will review and send an invoice. Nothing is charged now.</div>
       </form>
     </div>
   </div>
@@ -765,7 +790,7 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
     <div style="font-size:15px;font-weight:700;" id="req-bar-count">0 slots</div>
     <div style="font-size:12px;opacity:.75;margin-top:2px;" id="req-bar-detail"></div>
   </div>
-  <button class="btn btn-amber" onclick="scrollToForm()">Review &amp; Submit &rarr;</button>
+  <button class="btn btn-amber" onclick="scrollToForm()">Review your request</button>
 </div>
 
 <style>
@@ -888,13 +913,37 @@ function updateDotForDate(date) {
   const validH = validHoursForDow(dow);
   const validHours = [...validH];
   const openCount = validHours.filter(h => !takenSet.has(h)).length;
-  const allTaken = validHours.length > 0 && openCount === 0;
+  // Four day states, none of them carried by colour alone. Open is a navy
+  // numeral in an outlined cell — the cell IS the affordance, so it needs no
+  // green dot to confirm it. In-your-request is a FILLED cell with the count
+  // beneath, which is a fact the colour cannot state on its own.
+  //
+  // ⚠ This used to repaint every dot green or red on the client, which would
+  // silently undo the server-side redraw: availability was encoded twice, in
+  // colour only, and a red numeral reads as an error rather than as "already
+  // taken". A day that is genuinely full is rendered unclickable server-side,
+  // so there is nothing left for a red dot to say.
+  const count = [...selected.keys()].filter(k => k.startsWith(date + '|')).length;
   if (hasSel) {
-    dot.style.background = 'var(--amber)';
-    if (cell) { cell.style.borderColor = 'var(--amber)'; }
+    dot.style.background = 'transparent';
+    dot.style.width = 'auto';
+    dot.style.height = 'auto';
+    dot.textContent = '·' + count;
+    dot.style.font = '700 10px/1 var(--sans)';
+    dot.style.color = 'var(--amber)';
+    if (cell) {
+      cell.style.background = 'var(--steel)';
+      cell.style.color = '#fff';
+      cell.style.borderColor = 'var(--steel)';
+    }
   } else {
-    dot.style.background = allTaken ? '#D17070' : '#5A9E6F';
-    if (cell) { cell.style.borderColor = 'var(--border)'; }
+    dot.style.background = 'transparent';
+    dot.textContent = '';
+    if (cell) {
+      cell.style.background = '#FFFDF9';
+      cell.style.color = 'var(--steel)';
+      cell.style.borderColor = 'var(--border)';
+    }
   }
 }
 
@@ -959,11 +1008,17 @@ function clearAll() {
     const validH = validHoursForDow(dow);
     const takenSet = new Set(TAKEN[date] || []);
     const validHours = [...validH];
-    const openCount = validHours.filter(h => !takenSet.has(h)).length;
-    const allTaken = validHours.length > 0 && openCount === 0;
-    dot.style.background = (!validHours.length || date < TODAY_STR || BLOCKED.has(date)) ? 'transparent' : allTaken ? '#D17070' : '#5A9E6F';
+    // Clearing a selection returns a day to the open state: an outlined cell
+    // and nothing else. This used to repaint the dot green or red and would
+    // have undone the redraw the first time anybody pressed Clear.
+    dot.style.background = 'transparent';
+    dot.textContent = '';
     const cell = document.getElementById('cell-' + date);
-    if (cell) cell.style.borderColor = 'var(--border)';
+    if (cell) {
+      cell.style.background = '#FFFDF9';
+      cell.style.color = 'var(--steel)';
+      cell.style.borderColor = 'var(--border)';
+    }
   });
   updateUI();
   closeDay();
@@ -2581,24 +2636,11 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>
           : '';
         const esc = v => (v||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
         return html(`
-${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>`, {}, g.name)}
 <div class="tlc-wrap">
-  <div class="page-title">${g.name}</div>
-  <div class="page-sub">Edit group details and manage their booking link.</div>
+  <div class="page-title">${escapeHtml(g.name)}</div>
+  <div class="page-sub">The group's own details, and the private link they book through.</div>
   ${editAlert}
-  <div class="card" style="background:var(--mist);border-color:var(--steel);">
-    <div class="card-title">📋 Private Booking Link</div>
-    <div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);margin-bottom:12px;">Share this link with the group. The token in the URL is their key — no login needed.</div>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-      <input type="text" id="portal-link" value="${portalLink}" readonly style="font-family:monospace;font-size:12px;background:white;flex:1;min-width:200px;">
-      <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('portal-link').value).then(()=>{this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',2000)})" class="btn btn-secondary btn-sm">Copy</button>
-    </div>
-    <div style="margin-top:14px;">
-      <form method="POST" action="/gym-rentals/groups/regen-token/${g.id}" onsubmit="return confirm('This invalidates their current link. They will need the new URL to book. Continue?')">
-        <button type="submit" class="btn btn-sm btn-danger">Regenerate token (old link stops working)</button>
-      </form>
-    </div>
-  </div>
   <div class="card">
     <form method="POST" action="/gym-rentals/groups/update/${g.id}">
       <div class="form-group">
@@ -2658,17 +2700,70 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>
         <button type="submit" class="btn btn-primary">Save changes</button>
       </div>
     </form>
-    <hr style="border:none;border-top:1px solid var(--border);margin:24px 0;">
-    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-      <form method="POST" action="/gym-rentals/groups/toggle/${g.id}" style="display:inline;">
-        <button type="submit" class="btn ${g.active ? 'btn-danger' : 'btn-sage'}">${g.active ? 'Deactivate group (disables portal access)' : 'Reactivate group'}</button>
-      </form>
-      <form method="POST" action="/gym-rentals/groups/delete/${g.id}" style="display:inline;" onsubmit="return confirm('Permanently delete ${g.name.replace(/'/g,"\\'")} and all their bookings and invoices? This cannot be undone.')">
-        <button type="submit" class="btn btn-danger">Delete group permanently</button>
+  </div>
+
+  <!-- Task 19 items 1-3, 5. The booking link used to sit ABOVE the group's own
+       name, in the mist tint with a heavy navy border — a treatment that means
+       SELECTED everywhere else in this admin. It is a utility, not the subject
+       of the page, so it is a plain card beneath the record now. -->
+  <div class="card">
+    <div class="card-title">Private booking link</div>
+    <div style="font-family:var(--sans);font-size:13px;color:var(--tlc-body,#4A4860);margin-bottom:12px;">Share this with the group. The token in the address is their key — there is no login.</div>
+    <!-- Copy is the whole point of this card, so it is the primary action and
+         it can never be pushed off the right edge: one flex row, the field
+         flex:1, the button flex:none. Not a grid. -->
+    <div style="display:flex;gap:10px;align-items:center;">
+      <input type="text" id="portal-link" value="${esc(portalLink)}" readonly style="font-family:monospace;font-size:12px;background:var(--tlc-sand,#F4EFE5);flex:1;min-width:0;">
+      <button type="button" id="portal-copy" class="btn btn-primary btn-sm" style="flex:none;">Copy</button>
+    </div>
+    <!-- Regenerate invalidates a link sitting in other people's inboxes. It was
+         a bordered button at the same weight as Copy, with its own warning
+         folded into the label. It is a text button at the card foot now, and
+         the consequence lives in the confirm where it can actually stop
+         somebody — same treatment as Delete in a drawer foot. -->
+    <div style="margin-top:16px;">
+      <form method="POST" action="/gym-rentals/groups/regen-token/${g.id}" id="regen-form" style="margin:0;">
+        <button type="submit" class="btn btn-danger btn-sm" style="padding-left:0;">Regenerate link</button>
       </form>
     </div>
   </div>
-</div>`, `Edit — ${g.name}`);
+
+  <div class="card">
+    <div class="card-title">This group</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      <form method="POST" action="/gym-rentals/groups/toggle/${g.id}" style="display:inline;">
+        <button type="submit" class="btn ${g.active ? 'btn-secondary' : 'btn-sage'}">${g.active ? 'Deactivate group' : 'Reactivate group'}</button>
+      </form>
+      <form method="POST" action="/gym-rentals/groups/delete/${g.id}" style="display:inline;" id="del-form">
+        <button type="submit" class="btn btn-danger">Delete group permanently</button>
+      </form>
+    </div>
+    <div style="font-family:var(--sans);font-size:12px;color:var(--gray);margin-top:10px;">Deactivating stops their link working and keeps every booking they already have.</div>
+  </div>
+</div>
+<script>
+(function(){
+  var btn = document.getElementById('portal-copy');
+  if (btn) btn.addEventListener('click', function(){
+    var f = document.getElementById('portal-link');
+    navigator.clipboard.writeText(f.value).then(function(){
+      btn.textContent = 'Copied';
+      setTimeout(function(){ btn.textContent = 'Copy'; }, 2000);
+    });
+  });
+  // ⚠ Confirms are wired here rather than in an inline onsubmit, because the
+  // group name is office-entered text and interpolating it into an attribute
+  // is how an apostrophe breaks the handler outright.
+  var regen = document.getElementById('regen-form');
+  if (regen) regen.addEventListener('submit', function(e){
+    if (!confirm('The link you have already shared will stop working. The group will need the new one.')) e.preventDefault();
+  });
+  var del = document.getElementById('del-form');
+  if (del) del.addEventListener('submit', function(e){
+    if (!confirm('Permanently delete this group and all their bookings and invoices? This cannot be undone.')) e.preventDefault();
+  });
+})();
+</script>`, `Edit — ${g.name}`);
       }
 
       // ── UPDATE GROUP ─────────────────────────────────────────
@@ -3406,7 +3501,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
   </div>
 </div>
 <style>
-.scal-wrap{position:relative;}.scal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:8px;}.scal-nav-btn{background:var(--mist,#EDF5F8);border:1px solid var(--border,#E7DFD1);cursor:pointer;padding:8px 18px;border-radius:8px;font-size:18px;line-height:1;font-weight:700;transition:background .15s;flex-shrink:0;color:var(--steel,#1E2D4A);touch-action:manipulation;}.scal-nav-btn:hover{background:var(--border,#E7DFD1);}.scal-nav-btn:disabled{opacity:.35;cursor:default;}.scal-nav-label{font-family:var(--serif,Georgia,serif);font-size:18px;font-weight:700;text-align:center;flex:1;color:var(--steel,#1E2D4A);}.scal-month{display:none;}.scal-month.active{display:block;}
+.scal-wrap{position:relative;}.scal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:8px;}.scal-nav-btn{background:var(--mist,#E7EEF7);border:1px solid var(--border,#E7DFD1);cursor:pointer;padding:8px 18px;border-radius:8px;font-size:18px;line-height:1;font-weight:700;transition:background .15s;flex-shrink:0;color:var(--steel,#1E2D4A);touch-action:manipulation;}.scal-nav-btn:hover{background:var(--border,#E7DFD1);}.scal-nav-btn:disabled{opacity:.35;cursor:default;}.scal-nav-label{font-family:var(--serif,Georgia,serif);font-size:18px;font-weight:700;text-align:center;flex:1;color:var(--steel,#1E2D4A);}.scal-month{display:none;}.scal-month.active{display:block;}
 .scal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
 .scal-dow{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray,#6B7280);padding:6px 0;text-align:center;}
 .adm-cell{border-radius:8px;text-align:center;padding:10px 2px;font-size:13px;font-weight:700;border:2px solid transparent;transition:background .12s,border-color .12s,transform .1s;line-height:1;font-family:inherit;color:var(--steel,#1E2D4A);min-width:0;overflow:hidden;}
