@@ -425,6 +425,7 @@ export const INITIAL_SETTINGS = [
   // Church details — the one record every page reads. The map block, the
   // service-times block, the sidebar layout and the footer all pull from here,
   // so a phone number changes in one place and no deploy is needed.
+  { key: 'church_name',         value: 'Timothy Lutheran Church',  label: 'Church name',     hint: 'Shown wherever the church names itself — the map block, invoices, the footer.' },
   { key: 'church_address_line', value: '6704 Fyler Ave',            label: 'Street address',  hint: 'Shown on the map block, contact page, and page sidebars.' },
   { key: 'church_address_city', value: 'St. Louis, MO 63139',       label: 'City, state, ZIP', hint: 'The second line of the address.' },
   { key: 'church_address_near', value: 'Corner of Fyler & Ivanhoe',  label: 'Landmark',        hint: 'How somebody finds it from the road — shown under the address on the welcome card. Leave blank to omit.' },

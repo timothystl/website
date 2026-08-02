@@ -891,6 +891,19 @@ aside.tlcb-card{background:#FFFFFF;border-radius:18px;padding:34px 32px;box-shad
 .tlcb-map-f{width:100%;height:100%;min-height:230px;border:0;display:block;}
 .tlcb-map-ph{color:#8A8898;font-size:13px;}
 .tlcb-addr{display:flex;flex-direction:column;gap:3px;font-size:13.5px;color:#4A4860;}
+/* The half-width map: one card carrying the address, the link out and the map
+   beneath. Same card geometry as everything else on a page — 12 radius, the
+   sand edge — so it reads as part of the site rather than as a widget. */
+.tlcb-mapc{background:#FFFDF9;border:1px solid #E7DFD1;border-radius:12px;padding:22px 22px 18px;
+  display:flex;flex-direction:column;gap:7px;}
+.tlcb-mapc-name{font:700 15px/1.4 var(--tlcb-sans);color:#1E2D4A;}
+.tlcb-mapc-line{font:400 14px/1.5 var(--tlcb-sans);color:#4A4860;}
+.tlcb-mapc-link{font:700 14px/1.5 var(--tlcb-sans);color:#2E7EA6;text-decoration:none;margin-top:3px;}
+.tlcb-mapc-link:hover{text-decoration:underline;}
+/* The map sits inside the card's padding rather than bleeding to its edges —
+   the screenshot shows the card's cream around it on all four sides. */
+.tlcb-mapc-frame{margin-top:11px;border-radius:8px;overflow:hidden;min-height:300px;}
+.tlcb-mapc-frame .tlcb-map-f{min-height:300px;}
 .tlcb-stamp{position:absolute;z-index:4;bottom:14px;padding:7px 15px;border-radius:7px;
   font:700 13px/1.3 'Source Sans 3',sans-serif;letter-spacing:.1em;text-transform:uppercase;
   box-shadow:0 5px 16px rgba(30,45,74,.3);white-space:nowrap;}
@@ -1344,6 +1357,33 @@ function renderInner(b, opts) {
     const frame = opts.editing
       ? `<span class="tlcb-map-ph">Map</span>`
       : `<iframe class="tlcb-map-f" src="https://www.google.com/maps?q=${q}&output=embed" title="Map" loading="lazy"></iframe>`;
+    // ⚠ HALF WIDTH IS A DIFFERENT LAYOUT, NOT A NARROWER ONE. The full-width
+    // block is a two-column grid — map beside the text — and squeezing that
+    // into half a page gives two columns of about 170px each, which is too
+    // narrow for a street address and far too narrow for a map. So at half
+    // width it stacks: the heading and the paragraph, then ONE card carrying
+    // the address, the link out and the map beneath it.
+    //
+    // Everything in the card reads the church-details record, same as the
+    // welcome card and the sidebar layout — change the address once and every
+    // map block on the site follows.
+    if (b.width === 'half') {
+      const maps = `https://maps.google.com/?q=${q}`;
+      const lines = [
+        st.name ? `<div class="tlcb-mapc-name">${esc(st.name)}</div>` : '',
+        // A middot rather than the comma `addr` uses: that string also feeds the
+        // Google Maps query, where a comma is what separates the parts.
+        (st.address_line || st.address_city)
+          ? `<div class="tlcb-mapc-line">${esc([st.address_line, st.address_city].filter(Boolean).join(' · '))}</div>` : '',
+        st.address_near ? `<div class="tlcb-mapc-line">${esc(st.address_near)}</div>` : '',
+      ].filter(Boolean).join('');
+      const body = lines
+        ? lines + `<a class="tlcb-mapc-link" href="${esc(maps)}">Open in Google Maps →</a>`
+        : '<span class="tlcb-note">Add the church address under Church details in the admin.</span>';
+      return `<div class="tlcb-stack" style="gap:9px">${renderHead(opts, b)}${renderBody(opts, b, def)}
+        <div class="tlcb-mapc">${body}<div class="tlcb-map tlcb-mapc-frame">${frame}</div></div>
+      </div>`;
+    }
     return `<div class="tlcb-grid">
       <div class="tlcb-media tlcb-map">${frame}</div>
       <div class="tlcb-stack" style="gap:9px">${renderHead(opts, b)}${renderBody(opts, b, def)}

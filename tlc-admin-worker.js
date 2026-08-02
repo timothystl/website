@@ -934,7 +934,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-08-02-5'; // bumped: two Sunday services, unlabelled — the 9:30 Vietnamese service comes off the site
+    const SCHEMA_VERSION = '2026-08-02-6'; // bumped: church_name setting (the map block's half-width card names the church)
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -7878,6 +7878,7 @@ ${sidebarShell('redirects', currentUser, '', await badgeCounts(env, currentUser)
     // it. Anything not in this table is theme-owned and lives in code.
     if (path === '/settings' && method === 'GET') {
       const SETTINGS_VIEW = [
+        { key: 'church_name', label: 'Church name', group: 'church-details', used: 'Map blocks · invoices', href: '/pages/details' },
         { key: 'church_address_line', label: 'Church address', group: 'church-details', used: 'Map blocks · footer · invoices', href: '/pages/details' },
         { key: 'church_address_city', label: 'City, state and ZIP', group: 'church-details', used: 'Map blocks · footer · invoices', href: '/pages/details' },
         { key: 'church_address_near', label: 'Landmark', group: 'church-details', used: 'Welcome card on the homepage', href: '/pages/details' },
