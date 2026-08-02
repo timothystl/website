@@ -1329,9 +1329,13 @@ group('the shell is the sidebar plus a context bar');
   // was never the sidebar — it was hiding it behind a hamburger. Twenty-one
   // sections in five groups is more than a horizontal bar holds honestly.
   has(body, 'class="sidebar"', 'the sidebar is there');
-  for (const g of ['Website', 'Email', 'Money &amp; Building', 'People &amp; Access', 'Setup']) {
+  for (const g of ['Website', 'Communication', 'Money &amp; Building', 'People &amp; Access', 'Setup']) {
     has(body, `>${g}</div>`, `${g} is a group`);
   }
+  // ⚠ The heading and the trail read the same constant. They were two typed
+  // strings, and a rename that reached one and not the other would have the
+  // sidebar and the breadcrumb disagreeing about where you are.
+  lacks(body, 'Money &amp;amp; Building', 'a group name is escaped once, not twice');
   has(body, 'href="/redirects"', 'Redirects has its own address');
   has(body, 'href="/settings"', 'and so does Settings');
   has(body, 'sidebar-item-child', 'the five children of Pages keep their elbow');

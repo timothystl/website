@@ -318,6 +318,29 @@ ${CMDK_JS}
 // shows, so the sidebar and the worklist can never disagree. Pass
 // { gym, pages, newsletter }; a bare number is read as the newsletter count so
 // the pre-redesign call sites keep working.
+
+// A group is named in TWO places — the sidebar heading and the context bar's
+// trail — so the name lives here rather than being typed at each. Otherwise
+// they can say different things about the same group, which is exactly the
+// drift the trail exists to prevent.
+//
+// "Communication" rather than the mockups' "Email" is Andrew's call
+// (2026-08-02): the group holds the newsletter, the subscriber list and held
+// mail, which is more than the word Email covers. The other four are the
+// design's own.
+//
+// ⚠ Stored RAW, escaped at both render sites. The trail already ran the name
+// through escapeHtml while the sidebar had `&amp;` typed into its markup — one
+// constant holding the entity would have printed "Money &amp;amp; Building"
+// in the context bar.
+export const GROUPS = {
+  website: 'Website',
+  email: 'Communication',
+  money: 'Money & Building',
+  people: 'People & Access',
+  setup: 'Setup',
+};
+
 // ── SIDEBAR SHELL ─────────────────────────────────────────────
 // Left sidebar navigation (grouped by task area) + a slim utility bar for
 // per-page back-links / external-view links + sign out. Replaces the old
@@ -431,11 +454,11 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}) {
   <div class="sidebar-group">
     ${navItem('/dashboard', 'Dashboard', activeTab === 'dashboard')}
   </div>
-  ${websiteItems ? `<div class="sidebar-group"><div class="sidebar-group-label">Website</div>${websiteItems}</div>` : ''}
-  ${emailItems ? `<div class="sidebar-group"><div class="sidebar-group-label">Email</div>${emailItems}</div>` : ''}
-  ${moneyItems ? `<div class="sidebar-group"><div class="sidebar-group-label">Money &amp; Building</div>${moneyItems}</div>` : ''}
-  ${peopleItems ? `<div class="sidebar-group"><div class="sidebar-group-label">People &amp; Access</div>${peopleItems}</div>` : ''}
-  ${setupItems ? `<div class="sidebar-group"><div class="sidebar-group-label">Setup</div>${setupItems}</div>` : ''}
+  ${websiteItems ? `<div class="sidebar-group"><div class="sidebar-group-label">${escapeHtml(GROUPS.website)}</div>${websiteItems}</div>` : ''}
+  ${emailItems ? `<div class="sidebar-group"><div class="sidebar-group-label">${escapeHtml(GROUPS.email)}</div>${emailItems}</div>` : ''}
+  ${moneyItems ? `<div class="sidebar-group"><div class="sidebar-group-label">${escapeHtml(GROUPS.money)}</div>${moneyItems}</div>` : ''}
+  ${peopleItems ? `<div class="sidebar-group"><div class="sidebar-group-label">${escapeHtml(GROUPS.people)}</div>${peopleItems}</div>` : ''}
+  ${setupItems ? `<div class="sidebar-group"><div class="sidebar-group-label">${escapeHtml(GROUPS.setup)}</div>${setupItems}</div>` : ''}
   </div>
   <div class="sidebar-footer">
     <a href="#" id="tlc-k-open">⌘K searches every section</a>
@@ -481,28 +504,28 @@ export function contextBar(activeTab, badges = {}) {
 // Dashboard's group reads "Admin", as the spec says: it belongs to no group.
 const TRAIL = {
   dashboard: { group: 'Admin', section: 'Dashboard' },
-  pages: { group: 'Website', section: 'Pages', waits: 'pages' },
-  ministries: { group: 'Website', section: 'Ministry pages' },
-  partners: { group: 'Website', section: 'Partner ministries' },
-  news: { group: 'Website', section: 'News & Events' },
-  sermons: { group: 'Website', section: 'Sermons' },
-  'christian-education': { group: 'Website', section: 'Christian Education' },
-  menu: { group: 'Website', section: 'Menu' },
-  notices: { group: 'Website', section: 'Notices' },
-  'link-cards': { group: 'Website', section: 'Taps & links' },
-  redirects: { group: 'Website', section: 'Redirects' },
-  newsletter: { group: 'Email', section: 'Newsletter', waits: 'newsletter' },
-  subscribers: { group: 'Email', section: 'Subscribers' },
-  filtered: { group: 'Email', section: 'Filtered mail' },
-  giving: { group: 'Money & Building', section: 'Giving' },
-  gym: { group: 'Money & Building', section: 'Gym rentals', waits: 'gym' },
-  payroll: { group: 'Money & Building', section: 'Payroll' },
-  staff: { group: 'People & Access', section: 'Staff directory' },
-  users: { group: 'People & Access', section: 'Users' },
-  audit: { group: 'People & Access', section: 'Audit log' },
-  media: { group: 'Setup', section: 'Media' },
-  settings: { group: 'Setup', section: 'Settings' },
-  voters: { group: 'Website', section: 'Voters page' },
+  pages: { group: GROUPS.website, section: 'Pages', waits: 'pages' },
+  ministries: { group: GROUPS.website, section: 'Ministry pages' },
+  partners: { group: GROUPS.website, section: 'Partner ministries' },
+  news: { group: GROUPS.website, section: 'News & Events' },
+  sermons: { group: GROUPS.website, section: 'Sermons' },
+  'christian-education': { group: GROUPS.website, section: 'Christian Education' },
+  menu: { group: GROUPS.website, section: 'Menu' },
+  notices: { group: GROUPS.website, section: 'Notices' },
+  'link-cards': { group: GROUPS.website, section: 'Taps & links' },
+  redirects: { group: GROUPS.website, section: 'Redirects' },
+  newsletter: { group: GROUPS.email, section: 'Newsletter', waits: 'newsletter' },
+  subscribers: { group: GROUPS.email, section: 'Subscribers' },
+  filtered: { group: GROUPS.email, section: 'Filtered mail' },
+  giving: { group: GROUPS.money, section: 'Giving' },
+  gym: { group: GROUPS.money, section: 'Gym rentals', waits: 'gym' },
+  payroll: { group: GROUPS.money, section: 'Payroll' },
+  staff: { group: GROUPS.people, section: 'Staff directory' },
+  users: { group: GROUPS.people, section: 'Users' },
+  audit: { group: GROUPS.people, section: 'Audit log' },
+  media: { group: GROUPS.setup, section: 'Media' },
+  settings: { group: GROUPS.setup, section: 'Settings' },
+  voters: { group: GROUPS.website, section: 'Voters page' },
   scheduler: { group: 'Admin', section: 'Schedule builder' },
 };
 

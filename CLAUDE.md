@@ -1415,6 +1415,17 @@ minimized when not open?"*
   somebody wants to open; making the row double as a toggle would put one of
   the two things you can want from it out of reach.
 
+**The Email group is "Communication" again** — Andrew's call, 2026-08-02. It
+holds the newsletter, the subscriber list and held mail, which is more than the
+word Email covers; the other four keep the design's names. `GROUPS` in
+`admin/helpers.js` is the one place a group is named. It was typed twice — the
+sidebar heading and the context bar's trail — so a rename could reach one and
+not the other, leaving the nav and the breadcrumb disagreeing about where you
+are. ⚠ The names are stored **raw** and escaped at both render sites: the trail
+already ran its copy through `escapeHtml` while the sidebar had `&amp;` typed
+into the markup, so one constant holding the entity would print
+`Money &amp;amp; Building` in the bar. A test asserts it does not.
+
 **And the slide-over is deleted.** `FIXES.md`'s definition of done asks that
 `util-bar|sidebar-toggle|sidebar-backdrop|translateX(-100%)` return nothing —
 the design considered the hamburger and rejected it. The v4.0.0 pass removed
