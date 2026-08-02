@@ -382,8 +382,12 @@ group('login and the account screens');
 {
   const shell = readFileSync(new URL('./helpers.js', import.meta.url), 'utf8');
 
-  ok(shell.includes('.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#1E2D4A;}'),
-    'the backdrop is the Foundations navy');
+  // ⚠ flex:1 is part of the assertion on purpose. The shell makes body a flex
+  // ROW, and on these four screens the wrapper is the only flex item — without
+  // a width the navy backdrop collapsed to a 380px strip on the left of the
+  // viewport. Dropping flex:1 brings that back.
+  ok(shell.includes('.login-wrap{flex:1;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#1E2D4A;}'),
+    'the backdrop is the Foundations navy, and it takes the whole flex row');
   ok(shell.includes('max-width:380px'), 'the card is 380px');
   ok(shell.includes('padding:36px 34px'), 'with the spec’s padding');
   ok(shell.includes('box-shadow:0 18px 44px rgba(11,22,44,.28)'), 'and its shadow');

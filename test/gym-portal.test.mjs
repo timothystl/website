@@ -91,6 +91,13 @@ group('the phone is the real device (item 5)');
 
   const cell = await p.$eval('[id^="cell-"]', (n) => Math.round(n.getBoundingClientRect().height));
   ok(cell >= 44, `a calendar day is at least 44px tall (got ${cell})`);
+
+  // The request bar used to carry display:none AND display:flex in one style
+  // attribute — the later one won, so an empty bar reading zero slots sat on
+  // screen until the first script ran. The inline style may carry only the
+  // none; everything else comes from the .req-bar class.
+  const barStyle = await p.$eval('#req-bar', (n) => n.getAttribute('style') || '');
+  ok(!/flex/.test(barStyle), 'the request bar markup does not force itself visible: ' + barStyle);
 }
 
 group('the request basket (item 4)');
@@ -138,6 +145,35 @@ group('the request basket (item 4)');
   // something they removed.
   const inputs = await p.$$eval('#slot-inputs input', (n) => n.length);
   eq(inputs, 1, 'the posted slots match what the basket shows');
+}
+
+group('the basket is tappable at 390px');
+{
+  // ⚠ The first tap scan above runs on a fresh page, where the basket does
+  // not exist yet — which is exactly how the basket's 44px rules shipped
+  // defeated: they sat in the head stylesheet and the body stylesheet's
+  // desktop sizes, later in source at equal specificity, won at every width.
+  // Every string assertion stayed green. This scan runs with the basket ON
+  // SCREEN, so a cascade regression fails here rather than in a renter's hand.
+  const x = await p.$eval('.bk-row > .bk-x', (n) => {
+    const r = n.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height) };
+  });
+  ok(x.w >= 44 && x.h >= 44, `the row's remove button is 44px on a phone (got ${x.w}x${x.h})`);
+
+  const chip = await p.$eval('.bk-time .bk-x', (n) => {
+    const r = n.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height) };
+  });
+  ok(chip.w >= 28 && chip.h >= 28, `a chip's remove target is at least 28px (got ${chip.w}x${chip.h})`);
+
+  // And the visible bar is the styled one — sticky, capped at 30vh — not the
+  // old inline copy that the class rules never reached.
+  const bar = await p.$eval('#req-bar', (n) => {
+    const c = getComputedStyle(n); return { display: c.display, position: c.position, max: c.maxHeight };
+  });
+  ok(bar.display === 'flex', 'the bar shows once slots are picked');
+  ok(bar.position === 'sticky', `and is the styled sticky bar (got ${bar.position})`);
+  ok(Math.abs(parseFloat(bar.max) - 844 * 0.3) < 2 || bar.max === '30vh',
+    `capped at 30vh so it cannot swallow the page (got ${bar.max})`);
 }
 
 group('no script errors');

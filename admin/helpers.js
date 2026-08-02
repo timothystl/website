@@ -5,7 +5,7 @@ import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, SIDEBAR_JS, TOGGLE_WORD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 
-export const VERSION = 'v4.13.1'; // minor: the extractor recognises card grids, so the page drafts match the live layout
+export const VERSION = 'v4.14.0'; // minor: review batch 1 — the login pages take the flex row, the sidebar is declared once, the phone basket rules actually win
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
@@ -70,7 +70,13 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
 .radio-row{display:flex;gap:16px;margin-top:6px;}
 .radio-row label{font-family:var(--sans);font-size:13px;font-weight:600;color:var(--charcoal);letter-spacing:0;text-transform:none;display:flex;align-items:center;gap:6px;cursor:pointer;}
 .radio-row input[type=radio]{width:auto;}
-.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#1E2D4A;}
+/* ⚠ flex:1 is load-bearing, not decoration. The shell makes body a flex ROW,
+   and on the four screens with no sidebar (login, forgot, reset, first-run
+   setup) this wrapper is the only flex item. Without a width it shrinks to
+   fit its 380px card — the navy background collapsed to a strip on the left
+   of the viewport with the warm page colour filling the rest, which is how
+   the sign-in screen looked broken for a day. flex:1 makes it take the row. */
+.login-wrap{flex:1;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#1E2D4A;}
 .login-card{background:#FFFDF9;border-radius:12px;padding:36px 34px;width:100%;max-width:380px;text-align:center;box-shadow:0 18px 44px rgba(11,22,44,.28);}
 .login-title{font:500 25px/1.2 var(--serif);color:#1E2D4A;margin-bottom:4px;}
 .login-sub{font:400 13.5px/1.5 var(--sans);color:#6A6858;margin-bottom:26px;}
@@ -152,18 +158,52 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
    the flow — check that before adding anything else at this level. */
 body{display:flex;align-items:stretch;}
 .tlc-main{flex:1;min-width:0;display:flex;flex-direction:column;}
+/* Colour and type here are the Foundations spec's, merged into the shell
+   geometry. These selectors used to be declared TWICE — geometry here, colour
+   in a second block 150 lines down, past the interpolated stylesheets — with
+   different values for the same properties, so source order silently decided
+   which won. That is the same mechanism that hid the hamburger for a release.
+   One declaration per selector now; the only .sidebar rules outside this run
+   are the slide-over's, inside the 900px media query below, which must stay
+   AFTER these desktop defaults.
+   ⚠ The width is --tlc-rail and is set once, here. Do not restate it.
+   The active row is RAISED (a lighter navy plus a hairline inset), not
+   recoloured with a gold bar — that was mine, and the spec's way won. */
 .sidebar{flex:0 0 var(--tlc-rail);width:var(--tlc-rail);position:sticky;top:0;
-  height:100vh;background:var(--steel);display:flex;flex-direction:column;
-  overflow:hidden;z-index:100;}
-.sidebar-brand{padding:20px 20px 18px;border-bottom:1px solid rgba(255,255,255,.12);margin-bottom:8px;flex-shrink:0;}
-.sidebar-brand-name{font-family:var(--sans);font-size:14px;font-weight:800;color:#fff;}
-.sidebar-brand-sub{font-family:var(--sans);font-size:11px;color:var(--amber);font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-top:2px;}
-.sidebar-user{padding:0 20px 8px;font-family:var(--sans);font-size:11px;color:rgba(255,255,255,.55);}
-.sidebar-group{padding:8px 0 12px;}
-.sidebar-group-label{font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.4);padding:4px 20px 6px 23px;}
-.sidebar-item{display:flex;align-items:center;gap:10px;padding:9px 20px 9px 23px;color:rgba(255,255,255,.78);font-size:13px;font-weight:600;text-decoration:none;}
+  height:100vh;background:var(--tlc-sidebar);font-family:var(--tlc-sans);
+  display:flex;flex-direction:column;overflow:hidden;z-index:100;}
+.sidebar-brand{padding:16px 18px 14px;border-bottom:1px solid rgba(237,242,247,.12);flex-shrink:0;}
+.sidebar-brand-name{font:600 16px/1.2 var(--tlc-sans);color:#FAF7F1;}
+.sidebar-brand-sub{font:700 11.5px/1 var(--tlc-sans);color:var(--tlc-gold);letter-spacing:.16em;text-transform:uppercase;margin-top:5px;}
+.sidebar-version{font:400 11px/1 var(--tlc-sans);color:#6B7F99;text-transform:none;letter-spacing:0;margin-left:6px;}
+.sidebar-user{padding:10px 18px;font-family:var(--sans);font-size:12.5px;color:#8598B0;border-bottom:1px solid rgba(237,242,247,.12);}
+.sidebar-group{padding:8px 0 4px;}
+.sidebar-group-label{font:700 10.5px/1 var(--tlc-sans);letter-spacing:.14em;text-transform:uppercase;color:var(--tlc-gold-label);padding:8px 18px 8px 20px;}
+.sidebar-item{display:flex;align-items:center;gap:11px;margin:1px 8px;padding:9px 12px;border-radius:9px;color:var(--tlc-nav-label);font:500 13.5px/1.35 var(--tlc-sans);text-decoration:none;}
 .sidebar-item:hover{color:#fff;background:rgba(255,255,255,.06);}
-.sidebar-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.35);flex-shrink:0;}
+.sidebar-label{flex:1;min-width:0;}
+.sidebar-dot{flex:none;width:7px;height:7px;border-radius:50%;background:var(--tlc-nav-dot);}
+/* A child row's marker is an elbow, not a circle — it draws the relationship
+   rather than asserting it with indentation alone. */
+.sidebar-tick{flex:none;width:7px;height:7px;border-radius:0 0 0 3px;border-left:1px solid var(--tlc-nav-dot);border-bottom:1px solid var(--tlc-nav-dot);background:transparent;font-size:0;line-height:0;}
+.sidebar-item-child{padding-left:26px;}
+/* Folded away unless you are inside it. The hidden rule is restated because
+   this element carries a display of its own, which would otherwise win. */
+.sidebar-children{display:block;}
+.sidebar-children[hidden]{display:none;}
+/* The caret is a hit area inside the row, not the row. It stays quiet until
+   the row is hovered or it has focus — it is a second action on a row whose
+   first action is the one people want. */
+.sidebar-caret{flex:none;display:flex;align-items:center;justify-content:center;width:20px;height:20px;margin:-4px -4px -4px 0;padding:0;border:0;border-radius:8px;background:transparent;color:var(--tlc-nav-dot);font:400 15px/1 var(--tlc-sans);cursor:pointer;transition:transform .15s,background .15s,color .15s;}
+.sidebar-caret span{display:block;transition:transform .15s;}
+.sidebar-caret[aria-expanded="true"] span{transform:rotate(90deg);}
+.sidebar-item:hover .sidebar-caret,.sidebar-caret:focus-visible{color:#fff;background:rgba(255,255,255,.12);}
+.sidebar-caret:focus-visible{outline:2px solid var(--tlc-gold-bright);outline-offset:1px;}
+.sidebar-item-active .sidebar-caret{color:#fff;}
+.sidebar-item-active{background:var(--tlc-nav-raised);color:#FFFFFF;font-weight:600;box-shadow:inset 0 0 0 1px rgba(255,255,255,.16);}
+.sidebar-item-active .sidebar-dot{background:var(--tlc-gold-bright);}
+.sidebar-item-active .sidebar-tick{border-color:var(--tlc-gold-bright);}
+.sidebar-badge{flex:none;padding:1px 7px;border-radius:999px;background:rgba(201,151,58,.22);color:#E8C070;font:700 10.5px/1.6 var(--tlc-sans);}
 /* ⚠ THE GROUP LIST IS THE SCROLLER, NOT THE SIDEBAR.
    This had flex:1;min-height:0 and no overflow-y, while .sidebar itself
    carried overflow-y:auto. So the box was squashed to whatever height was
@@ -184,9 +224,14 @@ body{display:flex;align-items:stretch;}
    auto margin on would be a second mechanism for the same thing, and the two
    disagree exactly when the content overflows, which is when it shows. */
 .sidebar-groups{flex:1;min-height:0;overflow-y:auto;}
-.sidebar-footer{padding:14px 20px 18px;border-top:1px solid rgba(255,255,255,.12);display:flex;flex-direction:column;gap:8px;flex-shrink:0;}
-.sidebar-footer a{font-family:var(--sans);color:rgba(255,255,255,.6);font-size:12px;font-weight:600;text-decoration:none;}
+.sidebar-footer{padding:14px 20px 18px;border-top:1px solid rgba(237,242,247,.12);display:flex;flex-direction:column;gap:8px;flex-shrink:0;}
+.sidebar-footer a{font-family:var(--sans);font-size:11.5px;font-weight:600;color:#8397AF;text-decoration:none;}
+/* ⚠ :hover is ABOVE :last-child on purpose. They tie on specificity, so
+   source order decides — and today the last footer link keeps its gold on
+   hover rather than turning white. Swapping these lines changes that. */
 .sidebar-footer a:hover{color:#fff;}
+.sidebar-footer a:last-child{font-size:12.5px;color:var(--tlc-gold);}
+.sidebar-signout{color:var(--tlc-gold) !important;}
 
 /* ── THE CONTEXT BAR ───────────────────────────────────────
    46px, the same navy as the sidebar so the two read as one shell, and it sits
@@ -298,52 +343,10 @@ ${PANEL_LIST_CSS}
 ${NEWSLETTER_CSS}
 ${TOAST_CSS}
 ${CMDK_CSS}
-/* ── THE SIDEBAR ───────────────────────────────────────────────
-   Straight from the Foundations spec: its own scroll, identical on every
-   screen — only the active row changes. The active row is RAISED (a lighter
-   navy plus a hairline inset), not recoloured with a gold bar; that was mine.
-
-   ⚠ The width is --tlc-rail and is set ONCE, above. This block used to
-   restate width:228px — a second place to change and a second place to
-   forget, which is the whole reason the flex shell replaced the old
-   padding-left arithmetic. Colour and type here; geometry there. */
-.sidebar{background:var(--tlc-sidebar);font-family:var(--tlc-sans);}
-.sidebar-brand{padding:16px 18px 14px;border-bottom:1px solid rgba(237,242,247,.12);margin-bottom:0;}
-.sidebar-brand-name{font:600 16px/1.2 var(--tlc-sans);color:#FAF7F1;}
-.sidebar-brand-sub{font:700 11.5px/1 var(--tlc-sans);color:var(--tlc-gold);letter-spacing:.16em;text-transform:uppercase;margin-top:5px;}
-.sidebar-version{font:400 11px/1 var(--tlc-sans);color:#6B7F99;text-transform:none;letter-spacing:0;margin-left:6px;}
-.sidebar-user{padding:10px 18px;font-size:12.5px;color:#8598B0;border-bottom:1px solid rgba(237,242,247,.12);}
-.sidebar-group{padding:8px 0 4px;}
-.sidebar-group-label{font:700 10.5px/1 var(--tlc-sans);letter-spacing:.14em;text-transform:uppercase;color:var(--tlc-gold-label);padding:8px 18px 8px 20px;}
-.sidebar-item{display:flex;align-items:center;gap:11px;margin:1px 8px;padding:9px 12px;border-radius:9px;color:var(--tlc-nav-label);font:500 13.5px/1.35 var(--tlc-sans);text-decoration:none;}
-.sidebar-item:hover{color:#fff;background:rgba(255,255,255,.06);}
-.sidebar-label{flex:1;min-width:0;}
-.sidebar-dot{flex:none;width:7px;height:7px;border-radius:50%;background:var(--tlc-nav-dot);}
-/* A child row's marker is an elbow, not a circle — it draws the relationship
-   rather than asserting it with indentation alone. */
-.sidebar-tick{flex:none;width:7px;height:7px;border-radius:0 0 0 3px;border-left:1px solid var(--tlc-nav-dot);border-bottom:1px solid var(--tlc-nav-dot);background:transparent;font-size:0;line-height:0;}
-.sidebar-item-child{padding-left:26px;}
-/* Folded away unless you are inside it. The [hidden] rule is restated because
-   this element carries a display of its own, which would otherwise win. */
-.sidebar-children{display:block;}
-.sidebar-children[hidden]{display:none;}
-/* The caret is a hit area inside the row, not the row. It stays quiet until
-   the row is hovered or it has focus — it is a second action on a row whose
-   first action is the one people want. */
-.sidebar-caret{flex:none;display:flex;align-items:center;justify-content:center;width:20px;height:20px;margin:-4px -4px -4px 0;padding:0;border:0;border-radius:8px;background:transparent;color:var(--tlc-nav-dot);font:400 15px/1 var(--tlc-sans);cursor:pointer;transition:transform .15s,background .15s,color .15s;}
-.sidebar-caret span{display:block;transition:transform .15s;}
-.sidebar-caret[aria-expanded="true"] span{transform:rotate(90deg);}
-.sidebar-item:hover .sidebar-caret,.sidebar-caret:focus-visible{color:#fff;background:rgba(255,255,255,.12);}
-.sidebar-caret:focus-visible{outline:2px solid var(--tlc-gold-bright);outline-offset:1px;}
-.sidebar-item-active .sidebar-caret{color:#fff;}
-.sidebar-item-active{background:var(--tlc-nav-raised);color:#FFFFFF;font-weight:600;box-shadow:inset 0 0 0 1px rgba(255,255,255,.16);}
-.sidebar-item-active .sidebar-dot{background:var(--tlc-gold-bright);}
-.sidebar-item-active .sidebar-tick{border-color:var(--tlc-gold-bright);}
-.sidebar-badge{flex:none;padding:1px 7px;border-radius:999px;background:rgba(201,151,58,.22);color:#E8C070;font:700 10.5px/1.6 var(--tlc-sans);}
-.sidebar-footer{border-top:1px solid rgba(237,242,247,.12);}
-.sidebar-footer a{font-size:11.5px;color:#8397AF;}
-.sidebar-footer a:last-child{font-size:12.5px;color:var(--tlc-gold);}
-.sidebar-signout{color:var(--tlc-gold) !important;}
+/* The sidebar's colour and type used to be restyled HERE, in a second block
+   after the interpolated stylesheets — ten selectors declared twice with
+   different values, source order deciding which won. Merged into the shell
+   block above, where the geometry lives; do not start a second one. */
 </style>
 </head>
 <body>${body}${body.includes('class="tlc-main"') ? '</div>' : ''}
