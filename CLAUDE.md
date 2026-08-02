@@ -1394,6 +1394,35 @@ prayer request are real forms elsewhere on the site but they post to ChMS with
 their own screening; adding them here would be a second, unscreened way in. If
 they are ever wanted, they go through `screenSubmission()` like the rest.
 
+#### The arrows are gone, and this time there is a test (v4.12.0, 2026-08-02)
+
+Andrew: *"Again go through and remove the arrows at end of links. I don't like
+that style choice and it keeps coming back in."*
+
+He is right that it keeps coming back, and the reason is that it was a
+convention nobody checked. They were swept in v3.11.0 (90 of them), the `↗`
+went in Task 12c — and they returned the same night: `Learn more →` in the card
+grid's defaults, `Open in Google Maps →` on the map card, both mine.
+
+**110 removed**, across `public/index.html`, the manual, the give page, the
+block defaults, the editor and the generated seeds.
+
+- **The rule is mechanical, which is why it can be tested.** An arrow at the
+  END of a link's text is decoration — the text already says where it goes. An
+  arrow BETWEEN two words is a sentence: `admin → Notices → Home`,
+  `hold → confirmed`, `'Draft edits' → 'draft-edits'`. Those stay.
+- **⚠ The quote case allows no whitespace.** `'Learn more →'` ends a label;
+  `'Draft edits' → 'draft-edits'` is a separator whose next character is also a
+  quote, with a space between. Allowing whitespace there flags the separator —
+  and the fix somebody reaches for is deleting the rule rather than the arrow.
+- **`admin/scheduler.html` is exempt**, and named as exempt: its one arrow is a
+  next-month *button* whose entire label is the glyph. That is an icon, not
+  decoration trailing a link.
+
+`admin/link-style.test.mjs` runs in CI with the other admin suites. It also
+asserts the rule still *catches* real decoration and still *passes* a
+separator, so a green run means something and nobody weakens it by accident.
+
 #### The renter's basket, and the phone it is opened on (v4.11.0, 2026-08-02)
 
 Task 18 items 4 and 5 — the two left deliberately unfinished, now done.

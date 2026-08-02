@@ -1528,7 +1528,7 @@ function inspectorAction(action, value) {
       // Guardrail as data, not an ad-hoc conditional: an ink that would be
       // unreadable on the new background moves to the readable default.
       if (C.INK[b.ink].onDark !== C.BG[bgIdx].dark) part.ink = C.BG[bgIdx].dark ? 3 : 0;
-      patch(b.id, part, 'Background → ' + C.BG[bgIdx].name);
+      patch(b.id, part, 'Background ' + C.BG[bgIdx].name);
       break;
     }
     case 'ink': {
@@ -1537,12 +1537,12 @@ function inspectorAction(action, value) {
         say(C.INK[inkIdx].name + ' would be unreadable on ' + C.BG[b.bg].name);
         return;
       }
-      patch(b.id, { ink: inkIdx }, 'Text colour → ' + C.INK[inkIdx].name);
+      patch(b.id, { ink: inkIdx }, 'Text colour ' + C.INK[inkIdx].name);
       break;
     }
-    case 'size': patch(b.id, { size: value }, 'Text size → ' + value.toUpperCase()); break;
-    case 'stamp': patch(b.id, { stamp: value }, value ? 'Stamp → ' + value : 'Removed stamp', 'rerender'); break;
-    case 'tone': patch(b.id, { tone: Number(value) }, 'Stamp colour → ' + C.TONES[Number(value)].name, 'rerender'); break;
+    case 'size': patch(b.id, { size: value }, 'Text size ' + value.toUpperCase()); break;
+    case 'stamp': patch(b.id, { stamp: value }, value ? 'Stamp ' + value : 'Removed stamp', 'rerender'); break;
+    case 'tone': patch(b.id, { tone: Number(value) }, 'Stamp colour ' + C.TONES[Number(value)].name, 'rerender'); break;
     case 'corner': patch(b.id, { corner: value }, 'Stamp moved ' + (value === 'tl' ? 'left' : 'right'), 'rerender'); break;
     case 'hide': toggleHide(b.id); break;
     case 'reset': resetBlock(b.id); break;
@@ -2387,7 +2387,7 @@ async function uploadPhoto(file) {
     // The size actually stored, so the Media screen can flag anything that
     // slipped past the 1MB target without re-fetching every object from R2.
     bytes: main ? main.blob.size : (file.size || 0),
-    saved: main ? 'Resized ' + prettyBytes(file.size) + ' → ' + prettyBytes(main.blob.size) : '',
+    saved: main ? 'Resized ' + prettyBytes(file.size) + ' ' + prettyBytes(main.blob.size) : '',
   };
 }
 
