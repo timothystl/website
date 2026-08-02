@@ -390,7 +390,7 @@ function shellHtml() {
       '<span class="ed-pill" id="edPill"></span>' +
       '<span class="ed-saved" id="edSaved"></span>' +
       '<div class="ed-spacer"></div>' +
-      '<a class="ed-view" id="edView" target="_blank" rel="noopener">View live ↗</a>' +
+      '<a class="ed-view" id="edView" target="_blank" rel="noopener">View live</a>' +
       '<div class="ed-devices" role="group" aria-label="Preview width">' +
         '<button type="button" data-device="desktop">Desktop</button>' +
         '<button type="button" data-device="tablet">Tablet</button>' +
@@ -2031,7 +2031,7 @@ function renderPublishPanel() {
       '<span class="ed-note">' + (scheduled
         ? 'Scheduled for ' + esc(fmtWhen(S.publishAt))
         : (S.changes.length ? S.changes.length + ' unpublished change' + (S.changes.length === 1 ? '' : 's') : 'Everything is published')) + '</span>' +
-      '<a class="ed-close" style="display:inline-block;text-align:center" href="https://timothystl.org' + esc(S.path) + '" target="_blank" rel="noopener">Compare with the live page ↗</a>' +
+      '<a class="ed-close" style="display:inline-block;text-align:center" href="https://timothystl.org' + esc(S.path) + '" target="_blank" rel="noopener">Compare with the live page</a>' +
       '<button type="button" class="ed-close" id="edSavePage">Save this whole page as a section</button>' +
     '</div>' +
     '<div class="ed-panel-sec"><label class="ed-lab" for="edWhen">Publish later</label>' +

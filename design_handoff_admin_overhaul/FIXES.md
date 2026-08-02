@@ -68,17 +68,17 @@ questions and part of 1.
 | 8 | Value chips | **Done** |
 | 9 | Two copy fixes | **Done** |
 | 10 | Banner info card | **Done** — `renderInfoCard()` in `blocks.js` |
-| 11 | Warning rows above their row | **Open** — the last ruling not in the code |
-| 12 | Editor rail, Connect, arrow glyphs | **Open** |
+| 11 | Warning rows above their row | **Done** — emitted before the row, seam moved to `border-bottom`, ▲ now `#8C3A28`. `ui.test.mjs` asserts the band is the first child of the row wrapper, not merely present |
+| 12 | Editor rail, Connect, arrow glyphs | **Done.** b and c carried out. **a needed no change** — both rails already default to open (`localStorage` absent means open, since v4.3.0); the walkthrough was reading a persisted collapse, not a default |
 | 13 | Homepage editor: info card, free text, half-width blocks | **Open** |
 | 14 | Card grid block | **Open** — new block |
 | 15 | Five borderline hand-written routes | **Answered; 2 of 5 need no code.** #3 and #4 rest on premises that are false. #1 and #2 are real and open. See below |
 | 16 | Congregation-facing files onto the palette | **Open** — reverses an earlier `n/a` |
 | 17 | Renter booking: domain and shell | **a. Done** (v4.6.0) — the portal is on `timothystl.org/gym/*`, the admin path 301s, the CSRF gate learned about it, verified in production. **b. open** — it still has no public-site shell |
 | 18 | Renter booking: the pattern | **Open** — spec screen built, `screens/24-gym-booking.html` |
-| 19 | Group edit + form-width rule | **Open** — the width rule touches every form |
+| 19 | Group edit + form-width rule | **The width rule is done**, which was the part touching every form: 640 single column, 920 wide, heading/tables uncapped, buttons at the field column's left edge. Items 1–5 (the group-edit screen itself) are still open |
 
-**Suggested order now:** 19 (one shared wrapper fixes every form, and Task 2 dropping `.wrap{max-width:860px}` left every form full-width on a wide monitor) → 11, 12 (small, decided) → 15 #1 and #2 (the two that survived) → 16 → 17b → 13, 14, 18 (new work).
+**Suggested order now:** 19 items 1–5 (the group-edit screen) → 16 (a mechanical colour sweep) → 15 #1 and #2 → 17b → 13, 14, 18 (new work, largest last).
 
 ---
 
@@ -277,11 +277,22 @@ Everything else from the rulings is already in: the drawer foot is `space-betwee
 
 Screenshots in `uploads/`. All three are decided — no design work needed.
 
+**a. Already correct — no change made.** `setRail()` reads `localStorage` and only collapses on an explicit `'0'`, so absent means open and a first visit shows both rails. The walkthrough was reading a choice that browser had persisted, not the default. Original item follows.
+
 **a. Both editors open with their left rail collapsed.** In the Ministries editor (and Pages, same shell) the block rail is shut behind a `›` chevron at the far left, so the editor opens as canvas + inspector with no structure list. The rail is where you reorder and select blocks — the inspector's own empty state reads "or a row in the left rail," pointing at something that isn't on screen. **Open by default**, at the width the spec gives it. Keep the chevron so it can be collapsed deliberately, and persist that choice per user, defaulting to open.
 
 **b. Remove "Connect" from the context bar.** It links to an unrelated app and does not belong in the admin's chrome. Delete it — it is not moving to the sidebar. The right side of the bar is the ⌘K chip and "View site", nothing else. This supersedes the earlier "if they look crowded, Connect moves to the sidebar foot" note.
 
 **c. No `↗` glyphs anywhere.** Strip the arrow from "View site", "View live", and every other outbound link across the admin. The link text says where it goes; the glyph is noise. All 24 spec files in `screens/` have been swept — match them.
+
+**Done, with one deliberate exception.** Every ↗ on a *link* is gone — the
+context bar, both Brevo links, both give links, the editor's "View live" and
+"Compare with the live page". The one left is `tlc-admin-worker.js:5482`: the
+Pages list's leading row marker, the sibling of `⌂` for the homepage. It is not
+a link and carries no link text to make it redundant — it says what kind of
+page the row is, and stripping it would leave an outbound page as the only row
+in the list with no marker. If the side-by-side pass disagrees, `⌂` has to go
+with it; they are one decision, not two.
 
 ---
 

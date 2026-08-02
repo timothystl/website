@@ -144,6 +144,41 @@ group('a wide table cannot push the content column off screen');
   await p.$eval('#fat', (n) => n.remove());
 }
 
+group('the form width rule caps the field column and nothing else');
+{
+  // Task 19. The cap is on the field column; the heading, the purpose line and
+  // anything with a table in it stay full width. Measured at 1900px because
+  // that is the monitor the rule exists for — at 1280px a 640px form and an
+  // uncapped one are not obviously different, which is how this went unnoticed.
+  await p.setViewportSize({ width: 1900, height: 900 });
+  await p.evaluate(() => {
+    const w = document.querySelector('.wrap');
+    w.className = 'tlc-wrap';
+    w.innerHTML = '<h1 class="page-title">Add a ministry page</h1>'
+      + '<p class="page-sub">Purpose line.</p>'
+      + '<div class="card" id="t19-form"><div class="form-group"><label>Name</label>'
+      + '<input type="text"></div></div>'
+      + '<div class="btn-row" id="t19-btns"><button class="btn btn-primary">Save</button></div>'
+      + '<div class="card" id="t19-mixed"><div class="form-group"><label>Rate</label>'
+      + '<input type="text"></div><table><tr><td>wide</td></tr></table></div>'
+      + '<div class="card" id="t19-table"><table><tr><td>pure table</td></tr></table></div>';
+  });
+  await p.waitForTimeout(80);
+
+  const wide = await box('#t19-table');
+  ok(Math.round((await box('#t19-form')).w) === 640,
+    `a field-only card caps at 640 (got ${Math.round((await box('#t19-form')).w)})`);
+  ok(Math.round((await box('#t19-mixed')).w) > 900,
+    'a card holding a table keeps its width — fixing the form must not break the table beside it');
+  ok(Math.round(wide.w) > 900, 'a pure table card is untouched');
+  ok(Math.round((await box('.page-title')).w) > 900, 'the heading is not capped');
+
+  // "Buttons at the foot of a form align to the left edge of the field column,
+  // not the right edge of the page."
+  ok(Math.round((await box('#t19-btns')).x) === Math.round((await box('#t19-form')).x),
+    'the buttons begin at the left edge of the field column');
+}
+
 group('below 900px the rail is a slide-over, and the content takes the width');
 {
   await p.setViewportSize({ width: 480, height: 760 });

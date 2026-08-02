@@ -1394,6 +1394,53 @@ prayer request are real forms elsewhere on the site but they post to ChMS with
 their own screening; adding them here would be a second, unscreened way in. If
 they are ever wanted, they go through `screenSubmission()` like the rest.
 
+#### Forms have a width again, and three rulings land (v4.8.0, 2026-08-02)
+
+Andrew: *"there should be a max width, 1900px is too wide"*. That is FIXES
+Task 19's general rule, and he is describing the exact symptom it names.
+
+- **The cap is on the field column and nothing else.** 640 single column, 920
+  for a form that needs the room. The heading, the purpose line and any table
+  or list stay full width — a form is hard to read wide, a table is hard to
+  read narrow, and they are different problems. Task 2 dropped
+  `.wrap{max-width:860px}` because that narrow column was a symptom of the
+  missing sidebar; right for lists, wrong for forms.
+- **`wide` meant `max-width:none`** — the 1900px this rule exists to stop. It
+  is 920 now, the spec's own second number. Its two callers (the sermon note
+  and the news post) are single-column forms carrying a rich-text body, which
+  is what wants the width, not a second column.
+- **The ~29 hand-written forms are reached without touching a route**, because
+  they are all `.tlc-wrap > .card > .form-group`. ⚠ `:not(:has(table))` is
+  load-bearing: a few cards hold both fields and a table — the gym invoice view
+  is one — and squeezing those to 640 would fix the form by breaking the table
+  beside it.
+- The button row stays uncapped on purpose: it is `display:flex` with no
+  `justify-content`, so its buttons already begin at the left edge of the field
+  column, which is where the spec wants them.
+- **Measured, not asserted as strings.** `test/shell-layout.test.mjs` drives
+  1900px and checks all five outcomes, because at 1280px a capped form and an
+  uncapped one are not obviously different — which is how this went unnoticed.
+
+**Warning rows moved above their row** (Ruling 1 — the last ruling not in the
+code). The eye should hit the problem before the thing with the problem. The
+seam moved from `border-top` to `border-bottom`, since above its row the seam
+belongs on the *bottom* edge; `border-top` joined the band to the row above,
+which is a different row. The ▲ is problem red now rather than the same amber
+as the text — it was the least visible thing in the band. ⚠ The old test only
+asserted the class existed, which is how the README's "grows a warning row
+beneath it" survived against the screenshots for four releases; it now pins the
+band as the **first child** of the row wrapper.
+
+**Connect is gone from the context bar** and every `↗` on a link with it (Task
+12b/c). ⚠ **One `↗` is left, deliberately** — `tlc-admin-worker.js:5482`, the
+Pages list's leading row marker and the sibling of `⌂` for the homepage. It is
+not a link, so no link text makes it redundant; strip it and an outbound page
+is the only row with no marker. If that is wrong, `⌂` goes with it.
+
+**Task 12a needed no change.** `setRail()` only collapses on an explicit `'0'`
+in `localStorage`, so absent means open and a first visit shows both rails. The
+walkthrough was reading a persisted choice, not a default.
+
 #### The design handoff is in the repo now (v4.7.0, 2026-08-02)
 
 `design_handoff_admin_overhaul/` is **committed**. This file has referenced it

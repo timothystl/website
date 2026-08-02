@@ -126,6 +126,16 @@ group('list section');
   has(out, 'tlc-warn', 'a row needing attention grows a warning row');
   has(out, 'Add photo', 'with its own action label');
 
+  // ⚠ ABOVE its row, not below — Ruling 1, and the last one to reach the code.
+  // Asserting only that the class exists is what let the README's "grows a
+  // warning row beneath it" survive against the screenshots for four releases.
+  // This pins the position: the band must be the FIRST child of the row
+  // wrapper, so it precedes the row it describes.
+  ok(/class="tlc-row-wrap[^"]*"[^>]*>\s*<div class="tlc-warn"/.test(out),
+    'the warning band is the first thing in its row wrapper, above the row');
+  ok(!/<\/div>\s*<div class="tlc-warn"[^>]*>\s*<span class="tlc-warn-mark">▲<\/span>[\s\S]{0,200}<\/div>\s*<\/div>/.test(out),
+    'and is not trailing the row instead');
+
   // The grid template must include one extra track for the actions cell, or
   // the last column and the Edit link fight over the same column.
   has(out, 'grid-template-columns:2.2fr 1.8fr .7fr 118px', 'columns plus an actions track');

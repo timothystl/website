@@ -1501,8 +1501,13 @@ group('the shell is the sidebar plus a context bar');
   has(body, 'class="tlc-ctx"', 'the context bar is above the content');
   has(body, 'class="tlc-ctx-group">Admin<', 'Dashboard’s group reads Admin');
   has(body, 'class="tlc-ctx-section">Dashboard<', 'with the section beside it');
-  has(body, 'View site ↗', 'and the two global actions');
-  has(body, 'Connect ↗', 'both of them');
+  // Task 12b/c. The right of the bar is the ⌘K chip and "View site", nothing
+  // else. Connect links to an unrelated app and does not belong in the admin's
+  // chrome — it is deleted, not moved to the sidebar foot. And the ↗ goes with
+  // it everywhere: the link text says where it goes.
+  has(body, '>View site<', 'the bar carries View site');
+  ok(!body.includes('Connect'), 'Connect is gone from the chrome entirely');
+  ok(!body.includes('↗'), 'and no outbound arrow glyphs survive on this screen');
   ok(!body.includes('tlc-ctx-tab'), 'no tabs in it');
   ok(!body.includes('class="tlc-nav-chip'), 'and no group chips — the sidebar navigates');
 
