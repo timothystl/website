@@ -351,6 +351,13 @@ function calc403b(s, baseEarnings) {
   return Number(s.retirement_403b_amount);
 }
 
+// PTO is an hourly idea. A salaried person is paid the same whether or not
+// they take the day off, so hours "used" against them cost nothing — and a
+// number sitting in that column, and adding into the period's PTO total,
+// says the run was affected by something that never touched it. Salaried
+// rows read n/a there, exactly as they already do under Hours.
+const takesPto = (payType) => payType !== 'salary';
+
 // The base earnings figure, computed ONCE and used by both the gross and the
 // line items. They used to be computed separately — the gross counted PTO in
 // the 403(b) base and the printed line item did not, so the line items on a
@@ -632,9 +639,11 @@ function renderEntry(periodStart) {
         : '<span class="tlc-pay-inwrap"><input class="tlc-pay-in" type="number" min="0" step="0.25" value="' + esc(hoursVal)
           + '" placeholder="0" data-staff="' + esc(s.id) + '" data-field="hours_worked" data-period="' + esc(periodStart)
           + '" aria-label="Hours worked by ' + esc(s.name) + '"><small>hrs</small></span>') + '</span>'
-      + '<span><span class="tlc-pay-inwrap"><input class="tlc-pay-in" type="number" min="0" step="0.25" value="' + esc(ptoVal)
-        + '" placeholder="0" data-staff="' + esc(s.id) + '" data-field="pto_hours_used" data-period="' + esc(periodStart)
-        + '" aria-label="PTO used by ' + esc(s.name) + '"><small>hrs</small></span></span>'
+      + '<span>' + (takesPto(s.pay_type)
+        ? '<span class="tlc-pay-inwrap"><input class="tlc-pay-in" type="number" min="0" step="0.25" value="' + esc(ptoVal)
+          + '" placeholder="0" data-staff="' + esc(s.id) + '" data-field="pto_hours_used" data-period="' + esc(periodStart)
+          + '" aria-label="PTO used by ' + esc(s.name) + '"><small>hrs</small></span>'
+        : '<span class="tlc-pay-na">n/a</span>') + '</span>'
       + '<span class="tlc-pay-status">' + pill(st.tone, st.label) + '</span>'
       + '</div>');
   });
@@ -649,7 +658,7 @@ function renderEntry(periodStart) {
       + '<span class="tlc-pay-name"><b>' + esc(s.name) + '</b><span>' + esc(s.role || 'Childcare') + '</span></span>'
       + '<span>' + pill('plain', isSalary ? 'Salaried' : 'Childcare app') + '</span>'
       + '<span class="' + (isSalary ? 'tlc-pay-na' : 'tlc-pay-num') + '">' + (isSalary ? 'n/a' : hrs(h)) + '</span>'
-      + '<span class="tlc-pay-num">' + hrs(pto) + '</span>'
+      + '<span class="' + (isSalary ? 'tlc-pay-na' : 'tlc-pay-num') + '">' + (isSalary ? 'n/a' : hrs(pto)) + '</span>'
       + '<span class="tlc-pay-status">' + pill(st.tone, st.label) + '</span>'
       + '</div>');
   });
@@ -807,7 +816,7 @@ function churchLines(s) {
       : '403(b) Deduction';
     out.push(lineItem(label, '−' + money(b403), { neg: true }));
   }
-  out.push(lineItem('PTO used', hrs(ptoUsed), { muted: ptoUsed === 0 }));
+  if (!isSalary) out.push(lineItem('PTO used', hrs(ptoUsed), { muted: ptoUsed === 0 }));
   return out.join('');
 }
 
@@ -820,7 +829,7 @@ function mdoLines(s) {
     out.push(lineItem('Pay Rate', money(s.hourly_rate) + '/hr'));
     out.push(lineItem('Hours Worked', hrs(mdoPeriodMap.get(s.id) || 0)));
   }
-  out.push(lineItem('PTO used', hrs(pto), { muted: pto === 0 }));
+  if (!isSalary) out.push(lineItem('PTO used', hrs(pto), { muted: pto === 0 }));
   return out.join('');
 }
 
@@ -829,7 +838,9 @@ function reportGroups() {
     name: s.name, title: s.role || 'Church staff',
     kind: s.pay_type === 'salary' ? 'Salaried' : 'Hourly',
     basis: s.pay_type === 'salary' ? '—' : hrs((periodEntries[s.id] || {}).hours_worked || 0) + ' @ ' + money(s.hourly_rate),
-    pto: Number((periodEntries[s.id] || {}).pto_hours_used || 0),
+    // Zeroed rather than hidden here, so the group's PTO total is right
+    // whatever a salaried person may still have stored against them.
+    pto: takesPto(s.pay_type) ? Number((periodEntries[s.id] || {}).pto_hours_used || 0) : 0,
     hours: s.pay_type === 'salary' ? 0 : Number((periodEntries[s.id] || {}).hours_worked || 0),
     salaried: s.pay_type === 'salary',
     gross: calcGross(s), lines: churchLines(s),
@@ -838,7 +849,7 @@ function reportGroups() {
     name: s.name, title: s.role || 'Childcare',
     kind: s.pay_type === 'salary' ? 'Salaried' : 'Childcare app',
     basis: s.pay_type === 'salary' ? '—' : hrs(mdoPeriodMap.get(s.id) || 0) + ' @ ' + money(s.hourly_rate),
-    pto: mdoPtoMap.get(s.id) || 0,
+    pto: takesPto(s.pay_type) ? (mdoPtoMap.get(s.id) || 0) : 0,
     hours: s.pay_type === 'salary' ? 0 : (mdoPeriodMap.get(s.id) || 0),
     salaried: s.pay_type === 'salary',
     gross: calcMdoGross(s), lines: mdoLines(s),
@@ -889,7 +900,7 @@ function renderReport(periodStart, periodEnd) {
         + '<span class="tlc-pay-name"><b>' + esc(p.name) + '</b></span>'
         + '<span class="tlc-pay-na">' + esc(p.kind) + '</span>'
         + '<span class="tlc-pay-na">' + esc(p.basis) + '</span>'
-        + '<span class="tlc-pay-num">' + hrs(p.pto) + '</span>'
+        + (p.salaried ? '<span class="tlc-pay-na">n/a</span>' : '<span class="tlc-pay-num">' + hrs(p.pto) + '</span>')
         + '<span class="tlc-pay-num tlc-pay-right">' + money(p.gross) + '</span>'
         + '</div>').join('')
       + '<div class="tlc-pay-li is-total"><span class="tlc-pay-li-label">' + esc(g.name) + ' subtotal</span>'
@@ -980,7 +991,11 @@ $('exportBtn').addEventListener('click', () => {
   groups.filter((g) => g.people.length).forEach((g) => {
     rows.push([csvCell(g.name), csvCell('Paid as'), csvCell('Hours / salary'), csvCell('PTO used'), csvCell('Gross')]);
     g.people.forEach((p) => {
-      rows.push([csvCell(p.name), csvCell(p.kind), csvCell(p.basis), csvCell(p.pto.toFixed(2)), csvCell(p.gross.toFixed(2))]);
+      // n/a rather than 0.00 for a salaried person, matching the screen. A
+      // zero in a spreadsheet reads as "took none", which is a different
+      // claim from "the column does not apply".
+      rows.push([csvCell(p.name), csvCell(p.kind), csvCell(p.basis),
+        csvCell(p.salaried ? 'n/a' : p.pto.toFixed(2)), csvCell(p.gross.toFixed(2))]);
     });
     rows.push([csvCell(g.name + ' subtotal'), '', '', '', csvCell(subtotal(g.people).toFixed(2))]);
     rows.push([]);
@@ -1030,7 +1045,7 @@ $('emailBtn').addEventListener('click', async () => {
         groups: groups.filter((g) => g.people.length).map((g) => ({
           name: g.name,
           subtotal: subtotal(g.people),
-          people: g.people.map((x) => ({ name: x.name, kind: x.kind, basis: x.basis, pto: x.pto, gross: x.gross })),
+          people: g.people.map((x) => ({ name: x.name, kind: x.kind, basis: x.basis, pto: x.pto, salaried: x.salaried, gross: x.gross })),
         })),
       }),
     });

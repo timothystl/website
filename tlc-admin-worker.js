@@ -3180,7 +3180,7 @@ ${PAYROLL_HTML}`, 'Payroll');
           <td style="${td}"><strong>${escapeHtml(p.name)}</strong></td>
           <td style="${td}">${escapeHtml(p.kind)}</td>
           <td style="${td}">${escapeHtml(p.basis)}</td>
-          <td style="${tdR}">${escapeHtml(Number(p.pto || 0).toFixed(2))} hrs</td>
+          <td style="${tdR}">${p.salaried ? 'n/a' : escapeHtml(Number(p.pto || 0).toFixed(2)) + ' hrs'}</td>
           <td style="${tdR}">${escapeHtml(money(p.gross))}</td>
         </tr>`).join('')}
         <tr>
