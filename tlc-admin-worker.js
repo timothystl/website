@@ -5559,7 +5559,7 @@ ${newsImageUploadScript(item.image_url || '')}`, 'Edit post — TLC Admin', TINY
               // it says what KIND of page this is. Strip it and an outbound
               // page is the only row in the list with no marker at all.
               // If the side-by-side pass disagrees, ⌂ has to go with it.
-              primaryCell(p.menu_label || p.title, sub, { icon: p.slug === '/' ? '⌂' : (out ? '↗' : '') }),
+              primaryCell(p.menu_label || p.title, sub, { icon: p.slug === '/' ? '⌂' : (out ? '' : '') }),
               escapeHtml(p.slug),
               link.shortLink
                 // A clashing short link is shown in the problem ink, because it

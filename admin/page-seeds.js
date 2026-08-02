@@ -88,7 +88,7 @@ export const PAGE_SEEDS = {
       "title": "",
       "subtitle": "",
       "eyebrow": "Special music",
-      "body": "<h2>Moments from worship</h2>\n<p>Special music moments are captured on video and posted to our YouTube channel — choirs, handbells, guest musicians, and seasonal celebrations.</p>\n<p><a href=\"https://www.youtube.com/@TimothySTL\" target=\"_blank\" rel=\"noopener noreferrer\">See all videos on YouTube →</a></p>",
+      "body": "<h2>Moments from worship</h2>\n<p>Special music moments are captured on video and posted to our YouTube channel — choirs, handbells, guest musicians, and seasonal celebrations.</p>\n<p><a href=\"https://www.youtube.com/@TimothySTL\" target=\"_blank\" rel=\"noopener noreferrer\">See all videos on YouTube</a></p>",
       "url": "",
       "spaceAbove": 88,
       "spaceBelow": 88,
@@ -190,7 +190,7 @@ export const PAGE_SEEDS = {
       "hidden": false,
       "items": [
         {
-          "title": "Browse music volunteer opportunities →",
+          "title": "Browse music volunteer opportunities",
           "url": "https://serve.timothystl.org"
         },
         {
@@ -315,11 +315,11 @@ export const PAGE_SEEDS = {
       "hidden": false,
       "items": [
         {
-          "title": "Contact the office →",
+          "title": "Contact the office",
           "url": "mailto:dinger@timothystl.org"
         },
         {
-          "title": "Inquire about training →",
+          "title": "Inquire about training",
           "url": "mailto:dinger@timothystl.org"
         }
       ],
@@ -516,7 +516,7 @@ export const PAGE_SEEDS = {
       "hidden": false,
       "items": [
         {
-          "title": "Volunteer sign-up →",
+          "title": "Volunteer sign-up",
           "url": "https://serve.timothystl.org"
         },
         {
@@ -679,7 +679,7 @@ export const PAGE_SEEDS = {
       "hidden": false,
       "items": [
         {
-          "title": "Volunteer opportunities →",
+          "title": "Volunteer opportunities",
           "url": "https://serve.timothystl.org"
         },
         {
@@ -842,7 +842,7 @@ export const PAGE_SEEDS = {
       "hidden": false,
       "items": [
         {
-          "title": "Express vendor interest →",
+          "title": "Express vendor interest",
           "url": "mailto:dinger@timothystl.org?subject=ChristmasMarketVendorInterest"
         },
         {
@@ -967,7 +967,7 @@ export const PAGE_SEEDS = {
       "hidden": false,
       "items": [
         {
-          "title": "Email our DCE →",
+          "title": "Email our DCE",
           "url": "mailto:dce@timothystl.org"
         }
       ],
@@ -1088,7 +1088,7 @@ export const PAGE_SEEDS = {
       "hidden": false,
       "items": [
         {
-          "title": "Email our DCE →",
+          "title": "Email our DCE",
           "url": "mailto:dce@timothystl.org"
         }
       ],
@@ -1209,7 +1209,7 @@ export const PAGE_SEEDS = {
       "hidden": false,
       "items": [
         {
-          "title": "Email our DCE →",
+          "title": "Email our DCE",
           "url": "mailto:dce@timothystl.org"
         }
       ],
@@ -1330,7 +1330,7 @@ export const PAGE_SEEDS = {
       "hidden": false,
       "items": [
         {
-          "title": "Email our DCE →",
+          "title": "Email our DCE",
           "url": "mailto:dce@timothystl.org"
         }
       ],
@@ -1451,7 +1451,7 @@ export const PAGE_SEEDS = {
       "hidden": false,
       "items": [
         {
-          "title": "Email the office →",
+          "title": "Email the office",
           "url": "mailto:dinger@timothystl.org"
         }
       ],
@@ -1572,7 +1572,7 @@ export const PAGE_SEEDS = {
       "hidden": false,
       "items": [
         {
-          "title": "Email our DCE →",
+          "title": "Email our DCE",
           "url": "mailto:dce@timothystl.org"
         }
       ],

@@ -121,7 +121,7 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds) {
         <div class="ladder-amount">$${row.amount}<span class="ladder-period">/week</span></div>
         <div class="ladder-outcome">${row.outcome}</div>
       </div>
-      <a class="ladder-cta" href="${withAmount(safeBaseUrl, row.amount)}" target="_blank" rel="noopener">Give $${row.amount} →</a>
+      <a class="ladder-cta" href="${withAmount(safeBaseUrl, row.amount)}" target="_blank" rel="noopener">Give $${row.amount}</a>
     </div>`).join('');
 
   const leadershipRowsHtml = LEADERSHIP_TIERS.map(row => `
@@ -130,7 +130,7 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds) {
         <div class="leadership-amount">$${fmtAmount(row.amount)}<span class="leadership-period">/year</span></div>
         <div class="leadership-outcome">${row.outcome}</div>
       </div>
-      <a class="leadership-cta" href="${withAmount(safeBaseUrl, row.amount)}" target="_blank" rel="noopener">Give $${fmtAmount(row.amount)} →</a>
+      <a class="leadership-cta" href="${withAmount(safeBaseUrl, row.amount)}" target="_blank" rel="noopener">Give $${fmtAmount(row.amount)}</a>
     </div>`).join('');
 
   return `<!DOCTYPE html>
@@ -379,7 +379,7 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds) {
       <div class="amount-error" id="amount-error">Please enter an amount of at least $1.</div>
 
       <a class="cta" id="give-cta" href="${initialLinkByAmount[defaultAmount]}" target="_blank" rel="noopener">
-        <span id="cta-label">Give $${defaultAmount}</span> <span aria-hidden="true">→</span>
+        <span id="cta-label">Give $${defaultAmount}</span> <span aria-hidden="true"></span>
       </a>
 
       <div class="trust-line">

@@ -908,7 +908,7 @@ export const SITE_PAGES = [
         "hidden": false,
         "items": [
           {
-            "title": "Watch on YouTube →",
+            "title": "Watch on YouTube",
             "url": "https://www.youtube.com/@TimothySTL"
           }
         ],
@@ -1116,7 +1116,7 @@ export const SITE_PAGES = [
         "hidden": false,
         "items": [
           {
-            "title": "Find volunteer opportunities →",
+            "title": "Find volunteer opportunities",
             "url": "https://serve.timothystl.org"
           }
         ],
@@ -1286,7 +1286,7 @@ export const SITE_PAGES = [
         "hidden": false,
         "items": [
           {
-            "title": "Email our DCE →",
+            "title": "Email our DCE",
             "url": "mailto:dce@timothystl.org"
           }
         ],
@@ -1697,7 +1697,7 @@ export const SITE_PAGES = [
         "title": "",
         "subtitle": "",
         "eyebrow": "Why we give",
-        "body": "<h2>Participation, not obligation.</h2>\n<p>Giving at Timothy is not an obligation — it is a participation with God in what he is already doing in the world. We give because God has given. Every gift supports the life of this congregation: Sunday worship, Word of Life School, our food pantry, youth ministry, and the neighbors God places in our path each week.</p>\n<p>You are always welcome to come and simply receive that Sunday's grace.</p>\n<p>Our online giving is processed by <strong>Tithe.ly</strong>, a trusted platform used by over 37,000 churches. Give by credit card, debit card, or ACH bank transfer — one-time or recurring. No account required. A tax receipt is emailed automatically after every gift.</p>\n<p>You will be taken to Tithe.ly's secure giving page.</p>\n<p>Offering plates are passed at both services. Cash or check (payable to <strong>Timothy Lutheran Church</strong>) are both welcome. You are always welcome to give — or simply to receive that Sunday's grace.</p>\n<p>Set up automatic giving directly through your bank's online bill pay — no fees, no middleman. Payable to <strong>Timothy Lutheran Church</strong>, 6704 Fyler Ave, St. Louis, MO 63139.</p>\n<p>Thrivent members can give through Thrivent Charitable Impact &amp; Investing. Thrivent covers all processing fees, so 100% of your gift reaches the church.</p>\n<p>If you are 70½ or older, a Qualified Charitable Distribution (QCD) directly from your IRA to Timothy can count toward your required minimum distribution — and is not included in taxable income. Contact your IRA administrator to arrange.</p>\n<p>Recommend a grant to Timothy Lutheran Church from your Donor Advised Fund at Fidelity Charitable, Schwab Charitable, or any other DAF sponsor. Our EIN is available from the church office.</p>\n<p>A gift through your will or estate is one of the most significant ways to invest in the future of this congregation and its mission. We'd be honored to talk with you. <a href=\"#\" rel=\"noopener noreferrer\">Speak with a pastor →</a></p>\n<p>Stewardship isn't only financial. Serving your neighbors — in and around Timothy — is one of the most meaningful ways to participate in what God is doing here. Find upcoming volunteer opportunities at our volunteer site.</p>",
+        "body": "<h2>Participation, not obligation.</h2>\n<p>Giving at Timothy is not an obligation — it is a participation with God in what he is already doing in the world. We give because God has given. Every gift supports the life of this congregation: Sunday worship, Word of Life School, our food pantry, youth ministry, and the neighbors God places in our path each week.</p>\n<p>You are always welcome to come and simply receive that Sunday's grace.</p>\n<p>Our online giving is processed by <strong>Tithe.ly</strong>, a trusted platform used by over 37,000 churches. Give by credit card, debit card, or ACH bank transfer — one-time or recurring. No account required. A tax receipt is emailed automatically after every gift.</p>\n<p>You will be taken to Tithe.ly's secure giving page.</p>\n<p>Offering plates are passed at both services. Cash or check (payable to <strong>Timothy Lutheran Church</strong>) are both welcome. You are always welcome to give — or simply to receive that Sunday's grace.</p>\n<p>Set up automatic giving directly through your bank's online bill pay — no fees, no middleman. Payable to <strong>Timothy Lutheran Church</strong>, 6704 Fyler Ave, St. Louis, MO 63139.</p>\n<p>Thrivent members can give through Thrivent Charitable Impact &amp; Investing. Thrivent covers all processing fees, so 100% of your gift reaches the church.</p>\n<p>If you are 70½ or older, a Qualified Charitable Distribution (QCD) directly from your IRA to Timothy can count toward your required minimum distribution — and is not included in taxable income. Contact your IRA administrator to arrange.</p>\n<p>Recommend a grant to Timothy Lutheran Church from your Donor Advised Fund at Fidelity Charitable, Schwab Charitable, or any other DAF sponsor. Our EIN is available from the church office.</p>\n<p>A gift through your will or estate is one of the most significant ways to invest in the future of this congregation and its mission. We'd be honored to talk with you. <a href=\"#\" rel=\"noopener noreferrer\">Speak with a pastor</a></p>\n<p>Stewardship isn't only financial. Serving your neighbors — in and around Timothy — is one of the most meaningful ways to participate in what God is doing here. Find upcoming volunteer opportunities at our volunteer site.</p>",
         "url": "",
         "spaceAbove": 88,
         "spaceBelow": 24,
@@ -1761,7 +1761,7 @@ export const SITE_PAGES = [
         "hidden": false,
         "items": [
           {
-            "title": "Find ways to serve →",
+            "title": "Find ways to serve",
             "url": "https://serve.timothystl.org"
           }
         ],
@@ -1867,7 +1867,7 @@ export const SITE_PAGES = [
         "title": "",
         "subtitle": "",
         "eyebrow": "Special music",
-        "body": "<h2>Moments from worship</h2>\n<p>Special music moments are captured on video and posted to our YouTube channel — choirs, handbells, guest musicians, and seasonal celebrations.</p>\n<p><a href=\"https://www.youtube.com/@TimothySTL\" target=\"_blank\" rel=\"noopener noreferrer\">See all videos on YouTube →</a></p>",
+        "body": "<h2>Moments from worship</h2>\n<p>Special music moments are captured on video and posted to our YouTube channel — choirs, handbells, guest musicians, and seasonal celebrations.</p>\n<p><a href=\"https://www.youtube.com/@TimothySTL\" target=\"_blank\" rel=\"noopener noreferrer\">See all videos on YouTube</a></p>",
         "url": "",
         "spaceAbove": 88,
         "spaceBelow": 88,
@@ -1969,7 +1969,7 @@ export const SITE_PAGES = [
         "hidden": false,
         "items": [
           {
-            "title": "Browse music volunteer opportunities →",
+            "title": "Browse music volunteer opportunities",
             "url": "https://serve.timothystl.org"
           },
           {
@@ -2105,11 +2105,11 @@ export const SITE_PAGES = [
         "hidden": false,
         "items": [
           {
-            "title": "Contact the office →",
+            "title": "Contact the office",
             "url": "mailto:dinger@timothystl.org"
           },
           {
-            "title": "Inquire about training →",
+            "title": "Inquire about training",
             "url": "mailto:dinger@timothystl.org"
           }
         ],
@@ -2317,7 +2317,7 @@ export const SITE_PAGES = [
         "hidden": false,
         "items": [
           {
-            "title": "Volunteer sign-up →",
+            "title": "Volunteer sign-up",
             "url": "https://serve.timothystl.org"
           },
           {
@@ -2491,7 +2491,7 @@ export const SITE_PAGES = [
         "hidden": false,
         "items": [
           {
-            "title": "Volunteer opportunities →",
+            "title": "Volunteer opportunities",
             "url": "https://serve.timothystl.org"
           },
           {
@@ -2665,7 +2665,7 @@ export const SITE_PAGES = [
         "hidden": false,
         "items": [
           {
-            "title": "Express vendor interest →",
+            "title": "Express vendor interest",
             "url": "mailto:dinger@timothystl.org?subject=ChristmasMarketVendorInterest"
           },
           {
@@ -2839,7 +2839,7 @@ export const SITE_PAGES = [
         "hidden": false,
         "items": [
           {
-            "title": "Give to CCS →",
+            "title": "Give to CCS",
             "url": "https://give.tithe.ly/?formId=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8&locationId=fe6ddef2-d6d2-4c85-adfd-f19eac997d38&fundId=49cdc381-ff0e-4b7e-b029-091f206850c1&frequency=one-time"
           }
         ],
@@ -2971,7 +2971,7 @@ export const SITE_PAGES = [
         "hidden": false,
         "items": [
           {
-            "title": "Visit wordoflifeschool.net →",
+            "title": "Visit wordoflifeschool.net",
             "url": "https://wordoflifeschool.net"
           }
         ],
@@ -3103,7 +3103,7 @@ export const SITE_PAGES = [
         "hidden": false,
         "items": [
           {
-            "title": "Email our DCE →",
+            "title": "Email our DCE",
             "url": "mailto:dce@timothystl.org"
           }
         ],
@@ -3235,7 +3235,7 @@ export const SITE_PAGES = [
         "hidden": false,
         "items": [
           {
-            "title": "Email our DCE →",
+            "title": "Email our DCE",
             "url": "mailto:dce@timothystl.org"
           }
         ],
@@ -3367,7 +3367,7 @@ export const SITE_PAGES = [
         "hidden": false,
         "items": [
           {
-            "title": "Email our DCE →",
+            "title": "Email our DCE",
             "url": "mailto:dce@timothystl.org"
           }
         ],
@@ -3499,7 +3499,7 @@ export const SITE_PAGES = [
         "hidden": false,
         "items": [
           {
-            "title": "Email our DCE →",
+            "title": "Email our DCE",
             "url": "mailto:dce@timothystl.org"
           }
         ],
@@ -3631,7 +3631,7 @@ export const SITE_PAGES = [
         "hidden": false,
         "items": [
           {
-            "title": "Email the office →",
+            "title": "Email the office",
             "url": "mailto:dinger@timothystl.org"
           }
         ],
@@ -3763,7 +3763,7 @@ export const SITE_PAGES = [
         "hidden": false,
         "items": [
           {
-            "title": "Email our DCE →",
+            "title": "Email our DCE",
             "url": "mailto:dce@timothystl.org"
           }
         ],

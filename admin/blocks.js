@@ -196,12 +196,12 @@ export const BLOCK_DEFS = {
     itemLabel: 'Card',
     itemPlaceholders: {
       img: 'Logo or photo (optional)', eyebrow: 'SMALL LABEL', title: 'Card heading',
-      body: 'One short paragraph.', linkLabel: 'Learn more →', url: '/where-it-goes',
+      body: 'One short paragraph.', linkLabel: 'Learn more', url: '/where-it-goes',
     },
     defaultItems: [
-      { title: 'First card', body: '<p>What this is.</p>', linkLabel: 'Learn more →', url: '' },
-      { title: 'Second card', body: '<p>What this is.</p>', linkLabel: 'Learn more →', url: '' },
-      { title: 'Third card', body: '<p>What this is.</p>', linkLabel: 'Learn more →', url: '' },
+      { title: 'First card', body: '<p>What this is.</p>', linkLabel: 'Learn more', url: '' },
+      { title: 'Second card', body: '<p>What this is.</p>', linkLabel: 'Learn more', url: '' },
+      { title: 'Third card', body: '<p>What this is.</p>', linkLabel: 'Learn more', url: '' },
     ],
   },
   video: {
@@ -1394,7 +1394,7 @@ function renderInner(b, opts) {
         st.address_near ? `<div class="tlcb-mapc-line">${esc(st.address_near)}</div>` : '',
       ].filter(Boolean).join('');
       const body = lines
-        ? lines + `<a class="tlcb-mapc-link" href="${esc(maps)}">Open in Google Maps →</a>`
+        ? lines + `<a class="tlcb-mapc-link" href="${esc(maps)}">Open in Google Maps</a>`
         : '<span class="tlcb-note">Add the church address under Church details in the admin.</span>';
       return `<div class="tlcb-stack" style="gap:9px">${renderHead(opts, b)}${renderBody(opts, b, def)}
         <div class="tlcb-mapc">${body}<div class="tlcb-map tlcb-mapc-frame">${frame}</div></div>
@@ -1456,11 +1456,11 @@ function renderInner(b, opts) {
       const eyebrow = itemField(opts, i, 'eyebrow', 'div', 'tlcb-cg-eyebrow', esc(it.eyebrow || ''), ' data-ph="SMALL LABEL"');
       const head = itemField(opts, i, 'title', 'div', 'tlcb-cg-head', esc(it.title || ''), ' data-ph="Card heading"');
       const body = itemField(opts, i, 'body', 'div', 'tlcb-prose tlcb-cg-body', it.body || '', ' data-ph="One short paragraph."', true);
-      // The arrow is part of the label the office types, so "Learn more →",
-      // "Visit MDO site →" and "Watch video →" all work with no setting for it.
+      // The arrow is part of the label the office types, so "Learn more",
+      // "Visit MDO site" and "Watch video" all work with no setting for it.
       const link = it.linkLabel
         ? (opts.editing
-            ? itemField(opts, i, 'linkLabel', 'div', 'tlcb-cg-link', esc(it.linkLabel), ' data-ph="Learn more →"')
+            ? itemField(opts, i, 'linkLabel', 'div', 'tlcb-cg-link', esc(it.linkLabel), ' data-ph="Learn more"')
             : `<a class="tlcb-cg-link" href="${esc(it.url || '#')}">${esc(it.linkLabel)}</a>`)
         : '';
       return `<div class="tlcb-cg-card">${img}${eyebrow}${head}${body}<div class="tlcb-cg-foot">${link}</div></div>`;
