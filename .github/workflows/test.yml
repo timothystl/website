@@ -40,6 +40,23 @@ jobs:
           node --check give-landing.js
           for f in admin/*.js; do node --check "$f"; done
 
+      # ⚠ `node --check` is NOT enough on its own, and believing it was cost
+      # real time. It parses these files as CommonJS scripts. Most of the CSS
+      # and client-side JS in this repo lives inside template literals, and a
+      # stray backtick in one of those — a comment quoting `flex:1`, say —
+      # terminates the literal and breaks the MODULE while still parsing fine
+      # as a script. Verified: --check passed on a gym.js that could not be
+      # imported at all.
+      #
+      # So import each one for real. These modules are declarations and a
+      # config object at the top level, so importing them runs nothing.
+      - name: Import every admin module as ESM
+        run: |
+          set -e
+          for f in admin/*.js; do
+            node -e "import('./$f').catch(e => { console.error('$f: ' + e.message); process.exit(1); })"
+          done
+
       # Globbed rather than listed. A named list goes stale the moment somebody
       # adds a suite — which happened the first time this workflow met a new
       # one — and a suite that silently never runs is worse than no suite.

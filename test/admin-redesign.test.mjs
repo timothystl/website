@@ -1402,6 +1402,43 @@ group('the renter portal has its own origin');
   eq((await portalGet()).status, 200, 'an unsafe address is ignored rather than half-honoured');
   setOrigin('');
 
+  // ── Tasks 17b and 18: the renter portal ──────────────────────────────
+  const portal = await (await portalGet()).text();
+
+  // 17b. The portal keeps its own :root — a renter must never get the admin
+  // sidebar or the ⌘K chip — but "not an admin screen" had been read as "not
+  // styled". It takes the public site's moss masthead now.
+  has(portal, '#4A5E3A', 'the portal wears the public site\'s moss masthead');
+  has(portal, 'from our Neighborhood to the Nations', 'with the site\'s own brand line');
+  lacks(portal, 'class="sidebar"', 'and none of the admin chrome');
+  lacks(portal, 'tlc-ctx', 'no context bar either');
+
+  // 18.1. The insurance notice is an obligation that comes AFTER booking. At
+  // the top of the page it made somebody read a compliance requirement before
+  // finding out whether their date was even free.
+  const insuranceAt = portal.indexOf('certificate of insurance');
+  const calendarAt = portal.indexOf('scal-month');
+  ok(insuranceAt > -1 && calendarAt > -1 && insuranceAt > calendarAt,
+    'the insurance notice sits after the calendar, at the confirm step');
+
+  // 18.2. Both tabs feed one request, so the second is named for what it is.
+  has(portal, '>Recurring dates<', 'the second tab is Recurring dates');
+  lacks(portal, 'Repeat weekly pattern', 'not a competing flow');
+
+  // 18.3. Availability was encoded twice, in colour only — a red numeral AND a
+  // red dot. Red numerals read as errors, and colour alone fails for anyone
+  // who cannot separate the two hues.
+  // Scoped to the DAY CELLS. The hour-slot buttons inside a day still use red
+  // for a taken hour, and that is a different control the spec does not touch —
+  // asserting no red anywhere on the page would fail for the wrong reason.
+  lacks(portal, 'font-weight:700;color:#D17070', 'no unavailable day is a red numeral');
+  has(portal, 'color:#A9A396', 'unavailable days are grey, with no cell and no dot');
+  lacks(portal, 'Fully booked</span>', 'and the colour legend is gone — the drawing says it');
+
+  // "Request", not "Confirm" — the office prices and approves it.
+  has(portal, '>Request this booking<', 'the submit button says request');
+  has(portal, 'Nothing is charged now', 'and says so in one line beneath');
+
   // ── Task 19 items 1-5: the hierarchy on this screen was upside down ──
   // You come here to edit a group. The booking link is a utility, and it was
   // the loudest thing on the page — above the group's own name, in the mist

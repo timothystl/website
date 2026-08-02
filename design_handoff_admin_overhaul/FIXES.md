@@ -74,8 +74,8 @@ questions and part of 1.
 | 14 | Card grid block | **Done** — `cardgrid` in `blocks.js`, in the Structure group, with the spec's drawing values and equal-height cards whose links pin to the foot |
 | 15 | Five borderline hand-written routes | **Done.** #3 and #4 rest on false premises (no user drawer exists; `/pages/details` is a different record). #5's youth rows are 302s. #1 and #2 are built — see below |
 | 16 | Congregation-facing files onto the palette | **Done** — 94 pre-redesign hexes swept from `email.js`, the newsletter archive and the renter blocks in `gym.js`; `scheduler.html` swept too so the definition-of-done grep can return clean. `ui.test.mjs` now guards the email palette *and* its three don't-travel constraints |
-| 17 | Renter booking: domain and shell | **a. Done** (v4.6.0) — the portal is on `timothystl.org/gym/*`, the admin path 301s, the CSRF gate learned about it, verified in production. **b. open** — it still has no public-site shell |
-| 18 | Renter booking: the pattern | **Open** — spec screen built, `screens/24-gym-booking.html` |
+| 17 | Renter booking: domain and shell | **Done.** a in v4.6.0 (portal on `timothystl.org/gym/*`, admin path 301s, CSRF gate taught about it, verified in production). b now: the public site's moss masthead, logo and brand line, one header block instead of three stacked boxes, and no admin chrome of any kind |
+| 18 | Renter booking: the pattern | **Items 1, 2, 3 and the Step 3 copy done.** The insurance notice moved to the confirm step, the second tab is Recurring dates, the calendar no longer encodes availability in colour alone, the legend is gone and the button says Request. **Items 4 and 5 are partly there and NOT signed off** — see below |
 | 19 | Group edit + form-width rule | **Done** — the width rule, and all five group-edit items: record first, link card plain and beneath, Copy as a flex-row primary, Regenerate as a quiet text button with the consequence in the confirm, the third crumb, and the clipboard glyph gone |
 
 **Suggested order now:** 19 items 1–5 (the group-edit screen) → 16 (a mechanical colour sweep) → 15 #1 and #2 → 17b → 13, 14, 18 (new work, largest last).
@@ -489,6 +489,36 @@ Screenshots in `uploads/`. The page is not un-designed — navy masthead, gold r
 **Step 3 · Confirm.** Contact name, email, phone, and what the space is for. *Here* is the insurance notice, as a callout directly above the submit button, with the address as a `mailto:` link. Then the total, then **Request this booking** — request, not confirm, because the office prices and approves it. Say so in one line beneath: "The office will review and send an invoice. Nothing is charged now."
 
 **After submit** — the same page, replaced by a plain confirmation: what was requested, what happens next, and the insurance reminder again. Not a redirect to a bare "thanks" page.
+
+### What is done, and what is honestly not — 2 Aug 2026
+
+**Done:** 1 (the insurance notice is at the confirm step, where it is
+actionable), 2 (the second tab is *Recurring dates* and both tabs already fed
+one request), 3 (available days are a navy numeral in an outlined `#FFFDF9`
+cell that raises on hover; unavailable days are the numeral alone at `#A9A396`,
+no cell, no dot, not clickable, told apart by tooltip — and the legend is gone,
+because the drawing says it now). Step 3's copy is the spec's: **Request this
+booking**, with "The office will review and send an invoice. Nothing is charged
+now." beneath.
+
+⚠ The client was repainting every dot green or red in two places, which would
+have undone the redraw the first time anybody pressed Clear. Both are aligned.
+The hour-slot buttons *inside* a day still use red for a taken hour — that is a
+different control and this item does not cover it.
+
+**Item 4 — the basket — is PARTLY there and is not signed off.** A "Your
+request" panel and a sticky summary bar already existed: slots grouped by date,
+a running total, and Clear. What the spec asks for beyond that is a ✕ on each
+row and on each individual time, and the panel staying visible while you keep
+picking rather than appearing once slots exist. Not built.
+
+**Item 5 — designed at 390px first — is NOT done.** The page is responsive but
+it was not redrawn phone-first, and saying otherwise would be a claim nobody
+had checked.
+
+Those two are a genuine redesign of a flow with real money and real bookings
+behind it. Same reasoning as the giving page in Phase 7: it should be a
+deliberate change with somebody watching it, not folded into the end of a pass.
 
 ### The one thing to keep
 
