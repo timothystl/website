@@ -1311,6 +1311,79 @@ group('payroll lives in the shared shell now');
   eq(res.headers.get('x-robots-tag'), 'noindex, nofollow', 'and it is still noindex, as the standalone page was');
 }
 
+group('an approved payroll period is locked server-side');
+{
+  // Approving a run is somebody signing off a set of figures. If the hours can
+  // still change afterwards the signature is on nothing — and the fix list is
+  // explicit that this is enforced at the proxy, not by hiding the button. A
+  // stale tab, a second window and a crafted POST all arrive at the same line.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const realFetch = globalThis.fetch;
+
+  let approved = [];
+  let supabaseUp = true;
+  let reached = 0;               // did the write get through to Supabase?
+  globalThis.fetch = async (u) => {
+    const href = typeof u === 'string' ? u : u.url;
+    if (!supabaseUp) throw new Error('supabase unreachable');
+    if (href.includes('/payroll_periods')) {
+      // Honour the filter, or the stub answers "approved" for every period and
+      // the per-period scoping below would pass without being true.
+      const want = decodeURIComponent((href.match(/period_start=eq\.([^&]+)/) || [])[1] || '');
+      return new Response(JSON.stringify(approved.filter((r) => r.period_start === want)), { status: 200 });
+    }
+    if (href.includes('/church_staff_period_entries')) { reached++; return new Response('[]', { status: 200 }); }
+    return new Response('{}', { status: 200 });
+  };
+  const saveHours = (period = '2026-07-20') => worker.fetch(new Request(
+    'https://admin.timothystl.org/sb/rest/v1/church_staff_period_entries?on_conflict=staff_id,period_start',
+    { method: 'POST', headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/json', apikey: 'k' },
+      body: JSON.stringify({ staff_id: 'a', period_start: period, hours_worked: 40 }) }), env, ctx);
+
+  reached = 0;
+  eq((await saveHours()).status, 200, 'an unapproved period saves as before');
+  eq(reached, 1, 'and the write really reached Supabase');
+
+  approved = [{ period_start: '2026-07-20' }];
+  reached = 0;
+  const blocked = await saveHours();
+  eq(blocked.status, 409, 'an approved period refuses the write');
+  eq(reached, 0, 'and nothing reached Supabase');
+  has(await blocked.text(), 'has been approved', 'with a message naming the way out');
+
+  // A DIFFERENT period is unaffected — the lock is per run, not a global stop.
+  reached = 0;
+  eq((await saveHours('2026-08-03')).status, 200, 'another period is untouched');
+  eq(reached, 1, 'and writes through');
+
+  // ⚠ Fails CLOSED. A refusal costs a retry and says so; the other way round
+  // silently rewrites figures somebody has already put their name to.
+  supabaseUp = false;
+  reached = 0;
+  const cannotTell = await saveHours();
+  eq(cannotTell.status, 409, 'if the approval cannot be read, nothing is written');
+  eq(reached, 0, 'and the write is not attempted');
+  supabaseUp = true;
+
+  // ⚠ Rates are NOT period-scoped, so locking them would stop the office
+  // fixing a rate for a run they have not done yet.
+  reached = 0;
+  const rate = await worker.fetch(new Request('https://admin.timothystl.org/sb/rest/v1/church_staff', {
+    method: 'POST', headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/json', apikey: 'k' },
+    body: JSON.stringify({ id: 'a', hourly_rate: 21 }),
+  }), env, ctx);
+  eq(rate.status, 200, 'a staff record still saves while a period is approved');
+
+  // And taking the approval back has to stay possible, or the lock is a trap.
+  const unapprove = await worker.fetch(new Request(
+    'https://admin.timothystl.org/sb/rest/v1/payroll_periods?period_start=eq.2026-07-20',
+    { method: 'DELETE', headers: { cookie, origin: 'https://admin.timothystl.org', apikey: 'k' } }), env, ctx);
+  eq(unapprove.status, 200, 'the approval itself can still be removed');
+
+  globalThis.fetch = realFetch;
+}
+
 group('payroll access is gated on its own permission');
 {
   const { db, env } = await boot();

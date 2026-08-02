@@ -352,7 +352,7 @@ input:focus,select:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(201
 /* Selection calendar */
 .scal-wrap{position:relative;}
 .scal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:8px;}
-.scal-nav-btn{background:var(--mist);border:1px solid var(--border);cursor:pointer;padding:6px 16px;border-radius:6px;font-size:18px;line-height:1;color:var(--steel);font-weight:700;transition:background .15s;flex-shrink:0;}
+.scal-nav-btn{background:var(--mist);border:1px solid var(--border);cursor:pointer;padding:6px 16px;border-radius:8px;font-size:18px;line-height:1;color:var(--steel);font-weight:700;transition:background .15s;flex-shrink:0;}
 .scal-nav-btn:hover{background:var(--border);}
 .scal-nav-btn:disabled{opacity:.35;cursor:default;}
 .scal-nav-label{font-family:var(--serif);font-size:18px;color:var(--steel);font-weight:700;text-align:center;flex:1;}
@@ -372,13 +372,13 @@ input:focus,select:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(201
 .scal-slot.na{background:#E8EDF3;color:transparent;}
 .scal-slot.selected{background:var(--amber) !important;cursor:pointer;}
 .scal-cell.has-selection{border-color:var(--amber);}
-.scal-slot[data-label]:hover::after{content:attr(data-label);position:absolute;bottom:calc(100% + 5px);left:50%;transform:translateX(-50%);background:#1E2D4A;color:white;font-size:11px;white-space:nowrap;padding:3px 8px;border-radius:4px;pointer-events:none;z-index:300;font-family:var(--sans);font-weight:600;box-shadow:0 2px 6px rgba(0,0,0,.25);}
+.scal-slot[data-label]:hover::after{content:attr(data-label);position:absolute;bottom:calc(100% + 5px);left:50%;transform:translateX(-50%);background:#1E2D4A;color:white;font-size:11px;white-space:nowrap;padding:3px 8px;border-radius:8px;pointer-events:none;z-index:300;font-family:var(--sans);font-weight:600;box-shadow:0 2px 6px rgba(0,0,0,.25);}
 /* Legend */
 .scal-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--gray);margin-top:14px;}
 .scal-legend span{display:flex;align-items:center;gap:6px;}
 .legend-swatch{width:24px;height:10px;border-radius:2px;flex-shrink:0;}
 /* Pattern selector */
-.pattern-card{background:var(--mist);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-top:16px;}
+.pattern-card{background:var(--mist);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin-top:16px;}
 .pattern-card-title{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:12px;}
 .pattern-fields{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;}
 .pattern-fields .form-group{margin-bottom:0;flex:1;min-width:130px;}
@@ -387,7 +387,7 @@ input:focus,select:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(201
 .req-bar-count{font-size:15px;font-weight:700;}
 .req-bar-detail{font-size:12px;opacity:.75;margin-top:2px;}
 /* Agreement card */
-.agree-card{border:2px solid var(--steel);border-radius:10px;padding:18px 20px;margin-bottom:18px;background:var(--mist);}
+.agree-card{border:2px solid var(--steel);border-radius:12px;padding:18px 20px;margin-bottom:18px;background:var(--mist);}
 .agree-card .total{font-size:22px;font-weight:700;color:var(--steel);margin-bottom:10px;}
 .agree-check{display:flex;align-items:flex-start;gap:10px;font-size:14px;color:var(--charcoal);line-height:1.5;cursor:pointer;}
 .agree-check input{width:auto;margin-top:2px;flex-shrink:0;}
@@ -542,7 +542,7 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
       const paymentLink = await getPaymentLink(env);
       const _alertAmt = url.searchParams.get('amount');
       const _payLink = _alertAmt ? `${paymentLink}&amount=${_alertAmt}` : paymentLink;
-      const _payBtn = `<div style="margin-top:12px;"><a href="${_payLink}" target="_blank" style="display:inline-block;background:#00DB72;color:white;font-weight:700;font-size:14px;padding:10px 28px;border-radius:6px;text-decoration:none;">Pay Invoice Online</a></div>`;
+      const _payBtn = `<div style="margin-top:12px;"><a href="${_payLink}" target="_blank" style="display:inline-block;background:#00DB72;color:white;font-weight:700;font-size:14px;padding:10px 28px;border-radius:8px;text-decoration:none;">Pay Invoice Online</a></div>`;
       const portalAlert = (portalMsg || '').startsWith('holds') ? `<div class="alert alert-success">✓ ${_pc} hold${_pc===1?'':'s'} placed! The church office will review and confirm your dates — you'll receive an invoice by email once confirmed.${_ps > 0 ? ` (${_ps} slot${_ps===1?'':'s'} were already taken and skipped.)` : ''}</div>`
         : portalMsg === 'nohold' ? `<div class="alert alert-error">No slots could be booked — they may have been taken or blocked. Please choose different times.</div>`
         : portalMsg === 'noselect' ? `<div class="alert alert-error">No dates were selected. Please use the pattern selector or tap individual slots before submitting.</div>`
@@ -651,8 +651,8 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
       <div style="font-family:var(--serif);font-size:19px;color:white;">Gym Rental — ${group.name}</div>
     </div>
     <div style="display:flex;gap:8px;">
-      <a href="/gym/book/${token}" style="font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;border:none;cursor:pointer;background:var(--amber);color:var(--steel);text-decoration:none;">Book</a>
-      <a href="/gym/book/${token}/history" style="font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;border:none;cursor:pointer;background:rgba(255,255,255,.15);color:white;text-decoration:none;">My Bookings</a>
+      <a href="/gym/book/${token}" style="font-size:13px;font-weight:700;padding:8px 16px;border-radius:8px;border:none;cursor:pointer;background:var(--amber);color:var(--steel);text-decoration:none;">Book</a>
+      <a href="/gym/book/${token}/history" style="font-size:13px;font-weight:700;padding:8px 16px;border-radius:8px;border:none;cursor:pointer;background:rgba(255,255,255,.15);color:white;text-decoration:none;">My Bookings</a>
     </div>
   </div>
 </div>
@@ -661,7 +661,7 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
   ${portalAlert}
 
   <!-- Insurance banner -->
-  <div style="display:flex;gap:12px;align-items:flex-start;background:#FFF8EC;border:1px solid #E8C87A;border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+  <div style="display:flex;gap:12px;align-items:flex-start;background:#FFF8EC;border:1px solid #E8C87A;border-radius:12px;padding:14px 16px;margin-bottom:16px;">
     <div style="font-size:20px;line-height:1;">📋</div>
     <div style="font-size:13px;color:#5A4200;line-height:1.5;">
       <strong>Before your rental date:</strong> email a certificate of insurance naming Timothy Lutheran Church as additional insured to <a href="mailto:dinger@timothystl.org" style="color:#2E7EA6;">dinger@timothystl.org</a>.
@@ -669,27 +669,27 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
   </div>
 
   <!-- Rate info -->
-  <div style="background:var(--white);border:1px solid var(--border);border-radius:10px;padding:10px 16px;font-size:13px;color:var(--charcoal);margin-bottom:18px;">
+  <div style="background:var(--white);border:1px solid var(--border);border-radius:12px;padding:10px 16px;font-size:13px;color:var(--charcoal);margin-bottom:18px;">
     <strong style="color:var(--steel);">${rateDisplay}</strong> · Mon–Fri 5–9 PM · Sat 8 AM–8 PM · Sun 1–8 PM
   </div>
 
   <!-- Mode toggle -->
-  <div style="display:flex;gap:0;margin-bottom:16px;background:var(--linen);border-radius:10px;padding:4px;">
+  <div style="display:flex;gap:0;margin-bottom:16px;background:var(--linen);border-radius:12px;padding:4px;">
     <button id="btn-mode-tap" onclick="setMode('tap')" style="flex:1;font-size:13px;font-weight:700;padding:10px;border-radius:8px;border:none;cursor:pointer;background:white;color:var(--steel);box-shadow:0 1px 3px rgba(0,0,0,.1);">Tap individual times</button>
     <button id="btn-mode-pattern" onclick="setMode('pattern')" style="flex:1;font-size:13px;font-weight:700;padding:10px;border-radius:8px;border:none;cursor:pointer;background:transparent;color:var(--gray);box-shadow:none;">Repeat weekly pattern</button>
   </div>
 
   <!-- Pattern panel -->
-  <div id="pattern-panel" style="display:none;background:var(--mist);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:18px;">
+  <div id="pattern-panel" style="display:none;background:var(--mist);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:18px;">
     <div style="font-size:12px;color:var(--gray);margin-bottom:14px;">Pick a date range and the days of the week you need — we'll show which hours are rentable on those days, then add every matching open slot to your request.</div>
     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
       <div style="flex:1;min-width:140px;">
         <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:6px;">From</label>
-        <input type="date" id="pat-from" style="width:100%;border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-size:13px;font-family:var(--sans);">
+        <input type="date" id="pat-from" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:13px;font-family:var(--sans);">
       </div>
       <div style="flex:1;min-width:140px;">
         <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:6px;">To</label>
-        <input type="date" id="pat-to" style="width:100%;border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-size:13px;font-family:var(--sans);">
+        <input type="date" id="pat-to" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:13px;font-family:var(--sans);">
       </div>
     </div>
     <div style="margin-bottom:16px;">
@@ -697,16 +697,16 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
       <div style="display:flex;gap:6px;flex-wrap:wrap;" id="dow-toggles"></div>
     </div>
     <div id="pat-hour-sections" style="display:flex;flex-direction:column;gap:14px;margin-bottom:16px;"></div>
-    <button id="pat-apply-btn" onclick="applyPattern()" disabled style="background:var(--steel);color:white;font-size:13px;font-weight:700;padding:10px 18px;border-radius:6px;border:none;cursor:pointer;opacity:.5;">Apply to date range</button>
+    <button id="pat-apply-btn" onclick="applyPattern()" disabled style="background:var(--steel);color:white;font-size:13px;font-weight:700;padding:10px 18px;border-radius:8px;border:none;cursor:pointer;opacity:.5;">Apply to date range</button>
     <div id="pat-result" style="font-size:12px;color:var(--sage);margin-top:10px;font-weight:600;display:none;"></div>
   </div>
 
   <!-- Tap calendar -->
-  <div id="tap-cal" style="background:var(--white);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:20px;">
+  <div id="tap-cal" style="background:var(--white);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:8px;">
-      <button id="scal-prev" onclick="navMonth(-1)" disabled style="background:var(--mist);border:1px solid var(--border);cursor:pointer;padding:8px 16px;border-radius:6px;font-size:18px;line-height:1;color:var(--steel);font-weight:700;">&#8249;</button>
+      <button id="scal-prev" onclick="navMonth(-1)" disabled style="background:var(--mist);border:1px solid var(--border);cursor:pointer;padding:8px 16px;border-radius:8px;font-size:18px;line-height:1;color:var(--steel);font-weight:700;">&#8249;</button>
       <select id="month-jump" onchange="jumpToMonth(this.value)" style="font-family:var(--serif);font-size:16px;color:var(--steel);font-weight:700;text-align:center;border:1px solid var(--border);border-radius:8px;padding:6px 12px;background:white;cursor:pointer;">${monthOpts}</select>
-      <button id="scal-next" onclick="navMonth(1)" style="background:var(--mist);border:1px solid var(--border);cursor:pointer;padding:8px 16px;border-radius:6px;font-size:18px;line-height:1;color:var(--steel);font-weight:700;">&#8250;</button>
+      <button id="scal-next" onclick="navMonth(1)" style="background:var(--mist);border:1px solid var(--border);cursor:pointer;padding:8px 16px;border-radius:8px;font-size:18px;line-height:1;color:var(--steel);font-weight:700;">&#8250;</button>
     </div>
     <div id="cal-months-wrap">
       ${calMonthsHtml}
@@ -720,7 +720,7 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
   </div>
 
   <!-- Day slot panel (shown when a day is tapped) -->
-  <div id="day-panel" style="display:none;background:var(--white);border:2px solid var(--steel);border-radius:14px;padding:20px;margin-bottom:20px;">
+  <div id="day-panel" style="display:none;background:var(--white);border:2px solid var(--steel);border-radius:12px;padding:20px;margin-bottom:20px;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
       <div id="day-panel-label" style="font-family:var(--serif);font-size:17px;color:var(--steel);"></div>
       <button onclick="closeDay()" style="background:none;border:none;font-size:20px;color:var(--gray);cursor:pointer;">&times;</button>
@@ -730,7 +730,7 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
 
   <!-- Request summary card -->
   <div id="req-form-wrap" style="display:none;">
-    <div style="background:var(--white);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:20px;">
+    <div style="background:var(--white);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;">
       <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border);">Your Request</div>
       <div id="sel-summary-list" style="font-size:13px;color:var(--charcoal);margin-bottom:14px;line-height:1.8;"></div>
       <div style="display:flex;align-items:center;justify-content:space-between;background:var(--mist);border-radius:8px;padding:12px 16px;margin-bottom:16px;">
@@ -742,11 +742,11 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
         <div id="slot-inputs"></div>
         <div style="margin-bottom:18px;">
           <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);margin-bottom:6px;">Notes <span style="font-weight:400;text-transform:none;">(optional)</span></label>
-          <textarea name="notes" rows="2" maxlength="500" placeholder="e.g. Basketball practice" style="width:100%;border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-family:var(--sans);font-size:14px;"></textarea>
+          <textarea name="notes" rows="2" maxlength="500" placeholder="e.g. Basketball practice" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-family:var(--sans);font-size:14px;"></textarea>
         </div>
         <div style="display:flex;gap:12px;flex-wrap:wrap;">
           <button type="submit" class="btn btn-amber">Submit Rental Request &rarr;</button>
-          <button type="button" onclick="clearAll()" style="background:var(--linen);color:var(--steel);font-weight:700;padding:12px 26px;border-radius:6px;border:none;font-size:14px;cursor:pointer;">Clear</button>
+          <button type="button" onclick="clearAll()" style="background:var(--linen);color:var(--steel);font-weight:700;padding:12px 26px;border-radius:8px;border:none;font-size:14px;cursor:pointer;">Clear</button>
         </div>
         <div style="font-size:11px;color:var(--gray);margin-top:8px;">The office reviews and confirms — you'll get an emailed invoice once confirmed.</div>
       </form>
@@ -1153,7 +1153,7 @@ ${portalHeader}
         <textarea name="notes" placeholder="Brief description of your use…" rows="2" maxlength="500"></textarea>
       </div>
       <div class="agree-card">
-        <div style="background:#FFF8EC;border:1px solid #E8C87A;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#5A4200;">
+        <div style="background:#FFF8EC;border:1px solid #E8C87A;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#5A4200;">
           <strong>Proof of insurance required:</strong> Please submit a certificate of insurance naming Timothy Lutheran Church as an additional insured to <a href="mailto:dinger@timothystl.org" style="color:#2E7EA6;">dinger@timothystl.org</a> before your rental date.
         </div>
         <div class="total" id="total-display" style="display:none;">Estimated total: <span id="total-amt"></span></div>
@@ -1387,7 +1387,7 @@ function calcTotal() {
     ${expireCountdown ? `<div style="font-size:12px;color:#B85C3A;margin-top:3px;font-weight:600;">⏳ ${expireCountdown}</div>` : ''}
   </div>
   <span style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;white-space:nowrap;background:${badgeBg};color:${badgeColor};">${badgeText}</span>
-  ${isHold ? `<button onclick="askCancelModal('${b.id}')" style="background:transparent;color:#B85C3A;border:1px solid #B85C3A;font-size:12px;font-weight:700;padding:8px 14px;border-radius:6px;cursor:pointer;">Cancel</button>` : `<a href="${payHref}" target="_blank" style="background:var(--sage);color:white;font-size:12px;font-weight:700;padding:8px 14px;border-radius:6px;text-decoration:none;">Pay Online</a>`}
+  ${isHold ? `<button onclick="askCancelModal('${b.id}')" style="background:transparent;color:#B85C3A;border:1px solid #B85C3A;font-size:12px;font-weight:700;padding:8px 14px;border-radius:8px;cursor:pointer;">Cancel</button>` : `<a href="${payHref}" target="_blank" style="background:var(--sage);color:white;font-size:12px;font-weight:700;padding:8px 14px;border-radius:8px;text-decoration:none;">Pay Online</a>`}
 </div>`;
             }).join('');
 
@@ -1410,19 +1410,19 @@ function calcTotal() {
       <div style="font-family:var(--serif);font-size:19px;color:white;">Gym Rental — ${group.name}</div>
     </div>
     <div style="display:flex;gap:8px;">
-      <a href="/gym/book/${token}" style="font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;border:none;cursor:pointer;background:rgba(255,255,255,.15);color:white;text-decoration:none;">Book</a>
-      <a href="/gym/book/${token}/history" style="font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;border:none;cursor:pointer;background:var(--amber);color:var(--steel);text-decoration:none;">My Bookings</a>
+      <a href="/gym/book/${token}" style="font-size:13px;font-weight:700;padding:8px 16px;border-radius:8px;border:none;cursor:pointer;background:rgba(255,255,255,.15);color:white;text-decoration:none;">Book</a>
+      <a href="/gym/book/${token}/history" style="font-size:13px;font-weight:700;padding:8px 16px;border-radius:8px;border:none;cursor:pointer;background:var(--amber);color:var(--steel);text-decoration:none;">My Bookings</a>
     </div>
   </div>
 </div>
 <div style="max-width:820px;margin:0 auto;padding:24px 20px;">
   ${histErr}
   ${portalAlert}
-  <div style="background:var(--white);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px;">
+  <div style="background:var(--white);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px;">
     <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border);">Upcoming</div>
     ${upHtml}
   </div>
-  <div style="background:var(--white);border:1px solid var(--border);border-radius:14px;padding:20px;">
+  <div style="background:var(--white);border:1px solid var(--border);border-radius:12px;padding:20px;">
     <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border);">Past</div>
     ${pastHtml}
   </div>
@@ -1430,12 +1430,12 @@ function calcTotal() {
 
 <!-- Cancel confirmation modal -->
 <div id="cancel-modal" style="display:none;position:fixed;inset:0;background:rgba(20,20,30,.5);align-items:center;justify-content:center;z-index:500;padding:20px;">
-  <div style="background:white;border-radius:14px;padding:26px;max-width:360px;width:100%;">
+  <div style="background:white;border-radius:12px;padding:26px;max-width:360px;width:100%;">
     <div style="font-family:var(--serif);font-size:18px;color:var(--steel);margin-bottom:10px;">Release this hold?</div>
     <div style="font-size:14px;color:var(--charcoal);margin-bottom:20px;line-height:1.5;">This time slot will open back up for other groups to request.</div>
     <div style="display:flex;gap:10px;">
-      <button id="cancel-confirm-btn" style="flex:1;background:#B85C3A;color:white;font-weight:700;padding:10px;border-radius:6px;border:none;cursor:pointer;">Release Hold</button>
-      <button onclick="dismissCancel()" style="flex:1;background:var(--linen);color:var(--steel);font-weight:700;padding:10px;border-radius:6px;border:none;cursor:pointer;">Keep it</button>
+      <button id="cancel-confirm-btn" style="flex:1;background:#B85C3A;color:white;font-weight:700;padding:10px;border-radius:8px;border:none;cursor:pointer;">Release Hold</button>
+      <button onclick="dismissCancel()" style="flex:1;background:var(--linen);color:var(--steel);font-weight:700;padding:10px;border-radius:8px;border:none;cursor:pointer;">Keep it</button>
     </div>
   </div>
 </div>
@@ -1950,7 +1950,7 @@ ${portalHeader}
         const pendingRecHtml = pendingRes.results.length === 0 ? '' : `
 <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
   <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gray);margin-bottom:8px;">Recurring requests — awaiting review</div>
-  ${pendingRes.results.map(r => `<div style="display:flex;align-items:center;gap:12px;padding:9px 14px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;background:var(--linen);">
+  ${pendingRes.results.map(r => `<div style="display:flex;align-items:center;gap:12px;padding:9px 14px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;background:var(--linen);">
   <div style="flex:1;font-family:var(--sans);font-size:13px;">
     <span style="font-weight:700;color:var(--charcoal);">${r.group_name || '—'}</span>
     <span style="color:var(--gray);margin:0 5px;">·</span>
@@ -2345,7 +2345,7 @@ ${sidebarShell('gym', currentUser)}
        and the Google Calendar push — one person's whole job. Hiding them on
        the default view would be dropping them in everything but name. -->
   <div>
-  <div style="background:var(--mist);border:1px solid var(--border);border-radius:10px;padding:12px 18px;margin-bottom:24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+  <div style="background:var(--mist);border:1px solid var(--border);border-radius:12px;padding:12px 18px;margin-bottom:24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
     <div style="font-size:13px;color:var(--charcoal);">Pending holds: <strong>${holdHrs} hrs</strong> <span style="color:var(--gray);">($${(holdHrs * rate).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})})</span></div>
     <div style="font-size:13px;color:var(--charcoal);">Confirmed (upcoming): <strong>${confHrs} hrs</strong> <span style="color:var(--gray);">($${(confHrs * rate).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})})</span></div>
     <div style="margin-left:auto;font-size:12px;color:var(--gray);">Mon–Fri 5–9 PM &nbsp;·&nbsp; Sat 8 AM–8 PM &nbsp;·&nbsp; Sun 1–8 PM</div>
@@ -3119,7 +3119,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
       <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);">Select dates to block or unblock</div>
       <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
         <span style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);">Show:</span>
-        <select onchange="window.location.href='/gym-rentals/blocked?months='+this.value" style="font-size:13px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:white;cursor:pointer;">
+        <select onchange="window.location.href='/gym-rentals/blocked?months='+this.value" style="font-size:13px;padding:4px 8px;border:1px solid var(--border);border-radius:8px;background:white;cursor:pointer;">
           ${[3,6,9,12,18].map(n=>`<option value="${n}"${numMonths===n?' selected':''}>${n} months</option>`).join('')}
         </select>
       </div>
@@ -3320,7 +3320,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
           <label style="margin-bottom:0;">Dates * <span id="date-count" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--amber);font-size:13px;"></span></label>
           <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
             <span style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);">Show:</span>
-            <select onchange="window.location.href='/gym-rentals/bookings/new?months='+this.value" style="font-size:13px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:white;cursor:pointer;">
+            <select onchange="window.location.href='/gym-rentals/bookings/new?months='+this.value" style="font-size:13px;padding:4px 8px;border:1px solid var(--border);border-radius:8px;background:white;cursor:pointer;">
               ${[3,6,9,12,18].map(n=>`<option value="${n}"${numMonths===n?' selected':''}>${n} months</option>`).join('')}
             </select>
           </div>
@@ -3354,9 +3354,9 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
       <div style="margin:0 0 16px;padding:14px 16px;background:var(--mist);border-radius:8px;">
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border);">
           <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);white-space:nowrap;">Default time:</span>
-          <select id="def-start" style="font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;min-width:100px;background:white;"></select>
+          <select id="def-start" style="font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:8px;min-width:100px;background:white;"></select>
           <span style="font-size:12px;color:var(--gray);">to</span>
-          <select id="def-end"   style="font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;min-width:100px;background:white;"></select>
+          <select id="def-end"   style="font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:8px;min-width:100px;background:white;"></select>
           <button type="button" id="apply-all-btn" class="btn btn-sm btn-secondary">Apply to all</button>
           <span style="font-size:11px;color:var(--gray);">— new dates auto-use this time</span>
         </div>
@@ -3398,10 +3398,10 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
   </div>
 </div>
 <style>
-.scal-wrap{position:relative;}.scal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:8px;}.scal-nav-btn{background:var(--mist,#EDF5F8);border:1px solid var(--border,#E7DFD1);cursor:pointer;padding:8px 18px;border-radius:6px;font-size:18px;line-height:1;font-weight:700;transition:background .15s;flex-shrink:0;color:var(--steel,#1E2D4A);touch-action:manipulation;}.scal-nav-btn:hover{background:var(--border,#E7DFD1);}.scal-nav-btn:disabled{opacity:.35;cursor:default;}.scal-nav-label{font-family:var(--serif,Georgia,serif);font-size:18px;font-weight:700;text-align:center;flex:1;color:var(--steel,#1E2D4A);}.scal-month{display:none;}.scal-month.active{display:block;}
+.scal-wrap{position:relative;}.scal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:8px;}.scal-nav-btn{background:var(--mist,#EDF5F8);border:1px solid var(--border,#E7DFD1);cursor:pointer;padding:8px 18px;border-radius:8px;font-size:18px;line-height:1;font-weight:700;transition:background .15s;flex-shrink:0;color:var(--steel,#1E2D4A);touch-action:manipulation;}.scal-nav-btn:hover{background:var(--border,#E7DFD1);}.scal-nav-btn:disabled{opacity:.35;cursor:default;}.scal-nav-label{font-family:var(--serif,Georgia,serif);font-size:18px;font-weight:700;text-align:center;flex:1;color:var(--steel,#1E2D4A);}.scal-month{display:none;}.scal-month.active{display:block;}
 .scal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
 .scal-dow{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray,#6B7280);padding:6px 0;text-align:center;}
-.adm-cell{border-radius:6px;text-align:center;padding:10px 2px;font-size:13px;font-weight:700;border:2px solid transparent;transition:background .12s,border-color .12s,transform .1s;line-height:1;font-family:inherit;color:var(--steel,#1E2D4A);min-width:0;overflow:hidden;}
+.adm-cell{border-radius:8px;text-align:center;padding:10px 2px;font-size:13px;font-weight:700;border:2px solid transparent;transition:background .12s,border-color .12s,transform .1s;line-height:1;font-family:inherit;color:var(--steel,#1E2D4A);min-width:0;overflow:hidden;}
 div.adm-avail{cursor:pointer;background:#fff;border-color:#ddd;}
 div.adm-avail:hover{background:#D4EDDA;border-color:#5A9E6F;transform:scale(1.06);}
 div.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020 !important;color:white !important;}
@@ -3411,10 +3411,10 @@ div.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020 !i
 .date-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border,#E7DFD1);flex-wrap:wrap;}
 .date-row:last-child{border-bottom:none;}
 .date-row-label{font-family:var(--sans,Arial,sans-serif);font-size:13px;font-weight:700;color:var(--steel,#1E2D4A);min-width:160px;}
-.date-row select{font-size:13px;padding:6px 10px;border:1px solid var(--border,#E7DFD1);border-radius:6px;background:white;color:var(--charcoal,#1A1A2A);min-width:110px;}
-.date-row .btn-rm{background:none;border:1px solid #ddd;border-radius:4px;color:#999;cursor:pointer;font-size:14px;padding:4px 8px;line-height:1;}
+.date-row select{font-size:13px;padding:6px 10px;border:1px solid var(--border,#E7DFD1);border-radius:8px;background:white;color:var(--charcoal,#1A1A2A);min-width:110px;}
+.date-row .btn-rm{background:none;border:1px solid #ddd;border-radius:8px;color:#999;cursor:pointer;font-size:14px;padding:4px 8px;line-height:1;}
 .date-row .btn-rm:hover{background:#fce8e8;border-color:#B85C3A;color:#B85C3A;}
-.pat-btn{font-family:var(--sans,Arial,sans-serif);font-size:12px;font-weight:700;padding:5px 10px;border-radius:6px;border:1px solid var(--border,#E7DFD1);background:white;cursor:pointer;color:var(--steel,#1E2D4A);transition:background .12s,border-color .12s;}
+.pat-btn{font-family:var(--sans,Arial,sans-serif);font-size:12px;font-weight:700;padding:5px 10px;border-radius:8px;border:1px solid var(--border,#E7DFD1);background:white;cursor:pointer;color:var(--steel,#1E2D4A);transition:background .12s,border-color .12s;}
 .pat-btn.active{background:#1E2D4A;color:white;border-color:#1E2D4A;}
 </style>
 <script>

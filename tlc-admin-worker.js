@@ -334,6 +334,44 @@ async function pageData(env, reqKey) {
   return p;
 }
 
+// ── THE PAYROLL PERIOD LOCK ──────────────────────────────────
+// Returns the refusal message when a period has been signed off, or '' when
+// the write may go through. Approval is a row in `payroll_periods`: present
+// means somebody put their name to those figures.
+//
+// ⚠ It FAILS CLOSED — an unreadable period, an unreachable Supabase, or a
+// body we cannot parse all refuse. A refusal costs a retry and says so on the
+// screen; the other way round quietly rewrites figures somebody has already
+// signed. That asymmetry is the whole reason the lock exists.
+//
+// It reuses the caller's own `apikey`/`Authorization`, because this Worker
+// holds no Supabase credentials of its own — see "Payroll & Supabase" in
+// CLAUDE.md. Same credentials, same authority, one extra read.
+async function payrollPeriodLocked(baseUrl, period, headers) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(period || ''))) {
+    return 'That save could not be checked against the period’s approval, so it was not written. Reload the page and try again.';
+  }
+  const check = new Headers();
+  for (const h of ['apikey', 'authorization']) {
+    const v = headers.get(h);
+    if (v) check.set(h, v);
+  }
+  try {
+    const res = await fetch(
+      `${baseUrl}/rest/v1/payroll_periods?select=period_start&period_start=eq.${encodeURIComponent(period)}`,
+      { headers: check },
+    );
+    if (!res.ok) return 'The period’s approval could not be read, so nothing was saved. Try again in a moment.';
+    const rows = await res.json();
+    if (Array.isArray(rows) && rows.length > 0) {
+      return 'This pay period has been approved, so its hours are locked. Take back the approval first if something needs changing.';
+    }
+    return '';
+  } catch (_) {
+    return 'The period’s approval could not be read, so nothing was saved. Try again in a moment.';
+  }
+}
+
 // CSRF defense: only these POST paths are reachable from outside the admin
 // origin (the public site at timothystl.org POSTs to them). Every other
 // state-changing request must originate from admin.timothystl.org itself.
@@ -739,9 +777,53 @@ export default {
         const v = request.headers.get(h);
         if (v) outHeaders.set(h, v);
       }
+
+      // ── THE PERIOD LOCK ──
+      // Approving a payroll run is somebody signing off a set of figures. If
+      // the hours can still change afterwards, the signature is on nothing.
+      // The fix list is explicit that this is enforced HERE and not by hiding
+      // the button — the screen greys the inputs as a courtesy, but a stale
+      // tab, a second window, or a crafted POST all arrive at this line.
+      //
+      // Scoped to the period's own entries. Rates live on `church_staff` and
+      // are not period-scoped, so locking those would stop the office fixing
+      // a rate for a period they have not run yet.
+      let forwardBody = ['GET', 'HEAD'].includes(method) ? undefined : request.body;
+      if (!['GET', 'HEAD'].includes(method) && path.includes('/church_staff_period_entries')) {
+        let period = '';
+        const q = url.searchParams.get('period_start') || '';
+        if (q.startsWith('eq.')) period = q.slice(3);
+        if (!period) {
+          // Buffered rather than streamed, so the period can be read out of it
+          // — payroll bodies are one small row. Everything else still streams.
+          const raw = await request.text();
+          forwardBody = raw;
+          try {
+            const parsed = JSON.parse(raw);
+            const rows = Array.isArray(parsed) ? parsed : [parsed];
+            period = String(rows.find((r) => r && r.period_start)?.period_start || '');
+          } catch (_) { /* not JSON we can read; the check below fails closed */ }
+        }
+        // ⚠ Fails CLOSED. If we cannot tell whether the run was signed off, a
+        // refusal costs a retry and says so; the other way round silently
+        // rewrites approved figures. The message names the way out.
+        const locked = await payrollPeriodLocked(MDO_SUPABASE_URL, period, outHeaders);
+        if (locked) {
+          return new Response(JSON.stringify({ message: locked }), {
+            status: 409,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': ADMIN_ORIGIN },
+          });
+        }
+      }
+
+      // `duplex: 'half'` is required by the fetch spec whenever the body is a
+      // stream. Workers does not enforce it and ignores the option; Node does
+      // enforce it, and without it this proxy throws the moment a test drives
+      // a POST through it — which is how it went untested until the period
+      // lock needed covering.
       const proxyReq = new Request(targetUrl, {
-        method, headers: outHeaders,
-        body: ['GET', 'HEAD'].includes(method) ? undefined : request.body,
+        method, headers: outHeaders, body: forwardBody,
+        ...(forwardBody && typeof forwardBody !== 'string' ? { duplex: 'half' } : {}),
       });
       let supabaseRes;
       try {

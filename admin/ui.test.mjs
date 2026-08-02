@@ -282,7 +282,8 @@ group('one palette');
   // to read both. The radii and font-stack assertions below stay on the legacy
   // shell on purpose: ui.js carries the redesign's own values — a 3px elbow, a
   // 5px chip — which Foundations specifies and Task 1's audit never covered.
-  const allCss = shell + readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+  const uiSrc = readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+  const allCss = shell + uiSrc;
 
   for (const [hex, was] of [['#0A3C5C', 'the old steel'], ['#D4922A', 'the old amber'],
                             ['#3D3530', 'the old charcoal'], ['#7A6E60', 'the old grey']]) {
@@ -305,9 +306,21 @@ group('one palette');
 
   // Radii: 8 (inputs, chips, buttons), 9 (nav rows, search), 11–12 (cards),
   // 999 (pills, toggles). Anything else is somebody eyeballing it.
-  const radii = [...shell.matchAll(/border-radius:(\d+)px/g)].map((m) => Number(m[1]));
-  const illegal = [...new Set(radii.filter((r) => ![8, 9, 11, 12, 999].includes(r)))];
-  eq(illegal.join(','), '', 'every radius is one of the four legal values');
+  //
+  // ⚠ This read only helpers.js, so the file it did NOT read — ui.js, which is
+  // the design system every redesigned screen is built from — drifted to 5, 6,
+  // 7, 10, 13 and 14 without a word. A rule enforced on one of two files is
+  // not enforced. Both are checked now.
+  //
+  // 3px survives on marks under 12px square: a legend swatch and the nav
+  // elbow, which Foundations itself specifies as `radius 0 0 0 3px`. They are
+  // marks, not components, and rounding them to 8 would make them circles.
+  const LEGAL = [3, 8, 9, 11, 12, 999];
+  for (const [name, src] of [['the shell', shell], ['the design system', uiSrc]]) {
+    const radii = [...src.matchAll(/border-radius:(\d+)px/g)].map((m) => Number(m[1]));
+    const illegal = [...new Set(radii.filter((r) => !LEGAL.includes(r)))].sort((a, b) => a - b);
+    eq(illegal.join(','), '', `every radius in ${name} is one of the legal values`);
+  }
 
   // The focus ring is blue. It was amber, which is the colour this admin uses
   // for "needs attention" — a focused field is not a problem.
