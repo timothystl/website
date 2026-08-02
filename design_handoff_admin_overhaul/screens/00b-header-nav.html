@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>The shell — sidebar and context bar</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500&family=Source+Sans+3:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+#nav::-webkit-scrollbar{display:none}
+html,body{margin:0;background:#F0EAE0;font-family:'Source Sans 3',Arial,sans-serif;color:#1A1A2A}
+a{color:#2E7EA6;text-decoration:none}a:hover{color:#1E2D4A}
+code{font:500 12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#2E7EA6}
+h2{margin:34px 0 12px;font:500 21px/1.2 Lora,Georgia,serif;color:#1D3557}
+.card{background:#FFFDF9;border:1px solid #E7DFD1;border-radius:12px;padding:18px 20px}
+.card ul{margin:0;padding:0 0 0 18px;display:flex;flex-direction:column;gap:8px}
+.card li{font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty}
+</style></head><body>
+
+<div style="max-width:1500px;margin:0 auto;padding:34px 30px 0;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+  <a href="index.html" style="font:600 13px/1 'Source Sans 3'">← All screens</a>
+  <span style="font:400 13px/1 'Source Sans 3';color:#8A8271">Reference build — click the sidebar. Scroll past it for the written spec.</span>
+</div>
+
+<div style="max-width:1500px;margin:0 auto;padding:12px 30px 0">
+<div style="height:660px;position:relative;border:1px solid #DFD5C4;border-radius:14px;overflow:hidden;box-shadow:0 18px 44px rgba(29,53,87,.12);display:flex;background:#FAF7F1">
+
+  <!-- ── SIDEBAR ───────────────────────────────────────────── -->
+  <div style="width:228px;flex:none;background:#1D3557;display:flex;flex-direction:column;overflow:hidden">
+    <div style="padding:16px 18px 14px;border-bottom:1px solid rgba(237,242,247,.12);flex:none">
+      <div style="font:600 16px/1.2 'Source Sans 3';color:#FAF7F1">Timothy Lutheran</div>
+      <div style="font:700 11.5px/1 'Source Sans 3';color:#C9973A;letter-spacing:.16em;text-transform:uppercase;margin-top:5px">Admin <span style="font:400 11px/1 'Source Sans 3';color:#6B7F99;letter-spacing:0;text-transform:none;margin-left:6px">v3.10.1</span></div>
+    </div>
+    <div style="padding:10px 18px;font:400 12.5px/1 'Source Sans 3';color:#8598B0;border-bottom:1px solid rgba(237,242,247,.12);flex:none">karen</div>
+    <div id="nav" style="flex:1;overflow-y:auto;scrollbar-width:none;padding:0 0 8px"></div>
+    <div style="padding:12px 18px 14px;border-top:1px solid rgba(237,242,247,.12);display:flex;flex-direction:column;gap:8px;flex:none">
+      <a href="#" style="font:400 11.5px/1 'Source Sans 3';color:#8397AF">⌘K searches every section</a>
+      <a href="#" style="font:600 12.5px/1 'Source Sans 3';color:#C9973A">Sign out</a>
+    </div>
+  </div>
+
+  <!-- ── RIGHT SIDE ────────────────────────────────────────── -->
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+
+    <!-- context bar -->
+    <div style="display:flex;align-items:center;gap:10px;padding:0 26px;height:46px;background:#1E2D4A;color:#EDF2F7;flex:none">
+      <span id="crumb-group" style="font:500 12.5px/1 'Source Sans 3';color:#8598B0;white-space:nowrap"></span>
+      <span style="font:400 12.5px/1 'Source Sans 3';color:#4E6180">/</span>
+      <span id="crumb-sec" style="font:600 13.5px/1 'Source Sans 3';color:#FFFFFF;white-space:nowrap"></span>
+      <span id="crumb-badge"></span>
+      <span style="flex:1"></span>
+      <span style="padding:6px 10px;border:1px solid rgba(196,206,223,.35);border-radius:8px;font:500 12px/1 'Source Sans 3';color:#AFC0D2;white-space:nowrap;cursor:pointer">⌘K</span>
+      <a href="#" style="font:600 12.5px/1 'Source Sans 3';color:#AFC0D2;white-space:nowrap">View site</a>
+    </div>
+
+    <div style="flex:1;overflow:auto;padding:20px 26px">
+      <h1 id="ptitle" style="margin:0 0 4px;font:500 25px/1.15 Lora,Georgia,serif;color:#1E2D4A"></h1>
+      <p id="ppurpose" style="margin:0 0 18px;font:400 13.5px/1.5 'Source Sans 3';color:#6A6858;max-width:56em"></p>
+      <div style="background:#FFFDF9;border:1px solid #E7DFD1;border-radius:12px;overflow:hidden">
+        <div style="display:grid;grid-template-columns:2.3fr 1.1fr .7fr 1fr;gap:12px;padding:11px 18px;background:#F4EFE5;border-bottom:1px solid #E7DFD1;font:600 10.5px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8271">
+          <span>Ministry</span><span>Short link</span><span>In menu</span><span>Status</span></div>
+        <div id="rows"></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+const NAV = [
+  { label:null, items:[['Dashboard','Thursday morning','What needs you today, what happens Sunday, and what changed since yesterday.']] },
+  { label:'Website', items:[
+      ['Pages','Pages','Every page on the site. Opening a row goes straight to the page editor.',0,2],
+      ['Ministries','Ministry pages','Eleven ministry pages, split out from Pages because different people own them and some carry posts.',1],
+      ['Partners','Partner ministries','Four partners, one for each of our values — from our neighbourhood to the nations.',1],
+      ['News & Events','News & Events','One list behind one page — announcements and dated events together.',1],
+      ['Sermons','Sermons','Series, and the sermons inside them. One series is the active one shown on the site.',1],
+      ['Christian Ed','Christian Education','Bible classes and Sunday School offerings, in the order they appear on the education page.',1],
+      ['Menu','Menu','The order and shape of the header and footer.'],
+      ['Notices','Notices','Short banners pinned to a specific page — a closure, a schedule change, a deadline.'],
+      ['NFC Taps','Taps & links','Four NFC taps, each with its own set of link cards.'],
+      ['Redirects','Redirects','Short links you can say out loud, and the 301s written when a page address changes.']] },
+  { label:'Email', items:[
+      ['Newsletter','Newsletter','Weekly issues, assembled from news posts, events, and Bible classes already in the admin.',0,1],
+      ['Subscribers','Subscribers','People signed up for the weekly email.'],
+      ['Filtered Mail','Filtered mail','Messages held back from the office inbox.']] },
+  { label:'Money & Building', items:[
+      ['Giving','Giving','The giving page itself, the funds offered on it, and the single platform link.'],
+      ['Gym Rentals','Gym rentals','Holds lapse in 48 hours; recurring requests wait for you.',0,3],
+      ['Payroll','Payroll','Enter hours, approve the period, then print the gross-pay report.']] },
+  { label:'People & Access', items:[
+      ['Staff','Staff directory','One record per person. Every page that shows staff reads from here.'],
+      ['Users','Users','Who can get into this admin, and exactly what each of them can reach.'],
+      ['Audit Log','Audit log','Every change, who made it, and what it looked like before.']] },
+  { label:'Setup', items:[
+      ['Media','Media','Every photo and file on the site, in one place.'],
+      ['Settings','Settings','The handful of values the rest of the site reads.']] }
+];
+const ROWS = [
+  ['Youth','/youth','Yes','Live','live','3 posts'],
+  ['Music','/music','Yes','Live','live',''],
+  ['Quilters','/quilters','Yes','Draft edits','draft',''],
+  ['Food Pantry','/pantry','Yes','Live','live','7 posts'],
+  ['Timothy MDO','/mdo','No','Links out','flat','']
+];
+let g = 1, s = 1;
+
+function draw(){
+  document.getElementById('nav').innerHTML = NAV.map((grp,gi)=>{
+    const label = grp.label ? '<div style="font:700 10.5px/1 \'Source Sans 3\';letter-spacing:.14em;text-transform:uppercase;color:#D9A445;padding:8px 18px 8px 20px">'+grp.label+'</div>' : '';
+    const items = grp.items.map((it,si)=>{
+      const on = gi===g && si===s, child = it[3]===1;
+      const marker = child
+        ? '<span style="flex:none;width:7px;height:7px;border-radius:0 0 0 3px;border-left:1px solid '+(on?'#E0A82E':'#5A7191')+';border-bottom:1px solid '+(on?'#E0A82E':'#5A7191')+'"></span>'
+        : '<span style="flex:none;width:7px;height:7px;border-radius:50%;background:'+(on?'#E0A82E':'#5A7191')+'"></span>';
+      const bdg = it[4] ? '<span style="flex:none;padding:1px 7px;border-radius:999px;background:rgba(201,151,58,.22);color:#E8C070;font:700 10.5px/1.6 \'Source Sans 3\'">'+it[4]+'</span>' : '';
+      return '<div data-g="'+gi+'" data-s="'+si+'" style="display:flex;align-items:center;gap:11px;margin:1px 8px;padding:9px 12px'+(child?' 9px 26px':'')+';border-radius:9px;cursor:pointer;font:'+(on?'600':'500')+' 13.5px/1.35 \'Source Sans 3\';color:'+(on?'#FFFFFF':'#C6D0DC')+';'+(on?'background:#27496E;box-shadow:inset 0 0 0 1px rgba(255,255,255,.16)':'')+'">'
+        +marker+'<span style="flex:1;min-width:0">'+it[0]+'</span>'+bdg+'</div>';
+    }).join('');
+    return '<div style="padding:8px 0 4px">'+label+items+'</div>';
+  }).join('');
+
+  const grp = NAV[g], it = grp.items[s];
+  document.getElementById('crumb-group').textContent = grp.label || 'Admin';
+  document.getElementById('crumb-sec').textContent = it[1];
+  document.getElementById('crumb-badge').innerHTML = it[4]
+    ? '<span style="padding:2px 9px;border-radius:999px;background:rgba(201,151,58,.22);color:#E8C070;font:700 10.5px/1.6 \'Source Sans 3\'">'+it[4]+' waiting</span>' : '';
+  document.getElementById('ptitle').textContent = it[1];
+  document.getElementById('ppurpose').textContent = it[2];
+
+  const tone = {live:['#EDF0E4','#3F5424'],draft:['#FAF0DC','#7A5B18'],flat:['#EFE7D9','#6A6858']};
+  document.getElementById('rows').innerHTML = ROWS.map(r=>{
+    const t = tone[r[4]];
+    return '<div style="display:grid;grid-template-columns:2.3fr 1.1fr .7fr 1fr;gap:12px;padding:12px 18px;border-bottom:1px solid #EFE7D9;align-items:center">'
+      +'<span style="display:flex;flex-direction:column;gap:2px"><span style="font:600 14px/1.3 \'Source Sans 3\'">'+r[0]+'</span>'
+      +(r[5]?'<span style="font:400 12.5px/1.3 \'Source Sans 3\';color:#8A8271">'+r[5]+'</span>':'')+'</span>'
+      +'<span style="font:400 13.5px/1.4 \'Source Sans 3\';color:#6A6858">'+r[1]+'</span>'
+      +'<span style="font:400 13.5px/1.4 \'Source Sans 3\';color:#6A6858">'+r[2]+'</span>'
+      +'<span><span style="padding:3px 10px;border-radius:999px;font:600 11px/1.6 \'Source Sans 3\';background:'+t[0]+';color:'+t[1]+'">'+r[3]+'</span></span></div>';
+  }).join('');
+}
+document.getElementById('nav').addEventListener('click',e=>{const n=e.target.closest('[data-s]');if(!n)return;g=+n.dataset.g;s=+n.dataset.s;draw();});
+draw();
+</script>
+
+<div style="max-width:1040px;margin:0 auto;padding:8px 30px 90px">
+  <div style="display:flex;align-items:baseline;gap:10px;margin:40px 0 0"><span style="font:700 11px/1 'Source Sans 3';letter-spacing:.16em;text-transform:uppercase;color:#C9973A">Specification</span><span style="font:400 12.5px/1 'Source Sans 3';color:#8A8271">00b-header-nav.html</span></div>
+  <h1 style="margin:8px 0 6px;font:500 32px/1.15 Lora,Georgia,serif;color:#1D3557">The shell — sidebar and context bar</h1>
+  <p style="margin:0 0 4px;font:400 15px/1.65 'Source Sans 3';color:#6B6455;max-width:64ch;text-wrap:pretty"><b>The sidebar stays.</b> It is the navigation, exactly as <a href="00-foundations.html">Foundations</a> specifies it — twenty-one sections in five groups is more than a horizontal bar can hold honestly, and a list you can read top to bottom beats chips you have to scroll. What the build got wrong was not the sidebar; it was <b>hiding</b> it behind a hamburger.</p>
+  <p style="margin:0 0 4px;font:400 15px/1.65 'Source Sans 3';color:#6B6455;max-width:64ch;text-wrap:pretty">Above the content sits a slim <b>context bar</b> — the one good idea from the editor's top bar, kept and cut down. It answers "where am I" at a glance and carries the two global actions. It does <b>not</b> navigate.</p>
+
+  <h2>The sidebar</h2>
+  <div class="card"><ul>
+    <li>Built exactly as <a href="00-foundations.html">Foundations → The sidebar</a> specifies: 228px, <code>#1D3557</code>, its own scroll, group labels in gold, 7px dot on top-level rows and an <b>elbow</b> on the five children of Pages, active row raised to <code>#27496E</code> with <code>inset 0 0 0 1px rgba(255,255,255,.16)</code> and an <code>#E0A82E</code> dot, gold count badges, ⌘K line and <b>Sign out</b> in the foot.</li>
+    <li><b>Always on screen.</b> No <code>transform:translateX(-100%)</code>, no <code>.is-open</code>, no backdrop, no hamburger. Content sits beside it, not under it.</li>
+    <li>The only responsive rule: below <b>900px</b> it may become a slide-over with a hamburger — a phone genuinely cannot spare 228px. On every laptop and desktop it is fixed and visible.</li>
+    <li>Permissions hide whole groups, so a ministry leader's sidebar is short rather than mostly disabled.</li>
+  </ul></div>
+
+  <h2>The context bar</h2>
+  <div class="card"><ul>
+    <li>46px, <code>#1E2D4A</code>, padding <code>0 26px</code>, sitting above the content column only — it starts where the sidebar ends and does not run behind it. The two navies read as one shell.</li>
+    <li><b>Left:</b> the trail, as two parts. Group name at <code>500 12.5px #8598B0</code>, a <code>/</code> separator at <code>#4E6180</code>, then the section at <code>600 13.5px #FFFFFF</code>. Dashboard's group reads “Admin”.</li>
+    <li>If the current section has a waiting count, an amber pill follows it — “3 waiting”. Same tones as the sidebar badge.</li>
+    <li>Inside an editor, a third crumb is appended: <code>Website / Pages / Plan a Visit</code>, with the page's address beneath at <code>11.5px #6B7F99</code>. That is the only place the trail goes three deep.</li>
+    <li><b>Right:</b> the ⌘K chip and “View site”, both <code>white-space:nowrap</code>. Nothing else — no “Connect”, no outbound arrow glyphs. Username and Sign out stay in the sidebar foot where they already are.</li>
+    <li><b>It is not navigation.</b> The crumbs are not links, there are no tabs, and nothing in it opens a menu. Its whole job is to say where you are, and to put the two things you reach for from any screen within one click.</li>
+    <li>Back-links that used to live in the white util bar (“← Dashboard” on the gym sub-screens) go <b>in the content area</b>, above the <code>h1</code>, at <code>600 13px #2E7EA6</code> — not in the context bar.</li>
+  </ul></div>
+
+  <h2>What changes in the build</h2>
+  <div class="card"><ul>
+    <li>Delete <code>transform:translateX(-100%)</code>, <code>.is-open</code>, <code>.sidebar-backdrop</code>, <code>.sidebar-toggle</code> and the toggle script from <code>admin/helpers.js</code>. Keep <code>sidebarShell()</code> and all its permission and badge logic — it was right.</li>
+    <li>Give the content column <code>margin-left:228px</code> (or make the shell a two-column flex, which is cleaner) and drop <code>.wrap{max-width:860px}</code> — that narrow column was a symptom of the sidebar being absent, not a layout choice.</li>
+    <li>Replace the white <code>.util-bar</code> with the context bar. Its <code>extraLinks</code> argument keeps working; the links just render in the content area instead.</li>
+    <li>“Connect” is <b>removed</b>, not relocated — it linked to an unrelated app and does not belong in the admin chrome. Sign out returns to the sidebar foot, in gold, as specified.</li>
+    <li>Both editors keep their own 58px navy bar with undo/redo, device switcher, draft state, Preview and Publish. In an editor that bar <b>replaces</b> the context bar — an editor is full-screen and keeps the sidebar collapsed to its pages rail. It is the one screen that does not wear this shell.</li>
+  </ul></div>
+
+  <div style="margin:34px 0 0;background:#FBF0E4;border:1px solid #E8CFA8;border-radius:12px;padding:18px 20px">
+    <div style="font:700 10.5px/1 'Source Sans 3';letter-spacing:.14em;text-transform:uppercase;color:#9A6B18;margin:0 0 10px">Get this wrong and it shows</div>
+    <ul style="margin:0;padding:0 0 0 18px;display:flex;flex-direction:column;gap:8px"><li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33">Putting section tabs, group chips, or a menu in the context bar. The sidebar navigates; the bar reports.</li>
+    <li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33">A hamburger on a desktop.</li>
+    <li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33">Making the context bar a lighter colour than the sidebar — two different navies in one shell reads as two products.</li>
+    <li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33">Duplicating Sign out in both the bar and the sidebar foot.</li></ul>
+  </div>
+
+  <div style="margin:40px 0 0;display:flex;gap:14px;font:600 13.5px/1 'Source Sans 3'"><a href="index.html">← All screens</a><a href="AUDIT.html">Build audit →</a></div>
+</div>
+</body></html>

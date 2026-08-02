@@ -1,0 +1,1110 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Ministry page editor — Timothy Admin spec</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Source+Sans+3:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  html,body{margin:0;background:#F0EAE0;font-family:'Source Sans 3',Arial,sans-serif;color:#1A1A2A;}
+  a{color:#2E7EA6;text-decoration:none;}
+  a:hover{color:#1E2D4A;}
+  [contenteditable]{outline:none;}
+  [contenteditable]:focus{box-shadow:0 0 0 2px rgba(46,126,166,.35);border-radius:4px;}
+  ::selection{background:#F5E4C0;}
+</style>
+</helmet>
+
+<div style="max-width:1500px;margin:0 auto;padding:34px 30px 0;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap"><a href="index.html" style="font:600 13px/1 'Source Sans 3';color:#2E7EA6">← All screens</a><span style="font:400 13px/1 'Source Sans 3';color:#8A8271">Reference build — interactive. Scroll past it for the written spec.</span></div><div style="max-width:1500px;margin:0 auto;padding:12px 30px 0"><div style="height:880px;position:relative;transform:translateZ(0);border:1px solid #DFD5C4;border-radius:14px;overflow:hidden;box-shadow:0 18px 44px rgba(29,53,87,.12)"><div style="height:100%;display:flex;flex-direction:column;background:#FBF8F3;overflow:hidden">
+
+  <div style="display:flex;align-items:center;gap:14px;padding:0 18px;height:58px;background:#1E2D4A;color:#EDF2F7;flex:none">
+    <div style="display:flex;align-items:center;gap:10px;padding-right:16px;border-right:1px solid rgba(237,242,247,.18)">
+      <div style="width:26px;height:26px;border-radius:6px;background:#C9973A;color:#1E2D4A;font:600 13px/26px 'Source Sans 3';text-align:center">T</div>
+      <span style="font:600 14px/1 'Source Sans 3'">Timothy Admin</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;font-size:14px;color:#C4CEDF">
+      <span>Ministries</span><span style="opacity:.5">/</span><span style="color:#FBF8F3;font-weight:600">Music Ministry</span>
+    </div>
+    <span style="{{ statusPill }}">{{ statusText }}</span>
+    <span style="font-size:12.5px;color:#93A2B8">{{ savedLabel }}</span>
+    <div style="flex:1"></div>
+    <div style="display:flex;padding:3px;background:rgba(17,30,50,.55);border-radius:9px;gap:2px">
+      <span onClick="{{ setDesktop }}" style="{{ deskTab }}">Desktop</span>
+      <span onClick="{{ setTablet }}" style="{{ tabTab }}">Tablet</span>
+      <span onClick="{{ setPhone }}" style="{{ phoneTab }}">Phone</span>
+    </div>
+    <span onClick="{{ undo }}" style="{{ undoStyle }}">↺ Undo</span>
+    <span onClick="{{ publish }}" style="padding:9px 16px;background:#C9973A;color:#1B1608;border-radius:8px;font:700 13px/1 'Source Sans 3';cursor:pointer" style-hover="background:#DBAA4E">Publish</span>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:8px;padding:7px 18px;background:#F7F3EC;border-bottom:1px solid #DDE3ED;font-size:12.5px;color:#6A6858;flex:none">
+    <span style="color:#C9973A;font-weight:700">Try it:</span>
+    <span>drag rows in the left rail to reorder · drag a block from the bottom panel onto the page · click any text to type · use the right panel for spacing and layout</span>
+  </div>
+
+  <div style="flex:1;display:flex;min-height:0">
+
+    <div style="width:266px;flex:none;border-right:1px solid #DDE3ED;background:#F7F3EC;display:flex;flex-direction:column;min-height:0">
+      <div style="padding:15px 16px 9px;font:600 11px/1 'Source Sans 3';letter-spacing:.14em;text-transform:uppercase;color:#8A8898">Page blocks</div>
+      <div onDragOver="{{ railOver }}" onDrop="{{ drop }}" style="flex:1;overflow-y:auto;padding:0 12px 12px;display:flex;flex-direction:column;gap:5px">
+        <sc-for list="{{ items }}" as="item" hint-placeholder-count="5">
+          <sc-if value="{{ item.dropBefore }}">
+            <div style="height:2px;background:#C9973A;border-radius:2px;margin:1px 0"></div>
+          </sc-if>
+          <div draggable="true" onDragStart="{{ item.dragStart }}" onDragEnd="{{ item.dragEnd }}" onDragOver="{{ item.dragOver }}" onDrop="{{ drop }}" onClick="{{ item.select }}" style="{{ item.rowStyle }}">
+            <span style="color:#B8BECB;font-size:13px;cursor:grab">⠿</span>
+            <span style="width:16px;text-align:center;color:#2E7EA6">{{ item.glyph }}</span>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ item.label }}</span>
+            <sc-if value="{{ item.hidden }}">
+              <span style="font-size:10.5px;padding:1px 5px;border:1px solid #DDE3ED;border-radius:4px;color:#8A8898">Hidden</span>
+            </sc-if>
+          </div>
+        </sc-for>
+        <sc-if value="{{ dropAtEnd }}">
+          <div style="height:2px;background:#C9973A;border-radius:2px;margin:1px 0"></div>
+        </sc-if>
+        <sc-if value="{{ isEmpty }}">
+          <div style="padding:22px 12px;border:1.5px dashed #C4CEDF;border-radius:10px;text-align:center;font-size:12.5px;color:#8A8898;line-height:1.5">No blocks yet.<br>Drag one from below.</div>
+        </sc-if>
+      </div>
+      <div style="padding:12px;border-top:1px solid #DDE3ED;display:flex;flex-direction:column;gap:7px">
+        <span style="font-size:11.5px;color:#8A8898;text-align:center">Drag to reorder</span>
+      </div>
+    </div>
+
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;min-height:0;background:#E7E2D8">
+      <div ref="{{ measure }}" onDragOver="{{ railOver }}" onDrop="{{ drop }}" style="flex:1;overflow:auto;padding:24px 24px 30px;display:block">
+        <div style="{{ paperStyle }}">
+          <sc-for list="{{ items }}" as="item" hint-placeholder-count="4">
+            <sc-if value="{{ item.dropBefore }}">
+              <div style="position:relative;height:3px;background:#C9973A;border-radius:3px;box-shadow:0 0 0 4px rgba(201,151,58,.16)">
+                <span style="position:absolute;left:50%;transform:translateX(-50%);top:-24px;padding:3px 9px;background:#C9973A;color:#1B1608;border-radius:6px;font:700 10.5px/1.5 'Source Sans 3';letter-spacing:.06em;text-transform:uppercase;white-space:nowrap">{{ dropLabel }}</span>
+              </div>
+            </sc-if>
+
+            <div onClick="{{ item.select }}" onDragOver="{{ item.dragOver }}" onDrop="{{ drop }}" style="{{ item.blockStyle }}">
+
+              <sc-if value="{{ item.selected }}">
+                <div style="position:absolute;top:-33px;left:-2px;display:flex;align-items:center;gap:1px;padding:3px;background:#1E2D4A;border-radius:8px;box-shadow:0 3px 14px rgba(30,45,74,.3);z-index:5;white-space:nowrap">
+                  <span draggable="true" onDragStart="{{ item.dragStart }}" onDragEnd="{{ item.dragEnd }}" style="padding:4px 8px;color:#C4CEDF;font-size:12.5px;cursor:grab">⠿ Move</span>
+                  <span style="width:1px;height:15px;background:rgba(196,206,223,.3)"></span>
+                  <span onClick="{{ item.dup }}" style="padding:4px 8px;color:#C4CEDF;font-size:12.5px;cursor:pointer" style-hover="color:#FBF8F3">Duplicate</span>
+                  <span onClick="{{ item.toggleHide }}" style="padding:4px 8px;color:#C4CEDF;font-size:12.5px;cursor:pointer" style-hover="color:#FBF8F3">{{ item.hideLabel }}</span>
+                  <span onClick="{{ item.del }}" style="padding:4px 8px;color:#E8A0A0;font-size:12.5px;cursor:pointer" style-hover="color:#FFC9C9">Delete</span>
+                </div>
+                <span style="position:absolute;top:-33px;right:-2px;padding:5px 10px;background:#2E7EA6;color:#fff;border-radius:8px;font:700 10.5px/1.3 'Source Sans 3';letter-spacing:.08em;text-transform:uppercase;z-index:5;white-space:nowrap">{{ item.label }}</span>
+              </sc-if>
+
+              <sc-if value="{{ item.hasStamp }}">
+                <span ref="{{ item.refStamp }}" contentEditable="true" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.blurStamp }}" style="{{ item.stampStyle }}"></span>
+              </sc-if>
+
+              <sc-if value="{{ item.isHero }}">
+                <div style="{{ item.heroStyle }}">
+                  <span onClick="{{ item.openPhoto }}" style="position:absolute;top:12px;right:12px;padding:6px 11px;background:rgba(251,248,243,.94);border-radius:7px;font:600 12px/1 'Source Sans 3';color:#1E2D4A;cursor:pointer">Change photo</span>
+                  <div style="font:600 11px/1 'Source Sans 3';letter-spacing:.2em;text-transform:uppercase;color:#E8C070">Ministry</div>
+                  <div ref="{{ item.refTitle }}" contentEditable="true" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.blurTitle }}" style="{{ item.heroTitleStyle }}"></div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ item.isText }}">
+                <div ref="{{ item.refBody }}" contentEditable="true" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.blurBody }}" style="{{ item.proseStyle }}"></div>
+              </sc-if>
+
+              <sc-if value="{{ item.isTextPhoto }}">
+                <div style="{{ item.splitStyle }}">
+                  <div onClick="{{ item.openPhoto }}" style="{{ item.mediaStyle }}">
+                    <span style="padding:5px 10px;background:rgba(251,248,243,.9);border-radius:6px;font:600 11px/1.3 'Source Sans 3';color:#1E2D4A">Change photo</span>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:9px;min-width:0">
+                    <div ref="{{ item.refTitle }}" contentEditable="true" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.blurTitle }}" style="{{ item.headStyle }}"></div>
+                    <div ref="{{ item.refBody }}" contentEditable="true" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.blurBody }}" style="{{ item.proseStyle }}"></div>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ item.isVideo }}">
+                <div style="display:flex;flex-direction:column;gap:10px">
+                  <div ref="{{ item.refTitle }}" contentEditable="true" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.blurTitle }}" style="{{ item.headStyle }}"></div>
+                  <div onClick="{{ item.openVideo }}" style="position:relative;aspect-ratio:16/9;border-radius:8px;background:#1E2D4A;display:flex;align-items:center;justify-content:center;color:#FBF8F3;font-size:30px;cursor:pointer">▶
+                    <span style="position:absolute;bottom:10px;left:10px;padding:4px 9px;background:rgba(251,248,243,.92);border-radius:6px;font:600 11px/1.3 'Source Sans 3';color:#1E2D4A">{{ item.videoName }} · change</span>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ item.isPosts }}">
+                <div style="display:flex;flex-direction:column;gap:12px">
+                  <div ref="{{ item.refTitle }}" contentEditable="true" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.blurTitle }}" style="{{ item.headStyle }}"></div>
+                  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+                    <div style="border:1px solid #DDE3ED;border-radius:8px;background:#F7F3EC;padding:11px;display:flex;flex-direction:column;gap:6px">
+                      <div style="height:44px;border-radius:5px;background:repeating-linear-gradient(135deg,#DDE3ED 0 8px,#D2DAE7 8px 16px)"></div>
+                      <span style="font:600 12.5px/1.3 'Source Sans 3';color:#1E2D4A">Advent Lessons &amp; Carols</span>
+                      <span style="font-size:11px;color:#8A8898">Dec 8</span>
+                    </div>
+                    <div style="border:1px solid #DDE3ED;border-radius:8px;background:#F7F3EC;padding:11px;display:flex;flex-direction:column;gap:6px">
+                      <div style="height:44px;border-radius:5px;background:repeating-linear-gradient(135deg,#E4DCCB 0 8px,#DBD1BC 8px 16px)"></div>
+                      <span style="font:600 12.5px/1.3 'Source Sans 3';color:#1E2D4A">Handbells return</span>
+                      <span style="font-size:11px;color:#8A8898">Nov 2</span>
+                    </div>
+                    <div style="border:1px solid #DDE3ED;border-radius:8px;background:#F7F3EC;padding:11px;display:flex;flex-direction:column;gap:6px">
+                      <div style="height:44px;border-radius:5px;background:repeating-linear-gradient(135deg,#D6DED4 0 8px,#CAD4C7 8px 16px)"></div>
+                      <span style="font:600 12.5px/1.3 'Source Sans 3';color:#1E2D4A">New hymnals dedicated</span>
+                      <span style="font-size:11px;color:#8A8898">Oct 19</span>
+                    </div>
+                  </div>
+                  <span style="font-size:11.5px;color:#8A8898">Pulls the three newest Music Ministry posts automatically.</span>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ item.isButtons }}">
+                <div style="display:flex;gap:10px;flex-wrap:wrap">
+                  <span ref="{{ item.refTitle }}" contentEditable="true" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.blurTitle }}" style="padding:11px 20px;background:#1E2D4A;color:#F5E4C0;border-radius:8px;font:600 14px/1 'Source Sans 3'"></span>
+                  <span ref="{{ item.refBody }}" contentEditable="true" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.blurBody }}" style="padding:11px 20px;border:1px solid #C4CEDF;color:#1E2D4A;border-radius:8px;font:600 14px/1 'Source Sans 3'"></span>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ item.isColumns }}">
+                <div style="display:flex;flex-direction:column;gap:12px">
+                  <div ref="{{ item.refTitle }}" contentEditable="true" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.blurTitle }}" style="{{ item.headStyle }}"></div>
+                  <div style="{{ item.colStyle }}">
+                    <div ref="{{ item.refBody }}" contentEditable="true" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.blurBody }}" style="{{ item.proseStyle }}"></div>
+                    <p style="{{ item.proseStyle }}">Handbells rehearse before the late service and ring on festival Sundays through the year.</p>
+                    <sc-if value="{{ item.thirdColumn }}">
+                      <p style="{{ item.proseStyle }}">The sound booth needs one more volunteer each month — training takes about an hour.</p>
+                    </sc-if>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ item.isGallery }}">
+                <div style="display:flex;flex-direction:column;gap:12px">
+                  <div ref="{{ item.refTitle }}" contentEditable="true" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.blurTitle }}" style="{{ item.headStyle }}"></div>
+                  <div style="{{ item.galleryStyle }}">
+                    <sc-for list="{{ item.tiles }}" as="t" hint-placeholder-count="6">
+                      <div style="{{ t.style }}"></div>
+                    </sc-for>
+                  </div>
+                  <span onClick="{{ item.openPhoto }}" style="align-self:flex-start;padding:7px 12px;border:1px solid #C4CEDF;border-radius:7px;font:600 12.5px/1 'Source Sans 3';color:#1E2D4A;cursor:pointer">Manage photos</span>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ item.isEvents }}">
+                <div style="display:flex;flex-direction:column;gap:12px">
+                  <div ref="{{ item.refTitle }}" contentEditable="true" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.blurTitle }}" style="{{ item.headStyle }}"></div>
+                  <div style="display:flex;flex-direction:column;gap:8px">
+                    <sc-for list="{{ item.events }}" as="e" hint-placeholder-count="3">
+                      <div style="display:flex;align-items:center;gap:14px;padding:11px 13px;border:1px solid #DDE3ED;border-radius:8px;background:#F7F3EC">
+                        <span style="flex:none;width:54px;text-align:center;font:700 12.5px/1.3 'Source Sans 3';color:#1E2D4A;letter-spacing:.03em">{{ e.date }}</span>
+                        <span style="flex:1;display:flex;flex-direction:column;gap:2px">
+                          <span style="font:600 13.5px/1.3 'Source Sans 3';color:#1E2D4A">{{ e.name }}</span>
+                          <span style="font-size:12px;color:#8A8898">{{ e.meta }}</span>
+                        </span>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <span style="font-size:11.5px;color:#8A8898">Pulls automatically from the church calendar, tagged Music.</span>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ item.isTimes }}">
+                <div style="display:flex;flex-direction:column;gap:12px">
+                  <div ref="{{ item.refTitle }}" contentEditable="true" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.blurTitle }}" style="{{ item.headStyle }}"></div>
+                  <div style="display:flex;flex-direction:column;gap:0">
+                    <sc-for list="{{ item.times }}" as="t" hint-placeholder-count="3">
+                      <div style="display:grid;grid-template-columns:1.2fr 1.3fr 1fr;gap:12px;padding:10px 2px;border-bottom:1px solid #EDE9E0;font-size:13.5px">
+                        <span style="font-weight:600;color:#1E2D4A">{{ t.who }}</span>
+                        <span style="color:#4A4860">{{ t.when }}</span>
+                        <span style="color:#8A8898">{{ t.where }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ item.isFaq }}">
+                <div style="display:flex;flex-direction:column;gap:12px">
+                  <div ref="{{ item.refTitle }}" contentEditable="true" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.blurTitle }}" style="{{ item.headStyle }}"></div>
+                  <div style="display:flex;flex-direction:column;gap:8px">
+                    <sc-for list="{{ item.faqs }}" as="f" hint-placeholder-count="3">
+                      <div style="padding:12px 14px;border:1px solid #DDE3ED;border-radius:8px;background:#F7F3EC;display:flex;flex-direction:column;gap:6px">
+                        <div style="display:flex;align-items:center;gap:10px">
+                          <span style="flex:1;font:600 13.5px/1.35 'Source Sans 3';color:#1E2D4A">{{ f.q }}</span>
+                          <span style="color:#8A8898;font-size:13px">⌄</span>
+                        </div>
+                        <span style="font-size:13px;line-height:1.6;color:#4A4860">{{ f.a }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ item.isCallout }}">
+                <div style="{{ item.calloutStyle }}">
+                  <span style="align-self:flex-start;padding:2px 8px;border-radius:5px;background:#C9973A;color:#1B1608;font:700 10px/1.6 'Source Sans 3';letter-spacing:.1em;text-transform:uppercase">Please note</span>
+                  <div ref="{{ item.refTitle }}" contentEditable="true" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.blurTitle }}" style="font:600 16px/1.35 'Source Sans 3';color:#1E2D4A"></div>
+                  <div ref="{{ item.refBody }}" contentEditable="true" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.blurBody }}" style="{{ item.proseStyle }}"></div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ item.isNewsletter }}">
+                <div style="display:flex;flex-direction:column;gap:10px;padding:18px 20px;border:1px solid #DDE3ED;border-radius:9px;background:#EDF2F7">
+                  <div ref="{{ item.refTitle }}" contentEditable="true" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.blurTitle }}" style="{{ item.headStyle }}"></div>
+                  <div ref="{{ item.refBody }}" contentEditable="true" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.blurBody }}" style="{{ item.proseStyle }}"></div>
+                  <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap">
+                    <span style="flex:1;min-width:180px;padding:10px 12px;border:1px solid #C7CEDA;border-radius:7px;background:#fff;font-size:13px;color:#8A8898">you@email.com</span>
+                    <span style="padding:10px 16px;background:#1E2D4A;color:#F5E4C0;border-radius:7px;font:600 13px/1 'Source Sans 3'">Subscribe</span>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ item.isGive }}">
+                <div style="display:flex;flex-direction:column;gap:11px;padding:20px;border-radius:10px;background:#1E2D4A">
+                  <div ref="{{ item.refTitle }}" contentEditable="true" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.blurTitle }}" style="font:500 22px/1.25 Lora,Georgia,serif;color:#F3EDE1"></div>
+                  <div ref="{{ item.refBody }}" contentEditable="true" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.blurBody }}" style="font-size:14px;line-height:1.7;color:#C4CEDF"></div>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                    <span style="padding:8px 14px;border:1px solid rgba(245,228,192,.4);border-radius:7px;color:#F3EDE1;font:600 13px/1 'Source Sans 3'">$25</span>
+                    <span style="padding:8px 14px;border:1px solid rgba(245,228,192,.4);border-radius:7px;color:#F3EDE1;font:600 13px/1 'Source Sans 3'">$100</span>
+                    <span style="padding:8px 14px;border:1px solid rgba(245,228,192,.4);border-radius:7px;color:#F3EDE1;font:600 13px/1 'Source Sans 3'">Other</span>
+                    <span style="padding:10px 18px;background:#C9973A;color:#1B1608;border-radius:7px;font:700 13px/1 'Source Sans 3'">Give now</span>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ item.isDownload }}">
+                <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;border:1px solid #DDE3ED;border-radius:9px;background:#F7F3EC">
+                  <span style="flex:none;width:38px;height:46px;border-radius:5px;background:#FBF8F3;border:1px solid #C4CEDF;display:flex;align-items:center;justify-content:center;font:700 10px/1 'Source Sans 3';color:#8A8898">PDF</span>
+                  <span style="flex:1;display:flex;flex-direction:column;gap:3px;min-width:0">
+                    <div ref="{{ item.refTitle }}" contentEditable="true" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.blurTitle }}" style="font:600 14px/1.35 'Source Sans 3';color:#1E2D4A"></div>
+                    <span style="font-size:12px;color:#8A8898">rehearsal-schedule-fall.pdf · 240 KB</span>
+                  </span>
+                  <span style="padding:9px 15px;border:1px solid #C4CEDF;border-radius:7px;font:600 13px/1 'Source Sans 3';color:#1E2D4A">Download</span>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ item.isCalendar }}">
+                <div style="display:flex;flex-direction:column;gap:12px">
+                  <div ref="{{ item.refTitle }}" contentEditable="true" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.blurTitle }}" style="{{ item.headStyle }}"></div>
+                  <div style="border:1px solid #DDE3ED;border-radius:9px;overflow:hidden">
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 13px;background:#F7F3EC;border-bottom:1px solid #DDE3ED;font:600 13px/1 'Source Sans 3';color:#1E2D4A">
+                      <span>‹</span><span>December 2026</span><span>›</span>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:#EDE9E0;padding:1px">
+                      <span style="background:#FBF8F3;padding:7px 0;text-align:center;font-size:10.5px;color:#8A8898;font-weight:600">S</span>
+                      <span style="background:#FBF8F3;padding:7px 0;text-align:center;font-size:10.5px;color:#8A8898;font-weight:600">M</span>
+                      <span style="background:#FBF8F3;padding:7px 0;text-align:center;font-size:10.5px;color:#8A8898;font-weight:600">T</span>
+                      <span style="background:#FBF8F3;padding:7px 0;text-align:center;font-size:10.5px;color:#8A8898;font-weight:600">W</span>
+                      <span style="background:#FBF8F3;padding:7px 0;text-align:center;font-size:10.5px;color:#8A8898;font-weight:600">T</span>
+                      <span style="background:#FBF8F3;padding:7px 0;text-align:center;font-size:10.5px;color:#8A8898;font-weight:600">F</span>
+                      <span style="background:#FBF8F3;padding:7px 0;text-align:center;font-size:10.5px;color:#8A8898;font-weight:600">S</span>
+                      <sc-for list="{{ calendarDays }}" as="d" hint-placeholder-count="35">
+                        <span style="{{ d.style }}">{{ d.n }}</span>
+                      </sc-for>
+                    </div>
+                  </div>
+                  <span style="font-size:11.5px;color:#8A8898">Live Google Calendar embed, filtered to Music events.</span>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ item.isPartners }}">
+                <div style="display:flex;flex-direction:column;gap:12px">
+                  <div ref="{{ item.refTitle }}" contentEditable="true" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.blurTitle }}" style="{{ item.headStyle }}"></div>
+                  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+                    <div style="height:56px;border:1px solid #DDE3ED;border-radius:7px;background:#F7F3EC;display:flex;align-items:center;justify-content:center;font-size:10.5px;color:#A8A69A;letter-spacing:.08em">LOGO</div>
+                    <div style="height:56px;border:1px solid #DDE3ED;border-radius:7px;background:#F7F3EC;display:flex;align-items:center;justify-content:center;font-size:10.5px;color:#A8A69A;letter-spacing:.08em">LOGO</div>
+                    <div style="height:56px;border:1px solid #DDE3ED;border-radius:7px;background:#F7F3EC;display:flex;align-items:center;justify-content:center;font-size:10.5px;color:#A8A69A;letter-spacing:.08em">LOGO</div>
+                    <div style="height:56px;border:1px solid #DDE3ED;border-radius:7px;background:#F7F3EC;display:flex;align-items:center;justify-content:center;font-size:10.5px;color:#A8A69A;letter-spacing:.08em">LOGO</div>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ item.isSpacer }}">
+                <div style="{{ item.spacerStyle }}">{{ item.spacerLabel }}</div>
+              </sc-if>
+
+              <sc-if value="{{ item.isForm }}">
+                <div style="display:flex;flex-direction:column;gap:10px;padding:18px;border:1px solid #DDE3ED;border-radius:9px;background:#F7F3EC">
+                  <div ref="{{ item.refTitle }}" contentEditable="true" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.blurTitle }}" style="{{ item.headStyle }}"></div>
+                  <div style="height:34px;border:1px solid #C7CEDA;border-radius:6px;background:#fff"></div>
+                  <div style="height:34px;border:1px solid #C7CEDA;border-radius:6px;background:#fff"></div>
+                  <span style="align-self:flex-start;padding:9px 16px;background:#2E7EA6;color:#fff;border-radius:7px;font:600 13px/1 'Source Sans 3'">Sign up</span>
+                  <span style="font-size:11.5px;color:#8A8898">Google Form embed</span>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+
+          <sc-if value="{{ dropAtEnd }}">
+            <div style="position:relative;height:3px;background:#C9973A;border-radius:3px;box-shadow:0 0 0 4px rgba(201,151,58,.16)">
+              <span style="position:absolute;left:50%;transform:translateX(-50%);top:-24px;padding:3px 9px;background:#C9973A;color:#1B1608;border-radius:6px;font:700 10.5px/1.5 'Source Sans 3';letter-spacing:.06em;text-transform:uppercase;white-space:nowrap">{{ dropLabel }}</span>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isEmpty }}">
+            <div style="margin:40px;padding:52px 28px;border:2px dashed #C4CEDF;border-radius:12px;text-align:center;display:flex;flex-direction:column;gap:8px">
+              <span style="font:500 22px/1.2 Lora,Georgia,serif;color:#1E2D4A">This page is empty</span>
+              <span style="font-size:13.5px;color:#8A8898">Drag a block up from the panel below to begin.</span>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+
+      <div style="flex:none;border-top:1px solid #DDE3ED;background:#1E2D4A">
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 14px 0">
+          <div style="flex:1;min-width:0;display:flex;align-items:center;gap:4px;overflow-x:auto">
+            <span style="flex:none;padding:8px 8px 8px 2px;color:#93A2B8;font:600 12.5px/1 'Source Sans 3'">Add block</span>
+            <sc-for list="{{ groups }}" as="g" hint-placeholder-count="4">
+              <span onClick="{{ g.pick }}" style="{{ g.style }}">{{ g.name }}</span>
+            </sc-for>
+          </div>
+          <span onClick="{{ togglePalette }}" style="flex:none;padding:7px 11px;border:1px solid rgba(196,206,223,.35);border-radius:7px;color:#C4CEDF;font:600 12px/1 'Source Sans 3';cursor:pointer;white-space:nowrap">{{ paletteToggleLabel }}</span>
+        </div>
+        <sc-if value="{{ paletteOpen }}">
+          <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:10px 14px 12px">
+            <sc-for list="{{ palette }}" as="p" hint-placeholder-count="7">
+              <span draggable="true" onDragStart="{{ p.dragStart }}" onDragEnd="{{ p.dragEnd }}" onClick="{{ p.add }}" style="padding:9px 13px;background:rgba(237,242,247,.1);border-radius:9px;color:#EDF2F7;font:500 12.5px/1 'Source Sans 3';cursor:grab" style-hover="background:rgba(237,242,247,.22)">{{ p.label }}</span>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+
+    <div style="width:318px;flex:none;border-left:1px solid #DDE3ED;background:#FBF8F3;display:flex;flex-direction:column;min-height:0">
+      <sc-if value="{{ hasSelection }}">
+        <div style="padding:14px 16px;border-bottom:1px solid #DDE3ED;display:flex;align-items:center;justify-content:space-between">
+          <span style="font:600 15px/1 'Source Sans 3';color:#1E2D4A">{{ sel.label }}</span>
+          <span style="font-size:12px;color:#8A8898">{{ sel.position }}</span>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:15px">
+
+          <sc-if value="{{ sel.isColumns }}">
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <span style="font:600 11px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8898">Columns</span>
+              <div style="display:flex;gap:7px">
+                <sc-for list="{{ sel.colCounts }}" as="n" hint-placeholder-count="2">
+                  <span onClick="{{ n.pick }}" style="{{ n.style }}">{{ n.label }}</span>
+                </sc-for>
+              </div>
+              <span style="font-size:11.5px;color:#8A8898;line-height:1.4">Columns stack on a phone automatically.</span>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ sel.isTextPhoto }}">
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <span style="font:600 11px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8898">Photo position</span>
+              <div style="display:flex;gap:7px">
+                <span onClick="{{ sel.sideLeft }}" style="{{ sel.sideLeftStyle }}">Left</span>
+                <span onClick="{{ sel.sideRight }}" style="{{ sel.sideRightStyle }}">Right</span>
+                <span onClick="{{ sel.sideAbove }}" style="{{ sel.sideAboveStyle }}">Above</span>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;align-items:baseline;justify-content:space-between">
+                <span style="font:600 11px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8898">Column split</span>
+                <span style="font-size:12px;color:#4A4860">{{ sel.splitLabel }}</span>
+              </div>
+              <div style="display:flex;gap:6px">
+                <sc-for list="{{ sel.splits }}" as="s" hint-placeholder-count="4">
+                  <span onClick="{{ s.pick }}" style="{{ s.style }}">{{ s.label }}</span>
+                </sc-for>
+              </div>
+              <span style="font-size:11.5px;color:#8A8898;line-height:1.4">Columns stack automatically on a phone.</span>
+            </div>
+          </sc-if>
+
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <span style="font:600 11px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8898">Spacing</span>
+            <sc-for list="{{ sel.steppers }}" as="st" hint-placeholder-count="3">
+              <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#1E2D4A">
+                <span style="flex:1">{{ st.label }}</span>
+                <span style="display:flex;align-items:center;border:1px solid #DDE3ED;border-radius:7px;overflow:hidden;background:#fff">
+                  <span onClick="{{ st.dec }}" style="padding:4px 9px;color:#4A4860;border-right:1px solid #DDE3ED;cursor:pointer" style-hover="background:#EDF2F7">−</span>
+                  <span style="padding:4px 10px;font:600 12.5px/1.4 'Source Sans 3';min-width:38px;text-align:center">{{ st.value }}</span>
+                  <span onClick="{{ st.inc }}" style="padding:4px 9px;color:#4A4860;border-left:1px solid #DDE3ED;cursor:pointer" style-hover="background:#EDF2F7">+</span>
+                </span>
+              </div>
+            </sc-for>
+            <span style="font-size:11.5px;color:#8A8898;line-height:1.4">Steps of 8px, capped at 96 — blocks always line up with the rest of the site.</span>
+          </div>
+
+          <sc-if value="{{ sel.hasPhoto }}">
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <span style="font:600 11px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8898">Photo</span>
+              <div onClick="{{ sel.openPhoto }}" style="display:flex;gap:10px;align-items:center;padding:10px;border:1px solid #DDE3ED;border-radius:9px;background:#F7F3EC;cursor:pointer" style-hover="border-color:#2E7EA6">
+                <span style="{{ sel.photoSwatch }}"></span>
+                <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                  <span style="font-size:13px;color:#1E2D4A;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ sel.photoName }}</span>
+                  <span style="font-size:12px;color:#2E7EA6">Choose from library</span>
+                </span>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ sel.isVideoBlock }}">
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <span style="font:600 11px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8898">Video</span>
+              <div onClick="{{ sel.openVideo }}" style="display:flex;gap:10px;align-items:center;padding:10px;border:1px solid #DDE3ED;border-radius:9px;background:#F7F3EC;cursor:pointer" style-hover="border-color:#2E7EA6">
+                <span style="width:52px;height:32px;border-radius:5px;flex:none;background:#1E2D4A;color:#FBF8F3;font-size:14px;display:flex;align-items:center;justify-content:center">▶</span>
+                <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                  <span style="font-size:13px;color:#1E2D4A;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ sel.videoName }}</span>
+                  <span style="font-size:12px;color:#2E7EA6">{{ sel.videoMeta }} · change</span>
+                </span>
+              </div>
+            </div>
+          </sc-if>
+
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between">
+              <span style="font:600 11px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8898">Theme colours</span>
+              <span style="font-size:12px;color:#4A4860">{{ sel.bgName }} · {{ sel.inkName }}</span>
+            </div>
+            <span style="font-size:12px;color:#8A8898">Background</span>
+            <div style="display:flex;gap:7px">
+              <sc-for list="{{ sel.backgrounds }}" as="b" hint-placeholder-count="4">
+                <span onClick="{{ b.pick }}" title="{{ b.name }}" style="{{ b.style }}"></span>
+              </sc-for>
+            </div>
+            <span style="font-size:12px;color:#8A8898">Text</span>
+            <div style="display:flex;gap:7px">
+              <sc-for list="{{ sel.inks }}" as="k" hint-placeholder-count="5">
+                <span onClick="{{ k.pick }}" title="{{ k.name }}" style="{{ k.style }}"></span>
+              </sc-for>
+            </div>
+            <span style="font-size:11.5px;color:#8A8898;line-height:1.4">Only the site's own palette, and only pairs that stay readable — unusable combinations are greyed out.</span>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between">
+              <span style="font:600 11px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8898">Text size</span>
+              <span style="font-size:12px;color:#4A4860">{{ sel.sizeLabel }}</span>
+            </div>
+            <div style="display:flex;gap:6px">
+              <sc-for list="{{ sel.sizes }}" as="z" hint-placeholder-count="3">
+                <span onClick="{{ z.pick }}" style="{{ z.style }}">{{ z.label }}</span>
+              </sc-for>
+            </div>
+            <span style="font-size:11.5px;color:#8A8898;line-height:1.4">Three steps on the site's type scale — headings scale with the body text, so nothing drops below readable size.</span>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:9px;padding-top:11px;border-top:1px solid #DDE3ED">
+            <div style="display:flex;align-items:baseline;justify-content:space-between">
+              <span style="font:600 11px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8898">Stamp</span>
+              <span style="font-size:12px;color:#4A4860">{{ sel.stampText }}</span>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <sc-for list="{{ sel.stampPresets }}" as="p" hint-placeholder-count="5">
+                <span onClick="{{ p.pick }}" style="{{ p.style }}">{{ p.label }}</span>
+              </sc-for>
+            </div>
+            <sc-if value="{{ sel.hasStamp }}">
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <sc-for list="{{ sel.tones }}" as="t" hint-placeholder-count="3">
+                  <span onClick="{{ t.pick }}" style="{{ t.style }}">{{ t.name }}</span>
+                </sc-for>
+              </div>
+              <div style="display:flex;gap:7px">
+                <span onClick="{{ sel.cornerLeft }}" style="{{ sel.cornerLeftStyle }}">Left</span>
+                <span onClick="{{ sel.cornerRight }}" style="{{ sel.cornerRightStyle }}">Right</span>
+              </div>
+            </sc-if>
+            <span style="font-size:11.5px;color:#8A8898;line-height:1.4">Sits tilted over the block's upper corner. Click it on the page to reword it.</span>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px;padding-top:11px;border-top:1px solid #DDE3ED">
+            <div style="display:flex;align-items:center;justify-content:space-between;font-size:13.5px;color:#1E2D4A">
+              <span>Show on phone</span>
+              <span onClick="{{ sel.toggleHide }}" style="{{ sel.switchTrack }}"><span style="{{ sel.switchKnob }}"></span></span>
+            </div>
+            <div style="display:flex;gap:9px;padding:10px;border:1px solid #DCE6D6;border-radius:9px;background:#F2F6EF">
+              <span style="color:#4A5E3A;font-size:13px;line-height:1.3">✓</span>
+              <span style="font-size:11.5px;line-height:1.45;color:#3B4C2E">Every value snaps to the site's spacing scale and fonts, so a page can't end up misaligned or unreadable on a phone.</span>
+            </div>
+            <span onClick="{{ sel.reset }}" style="align-self:flex-start;padding:7px 12px;border:1px solid #C4CEDF;border-radius:7px;font:600 12.5px/1 'Source Sans 3';color:#1E2D4A;cursor:pointer" style-hover="background:#EDF2F7">Reset block</span>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ noSelection }}">
+        <div style="padding:22px 18px;display:flex;flex-direction:column;gap:9px">
+          <span style="font:500 16px/1.3 Lora,Georgia,serif;color:#1E2D4A">Nothing selected</span>
+          <span style="font-size:13px;color:#8A8898;line-height:1.5">Click a block on the page — or a row in the left rail — to change its layout, spacing, and background.</span>
+        </div>
+      </sc-if>
+
+      <div style="flex:none;padding:13px 16px;border-top:1px solid #DDE3ED;display:flex;flex-direction:column;gap:9px;background:#F7F3EC">
+        <span style="font:600 11px/1 'Source Sans 3';letter-spacing:.13em;text-transform:uppercase;color:#8A8898">{{ changesHeading }}</span>
+        <div style="display:flex;flex-direction:column;gap:6px;max-height:132px;overflow-y:auto;font-size:12.5px;color:#4A4860">
+          <sc-for list="{{ changes }}" as="c" hint-placeholder-count="3">
+            <span>{{ c.text }}</span>
+          </sc-for>
+          <sc-if value="{{ noChanges }}">
+            <span style="color:#8A8898">Nothing since the last publish.</span>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <sc-if value="{{ picker }}">
+    <div onClick="{{ closePicker }}" style="position:fixed;inset:0;background:rgba(17,30,50,.5);display:flex;align-items:center;justify-content:center;z-index:60;padding:34px">
+      <div style="width:760px;max-height:82vh;background:#FBF8F3;border-radius:14px;box-shadow:0 24px 70px rgba(17,30,50,.4);display:flex;flex-direction:column;overflow:hidden">
+        <div style="padding:16px 20px;border-bottom:1px solid #DDE3ED;display:flex;align-items:center;gap:12px">
+          <span style="font:500 19px/1.2 Lora,Georgia,serif;color:#1E2D4A">{{ pickerTitle }}</span>
+          <span style="font-size:12.5px;color:#8A8898">{{ pickerHint }}</span>
+          <div style="flex:1"></div>
+          <span onClick="{{ closePicker }}" style="padding:6px 11px;border:1px solid #C4CEDF;border-radius:7px;font:600 12.5px/1 'Source Sans 3';color:#1E2D4A;cursor:pointer" style-hover="background:#EDF2F7">Close</span>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:18px 20px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px">
+          <sc-for list="{{ pickerItems }}" as="m" hint-placeholder-count="8">
+            <div onClick="{{ m.pick }}" style="display:flex;flex-direction:column;gap:7px;cursor:pointer;padding:8px;border:1px solid transparent;border-radius:10px" style-hover="border-color:#2E7EA6;background:#F2F7FA">
+              <span style="{{ m.thumbStyle }}">
+                <sc-if value="{{ pickerIsPhoto }}"><span></span></sc-if>
+              </span>
+              <span style="font:600 12.5px/1.3 'Source Sans 3';color:#1E2D4A;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ m.name }}</span>
+              <span style="font-size:11px;color:#8A8898">{{ m.meta }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="padding:14px 20px;border-top:1px solid #DDE3ED;background:#F7F3EC;display:flex;align-items:center;gap:12px">
+          <span style="flex:1;padding:16px;border:1.5px dashed #C4CEDF;border-radius:10px;text-align:center;font:600 13px/1.3 'Source Sans 3';color:#1E2D4A">Drop a new file here to upload</span>
+          <span style="padding:10px 15px;background:#1E2D4A;color:#F5E4C0;border-radius:8px;font:700 13px/1 'Source Sans 3';cursor:pointer">Upload</span>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ toast }}">
+    <div style="position:fixed;left:50%;bottom:26px;transform:translateX(-50%);padding:12px 20px;background:#1E2D4A;color:#F5E4C0;border-radius:10px;box-shadow:0 12px 34px rgba(17,30,50,.4);font:600 13.5px/1.3 'Source Sans 3';z-index:50">{{ toast }}</div>
+  </sc-if>
+</div>
+</div></div><div style="max-width:1040px;margin:0 auto;padding:8px 30px 90px"><div style="display:flex;align-items:baseline;gap:10px;margin:40px 0 0"><span style="font:700 11px/1 'Source Sans 3';letter-spacing:.16em;text-transform:uppercase;color:#C9973A">Specification</span><span style="font:400 12.5px/1 'Source Sans 3';color:#8A8271">23-ministry-editor.html</span></div><h1 style="margin:8px 0 6px;font:500 32px/1.15 Lora,Georgia,serif;color:#1D3557">Ministry page editor</h1><p style="margin:0 0 4px;font:400 15px/1.65 'Source Sans 3';color:#6B6455;max-width:64ch;text-wrap:pretty">This is where a row in <a href="03-ministries.html" style="color:#2E7EA6">Ministries</a> lands when the office clicks it. <b>It is a different shell from the list screens</b> — no navy sidebar, no toolbar, no drawer. Do not try to build it out of the list chrome in <a href="00-foundations.html" style="color:#2E7EA6">Foundations</a>; that shell stops at the moment a page opens.</p><h2 style="margin:34px 0 12px;font:500 21px/1.2 Lora,Georgia,serif;color:#1D3557">The shell</h2><div style="background:#FFFDF9;border:1px solid #E7DFD1;border-radius:12px;padding:18px 20px"><ul style="margin:0;padding:0 0 0 18px;display:flex;flex-direction:column;gap:8px"><li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty"><b>Top bar</b> — 58px, <code>#1E2D4A</code>, text <code>#EDF2F7</code>, padding 0 18px. Left: back to the list, the page name, and its address. Middle: undo / redo and the device switcher (Desktop · Tablet · Phone). Right: draft state, “Preview”, and the gold <b>Publish</b> button.</li><li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty"><b>Body</b> — three columns: the block outline / palette on the left, the live page in the middle, the inspector on the right.</li><li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty"><b>Canvas background</b> <code>#E7E2D8</code>; the page itself sits on <code>#FBF8F3</code> at the chosen device width, centred, with a soft shadow. Device widths are real widths, not a zoom.</li><li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty"><b>Inspector</b> — right column, ~300px, switches between <b>Block</b> and <b>Page</b> tabs. Block settings change with the selected block; Page settings hold name, address, short link, menu placement, and the starter.</li><li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty">Nothing in the editor is modal. Selecting a block never covers the page.</li></ul></div><h2 style="margin:34px 0 12px;font:500 21px/1.2 Lora,Georgia,serif;color:#1D3557">Editing model</h2><div style="background:#FFFDF9;border:1px solid #E7DFD1;border-radius:12px;padding:18px 20px"><ul style="margin:0;padding:0 0 0 18px;display:flex;flex-direction:column;gap:8px"><li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty">Text is edited <b>on the page</b>, in place — click the heading in the preview and type. The outline is for order and structure, never for typing body copy.</li><li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty">Blocks are added by dragging from the palette onto the page, or clicking to append. A live drop indicator shows exactly where it will land.</li><li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty">Blocks are reordered by dragging in the outline or on the page. Every mutation pushes onto an undo stack (40 deep).</li><li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty">Every change writes a plain-English line into the page’s change list — “Text + photo added”, “Welcome banner text edited” — with a timestamp. That list is what the office reads before publishing.</li><li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty">Editing a published page puts it into <b>draft edits</b>; the live site does not change until Publish is pressed.</li></ul></div><h2 style="margin:34px 0 12px;font:500 21px/1.2 Lora,Georgia,serif;color:#1D3557">Block library</h2><div style="background:#FFFDF9;border:1px solid #E7DFD1;border-radius:12px;overflow:hidden"><table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:9px 12px;background:#F4EFE5;border-bottom:1px solid #E7DFD1;font:600 10.5px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8271">Group</th><th style="text-align:left;padding:9px 12px;background:#F4EFE5;border-bottom:1px solid #E7DFD1;font:600 10.5px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8271">Blocks</th></tr></thead><tbody><tr><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:600 13.5px/1.5 'Source Sans 3';color:#1A1A2A;vertical-align:top">Structure</td><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:400 13.5px/1.5 'Source Sans 3';color:#5A5648;vertical-align:top">Notice bar, Welcome banner, Page banner, Link tiles, Button bar, Callout box, Partner logos, Spacer</td></tr><tr><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:600 13.5px/1.5 'Source Sans 3';color:#1A1A2A;vertical-align:top">Content</td><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:400 13.5px/1.5 'Source Sans 3';color:#5A5648;vertical-align:top">Rich text, Text + photo, Video, Columns, Photo gallery, FAQ, Latest sermon*, News highlights*, Staff grid*, Posts feed*</td></tr><tr><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:600 13.5px/1.5 'Source Sans 3';color:#1A1A2A;vertical-align:top">Dates</td><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:400 13.5px/1.5 'Source Sans 3';color:#5A5648;vertical-align:top">Service times, Map & address, Upcoming events*, Meeting times, File download, Calendar</td></tr><tr><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:600 13.5px/1.5 'Source Sans 3';color:#1A1A2A;vertical-align:top">Sign up</td><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:400 13.5px/1.5 'Source Sans 3';color:#5A5648;vertical-align:top">Form, Newsletter, Give</td></tr></tbody></table></div><p style="margin:10px 0 0;font:400 13px/1.6 'Source Sans 3';color:#8A8271"><code>*</code> = automatic block. It reads from another section of the admin (sermon library, news posts, staff directory, calendar) and has no content to type — the inspector explains what feeds it instead of offering empty fields.</p><h2 style="margin:34px 0 12px;font:500 21px/1.2 Lora,Georgia,serif;color:#1D3557">Block settings, shared by every block</h2><div style="background:#FFFDF9;border:1px solid #E7DFD1;border-radius:12px;overflow:hidden"><table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:9px 12px;background:#F4EFE5;border-bottom:1px solid #E7DFD1;font:600 10.5px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8271">Setting</th><th style="text-align:left;padding:9px 12px;background:#F4EFE5;border-bottom:1px solid #E7DFD1;font:600 10.5px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8271">Options</th></tr></thead><tbody><tr><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:600 13.5px/1.5 'Source Sans 3';color:#1A1A2A;vertical-align:top">Background</td><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:400 13.5px/1.5 'Source Sans 3';color:#5A5648;vertical-align:top">Parchment <code>#FBF8F3</code> · Sand <code>#F7F3EC</code> · Mist <code>#EDF2F7</code> · Navy <code>#1E2D4A</code></td></tr><tr><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:600 13.5px/1.5 'Source Sans 3';color:#1A1A2A;vertical-align:top">Text colour</td><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:400 13.5px/1.5 'Source Sans 3';color:#5A5648;vertical-align:top">Ink <code>#3A3A4A</code> · Navy <code>#1E2D4A</code> · Slate <code>#6A6858</code> · Cream <code>#F3EDE1</code> · Gold <code>#C9973A</code> — the last two only offered on a dark background</td></tr><tr><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:600 13.5px/1.5 'Source Sans 3';color:#1A1A2A;vertical-align:top">Text size</td><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:400 13.5px/1.5 'Source Sans 3';color:#5A5648;vertical-align:top">S / M / L — body 14/15/17, heading 19/22/26, hero 30/38/46</td></tr><tr><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:600 13.5px/1.5 'Source Sans 3';color:#1A1A2A;vertical-align:top">Space above / below</td><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:400 13.5px/1.5 'Source Sans 3';color:#5A5648;vertical-align:top">A small stepper in px, defaulted per block type</td></tr><tr><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:600 13.5px/1.5 'Source Sans 3';color:#1A1A2A;vertical-align:top">Photo split (Text + photo only)</td><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:400 13.5px/1.5 'Source Sans 3';color:#5A5648;vertical-align:top">50/50 · 40/60 · 30/70 · 70/30, and which side the photo sits on</td></tr></tbody></table></div><p style="margin:10px 0 0;font:400 13px/1.6 'Source Sans 3';color:#8A8271">These five are the whole styling surface. There is no free colour picker, no font choice, and no custom CSS — that restraint is the feature.</p><h2 style="margin:34px 0 12px;font:500 21px/1.2 Lora,Georgia,serif;color:#1D3557">The info card — the white box on the banner</h2><p style="margin:0 0 14px;font:400 15px/1.65 'Source Sans 3';color:#5A5648;max-width:66ch;text-wrap:pretty">The white card that sits over the navy welcome banner — service times, address, phone, directions — is <b>not a block the office drags in</b>. It is a slot on the banner, switched on in the inspector. Making it a separate floating block would mean asking the office to position it, and that is exactly the sort of thing this editor refuses to do.</p><div style="background:#FFFDF9;border:1px solid #E7DFD1;border-radius:12px;padding:18px 20px"><ul style="margin:0;padding:0 0 0 18px;display:flex;flex-direction:column;gap:8px"><li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty">Available on <b>Welcome banner</b>, <b>Page banner</b>, and <b>Callout box</b>. Off by default.</li><li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty">Inspector setting <b>“Info card”</b>: Off · Right · Left. When it is on, the banner text column narrows to make room — the card never overlaps the text and is never dragged.</li><li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty">Second setting, <b>“Card shows”</b>, picks the contents from a short list rather than a blank canvas: <b>Service times</b>, <b>Address &amp; directions</b>, <b>Contact</b>, <b>A short list of links</b>, or <b>Free text</b>.</li><li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty">Service times and Address pull from Settings — change the service times once and every card on the site follows. Free text is the only option that asks the office to type anything.</li><li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty">The card has an optional gold eyebrow line above its contents (“JOIN US SUNDAY”), edited on the page like any other text.</li></ul></div><h3 style="margin:26px 0 10px;font:600 15px/1.2 'Source Sans 3';color:#1D3557">How the card is drawn</h3><div style="background:#FFFDF9;border:1px solid #E7DFD1;border-radius:12px;overflow:hidden"><table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:9px 12px;background:#F4EFE5;border-bottom:1px solid #E7DFD1;font:600 10.5px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8271">Part</th><th style="text-align:left;padding:9px 12px;background:#F4EFE5;border-bottom:1px solid #E7DFD1;font:600 10.5px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8271">Value</th></tr></thead><tbody><tr><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:600 13.5px/1.5 'Source Sans 3';color:#1A1A2A;vertical-align:top">Card</td><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:400 13.5px/1.5 'Source Sans 3';color:#5A5648;vertical-align:top"><code>#FFFFFF</code>, radius 18, padding 34px 32px, shadow <code>0 18px 44px rgba(11,22,44,.28)</code></td></tr><tr><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:600 13.5px/1.5 'Source Sans 3';color:#1A1A2A;vertical-align:top">Width</td><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:400 13.5px/1.5 'Source Sans 3';color:#5A5648;vertical-align:top">~34% of the banner on desktop, min 320px; full width below the tablet breakpoint, stacking under the text</td></tr><tr><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:600 13.5px/1.5 'Source Sans 3';color:#1A1A2A;vertical-align:top">Eyebrow</td><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:400 13.5px/1.5 'Source Sans 3';color:#5A5648;vertical-align:top"><code>700 12.5px, letter-spacing .12em, uppercase, #C9973A</code></td></tr><tr><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:600 13.5px/1.5 'Source Sans 3';color:#1A1A2A;vertical-align:top">Primary line</td><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:400 13.5px/1.5 'Source Sans 3';color:#5A5648;vertical-align:top"><code>400 30px Lora #1E2D4A</code> — the time, or the first line of the address</td></tr><tr><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:600 13.5px/1.5 'Source Sans 3';color:#1A1A2A;vertical-align:top">Secondary line</td><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:400 13.5px/1.5 'Source Sans 3';color:#5A5648;vertical-align:top"><code>400 15px 'Source Sans 3' #4A4860</code></td></tr><tr><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:600 13.5px/1.5 'Source Sans 3';color:#1A1A2A;vertical-align:top">Divider</td><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:400 13.5px/1.5 'Source Sans 3';color:#5A5648;vertical-align:top">1px <code>#E7DFD1</code>, 20px above and below, between each entry</td></tr><tr><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:600 13.5px/1.5 'Source Sans 3';color:#1A1A2A;vertical-align:top">Links</td><td style="padding:10px 12px;border-bottom:1px solid #EFE7D9;font:400 13.5px/1.5 'Source Sans 3';color:#5A5648;vertical-align:top"><code>600 15px #2E7EA6</code>, arrow suffix on actions (“Get directions →”)</td></tr></tbody></table></div><p style="margin:10px 0 0;font:400 13px/1.6 'Source Sans 3';color:#8A8271">On a navy banner the card is always white — there is no card-colour setting. One card per banner.</p><h2 style="margin:34px 0 12px;font:500 21px/1.2 Lora,Georgia,serif;color:#1D3557">What is different from the page editor</h2><div style="background:#FFFDF9;border:1px solid #E7DFD1;border-radius:12px;padding:18px 20px"><ul style="margin:0;padding:0 0 0 18px;display:flex;flex-direction:column;gap:8px"><li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty">Opens with the ministry block set already in place: page banner, rich text, text + photo, video, posts feed, form.</li><li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty">The <b>Posts feed</b> block only appears for ministries with “Accepts posts” switched on in the ministry drawer.</li><li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty">The Page tab of the inspector carries the ministry-only fields: core value, “In menu”, and “Links out to”.</li><li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty">Everything else — top bar, editing model, block library, block settings, publishing — is identical to the page editor. One editor, two entry points.</li></ul></div><h2 style="margin:34px 0 12px;font:500 21px/1.2 Lora,Georgia,serif;color:#1D3557">Publishing</h2><div style="background:#FFFDF9;border:1px solid #E7DFD1;border-radius:12px;padding:18px 20px"><ul style="margin:0;padding:0 0 0 18px;display:flex;flex-direction:column;gap:8px"><li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty">Publish is the only thing that changes the live site, and it is a single button in the top bar.</li><li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty">After publishing, the change list clears and the state pill returns to Live.</li><li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty">Publishing is a permission (<code>pages_edit</code> / <code>ministries_edit</code>), and every publish is written to the audit log.</li></ul></div><div style="margin:34px 0 0;background:#FBF0E4;border:1px solid #E8CFA8;border-radius:12px;padding:18px 20px"><div style="font:700 10.5px/1 'Source Sans 3';letter-spacing:.14em;text-transform:uppercase;color:#9A6B18;margin:0 0 10px">Get this wrong and it shows</div><ul style="margin:0;padding:0 0 0 18px;display:flex;flex-direction:column;gap:8px"><li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty">Rebuilding the editor with the navy admin sidebar. The editor is full-screen and has its own chrome.</li><li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty">A form of text fields on the left and a preview on the right. Text is typed on the page.</li><li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty">Offering a colour picker, a font menu, or raw HTML.</li><li style="font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty">Auto-publishing on save.</li></ul></div><div style="margin:40px 0 0;display:flex;gap:14px;font:600 13.5px/1 'Source Sans 3'"><a href="index.html" style="color:#2E7EA6">← All screens</a><a href="00-foundations.html" style="color:#2E7EA6">Foundations →</a></div></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+const SPLITS = [
+  { key: '50', label: '50/50', a: '1fr', b: '1fr', text: 'Photo 50% · Text 50%' },
+  { key: '40', label: '40/60', a: '4fr', b: '6fr', text: 'Photo 40% · Text 60%' },
+  { key: '30', label: '30/70', a: '3fr', b: '7fr', text: 'Photo 30% · Text 70%' },
+  { key: '70', label: '70/30', a: '7fr', b: '3fr', text: 'Photo 70% · Text 30%' }
+];
+const BG = [
+  { name: 'Parchment', c: '#FBF8F3', dark: false },
+  { name: 'Sand', c: '#F7F3EC', dark: false },
+  { name: 'Mist', c: '#EDF2F7', dark: false },
+  { name: 'Navy', c: '#1E2D4A', dark: true }
+];
+const INK = [
+  { name: 'Ink', c: '#3A3A4A', onDark: false },
+  { name: 'Navy', c: '#1E2D4A', onDark: false },
+  { name: 'Slate', c: '#6A6858', onDark: false },
+  { name: 'Cream', c: '#F3EDE1', onDark: true },
+  { name: 'Gold', c: '#C9973A', onDark: true }
+];
+const SIZES = [
+  { key: 's', label: 'S', body: 14, head: 19, hero: 30 },
+  { key: 'm', label: 'M', body: 15, head: 22, hero: 38 },
+  { key: 'l', label: 'L', body: 17, head: 26, hero: 46 }
+];
+const PHOTOS = [
+  { name: 'choir-loft.jpg',       grad: 'repeating-linear-gradient(135deg,#C0D8E4 0 12px,#B3CEDC 12px 24px)' },
+  { name: 'handbells-easter.jpg', grad: 'repeating-linear-gradient(135deg,#E4DCCB 0 12px,#DBD1BC 12px 24px)' },
+  { name: 'organ-console.jpg',    grad: 'repeating-linear-gradient(135deg,#DDE3ED 0 12px,#D2DAE7 12px 24px)' },
+  { name: 'advent-vespers.jpg',   grad: 'repeating-linear-gradient(135deg,#D6DED4 0 12px,#CAD4C7 12px 24px)' },
+  { name: 'hymnal-dedication.jpg',grad: 'repeating-linear-gradient(135deg,#E2D8DC 0 12px,#D6CBD0 12px 24px)' },
+  { name: 'childrens-choir.jpg',  grad: 'repeating-linear-gradient(135deg,#DCE6D6 0 12px,#CDDBC5 12px 24px)' },
+  { name: 'bell-tower.jpg',       grad: 'repeating-linear-gradient(135deg,#D9DCE4 0 12px,#CCD1DB 12px 24px)' },
+  { name: 'good-friday.jpg',      grad: 'repeating-linear-gradient(135deg,#D3D0CB 0 12px,#C6C2BB 12px 24px)' }
+];
+const VIDEOS = [
+  { name: 'Choir at Advent Vespers', meta: 'YouTube · 4:12' },
+  { name: 'Handbells — Easter Dawn', meta: 'YouTube · 2:48' },
+  { name: 'Organ dedication recital', meta: 'YouTube · 11:20' },
+  { name: 'Children sing Silent Night', meta: 'YouTube · 3:05' }
+];
+const DEFS = {
+  hero:      { label: 'Hero banner',  glyph: '▣', title: 'Music Ministry', spaceAbove: 0,  spaceBelow: 24 },
+  text:      { label: 'Rich text',    glyph: '¶', body: "Music at Timothy is not performance — it is the congregation's own voice, carried by choir, organ, and handbells through the church year. Anyone who wants to sing has a place.", spaceAbove: 8, spaceBelow: 8 },
+  textphoto: { label: 'Text + photo', glyph: '◲', title: 'Sing with the Choir', body: 'Rehearsals are Wednesdays at 7:00 in the balcony, September through Pentecost. No audition — if you can show up, you can sing.', spaceAbove: 24, spaceBelow: 24 },
+  video:     { label: 'Video',        glyph: '▶', title: 'Choir at Advent Vespers', spaceAbove: 24, spaceBelow: 24 },
+  posts:     { label: 'Posts feed',   glyph: '☰', title: 'From the Music Ministry', spaceAbove: 24, spaceBelow: 24 },
+  buttons:   { label: 'Button bar',   glyph: '⬒', title: 'Join the choir', body: 'Contact the organist', spaceAbove: 16, spaceBelow: 16 },
+  form:      { label: 'Signup form',  glyph: '◉', title: 'Sign up to sing', spaceAbove: 24, spaceBelow: 24 },
+  columns:   { label: 'Columns',      glyph: '▥', title: 'Three ways to take part', body: 'Sing in the choir on Sunday mornings, ring in the handbell choir, or help run the sound board.', spaceAbove: 24, spaceBelow: 24 },
+  gallery:   { label: 'Photo gallery',glyph: '▦', title: 'Through the church year', spaceAbove: 24, spaceBelow: 24 },
+  events:    { label: 'Upcoming events', glyph: '▤', title: 'Upcoming', spaceAbove: 24, spaceBelow: 24 },
+  times:     { label: 'Meeting times', glyph: '◷', title: 'When we gather', spaceAbove: 24, spaceBelow: 24 },
+  faq:       { label: 'FAQ',          glyph: '?', title: 'Questions people ask', spaceAbove: 24, spaceBelow: 24 },
+  callout:   { label: 'Callout box',  glyph: '❢', title: 'Registration closes August 15', body: 'Let the office know by then so we can order music for everyone.', spaceAbove: 24, spaceBelow: 24 },
+  newsletter:{ label: 'Newsletter',   glyph: '✉', title: 'Music notes by email', body: 'A short note each month with rehearsal changes and service music.', spaceAbove: 24, spaceBelow: 24 },
+  give:      { label: 'Give',         glyph: '♡', title: 'Support the music program', body: 'Gifts go toward music, instrument upkeep, and the organ fund.', spaceAbove: 24, spaceBelow: 24 },
+  download:  { label: 'File download',glyph: '⤓', title: 'Rehearsal schedule, fall term', spaceAbove: 16, spaceBelow: 16 },
+  calendar:  { label: 'Calendar',     glyph: '▩', title: 'Music calendar', spaceAbove: 24, spaceBelow: 24 },
+  partners:  { label: 'Partner logos',glyph: '◈', title: 'With thanks to', spaceAbove: 24, spaceBelow: 24 },
+  spacer:    { label: 'Spacer',       glyph: '↕', spaceAbove: 0, spaceBelow: 0 }
+};
+const ORDER = ['text', 'textphoto', 'columns', 'video', 'gallery', 'posts', 'events', 'times', 'faq',
+  'callout', 'form', 'newsletter', 'give', 'download', 'calendar', 'partners', 'buttons', 'spacer', 'hero'];
+const GROUPS = [
+  { name: 'Content', types: ['text', 'textphoto', 'columns', 'video', 'gallery', 'posts', 'faq'] },
+  { name: 'Dates', types: ['events', 'times', 'calendar', 'download'] },
+  { name: 'Structure', types: ['hero', 'callout', 'buttons', 'spacer', 'partners'] },
+  { name: 'Sign up', types: ['form', 'newsletter', 'give'] }
+];
+const TONES = [
+  { name: 'Gold', bg: '#C9973A', fg: '#1B1608' },
+  { name: 'Navy', bg: '#1E2D4A', fg: '#F5E4C0' },
+  { name: 'Green', bg: '#4A5E3A', fg: '#F0F5EC' }
+];
+
+const CARD_KINDS = [
+  { key: 'times', label: 'Service times', eyebrow: 'Join us Sunday',
+    note: 'Reads the service times from Settings. Change them once and every card on the site follows.',
+    rows: [{ big: '8:00 & 10:45 am', small: 'English worship' }, { big: '9:30 am', small: 'Vietnamese worship · Hội Thánh Việt' },
+           { small: '6704 Fyler Ave, St. Louis, MO 63139', link: 'Get directions →' }] },
+  { key: 'address', label: 'Address & directions', eyebrow: 'Find us',
+    note: 'Reads the address from Settings.',
+    rows: [{ big: '6704 Fyler Ave', small: 'St. Louis, MO 63139 · corner of Fyler & Ivanhoe' }, { small: 'Free parking in the lot off Bates Street.', link: 'Get directions →' }] },
+  { key: 'contact', label: 'Contact', eyebrow: 'Talk to us',
+    note: 'Reads the office phone and email from Settings.',
+    rows: [{ big: '(314) 781-8673', small: 'Office hours Mon–Thu, 9–3' }, { small: 'office@timothystl.org', link: 'Send a note →' }] },
+  { key: 'links', label: 'Short list of links', eyebrow: 'Start here',
+    note: 'Up to four links. Pick pages, or paste an address.',
+    rows: [{ link: 'Plan a visit →' }, { link: 'What we believe →' }, { link: 'This week’s bulletin →' }] },
+  { key: 'free', label: 'Free text', eyebrow: 'Take note',
+    note: 'The only option that asks you to type. Everything else keeps itself current.',
+    rows: [{ big: 'Registration closes 15 August', small: 'Let the office know so we can plan for everyone.' }] }
+];
+const STAMPS = ['New', 'Upcoming', 'Take note', 'Registration open'];
+const FAQS = [
+  ['Do I need to audition?', 'No. If you can show up, you can sing.'],
+  ['What if I can\u2019t read music?', 'Plenty of our singers don\u2019t. You will learn by ear alongside people who do.'],
+  ['How long is the commitment?', 'One term at a time \u2014 September to Christmas, or Epiphany to Pentecost.']
+];
+const TIMES = [
+  ['Chancel Choir', 'Wednesdays, 7:00 pm', 'Balcony'],
+  ['Handbell Choir', 'Sundays, 9:00 am', 'Fellowship Hall'],
+  ['Children\u2019s Choir', '2nd & 4th Sundays, 11:15 am', 'Room 12']
+];
+const EVENTS = [
+  ['Dec 8', 'Advent Lessons & Carols', '7:00 pm · Sanctuary'],
+  ['Dec 24', 'Christmas Eve Choir Call', '3:30 pm · Balcony'],
+  ['Jan 12', 'Epiphany Hymn Festival', '4:00 pm · Sanctuary']
+];
+const WIDTHS = { desktop: 860, tablet: 620, phone: 390 };
+
+let seq = 100;
+const mk = (type) => {
+  const d = DEFS[type];
+  return { id: 'b' + (++seq), type, title: d.title || '', body: d.body || '',
+    spaceAbove: d.spaceAbove, spaceBelow: d.spaceBelow, gap: 32, split: '40', side: 'left',
+    bg: 0, ink: 0, size: 'm', photo: 0, video: 0, cols: 2, height: 48, hidden: false,
+    stamp: '', tone: 0, corner: 'tr' };
+};
+
+class Component extends DCLogic {
+  state = {
+    blocks: ['hero', 'text', 'textphoto', 'video', 'posts', 'form'].map(mk),
+    selectedId: null, device: 'desktop', hydration: 1,
+    dragId: null, dragType: null, dropIndex: null,
+    changes: [], history: [], saved: null, toast: null, canvasW: 0, picker: null,
+    group: 'Content', paletteOpen: true
+  };
+
+  setGroup = (name) => () => this.setState({ group: name, paletteOpen: true });
+  togglePalette = () => this.setState(s => ({ paletteOpen: !s.paletteOpen }));
+
+  openPicker = (id, kind) => (e) => {
+    if (e) e.stopPropagation();
+    this.setState({ selectedId: id, picker: { id, kind } });
+  };
+  closePicker = () => this.setState({ picker: null });
+  choose = (id, kind, index) => () => {
+    if (kind === 'photo') this.patch(id, { photo: index }, 'Changed photo · ' + PHOTOS[index].name);
+    else this.patch(id, { video: index }, 'Changed video · ' + VIDEOS[index].name);
+    this.setState({ picker: null });
+  };
+
+  measure = (el) => {
+    if (!el || this._canvasEl === el) return;
+    this._canvasEl = el;
+    const read = () => this.setState({ canvasW: el.clientWidth });
+    read();
+    if (window.ResizeObserver) { this._ro = new ResizeObserver(read); this._ro.observe(el); }
+  };
+  componentWillUnmount() { if (this._ro) this._ro.disconnect(); clearTimeout(this._t); }
+
+  // ---- helpers
+  now() {
+    return new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+  note(text) {
+    this.setState(s => ({ changes: [{ text: text + ' · ' + this.now() }].concat(s.changes).slice(0, 24), saved: this.now() }));
+  }
+  push() {
+    this.setState(s => ({ history: s.history.concat([JSON.stringify(s.blocks)]).slice(-40) }));
+  }
+  mutate(fn, label) {
+    this.push();
+    this.setState(s => ({ blocks: fn(s.blocks.map(b => Object.assign({}, b))) }));
+    if (label) this.note(label);
+  }
+  patch(id, part, label) {
+    this.mutate(bs => bs.map(b => (b.id === id ? Object.assign(b, part) : b)), label);
+  }
+  hydrate(el, html, key) {
+    if (!el) return;
+    const stamp = key + ':' + this.state.hydration;
+    if (el.dataset.stamp === stamp) return;
+    el.dataset.stamp = stamp;
+    el.textContent = html || '';
+  }
+
+  // ---- drag & drop
+  beginMove = (id) => (e) => {
+    if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', id); } catch (err) {} }
+    this.setState({ dragId: id, dragType: null });
+  };
+  beginNew = (type) => (e) => {
+    if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'copy'; try { e.dataTransfer.setData('text/plain', type); } catch (err) {} }
+    this.setState({ dragId: null, dragType: type });
+  };
+  endDrag = () => this.setState({ dragId: null, dragType: null, dropIndex: null });
+
+  overItem = (index) => (e) => {
+    if (!this.state.dragId && !this.state.dragType) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const r = e.currentTarget.getBoundingClientRect();
+    const idx = (e.clientY - r.top) < r.height / 2 ? index : index + 1;
+    if (this.state.dropIndex !== idx) this.setState({ dropIndex: idx });
+  };
+  overRail = (e) => {
+    if (!this.state.dragId && !this.state.dragType) return;
+    e.preventDefault();
+    if (this.state.dropIndex === null) this.setState({ dropIndex: this.state.blocks.length });
+  };
+  onDrop = (e) => {
+    e.preventDefault();
+    const { dragId, dragType, dropIndex, blocks } = this.state;
+    let at = dropIndex === null ? blocks.length : dropIndex;
+    if (dragType) {
+      const block = mk(dragType);
+      this.mutate(bs => { bs.splice(at, 0, block); return bs; }, 'Added ' + DEFS[dragType].label.toLowerCase());
+      this.setState({ selectedId: block.id });
+    } else if (dragId) {
+      const from = blocks.findIndex(b => b.id === dragId);
+      if (from > -1) {
+        if (at > from) at -= 1;
+        if (at !== from) this.mutate(bs => { const [m] = bs.splice(from, 1); bs.splice(at, 0, m); return bs; }, 'Reordered ' + DEFS[blocks[from].type].label.toLowerCase());
+      }
+    }
+    this.setState({ dragId: null, dragType: null, dropIndex: null });
+  };
+
+  // ---- actions
+  select = (id) => (e) => { if (e) e.stopPropagation(); this.setState({ selectedId: id }); };
+  add = (type) => () => {
+    const block = mk(type);
+    this.mutate(bs => bs.concat([block]), 'Added ' + DEFS[type].label.toLowerCase());
+    this.setState({ selectedId: block.id });
+  };
+  del = (id) => (e) => {
+    e.stopPropagation();
+    const b = this.state.blocks.find(x => x.id === id);
+    this.mutate(bs => bs.filter(x => x.id !== id), 'Deleted ' + DEFS[b.type].label.toLowerCase());
+    this.setState({ selectedId: null });
+  };
+  dup = (id) => (e) => {
+    e.stopPropagation();
+    const i = this.state.blocks.findIndex(x => x.id === id);
+    const copy = Object.assign({}, this.state.blocks[i], { id: 'b' + (++seq) });
+    this.mutate(bs => { bs.splice(i + 1, 0, copy); return bs; }, 'Duplicated ' + DEFS[copy.type].label.toLowerCase());
+    this.setState({ selectedId: copy.id });
+  };
+  toggleHide = (id) => (e) => {
+    if (e) e.stopPropagation();
+    const b = this.state.blocks.find(x => x.id === id);
+    this.patch(id, { hidden: !b.hidden }, (b.hidden ? 'Shown on phone: ' : 'Hidden on phone: ') + DEFS[b.type].label.toLowerCase());
+  };
+  reset = (id) => () => {
+    const b = this.state.blocks.find(x => x.id === id);
+    const d = DEFS[b.type];
+    this.patch(id, { spaceAbove: d.spaceAbove, spaceBelow: d.spaceBelow, gap: 32, split: '40', side: 'left', bg: 0, ink: 0, size: 'm', hidden: false, stamp: '', tone: 0, corner: 'tr', title: d.title || '', body: d.body || '' }, 'Reset ' + d.label.toLowerCase());
+    this.setState(s => ({ hydration: s.hydration + 1 }));
+  };
+  step = (id, key, delta) => () => {
+    const b = this.state.blocks.find(x => x.id === id);
+    const v = Math.max(0, Math.min(96, b[key] + delta));
+    if (v !== b[key]) this.patch(id, { [key]: v });
+    this.setState({ saved: this.now() });
+  };
+  commit = (id, key) => (e) => {
+    const text = e.currentTarget.textContent.trim();
+    const b = this.state.blocks.find(x => x.id === id);
+    if (!b || b[key] === text) return;
+    this.patch(id, { [key]: text }, 'Edited text in ' + DEFS[b.type].label.toLowerCase());
+  };
+  undo = () => {
+    const h = this.state.history;
+    if (!h.length) return;
+    const prev = JSON.parse(h[h.length - 1]);
+    this.setState(s => ({ blocks: prev, history: h.slice(0, -1), hydration: s.hydration + 1, selectedId: null }));
+    this.note('Undid last change');
+  };
+  publish = () => {
+    this.setState({ changes: [], toast: 'Published to timothystl.org/ministries/music' });
+    clearTimeout(this._t);
+    this._t = setTimeout(() => this.setState({ toast: null }), 2600);
+  };
+  device = (d) => () => this.setState({ device: d });
+
+  renderVals() {
+    const s = this.state;
+    const dragging = !!(s.dragId || s.dragType);
+    const width = WIDTHS[s.device];
+    const pad = s.device === 'phone' ? 18 : 34;
+    const stack = s.device === 'phone';
+
+    const tab = (on) => 'padding:5px 12px;border-radius:7px;cursor:pointer;font:' + (on ? '600' : '500') + ' 13px/1.2 "Source Sans 3";' +
+      (on ? 'background:#EDF2F7;color:#1E2D4A' : 'color:#C4CEDF');
+    const chip = (on) => 'flex:1;padding:6px 0;text-align:center;border-radius:7px;cursor:pointer;font:' + (on ? '600' : '500') + ' 12.5px/1 "Source Sans 3";' +
+      (on ? 'border:2px solid #2E7EA6;background:#E4EEF4;color:#1E2D4A' : 'border:1px solid #DDE3ED;color:#4A4860');
+
+    const items = s.blocks.map((b, i) => {
+      const selected = b.id === s.selectedId;
+      const dim = stack && b.hidden;
+      const sp = SPLITS.find(x => x.key === b.split) || SPLITS[1];
+      const cols = b.side === 'above' ? '1fr' : (b.side === 'right' ? sp.b + ' ' + sp.a : sp.a + ' ' + sp.b);
+      const sz = SIZES.find(x => x.key === b.size) || SIZES[1];
+      const ink = INK[b.ink].c;
+      return {
+        photoName: PHOTOS[b.photo].name, videoName: VIDEOS[b.video].name,
+        openPhoto: this.openPicker(b.id, 'photo'), openVideo: this.openPicker(b.id, 'video'),
+        headStyle: { font: '500 ' + sz.head + 'px/1.25 Lora,Georgia,serif', color: b.bg === 3 ? '#F3EDE1' : '#1E2D4A' },
+        label: DEFS[b.type].label, glyph: DEFS[b.type].glyph, hidden: b.hidden, selected,
+        hideLabel: b.hidden ? 'Show' : 'Hide',
+        dropBefore: dragging && s.dropIndex === i,
+        isHero: b.type === 'hero', isText: b.type === 'text', isTextPhoto: b.type === 'textphoto',
+        isVideo: b.type === 'video', isPosts: b.type === 'posts', isButtons: b.type === 'buttons', isForm: b.type === 'form',
+        isColumns: b.type === 'columns', isGallery: b.type === 'gallery', isEvents: b.type === 'events',
+        isTimes: b.type === 'times', isFaq: b.type === 'faq', isCallout: b.type === 'callout',
+        isNewsletter: b.type === 'newsletter', isGive: b.type === 'give', isDownload: b.type === 'download',
+        isCalendar: b.type === 'calendar', isPartners: b.type === 'partners', isSpacer: b.type === 'spacer',
+        colStyle: { display: 'grid', gridTemplateColumns: stack ? '1fr' : 'repeat(' + b.cols + ',1fr)', gap: b.gap + 'px' },
+        thirdColumn: b.cols === 3,
+        galleryStyle: { display: 'grid', gridTemplateColumns: stack ? '1fr 1fr' : 'repeat(3,1fr)', gap: '10px' },
+        tiles: PHOTOS.slice(0, 6).map(p => ({ style: 'aspect-ratio:4/3;border-radius:7px;background:' + p.grad })),
+        faqs: FAQS.map(f => ({ q: f[0], a: f[1] })),
+        times: TIMES.map(t => ({ who: t[0], when: t[1], where: t[2] })),
+        events: EVENTS.map(e => ({ date: e[0], name: e[1], meta: e[2] })),
+        spacerStyle: { height: b.height + 'px', border: '1px dashed #C4CEDF', borderRadius: '7px', display: 'flex', alignItems: 'center', justifyContent: 'center', font: '600 11px/1 "Source Sans 3"', color: '#A8A69A', letterSpacing: '.1em' },
+        spacerLabel: b.height + 'PX SPACE',
+        hasStamp: !!b.stamp,
+        refStamp: (el) => this.hydrate(el, b.stamp, b.id + 'stamp'),
+        blurStamp: this.commit(b.id, 'stamp'),
+        stampStyle: {
+          position: 'absolute', zIndex: 4, bottom: '14px',
+          left: b.corner === 'tl' ? '10px' : 'auto', right: b.corner === 'tr' ? '10px' : 'auto',
+          transform: 'rotate(' + (b.corner === 'tl' ? -8 : 8) + 'deg)',
+          padding: '7px 15px', borderRadius: '7px',
+          background: TONES[b.tone].bg, color: TONES[b.tone].fg,
+          font: '700 13px/1.3 "Source Sans 3"', letterSpacing: '.1em', textTransform: 'uppercase',
+          boxShadow: '0 5px 16px rgba(30,45,74,.3)', whiteSpace: 'nowrap'
+        },
+        calloutStyle: { padding: '18px 20px', borderRadius: '10px', background: '#FDF8EC', border: '1px solid #F0DCB0', display: 'flex', flexDirection: 'column', gap: '7px' },
+        select: this.select(b.id), del: this.del(b.id), dup: this.dup(b.id), toggleHide: this.toggleHide(b.id),
+        dragStart: this.beginMove(b.id), dragEnd: this.endDrag, dragOver: this.overItem(i),
+        refTitle: (el) => this.hydrate(el, b.title, b.id + 'title'),
+        refBody: (el) => this.hydrate(el, b.body, b.id + 'body'),
+        blurTitle: this.commit(b.id, 'title'), blurBody: this.commit(b.id, 'body'),
+        rowStyle: 'display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:9px;font-size:13.5px;cursor:pointer;' +
+          (selected ? 'background:#E4EEF4;border:1px solid #2E7EA6;font-weight:600;color:#1E2D4A' : 'background:#FBF8F3;border:1px solid #DDE3ED;color:' + (b.hidden ? '#8A8898' : '#1E2D4A')) +
+          (s.dragId === b.id ? ';opacity:.4' : ''),
+        blockStyle: {
+          position: 'relative', cursor: 'pointer',
+          marginTop: b.spaceAbove + 'px', marginBottom: b.spaceBelow + 'px',
+          padding: b.type === 'hero' ? '0' : '14px ' + pad + 'px',
+          border: '2px solid ' + (selected ? '#2E7EA6' : 'transparent'),
+          borderRadius: '10px', background: BG[b.bg].c, opacity: dim ? 0.4 : 1
+        },
+        heroStyle: {
+          height: (s.device === 'phone' ? 150 : 196) + 'px', borderRadius: '8px', padding: '22px ' + pad + 'px',
+          display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
+          background: 'linear-gradient(180deg,rgba(30,45,74,.12),rgba(30,45,74,.72)),' + PHOTOS[b.photo].grad
+        },
+        heroTitleStyle: { font: '500 ' + (s.device === 'phone' ? Math.round(sz.hero * 0.74) : sz.hero) + 'px/1.1 Lora,Georgia,serif', color: '#FBF8F3', marginTop: '8px' },
+        proseStyle: { fontSize: sz.body + 'px', lineHeight: '1.75', color: b.bg === 3 && !INK[b.ink].onDark ? '#F3EDE1' : ink, margin: 0, textWrap: 'pretty' },
+        splitStyle: { display: 'grid', gridTemplateColumns: stack ? '1fr' : cols, gap: b.gap + 'px', alignItems: 'center' },
+        mediaStyle: {
+          minHeight: '150px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          order: b.side === 'right' && !stack ? 2 : 0, cursor: 'pointer',
+          background: PHOTOS[b.photo].grad
+        }
+      };
+    });
+
+    const b = s.blocks.find(x => x.id === s.selectedId);
+    let sel = null;
+    if (b) {
+      const sp = SPLITS.find(x => x.key === b.split) || SPLITS[1];
+      const on = !b.hidden;
+      sel = {
+        label: DEFS[b.type].label,
+        position: 'Block ' + (s.blocks.indexOf(b) + 1) + ' of ' + s.blocks.length,
+        isTextPhoto: b.type === 'textphoto',
+        splitLabel: b.side === 'above' ? 'Full width' : sp.text,
+        splits: SPLITS.map(x => ({ label: x.label, style: chip(x.key === b.split), pick: () => this.patch(b.id, { split: x.key }, 'Changed column split') })),
+        sideLeft: () => this.patch(b.id, { side: 'left' }, 'Moved photo left'),
+        sideRight: () => this.patch(b.id, { side: 'right' }, 'Moved photo right'),
+        sideAbove: () => this.patch(b.id, { side: 'above' }, 'Moved photo above'),
+        sideLeftStyle: chip(b.side === 'left'), sideRightStyle: chip(b.side === 'right'), sideAboveStyle: chip(b.side === 'above'),
+        steppers: [
+          { label: 'Space above', value: b.spaceAbove + 'px', inc: this.step(b.id, 'spaceAbove', 8), dec: this.step(b.id, 'spaceAbove', -8) },
+          { label: 'Space below', value: b.spaceBelow + 'px', inc: this.step(b.id, 'spaceBelow', 8), dec: this.step(b.id, 'spaceBelow', -8) }
+        ].concat(b.type === 'textphoto' || b.type === 'columns' ? [{ label: 'Gap between columns', value: b.gap + 'px', inc: this.step(b.id, 'gap', 8), dec: this.step(b.id, 'gap', -8) }] : [])
+          .concat(b.type === 'spacer' ? [{ label: 'Height', value: b.height + 'px', inc: this.step(b.id, 'height', 8), dec: this.step(b.id, 'height', -8) }] : []),
+        isBanner: b.type === 'slideshow' || b.type === 'hero' || b.type === 'callout',
+        cardOn: !!b.card && b.card !== 'off',
+        cardSides: [['off', 'Off'], ['right', 'Right'], ['left', 'Left']].map(o => ({
+          label: o[1], style: chip((b.card || 'off') === o[0]),
+          pick: () => this.patch(b.id, { card: o[0] }, o[0] === 'off' ? 'Info card turned off' : 'Info card moved ' + o[1].toLowerCase()) })),
+        cardKinds: CARD_KINDS.map(k => ({
+          label: k.label, style: chip((b.cardKind || 'times') === k.key),
+          pick: () => this.patch(b.id, { cardKind: k.key }, 'Info card shows ' + k.label.toLowerCase()) })),
+        cardNote: (CARD_KINDS.find(k => k.key === (b.cardKind || 'times')) || CARD_KINDS[0]).note,
+        isColumns: b.type === 'columns',
+        colCounts: [2, 3].map(n => ({
+          label: n + ' columns',
+          pick: () => this.patch(b.id, { cols: n }, 'Changed to ' + n + ' columns'),
+          style: chip(n === b.cols)
+        })),
+        backgrounds: BG.map((t, i) => ({
+          name: t.name,
+          pick: () => {
+            const part = { bg: i };
+            if (t.dark && !INK[b.ink].onDark) part.ink = 3;
+            if (!t.dark && INK[b.ink].onDark) part.ink = 0;
+            this.patch(b.id, part, 'Background → ' + t.name);
+          },
+          style: 'width:30px;height:30px;border-radius:7px;cursor:pointer;background:' + t.c + ';' + (i === b.bg ? 'border:2px solid #2E7EA6;box-shadow:0 0 0 2px rgba(46,126,166,.2)' : 'border:1px solid #DDE3ED')
+        })),
+        bgName: BG[b.bg].name,
+        inkName: INK[b.ink].name,
+        inks: INK.map((t, i) => ({
+          name: t.name,
+          usable: t.onDark === BG[b.bg].dark,
+          pick: () => { if (t.onDark === BG[b.bg].dark) this.patch(b.id, { ink: i }, 'Text colour → ' + t.name); },
+          style: 'width:30px;height:30px;border-radius:7px;background:' + t.c + ';' +
+            (t.onDark === BG[b.bg].dark
+              ? 'cursor:pointer;' + (i === b.ink ? 'border:2px solid #2E7EA6;box-shadow:0 0 0 2px rgba(46,126,166,.2)' : 'border:1px solid #DDE3ED')
+              : 'border:1px dashed #DDE3ED;opacity:.3;cursor:not-allowed')
+        })),
+        sizes: SIZES.map(x => ({
+          label: x.label,
+          pick: () => this.patch(b.id, { size: x.key }, 'Text size → ' + x.label),
+          style: 'flex:1;padding:7px 0;text-align:center;border-radius:7px;cursor:pointer;font:' + (x.key === b.size ? '600' : '500') + ' ' + (x.key === 's' ? 12 : x.key === 'm' ? 13.5 : 15) + 'px/1 "Source Sans 3";' +
+            (x.key === b.size ? 'border:2px solid #2E7EA6;background:#E4EEF4;color:#1E2D4A' : 'border:1px solid #DDE3ED;color:#4A4860')
+        })),
+        sizeLabel: (SIZES.find(x => x.key === b.size) || SIZES[1]).body + 'px body text',
+        hasPhoto: b.type === 'hero' || b.type === 'textphoto',
+        isVideoBlock: b.type === 'video',
+        photoName: PHOTOS[b.photo].name,
+        photoSwatch: 'width:44px;height:44px;border-radius:6px;flex:none;background:' + PHOTOS[b.photo].grad,
+        videoName: VIDEOS[b.video].name,
+        videoMeta: VIDEOS[b.video].meta,
+        openPhoto: this.openPicker(b.id, 'photo'),
+        openVideo: this.openPicker(b.id, 'video'),
+        stampText: b.stamp || 'None',
+        stampPresets: [{ label: 'None', value: '' }].concat(STAMPS.map(t => ({ label: t, value: t }))).map(p => ({
+          label: p.label,
+          pick: () => this.patch(b.id, { stamp: p.value }, p.value ? 'Stamp → ' + p.value : 'Removed stamp'),
+          style: 'padding:6px 11px;border-radius:7px;cursor:pointer;font:' + (p.value === b.stamp ? '600' : '500') + ' 12.5px/1 "Source Sans 3";' +
+            (p.value === b.stamp ? 'border:2px solid #2E7EA6;background:#E4EEF4;color:#1E2D4A' : 'border:1px solid #DDE3ED;color:#4A4860')
+        })),
+        hasStamp: !!b.stamp,
+        tones: TONES.map((t, i) => ({
+          name: t.name,
+          pick: () => this.patch(b.id, { tone: i }, 'Stamp colour → ' + t.name),
+          style: 'padding:6px 12px;border-radius:7px;cursor:pointer;font:700 10.5px/1.4 "Source Sans 3";letter-spacing:.08em;text-transform:uppercase;background:' + t.bg + ';color:' + t.fg + ';' +
+            (i === b.tone ? 'box-shadow:0 0 0 2px #2E7EA6' : '')
+        })),
+        cornerLeft: () => this.patch(b.id, { corner: 'tl' }, 'Stamp moved left'),
+        cornerRight: () => this.patch(b.id, { corner: 'tr' }, 'Stamp moved right'),
+        cornerLeftStyle: chip(b.corner === 'tl'), cornerRightStyle: chip(b.corner === 'tr'),
+        toggleHide: this.toggleHide(b.id),
+        switchTrack: 'width:40px;height:22px;border-radius:999px;position:relative;display:inline-block;cursor:pointer;background:' + (on ? '#4A5E3A' : '#DDE3ED'),
+        switchKnob: 'position:absolute;top:3px;' + (on ? 'right:3px' : 'left:3px') + ';width:16px;height:16px;border-radius:50%;background:#FBF8F3;box-shadow:0 1px 3px rgba(0,0,0,.2)',
+        reset: this.reset(b.id)
+      };
+    }
+
+    return {
+      items, sel, hasSelection: !!b, noSelection: !b,
+      isEmpty: s.blocks.length === 0,
+      dropAtEnd: dragging && s.dropIndex === s.blocks.length,
+      dropLabel: s.dragType ? 'Insert ' + DEFS[s.dragType].label.toLowerCase() + ' here' : 'Move here',
+      paletteOpen: s.paletteOpen, togglePalette: this.togglePalette,
+      paletteToggleLabel: s.paletteOpen ? 'Hide' : 'Show blocks',
+      groups: GROUPS.map(g => ({
+        name: g.name, pick: this.setGroup(g.name),
+        style: 'flex:none;white-space:nowrap;padding:7px 11px;border-radius:8px;cursor:pointer;font:' + (g.name === s.group ? '600' : '500') + ' 12.5px/1 "Source Sans 3";' +
+          (g.name === s.group ? 'background:#EDF2F7;color:#1E2D4A' : 'color:#C4CEDF')
+      })),
+      palette: (GROUPS.find(g => g.name === s.group) || GROUPS[0]).types
+        .map(t => ({ label: DEFS[t].glyph + '  ' + DEFS[t].label, dragStart: this.beginNew(t), dragEnd: this.endDrag, add: this.add(t) })),
+      measure: this.measure, drop: this.onDrop, railOver: this.overRail,
+      calendarDays: Array.from({ length: 35 }, (_, i) => {
+        const n = i - 1;
+        const marked = n === 8 || n === 24;
+        return {
+          n: n > 0 && n <= 31 ? String(n) : '',
+          style: 'background:#FBF8F3;padding:8px 0;text-align:center;font-size:11px;' +
+            (marked ? 'color:#1E2D4A;font-weight:700;box-shadow:inset 0 0 0 2px #C9973A' : 'color:#4A4860')
+        };
+      }),
+      paperStyle: {
+        width: width + 'px', minHeight: '420px', flex: '0 0 auto', background: '#FBF8F3', borderRadius: '10px',
+        boxShadow: '0 6px 30px rgba(30,45,74,.14)', padding: '18px', margin: '0 auto',
+        zoom: s.canvasW ? Math.min(1, (s.canvasW - 56) / width) : 1,
+        transition: 'width .18s ease'
+      },
+      deskTab: tab(s.device === 'desktop'), tabTab: tab(s.device === 'tablet'), phoneTab: tab(s.device === 'phone'),
+      setDesktop: this.device('desktop'), setTablet: this.device('tablet'), setPhone: this.device('phone'),
+      undo: this.undo, publish: this.publish,
+      undoStyle: 'padding:8px 13px;border:1px solid rgba(196,206,223,.45);border-radius:8px;font:600 13px/1 "Source Sans 3";color:#EDF2F7;cursor:pointer;' + (s.history.length ? '' : 'opacity:.4'),
+      statusText: s.changes.length ? 'Draft · ' + s.changes.length + ' edit' + (s.changes.length === 1 ? '' : 's') : 'Published',
+      statusPill: s.changes.length
+        ? 'padding:4px 10px;border-radius:999px;background:rgba(201,151,58,.18);border:1px solid rgba(232,192,112,.5);color:#E8C070;font:600 11px/1.4 "Source Sans 3";letter-spacing:.07em;text-transform:uppercase;white-space:nowrap'
+        : 'padding:4px 10px;border-radius:999px;background:rgba(220,230,214,.18);border:1px solid rgba(160,190,150,.5);color:#C6DDBB;font:600 11px/1.4 "Source Sans 3";letter-spacing:.07em;text-transform:uppercase;white-space:nowrap',
+      savedLabel: s.saved ? 'Autosaved ' + s.saved : 'No changes yet',
+      changesHeading: s.changes.length ? 'Unpublished changes (' + s.changes.length + ')' : 'Unpublished changes',
+      changes: s.changes, noChanges: s.changes.length === 0, toast: s.toast,
+      picker: !!s.picker,
+      pickerTitle: s.picker ? (s.picker.kind === 'photo' ? 'Photo library' : 'Video library') : '',
+      pickerHint: s.picker ? (s.picker.kind === 'photo' ? 'Uploaded photos are resized and cropped automatically.' : 'Paste a YouTube link, or reuse a video already on the site.') : '',
+      pickerIsPhoto: !!s.picker && s.picker.kind === 'photo',
+      closePicker: this.closePicker,
+      pickerItems: s.picker
+        ? (s.picker.kind === 'photo'
+            ? PHOTOS.map((p, i) => ({
+                name: p.name, meta: 'JPG · 1600×1067',
+                pick: this.choose(s.picker.id, 'photo', i),
+                thumbStyle: 'aspect-ratio:4/3;border-radius:8px;background:' + p.grad
+              }))
+            : VIDEOS.map((v, i) => ({
+                name: v.name, meta: v.meta,
+                pick: this.choose(s.picker.id, 'video', i),
+                thumbStyle: 'aspect-ratio:16/9;border-radius:8px;background:#1E2D4A;display:flex;align-items:center;justify-content:center;color:#FBF8F3;font-size:24px'
+              })))
+        : []
+    };
+  }
+}
+</script>
+</body>
+</html>

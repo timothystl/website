@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Build audit — Timothy Admin</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500&family=Source+Sans+3:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#F0EAE0;font-family:'Source Sans 3',Arial,sans-serif;color:#1A1A2A}
+a{color:#2E7EA6;text-decoration:none}a:hover{color:#1E2D4A}
+code{font:500 12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#2E7EA6}
+h2{margin:44px 0 6px;font:500 22px/1.2 Lora,Georgia,serif;color:#1D3557}
+h3{margin:26px 0 8px;font:600 15px/1.3 'Source Sans 3';color:#1D3557}
+p{margin:0 0 14px;font:400 15px/1.65 'Source Sans 3';color:#5A5648;max-width:68ch;text-wrap:pretty}
+li{font:400 14.5px/1.6 'Source Sans 3';color:#3F3B33;text-wrap:pretty}
+ul{margin:0;padding:0 0 0 18px;display:flex;flex-direction:column;gap:8px}
+.card{background:#FFFDF9;border:1px solid #E7DFD1;border-radius:12px;padding:18px 20px}
+.sev{display:inline-block;padding:3px 10px;border-radius:999px;font:600 11px/1.6 'Source Sans 3';vertical-align:middle;margin-left:8px}
+.s1{background:#F7E4DE;color:#8C3A28}.s2{background:#FAF0DC;color:#7A5B18}.s3{background:#EFE7D9;color:#6A6858}.ok{background:#EDF0E4;color:#3F5424}
+table{width:100%;border-collapse:collapse;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:12px;overflow:hidden}
+th{text-align:left;padding:9px 12px;background:#F4EFE5;border-bottom:1px solid #E7DFD1;font:600 10.5px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8271}
+td{padding:10px 12px;border-bottom:1px solid #EFE7D9;font:400 13.5px/1.5 'Source Sans 3';color:#5A5648;vertical-align:top}
+td:first-child{font-weight:600;color:#1A1A2A}
+</style></head><body>
+<div style="max-width:1040px;margin:0 auto;padding:56px 30px 110px">
+<a href="index.html" style="font:600 13px/1 'Source Sans 3'">← All screens</a>
+<div style="font:700 11px/1 'Source Sans 3';letter-spacing:.16em;text-transform:uppercase;color:#C9973A;margin:26px 0 8px">Read against the build · 1 August 2026</div>
+<h1 style="margin:0 0 10px;font:500 40px/1.12 Lora,Georgia,serif;color:#1D3557">Build audit</h1>
+<p>Read from <code>timothystl/website@main</code> (<code>5f90460</code>) — <code>admin/helpers.js</code>, <code>admin/ui.js</code>, <code>admin/sections.js</code>, <code>admin/values.js</code>, <code>admin/menu.js</code>, <code>admin/taps.js</code>, <code>admin/gym.js</code>, <code>admin/forms.js</code>, <code>admin/payroll.html</code>, <code>admin/ministry-editor.html</code>. The main worker is over the reader's size cap and was searched, not read line by line, so anything routed only from <code>tlc-admin-worker.js</code> is unverified rather than clean.</p>
+
+<h2>What was implemented well</h2>
+<div class="card"><ul>
+  <li><code>admin/sections.js</code> holds every title, purpose line, action label, search placeholder, filter set, column width and note as data, with a test asserting it cannot drift from the design. That is a better solution than the design asked for.</li>
+  <li><code>PALETTE</code> in <code>ui.js</code> is the Foundations table, hex for hex, with the comments intact — and <code>ui.test.mjs</code> asserts them.</li>
+  <li><code>values.js</code> carries all four values with the exact tint / ink / solid triplets, keyed to the database columns.</li>
+  <li>The sidebar's own CSS block is faithful: 228px, 9px radius rows, the raised active state rather than a gold bar, the child <b>elbow</b> marker, the gold badge pill.</li>
+  <li><code>menu.js</code> is exactly the design's model — menu separate from pages, label falls back to the page, broken items flagged not dropped, two levels in the header.</li>
+  <li>One <code>tinymceField()</code> with one toolbar constant, so every rich-text field is painted the same. The design's note, honoured literally.</li>
+  <li>Taps are <code>/tap1</code>–<code>/tap4</code>, and the counting refuses to show a fake zero.</li>
+</ul></div>
+
+<h2>Deviations, worst first</h2>
+
+<h3>1 · The sidebar is off-canvas — it is not on the screen at all <span class="sev s1">Breaks the design</span></h3>
+<div class="card"><ul>
+  <li><code>helpers.js</code>: <code>.sidebar{position:fixed;transform:translateX(-100%)}</code> with <code>.is-open</code> sliding it in, a <code>.sidebar-backdrop</code> scrim, and a hamburger <code>.sidebar-toggle</code> in a white <code>.util-bar</code>. Foundations says “228px, fixed, <b>never collapses</b>”.</li>
+  <li>All the good sidebar styling below it is therefore invisible until someone finds the hamburger. This alone would make the admin feel like a different product from the prototype.</li>
+  <li>Consequence: <code>.wrap{margin-left:0}</code> and <code>max-width:860px</code>, so content sits in a narrow column with a large empty right side.</li>
+  <li><b>Fix:</b> keep <code>sidebarShell()</code> and all its styling — it is right. Delete only what hides it: <code>transform:translateX(-100%)</code>, <code>.is-open</code>, <code>.sidebar-backdrop</code>, <code>.sidebar-toggle</code> and the toggle script. Then replace the white <code>.util-bar</code> with the context bar in <a href="00b-header-nav.html">00b-header-nav.html</a>.</li>
+</ul></div>
+
+<h3>2 · Three palettes are live at once <span class="sev s1">Breaks the design</span></h3>
+<div class="card"><ul>
+  <li><code>helpers.js</code> still opens with the pre-redesign <code>:root</code>: <code>--steel:#0A3C5C</code>, <code>--amber:#D4922A</code>, <code>--charcoal:#3D3530</code>, <code>--gray:#7A6E60</code>, <code>--serif:Georgia</code>, <code>--sans:-apple-system…</code>. The new tokens are appended <i>after</i> it, so anything not explicitly restyled renders in the old scheme and the wrong typefaces.</li>
+  <li><code>gym.js</code> declares a <b>third</b> <code>:root</code> — <code>--steel:#1E2D4A;--amber:#C9973A</code> — which is closer but still not <code>#1D3557</code>/<code>#C9973A</code> as a pair, and it shadows the shell's tokens inside gym screens.</li>
+  <li>Everything built on the legacy classes is therefore off-design: <code>.card</code> (radius 14, 28px padding), <code>.btn-primary</code> (<code>#0A3C5C</code>, radius 6), inputs (radius 6, amber focus ring), <code>.page-title</code> (Georgia 28px, not Lora 25px), <code>.alert</code>, <code>.badge-*</code>, <code>.filter-pill</code> (999px pills with a navy fill, not the spec's 8px chips with a 2px border).</li>
+  <li><b>Fix:</b> one <code>:root</code>. Point <code>--steel/--amber/--charcoal/--gray/--serif/--sans</code> at the Foundations values, delete the gym <code>:root</code>, and restyle <code>.card</code>, <code>.btn</code>, inputs, <code>.page-title</code> and <code>.filter-pill</code> to the Foundations numbers. Most legacy screens then land close to the design for free.</li>
+</ul></div>
+
+<h3>3 · Gym Rentals is almost entirely pre-redesign <span class="sev s1">Breaks the design</span></h3>
+<div class="card"><ul>
+  <li>Only the request queue uses <code>renderListSection()</code>. Roughly twenty sub-screens — settings, groups, add group, group detail, calendar test, consolidate, recurring detection, blocked dates, new booking, review booking, all bookings, price &amp; confirm, invoices, invoice detail, recurring requests — are <code>&lt;div class="wrap"&gt;&lt;div class="page-title"&gt;</code>, i.e. Georgia headings on the old palette.</li>
+  <li>Their titles are Title Case (“Gym Rental Settings”, “New Booking”, “All Bookings”), not the design's sentence case.</li>
+  <li>The design's two Gym layouts — <b>Calendar first</b> and <b>Queue first</b> — are declared in <code>sections.js</code> as variants. Confirm both are actually rendered; <a href="16-gym.html">16-gym.html</a> specifies both.</li>
+  <li><b>Fix:</b> after the palette merge, convert the list-shaped ones (groups, all bookings, invoices, recurring requests, blocked dates) to <code>renderListSection()</code> + <code>renderDrawer()</code>. The genuinely form-shaped ones can stay as forms, but on the new card and button styles.</li>
+</ul></div>
+
+<h3>4 · Sign out was moved out of the nav, and “Connect” took its place <span class="sev s2">Visible drift</span></h3>
+<div class="card"><ul>
+  <li>Foundations: the sidebar foot is the ⌘K line and <b>Sign out</b> in gold. The build has ⌘K and <code>Connect</code>, with Sign out relocated to the white util bar.</li>
+  <li><b>Fix:</b> in the new header, Sign out is the last item on the right in gold; “View site” carries the outbound link. If Connect needs a home, it is a second outbound link, not a replacement for signing out.</li>
+</ul></div>
+
+<h3>5 · Login, password reset and first-run setup were never redesigned <span class="sev s2">Visible drift</span></h3>
+<div class="card"><ul>
+  <li><code>loginPage()</code>, <code>forgotPasswordPage()</code>, <code>resetPasswordPage()</code>, <code>setupPage()</code> all use <code>--steel #0A3C5C</code>, Georgia titles, <code>#D4922A</code> eyebrows and radius-20 cards.</li>
+  <li>This is the <b>first screen anybody sees</b>, and it currently announces the old design before the new one loads.</li>
+  <li><b>Fix:</b> navy <code>#1E2D4A</code> field, card <code>#FFFDF9</code> radius 12, Lora 500 title, Source Sans 3 body, primary button <code>#1E2D4A</code> with <code>#F5E4C0</code> text at radius 8.</li>
+</ul></div>
+
+<h3>6 · Sidebar navy used as a content fill on Payroll <span class="sev s2">Visible drift</span></h3>
+<div class="card"><ul>
+  <li><code>payroll.html</code> paints <code>.tlc-pay-card-bar</code> and <code>.tlc-pay-tbl-bar</code> in <code>#1D3557</code>. The palette comment in <code>ui.js</code> says it in as many words: “sidebar only, never a page”.</li>
+  <li><b>Fix:</b> use <code>#F4EFE5</code> with <code>#8A8271</code> uppercase micro-label type, as every other table header does. Once the header nav is navy across the top, a second navy band in the page reads as a second nav.</li>
+</ul></div>
+
+<h3>7 · Value chips are missing from the filter rows <span class="sev s2">Visible drift</span></h3>
+<div class="card"><ul>
+  <li><code>sections.js</code> gives Ministries, News &amp; Events and Christian Ed their plain filters only. The design puts the four tinted value chips <b>after</b> the plain chips on each of those three screens, and <code>values.js</code> already holds the exact colours to draw them.</li>
+  <li><b>Fix:</b> add a <code>valueChips: true</code> flag to those three configs and render them from <code>VALUES</code> after the plain set, keeping the value colours in both the on and off states.</li>
+</ul></div>
+
+<h3>8 · Filtered Mail is a legacy screen <span class="sev s2">Visible drift</span></h3>
+<div class="card"><ul>
+  <li><code>forms.js</code> renders it as <code>.wrap</code> + <code>.page-title</code> + hand-built cards. It postdates the handoff, so there is no spec for it — but it now sits between Newsletter and Subscribers in the Email group looking unlike both.</li>
+  <li><b>Fix:</b> it is a list of held messages with a per-message decision — <code>renderListSection()</code> with columns From / Subject / Held / Why, filters All · Held · Released, and <code>renderDrawer({readOnly:true})</code> plus a Release action.</li>
+</ul></div>
+
+<h3>9 · Copy drift in two places <span class="sev s3">Small</span></h3>
+<div class="card"><ul>
+  <li><code>sections.js</code> → <code>links.label</code> is <code>'NFC Taps\n'</code> with a trailing newline. Harmless in HTML, wrong in a title attribute or a <code>⌘K</code> result.</li>
+  <li><code>sections.js</code> → the Sermons note reads “No recordings are attached yet, so the site shows text-only cards.” That was written when the library was assumed to exist. It is being <b>built</b>, so the note should describe the rule, not the current state: “A sermon with no recording shows a text-only card. Add a YouTube link and it upgrades itself.”</li>
+</ul></div>
+
+<h2>Not verifiable from here</h2>
+<p>These need a look at the running admin or at <code>tlc-admin-worker.js</code> directly. Each is specified in its screen file.</p>
+<table>
+  <thead><tr><th>Check</th><th>Screen file</th></tr></thead>
+  <tbody>
+    <tr><td>Dashboard renders both Needs you and Overview, and every card is a link</td><td>01-dashboard.html</td></tr>
+    <tr><td>Sidebar is visible without a hamburger at desktop widths</td><td>00b-header-nav.html</td></tr><tr><td>Drawer geometry — 460px, sand read-only fields, toggle with its word, delete in <code>#9A3B2E</code></td><td>00-foundations.html</td></tr>
+    <tr><td>Row hover actions and the amber inline “needs attention” strip</td><td>00-foundations.html</td></tr>
+    <tr><td>Empty states use the two specified sentences</td><td>00-foundations.html</td></tr>
+    <tr><td>Toast copy states the consequence (“Saved · written to the audit log”)</td><td>00-foundations.html</td></tr>
+    <tr><td>Taps screen leads with the four tap cards above the toolbar</td><td>10-links.html</td></tr>
+    <tr><td>Giving's two surfaces and the “keep in step” switch</td><td>18-giving.html</td></tr>
+    <tr><td>Payroll's three report layouts, and the lock enforced server-side</td><td>19-payroll.html</td></tr>
+    <tr><td>Newsletter editor: all three note slots, pickers not free text, sent issues locked</td><td>13-newsletter.html</td></tr>
+    <tr><td>Media rows flag missing alt text and &gt;1&nbsp;MB inline</td><td>12-media.html</td></tr>
+    <tr><td>Banner <b>info card</b> — the white box on the worship banner</td><td>22-page-editor.html</td></tr>
+  </tbody>
+</table>
+
+<h2>Suggested order</h2>
+<div class="card"><ul>
+  <li><b>One —</b> merge the palettes into a single <code>:root</code> and restyle the six legacy primitives (<code>.card</code>, <code>.btn</code>, inputs, <code>.page-title</code>, <code>.alert</code>, <code>.filter-pill</code>). Widest visual gain per line changed.</li>
+  <li><b>Two —</b> un-hide the sidebar, and replace the white util bar with the context bar.</li>
+  <li><b>Three —</b> login and the three account screens.</li>
+  <li><b>Four —</b> gym sub-screens, then Filtered Mail.</li>
+  <li><b>Five —</b> value chips, the payroll navy bars, and the two copy fixes.</li>
+</ul></div>
+
+<div style="margin:44px 0 0;display:flex;gap:14px;font:600 13.5px/1 'Source Sans 3'"><a href="index.html">← All screens</a><a href="00b-header-nav.html">Header navigation →</a></div>
+</div></body></html>

@@ -3102,9 +3102,9 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
 .cal-table th{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:4px 0;text-align:center;}
 .cal-table td{padding:2px;text-align:center;}
 .bcal-day{display:block;width:30px;height:30px;line-height:30px;border-radius:50%;margin:0 auto;font-size:12px;font-weight:600;text-align:center;position:relative;cursor:pointer;color:var(--steel);}
-.bcal-past{color:#CBD5E1;cursor:default;}
-.bcal-blocked{background:#fce8e8;color:#7a1f1f;cursor:pointer;}
-.bcal-blocked.bcal-pending-unblock{background:transparent;color:#CBD5E1;text-decoration:line-through;}
+.bcal-past{color:#A9A396;cursor:default;}
+.bcal-blocked{background:#F7E4DE;color:#8C3A28;cursor:pointer;}
+.bcal-blocked.bcal-pending-unblock{background:transparent;color:#A9A396;text-decoration:line-through;}
 .bcal-has-booking{color:var(--steel);}
 .bcal-selected{background:var(--amber);color:white;}
 .bcal-dot{display:block;width:5px;height:5px;border-radius:50%;background:var(--amber);position:absolute;bottom:2px;left:50%;transform:translateX(-50%);}
@@ -3135,7 +3135,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
     ${calHtml}
     <p class="tlc-note" style="margin:0 0 14px;"><span class="tlc-note-mark">◆</span><span>${escapeHtml(sectionCfg('gymBlocked').note)}</span></p>
     <div class="bcal-legend" style="margin-bottom:16px;">
-      <span><span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:#fce8e8;border:1px solid #e8a0a0;"></span> Currently blocked</span>
+      <span><span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:#F7E4DE;border:1px solid #E4C8C8;"></span> Currently blocked</span>
       <span><span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:var(--amber);"></span> Selected to block</span>
       <span><span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--amber);vertical-align:middle;margin:0 4px;"></span> Has booking (still blockable)</span>
     </div>

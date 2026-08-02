@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Gym booking (renter) — Timothy Admin spec</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600&amp;family=Source+Sans+3:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+  html,body{margin:0;background:#F0EAE0;font-family:'Source Sans 3',Arial,sans-serif;color:#1A1A2A;}
+  a{color:#2E7EA6;text-decoration:none;}
+  a:hover{color:#1E2D4A;}
+  ::selection{background:#F5E4C0;}
+</style>
+</helmet>
+
+<div style="max-width:1500px;margin:0 auto;padding:34px 30px 0;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap"><a href="index.html" style="font:600 13px/1 'Source Sans 3';color:#2E7EA6">← All screens</a><span style="font:400 13px/1 'Source Sans 3';color:#8A8271">Reference build — interactive. Pick hours on several dates; they all go into one request. Scroll past it for the written spec.</span></div>
+
+<div style="max-width:1500px;margin:0 auto;padding:14px 30px 0;display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap">
+
+  <div style="flex:1;min-width:680px;border:1px solid #DFD5C4;border-radius:14px;overflow:hidden;box-shadow:0 18px 44px rgba(29,53,87,.12);background:#FAF7F1">
+
+    <div style="background:#4A5E3A;padding:15px 30px;display:flex;align-items:center;gap:14px">
+      <div style="width:42px;height:42px;border-radius:50%;background:#FAF7F1;flex:none;display:flex;align-items:center;justify-content:center;font:600 9px/1 'Source Sans 3';color:#4A5E3A">LOGO</div>
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <span style="font:600 15.5px/1 'Source Sans 3';color:#FFFFFF">Timothy Lutheran Church</span>
+        <span style="font:600 11.5px/1 'Source Sans 3';color:#D9C48A">from our Neighborhood to the Nations</span>
+      </div>
+    </div>
+    <div style="height:3px;background:#C9973A"></div>
+
+    <div style="background:#1E2D4A;padding:20px 30px;display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap">
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <span style="font:500 26px/1.1 Lora,Georgia,serif;color:#FFFFFF">Gym Rental</span>
+        <span style="font:600 13.5px/1 'Source Sans 3';color:#C9973A">Test</span>
+        <span style="font:400 13px/1.5 'Source Sans 3';color:#AFC0D2;margin-top:3px">$50.00/hr · Mon–Fri 5–9 PM · Sat 8 AM–8 PM · Sun 1–8 PM</span>
+      </div>
+      <span style="padding:8px 15px;border:1px solid rgba(196,206,223,.4);border-radius:8px;font:600 13px/1 'Source Sans 3';color:#EDF2F7;cursor:pointer;white-space:nowrap" style-hover="background:rgba(255,255,255,.08)">My bookings</span>
+    </div>
+
+    <div style="padding:24px 30px 34px;display:flex;flex-direction:column;gap:14px">
+
+      <div style="border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;box-shadow:0 2px 6px rgba(11,22,44,.05),0 10px 24px rgba(11,22,44,.06);overflow:hidden">
+        <div style="padding:15px 20px;display:flex;align-items:center;gap:11px;border-bottom:1px solid #EFE7D9">
+          <span style="width:23px;height:23px;flex:none;border-radius:50%;background:#1E2D4A;color:#F5E4C0;font:700 11.5px/23px 'Source Sans 3';text-align:center">1</span>
+          <span style="font:500 17px/1 Lora,Georgia,serif;color:#1E2D4A;flex:1">Choose your slots</span>
+          <span style="font:600 13px/1 'Source Sans 3';color:#6A6858">{{ pickedSummary }}</span>
+        </div>
+
+        <div style="display:flex;gap:8px;padding:14px 20px 0">
+          <span onClick="{{ tabOne }}" style="{{ tabOneStyle }}">Tap individual times</span>
+          <span onClick="{{ tabMany }}" style="{{ tabManyStyle }}">Recurring dates</span>
+        </div>
+
+        <sc-if value="{{ isTabOne }}" hint-placeholder-val="{{ true }}">
+          <div style="padding:16px 20px 22px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+              <span onClick="{{ prevMonth }}" style="width:34px;height:34px;flex:none;border:1px solid #E7DFD1;border-radius:8px;background:#FAF7F1;color:#1E2D4A;font-size:15px;display:flex;align-items:center;justify-content:center;cursor:pointer" style-hover="border-color:#1E2D4A">‹</span>
+              <span style="flex:1;text-align:center;font:500 17px/1 Lora,Georgia,serif;color:#1E2D4A">{{ monthLabel }}</span>
+              <span onClick="{{ nextMonth }}" style="width:34px;height:34px;flex:none;border:1px solid #E7DFD1;border-radius:8px;background:#FAF7F1;color:#1E2D4A;font-size:15px;display:flex;align-items:center;justify-content:center;cursor:pointer" style-hover="border-color:#1E2D4A">›</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px">
+              <sc-for list="{{ weekdays }}" as="w" hint-placeholder-count="7">
+                <span style="text-align:center;font:700 10.5px/1 'Source Sans 3';letter-spacing:.1em;text-transform:uppercase;color:#8A8271;padding-bottom:5px">{{ w.d }}</span>
+              </sc-for>
+              <sc-for list="{{ days }}" as="d" hint-placeholder-count="35">
+                <span onClick="{{ d.pick }}" title="{{ d.title }}" style="{{ d.style }}">
+                  <span style="{{ d.numStyle }}">{{ d.n }}</span>
+                  <span style="{{ d.countStyle }}">{{ d.count }}</span>
+                </span>
+              </sc-for>
+            </div>
+            <span style="display:block;margin-top:13px;font-size:12.5px;color:#8A8271;text-wrap:pretty">Greyed dates are fully booked or outside the hours your group may book. Dates already in your request carry the number of hours.</span>
+
+            <div style="margin-top:16px;padding:16px 18px;border:1px solid #DDE3ED;border-radius:12px;background:#F2F6FB">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;margin-bottom:12px">
+                <span style="font:500 16px/1 Lora,Georgia,serif;color:#1E2D4A">{{ focusLabel }}</span>
+                <span style="font-size:12.5px;color:#5A6E8A">Tap any hours you want — they need not be next to each other.</span>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <sc-for list="{{ hours }}" as="h" hint-placeholder-count="8">
+                  <span onClick="{{ h.pick }}" style="{{ h.style }}">{{ h.label }}</span>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isTabMany }}">
+          <div style="padding:16px 20px 22px">
+            <span style="display:block;font-size:13.5px;line-height:1.6;color:#4A4860;max-width:56em;text-wrap:pretty;margin-bottom:15px">For a season or a term. Pick a date range and the days of the week you need — every matching open slot is <b>added to the request you already have</b>, and nothing you picked by hand is replaced.</span>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px;max-width:640px;margin-bottom:16px">
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <span style="font:600 11px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8271">From</span>
+                <span style="padding:9px 11px;border:1px solid #E7DFD1;border-radius:8px;background:#FFFFFF;font-size:13.5px;color:#1A1A2A">2 August 2026</span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <span style="font:600 11px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8271">To</span>
+                <span style="padding:9px 11px;border:1px solid #E7DFD1;border-radius:8px;background:#FFFFFF;font-size:13.5px;color:#1A1A2A">2 September 2026</span>
+              </div>
+            </div>
+            <span style="display:block;font:600 11px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8271;margin-bottom:8px">Repeat on</span>
+            <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:18px">
+              <sc-for list="{{ dowChips }}" as="c" hint-placeholder-count="7">
+                <span onClick="{{ c.pick }}" style="{{ c.style }}">{{ c.label }}</span>
+              </sc-for>
+            </div>
+            <sc-for list="{{ dowGroups }}" as="g" hint-placeholder-count="2">
+              <div style="margin-bottom:16px">
+                <span style="display:block;font:600 11px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8271;margin-bottom:8px">{{ g.name }}</span>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <sc-for list="{{ g.hours }}" as="h" hint-placeholder-count="4">
+                    <span style="{{ h.style }}">{{ h.label }}</span>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+            <span style="display:inline-block;padding:11px 20px;background:#1E2D4A;color:#F5E4C0;border-radius:8px;font:600 14px/1 'Source Sans 3';cursor:pointer" style-hover="background:#2A3E62">Add these to my request</span>
+          </div>
+        </sc-if>
+      </div>
+
+      <div style="border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;box-shadow:0 2px 6px rgba(11,22,44,.05),0 10px 24px rgba(11,22,44,.06);overflow:hidden">
+        <div style="padding:15px 20px;display:flex;align-items:center;gap:11px;border-bottom:1px solid #EFE7D9">
+          <span style="width:23px;height:23px;flex:none;border-radius:50%;background:#1E2D4A;color:#F5E4C0;font:700 11.5px/23px 'Source Sans 3';text-align:center">2</span>
+          <span style="font:500 17px/1 Lora,Georgia,serif;color:#1E2D4A;flex:1">Your request</span>
+          <span style="font:600 13px/1 'Source Sans 3';color:#6A6858">{{ basketCount }}</span>
+        </div>
+        <sc-if value="{{ hasAny }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column">
+            <sc-for list="{{ basket }}" as="r" hint-placeholder-count="3">
+              <div style="display:flex;align-items:center;gap:14px;padding:13px 20px;border-bottom:1px solid #F2ECE1">
+                <span style="font:600 13.5px/1.3 'Source Sans 3';color:#1E2D4A;width:120px;flex:none">{{ r.date }}</span>
+                <span style="flex:1;font-size:13.5px;color:#4A4860;text-wrap:pretty">{{ r.times }}</span>
+                <span style="font-size:13px;color:#6A6858;white-space:nowrap">{{ r.hrs }}</span>
+                <span style="font:600 13.5px/1 'Source Sans 3';color:#1E2D4A;width:74px;text-align:right;flex:none">{{ r.cost }}</span>
+                <span onClick="{{ r.remove }}" title="Remove this date" style="width:26px;height:26px;flex:none;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#9A3B2E;font-size:14px;cursor:pointer" style-hover="background:#F7E4DE">✕</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;background:#FAF7F1">
+            <span style="font:600 15px/1 'Source Sans 3';color:#1E2D4A">{{ grandTotal }}</span>
+            <span onClick="{{ clearAll }}" style="font:600 13px/1 'Source Sans 3';color:#9A3B2E;cursor:pointer">Clear all</span>
+          </div>
+        </sc-if>
+        <sc-if value="{{ isEmpty }}">
+          <div style="padding:26px 20px;text-align:center;font-size:13.5px;color:#8A8271">Nothing picked yet. Choose a date above, then the hours you need.</div>
+        </sc-if>
+      </div>
+
+      <sc-if value="{{ hasAny }}" hint-placeholder-val="{{ true }}">
+        <div style="border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;box-shadow:0 2px 6px rgba(11,22,44,.05),0 10px 24px rgba(11,22,44,.06);overflow:hidden">
+          <div style="padding:15px 20px;display:flex;align-items:center;gap:11px;border-bottom:1px solid #EFE7D9">
+            <span style="width:23px;height:23px;flex:none;border-radius:50%;background:#1E2D4A;color:#F5E4C0;font:700 11.5px/23px 'Source Sans 3';text-align:center">3</span>
+            <span style="font:500 17px/1 Lora,Georgia,serif;color:#1E2D4A;flex:1">Confirm</span>
+          </div>
+          <div style="padding:18px 20px 22px;display:flex;flex-direction:column;gap:14px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px;max-width:640px">
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <span style="font:600 11px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8271">Your name</span>
+                <span style="padding:9px 11px;border:1px solid #E7DFD1;border-radius:8px;background:#FFFFFF;font-size:13.5px;color:#1A1A2A">Andrew Dinger</span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <span style="font:600 11px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8271">Email</span>
+                <span style="padding:9px 11px;border:1px solid #E7DFD1;border-radius:8px;background:#FFFFFF;font-size:13.5px;color:#1A1A2A">revdinger@gmail.com</span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <span style="font:600 11px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8271">Phone</span>
+                <span style="padding:9px 11px;border:1px solid #E7DFD1;border-radius:8px;background:#FFFFFF;font-size:13.5px;color:#A9A396">(314) 555-0134</span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <span style="font:600 11px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8271">What is it for?</span>
+                <span style="padding:9px 11px;border:1px solid #E7DFD1;border-radius:8px;background:#FFFFFF;font-size:13.5px;color:#A9A396">Youth basketball practice</span>
+              </div>
+            </div>
+
+            <div style="padding:14px 16px;border:1px solid #E4CE9A;border-radius:12px;background:#FBF3E1;display:flex;flex-direction:column;gap:5px;max-width:640px">
+              <span style="font:700 11px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#7A5B18">Before your first rental date</span>
+              <span style="font-size:13.5px;line-height:1.6;color:#5C4A1E;text-wrap:pretty">Email a certificate of insurance naming Timothy Lutheran Church as additional insured to <a href="mailto:dinger@timothystl.org" style="color:#7A5B18;text-decoration:underline">dinger@timothystl.org</a>. We will send this reminder again with your confirmation.</span>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding-top:13px;border-top:1px solid #EFE7D9">
+              <span style="padding:11px 20px;background:#1E2D4A;color:#F5E4C0;border-radius:8px;font:600 14px/1 'Source Sans 3';cursor:pointer;white-space:nowrap" style-hover="background:#2A3E62">Request this booking</span>
+              <div style="display:flex;flex-direction:column;gap:3px">
+                <span style="font:600 15px/1 'Source Sans 3';color:#1E2D4A">{{ grandTotal }}</span>
+                <span style="font-size:12.5px;color:#8A8271">The office will review and send an invoice. Nothing is charged now.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+    </div>
+  </div>
+
+  <div style="width:392px;flex:none;border:1px solid #DFD5C4;border-radius:14px;overflow:hidden;box-shadow:0 18px 44px rgba(29,53,87,.12);background:#FAF7F1">
+    <div style="background:#4A5E3A;padding:12px 16px;display:flex;align-items:center;gap:10px">
+      <div style="width:32px;height:32px;border-radius:50%;background:#FAF7F1;flex:none;display:flex;align-items:center;justify-content:center;font:600 7.5px/1 'Source Sans 3';color:#4A5E3A">LOGO</div>
+      <span style="font:600 13px/1.2 'Source Sans 3';color:#FFFFFF">Timothy Lutheran Church</span>
+    </div>
+    <div style="height:3px;background:#C9973A"></div>
+    <div style="background:#1E2D4A;padding:15px 16px;display:flex;flex-direction:column;gap:4px">
+      <span style="font:500 21px/1.1 Lora,Georgia,serif;color:#FFFFFF">Gym Rental</span>
+      <span style="font:600 12.5px/1 'Source Sans 3';color:#C9973A">Test</span>
+    </div>
+    <div style="padding:14px 16px 0;display:flex;flex-direction:column;gap:12px">
+      <div style="border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;padding:14px 15px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:11px">
+          <span style="width:30px;height:30px;flex:none;border:1px solid #E7DFD1;border-radius:8px;background:#FAF7F1;color:#1E2D4A;display:flex;align-items:center;justify-content:center">‹</span>
+          <span style="flex:1;text-align:center;font:500 15px/1 Lora,Georgia,serif;color:#1E2D4A">{{ monthLabel }}</span>
+          <span style="width:30px;height:30px;flex:none;border:1px solid #E7DFD1;border-radius:8px;background:#FAF7F1;color:#1E2D4A;display:flex;align-items:center;justify-content:center">›</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">
+          <sc-for list="{{ weekdays }}" as="w" hint-placeholder-count="7">
+            <span style="text-align:center;font:700 9.5px/1 'Source Sans 3';letter-spacing:.06em;text-transform:uppercase;color:#8A8271;padding-bottom:4px">{{ w.d }}</span>
+          </sc-for>
+          <sc-for list="{{ phoneDays }}" as="d" hint-placeholder-count="35">
+            <span style="{{ d.style }}">
+              <span style="{{ d.numStyle }}">{{ d.n }}</span>
+              <span style="{{ d.countStyle }}">{{ d.count }}</span>
+            </span>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    <div style="margin:12px 0 0;border-top:1px solid #E7DFD1;background:#FFFDF9;padding:13px 16px 18px;box-shadow:0 -6px 18px rgba(11,22,44,.06)">
+      <span style="display:block;font:600 11px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8271;margin-bottom:9px">Your request</span>
+      <sc-if value="{{ isEmpty }}">
+        <span style="display:block;padding:6px 0 2px;font-size:12.5px;line-height:1.5;color:#8A8271;text-wrap:pretty">Nothing picked yet. Choose a date above, then the hours you need.</span>
+      </sc-if>
+      <sc-for list="{{ basket }}" as="r" hint-placeholder-count="3">
+        <div style="display:flex;align-items:baseline;gap:8px;padding:5px 0;font-size:12.5px">
+          <span style="font-weight:600;color:#1E2D4A;white-space:nowrap">{{ r.dateShort }}</span>
+          <span style="flex:1;color:#4A4860">{{ r.times }}</span>
+          <span style="color:#6A6858;white-space:nowrap">{{ r.cost }}</span>
+        </div>
+      </sc-for>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:11px;padding-top:11px;border-top:1px solid #EFE7D9">
+        <span style="flex:1;font:600 14px/1 'Source Sans 3';color:#1E2D4A">{{ grandTotal }}</span>
+        <span style="{{ continueStyle }}">Continue</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div style="max-width:1040px;margin:0 auto;padding:46px 30px 90px">
+
+  <div style="display:flex;align-items:baseline;gap:10px;margin:0 0 6px">
+    <span style="font:700 11px/1 'Source Sans 3';letter-spacing:.14em;text-transform:uppercase;color:#8A8271">Spec</span>
+    <span style="font:500 27px/1.15 Lora,Georgia,serif;color:#1E2D4A">The renter booking page</span>
+  </div>
+  <p style="font:400 14px/1.65 'Source Sans 3';color:#4A4860;max-width:56em;margin:0 0 26px;text-wrap:pretty">The page a gym renter opens from the link in their confirmation email. The only screen in this set that is not an admin screen — the person using it has no login, no session and no reason to know the admin exists. Fix list: Task 17 (domain and shell), Task 18 (this pattern).</p>
+
+  <h3 style="font:500 19px/1.2 Lora,Georgia,serif;color:#1E2D4A;margin:28px 0 8px">A request is a basket, not a booking</h3>
+  <div style="border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;padding:17px 20px"><p style="margin:0 0 10px;font:400 14px/1.7 'Source Sans 3';color:#4A4860;text-wrap:pretty">The thing being built is <b>a set of hour slots across many dates</b> — Tuesday 6–7 PM, Wednesday 5–6 PM <i>and</i> 7–8 PM. Hours on a day need not touch, dates need not be adjacent, and the selection must survive moving to another month.</p><p style="margin:0;font:400 14px/1.7 'Source Sans 3';color:#4A4860;text-wrap:pretty">There is <b>no contiguity rule</b>. Adjacent hours on one date simply print as a range in the summary — <code>5–7 PM</code> — while a gap prints as two entries, <code>5–6 PM, 7–8 PM</code>.</p></div>
+
+  <h3 style="font:500 19px/1.2 Lora,Georgia,serif;color:#1E2D4A;margin:28px 0 8px">Where it lives</h3>
+  <div style="border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;padding:17px 20px"><ul style="margin:0;padding-left:19px;font:400 14px/1.7 'Source Sans 3';color:#4A4860">
+    <li><code>timothystl.org/gym/book/&lt;token&gt;</code> — <b>not</b> <code>admin.timothystl.org</code>. This URL is pasted into emails to people outside the church. Serving it from the admin host advertises the admin origin to every renter and stops you requiring a session on <code>admin.*</code> at the edge.</li>
+    <li>Permanent redirect from the old address; renters have confirmation emails going back months.</li>
+    <li>The <b>Private booking link</b> field on <code>/gym-rentals/groups/edit/&lt;id&gt;</code> is where the wrong address comes from. Fix it there too (Task 19) or every group re-copies the old one.</li>
+  </ul></div>
+
+  <h3 style="font:500 19px/1.2 Lora,Georgia,serif;color:#1E2D4A;margin:28px 0 8px">The shell</h3>
+  <div style="border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;padding:17px 20px"><ul style="margin:0;padding-left:19px;font:400 14px/1.7 'Source Sans 3';color:#4A4860">
+    <li>Public-site green masthead <code>#4A5E3A</code> with the logo and tagline, then the 3px gold rule <code>#C9973A</code> — the header every page on <code>timothystl.org</code> wears. No admin sidebar, no context bar, no ⌘K.</li>
+    <li>Beneath it a navy band <code>#1E2D4A</code>: <b>Gym Rental</b> in Lora 26px, the group name in gold, and the rate and hours as one line at <code>13px #AFC0D2</code>. That was three stacked boxes; it is one block.</li>
+    <li>Body on sand, cards <code>#FFFDF9</code> / <code>1px #E7DFD1</code> / radius 12 with the soft two-layer shadow. Foundations values throughout, so the page matches <code>timothystl.org/worship</code> rather than matching nothing.</li>
+  </ul></div>
+
+  <h3 style="font:500 19px/1.2 Lora,Georgia,serif;color:#1E2D4A;margin:28px 0 8px">Step 1 · Choose your slots</h3>
+  <div style="border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;padding:17px 20px"><ul style="margin:0;padding-left:19px;font:400 14px/1.7 'Source Sans 3';color:#4A4860">
+    <li>The month grid is a <b>multi-date</b> picker. Tapping a day opens its hours beneath the grid; the hours you have already picked on other days stay picked.</li>
+    <li>Four day states, and <b>none of them is carried by colour alone</b> — which is what the red and green dots were doing. <b>Open:</b> navy numeral in an outlined cell. <b>In your request:</b> filled navy cell with the hour count beneath. <b>Fully booked</b> and <b>not rentable:</b> grey numeral, no cell, not clickable, told apart by their tooltip. The legend disappears with the dots; there is nothing left to decode.</li>
+    <li>The day panel opens in the mist tint so it reads as attached to the grid above it, and says in plain words that hours need not be adjacent.</li>
+    <li><b>Recurring dates</b> is the second tab, not a competing flow — it fills the same request. Range, weekdays, hours, then <b>Add these to my request</b>: it adds to the basket and reports how many it added, and never replaces what is already there. A season of Tuesday practices is four taps.</li>
+  </ul></div>
+
+  <h3 style="font:500 19px/1.2 Lora,Georgia,serif;color:#1E2D4A;margin:28px 0 8px">Step 2 · Your request</h3>
+  <div style="border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;padding:17px 20px"><ul style="margin:0;padding-left:19px;font:400 14px/1.7 'Source Sans 3';color:#4A4860">
+    <li>The part that does not exist today, and the reason the current page is hard to trust. One row per date in date order: date, the times, hours, cost, and a ✕ to drop the date. Individual times come off by tapping them again in the grid.</li>
+    <li>Totals at the foot, with <b>Clear all</b> as a quiet red text button — never a filled button next to the primary action.</li>
+    <li>Empty state says what to do, not that something is missing: “Nothing picked yet. Choose a date above, then the hours you need.”</li>
+    <li>On a phone this panel pins to the foot of the viewport. A request built across five dates cannot be checked from memory.</li>
+  </ul></div>
+
+  <h3 style="font:500 19px/1.2 Lora,Georgia,serif;color:#1E2D4A;margin:28px 0 8px">Step 3 · Confirm</h3>
+  <div style="border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;padding:17px 20px"><ul style="margin:0;padding-left:19px;font:400 14px/1.7 'Source Sans 3';color:#4A4860">
+    <li>Name, email, phone, and what the space is for. Field column caps at 640px (Task 19), not the full width of the window.</li>
+    <li>The insurance notice lives <b>here</b>, above the button, where it is actionable — not at the top of the page ahead of the calendar. It reads “before your <i>first</i> rental date”, since a request can span months.</li>
+    <li><b>Request this booking</b> — a request, because the office prices and approves it. One line beneath says so: nothing is charged now.</li>
+    <li>After submit, the same page is replaced by a plain confirmation: what was requested, what happens next, the insurance reminder again. Not a redirect to a bare thanks page.</li>
+  </ul></div>
+
+  <h3 style="font:500 19px/1.2 Lora,Georgia,serif;color:#1E2D4A;margin:28px 0 8px">On a phone</h3>
+  <div style="border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;padding:17px 20px"><ul style="margin:0;padding-left:19px;font:400 14px/1.7 'Source Sans 3';color:#4A4860">
+    <li>Design at 390px first — this page is opened from an email, on a phone, standing in a hallway.</li>
+    <li>The month grid <b>stays seven columns</b>. A list of dates loses the shape of the week, which is how people think about a gym. Cells go to 44px minimum.</li>
+    <li>Hour chips become a two-column grid. One column wastes the width; three makes them too small to hit.</li>
+    <li><b>Your request</b> is a pinned foot bar showing the rows and the total, expanding on tap.</li>
+  </ul></div>
+
+  <h3 style="font:500 19px/1.2 Lora,Georgia,serif;color:#1E2D4A;margin:28px 0 8px">What not to change</h3>
+  <div style="border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;padding:17px 20px"><p style="margin:0;font:400 14px/1.7 'Source Sans 3';color:#4A4860;text-wrap:pretty">The month grid with per-day availability is right, and it is why this screen cannot become the list-and-drawer pattern. Same reasoning as Blocked dates: you book a gym by looking at a month. Keep the calendar; fix what it is saying.</p></div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const WD = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+const WD_LONG = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const TAKEN = { 3: 1, 6: 1, 10: 1, 13: 1, 14: 1, 17: 1, 20: 1, 24: 1, 27: 1, 31: 1 };
+const RATE = 50;
+
+function hoursFor(dow) {
+  if (dow === 0) return [13, 14, 15, 16, 17, 18, 19];
+  if (dow === 6) return [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
+  return [17, 18, 19, 20];
+}
+function hr(h) {
+  const n = h % 12 === 0 ? 12 : h % 12;
+  return n + (h >= 12 ? ' PM' : ' AM');
+}
+function span(a, b) {
+  const na = a % 12 === 0 ? 12 : a % 12;
+  // Same half of the day: the meridiem is said once, at the end — "5–7 PM".
+  return (a >= 12) === (b >= 12) ? na + '–' + hr(b) : hr(a) + '–' + hr(b);
+}
+function ranges(hs) {
+  const s = hs.slice().sort((a, b) => a - b);
+  const out = [];
+  let i = 0;
+  while (i < s.length) {
+    let j = i;
+    while (j + 1 < s.length && s[j + 1] === s[j] + 1) j++;
+    out.push(span(s[i], s[j] + 1));
+    i = j + 1;
+  }
+  return out.join(', ');
+}
+function money(n) { return '$' + n.toFixed(2); }
+
+class Component extends DCLogic {
+  state = {
+    month: 7, year: 2026, focus: 4, tab: 'one',
+    sel: { 4: [18], 5: [17, 19], 12: [17, 18] },
+    dows: { 0: 1, 1: 1, 3: 1, 4: 1, 6: 1 }
+  };
+
+  cellStyle(kind, small) {
+    const h = small ? '44px' : '46px';
+    const base = 'box-sizing:border-box;height:' + h + ';display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;border-radius:8px;';
+    if (kind === 'blank') return base + 'visibility:hidden';
+    if (kind === 'dead') return base + 'cursor:default';
+    if (kind === 'focus') return base + 'background:#1E2D4A;border:2px solid #C9973A;cursor:pointer';
+    if (kind === 'has') return base + 'background:#1E2D4A;border:1px solid #1E2D4A;cursor:pointer';
+    return base + 'background:#FFFDF9;border:1px solid #E7DFD1;cursor:pointer';
+  }
+  numStyle(kind, small) {
+    const f = (small ? '600 12.5px/1 ' : '600 13.5px/1 ') + "'Source Sans 3'";
+    if (kind === 'dead') return 'font:' + f + ';color:#A9A396';
+    if (kind === 'has' || kind === 'focus') return 'font:' + f + ';color:#F5E4C0';
+    return 'font:' + f + ';color:#1E2D4A';
+  }
+
+  chip(on, wide) {
+    const base = "padding:10px 15px;border-radius:8px;font:600 13px/1 'Source Sans 3';white-space:nowrap;cursor:pointer;" + (wide ? 'text-align:center;' : '');
+    if (on) return base + 'border:2px solid #1E2D4A;background:#E7EEF7;color:#1E2D4A;padding:9px 14px';
+    return base + 'border:1px solid #E7DFD1;background:#FFFDF9;color:#1E2D4A';
+  }
+  tab(on) {
+    const base = "padding:9px 15px;border-radius:8px;font:600 13px/1 'Source Sans 3';cursor:pointer;";
+    return on ? base + 'background:#1E2D4A;color:#F5E4C0' : base + 'background:#F4EFE5;color:#4A4860';
+  }
+
+  toggleHour = (day, h) => () => {
+    this.setState(s => {
+      const next = Object.assign({}, s.sel);
+      const cur = (next[day] || []).slice();
+      const i = cur.indexOf(h);
+      if (i >= 0) cur.splice(i, 1); else cur.push(h);
+      if (cur.length) next[day] = cur; else delete next[day];
+      return { sel: next };
+    });
+  };
+
+  renderVals() {
+    const s = this.state;
+    const first = new Date(s.year, s.month, 1).getDay();
+    const count = new Date(s.year, s.month + 1, 0).getDate();
+    const cells = [];
+    for (let i = 0; i < first; i++) cells.push(null);
+    for (let n = 1; n <= count; n++) cells.push(n);
+    while (cells.length % 7) cells.push(null);
+
+    const mk = (small) => cells.map(n => {
+      let kind = 'open';
+      if (!n) kind = 'blank';
+      else if (TAKEN[n]) kind = 'dead';
+      else if (n === s.focus) kind = 'focus';
+      else if (s.sel[n]) kind = 'has';
+      const c = n && s.sel[n] ? s.sel[n].length : 0;
+      return {
+        n: n || '',
+        count: c ? '·' + c : '',
+        title: !n ? '' : TAKEN[n] ? 'Fully booked' : c ? c + ' hour' + (c === 1 ? '' : 's') + ' in your request' : 'Open',
+        style: this.cellStyle(kind, small),
+        numStyle: this.numStyle(kind, small),
+        countStyle: "font:600 9.5px/1 'Source Sans 3';color:" + (kind === 'has' || kind === 'focus' ? '#C9973A' : 'transparent'),
+        pick: n && !TAKEN[n] ? () => this.setState({ focus: n }) : () => {}
+      };
+    });
+
+    const fDate = new Date(s.year, s.month, s.focus);
+    const fHours = hoursFor(fDate.getDay());
+    const fSel = s.sel[s.focus] || [];
+
+    const dayNums = Object.keys(s.sel).map(Number).sort((a, b) => a - b);
+    const basket = dayNums.map(n => {
+      const hs = s.sel[n];
+      const d = new Date(s.year, s.month, n);
+      return {
+        date: WD_LONG[d.getDay()] + ' ' + n + ' ' + MONTHS[s.month].slice(0, 3),
+        dateShort: WD_LONG[d.getDay()] + ' ' + n,
+        times: ranges(hs),
+        hrs: hs.length + (hs.length === 1 ? ' hr' : ' hrs'),
+        cost: money(hs.length * RATE),
+        remove: () => this.setState(p => {
+          const next = Object.assign({}, p.sel);
+          delete next[n];
+          return { sel: next };
+        })
+      };
+    });
+    const totalHrs = dayNums.reduce((a, n) => a + s.sel[n].length, 0);
+
+    const dowNames = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
+
+    return {
+      weekdays: WD.map(d => ({ d })),
+      monthLabel: MONTHS[s.month] + ' ' + s.year,
+      days: mk(false),
+      phoneDays: mk(true),
+      prevMonth: () => this.setState(p => ({ month: p.month ? p.month - 1 : 11, year: p.month ? p.year : p.year - 1 })),
+      nextMonth: () => this.setState(p => ({ month: p.month === 11 ? 0 : p.month + 1, year: p.month === 11 ? p.year + 1 : p.year })),
+
+      isTabOne: s.tab === 'one',
+      isTabMany: s.tab === 'many',
+      tabOne: () => this.setState({ tab: 'one' }),
+      tabMany: () => this.setState({ tab: 'many' }),
+      tabOneStyle: this.tab(s.tab === 'one'),
+      tabManyStyle: this.tab(s.tab === 'many'),
+
+      focusLabel: WD_LONG[fDate.getDay()] + ', ' + s.focus + ' ' + MONTHS[s.month],
+      hours: fHours.map(h => ({
+        label: span(h, h + 1),
+        style: this.chip(fSel.indexOf(h) >= 0, false),
+        pick: this.toggleHour(s.focus, h)
+      })),
+
+      dowChips: WD.map((d, i) => ({
+        label: d,
+        style: this.chip(!!s.dows[i], true),
+        pick: () => this.setState(p => {
+          const next = Object.assign({}, p.dows);
+          if (next[i]) delete next[i]; else next[i] = 1;
+          return { dows: next };
+        })
+      })),
+      dowGroups: Object.keys(s.dows).map(Number).sort((a, b) => a - b).map(i => ({
+        name: dowNames[i] + ' — available times',
+        hours: hoursFor(i).map(h => ({ label: span(h, h + 1), style: this.chip(false, false) }))
+      })),
+
+      basket,
+      hasAny: dayNums.length > 0,
+      isEmpty: dayNums.length === 0,
+      basketCount: dayNums.length ? dayNums.length + (dayNums.length === 1 ? ' date' : ' dates') : '',
+      pickedSummary: totalHrs ? totalHrs + (totalHrs === 1 ? ' hour picked' : ' hours picked') : '',
+      grandTotal: totalHrs + (totalHrs === 1 ? ' hour · ' : ' hours · ') + money(totalHrs * RATE),
+      continueStyle: dayNums.length
+        ? "padding:11px 18px;background:#1E2D4A;color:#F5E4C0;border-radius:8px;font:600 13.5px/1 'Source Sans 3';white-space:nowrap"
+        : "padding:11px 18px;background:#E7DFD1;color:#A9A396;border-radius:8px;font:600 13.5px/1 'Source Sans 3';white-space:nowrap",
+      clearAll: () => this.setState({ sel: {} })
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1394,6 +1394,102 @@ prayer request are real forms elsewhere on the site but they post to ChMS with
 their own screening; adding them here would be a second, unscreened way in. If
 they are ever wanted, they go through `screenSubmission()` like the rest.
 
+#### The design handoff is in the repo now (v4.7.0, 2026-08-02)
+
+`design_handoff_admin_overhaul/` is **committed**. This file has referenced it
+by path since v3.0.0 — `FIXES.md`, `screens/00-foundations.html`, the
+screenshots — and none of it was ever in the repo, so every session read
+confident references to files it could not open. That is not a small tax: a
+whole session went by unable to answer "what were those open questions?"
+because the answers were in a file only Andrew had.
+
+7.3MB, most of it `screens/`. Worth it once.
+
+⚠ **The handoff's own `REDESIGN-STATUS.md` is replaced by a pointer.** The live
+inventory is `admin/REDESIGN-STATUS.md`, which is what Task 0 names as its
+deliverable. Two copies of a status table are two answers to "is this done
+yet", and the archived one was already stale on arrival.
+
+#### The shell is two flex columns, and the sidebar stopped overlapping itself (v4.7.0, 2026-08-02)
+
+Andrew: *"sidebar has strange overlapping and duplication it seems"*, with a
+screenshot of the footer painted across the middle of the nav.
+
+- **`.sidebar-groups` had `flex:1;min-height:0` and no `overflow-y`**, while
+  `.sidebar` carried `overflow-y:auto`. Every declaration was fine alone.
+  Together the group list was squashed to the leftover flex height and its
+  twenty-odd rows painted straight out of the box, so the footer landed on top
+  of Filtered Mail with the groups continuing underneath. The nesting has to be
+  **sidebar clips, list scrolls, footer pinned below** — and `margin-top:auto`
+  comes off the footer in the same change, because the list is `flex:1` and
+  already eats the free space. Two mechanisms for one job disagree exactly when
+  the content overflows, which is when it shows.
+- **⚠ The hamburger had been invisible since v4.6.0.**
+  `.sidebar-toggle{display:none}` was declared *below* the `max-width:900px`
+  block at identical specificity, so source order decided and it won at every
+  width. A media query does not outrank anything; it only narrows when a rule
+  applies. **That is three consecutive releases shipping an admin with no
+  mobile navigation, by a different mechanism each time** — off-canvas with no
+  handler, handler with no markup, and now a button styled out of existence.
+  All three passed a CSS grep.
+- **So `test/shell-layout.test.mjs` measures instead of matching.** It asks
+  `elementFromPoint` what is painted over the footer and it *clicks* the
+  hamburger. Verified against the bug: the original CSS was reintroduced and the
+  suite fails. The load-bearing assertion is "the sidebar itself does not
+  scroll" — the paint check stayed green under the new shell, and the file says
+  so rather than implying the overlap check is what protects this.
+- **The flex shell is Task 2 item 2**, which was never done: it was a fixed rail
+  plus a matching body padding, so the width was written twice. `--tlc-rail`
+  once now, in the shell's only `:root`, and `.tlc-main` takes what is left.
+  `min-width:0` is not decoration — without it a wide table refuses to shrink
+  and pushes the column off screen. Below 900px the rail goes `position:fixed`,
+  **not `sticky`**: a sticky element keeps its place in the flex row, so the
+  content would hold a 228px gap for a rail that is off-canvas.
+
+⚠ **CSS comments in `admin/helpers.js` live inside a JS template literal and
+ship to the browser.** A backtick in one terminates the literal. A comment
+quoting a UI label verbatim puts a second copy of that string into every admin
+page — which is how the assertion that the sign-out link appears exactly once
+began failing on a CSS-only change. Describe a label in these comments; do not
+quote one.
+
+#### A value is not a status (v4.7.0, 2026-08-02)
+
+Andrew: *"pick the colors you want that are all different, it doesnt matter"*.
+
+Acceptance's tint was `#EDF0E4` — byte-identical to the `good` status tone — and
+Outreach's was `#FAF0DC`, the `warn` tone. On Ministries those columns are
+adjacent, so one pale green chip meant "this page is live" and the chip beside
+it meant "tagged Acceptance". Each palette was internally correct; only together
+were they wrong, which is why `admin/values.test.mjs` lives in neither file and
+reads both.
+
+- **The fix is a rule, not four replacement hexes**, because a rule survives
+  somebody adding a sixth status tone: **a status tone is pale and low-chroma, a
+  value tint is saturated.** Status is a state a row passes through; a value is
+  what the row *is*.
+- Hues are the church's own — moss, navy, teal, plum — spaced so no two tints
+  are within 20 on any channel. The suite asserts the chroma rule, the
+  separation, non-collision with the tones *and* with the selected-chip fill,
+  4.5:1 ink-on-tint, and 3:1 for the `solid` border.
+- ⚠ This deviates from the fix list's governing rule (*"do not invent values"*).
+  Andrew overrode it explicitly. Flagged here so the designer's side-by-side
+  pass reads it as a decision rather than a drift.
+
+#### Task 15's five routes, answered (v4.7.0, 2026-08-02)
+
+Andrew: *"do whatever you need here to make it future proof."* Each was checked
+against the code, and **two of the five have false premises** — see
+`admin/REDESIGN-STATUS.md` for the table. In short: there is no user drawer
+(`renderDrawer` is never called on `/users`), and `/pages/details` is the church
+details record, not a duplicate of the page drawer at `/pages/:id/details`. Both
+questions describe a record editable two ways, which is the defect the task
+exists to find, and neither is real. `/youth` and `/youth/` are 302s rather than
+screens, which moves the count to **38 pattern / 29 converted / 7 n/a**.
+
+Still genuinely open from that task: `/ministries/:slug/posts` wants a
+`sections.js` entry, and `/notices/add` should fold into `/notices/edit/`.
+
 #### The renter portal moved off the admin origin (v4.6.0, 2026-08-02)
 
 Andrew, looking at a portal link: *"why is it going to the admin.timothystl.org

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Timothy Admin — screen specs</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>html,body{margin:0;background:#F0EAE0;font-family:'Source Sans 3',Arial,sans-serif;color:#1A1A2A}a{text-decoration:none}</style>
+</head><body>
+<div style="max-width:900px;margin:0 auto;padding:56px 32px 80px">
+  <span style="font:700 11px/1 'Source Sans 3';letter-spacing:.16em;text-transform:uppercase;color:#C9973A">Timothy Lutheran · Admin overhaul</span>
+  <h1 style="font:500 38px/1.15 Lora,Georgia,serif;color:#1D3557;margin:10px 0 10px">Screen specs</h1>
+  <p style="font:400 15px/1.65 'Source Sans 3';color:#6B6455;max-width:62ch;margin:0 0 8px;text-wrap:pretty">One file per screen. Each file opens with the built screen at the top — the sidebar, the list, the drawer, real data — and the written specification underneath it. Build against the screen; the words explain why it is that way. Start with Foundations — it specifies the sidebar and the shared shell that all twenty-one screens share.</p>
+  <p style="font:400 15px/1.65 'Source Sans 3';color:#6B6455;max-width:62ch;margin:0 0 34px;text-wrap:pretty"><strong>These pages are the source of truth.</strong> Every screen shares one sidebar, one table pattern, and one drawer pattern. If a screen you are building does not look like the reference above its spec, it is wrong.</p>
+  
+  <a href="00-foundations.html" style="display:flex;flex-direction:column;gap:4px;background:#1D3557;border-radius:13px;padding:20px 22px;margin:0 0 30px">
+    <span style="font:700 10.5px/1 'Source Sans 3';letter-spacing:.15em;text-transform:uppercase;color:#C9973A">Read this first</span>
+    <span style="font:500 22px/1.2 Lora,Georgia,serif;color:#FAF7F1">Foundations — the sidebar and shared shell</span>
+    <span style="font:400 13.5px/1.55 'Source Sans 3';color:#AFC0D2;max-width:60ch">Exact colours, type, sidebar geometry, table grid, drawer anatomy, pills, toasts and copy rules. Every screen is this shell with a different middle. 00-foundations.html</span>
+  </a>
+  <a href="AUDIT.html" style="display:flex;flex-direction:column;gap:4px;background:#FBF0E4;border:1px solid #E8CFA8;border-radius:13px;padding:20px 22px;margin:0 0 14px">
+    <span style="font:700 10.5px/1 'Source Sans 3';letter-spacing:.15em;text-transform:uppercase;color:#9A6B18">Read against the build · 1 Aug 2026</span>
+    <span style="font:500 22px/1.2 Lora,Georgia,serif;color:#7A4F00">Build audit — nine deviations, worst first</span>
+    <span style="font:400 13.5px/1.55 'Source Sans 3';color:#8A6A2E;max-width:60ch">What the implementation got right, where it drifted from this handoff, and the order to fix it in. AUDIT.html</span>
+  </a>
+  <a href="00b-header-nav.html" style="display:flex;flex-direction:column;gap:4px;background:#1E2D4A;border-radius:13px;padding:20px 22px;margin:0 0 30px">
+    <span style="font:700 10.5px/1 'Source Sans 3';letter-spacing:.15em;text-transform:uppercase;color:#C9973A">Revised 1 Aug 2026</span>
+    <span style="font:500 22px/1.2 Lora,Georgia,serif;color:#FAF7F1">The shell — sidebar and context bar</span>
+    <span style="font:400 13.5px/1.55 'Source Sans 3';color:#AFC0D2;max-width:60ch">The sidebar stays and is always on screen; a slim navy context bar above the content says which section you are in. 00b-header-nav.html</span>
+  </a>
+  <div style="margin:0 0 26px">
+    
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px">
+      <a href="01-dashboard.html" style="display:flex;flex-direction:column;gap:3px;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:11px;padding:14px 16px">
+        <span style="font:600 14.5px/1.3 'Source Sans 3';color:#1A1A2A">Dashboard</span>
+        <span style="font:400 12px/1.4 'Source Sans 3';color:#8A8271">01-dashboard.html</span></a>
+    </div>
+  </div>
+  <div style="margin:0 0 26px">
+    <div style="font:700 10.5px/1 'Source Sans 3';letter-spacing:.14em;text-transform:uppercase;color:#8A8271;margin:0 0 10px">Website</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px">
+      <a href="02-pages.html" style="display:flex;flex-direction:column;gap:3px;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:11px;padding:14px 16px">
+        <span style="font:600 14.5px/1.3 'Source Sans 3';color:#1A1A2A">Pages</span>
+        <span style="font:400 12px/1.4 'Source Sans 3';color:#8A8271">02-pages.html</span></a><a href="03-ministries.html" style="display:flex;flex-direction:column;gap:3px;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:11px;padding:14px 16px">
+        <span style="font:600 14.5px/1.3 'Source Sans 3';color:#1A1A2A">Ministries</span>
+        <span style="font:400 12px/1.4 'Source Sans 3';color:#8A8271">03-ministries.html</span></a><a href="04-partners.html" style="display:flex;flex-direction:column;gap:3px;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:11px;padding:14px 16px">
+        <span style="font:600 14.5px/1.3 'Source Sans 3';color:#1A1A2A">Partners</span>
+        <span style="font:400 12px/1.4 'Source Sans 3';color:#8A8271">04-partners.html</span></a><a href="05-news.html" style="display:flex;flex-direction:column;gap:3px;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:11px;padding:14px 16px">
+        <span style="font:600 14.5px/1.3 'Source Sans 3';color:#1A1A2A">News & Events</span>
+        <span style="font:400 12px/1.4 'Source Sans 3';color:#8A8271">05-news.html</span></a><a href="06-sermons.html" style="display:flex;flex-direction:column;gap:3px;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:11px;padding:14px 16px">
+        <span style="font:600 14.5px/1.3 'Source Sans 3';color:#1A1A2A">Sermons</span>
+        <span style="font:400 12px/1.4 'Source Sans 3';color:#8A8271">06-sermons.html</span></a><a href="07-ed.html" style="display:flex;flex-direction:column;gap:3px;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:11px;padding:14px 16px">
+        <span style="font:600 14.5px/1.3 'Source Sans 3';color:#1A1A2A">Christian Ed</span>
+        <span style="font:400 12px/1.4 'Source Sans 3';color:#8A8271">07-ed.html</span></a><a href="08-menu.html" style="display:flex;flex-direction:column;gap:3px;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:11px;padding:14px 16px">
+        <span style="font:600 14.5px/1.3 'Source Sans 3';color:#1A1A2A">Menu</span>
+        <span style="font:400 12px/1.4 'Source Sans 3';color:#8A8271">08-menu.html</span></a><a href="09-notices.html" style="display:flex;flex-direction:column;gap:3px;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:11px;padding:14px 16px">
+        <span style="font:600 14.5px/1.3 'Source Sans 3';color:#1A1A2A">Notices</span>
+        <span style="font:400 12px/1.4 'Source Sans 3';color:#8A8271">09-notices.html</span></a><a href="10-links.html" style="display:flex;flex-direction:column;gap:3px;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:11px;padding:14px 16px">
+        <span style="font:600 14.5px/1.3 'Source Sans 3';color:#1A1A2A">Taps & Links</span>
+        <span style="font:400 12px/1.4 'Source Sans 3';color:#8A8271">10-links.html</span></a><a href="11-redirects.html" style="display:flex;flex-direction:column;gap:3px;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:11px;padding:14px 16px">
+        <span style="font:600 14.5px/1.3 'Source Sans 3';color:#1A1A2A">Redirects</span>
+        <span style="font:400 12px/1.4 'Source Sans 3';color:#8A8271">11-redirects.html</span></a>
+    </div>
+  </div>
+  <div style="margin:0 0 26px">
+    <div style="font:700 10.5px/1 'Source Sans 3';letter-spacing:.14em;text-transform:uppercase;color:#8A8271;margin:0 0 10px">Editors — where “Open editor” goes</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px">
+      <a href="22-page-editor.html" style="display:flex;flex-direction:column;gap:3px;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:11px;padding:14px 16px">
+        <span style="font:600 14.5px/1.3 'Source Sans 3';color:#1A1A2A">Page editor</span>
+        <span style="font:400 12px/1.4 'Source Sans 3';color:#8A8271">22-page-editor.html</span></a><a href="23-ministry-editor.html" style="display:flex;flex-direction:column;gap:3px;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:11px;padding:14px 16px">
+        <span style="font:600 14.5px/1.3 'Source Sans 3';color:#1A1A2A">Ministry page editor</span>
+        <span style="font:400 12px/1.4 'Source Sans 3';color:#8A8271">23-ministry-editor.html</span></a>
+    </div>
+  </div>
+  <div style="margin:0 0 26px">
+    <div style="font:700 10.5px/1 'Source Sans 3';letter-spacing:.14em;text-transform:uppercase;color:#8A8271;margin:0 0 10px">Email</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px">
+      <a href="13-newsletter.html" style="display:flex;flex-direction:column;gap:3px;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:11px;padding:14px 16px">
+        <span style="font:600 14.5px/1.3 'Source Sans 3';color:#1A1A2A">Newsletter</span>
+        <span style="font:400 12px/1.4 'Source Sans 3';color:#8A8271">13-newsletter.html</span></a><a href="14-subscribers.html" style="display:flex;flex-direction:column;gap:3px;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:11px;padding:14px 16px">
+        <span style="font:600 14.5px/1.3 'Source Sans 3';color:#1A1A2A">Subscribers</span>
+        <span style="font:400 12px/1.4 'Source Sans 3';color:#8A8271">14-subscribers.html</span></a>
+    </div>
+  </div>
+  <div style="margin:0 0 26px">
+    <div style="font:700 10.5px/1 'Source Sans 3';letter-spacing:.14em;text-transform:uppercase;color:#8A8271;margin:0 0 10px">Money & Building</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px">
+      <a href="18-giving.html" style="display:flex;flex-direction:column;gap:3px;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:11px;padding:14px 16px">
+        <span style="font:600 14.5px/1.3 'Source Sans 3';color:#1A1A2A">Giving</span>
+        <span style="font:400 12px/1.4 'Source Sans 3';color:#8A8271">18-giving.html</span></a><a href="16-gym.html" style="display:flex;flex-direction:column;gap:3px;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:11px;padding:14px 16px">
+        <span style="font:600 14.5px/1.3 'Source Sans 3';color:#1A1A2A">Gym Rentals</span>
+        <span style="font:400 12px/1.4 'Source Sans 3';color:#8A8271">16-gym.html</span></a><a href="19-payroll.html" style="display:flex;flex-direction:column;gap:3px;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:11px;padding:14px 16px">
+        <span style="font:600 14.5px/1.3 'Source Sans 3';color:#1A1A2A">Payroll</span>
+        <span style="font:400 12px/1.4 'Source Sans 3';color:#8A8271">19-payroll.html</span></a>
+    </div>
+  </div>
+  <div style="margin:0 0 26px">
+    <div style="font:700 10.5px/1 'Source Sans 3';letter-spacing:.14em;text-transform:uppercase;color:#8A8271;margin:0 0 10px">People & Access</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px">
+      <a href="15-staff.html" style="display:flex;flex-direction:column;gap:3px;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:11px;padding:14px 16px">
+        <span style="font:600 14.5px/1.3 'Source Sans 3';color:#1A1A2A">Staff</span>
+        <span style="font:400 12px/1.4 'Source Sans 3';color:#8A8271">15-staff.html</span></a><a href="17-users.html" style="display:flex;flex-direction:column;gap:3px;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:11px;padding:14px 16px">
+        <span style="font:600 14.5px/1.3 'Source Sans 3';color:#1A1A2A">Users</span>
+        <span style="font:400 12px/1.4 'Source Sans 3';color:#8A8271">17-users.html</span></a><a href="20-audit.html" style="display:flex;flex-direction:column;gap:3px;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:11px;padding:14px 16px">
+        <span style="font:600 14.5px/1.3 'Source Sans 3';color:#1A1A2A">Audit Log</span>
+        <span style="font:400 12px/1.4 'Source Sans 3';color:#8A8271">20-audit.html</span></a>
+    </div>
+  </div>
+  <div style="margin:0 0 26px">
+    <div style="font:700 10.5px/1 'Source Sans 3';letter-spacing:.14em;text-transform:uppercase;color:#8A8271;margin:0 0 10px">Setup</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px">
+      <a href="12-media.html" style="display:flex;flex-direction:column;gap:3px;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:11px;padding:14px 16px">
+        <span style="font:600 14.5px/1.3 'Source Sans 3';color:#1A1A2A">Media</span>
+        <span style="font:400 12px/1.4 'Source Sans 3';color:#8A8271">12-media.html</span></a><a href="21-settings.html" style="display:flex;flex-direction:column;gap:3px;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:11px;padding:14px 16px">
+        <span style="font:600 14.5px/1.3 'Source Sans 3';color:#1A1A2A">Settings</span>
+        <span style="font:400 12px/1.4 'Source Sans 3';color:#8A8271">21-settings.html</span></a>
+    </div>
+  </div>
+  <div style="height:1px;background:#E0D7C7;margin:14px 0 26px"></div>
+  <div style="background:#FFFDF9;border:1px solid #E7DFD1;border-radius:11px;padding:20px 22px">
+    <h2 style="font:500 22px/1.3 Lora,Georgia,serif;color:#1D3557;margin:26px 0 10px">7. Confirmed data decisions</h2>
+<p style="font:400 14px/1.65 'Source Sans 3';color:#3A3A4A;margin:0 0 13px;text-wrap:pretty">From Andrew directly:</p>
+<ul style="margin:0 0 14px;padding-left:20px;display:flex;flex-direction:column;gap:7px"><li style="font:400 14px/1.6 'Source Sans 3';color:#3A3A4A;text-wrap:pretty"><strong style="font-weight:700;color:#1A1A2A">Images live in the database</strong> with the website. Resize on upload and <strong style="font-weight:700;color:#1A1A2A">confirm under 1 MB</strong>.</li><li style="font:400 14px/1.6 'Source Sans 3';color:#3A3A4A;text-wrap:pretty"><strong style="font-weight:700;color:#1A1A2A">A staff directory table already exists</strong> — the staff grid reads from it.</li><li style="font:400 14px/1.6 'Source Sans 3';color:#3A3A4A;text-wrap:pretty"><strong style="font-weight:700;color:#1A1A2A">The sermon library does NOT exist yet — build it.</strong> Series with individual sermons, audio and video optional per sermon. Handle both attached and unattached states automatically (§5.6).</li><li style="font:400 14px/1.6 'Source Sans 3';color:#3A3A4A;text-wrap:pretty"><strong style="font-weight:700;color:#1A1A2A">Keep the redirects table.</strong> Automatic 301s from page renames stay.</li><li style="font:400 14px/1.6 'Source Sans 3';color:#3A3A4A;text-wrap:pretty"><strong style="font-weight:700;color:#1A1A2A">Timothy owns MDO.</strong> Timothy MDO (Mother's Day Out) content is church content, edited in this admin, and its staff sit in Timothy's payroll. Its own site at <code style="font:600 12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;background:#F0EAE0;border:1px solid #E7DFD1;border-radius:4px;padding:1px 5px;color:#1E2D4A">mdo.timothystl.org</code> stays, and the main site links out to it.</li><li style="font:400 14px/1.6 'Source Sans 3';color:#3A3A4A;text-wrap:pretty"><strong style="font-weight:700;color:#1A1A2A">The school is a separate organisation.</strong> No school content or school staff in this admin — link out only.</li><li style="font:400 14px/1.6 'Source Sans 3';color:#3A3A4A;text-wrap:pretty"><strong style="font-weight:700;color:#1A1A2A">No Breeze integration.</strong> Timothy is building its own ChMS, so <strong style="font-weight:700;color:#1A1A2A">staff, users, and people data live in this system as the system of record</strong> — do not design around syncing from Breeze.</li><li style="font:400 14px/1.6 'Source Sans 3';color:#3A3A4A;text-wrap:pretty"><strong style="font-weight:700;color:#1A1A2A">Four partner ministries, one per core value</strong> (§5.4), including Pastor Rall and Mary Ann in Papua New Guinea under CFNA.</li><li style="font:400 14px/1.6 'Source Sans 3';color:#3A3A4A;text-wrap:pretty"><strong style="font-weight:700;color:#1A1A2A">There is a concert series</strong>, tagged Welcome.</li><li style="font:400 14px/1.6 'Source Sans 3';color:#3A3A4A;text-wrap:pretty"><strong style="font-weight:700;color:#1A1A2A">Payroll has salaried workers</strong> and imports childcare hours from the childcare app.</li><li style="font:400 14px/1.6 'Source Sans 3';color:#3A3A4A;text-wrap:pretty"><strong style="font-weight:700;color:#1A1A2A">Newsletter is <code style="font:600 12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;background:#F0EAE0;border:1px solid #E7DFD1;border-radius:4px;padding:1px 5px;color:#1E2D4A">/edit/35</code>-style</strong> — the full composer, not a four-field form.</li></ul>
+  </div>
+</div>
+</body></html>
