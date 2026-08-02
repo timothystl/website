@@ -344,7 +344,7 @@ export const SITE_PAGES = [
     "sort": 20,
     "template": "standard",
     "in_menu": 1,
-    "seo_description": "Sunday services at 8:00 am, 9:30 am (Vietnamese), and 10:45 am. Plan your visit, watch the live stream, or join midweek worship.",
+    "seo_description": "Sunday services at 8:00 and 10:45 am. Plan your visit, watch the live stream, or join midweek worship.",
     "blocks": [
       {
         "id": "worship-1",

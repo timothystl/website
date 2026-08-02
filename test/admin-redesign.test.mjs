@@ -1218,14 +1218,13 @@ group('the MDO saved section, and the service labels the site uses');
   const after = db.prepare("SELECT COUNT(*) c FROM ministry_saved_sections WHERE name = ?").get("Mother's Day Out");
   eq(after.c, 0, 'deleting it makes it stay deleted');
 
-  // The stored service labels are the ones the SITE uses. Two slots of the
-  // same service have to carry the same label or the welcome card cannot
-  // collapse them onto one line.
+  // Two Sunday services, neither labelled — Andrew's call on 2 Aug. Both
+  // blank means the welcome card reads them as one line, "8:00 & 10:45 am",
+  // with nothing beneath it.
   const times = db.prepare("SELECT value FROM site_settings WHERE key = 'church_service_times'").get();
-  ok(times && (times.value.match(/English worship/g) || []).length === 2,
-    'both English slots are labelled the same, so 8:00 and 10:45 can share a line');
-  ok(times && !/Traditional|Contemporary/.test(times.value),
-    'and the labels /worship never used are gone');
+  ok(times && /8:00 am/.test(times.value) && /10:45 am/.test(times.value), 'both services are there');
+  ok(times && !/9:30/.test(times.value), 'the 9:30 Vietnamese service is off the site');
+  ok(times && !/English|Traditional|Contemporary/.test(times.value), 'and neither service carries a label');
 }
 
 group('the last two borderline routes are on the shared pattern');

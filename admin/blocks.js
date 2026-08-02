@@ -1127,7 +1127,11 @@ function renderInfoCard(b, opts) {
       // "Sunday · English worship" on every line repeats what the eyebrow
       // already said and wraps to two lines in a 415px card. The day earns its
       // place only when the services are not all on the same one.
-      const label = oneDay ? (r.note || r.day || '') : [r.day, r.note].filter(Boolean).join(' · ');
+      // ⚠ Falls back to nothing, not to the day. With every service on one
+      // Sunday the eyebrow already says so, and printing "Sunday" under each
+      // time is the same redundancy the note-only rule exists to remove. The
+      // day still returns below the moment services span more than one.
+      const label = oneDay ? (r.note || '') : [r.day, r.note].filter(Boolean).join(' · ');
       if (!byLabel.has(label)) { byLabel.set(label, []); order.push(label); }
       byLabel.get(label).push(String(r.time || '').trim());
     }
