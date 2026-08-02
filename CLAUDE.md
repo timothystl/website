@@ -1394,6 +1394,36 @@ prayer request are real forms elsewhere on the site but they post to ChMS with
 their own screening; adding them here would be a second, unscreened way in. If
 they are ever wanted, they go through `screenSubmission()` like the rest.
 
+#### The card grids extract now (v4.13.0, 2026-08-02)
+
+Andrew: *"can you try again to look at what is currently on every page and try
+to put that in the editor that we have built."*
+
+All 25 pages already extracted — that part shipped with the site editor. What
+had not was **fidelity**: the extractor predated the card grid block, so it had
+nowhere to put a run of cards and flattened them into a paragraph. `/ministries`
+came out as `hero, text, text, text, buttons` for a page that is really nine
+cards and four partners.
+
+- **`cardRun()` recognises a grid**, and the drafts now carry `cardgrid` blocks
+  on `/ministries` (9 + 4), `/worship` (the four plan-your-visit cards) and
+  `/youthfamily` (6) — with each card's image, heading, body and link intact.
+- **⚠ THE CONTAINER HAS TO SAY IT IS A GRID.** The first version took any two
+  sibling divs carrying an `<h3>`, and that swept up `/give`, whose two `<h3>`
+  panels are stacked full-width boxes. *Two headings near each other* is not a
+  grid; *these are laid out as a grid* is, and the markup already says so with
+  a `-grid` class or an inline `display:grid`.
+- **`/education` correctly extracts nothing.** Its three class cards are
+  `bible-classes-grid`, filled live from the Christian Ed tab — there is no
+  hardcoded content to lift, and inventing some would freeze a live list.
+- The counts are the markup's, not the handoff's: `/ministries` genuinely has
+  **nine** cards and seven images, where the spec said eight.
+
+**Nothing on the live site changed.** Seeds land in the *draft*; a page with
+nothing published still renders its hardcoded markup. The office opens a page,
+looks at it, and presses Publish — page by page, which is what makes the
+conversion reversible.
+
 #### The arrows are gone, and this time there is a test (v4.12.0, 2026-08-02)
 
 Andrew: *"Again go through and remove the arrows at end of links. I don't like

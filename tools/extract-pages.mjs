@@ -135,6 +135,48 @@ function sections(chunk) {
 // Sections whose markup says plainly what block they are. Recognising these is
 // what turns a wall of divs into something staff can actually edit; anything
 // unrecognised falls through to the generic text/photo conversion below.
+// ── A RUN OF CARDS ───────────────────────────────────────────────────────────
+// The live site uses one layout on four pages that the editor could not make
+// until Task 14 shipped the card grid: /ministries' eight cards, the community
+// partners row, and /worship's four plan-your-visit cards. Before the block
+// existed this extractor had nowhere to put them, so they were flattened into
+// a paragraph — which is why those drafts read as prose where the live page
+// reads as a grid.
+//
+// ⚠ THE CONTAINER HAS TO SAY IT IS A GRID. An earlier version of this took any
+// two sibling divs carrying an <h3>, and that swept up /give — whose two <h3>
+// panels are STACKED FULL-WIDTH BOXES, not cards. "Two headings near each
+// other" is not a grid; "these are laid out as a grid" is, and the markup
+// already says so, either with a -grid class or an inline display:grid.
+const GRID_OPEN = /<div\b[^>]*(?:class="[^"]*\b[a-z-]*grid\b[^"]*"|style="[^"]*display:\s*grid)[^>]*>/i;
+
+function cardRun(body) {
+  const open = body.match(GRID_OPEN);
+  if (!open) return null;
+  const inner = body.slice(open.index + open[0].length);
+
+  const cards = [];
+  const re = /<div\b[^>]*>\s*((?:(?!<div\b)[\s\S])*?<h3\b[\s\S]*?)<\/div>/gi;
+  let m;
+  while ((m = re.exec(inner)) !== null) {
+    const c = m[1];
+    const h3 = text(grab(c, /<h3[^>]*>([\s\S]*?)<\/h3>/i));
+    if (!h3) continue;
+    const link = c.match(/<a\b([^>]*)>([\s\S]*?)<\/a>/i);
+    cards.push({
+      img: grab(c, /<img[^>]*src="([^"]*)"/i) || '',
+      title: h3,
+      // The first paragraph only. A card carries one line about itself; if the
+      // markup has more, the rest is layout noise rather than the card's body.
+      body: (() => { const t = text(grab(c, /<p\b[^>]*>([\s\S]*?)<\/p>/i)); return t ? '<p>' + t + '</p>' : ''; })(),
+      linkLabel: link ? text(link[2]) : '',
+      url: link ? (grab(link[1], /href="([^"]*)"/) || '') : '',
+      eyebrow: '',
+    });
+  }
+  return cards.length >= 2 ? cards : null;
+}
+
 function recognise(sec, push, ctx) {
   const b = sec.body;
   const bg = /section--linen|section--mist/.test(sec.open) ? 1 : 0;
@@ -167,6 +209,26 @@ function recognise(sec, push, ctx) {
   if (/service times/i.test(heading)) {
     push('servicetimes', { eyebrow, title: heading, bg, spaceAbove: 64, spaceBelow: 24 });
     push('map', { title: 'Where to find us', bg, spaceAbove: 0, spaceBelow: 64 });
+    return true;
+  }
+
+  // A run of cards. Checked LAST, so a section the recognisers above already
+  // understand — staff, the sermon pair, the contact form — is never mistaken
+  // for a grid just because it happens to contain headings.
+  const cards = cardRun(b);
+  if (cards) {
+    // The intro paragraph belongs to the block, not to a card; prose() would
+    // otherwise sweep every card's body into one lump above the grid.
+    const intro = text(grab(b, /<p\b[^>]*>([\s\S]*?)<\/p>/i));
+    const introIsCard = cards.some((c) => c.body.includes(intro));
+    push('cardgrid', {
+      eyebrow, title: heading,
+      subtitle: introIsCard ? '' : intro,
+      cols: cards.length % 4 === 0 ? 4 : cards.length % 3 === 0 ? 3 : cards.length === 2 ? 2 : 3,
+      topRule: cards.some((c) => c.img) && cards.length > 4,
+      items: cards,
+      bg, spaceAbove: 64, spaceBelow: 64,
+    });
     return true;
   }
   return false;

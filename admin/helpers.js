@@ -5,7 +5,7 @@ import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, SIDEBAR_JS, TOGGLE_WORD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 
-export const VERSION = 'v4.12.1'; // minor: no decorative arrows at the end of links, with a test so they stop coming back
+export const VERSION = 'v4.13.0'; // minor: the extractor recognises card grids, so the page drafts match the live layout
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
