@@ -934,7 +934,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-08-02-4'; // bumped: the service labels the site actually uses (English worship, not Traditional/Contemporary)
+    const SCHEMA_VERSION = '2026-08-02-5'; // bumped: two Sunday services, unlabelled — the 9:30 Vietnamese service comes off the site
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -1592,7 +1592,7 @@ export default {
     // licence to overwrite somebody's edit. Gated on its own marker like the
     // permission rename and the sign-up card, so a later SCHEMA_VERSION bump
     // cannot run it a second time and undo a rename made after this shipped.
-    const SERVICE_LABEL_MARKER = 'service_labels_v1';
+    const SERVICE_LABEL_MARKER = 'service_labels_v2';
     let serviceLabelsFixed = false;
     try {
       const row = await env.DB.prepare('SELECT value FROM _schema_version WHERE key = ?').bind(SERVICE_LABEL_MARKER).first();
@@ -1600,10 +1600,21 @@ export default {
     } catch (_) { /* table may not exist on a brand-new database */ }
     if (!serviceLabelsFixed) {
       try {
-        const STALE = 'Sunday | 8:00 am | Traditional\nSunday | 9:30 am | Vietnamese worship · Hội Thánh Việt\nSunday | 10:45 am | Contemporary';
-        const FIXED = 'Sunday | 8:00 am | English worship\nSunday | 9:30 am | Vietnamese worship · Hội Thánh Việt\nSunday | 10:45 am | English worship';
-        await env.DB.prepare("UPDATE site_settings SET value = ? WHERE key = 'church_service_times' AND value = ?")
-          .bind(FIXED, STALE).run();
+        // Two Sunday services and no labels — Andrew's call on 2 Aug: the 9:30
+        // Vietnamese service is off the site, and neither remaining service is
+        // described as "English worship" any more.
+        const FIXED = 'Sunday | 8:00 am | \nSunday | 10:45 am | ';
+        // ⚠ BOTH PRIOR DEFAULTS, because v1 of this correction shipped hours
+        // earlier and a database may hold either. Matching only the older one
+        // would leave anyone who took the v1 deploy stuck with three services.
+        const PRIOR = [
+          'Sunday | 8:00 am | Traditional\nSunday | 9:30 am | Vietnamese worship · Hội Thánh Việt\nSunday | 10:45 am | Contemporary',
+          'Sunday | 8:00 am | English worship\nSunday | 9:30 am | Vietnamese worship · Hội Thánh Việt\nSunday | 10:45 am | English worship',
+        ];
+        for (const stale of PRIOR) {
+          await env.DB.prepare("UPDATE site_settings SET value = ? WHERE key = 'church_service_times' AND value = ?")
+            .bind(FIXED, stale).run();
+        }
         await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run();
         await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, 'done')").bind(SERVICE_LABEL_MARKER).run();
       } catch (_) { /* retried on the next request */ }

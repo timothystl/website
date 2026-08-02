@@ -431,13 +431,15 @@ export const INITIAL_SETTINGS = [
   { key: 'church_phone',        value: '(314) 781-8673',            label: 'Church phone',    hint: 'Shown wherever the site lists a phone number.' },
   { key: 'church_email',        value: 'office@timothystl.org',     label: 'Church email',    hint: 'The public contact address for the church office.' },
   { key: 'church_service_times', label: 'Service times', hint: 'One line per service: Day | Time | Note. Shown by the Service times block and page sidebars.',
-    // ⚠ These are the names the SITE uses, and they matter beyond wording: the
-    // welcome card groups services by their label, so 8:00 and 10:45 collapse
-    // onto one line — "8:00 & 10:45 am / English worship" — exactly as the
-    // homepage has always shown them. The old seed said Traditional and
-    // Contemporary, which /worship never said, and two different labels can
-    // never merge. Renaming one of them here splits that line again.
-    value: 'Sunday | 8:00 am | English worship\nSunday | 9:30 am | Vietnamese worship · Hội Thánh Việt\nSunday | 10:45 am | English worship' },
+    // Two Sunday services, and no label on either. The welcome card groups by
+    // label, so both blank means they read as one line — "8:00 & 10:45 am" —
+    // which is what Andrew asked for on 2 Aug: no "English worship", and the
+    // 9:30 Vietnamese service dropped.
+    //
+    // ⚠ Giving one of them a label and not the other splits that line again.
+    // That is the mechanism working, not a bug: two services described
+    // differently ARE two lines. If both need the same wording, type it twice.
+    value: 'Sunday | 8:00 am | \nSunday | 10:45 am | ' },
 ];
 
 // ── PARTNERS ─────────────────────────────────────────────────
