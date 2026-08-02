@@ -1673,7 +1673,7 @@ ${portalHeader}
       </div>
     </form>
   </div>
-</div>`, 'Recurring Request');
+</div>`, 'Recurring request');
       }
 
       if (sub === 'recurring' && method === 'POST') {
@@ -2333,7 +2333,7 @@ ${sidebarShell('gym', currentUser)}
   </div>
   <div class="btn-row" style="margin-bottom:16px;">
     <a href="/gym-rentals/groups" class="btn btn-secondary">Manage Groups</a>
-    <a href="/gym-rentals/blocked" class="btn btn-sage">Blocked Dates</a>
+    <a href="/gym-rentals/blocked" class="btn btn-sage">Blocked dates</a>
     <a href="/gym-rentals/invoices" class="btn btn-secondary">Invoices</a>
     <a href="/gym-rentals/merge-holds" class="btn btn-secondary">Consolidate Bookings</a>
     <a href="/gym-rentals/detect-patterns" class="btn btn-secondary">Detect Patterns</a>
@@ -2416,7 +2416,7 @@ document.addEventListener('change', function(e) {
     document.getElementById('bulk-delete-btn').style.display = any ? '' : 'none';
   }
 });
-</script>`, 'Gym Rentals');
+</script>`, 'Gym rentals');
       }
 
       // ── SETTINGS ─────────────────────────────────────────────
@@ -2443,7 +2443,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
       </div>
     </div>
   </form>
-</div>`, 'Gym Rental Settings');
+</div>`, 'Gym rental settings');
       }
 
       if (path === '/gym-rentals/settings/update' && method === 'POST') {
@@ -2541,7 +2541,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>
       </div>
     </form>
   </div>
-</div>`, 'Add Group');
+</div>`, 'Add group');
       }
 
       // ── CREATE GROUP ─────────────────────────────────────────
@@ -2781,7 +2781,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Gym Rentals</a>`)
   <div class="card">${stepsHtml}</div>
   ${eventCreated ? `<div class="alert alert-success">✓ Everything is working. A test event was added to your calendar — check it and delete it.</div>` : ''}
   <div style="margin-top:8px;"><a href="/gym-rentals/test-gcal" class="btn btn-secondary">Run test again</a></div>
-</div>`, 'GCal Test');
+</div>`, 'Google Calendar test');
       }
 
       // ── MERGE/CONSOLIDATE HOLDS ──────────────────────────────
@@ -2861,7 +2861,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
       </div>
     </form>` : `<div style="margin-top:16px;"><a href="/gym-rentals" class="btn btn-secondary" style="text-decoration:none;">← Back to Dashboard</a></div>`}
   </div>
-</div>`, 'Consolidate Bookings');
+</div>`, 'Consolidate bookings');
         }
 
         if (method === 'POST') {
@@ -3011,7 +3011,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
     ${previewHtml}
     ${patterns.length === 0 ? `<div style="margin-top:16px;"><a href="/gym-rentals" class="btn btn-secondary" style="text-decoration:none;">← Back to Dashboard</a></div>` : ''}
   </div>
-</div>`, 'Detect Patterns');
+</div>`, 'Detect patterns');
         }
 
         if (method === 'POST') {
@@ -3195,7 +3195,7 @@ function updateSummary() {
 }
 updateSummary();
 </script>
-`, 'Blocked Dates');
+`, 'Blocked dates');
       }
 
       if (path === '/gym-rentals/blocked/batch' && method === 'POST') {
@@ -3762,7 +3762,7 @@ div.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020 !i
   if (slots.length) { renderList(); updateCounter(); }
 })();
 </script>
-`, 'New Booking');
+`, 'New booking');
       }
 
       // ── BOOKING REVIEW ────────────────────────────────────────
@@ -3876,7 +3876,7 @@ ${sidebarShell('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
       </div>
     </form>
   </div>`}
-</div>`, 'Review Booking');
+</div>`, 'Review booking');
       }
 
       // ── CONFIRM BOOKING ───────────────────────────────────────
@@ -4875,7 +4875,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/recurring">← Recurri
     </form>
   </div>`;
   })() : ''}
-</div>`, 'Review Recurring Request');
+</div>`, 'Review recurring request');
       }
 
       if (path.startsWith('/gym-rentals/recurring/approve/') && method === 'POST') {

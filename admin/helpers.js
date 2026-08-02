@@ -5,7 +5,7 @@ import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, SIDEBAR_JS, TOGGLE_WORD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 
-export const VERSION = 'v4.4.1'; // minor: the payroll period lock is real and server-side; the radii sweep covers ui.js
+export const VERSION = 'v4.5.0'; // minor: the fix list read line by line — filter pills, alert stripe, .tlcb-card collision
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
@@ -216,8 +216,11 @@ body{padding-left:228px;}
 .icon-tile{width:44px;height:44px;border-radius:12px;background:var(--mist);color:var(--steel);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
 .badge-expiring{background:#FFF3D6;color:#7A4F00;}
 .count-pill{font-family:var(--sans);font-size:12px;color:var(--gray);}
-.filter-pill{font-family:var(--sans);font-size:12px;font-weight:700;color:var(--gray);background:var(--linen);border:1px solid var(--border);border-radius:999px;padding:6px 14px;cursor:pointer;}
-.filter-pill.active{background:var(--steel);color:#fff;border-color:var(--steel);}
+/* Task 1's exact values. It was a 999px pill with a navy fill, which the fix
+   list rules out in as many words — a filled navy chip reads as the primary
+   action on the screen, and a filter is not that. */
+.filter-pill{font:600 11.5px/1 var(--sans);color:#4A4860;background:#FAF7F1;border:1px solid #E7DFD1;border-radius:8px;padding:7px 12px;cursor:pointer;}
+.filter-pill.active{border:2px solid #1E2D4A;background:#E7EEF7;color:#1E2D4A;padding:6px 11px;}
 ${ADMIN_UI_CSS}
 ${MENU_CSS}
 ${PRESET_CSS}
