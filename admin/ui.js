@@ -260,6 +260,46 @@ export function renderListSection(cfg) {
 // One script for every list section on the page. Included once by
 // sidebarShell(); it discovers sections rather than being wired per section, so
 // a new section needs no script of its own.
+// A nav row with children folds them away when you are not in them. Five rows
+// permanently under Pages read as one flat list of ten, which is the opposite
+// of what nesting them was for.
+//
+// ⚠ Which way it starts is decided SERVER-SIDE and this script only ever
+// responds to a click. A sidebar that redraws itself after paint is a sidebar
+// whose rows move under the pointer, and the first thing anybody does on a
+// page is click the nav.
+//
+// The remembered choice is an override of where you are, never the other way
+// round: `data-here` marks a panel the server opened because the active screen
+// is inside it, and that always wins. The rows you are using cannot be the
+// ones folded away.
+export const SIDEBAR_JS = `(function(){
+  var KEY = 'tlc-nav-open';
+  var saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (_) {}
+
+  Array.prototype.forEach.call(document.querySelectorAll('.sidebar-caret'), function (btn) {
+    var id = btn.getAttribute('data-children');
+    var panel = document.getElementById(id);
+    if (!panel) return;
+
+    function set(open) {
+      panel.hidden = !open;
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+    if (!panel.hasAttribute('data-here') && Object.prototype.hasOwnProperty.call(saved, id)) {
+      set(!!saved[id]);
+    }
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      var open = panel.hidden;
+      set(open);
+      saved[id] = open;
+      try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (_) {}
+    });
+  });
+})();`;
+
 // The state word beside a drawer toggle follows the switch. Rendering it once
 // server-side and leaving it stale would be worse than not having it — it
 // would confidently say "Showing" about something now hidden.

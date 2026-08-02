@@ -360,12 +360,18 @@ group('the shell');
   ok(shell.includes('body{padding-left:228px;}'), 'and the content sits beside it, not under it');
   ok(!shell.includes('.wrap{max-width:860px'), 'the narrow content column is gone');
 
-  // Every way of hiding it, gone — except the one the spec allows.
-  const dflt = shell.slice(shell.indexOf('.sidebar{'));
-  ok(!dflt.slice(0, dflt.indexOf('}')).includes('translateX'), 'no off-canvas default');
-  ok(shell.includes('.sidebar-backdrop{display:none;}'), 'no backdrop unless the slide-over is on');
-  ok(shell.includes('.sidebar-toggle{display:none;'), 'and no hamburger on a desktop');
-  ok(shell.includes('@media (max-width:900px)'), 'below 900px it may slide over — the only responsive rule');
+  // Every way of hiding it, gone — the fix list's own check, verbatim: no
+  // util bar, no hamburger, no backdrop, no off-canvas transform, anywhere.
+  // ⚠ The hamburger that was left behind had NO handler wired to it, so below
+  // 900px the admin had no navigation at all. Restoring the button would have
+  // been fixing the symptom of a pattern the design had already rejected.
+  for (const dead of ['util-bar', 'sidebar-toggle', 'sidebar-backdrop', 'translateX(-100%)']) {
+    ok(!shell.includes(dead), `the slide-over is gone: no ${dead}`);
+  }
+  ok(shell.includes('@media (max-width:900px)'), 'below 900px it restacks — the only responsive rule');
+  const narrow = shell.slice(shell.indexOf('@media (max-width:900px)'));
+  ok(narrow.slice(0, narrow.indexOf('\n}')).includes('.sidebar{position:static'),
+    'and restacking means static above the content, never hidden');
 
   // The context bar. Same navy as the sidebar, so the two read as one shell.
   ok(shell.includes('.tlc-ctx{display:flex;align-items:center;gap:14px;height:46px;padding:0 26px;background:#1E2D4A'),

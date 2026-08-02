@@ -1336,19 +1336,16 @@ group('the shell is the sidebar plus a context bar');
   has(body, 'href="/settings"', 'and so does Settings');
   has(body, 'sidebar-item-child', 'the five children of Pages keep their elbow');
 
-  // What IS gone: every way of hiding it. No off-canvas default, no backdrop
-  // shown, no toggle script — the hamburger survives only below 900px, where a
-  // phone genuinely cannot spare 228px.
-  const shellCss = await (await call(env, '/dashboard', { cookie })).text();
-  // The DEFAULT rule must not translate it away. The one inside the 900px
-  // media query is the legitimate slide-over, so match the first occurrence
-  // only — asserting on the whole stylesheet would fail on the rule the spec
-  // actually asks for.
-  const firstSidebarRule = shellCss.slice(shellCss.indexOf('.sidebar{'));
-  ok(!firstSidebarRule.slice(0, firstSidebarRule.indexOf('}')).includes('translateX'),
-    'the sidebar does not start off-canvas');
-  ok(shellCss.includes('body{padding-left:228px;}'), 'and the content sits beside it, not under it');
-  ok(shellCss.includes('@media (max-width:900px)'), 'the slide-over is the one responsive rule');
+  // What IS gone: every way of hiding it, on every width. The fix list asks
+  // for exactly these four strings to return nothing.
+  // ⚠ The hamburger that used to survive below 900px had NO handler wired to
+  // it, so on a phone the admin had no navigation at all — the slide-over was
+  // half-deleted rather than kept.
+  for (const dead of ['sidebar-toggle', 'sidebar-backdrop', 'translateX(-100%)', 'util-bar']) {
+    ok(!body.includes(dead), `no way to hide the sidebar: ${dead} is gone`);
+  }
+  ok(body.includes('body{padding-left:228px;}'), 'the content sits beside it, not under it');
+  ok(body.includes('.sidebar{position:static'), 'and below 900px it restacks above the content');
 
   // The context bar reports; it does not navigate.
   has(body, 'class="tlc-ctx"', 'the context bar is above the content');
@@ -1367,6 +1364,32 @@ group('the shell is the sidebar plus a context bar');
   const gym = await (await call(env, '/gym-rentals', { cookie })).text();
   has(gym, 'class="tlc-ctx-group">Money &amp; Building<', 'a gym screen names its group');
   has(gym, 'class="tlc-ctx-section">Gym rentals<', 'and its section');
+}
+
+group('what is under Pages folds away');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const open = (html) => /id="sidebar-under-pages"(?! hidden)/.test(html);
+
+  // Five rows permanently under Pages pushed the four groups below them down
+  // the sidebar and read as one flat list of ten — the opposite of what
+  // nesting them was for.
+  const dash = await (await call(env, '/dashboard', { cookie })).text();
+  ok(!open(dash), 'from somewhere else, the children are folded away');
+  has(dash, 'class="sidebar-caret"', 'with a control to open them');
+
+  // ⚠ Decided server-side, not by a script after paint. A sidebar whose rows
+  // move once the page has loaded is a sidebar you cannot click confidently.
+  ok(open(await (await call(env, '/pages', { cookie })).text()),
+    'on Pages itself they are open');
+  for (const [path, what] of [['/ministries', 'Ministries'], ['/sermons', 'Sermons'],
+    ['/newsitems', 'News'], ['/partners', 'Partners'], ['/christian-education', 'Christian Ed']]) {
+    const html = await (await call(env, path, { cookie })).text();
+    ok(open(html), `and on ${what}, which is one of them`);
+    // The row you are on cannot be the row that is hidden.
+    has(html, 'data-here', 'marked as opened because you are inside it');
+  }
 }
 
 group('the sidebar hides whole groups, not rows');
