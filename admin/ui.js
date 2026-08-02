@@ -669,6 +669,10 @@ export const ADMIN_UI_CSS = `
 :root{--steel:#1E2D4A;--amber:#C9973A;--sage:#4A5E3A;--warm:#FAF7F1;--linen:#F4EFE5;--mist:#E7EEF7;
   --border:#E7DFD1;--charcoal:#1A1A2A;--gray:#6A6858;--white:#fff;
   --sans:'Source Sans 3',Arial,sans-serif;--serif:'Lora',Georgia,serif;
+  /* The sidebar rail. Declared here because this is the shell's one :root —
+     the flex shell reads it for both the rail and the content column, so the
+     width exists in exactly one place. */
+  --tlc-rail:228px;
 
   --tlc-sidebar:${PALETTE.sidebarNavy};--tlc-nav-raised:${PALETTE.navyRaised};
   --tlc-navy:${PALETTE.navy};--tlc-ink:${PALETTE.navyInk};--tlc-text:${PALETTE.ink};

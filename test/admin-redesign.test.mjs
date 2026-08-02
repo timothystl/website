@@ -1481,7 +1481,12 @@ group('the shell is the sidebar plus a context bar');
   // The white util bar that held Sign Out is gone for good — that is the part
   // the design rejected. Sign Out lives in the sidebar foot now.
   ok(!body.includes('util-bar'), 'the util bar is gone');
-  ok(body.includes('body{padding-left:228px;}'), 'the content sits beside it, not under it');
+  // Two flex columns, not a fixed rail plus matching body padding. The rail
+  // width is a single custom property now, read by both sides.
+  ok(body.includes('body{display:flex;align-items:stretch;}'), 'the shell is a flex row');
+  ok(body.includes('.tlc-main{flex:1;min-width:0'), 'the content column takes what is left');
+  ok(body.includes('--tlc-rail:228px'), 'and the rail width is declared once');
+  ok(!body.includes('body{padding-left:228px'), 'the old padding arithmetic is gone');
 
   // ⚠ Below 900px it is a slide-over, and the CSS and the handler cannot ship
   // apart. A previous pass deleted the handler and kept the CSS, so a phone
