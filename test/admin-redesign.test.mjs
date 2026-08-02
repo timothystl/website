@@ -1540,6 +1540,39 @@ group('a link card can be a sign-up form');
   ok(api.cards.some((c) => c.kind === 'link'), 'and still reports ordinary cards');
 }
 
+group('each tap serves its own cards');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  // The links page works out which tap it is from the address the office typed
+  // into "Lands on", so the API has to carry both halves: which tap a card is
+  // on, and where each tap lands. Without either, every tap shows every card.
+  const api = await (await call(env, '/api/link-cards')).json();
+  ok(api.cards.every((c) => 'tap' in c), 'every card reports which tap it is on');
+  ok(api.taps.length >= 4, 'and the taps ride along: ' + api.taps.length);
+  ok(api.taps.every((t) => t.destination), 'each with the address it lands on');
+
+  // A switched-off tap is not sent, so its cards stop showing rather than
+  // being served at an address the office has retired.
+  db.prepare('UPDATE taps SET active=0 WHERE id=2').run();
+  const off = await (await call(env, '/api/link-cards')).json();
+  ok(!off.taps.some((t) => t.id === 2), 'a switched-off tap is not published');
+  db.prepare('UPDATE taps SET active=1 WHERE id=2').run();
+
+  // ⚠ Tap 3 lands on the giving page, which is a different Worker — cards
+  // assigned to it can never appear. Saying so on the screen is what stops
+  // "I moved it and nothing happened" being a mystery.
+  db.prepare("UPDATE link_cards SET tap=3 WHERE id=(SELECT MIN(id) FROM link_cards)").run();
+  const screen = await (await call(env, '/link-cards', { cookie })).text();
+  has(screen, 'lands somewhere other than the links page', 'the screen flags a tap that cannot show cards');
+  has(screen, 'not visible to anybody', 'and says the cards on it are going unseen');
+
+  // A tap that does land on the links page carries no such warning.
+  const firstTap = screen.slice(0, screen.indexOf('/tap2'));
+  ok(!firstTap.includes('lands somewhere other than'), 'a tap on the links page is not flagged');
+}
+
 group('a newsletter can carry a fourth and fifth note');
 {
   const { db, env } = await boot();
