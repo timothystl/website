@@ -376,6 +376,36 @@ async function payrollPeriodLocked(baseUrl, period, headers) {
 // origin (the public site at timothystl.org POSTs to them). Every other
 // state-changing request must originate from admin.timothystl.org itself.
 const ADMIN_ORIGIN = 'https://admin.timothystl.org';
+
+// ── THE RENTER PORTAL'S OWN ORIGIN ───────────────────────────
+// The gym booking portal is the one page in this Worker that renders
+// renter-supplied content and is handed to people outside the church. Served
+// on the admin origin it was same-origin with the admin — and same-origin is
+// the whole security boundary here: the CSP allows 'unsafe-inline', and the
+// Origin gate below cannot tell a portal script from an admin one, so an
+// injection in the portal could act with a signed-in admin's session. Moving
+// it to the public site origin means the worst a portal bug can do is happen
+// on a page where nobody is signed in to anything.
+//
+// ⚠ Read from `gym_portal_origin`, and BLANK IS THE SAFE DEFAULT: the
+// Cloudflare route (timothystl.org/gym/* → tlc-newsletter-admin) has to exist
+// before anything is sent there, and code deploys before somebody adds a
+// route. Until it is set, everything behaves exactly as it did.
+const PORTAL_PATHS = ['/gym/book/', '/gym/cal/'];
+const isPortalPath = (p) => PORTAL_PATHS.some((prefix) => p.startsWith(prefix));
+
+async function portalOrigin(env) {
+  try {
+    const row = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_portal_origin'").first();
+    const raw = String(row?.value || '').trim().replace(/\/+$/, '');
+    if (!raw) return '';
+    const u = new URL(raw);
+    // Anything but http(s) here would be a link the office hands to renters,
+    // so it is dropped rather than half-honoured.
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
+    return u.origin;
+  } catch (_) { return ''; }
+}
 // `/api/tap-hit` is called server-to-server by site-worker.js when it resolves
 // one of the /tapN short addresses, so it has no Origin to check against.
 const PUBLIC_CROSS_ORIGIN_POSTS = new Set(['/api/contact', '/api/prayer', '/api/subscribe', '/api/tap-hit']);
@@ -878,8 +908,19 @@ export default {
     if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS' && !PUBLIC_CROSS_ORIGIN_POSTS.has(path)) {
       const origin = request.headers.get('Origin') || '';
       const referer = request.headers.get('Referer') || '';
-      const ok = origin === ADMIN_ORIGIN
-        || (!origin && referer.startsWith(ADMIN_ORIGIN + '/'));
+      // ⚠ A renter portal form posts from the PORTAL's origin, not the
+      // admin's. Without this the whole booking flow 403s the moment the
+      // portal moves — a hold request, a release, a confirmation, all of it,
+      // and it would read as "the portal is broken" with nothing to go on.
+      // The property that matters is kept: a request must come from the page
+      // it belongs to. The portal origin is accepted for portal paths only.
+      const allowed = [ADMIN_ORIGIN];
+      if (isPortalPath(path)) {
+        const po = await portalOrigin(env);
+        if (po) allowed.push(po);
+      }
+      const ok = allowed.includes(origin)
+        || (!origin && allowed.some((a) => referer.startsWith(a + '/')));
       if (!ok) {
         return new Response('Cross-origin request blocked.', { status: 403 });
       }
@@ -893,7 +934,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-08-02-1'; // bumped: link_cards.kind (a card can be a sign-up form)
+    const SCHEMA_VERSION = '2026-08-02-2'; // bumped: gym_portal_origin setting (the renter portal's own address)
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -2181,8 +2222,18 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#0A3C5C;margin-bottom:6
 
     // ── PUBLIC GYM ROUTES (no auth) ────────────────────────────
     // Group booking portal (/gym/book/:token/*) and iCal feeds (/gym/cal/*.ics)
-    if (path.startsWith('/gym/book/') || path.startsWith('/gym/cal/')) {
-      const r = await handleGymRoutes(path, method, url, request, env, null, ctx);
+    if (isPortalPath(path)) {
+      const po = await portalOrigin(env);
+      // Once the portal has a public address, the admin domain stops serving
+      // renter content and sends anybody holding an old link to the new one.
+      // 301 rather than 302 because the address really has moved — and the
+      // iCal feed matters most here: it is subscribed inside people's calendar
+      // apps, so without this their calendar would simply stop updating with
+      // no error anywhere.
+      if (po && url.origin === ADMIN_ORIGIN) {
+        return new Response('', { status: 301, headers: { Location: po + path + url.search } });
+      }
+      const r = await handleGymRoutes(path, method, url, request, env, null, ctx, po);
       if (r) return r;
     }
 
@@ -3329,7 +3380,7 @@ ${PAYROLL_HTML}`, 'Payroll');
       if (!hasPermission(currentUser, 'gym_manage')) {
         return new Response('Access denied.', { status: 403 });
       }
-      const r = await handleGymRoutes(path, method, url, request, env, currentUser, ctx);
+      const r = await handleGymRoutes(path, method, url, request, env, currentUser, ctx, await portalOrigin(env));
       if (r) return r;
     }
 

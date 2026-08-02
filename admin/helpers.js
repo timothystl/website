@@ -5,7 +5,7 @@ import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, SIDEBAR_JS, TOGGLE_WORD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 
-export const VERSION = 'v4.5.1'; // minor: the fix list read line by line — filter pills, alert stripe, .tlcb-card collision
+export const VERSION = 'v4.6.0'; // minor: the renter portal has its own origin; the slide-over is back with its handler
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
@@ -125,9 +125,15 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
    ⚠ The sidebar STAYS. Twenty-one sections in five groups is more than a
    horizontal bar can hold honestly, and a list you read top to bottom beats
    chips you have to scroll. What the build got wrong was never the sidebar —
-   it was hiding it behind a hamburger. So there is no off-canvas transform,
-   no .is-open, no backdrop and no toggle: it is simply on screen, and the
-   content sits BESIDE it rather than under it.
+   it was hiding it behind a hamburger ON EVERY WIDTH. Above 900px it is
+   simply on screen and the content sits BESIDE it. Below 900px — where a
+   390px phone cannot spare 228px of it — it is a slide-over, which is what
+   Task 2 item 3 allows.
+
+   ⚠ The slide-over needs SIDEBAR_JS. A previous pass deleted the handler and
+   kept this CSS, so the sidebar sat off-canvas behind a button wired to
+   nothing and the admin had no navigation at all on a phone. If you remove
+   one, remove both.
 
    Above the content, a slim context bar — the one good idea from the editor's
    top bar, kept and cut down. It reports; it does not navigate. */
@@ -186,13 +192,21 @@ body{padding-left:228px;}
    pattern the design had already rejected. */
 @media (max-width:900px){
   body{padding-left:0;}
-  .sidebar{position:static;width:100%;height:auto;}
-  .sidebar-groups{display:flex;flex-wrap:wrap;gap:0 10px;}
-  .sidebar-group{flex:1 1 150px;}
+  .sidebar{transform:translateX(-100%);transition:transform .2s ease;box-shadow:none;}
+  .sidebar.is-open{transform:translateX(0);box-shadow:2px 0 22px rgba(11,22,44,.35);}
+  .sidebar-backdrop.is-open{display:block;}
+  .sidebar-toggle{display:inline-flex;}
   .tlc-ctx{padding:0 16px;}
   .wrap,.wrap-wide{padding:20px 16px;}
   .tlc-nav-back{padding:14px 16px 0;}
 }
+/* Off on a desktop, where the sidebar is simply on screen. */
+.sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(11,22,44,.42);z-index:99;}
+.sidebar-toggle{display:none;align-items:center;justify-content:center;background:transparent;border:0;
+  padding:6px;margin:0 0 0 -6px;border-radius:8px;cursor:pointer;color:#AFC0D2;flex:none;}
+.sidebar-toggle:hover{color:#fff;background:rgba(255,255,255,.10);}
+.sidebar-toggle:focus-visible{outline:2px solid var(--tlc-gold-bright);outline-offset:1px;}
+.sidebar-toggle svg{display:block;width:22px;height:22px;}
 /* ── DASHBOARD ─────────────────────────────────────────────── */
 .dash-header{font-family:var(--serif);font-size:24px;color:var(--steel);}
 .dash-sub{font-family:var(--sans);font-size:13px;color:var(--gray);margin-top:2px;}
@@ -447,7 +461,8 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}) {
     hp('settings_manage') ? navItem('/settings', 'Settings', activeTab === 'settings') : '',
   ].filter(Boolean).join('');
 
-  return `<aside class="sidebar" id="sidebar">
+  return `<div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+<aside class="sidebar" id="sidebar">
   <div class="sidebar-brand">
     <div class="sidebar-brand-name">Timothy Lutheran</div>
     <div class="sidebar-brand-sub">Admin <span class="sidebar-version">${VERSION}</span></div>
@@ -486,6 +501,9 @@ export function contextBar(activeTab, badges = {}) {
   const t = TRAIL[activeTab] || { group: 'Admin', section: 'Admin' };
   const waiting = t.waits ? Number(badges[t.waits] || 0) : 0;
   return `<div class="tlc-ctx">
+    <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+    </button>
     <div class="tlc-ctx-trail">
       <span class="tlc-ctx-group">${escapeHtml(t.group)}</span>
       <span class="tlc-ctx-sep" aria-hidden="true">/</span>

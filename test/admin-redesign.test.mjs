@@ -1311,6 +1311,71 @@ group('payroll lives in the shared shell now');
   eq(res.headers.get('x-robots-tag'), 'noindex, nofollow', 'and it is still noindex, as the standalone page was');
 }
 
+group('the renter portal has its own origin');
+{
+  // ⚠ The portal renders renter-supplied content and is handed to people
+  // outside the church. Same-origin with the admin, an injection in it could
+  // act with a signed-in admin's session — the CSP allows 'unsafe-inline' and
+  // the Origin gate cannot tell a portal script from an admin one.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const setOrigin = (v) => db.prepare("INSERT INTO site_settings (key,value) VALUES ('gym_portal_origin',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(v);
+  db.prepare("INSERT INTO gym_groups (id,name,contact,email,access_token,active) VALUES (7,'Hoops','A','a@b.example','tok7',1)").run();
+
+  const portalGet = (host = 'admin.timothystl.org') =>
+    worker.fetch(new Request(`https://${host}/gym/book/tok7`), env, ctx);
+
+  // ⚠ Blank is the SAFE DEFAULT and has to stay that way: code deploys before
+  // somebody adds a Cloudflare route, and redirecting to a host that is not
+  // serving yet would send every renter to the homepage — with a 200, because
+  // the site is a single-page app, so it would not even look like an error.
+  setOrigin('');
+  eq((await portalGet()).status, 200, 'with no address set, the admin host still serves the portal');
+
+  setOrigin('https://timothystl.org');
+  const moved = await portalGet();
+  eq(moved.status, 301, 'once it has an address, the admin host stops serving renter content');
+  eq(moved.headers.get('Location'), 'https://timothystl.org/gym/book/tok7', 'and says where it went');
+
+  // The iCal feed is subscribed inside people's calendar apps. Without the
+  // redirect their calendar would just stop updating, with no error anywhere.
+  const ics = await worker.fetch(new Request('https://admin.timothystl.org/gym/cal/abc.ics'), env, ctx);
+  eq(ics.status, 301, 'the calendar feed moves too');
+  eq(ics.headers.get('Location'), 'https://timothystl.org/gym/cal/abc.ics', 'to the same address');
+
+  // On the portal's own host it is served, not redirected — otherwise this is
+  // a loop.
+  eq((await portalGet('timothystl.org')).status, 200, 'the portal host serves it');
+
+  // ⚠ A portal form posts from the PORTAL's origin. Without accepting it the
+  // whole booking flow 403s the moment the portal moves — and it would read
+  // as "the portal is broken" with nothing to go on.
+  const postFrom = (origin) => worker.fetch(new Request('https://timothystl.org/gym/book/tok7/hold', {
+    method: 'POST', headers: { origin, 'content-type': 'application/x-www-form-urlencoded' }, body: '',
+  }), env, ctx);
+  ok((await postFrom('https://timothystl.org')).status !== 403, 'a portal form posts from the portal origin');
+  eq((await postFrom('https://evil.example')).status, 403, 'and somewhere else is still refused');
+
+  // The gate is widened for portal paths only — not for the admin at large.
+  const adminPost = await worker.fetch(new Request('https://admin.timothystl.org/link-cards/create', {
+    method: 'POST', headers: { cookie, origin: 'https://timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
+    body: 'title=X&url=https%3A%2F%2Fa.example',
+  }), env, ctx);
+  eq(adminPost.status, 403, 'an admin POST from the portal origin is still refused');
+
+  // ⚠ The link staff copy has to name the portal, or every group created from
+  // here keeps handing out the admin domain and the move is undone one group
+  // at a time.
+  const groupPage = await (await call(env, '/gym-rentals/groups/edit/7', { cookie })).text();
+  has(groupPage, 'https://timothystl.org/gym/book/tok7', 'the copyable link is the portal address');
+  lacks(groupPage, 'https://admin.timothystl.org/gym/book/tok7', 'not the admin one');
+
+  // Only http(s). This value becomes a link the office hands to renters.
+  setOrigin('javascript:alert(1)');
+  eq((await portalGet()).status, 200, 'an unsafe address is ignored rather than half-honoured');
+  setOrigin('');
+}
+
 group('an approved payroll period is locked server-side');
 {
   // Approving a run is somebody signing off a set of figures. If the hours can
@@ -1413,16 +1478,19 @@ group('the shell is the sidebar plus a context bar');
   has(body, 'href="/settings"', 'and so does Settings');
   has(body, 'sidebar-item-child', 'the five children of Pages keep their elbow');
 
-  // What IS gone: every way of hiding it, on every width. The fix list asks
-  // for exactly these four strings to return nothing.
-  // ⚠ The hamburger that used to survive below 900px had NO handler wired to
-  // it, so on a phone the admin had no navigation at all — the slide-over was
-  // half-deleted rather than kept.
-  for (const dead of ['sidebar-toggle', 'sidebar-backdrop', 'translateX(-100%)', 'util-bar']) {
-    ok(!body.includes(dead), `no way to hide the sidebar: ${dead} is gone`);
-  }
+  // The white util bar that held Sign Out is gone for good — that is the part
+  // the design rejected. Sign Out lives in the sidebar foot now.
+  ok(!body.includes('util-bar'), 'the util bar is gone');
   ok(body.includes('body{padding-left:228px;}'), 'the content sits beside it, not under it');
-  ok(body.includes('.sidebar{position:static'), 'and below 900px it restacks above the content');
+
+  // ⚠ Below 900px it is a slide-over, and the CSS and the handler cannot ship
+  // apart. A previous pass deleted the handler and kept the CSS, so a phone
+  // got a sidebar off-canvas behind a button wired to nothing — an admin with
+  // no navigation at all.
+  ok(body.includes('id="sidebar-toggle"'), 'the hamburger is rendered');
+  ok(body.includes('id="sidebar-backdrop"'), 'and the scrim it needs');
+  ok(body.includes("getElementById('sidebar-toggle')"), 'and the handler that opens it');
+  ok(body.includes("classList.toggle('is-open'"), 'which really toggles the class the CSS reads');
 
   // The context bar reports; it does not navigate.
   has(body, 'class="tlc-ctx"', 'the context bar is above the content');

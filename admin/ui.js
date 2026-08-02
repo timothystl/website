@@ -274,6 +274,42 @@ export function renderListSection(cfg) {
 // is inside it, and that always wins. The rows you are using cannot be the
 // ones folded away.
 export const SIDEBAR_JS = `(function(){
+  // ── The slide-over, below 900px ──
+  // ⚠ This handler is the half that was missing before: the CSS pushed the
+  // sidebar off-canvas and the hamburger had nothing wired to it, so a phone
+  // got an admin with no navigation at all. The CSS and this cannot ship
+  // apart — if one goes, both go.
+  var sb = document.getElementById('sidebar');
+  var bd = document.getElementById('sidebar-backdrop');
+  var tg = document.getElementById('sidebar-toggle');
+  function setOpen(open) {
+    if (!sb) return;
+    sb.classList.toggle('is-open', open);
+    if (bd) bd.classList.toggle('is-open', open);
+    if (tg) {
+      tg.setAttribute('aria-expanded', open ? 'true' : 'false');
+      tg.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
+    }
+  }
+  if (tg) tg.addEventListener('click', function () { setOpen(!sb.classList.contains('is-open')); });
+  if (bd) bd.addEventListener('click', function () { setOpen(false); });
+  // Escape closes it, and following a link leaves the menu behind rather than
+  // returning to the next page with it still over the content.
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setOpen(false); });
+  if (sb) sb.addEventListener('click', function (e) {
+    if (e.target.closest && e.target.closest('a')) setOpen(false);
+  });
+  // A window dragged wider leaves .is-open set, which is harmless — the rule
+  // only exists inside the media query — but the toggle would still claim to
+  // be expanded to a screen reader.
+  if (window.matchMedia) {
+    var wide = window.matchMedia('(min-width:901px)');
+    var onWide = function (m) { if (m.matches) setOpen(false); };
+    if (wide.addEventListener) wide.addEventListener('change', onWide);
+    else if (wide.addListener) wide.addListener(onWide);
+  }
+
+  // ── What sits under a nav row ──
   var KEY = 'tlc-nav-open';
   var saved = {};
   try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (_) {}

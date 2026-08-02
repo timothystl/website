@@ -1394,6 +1394,60 @@ prayer request are real forms elsewhere on the site but they post to ChMS with
 their own screening; adding them here would be a second, unscreened way in. If
 they are ever wanted, they go through `screenSubmission()` like the rest.
 
+#### The renter portal moved off the admin origin (v4.6.0, 2026-08-02)
+
+Andrew, looking at a portal link: *"why is it going to the admin.timothystl.org
+domain, i think that exposes the admin portal"*. He was right, and the reason is
+stronger than exposure.
+
+The gym booking portal is the one page in this Worker that **renders
+renter-supplied content and is handed to people outside the church**. Served on
+the admin origin it was same-origin with the admin — and same-origin is the
+whole boundary: the admin CSP allows `'unsafe-inline'`, and the Origin gate
+cannot tell a portal script from an admin one. So an injection in the portal
+(GY-2 was exactly that, escaped in v3.8.0) could `fetch('/users/new', …)` with a
+signed-in admin's session and be accepted. On the public site origin, the worst
+a portal bug can do happens where nobody is signed in to anything.
+
+- **`gym_portal_origin` is a setting, and blank is the safe default.** Code
+  deploys before somebody adds a Cloudflare route, and redirecting to a host
+  that is not serving yet would send every renter to the homepage — with a
+  **200**, because the site is a single-page app, so it would not even look
+  like an error. Until it is set, everything behaves as it did.
+- **Two manual steps, in this order**: add the Cloudflare route
+  `timothystl.org/gym/*` → `tlc-newsletter-admin` (more specific than
+  `timothystl.org/*`, so it wins over the site worker), *then* set the setting
+  on the Gym rental settings screen. Routes are **not** in `wrangler.toml` and
+  must not be added there — Wrangler would take over route management for this
+  Worker and could drop `admin.timothystl.org`.
+- **⚠ The CSRF gate had to learn about it.** A portal form posts from the
+  portal's origin, so the admin's `Origin === ADMIN_ORIGIN` check would have
+  403'd the entire booking flow the moment the portal moved — a hold, a
+  release, a confirmation, all of it, reading as "the portal is broken" with
+  nothing to go on. The portal origin is accepted **for portal paths only**; a
+  test asserts an admin POST from it is still refused.
+- **⚠ The iCal feed moves with it.** `/gym/cal/:token.ics` is subscribed inside
+  people's calendar apps; without the 301 their calendar would simply stop
+  updating, with no error anywhere.
+- **The copyable link is built from the setting, not `url.origin`.** Otherwise
+  every group created from the admin keeps handing out the admin domain and the
+  move is undone one group at a time.
+
+#### The slide-over is back, with its handler this time (v4.6.0, 2026-08-02)
+
+Andrew's call on the open ruling: *"write the handler"*. Task 2 item 3 allows a
+slide-over below 900px; the definition of done's grep forbade the strings. The
+grep was aimed at the *desktop* hamburger, which is what the design rejected —
+so below 900px it slides over again, and above it the sidebar is simply on
+screen.
+
+**⚠ The CSS and `SIDEBAR_JS` cannot ship apart.** The v4.0.0 pass deleted the
+handler and kept the CSS, which is how the admin ended up with no navigation at
+all on a phone. Both suites now assert the markup *and* the handler, not just
+the CSS. Escape closes it, the backdrop closes it, following a link closes it,
+and widening past 900px resets `aria-expanded` so the button never lies to a
+screen reader.
+
 #### The fix list, read line by line (v4.5.0, 2026-08-02)
 
 A fourth pass over `FIXES.md`, checking every sub-item rather than every task.
