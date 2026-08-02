@@ -99,6 +99,9 @@ jobs:
 # something to slip in alongside the Node ones. Run them locally:
 #
 #   node test/shell-layout.test.mjs      # the shell, MEASURED — see below
+#   node --experimental-loader ./test/html-loader.mjs test/gym-portal.test.mjs
+#                                        # the renter portal at 390px — the
+#                                        # device it is actually opened on
 #   node test/list-section.test.mjs      # the shared list pattern
 #   node test/editor.test.mjs            # the block editor shell
 #   node test/site-editor.test.mjs       # the pages rail and Page tab

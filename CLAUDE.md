@@ -1394,6 +1394,39 @@ prayer request are real forms elsewhere on the site but they post to ChMS with
 their own screening; adding them here would be a second, unscreened way in. If
 they are ever wanted, they go through `screenSubmission()` like the rest.
 
+#### The renter's basket, and the phone it is opened on (v4.11.0, 2026-08-02)
+
+Task 18 items 4 and 5 — the two left deliberately unfinished, now done.
+
+**The basket** is one row per date in date order, each removable whole, with
+every time inside it removable on its own.
+
+- **Removing ONE time must leave the rest of that date alone.** Before this,
+  the only correction available was Clear — and "start again" is not a
+  correction when a request spans five dates.
+- **Adjacent hours print as one range, a gap prints as two** (the spec's own
+  rule): `1–3 PM` against `1–2 PM, 3–4 PM`. Those are different bookings. The
+  range recomputes when a time is dropped, so it cannot go stale.
+- **⚠ The removal handlers are delegated, not bound per button.** The basket
+  re-renders on every change, so handlers attached to its buttons would be
+  thrown away the moment somebody used one — the second ✕ would silently do
+  nothing.
+
+**The phone is the real device.** A renter opens this from an email, on a
+phone, so 390px is where it was measured rather than a responsive afterthought.
+
+- **Twelve tap targets were under 44px**, and the tightest was the one that
+  matters most: the 7-column month grid, whose day cells were 38×40. A missed
+  tap on a calendar is not a small annoyance — it books the wrong day, or
+  nothing, and the renter tries again somewhere else.
+- The `td` padding comes down at the same time so seven 44px cells still fit
+  390px without sideways scroll. **That trade is the whole reason this needs
+  designing at width rather than scaled down from desktop.**
+
+`test/gym-portal.test.mjs` boots the real Worker and drives it in Chromium at
+390px. Verified against the bug: breaking the per-time removal fails two
+assertions. Run it after any change to the portal.
+
 #### Half blocks flow, they do not sit in rows (v4.10.0, 2026-08-02)
 
 Andrew, with a screenshot: *"if a half block width colum goes long lets make

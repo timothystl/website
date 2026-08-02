@@ -393,11 +393,33 @@ input:focus,select:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(201
 .agree-check input{width:auto;margin-top:2px;flex-shrink:0;}
 /* Mobile responsive */
 .time-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;}
+/* ── THE PHONE IS THE REAL DEVICE ─────────────────────────────
+   A renter opens this from an email, on a phone. Measured at 390px, twelve
+   things were under a 44px tap target — and the tightest was the one that
+   matters most: the 7-column month grid, whose day cells were 38x40. A missed
+   tap on a calendar is not a small annoyance; it books the wrong day or, more
+   often, nothing at all, and the renter tries again on a different date. */
 @media(max-width:480px){
   .time-grid{grid-template-columns:1fr;}
   .scal-slot{min-height:44px;display:flex;align-items:center;justify-content:center;font-size:12px;padding:4px 2px;}
   .req-bar{padding:10px 14px;}
   .req-bar-count{font-size:14px;}
+
+  /* The month grid. 44px minimum on the cell itself, and the padding around
+     each td comes down so seven of them still fit 390px without scrolling —
+     that trade is the whole reason this needs designing at width rather than
+     scaled down from desktop. */
+  .scal-table td{padding:1px !important;}
+  .scal-table td > button,.scal-table td > div{min-height:44px !important;justify-content:center !important;}
+  /* Month arrows and the tab pair. */
+  .pcal-nav{min-width:44px !important;min-height:44px !important;}
+  .pmode-btn{min-height:44px !important;}
+  .phdr-link{min-height:44px !important;display:inline-flex !important;align-items:center !important;}
+  /* Removing a date is destructive-ish and sits beside a smaller chip ✕, so it
+     gets the full target rather than the desktop 32. */
+  .bk-row > .bk-x{width:44px;height:44px;}
+  .bk-time .bk-x{width:28px;height:28px;}
+  .bk-time{padding:5px 7px 5px 12px;}
 }
 </style>
 </head>
@@ -642,7 +664,7 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
           }
           while (curDow > 0 && curDow < 7) { rows += '<td></td>'; curDow++; }
           rows += '</tr>';
-          calMonthsHtml += `<div class="scal-month${mi === 0 ? ' active' : ''}" id="scal-month-${mi}" data-label="${moLabel}"><table style="width:100%;border-collapse:collapse;table-layout:fixed;"><tr><th style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:8px 0;text-align:center;">Su</th><th style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:8px 0;text-align:center;">Mo</th><th style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:8px 0;text-align:center;">Tu</th><th style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:8px 0;text-align:center;">We</th><th style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:8px 0;text-align:center;">Th</th><th style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:8px 0;text-align:center;">Fr</th><th style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:8px 0;text-align:center;">Sa</th></tr>${rows}</table></div>`;
+          calMonthsHtml += `<div class="scal-month${mi === 0 ? ' active' : ''}" id="scal-month-${mi}" data-label="${moLabel}"><table class="scal-table" style="width:100%;border-collapse:collapse;table-layout:fixed;"><tr><th style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:8px 0;text-align:center;">Su</th><th style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:8px 0;text-align:center;">Mo</th><th style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:8px 0;text-align:center;">Tu</th><th style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:8px 0;text-align:center;">We</th><th style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:8px 0;text-align:center;">Th</th><th style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:8px 0;text-align:center;">Fr</th><th style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);padding:8px 0;text-align:center;">Sa</th></tr>${rows}</table></div>`;
         }
 
         // Month options for dropdown
@@ -673,7 +695,7 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
         <span style="font-family:var(--sans);font-size:10px;font-weight:600;color:#E8C070;display:block;letter-spacing:.04em;">from our Neighborhood to the Nations</span>
       </span>
     </a>
-    <a href="/gym/book/${token}/history" style="font-size:13px;font-weight:700;padding:8px 16px;border-radius:8px;background:rgba(255,255,255,.15);color:white;text-decoration:none;white-space:nowrap;">My bookings</a>
+    <a href="/gym/book/${token}/history" class="phdr-link" style="font-size:13px;font-weight:700;padding:8px 16px;border-radius:8px;background:rgba(255,255,255,.15);color:white;text-decoration:none;white-space:nowrap;">My bookings</a>
   </div>
 </div>
 
@@ -695,8 +717,8 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
 
   <!-- Mode toggle -->
   <div style="display:flex;gap:0;margin-bottom:16px;background:var(--linen);border-radius:12px;padding:4px;">
-    <button id="btn-mode-tap" onclick="setMode('tap')" style="flex:1;font-size:13px;font-weight:700;padding:10px;border-radius:8px;border:none;cursor:pointer;background:white;color:var(--steel);box-shadow:0 1px 3px rgba(0,0,0,.1);">Pick dates</button>
-    <button id="btn-mode-pattern" onclick="setMode('pattern')" style="flex:1;font-size:13px;font-weight:700;padding:10px;border-radius:8px;border:none;cursor:pointer;background:transparent;color:var(--gray);box-shadow:none;">Recurring dates</button>
+    <button id="btn-mode-tap" class="pmode-btn" onclick="setMode('tap')" style="flex:1;font-size:13px;font-weight:700;padding:10px;border-radius:8px;border:none;cursor:pointer;background:white;color:var(--steel);box-shadow:0 1px 3px rgba(0,0,0,.1);">Pick dates</button>
+    <button id="btn-mode-pattern" class="pmode-btn" onclick="setMode('pattern')" style="flex:1;font-size:13px;font-weight:700;padding:10px;border-radius:8px;border:none;cursor:pointer;background:transparent;color:var(--gray);box-shadow:none;">Recurring dates</button>
   </div>
 
   <!-- Pattern panel -->
@@ -724,9 +746,9 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
   <!-- Tap calendar -->
   <div id="tap-cal" style="background:var(--white);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:8px;">
-      <button id="scal-prev" onclick="navMonth(-1)" disabled style="background:var(--mist);border:1px solid var(--border);cursor:pointer;padding:8px 16px;border-radius:8px;font-size:18px;line-height:1;color:var(--steel);font-weight:700;">&#8249;</button>
+      <button id="scal-prev" class="pcal-nav" onclick="navMonth(-1)" disabled style="background:var(--mist);border:1px solid var(--border);cursor:pointer;padding:8px 16px;border-radius:8px;font-size:18px;line-height:1;color:var(--steel);font-weight:700;">&#8249;</button>
       <select id="month-jump" onchange="jumpToMonth(this.value)" style="font-family:var(--serif);font-size:16px;color:var(--steel);font-weight:700;text-align:center;border:1px solid var(--border);border-radius:8px;padding:6px 12px;background:white;cursor:pointer;">${monthOpts}</select>
-      <button id="scal-next" onclick="navMonth(1)" style="background:var(--mist);border:1px solid var(--border);cursor:pointer;padding:8px 16px;border-radius:8px;font-size:18px;line-height:1;color:var(--steel);font-weight:700;">&#8250;</button>
+      <button id="scal-next" class="pcal-nav" onclick="navMonth(1)" style="background:var(--mist);border:1px solid var(--border);cursor:pointer;padding:8px 16px;border-radius:8px;font-size:18px;line-height:1;color:var(--steel);font-weight:700;">&#8250;</button>
     </div>
     <div id="cal-months-wrap">
       ${calMonthsHtml}
@@ -747,7 +769,11 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
   <div id="req-form-wrap" style="display:none;">
     <div style="background:var(--white);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;">
       <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border);">Your Request</div>
-      <div id="sel-summary-list" style="font-size:13px;color:var(--charcoal);margin-bottom:14px;line-height:1.8;"></div>
+      <!-- One row per date, in date order, each removable — and each individual
+           time removable within it. A request built across five dates cannot be
+           checked from memory, and "clear the whole thing and start again" is
+           not a correction. -->
+      <div id="sel-summary-list" class="basket"></div>
       <div style="display:flex;align-items:center;justify-content:space-between;background:var(--mist);border-radius:8px;padding:12px 16px;margin-bottom:16px;">
         <span style="font-size:13px;color:var(--charcoal);">Estimated total (<span id="sel-hrs-label">0 hrs</span>)</span>
         <span id="sel-total-display" style="font-size:20px;font-weight:700;color:var(--steel);">$0</span>
@@ -798,6 +824,30 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
 .slot-btn{min-height:44px;border:none;border-radius:8px;font-size:12px;font-weight:700;color:white;cursor:pointer;padding:6px 4px;transition:transform .1s,filter .1s;}
 .slot-btn:hover{filter:brightness(1.08);}.slot-btn:active{transform:scale(.94);}
 .slot-btn:disabled{cursor:default;}
+
+/* ── THE REQUEST BASKET ───────────────────────────────────────
+   One row per date. The date can be removed whole, and each time inside it
+   can be removed on its own — a renter who picked 5-6 and 7-8 and only wanted
+   the later one should not have to clear the date and start again. */
+.basket{margin-bottom:14px;}
+.bk-row{display:flex;align-items:flex-start;gap:10px;padding:11px 0;border-bottom:1px solid var(--border);}
+.bk-row:last-child{border-bottom:none;}
+.bk-main{flex:1;min-width:0;}
+.bk-date{font-size:13.5px;font-weight:700;color:var(--steel);}
+.bk-meta{font-size:12px;color:var(--gray);margin-top:2px;}
+.bk-times{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px;}
+/* Each time is a chip whose ✕ is part of the chip, so the tap target is the
+   whole thing rather than a 10px glyph beside it. */
+.bk-time{display:inline-flex;align-items:center;gap:6px;background:var(--linen);border:1px solid var(--border);
+  border-radius:999px;padding:4px 6px 4px 11px;font-size:12px;font-weight:600;color:var(--charcoal);}
+.bk-x{background:none;border:none;cursor:pointer;color:var(--gray);line-height:1;padding:0;
+  display:inline-flex;align-items:center;justify-content:center;}
+.bk-time .bk-x{width:22px;height:22px;border-radius:999px;font-size:14px;}
+.bk-time .bk-x:hover{background:#F7E4DE;color:#8C3A28;}
+/* The row's own ✕ is 32px square: it removes a whole date, so it must not be
+   a near-miss for the chip beside it. */
+.bk-row > .bk-x{width:32px;height:32px;border-radius:8px;font-size:17px;flex:none;}
+.bk-row > .bk-x:hover{background:#F7E4DE;color:#8C3A28;}
 </style>
 
 <script>
@@ -947,6 +997,42 @@ function updateDotForDate(date) {
   }
 }
 
+// Adjacent hours print as ONE range; a gap prints as two. "5-7 PM" and
+// "5-6 PM, 7-8 PM" are different bookings and the summary has to show which
+// one the renter actually built — this is the spec's own rule.
+function rangeText(hours) {
+  const runs = [];
+  let start = null, prev = null;
+  for (const h of hours) {
+    if (start === null) { start = prev = h; continue; }
+    if (h === prev + 1) { prev = h; continue; }
+    runs.push([start, prev]); start = prev = h;
+  }
+  if (start !== null) runs.push([start, prev]);
+  const clock = (h) => {
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const n = h % 12 === 0 ? 12 : h % 12;
+    return n + ' ' + ampm;
+  };
+  // The meridiem prints once when both ends share it, same rule as the
+  // welcome card: "5-7 PM", not "5 PM-7 PM".
+  return runs.map(([a, b]) => {
+    const end = b + 1;
+    const sameHalf = (a >= 12) === (end >= 12 || end === 24);
+    const aTxt = sameHalf ? String(a % 12 === 0 ? 12 : a % 12) : clock(a);
+    return aTxt + '\u2013' + clock(end === 24 ? 12 : end);
+  }).join(', ');
+}
+
+// The basket is built from renter-supplied nothing — every value here is ours
+// — but the labels go through innerHTML, so escape on principle rather than
+// on audit.
+function esc(v) {
+  return String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function updateUI() {
   const n = selected.size;
   const bar = document.getElementById('req-bar');
@@ -965,12 +1051,26 @@ function updateUI() {
     ? dates.map(d => new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})).join(', ')
     : dates.length + ' dates';
 
-  // Summary
+  // The basket. One row per date, each removable whole, with every time inside
+  // it removable on its own.
   const summaryHtml = dates.map(d => {
     const dn = new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-    const slots = byDate[d].sort((a,b)=>a.h-b.h).map(s=>s.label).join(', ');
-    return '<strong>' + dn + '</strong>: ' + slots;
-  }).join('<br>');
+    const hrs = byDate[d].sort((a,b)=>a.h-b.h);
+    const money = RATE_TYPE === 'lump' ? null : RATE_TYPE === 'daily' ? RATE : RATE * hrs.length;
+    const meta = hrs.length + ' hr' + (hrs.length===1?'':'s')
+      + (money === null ? '' : ' · $' + money.toFixed(2))
+      + ' · ' + rangeText(hrs.map(x=>x.h));
+    const chips = hrs.map(x =>
+      '<span class="bk-time">' + esc(x.label) +
+      '<button type="button" class="bk-x" data-drop-slot="' + esc(d+'|'+x.h) + '"' +
+      ' aria-label="Remove ' + esc(x.label) + ' on ' + esc(dn) + '">&times;</button></span>').join('');
+    return '<div class="bk-row"><div class="bk-main">' +
+      '<div class="bk-date">' + esc(dn) + '</div>' +
+      '<div class="bk-meta">' + esc(meta) + '</div>' +
+      '<div class="bk-times">' + chips + '</div></div>' +
+      '<button type="button" class="bk-x" data-drop-date="' + esc(d) + '"' +
+      ' aria-label="Remove all times on ' + esc(dn) + '">&times;</button></div>';
+  }).join('');
   document.getElementById('sel-summary-list').innerHTML = summaryHtml;
 
   // Total
@@ -994,6 +1094,36 @@ function updateUI() {
   const wrap = document.getElementById('req-form-wrap');
   wrap.style.display = n > 0 ? '' : 'none';
 }
+
+// ⚠ Delegated, not per-button. The basket is re-rendered on every change, so
+// handlers bound to its buttons would be thrown away the moment somebody used
+// one — the second ✕ would do nothing.
+document.addEventListener('click', function (e) {
+  const slotBtn = e.target.closest && e.target.closest('[data-drop-slot]');
+  if (slotBtn) {
+    const key = slotBtn.getAttribute('data-drop-slot');
+    const date = key.split('|')[0];
+    selected.delete(key);
+    // If the day panel is open on that date, its button has to fall back to
+    // unselected or the page contradicts the basket.
+    const btn = document.getElementById('slotbtn-' + key);
+    if (btn) btn.style.background = '#5A9E6F';
+    updateDotForDate(date);
+    updateUI();
+    return;
+  }
+  const dateBtn = e.target.closest && e.target.closest('[data-drop-date]');
+  if (dateBtn) {
+    const date = dateBtn.getAttribute('data-drop-date');
+    [...selected.keys()].filter(k => k.startsWith(date + '|')).forEach((k) => {
+      selected.delete(k);
+      const btn = document.getElementById('slotbtn-' + k);
+      if (btn) btn.style.background = '#5A9E6F';
+    });
+    updateDotForDate(date);
+    updateUI();
+  }
+});
 
 function scrollToForm() {
   document.getElementById('req-form-wrap').style.display = '';
