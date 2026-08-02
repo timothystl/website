@@ -1401,6 +1401,35 @@ group('the renter portal has its own origin');
   setOrigin('javascript:alert(1)');
   eq((await portalGet()).status, 200, 'an unsafe address is ignored rather than half-honoured');
   setOrigin('');
+
+  // ── Task 19 items 1-5: the hierarchy on this screen was upside down ──
+  // You come here to edit a group. The booking link is a utility, and it was
+  // the loudest thing on the page — above the group's own name, in the mist
+  // tint with a heavy navy border, which means SELECTED everywhere else.
+  const detailsAt = groupPage.indexOf('name="name"');
+  const linkAt = groupPage.indexOf('id="portal-link"');
+  ok(detailsAt > -1 && linkAt > -1 && detailsAt < linkAt,
+    'the group record comes first and the booking link sits beneath it');
+  lacks(groupPage, 'background:var(--mist);border-color:var(--steel);',
+    'the link card is a plain card, not the selected treatment');
+  lacks(groupPage, '📋', 'and the clipboard glyph is gone — no emoji in the admin');
+
+  // Copy is the card's primary action and can never be pushed out of view.
+  has(groupPage, 'id="portal-copy" class="btn btn-primary btn-sm" style="flex:none;"',
+    'Copy is a navy primary that cannot be squeezed out of the row');
+  has(groupPage, 'flex:1;min-width:0', 'and the field flexes rather than sitting in a grid');
+
+  // Regenerate invalidates a link already in other people's inboxes. It is a
+  // text button at the card foot, and the consequence is in the confirm where
+  // it can actually stop somebody — not folded into the button label.
+  has(groupPage, '>Regenerate link<', 'Regenerate is quiet and plainly labelled');
+  lacks(groupPage, 'Regenerate token (old link stops working)', 'the warning is out of the label');
+  has(groupPage, 'The link you have already shared will stop working',
+    'and names what breaks, in the confirm');
+
+  // The third crumb — an editor appends the record it is editing.
+  has(groupPage, 'class="tlc-ctx-section">Hoops<',
+    'the context bar names the group you are in');
 }
 
 group('an approved payroll period is locked server-side');

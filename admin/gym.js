@@ -2581,24 +2581,11 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>
           : '';
         const esc = v => (v||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
         return html(`
-${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>`, {}, g.name)}
 <div class="tlc-wrap">
-  <div class="page-title">${g.name}</div>
-  <div class="page-sub">Edit group details and manage their booking link.</div>
+  <div class="page-title">${escapeHtml(g.name)}</div>
+  <div class="page-sub">The group's own details, and the private link they book through.</div>
   ${editAlert}
-  <div class="card" style="background:var(--mist);border-color:var(--steel);">
-    <div class="card-title">📋 Private Booking Link</div>
-    <div style="font-family:var(--sans);font-size:13px;color:var(--charcoal);margin-bottom:12px;">Share this link with the group. The token in the URL is their key — no login needed.</div>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-      <input type="text" id="portal-link" value="${portalLink}" readonly style="font-family:monospace;font-size:12px;background:white;flex:1;min-width:200px;">
-      <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('portal-link').value).then(()=>{this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',2000)})" class="btn btn-secondary btn-sm">Copy</button>
-    </div>
-    <div style="margin-top:14px;">
-      <form method="POST" action="/gym-rentals/groups/regen-token/${g.id}" onsubmit="return confirm('This invalidates their current link. They will need the new URL to book. Continue?')">
-        <button type="submit" class="btn btn-sm btn-danger">Regenerate token (old link stops working)</button>
-      </form>
-    </div>
-  </div>
   <div class="card">
     <form method="POST" action="/gym-rentals/groups/update/${g.id}">
       <div class="form-group">
@@ -2658,17 +2645,70 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>
         <button type="submit" class="btn btn-primary">Save changes</button>
       </div>
     </form>
-    <hr style="border:none;border-top:1px solid var(--border);margin:24px 0;">
-    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-      <form method="POST" action="/gym-rentals/groups/toggle/${g.id}" style="display:inline;">
-        <button type="submit" class="btn ${g.active ? 'btn-danger' : 'btn-sage'}">${g.active ? 'Deactivate group (disables portal access)' : 'Reactivate group'}</button>
-      </form>
-      <form method="POST" action="/gym-rentals/groups/delete/${g.id}" style="display:inline;" onsubmit="return confirm('Permanently delete ${g.name.replace(/'/g,"\\'")} and all their bookings and invoices? This cannot be undone.')">
-        <button type="submit" class="btn btn-danger">Delete group permanently</button>
+  </div>
+
+  <!-- Task 19 items 1-3, 5. The booking link used to sit ABOVE the group's own
+       name, in the mist tint with a heavy navy border — a treatment that means
+       SELECTED everywhere else in this admin. It is a utility, not the subject
+       of the page, so it is a plain card beneath the record now. -->
+  <div class="card">
+    <div class="card-title">Private booking link</div>
+    <div style="font-family:var(--sans);font-size:13px;color:var(--tlc-body,#4A4860);margin-bottom:12px;">Share this with the group. The token in the address is their key — there is no login.</div>
+    <!-- Copy is the whole point of this card, so it is the primary action and
+         it can never be pushed off the right edge: one flex row, the field
+         flex:1, the button flex:none. Not a grid. -->
+    <div style="display:flex;gap:10px;align-items:center;">
+      <input type="text" id="portal-link" value="${esc(portalLink)}" readonly style="font-family:monospace;font-size:12px;background:var(--tlc-sand,#F4EFE5);flex:1;min-width:0;">
+      <button type="button" id="portal-copy" class="btn btn-primary btn-sm" style="flex:none;">Copy</button>
+    </div>
+    <!-- Regenerate invalidates a link sitting in other people's inboxes. It was
+         a bordered button at the same weight as Copy, with its own warning
+         folded into the label. It is a text button at the card foot now, and
+         the consequence lives in the confirm where it can actually stop
+         somebody — same treatment as Delete in a drawer foot. -->
+    <div style="margin-top:16px;">
+      <form method="POST" action="/gym-rentals/groups/regen-token/${g.id}" id="regen-form" style="margin:0;">
+        <button type="submit" class="btn btn-danger btn-sm" style="padding-left:0;">Regenerate link</button>
       </form>
     </div>
   </div>
-</div>`, `Edit — ${g.name}`);
+
+  <div class="card">
+    <div class="card-title">This group</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      <form method="POST" action="/gym-rentals/groups/toggle/${g.id}" style="display:inline;">
+        <button type="submit" class="btn ${g.active ? 'btn-secondary' : 'btn-sage'}">${g.active ? 'Deactivate group' : 'Reactivate group'}</button>
+      </form>
+      <form method="POST" action="/gym-rentals/groups/delete/${g.id}" style="display:inline;" id="del-form">
+        <button type="submit" class="btn btn-danger">Delete group permanently</button>
+      </form>
+    </div>
+    <div style="font-family:var(--sans);font-size:12px;color:var(--gray);margin-top:10px;">Deactivating stops their link working and keeps every booking they already have.</div>
+  </div>
+</div>
+<script>
+(function(){
+  var btn = document.getElementById('portal-copy');
+  if (btn) btn.addEventListener('click', function(){
+    var f = document.getElementById('portal-link');
+    navigator.clipboard.writeText(f.value).then(function(){
+      btn.textContent = 'Copied';
+      setTimeout(function(){ btn.textContent = 'Copy'; }, 2000);
+    });
+  });
+  // ⚠ Confirms are wired here rather than in an inline onsubmit, because the
+  // group name is office-entered text and interpolating it into an attribute
+  // is how an apostrophe breaks the handler outright.
+  var regen = document.getElementById('regen-form');
+  if (regen) regen.addEventListener('submit', function(e){
+    if (!confirm('The link you have already shared will stop working. The group will need the new one.')) e.preventDefault();
+  });
+  var del = document.getElementById('del-form');
+  if (del) del.addEventListener('submit', function(e){
+    if (!confirm('Permanently delete this group and all their bookings and invoices? This cannot be undone.')) e.preventDefault();
+  });
+})();
+</script>`, `Edit — ${g.name}`);
       }
 
       // ── UPDATE GROUP ─────────────────────────────────────────

@@ -777,6 +777,7 @@ function styleVars(b) {
   ];
   if (b.type === 'textphoto') v.push('--tlcb-cols:' + cols);
   if (b.type === 'columns') v.push('--tlcb-cols:repeat(' + b.cols + ',1fr)');
+  if (b.type === 'cardgrid') v.push('--tlcb-cols:repeat(' + b.cols + ',1fr)');
   if (b.type === 'hero' && b.photo) v.push("--tlcb-hero-img:url('" + String(b.photo).replace(/["'\\()\s<>;{}]/g, '') + "')");
   return v.join(';');
 }
@@ -1258,6 +1259,24 @@ function inspectorSections(b, d) {
       '</div><span class="ed-note">Columns stack on a phone automatically.</span></div>';
   }
 
+  // 1b. Card grid — cards per row, alignment, and the coloured top rule.
+  // Four options or fewer is chips, not a select: a select hides three of the
+  // four choices behind a click.
+  if (b.type === 'cardgrid') {
+    out += '<div class="ed-sec"><span class="ed-lab">Cards per row</span><div class="ed-chips">' +
+      chip('cols', '2', '2', b.cols === 2) + chip('cols', '3', '3', b.cols === 3) +
+      chip('cols', '4', '4', b.cols === 4) +
+      '</div><span class="ed-note">Cards stack on a phone whatever you pick here.</span></div>';
+    out += '<div class="ed-sec"><span class="ed-lab">Alignment</span><div class="ed-chips">' +
+      chip('align', 'left', 'Left', b.align !== 'center') +
+      chip('align', 'center', 'Centre', b.align === 'center') +
+      '</div></div>';
+    out += '<div class="ed-sec"><span class="ed-lab">Card top rule</span><div class="ed-chips">' +
+      chip('topRule', '0', 'Off', !b.topRule) +
+      chip('topRule', '1', 'On', !!b.topRule) +
+      '</div><span class="ed-note">A coloured hairline across the top of every card in this grid.</span></div>';
+  }
+
   // 2 + 3. Photo position and column split
   if (b.type === 'textphoto') {
     out += '<div class="ed-sec"><span class="ed-lab">Photo position</span><div class="ed-chips">' +
@@ -1421,6 +1440,15 @@ function inspectorAction(action, value) {
       var structural = false;
       while (items.length < n) { items.push({ title: '', body: '' }); structural = true; }
       patch(b.id, structural ? { cols: n, items: items } : { cols: n }, 'Changed to ' + n + ' columns', structural ? 'rerender' : 'style');
+      break;
+    }
+    case 'align': {
+      patch(b.id, { align: value === 'center' ? 'center' : 'left' },
+        value === 'center' ? 'Centred' : 'Left-aligned', 'rerender');
+      break;
+    }
+    case 'topRule': {
+      patch(b.id, { topRule: value === '1' }, value === '1' ? 'Top rule on' : 'Top rule off', 'rerender');
       break;
     }
     case 'count': {

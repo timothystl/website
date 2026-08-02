@@ -71,12 +71,12 @@ questions and part of 1.
 | 11 | Warning rows above their row | **Done** — emitted before the row, seam moved to `border-bottom`, ▲ now `#8C3A28`. `ui.test.mjs` asserts the band is the first child of the row wrapper, not merely present |
 | 12 | Editor rail, Connect, arrow glyphs | **Done.** b and c carried out. **a needed no change** — both rails already default to open (`localStorage` absent means open, since v4.3.0); the walkthrough was reading a persisted collapse, not a default |
 | 13 | Homepage editor: info card, free text, half-width blocks | **Open** |
-| 14 | Card grid block | **Open** — new block |
+| 14 | Card grid block | **Done** — `cardgrid` in `blocks.js`, in the Structure group, with the spec's drawing values and equal-height cards whose links pin to the foot |
 | 15 | Five borderline hand-written routes | **Done.** #3 and #4 rest on false premises (no user drawer exists; `/pages/details` is a different record). #5's youth rows are 302s. #1 and #2 are built — see below |
 | 16 | Congregation-facing files onto the palette | **Done** — 94 pre-redesign hexes swept from `email.js`, the newsletter archive and the renter blocks in `gym.js`; `scheduler.html` swept too so the definition-of-done grep can return clean. `ui.test.mjs` now guards the email palette *and* its three don't-travel constraints |
 | 17 | Renter booking: domain and shell | **a. Done** (v4.6.0) — the portal is on `timothystl.org/gym/*`, the admin path 301s, the CSRF gate learned about it, verified in production. **b. open** — it still has no public-site shell |
 | 18 | Renter booking: the pattern | **Open** — spec screen built, `screens/24-gym-booking.html` |
-| 19 | Group edit + form-width rule | **The width rule is done**, which was the part touching every form: 640 single column, 920 wide, heading/tables uncapped, buttons at the field column's left edge. Items 1–5 (the group-edit screen itself) are still open |
+| 19 | Group edit + form-width rule | **Done** — the width rule, and all five group-edit items: record first, link card plain and beneath, Copy as a flex-row primary, Regenerate as a quiet text button with the consequence in the confirm, the third crumb, and the clipboard glyph gone |
 
 **Suggested order now:** 19 items 1–5 (the group-edit screen) → 16 (a mechanical colour sweep) → 15 #1 and #2 → 17b → 13, 14, 18 (new work, largest last).
 

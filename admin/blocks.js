@@ -173,6 +173,37 @@ export const BLOCK_DEFS = {
       { title: 'Second', body: '<p>What happens here.</p>' },
     ],
   },
+  // ── CARD GRID (Task 14) ──────────────────────────────────────────────────
+  // The live site uses this layout on four pages and the editor could not make
+  // it: /worship's four info cards, /education's three class cards,
+  // /ministries' eight cards with a coloured top rule, and the community
+  // partners row. `columns` is plain text with no card, no image and no link;
+  // `quicklinks` is a fixed 4-up of short labels. Neither is this.
+  //
+  // Every per-card field except the heading is optional, ON PURPOSE: one grid
+  // has to carry a logo card and a text-only card side by side without looking
+  // half-finished. /ministries mixes a wordmark, a roundel and a photograph.
+  cardgrid: {
+    label: 'Card grid', glyph: '▩',
+    defaults: {
+      eyebrow: 'WHAT WE OFFER', title: 'Ways to take part', subtitle: '',
+      spaceAbove: 24, spaceBelow: 24, cols: 3, align: 'left', topRule: false,
+    },
+    items: true,
+    itemFields: ['img', 'eyebrow', 'title', 'body', 'linkLabel', 'url'],
+    richItemFields: ['body'],
+    itemUrlFields: ['img', 'url'],
+    itemLabel: 'Card',
+    itemPlaceholders: {
+      img: 'Logo or photo (optional)', eyebrow: 'SMALL LABEL', title: 'Card heading',
+      body: 'One short paragraph.', linkLabel: 'Learn more →', url: '/where-it-goes',
+    },
+    defaultItems: [
+      { title: 'First card', body: '<p>What this is.</p>', linkLabel: 'Learn more →', url: '' },
+      { title: 'Second card', body: '<p>What this is.</p>', linkLabel: 'Learn more →', url: '' },
+      { title: 'Third card', body: '<p>What this is.</p>', linkLabel: 'Learn more →', url: '' },
+    ],
+  },
   video: {
     label: 'Video', glyph: '▶',
     defaults: { title: 'Watch', spaceAbove: 24, spaceBelow: 24 },
@@ -260,7 +291,7 @@ export const BLOCK_DEFS = {
 // what somebody reaches for first on an empty page — the banner and the shape
 // of it — and Content is what they fill it with afterwards.
 export const GROUPS = [
-  { name: 'Structure', types: ['alert', 'hero', 'slideshow', 'quicklinks', 'buttons', 'callout', 'partners', 'spacer'] },
+  { name: 'Structure', types: ['alert', 'hero', 'slideshow', 'quicklinks', 'cardgrid', 'buttons', 'callout', 'partners', 'spacer'] },
   { name: 'Content',   types: ['text', 'textphoto', 'video', 'columns', 'gallery', 'faq', 'sermon', 'news', 'staff', 'posts'] },
   { name: 'Dates',     types: ['servicetimes', 'map', 'events', 'times', 'download', 'calendar'] },
   { name: 'Sign up',   types: ['form', 'newsletter', 'give'] },
@@ -418,7 +449,12 @@ export function sanitizeBlock(b) {
     height: snapSpace(b.height == null ? 48 : b.height),
     split: SPLITS.some((s) => s.key === b.split) ? b.split : '40',
     side: ['left', 'right', 'above'].includes(b.side) ? b.side : 'left',
-    cols: Number(b.cols) === 3 ? 3 : 2,
+    // 2, 3 or 4 — a constrained choice, never a free number. The card grid
+    // needs 4-up for /worship; `columns` only ever offers 2 or 3 in its own
+    // inspector, and a crafted 4 there is a wide text row, not a broken page.
+    cols: [2, 3, 4].includes(Number(b.cols)) ? Number(b.cols) : 2,
+    align: b.align === 'center' ? 'center' : 'left',
+    topRule: !!b.topRule,
     count: Math.max(1, Math.min(6, Math.floor(Number(b.count)) || 3)),
     locked: !!b.locked,
     bg: clampIndex(b.bg, BG.length),
@@ -641,6 +677,35 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-stack{display:flex;flex-direction:column;gap:12px;}
 .tlcb-grid{display:grid;grid-template-columns:var(--tlcb-cols,1fr 1fr);gap:var(--tlcb-gap,32px);align-items:center;}
 .tlcb-cols{display:grid;grid-template-columns:var(--tlcb-cols,1fr 1fr);gap:var(--tlcb-gap,32px);align-items:start;}
+/* ── CARD GRID ────────────────────────────────────────────────
+   Cards in a row are EQUAL HEIGHT with the content top-aligned and the link
+   pinned to the foot, so the links line up across the row however much body
+   text each card carries. That is the whole reason for the flex column and
+   the margin-top:auto on the foot. */
+.tlcb-cg-grid{display:grid;grid-template-columns:var(--tlcb-cols,repeat(3,1fr));gap:24px;align-items:stretch;margin-top:8px;}
+.tlcb-cg-card{display:flex;flex-direction:column;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:12px;padding:26px 24px;
+  box-shadow:0 2px 6px rgba(11,22,44,.05),0 10px 24px rgba(11,22,44,.06);
+  transition:box-shadow 140ms ease,transform 140ms ease;}
+.tlcb-cg-card:hover{box-shadow:0 4px 10px rgba(11,22,44,.07),0 16px 34px rgba(11,22,44,.09);transform:translateY(-2px);}
+/* A soft lift, not a drop — the card rises toward the reader. */
+.tlcb-cg-img{margin-bottom:14px;}
+.tlcb-cg-img img{display:block;max-width:100%;max-height:120px;width:auto;height:auto;object-fit:contain;}
+.tlcb-cg-eyebrow{font:700 11px/1.4 var(--tlcb-sans);letter-spacing:.14em;text-transform:uppercase;color:#2E7EA6;margin-bottom:6px;}
+.tlcb-cg-eyebrow:empty{display:none;}
+.tlcb-cg-head{font-family:var(--tlcb-serif);font-size:calc(var(--tlcb-head,22px) * .78);line-height:1.25;color:#1E2D4A;margin-bottom:8px;}
+.tlcb-cg-body{margin-bottom:14px;}
+.tlcb-cg-foot{margin-top:auto;}
+.tlcb-cg-foot:empty{display:none;}
+.tlcb-cg-link{font:600 15px/1.3 var(--tlcb-sans);color:#2E7EA6;text-decoration:none;}
+.tlcb-cg-link:hover{text-decoration:underline;}
+.tlcb-cg-intro{font-family:var(--tlcb-sans);max-width:56em;color:var(--tlcb-body,#4A4860);}
+.tlcb-cg-intro:empty{display:none;}
+/* The coloured hairline across the card top on /ministries. It is switched on
+   for the whole grid rather than picked per card — one decision, not eight. */
+.tlcb-cg--rule .tlcb-cg-card{border-top:3px solid #2E7EA6;}
+.tlcb-cg--center{text-align:center;}
+.tlcb-cg--center .tlcb-cg-img img{margin:0 auto;}
+.tlcb-cg--center .tlcb-cg-intro{margin-left:auto;margin-right:auto;}
 .tlcb-media{order:var(--tlcb-media-order,0);min-height:150px;border-radius:8px;background:#E4EAF2 center/cover no-repeat;
   display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;}
 .tlcb-media img{width:100%;height:100%;object-fit:cover;display:block;border-radius:8px;}
@@ -830,6 +895,9 @@ PHONE_RULES_PLACEHOLDER
 function phoneRules(p) {
   return [
     `${p}.tlcb-grid,${p}.tlcb-cols{grid-template-columns:1fr!important;}`,
+    // A 4-up of cards is still readable two across on a tablet; a 3-up is not,
+    // because each card keeps its padding and the text column collapses.
+    `${p}.tlcb-cg-grid{grid-template-columns:1fr!important;}`,
     `${p}.tlcb-media{order:0!important;}`,
     `${p}.tlcb-cards{grid-template-columns:1fr!important;}`,
     `${p}.tlcb-gallery{grid-template-columns:1fr 1fr!important;}`,
@@ -919,6 +987,7 @@ function wrapperVars(b) {
   ];
   if (b.type === 'textphoto' || b.type === 'map' || b.type === 'sermon') v.push('--tlcb-cols:' + cols);
   if (b.type === 'columns') v.push('--tlcb-cols:repeat(' + b.cols + ',1fr)');
+  if (b.type === 'cardgrid') v.push('--tlcb-cols:repeat(' + b.cols + ',1fr)');
   if (b.type === 'hero' && b.photo) {
     v.push("--tlcb-hero-img:url('" + cssUrl(b.photo) + "')");
     v.push('--tlcb-hero-veil:1'); // the gradient that keeps white text legible over a photo
@@ -1199,6 +1268,35 @@ function renderInner(b, opts) {
         ${itemField(opts, i, 'body', 'div', 'tlcb-prose', it.body || '', ' data-ph="What happens here"', true)}
       </div>`).join('');
     return `<div class="tlcb-stack">${renderHead(opts, b)}<div class="tlcb-cols">${cells}</div></div>`;
+  }
+
+  if (t === 'cardgrid') {
+    const cards = (b.items || []).map((it, i) => {
+      // Contained at its own aspect and never cropped: these are logos as often
+      // as photos, and /ministries mixes a wordmark, a roundel and a
+      // photograph — a square crop would ruin at least one of the three.
+      const img = it.img
+        ? `<div class="tlcb-cg-img"><img src="${esc(it.img)}" alt="${esc(it.title || '')}" loading="lazy"></div>`
+        : '';
+      const eyebrow = itemField(opts, i, 'eyebrow', 'div', 'tlcb-cg-eyebrow', esc(it.eyebrow || ''), ' data-ph="SMALL LABEL"');
+      const head = itemField(opts, i, 'title', 'div', 'tlcb-cg-head', esc(it.title || ''), ' data-ph="Card heading"');
+      const body = itemField(opts, i, 'body', 'div', 'tlcb-prose tlcb-cg-body', it.body || '', ' data-ph="One short paragraph."', true);
+      // The arrow is part of the label the office types, so "Learn more →",
+      // "Visit MDO site →" and "Watch video →" all work with no setting for it.
+      const link = it.linkLabel
+        ? (opts.editing
+            ? itemField(opts, i, 'linkLabel', 'div', 'tlcb-cg-link', esc(it.linkLabel), ' data-ph="Learn more →"')
+            : `<a class="tlcb-cg-link" href="${esc(it.url || '#')}">${esc(it.linkLabel)}</a>`)
+        : '';
+      return `<div class="tlcb-cg-card">${img}${eyebrow}${head}${body}<div class="tlcb-cg-foot">${link}</div></div>`;
+    }).join('');
+    const intro = b.subtitle
+      ? field(opts, b, 'subtitle', 'div', 'tlcb-cg-intro', esc(b.subtitle), ' data-ph="One short paragraph of introduction."')
+      : (opts.editing ? field(opts, b, 'subtitle', 'div', 'tlcb-cg-intro', '', ' data-ph="One short paragraph of introduction."') : '');
+    return `<div class="tlcb-stack tlcb-cg${b.align === 'center' ? ' tlcb-cg--center' : ''}${b.topRule ? ' tlcb-cg--rule' : ''}">
+      ${renderHead(opts, b, 'Section heading')}${intro}
+      <div class="tlcb-cg-grid">${cards}</div>
+    </div>`;
   }
 
   if (t === 'video') {
