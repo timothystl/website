@@ -1394,6 +1394,42 @@ prayer request are real forms elsewhere on the site but they post to ChMS with
 their own screening; adding them here would be a second, unscreened way in. If
 they are ever wanted, they go through `screenSubmission()` like the rest.
 
+#### The last two fix-list items (v4.4.0, 2026-08-02)
+
+**The payroll period lock exists now, and it is server-side.** Task 5 asks to
+"confirm the period lock is enforced server-side, not by hiding the button".
+There was no lock at all — approving recorded a row in `payroll_periods` and
+nothing stopped the hours changing underneath it, so the signature was on
+nothing.
+
+- **`payrollPeriodLocked()` guards the `/sb` proxy**, scoped to
+  `church_staff_period_entries`. A stale tab, a second window and a crafted
+  POST all arrive at that line; the greyed inputs on the screen are a courtesy
+  so nobody types a figure that is going to be refused.
+- **Rates are deliberately NOT locked.** They live on `church_staff` and are
+  not period-scoped, so locking them would stop the office fixing a rate for a
+  run they have not done yet. Nor is `payroll_periods` itself — taking the
+  approval back has to stay possible or the lock is a trap. Both are tested.
+- **⚠ It fails CLOSED.** An unreadable period, an unreachable Supabase or an
+  unparseable body all refuse. A refusal costs a retry and says so on screen;
+  the other way round silently rewrites figures somebody has signed.
+- It reuses the caller's own `apikey`/`Authorization` — this Worker holds no
+  Supabase credentials of its own. Same credentials, same authority, one extra
+  read.
+- **⚠ `duplex: 'half'` on the proxied request.** The fetch spec requires it for
+  a stream body; Workers ignores it, Node enforces it. Without it the proxy
+  threw the instant a test drove a POST through — which is how it went
+  untested until this needed covering.
+
+**The radii sweep only ever looked at one file.** Task 1 names 8 / 9 / 11–12 /
+999 as the legal set. `admin/ui.test.mjs` checked `helpers.js` alone, so
+`admin/ui.js` — the design system every redesigned screen is built from —
+drifted to 5, 6, 7, 10, 13 and 14 without a word. A rule enforced on one of two
+files is not enforced; both are checked now, and the gym's own admin calendar
+block was swept too. 3px survives on marks under 12px square (a legend swatch,
+and the nav elbow Foundations itself specifies as `0 0 0 3px`) — they are
+marks, not components, and rounding them to 8 would make them circles.
+
 #### The sidebar folds, and the slide-over is really gone (v4.3.0, 2026-08-02)
 
 Andrew: *"on the pages sidebar, the sub levels are always open, can those go

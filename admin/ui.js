@@ -677,11 +677,11 @@ export const ADMIN_UI_CSS = `
 .tlc-chipfilter.is-on{opacity:1;border:2px solid var(--tlc-chip-solid);padding:6px 11px;}
 /* ── Row overflow menu ── */
 .tlc-more{position:relative;display:inline-flex;}
-.tlc-more-btn{background:none;border:0;cursor:pointer;color:var(--tlc-muted);font-size:15px;line-height:1;padding:4px 6px;border-radius:6px;}
+.tlc-more-btn{background:none;border:0;cursor:pointer;color:var(--tlc-muted);font-size:15px;line-height:1;padding:4px 6px;border-radius:8px;}
 .tlc-more-btn:hover{background:var(--tlc-sand);color:var(--tlc-ink);}
 .tlc-menu{position:absolute;top:100%;right:0;min-width:170px;background:#fff;border:1px solid var(--tlc-edge);border-radius:9px;box-shadow:0 8px 24px rgba(18,36,61,.14);padding:5px;z-index:40;display:none;flex-direction:column;}
 .tlc-more.is-open .tlc-menu{display:flex;}
-.tlc-menu-item{display:block;width:100%;text-align:left;background:none;border:0;cursor:pointer;font:500 13px var(--tlc-sans);color:var(--tlc-ink);padding:8px 10px;border-radius:6px;text-decoration:none;}
+.tlc-menu-item{display:block;width:100%;text-align:left;background:none;border:0;cursor:pointer;font:500 13px var(--tlc-sans);color:var(--tlc-ink);padding:8px 10px;border-radius:8px;text-decoration:none;}
 .tlc-menu-item:hover{background:var(--tlc-sand);}
 .tlc-menu-item.is-danger{color:#8A4A4A;}
 /* ── Switch cell ── */
@@ -713,7 +713,7 @@ export const ADMIN_UI_CSS = `
    different things and the spec sizes them differently — a square thumbnail of
    a landscape photo tells you less than the photo does. */
 .tlc-primary-icon--person{width:52px;height:52px;font-size:16px;}
-.tlc-primary-icon--file{width:64px;height:48px;border-radius:6px;}
+.tlc-primary-icon--file{width:64px;height:48px;border-radius:8px;}
 /* A pinned row is already sorted to the top; the marker explains why it is
    there rather than helping you find it, so it is small and sits before the
    title where reading starts. */
@@ -745,7 +745,7 @@ export const ADMIN_UI_CSS = `
 .tlc-give-addr{font:600 15px var(--tlc-sans);color:var(--tlc-navy);overflow-wrap:anywhere;}
 .tlc-give-note{margin:0;font-size:12.5px;line-height:1.55;color:var(--tlc-body);text-wrap:pretty;}
 .tlc-give-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;align-items:center;}
-.tlc-give-sync{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:12px;padding:11px 14px;border:1px solid var(--tlc-edge);border-radius:10px;background:var(--tlc-parchment);font-size:13px;color:var(--tlc-body);text-wrap:pretty;}
+.tlc-give-sync{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:12px;padding:11px 14px;border:1px solid var(--tlc-edge);border-radius:12px;background:var(--tlc-parchment);font-size:13px;color:var(--tlc-body);text-wrap:pretty;}
 /* ── NFC taps ── */
 .tlc-taps{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px;margin-bottom:18px;}
 .tlc-tap{border:1px solid var(--tlc-edge);border-radius:12px;background:var(--tlc-parchment);padding:13px 15px;display:flex;flex-direction:column;gap:4px;}
@@ -764,9 +764,9 @@ export const ADMIN_UI_CSS = `
 /* A tap landing somewhere other than the links page cannot show cards at all.
    Said on the card rather than left to be discovered, because assigning one
    and seeing nothing happen looks like the admin is broken. */
-.tlc-tap-warn{font:600 11.5px/1.45 var(--tlc-sans);color:${TONES.bad.fg};background:${TONES.bad.bg};border-radius:7px;padding:6px 9px;margin-top:3px;text-wrap:pretty;}
+.tlc-tap-warn{font:600 11.5px/1.45 var(--tlc-sans);color:${TONES.bad.fg};background:${TONES.bad.bg};border-radius:8px;padding:6px 9px;margin-top:3px;text-wrap:pretty;}
 .tlc-tap-actions{display:flex;gap:8px;margin-top:7px;flex-wrap:wrap;}
-.tlc-tap-btn{font:600 11.5px var(--tlc-sans);color:var(--tlc-navy);background:#fff;border:1px solid var(--tlc-edge);border-radius:7px;padding:6px 10px;text-decoration:none;}
+.tlc-tap-btn{font:600 11.5px var(--tlc-sans);color:var(--tlc-navy);background:#fff;border:1px solid var(--tlc-edge);border-radius:8px;padding:6px 10px;text-decoration:none;}
 .tlc-tap-btn:hover{border-color:var(--tlc-blue);}
 /* ── Panels ── */
 .tlc-panel{border:1px solid var(--tlc-edge);border-radius:12px;background:var(--tlc-parchment);overflow:hidden;}
@@ -782,11 +782,11 @@ export const ADMIN_UI_CSS = `
 .tlc-dash-greeting{font:500 30px/1.15 var(--tlc-serif);color:var(--tlc-navy);margin:0;}
 .tlc-dash-sub{margin:6px 0 0;font-size:13.5px;color:var(--tlc-body);text-wrap:pretty;}
 .tlc-seg{display:inline-flex;background:var(--tlc-sand);border:1px solid var(--tlc-edge);border-radius:9px;padding:3px;gap:3px;flex:none;}
-.tlc-seg a{font:600 13px var(--tlc-sans);color:var(--tlc-body);text-decoration:none;padding:7px 16px;border-radius:7px;}
+.tlc-seg a{font:600 13px var(--tlc-sans);color:var(--tlc-body);text-decoration:none;padding:7px 16px;border-radius:8px;}
 .tlc-seg a.is-on{background:#fff;color:var(--tlc-navy);box-shadow:0 1px 2px rgba(18,36,61,.10);}
 .tlc-task{display:flex;align-items:center;gap:14px;padding:15px 18px;border-bottom:1px solid var(--tlc-divider);}
 .tlc-task:last-child{border-bottom:0;}
-.tlc-task-glyph{flex:none;width:38px;height:38px;border-radius:10px;background:var(--tlc-sand);display:flex;align-items:center;justify-content:center;font-size:17px;}
+.tlc-task-glyph{flex:none;width:38px;height:38px;border-radius:12px;background:var(--tlc-sand);display:flex;align-items:center;justify-content:center;font-size:17px;}
 .tlc-task-text{flex:1;min-width:0;}
 .tlc-task-title{display:block;font:600 14px/1.35 var(--tlc-sans);color:var(--tlc-ink);}
 .tlc-task-detail{display:block;font-size:12.5px;line-height:1.45;color:var(--tlc-muted);margin-top:3px;text-wrap:pretty;}
@@ -804,7 +804,7 @@ export const ADMIN_UI_CSS = `
 .tlc-value-stat{font:600 13px/1.4 var(--tlc-sans);color:var(--tlc-ink);}
 .tlc-value-partner{font-size:12px;line-height:1.45;color:var(--tlc-body);}
 .tlc-value-partner b{font-weight:600;}
-.tlc-value-quiet{margin-top:auto;font-size:11.5px;line-height:1.4;color:#7A5B18;background:#FBF1DC;border:1px solid #EBD5A6;border-radius:7px;padding:7px 9px;text-wrap:pretty;}
+.tlc-value-quiet{margin-top:auto;font-size:11.5px;line-height:1.4;color:#7A5B18;background:#FBF1DC;border:1px solid #EBD5A6;border-radius:8px;padding:7px 9px;text-wrap:pretty;}
 .tlc-dash-grid{display:grid;grid-template-columns:1.35fr 1fr;gap:16px;align-items:start;}
 @media (max-width:960px){.tlc-dash-grid{grid-template-columns:1fr;}}
 .tlc-sunday{display:flex;align-items:baseline;gap:10px;padding:9px 0;border-bottom:1px solid var(--tlc-divider);font-size:13px;}
@@ -903,12 +903,12 @@ export const ADMIN_UI_CSS = `
 .tlc-wrap .checkbox-row input[type=checkbox]{width:15px;height:15px;accent-color:var(--tlc-blue);}
 .tlc-wrap .checkbox-row span,.tlc-wrap .checkbox-row label{font:600 13px var(--tlc-sans);color:var(--tlc-body);
   text-transform:none;letter-spacing:0;margin:0;cursor:pointer;}
-.tlc-wrap .alert{border-radius:10px;padding:13px 16px;font-size:13.5px;line-height:1.55;margin-bottom:18px;}
+.tlc-wrap .alert{border-radius:12px;padding:13px 16px;font-size:13.5px;line-height:1.55;margin-bottom:18px;}
 .tlc-wrap .alert-success{background:#EDF0E4;border-left:3px solid #3F5424;color:#3F5424;}
 .tlc-wrap .alert-error{background:#F7E4DE;border-left:3px solid #8C3A28;color:#8C3A28;}
 .tlc-wrap .alert-info{background:#E7EEF7;border-left:3px solid var(--tlc-navy);color:var(--tlc-navy);}
 .tlc-wrap .tag{font:700 9.5px var(--tlc-sans);letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;
-  border-radius:5px;background:var(--tlc-parchment);color:var(--tlc-muted);}
+  border-radius:8px;background:var(--tlc-parchment);color:var(--tlc-muted);}
 
 /* A short list of tick boxes — "where this appears", not a status. Each one is
    a target big enough to hit, because these are read and clicked in a row. */
@@ -957,7 +957,7 @@ export const ADMIN_UI_CSS = `
 .tlc-vchip input:focus-visible + span{box-shadow:0 0 0 3px rgba(46,126,166,.25);}
 .tlc-vchip--none span{background:var(--tlc-parchment);color:var(--tlc-muted);border:1px solid var(--tlc-edge);--tlc-chip-solid:var(--tlc-muted);}
 .tlc-perms{display:flex;flex-direction:column;gap:2px;border:1px solid var(--tlc-edge);border-radius:9px;padding:6px;background:var(--tlc-parchment);}
-.tlc-perm{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:6px;cursor:pointer;}
+.tlc-perm{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:8px;cursor:pointer;}
 .tlc-perm:hover{background:#fff;}
 /* A granted permission is visibly granted — scanning the list for what somebody
    can reach should not mean reading twenty checkboxes one at a time. */
@@ -985,9 +985,9 @@ export const MENU_CSS = `
 .tlc-preview{background:var(--tlc-sidebar);border-radius:12px;padding:16px 20px;margin-bottom:18px;}
 .tlc-preview-bar{display:flex;align-items:center;gap:18px;flex-wrap:wrap;}
 .tlc-preview-brand{display:flex;align-items:center;gap:9px;font:500 15px var(--tlc-serif);color:#fff;padding-right:12px;border-right:1px solid rgba(255,255,255,.18);}
-.tlc-preview-mark{width:24px;height:24px;border-radius:6px;background:var(--tlc-gold);color:var(--tlc-gold-ink);display:flex;align-items:center;justify-content:center;font:700 12px var(--tlc-sans);}
+.tlc-preview-mark{width:24px;height:24px;border-radius:8px;background:var(--tlc-gold);color:var(--tlc-gold-ink);display:flex;align-items:center;justify-content:center;font:700 12px var(--tlc-sans);}
 .tlc-preview-item{font:500 13px var(--tlc-sans);color:rgba(255,255,255,.86);}
-.tlc-preview-item--button{background:var(--tlc-gold);color:var(--tlc-gold-ink);font-weight:700;padding:7px 16px;border-radius:7px;}
+.tlc-preview-item--button{background:var(--tlc-gold);color:var(--tlc-gold-ink);font-weight:700;padding:7px 16px;border-radius:8px;}
 .tlc-preview-note{margin-top:10px;font-size:11.5px;color:rgba(255,255,255,.45);}
 .tlc-menu-cols{display:grid;grid-template-columns:1.35fr 1fr;gap:16px;align-items:start;}
 @media (max-width:980px){.tlc-menu-cols{grid-template-columns:1fr;}}
@@ -1009,7 +1009,7 @@ export const MENU_CSS = `
 .tlc-orphan{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--tlc-divider);}
 .tlc-orphan:last-child{border-bottom:0;}
 .tlc-orphan-body{flex:1;min-width:0;}
-.tlc-orphan-btn{flex:none;font:600 11.5px var(--tlc-sans);color:var(--tlc-navy);background:#fff;border:1px solid var(--tlc-edge);border-radius:7px;padding:6px 11px;cursor:pointer;}
+.tlc-orphan-btn{flex:none;font:600 11.5px var(--tlc-sans);color:var(--tlc-navy);background:#fff;border:1px solid var(--tlc-edge);border-radius:8px;padding:6px 11px;cursor:pointer;}
 .tlc-orphan-btn:hover{border-color:var(--tlc-blue);}
 .tlc-menu-hint{padding:12px 16px;font-size:12.5px;line-height:1.6;color:var(--tlc-body);background:var(--tlc-parchment);border-top:1px solid var(--tlc-edge);text-wrap:pretty;}
 .tlc-menu-empty{padding:26px 16px;text-align:center;font-size:13px;color:var(--tlc-muted);}
@@ -1029,7 +1029,7 @@ export const PRESET_CSS = `
 export const GYM_CAL_CSS = `
 .gymcal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--tlc-edge);background:var(--tlc-sand);}
 .gymcal-title{font:500 17px var(--tlc-serif);color:var(--tlc-navy);}
-.gymcal-nav{font:600 12.5px var(--tlc-sans);color:var(--tlc-navy);text-decoration:none;border:1px solid var(--tlc-edge);background:#fff;border-radius:7px;padding:6px 12px;}
+.gymcal-nav{font:600 12.5px var(--tlc-sans);color:var(--tlc-navy);text-decoration:none;border:1px solid var(--tlc-edge);background:#fff;border-radius:8px;padding:6px 12px;}
 .gymcal-nav:hover{border-color:var(--tlc-blue);}
 .gymcal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--tlc-divider);}
 .gymcal-dow{background:var(--tlc-parchment);padding:7px 8px;font:600 10.5px var(--tlc-sans);letter-spacing:.1em;text-transform:uppercase;color:var(--tlc-muted);text-align:center;}
@@ -1040,7 +1040,7 @@ export const GYM_CAL_CSS = `
 .gymcal-day{font:600 11.5px var(--tlc-sans);color:var(--tlc-muted);}
 /* A day you can book is a link, and says so on hover rather than all the time
    — forty-two permanently visible plus signs would be noise, not affordance. */
-.gymcal-day--open{display:inline-flex;align-items:center;gap:4px;text-decoration:none;border-radius:5px;padding:1px 5px;margin:-1px -5px;}
+.gymcal-day--open{display:inline-flex;align-items:center;gap:4px;text-decoration:none;border-radius:8px;padding:1px 5px;margin:-1px -5px;}
 .gymcal-day--open:hover,.gymcal-day--open:focus-visible{background:var(--tlc-navy);color:#fff;outline:none;}
 .gymcal-add{opacity:0;font-size:12px;line-height:1;}
 .gymcal-day--open:hover .gymcal-add,.gymcal-day--open:focus-visible .gymcal-add{opacity:1;}
@@ -1050,7 +1050,7 @@ export const GYM_CAL_CSS = `
 a.gymcal-chip{text-decoration:none;}
 a.gymcal-chip:hover{filter:brightness(.96);}
 .tlc-sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;}
-.gymcal-chip{display:block;font:600 10.5px/1.35 var(--tlc-sans);padding:3px 6px;border-radius:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.gymcal-chip{display:block;font:600 10.5px/1.35 var(--tlc-sans);padding:3px 6px;border-radius:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 /* The design's four tones. Confirmed is blue rather than green because green
    is the pill colour for "live" everywhere else and a calendar full of it
    would read as reassurance rather than information. */
@@ -1060,13 +1060,13 @@ a.gymcal-chip:hover{filter:brightness(.96);}
 .gymcal-legend{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:11.5px;color:var(--tlc-body);}
 .gymcal-legend span{display:flex;align-items:center;gap:6px;}
 .gymcal-navs{display:flex;gap:4px;align-items:center;}
-.gymcal-arrow{font:600 13px var(--tlc-sans);color:var(--tlc-muted);text-decoration:none;padding:2px 6px;border-radius:5px;}
+.gymcal-arrow{font:600 13px var(--tlc-sans);color:var(--tlc-muted);text-decoration:none;padding:2px 6px;border-radius:8px;}
 .gymcal-arrow:hover{color:var(--tlc-navy);background:var(--tlc-parchment);}
 /* Approve is the loud one and Open the quiet one, because on this screen
    approving is the decision and opening is just looking. */
-.tlc-gym-approve{display:inline-flex;align-items:center;font:600 12.5px var(--tlc-sans);background:var(--tlc-navy);color:#fff;border:1px solid var(--tlc-navy);border-radius:7px;padding:7px 14px;cursor:pointer;text-decoration:none;white-space:nowrap;}
+.tlc-gym-approve{display:inline-flex;align-items:center;font:600 12.5px var(--tlc-sans);background:var(--tlc-navy);color:#fff;border:1px solid var(--tlc-navy);border-radius:8px;padding:7px 14px;cursor:pointer;text-decoration:none;white-space:nowrap;}
 .tlc-gym-approve:hover{background:var(--tlc-ink);}
-.tlc-gym-open{display:inline-flex;align-items:center;font:600 12.5px var(--tlc-sans);color:var(--tlc-navy);background:#fff;border:1px solid var(--tlc-edge);border-radius:7px;padding:7px 14px;text-decoration:none;white-space:nowrap;margin-left:6px;}
+.tlc-gym-open{display:inline-flex;align-items:center;font:600 12.5px var(--tlc-sans);color:var(--tlc-navy);background:#fff;border:1px solid var(--tlc-edge);border-radius:8px;padding:7px 14px;text-decoration:none;white-space:nowrap;margin-left:6px;}
 .tlc-gym-open:hover{border-color:var(--tlc-blue);}
 .gymcal-blocked{font:600 10px var(--tlc-sans);color:#6A6858;text-transform:uppercase;letter-spacing:.06em;}
 .gymcal-more{font-size:10.5px;color:var(--tlc-muted);}
@@ -1095,7 +1095,7 @@ a.gymcal-chip:hover{filter:brightness(.96);}
 .gympanel-foot a{color:var(--tlc-blue);font-weight:600;text-decoration:none;}
 /* Release is destructive and reads that way, but quietly — it is the ordinary
    other half of Approve, not a warning. */
-.tlc-gym-release{display:inline-flex;align-items:center;font:600 12.5px var(--tlc-sans);color:#8C3A28;background:#fff;border:1px solid #E4C8C8;border-radius:7px;padding:7px 14px;cursor:pointer;white-space:nowrap;}
+.tlc-gym-release{display:inline-flex;align-items:center;font:600 12.5px var(--tlc-sans);color:#8C3A28;background:#fff;border:1px solid #E4C8C8;border-radius:8px;padding:7px 14px;cursor:pointer;white-space:nowrap;}
 .tlc-gym-release:hover{background:#F7E4DE;}
 .gymcal-swatch{width:11px;height:11px;border-radius:3px;display:inline-block;}
 .gymcal-swatch--blocked{background:#EFEFEF;border:1px solid #DDD9D0;}
@@ -1108,7 +1108,7 @@ a.gymcal-chip:hover{filter:brightness(.96);}
 export const CMDK_CSS = `
 .tlc-k-scrim{position:fixed;inset:0;background:rgba(18,36,61,.38);z-index:300;display:none;}
 .tlc-k-scrim.is-open{display:block;}
-.tlc-k{position:fixed;top:12vh;left:50%;transform:translateX(-50%);width:min(560px,92vw);background:#fff;border:1px solid var(--tlc-edge);border-radius:13px;box-shadow:0 18px 50px rgba(18,36,61,.28);z-index:301;display:none;overflow:hidden;font-family:var(--tlc-sans);}
+.tlc-k{position:fixed;top:12vh;left:50%;transform:translateX(-50%);width:min(560px,92vw);background:#fff;border:1px solid var(--tlc-edge);border-radius:12px;box-shadow:0 18px 50px rgba(18,36,61,.28);z-index:301;display:none;overflow:hidden;font-family:var(--tlc-sans);}
 .tlc-k.is-open{display:block;}
 .tlc-k-input{width:100%;border:0;border-bottom:1px solid var(--tlc-edge);padding:16px 18px;font:400 16px var(--tlc-sans);color:var(--tlc-ink);outline:none;}
 .tlc-k-list{max-height:52vh;overflow-y:auto;}
@@ -1320,7 +1320,7 @@ export const PANEL_LIST_JS = `(function(){
 export const TOAST_CSS = `
 .tlc-toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(8px);z-index:400;
   background:var(--tlc-ink);color:var(--tlc-cream);font:500 13.5px var(--tlc-sans);
-  padding:11px 20px;border-radius:10px;box-shadow:0 12px 34px rgba(17,30,50,.4);
+  padding:11px 20px;border-radius:12px;box-shadow:0 12px 34px rgba(17,30,50,.4);
   opacity:0;pointer-events:none;transition:opacity .16s ease,transform .16s ease;max-width:min(560px,92vw);text-wrap:pretty;}
 .tlc-toast.is-on{opacity:1;transform:translateX(-50%) translateY(0);}
 @media (prefers-reduced-motion:reduce){.tlc-toast{transition:opacity .16s ease;}}

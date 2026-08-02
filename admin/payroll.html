@@ -49,7 +49,10 @@
 .tlc-pay-name span{font-size:12px;color:var(--tlc-muted);}
 .tlc-pay-num{font:600 13px var(--tlc-sans);color:var(--tlc-body);white-space:nowrap;}
 .tlc-pay-na{font-size:12.5px;color:var(--tlc-muted);}
-.tlc-pay-in{width:74px;font:600 13px var(--tlc-sans);color:var(--tlc-ink);border:1px solid var(--tlc-edge);border-radius:7px;padding:6px 8px;background:#fff;text-align:right;}
+.tlc-pay-in{width:74px;font:600 13px var(--tlc-sans);color:var(--tlc-ink);border:1px solid var(--tlc-edge);border-radius:8px;padding:6px 8px;background:#fff;text-align:right;}
+/* Read-only is a SAND FILL, never greyed text — Foundations is explicit
+   that grey text reads as broken while a filled field reads as a fact. */
+.tlc-pay-in[readonly]{background:var(--tlc-sand);cursor:default;}
 .tlc-pay-in:focus{outline:2px solid var(--tlc-blue);outline-offset:-1px;}
 .tlc-pay-inwrap{display:flex;align-items:center;gap:6px;}
 .tlc-pay-inwrap small{font-size:11px;color:var(--tlc-muted);}
@@ -622,6 +625,17 @@ function payablePeople() {
   return n;
 }
 
+// An approved period's hours are locked. This is a COURTESY, not the control:
+// the Worker refuses the write regardless (payrollPeriodLocked in
+// tlc-admin-worker.js), because a stale tab or a second window would sail past
+// anything decided here. Showing it means nobody types a figure that is going
+// to be refused.
+//
+// `readonly` rather than `disabled`: a disabled field is skipped by the
+// keyboard and reads to a screen reader as absent, and the number in it is
+// still a fact worth reading.
+const lockAttr = () => (periodApproval ? ' readonly title="Approved — take back the approval to change hours"' : '');
+
 function renderEntry(periodStart) {
   const rows = [];
 
@@ -637,11 +651,11 @@ function renderEntry(periodStart) {
       + '<span>' + (isSalary
         ? '<span class="tlc-pay-na">n/a</span>'
         : '<span class="tlc-pay-inwrap"><input class="tlc-pay-in" type="number" min="0" step="0.25" value="' + esc(hoursVal)
-          + '" placeholder="0" data-staff="' + esc(s.id) + '" data-field="hours_worked" data-period="' + esc(periodStart)
+          + '" placeholder="0"' + lockAttr() + ' data-staff="' + esc(s.id) + '" data-field="hours_worked" data-period="' + esc(periodStart)
           + '" aria-label="Hours worked by ' + esc(s.name) + '"><small>hrs</small></span>') + '</span>'
       + '<span>' + (takesPto(s.pay_type)
         ? '<span class="tlc-pay-inwrap"><input class="tlc-pay-in" type="number" min="0" step="0.25" value="' + esc(ptoVal)
-          + '" placeholder="0" data-staff="' + esc(s.id) + '" data-field="pto_hours_used" data-period="' + esc(periodStart)
+          + '" placeholder="0"' + lockAttr() + ' data-staff="' + esc(s.id) + '" data-field="pto_hours_used" data-period="' + esc(periodStart)
           + '" aria-label="PTO used by ' + esc(s.name) + '"><small>hrs</small></span>'
         : '<span class="tlc-pay-na">n/a</span>') + '</span>'
       + '<span class="tlc-pay-status">' + pill(st.tone, st.label) + '</span>'
