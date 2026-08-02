@@ -673,12 +673,28 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb{position:relative;border-radius:10px;background:var(--tlcb-bg,#FBF8F3);color:var(--tlcb-ink,#3A3A4A);
   padding:14px var(--tlcb-pad);border:2px solid transparent;
   margin-top:var(--tlcb-space-above,0px);margin-bottom:var(--tlcb-space-below,0px);}
-/* A pair is two columns with the same 32px gap the column blocks use. A lone
-   half keeps BOTH tracks so it sits at half width with the right side empty,
-   left-aligned — the spec's legitimate layout, not a gap to apologise for. */
-.tlcb-pair{display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:start;
+/* A RUN of half blocks flows into two balanced columns, with the same 32px gap
+   the column blocks use.
+
+   ⚠ COLUMNS, NOT A TWO-CELL GRID. A grid puts blocks in fixed rows, so a tall
+   block beside a short one leaves the short one's row half empty and the next
+   block starts below BOTH — which is exactly the hole Andrew photographed: a
+   450px map beside a 150px news list, then 300px of nothing. Real columns
+   balance by height, so whatever comes next in the run flows up into the
+   shorter side.
+
+   This is a deliberate departure from the spec's "a third consecutive Half
+   starts a new row". That rule produces the gap; Andrew asked for it filled.
+
+   break-inside:avoid is what stops a block being sliced in half across the
+   column boundary — without it a card can be cut through the middle. */
+.tlcb-pair{column-count:2;column-gap:32px;
   margin-top:var(--tlcb-space-above,0px);margin-bottom:var(--tlcb-space-below,0px);}
-.tlcb-pair > .tlcb{margin-top:0;margin-bottom:0;}
+.tlcb-pair > .tlcb{break-inside:avoid;-webkit-column-break-inside:avoid;
+  margin-top:0;margin-bottom:32px;}
+/* A lone half keeps both tracks, so it sits at half width with the right side
+   empty — the spec's legitimate layout, not a gap to apologise for. */
+.tlcb-pair--lone > .tlcb{margin-bottom:0;}
 .tlcb--hero{padding:0;}
 .tlcb--spacer{padding:0 var(--tlcb-pad);}
 .tlcb *{box-sizing:border-box;}
@@ -1719,29 +1735,25 @@ export function pairHalves(list, opts = {}) {
   const out = [];
   let i = 0;
   while (i < list.length) {
-    const a = list[i];
-    const b = list[i + 1];
-    if (a && a.width === 'half' && b && b.width === 'half') {
-      const above = Math.max(a.spaceAbove || 0, b.spaceAbove || 0);
-      const below = Math.max(a.spaceBelow || 0, b.spaceBelow || 0);
-      const inner = [a, b].map((blk, n) => renderBlock(
-        // The member's own spacing is spent by the row, so it must not be
-        // spent twice.
+    if (list[i] && list[i].width === 'half') {
+      // Take the WHOLE RUN of consecutive halves, not two at a time.
+      let j = i;
+      while (j < list.length && list[j] && list[j].width === 'half') j += 1;
+      const run = list.slice(i, j);
+      const above = Math.max(...run.map((b) => b.spaceAbove || 0));
+      const below = Math.max(...run.map((b) => b.spaceBelow || 0));
+      const inner = run.map((blk, n) => renderBlock(
+        // A member's own spacing is spent by the run, so it must not be spent
+        // twice. Inside the run, blocks are separated by the column gap.
         Object.assign({}, blk, { spaceAbove: 0, spaceBelow: 0 }),
         Object.assign({}, opts, { index: i + n, total }),
       )).join('');
-      out.push(`<div class="tlcb-pair" style="--tlcb-space-above:${above}px;--tlcb-space-below:${below}px">${inner}</div>`);
-      i += 2;
+      const lone = run.length === 1 ? ' tlcb-pair--lone' : '';
+      out.push(`<div class="tlcb-pair${lone}" style="--tlcb-space-above:${above}px;--tlcb-space-below:${below}px">${inner}</div>`);
+      i = j;
       continue;
     }
-    if (a && a.width === 'half') {
-      out.push(`<div class="tlcb-pair tlcb-pair--lone" style="--tlcb-space-above:${a.spaceAbove || 0}px;--tlcb-space-below:${a.spaceBelow || 0}px">`
-        + renderBlock(Object.assign({}, a, { spaceAbove: 0, spaceBelow: 0 }),
-            Object.assign({}, opts, { index: i, total })) + '</div>');
-      i += 1;
-      continue;
-    }
-    out.push(renderBlock(a, Object.assign({}, opts, { index: i, total })));
+    out.push(renderBlock(list[i], Object.assign({}, opts, { index: i, total })));
     i += 1;
   }
   return out;

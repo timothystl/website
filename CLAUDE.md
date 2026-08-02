@@ -1394,6 +1394,39 @@ prayer request are real forms elsewhere on the site but they post to ChMS with
 their own screening; adding them here would be a second, unscreened way in. If
 they are ever wanted, they go through `screenSubmission()` like the rest.
 
+#### Half blocks flow, they do not sit in rows (v4.10.0, 2026-08-02)
+
+Andrew, with a screenshot: *"if a half block width colum goes long lets make
+the others match it to fill in teh space... the current series could go up to
+fill that in next to the map block and under news"*.
+
+A 450px map beside a 150px news list, then **300px of nothing** before the next
+block. That hole is what the spec's own rule produced — *"a third consecutive
+Half starts a new row"* — because a two-cell grid puts blocks in fixed rows and
+the next block starts below **both**.
+
+- **A run of consecutive halves is now one two-column flow**, and the browser
+  balances it by height, so whatever comes next fills the shorter side. In the
+  screenshot's case, Current series moves up beside the map and under News.
+- **⚠ `column-count`, not a grid.** A grid cannot do this: rows are rows. Real
+  columns balance. `break-inside:avoid` is what stops a card being sliced
+  through the middle at the column boundary.
+- **A full-width block ends the run**, so the halves after it start a new one.
+  That is the only way to force a break, and it is the one the office already
+  understands.
+- **This is a deliberate departure from the spec.** The rule it replaces is the
+  cause of the defect. Recorded here so the side-by-side pass reads it as a
+  decision.
+- The editor rail brackets the **whole run** now rather than pairs, walked the
+  same way the renderer walks it — the rail must never draw a grouping the page
+  does not honour.
+
+⚠ **A tall block still decides the layout.** Two halves whose content differs
+wildly in length will not look like a tidy two-up; they will look like a tall
+thing beside a short thing with the next block tucked under it. That is the
+point, but it means reordering blocks changes the shape of the page more than
+it used to.
+
 #### The renter portal follows the brand, and the calendar stops saying it twice (v4.9.0, 2026-08-02)
 
 Tasks 17b and 18. The portal keeping its own `:root` was right and still is — a
