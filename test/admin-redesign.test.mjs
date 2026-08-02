@@ -1484,6 +1484,62 @@ group('the NFC taps actually answer');
     'a hand-made redirect beats the tap');
 }
 
+group('a link card can be a sign-up form');
+{
+  // The newsletter sign-up form was hardcoded into the links page, so it showed
+  // on every tap and the office could not edit a word of it. It is a card kind
+  // now — which means the URL rule has to stop applying to it, in both
+  // directions.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  // Seeded once, so the office finds it on the screen rather than having to
+  // know it exists.
+  const seeded = db.prepare("SELECT * FROM link_cards WHERE kind='signup'").all();
+  eq(seeded.length, 1, 'the sign-up card is seeded as an ordinary row');
+  eq(seeded[0].url, '', 'with no address, because it does not go anywhere');
+
+  // ⚠ It must not come back after being deleted. The seed sits outside the
+  // schema block for exactly this reason — that block re-runs on every
+  // SCHEMA_VERSION bump.
+  db.prepare("DELETE FROM link_cards WHERE kind='signup'").run();
+  await call(env, '/link-cards', { cookie });
+  eq(db.prepare("SELECT COUNT(*) n FROM link_cards WHERE kind='signup'").get().n, 0,
+    'a deleted sign-up card stays deleted');
+
+  const form = await (await call(env, '/link-cards/new', { cookie })).text();
+  has(form, 'What the card does', 'the card form asks which kind it is');
+  has(form, 'Newsletter sign-up', 'and offers the form option');
+
+  // A sign-up card saves with no address. Applying the link rule to it would
+  // bounce the form back with nothing said.
+  await call(env, '/link-cards/create', { cookie, method: 'POST', form: {
+    title: 'Get the Newsletter', description: 'Weekly news', kind: 'signup', url: '', icon_emoji: '✉️', icon_color: 'amber', sort_order: '90',
+  } });
+  const made = db.prepare("SELECT * FROM link_cards WHERE title='Get the Newsletter'").get();
+  ok(!!made, 'a sign-up card saves without a URL');
+  eq(made.kind, 'signup', 'and is stored as one');
+
+  // A link card still has to have a real address — the relaxation is scoped to
+  // the kind that has nowhere to go, not removed.
+  await call(env, '/link-cards/create', { cookie, method: 'POST', form: {
+    title: 'Bad card', kind: 'link', url: 'javascript:alert(1)', icon_color: 'sky', sort_order: '1',
+  } });
+  ok(!db.prepare("SELECT id FROM link_cards WHERE title='Bad card'").get(),
+    'a link card with an unsafe address is still refused');
+
+  // The list says what a sign-up card is instead of leaving the address cell
+  // blank, which reads as a card somebody forgot to finish.
+  const list = await (await call(env, '/link-cards', { cookie })).text();
+  has(list, 'Sign-up form', 'the list names the kind in the address column');
+
+  // The public API carries the kind, which is the only way the links page can
+  // tell the two apart.
+  const api = await (await call(env, '/api/link-cards')).json();
+  ok(api.cards.some((c) => c.kind === 'signup'), 'the public API reports the kind');
+  ok(api.cards.some((c) => c.kind === 'link'), 'and still reports ordinary cards');
+}
+
 group('a newsletter can carry a fourth and fifth note');
 {
   const { db, env } = await boot();

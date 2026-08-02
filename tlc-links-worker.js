@@ -21,10 +21,47 @@ function isSafeCardUrl(value) {
   } catch { return false; }
 }
 
+// A sign-up card carries a form the visitor fills in here, so it has no
+// address — the URL check below must not be applied to it.
+const isFormCard = (c) => String(c && c.kind) === 'signup';
+
+// The newsletter sign-up card. It was hardcoded into the page below, which
+// meant it showed on every tap and the office could not edit a word of it;
+// it is an ordinary admin-managed card now, so this is a template rather than
+// a fixed block. `n` makes the ids unique — the markup is no longer
+// guaranteed to appear exactly once.
+function renderSignupCard(c, n) {
+  const bg = COLOR_BG[c.icon_color] || COLOR_BG.amber;
+  return `  <div class="signup-card" data-signup="${n}">
+    <div class="signup-card-header" role="button" tabindex="0" aria-expanded="false" aria-controls="signup-form-wrap-${n}">
+      <div class="card-icon" style="background:${bg};">
+        <span style="font-size:22px;line-height:1;">${esc(c.icon_emoji || '✉️')}</span>
+      </div>
+      <div class="card-text">
+        <div class="card-title">${esc(c.title)}</div>
+        ${c.description ? `<div class="card-desc">${esc(c.description)}</div>` : ''}
+      </div>
+      <span class="card-arrow">&#x203A;</span>
+    </div>
+    <div class="signup-form-wrap" id="signup-form-wrap-${n}">
+      <form autocomplete="off">
+        <input class="signup-input" type="text" name="name" placeholder="Your name (optional)" autocomplete="off" data-lpignore="true" data-1p-ignore data-bwignore>
+        <input class="signup-input" type="email" name="email" placeholder="Email address" required autocomplete="off" data-lpignore="true" data-1p-ignore data-bwignore>
+        <input type="text" name="website" style="display:none" tabindex="-1" autocomplete="off">
+        <button class="signup-btn" type="submit">Subscribe</button>
+      </form>
+      <div class="signup-msg"></div>
+    </div>
+  </div>`;
+}
+
 function renderCards(cards) {
-  return cards.filter(c => isSafeCardUrl(c.url)).map(c => {
-    const bg = COLOR_BG[c.icon_color] || COLOR_BG.sky;
-    return `  <a class="link-card" href="${esc(c.url)}" target="_blank" rel="noopener">
+  return cards
+    .filter(c => isFormCard(c) || isSafeCardUrl(c.url))
+    .map((c, i) => {
+      if (isFormCard(c)) return renderSignupCard(c, i);
+      const bg = COLOR_BG[c.icon_color] || COLOR_BG.sky;
+      return `  <a class="link-card" href="${esc(c.url)}" target="_blank" rel="noopener">
     <div class="card-icon" style="background:${bg};">
       <span style="font-size:22px;line-height:1;">${esc(c.icon_emoji || '🔗')}</span>
     </div>
@@ -34,7 +71,8 @@ function renderCards(cards) {
     </div>
     <span class="card-arrow">&#x203A;</span>
   </a>`;
-  }).join('\n');
+    })
+    .join('\n');
 }
 
 // Used only if the admin API is unreachable
@@ -67,7 +105,8 @@ const FALLBACK_CARDS_HTML = `  <a class="link-card" href="https://timothystl.org
     <div class="card-icon" style="background:#E4EEF4;"><span style="font-size:22px;line-height:1;">📖</span></div>
     <div class="card-text"><div class="card-title">Sermon Notes</div><div class="card-desc">Take today's message home with you</div></div>
     <span class="card-arrow">&#x203A;</span>
-  </a>`;
+  </a>
+` + renderSignupCard({ title: 'Get the Newsletter', description: 'Weekly news & a word from Pastor Dinger', icon_emoji: '✉️', icon_color: 'amber' }, 0);
 
 function buildHtml(cardsHtml) {
   return `<!DOCTYPE html>
@@ -110,6 +149,7 @@ body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-he
 .signup-card{background:var(--white);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);overflow:hidden;}
 .signup-card-header{display:flex;align-items:center;gap:16px;padding:18px 20px;cursor:pointer;transition:background .15s;}
 .signup-card-header:hover{background:var(--mist);}
+.signup-card-header:focus-visible{outline:2px solid var(--sky);outline-offset:-2px;}
 .signup-form-wrap{display:none;padding:0 20px 20px;}
 .signup-form-wrap.open{display:block;}
 .signup-input{width:100%;background:#F9F6F0;border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-family:var(--sans);font-size:15px;color:var(--charcoal);margin-bottom:10px;outline:none;transition:border-color .2s;}
@@ -139,28 +179,6 @@ body{font-family:var(--sans);color:var(--charcoal);background:var(--warm);min-he
 
 ${cardsHtml}
 
-  <div class="signup-card" id="signup-card">
-    <div class="signup-card-header" onclick="toggleSignup()" role="button" aria-expanded="false" id="signup-header">
-      <div class="card-icon" style="background:#FEF3DC;">
-        <span style="font-size:22px;line-height:1;">✉️</span>
-      </div>
-      <div class="card-text">
-        <div class="card-title">Get the Newsletter</div>
-        <div class="card-desc">Weekly news &amp; a word from Pastor Dinger</div>
-      </div>
-      <span class="card-arrow" id="signup-chevron">&#x203A;</span>
-    </div>
-    <div class="signup-form-wrap" id="signup-form-wrap">
-      <form id="signup-form" onsubmit="submitSignup(event)" autocomplete="off">
-        <input class="signup-input" type="text" name="name" placeholder="Your name (optional)" autocomplete="off" data-lpignore="true" data-1p-ignore data-bwignore>
-        <input class="signup-input" type="email" name="email" placeholder="Email address" required autocomplete="off" data-lpignore="true" data-1p-ignore data-bwignore>
-        <input type="text" name="website" style="display:none" tabindex="-1" autocomplete="off">
-        <button class="signup-btn" type="submit" id="signup-btn">Subscribe →</button>
-      </form>
-      <div class="signup-msg" id="signup-msg"></div>
-    </div>
-  </div>
-
 </div>
 
 <div class="footer">
@@ -169,35 +187,52 @@ ${cardsHtml}
 </div>
 
 <script>
-function toggleSignup() {
-  var wrap = document.getElementById('signup-form-wrap');
-  var chevron = document.getElementById('signup-chevron');
-  var header = document.getElementById('signup-header');
+// Delegated rather than wired per card: how many sign-up cards a tap shows is
+// the office's choice now, and a handler that assumed exactly one would work
+// on the first card and silently do nothing on a second.
+function toggleSignup(card) {
+  var wrap = card.querySelector('.signup-form-wrap');
+  var header = card.querySelector('.signup-card-header');
   var open = wrap.classList.toggle('open');
-  chevron.innerHTML = open ? '&#x2039;' : '&#x203A;';
+  header.querySelector('.card-arrow').innerHTML = open ? '&#x2039;' : '&#x203A;';
   header.setAttribute('aria-expanded', open);
   if (open) wrap.querySelector('input[type="email"]').focus();
 }
-async function submitSignup(e) {
+document.addEventListener('click', function (e) {
+  var header = e.target.closest && e.target.closest('.signup-card-header');
+  if (header) toggleSignup(header.closest('.signup-card'));
+});
+// The header is a div, so the keyboard has to be wired by hand — without this
+// it is reachable by Tab and does nothing when you press Enter.
+document.addEventListener('keydown', function (e) {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  var header = e.target.closest && e.target.closest('.signup-card-header');
+  if (!header) return;
   e.preventDefault();
-  var btn = document.getElementById('signup-btn');
-  var msg = document.getElementById('signup-msg');
+  toggleSignup(header.closest('.signup-card'));
+});
+document.addEventListener('submit', async function (e) {
+  var card = e.target.closest && e.target.closest('.signup-card');
+  if (!card) return;
+  e.preventDefault();
+  var form = e.target;
+  var btn = form.querySelector('.signup-btn');
+  var msg = card.querySelector('.signup-msg');
   btn.disabled = true; btn.textContent = 'Subscribing…';
   msg.style.color = ''; msg.textContent = '';
   try {
-    var fd = new FormData(e.target);
-    var r = await fetch('https://admin.timothystl.org/api/subscribe', { method: 'POST', body: fd });
+    var r = await fetch('https://admin.timothystl.org/api/subscribe', { method: 'POST', body: new FormData(form) });
     var d = await r.json();
     if (!r.ok || d.error) throw new Error(d.error || 'Error');
-    document.getElementById('signup-form').style.display = 'none';
+    form.style.display = 'none';
     msg.style.color = '#2E7D32';
     msg.textContent = "You're on the list! 🎉 Look for us in your inbox.";
-  } catch(err) {
+  } catch (err) {
     msg.style.color = '#B00020';
     msg.textContent = err.message || 'Something went wrong. Please try again.';
-    btn.disabled = false; btn.textContent = 'Subscribe →';
+    btn.disabled = false; btn.textContent = 'Subscribe';
   }
-}
+});
 </script>
 </body>
 </html>`;

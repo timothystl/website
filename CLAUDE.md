@@ -1354,6 +1354,46 @@ across the two Workers because that is where the two halves of the problem are.
 
 Run: `node admin/taps.test.mjs`, `node test/site-taps.test.mjs`.
 
+#### A card can be a sign-up form (v4.1.0, 2026-08-02)
+
+Andrew: *"on the taps we had before a form option for one of the cards. can you
+add that in"*. The newsletter sign-up card **was** on the links page — but it
+was hardcoded in `tlc-links-worker.js`, below the loop that renders the
+admin-managed cards. So it showed on every tap whatever the office did, its
+words could not be edited, and there was no way to add a second one or to take
+it off a tap where it did not belong.
+
+`link_cards.kind` is `link` (the default, and what every existing row already
+was) or `signup`.
+
+- **The kind decides whether there is an address, so it is asked first.** A
+  sign-up card is a form the visitor fills in on the page — it has nowhere to
+  go. The URL field is therefore **not** marked `required`: a browser refusing
+  to submit would read as the screen being broken. The rule lives in the POST
+  handler, which skips the address check for a sign-up card and still refuses
+  an unsafe one on a link card. Both directions are tested — relaxing it for
+  the kind that has no address is not the same as removing it.
+- **The seed runs once, behind `SIGNUP_CARD_MARKER`**, exactly like the v3.0.0
+  permission rename and for the same reason: the schema block re-runs on every
+  `SCHEMA_VERSION` bump, and a seed in there would bring back a card the office
+  had deleted on purpose. A test deletes it and asserts it stays gone.
+- **The sign-up markup moved into `renderSignupCard()`** and the page's script
+  is delegated off `.signup-card`. It used to be wired to fixed ids, which was
+  fine while the block appeared exactly once and would have worked on the first
+  card and silently done nothing on a second. The header is a `div`, so Enter
+  and Space are wired by hand — without that it is reachable by Tab and does
+  nothing.
+- **The fallback carries the form too.** `FALLBACK_CARDS_HTML` is what a
+  visitor sees when the admin API is unreachable, and a page that quietly drops
+  its sign-up form during an outage is worse than one that shows a stale copy.
+- The list's address column reads `Sign-up form` rather than sitting empty —
+  a blank cell reads as a card somebody forgot to finish.
+
+⚠ **Only the newsletter sign-up exists as a form kind.** Connect card and
+prayer request are real forms elsewhere on the site but they post to ChMS with
+their own screening; adding them here would be a second, unscreened way in. If
+they are ever wanted, they go through `screenSubmission()` like the rest.
+
 #### Four security fixes from the July review (v3.8.0, 2026-08-01)
 
 **VS-2 — the Worship Schedule Builder was public.** `public/scheduler.html`
