@@ -2423,6 +2423,18 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 - **Music page video strip** — the three fallback video cards on `/music` were not converted (they need real YouTube URLs). Add Video blocks in the editor, or drop them.
 - **Sermons page** — YouTube embed page exists; confirm it's pulling the correct channel or that it's manually maintained.
 
+### From the Post-Redesign Review — Andrew's Call (2026-08-02)
+
+The full review (three scouts + a synthesis pass, everything verified by reading or measuring rather than pattern-matched) is recorded above under "The post-redesign review (v4.14.0–v4.15.0)". Everything it found that was safe to fix outright shipped in PRs #378–#379. These seven were surfaced but deliberately **not** built without a decision — ranked in the report's own order of likely payoff:
+
+1. **A build/minify step.** `public/index.html` is 221KB (36KB brotli), ~95KB of it inline JS re-downloaded with every HTML fetch. Minification alone is a ~50% transfer cut, but it reverses the deliberate no-toolchain stance the site has kept since launch.
+2. **Externalise the admin's CSS/JS.** ~89KB unminified is inlined into every admin screen at `private, max-age=10`, re-parsed on nearly every click. A cacheable `/assets/admin.css` fixes it and costs a versioning scheme.
+3. **The heavy admin handlers**, each needing its own design rather than a shared fix: `/media` scans every page's block JSON per media row; `/subscribers` pages Brevo serially inside the render path; `/newsitems` runs its expiry sweep inline (an R2 delete + a DELETE per expired row); `/api/search` fires up to 10 unindexed LIKE scans per keystroke with no debounce; `/audit-log` renders one anchor per 50-row page with no retention.
+4. **~1.55MB of `IMG_*.jpg` in `public/images` referenced nowhere.** User-uploaded files, so deletion needs sign-off before anything touches them. `food-pantry.webp`/`Bees.webp` (~175KB each) double as both card thumbnails and full-width images. No `width`/`height` attributes anywhere on the site (CLS exposure).
+5. **Nine Google Font faces loaded** — likely half are unused; worth an audit before trimming.
+6. **A `:has()` fallback** for the Task 19 form-width cap — Firefox ESR and Safari <15.4 get the old 1900px-wide forms back with no cap. Depends on whether the office's browsers actually include either.
+7. **A dedicated accessibility pass** — admin list rows are mouse-only (not keyboard-reachable), and the public site has no `:focus-visible` styles anywhere.
+
 ### Pinned / Low Priority
 - **manual.html** — Keep this updated whenever new features, pages, or admin tabs are added. It is the staff reference guide at `/manual` and should always reflect the current state of the site and admin portal.
 - **[B1] Gym booking race condition** — `admin/gym.js` checks for a booking-slot conflict with a `SELECT` and then does a separate `INSERT`, with no transaction or unique constraint on `(booking_date, start_time, end_time)`. Two concurrent hold requests for the same slot could both pass the check and double-book. Needs a design decision (D1 batch/transaction vs. a unique index + handling the constraint-violation error) rather than a quick fix. Flagged in the July 2026 code review; not yet fixed. Very low urgency in practice — two people booking the exact same slot at the exact same instant is rare; keep on the list to think about, no rush.
@@ -2474,32 +2486,20 @@ the live DB. The format is a date plus a counter, e.g. `2026-05-20-1`.
 
 ---
 
-## Session State (as of 2026-05-19)
+## Session State (as of 2026-08-02)
 
-### What's live on timothystl.org:
-- **DNS cutover complete** — site is live at timothystl.org
-- Nav: About → Worship → MDO (external) → Word of Life → Ministries → News & Events → Contact → Give
-- **Color system:** Navy #1E2D4A, Gold #C9973A, Moss #4A5E3A, Teal #2E7EA6, Slate #3A4E5C, Plum #8A6A8A. Background texture added.
-- **Nav header:** Moss green (--sage), logo in white circle
-- **Logo:** `logo.png`, `logo-bw.png`, `logo-teal.png` in `/public/images/`
-- About page: vision/mission text, Mission Field section, staff photos in `/public/images/staff/`
-- News page (`/news`): fetches live from admin API + newsletter archive
-- Ministry landing pages: /music /stephen /foodpantry /bees /christmasmarket — built with real photos
-- Youth pages: /youth and sub-pages load dynamically from admin API
-- Calendar (`/calendar`): Google Calendar iframe embed
-- Zoom redirect (`/zoom`): admin-managed URL via Settings tab
-- Council files redirect (`/councilfiles`): admin-managed URL via Settings tab
-- Give page (`/give`): points to Tithely — `give.tithe.ly`
-- Voters page (`/voters`): admin-managed Zoom link + downloadable council file uploads
-- 404 page: unknown URLs show a friendly 404 with nav buttons (not a silent home redirect)
-- URL routing: pushState — direct URLs like /about work on reload
-- Staff manual: `/manual` — documents header photos, button editing, Christmas Market, color reference
-- Newsletter: Weekly / Quick Announcement formats, draft/published split, Brevo email, website archive
-- Gym Rental Scheduler: full system at `/gym-rentals` — groups, bookings, holds, invoices, GCal, iCal, recurring requests
+This section used to restate the site's status in full; it drifted for months (last update 2026-05-19, before the entire v3.0.0–v4.15.0 admin overhaul) and nobody caught it because it was a second copy of information kept accurately elsewhere. Following the same rule this file states explicitly under "The design handoff is in the repo now" — *"two copies of a status table are two answers to 'is this done yet'"* — it now points rather than repeats:
 
-### What's next:
-- Youth director content entry for /confirmation, /sundayschool, /vbs, /egghunt, /family
-- Christmas Market content update each year (via admin Ministries tab)
+- **Every admin tab's status** is the "Admin Portal Plan" table near the top of this file — kept current all session, every row DONE.
+- **The live inventory of every admin screen** against the v3.0.0 mockups is `admin/REDESIGN-STATUS.md` — see "The design handoff is in the repo now" below for why that file, not this one, is the source of truth for per-screen fidelity.
+- **The public site's colors, typography and socials** are under "Design System" below.
+- **The admin worker version** is `VERSION` in `admin/helpers.js`, currently `v4.15.0` — see "Versioning" below for what bumps mean.
+
+### What's actually next
+- Youth director content entry for `/confirmation`, `/sundayschool`, `/vbs`, `/egghunt`, `/family` — the `youth_pages` rows exist, waiting on real content.
+- Christmas Market content update each year (via the admin Ministries tab).
+- The seven report-only items from the 2026-08-02 review, under "Pending / Deferred Items" below — all seven are Andrew's call, none urgent.
+- Everything else still listed under "Pending / Deferred Items" below.
 
 ### SEO — completed April 2026
 - Schema.org JSON-LD (Church type) with address, phone, hours, social links
@@ -2585,9 +2585,9 @@ core modules · `GY-` gym module · `PY-` payroll.
 | GY-4 | High | Gym | Batch hold endpoint bypasses rate-limit and `max_active_holds` (calendar DoS) |
 | GY-5 | High | Gym | Renter self-confirm endpoints still routed despite "holds only" policy (bypasses office review) |
 | GY-6 | High | Gym | `/hold` classic path skips day/hour business-rule validation (book outside allowed hours) |
-| PY-1 | High | Payroll | Staff name not JS-escaped in inline `onclick` → breaks legit names (`O'Brien`) + script injection |
-| PY-2 | High | Payroll | 403(b) base mismatch — stub line items don't reconcile to displayed Gross Pay |
-| PY-3 | High | Payroll | Payroll page ignores shared admin shell — divergent design, no nav (dead-end page) |
+| PY-1 | ~~High~~ **FIXED v3.2.0** | Payroll | Staff name not JS-escaped in inline `onclick` → broke legit names (`O'Brien`) + script injection — delegated off `data-id` now |
+| PY-2 | ~~High~~ **FIXED v3.2.0** | Payroll | 403(b) base mismatch — stub line items didn't reconcile to displayed Gross Pay — `baseEarnings()` computed once, used everywhere |
+| PY-3 | ~~High~~ **FIXED v3.2.0** | Payroll | Payroll page ignored the shared admin shell (divergent design, no nav) — folded into `sidebarShell` |
 
 **Cross-cutting themes** (fix systematically, not one-off): consistent output
 escaping — AW-2, AC-2, AC-3, GY-2, VS-8, PY-1 all share one root cause (a shared
@@ -2605,7 +2605,7 @@ GY-7, PY-6. Modal/keyboard accessibility — VS-7, VS-12, PY-7, PY-8, GY-12.
 ### Volunteer Scheduler — `public/scheduler.html`
 
 - **VS-1** (Critical, correctness) — Special rows `{type:'special', …}` have no `.assignments`; CSV (~2189), Stats (~4028), Auto-Fill (~3923), deletePerson (~1506) iterate blindly and throw `TypeError`. Add `if (row.type !== 'sunday') return;` like the other iterators do.
-- **VS-2** (Critical, security) — `site-worker.js` falls through to `env.ASSETS.fetch`, so the whole Worship Schedule Builder is public at `/scheduler.html` with no auth gate. Decide whether it should be gated or is dead/legacy (admin sidebar points staff to `chms.timothystl.org` instead).
+- **VS-2** ~~(Critical, security)~~ **FIXED v3.8.0** — `site-worker.js` fell through to `env.ASSETS.fetch`, so the whole Worship Schedule Builder was public at `/scheduler.html` with no auth gate. Moved to `admin.timothystl.org/scheduler`, behind the session; the old address 302s there. It is also dead code — the endpoint it talks to does not exist in this repo — locked rather than deleted since the schedules it once held may still be wanted; see "Four security fixes from the July review" above.
 - **VS-3** (High, security) — `ws_breeze_settings` holds `apiKey`/`resendKey`/`workerSecret` in cleartext localStorage; `buildDataSnapshot()` (~3708) POSTs them to D1 in plaintext. Exclude secrets from the snapshot or move Breeze/Resend calls server-side.
 - **VS-4** (High, security) — RSVP tokens (~2566) use `Math.random()`; use `crypto.getRandomValues()` (16+ bytes hex).
 - **VS-5** (High, data) — 1.5s debounced last-write-wins D1 sync (~3759), pull overwrites local wholesale (~3736); two devices clobber each other; `beforeunload` only warns on schedule dirty, not people/settings/confirmations. Add version/updated-at check + flush on unload, or single authoritative store.
@@ -2628,7 +2628,7 @@ GY-7, PY-6. Modal/keyboard accessibility — VS-7, VS-12, PY-7, PY-8, GY-12.
 
 ### Admin Worker — `tlc-admin-worker.js`
 
-- **AW-1** (High, security) — Top-level catch (116-125) returns `e.stack` to every route incl. unauthenticated ones. Return generic 500; log detail server-side only.
+- **AW-1** ~~(High, security)~~ **FIXED v3.8.0** — top-level catch (116-125) returned `e.stack` to every route incl. unauthenticated ones. Now returns a short reference and logs the detail server-side only; see "Four security fixes from the July review" above.
 - **AW-2** (High, security) — Many DB strings interpolated without `escapeHtml` (news picker 1727, newsletter subject 4712/4738, sermon title incl. in `value="…"` 1464/1554/1665, bible class 2142). With `unsafe-inline` CSP this is a cross-privilege escalation path. Escape all output; attribute-safe escape for `value=`.
 - **AW-3** (Medium, security) — `/api/newsletter/:id` (688) has no status filter; drafts/pending readable by sequential ID. Add `AND status='published'` + public columns only.
 - **AW-4** (Medium, security) — `/api/voters` (936) and `/docs/*` (538) are unauthenticated though the Voters page is "members-only." Gate behind session/token if truly private.
@@ -2649,9 +2649,9 @@ GY-7, PY-6. Modal/keyboard accessibility — VS-7, VS-12, PY-7, PY-8, GY-12.
 
 ### Admin Core Modules — `admin/auth.js` · `db.js` · `email.js` · `helpers.js`
 
-- **AC-1** (High, security) — Session cookie (`auth.js` 109/113) sets `HttpOnly; SameSite=Strict` but not `Secure`. Append `; Secure`.
+- **AC-1** ~~(High, security)~~ **FIXED v3.8.0** — session cookie (`auth.js` 109/113) set `HttpOnly; SameSite=Strict` but not `Secure`. Appended on both the set and clear headers, so sign-out can't leave a non-Secure cookie a browser refuses to overwrite.
 - **AC-2** (High, security) — `email.js` drops subjects/titles/event names/CTA URLs into broadcast HTML with no escaping; `escapeHtml` exists in `helpers.js` but isn't imported here. Wrap all short plain-text fields.
-- **AC-3** (High, security) — `helpers.js` TinyMCE section builders (398/431 and 5 clones) escape backtick/`$` but not `</script>`, which the HTML parser honors regardless of JS-string context. Also neutralize the closing-tag sequence.
+- **AC-3** ~~(High, security)~~ **FIXED v3.6.0** — `helpers.js`'s six near-identical TinyMCE section builders escaped backtick/`$` but not `</script>`, which the HTML parser honors regardless of JS-string context — a saved post could break out of the inline init block and run script in an admin's session. One builder now (`tinymceField()`), and `jsString()` splits the closing tag so the parser never sees it; see "AC-3 is fixed" above.
 - **AC-4** (High, correctness) — `db.js` `DB_INIT_GYM_BOOKINGS` (133) has no unique index → root of GY-1. Add a partial unique index over active statuses; bump `SCHEMA_VERSION`.
 - **AC-5** (Medium, correctness) — `gym_invoices` money columns are `REAL` (db.js 175). Store integer cents. (Schema change → version bump.)
 - **AC-6** (Medium, correctness) — `audit_log.user_id` is `NOT NULL` (db.js 231) but `logAudit` binds null for system actions (auth.js 134); the INSERT throws and is silently swallowed → those actions vanish from the audit trail. Make nullable or use a sentinel.
@@ -2673,7 +2673,7 @@ GY-7, PY-6. Modal/keyboard accessibility — VS-7, VS-12, PY-7, PY-8, GY-12.
 ### Gym Module — `admin/gym.js`
 
 - **GY-1** (Critical, correctness) — [B1] double-book race (1220/1258/1484/3437). Add partial unique index (see AC-4) + handle constraint error as "slot taken."
-- **GY-2** (Critical, security) — Renter `notes` rendered unescaped in recurring-review page (4453) and admin emails (1532/1542/1705) → stored XSS in office admin's authenticated session. Escape `notes` (and defensively `group.*`) everywhere.
+- **GY-2** ~~(Critical, security)~~ **FIXED v3.8.0** — renter `notes` rendered unescaped in the recurring-review page (4453) and admin emails (1532/1542/1705) — stored XSS running in the office's authenticated session. Escaped in all three now; `group.name`/`contact`/`email` are left unescaped deliberately since that field is office-entered behind `gym_manage`, not renter-supplied — see "Four security fixes from the July review" above.
 - **GY-3** (High, correctness) — Recurring monthly invoice dedup (4572) queries `booking_id` but recurrence invoices are inserted without it → re-bills every run. Store `booking_ids` and filter against it.
 - **GY-4** (High, security/DoS) — Batch `/request-slots` (1459) enforces neither rate-limit nor `max_active_holds` (unlike single `/hold`). Enforce both + a per-request slot ceiling.
 - **GY-5** (High, security/design) — Public `/confirm` (1245) & `/confirm-slots` (1554) let a renter self-confirm + self-invoice despite "holds only." Remove or gate behind admin.
@@ -2693,15 +2693,15 @@ GY-7, PY-6. Modal/keyboard accessibility — VS-7, VS-12, PY-7, PY-8, GY-12.
 
 ### Payroll — `admin/payroll.html`
 
-- **PY-1** (High, security/correctness) — `esc()` (1596) doesn't escape single quotes; names land in single-quoted inline `onclick` (913). `O'Brien` breaks Edit/Remove; a crafted name executes JS. Use event delegation + `data-id`.
-- **PY-2** (High, correctness) — 403(b) shown in `renderStaffBlock` (1493) is computed on `hours*rate` but `calcGross` (1579) uses `(hours+ptoUsed)*rate` → stub line items don't reconcile to Gross. Compute `base` once and pass everywhere.
-- **PY-3** (High, design/UX) — Whole page is bespoke (Nunito/navy, own login CSS, no sidebar, only a Sign Out button) vs the shared `sidebarShell`/`html()` — a dead-end that won't inherit shell a11y/mobile fixes. Fold into the shared shell during the redesign.
-- **PY-4** (Medium, security) — Supabase anon JWT hardcoded in page source (779). `/sb` gate is the real control (defense-in-depth), but inject the key server-side / document rotation.
-- **PY-5** (Medium, security) — CSV `q()` (1229) quote-doubles but doesn't neutralize `= + - @` (the 403(b) column even emits leading `-`). Prefix risky cells.
-- **PY-6** (Medium, correctness) — Float money; rows rounded for display while subtotals sum unrounded values (1304) → printed subtotal a cent off. Round each gross to cents before summing, or integer cents.
-- **PY-7** (Medium, a11y) — `#staffModal` (691) has no `role="dialog"`/`aria-modal`, no focus move/trap/restore, no Escape.
-- **PY-8** (Medium, a11y) — Modal `<label>`s lack `for`; hours-grid captions are `<div>` not labels → three identical unlabeled spinboxes per row. Pair `for`/`id`; add `aria-label`.
-- **PY-9** (Medium, UX/correctness) — `onPeriodChange` (1059) awaits several fetches with no feedback; `loadMdoData` (1093) uses `|| []` and never checks the Supabase `error` field → a failed MDO query silently under-reports staff on a payroll run. Add loading state + error banner.
+- **PY-1** ~~(High, security/correctness)~~ **FIXED v3.2.0** — `esc()` (1596) didn't escape single quotes; names landed in single-quoted inline `onclick` (913). `O'Brien` broke Edit/Remove; a crafted name could run JS. Now event-delegated off `data-id`, listed above under "Gym and Payroll, to the mockups".
+- **PY-2** ~~(High, correctness)~~ **FIXED v3.2.0** — 403(b) shown in `renderStaffBlock` (1493) was computed on `hours*rate` but `calcGross` (1579) used `(hours+ptoUsed)*rate` → stub line items didn't reconcile to Gross. `baseEarnings()` is computed once now and used everywhere.
+- **PY-3** ~~(High, design/UX)~~ **FIXED v3.2.0** — the whole page was bespoke (Nunito/navy, own login CSS, no sidebar, only a Sign Out button) vs the shared `sidebarShell`/`html()` — a dead-end that inherited none of the shell's a11y/mobile fixes. Folded into the shared shell; see "PY-3 is fixed" under "Gym and Payroll, to the mockups" above.
+- **PY-4** (Medium, security) — Supabase anon JWT hardcoded in page source (779). `/sb` gate is the real control (defense-in-depth), but inject the key server-side / document rotation. Still open.
+- **PY-5** ~~(Medium, security)~~ **FIXED v3.2.0** — CSV `q()` (1229) quote-doubled but didn't neutralize `= + - @` (the 403(b) column even emitted a leading `-`). Risky cells are prefixed now.
+- **PY-6** ~~(Medium, correctness)~~ **FIXED v3.2.0** — float money; rows rounded for display while subtotals summed unrounded values (1304) → a printed subtotal could be a cent off. Every gross rounds to cents before it is summed now.
+- **PY-7** (Medium, a11y) — `#staffModal` (691) has no `role="dialog"`/`aria-modal`, no focus move/trap/restore, no Escape. Still open.
+- **PY-8** (Medium, a11y) — Modal `<label>`s lack `for`; hours-grid captions are `<div>` not labels → three identical unlabeled spinboxes per row. Pair `for`/`id`; add `aria-label`. Still open.
+- **PY-9** ~~(Medium, UX/correctness)~~ **FIXED v3.2.0** — `onPeriodChange` (1059) awaited several fetches with no feedback; `loadMdoData` (1093) used `|| []` and never checked the Supabase `error` field → a failed MDO query could silently under-report staff on a payroll run. It now says the report is incomplete, in the entry view, the report, and the CSV.
 - **PY-10** (Medium, responsive) — `.form-row`/`.form-row-3` (539) don't collapse on mobile; the 640px block only touches the hours row/table. Collapse to one column under ~560px.
 - **PY-11** (Medium, correctness) — Period dates parsed as local midnight but formatted via `toISOString()` (UTC) (824) — latent off-by-one. Format from local components consistently.
 - **PY-12** (Low, UX) — Save/remove errors use `alert()` (1039) inconsistent with admin `.alert` banners; `confirm()` gets HTML-entity-escaped name (`Smith &amp; Jones`).
