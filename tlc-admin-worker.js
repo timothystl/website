@@ -934,7 +934,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-08-02-2'; // bumped: gym_portal_origin setting (the renter portal's own address)
+    const SCHEMA_VERSION = '2026-08-02-3'; // bumped: church_address_near setting (the landmark line on the welcome card)
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();

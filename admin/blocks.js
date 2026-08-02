@@ -343,6 +343,22 @@ const RICH_TAGS = new Set(['p', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'ul', 
 // the incoming one survive as well made every sanitise pass append another copy.
 const RICH_ATTRS = { a: ['href', 'target'], img: ['src', 'alt', 'width', 'height'] };
 const RICH_VOID = new Set(['br', 'img', 'hr']);
+
+// ── THE CARD'S OWN, NARROWER ALLOWLIST (Task 13b) ────────────────────────────
+// Free text is the deliberate exception among the five card kinds — the other
+// four never go stale because they read the church details. So it gets a real
+// rich field rather than a bold line and a small line, but NOT the page's one:
+// the card is a small box against a banner, and a heading, an image or a list
+// breaks its shape. Bold, italic, links and line breaks, and nothing else.
+//
+// It is a separate SET rather than a flag on sanitizeRich, so widening the page
+// editor's allowlist later cannot quietly widen this one too.
+const CARD_RICH_TAGS = new Set(['p', 'br', 'strong', 'b', 'em', 'i', 'a']);
+export function sanitizeCardRich(input) {
+  const full = sanitizeRich(input);
+  return full.replace(/<\/?([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>/g, (m, tag) =>
+    (CARD_RICH_TAGS.has(tag.toLowerCase()) ? m : '')).slice(0, 1200);
+}
 const RICH_DROP_WITH_CONTENT = /<(script|style|iframe|object|embed|form|link|meta|base|svg|math)\b[\s\S]*?(<\/\1\s*>|$)/gi;
 
 // TinyMCE output is user input. Only staff can reach the editor, but a stored
@@ -454,6 +470,10 @@ export function sanitizeBlock(b) {
     // inspector, and a crafted 4 there is a wide text row, not a broken page.
     cols: [2, 3, 4].includes(Number(b.cols)) ? Number(b.cols) : 2,
     align: b.align === 'center' ? 'center' : 'left',
+    // Task 13c. Full or Half — a property of the BLOCK, never a container the
+    // office drags things into. The rail is a flat list and stays one; pairing
+    // is what two adjacent halves DO, not a level of nesting they live in.
+    width: b.width === 'half' ? 'half' : 'full',
     topRule: !!b.topRule,
     count: Math.max(1, Math.min(6, Math.floor(Number(b.count)) || 3)),
     locked: !!b.locked,
@@ -481,7 +501,7 @@ export function sanitizeBlock(b) {
   out.card = def.infoCard && CARD_SIDES.some((s) => s.key === b.card) ? b.card : 'off';
   out.cardShows = CARD_SHOWS.some((s) => s.key === b.cardShows) ? b.cardShows : 'services';
   out.cardEyebrow = cleanText(b.cardEyebrow, 60);
-  out.cardBody = cleanText(b.cardBody, 400);
+  out.cardBody = sanitizeCardRich(b.cardBody);
   out.cardLinks = Array.isArray(b.cardLinks)
     ? b.cardLinks.slice(0, 4).map((raw) => ({
       title: cleanText(raw && raw.title, 60),
@@ -653,6 +673,12 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb{position:relative;border-radius:10px;background:var(--tlcb-bg,#FBF8F3);color:var(--tlcb-ink,#3A3A4A);
   padding:14px var(--tlcb-pad);border:2px solid transparent;
   margin-top:var(--tlcb-space-above,0px);margin-bottom:var(--tlcb-space-below,0px);}
+/* A pair is two columns with the same 32px gap the column blocks use. A lone
+   half keeps BOTH tracks so it sits at half width with the right side empty,
+   left-aligned — the spec's legitimate layout, not a gap to apologise for. */
+.tlcb-pair{display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:start;
+  margin-top:var(--tlcb-space-above,0px);margin-bottom:var(--tlcb-space-below,0px);}
+.tlcb-pair > .tlcb{margin-top:0;margin-bottom:0;}
 .tlcb--hero{padding:0;}
 .tlcb--spacer{padding:0 var(--tlcb-pad);}
 .tlcb *{box-sizing:border-box;}
@@ -813,6 +839,10 @@ aside.tlcb-card{background:#FFFFFF;border-radius:18px;padding:34px 32px;box-shad
 .tlcb-card-eyebrow{font:700 12.5px/1.4 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#C9973A;}
 .tlcb-card-eyebrow:empty::before{content:attr(data-ph);opacity:.45;}
 .tlcb-card-row{display:flex;flex-direction:column;gap:3px;padding:20px 0;border-bottom:1px solid #E7DFD1;}
+.tlcb-card-free{display:block;font-size:14.5px;line-height:1.65;}
+.tlcb-card-free p{margin:0 0 8px;}
+.tlcb-card-free p:last-child{margin-bottom:0;}
+.tlcb-card-free a{color:#2E7EA6;}
 .tlcb-card-row:last-child{border-bottom:0;padding-bottom:0;}
 .tlcb-card-body > :first-child{padding-top:20px;}
 .tlcb-card-1{font:400 30px/1.2 Lora,Georgia,serif;color:#1E2D4A;}
@@ -898,6 +928,9 @@ function phoneRules(p) {
     // A 4-up of cards is still readable two across on a tablet; a 3-up is not,
     // because each card keeps its padding and the text column collapses.
     `${p}.tlcb-cg-grid{grid-template-columns:1fr!important;}`,
+    // Halves stack full width in source order — the grid already lays them out
+    // in that order, so one column is the whole fix.
+    `${p}.tlcb-pair{grid-template-columns:1fr!important;}`,
     `${p}.tlcb-media{order:0!important;}`,
     `${p}.tlcb-cards{grid-template-columns:1fr!important;}`,
     `${p}.tlcb-gallery{grid-template-columns:1fr 1fr!important;}`,
@@ -1061,11 +1094,66 @@ function renderInfoCard(b, opts) {
       ${secondary ? `<span class="tlcb-card-2">${esc(secondary)}</span>` : ''}
     </div>`;
 
+  // ── TASK 13a ─────────────────────────────────────────────────────────────
+  // Two bugs with one cause, and the cause was reading CARD_KINDS.times.rows as
+  // "the first two entries" rather than as the composed unit it describes.
+  //
+  // 1. Services that share a label collapse onto ONE line. On the live
+  //    homepage 8:00 and 10:45 are both English worship, so they read
+  //    "8:00 & 10:45 am" with a single label beneath — not one row each. The
+  //    grouping is by the label the office typed, so it follows the data: give
+  //    two services the same note and they merge; leave them Traditional and
+  //    Contemporary and they stay apart, which is also right.
+  // 2. The meridiem prints ONCE. "8:00 am & 10:45 am" is how a machine says it.
+  const groupServices = (rows) => {
+    const order = [];
+    const byLabel = new Map();
+    for (const r of rows) {
+      const label = [r.day, r.note].filter(Boolean).join(' · ');
+      if (!byLabel.has(label)) { byLabel.set(label, []); order.push(label); }
+      byLabel.get(label).push(String(r.time || '').trim());
+    }
+    return order.map((label) => {
+      const times = byLabel.get(label).filter(Boolean);
+      const mer = (t) => (t.match(/\s*(am|pm)$/i) || [, ''])[1].toLowerCase();
+      const last = times[times.length - 1] || '';
+      const shared = times.length > 1 && times.every((t) => mer(t) && mer(t) === mer(last));
+      const joined = shared
+        ? times.map((t, i) => (i === times.length - 1 ? t : t.replace(/\s*(am|pm)$/i, ''))).join(' & ')
+        : times.join(' & ');
+      return { time: joined, label };
+    });
+  };
+
+  // The address and phone rows, shared by the composed services card and the
+  // address/contact cards, so there is one description of each.
+  const addressRows = () => {
+    const line = st.address_line || '';
+    const city = st.address_city || '';
+    const near = st.address_near || '';
+    if (!line && !city) return '';
+    const maps = `https://maps.google.com/?q=${encodeURIComponent([line, city].filter(Boolean).join(', '))}`;
+    return `<div class="tlcb-card-row"><span class="tlcb-card-2">${esc(line)}</span></div>`
+      + (city ? `<div class="tlcb-card-row"><span class="tlcb-card-2">${esc(city)}</span></div>` : '')
+      + (near ? `<div class="tlcb-card-row"><span class="tlcb-card-2">${esc(near)}</span></div>` : '')
+      + `<div class="tlcb-card-row"><a class="tlcb-card-link" href="${esc(maps)}">Get directions</a></div>`;
+  };
+  const phoneRow = () => (st.phone
+    ? `<div class="tlcb-card-row"><a class="tlcb-card-link" href="tel:${esc(String(st.phone).replace(/[^0-9+]/g, ''))}">${esc(st.phone)}</a></div>`
+    : '');
+
   let body = '';
   if (b.cardShows === 'services') {
-    body = services.length
-      ? services.map((r) => row(r.time || '', [r.day, r.note].filter(Boolean).join(' · '))).join('')
-      : `<p class="tlcb-note">No service times set yet — add them under Church details.</p>`;
+    // ⚠ "Service times" is NOT only service times. The card is one composed
+    // unit — times, a hairline, the address, directions, then the phone — and
+    // rendering only the times is what dropped the address off the homepage.
+    if (!services.length) {
+      body = `<p class="tlcb-note">No service times set yet — add them under Church details.</p>`;
+    } else {
+      const times = groupServices(services).map((g) => row(g.time, g.label)).join('');
+      const rest = addressRows() + phoneRow();
+      body = times + rest;
+    }
   } else if (b.cardShows === 'address') {
     // `pageData()` strips the `church_` prefix, so these are the same keys the
     // map block and the sidebar read — one record, four places, no retyping.
@@ -1093,14 +1181,15 @@ function renderInfoCard(b, opts) {
       : `<p class="tlcb-note">No links yet — add them in the inspector.</p>`;
   } else {
     body = b.cardBody
-      ? row(b.cardBody, '')
+      ? `<div class="tlcb-card-row tlcb-card-free">${b.cardBody}</div>`
       : `<p class="tlcb-note">Nothing typed yet.</p>`;
   }
 
   // The eyebrow is edited on the page like any other text, so it goes through
   // `field()` rather than being printed flat.
   const eyebrow = (b.cardEyebrow || opts.editing)
-    ? field(opts, b, 'cardEyebrow', 'div', 'tlcb-card-eyebrow', esc(b.cardEyebrow || ''), ' data-ph="JOIN US SUNDAY"')
+    ? field(opts, b, 'cardEyebrow', 'div', 'tlcb-card-eyebrow', esc(b.cardEyebrow || ''),
+        ` data-ph="${b.cardShows === 'text' ? 'Take note' : 'JOIN US SUNDAY'}"`)
     : '';
   // The card's contents are read from elsewhere or set in the inspector, so
   // only the eyebrow is typed on the page — the rest is inert.
@@ -1541,10 +1630,57 @@ export function wrapTemplate(template, inner, ctx = {}) {
   return `<div class="${cls}">${parts.join('')}${tail}</div>`;
 }
 
+// ── HALF-WIDTH BLOCKS (Task 13c) ─────────────────────────────────────────────
+// Two consecutive Half blocks pair into one row, first left, second right. A
+// THIRD consecutive Half starts a new row rather than joining a three-up — the
+// row is a pair or it is nothing, which is what makes this expressible without
+// a container.
+//
+// A Half with no Half neighbour renders at half width, left-aligned, with the
+// right side empty. That is a legitimate layout, not an error state, so it gets
+// no warning.
+//
+// ⚠ Space above and below belong to the ROW, not to each block, and the row
+// takes the LARGER of the pair. Two blocks with different spacing sitting side
+// by side would otherwise start at different heights, which reads as a bug in
+// the page rather than a choice.
+export function pairHalves(list, opts = {}) {
+  const total = list.length;
+  const out = [];
+  let i = 0;
+  while (i < list.length) {
+    const a = list[i];
+    const b = list[i + 1];
+    if (a && a.width === 'half' && b && b.width === 'half') {
+      const above = Math.max(a.spaceAbove || 0, b.spaceAbove || 0);
+      const below = Math.max(a.spaceBelow || 0, b.spaceBelow || 0);
+      const inner = [a, b].map((blk, n) => renderBlock(
+        // The member's own spacing is spent by the row, so it must not be
+        // spent twice.
+        Object.assign({}, blk, { spaceAbove: 0, spaceBelow: 0 }),
+        Object.assign({}, opts, { index: i + n, total }),
+      )).join('');
+      out.push(`<div class="tlcb-pair" style="--tlcb-space-above:${above}px;--tlcb-space-below:${below}px">${inner}</div>`);
+      i += 2;
+      continue;
+    }
+    if (a && a.width === 'half') {
+      out.push(`<div class="tlcb-pair tlcb-pair--lone" style="--tlcb-space-above:${a.spaceAbove || 0}px;--tlcb-space-below:${a.spaceBelow || 0}px">`
+        + renderBlock(Object.assign({}, a, { spaceAbove: 0, spaceBelow: 0 }),
+            Object.assign({}, opts, { index: i, total })) + '</div>');
+      i += 1;
+      continue;
+    }
+    out.push(renderBlock(a, Object.assign({}, opts, { index: i, total })));
+    i += 1;
+  }
+  return out;
+}
+
 export function renderPage(blocks, opts = {}) {
   const list = Array.isArray(blocks) ? blocks : [];
   const total = list.length;
-  const parts = list.map((b, i) => renderBlock(b, Object.assign({}, opts, { index: i, total })));
+  const parts = pairHalves(list, opts);
   const empty = !total && opts.editing
     ? `<div class="tlcb-empty"><b>This page is empty</b><span>Drag a block up from the panel below to begin.</span></div>`
     : '';

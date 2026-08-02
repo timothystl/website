@@ -70,7 +70,7 @@ questions and part of 1.
 | 10 | Banner info card | **Done** — `renderInfoCard()` in `blocks.js` |
 | 11 | Warning rows above their row | **Done** — emitted before the row, seam moved to `border-bottom`, ▲ now `#8C3A28`. `ui.test.mjs` asserts the band is the first child of the row wrapper, not merely present |
 | 12 | Editor rail, Connect, arrow glyphs | **Done.** b and c carried out. **a needed no change** — both rails already default to open (`localStorage` absent means open, since v4.3.0); the walkthrough was reading a persisted collapse, not a default |
-| 13 | Homepage editor: info card, free text, half-width blocks | **Open** |
+| 13 | Homepage editor: info card, free text, half-width blocks | **Done** — a, b and c. Services group by label with the meridiem printed once, the card composes times → address → phone, free text is a narrow rich field, and Block width pairs adjacent halves |
 | 14 | Card grid block | **Done** — `cardgrid` in `blocks.js`, in the Structure group, with the spec's drawing values and equal-height cards whose links pin to the foot |
 | 15 | Five borderline hand-written routes | **Done.** #3 and #4 rest on false premises (no user drawer exists; `/pages/details` is a different record). #5's youth rows are 302s. #1 and #2 are built — see below |
 | 16 | Congregation-facing files onto the palette | **Done** — 94 pre-redesign hexes swept from `email.js`, the newsletter archive and the renter blocks in `gym.js`; `scheduler.html` swept too so the definition-of-done grep can return clean. `ui.test.mjs` now guards the email palette *and* its three don't-travel constraints |
