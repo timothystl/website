@@ -115,5 +115,32 @@ group('copy and value chips');
   eq(withChips.join(','), 'ed,ministries,news', 'value chips are on Ministries, News and Christian Ed');
 }
 
+// ── the sections the fix list asked to be added here ─────────────────────────
+// Task 4 ("Add them to admin/sections.test.mjs") and Task 7 ("and a case to
+// sections.test.mjs") both said so and neither got one. The point of a case
+// here is that the strings live in the config: a route that types its own
+// title is the bug this file exists to catch.
+group('gym sub-screens and filtered mail are configs, not route strings');
+{
+  for (const key of ['gymGroups', 'gymBookings', 'gymInvoices', 'gymRecurring', 'gymBlocked']) {
+    const c = SECTIONS[key];
+    ok(!!c, `${key} has a config`);
+    // Sentence case: only the first word is capitalised, bar a proper noun.
+    ok(c.title && !/\s[A-Z][a-z]/.test(c.title), `${key}'s title is sentence case, not Title Case: ${c.title}`);
+    ok(c.purpose && c.purpose.length > 30, `${key} says what the screen is for`);
+    ok(Array.isArray(c.filters) && c.filters[0] === 'All', `${key} leads its filters with All`);
+    ok(Array.isArray(c.columns) && c.columns.length >= 3, `${key} declares its columns`);
+    ok(c.note, `${key} carries the ◆ rule the screen enforces`);
+  }
+
+  // Task 7's exact layout for Filtered Mail — the one screen with no spec
+  // file, so the fix list is the spec.
+  const f = SECTIONS.filtered;
+  eq(f.columns.map((c) => c.join(' ')).join(' · '),
+    'From 1.8fr · Subject 2.4fr · Held 1fr · Why 1.4fr',
+    'filtered mail has the columns and widths the fix list gives');
+  eq(f.filters.join(' · '), 'All · Held · Released', 'and its three filters, in order');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

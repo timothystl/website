@@ -903,10 +903,14 @@ export const ADMIN_UI_CSS = `
 .tlc-wrap .checkbox-row input[type=checkbox]{width:15px;height:15px;accent-color:var(--tlc-blue);}
 .tlc-wrap .checkbox-row span,.tlc-wrap .checkbox-row label{font:600 13px var(--tlc-sans);color:var(--tlc-body);
   text-transform:none;letter-spacing:0;margin:0;cursor:pointer;}
-.tlc-wrap .alert{border-radius:12px;padding:13px 16px;font-size:13.5px;line-height:1.55;margin-bottom:18px;}
-.tlc-wrap .alert-success{background:#EDF0E4;border-left:3px solid #3F5424;color:#3F5424;}
-.tlc-wrap .alert-error{background:#F7E4DE;border-left:3px solid #8C3A28;color:#8C3A28;}
-.tlc-wrap .alert-info{background:#E7EEF7;border-left:3px solid var(--tlc-navy);color:var(--tlc-navy);}
+.tlc-wrap .alert{border:1px solid;border-radius:12px;padding:13px 16px;font-size:13.5px;line-height:1.55;margin-bottom:18px;}
+/* Card geometry and the four tones — no 3px accent stripe. Task 1 asks for
+   the stripe gone: it is a fifth way of saying "this is important" on a
+   surface that already has a tone, and it made an alert read as a different
+   kind of object from every other card on the screen. */
+.tlc-wrap .alert-success{background:${TONES.good.bg};border-color:${TONES.good.bd};color:${TONES.good.fg};}
+.tlc-wrap .alert-error{background:${TONES.bad.bg};border-color:${TONES.bad.bd};color:${TONES.bad.fg};}
+.tlc-wrap .alert-info{background:#E7EEF7;border-color:#D3DEEC;color:var(--tlc-navy);}
 .tlc-wrap .tag{font:700 9.5px var(--tlc-sans);letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;
   border-radius:8px;background:var(--tlc-parchment);color:var(--tlc-muted);}
 

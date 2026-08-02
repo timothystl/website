@@ -1394,6 +1394,37 @@ prayer request are real forms elsewhere on the site but they post to ChMS with
 their own screening; adding them here would be a second, unscreened way in. If
 they are ever wanted, they go through `screenSubmission()` like the rest.
 
+#### The fix list, read line by line (v4.5.0, 2026-08-02)
+
+A fourth pass over `FIXES.md`, checking every sub-item rather than every task.
+Five things had been marked done at the task level while a line inside them was
+never carried out.
+
+- **⚠ `.tlcb-card` was declared twice, with the same selector.** The banner
+  info card (v3.9.0) took the class the **card-grid block's tiles** already
+  used, and the later rule wins — so every tile in a card grid rendered as a
+  big white 18-radius panel with the info card's drop shadow. Both are
+  qualified now (`.tlcb-cards .tlcb-card` and `aside.tlcb-card`) so neither can
+  catch the other. This is why one renderer is worth having and why two rules
+  for one class is worth grepping for.
+- **`.filter-pill` was still the pre-redesign 999px navy pill.** Task 1 rules
+  that out in as many words and gives the replacement values; the primitive had
+  simply been missed while everything around it was converted. A filled navy
+  chip reads as the primary action on the screen, and a filter is not that.
+- **The alert stripe was still there.** Task 1 asks for the 3px left accent
+  gone: it is a fifth way of saying "important" on a surface that already
+  carries a tone, and it made an alert read as a different kind of object from
+  every other card. Alerts are card geometry and the four tones now.
+- **Gym document titles were still Title Case** — the `<h1>`s had been
+  converted and the `<title>`s had not, so the browser tab and every bookmark
+  still read "Gym Rental Settings". The renter portal's own title is left
+  alone; it is not an admin screen.
+- **The `sections.test.mjs` cases Tasks 4 and 7 both asked for did not exist.**
+  Both say to add them in as many words. The point of a case there is that the
+  strings live in the config — a route typing its own title is exactly what
+  that file exists to catch. Filtered Mail's columns and widths are pinned to
+  the fix list's own values, since it is the one screen with no spec file.
+
 #### The last two fix-list items (v4.4.0, 2026-08-02)
 
 **The payroll period lock exists now, and it is server-side.** Task 5 asks to

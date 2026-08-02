@@ -660,7 +660,7 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
 .tlcb-gallery span,.tlcb-gallery img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:7px;background:#DDE3ED;}
 .tlcb-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
-.tlcb-card{border:1px solid #DDE3ED;border-radius:8px;background:#F7F3EC;padding:11px;display:flex;flex-direction:column;gap:6px;}
+.tlcb-cards .tlcb-card{border:1px solid #DDE3ED;border-radius:8px;background:#F7F3EC;padding:11px;display:flex;flex-direction:column;gap:6px;}
 .tlcb-card-t{font:600 12.5px/1.3 'Source Sans 3',sans-serif;color:#1E2D4A;}
 .tlcb-card-m{font-size:11px;color:#8A8898;}
 .tlcb-rows{display:flex;flex-direction:column;gap:8px;}
@@ -743,7 +743,7 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-band--card-left{grid-template-columns:minmax(320px,34%) 1fr;}
 .tlcb-band--card-left .tlcb-band-text{order:2;}
 .tlcb-band--card-left .tlcb-card{order:1;}
-.tlcb-card{background:#FFFFFF;border-radius:18px;padding:34px 32px;box-shadow:0 18px 44px rgba(11,22,44,.28);
+aside.tlcb-card{background:#FFFFFF;border-radius:18px;padding:34px 32px;box-shadow:0 18px 44px rgba(11,22,44,.28);
   display:flex;flex-direction:column;position:relative;z-index:1;}
 .tlcb-card-eyebrow{font:700 12.5px/1.4 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#C9973A;}
 .tlcb-card-eyebrow:empty::before{content:attr(data-ph);opacity:.45;}
@@ -851,7 +851,7 @@ function phoneRules(p) {
     `${p}.tlcb-band--card{grid-template-columns:1fr!important;}`,
     `${p}.tlcb-band--card-left .tlcb-band-text{order:0!important;}`,
     `${p}.tlcb-band--card-left .tlcb-card{order:1!important;}`,
-    `${p}.tlcb-card{padding:24px 22px!important;}`,
+    `${p}aside.tlcb-card{padding:24px 22px!important;}`,
     `${p}.tlcb-card-1{font-size:24px!important;}`,
   ].join('\n  ');
 }
