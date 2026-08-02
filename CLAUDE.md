@@ -1394,6 +1394,49 @@ prayer request are real forms elsewhere on the site but they post to ChMS with
 their own screening; adding them here would be a second, unscreened way in. If
 they are ever wanted, they go through `screenSubmission()` like the rest.
 
+#### The sidebar folds, and the slide-over is really gone (v4.3.0, 2026-08-02)
+
+Andrew: *"on the pages sidebar, the sub levels are always open, can those go
+minimized when not open?"*
+
+- **What is under Pages folds away unless you are in it.** Five rows
+  permanently under Pages pushed the four groups below them down the sidebar
+  and read as one flat list of ten — the opposite of what nesting them was for.
+- **⚠ Which way it starts is decided server-side.** `inPages` in
+  `sidebarShell()` renders the panel open or `hidden`; `SIDEBAR_JS` only ever
+  responds to a click. A sidebar that redraws itself after paint is one whose
+  rows move under the pointer, and clicking the nav is the first thing anybody
+  does on a page.
+- **The remembered choice is an override of where you are, never the reverse.**
+  `data-here` marks a panel the server opened because the active screen is
+  inside it, and that always wins — the rows you are using cannot be the ones
+  folded away.
+- **The caret is a button beside the link, not the row.** Pages is a screen
+  somebody wants to open; making the row double as a toggle would put one of
+  the two things you can want from it out of reach.
+
+**The Email group is "Communication" again** — Andrew's call, 2026-08-02. It
+holds the newsletter, the subscriber list and held mail, which is more than the
+word Email covers; the other four keep the design's names. `GROUPS` in
+`admin/helpers.js` is the one place a group is named. It was typed twice — the
+sidebar heading and the context bar's trail — so a rename could reach one and
+not the other, leaving the nav and the breadcrumb disagreeing about where you
+are. ⚠ The names are stored **raw** and escaped at both render sites: the trail
+already ran its copy through `escapeHtml` while the sidebar had `&amp;` typed
+into the markup, so one constant holding the entity would print
+`Money &amp;amp; Building` in the bar. A test asserts it does not.
+
+**And the slide-over is deleted.** `FIXES.md`'s definition of done asks that
+`util-bar|sidebar-toggle|sidebar-backdrop|translateX(-100%)` return nothing —
+the design considered the hamburger and rejected it. The v4.0.0 pass removed
+the *handler* and left the *markup*, so below 900px the sidebar sat off-canvas
+with a hamburger that did nothing: **the admin had no navigation at all on a
+phone.** Restoring the button would have been fixing the symptom of a pattern
+the design had already thrown out. Below 900px the sidebar is now
+`position:static` above the content, scrolled past like anything else — visible,
+which is the whole point, without stealing 228px of a 390px screen. Both test
+suites assert all four strings are absent.
+
 #### Each tap serves its own cards (v4.2.0, 2026-08-02)
 
 `link_cards.tap` had existed since v3.x and the admin let you move a card

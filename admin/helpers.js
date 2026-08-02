@@ -3,9 +3,9 @@
 
 import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
-import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, TOGGLE_WORD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
+import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, SIDEBAR_JS, TOGGLE_WORD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 
-export const VERSION = 'v4.2.1'; // minor: each tap serves its own cards; no PTO column for salaried staff
+export const VERSION = 'v4.3.0'; // minor: the sidebar folds under Pages, and the dead slide-over is gone
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
@@ -125,9 +125,9 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
    ⚠ The sidebar STAYS. Twenty-one sections in five groups is more than a
    horizontal bar can hold honestly, and a list you read top to bottom beats
    chips you have to scroll. What the build got wrong was never the sidebar —
-   it was hiding it behind a hamburger. So there is no translateX(-100%), no
-   .is-open, no backdrop and no toggle: it is simply on screen, and the content
-   sits BESIDE it rather than under it.
+   it was hiding it behind a hamburger. So there is no off-canvas transform,
+   no .is-open, no backdrop and no toggle: it is simply on screen, and the
+   content sits BESIDE it rather than under it.
 
    Above the content, a slim context bar — the one good idea from the editor's
    top bar, kept and cut down. It reports; it does not navigate. */
@@ -143,6 +143,7 @@ body{padding-left:228px;}
 .sidebar-item{display:flex;align-items:center;gap:10px;padding:9px 20px 9px 23px;color:rgba(255,255,255,.78);font-size:13px;font-weight:600;text-decoration:none;}
 .sidebar-item:hover{color:#fff;background:rgba(255,255,255,.06);}
 .sidebar-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.35);flex-shrink:0;}
+.sidebar-groups{flex:1;min-height:0;}
 .sidebar-footer{margin-top:auto;padding:14px 20px 18px;border-top:1px solid rgba(255,255,255,.12);display:flex;flex-direction:column;gap:8px;flex-shrink:0;}
 .sidebar-footer a{font-family:var(--sans);color:rgba(255,255,255,.6);font-size:12px;font-weight:600;text-decoration:none;}
 .sidebar-footer a:hover{color:#fff;}
@@ -174,24 +175,24 @@ body{padding-left:228px;}
 .tlc-nav-back a{font:600 13px/1 var(--tlc-sans);color:#2E7EA6;text-decoration:none;}
 .tlc-nav-back a:hover{text-decoration:underline;}
 
-/* The ONLY responsive rule for the sidebar: below 900px a phone genuinely
-   cannot spare 228px, so it becomes a slide-over. On every laptop and desktop
-   it is fixed and visible. */
+/* The ONLY responsive rule for the sidebar: below 900px a phone cannot spare
+   228px BESIDE the content, so the sidebar stops being fixed and sits above it
+   instead — scrolled past like anything else on the page.
+
+   ⚠ It is never hidden. There was a slide-over here, off-canvas behind a
+   hamburger; the fix list asks for exactly that to be gone, and the hamburger
+   had no handler wired to it anyway, so on a phone the admin had NO navigation
+   at all. Restoring the button would have been fixing the symptom of a
+   pattern the design had already rejected. */
 @media (max-width:900px){
   body{padding-left:0;}
-  .sidebar{transform:translateX(-100%);transition:transform .2s ease;}
-  .sidebar.is-open{transform:translateX(0);box-shadow:2px 0 16px rgba(0,0,0,.25);}
-  .sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:99;}
-  .sidebar-backdrop.is-open{display:block;}
-  .sidebar-toggle{display:inline-flex;}
+  .sidebar{position:static;width:100%;height:auto;}
+  .sidebar-groups{display:flex;flex-wrap:wrap;gap:0 10px;}
+  .sidebar-group{flex:1 1 150px;}
   .tlc-ctx{padding:0 16px;}
   .wrap,.wrap-wide{padding:20px 16px;}
   .tlc-nav-back{padding:14px 16px 0;}
 }
-.sidebar-backdrop{display:none;}
-.sidebar-toggle{display:none;align-items:center;background:transparent;border:0;padding:6px;margin:0 0 0 -6px;
-  cursor:pointer;color:#AFC0D2;flex:none;}
-.sidebar-toggle svg{display:block;width:22px;height:22px;}
 /* ── DASHBOARD ─────────────────────────────────────────────── */
 .dash-header{font-family:var(--serif);font-size:24px;color:var(--steel);}
 .dash-sub{font-family:var(--sans);font-size:13px;color:var(--gray);margin-top:2px;}
@@ -246,6 +247,19 @@ ${CMDK_CSS}
    rather than asserting it with indentation alone. */
 .sidebar-tick{flex:none;width:7px;height:7px;border-radius:0 0 0 3px;border-left:1px solid var(--tlc-nav-dot);border-bottom:1px solid var(--tlc-nav-dot);background:transparent;font-size:0;line-height:0;}
 .sidebar-item-child{padding-left:26px;}
+/* Folded away unless you are inside it. The [hidden] rule is restated because
+   this element carries a display of its own, which would otherwise win. */
+.sidebar-children{display:block;}
+.sidebar-children[hidden]{display:none;}
+/* The caret is a hit area inside the row, not the row. It stays quiet until
+   the row is hovered or it has focus — it is a second action on a row whose
+   first action is the one people want. */
+.sidebar-caret{flex:none;display:flex;align-items:center;justify-content:center;width:20px;height:20px;margin:-4px -4px -4px 0;padding:0;border:0;border-radius:8px;background:transparent;color:var(--tlc-nav-dot);font:400 15px/1 var(--tlc-sans);cursor:pointer;transition:transform .15s,background .15s,color .15s;}
+.sidebar-caret span{display:block;transition:transform .15s;}
+.sidebar-caret[aria-expanded="true"] span{transform:rotate(90deg);}
+.sidebar-item:hover .sidebar-caret,.sidebar-caret:focus-visible{color:#fff;background:rgba(255,255,255,.12);}
+.sidebar-caret:focus-visible{outline:2px solid var(--tlc-gold-bright);outline-offset:1px;}
+.sidebar-item-active .sidebar-caret{color:#fff;}
 .sidebar-item-active{background:var(--tlc-nav-raised);color:#FFFFFF;font-weight:600;box-shadow:inset 0 0 0 1px rgba(255,255,255,.16);}
 .sidebar-item-active .sidebar-dot{background:var(--tlc-gold-bright);}
 .sidebar-item-active .sidebar-tick{border-color:var(--tlc-gold-bright);}
@@ -273,6 +287,7 @@ function prepSchedule(form){
 }
 ${LIST_SECTION_JS}
 ${PANEL_LIST_JS}
+${SIDEBAR_JS}
 ${TOGGLE_WORD_JS}
 ${TOAST_JS}
 ${CMDK_JS}
@@ -303,6 +318,29 @@ ${CMDK_JS}
 // shows, so the sidebar and the worklist can never disagree. Pass
 // { gym, pages, newsletter }; a bare number is read as the newsletter count so
 // the pre-redesign call sites keep working.
+
+// A group is named in TWO places — the sidebar heading and the context bar's
+// trail — so the name lives here rather than being typed at each. Otherwise
+// they can say different things about the same group, which is exactly the
+// drift the trail exists to prevent.
+//
+// "Communication" rather than the mockups' "Email" is Andrew's call
+// (2026-08-02): the group holds the newsletter, the subscriber list and held
+// mail, which is more than the word Email covers. The other four are the
+// design's own.
+//
+// ⚠ Stored RAW, escaped at both render sites. The trail already ran the name
+// through escapeHtml while the sidebar had `&amp;` typed into its markup — one
+// constant holding the entity would have printed "Money &amp;amp; Building"
+// in the context bar.
+export const GROUPS = {
+  website: 'Website',
+  email: 'Communication',
+  money: 'Money & Building',
+  people: 'People & Access',
+  setup: 'Setup',
+};
+
 // ── SIDEBAR SHELL ─────────────────────────────────────────────
 // Left sidebar navigation (grouped by task area) + a slim utility bar for
 // per-page back-links / external-view links + sign out. Replaces the old
@@ -326,6 +364,14 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}) {
     + (depth ? `<span class="sidebar-tick" aria-hidden="true">└</span>` : `<span class="sidebar-dot"></span>`)
     + `<span class="sidebar-label">${label}</span>${extra}</a>`;
 
+  // The disclosure control for a row that has children. It is a BUTTON beside
+  // the link, not the row itself: the row is a real destination — Pages is a
+  // screen somebody wants to open — and making it double as a toggle would
+  // mean one of the two things you can want from it is unreachable.
+  const navCaret = (id, open) =>
+    `<button type="button" class="sidebar-caret" data-children="${id}" aria-expanded="${open}"`
+    + ` aria-controls="${id}" title="Show or hide what is under this"><span aria-hidden="true">›</span></button>`;
+
   // ── THE FIVE GROUPS ──
   // Order, grouping and nesting are the design's `NAV` and `CHILD_OF`, kept in
   // that order deliberately: it groups by *what you came here to do* — put
@@ -342,10 +388,25 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}) {
     hp('news_edit')       ? navItem('/christian-education', 'Christian Ed', activeTab === 'christian-education', '', 1) : '',
   ].filter(Boolean).join('');
 
+  // Open when you are somewhere inside it, folded away otherwise. Five rows
+  // permanently under Pages pushed everything below them down the sidebar and
+  // read as one flat list of ten, which is the opposite of what nesting them
+  // was for. The state is decided server-side so the sidebar is never drawn
+  // in the wrong shape and then corrected — a nav that moves after paint is
+  // a nav you cannot click confidently.
+  const PAGES_CHILD_TABS = ['ministries', 'partners', 'news', 'sermons', 'christian-education'];
+  const inPages = activeTab === 'pages' || PAGES_CHILD_TABS.includes(activeTab);
+
   const canPages = hp('pages_edit') || hp('pages_edit_own');
   const websiteItems = [
-    canPages ? navItem('/pages', 'Pages', activeTab === 'pages', badge(b.pages, canPages, `${b.pages} page(s) with unpublished edits`)) : '',
-    pagesChildren,
+    canPages ? navItem('/pages', 'Pages', activeTab === 'pages',
+      badge(b.pages, canPages, `${b.pages} page(s) with unpublished edits`)
+      + (pagesChildren ? navCaret('sidebar-under-pages', inPages) : '')) : '',
+    // ⚠ `hidden` is restated in CSS. `.sidebar-children` needs a display of
+    // its own, and an explicit display beats the UA's `[hidden]{display:none}`
+    // — the same trap that once left an empty state sitting under a full
+    // table. Without the restatement this panel never closes.
+    pagesChildren ? `<div class="sidebar-children" id="sidebar-under-pages"${inPages ? ' data-here' : ' hidden'}>${pagesChildren}</div>` : '',
     hp('pages_edit')      ? navItem('/menu', 'Menu', activeTab === 'menu') : '',
     hp('notices_edit')    ? navItem('/notices', 'Notices', activeTab === 'notices') : '',
     hp('links_edit')      ? navItem('/link-cards', 'NFC Taps', activeTab === 'link-cards') : '',
@@ -383,21 +444,22 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}) {
     hp('settings_manage') ? navItem('/settings', 'Settings', activeTab === 'settings') : '',
   ].filter(Boolean).join('');
 
-  return `<div class="sidebar-backdrop" id="sidebar-backdrop"></div>
-<aside class="sidebar" id="sidebar">
+  return `<aside class="sidebar" id="sidebar">
   <div class="sidebar-brand">
     <div class="sidebar-brand-name">Timothy Lutheran</div>
     <div class="sidebar-brand-sub">Admin <span class="sidebar-version">${VERSION}</span></div>
   </div>
   <div class="sidebar-user">${user ? escapeHtml(user.username) : ''}</div>
+  <div class="sidebar-groups">
   <div class="sidebar-group">
     ${navItem('/dashboard', 'Dashboard', activeTab === 'dashboard')}
   </div>
-  ${websiteItems ? `<div class="sidebar-group"><div class="sidebar-group-label">Website</div>${websiteItems}</div>` : ''}
-  ${emailItems ? `<div class="sidebar-group"><div class="sidebar-group-label">Email</div>${emailItems}</div>` : ''}
-  ${moneyItems ? `<div class="sidebar-group"><div class="sidebar-group-label">Money &amp; Building</div>${moneyItems}</div>` : ''}
-  ${peopleItems ? `<div class="sidebar-group"><div class="sidebar-group-label">People &amp; Access</div>${peopleItems}</div>` : ''}
-  ${setupItems ? `<div class="sidebar-group"><div class="sidebar-group-label">Setup</div>${setupItems}</div>` : ''}
+  ${websiteItems ? `<div class="sidebar-group"><div class="sidebar-group-label">${escapeHtml(GROUPS.website)}</div>${websiteItems}</div>` : ''}
+  ${emailItems ? `<div class="sidebar-group"><div class="sidebar-group-label">${escapeHtml(GROUPS.email)}</div>${emailItems}</div>` : ''}
+  ${moneyItems ? `<div class="sidebar-group"><div class="sidebar-group-label">${escapeHtml(GROUPS.money)}</div>${moneyItems}</div>` : ''}
+  ${peopleItems ? `<div class="sidebar-group"><div class="sidebar-group-label">${escapeHtml(GROUPS.people)}</div>${peopleItems}</div>` : ''}
+  ${setupItems ? `<div class="sidebar-group"><div class="sidebar-group-label">${escapeHtml(GROUPS.setup)}</div>${setupItems}</div>` : ''}
+  </div>
   <div class="sidebar-footer">
     <a href="#" id="tlc-k-open">⌘K searches every section</a>
     <a href="/logout" class="sidebar-signout">Sign out</a>
@@ -421,9 +483,6 @@ export function contextBar(activeTab, badges = {}) {
   const t = TRAIL[activeTab] || { group: 'Admin', section: 'Admin' };
   const waiting = t.waits ? Number(badges[t.waits] || 0) : 0;
   return `<div class="tlc-ctx">
-    <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
-    </button>
     <div class="tlc-ctx-trail">
       <span class="tlc-ctx-group">${escapeHtml(t.group)}</span>
       <span class="tlc-ctx-sep" aria-hidden="true">/</span>
@@ -445,28 +504,28 @@ export function contextBar(activeTab, badges = {}) {
 // Dashboard's group reads "Admin", as the spec says: it belongs to no group.
 const TRAIL = {
   dashboard: { group: 'Admin', section: 'Dashboard' },
-  pages: { group: 'Website', section: 'Pages', waits: 'pages' },
-  ministries: { group: 'Website', section: 'Ministry pages' },
-  partners: { group: 'Website', section: 'Partner ministries' },
-  news: { group: 'Website', section: 'News & Events' },
-  sermons: { group: 'Website', section: 'Sermons' },
-  'christian-education': { group: 'Website', section: 'Christian Education' },
-  menu: { group: 'Website', section: 'Menu' },
-  notices: { group: 'Website', section: 'Notices' },
-  'link-cards': { group: 'Website', section: 'Taps & links' },
-  redirects: { group: 'Website', section: 'Redirects' },
-  newsletter: { group: 'Email', section: 'Newsletter', waits: 'newsletter' },
-  subscribers: { group: 'Email', section: 'Subscribers' },
-  filtered: { group: 'Email', section: 'Filtered mail' },
-  giving: { group: 'Money & Building', section: 'Giving' },
-  gym: { group: 'Money & Building', section: 'Gym rentals', waits: 'gym' },
-  payroll: { group: 'Money & Building', section: 'Payroll' },
-  staff: { group: 'People & Access', section: 'Staff directory' },
-  users: { group: 'People & Access', section: 'Users' },
-  audit: { group: 'People & Access', section: 'Audit log' },
-  media: { group: 'Setup', section: 'Media' },
-  settings: { group: 'Setup', section: 'Settings' },
-  voters: { group: 'Website', section: 'Voters page' },
+  pages: { group: GROUPS.website, section: 'Pages', waits: 'pages' },
+  ministries: { group: GROUPS.website, section: 'Ministry pages' },
+  partners: { group: GROUPS.website, section: 'Partner ministries' },
+  news: { group: GROUPS.website, section: 'News & Events' },
+  sermons: { group: GROUPS.website, section: 'Sermons' },
+  'christian-education': { group: GROUPS.website, section: 'Christian Education' },
+  menu: { group: GROUPS.website, section: 'Menu' },
+  notices: { group: GROUPS.website, section: 'Notices' },
+  'link-cards': { group: GROUPS.website, section: 'Taps & links' },
+  redirects: { group: GROUPS.website, section: 'Redirects' },
+  newsletter: { group: GROUPS.email, section: 'Newsletter', waits: 'newsletter' },
+  subscribers: { group: GROUPS.email, section: 'Subscribers' },
+  filtered: { group: GROUPS.email, section: 'Filtered mail' },
+  giving: { group: GROUPS.money, section: 'Giving' },
+  gym: { group: GROUPS.money, section: 'Gym rentals', waits: 'gym' },
+  payroll: { group: GROUPS.money, section: 'Payroll' },
+  staff: { group: GROUPS.people, section: 'Staff directory' },
+  users: { group: GROUPS.people, section: 'Users' },
+  audit: { group: GROUPS.people, section: 'Audit log' },
+  media: { group: GROUPS.setup, section: 'Media' },
+  settings: { group: GROUPS.setup, section: 'Settings' },
+  voters: { group: GROUPS.website, section: 'Voters page' },
   scheduler: { group: 'Admin', section: 'Schedule builder' },
 };
 
