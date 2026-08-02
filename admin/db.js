@@ -510,6 +510,28 @@ export const TAP_SEED = [
   { id: 4, name: 'School & MDO', placement: 'School entry · MDO front desk', destination: 'https://links.timothystl.org/school' },
 ];
 
+// ── LINK CARD KINDS ──────────────────────────────────────────
+// A card either opens a link or is a form the visitor fills in on the page.
+// `link` is the default and is what every card was before this existed.
+export const CARD_KINDS = [
+  { value: 'link',   label: 'Opens a link',        note: 'Tapping the card sends them to the address below.' },
+  { value: 'signup', label: 'Newsletter sign-up',  note: 'The card opens a name and email form on the page. Nothing to link to.' },
+];
+export const isFormCard = (kind) => String(kind || 'link') === 'signup';
+
+// The newsletter sign-up card was hardcoded into tlc-links-worker.js, which
+// meant it showed on every tap and the office could not touch a word of it.
+// It is seeded as a real row so it is editable like any other card — once,
+// behind SIGNUP_CARD_MARKER, because a seed that ran on every schema bump
+// would resurrect a card somebody had deliberately deleted.
+export const SIGNUP_CARD_SEED = {
+  title: 'Get the Newsletter',
+  description: 'Weekly news & a word from Pastor Dinger',
+  icon_emoji: '✉️',
+  icon_color: 'amber',
+  sort_order: 90,
+};
+
 // Service times are stored as one editable text box rather than a table of
 // their own: three lines that staff can retype without learning a new screen.
 export function parseServiceTimes(value) {

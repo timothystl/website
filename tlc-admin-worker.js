@@ -5,7 +5,7 @@
 // Last modified: 2026-03-27
 
 
-import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, TAP_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes } from './admin/db.js';
+import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes } from './admin/db.js';
 
 // Static pages that can carry self-serve notices (matches the SPA's page ids in public/index.html)
 const STATIC_PAGES = [
@@ -807,7 +807,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-08-01-9'; // bumped: newsletters.extra_notes (a fourth and fifth note)
+    const SCHEMA_VERSION = '2026-08-02-1'; // bumped: link_cards.kind (a card can be a sign-up form)
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -1069,6 +1069,9 @@ export default {
     // right default for the cards that existed before taps did — they were all
     // on the one link page.
     try { await env.DB.prepare('ALTER TABLE link_cards ADD COLUMN tap INTEGER').run(); } catch (_) {}
+    // What a card does: open a link, or be a form the visitor fills in here.
+    // Defaulting to 'link' is what every existing row already was.
+    try { await env.DB.prepare("ALTER TABLE link_cards ADD COLUMN kind TEXT DEFAULT 'link'").run(); } catch (_) {}
     for (const t of TAP_SEED) {
       try {
         await env.DB.prepare('INSERT OR IGNORE INTO taps (id, name, placement, destination, active) VALUES (?, ?, ?, ?, 1)')
@@ -1426,6 +1429,29 @@ export default {
       } catch (_) { /* retried on the next request */ }
     }
 
+    // ── ONE-TIME NEWSLETTER SIGN-UP CARD (2026-08-02) ──
+    // Outside the schema block for the same reason as the rename above: that
+    // block re-runs on every SCHEMA_VERSION bump, and this must run exactly
+    // once. The sign-up form used to be hardcoded into the links page, so
+    // there is no row for it and no way to edit its words; seeding one makes
+    // it an ordinary card. Re-seeding on a later bump would bring back a card
+    // the office had deleted on purpose.
+    const SIGNUP_CARD_MARKER = 'signup_card_v1';
+    let signupCardSeeded = false;
+    try {
+      const row = await env.DB.prepare('SELECT value FROM _schema_version WHERE key = ?').bind(SIGNUP_CARD_MARKER).first();
+      signupCardSeeded = row?.value === 'done';
+    } catch (_) { /* table may not exist on a brand-new database */ }
+    if (!signupCardSeeded) {
+      try {
+        const s = SIGNUP_CARD_SEED;
+        await env.DB.prepare("INSERT INTO link_cards (title, description, url, icon_emoji, icon_color, sort_order, kind, active) VALUES (?, ?, '', ?, ?, ?, 'signup', 1)")
+          .bind(s.title, s.description, s.icon_emoji, s.icon_color, s.sort_order).run();
+        await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run();
+        await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, 'done')").bind(SIGNUP_CARD_MARKER).run();
+      } catch (_) { /* retried on the next request */ }
+    }
+
     // ── PUBLIC: serve uploaded docs from R2 ──
     if (path.startsWith('/docs/') && method === 'GET') {
       const key = 'docs-' + path.slice('/docs/'.length);
@@ -1671,7 +1697,7 @@ export default {
 
     // ── PUBLIC: link cards API ──
     if (path === '/api/link-cards' && method === 'GET') {
-      const rows = await env.DB.prepare('SELECT id, title, description, url, icon_emoji, icon_color FROM link_cards WHERE active = 1 ORDER BY sort_order, id').all();
+      const rows = await env.DB.prepare("SELECT id, title, description, url, icon_emoji, icon_color, COALESCE(kind, 'link') AS kind FROM link_cards WHERE active = 1 ORDER BY sort_order, id").all();
       return new Response(JSON.stringify({ cards: rows.results || [] }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=60' }
       });
@@ -6957,10 +6983,14 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
           .map((c) => ({
             href: `/link-cards/edit/${c.id}`,
             filter: c.active ? 'showing' : 'hidden',
-            search: `${c.title} ${c.description || ''} ${c.url}`.toLowerCase(),
+            search: `${c.title} ${c.description || ''} ${c.url} ${isFormCard(c.kind) ? 'form signup newsletter' : ''}`.toLowerCase(),
             cells: [
               primaryCell(c.title, c.description || '', { icon: escapeHtml(c.icon_emoji || '🔗') }),
-              `<span title="${escapeHtml(c.url)}">${escapeHtml(String(c.url).replace(/^https?:\/\//, '').slice(0, 46))}</span>`,
+              // A sign-up card has no address. Saying so beats an empty cell,
+              // which reads as a card somebody forgot to finish.
+              isFormCard(c.kind)
+                ? statusPill('plain', 'Sign-up form')
+                : `<span title="${escapeHtml(c.url)}">${escapeHtml(String(c.url).replace(/^https?:\/\//, '').slice(0, 46))}</span>`,
               `${c.sort_order ?? 0}`,
               c.active ? statusPill('good', 'Showing') : statusPill('plain', 'Hidden'),
             ],
@@ -7095,7 +7125,17 @@ ${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; 
             { name: 'title', label: 'Card title', value: c.title || '', required: true, placeholder: 'Get Connected' },
             { name: 'description', label: 'Description', value: c.description || '', placeholder: 'One line under the title',
               hint: 'Optional. It is the line somebody reads to decide whether to tap.' },
-            { name: 'url', type: 'url', label: 'Goes to', value: c.url || '', required: true, placeholder: 'https://…' },
+            // Two options, so chips rather than a select — and the choice comes
+            // before the address, because it decides whether there is one.
+            { kind: 'chips', name: 'kind', label: 'What the card does', value: isFormCard(c.kind) ? 'signup' : 'link',
+              options: CARD_KINDS.map((k) => ({ value: k.value, label: k.label })),
+              hint: CARD_KINDS.map((k) => `${k.label}: ${k.note}`).join(' '),
+            },
+            // Not `required`: a sign-up card has nowhere to go, and a browser
+            // refusing to submit the form would read as the screen being
+            // broken. The POST handler is where the rule actually lives.
+            { name: 'url', type: 'url', label: 'Goes to', value: c.url || '', placeholder: 'https://…',
+              hint: 'Only for a card that opens a link. Leave it blank on a sign-up card.' },
             ...(taps.length ? [{
               kind: 'chips', name: 'tap', label: 'Which tap', value: c.tap == null ? '' : String(c.tap),
               options: [{ value: '', label: 'Every tap' }].concat(taps.map((t) => ({ value: String(t.id), label: `/tap${t.id} · ${t.name}` }))),
@@ -7122,12 +7162,15 @@ ${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; 
       if (path === '/link-cards/create' && method === 'POST') {
         const fd = await request.formData();
         const title = (fd.get('title')||'').trim();
-        const cardUrl = (fd.get('url')||'').trim();
-        if (!title || !isSafeCardUrl(cardUrl)) return new Response('', { status: 302, headers: { Location: '/link-cards/new' } });
+        // A sign-up card is a form on the page, so it has no address at all —
+        // the URL check applies only to a card that opens a link.
+        const newKind = isFormCard(fd.get('kind')) ? 'signup' : 'link';
+        const cardUrl = newKind === 'signup' ? '' : (fd.get('url')||'').trim();
+        if (!title || (newKind === 'link' && !isSafeCardUrl(cardUrl))) return new Response('', { status: 302, headers: { Location: '/link-cards/new' } });
         // Blank means "every tap", which is a real answer and not a missing one.
         const newTap = String(fd.get('tap') || '').trim();
-        await env.DB.prepare('INSERT INTO link_cards (title, description, url, icon_emoji, icon_color, sort_order, tap, active) VALUES (?, ?, ?, ?, ?, ?, ?, 1)')
-          .bind(title, (fd.get('description')||'').trim(), cardUrl, (fd.get('icon_emoji')||'🔗').trim(), (fd.get('icon_color')||'sky'), parseInt(fd.get('sort_order')||'0',10), newTap ? parseInt(newTap, 10) : null).run();
+        await env.DB.prepare('INSERT INTO link_cards (title, description, url, icon_emoji, icon_color, sort_order, tap, kind, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)')
+          .bind(title, (fd.get('description')||'').trim(), cardUrl, (fd.get('icon_emoji')||'🔗').trim(), (fd.get('icon_color')||'sky'), parseInt(fd.get('sort_order')||'0',10), newTap ? parseInt(newTap, 10) : null, newKind).run();
         return new Response('', { status: 302, headers: { Location: '/link-cards?msg=saved' } });
       }
 
@@ -7145,11 +7188,12 @@ ${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; 
       if (updateMatch && method === 'POST') {
         const fd = await request.formData();
         const title = (fd.get('title')||'').trim();
-        const cardUrl = (fd.get('url')||'').trim();
-        if (!title || !isSafeCardUrl(cardUrl)) return new Response('', { status: 302, headers: { Location: `/link-cards/edit/${updateMatch[1]}` } });
+        const upKind = isFormCard(fd.get('kind')) ? 'signup' : 'link';
+        const cardUrl = upKind === 'signup' ? '' : (fd.get('url')||'').trim();
+        if (!title || (upKind === 'link' && !isSafeCardUrl(cardUrl))) return new Response('', { status: 302, headers: { Location: `/link-cards/edit/${updateMatch[1]}` } });
         const upTap = String(fd.get('tap') || '').trim();
-        await env.DB.prepare('UPDATE link_cards SET title=?, description=?, url=?, icon_emoji=?, icon_color=?, sort_order=?, tap=? WHERE id=?')
-          .bind(title, (fd.get('description')||'').trim(), cardUrl, (fd.get('icon_emoji')||'🔗').trim(), (fd.get('icon_color')||'sky'), parseInt(fd.get('sort_order')||'0',10), upTap ? parseInt(upTap, 10) : null, parseInt(updateMatch[1],10)).run();
+        await env.DB.prepare('UPDATE link_cards SET title=?, description=?, url=?, icon_emoji=?, icon_color=?, sort_order=?, tap=?, kind=? WHERE id=?')
+          .bind(title, (fd.get('description')||'').trim(), cardUrl, (fd.get('icon_emoji')||'🔗').trim(), (fd.get('icon_color')||'sky'), parseInt(fd.get('sort_order')||'0',10), upTap ? parseInt(upTap, 10) : null, upKind, parseInt(updateMatch[1],10)).run();
         return new Response('', { status: 302, headers: { Location: '/link-cards?msg=saved' } });
       }
 
