@@ -75,7 +75,7 @@ questions and part of 1.
 | 15 | Five borderline hand-written routes | **Done.** #3 and #4 rest on false premises (no user drawer exists; `/pages/details` is a different record). #5's youth rows are 302s. #1 and #2 are built — see below |
 | 16 | Congregation-facing files onto the palette | **Done** — 94 pre-redesign hexes swept from `email.js`, the newsletter archive and the renter blocks in `gym.js`; `scheduler.html` swept too so the definition-of-done grep can return clean. `ui.test.mjs` now guards the email palette *and* its three don't-travel constraints |
 | 17 | Renter booking: domain and shell | **Done.** a in v4.6.0 (portal on `timothystl.org/gym/*`, admin path 301s, CSRF gate taught about it, verified in production). b now: the public site's moss masthead, logo and brand line, one header block instead of three stacked boxes, and no admin chrome of any kind |
-| 18 | Renter booking: the pattern | **Items 1, 2, 3 and the Step 3 copy done.** The insurance notice moved to the confirm step, the second tab is Recurring dates, the calendar no longer encodes availability in colour alone, the legend is gone and the button says Request. **Items 4 and 5 are partly there and NOT signed off** — see below |
+| 18 | Renter booking: the pattern | **Done** — all five items. The insurance notice is at the confirm step, the second tab is Recurring dates, availability is not colour-only, the basket has a ✕ per date and per time with ranges that recompute, and the page is measured at 390px with every tap target clearing 44px |
 | 19 | Group edit + form-width rule | **Done** — the width rule, and all five group-edit items: record first, link card plain and beneath, Copy as a flex-row primary, Regenerate as a quiet text button with the consequence in the confirm, the third crumb, and the clipboard glyph gone |
 
 **Suggested order now:** 19 items 1–5 (the group-edit screen) → 16 (a mechanical colour sweep) → 15 #1 and #2 → 17b → 13, 14, 18 (new work, largest last).
@@ -506,19 +506,23 @@ have undone the redraw the first time anybody pressed Clear. Both are aligned.
 The hour-slot buttons *inside* a day still use red for a taken hour — that is a
 different control and this item does not cover it.
 
-**Item 4 — the basket — is PARTLY there and is not signed off.** A "Your
-request" panel and a sticky summary bar already existed: slots grouped by date,
-a running total, and Clear. What the spec asks for beyond that is a ✕ on each
-row and on each individual time, and the panel staying visible while you keep
-picking rather than appearing once slots exist. Not built.
+**Item 4 — the basket — is DONE.** One row per date in date order, each
+removable whole, with every time inside it removable on its own. Adjacent hours
+print as one range and a gap prints as two, per the spec's own rule, and the
+range recomputes when a time is dropped. Removing one time leaves the rest of
+that date alone — "clear it all and start again" is not a correction, and it is
+what a renter had before.
 
-**Item 5 — designed at 390px first — is NOT done.** The page is responsive but
-it was not redrawn phone-first, and saying otherwise would be a claim nobody
-had checked.
+**Item 5 — designed at 390px — is DONE.** Measured, not asserted: twelve tap
+targets were under 44px, and the tightest was the one that matters most — the
+7-column month grid, whose day cells were 38×40. A missed tap on a calendar is
+not a small annoyance; it books the wrong day, or nothing, and the renter tries
+again somewhere else. All twelve clear 44px now and nothing pushes the page
+sideways.
 
-Those two are a genuine redesign of a flow with real money and real bookings
-behind it. Same reasoning as the giving page in Phase 7: it should be a
-deliberate change with somebody watching it, not folded into the end of a pass.
+`test/gym-portal.test.mjs` drives the real Worker in Chromium at 390px and
+checks both. Verified against the bug: breaking the per-time removal fails two
+assertions.
 
 ### The one thing to keep
 

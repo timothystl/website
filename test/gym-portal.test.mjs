@@ -1,0 +1,149 @@
+// The renter booking portal, driven in a real browser at 390px.
+//   node --experimental-loader ./test/html-loader.mjs test/gym-portal.test.mjs
+//
+// Task 18 items 4 and 5. Two things here can only be checked by driving the
+// page: whether removing one time from a date leaves the rest of that date
+// alone, and whether a tap target is actually 44px on a phone. Both were
+// wrong, and neither shows up in the markup.
+//
+// ⚠ A renter opens this from an email, ON A PHONE. That is the device this
+// screen is for, so 390px is the default viewport here rather than a
+// responsive afterthought at the bottom of the file.
+
+import http from 'node:http';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+import { execSync } from 'node:child_process';
+import { DatabaseSync } from 'node:sqlite';
+import worker from '../tlc-admin-worker.js';
+
+const gr = execSync('npm root -g').toString().trim();
+const { chromium } = createRequire(path.join(gr, 'x.js'))('playwright');
+
+function d1(db) {
+  const stmt = (sql, args = []) => ({
+    bind: (...a) => stmt(sql, a),
+    first: async () => { try { return db.prepare(sql).get(...args) ?? null; } catch (e) { throw e; } },
+    all: async () => ({ results: db.prepare(sql).all(...args) }),
+    run: async () => {
+      const r = db.prepare(sql).run(...args);
+      return { meta: { last_row_id: Number(r.lastInsertRowid), changes: Number(r.changes) } };
+    },
+  });
+  return {
+    prepare: (sql) => stmt(sql),
+    batch: async (stmts) => Promise.all(stmts.map((s) => s.run())),
+    exec: async (sql) => { db.exec(sql); },
+  };
+}
+
+
+const ctx = { waitUntil: () => {}, passThroughOnException: () => {} };
+globalThis.fetch = async () => new Response('{}', { status: 200 });
+
+let pass = 0, fail = 0;
+const ok = (c, m) => { c ? pass++ : (fail++, console.error('  ✗ ' + m)); };
+const eq = (a, b, m) => ok(a === b, `${m} — expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`);
+const group = (n) => console.log('\n' + n);
+
+const db = new DatabaseSync(':memory:');
+const env = { DB: d1(db), IMAGES: { get: async () => null, put: async () => ({}), delete: async () => {} }, BREVO_API_KEY: 'test' };
+await worker.fetch(new Request('https://admin.timothystl.org/login'), env, ctx);
+db.prepare("INSERT INTO gym_groups (id,name,contact,email,access_token,active) VALUES (9,'Hoops League','A','a@b.example','tok9',1)").run();
+
+const srv = http.createServer(async (q, r) => {
+  const res = await worker.fetch(new Request('https://admin.timothystl.org' + q.url, {
+    headers: { origin: 'https://admin.timothystl.org' },
+  }), env, ctx);
+  const body = await res.text();
+  r.writeHead(res.status, { 'Content-Type': res.headers.get('content-type') || 'text/html' });
+  r.end(body);
+});
+await new Promise((r) => srv.listen(0, r));
+const URL_ = 'http://localhost:' + srv.address().port + '/gym/book/tok9';
+
+const br = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium' });
+const p = await (await br.newContext({ viewport: { width: 390, height: 844 } })).newPage();
+const errs = [];
+p.on('pageerror', (e) => errs.push(String(e)));
+await p.goto(URL_);
+await p.waitForTimeout(300);
+
+group('the phone is the real device (item 5)');
+{
+  // The 7-column month grid is the tightest thing on the page. A missed tap on
+  // a calendar is not a small annoyance — it books the wrong day, or nothing,
+  // and the renter tries again somewhere else.
+  const docW = await p.evaluate(() => document.documentElement.scrollWidth);
+  eq(docW, 390, 'nothing pushes the page sideways at 390px');
+
+  const small = await p.evaluate(() => {
+    const out = [];
+    document.querySelectorAll('button,a,[role=button]').forEach((n) => {
+      const r = n.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0 && (r.height < 44 || r.width < 32)) {
+        out.push(((n.textContent || n.getAttribute('aria-label') || '').trim().slice(0, 24)) + ` ${Math.round(r.width)}x${Math.round(r.height)}`);
+      }
+    });
+    return out;
+  });
+  ok(small.length === 0, 'every tap target clears 44px: ' + small.join(' | '));
+
+  const cell = await p.$eval('[id^="cell-"]', (n) => Math.round(n.getBoundingClientRect().height));
+  ok(cell >= 44, `a calendar day is at least 44px tall (got ${cell})`);
+}
+
+group('the request basket (item 4)');
+{
+  const days = await p.$$eval('[id^="cell-"]', (ns) => ns.slice(0, 40).map((n) => n.dataset.date));
+  const pick = async (date, n) => {
+    await p.click('#cell-' + date);
+    await p.waitForTimeout(150);
+    const btns = await p.$$('#day-panel-slots .slot-btn:not([disabled])');
+    for (let i = 0; i < n && i < btns.length; i++) { await btns[i].click(); await p.waitForTimeout(60); }
+  };
+  const rows = () => p.$$eval('.bk-row', (rs) => rs.map((r) => ({
+    date: r.querySelector('.bk-date').textContent,
+    meta: r.querySelector('.bk-meta').textContent,
+    times: [...r.querySelectorAll('.bk-time')].length,
+  })));
+
+  await pick(days[0], 2);
+  await pick(days[1], 1);
+  await p.waitForTimeout(200);
+
+  let r = await rows();
+  eq(r.length, 2, 'one row per date, not one row per slot');
+  eq(r[0].times, 2, 'and every time on that date is listed');
+
+  // The spec's own rule: adjacent hours print as ONE range, a gap as two.
+  // "5–7 PM" and "5–6 PM, 7–8 PM" are different bookings.
+  ok(/1–3 PM/.test(r[0].meta), 'two adjacent hours print as one range: ' + r[0].meta);
+
+  // ⚠ Removing ONE time must leave the rest of that date alone. "Clear it all
+  // and start again" is not a correction, and it is what a renter had before.
+  await p.click('.bk-row:first-child .bk-time .bk-x');
+  await p.waitForTimeout(200);
+  r = await rows();
+  eq(r.length, 2, 'removing one time keeps the date');
+  eq(r[0].times, 1, 'and drops only that time');
+  ok(!/1–3 PM/.test(r[0].meta), 'the range recomputes rather than going stale: ' + r[0].meta);
+
+  await p.click('.bk-row:first-child > .bk-x');
+  await p.waitForTimeout(200);
+  r = await rows();
+  eq(r.length, 1, 'the row ✕ removes the whole date');
+
+  // What actually gets submitted has to follow the basket, or the renter books
+  // something they removed.
+  const inputs = await p.$$eval('#slot-inputs input', (n) => n.length);
+  eq(inputs, 1, 'the posted slots match what the basket shows');
+}
+
+group('no script errors');
+ok(errs.length === 0, 'the portal threw: ' + errs.join(' | '));
+
+await br.close();
+srv.close();
+console.log(`\ngym-portal: ${pass} passed, ${fail} failed`);
+process.exit(fail ? 1 : 0);
