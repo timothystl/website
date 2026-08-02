@@ -1414,12 +1414,16 @@ a portal bug can do happens where nobody is signed in to anything.
   that is not serving yet would send every renter to the homepage — with a
   **200**, because the site is a single-page app, so it would not even look
   like an error. Until it is set, everything behaves as it did.
-- **Two manual steps, in this order**: add the Cloudflare route
+- **Two manual steps, in this order** — **both done 2026-08-02, the portal is
+  live on `timothystl.org`**: add the Cloudflare route
   `timothystl.org/gym/*` → `tlc-newsletter-admin` (more specific than
   `timothystl.org/*`, so it wins over the site worker), *then* set the setting
   on the Gym rental settings screen. Routes are **not** in `wrangler.toml` and
   must not be added there — Wrangler would take over route management for this
-  Worker and could drop `admin.timothystl.org`.
+  Worker and could drop `admin.timothystl.org`. Verified against production:
+  the admin path 301s, `timothystl.org/gym/*` serves the portal rather than the
+  SPA homepage, the iCal feed 301s with it, a portal POST passes the CSRF gate,
+  and an admin POST carrying the portal's Origin is still refused.
 - **⚠ The CSRF gate had to learn about it.** A portal form posts from the
   portal's origin, so the admin's `Origin === ADMIN_ORIGIN` check would have
   403'd the entire booking flow the moment the portal moved — a hold, a
