@@ -13,7 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { execSync } from 'node:child_process';
-import { renderPage, newBlock, migrateLegacyPage, sanitizeBlocks, BLOCK_DEFS } from '../admin/blocks.js';
+import { renderPage, newBlock, migrateLegacyPage, sanitizeBlocks, BLOCK_DEFS, BLOCK_CSS } from '../admin/blocks.js';
 
 // Playwright is installed globally in the dev container, not as a project
 // dependency (the repo has no package.json on purpose). ESM ignores NODE_PATH,
@@ -52,6 +52,14 @@ async function visit(slug, apiPage, posts = []) {
     const u = route.request().url();
     if (u.endsWith('/posts')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(posts) });
     if (u.includes('/api/ministry/')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(apiPage) });
+    // /api/pages is where the ONE copy of the block stylesheet ships now —
+    // the ministry responses carry none, and the client awaits this before
+    // injecting block markup. The stub mirrors that, or every geometry
+    // assertion below would measure unstyled markup.
+    if (u.includes('/api/pages')) {
+      return route.fulfill({ status: 200, contentType: 'application/json',
+        body: JSON.stringify({ pages: [], menu: null, rendered: {}, redirects: {}, css: BLOCK_CSS }) });
+    }
     return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });
   await page.route('https://**', (route) => route.fulfill({ status: 200, body: '' }));
@@ -60,14 +68,16 @@ async function visit(slug, apiPage, posts = []) {
   return { page, ctx, errors };
 }
 
-// The Worker's response shape for a block-managed page.
+// The Worker's response shape for a block-managed page — withCss:false, as
+// the real /api/ministry/:slug renders since the stylesheet moved to
+// /api/pages alone.
 const apiFor = (slug, blocks, extra = {}) => Object.assign({
   slug, title: 'Music Ministry', content: '<p>LEGACY CONTENT</p>', has_posts: 0,
   cta_label: 'Legacy CTA', cta_url: 'https://example.org', cta_label_2: '', cta_url_2: '',
   hero_image_url: '/images/hero.jpg', ministry_image_url: '/images/legacy-photo.jpg',
   vid_1_url: 'https://youtu.be/LEGACYVIDEO', vid_1_title: 'Legacy video',
   updated_at: '2026-07-30', page_status: 'live',
-  blocks_html: blocks ? renderPage(sanitizeBlocks(blocks), { slug }) : '',
+  blocks_html: blocks ? renderPage(sanitizeBlocks(blocks), { slug, withCss: false }) : '',
 }, extra);
 
 console.log('\npublic ministry page — block-managed');
@@ -143,6 +153,42 @@ console.log('\npublic ministry page — every block type renders without error')
   await ctx.close();
 }
 
+console.log('\npublic ministry page — half blocks stack on a phone and centre on a full-bleed page');
+{
+  const blocks = [
+    newBlock('hero'),
+    Object.assign(newBlock('text', { body: '<p>Left half</p>' }), { width: 'half' }),
+    Object.assign(newBlock('text', { body: '<p>Right half</p>' }), { width: 'half' }),
+  ];
+  const { page, ctx, errors } = await visit('vbs', apiFor('vbs', blocks, { title: 'VBS' }));
+  eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
+
+  // ⚠ Pair members are GRANDCHILDREN of the page, so the > .tlcb centring
+  // rule never reaches them — the wrapper has to carry the padding, or a half
+  // run on a hero-led page sits hard against the viewport edge while every
+  // full block around it is centred. At 1280 wide with an 1100px wrap that
+  // padding is 90px a side.
+  const pad = await page.evaluate(() => {
+    const pair = document.querySelector('.tlcb-page--full > .tlcb-pair');
+    return pair ? parseFloat(getComputedStyle(pair).paddingLeft) : null;
+  });
+  ok(pad !== null && pad > 80, 'the pair wrapper carries the full-bleed centring (got ' + pad + ')');
+
+  const wide = await page.$$eval('.tlcb-pair .tlcb', (ns) => ns.map((n) => Math.round(n.getBoundingClientRect().width)));
+  ok(wide.length === 2 && wide[0] < 700 && Math.abs(wide[0] - wide[1]) < 2,
+    'halves sit side by side on desktop (got ' + wide.join(', ') + ')');
+
+  // ⚠ The phone rule must be column-count — the pair is CSS columns, and the
+  // old grid-template rule was a no-op that left two ~165px columns at 390px.
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.waitForTimeout(200);
+  const stacked = await page.$$eval('.tlcb-pair .tlcb', (ns) => ns.map((n) => Math.round(n.getBoundingClientRect().width)));
+  ok(stacked.every((w) => w >= 330), 'halves take the full width at 390px (got ' + stacked.join(', ') + ')');
+  const tops = await page.$$eval('.tlcb-pair .tlcb', (ns) => ns.map((n) => Math.round(n.getBoundingClientRect().top)));
+  ok(tops[1] > tops[0] + 10, 'and one sits under the other rather than beside it');
+  await ctx.close();
+}
+
 console.log('\npublic ministry page — hidden-on-phone blocks');
 {
   const blocks = [newBlock('text', { body: '<p>Always</p>' }), newBlock('text', { body: '<p>Desktop only</p>', hidden: true })];
@@ -151,6 +197,29 @@ console.log('\npublic ministry page — hidden-on-phone blocks');
   await page.setViewportSize({ width: 390, height: 800 });
   await page.waitForTimeout(200);
   eq(await page.locator('.tlcb-hide-phone').isVisible(), false, 'hidden-on-phone block is hidden on a phone');
+  await ctx.close();
+}
+
+console.log('\nthe homepage is frugal with its fetches');
+{
+  // The home card and the sermons page each fetched /api/sermon-series on
+  // every homepage load — the same data twice — and the Christmas Market
+  // posts were fetched at boot for a page the visitor had not opened.
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  const hits = [];
+  await page.route('https://admin.timothystl.org/**', (route) => {
+    hits.push(route.request().url());
+    return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  });
+  await page.route('https://**', (route) => route.fulfill({ status: 200, body: '' }));
+  await page.goto(base + '/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(800);
+
+  eq(hits.filter((u) => u.includes('/api/sermon-series')).length, 1,
+    'the sermon series is fetched exactly once');
+  ok(!hits.some((u) => u.includes('/api/ministry/christmasmarket/posts')),
+    'the market posts wait for their page to be opened');
   await ctx.close();
 }
 

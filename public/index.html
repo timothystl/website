@@ -1925,12 +1925,24 @@ async function fetchHomeNews() {
 }
 fetchHomeNews();
 
+// One fetch of the sermon series, shared. The home card and the sermons page
+// each did their own — the same endpoint fetched twice on every homepage
+// load, for data that cannot differ between the two.
+var sermonSeriesPromise = null;
+function fetchSermonSeries() {
+  if (!sermonSeriesPromise) {
+    sermonSeriesPromise = fetch('https://admin.timothystl.org/api/sermon-series')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; });
+  }
+  return sermonSeriesPromise;
+}
+
 // Load sermon series for home page card
 async function loadHomeSermonCard() {
   try {
-    const res = await fetch('https://admin.timothystl.org/api/sermon-series');
-    if (!res.ok) throw new Error();
-    const data = await res.json();
+    const data = await fetchSermonSeries();
+    if (!data) throw new Error();
     const hc = document.getElementById('home-sermon-card');
     if (!hc) return;
     const active = (data.series || []).find(s => s.active);
@@ -2408,6 +2420,7 @@ async function loadMinistryCta(slug) {
     var contentSection = document.getElementById(slug + '-admin-content-section');
     if (contentEl && contentSection && (ctaBlocks || (data.content && data.content.trim()))) {
       if (ctaBlocks) {
+        await tlcEnsureBlockCss();
         if (document.getElementById('tlcb-css')) ctaBlocks = ctaBlocks.replace(/<style id="tlcb-css">[\s\S]*?<\/style>/, '');
         contentEl.classList.remove('rich-content');
       }
@@ -2492,6 +2505,20 @@ function loadSitePages() {
     })
     .catch(function () { return null; });
   return sitePagesPromise;
+}
+
+// The block stylesheet used to ride inside every /api/ministry response —
+// 23KB re-downloaded with each ministry page and immediately stripped again
+// whenever a copy was already in the head. The API sends none now, so
+// anything about to inject block markup awaits the one copy /api/pages
+// ships. If that call failed, the ministry fetch that produced the markup
+// almost certainly failed with it — both live on the same worker — so
+// unstyled blocks here would need the two to fail in opposite ways at once.
+// (The strip lines in the injectors stay: a cached API response can carry
+// the embedded stylesheet for a few minutes after a deploy.)
+async function tlcEnsureBlockCss() {
+  if (document.getElementById('tlcb-css')) return;
+  await loadSitePages();
 }
 
 // The footer reads the same church-details record the map block and the sidebar
@@ -2628,6 +2655,7 @@ async function tlcMaybeTakeOver(slug) {
     var data = await res.json();
     var html = (data.blocks_html || '').trim();
     if (!html || !tlcOwnsWholePage(html)) return false;
+    await tlcEnsureBlockCss();
     if (!tlcTakeOverPage(slug, html)) return false;
     ministryTakeover[slug] = true;
     ministryBlockManaged[slug] = true;
@@ -2712,6 +2740,7 @@ async function loadMinistryPage(slug) {
       var blocksHtml = (data.blocks_html || '').trim();
       ministryBlockManaged[slug] = !!blocksHtml;
       if (blocksHtml) {
+        await tlcEnsureBlockCss();
         tlcApplyBlocks(slug, blocksHtml);
       } else if (data.content && data.content.trim()) {
         document.getElementById(slug + '-content').innerHTML = fixImgUrls(data.content);
@@ -2939,6 +2968,7 @@ window.showPage = function(id, addHistory) {
     if (wolFrame && !wolFrame.getAttribute('src')) { wolFrame.src = wolFrame.dataset.src; }
   }
   if (id === 'sermons') { loadSermons(); }
+  if (id === 'christmasmarket') { loadChristmasMarketPosts(); }
   if (id === 'voters') { loadVotersPage(); }
   if (id === 'home') { loadNotices('home'); }
   if (id === 'worship') { loadNotices('worship'); }
@@ -3049,7 +3079,7 @@ window.showPage = function(id, addHistory) {
 var tlcFormToken = '';
 (async function tlcLoadFormConfig() {
   try {
-    const r = await fetch('https://admin.timothystl.org/api/form-config', { cache: 'no-store' });
+    const r = await fetch('https://admin.timothystl.org/api/form-config');
     const d = await r.json();
     tlcFormToken = d.token || '';
     if (d.turnstile_site_key) tlcMountTurnstile(d.turnstile_site_key);
@@ -3205,9 +3235,8 @@ async function loadVotersPage() {
 // ── SERMONS ───────────────────────────────────────────────────
 async function loadSermons() {
   try {
-    const r = await fetch('https://admin.timothystl.org/api/sermon-series');
-    if (!r.ok) return;
-    const d = await r.json();
+    const d = await fetchSermonSeries();
+    if (!d) return;
     const seriesList = d.series || [];
     const activeSeries = seriesList.find(function(s){ return s.active; });
 
@@ -3323,10 +3352,16 @@ async function loadSermons() {
     }
   } catch(e) { /* keep fallback content */ }
 }
-loadSermons();
+// Not called at boot. showPage('sermons') runs it — including on a direct
+// /sermons load, since the router below routes through the real showPage —
+// so a visitor on the homepage no longer pays for a page they never opened.
+// The series data itself is shared with the home card via fetchSermonSeries.
 
 // ── CHRISTMAS MARKET POSTS ─────────────────────────────────────
+var xmasPostsLoaded = false;
 async function loadChristmasMarketPosts() {
+  if (xmasPostsLoaded) return;
+  xmasPostsLoaded = true;
   try {
     const r = await fetch('https://admin.timothystl.org/api/ministry/christmasmarket/posts');
     if (!r.ok) return;
@@ -3360,7 +3395,7 @@ async function loadChristmasMarketPosts() {
     }
   } catch(e) { /* keep static fallback */ }
 }
-loadChristmasMarketPosts();
+// Not called at boot either — showPage('christmasmarket') runs it.
 </script>
 <script>
 

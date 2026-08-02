@@ -530,7 +530,7 @@ function tlcUploadHandler(blobInfo) {
 // origin, not this admin one. Blank until the Cloudflare route exists, in which
 // case links fall back to whatever host the request came in on, which is the
 // behaviour this had before the portal moved.
-export async function handleGymRoutes(path, method, url, request, env, currentUser = null, ctx = null, portalOrigin = '') {
+export async function handleGymRoutes(path, method, url, request, env, currentUser = null, ctx = null, portalOrigin = '', badges = {}) {
 
     // ── GROUP BOOKING PORTAL (/gym/book/:token/*) ───────────────
     if (path.startsWith('/gym/book/')) {
@@ -2495,7 +2495,7 @@ ${portalHeader}
           : '';
 
         return html(`
-${sidebarShell('gym', currentUser)}
+${sidebarShell('gym', currentUser, '', badges)}
 <style>details > summary { list-style: none; } details > summary::-webkit-details-marker { display: none; }</style>
 <div class="tlc-wrap">
   ${gymAlert}
@@ -2641,7 +2641,7 @@ document.addEventListener('change', function(e) {
             <input type="text" name="${s.key.replace(/"/g,'&quot;')}" value="${(s.value||'').replace(/"/g,'&quot;').replace(/&/g,'&amp;')}" style="font-family:var(--mono,monospace);font-size:13px;">
           </div>`).join('');
         return html(`
-${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`, badges)}
 <div class="tlc-wrap">
   <div class="page-title">Gym rental settings</div>
   <div class="page-sub">Rate, holds, notifications, and Google Calendar sync for the gym rental scheduler.</div>
@@ -2690,7 +2690,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
             ? { label: 'Open group', href: `/gym-rentals/groups/edit/${g.id}` } : null,
         }));
         return html(`
-${sidebarShell('gym', currentUser, `<a href="/gym-rentals">Gym rentals</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">Gym rentals</a>`, badges)}
 <div class="tlc-wrap">
   ${gymAlert ? `<div class="tlc-section" style="padding-bottom:0;">${gymAlert}</div>` : ''}
   ${renderListSection({
@@ -2712,7 +2712,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">Gym rentals</a>`)}
       // ── NEW GROUP FORM ───────────────────────────────────────
       if (path === '/gym-rentals/groups/new' && method === 'GET') {
         return html(`
-${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>`, badges)}
 <div class="tlc-wrap">
   <div class="page-title">Add rental group</div>
   <div class="page-sub">After saving, you'll see their private booking link to share.</div>
@@ -2788,7 +2788,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>
           : '';
         const esc = v => (v||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
         return html(`
-${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>`, {}, g.name)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>`, badges, g.name)}
 <div class="tlc-wrap">
   <div class="page-title">${escapeHtml(g.name)}</div>
   <div class="page-sub">The group's own details, and the private link they book through.</div>
@@ -3029,7 +3029,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>
   </div>
 </div>`).join('');
         return html(`
-${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Gym Rentals</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Gym Rentals</a>`, badges)}
 <div class="tlc-wrap">
   <div class="page-title">Google Calendar — connection test</div>
   <div class="page-sub">Checks secrets, access token, and creates a test event on your calendar.</div>
@@ -3100,7 +3100,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Gym Rentals</a>`)
                  </div>`).join('')}`;
 
           return html(`
-${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`, badges)}
 <div class="tlc-wrap">
   <div class="page-title">Consolidate bookings</div>
   <div class="page-sub">Merge consecutive same-day bookings (e.g. three 1-hour holds → one 3-hour hold). No data is lost — only combined.</div>
@@ -3257,7 +3257,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
                </script>`;
 
           return html(`
-${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`, badges)}
 <div class="tlc-wrap">
   <div class="page-title">Detect recurring patterns</div>
   <div class="page-sub">Groups holds with the same day-of-week and time into recurrence records, so invoices show a clean summary ("Every Monday 5–8 PM, June–August: 13 sessions") instead of individual date lines.</div>
@@ -3341,7 +3341,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
         calHtml += '</div>';
 
         return html(`
-${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`, badges)}
 <style>
 .cal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:28px;margin-bottom:20px;}
 .cal-month-name{font-family:var(--sans);font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--steel);margin-bottom:8px;}
@@ -3555,7 +3555,7 @@ updateSummary();
 
 
         return html(`
-${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`, badges)}
 <div class="tlc-wrap">
   <div class="page-title">New booking</div>
   <div class="page-sub">Click dates, set times, then review before sending an invoice.</div>
@@ -4093,7 +4093,7 @@ div.adm-avail.adm-selected{background:#C9973A !important;border-color:#A07020 !i
         const editBack = `/gym-rentals/bookings/new?grp=${group_id}&slots=${encodeURIComponent(slotsRaw)}&notes=${encodeURIComponent(notes)}&rate_type=${rate_type}${rate_override ? '&rate=' + rate_override : ''}`;
 
         return html(`
-${sidebarShell('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
+${sidebarShell('gym', currentUser, `<a href="${editBack}">← Edit</a>`, badges)}
 <div class="tlc-wrap">
   <div class="page-title">Review booking</div>
   <div class="page-sub">${group.name} — $${rate.toFixed(2)}${rateLabel}</div>
@@ -4332,7 +4332,7 @@ ${sidebarShell('gym', currentUser, `<a href="${editBack}">← Edit</a>`)}
         });
 
         return html(`
-${sidebarShell('gym', currentUser, `<a href="/gym-rentals">Gym rentals</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">Gym rentals</a>`, badges)}
 <div class="tlc-wrap">
   ${gymAlert ? `<div class="tlc-section" style="padding-bottom:0;">${gymAlert}</div>` : ''}
   ${renderListSection({
@@ -4399,7 +4399,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">Gym rentals</a>`)}
           }
 
           return html(`
-${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`, badges)}
 <div class="tlc-wrap">
   <div class="page-title">Set price &amp; confirm — ${group.name}</div>
   <div class="page-sub">Review all pending holds for this group, set the invoice total, then confirm.</div>
@@ -4733,7 +4733,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`)}
           };
         });
         return html(`
-${sidebarShell('gym', currentUser, `<a href="/gym-rentals">Gym rentals</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">Gym rentals</a>`, badges)}
 <div class="tlc-wrap">
   ${gymAlert ? `<div class="tlc-section" style="padding-bottom:0;">${gymAlert}</div>` : ''}
   ${renderListSection({
@@ -4836,7 +4836,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">Gym rentals</a>`)}
         }
 
         return html(`
-${sidebarShell('gym', currentUser, `<a href="/gym-rentals/invoices">\u2190 Invoices</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals/invoices">\u2190 Invoices</a>`, badges)}
 <div class="tlc-wrap">
   <div class="page-title">Invoice ${invNum}</div>
   <div class="page-sub">${group?.name||'\u2014'}</div>
@@ -5004,7 +5004,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/invoices">\u2190 Invoi
         });
 
         return html(`
-${sidebarShell('gym', currentUser, `<a href="/gym-rentals">Gym rentals</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals">Gym rentals</a>`, badges)}
 <div class="tlc-wrap">
   ${gymAlert ? `<div class="tlc-section" style="padding-bottom:0;">${gymAlert}</div>` : ''}
   ${renderListSection({
@@ -5076,7 +5076,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">Gym rentals</a>`)}
           : '';
 
         return html(`
-${sidebarShell('gym', currentUser, `<a href="/gym-rentals/recurring">← Recurring</a>`)}
+${sidebarShell('gym', currentUser, `<a href="/gym-rentals/recurring">← Recurring</a>`, badges)}
 <div class="tlc-wrap">
   <div class="page-title">Recurring request</div>
   <div class="page-sub">A group asking for the same slot every week. Approving generates every date at once, so conflicts are worth reading first.</div>

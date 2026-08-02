@@ -62,6 +62,39 @@ import { screenSubmission, formConfig, forwardToChms, officeEmailHtml, officeSub
 // email, Brevo keys, etc.) from leaking to anyone who can guess a key name.
 const PUBLIC_SETTINGS_KEYS = new Set(['zoom_url', 'councilfiles_url', 'give_url']);
 
+// /api/pages is the public site's one bundle — nav, church details, every
+// published page's HTML — rebuilt from five queries and a full render on
+// every request. It goes behind the edge cache; any POST that could change
+// what it says busts it (see the chokepoint in _fetch), and the response's
+// own max-age=120 is the safety net for anything the chokepoint misses.
+// `caches` does not exist in the Node test harness, so every touch is gated.
+const PAGES_CACHE_URL = 'https://admin.timothystl.org/api/pages';
+
+// Per-binding: a database that has at least one user account. The first-run
+// /setup redirect needs a COUNT until then; after that the count can only
+// grow, so it is not asked again. Keyed the same way as MARKERS_SEEN below.
+const SETUP_DONE = new WeakMap();
+const edgeCache = () => (typeof caches !== 'undefined' && caches.default) ? caches.default : null;
+function bustPagesCache(ctx) {
+  const c = edgeCache();
+  if (!c) return;
+  try { ctx.waitUntil(c.delete(new Request(PAGES_CACHE_URL))); } catch (_) {}
+}
+
+// Per-DATABASE memo: the schema version and all four one-time seed markers
+// have been read and found current, so later requests against the same
+// binding skip even the single _schema_version read. Keyed on env.DB rather
+// than held in a bare module variable, because the test harness hands the
+// same worker module a fresh database per group — a module flag would carry
+// "already migrated" across to an empty database and nothing would have
+// tables. In production the binding is one object per isolate, so this is
+// exactly the per-isolate memo it looks like. Set ONLY when every gate was
+// already satisfied — a request that ran any migration or seed leaves it
+// unset, so the next request re-reads and verifies the markers actually
+// landed. A deploy starts fresh isolates, so a SCHEMA_VERSION bump is never
+// masked by this.
+const MARKERS_SEEN = new WeakMap();
+
 // Real Tithe.ly fund IDs, parsed by hand out of Tithe.ly-generated links (one link per
 // fund, `?...&fundId=<this value>&amount=...`) — Tithe.ly has no fund-listing API of its
 // own to pull these from automatically. Applied as a one-time backfill by name (see the
@@ -926,20 +959,41 @@ export default {
       }
     }
 
+    // One chokepoint, not a call in every handler: any POST that could change
+    // what /api/pages says — a page, the menu, the church details — busts the
+    // edge copy. Over-busting (a draft save, a refused POST) costs one
+    // rebuild; a missed bust would cost a stale public site, and the route
+    // list under these prefixes keeps growing.
+    if (method === 'POST' && (path.startsWith('/pages') || path.startsWith('/menu'))) {
+      bustPagesCache(ctx);
+    }
+
     // ── SCHEMA GATE ──
     // The block below runs ~140 idempotent CREATE/ALTER/INSERT statements.
     // On a stable schema each one is a no-op, but they're still ~140 D1
     // subrequests per admin request — that's where the 5–10s "slow but
-    // works" latency comes from. Gate the whole block behind a single
-    // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
-    // migrations below change so the next request after deploy re-runs
-    // them and rewrites the marker.
+    // works" latency comes from. Gate the whole block behind ONE read of
+    // _schema_version. Bump SCHEMA_VERSION any time the migrations below
+    // change so the next request after deploy re-runs them and rewrites
+    // the marker.
+    //
+    // ⚠ ONE read for all five markers, and none at all once this binding has
+    // been seen current. The version gate and the four one-time seeds below
+    // each did their own serial SELECT — five D1 round-trips ahead of routing
+    // on EVERY request, including /images/* and every public API call the
+    // homepage makes. The whole table is a handful of rows, so it is read
+    // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
+    // env.DB and only ever set when no work ran.
     const SCHEMA_VERSION = '2026-08-02-6'; // bumped: church_name setting (the map block's half-width card names the church)
-    let schemaOk = false;
-    try {
-      const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
-      if (row?.value === SCHEMA_VERSION) schemaOk = true;
-    } catch (_) { /* _schema_version table may not exist yet */ }
+    const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
+    const markers = new Map();
+    if (!markersOk) {
+      try {
+        const rows = await env.DB.prepare('SELECT key, value FROM _schema_version').all();
+        for (const r of (rows.results || [])) markers.set(r.key, r.value);
+      } catch (_) { /* _schema_version table may not exist yet */ }
+    }
+    const schemaOk = markersOk || markers.get('version') === SCHEMA_VERSION;
 
     if (!schemaOk) {
     // Init DB
@@ -1532,11 +1586,7 @@ export default {
     // out, so a second pass would silently demote every site editor to
     // notices-only. See migratePermissionKeys() in admin/auth.js.
     const PERM_RENAME_MARKER = 'perm_rename_v3';
-    let permsRenamed = false;
-    try {
-      const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key = ?").bind(PERM_RENAME_MARKER).first();
-      permsRenamed = row?.value === 'done';
-    } catch (_) { /* table may not exist on a brand-new database */ }
+    const permsRenamed = markersOk || markers.get(PERM_RENAME_MARKER) === 'done';
     if (!permsRenamed) {
       try {
         const users = await env.DB.prepare('SELECT id, permissions FROM users').all();
@@ -1564,11 +1614,7 @@ export default {
     // it an ordinary card. Re-seeding on a later bump would bring back a card
     // the office had deleted on purpose.
     const SIGNUP_CARD_MARKER = 'signup_card_v1';
-    let signupCardSeeded = false;
-    try {
-      const row = await env.DB.prepare('SELECT value FROM _schema_version WHERE key = ?').bind(SIGNUP_CARD_MARKER).first();
-      signupCardSeeded = row?.value === 'done';
-    } catch (_) { /* table may not exist on a brand-new database */ }
+    const signupCardSeeded = markersOk || markers.get(SIGNUP_CARD_MARKER) === 'done';
     if (!signupCardSeeded) {
       try {
         const s = SIGNUP_CARD_SEED;
@@ -1593,11 +1639,7 @@ export default {
     // permission rename and the sign-up card, so a later SCHEMA_VERSION bump
     // cannot run it a second time and undo a rename made after this shipped.
     const SERVICE_LABEL_MARKER = 'service_labels_v2';
-    let serviceLabelsFixed = false;
-    try {
-      const row = await env.DB.prepare('SELECT value FROM _schema_version WHERE key = ?').bind(SERVICE_LABEL_MARKER).first();
-      serviceLabelsFixed = row?.value === 'done';
-    } catch (_) { /* table may not exist on a brand-new database */ }
+    const serviceLabelsFixed = markersOk || markers.get(SERVICE_LABEL_MARKER) === 'done';
     if (!serviceLabelsFixed) {
       try {
         // Two Sunday services and no labels — Andrew's call on 2 Aug: the 9:30
@@ -1632,11 +1674,7 @@ export default {
     // indistinguishable once stored, or the seeded one behaves oddly on first
     // insert and nobody knows why.
     const MDO_SECTION_MARKER = 'mdo_section_v1';
-    let mdoSectionSeeded = false;
-    try {
-      const row = await env.DB.prepare('SELECT value FROM _schema_version WHERE key = ?').bind(MDO_SECTION_MARKER).first();
-      mdoSectionSeeded = row?.value === 'done';
-    } catch (_) { /* table may not exist on a brand-new database */ }
+    const mdoSectionSeeded = markersOk || markers.get(MDO_SECTION_MARKER) === 'done';
     if (!mdoSectionSeeded) {
       try {
         const blocks = sanitizeBlocks(MDO_SECTION_SEED.blocks);
@@ -1649,6 +1687,15 @@ export default {
         await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run();
         await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, 'done')").bind(MDO_SECTION_MARKER).run();
       } catch (_) { /* retried on the next request */ }
+    }
+
+    // Every gate above was satisfied before this request touched anything, so
+    // nothing ran and nothing needs verifying — this binding can stop reading
+    // _schema_version altogether. Deliberately NOT set when any work ran: the
+    // marker writes above are each inside a try that swallows, so the next
+    // request must re-read to see whether they actually landed.
+    if (schemaOk && permsRenamed && signupCardSeeded && serviceLabelsFixed && mdoSectionSeeded) {
+      MARKERS_SEEN.set(env.DB, SCHEMA_VERSION);
     }
 
     // ── PUBLIC: serve uploaded docs from R2 ──
@@ -1680,6 +1727,16 @@ export default {
     // falls back to its own hardcoded markup — that fallback is what lets the
     // site be converted one page at a time.
     if (path === '/api/pages' && method === 'GET') {
+      // Served from the edge once built — the whole payload is the same for
+      // every visitor, and rebuilding it means five queries plus rendering
+      // every published page. Posts under /pages and /menu bust it.
+      {
+        const c = edgeCache();
+        if (c) {
+          const hit = await c.match(new Request(PAGES_CACHE_URL)).catch(() => null);
+          if (hit) return hit;
+        }
+      }
       const publicPage = (r) => ({
         id: r.id, title: r.title, label: r.menu_label || r.title, slug: r.slug,
         parent: r.parent_id || null, in_menu: !!r.in_menu, template: r.template,
@@ -1713,7 +1770,7 @@ export default {
       const menuPages = new Map(list.map((p) => [p.id, p]));
       const strip = (i) => ({ label: i.label, href: i.href, style: i.style, kind: i.kind,
         children: (i.children || []).map((c) => ({ label: c.label, href: c.href, kind: c.kind })) });
-      return new Response(JSON.stringify({
+      const pagesRes = new Response(JSON.stringify({
         // The church details, so the footer reads the same record the map
         // block and the sidebar do. Staff change a phone number once.
         details: { settings: data.settings, services: data.services },
@@ -1754,6 +1811,11 @@ export default {
       }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=120' }
       });
+      {
+        const c = edgeCache();
+        if (c) { try { ctx.waitUntil(c.put(new Request(PAGES_CACHE_URL), pagesRes.clone())); } catch (_) {} }
+      }
+      return pagesRes;
     }
 
     // ── PUBLIC: news items API ──
@@ -1834,8 +1896,12 @@ export default {
       // visitors get. Pages still on the legacy renderer send no blocks_html
       // and the site falls back to `content` exactly as before.
       const pubBlocks = row.page_status === 'hidden' ? [] : parseBlocks(row.published_blocks);
+      // withCss:false — the 23KB block stylesheet used to ride inside every
+      // one of these responses, and the client's first move was to regex it
+      // back out because /api/pages had already shipped the one copy the page
+      // uses. The client now awaits that copy before injecting this markup.
       const blocksHtml = pubBlocks.length
-        ? fixUrl(renderPage(sanitizeBlocks(pubBlocks), { slug, data: await pageData(env, ctx) }))
+        ? fixUrl(renderPage(sanitizeBlocks(pubBlocks), { slug, data: await pageData(env, ctx), withCss: false }))
         : '';
       const { published_blocks, ...publicRow } = row;
       return new Response(JSON.stringify({ ...publicRow, content: fixUrl(row.content), blocks_html: blocksHtml }), {
@@ -2025,11 +2091,17 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
     // Turnstile site key if one has been configured. Never cached — the token
     // carries its issue time, and a cached one would read as stale to everyone.
     if (path === '/api/form-config' && method === 'GET') {
+      // `private`, deliberately, not `public`: a browser may keep its token
+      // for a minute (a visitor moving contact → prayer no longer pays a
+      // guaranteed round trip), but the edge must never hand one visitor's
+      // token to the next — and a bot that fetches its own token must get a
+      // fresh timestamp, or the too-quick-to-be-human signal reads a stale
+      // issue time and scores the bot as patient.
       return new Response(JSON.stringify(await formConfig(env)), {
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
-          'Cache-Control': 'no-store',
+          'Cache-Control': 'private, max-age=60',
         }
       });
     }
@@ -2425,15 +2497,30 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
       return loginPage('Incorrect username or password.');
     }
 
-    const setupCheck = await env.DB.prepare('SELECT COUNT(*) as n FROM users').first().catch(() => ({ n: 1 }));
-    if (!setupCheck || setupCheck.n === 0) {
-      return new Response('', { status: 302, headers: { Location: '/setup' } });
+    // First-run only: once a user exists this database can never go back to
+    // zero from the admin (the last account cannot delete itself), so the
+    // COUNT is remembered per binding instead of being paid on every screen.
+    if (!SETUP_DONE.get(env.DB)) {
+      const setupCheck = await env.DB.prepare('SELECT COUNT(*) as n FROM users').first().catch(() => ({ n: 1 }));
+      if (!setupCheck || setupCheck.n === 0) {
+        return new Response('', { status: 302, headers: { Location: '/setup' } });
+      }
+      SETUP_DONE.set(env.DB, true);
     }
     const currentUser = await getSession(env.DB, request);
     if (!currentUser) {
       if (path === '/login') return loginPage();
       return loginPage();
     }
+
+    // The sidebar badges, once per request. Screens used to call badgeCounts
+    // themselves — the dashboard paid for it twice, and two dozen edit
+    // screens (and every gym screen) passed nothing at all, so the badges
+    // visibly vanished the moment somebody clicked into an edit form and
+    // reappeared on the way back. One memoized promise, handed to every
+    // sidebarShell call.
+    let _badgesPromise = null;
+    const pageBadges = () => (_badgesPromise ||= badgeCounts(env, currentUser));
 
     // ── DASHBOARD (new post-login landing page) ──
     if (path === '/dashboard' && method === 'GET') {
@@ -2448,7 +2535,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
       const canPages = hasPermission(currentUser, 'pages_edit') || hasPermission(currentUser, 'pages_edit_own');
       const canMinistries = hasPermission(currentUser, 'ministries_edit');
 
-      const badges = await badgeCounts(env, currentUser);
+      const badges = await pageBadges();
       const q = async (sql, ...binds) => {
         try { return (await env.DB.prepare(sql).bind(...binds).all()).results || []; } catch (_) { return []; }
       };
@@ -2636,12 +2723,15 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
     </div>`).join('');
 
       // ── "Overview": the same week as four numbers ────────────
-      const [liveNews, liveMinistries, subscribers, upcomingBookings] = await Promise.all([
+      // Counted only when the Overview layout is the one being rendered.
+      // "Needs you" is the default screen everybody lands on, and it was
+      // paying four COUNT queries for tiles it never drew.
+      const [liveNews, liveMinistries, subscribers, upcomingBookings] = view === 'overview' ? await Promise.all([
         canNews ? one("SELECT COUNT(*) AS n FROM news_items WHERE expire_date IS NULL OR expire_date >= date('now')") : null,
         one("SELECT COUNT(*) AS n FROM youth_pages"),
         hasPermission(currentUser, 'settings_manage') ? one('SELECT COUNT(*) AS n FROM newsletter_subscribers') : null,
         canGym ? one("SELECT COUNT(*) AS n FROM gym_bookings WHERE status='confirmed' AND booking_date >= date('now')") : null,
-      ]);
+      ]) : [null, null, null, null];
       const tiles = [
         liveNews ? { label: 'Live on the site', num: liveNews.n, note: 'News posts not yet expired' } : null,
         liveMinistries ? { label: 'Ministry pages', num: liveMinistries.n, note: 'Each one owned by somebody' } : null,
@@ -2854,7 +2944,7 @@ ${sidebarShell('dashboard', currentUser, '', badges)}
         });
 
         return html(`
-${sidebarShell('media', currentUser, '', await badgeCounts(env, currentUser))}
+${sidebarShell('media', currentUser, '', await pageBadges())}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -2952,7 +3042,7 @@ ${sidebarShell('media', currentUser, '', await badgeCounts(env, currentUser))}
   </div>`).join('');
 
         return html(`
-${sidebarShell('menu', currentUser, `<a href="https://timothystl.org" target="_blank">View site</a>`, await badgeCounts(env, currentUser))}
+${sidebarShell('menu', currentUser, `<a href="https://timothystl.org" target="_blank">View site</a>`, await pageBadges())}
 <div class="tlc-menu-wrap">
   <div class="tlc-section-head" style="margin-bottom:14px;">
     <div class="tlc-section-headings">
@@ -3103,7 +3193,7 @@ ${sidebarShell('menu', currentUser, `<a href="https://timothystl.org" target="_b
       if (path === '/menu/new' && method === 'GET') {
         const { pageRows } = await loadMenu();
         return html(`
-${sidebarShell('menu', currentUser, `<a href="/menu">← Menu</a>`, await badgeCounts(env, currentUser))}
+${sidebarShell('menu', currentUser, `<a href="/menu">← Menu</a>`, await pageBadges())}
 <div class="tlc-wrap">
   <div class="page-title">Add a menu item</div>
   <div class="page-sub">A menu item can point at one of your pages, at an outside site, or at a short link.</div>
@@ -3214,7 +3304,7 @@ ${sidebarShell('menu', currentUser, `<a href="/menu">← Menu</a>`, await badgeC
         });
 
         return html(`
-${sidebarShell('partners', currentUser, `<a href="https://timothystl.org/about/values" target="_blank">View values page</a>`, await badgeCounts(env, currentUser))}
+${sidebarShell('partners', currentUser, `<a href="https://timothystl.org/about/values" target="_blank">View values page</a>`, await pageBadges())}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -3241,7 +3331,7 @@ ${sidebarShell('partners', currentUser, `<a href="https://timothystl.org/about/v
         if (!isNew && !p) return new Response('Not found', { status: 404 });
         const preset = normalizeValue(url.searchParams.get('value'));
         return html(`
-${sidebarShell('partners', currentUser, `<a href="/partners">← All partners</a>`, await badgeCounts(env, currentUser))}
+${sidebarShell('partners', currentUser, `<a href="/partners">← All partners</a>`, await pageBadges())}
 <div class="tlc-wrap">
   <div class="page-title">${isNew ? 'Add a partner' : escapeHtml(p.name)}</div>
   <div class="page-sub">Shown on the values page and in the dashboard's values report, paired to one core value.</div>
@@ -3356,7 +3446,7 @@ ${sidebarShell('partners', currentUser, `<a href="/partners">← All partners</a
       // fix the rest of the admin gets. It used to be a standalone document
       // whose only way back out was a Sign Out button (PY-3).
       return html(`
-${sidebarShell('payroll', currentUser, '', await badgeCounts(env, currentUser))}
+${sidebarShell('payroll', currentUser, '', await pageBadges())}
 ${PAYROLL_HTML}`, 'Payroll');
     }
 
@@ -3452,14 +3542,18 @@ ${PAYROLL_HTML}`, 'Payroll');
       if (!hasPermission(currentUser, 'gym_manage')) {
         return new Response('Access denied.', { status: 403 });
       }
-      const r = await handleGymRoutes(path, method, url, request, env, currentUser, ctx, await portalOrigin(env));
+      const r = await handleGymRoutes(path, method, url, request, env, currentUser, ctx, await portalOrigin(env), await pageBadges());
       if (r) return r;
     }
 
     // ── FILTERED MAIL (auth + settings_manage) ─────────────────
     // The review queue for anything the public forms held as spam.
     {
-      const r = await handleFilteredRoutes(request, env, path, method, currentUser, ctx);
+      // This delegation runs for every authenticated request and returns null
+      // off its paths — badges are only worth three COUNTs when the screen
+      // that shows them is actually the one being served.
+      const r = await handleFilteredRoutes(request, env, path, method, currentUser, ctx,
+        path.startsWith('/filtered') ? await pageBadges() : {});
       if (r) return r;
     }
 
@@ -3536,7 +3630,7 @@ ${PAYROLL_HTML}`, 'Payroll');
             </form>
           </div>`).join('');
       return html(`
-${sidebarShell('voters', currentUser)}
+${sidebarShell('voters', currentUser, '', await pageBadges())}
 <div class="tlc-wrap">
   <div class="page-title">Voters page</div>
   <div class="page-sub">Manage the members-only voters page content at timothystl.org/voters</div>
@@ -3723,7 +3817,7 @@ document.getElementById('upload-form').addEventListener('submit', async function
       }
 
       return html(`
-${sidebarShell('sermons', currentUser, `<a href="https://timothystl.org/sermons" target="_blank">View page</a>`, await badgeCounts(env, currentUser))}
+${sidebarShell('sermons', currentUser, `<a href="https://timothystl.org/sermons" target="_blank">View page</a>`, await pageBadges())}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -3805,7 +3899,7 @@ ${sidebarShell('sermons', currentUser, `<a href="https://timothystl.org/sermons"
 
     if (path === '/sermons/new-series' && method === 'GET') {
       return html(`
-${sidebarShell('sermons', currentUser, `<a href="/sermons">All sermons</a>`)}
+${sidebarShell('sermons', currentUser, `<a href="/sermons">All sermons</a>`, await pageBadges())}
 <div class="tlc-wrap">${seriesFormHtml()}</div>`, 'New series — TLC Admin');
     }
 
@@ -3825,7 +3919,7 @@ ${sidebarShell('sermons', currentUser, `<a href="/sermons">All sermons</a>`)}
       const s = await env.DB.prepare('SELECT * FROM sermon_series WHERE id = ?').bind(id).first();
       if (!s) return new Response('Not found', { status: 404 });
       return html(`
-${sidebarShell('sermons', currentUser, `<a href="/sermons/notes/${id}">Sermons in this series</a>`)}
+${sidebarShell('sermons', currentUser, `<a href="/sermons/notes/${id}">Sermons in this series</a>`, await pageBadges())}
 <div class="tlc-wrap">${seriesFormHtml(s)}</div>`, 'Edit series — TLC Admin');
     }
 
@@ -3869,7 +3963,7 @@ ${sidebarShell('sermons', currentUser, `<a href="/sermons/notes/${id}">Sermons i
   </div>
 </div>`).join('');
       return html(`
-${sidebarShell('sermons', currentUser, `<a href="/sermons">← All series</a>`)}
+${sidebarShell('sermons', currentUser, `<a href="/sermons">← All series</a>`, await pageBadges())}
 <div class="tlc-wrap">
   <div class="page-title">${s.title}</div>
   <div class="page-sub">${s.date_range || 'Sermons in this series'}</div>
@@ -3885,7 +3979,7 @@ ${sidebarShell('sermons', currentUser, `<a href="/sermons">← All series</a>`)}
       const seriesId = url.searchParams.get('series_id') || '';
       const allSeries = await env.DB.prepare('SELECT id, title FROM sermon_series ORDER BY active DESC, id DESC').all();
       return html(`
-${sidebarShell('sermons', currentUser, `<a href="${seriesId ? '/sermons/notes/' + seriesId : '/sermons'}">All sermons</a>`)}
+${sidebarShell('sermons', currentUser, `<a href="${seriesId ? '/sermons/notes/' + seriesId : '/sermons'}">All sermons</a>`, await pageBadges())}
 <div class="tlc-wrap">${noteFormHtml(null, allSeries.results, seriesId)}</div>`, 'New sermon — TLC Admin', TINYMCE_HEAD);
     }
 
@@ -3906,7 +4000,7 @@ ${sidebarShell('sermons', currentUser, `<a href="${seriesId ? '/sermons/notes/' 
       if (!n) return new Response('Not found', { status: 404 });
       const allSeries = await env.DB.prepare('SELECT id, title FROM sermon_series ORDER BY active DESC, id DESC').all();
       return html(`
-${sidebarShell('sermons', currentUser, `<a href="${n.series_id ? '/sermons/notes/' + n.series_id : '/sermons'}">All sermons</a>`)}
+${sidebarShell('sermons', currentUser, `<a href="${n.series_id ? '/sermons/notes/' + n.series_id : '/sermons'}">All sermons</a>`, await pageBadges())}
 <div class="tlc-wrap">${noteFormHtml(n, allSeries.results)}</div>`, 'Edit sermon — TLC Admin', TINYMCE_HEAD);
     }
 
@@ -4020,7 +4114,7 @@ ${sidebarShell('sermons', currentUser, `<a href="${n.series_id ? '/sermons/notes
           </div>
         </div>`).join('') : '';
       return html(`
-${sidebarShell('news', currentUser, `<a href="/newsitems">← News &amp; Events</a>`)}
+${sidebarShell('news', currentUser, `<a href="/newsitems">← News &amp; Events</a>`, await pageBadges())}
 <div class="tlc-wrap">
   <div class="page-title">New newsletter</div>
   <div class="page-sub">Write your update, add events, and publish to the website.</div>
@@ -4481,7 +4575,7 @@ addEvent();
 
       if (path === '/christian-education/new') {
         return html(`
-${sidebarShell('christian-education', currentUser, `<a href="/christian-education">All classes</a>`, await badgeCounts(env, currentUser))}
+${sidebarShell('christian-education', currentUser, `<a href="/christian-education">All classes</a>`, await pageBadges())}
 <div class="tlc-wrap">${ceFormHtml()}</div>`, 'New class — TLC Admin');
       }
 
@@ -4508,7 +4602,7 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
       }));
 
       return html(`
-${sidebarShell('christian-education', currentUser, `<a href="https://timothystl.org/education" target="_blank">View page</a>`, await badgeCounts(env, currentUser))}
+${sidebarShell('christian-education', currentUser, `<a href="https://timothystl.org/education" target="_blank">View page</a>`, await pageBadges())}
 <div class="tlc-wrap">
   ${ceAlert ? `<div class="tlc-section" style="padding-bottom:0;">${ceAlert}</div>` : ''}
   ${renderListSection({
@@ -4547,7 +4641,7 @@ ${sidebarShell('christian-education', currentUser, `<a href="https://timothystl.
       const ceRow = await env.DB.prepare('SELECT * FROM bible_classes WHERE id = ?').bind(ceId).first();
       if (!ceRow) return new Response('Not found', { status: 404 });
       return html(`
-${sidebarShell('christian-education', currentUser, `<a href="/christian-education">All classes</a>`)}
+${sidebarShell('christian-education', currentUser, `<a href="/christian-education">All classes</a>`, await pageBadges())}
 <div class="tlc-wrap">${ceFormHtml(ceRow)}</div>`, 'Edit class — TLC Admin');
     }
 
@@ -4709,7 +4803,7 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
           ].filter(Boolean).join(' · ');
 
       return html(`
-${sidebarShell('newsletter', currentUser, '', await badgeCounts(env, currentUser))}
+${sidebarShell('newsletter', currentUser, '', await pageBadges())}
 <div class="tlc-wrap">
   <div class="tlc-section" style="padding-bottom:0;">
     <h1 class="tlc-title">${escapeHtml(sectionCfg('newsletter').title)}</h1>
@@ -5283,7 +5377,7 @@ ${classesJs}
       });
 
       return html(`
-${sidebarShell('news', currentUser, `<a href="https://timothystl.org/news" target="_blank">View site</a>`, await badgeCounts(env, currentUser))}
+${sidebarShell('news', currentUser, `<a href="https://timothystl.org/news" target="_blank">View site</a>`, await pageBadges())}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -5364,7 +5458,7 @@ ${sidebarShell('news', currentUser, `<a href="https://timothystl.org/news" targe
 
     if (path === '/newsitems/new' && method === 'GET') {
       return html(`
-${sidebarShell('news', currentUser, `<a href="/newsitems">All posts</a>`)}
+${sidebarShell('news', currentUser, `<a href="/newsitems">All posts</a>`, await pageBadges())}
 <div class="tlc-wrap">${newsFormHtml()}</div>
 ${newsImageUploadScript()}`, 'New post — TLC Admin', TINYMCE_HEAD);
     }
@@ -5406,7 +5500,7 @@ ${newsImageUploadScript()}`, 'New post — TLC Admin', TINYMCE_HEAD);
       const item = await env.DB.prepare('SELECT * FROM news_items WHERE id = ?').bind(id).first();
       if (!item) return new Response('Not found', { status: 404 });
       return html(`
-${sidebarShell('news', currentUser, `<a href="/newsitems">All posts</a>`)}
+${sidebarShell('news', currentUser, `<a href="/newsitems">All posts</a>`, await pageBadges())}
 <div class="tlc-wrap">${newsFormHtml(item)}</div>
 ${newsImageUploadScript(item.image_url || '')}`, 'Edit post — TLC Admin', TINYMCE_HEAD);
     }
@@ -5589,7 +5683,7 @@ ${newsImageUploadScript(item.image_url || '')}`, 'Edit post — TLC Admin', TINY
         const detailsClash = detailsLink ? detailsLink.shortLinkClash : null;
 
         return html(`
-${sidebarShell('pages', currentUser, `<a href="/pages/details">Church details</a>`, await badgeCounts(env, currentUser))}
+${sidebarShell('pages', currentUser, `<a href="/pages/details">Church details</a>`, await pageBadges())}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -5737,7 +5831,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages/details">Church details</a
 </div>`;
         };
         return html(`
-${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`)}
+${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await pageBadges())}
 <div class="tlc-wrap">
   <div class="page-title">Church details</div>
   <div class="page-sub">The address, phone number, email and service times the whole site reads. Change them here once and every page that shows them follows — no need to edit each page.</div>
@@ -6266,7 +6360,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`)}
 
         const cfg = sectionCfg('ministries');
         return html(`
-${sidebarShell('ministries', currentUser, `<a href="/voters">Voters Assembly page</a> <a href="/manual#ministry-editor">How the editor works</a>`, await badgeCounts(env, currentUser))}
+${sidebarShell('ministries', currentUser, `<a href="/voters">Voters Assembly page</a> <a href="/manual#ministry-editor">How the editor works</a>`, await pageBadges())}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -6289,7 +6383,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/voters">Voters Assembly pag
       // ── Add ministry form (GET) ──
       if (path === '/ministries/add' && method === 'GET') {
         return html(`
-${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministries</a>`)}
+${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministries</a>`, await pageBadges())}
 <div class="tlc-wrap">
   <div class="page-title">New ministry page</div>
   <div class="page-sub">Create a new ministry landing page.</div>
@@ -6360,7 +6454,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministr
   </div>`).join('')}
 </div>` : '';
         return html(`
-${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministries</a>`)}
+${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministries</a>`, await pageBadges())}
 <div class="tlc-wrap">
   <div class="page-title">${page.title}</div>
   <div class="page-sub">Banner image, buttons and video slots for this page.</div>
@@ -6607,7 +6701,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministr
         });
 
         return html(`
-${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministries</a> <a href="/ministries/edit/${encodeURIComponent(slug)}">Edit the ${escapeHtml(page.title)} page</a>`)}
+${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministries</a> <a href="/ministries/edit/${encodeURIComponent(slug)}">Edit the ${escapeHtml(page.title)} page</a>`, await pageBadges())}
 <div class="tlc-wrap">
   ${msg === 'postsaved' ? `<div class="alert alert-success">Post saved — it is on the ${escapeHtml(page.title)} page now.</div>` : ''}
   ${msg === 'postdeleted' ? `<div class="alert alert-info">Post deleted.</div>` : ''}
@@ -6622,7 +6716,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministr
         if (!page) return new Response('Not found', { status: 404 });
         const today = new Date().toISOString().split('T')[0];
         return html(`
-${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">← Posts</a>`)}
+${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">← Posts</a>`, await pageBadges())}
 <div class="tlc-wrap">
   <div class="page-title">New post — ${page.title}</div>
   <div class="page-sub">A dated update on this ministry's own page — a recap, a photo, a change of plan. It appears above the page's standing content.</div>
@@ -6691,7 +6785,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">�
         const post = await env.DB.prepare('SELECT * FROM ministry_posts WHERE id = ? AND ministry_slug = ?').bind(id, slug).first();
         if (!post || !page) return new Response('Not found', { status: 404 });
         return html(`
-${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">← Posts</a>`)}
+${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">← Posts</a>`, await pageBadges())}
 <div class="tlc-wrap">
   <div class="page-title">Edit post — ${page.title}</div>
   <div class="page-sub">Changes reach the ministry page as soon as you save.</div>
@@ -6829,7 +6923,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">�
         });
 
         return html(`
-${sidebarShell('notices', currentUser, '', await badgeCounts(env, currentUser))}
+${sidebarShell('notices', currentUser, '', await pageBadges())}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -6859,8 +6953,8 @@ ${sidebarShell('notices', currentUser, '', await badgeCounts(env, currentUser))}
       // Both addresses are kept. /notices/add is on the sidebar, on the list's
       // action button and in people's bookmarks; folding the CODE together is
       // the point, not renaming the door.
-      const noticeForm = (n, isNew) => `
-${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)}
+      const noticeForm = (n, isNew, badges) => `
+${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`, badges)}
 <div class="tlc-wrap">
   <div class="page-title">${isNew ? 'New notice' : escapeHtml(n.label)}</div>
   <div class="page-sub">${isNew
@@ -6901,7 +6995,7 @@ ${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)
         return html(noticeForm({
           page_slug: url.searchParams.get('page') || STATIC_PAGES[0].slug,
           label: '', body: '', published: 1,
-        }, true), 'New notice', TINYMCE_HEAD);
+        }, true, await pageBadges()), 'New notice', TINYMCE_HEAD);
       }
 
       // ── Create notice (POST) ──
@@ -6928,7 +7022,7 @@ ${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)
         const id = path.slice('/notices/edit/'.length);
         const n = await env.DB.prepare('SELECT * FROM notices WHERE id = ?').bind(id).first();
         if (!n) return new Response('Not found', { status: 404 });
-        return html(noticeForm(n, false), `Edit — ${n.label}`, TINYMCE_HEAD);
+        return html(noticeForm(n, false, await pageBadges()), `Edit — ${n.label}`, TINYMCE_HEAD);
       }
 
       // ── Save notice (POST) ──
@@ -7000,7 +7094,7 @@ ${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`)
         });
 
         return html(`
-${sidebarShell('staff', currentUser, `<a href="https://timothystl.org/about" target="_blank">View About page</a>`, await badgeCounts(env, currentUser))}
+${sidebarShell('staff', currentUser, `<a href="https://timothystl.org/about" target="_blank">View About page</a>`, await pageBadges())}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -7035,7 +7129,7 @@ function staffMove(id, direction) {
       if (path === '/staff/new' && method === 'GET') {
         const nextOrder = 10;
         return html(`
-${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`)}
+${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`, await pageBadges())}
 <div class="tlc-wrap">
   <div class="page-title">Add a person</div>
   <div class="page-sub">One record per person. Every page that shows staff reads from here — add someone once and the whole site follows.</div>
@@ -7082,7 +7176,7 @@ ${staffPhotoUploadScript()}`, 'New Staff Member');
         const m = await env.DB.prepare('SELECT * FROM staff_members WHERE id = ?').bind(id).first();
         if (!m) return new Response('Not found', { status: 404 });
         return html(`
-${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`)}
+${sidebarShell('staff', currentUser, `<a href="/staff">← All staff</a>`, await pageBadges())}
 <div class="tlc-wrap">
   <div class="page-title">${esc(m.name)}</div>
   <div class="page-sub">The photo crop set here is reused everywhere this person appears, so a head is never cut off on one page and not another.</div>
@@ -7251,7 +7345,7 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
         const cfg = sectionCfg('links');
         const activeTap = taps.find((t) => t.id === which);
         return html(`
-${sidebarShell('link-cards', currentUser, `<a href="https://links.timothystl.org" target="_blank">View link page</a>`, await badgeCounts(env, currentUser))}
+${sidebarShell('link-cards', currentUser, `<a href="https://links.timothystl.org" target="_blank">View link page</a>`, await pageBadges())}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   <div class="tlc-section" style="padding-bottom:0;">
@@ -7287,7 +7381,7 @@ ${sidebarShell('link-cards', currentUser, `<a href="https://links.timothystl.org
         const t = await env.DB.prepare('SELECT * FROM taps WHERE id = ?').bind(id).first();
         if (!t) return new Response('Not found', { status: 404 });
         return html(`
-${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; links</a>`, await badgeCounts(env, currentUser))}
+${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; links</a>`, await pageBadges())}
 <div class="tlc-wrap">
   <div class="page-title">Re-point /tap${t.id}</div>
   <div class="page-sub">${escapeHtml(t.name)} — ${escapeHtml(t.placement || 'placement not recorded')}</div>
@@ -7394,7 +7488,7 @@ ${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; 
 
       // New form
       if (path === '/link-cards/new' && method === 'GET') {
-        return html(sidebarShell('link-cards', currentUser)
+        return html(sidebarShell('link-cards', currentUser, '', await pageBadges())
           + `<div class="tlc-wrap">${cardFormHtml({}, await tapsForForm())}</div>`, 'New card — TLC Admin');
       }
 
@@ -7419,7 +7513,7 @@ ${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; 
       if (editMatch && method === 'GET') {
         const c = await env.DB.prepare('SELECT * FROM link_cards WHERE id = ?').bind(parseInt(editMatch[1],10)).first();
         if (!c) return new Response('Not found', { status: 404 });
-        return html(sidebarShell('link-cards', currentUser)
+        return html(sidebarShell('link-cards', currentUser, '', await pageBadges())
           + `<div class="tlc-wrap">${cardFormHtml(c, await tapsForForm())}</div>`, 'Edit card — TLC Admin');
       }
 
@@ -7684,7 +7778,7 @@ ${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; 
         : '') + (subMsg ? `<div class="alert alert-success">✓ ${escapeHtml(subMsg)}</div>` : '');
 
       return html(`
-${sidebarShell('subscribers', currentUser, `<a href="https://app.brevo.com" target="_blank">Open Brevo</a>`, await badgeCounts(env, currentUser))}
+${sidebarShell('subscribers', currentUser, `<a href="https://app.brevo.com" target="_blank">Open Brevo</a>`, await pageBadges())}
 <div class="tlc-wrap">
   ${errorBanner ? `<div class="tlc-section" style="padding-bottom:0;">${errorBanner}</div>` : ''}
   ${renderListSection({
@@ -7830,7 +7924,7 @@ ${sidebarShell('subscribers', currentUser, `<a href="https://app.brevo.com" targ
       const showDrawer = path === '/redirects/new' || !!editing;
 
       return html(`
-${sidebarShell('redirects', currentUser, '', await badgeCounts(env, currentUser))}
+${sidebarShell('redirects', currentUser, '', await pageBadges())}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -7930,7 +8024,7 @@ ${sidebarShell('redirects', currentUser, '', await badgeCounts(env, currentUser)
       });
 
       return html(`
-${sidebarShell('settings', currentUser, '', await badgeCounts(env, currentUser))}
+${sidebarShell('settings', currentUser, '', await pageBadges())}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -8222,7 +8316,7 @@ ${sidebarShell('settings', currentUser, '', await badgeCounts(env, currentUser))
           </form>`).join('');
 
       return html(`
-${sidebarShell('giving', currentUser)}
+${sidebarShell('giving', currentUser, '', await pageBadges())}
 <div class="tlc-wrap">
   <h1 class="tlc-title">${escapeHtml(sectionCfg('giving').title)}</h1>
   <p class="tlc-purpose" style="margin:6px 0 18px;">${escapeHtml(sectionCfg('giving').purpose)}</p>
@@ -8394,7 +8488,7 @@ ${sidebarShell('giving', currentUser)}
     if (path === '/giving/page' && method === 'GET') {
       if (!hasPermission(currentUser, 'giving_manage')) return new Response('Access denied.', { status: 403 });
       return html(`
-${sidebarShell('giving', currentUser, `<a href="/giving">← Giving</a>`, await badgeCounts(env, currentUser))}
+${sidebarShell('giving', currentUser, `<a href="/giving">← Giving</a>`, await pageBadges())}
 <div class="tlc-wrap">
   <div class="page-title">The giving page</div>
   <div class="page-sub">Where each part of give.timothystl.org and /give is edited.</div>
@@ -8464,7 +8558,7 @@ ${sidebarShell('giving', currentUser, `<a href="/giving">← Giving</a>`, await 
       });
 
       return html(`
-${sidebarShell('users', currentUser, '', await badgeCounts(env, currentUser))}
+${sidebarShell('users', currentUser, '', await pageBadges())}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -8485,7 +8579,7 @@ ${sidebarShell('users', currentUser, '', await badgeCounts(env, currentUser))}
 
     if (path === '/users/new' && method === 'GET') {
       return html(`
-${sidebarShell('users', currentUser)}
+${sidebarShell('users', currentUser, '', await pageBadges())}
 <div class="tlc-wrap">
   <div class="page-title">New user</div>
   <div class="page-sub">Who can get into this admin, and exactly what they can reach. Presets are shortcuts — the checkboxes are the truth.</div>
@@ -8531,7 +8625,7 @@ ${sidebarShell('users', currentUser)}
       let selectedPerms = [];
       try { selectedPerms = JSON.parse(u.permissions || '[]'); } catch(_) {}
       return html(`
-${sidebarShell('users', currentUser)}
+${sidebarShell('users', currentUser, '', await pageBadges())}
 <div class="tlc-wrap">
   <div class="page-title">${escapeHtml(u.username)}</div>
   <div class="page-sub">What this person can reach. Changing it takes effect the next time they load a screen, not at their next sign-in.</div>
@@ -8686,7 +8780,7 @@ ${sidebarShell('users', currentUser)}
       }</div>` : '';
 
       return html(`
-${sidebarShell('audit', currentUser, '', await badgeCounts(env, currentUser))}
+${sidebarShell('audit', currentUser, '', await pageBadges())}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({
@@ -8857,7 +8951,7 @@ ${sidebarShell('audit', currentUser, '', await badgeCounts(env, currentUser))}
     });
 
     return html(`
-${sidebarShell('newsletter', currentUser, `<a href="https://timothystl.org/news" target="_blank">View archive</a>`, await badgeCounts(env, currentUser))}
+${sidebarShell('newsletter', currentUser, `<a href="https://timothystl.org/news" target="_blank">View archive</a>`, await pageBadges())}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${renderListSection({

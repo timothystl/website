@@ -1518,7 +1518,13 @@ function inspectorAction(action, value) {
       var p = {}; p[key] = v;
       // Spacing steps deliberately write no change-log entry — nudging a
       // stepper four times would otherwise bury the meaningful edits.
-      patch(b.id, p, null, 'style');
+      // ⚠ A HALF block's spacing lives on the .tlcb-pair wrapper the SERVER
+      // writes, not on the block's own node — a style-mode patch updates a
+      // custom property the pair never reads, so the stepper moved nothing
+      // and the published page diverged from what the editor showed. Same
+      // ruling as the width chip above: anything the pair wrapper renders is
+      // the Worker's render.
+      patch(b.id, p, null, b.width === 'half' ? 'rerender' : 'style');
       say(key === 'height' ? 'Height ' + v + 'px' : v + 'px');
       break;
     }
@@ -1541,7 +1547,10 @@ function inspectorAction(action, value) {
       break;
     }
     case 'size': patch(b.id, { size: value }, 'Text size ' + value.toUpperCase()); break;
-    case 'stamp': patch(b.id, { stamp: value }, value ? 'Stamp ' + value : 'Removed stamp', 'rerender'); break;
+    // 'Stamp → Upcoming' is an arrow BETWEEN two words — a sentence about a
+    // state change, which the arrow rule allows in as many words. The v4.12.0
+    // sweep took it anyway and the change log read 'Stamp Upcoming'.
+    case 'stamp': patch(b.id, { stamp: value }, value ? 'Stamp → ' + value : 'Removed stamp', 'rerender'); break;
     case 'tone': patch(b.id, { tone: Number(value) }, 'Stamp colour ' + C.TONES[Number(value)].name, 'rerender'); break;
     case 'corner': patch(b.id, { corner: value }, 'Stamp moved ' + (value === 'tl' ? 'left' : 'right'), 'rerender'); break;
     case 'hide': toggleHide(b.id); break;
@@ -1853,7 +1862,15 @@ function setDropIndex(i) {
   var line = document.createElement('div');
   line.className = 'ed-canvas-drop';
   line.innerHTML = '<span>' + esc(dropLabel()) + '</span>';
-  if (i >= blocks.length) page.appendChild(line); else page.insertBefore(line, blocks[i]);
+  if (i >= blocks.length) { page.appendChild(line); return; }
+  // A half block sits INSIDE a .tlcb-pair wrapper, so blocks[i] can be a
+  // grandchild of the page — insertBefore(page, grandchild) throws
+  // NotFoundError and the whole drag dies. Walk up to the page's own child;
+  // the indicator lands at the pair boundary, which is honest, because the
+  // server re-pairs on drop and mid-pair positions do not exist until then.
+  var ref = blocks[i];
+  while (ref && ref.parentNode !== page) ref = ref.parentNode;
+  if (ref) page.insertBefore(line, ref); else page.appendChild(line);
 }
 
 function clearDrag() {

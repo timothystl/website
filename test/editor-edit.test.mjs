@@ -293,6 +293,37 @@ await page.click('[data-k="card:off"]');
 await settle(400);
 eq(await page.locator('.ed-paper .tlcb--hero .tlcb-card').count(), 0, 'switching it off takes it away again');
 
+group('spacing steppers on a half block re-render the pair');
+{
+  // ⚠ A half block's spacing is written by the SERVER onto the .tlcb-pair
+  // wrapper. The stepper's style-mode patch updated a custom property on the
+  // block's own node — one the pair never reads — so the stepper moved
+  // nothing on screen or in the published page, while the inspector counted
+  // up happily. Half blocks take the width chip's path now: a re-render.
+  await flushSave();
+  const halves = sanitizeBlocks([
+    Object.assign(newBlock('text', { body: '<p>Left.</p>' }), { width: 'half' }),
+    Object.assign(newBlock('text', { body: '<p>Right.</p>' }), { width: 'half' }),
+  ]);
+  await fetch(base + '/ministries/api/page/music/draft', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ blocks: halves, changes: [] }),
+  });
+  await reload();
+  await page.waitForSelector('.ed-paper .tlcb-pair');
+
+  const below = () => page.evaluate(() =>
+    parseInt(document.querySelector('.ed-paper .tlcb-pair').style.getPropertyValue('--tlcb-space-below'), 10) || 0);
+  const start = await below();
+  await page.click('.ed-paper .tlcb--text');
+  await page.click('[data-k="step:spaceBelow:1"]');
+  await page.waitForFunction((want) => {
+    const p = document.querySelector('.ed-paper .tlcb-pair');
+    return p && (parseInt(p.style.getPropertyValue('--tlcb-space-below'), 10) || 0) === want;
+  }, start + 8, { timeout: 5000 }).catch(() => {});
+  eq(await below(), start + 8, 'stepping a half block moves the pair wrapper the page actually renders');
+}
+
 group('server rejects what the client would never send');
 const bad = await (await fetch(base + '/ministries/api/render', {
   method: 'POST', headers: { 'Content-Type': 'application/json' },

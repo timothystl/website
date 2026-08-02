@@ -101,8 +101,13 @@ export function statusPill(tone, label) {
 // recognisable at a glance across every section that carries them.
 export function valueChip(key, { short = true } = {}) {
   const v = valueByKey(key);
-  if (!v) return `<span class="tlc-chip tlc-chip-none">No value</span>`;
-  return `<span class="tlc-chip" style="background:${v.tint};color:${v.ink};">${esc(short ? v.short : v.name)}</span>`;
+  // ⚠ .tlc-vpill, not .tlc-chip. The read-only value pill in a list row and
+  // the clickable choice chip in a drawer used to share one class name with
+  // two different rule sets — declared 260 lines apart — so the pill grew a
+  // pointer cursor it had no click for, and the chip label wore the pill's
+  // 999px radius. Two components, two names.
+  if (!v) return `<span class="tlc-vpill tlc-vpill-none">No value</span>`;
+  return `<span class="tlc-vpill" style="background:${v.tint};color:${v.ink};">${esc(short ? v.short : v.name)}</span>`;
 }
 
 // The <select> every section uses to tag a record. Blank is a real option —
@@ -189,7 +194,7 @@ export function renderListSection(cfg) {
     // otherwise, and the screenshots win. The row keeps its own problem badge:
     // the band explains, the badge marks.
     const warnHtml = r.warn ? `<div class="tlc-warn">
-      <span class="tlc-warn-mark">▲</span>
+      <span class="tlc-warn-mark" aria-hidden="true">▲</span>
       <span class="tlc-warn-text">${esc(r.warn)}</span>
       ${r.warnCta ? `<a class="tlc-warn-cta" href="${esc(r.warnCta.href)}">${esc(r.warnCta.label)}</a>` : ''}
     </div>` : '';
@@ -260,7 +265,7 @@ export function renderListSection(cfg) {
       <span class="tlc-empty-help" data-empty="Use the button above to add the first one.">Use the button above to add the first one.</span>
     </div>
   </div>
-  ${note ? `<p class="tlc-note"><span class="tlc-note-mark">◆</span><span>${esc(note)}</span></p>` : ''}
+  ${note ? `<p class="tlc-note"><span class="tlc-note-mark" aria-hidden="true">◆</span><span>${esc(note)}</span></p>` : ''}
 </section>`;
 }
 
@@ -523,7 +528,7 @@ export function renderFormSection(cfg) {
       ${fields.map((f) => renderField(f)).join('')}
       ${body}
     </div>
-    ${note ? `<p class="tlc-note"><span class="tlc-note-mark">◆</span><span>${esc(note)}</span></p>` : ''}
+    ${note ? `<p class="tlc-note"><span class="tlc-note-mark" aria-hidden="true">◆</span><span>${esc(note)}</span></p>` : ''}
     <div class="tlc-form-foot">
       ${deleteAction
         ? `<button type="submit" class="tlc-drawer-delete" formaction="${esc(deleteAction)}" formnovalidate onclick="return confirm('${esc(deleteConfirm).replace(/'/g, '&#39;')}')">${esc(deleteLabel)}</button>`
@@ -748,7 +753,10 @@ export const ADMIN_UI_CSS = `
 .tlc-row-child .tlc-primary-title{font-weight:500;}
 .tlc-row{display:grid;gap:14px;align-items:center;padding:12px 18px;min-height:56px;cursor:pointer;}
 .tlc-row:hover{background:var(--tlc-row-hover);}
-.tlc-row-wrap[data-href=""] .tlc-row{cursor:default;}
+/* A row with nowhere to go gets no pointer. The attribute is simply ABSENT
+   on those rows — the emitter above omits it — so matching an empty string
+   here was a selector that matched nothing, and every row wore a pointer. */
+.tlc-row:not([data-href]){cursor:default;}
 .tlc-td{font-size:13px;color:var(--tlc-body);min-width:0;overflow-wrap:anywhere;}
 .tlc-right{text-align:right;justify-self:end;}
 .tlc-actions{display:flex;align-items:center;gap:12px;white-space:nowrap;}
@@ -770,8 +778,8 @@ export const ADMIN_UI_CSS = `
 .tlc-primary-title{font:600 13.5px/1.3 var(--tlc-sans);color:var(--tlc-ink);}
 .tlc-primary-sub{font-size:11.5px;line-height:1.35;color:var(--tlc-muted);}
 .tlc-pill{display:inline-block;font:600 10.5px/1 var(--tlc-sans);letter-spacing:.08em;text-transform:uppercase;padding:5px 10px;border-radius:999px;border:1px solid transparent;white-space:nowrap;}
-.tlc-chip{display:inline-block;font:600 11px/1 var(--tlc-sans);padding:5px 10px;border-radius:999px;white-space:nowrap;}
-.tlc-chip-none{background:#F0EEE9;color:var(--tlc-muted);}
+.tlc-vpill{display:inline-block;font:600 11px/1 var(--tlc-sans);padding:5px 10px;border-radius:999px;white-space:nowrap;}
+.tlc-vpill-none{background:#F0EEE9;color:var(--tlc-muted);}
 /* The band sits ABOVE its row, so the seam belongs on its BOTTOM edge —
    border-top attached it to the row above, which is a different row and
    nothing to do with the warning. */

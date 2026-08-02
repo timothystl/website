@@ -205,7 +205,7 @@ export function officeSubject(kind, name, suspect) {
 // ── FILTERED MAIL ADMIN PAGE ─────────────────────────────────
 // Returns a Response for the routes it owns, or null so the caller's route
 // chain carries on.
-export async function handleFilteredRoutes(request, env, path, method, currentUser, ctx) {
+export async function handleFilteredRoutes(request, env, path, method, currentUser, ctx, badges = {}) {
   if (!path.startsWith('/filtered')) return null;
   if (!hasPermission(currentUser, 'settings_manage')) {
     return new Response('Access denied.', { status: 403 });
@@ -303,7 +303,7 @@ export async function handleFilteredRoutes(request, env, path, method, currentUs
     }) : '';
 
     return html(`
-${sidebarShell('filtered', currentUser)}
+${sidebarShell('filtered', currentUser, '', badges)}
 <div class="tlc-wrap">
   ${notice ? `<div class="tlc-section" style="padding-bottom:0;">${notice}</div>` : ''}
   ${renderListSection({

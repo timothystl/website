@@ -199,6 +199,41 @@ group('order survives a reload');
 await reload();
 eq(await waitOrder(['text']), JSON.stringify(['text']), 'the server kept the draft');
 
+group('drag over a half run');
+{
+  // ⚠ Half members live INSIDE a .tlcb-pair wrapper, so the canvas block list
+  // holds grandchildren of the page — and insertBefore(page, grandchild)
+  // throws NotFoundError, which killed the whole drag the moment the pointer
+  // crossed a half run. The indicator now lands at the pair boundary, which
+  // is honest: the server re-pairs on drop, so mid-pair positions do not
+  // exist until it answers. Verified failing against the old code.
+  await page.waitForTimeout(1900).catch(() => {});
+  const halves = sanitizeBlocks([
+    Object.assign(newBlock('text'), { width: 'half' }),
+    Object.assign(newBlock('text'), { width: 'half' }),
+    newBlock('video'),
+  ]);
+  await fetch(base + '/ministries/api/page/music/draft', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ blocks: halves, changes: [] }),
+  });
+  await reload();
+  await waitOrder(['text', 'text', 'video']);
+
+  const src = page.locator('.ed-row').nth(2); // the full-width video
+  const dst = page.locator('.ed-row').nth(0); // a half, inside the pair wrapper
+  await src.dispatchEvent('dragstart', { dataTransfer: await page.evaluateHandle(() => new DataTransfer()) });
+  const box = await dst.boundingBox();
+  await dst.dispatchEvent('dragover', { clientY: box.y + 3, clientX: box.x + 5 });
+  await page.waitForTimeout(80);
+  eq(await page.locator('.ed-canvas-drop').count(), 1,
+    'the canvas line appears at the pair boundary rather than throwing');
+  await dst.dispatchEvent('drop');
+  await settle(700);
+  eq(await waitOrder(['video', 'text', 'text']), JSON.stringify(['video', 'text', 'text']),
+    'the drop lands before the run');
+}
+
 eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
 
 await browser.close();
