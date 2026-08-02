@@ -5,7 +5,7 @@ import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, SIDEBAR_JS, TOGGLE_WORD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 
-export const VERSION = 'v4.6.2'; // minor: the renter portal has its own origin; the slide-over is back with its handler
+export const VERSION = 'v4.8.0'; // minor: the form width rule, warning rows above their row, Connect and the arrow glyphs gone
 
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
@@ -137,9 +137,24 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
 
    Above the content, a slim context bar — the one good idea from the editor's
    top bar, kept and cut down. It reports; it does not navigate. */
-body{padding-left:228px;}
-.sidebar{position:fixed;top:0;left:0;width:228px;height:100vh;background:var(--steel);
-  display:flex;flex-direction:column;overflow-y:auto;z-index:100;}
+/* ── THE SHELL IS TWO FLEX COLUMNS ─────────────────────────────
+   Task 2 item 2, finally: "228px sidebar, content column flex:1; min-width:0
+   — rather than a fixed sidebar with a margin."
+
+   It used to be a fixed-position rail plus a matching left padding on the
+   body, which meant the width was written twice and the two had to be kept in
+   step by hand. It is --tlc-rail once now, and the content column simply takes
+   what is left. min-width:0 is not optional: without it a wide table refuses
+   to shrink below its content and pushes the whole column off screen.
+
+   ⚠ Only .sidebar and .tlc-main are flex children. The ⌘K palette, its scrim
+   and the slide-over backdrop are all position:fixed, so they never enter
+   the flow — check that before adding anything else at this level. */
+body{display:flex;align-items:stretch;}
+.tlc-main{flex:1;min-width:0;display:flex;flex-direction:column;}
+.sidebar{flex:0 0 var(--tlc-rail);width:var(--tlc-rail);position:sticky;top:0;
+  height:100vh;background:var(--steel);display:flex;flex-direction:column;
+  overflow:hidden;z-index:100;}
 .sidebar-brand{padding:20px 20px 18px;border-bottom:1px solid rgba(255,255,255,.12);margin-bottom:8px;flex-shrink:0;}
 .sidebar-brand-name{font-family:var(--sans);font-size:14px;font-weight:800;color:#fff;}
 .sidebar-brand-sub{font-family:var(--sans);font-size:11px;color:var(--amber);font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-top:2px;}
@@ -149,8 +164,27 @@ body{padding-left:228px;}
 .sidebar-item{display:flex;align-items:center;gap:10px;padding:9px 20px 9px 23px;color:rgba(255,255,255,.78);font-size:13px;font-weight:600;text-decoration:none;}
 .sidebar-item:hover{color:#fff;background:rgba(255,255,255,.06);}
 .sidebar-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.35);flex-shrink:0;}
-.sidebar-groups{flex:1;min-height:0;}
-.sidebar-footer{margin-top:auto;padding:14px 20px 18px;border-top:1px solid rgba(255,255,255,.12);display:flex;flex-direction:column;gap:8px;flex-shrink:0;}
+/* ⚠ THE GROUP LIST IS THE SCROLLER, NOT THE SIDEBAR.
+   This had flex:1;min-height:0 and no overflow-y, while .sidebar itself
+   carried overflow-y:auto. So the box was squashed to whatever height was
+   left over and its content — twenty-odd nav rows — painted straight out of
+   it, over the footer: the palette hint and the sign-out link landed on top of
+   Filtered Mail, halfway up the list, with the groups continuing underneath.
+   min-height:0 let it shrink; nothing told it to scroll.
+
+   (Worded that way on purpose. These comments ship to the browser inside the
+   stylesheet, so a comment quoting a UI label verbatim puts a second copy of
+   that string into every admin page — which is exactly how the assertion that
+   the sign-out link appears exactly once began failing on a CSS-only change.
+   Describe a label here; do not quote one.)
+
+   The nesting has to be: sidebar clips, group list scrolls, footer is pinned
+   below it. Which is also why .sidebar-footer no longer needs margin-top:
+   auto — the list is flex:1 and already eats the free space. Leaving the
+   auto margin on would be a second mechanism for the same thing, and the two
+   disagree exactly when the content overflows, which is when it shows. */
+.sidebar-groups{flex:1;min-height:0;overflow-y:auto;}
+.sidebar-footer{padding:14px 20px 18px;border-top:1px solid rgba(255,255,255,.12);display:flex;flex-direction:column;gap:8px;flex-shrink:0;}
 .sidebar-footer a{font-family:var(--sans);color:rgba(255,255,255,.6);font-size:12px;font-weight:600;text-decoration:none;}
 .sidebar-footer a:hover{color:#fff;}
 
@@ -181,18 +215,46 @@ body{padding-left:228px;}
 .tlc-nav-back a{font:600 13px/1 var(--tlc-sans);color:#2E7EA6;text-decoration:none;}
 .tlc-nav-back a:hover{text-decoration:underline;}
 
-/* The ONLY responsive rule for the sidebar: below 900px a phone cannot spare
-   228px BESIDE the content, so the sidebar stops being fixed and sits above it
-   instead — scrolled past like anything else on the page.
+/* The ONLY responsive rule for the sidebar: below 900px a 390px phone cannot
+   spare 228px BESIDE the content, so it becomes a slide-over behind the
+   hamburger in the context bar. Above 900px it is simply on screen and the
+   content sits next to it — Ruling 4, which is not reversing again.
 
-   ⚠ It is never hidden. There was a slide-over here, off-canvas behind a
-   hamburger; the fix list asks for exactly that to be gone, and the hamburger
-   had no handler wired to it anyway, so on a phone the admin had NO navigation
-   at all. Restoring the button would have been fixing the symptom of a
-   pattern the design had already rejected. */
+   ⚠ This comment used to claim the sidebar "is never hidden" and that the
+   slide-over had been deleted. That was true for exactly one release. The fix
+   list's definition of done now says the opposite in as many words —
+   sidebar-toggle, sidebar-backdrop and translateX(-100%) are *expected*
+   hits, because Task 2 item 3 allows a slide-over below 900px and an earlier
+   draft of that line predated item 3. The comment outlived the decision it
+   described, which is worse than no comment: it argues against the code
+   directly beneath it.
+
+   ⚠ position:fixed here, not sticky. A sticky element still takes its
+   place in the flex row, so the content column would keep a 228px gap on the
+   left for a rail that is off-canvas. Fixed takes it out of the flow entirely
+   and the content column gets the whole width back.
+
+   ⚠ The CSS and SIDEBAR_JS cannot ship apart — a previous pass removed the
+   handler and kept this, so the button was wired to nothing and a phone had no
+   navigation at all. If you remove one, remove both. */
+/* ⚠ THE DESKTOP DEFAULTS MUST BE DECLARED BEFORE THE MEDIA QUERY, NOT AFTER.
+   These two rules and the ones inside the query have identical specificity, so
+   the cascade decides on source order alone — a media query does not outrank
+   anything, it only narrows when a rule applies. With .sidebar-toggle{display:
+   none} written below the query, it won at EVERY width and the hamburger was
+   invisible on a phone: the button was in the DOM, the handler was wired to it,
+   and a 390px screen still had no way to reach the navigation. That is the
+   third time this shell has shipped with no mobile nav, by a different
+   mechanism each time, which is why test/shell-layout.test.mjs now clicks the
+   thing rather than grepping for it. */
+.sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(11,22,44,.42);z-index:99;}
+.sidebar-toggle{display:none;align-items:center;justify-content:center;background:transparent;border:0;
+  padding:6px;margin:0 0 0 -6px;border-radius:8px;cursor:pointer;color:#AFC0D2;flex:none;}
+.sidebar-toggle:hover{color:#fff;background:rgba(255,255,255,.10);}
+.sidebar-toggle:focus-visible{outline:2px solid var(--tlc-gold-bright);outline-offset:1px;}
+.sidebar-toggle svg{display:block;width:22px;height:22px;}
 @media (max-width:900px){
-  body{padding-left:0;}
-  .sidebar{transform:translateX(-100%);transition:transform .2s ease;box-shadow:none;}
+  .sidebar{position:fixed;top:0;left:0;transform:translateX(-100%);transition:transform .2s ease;box-shadow:none;}
   .sidebar.is-open{transform:translateX(0);box-shadow:2px 0 22px rgba(11,22,44,.35);}
   .sidebar-backdrop.is-open{display:block;}
   .sidebar-toggle{display:inline-flex;}
@@ -200,13 +262,6 @@ body{padding-left:228px;}
   .wrap,.wrap-wide{padding:20px 16px;}
   .tlc-nav-back{padding:14px 16px 0;}
 }
-/* Off on a desktop, where the sidebar is simply on screen. */
-.sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(11,22,44,.42);z-index:99;}
-.sidebar-toggle{display:none;align-items:center;justify-content:center;background:transparent;border:0;
-  padding:6px;margin:0 0 0 -6px;border-radius:8px;cursor:pointer;color:#AFC0D2;flex:none;}
-.sidebar-toggle:hover{color:#fff;background:rgba(255,255,255,.10);}
-.sidebar-toggle:focus-visible{outline:2px solid var(--tlc-gold-bright);outline-offset:1px;}
-.sidebar-toggle svg{display:block;width:22px;height:22px;}
 /* ── DASHBOARD ─────────────────────────────────────────────── */
 .dash-header{font-family:var(--serif);font-size:24px;color:var(--steel);}
 .dash-sub{font-family:var(--sans);font-size:13px;color:var(--gray);margin-top:2px;}
@@ -244,11 +299,15 @@ ${NEWSLETTER_CSS}
 ${TOAST_CSS}
 ${CMDK_CSS}
 /* ── THE SIDEBAR ───────────────────────────────────────────────
-   Straight from the Foundations spec, down to the numbers: 228px, its own
-   scroll, identical on every screen — only the active row changes. The active
-   row is RAISED (a lighter navy plus a hairline inset), not recoloured with a
-   gold bar; that was mine. */
-.sidebar{background:var(--tlc-sidebar);width:228px;font-family:var(--tlc-sans);}
+   Straight from the Foundations spec: its own scroll, identical on every
+   screen — only the active row changes. The active row is RAISED (a lighter
+   navy plus a hairline inset), not recoloured with a gold bar; that was mine.
+
+   ⚠ The width is --tlc-rail and is set ONCE, above. This block used to
+   restate width:228px — a second place to change and a second place to
+   forget, which is the whole reason the flex shell replaced the old
+   padding-left arithmetic. Colour and type here; geometry there. */
+.sidebar{background:var(--tlc-sidebar);font-family:var(--tlc-sans);}
 .sidebar-brand{padding:16px 18px 14px;border-bottom:1px solid rgba(237,242,247,.12);margin-bottom:0;}
 .sidebar-brand-name{font:600 16px/1.2 var(--tlc-sans);color:#FAF7F1;}
 .sidebar-brand-sub{font:700 11.5px/1 var(--tlc-sans);color:var(--tlc-gold);letter-spacing:.16em;text-transform:uppercase;margin-top:5px;}
@@ -287,7 +346,7 @@ ${CMDK_CSS}
 .sidebar-signout{color:var(--tlc-gold) !important;}
 </style>
 </head>
-<body>${body}
+<body>${body}${body.includes('class="tlc-main"') ? '</div>' : ''}
 <script>
 function toggleSchedule(id){var row=document.getElementById('sched-row-'+id);if(row)row.style.display=row.style.display==='none'?'':'none';}
 // Converts the datetime-local field to an ISO instant using the browser's own
@@ -484,6 +543,7 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}) {
   </div>
 </aside>
 ${CMDK_HTML}
+<div class="tlc-main">
 ${contextBar(activeTab, b)}
 ${extraLinks ? `<div class="tlc-nav-back">${extraLinks}</div>` : ''}`;
 }
@@ -512,8 +572,7 @@ export function contextBar(activeTab, badges = {}) {
     </div>
     <div class="tlc-ctx-right">
       <button type="button" class="tlc-ctx-k" id="tlc-k-open-2">⌘K</button>
-      <a href="https://timothystl.org" target="_blank" rel="noopener">View site ↗</a>
-      <a href="https://connect.timothystl.org" target="_blank" rel="noopener">Connect ↗</a>
+      <a href="https://timothystl.org" target="_blank" rel="noopener">View site</a>
     </div>
   </div>`;
 }

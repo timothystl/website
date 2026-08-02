@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600&family=Source+Sans+3:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  html,body{margin:0;background:#E7E2D8;font-family:'Source Sans 3',Arial,sans-serif;color:#1A1A2A;}
+  a{color:#2E7EA6;text-decoration:none;}
+  a:hover{color:#1D3557;}
+</style>
+</helmet>
+
+<div style="max-width:1180px;margin:0 auto;padding:38px 30px 60px;display:flex;flex-direction:column;gap:30px">
+
+  <div style="display:flex;flex-direction:column;gap:10px;padding-bottom:22px;border-bottom:2px solid #1D3557">
+    <span style="font:700 11px/1 'Source Sans 3';letter-spacing:.16em;text-transform:uppercase;color:#C9973A">Design handoff · July 2026</span>
+    <h1 style="margin:0;font:500 38px/1.1 Lora,Georgia,serif;color:#1D3557">Timothy Lutheran Admin — Full Overhaul</h1>
+    <p style="margin:0;max-width:60em;font-size:15.5px;line-height:1.7;color:#4A4860;text-wrap:pretty">Twenty sections rebuilt on one interaction pattern, plus real editors for the two places that need more than a list. Every field name in the spec maps to the existing D1 schema. Start with <a href="README.md">README.md</a> for the specification, then <a href="IMPLEMENTATION-PHASES.md">IMPLEMENTATION-PHASES.md</a> for the build order.</p>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px">
+    <sc-for list="{{ stats }}" as="s" hint-placeholder-count="4">
+      <div style="padding:16px 17px;border:1px solid #E7DFD1;border-radius:11px;background:#FAF7F1;display:flex;flex-direction:column;gap:5px">
+        <span style="font:600 10.5px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8271">{{ s.label }}</span>
+        <span style="font:500 30px/1 Lora,Georgia,serif;color:#1D3557">{{ s.value }}</span>
+        <span style="font-size:12px;line-height:1.45;color:#6A6858">{{ s.note }}</span>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <sc-for list="{{ files }}" as="f" hint-placeholder-count="4">
+      <a href="{{ f.href }}" style="padding:17px 18px;border:1px solid #E7DFD1;border-radius:11px;background:#FAF7F1;display:flex;flex-direction:column;gap:6px" style-hover="border-color:#2E7EA6">
+        <span style="font:600 15px/1.3 'Source Sans 3';color:#1D3557">{{ f.name }}</span>
+        <span style="font-size:13px;line-height:1.6;color:#4A4860">{{ f.what }}</span>
+      </a>
+    </sc-for>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:11px;padding:19px 21px;border:1px solid #DCE6D6;border-radius:12px;background:#F2F6EF">
+    <span style="font:600 11px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#4A5E3A">The two rules behind every decision</span>
+    <span style="font-size:14px;line-height:1.7;color:#3B4C2E;text-wrap:pretty"><strong>A volunteer cannot break the site.</strong> No pixel values, no font pickers, no unconstrained colour, no HTML editing. Every control snaps to the theme.</span>
+    <span style="font-size:14px;line-height:1.7;color:#3B4C2E;text-wrap:pretty"><strong>Nothing is retyped.</strong> If a fact lives in a table — a staff photo, a sermon title, a news post — every screen reads it from there. Edit once, everything follows.</span>
+  </div>
+
+  <sc-for list="{{ groups }}" as="g" hint-placeholder-count="0">
+    <div style="display:flex;flex-direction:column;gap:15px">
+      <div style="display:flex;align-items:baseline;gap:12px;padding-bottom:9px;border-bottom:1px solid #D8CDBA">
+        <span style="font:500 24px/1.2 Lora,Georgia,serif;color:#1D3557">{{ g.name }}</span>
+        <span style="font-size:13px;color:#8A8271">{{ g.blurb }}</span>
+      </div>
+      <sc-for list="{{ g.shots }}" as="s" hint-placeholder-count="0">
+        <div style="display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:20px;align-items:start;padding:18px;border:1px solid #E7DFD1;border-radius:12px;background:#FAF7F1">
+          <div role="img" aria-label="{{ s.title }}" style="{{ s.imgStyle }}"></div>
+          <div style="display:flex;flex-direction:column;gap:9px;min-width:0">
+            <span style="font:600 16px/1.3 'Source Sans 3';color:#1D3557">{{ s.title }}</span>
+            <span style="font-size:13.5px;line-height:1.7;color:#4A4860;text-wrap:pretty">{{ s.body }}</span>
+            <sc-if value="{{ s.tables }}">
+              <span style="font:400 11.5px/1.6 monospace;color:#8A8271;overflow-wrap:anywhere">{{ s.tables }}</span>
+            </sc-if>
+            <span style="font-size:12px;color:#8A8271">Spec · {{ s.ref }}</span>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </sc-for>
+
+  <div style="display:flex;flex-direction:column;gap:12px;padding:21px 23px;border:1px solid #E6C98E;border-radius:12px;background:#FDF8EC">
+    <span style="font:600 11px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#7A5B18">Answer these before Phase 5</span>
+    <sc-for list="{{ questions }}" as="q" hint-placeholder-count="6">
+      <div style="display:flex;gap:10px;align-items:baseline">
+        <span style="flex:none;color:#C9973A;font-size:12px">◆</span>
+        <span style="flex:1;font-size:13.5px;line-height:1.65;color:#4A4860">{{ q.text }}</span>
+      </div>
+    </sc-for>
+  </div>
+
+  <span style="font-size:12.5px;line-height:1.6;color:#8A8271;text-wrap:pretty">Invented data, to be replaced with real values: pay rates and PTO figures; MDO staff names other than Skylor Murray and Sonya Jackson. Everything else is drawn from the live site, the D1 schema, or Andrew's answers during design.</span>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1240,&quot;height&quot;:900}}">
+const SHOTS = [
+  ['Overview', 'The daily home screen', [
+    ['dashboard.png', 'Dashboard · Needs you',
+      'A worklist you clear, not a wall of numbers. Three task queries — gym requests, pages with unpublished edits, payroll closing — each deep-linking with one action button. Below them, Our Four Values reports on the church\u2019s own priorities: ministries per value, recent posts, and the partner paired to it. A value with nothing new says so plainly.',
+      '', '§5.1']
+  ]],
+  ['Website', 'Everything that produces a page, nested under Pages', [
+    ['pages.png', 'Pages',
+      'Short links are generated from the last address segment, so /visit works as well as /plan-a-visit. Two pages wanting the same one produces a LINK CLASH pill and a warning row with a Fix action — never a silent guess. Renaming writes an automatic 301.',
+      'pages · redirects', '§5.2'],
+    ['ministries.png', 'Ministries',
+      'One click to the editor. The In menu switch takes a ministry out of the header without unpublishing it — the page stays live at its address, it just stops being listed. Each ministry carries one core-value chip, and the value chips filter the list.',
+      'youth_pages · ministry_posts', '§5.3'],
+    ['partners.png', 'Partners',
+      'Four partners, one per core value: LASM → Welcome, Concordia Seminary → Receive, Word of Life → Grow, CFNA → Go. CFNA\u2019s record also names Pastor Rall and Mary Ann in Papua New Guinea. Three columns only — an all-LIVE status column was cut so the names fit.',
+      'partners (new)', '§5.4'],
+    ['news-events.png', 'News & Events',
+      'News and Events & Calendar are now one page at /news with the calendar embedded. /events and /calendar both redirect there. The expire date is the field that matters: a post with one disappears on its own, which is what keeps the site from going stale.',
+      'news_items', '§5.5'],
+    ['sermons.png', 'Sermons',
+      'Series with sermons indented beneath. No recordings are attached yet, so the site renders a text-only card — series, title, date, scripture — with no play button, and upgrades itself the moment a link is pasted. Add the nullable media column now so nothing changes later.',
+      'sermon_series · sermon_notes', '§5.6'],
+    ['christian-ed.png', 'Christian Ed',
+      'The seven class offerings already seeded in bible_classes. Paused classes stay in the list but drop off the website. This table also feeds the newsletter\u2019s class picker.',
+      'bible_classes', '§5.7'],
+    ['menu.png', 'Menu editor',
+      'Live header preview at the top. Drag by the handle to reorder, drop onto an item\u2019s name to nest it, drag between header and footer. ✕ removes an item and the page reappears in the orphan panel below — nothing is ever lost. Labels can be shorter than page names, and one item may be a button.',
+      'menu_items (new)', '§5.8'],
+    ['notices.png', 'Notices',
+      'Short banners pinned to one page. Deliberately not a page block: a notice can be switched off in one click without touching the page it sits on.',
+      'notices', '§5.9'],
+    ['taps-links.png', 'Taps & Links',
+      'Four NFC taps, each with its own cards. The tag only ever holds its short address — /tap1 through /tap4 — so Re-point this tap changes where it lands without reprogramming a tag handed out a year ago. Tap counts per tap; cards move between taps from the drawer.',
+      'link_cards · taps (new)', '§5.10'],
+    ['redirects.png', 'Redirects',
+      'Hand-made short links you can say out loud, automatic 301s written when a page is renamed, and giving/payment links. The automatic rows are what keep old bulletins and Google results working — the section note says to leave them alone.',
+      'redirects', '§5.11'],
+    ['media.png', 'Media',
+      'Exists for the two things that actually go wrong: files over 1 MB (red, with a Re-upload warning row) and photos with no alt text. Alt text gets the widest column because it is the field being fixed. Images live in the database, resized on upload.',
+      'media (new)', '§5.12']
+  ]],
+  ['Communication', 'The weekly email, restored in full', [
+    ['newsletter-list.png', 'Newsletter · issues',
+      'Draft, Awaiting approval, and Sent. A sent issue keeps its real send record — "Sent 24 July to 609 subscribers · 61% opened" — and opens read-only.',
+      'newsletters', '§5.13'],
+    ['newsletter-editor.png', 'Newsletter editor',
+      'Form left, live email preview right. Everything from /edit/35 plus more: seven full TinyMCE fields (pastor\u2019s note, second note, third note, Word of Life, LASM, and any added note), news and bible-class pickers that read through at send time, editable event rows, two CTAs, and an auto This Sunday block. What goes in this issue is one switch per block, so a light week is a few clicks rather than deleting content. Sent issues are locked server-side.',
+      'newsletters · events · news_items · bible_classes', '§5.13'],
+    ['subscribers.png', 'Subscribers',
+      'A read-only mirror of the mail provider plus local signups. The note states the rule that matters: never delete a person to unsubscribe them — unsubscribes come back from the provider.',
+      'newsletter_subscribers', '§5.14']
+  ]],
+  ['People & Ops', 'Staff, rentals, money, and the record of who changed what', [
+    ['staff.png', 'Staff directory',
+      'One record per person; every page showing staff reads from here. Photo crop is set once and reused everywhere — no more heads cut off on the About page.',
+      'staff_members', '§5.15'],
+    ['gym-calendar.png', 'Gym Rentals · calendar first',
+      'Month grid with colour-coded bookings, a requests panel with Approve/Decline, and invoices at the Settings hourly rate. Holds lapse after 48 hours unless confirmed.',
+      'gym_groups · gym_bookings · gym_blocked_dates · gym_invoices', '§5.16'],
+    ['gym-queue.png', 'Gym Rentals · queue first',
+      'The same data as an approval queue with an explicit Conflicts column. Faster for clearing requests; worse for seeing the month. Ship one, or keep the toggle.',
+      'same', '§5.16'],
+    ['users.png', 'Users',
+      'Access reads as "Full access" or "Custom access (N of 14)". Disabling an account keeps the history; deleting does not.',
+      'users', '§5.17'],
+    ['drawer-user-permissions.png', 'Drawer · the 14 real permissions',
+      'Presets are shortcuts; the checkboxes are the truth. Each row shows its permission key in monospace so the screen and the code use the same words. This drawer is the shared pattern every list section uses.',
+      'users', '§5.17'],
+    ['giving.png', 'Giving',
+      'The giving page exists twice — standalone at give.timothystl.org for plate cards and print, and at /give with the normal nav — sharing one set of blocks, with a keep-in-step switch. Funds are addable with an on/off switch. Links carry a Gift or Payment tag: gym rent, a registration fee, and vendor invoices are Payments, so they never land on a year-end giving statement.',
+      'give_amount_tiers · give_funds · redirects', '§5.18'],
+    ['payroll-entry.png', 'Payroll · enter & approve',
+      'Pay period dropdown, Print report and Export CSV side by side. Salaried staff need only exceptions, hourly get steppers, and childcare hours import from the childcare app — with any unmatched name left visibly unmatched rather than guessed. A paid period locks: hours go static and Reopen period is the only way in.',
+      'pay_periods (new) · timesheets (new) · pay_lines (new)', '§5.19'],
+    ['payroll-report-cards.png', 'Payroll report · detail cards',
+      'Matches the report printed today: navy name bar, line items, Gross Pay. Salaried show Base Salary, Housing Allowance, and Mileage; hourly show Pay Rate and Hours Worked. Church staff and Timothy MDO grouped with a subtotal each, then a combined total.',
+      '', '§5.19'],
+    ['payroll-report-table.png', 'Payroll report · one line each',
+      'The same numbers as a compact table — Paid as, hours at rate, PTO used, gross. For scanning and for reconciling against what the payroll service filed.',
+      '', '§5.19'],
+    ['payroll-report-summary.png', 'Payroll report · totals only',
+      'No names and no rates. Each side\u2019s subtotal split salaried versus hourly, people paid, hours recorded, PTO used. This is the version that can go in council minutes or the treasurer\u2019s packet without exposing individual pay.',
+      '', '§5.19'],
+    ['audit-log.png', 'Audit log',
+      'Every change with its field-level before and after in the sub-line. The drawer shows a diff and offers Roll back — which itself writes a new audit entry.',
+      'audit_log', '§5.20']
+  ]]
+];
+
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      stats: [
+        { label: 'Sections', value: '20', note: 'All on one pattern' },
+        { label: 'Phases', value: '9', note: 'Each ships something usable' },
+        { label: 'New tables', value: '7', note: 'Everything else exists' },
+        { label: 'Permissions', value: '14', note: 'The real names, unchanged' }
+      ],
+      files: [
+        { name: 'README.md', href: 'README.md', what: 'The specification — shared pattern, all twenty sections, visual system, confirmed data decisions, open questions.' },
+        { name: 'IMPLEMENTATION-PHASES.md', href: 'IMPLEMENTATION-PHASES.md', what: 'Nine phases with SQL, build order inside each phase, and a definition of done. Six-week sequencing at the end.' },
+        { name: 'Admin Sections Prototype.dc.html', href: 'Admin Sections Prototype.dc.html', what: 'The clickable prototype. Every section, every drawer, every state shown below.' },
+        { name: 'Site Editor Prototype.dc.html', href: 'Site Editor Prototype.dc.html', what: 'The page and block editor from the earlier phase of this work — what a row in Pages or Ministries opens.' }
+      ],
+      groups: SHOTS.map(g => ({
+        name: g[0], blurb: g[1],
+        shots: g[2].map(s => ({
+          title: s[1], body: s[2], tables: s[3], ref: s[4],
+          imgStyle: {
+            width: '100%', aspectRatio: '924 / 540', border: '1px solid #E7DFD1', borderRadius: '8px',
+            backgroundColor: '#fff', backgroundImage: 'url("screenshots/' + s[0] + '")',
+            backgroundSize: 'contain', backgroundPosition: 'center', backgroundRepeat: 'no-repeat'
+          }
+        }))
+      })),
+      questions: [
+        { text: 'Real pay rates, PTO figures, and MDO staff names — only Skylor Murray and Sonya Jackson came from the screenshot.' },
+        { text: 'Should CFNA and Concordia Seminary get their own newsletter blocks alongside Word of Life and LASM?' },
+        { text: 'Gym Rentals: ship both layouts with a toggle, or pick one?' },
+        { text: 'Dashboard: keep the Overview alternative, or ship only Needs you?' },
+        { text: 'Who holds newsletter_approve besides Andrew? The two-person send depends on there being a second person.' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

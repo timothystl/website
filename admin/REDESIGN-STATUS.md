@@ -24,13 +24,46 @@ is the clearest case of the opposite: you block "the week of the Christmas
 Market" by seeing the month, so it keeps its calendar and wears the shared
 header instead.
 
+⚠ **That paragraph and the table disagreed about this exact row for three
+releases.** The prose said blocked dates keeps its calendar; the table marked
+`/gym-rentals/blocked` as `pattern`, which is what the prose rules out. The code
+was right all along — it has always been a month grid on the shared shell — so
+the table was simply wrong, and a wrong row in an inventory is worse than a
+missing one, because the whole point of this file is to be believed without
+opening the route. Andrew confirmed the calendar on 2 Aug; the row now says
+`converted` and the line number is current. Its day cells were also still on
+`#fce8e8`/`#7a1f1f`, which is nobody's palette; they are the problem tone now,
+and the legend swatch matches the cells it describes.
+
+## Task 15's five borderline routes — answered 2 Aug 2026
+
+The fix list asks five questions and says to answer them "before the count is
+trustworthy." Andrew's ruling was to make it future-proof rather than to pick
+per-route, so each was checked against the code. **Two of the five dissolve on
+inspection — the premise was wrong, not the classification.** That matters more
+than the answers: both describe a record editable two ways, which is the real
+defect the task is hunting, and neither exists.
+
+| # | Route | Answer |
+| --- | --- | --- |
+| 1 | `/ministries/:slug/posts` | **A genuine miss — still open.** It is a list of posts by any reading and should be a `renderListSection()` config with its own `sections.js` entry. Its `/new` and `/edit/` siblings are forms and correctly stay. |
+| 2 | `/notices/add` vs `/notices/edit/` | **Still open.** Add and edit are one form in two states, built two ways; `edit` is already `pattern`, so `add` is the one to fold in. |
+| 3 | `/users/new`, `/users/edit/` | **Premise false. There is no user drawer.** `renderDrawer` is never called on `/users` — the call sites are pages/new, pages details, subscribers import, redirects, giving, audit. `drawer-user-permissions.png` shows a design that was never built, so a user is editable exactly one way and nothing is duplicated. The choice is to build the drawer or keep the routes; it is a gap, not a defect. |
+| 4 | `/pages/details` | **Premise false — two different screens.** `/pages/details` is the *church details* record (two segments, one per site). The page drawer is `/pages/:id/details` and it does exist. They are not two ways to edit one record; they do not touch the same row. |
+| 5 | `/voters`, `/youth`, `/youth/` | **Youth answered: neither is a screen.** Both are 302s to `/ministries` — one for the bare path, one preserving the subtree — so both are needed and neither converts. Reclassified `n/a`. `/voters` is still unclassified. |
+
+⚠ **The line numbers in the table below drift.** Several were already stale when
+checked (blocked dates was off by 23, the youth rows by 170). A line number is
+a convenience, not an identity — if one does not land where you expect, search
+for the route string rather than assuming the row is wrong.
+
 | Route | File | State | Spec |
 | --- | --- | --- | --- |
 | `/dashboard` | `tlc-admin-worker.js:2198` | `converted` | `01-dashboard.html` |
 | `/edit/` | `tlc-admin-worker.js:4350` | `converted` | `13-newsletter.html` · Same composer. |
 | `/filtered` | `admin/forms.js:212` | `pattern` | — · No screen file (postdates the handoff); built to Task 7's columns and filters. |
 | `/gym-rentals/api/group-rate` | `admin/gym.js:3232` | `converted` | — |
-| `/gym-rentals/blocked` | `admin/gym.js:3026` | `pattern` | — |
+| `/gym-rentals/blocked` | `admin/gym.js:3049` | `converted` | — · A month grid, deliberately. See the note above the table; confirmed by Andrew 2 Aug. |
 | `/gym-rentals/bookings` | `admin/gym.js:4021` | `pattern` | — |
 | `/gym-rentals/bookings/new` | `admin/gym.js:3241` | `converted` | — |
 | `/gym-rentals/groups` | `admin/gym.js:2456` | `pattern` | — |
@@ -60,8 +93,6 @@ header instead.
 | `/users/edit/` | `tlc-admin-worker.js:8235` | `converted` | `17-users.html` |
 | `/users/new` | `tlc-admin-worker.js:8195` | `converted` | `17-users.html` |
 | `/voters` | `tlc-admin-worker.js:3281` | `converted` | — |
-| `/youth` | `tlc-admin-worker.js:5811` | `converted` | — |
-| `/youth/` | `tlc-admin-worker.js:5814` | `converted` | — |
 | `/audit-log` | `tlc-admin-worker.js:8320` | `pattern` | `20-audit.html` |
 | `/christian-education` | `tlc-admin-worker.js:4239` | `pattern` | `07-ed.html` |
 | `/christian-education/edit/` | `tlc-admin-worker.js:4303` | `pattern` | `07-ed.html` |
@@ -96,9 +127,11 @@ header instead.
 | `/ministries/api/page/` | `tlc-admin-worker.js:5835` | `n/a` | — · JSON, not a screen. |
 | `/ministries/editor/` | `tlc-admin-worker.js:5824` | `n/a` | `23-ministry-editor.html` · The block editor. Its own full-screen chrome by design (22-page-editor §"The shell"). |
 | `/pages/[^/]+/edit` | `tlc-admin-worker.js:5555` | `n/a` | `22-page-editor.html` · Same editor, other mount. |
+| `/youth` | `tlc-admin-worker.js:5981` | `n/a` | — · A 302 to `/ministries`. Not a screen, and not a duplicate of the row below: this one answers the bare path. |
+| `/youth/` | `tlc-admin-worker.js:5984` | `n/a` | — · A 302 for the subtree, preserving the rest of the address. Both are needed. |
 | `/scheduler` | `tlc-admin-worker.js:3099` | `n/a` | — · Dead code — the only endpoint it talks to does not exist. Locked behind the session in v3.8.0 rather than deleted. |
 
-**38 on the shared pattern · 31 converted (form-shaped) · 5 not applicable · no `legacy` rows.**
+**38 on the shared pattern · 29 converted (form-shaped) · 7 not applicable · no `legacy` rows.**
 
 Task 6 is done by its own definition: every route either uses the shared
 pattern, or is form-shaped and carries the primitives, a sentence-case heading

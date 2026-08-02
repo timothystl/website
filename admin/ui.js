@@ -181,6 +181,13 @@ export function renderListSection(cfg) {
     // The warning row is part of the row, not a modal and not a toast: a row
     // that needs attention says so in place, with its own action label, and
     // goes on saying it until somebody fixes it.
+    //
+    // ⚠ IT RENDERS ABOVE THE ROW IT DESCRIBES (Ruling 1, and pages.png /
+    // media.png draw it that way). The eye should hit the problem before the
+    // thing with the problem. This was the last ruling still not in the code —
+    // the README said "grows a warning row beneath it", the screenshots said
+    // otherwise, and the screenshots win. The row keeps its own problem badge:
+    // the band explains, the badge marks.
     const warnHtml = r.warn ? `<div class="tlc-warn">
       <span class="tlc-warn-mark">▲</span>
       <span class="tlc-warn-text">${esc(r.warn)}</span>
@@ -192,9 +199,9 @@ export function renderListSection(cfg) {
     // every row independently, so searching for a sermon finds it whether or
     // not its series matches.
     return `<div class="tlc-row-wrap${r.child ? ' tlc-row-child' : ''}" data-filter="${esc(filterVals.join(' '))}" data-search="${esc(String(r.search || '').toLowerCase())}">
-      <div class="tlc-row"${r.href ? ` data-href="${esc(r.href)}"` : ''} style="grid-template-columns:${grid};">
+      ${warnHtml}<div class="tlc-row"${r.href ? ` data-href="${esc(r.href)}"` : ''} style="grid-template-columns:${grid};">
         ${cells}<span class="tlc-td tlc-right tlc-actions">${actions}</span>
-      </div>${warnHtml}
+      </div>
     </div>`;
   }).join('');
 
@@ -669,6 +676,10 @@ export const ADMIN_UI_CSS = `
 :root{--steel:#1E2D4A;--amber:#C9973A;--sage:#4A5E3A;--warm:#FAF7F1;--linen:#F4EFE5;--mist:#E7EEF7;
   --border:#E7DFD1;--charcoal:#1A1A2A;--gray:#6A6858;--white:#fff;
   --sans:'Source Sans 3',Arial,sans-serif;--serif:'Lora',Georgia,serif;
+  /* The sidebar rail. Declared here because this is the shell's one :root —
+     the flex shell reads it for both the rail and the content column, so the
+     width exists in exactly one place. */
+  --tlc-rail:228px;
 
   --tlc-sidebar:${PALETTE.sidebarNavy};--tlc-nav-raised:${PALETTE.navyRaised};
   --tlc-navy:${PALETTE.navy};--tlc-ink:${PALETTE.navyInk};--tlc-text:${PALETTE.ink};
@@ -761,8 +772,14 @@ export const ADMIN_UI_CSS = `
 .tlc-pill{display:inline-block;font:600 10.5px/1 var(--tlc-sans);letter-spacing:.08em;text-transform:uppercase;padding:5px 10px;border-radius:999px;border:1px solid transparent;white-space:nowrap;}
 .tlc-chip{display:inline-block;font:600 11px/1 var(--tlc-sans);padding:5px 10px;border-radius:999px;white-space:nowrap;}
 .tlc-chip-none{background:#F0EEE9;color:var(--tlc-muted);}
-.tlc-warn{display:flex;align-items:center;gap:9px;padding:9px 18px 11px 18px;background:#FBF1DC;border-top:1px solid #EBD5A6;font-size:12.5px;color:#7A5B18;}
-.tlc-warn-mark{flex:none;font-size:10px;}
+/* The band sits ABOVE its row, so the seam belongs on its BOTTOM edge —
+   border-top attached it to the row above, which is a different row and
+   nothing to do with the warning. */
+.tlc-warn{display:flex;align-items:center;gap:9px;padding:9px 18px 11px 18px;background:#FBF1DC;border-bottom:1px solid #EBD5A6;font-size:12.5px;color:#7A5B18;}
+/* The mark is problem red against the amber band, per Ruling 1. It was the
+   same amber as the text, which made the one glyph on the row that is
+   meant to catch the eye the least visible thing in the band. */
+.tlc-warn-mark{flex:none;font-size:10px;color:#8C3A28;}
 .tlc-warn-text{flex:1;text-wrap:pretty;}
 .tlc-warn-cta{flex:none;font-weight:700;color:#7A5B18;text-decoration:underline;}
 .tlc-empty{padding:34px 18px;text-align:center;display:flex;flex-direction:column;gap:5px;}
@@ -884,8 +901,42 @@ export const ADMIN_UI_CSS = `
 /* The edit form as a page. Narrow on purpose — a form is read one field at a
    time, and a field box running the whole width of a desk monitor is harder to
    scan, not easier. The wide option opts out for the few that carry an editor. */
-.tlc-form{max-width:620px;}
-.tlc-form--wide{max-width:none;}
+/* ── THE FORM WIDTH RULE (Task 19) ────────────────────────────
+   Task 2 dropped .wrap{max-width:860px} because that narrow column was a
+   symptom of the missing sidebar. Right for list screens, which want the
+   width. Wrong for FORMS: "Group name" became a text input the full width of
+   a 1900px monitor, and the eye has to cross the whole screen to get from the
+   label to the value.
+
+   The cap is on the FIELD COLUMN and nothing else. The heading, the purpose
+   line and any table or list stay full width — a form is hard to read wide, a
+   table is hard to read narrow, and they are different problems.
+
+   640 single column, 920 for a form that genuinely needs the room. wide used
+   to mean max-width:none, i.e. the 1900px this rule exists to stop; it is the
+   spec's own second number now. Its two callers (the sermon note and the news
+   post) are single-column forms carrying a rich-text body, which is what wants
+   the extra width — not a second column. */
+.tlc-form{max-width:640px;}
+.tlc-form--wide{max-width:920px;}
+
+/* The same rule for the hand-written forms — the ~29 converted routes that
+   carry things a field config cannot express. They are all .tlc-wrap > .card >
+   .form-group, so this reaches them without touching a single route handler,
+   which is what Task 19 asks for ("fix it in the shared form wrapper rather
+   than per route").
+
+   ⚠ :not(:has(table)) is load-bearing. A few cards hold BOTH fields and a
+   table — the gym invoice view is one — and squeezing those to 640 would fix
+   the form by breaking the table beside it. A card earns the cap only if it is
+   purely a field column.
+
+   The button row is a sibling of the card and stays uncapped on purpose: it is
+   display:flex with no justify-content, so its buttons already begin at the
+   left edge of the field column, which is where the spec wants them. */
+.tlc-wrap .card:has(.form-group):not(:has(table)),
+.tlc-wrap .card:has(.checkbox-row):not(:has(table)),
+.wrap .card:has(.form-group):not(:has(table)){max-width:640px;}
 .tlc-form-card{background:var(--tlc-card);border:1px solid var(--tlc-edge);border-radius:12px;padding:20px 22px 6px;}
 .tlc-form-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px;}
 /* The forms carry the old markup for the things the field vocabulary cannot

@@ -81,6 +81,7 @@ jobs:
 # take minutes each, so wiring them up is a deliberate decision rather than
 # something to slip in alongside the Node ones. Run them locally:
 #
+#   node test/shell-layout.test.mjs      # the shell, MEASURED — see below
 #   node test/list-section.test.mjs      # the shared list pattern
 #   node test/editor.test.mjs            # the block editor shell
 #   node test/site-editor.test.mjs       # the pages rail and Page tab
@@ -91,3 +92,10 @@ jobs:
 #
 # Chromium is at /opt/pw-browsers/chromium in the Claude Code environment, or
 # set CHROME_PATH.
+#
+# ⚠ shell-layout is the one worth running by hand after ANY change to the
+# sidebar or the page shell. Three separate releases have shipped an admin with
+# no working navigation on a phone — off-canvas with no handler, then a handler
+# with no markup, then a hamburger whose display:none was declared after the
+# media query and so won at every width. Every one of those passed a CSS grep.
+# None would have passed a browser that was asked to click the thing.

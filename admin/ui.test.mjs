@@ -126,6 +126,16 @@ group('list section');
   has(out, 'tlc-warn', 'a row needing attention grows a warning row');
   has(out, 'Add photo', 'with its own action label');
 
+  // ⚠ ABOVE its row, not below — Ruling 1, and the last one to reach the code.
+  // Asserting only that the class exists is what let the README's "grows a
+  // warning row beneath it" survive against the screenshots for four releases.
+  // This pins the position: the band must be the FIRST child of the row
+  // wrapper, so it precedes the row it describes.
+  ok(/class="tlc-row-wrap[^"]*"[^>]*>\s*<div class="tlc-warn"/.test(out),
+    'the warning band is the first thing in its row wrapper, above the row');
+  ok(!/<\/div>\s*<div class="tlc-warn"[^>]*>\s*<span class="tlc-warn-mark">▲<\/span>[\s\S]{0,200}<\/div>\s*<\/div>/.test(out),
+    'and is not trailing the row instead');
+
   // The grid template must include one extra track for the actions cell, or
   // the last column and the Edit link fight over the same column.
   has(out, 'grid-template-columns:2.2fr 1.8fr .7fr 118px', 'columns plus an actions track');
@@ -368,10 +378,26 @@ group('the shell');
 {
   const shell = readFileSync(new URL('./helpers.js', import.meta.url), 'utf8');
 
-  // The sidebar, as Foundations specifies it.
-  ok(shell.includes('.sidebar{position:fixed;top:0;left:0;width:228px'), 'the sidebar is 228px and on screen');
-  ok(shell.includes('body{padding-left:228px;}'), 'and the content sits beside it, not under it');
+  // The shell is two flex columns — Task 2 item 2. It used to be a fixed
+  // sidebar plus `body{padding-left:228px}`, which wrote the rail width twice.
+  // The rail width lives in ADMIN_UI_CSS's :root — the shell's only one — so
+  // this reads both files rather than helpers.js alone.
+  const shellCss = shell + readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+  ok(shellCss.includes('--tlc-rail:228px'), 'the rail width is declared once');
+  ok(shell.includes('body{display:flex;align-items:stretch;}'), 'the shell is a flex row');
+  ok(shell.includes('.tlc-main{flex:1;min-width:0'), 'the content column flexes and can shrink');
+  ok(!shell.includes('body{padding-left:228px'), 'the old padding-left arithmetic is gone');
+  ok(!/\.sidebar\{[^}]*width:228px/.test(shell), 'and the width is not restated on .sidebar');
   ok(!shell.includes('.wrap{max-width:860px'), 'the narrow content column is gone');
+
+  // ⚠ THE OVERLAP BUG. The group list is the scroller; the sidebar clips. When
+  // `.sidebar-groups` had `flex:1;min-height:0` and no `overflow-y`, its
+  // content painted straight out of the squashed box and the footer landed on
+  // top of the nav rows halfway up the list. Both halves are asserted, because
+  // either one alone brings it back.
+  ok(shell.includes('.sidebar-groups{flex:1;min-height:0;overflow-y:auto;}'), 'the group list scrolls');
+  ok(/\.sidebar\{[^}]*overflow:hidden/.test(shell), 'and the sidebar itself clips rather than scrolling');
+  ok(!/\.sidebar-footer\{[^}]*margin-top:auto/.test(shell), 'the footer is pinned by the flex line, not an auto margin');
 
   // The white util bar that held Sign Out is gone for good — that is the piece
   // the design rejected, and Sign Out lives in the sidebar foot now.

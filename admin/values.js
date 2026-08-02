@@ -14,13 +14,34 @@
 // the 2px border a chip takes when it is the selected filter — without it a
 // selected chip has to change its fill, which reads as a different value
 // rather than the same one, chosen.
+
+// ⚠ A VALUE IS NOT A STATUS, AND MUST NOT LOOK LIKE ONE.
+//
+// These four used to borrow their tints from the status tones: Acceptance was
+// #EDF0E4, the same pale green as `good`, and Outreach was #FAF0DC, the same
+// pale amber as `warn`. On Ministries those columns sit side by side, so one
+// green chip meant "this page is live" and the chip beside it meant "tagged
+// Acceptance" — identical fills, unrelated meanings. Nothing warned about it
+// because each palette was correct on its own; only together were they wrong.
+//
+// The fix is a rule rather than four new hexes, because a rule survives
+// somebody adding a sixth status tone: **a status tone is pale and low-chroma,
+// a value tint is saturated.** Status is a state the row is passing through;
+// a value is what the row *is*. Separating the two categories by chroma means
+// they stay distinguishable even where the hues are neighbours, and it cannot
+// be undone by a later tone landing on a hue a value already uses.
+//
+// The hues are the church's own (moss, navy, teal, plum — see the design
+// system in CLAUDE.md), spaced so no two tints are within 20 of each other on
+// any channel. `values.test.mjs` asserts the separation, the non-collision and
+// 4.5:1 ink-on-tint, so this cannot quietly drift back.
 export const VALUES = [
   {
     key: 'acceptance',
     short: 'Welcome',
     name: 'Acceptance',
-    tint: '#EDF0E4',
-    ink: '#3F5424',
+    tint: '#D6E4BE',
+    ink: '#33431E',
     solid: '#4A5E3A',
     blurb: 'Intentionally welcoming and loving all people as Jesus does.',
   },
@@ -28,7 +49,7 @@ export const VALUES = [
     key: 'worship',
     short: 'Receive',
     name: 'Worship',
-    tint: '#E7EEF7',
+    tint: '#CEDBF7',
     ink: '#1E2D4A',
     solid: '#1E2D4A',
     blurb: "Gathering as God's people, celebrating His grace, receiving His gifts of Word and Sacrament.",
@@ -37,18 +58,18 @@ export const VALUES = [
     key: 'education',
     short: 'Grow',
     name: 'Christian Education',
-    tint: '#E4EFEF',
-    ink: '#17565C',
-    solid: '#1F6B72',
+    tint: '#BAE8DE',
+    ink: '#0F5049',
+    solid: '#1F7A70',
     blurb: 'Equipping people for a lifelong journey with Christ.',
   },
   {
     key: 'outreach',
     short: 'Go',
     name: 'Outreach',
-    tint: '#FAF0DC',
-    ink: '#7A5B18',
-    solid: '#C9973A',
+    tint: '#E4CBEE',
+    ink: '#573A5F',
+    solid: '#8A6A8A',
     blurb: "Sharing the love of Jesus with those who don't yet know Him.",
   },
 ];

@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600&amp;family=Source+Sans+3:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+  html,body{margin:0;background:#F0EAE0;font-family:'Source Sans 3',Arial,sans-serif;color:#1A1A2A;}
+  a{color:#2E7EA6;text-decoration:none;}
+  a:hover{color:#1E2D4A;}
+  ::selection{background:#F5E4C0;}
+</style>
+</helmet>
+
+<div style="max-width:1000px;margin:0 auto;padding:52px 34px 100px;display:flex;flex-direction:column;gap:34px">
+
+  <div style="display:flex;flex-direction:column;gap:11px;padding-bottom:24px;border-bottom:2px solid #1E2D4A">
+    <span style="font:700 11px/1 'Source Sans 3';letter-spacing:.16em;text-transform:uppercase;color:#C9973A">Design handoff · 2 August 2026 · main @ 69b5ba6</span>
+    <h1 style="margin:0;font:500 38px/1.1 Lora,Georgia,serif;color:#1E2D4A">Timothy Lutheran Admin — round two</h1>
+    <p style="margin:0;max-width:58em;font-size:15.5px;line-height:1.7;color:#4A4860;text-wrap:pretty">The July overhaul is built and live. This is what a walkthrough of the running admin turned up: Tasks 0 to 10 are done, four rulings are settled, and nine remain. One of them is a security issue and should go first.</p>
+  </div>
+
+  <div style="padding:19px 22px;border:1px solid #E4CE9A;border-radius:12px;background:#FBF3E1;display:flex;flex-direction:column;gap:7px">
+    <span style="font:700 11px/1 'Source Sans 3';letter-spacing:.13em;text-transform:uppercase;color:#7A5B18">Do this first</span>
+    <p style="margin:0;font-size:14.5px;line-height:1.65;color:#5C4A1E;text-wrap:pretty"><b>The renter booking page is served from <code>admin.timothystl.org</code>.</b> That URL is pasted into emails to people outside the church. While one path on the admin host has to be anonymous, you cannot require a session on <code>admin.*</code> at the edge — and a renter who trims the URL lands on your login. Move it to <code>timothystl.org/gym/book/&lt;token&gt;</code>, redirect the old address, then lock the admin origin down. <b>Task 17.</b></p>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:13px">
+    <h2 style="margin:0;font:500 25px/1.2 Lora,Georgia,serif;color:#1E2D4A">Four rulings, settled</h2>
+    <p style="margin:0;max-width:58em;font-size:14.5px;line-height:1.7;color:#4A4860;text-wrap:pretty">These were the questions where the docs contradicted each other. They are final; where they disagree with anything in <code>README.md</code>, they win.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px">
+      <div style="padding:17px 19px;border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;box-shadow:0 2px 6px rgba(11,22,44,.05),0 10px 24px rgba(11,22,44,.06);display:flex;flex-direction:column;gap:6px">
+        <span style="font:600 15.5px/1.3 Lora,Georgia,serif;color:#1E2D4A">Warning rows go above</span>
+        <span style="font-size:13.5px;line-height:1.6;color:#4A4860;text-wrap:pretty">The screenshot was right and §3 of the README was wrong. The band precedes the row it describes, so the eye hits the problem before the thing with the problem. Still not in the code — Task 11.</span>
+      </div>
+      <div style="padding:17px 19px;border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;box-shadow:0 2px 6px rgba(11,22,44,.05),0 10px 24px rgba(11,22,44,.06);display:flex;flex-direction:column;gap:6px">
+        <span style="font:600 15.5px/1.3 Lora,Georgia,serif;color:#1E2D4A">Permissions hide items, not groups</span>
+        <span style="font-size:13.5px;line-height:1.6;color:#4A4860;text-wrap:pretty">Each section hides on its own permission. A group label renders only when at least one section under it survives — no orphan headings, no group hidden while a permitted section sits inside it.</span>
+      </div>
+      <div style="padding:17px 19px;border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;box-shadow:0 2px 6px rgba(11,22,44,.05),0 10px 24px rgba(11,22,44,.06);display:flex;flex-direction:column;gap:6px">
+        <span style="font:600 15.5px/1.3 Lora,Georgia,serif;color:#1E2D4A">Drawer buttons: Delete far left</span>
+        <span style="font-size:13.5px;line-height:1.6;color:#4A4860;text-wrap:pretty">Red text, a gap, then Cancel and Save changes grouped right. Destructive is separated by distance, not by colour alone. Already correct in the build.</span>
+      </div>
+      <div style="padding:17px 19px;border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;box-shadow:0 2px 6px rgba(11,22,44,.05),0 10px 24px rgba(11,22,44,.06);display:flex;flex-direction:column;gap:6px">
+        <span style="font:600 15.5px/1.3 Lora,Georgia,serif;color:#1E2D4A">The sidebar stays visible</span>
+        <span style="font-size:13.5px;line-height:1.6;color:#4A4860;text-wrap:pretty">228px, fixed, always on screen at ≥900px, with a slide-over below that. Reversed once already; not reversing again.</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:13px">
+    <h2 style="margin:0;font:500 25px/1.2 Lora,Georgia,serif;color:#1E2D4A">Done — Tasks 0 to 10</h2>
+    <div style="padding:17px 20px;border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9">
+      <p style="margin:0 0 10px;font-size:14.5px;line-height:1.7;color:#4A4860;text-wrap:pretty">Six commits landed the palette sweep, the visible sidebar, the context bar, the login screens, the gym conversions, the payroll header bars, Filtered Mail, the value chips, both copy fixes and the banner info card. Verified in the source, not taken on trust.</p>
+      <p style="margin:0;font-size:14.5px;line-height:1.7;color:#4A4860;text-wrap:pretty">Two corrections came out of that audit. The definition of done said <code>sidebar-toggle</code>, <code>sidebar-backdrop</code> and <code>translateX(-100%)</code> should return nothing — but Task 2 item 3 <i>requires</i> them for the sub-900px slide-over, so that check would have failed a correct implementation. And <code>admin/email.js</code> was marked exempt from the palette on the reading that congregation-facing files have their own; they do not — those are the pre-redesign hexes. See Task 16.</p>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:13px">
+    <h2 style="margin:0;font:500 25px/1.2 Lora,Georgia,serif;color:#1E2D4A">Open — Tasks 11 to 19</h2>
+
+    <div style="display:flex;flex-direction:column;gap:11px">
+
+      <div style="display:flex;gap:15px;padding:16px 19px;border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;box-shadow:0 2px 6px rgba(11,22,44,.05),0 10px 24px rgba(11,22,44,.06)">
+        <span style="flex:none;width:30px;height:30px;border-radius:50%;background:#1E2D4A;color:#F5E4C0;font:700 13px/30px 'Source Sans 3';text-align:center">17</span>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <span style="font:600 16px/1.3 Lora,Georgia,serif;color:#1E2D4A">Renter booking — domain and shell</span>
+          <span style="font-size:13.5px;line-height:1.65;color:#4A4860;text-wrap:pretty">Move off the admin host. Then give it the public site's green masthead rather than nothing: the portal keeps its own tokens and gets no admin chrome, but it is not exempt from the brand. That refines the earlier ruling, which was read as "not styled".</span>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:15px;padding:16px 19px;border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;box-shadow:0 2px 6px rgba(11,22,44,.05),0 10px 24px rgba(11,22,44,.06)">
+        <span style="flex:none;width:30px;height:30px;border-radius:50%;background:#1E2D4A;color:#F5E4C0;font:700 13px/30px 'Source Sans 3';text-align:center">11</span>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <span style="font:600 16px/1.3 Lora,Georgia,serif;color:#1E2D4A">Warning rows move above their row</span>
+          <span style="font-size:13.5px;line-height:1.65;color:#4A4860;text-wrap:pretty">Three lines in <code>ui.js</code>: emit the band before the row, swap <code>border-top</code> for <code>border-bottom</code>, and make the ▲ problem red. Tighten the test to assert order, not just presence.</span>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:15px;padding:16px 19px;border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;box-shadow:0 2px 6px rgba(11,22,44,.05),0 10px 24px rgba(11,22,44,.06)">
+        <span style="flex:none;width:30px;height:30px;border-radius:50%;background:#1E2D4A;color:#F5E4C0;font:700 13px/30px 'Source Sans 3';text-align:center">12</span>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <span style="font:600 16px/1.3 Lora,Georgia,serif;color:#1E2D4A">Editor rail, Connect, arrow glyphs</span>
+          <span style="font-size:13.5px;line-height:1.65;color:#4A4860;text-wrap:pretty">Both editors open with the block rail collapsed — open it by default and persist the choice. Remove "Connect" from the context bar; it links to an unrelated app. Strip every <code>↗</code>. All 24 spec files are already swept.</span>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:15px;padding:16px 19px;border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;box-shadow:0 2px 6px rgba(11,22,44,.05),0 10px 24px rgba(11,22,44,.06)">
+        <span style="flex:none;width:30px;height:30px;border-radius:50%;background:#1E2D4A;color:#F5E4C0;font:700 13px/30px 'Source Sans 3';text-align:center">19</span>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <span style="font:600 16px/1.3 Lora,Georgia,serif;color:#1E2D4A">Group edit — and a form-width rule</span>
+          <span style="font-size:13.5px;line-height:1.65;color:#4A4860;text-wrap:pretty">The booking link outranks the record it belongs to; Copy is clipped off the right edge; Regenerate is a destructive action dressed as an ordinary button. The bigger find: dropping <code>max-width:860px</code> was right for lists and wrong for forms — single-column forms now cap at 640px, two-column at 920px, headings and tables uncapped. One shared wrapper, every form screen.</span>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:15px;padding:16px 19px;border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;box-shadow:0 2px 6px rgba(11,22,44,.05),0 10px 24px rgba(11,22,44,.06)">
+        <span style="flex:none;width:30px;height:30px;border-radius:50%;background:#1E2D4A;color:#F5E4C0;font:700 13px/30px 'Source Sans 3';text-align:center">15</span>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <span style="font:600 16px/1.3 Lora,Georgia,serif;color:#1E2D4A">Five borderline hand-written routes</span>
+          <span style="font-size:13.5px;line-height:1.65;color:#4A4860;text-wrap:pretty">Of 31 hand-written routes, 26 are correctly hand-written. Five are not — and the real defect is duplication, not markup: <code>/users/new</code>, <code>/users/edit/</code> and <code>/pages/details</code> are second editors for records the drawer already edits. Two ways to edit one record is the problem. Answer before writing code.</span>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:15px;padding:16px 19px;border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;box-shadow:0 2px 6px rgba(11,22,44,.05),0 10px 24px rgba(11,22,44,.06)">
+        <span style="flex:none;width:30px;height:30px;border-radius:50%;background:#1E2D4A;color:#F5E4C0;font:700 13px/30px 'Source Sans 3';text-align:center">16</span>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <span style="font:600 16px/1.3 Lora,Georgia,serif;color:#1E2D4A">Congregation-facing files onto the palette</span>
+          <span style="font-size:13.5px;line-height:1.65;color:#4A4860;text-wrap:pretty">Reverses an earlier exemption. The hexes in <code>email.js</code> are not a different palette, they are the old one — the four Task 1 replaced. Inline literals only, keep the Georgia and Arial fallbacks, and leave the geometry alone: email is not a browser.</span>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:15px;padding:16px 19px;border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;box-shadow:0 2px 6px rgba(11,22,44,.05),0 10px 24px rgba(11,22,44,.06)">
+        <span style="flex:none;width:30px;height:30px;border-radius:50%;background:#1E2D4A;color:#F5E4C0;font:700 13px/30px 'Source Sans 3';text-align:center">13</span>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <span style="font:600 16px/1.3 Lora,Georgia,serif;color:#1E2D4A">Homepage editor</span>
+          <span style="font-size:13.5px;line-height:1.65;color:#4A4860;text-wrap:pretty">The info card renders one row per service and then drops the address and phone — services sharing a label collapse onto one line, and the card is one composed unit. Free text widens to an editable eyebrow plus bold, italic, links and line breaks. And <b>Block width: Full / Half</b>, so two consecutive halves pair into a row — a property of adjacent blocks, deliberately not a container you drag things into.</span>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:15px;padding:16px 19px;border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;box-shadow:0 2px 6px rgba(11,22,44,.05),0 10px 24px rgba(11,22,44,.06)">
+        <span style="flex:none;width:30px;height:30px;border-radius:50%;background:#1E2D4A;color:#F5E4C0;font:700 13px/30px 'Source Sans 3';text-align:center">14</span>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <span style="font:600 16px/1.3 Lora,Georgia,serif;color:#1E2D4A">Card grid — new block</span>
+          <span style="font-size:13.5px;line-height:1.65;color:#4A4860;text-wrap:pretty">Four pages on the live site use a layout the editor cannot make. Columns is plain text with no card, image or link; Link tiles is a fixed 4-up of labels. One new block covers <code>/worship</code>, <code>/education</code>, <code>/ministries</code> and Community partners: 2–4 up, per-card image, eyebrow, heading, body and link, all optional but the heading.</span>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:15px;padding:16px 19px;border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;box-shadow:0 2px 6px rgba(11,22,44,.05),0 10px 24px rgba(11,22,44,.06)">
+        <span style="flex:none;width:30px;height:30px;border-radius:50%;background:#1E2D4A;color:#F5E4C0;font:700 13px/30px 'Source Sans 3';text-align:center">18</span>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <span style="font:600 16px/1.3 Lora,Georgia,serif;color:#1E2D4A">Renter booking — the pattern</span>
+          <span style="font-size:13.5px;line-height:1.65;color:#4A4860;text-wrap:pretty">Spec screen built: <code>screens/24-gym-booking.html</code>. A request is a <b>basket of slots across many dates</b> — Tue 6–7, Wed 5–6 and 7–8 — and there is nowhere on the current page to see what you have picked. Adds a Your request panel; makes the calendar multi-date with the hour count on each held day so availability is never colour alone; moves the insurance notice to confirmation, where it is actionable; and keeps the recurring tab as a bulk way to fill the same basket.</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:13px">
+    <h2 style="margin:0;font:500 25px/1.2 Lora,Georgia,serif;color:#1E2D4A">What is in this folder</h2>
+    <div style="border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;overflow:hidden">
+      <div style="display:grid;grid-template-columns:1.2fr 2fr;gap:12px;padding:11px 19px;background:#F4EFE5;font:600 10.5px/1 'Source Sans 3';letter-spacing:.12em;text-transform:uppercase;color:#8A8271">
+        <span>File</span><span>What it is</span>
+      </div>
+      <sc-for list="{{ files }}" as="f" hint-placeholder-count="6">
+        <div style="display:grid;grid-template-columns:1.2fr 2fr;gap:12px;padding:12px 19px;border-top:1px solid #F2ECE1;font-size:13.5px;color:#4A4860;align-items:baseline">
+          <span style="font-weight:600;color:#1E2D4A">{{ f.name }}</span>
+          <span style="text-wrap:pretty">{{ f.what }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:13px">
+    <h2 style="margin:0;font:500 25px/1.2 Lora,Georgia,serif;color:#1E2D4A">Still open, and not mine to close</h2>
+    <div style="padding:17px 20px;border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;display:flex;flex-direction:column;gap:9px">
+      <span style="font-size:14.5px;line-height:1.7;color:#4A4860;text-wrap:pretty"><b>The side-by-side pass.</b> All 24 screen files opened against the running admin at matching widths. It is the last line of the definition of done and it has not happened — it needs eyes on the live admin, which the spec files cannot give.</span>
+      <span style="font-size:14.5px;line-height:1.7;color:#4A4860;text-wrap:pretty"><b>Two questions on the renter portal.</b> Does "My bookings" carry its own token or ride the booking one? And can a renter cancel a request themselves before the office prices it? Both change the flow; neither is decided.</span>
+      <span style="font-size:14.5px;line-height:1.7;color:#4A4860;text-wrap:pretty"><b>Bookkeeping in <code>REDESIGN-STATUS.md</code>.</b> <code>/gym-rentals/api/group-rate</code> is an endpoint and should read <code>n/a</code>; Tasks 2, 8, 9 and 10 are real work that no row records; and <code>/voters</code> and the duplicated <code>/youth</code> rows are unclassified.</span>
+    </div>
+  </div>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      files: [
+        { name: 'FIXES.md', what: 'The work list — rulings, a status board, and Tasks 0 through 19 in priority order. The one file to work from.' },
+        { name: 'REDESIGN-STATUS.md', what: 'All 74 routes with their state and spec file, mirrored from the repo with a design review appended.' },
+        { name: 'screens/00-foundations.html', what: 'Palette, type, spacing, radii, the six primitives. Every value in the fix list comes from here.' },
+        { name: 'screens/00b-header-nav.html', what: 'The sidebar and the context bar — what the bar says, and what it deliberately does not do.' },
+        { name: 'screens/AUDIT.html', what: 'Why each fix exists: the July deviations, recorded against the build that had them.' },
+        { name: 'screens/01–23', what: 'One file per admin screen, plus the two editors. Reference build on top, written spec beneath.' },
+        { name: 'screens/24-gym-booking.html', what: 'New. The renter booking page rebuilt around a basket of slots — Task 18.' },
+        { name: 'Handoff.dc.html', what: 'The July handoff, kept as it was. This file supersedes it.' }
+      ]
+    };
+  }
+}
+
+</script>
+</body>
+</html>

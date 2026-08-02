@@ -1481,7 +1481,12 @@ group('the shell is the sidebar plus a context bar');
   // The white util bar that held Sign Out is gone for good — that is the part
   // the design rejected. Sign Out lives in the sidebar foot now.
   ok(!body.includes('util-bar'), 'the util bar is gone');
-  ok(body.includes('body{padding-left:228px;}'), 'the content sits beside it, not under it');
+  // Two flex columns, not a fixed rail plus matching body padding. The rail
+  // width is a single custom property now, read by both sides.
+  ok(body.includes('body{display:flex;align-items:stretch;}'), 'the shell is a flex row');
+  ok(body.includes('.tlc-main{flex:1;min-width:0'), 'the content column takes what is left');
+  ok(body.includes('--tlc-rail:228px'), 'and the rail width is declared once');
+  ok(!body.includes('body{padding-left:228px'), 'the old padding arithmetic is gone');
 
   // ⚠ Below 900px it is a slide-over, and the CSS and the handler cannot ship
   // apart. A previous pass deleted the handler and kept the CSS, so a phone
@@ -1496,8 +1501,13 @@ group('the shell is the sidebar plus a context bar');
   has(body, 'class="tlc-ctx"', 'the context bar is above the content');
   has(body, 'class="tlc-ctx-group">Admin<', 'Dashboard’s group reads Admin');
   has(body, 'class="tlc-ctx-section">Dashboard<', 'with the section beside it');
-  has(body, 'View site ↗', 'and the two global actions');
-  has(body, 'Connect ↗', 'both of them');
+  // Task 12b/c. The right of the bar is the ⌘K chip and "View site", nothing
+  // else. Connect links to an unrelated app and does not belong in the admin's
+  // chrome — it is deleted, not moved to the sidebar foot. And the ↗ goes with
+  // it everywhere: the link text says where it goes.
+  has(body, '>View site<', 'the bar carries View site');
+  ok(!body.includes('Connect'), 'Connect is gone from the chrome entirely');
+  ok(!body.includes('↗'), 'and no outbound arrow glyphs survive on this screen');
   ok(!body.includes('tlc-ctx-tab'), 'no tabs in it');
   ok(!body.includes('class="tlc-nav-chip'), 'and no group chips — the sidebar navigates');
 

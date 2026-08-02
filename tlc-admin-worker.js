@@ -5479,6 +5479,14 @@ ${newsImageUploadScript(item.image_url || '')}`, 'Edit post — TLC Admin', TINY
             ].filter(Boolean),
             search: `${p.title} ${p.menu_label || ''} ${p.slug} ${link.shortLink || ''} ${out}`.toLowerCase(),
             cells: [
+              // ⚠ The one ↗ left in the admin, and deliberately. Task 12c
+              // strips the glyph from "View site", "View live" and "every
+              // other outbound LINK" — there the text already says where it
+              // goes, so the arrow is noise. This is not a link: it is the
+              // row's leading marker, the sibling of ⌂ for the homepage, and
+              // it says what KIND of page this is. Strip it and an outbound
+              // page is the only row in the list with no marker at all.
+              // If the side-by-side pass disagrees, ⌂ has to go with it.
               primaryCell(p.menu_label || p.title, sub, { icon: p.slug === '/' ? '⌂' : (out ? '↗' : '') }),
               escapeHtml(p.slug),
               link.shortLink
@@ -7567,7 +7575,7 @@ ${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; 
                 : statusPill('good', 'Subscribed'),
           ],
           actions: '',
-          ...(isBounced ? { warn: 'Mail to this address is bouncing, so this person is not receiving the newsletter. Correct the address in Brevo or ask them for a new one.', warnAction: { label: 'Open in Brevo ↗', href: `https://app.brevo.com/contact/index` } } : {}),
+          ...(isBounced ? { warn: 'Mail to this address is bouncing, so this person is not receiving the newsletter. Correct the address in Brevo or ask them for a new one.', warnAction: { label: 'Open in Brevo', href: `https://app.brevo.com/contact/index` } } : {}),
         };
       });
       // Anyone who signed up on the website but has not reached Brevo yet. They
@@ -7590,11 +7598,11 @@ ${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; 
 
       const subMsg = url.searchParams.get('msg');
       const errorBanner = (brevoError
-        ? `<div class="alert alert-error">⚠ ${escapeHtml(brevoError)} <a href="https://app.brevo.com" target="_blank" style="color:var(--steel);">Open Brevo ↗</a><br><span style="font-size:13px;">The website signups below are still accurate; only the Brevo side could not be read.</span></div>`
+        ? `<div class="alert alert-error">⚠ ${escapeHtml(brevoError)} <a href="https://app.brevo.com" target="_blank" style="color:var(--steel);">Open Brevo</a><br><span style="font-size:13px;">The website signups below are still accurate; only the Brevo side could not be read.</span></div>`
         : '') + (subMsg ? `<div class="alert alert-success">✓ ${escapeHtml(subMsg)}</div>` : '');
 
       return html(`
-${sidebarShell('subscribers', currentUser, `<a href="https://app.brevo.com" target="_blank">Open Brevo ↗</a>`, await badgeCounts(env, currentUser))}
+${sidebarShell('subscribers', currentUser, `<a href="https://app.brevo.com" target="_blank">Open Brevo</a>`, await badgeCounts(env, currentUser))}
 <div class="tlc-wrap">
   ${errorBanner ? `<div class="tlc-section" style="padding-bottom:0;">${errorBanner}</div>` : ''}
   ${renderListSection({
@@ -8151,7 +8159,7 @@ ${sidebarShell('giving', currentUser)}
           <p class="tlc-give-note">No header, no menu — one job. This is the address on the plate cards, the NFC tap, and anything printed.</p>
           <div class="tlc-give-btns">
             <a class="tlc-action" href="/giving/page">Edit this page</a>
-            <a class="tlc-tap-btn" href="https://give.timothystl.org" target="_blank" rel="noopener">View live ↗</a>
+            <a class="tlc-tap-btn" href="https://give.timothystl.org" target="_blank" rel="noopener">View live</a>
           </div>
         </div>
         <div class="tlc-give-surface">
@@ -8160,7 +8168,7 @@ ${sidebarShell('giving', currentUser)}
           <p class="tlc-give-note">The same blocks with the normal header, menu, and footer, so someone browsing the site can land here without leaving it.</p>
           <div class="tlc-give-btns">
             <a class="tlc-action" href="/giving/page">Edit this page</a>
-            <a class="tlc-tap-btn" href="https://timothystl.org/give" target="_blank" rel="noopener">View live ↗</a>
+            <a class="tlc-tap-btn" href="https://timothystl.org/give" target="_blank" rel="noopener">View live</a>
           </div>
         </div>
       </div>
@@ -8323,8 +8331,8 @@ ${sidebarShell('giving', currentUser, `<a href="/giving">← Giving</a>`, await 
     </div>
   </div>
   <div class="btn-row">
-    <a href="https://give.timothystl.org" target="_blank" class="btn btn-primary">View give.timothystl.org ↗</a>
-    <a href="https://timothystl.org/give" target="_blank" class="btn btn-secondary">View /give ↗</a>
+    <a href="https://give.timothystl.org" target="_blank" class="btn btn-primary">View give.timothystl.org</a>
+    <a href="https://timothystl.org/give" target="_blank" class="btn btn-secondary">View /give</a>
   </div>
 </div>`, 'The giving page');
     }
