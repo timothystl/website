@@ -502,7 +502,11 @@ function tlcUploadHandler(blobInfo) {
 }
 
 // ── MAIN GYM ROUTE HANDLER ─────────────────────────────────
-export async function handleGymRoutes(path, method, url, request, env, currentUser = null, ctx = null) {
+// `portalOrigin` is where renters reach their booking portal — the public site
+// origin, not this admin one. Blank until the Cloudflare route exists, in which
+// case links fall back to whatever host the request came in on, which is the
+// behaviour this had before the portal moved.
+export async function handleGymRoutes(path, method, url, request, env, currentUser = null, ctx = null, portalOrigin = '') {
 
     // ── GROUP BOOKING PORTAL (/gym/book/:token/*) ───────────────
     if (path.startsWith('/gym/book/')) {
@@ -2420,7 +2424,7 @@ document.addEventListener('change', function(e) {
       }
 
       // ── SETTINGS ─────────────────────────────────────────────
-      const GYM_SETTINGS_KEYS = ['gym_rate_per_hour', 'gym_hold_hours', 'gcal_calendar_id', 'gym_admin_email', 'gym_payment_link'];
+      const GYM_SETTINGS_KEYS = ['gym_rate_per_hour', 'gym_hold_hours', 'gcal_calendar_id', 'gym_admin_email', 'gym_payment_link', 'gym_portal_origin'];
       if (path === '/gym-rentals/settings' && method === 'GET') {
         const settings = await env.DB.prepare(`SELECT key, value, label, hint FROM site_settings WHERE key IN (${GYM_SETTINGS_KEYS.map(() => '?').join(',')}) ORDER BY rowid`).bind(...GYM_SETTINGS_KEYS).all();
         const fieldsHtml = settings.results.map(s => `
@@ -2565,7 +2569,11 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>
         const gid = parseInt(path.split('/').pop(), 10);
         const g = await env.DB.prepare('SELECT * FROM gym_groups WHERE id = ?').bind(gid).first();
         if (!g) return new Response('Not found', { status: 404 });
-        const portalLink = `${url.origin}/gym/book/${g.access_token}`;
+        // ⚠ NOT url.origin. This is the link staff copy and email to a renter,
+        // so it has to name the portal's own address — otherwise every group
+        // created from here keeps handing out the admin domain, and the move
+        // would be undone one group at a time.
+        const portalLink = `${portalOrigin || url.origin}/gym/book/${g.access_token}`;
         const em = url.searchParams.get('msg');
         const editAlert = em === 'created' ? `<div class="alert alert-success">✓ Group created! Share the booking link below with the group.</div>`
           : em === 'saved' ? `<div class="alert alert-success">✓ Changes saved.</div>`

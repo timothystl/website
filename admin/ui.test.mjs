@@ -373,18 +373,27 @@ group('the shell');
   ok(shell.includes('body{padding-left:228px;}'), 'and the content sits beside it, not under it');
   ok(!shell.includes('.wrap{max-width:860px'), 'the narrow content column is gone');
 
-  // Every way of hiding it, gone — the fix list's own check, verbatim: no
-  // util bar, no hamburger, no backdrop, no off-canvas transform, anywhere.
-  // ⚠ The hamburger that was left behind had NO handler wired to it, so below
-  // 900px the admin had no navigation at all. Restoring the button would have
-  // been fixing the symptom of a pattern the design had already rejected.
-  for (const dead of ['util-bar', 'sidebar-toggle', 'sidebar-backdrop', 'translateX(-100%)']) {
-    ok(!shell.includes(dead), `the slide-over is gone: no ${dead}`);
-  }
-  ok(shell.includes('@media (max-width:900px)'), 'below 900px it restacks — the only responsive rule');
+  // The white util bar that held Sign Out is gone for good — that is the piece
+  // the design rejected, and Sign Out lives in the sidebar foot now.
+  ok(!shell.includes('util-bar'), 'the util bar is gone');
+
+  // ⚠ The slide-over is BELOW 900px ONLY, and its CSS and its handler cannot
+  // ship apart. A previous pass deleted the handler and kept the CSS, so a
+  // phone got a sidebar pushed off-canvas behind a button wired to nothing —
+  // an admin with no navigation at all. These four assertions are what stops
+  // that happening twice.
   const narrow = shell.slice(shell.indexOf('@media (max-width:900px)'));
-  ok(narrow.slice(0, narrow.indexOf('\n}')).includes('.sidebar{position:static'),
-    'and restacking means static above the content, never hidden');
+  const inQuery = narrow.slice(0, narrow.indexOf('\n}'));
+  ok(shell.includes('@media (max-width:900px)'), 'there is one responsive rule for the sidebar');
+  ok(inQuery.includes('translateX(-100%)'), 'below 900px it slides away');
+  ok(inQuery.includes('.sidebar-toggle{display:inline-flex'), 'and the hamburger appears');
+  const dflt = shell.slice(shell.indexOf('.sidebar{'));
+  ok(!dflt.slice(0, dflt.indexOf('}')).includes('translateX'), 'above 900px it is simply on screen');
+  ok(shell.includes('id="sidebar-toggle"') && shell.includes('id="sidebar-backdrop"'),
+    'the markup the handler needs is rendered');
+  const shellJs = readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+  ok(shellJs.includes("getElementById('sidebar-toggle')") && shellJs.includes("classList.toggle('is-open'"),
+    'and the handler exists — the half that was missing last time');
 
   // The context bar. Same navy as the sidebar, so the two read as one shell.
   ok(shell.includes('.tlc-ctx{display:flex;align-items:center;gap:14px;height:46px;padding:0 26px;background:#1E2D4A'),

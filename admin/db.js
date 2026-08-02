@@ -382,6 +382,12 @@ export const INITIAL_SETTINGS = [
   { key: 'gym_hold_hours',    value: '48',                      label: 'Gym hold duration (hours)',      hint: 'How many hours a tentative hold lasts before auto-expiring. Default: 48.' },
   { key: 'gcal_calendar_id',  value: '',                        label: 'Google Calendar ID (gym rentals)', hint: 'Calendar ID that confirmed gym bookings are automatically added to. Format: xxxxx@group.calendar.google.com or your Gmail address for a personal calendar. Also requires GCAL_SERVICE_ACCOUNT_EMAIL and GCAL_PRIVATE_KEY set as Cloudflare Worker secrets.' },
   { key: 'gym_admin_email',   value: 'dinger@timothystl.org',  label: 'Gym booking notification email', hint: 'Email notified when a group places a hold, confirms a booking, or submits a recurring request.' },
+  // ⚠ Blank means "serve the renter portal on the admin host", which is what it
+  // has always done — and that is the safe default, because the Cloudflare route
+  // has to exist before anything is sent to the public host. Filling this in is
+  // the second half of a two-step change; see "The renter portal moved off the
+  // admin origin" in CLAUDE.md.
+  { key: 'gym_portal_origin', value: '',                        label: 'Gym renter portal address', hint: 'Where renters reach their booking portal. Leave blank until the Cloudflare route timothystl.org/gym/* -> tlc-newsletter-admin exists; then set it to https://timothystl.org. Renter pages then stop being served on this admin domain, and old links redirect there.' },
   { key: 'gym_payment_link',  value: 'https://give.tithe.ly/?formId=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8&locationId=fe6ddef2-d6d2-4c85-adfd-f19eac997d38&fundId=51451abb-a7e4-435a-8fc3-cb061b0ab1d7', label: 'Gym rental payment link', hint: 'Tithely (or other) URL shown on invoices and confirmation pages for online payment. Update if the payment form changes.' },
   // Church details — the one record every page reads. The map block, the
   // service-times block, the sidebar layout and the footer all pull from here,
