@@ -5,7 +5,7 @@
 // Last modified: 2026-03-27
 
 
-import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes } from './admin/db.js';
+import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes } from './admin/db.js';
 
 // Static pages that can carry self-serve notices (matches the SPA's page ids in public/index.html)
 // The one address the link cards are shown at. A tap pointing anywhere else
@@ -934,7 +934,7 @@ export default {
     // SELECT against _schema_version. Bump SCHEMA_VERSION any time the
     // migrations below change so the next request after deploy re-runs
     // them and rewrites the marker.
-    const SCHEMA_VERSION = '2026-08-02-3'; // bumped: church_address_near setting (the landmark line on the welcome card)
+    const SCHEMA_VERSION = '2026-08-02-4'; // bumped: the service labels the site actually uses (English worship, not Traditional/Contemporary)
     let schemaOk = false;
     try {
       const row = await env.DB.prepare("SELECT value FROM _schema_version WHERE key='version'").first();
@@ -1576,6 +1576,67 @@ export default {
           .bind(s.title, s.description, s.icon_emoji, s.icon_color, s.sort_order).run();
         await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run();
         await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, 'done')").bind(SIGNUP_CARD_MARKER).run();
+      } catch (_) { /* retried on the next request */ }
+    }
+
+    // ── THE SERVICE LABELS THE SITE ACTUALLY USES ────────────────────────
+    // The seed said "Traditional" and "Contemporary"; /worship and the
+    // homepage have always said "English worship" for both. That is not just
+    // wording — the welcome card groups services BY LABEL, so two different
+    // labels can never collapse onto one line, and 8:00 and 10:45 sat apart
+    // when the card they reproduce has always shown "8:00 & 10:45 am".
+    //
+    // ⚠ It rewrites the setting ONLY IF IT IS STILL EXACTLY THE OLD SEED.
+    // This is an office-editable field: if anybody has touched it, whatever
+    // they typed is what they meant, and correcting a stale default is not a
+    // licence to overwrite somebody's edit. Gated on its own marker like the
+    // permission rename and the sign-up card, so a later SCHEMA_VERSION bump
+    // cannot run it a second time and undo a rename made after this shipped.
+    const SERVICE_LABEL_MARKER = 'service_labels_v1';
+    let serviceLabelsFixed = false;
+    try {
+      const row = await env.DB.prepare('SELECT value FROM _schema_version WHERE key = ?').bind(SERVICE_LABEL_MARKER).first();
+      serviceLabelsFixed = row?.value === 'done';
+    } catch (_) { /* table may not exist on a brand-new database */ }
+    if (!serviceLabelsFixed) {
+      try {
+        const STALE = 'Sunday | 8:00 am | Traditional\nSunday | 9:30 am | Vietnamese worship · Hội Thánh Việt\nSunday | 10:45 am | Contemporary';
+        const FIXED = 'Sunday | 8:00 am | English worship\nSunday | 9:30 am | Vietnamese worship · Hội Thánh Việt\nSunday | 10:45 am | English worship';
+        await env.DB.prepare("UPDATE site_settings SET value = ? WHERE key = 'church_service_times' AND value = ?")
+          .bind(FIXED, STALE).run();
+        await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run();
+        await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, 'done')").bind(SERVICE_LABEL_MARKER).run();
+      } catch (_) { /* retried on the next request */ }
+    }
+
+    // ── THE MDO SAVED SECTION ────────────────────────────────────────────
+    // Seeded once, behind its own marker, exactly like the sign-up card and
+    // for the same reason: the schema block re-runs on every SCHEMA_VERSION
+    // bump, and a seed sitting in there would bring back a section the office
+    // had deleted on purpose — or worse, silently restore the original words
+    // over an edit somebody made to them.
+    //
+    // It goes through sanitizeBlocks so the stored JSON is the same shape the
+    // editor writes. A section saved by hand and a section seeded here must be
+    // indistinguishable once stored, or the seeded one behaves oddly on first
+    // insert and nobody knows why.
+    const MDO_SECTION_MARKER = 'mdo_section_v1';
+    let mdoSectionSeeded = false;
+    try {
+      const row = await env.DB.prepare('SELECT value FROM _schema_version WHERE key = ?').bind(MDO_SECTION_MARKER).first();
+      mdoSectionSeeded = row?.value === 'done';
+    } catch (_) { /* table may not exist on a brand-new database */ }
+    if (!mdoSectionSeeded) {
+      try {
+        const blocks = sanitizeBlocks(MDO_SECTION_SEED.blocks);
+        if (blocks.length) {
+          await env.DB.prepare(DB_INIT_MINISTRY_SECTIONS).run();
+          await env.DB.prepare(
+            'INSERT INTO ministry_saved_sections (name, blocks, created_by, created_at) VALUES (?, ?, ?, ?)'
+          ).bind(MDO_SECTION_SEED.name, JSON.stringify(blocks), 'system', new Date().toISOString()).run();
+        }
+        await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run();
+        await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, 'done')").bind(MDO_SECTION_MARKER).run();
       } catch (_) { /* retried on the next request */ }
     }
 
@@ -7808,6 +7869,7 @@ ${sidebarShell('redirects', currentUser, '', await badgeCounts(env, currentUser)
       const SETTINGS_VIEW = [
         { key: 'church_address_line', label: 'Church address', group: 'church-details', used: 'Map blocks · footer · invoices', href: '/pages/details' },
         { key: 'church_address_city', label: 'City, state and ZIP', group: 'church-details', used: 'Map blocks · footer · invoices', href: '/pages/details' },
+        { key: 'church_address_near', label: 'Landmark', group: 'church-details', used: 'Welcome card on the homepage', href: '/pages/details' },
         { key: 'church_phone', label: 'Office phone', group: 'church-details', used: 'Contact page · footer', href: '/pages/details' },
         { key: 'church_email', label: 'Office email', group: 'church-details', used: 'Contact page · footer', href: '/pages/details' },
         { key: 'church_service_times', label: 'Service times', group: 'church-details', used: 'Service-times blocks · sidebar layout', href: '/pages/details' },

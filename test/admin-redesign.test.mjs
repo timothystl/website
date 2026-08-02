@@ -1197,6 +1197,37 @@ group('screens say what the design says');
 }
 
 // Task 15 #1 and #2 — the two of the five that were real.
+group('the MDO saved section, and the service labels the site uses');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  // The MDO strip is the church's most-repeated ask. As a saved section the
+  // office drops it in rather than retyping it, which is how three pages end
+  // up describing one preschool three ways.
+  const secs = await (await call(env, '/ministries/api/sections', { cookie })).json().catch(() => null);
+  const list = secs && (secs.sections || secs);
+  ok(Array.isArray(list) && list.some((x) => x.name === "Mother's Day Out"),
+    'the MDO section is seeded and listed');
+
+  // ⚠ Seeded ONCE, behind its own marker. The schema block re-runs on every
+  // SCHEMA_VERSION bump, so a seed sitting in there would restore a section
+  // the office deleted — or overwrite an edit to its words.
+  db.prepare("DELETE FROM ministry_saved_sections WHERE name = ?").run("Mother's Day Out");
+  await call(env, '/dashboard', { cookie });
+  const after = db.prepare("SELECT COUNT(*) c FROM ministry_saved_sections WHERE name = ?").get("Mother's Day Out");
+  eq(after.c, 0, 'deleting it makes it stay deleted');
+
+  // The stored service labels are the ones the SITE uses. Two slots of the
+  // same service have to carry the same label or the welcome card cannot
+  // collapse them onto one line.
+  const times = db.prepare("SELECT value FROM site_settings WHERE key = 'church_service_times'").get();
+  ok(times && (times.value.match(/English worship/g) || []).length === 2,
+    'both English slots are labelled the same, so 8:00 and 10:45 can share a line');
+  ok(times && !/Traditional|Contemporary/.test(times.value),
+    'and the labels /worship never used are gone');
+}
+
 group('the last two borderline routes are on the shared pattern');
 {
   const { db, env } = await boot();

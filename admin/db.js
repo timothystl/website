@@ -92,6 +92,39 @@ export const DB_INIT_MINISTRY_SECTIONS = `CREATE TABLE IF NOT EXISTS ministry_sa
   created_at TEXT DEFAULT (datetime('now'))
 )`;
 
+// ── THE MDO SAVED SECTION ────────────────────────────────────────────────────
+// The Mother's Day Out strip, as a section the office can drop onto any page
+// from the palette's Saved group. It is the homepage band word for word —
+// eyebrow, headline, the paragraph, and the one button out to mdo.timothystl.org
+// — because MDO is the church's most-repeated ask and retyping it on every page
+// is how three pages end up describing the same preschool three ways.
+//
+// Two blocks rather than one: a callout carries the words, a button bar carries
+// the link. That is what the homepage strip is, and it means the office can
+// keep the copy and re-point the button, or the reverse, without either one
+// being welded to the other.
+//
+// ⚠ MDO is a SEPARATE SITE (mdo.timothystl.org), so the button is an absolute
+// address and always opens there. It is not a page in this admin and must not
+// be turned into one.
+export const MDO_SECTION_SEED = {
+  name: "Mother's Day Out",
+  blocks: [
+    {
+      type: 'callout',
+      eyebrow: "Mother's Day Out",
+      title: 'Now enrolling — join our community',
+      body: '<p>Over twenty years of experienced, caring childcare for children from birth through preschool. Right here in Lindenwood Park.</p>',
+      spaceAbove: 24, spaceBelow: 8,
+    },
+    {
+      type: 'buttons',
+      spaceAbove: 0, spaceBelow: 24,
+      items: [{ title: 'Learn about MDO', url: 'https://mdo.timothystl.org' }],
+    },
+  ],
+};
+
 export const DB_INIT_VOTERS_PAGE = `CREATE TABLE IF NOT EXISTS voters_page (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   meeting_info TEXT,
@@ -398,7 +431,13 @@ export const INITIAL_SETTINGS = [
   { key: 'church_phone',        value: '(314) 781-8673',            label: 'Church phone',    hint: 'Shown wherever the site lists a phone number.' },
   { key: 'church_email',        value: 'office@timothystl.org',     label: 'Church email',    hint: 'The public contact address for the church office.' },
   { key: 'church_service_times', label: 'Service times', hint: 'One line per service: Day | Time | Note. Shown by the Service times block and page sidebars.',
-    value: 'Sunday | 8:00 am | Traditional\nSunday | 9:30 am | Vietnamese worship · Hội Thánh Việt\nSunday | 10:45 am | Contemporary' },
+    // ⚠ These are the names the SITE uses, and they matter beyond wording: the
+    // welcome card groups services by their label, so 8:00 and 10:45 collapse
+    // onto one line — "8:00 & 10:45 am / English worship" — exactly as the
+    // homepage has always shown them. The old seed said Traditional and
+    // Contemporary, which /worship never said, and two different labels can
+    // never merge. Renaming one of them here splits that line again.
+    value: 'Sunday | 8:00 am | English worship\nSunday | 9:30 am | Vietnamese worship · Hội Thánh Việt\nSunday | 10:45 am | English worship' },
 ];
 
 // ── PARTNERS ─────────────────────────────────────────────────
