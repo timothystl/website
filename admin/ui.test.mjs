@@ -247,6 +247,35 @@ group('the Foundations spec’s small parts');
   lacks(c, '<select', 'and no select in sight');
 }
 
+group('one class, one component');
+{
+  const src = readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+
+  // ⚠ .tlc-chip used to be TWO components: the read-only value pill in a list
+  // row and the clickable choice chip in a drawer, declared 260 lines apart
+  // with different values — so the pill wore a pointer cursor it had no click
+  // for, and the chip label wore the pill's 999px radius. The pill is
+  // .tlc-vpill now, and the chip keeps the name. One declaration each.
+  eq((src.match(/\.tlc-chip\{/g) || []).length, 1, '.tlc-chip is declared exactly once');
+  eq((src.match(/\.tlc-vpill\{/g) || []).length, 1, 'and so is the value pill');
+  has(valueChip('worship'), 'tlc-vpill', 'the value pill renders as the pill class');
+  ok(!valueChip('worship').includes('"tlc-chip"'), 'and never as the chip');
+  has(valueChip(''), 'tlc-vpill-none', 'the no-value state follows the rename');
+
+  // Decorative glyphs are noise to a screen reader — "black up-pointing
+  // triangle, warning" says warning twice and triangle once too often.
+  ok(src.includes('class="tlc-warn-mark" aria-hidden="true"'), 'the warning triangle is aria-hidden');
+  ok(src.includes('class="tlc-note-mark" aria-hidden="true"'), 'the note diamond is aria-hidden');
+  ok(!src.includes('class="tlc-note-mark">◆'), 'no bare note diamond remains');
+
+  // The no-link row cursor rule used to target [data-href=""] on the wrapper —
+  // but the emitter omits the attribute entirely on rows with nowhere to go,
+  // and puts it on the row, so the rule matched nothing and every row wore a
+  // pointer cursor.
+  ok(src.includes('.tlc-row:not([data-href]){cursor:default;}'), 'a row with no destination gets no pointer');
+  ok(!src.includes('[data-href=""]'), 'the dead empty-string selector is gone');
+}
+
 group('the rich-text field cannot be escaped from');
 {
   // ⚠ AC-3. The content is interpolated into an inline <script>, and the HTML

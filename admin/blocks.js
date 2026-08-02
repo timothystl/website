@@ -669,6 +669,14 @@ export const BLOCK_CSS = `<style id="tlcb-css">
   padding-right:max(var(--tlcb-pad), calc((100% - var(--tlcb-wrap)) / 2));}
 .tlcb-page--full > .tlcb--hero{padding:0;}
 .tlcb-page--full > .tlcb--hero .tlcb-hero{border-radius:0;}
+/* A half run's WRAPPER needs the same centring — pair members are
+   grandchildren, so the > .tlcb rule above never reaches them, and a run of
+   halves on a hero-led page sat hard against the viewport edge while every
+   full-width block around it was centred. The math goes on the wrapper and
+   only the wrapper: inside a half column, (100% - wrap)/2 means nothing. */
+.tlcb-page--full > .tlcb-pair{
+  padding-left:max(var(--tlcb-pad), calc((100% - var(--tlcb-wrap)) / 2));
+  padding-right:max(var(--tlcb-pad), calc((100% - var(--tlcb-wrap)) / 2));}
 .tlcb-page{--tlcb-pad:24px;font-family:'Source Sans 3',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
 .tlcb{position:relative;border-radius:10px;background:var(--tlcb-bg,#FBF8F3);color:var(--tlcb-ink,#3A3A4A);
   padding:14px var(--tlcb-pad);border:2px solid transparent;
@@ -850,6 +858,14 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-band--card-left{grid-template-columns:minmax(320px,34%) 1fr;}
 .tlcb-band--card-left .tlcb-band-text{order:2;}
 .tlcb-band--card-left .tlcb-card{order:1;}
+/* Inside a half column the card stacks under the text, exactly as on a phone:
+   minmax(320px,34%) beside a headline in a ~500px column leaves the words
+   about 150px. The two-class selectors outrank the single-class rules above,
+   so no !important is needed — same treatment as the phone rules, which stay
+   the stronger of the two. */
+.tlcb-pair .tlcb-band--card{grid-template-columns:1fr;}
+.tlcb-pair .tlcb-band--card-left .tlcb-band-text{order:0;}
+.tlcb-pair .tlcb-band--card-left .tlcb-card{order:1;}
 aside.tlcb-card{background:#FFFFFF;border-radius:18px;padding:34px 32px;box-shadow:0 18px 44px rgba(11,22,44,.28);
   display:flex;flex-direction:column;position:relative;z-index:1;}
 .tlcb-card-eyebrow{font:700 12.5px/1.4 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#C9973A;}
@@ -965,9 +981,11 @@ function phoneRules(p) {
     // A 4-up of cards is still readable two across on a tablet; a 3-up is not,
     // because each card keeps its padding and the text column collapses.
     `${p}.tlcb-cg-grid{grid-template-columns:1fr!important;}`,
-    // Halves stack full width in source order — the grid already lays them out
-    // in that order, so one column is the whole fix.
-    `${p}.tlcb-pair{grid-template-columns:1fr!important;}`,
+    // Halves stack full width in source order. ⚠ The pair is CSS COLUMNS, not
+    // a grid — a grid-template rule here was a silent no-op, and halves
+    // rendered as two ~165px columns on a 390px phone. column-count is the
+    // property the pair actually uses, so it is the one that stacks it.
+    `${p}.tlcb-pair{column-count:1!important;}`,
     `${p}.tlcb-media{order:0!important;}`,
     `${p}.tlcb-cards{grid-template-columns:1fr!important;}`,
     `${p}.tlcb-gallery{grid-template-columns:1fr 1fr!important;}`,
@@ -1555,7 +1573,7 @@ function renderInner(b, opts) {
 
   if (t === 'partners') {
     const logos = (b.items || []).map((it) => {
-      const inner = it.meta ? `<img src="${esc(it.meta)}" alt="${esc(it.title || '')}">` : esc(it.title || 'LOGO');
+      const inner = it.meta ? `<img src="${esc(it.meta)}" alt="${esc(it.title || '')}" loading="lazy">` : esc(it.title || 'LOGO');
       const href = safeUrl(it.url);
       return href && !opts.editing
         ? `<a class="tlcb-logo" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${inner}</a>`

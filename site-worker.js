@@ -78,13 +78,41 @@ let giveAmountsCache = null;
 let giveAmountsCacheTime = 0;
 let giveFundsCache = null;
 let giveFundsCacheTime = 0;
-const CACHE_TTL = 60_000; // 60 seconds
+// 5 minutes. Was 60s, which meant the admin subrequest sat IN FRONT of the
+// HTML once a minute per isolate — for a list of short links that changes a
+// few times a year. A re-pointed redirect taking up to five minutes to settle
+// is a fine trade for not making every fifth visitor wait on a cross-worker
+// round trip.
+const CACHE_TTL = 300_000;
 
 // Paths handled via admin settings keys (instant server-side 302, no SPA load)
 const SETTINGS_REDIRECTS = {
   'zoom':         { key: 'zoom_url',         fallback: 'https://us02web.zoom.us/j/3147818673' },
   'councilfiles': { key: 'councilfiles_url', fallback: 'https://drive.google.com/drive/folders/1pgqJ32H3HS7SNYnnf7rOswC5c87IAzA4?usp=drive_link' },
 };
+
+// A path that names a FILE — the redirect lookup skips these, and the asset
+// response gets its Cache-Control from them. An extension allowlist rather
+// than "contains a dot" so an unusual hand-made redirect with a dot in it
+// keeps working unless it collides with a real asset type.
+const ASSET_FILE_RE = /\.(png|jpe?g|webp|gif|svg|ico|woff2?|ttf|otf|css|js|mjs|json|xml|txt|map|pdf|webmanifest|mp3|mp4)$/i;
+const LONG_CACHE_RE = /\.(png|jpe?g|webp|gif|svg|ico|woff2?|ttf|otf|mp3|mp4|pdf)$/i;
+const SHORT_CACHE_RE = /\.(css|js|mjs|json|xml|txt|map|webmanifest)$/i;
+
+// The site served every asset with NO Cache-Control at all, so browsers
+// re-validated the logo, the fonts and every ministry photo on each visit.
+// Images and fonts change by being replaced (new filename or ?v=), so a day
+// of cache plus a week of stale-while-revalidate is safe; css/js keep an hour
+// (the ?v= busting on index.html's references stays the real control); HTML
+// gets no-cache so a publish is visible on the next load — no-cache still
+// allows storing, it just forces the etag revalidation env.ASSETS supports.
+function withAssetCaching(res, pathname) {
+  const h = new Headers(res.headers);
+  if (LONG_CACHE_RE.test(pathname)) h.set('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+  else if (SHORT_CACHE_RE.test(pathname)) h.set('Cache-Control', 'public, max-age=3600');
+  else h.set('Cache-Control', 'no-cache');
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
+}
 
 // Reject anything that isn't an http(s) URL — guards against javascript:,
 // data:, or relative-path payloads sneaking in via admin settings.
@@ -266,21 +294,32 @@ export default {
 
       // Custom redirects from DB — which is also where the four NFC taps
       // resolve, since /api/redirects merges them in.
-      const redirects = await getRedirects();
-      const match = redirects.find(r => r.path === path);
-      if (match && isSafeRedirectUrl(match.url)) {
-        // Counted only once the tap has resolved to somewhere real, so a
-        // mistyped /tap9 or a switched-off tag never shows up as a tap.
-        recordTap(request, ctx, path);
-        return new Response(null, {
-          status: 302,
-          headers: { 'Location': match.url }
-        });
+      //
+      // ⚠ NOT for asset files. On a cold isolate (or an expired cache) this
+      // lookup is a cross-worker subrequest sitting in front of the response
+      // — and every image, stylesheet and script on the page was paying it.
+      // A short link is an address someone says out loud or prints on a
+      // flyer; none of those end in a file extension, so anything that looks
+      // like an asset skips straight through. (scheduler.html, the one
+      // dotted path that ever redirected, is handled explicitly above.)
+      if (!ASSET_FILE_RE.test(path)) {
+        const redirects = await getRedirects();
+        const match = redirects.find(r => r.path === path);
+        if (match && isSafeRedirectUrl(match.url)) {
+          // Counted only once the tap has resolved to somewhere real, so a
+          // mistyped /tap9 or a switched-off tag never shows up as a tap.
+          recordTap(request, ctx, path);
+          return new Response(null, {
+            status: 302,
+            headers: { 'Location': match.url }
+          });
+        }
       }
     }
 
-    // Fall through to static assets (SPA)
-    return env.ASSETS.fetch(request);
+    // Fall through to static assets (SPA), with caching the edge and the
+    // browser can actually use — see withAssetCaching below.
+    return withAssetCaching(await env.ASSETS.fetch(request), url.pathname);
     } catch (err) {
       return new Response(ERROR_PAGE_HTML, {
         status: 500,

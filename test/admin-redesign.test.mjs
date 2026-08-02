@@ -23,12 +23,16 @@ const lacks = (hay, needle, msg) => ok(!String(hay).includes(needle), `${msg} �
 const group = (n) => console.log('\n' + n);
 
 // ── a D1-shaped shim over node:sqlite ────────────────────────────────────────
+// `log` records every executed statement, so a test can count what a request
+// actually cost — which is how the marker-read collapse is pinned down.
 function d1(db) {
+  const log = [];
   const stmt = (sql, args = []) => ({
     bind: (...a) => stmt(sql, a),
-    first: async () => { try { return db.prepare(sql).get(...args) ?? null; } catch (e) { throw e; } },
-    all: async () => ({ results: db.prepare(sql).all(...args) }),
+    first: async () => { log.push(sql); try { return db.prepare(sql).get(...args) ?? null; } catch (e) { throw e; } },
+    all: async () => { log.push(sql); return { results: db.prepare(sql).all(...args) }; },
     run: async () => {
+      log.push(sql);
       const r = db.prepare(sql).run(...args);
       return { meta: { last_row_id: Number(r.lastInsertRowid), changes: Number(r.changes) } };
     },
@@ -37,6 +41,7 @@ function d1(db) {
     prepare: (sql) => stmt(sql),
     batch: async (stmts) => Promise.all(stmts.map((s) => s.run())),
     exec: async (sql) => { db.exec(sql); },
+    log,
   };
 }
 
@@ -2066,6 +2071,52 @@ group('renter notes cannot smuggle markup into the office\u2019s session');
   const page = await (await call(env, '/gym-rentals/recurring/review/1', { cookie })).text();
   ok(!page.includes('<img src=x onerror'), 'the note does not reach the page as markup');
   has(page, '&lt;img src=x', 'it is escaped instead');
+}
+
+group('the schema gate reads once, then not at all');
+{
+  // Five serial marker SELECTs used to run ahead of routing on EVERY request
+  // — including each of the public API calls the homepage makes. They are one
+  // read now, and none once the binding has been seen current. Counted
+  // mechanically off the shim's statement log rather than measured by hand.
+  const db = new DatabaseSync(':memory:');
+  const env = { DB: d1(db), IMAGES: { get: async () => null, put: async () => ({}), delete: async () => {} }, BREVO_API_KEY: 'test' };
+  const markerReads = () => env.DB.log.filter((q) => /^\s*SELECT/i.test(q) && q.includes('_schema_version')).length;
+
+  await call(env, '/login');       // fresh database: the migrations run
+  env.DB.log.length = 0;
+  await call(env, '/login');       // warm: every gate already satisfied
+  eq(markerReads(), 1, 'a warm request makes exactly one marker read');
+
+  env.DB.log.length = 0;
+  await call(env, '/login');       // and now the binding is memoized
+  eq(markerReads(), 0, 'after that, none at all');
+
+  // The first-run /setup COUNT is remembered the same way — an unauthenticated
+  // request no longer pays it once a user exists.
+  signIn(db, ALL_PERMISSIONS, 'gate.user');
+  await call(env, '/');
+  env.DB.log.length = 0;
+  await call(env, '/');
+  eq(env.DB.log.filter((q) => q.includes('COUNT(*) as n FROM users')).length, 0,
+    'the setup check is not re-counted on every request');
+}
+
+group('badges follow you into an edit screen');
+{
+  // badgeCounts used to be passed only on the 25 list screens, so the sidebar
+  // badges visibly vanished the moment somebody clicked into any edit form —
+  // and reappeared on the way back, which reads as the admin being broken.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  db.prepare("INSERT INTO gym_groups (id,name,contact,email,active) VALUES (7,'Badge League','B','b@c.co',1)").run();
+  db.prepare(`INSERT INTO gym_bookings (group_id,booking_date,start_time,end_time,status,hold_expires_at,created_at)
+              VALUES (7,'2099-01-05','18:00','20:00','hold','2099-01-01T00:00:00Z','2026-08-01T00:00:00Z')`).run();
+
+  for (const p of ['/notices/add', '/pages/details', '/gym-rentals/groups']) {
+    const body = await (await call(env, p, { cookie })).text();
+    has(body, 'sidebar-badge', `${p} still shows the sidebar badges`);
+  }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

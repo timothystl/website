@@ -138,5 +138,30 @@ group('the cached list is what keeps a tag working');
   adminUp = true;
 }
 
+// ── assets skip the redirect lookup, and carry real caching ──────────────────
+group('an asset request never waits on the admin');
+{
+  // On a cold isolate the redirect list is a cross-worker subrequest sitting
+  // in front of the response — and every image, stylesheet and script on the
+  // page was paying it. A short link is an address somebody says out loud;
+  // none of them end in a file extension.
+  const { res, beacons } = await go('images/logo.png');
+  eq(res.status, 200, 'the asset is served');
+  eq(sent.filter((s) => s.url.includes('/api/redirects')).length, 0,
+    'without fetching the redirect list first');
+  eq(beacons.length, 0, 'and without counting anything');
+  eq(res.headers.get('Cache-Control'), 'public, max-age=86400, stale-while-revalidate=604800',
+    'an image is cacheable for a day, serving stale for a week');
+
+  const css = await go('styles.css');
+  eq(css.res.headers.get('Cache-Control'), 'public, max-age=3600',
+    'css keeps an hour — the ?v= busting stays the real control');
+
+  // HTML must revalidate, or a publish sits invisible behind yesterday's copy.
+  const page = await go('about');
+  eq(page.res.headers.get('Cache-Control'), 'no-cache',
+    'HTML revalidates so a publish is visible on the next load');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
