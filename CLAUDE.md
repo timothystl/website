@@ -1394,6 +1394,127 @@ prayer request are real forms elsewhere on the site but they post to ChMS with
 their own screening; adding them here would be a second, unscreened way in. If
 they are ever wanted, they go through `screenSubmission()` like the rest.
 
+#### The post-redesign review (v4.14.0–v4.15.0, 2026-08-02)
+
+Andrew: *"Now after this massive redesign effort do a thorough code review.
+Look for any problems with UI and speed issues of loading."* Three scouts read
+the whole surface; everything below was **verified by reading or measuring**,
+not pattern-matched. Fixed in two PRs (#378, #379).
+
+**The recurring defect was cascade order** — a rule correct on its own,
+defeated by a later declaration at equal specificity. Four separate bugs had
+that one shape:
+
+- **The login/forgot/reset/setup pages collapsed to a 380px navy strip** —
+  the flex-shell `body{display:flex}` made `.login-wrap` the only flex item
+  with no width. `flex:1` now, and `test/shell-layout.test.mjs` *measures*
+  the login page (verified failing against the bug).
+- **The `.sidebar*` selectors were declared twice**, 150 lines apart, with
+  different values — merged into the shell block, desktop defaults still
+  ahead of the 900px media query, computed values pinned in a browser.
+- **The renter basket's 390px pass shipped defeated**: its 44px/28px rules
+  sat in the head stylesheet, and the body stylesheet's desktop sizes came
+  later and won at every width. The phone rules live at the END of the body
+  stylesheet now, and `gym-portal` re-runs its tap scan with the basket ON
+  SCREEN — the original scan ran before the basket existed, which is how it
+  shipped green.
+- **The request bar carried `display:none` AND `display:flex` in one style
+  attribute** (flex won; an empty "0 slots" bar flashed on load) and its
+  `.req-bar` class rules — the 30vh cap included — targeted markup that
+  never had the class.
+
+**Half blocks, correct in every mode** (the `column-count` layout is new
+enough that nothing had caught up with it):
+
+- `phoneRules()` spoke `grid-template-columns` at a pair that is CSS
+  *columns* — a silent no-op, halves rendered ~165px wide on a phone.
+  `column-count:1` now, one shared text, so the editor's Phone tab fixed too.
+- Pair members are grandchildren, so `.tlcb-page--full > .tlcb` centring
+  never reached them; the wrapper carries the padding now.
+- The info card stacks inside a half column; the editor's drop indicator no
+  longer throws `NotFoundError` mid-drag over a pair (walk to the page's own
+  child first); spacing steppers on a half block re-render, because the pair
+  wrapper the SERVER writes is what the page renders and a style-mode patch
+  never reached it.
+- The v4.12.0 arrow sweep took `Stamp → Upcoming` — a separator its own rule
+  allows — and `editor-edit` knew, but browser suites are not in CI. Restored.
+
+**Loading** (the wins are structural, not micro):
+
+- **Five serial `_schema_version` SELECTs ran before routing on every
+  request** — ×7 API calls ≈ 35 wasted D1 round-trips per homepage load. One
+  read now, and none once the binding is seen current: `MARKERS_SEEN` is a
+  WeakMap **keyed on `env.DB`** (a module flag would carry "migrated" onto
+  the test harness's fresh databases), set ONLY when no gate ran work, so a
+  swallowed marker write is re-verified. A deploy starts fresh isolates, so
+  a SCHEMA_VERSION bump is never masked. The first-run `/setup` COUNT is
+  memoized the same way. The redesign test counts statements off the shim's
+  log: exactly 1 on a warm request, 0 after.
+- **`/api/pages` sits behind `caches.default`** — it was five queries plus a
+  render of every published page, per request, `max-age=120` notwithstanding.
+  One chokepoint busts it: any POST under `/pages` or `/menu`.
+- **`/api/ministry/:slug` renders `withCss:false`** — the 23KB stylesheet
+  every response carried and the client's first move was to regex away.
+  `tlcEnsureBlockCss()` awaits the one copy `/api/pages` ships before any
+  block markup is injected; the strip lines stay for the five-minute cached-
+  response transition after a deploy.
+- **`site-worker.js`**: asset paths skip the redirect lookup (it was a
+  cross-worker subrequest in front of every image on a cold isolate);
+  redirect cache 60s → 300s; and static assets carry Cache-Control at last —
+  day + week-SWR for images/fonts, an hour for css/js, `no-cache` for HTML
+  so a publish is visible on the next load. There was **no** Cache-Control
+  on anything before.
+- **Badges vanished on every edit screen** — `badgeCounts` was passed on the
+  25 list screens only. One memoized promise per request now
+  (`pageBadges()`), passed at every `sidebarShell` call site including the
+  17 gym screens and `/filtered` (which take it as a parameter). Dashboard
+  Overview tiles are counted only when Overview actually renders.
+- **The homepage fetched `/api/sermon-series` twice** (home card + sermons
+  page, no shared memo) and `loadChristmasMarketPosts()` ran at boot for a
+  page nobody opened. `fetchSermonSeries()` is one shared promise;
+  `loadSermons`/`loadChristmasMarketPosts` run on navigation (the router
+  routes a direct URL through `showPage`, so deep links still load).
+  `/api/form-config` is `private, max-age=60` — **private on purpose**: the
+  edge must never share one visitor's signed token with the next, nor hand a
+  bot a pre-aged timestamp that defeats the too-quick-to-be-human signal.
+- `.tlc-chip` was **two components** declared 260 lines apart — the value
+  pill (now `.tlc-vpill`) had a phantom pointer cursor, the choice chip a
+  999px radius. ▲/◆ marks are `aria-hidden`; the dead
+  `.tlc-row-wrap[data-href=""]` selector (wrong element, wrong state — the
+  attribute is absent, not empty) is `.tlc-row:not([data-href])`.
+
+**Reported, not fixed — Andrew's call, in rough order of payoff:**
+
+1. **A build/minify step.** `public/index.html` is 221KB (36KB brotli), ~95KB
+   of it inline JS re-downloaded with every HTML fetch. Minification alone is
+   a ~50% transfer cut, but it reverses the deliberate no-toolchain stance.
+2. **Externalising the admin's CSS/JS** — ~89KB unminified is inlined into
+   every admin screen at `private, max-age=10`, so it is re-parsed on nearly
+   every click. A cacheable `/assets/admin.css` fixes it and costs a
+   versioning scheme.
+3. **The heavy admin handlers**, each needing its own design: `/media` scans
+   every page's block JSON per media row; `/subscribers` pages Brevo serially
+   in the render path; `/newsitems` runs its expiry sweep inline (R2 delete +
+   DELETE per expired row); `/api/search` fires up to 10 LIKE scans per
+   keystroke with no debounce; `/audit-log` renders one anchor per 50-row
+   page with no retention.
+4. **~1.55MB of `IMG_*.jpg` in `public/images` referenced nowhere** — user
+   files, so deletion needs sign-off. `food-pantry.webp`/`Bees.webp` (~175KB
+   each) serve as both thumbnails and full-width. No `width`/`height`
+   attributes anywhere (CLS).
+5. **Nine Google Font faces** — likely half unused.
+6. **`:has()` fallback** for the form-width cap (Firefox ESR / Safari <15.4
+   get the 1900px forms back) — depends on what the office actually runs.
+7. **A dedicated a11y pass**: list rows are mouse-only, the public site has
+   no `:focus-visible` styles.
+
+**Looked at and left alone**: the `:has` choice-chip concern was wrong (the
+input is visible; only a decorative tint is at stake); `calcTotal`'s two
+signatures live in different documents; `aspect-ratio`/`inset` fallbacks
+would target ~2020 browsers; the pair's trailing margin has no clean multicol
+fix; the drop-target's Y-only math inside a two-column flow is an
+interaction-design question, recorded, with the crash itself fixed.
+
 #### The card grids extract now (v4.13.0, 2026-08-02)
 
 Andrew: *"can you try again to look at what is currently on every page and try
