@@ -27,6 +27,16 @@ Four open questions, answered. These are final; where they contradict anything b
 
 The side-by-side pass over all 24 screen files at matching widths is mine, not the coder's, and it has not happened yet. Nothing is done until it does. Priority order for that pass: Ministries, Pages, Users, Media, Newsletter, Gym, Payroll.
 
+> **Post-redesign review, 2 Aug 2026 (v4.14.0–v4.15.0).** After every task in
+> this file shipped, a full UI + loading review ran over the result. Its
+> findings, fixes and the report-only list Andrew still has to rule on are
+> recorded in `CLAUDE.md` under "The post-redesign review" — not here, since
+> this file is the *design* fix list and that pass reviewed the build. Worth
+> knowing before the side-by-side pass: the login pages, the sidebar's
+> duplicate declarations, the renter basket's 390px sizes and the half-block
+> phone layout were all fixed there, so screenshots taken before 2 Aug show
+> defects that are already gone.
+
 ---
 
 Work the tasks in order. Each one is independent and shippable — do not batch them into one commit. After each task, run `npm test` (there are tests asserting the palette and the section config; keep them green and add to them where noted).
