@@ -7,24 +7,18 @@ import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL
 
 export const VERSION = 'v4.15.5'; // minor: review batches 2-4 — half blocks stack and centre, one marker read, edge-cached /api/pages, badges everywhere, one series fetch
 
-
-export function html(body, title = 'TLC Admin', extraHead = '') {
-  return new Response(`<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${title}</title>
-<link rel="manifest" href="/site.webmanifest">
-<link rel="icon" href="https://timothystl.org/favicon.ico" sizes="any">
-<link rel="icon" href="https://timothystl.org/images/favicon-32x32.png" type="image/png" sizes="32x32">
-<link rel="apple-touch-icon" href="https://timothystl.org/apple-touch-icon.png" sizes="180x180">
-<meta name="theme-color" content="#12243D">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600&family=Source+Sans+3:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-${extraHead}
-<style>
+// ── THE SHARED SHELL CSS/JS, EXTERNALISED ───────────────────────
+// This used to be inlined into every admin response inside <style>/<script>
+// tags — ~89KB, unminified, re-sent and re-parsed on every single click,
+// because the response it rode along on is `private, max-age=10`. It never
+// changes within a deploy, so it does not belong on that response at all:
+// it is served on its own at /assets/admin.css and /assets/admin.js (routed
+// in tlc-admin-worker.js, ahead of the schema gate — a static string needs
+// no D1 access), cached `public, max-age=31536000, immutable`, and busted
+// automatically by the `?v=${VERSION}` query string every deploy already
+// bumps. Same-origin, so the existing CSP's 'self' already allows both —
+// nothing there needed to change.
+export const ADMIN_SHELL_CSS = `
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:var(--sans);background:var(--warm);color:var(--charcoal);min-height:100vh;}
 /* Full width under the header — a table constrained to 860px in a 1600px
@@ -343,14 +337,9 @@ ${PANEL_LIST_CSS}
 ${NEWSLETTER_CSS}
 ${TOAST_CSS}
 ${CMDK_CSS}
-/* The sidebar's colour and type used to be restyled HERE, in a second block
-   after the interpolated stylesheets — ten selectors declared twice with
-   different values, source order deciding which won. Merged into the shell
-   block above, where the geometry lives; do not start a second one. */
-</style>
-</head>
-<body>${body}${body.includes('class="tlc-main"') ? '</div>' : ''}
-<script>
+`;
+
+export const ADMIN_SHELL_JS = `
 function toggleSchedule(id){var row=document.getElementById('sched-row-'+id);if(row)row.style.display=row.style.display==='none'?'':'none';}
 // Converts the datetime-local field to an ISO instant using the browser's own
 // timezone before submit — the Worker runs in UTC, so it can't reliably turn
@@ -370,7 +359,28 @@ ${SIDEBAR_JS}
 ${TOGGLE_WORD_JS}
 ${TOAST_JS}
 ${CMDK_JS}
-</script>
+`;
+
+export function html(body, title = 'TLC Admin', extraHead = '') {
+  return new Response(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${title}</title>
+<link rel="manifest" href="/site.webmanifest">
+<link rel="icon" href="https://timothystl.org/favicon.ico" sizes="any">
+<link rel="icon" href="https://timothystl.org/images/favicon-32x32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="https://timothystl.org/apple-touch-icon.png" sizes="180x180">
+<meta name="theme-color" content="#12243D">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600&family=Source+Sans+3:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+${extraHead}
+<link rel="stylesheet" href="/assets/admin.css?v=${VERSION}">
+</head>
+<body>${body}${body.includes('class="tlc-main"') ? '</div>' : ''}
+<script src="/assets/admin.js?v=${VERSION}"></script>
 </body>
 </html>`, {
     headers: {
