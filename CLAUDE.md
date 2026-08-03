@@ -1501,13 +1501,28 @@ enough that nothing had caught up with it):
 
 **Reported, not fixed — Andrew's call, in rough order of payoff:**
 
-1. **A build/minify step.** `public/index.html` is 221KB (36KB brotli), ~95KB
-   of it inline JS re-downloaded with every HTML fetch. Minification alone is
-   a ~50% transfer cut, but it reverses the deliberate no-toolchain stance.
-2. **Externalising the admin's CSS/JS** — ~89KB unminified is inlined into
+1. **A build/minify step for `public/index.html`.** Declined 2026-08-03, not
+   just deferred: `public/index.html` is 221KB (36KB brotli), ~95KB of it
+   inline JS re-downloaded with every HTML fetch, and minifying it would cut
+   that roughly in half — but only via an automated step in the deploy
+   pipeline, since the file changes constantly and a one-off hand-pass would
+   drift the moment anybody next edited it. That reverses the deliberate
+   no-toolchain stance the site has kept since launch, and the real risk is
+   not cosmetic: this repo has already been bitten twice by naive text
+   transforms silently breaking a template literal at a stray backtick (see
+   "node --check does not catch a broken module" and the AC-3 fix above) —
+   the exact failure mode a text-based minifier invites, on the one file with
+   no test suite driving a real browser against every code path. Externalising
+   the *admin's* CSS/JS (item 2, done the same day) captured the safer half of
+   this win — a plain file move, no minifier, no build step — without that
+   risk. If minification is wanted later, it needs its own decision alongside
+   picking a minifier and wiring it into `.github/workflows/deploy.yml`, not a
+   default to reach for.
+2. ~~**Externalising the admin's CSS/JS** — ~89KB unminified is inlined into
    every admin screen at `private, max-age=10`, so it is re-parsed on nearly
    every click. A cacheable `/assets/admin.css` fixes it and costs a
-   versioning scheme.
+   versioning scheme.~~ **Done 2026-08-03** — see "The shell's ~89KB of
+   CSS/JS is externalised now" above.
 3. **The heavy admin handlers**, each needing its own design: `/media` scans
    every page's block JSON per media row; `/subscribers` pages Brevo serially
    in the render path; `/newsitems` runs its expiry sweep inline (R2 delete +
@@ -1541,7 +1556,17 @@ enough that nothing had caught up with it):
    used the capped form wrapper, already renders at full width with its
    own Desktop/Tablet/Phone size switcher, and needs no change here.
 7. **A dedicated a11y pass**: list rows are mouse-only, the public site has
-   no `:focus-visible` styles.
+   no `:focus-visible` styles. **The public-site half is done 2026-08-03** —
+   `public/styles.css` gained a global, on-brand (amber) `:focus-visible`
+   ring for links, buttons, and form fields, visible only to keyboard
+   navigation (a mouse click never triggers `:focus-visible`, so nothing
+   changes for a mouse/touch visitor). Found and fixed the same day: the
+   header logo was a `<div onclick>`, not reachable by keyboard at all —
+   every other nav link was already a real `<button>`; the logo now is too.
+   **Still open**: the admin's list rows are still mouse-only — a keyboard
+   user cannot open a row without a pointer. That is a bigger, separate piece
+   of work (every `renderListSection()` row across ~25 screens) and was not
+   part of this pass.
 
 **Looked at and left alone**: the `:has` choice-chip concern was wrong (the
 input is visible; only a decorative tint is at stake); `calcTotal`'s two
@@ -2462,13 +2487,18 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 
 The full review (three scouts + a synthesis pass, everything verified by reading or measuring rather than pattern-matched) is recorded above under "The post-redesign review (v4.14.0–v4.15.0)". Everything it found that was safe to fix outright shipped in PRs #378–#379. These seven were surfaced but deliberately **not** built without a decision — ranked in the report's own order of likely payoff:
 
-1. **A build/minify step.** `public/index.html` is 221KB (36KB brotli), ~95KB of it inline JS re-downloaded with every HTML fetch. Minification alone is a ~50% transfer cut, but it reverses the deliberate no-toolchain stance the site has kept since launch.
-2. **Externalise the admin's CSS/JS.** ~89KB unminified is inlined into every admin screen at `private, max-age=10`, re-parsed on nearly every click. A cacheable `/assets/admin.css` fixes it and costs a versioning scheme.
+1. ~~**A build/minify step.**~~ **Declined 2026-08-03** (not deferred) — a
+   text-based minifier is exactly the failure mode this repo has already been
+   bitten by twice (a stray backtick silently breaking a template literal),
+   and only an automated build step keeps it from drifting, which reverses
+   the deliberate no-toolchain stance. See "Pending / Deferred Items".
+2. ~~**Externalise the admin's CSS/JS.**~~ **Done 2026-08-03** — see "The
+   shell's ~89KB of CSS/JS is externalised now" above.
 3. **The heavy admin handlers**, each needing its own design rather than a shared fix: `/media` scans every page's block JSON per media row; `/subscribers` pages Brevo serially inside the render path; `/newsitems` runs its expiry sweep inline (an R2 delete + a DELETE per expired row); `/api/search` fires up to 10 unindexed LIKE scans per keystroke with no debounce; `/audit-log` renders one anchor per 50-row page with no retention.
 4. ~~**~1.55MB of `IMG_*.jpg` in `public/images` referenced nowhere.**~~ **Done 2026-08-03** — see the matching item under "Pending / Deferred Items" for what was checked and removed.
 5. ~~**Nine Google Font faces loaded** — likely half are unused; worth an audit before trimming.~~ **Done 2026-08-03** — trimmed to the 7 actually used; see "Pending / Deferred Items".
 6. **A `:has()` fallback** for the Task 19 form-width cap — Firefox ESR and Safari <15.4 get the old 1900px-wide forms back with no cap. Depends on whether the office's browsers actually include either. **Scoped 2026-08-03**: this is the admin's hand-written forms only, never the public site, and does not touch the block editor — see "Pending / Deferred Items".
-7. **A dedicated accessibility pass** — admin list rows are mouse-only (not keyboard-reachable), and the public site has no `:focus-visible` styles anywhere.
+7. **A dedicated accessibility pass** — admin list rows are mouse-only (not keyboard-reachable), and the public site has no `:focus-visible` styles anywhere. **The public-site half is done 2026-08-03** — see "Pending / Deferred Items"; the admin list-rows piece is still open.
 
 ### Pinned / Low Priority
 - **manual.html** — Keep this updated whenever new features, pages, or admin tabs are added. It is the staff reference guide at `/manual` and should always reflect the current state of the site and admin portal.
