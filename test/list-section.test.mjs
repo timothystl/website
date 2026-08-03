@@ -25,6 +25,18 @@ const ROWS = [
   { title: 'Urban Beekeepers',      slug: 'bees',  value: null,         menu: 0, status: 'live' },
 ];
 
+// Not every row has a separate link in its actions cell — gym bookings, for
+// one, render a plain non-interactive dash for confirmed/past bookings while
+// the row itself still carries data-href. That row's only way in is the row
+// itself, so it has to be keyboard-reachable on its own.
+const NO_LINK_ROW = {
+  href: '/ministries/editor/youthfamily',
+  filter: ['live', 'in-menu', 'untagged'],
+  search: 'youth & family youthfamily',
+  cells: [primaryCell('Youth & Family', '/youthfamily'), '', statusPill('good', 'In menu'), statusPill('good', 'Live')],
+  actions: '<span style="color:#999;">—</span>',
+};
+
 const section = renderListSection({
   key: 'ministries',
   title: 'Ministries',
@@ -56,7 +68,7 @@ const section = renderListSection({
     ],
     warn: r.value ? '' : 'No core value on this ministry.',
     warnCta: r.value ? null : { label: 'Tag it', href: `/ministries/edit/${r.slug}` },
-  })),
+  })).concat([NO_LINK_ROW]),
   noun: 'ministry', nounPlural: 'ministries',
   empty: 'No ministry pages yet.',
   note: 'In menu and Status are two different things.',
@@ -82,18 +94,18 @@ const clickFilter = async (label) => { await p.click(`.tlc-filter:text-is("${lab
 ok(errs.length === 0, 'no page errors: ' + errs.join(' | '));
 
 // ── the count label ──
-ok((await shown()).length === 3, 'every row is visible by default');
-ok((await count()) === '3 ministries shown', 'the count uses the irregular plural: ' + (await count()));
+ok((await shown()).length === 4, 'every row is visible by default');
+ok((await count()) === '4 ministries shown', 'the count uses the irregular plural: ' + (await count()));
 
 // ── search ──
 await p.fill('.tlc-search input', 'bees'); await p.waitForTimeout(100);
 ok((await shown()).length === 1, 'search narrows the list');
-ok((await count()) === '1 of 3 shown', 'and the count reads N of M: ' + (await count()));
+ok((await count()) === '1 of 4 shown', 'and the count reads N of M: ' + (await count()));
 
 await p.fill('.tlc-search input', 'zzz'); await p.waitForTimeout(100);
 ok((await shown()).length === 0, 'a search with no hits shows nothing');
 ok(await p.locator('.tlc-empty').isVisible(), 'and the empty state appears');
-ok((await count()) === '0 of 3 shown', 'the count says zero rather than going blank');
+ok((await count()) === '0 of 4 shown', 'the count says zero rather than going blank');
 
 // Two different empty states, because they call for two different actions.
 // The spec's own wording, and it quotes back what was actually typed.
@@ -105,7 +117,7 @@ ok((await count()) === '0 of 3 shown', 'the count says zero rather than going bl
 }
 
 await p.fill('.tlc-search input', ''); await p.waitForTimeout(100);
-ok((await shown()).length === 3, 'clearing the search restores every row');
+ok((await shown()).length === 4, 'clearing the search restores every row');
 // .tlc-empty carries an explicit display, which beats the UA's
 // [hidden]{display:none} — so hiding it has to be restated in CSS or the
 // empty state sits under a full table forever.
@@ -133,7 +145,7 @@ ok((await shown()).length === 0, 'a search inside a non-matching filter finds no
 ok((await count()) === '0 of 1 shown', 'and M is still the filter’s reach: ' + (await count()));
 
 await p.fill('.tlc-search input', ''); await clickFilter('All');
-ok((await shown()).length === 3, 'All restores everything');
+ok((await shown()).length === 4, 'All restores everything');
 
 // ── warning rows ──
 ok(await p.locator('.tlc-warn').count() === 1, 'exactly the untagged ministry grows a warning row');
@@ -150,6 +162,27 @@ await p.goBack(); await p.waitForTimeout(200);
 await p.click('.tlc-warn-cta');
 await p.waitForTimeout(150);
 ok(p.url().endsWith('/ministries/edit/bees'), 'a link inside a row wins over the row: ' + p.url());
+
+await p.goBack(); await p.waitForTimeout(200);
+
+// ── keyboard reachability ──
+// Every row that has somewhere to go is a real tab stop, since not every row
+// has a fallback link a keyboard user could reach instead — the Youth &
+// Family row above has only a dash where Edit usually sits.
+{
+  const rows = p.locator('.tlc-row[data-href]');
+  const rowCount = await rows.count();
+  ok(rowCount === 4, 'every row with somewhere to go carries a tabindex: ' + rowCount);
+  for (let i = 0; i < rowCount; i++) {
+    ok((await rows.nth(i).getAttribute('tabindex')) === '0', 'row ' + i + ' is a tab stop');
+  }
+}
+await p.locator('.tlc-row[data-href="/ministries/editor/youthfamily"]').focus();
+ok(await p.evaluate(() => document.activeElement.getAttribute('data-href')) === '/ministries/editor/youthfamily',
+  'the link-less row itself can take focus');
+await p.keyboard.press('Enter');
+await p.waitForTimeout(150);
+ok(p.url().endsWith('/ministries/editor/youthfamily'), 'Enter on a focused row with no separate link still navigates: ' + p.url());
 
 await b.close(); srv.close();
 console.log(`${pass} passed, ${fail} failed`);
