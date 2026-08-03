@@ -234,6 +234,45 @@ Gated by a dedicated **`giving_manage`** permission (`admin/auth.js`), separate 
 Settings, so giving-link management can be granted independently of plain redirects or
 Subscribers (PII) access.
 
+### The two giving pages have separate jobs (settled 2026-08-03)
+
+There are two giving pages and they had drifted into being rival versions of each
+other. They are now split by job, and this is the rule to keep:
+
+- **`give.timothystl.org`** (`give-landing.js`) is the **transaction**. Amount
+  chips, fund selector, custom amount, the ministry ladder and the leadership
+  tiers — everything that ends in a card being typed in. It resolves `give_url`
+  from the Giving tab *at request time*. It closes with a short "Other ways to
+  give" strip that names the six offline paths and links to `/give`; the strip
+  deliberately carries no descriptions, because two descriptions of an IRA QCD
+  in two files is one of them going stale.
+- **`timothystl.org/give`** is where somebody decides **how** to give: the
+  theology, then the offering plate, bank bill pay, Thrivent Charitable, an IRA
+  qualified charitable distribution, a Donor Advised Fund, planned giving, and
+  the time-and-talent link to `serve.timothystl.org`. Its "Give Online" button
+  **hands off to `give.timothystl.org`** — it is a plain `<a class="btn">` with
+  no Tithe.ly address in it at all.
+
+**The Tithe.ly link has exactly one owner: the Giving tab.** Nothing else may
+hold a copy — not `public/index.html`, and above all not a *block*, whose URL is
+frozen the moment a page is published. `admin/blocks.test.mjs` asserts that no
+seeded page contains `give.tithe.ly`, for every page rather than just `/give`;
+that assertion was per-page precisely because `/ccs` was the one that got missed.
+
+The **CCS appeal is the single exception** and worth understanding before adding
+another. It asks for a *specific fund*, and there is no way to tell
+`give.timothystl.org` "start on the CCS fund" from a link — so those two buttons
+are `[data-give-link]` and get rewritten in the browser by `loadGiveLinks()` in
+`public/index.html` from the same `give_url`. `data-give-fund` **replaces** the
+base link's `fundId` rather than appending a second one. The `href` in the markup
+is the offline fallback and stays real. `loadGiveLinks()` now runs on `/ccs`
+only — `/give` costs no cross-origin call.
+
+⚠ `buttonsIn()` in `tools/extract-pages.mjs` has two passes, and a give button
+matches *both* (`class="btn"` and `data-give-link`). The class pass skips
+`data-give-link` for that reason. Remove that guard and `/ccs` seeds its button
+twice, once with a hardcoded Tithe.ly URL.
+
 ### Form Spam Screening (added 2026-07-31)
 
 The public contact / prayer / newsletter forms had one defence — a hidden

@@ -99,6 +99,12 @@ function buttonsIn(chunk) {
   const re = /<a\b([^>]*class="[^"]*\bbtn\b[^"]*"[^>]*)>([\s\S]*?)<\/a>/gi;
   let m;
   while ((m = re.exec(chunk)) !== null) {
+    // A give link is claimed by the pass below, which knows to send it to
+    // give.timothystl.org instead of copying the raw Tithe.ly href. The CCS
+    // buttons are BOTH `class="btn"` and `data-give-link`, so without this the
+    // page seeds the button twice — once correctly and once with a hardcoded
+    // Tithe.ly address that goes stale the moment the office changes the link.
+    if (/data-give-link/i.test(m[1])) continue;
     const href = grab(m[1], /href="([^"]*)"/);
     const label = text(m[2]);
     if (href && label) out.push({ title: label, url: href });

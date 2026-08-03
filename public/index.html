@@ -899,9 +899,12 @@
       <div style="background:var(--mist);border:1px solid var(--ice);border-radius:var(--r-md);padding:32px;margin-top:40px;">
         <span class="eyebrow eyebrow--sky">Online giving</span>
         <h3 style="margin-bottom:8px;">Give securely online</h3>
-        <p style="font-size:14px;color:var(--gray);line-height:1.7;margin-bottom:24px;">Our online giving is processed by <strong style="color:var(--steel);">Tithe.ly</strong>, a trusted platform used by over 37,000 churches. Give by credit card, debit card, or ACH bank transfer — one-time or recurring. No account required. A tax receipt is emailed automatically after every gift.</p>
-        <a data-give-link href="https://give.tithe.ly/?formId=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none;background-color:#1E2D4A;color:white;font-family:'Source Sans 3',sans-serif;font-weight:700;font-size:16px;padding:14px 48px;border-radius:6px;border:none;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.15);transition:background-color 0.2s,box-shadow 0.2s;" onmouseover="this.style.backgroundColor='#16213a';this.style.boxShadow='0 4px 14px rgba(0,0,0,0.2)'" onmouseout="this.style.backgroundColor='#1E2D4A';this.style.boxShadow='0 2px 8px rgba(0,0,0,0.15)'">Give Online</a>
-        <p style="font-size:12px;color:var(--gray);margin-top:14px;margin-bottom:0;">You will be taken to Tithe.ly's secure giving page.</p>
+        <p style="font-size:14px;color:var(--gray);line-height:1.7;margin-bottom:24px;">Choose an amount and a fund on our giving page, then finish on <strong style="color:var(--steel);">Tithe.ly</strong> — a trusted platform used by over 37,000 churches. Give by credit card, debit card, or ACH bank transfer, one-time or recurring. No account required. A tax receipt is emailed automatically after every gift.</p>
+        <!-- Deliberately give.timothystl.org rather than a Tithe.ly address. That
+             page reads the office's own link from the Giving tab at request time,
+             so this button can never be the copy that goes stale. -->
+        <a href="https://give.timothystl.org" class="btn btn-primary">Give Online</a>
+        <p style="font-size:12px;color:var(--gray);margin-top:14px;margin-bottom:0;">Takes you to give.timothystl.org, then on to Tithe.ly's secure page.</p>
       </div>
 
       <!-- Other ways grid -->
@@ -2496,14 +2499,20 @@ function tlcOwnsWholePage(blocksHtml) {
 }
 
 // ── Giving links ─────────────────────────────────────────────────────────────
-// Every "give" button on the site is built from the one base link the office
-// manages in the admin's Giving tab. The href in the markup is the fallback, so
-// the buttons work if the admin is unreachable — but when the office changes
-// the Tithe.ly link, every button follows instead of some of them quietly
+// A button that asks for a *particular fund* is built here from the one base
+// link the office manages in the admin's Giving tab. The href in the markup is
+// the fallback, so the button works if the admin is unreachable — but when the
+// office changes the Tithe.ly link, the button follows instead of quietly
 // pointing at last year's form.
 //
-// A button can name its own fund (the CCS appeal does); that overrides the base
-// link's fund rather than being appended after it, which would give Tithe.ly
+// The plain "give to the church" buttons do NOT come through here. They link to
+// give.timothystl.org, which resolves the same setting server-side, so the
+// address in the markup is the church's own and can never be the stale copy.
+// The fund-specific appeals are the exception: give.timothystl.org has no way
+// to be told "start on the CCS fund" from a link.
+//
+// A button names its own fund with data-give-fund; that *overrides* the base
+// link's fund rather than being appended after it, which would hand Tithe.ly
 // two fundIds and let it pick.
 var givePromise = null;
 function loadGiveLinks() {
@@ -3039,7 +3048,9 @@ window.showPage = function(id, addHistory) {
   if (id === 'news') { loadNotices('news'); }
   if (id === 'calendar') { loadNotices('calendar'); }
   if (id === 'music') { loadConcertBlock(); }
-  if (id === 'give' || id === 'ccs') { loadGiveLinks(); }
+  // Only /ccs — /give's button is a plain link to give.timothystl.org now, so
+  // the giving page costs no cross-origin call.
+  if (id === 'ccs') { loadGiveLinks(); }
   var adminContentPages = ['sundayschool','confirmation','vbs','egghunt','family','music','stephen','foodpantry','bees'];
   var ministryPages = adminContentPages.concat(['youth','christmasmarket']);
   // A page published from the page editor draws itself entirely. Checked first,
