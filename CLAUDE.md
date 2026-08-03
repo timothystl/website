@@ -1482,6 +1482,22 @@ enough that nothing had caught up with it):
   999px radius. ▲/◆ marks are `aria-hidden`; the dead
   `.tlc-row-wrap[data-href=""]` selector (wrong element, wrong state — the
   attribute is absent, not empty) is `.tlc-row:not([data-href])`.
+- **The shell's ~89KB of CSS/JS is externalised now (2026-08-03)** — item 2
+  from the report-only list below, once Andrew signed off on it. It used to
+  be inlined into every admin `<style>`/`<script>` on a `private, max-age=10`
+  response, so the same ~89KB was re-sent and re-parsed on every click.
+  `ADMIN_SHELL_CSS`/`ADMIN_SHELL_JS` in `admin/helpers.js` hold it now;
+  `/assets/admin.css` and `/assets/admin.js` (routed in
+  `tlc-admin-worker.js`, ahead of the schema gate — a static string needs no
+  D1 read at all) serve it `public, max-age=31536000, immutable`, cache-busted
+  by the `?v=VERSION` query string `html()` already appends every deploy. The
+  CSP's existing `'self'` already covered same-origin requests, so nothing
+  there needed to change. ⚠ Several tests asserted this content by searching
+  the *page* body for CSS/JS substrings — `test/admin-redesign.test.mjs` and
+  `test/shell-layout.test.mjs` now fetch the two asset routes and check
+  there instead; a stub server that serves only `html()`'s literal output
+  (the shape `shell-layout` used) has to answer `/assets/admin.css` and
+  `/assets/admin.js` itself or every rectangle it measures is unstyled.
 
 **Reported, not fixed — Andrew's call, in rough order of payoff:**
 

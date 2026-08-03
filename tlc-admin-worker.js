@@ -25,7 +25,7 @@ const STATIC_PAGES = [
   { slug: 'news',       label: 'News & Events' },
   { slug: 'calendar',   label: 'Calendar' },
 ];
-import { html, sidebarShell, loginPage, setupPage, forgotPasswordPage, resetPasswordPage, permissionCheckboxes, formatDate, escapeHtml, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection } from './admin/helpers.js';
+import { html, sidebarShell, loginPage, setupPage, forgotPasswordPage, resetPasswordPage, permissionCheckboxes, formatDate, escapeHtml, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection, ADMIN_SHELL_CSS, ADMIN_SHELL_JS } from './admin/helpers.js';
 import { renderListSection, renderDrawer, renderFormSection, primaryCell, statusPill, valueChip, valueChips, panel, countLabel, pluralise,
          rowActions, toggleCell, panelList } from './admin/ui.js';
 import { SECTIONS, section as sectionCfg, columnsOf, filtersOf } from './admin/sections.js';
@@ -966,6 +966,29 @@ export default {
     // list under these prefixes keeps growing.
     if (method === 'POST' && (path.startsWith('/pages') || path.startsWith('/menu'))) {
       bustPagesCache(ctx);
+    }
+
+    // ── PUBLIC: the shared admin shell CSS/JS, externalised ──
+    // This used to be inlined into every admin page's <style>/<script> — a
+    // response cached `private, max-age=10`, so the browser re-fetched and
+    // re-parsed the whole thing on every click. It is a fixed string that
+    // only changes on deploy, so it is served on its own, cached for a year,
+    // and busted by the `?v=VERSION` query string html() already appends.
+    // Placed here, ahead of the schema gate, same as the /sb/ proxy above —
+    // a static string needs no D1 access at all.
+    if (path === '/assets/admin.css' && method === 'GET') {
+      return new Response(ADMIN_SHELL_CSS, { headers: {
+        'Content-Type': 'text/css; charset=utf-8',
+        'Cache-Control': 'public, max-age=31536000, immutable',
+        'X-Robots-Tag': 'noindex, nofollow',
+      }});
+    }
+    if (path === '/assets/admin.js' && method === 'GET') {
+      return new Response(ADMIN_SHELL_JS, { headers: {
+        'Content-Type': 'text/javascript; charset=utf-8',
+        'Cache-Control': 'public, max-age=31536000, immutable',
+        'X-Robots-Tag': 'noindex, nofollow',
+      }});
     }
 
     // ── SCHEMA GATE ──

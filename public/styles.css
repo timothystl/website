@@ -37,6 +37,13 @@ body::before{content:'';position:absolute;inset:0;background-image:url("/images/
 img{display:block;max-width:100%;}
 a{color:var(--mid);text-decoration:none;}
 a:hover{color:var(--steel);}
+/* Keyboard-only focus ring — mouse/touch clicks never trigger :focus-visible,
+   so this only ever shows for someone tabbing through the page. Amber reads
+   clearly against every section background on the site, light or dark. */
+a:focus-visible,button:focus-visible,.btn:focus-visible,input:focus-visible,
+textarea:focus-visible,select:focus-visible,[tabindex]:focus-visible{
+  outline:3px solid var(--amber);outline-offset:2px;border-radius:4px;
+}
 .page{display:none;}
 .page.active{display:block;}
 .wrap{max-width:1080px;margin:0 auto;padding:0 28px;}
@@ -59,7 +66,7 @@ p:last-child{margin-bottom:0;}
 /* NAV */
 .nav{position:sticky;top:0;z-index:100;background:var(--sage);border-bottom:3px solid var(--amber);}
 .nav-inner{max-width:1080px;margin:0 auto;padding:0 28px;height:64px;display:flex;align-items:center;justify-content:space-between;}
-.nav-brand{display:flex;align-items:center;gap:12px;cursor:pointer;}
+.nav-brand{display:flex;align-items:center;gap:12px;cursor:pointer;background:none;border:none;padding:0;font:inherit;text-align:left;}
 .nav-logo-img{width:44px;height:44px;border-radius:50%;flex-shrink:0;object-fit:contain;background:white;padding:3px;}
 .nav-brand-name{font-family:var(--sans);font-size:14px;font-weight:800;color:white;display:block;}
 .nav-brand-sub{font-family:var(--sans);font-size:10px;font-weight:600;color:var(--honey);display:block;letter-spacing:.04em;}

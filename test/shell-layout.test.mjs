@@ -18,7 +18,7 @@ import http from 'node:http'; import path from 'node:path';
 import { createRequire } from 'node:module'; import { execSync } from 'node:child_process';
 const gr = execSync('npm root -g').toString().trim();
 const { chromium } = createRequire(path.join(gr, 'x.js'))('playwright');
-import { html, sidebarShell, loginPage } from '../admin/helpers.js';
+import { html, sidebarShell, loginPage, ADMIN_SHELL_CSS, ADMIN_SHELL_JS } from '../admin/helpers.js';
 import { PERMISSIONS } from '../admin/auth.js';
 
 // Somebody with every permission, so the sidebar renders every group — which
@@ -34,7 +34,19 @@ const body = sidebarShell('gym', USER, '', {})
 const page = await html(body, 'Gym rentals').text();
 const login = await loginPage().text();
 
+// html() now links to /assets/admin.css and /assets/admin.js instead of
+// inlining them (so the browser can cache them across admin pages) — this
+// stub has to actually serve those or every rectangle in this file measures
+// an unstyled, unscripted page.
 const srv = http.createServer((q, r) => {
+  if (q.url.startsWith('/assets/admin.css')) {
+    r.writeHead(200, { 'Content-Type': 'text/css' });
+    return r.end(ADMIN_SHELL_CSS);
+  }
+  if (q.url.startsWith('/assets/admin.js')) {
+    r.writeHead(200, { 'Content-Type': 'text/javascript' });
+    return r.end(ADMIN_SHELL_JS);
+  }
   r.writeHead(200, { 'Content-Type': 'text/html' });
   r.end(q.url.startsWith('/login') ? login : page);
 });
