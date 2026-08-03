@@ -5320,7 +5320,11 @@ ${classesJs}
 
     // ── NEWS & EVENTS: COMBINED LIST (Newsletter + News Posts) ──
     if (path === '/newsitems' && method === 'GET') {
-      await sweepExpiredItems(env, new URL(request.url).origin);
+      // Backlog is normally 0-2 items and costs nothing; a long-neglected
+      // backlog would otherwise make the first person to open this screen
+      // eat a multi-second synchronous R2+D1 sweep. waitUntil lets the page
+      // render first and the cleanup finish after the response is sent.
+      ctx.waitUntil(sweepExpiredItems(env, new URL(request.url).origin));
       const itemsRes = await env.DB.prepare(
         'SELECT * FROM news_items ORDER BY pinned DESC, COALESCE(event_date, publish_date) DESC, id DESC'
       ).all();
@@ -7689,18 +7693,23 @@ ${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; 
         brevoError = 'BREVO_LIST_ID secret not configured.';
       } else {
         try {
-          let offset = 0;
           const limit = 500;
-          while (true) {
-            const resp = await fetch(`https://api.brevo.com/v3/contacts/lists/${listId}/contacts?limit=${limit}&offset=${offset}`, {
-              headers: { 'api-key': env.BREVO_API_KEY, 'Accept': 'application/json' }
-            });
-            if (!resp.ok) { brevoError = `Brevo API error: ${resp.status}`; break; }
-            const data = await resp.json();
-            brevoContacts = brevoContacts.concat(data.contacts || []);
-            brevoTotal = data.count;
-            if (brevoContacts.length >= data.count) break;
-            offset += limit;
+          const brevoPage = (offset) => fetch(`https://api.brevo.com/v3/contacts/lists/${listId}/contacts?limit=${limit}&offset=${offset}`, {
+            headers: { 'api-key': env.BREVO_API_KEY, 'Accept': 'application/json' }
+          }).then((resp) => {
+            if (!resp.ok) throw new Error(`Brevo API error: ${resp.status}`);
+            return resp.json();
+          });
+          const first = await brevoPage(0);
+          brevoContacts = first.contacts || [];
+          brevoTotal = first.count;
+          // The rest of the list no longer waits on each page in turn — same
+          // number of round trips, fired together instead of one at a time.
+          const remainingOffsets = [];
+          for (let offset = limit; offset < brevoTotal; offset += limit) remainingOffsets.push(offset);
+          if (remainingOffsets.length) {
+            const rest = await Promise.all(remainingOffsets.map(brevoPage));
+            for (const data of rest) brevoContacts = brevoContacts.concat(data.contacts || []);
           }
         } catch (e) {
           brevoError = `Failed to fetch from Brevo: ${e.message}`;

@@ -204,7 +204,7 @@ export function renderListSection(cfg) {
     // every row independently, so searching for a sermon finds it whether or
     // not its series matches.
     return `<div class="tlc-row-wrap${r.child ? ' tlc-row-child' : ''}" data-filter="${esc(filterVals.join(' '))}" data-search="${esc(String(r.search || '').toLowerCase())}">
-      ${warnHtml}<div class="tlc-row"${r.href ? ` data-href="${esc(r.href)}"` : ''} style="grid-template-columns:${grid};">
+      ${warnHtml}<div class="tlc-row"${r.href ? ` data-href="${esc(r.href)}" tabindex="0" role="link"` : ''} style="grid-template-columns:${grid};">
         ${cells}<span class="tlc-td tlc-right tlc-actions">${actions}</span>
       </div>
     </div>`;
@@ -423,6 +423,15 @@ function wire(sec){
   // The whole row is the target, but a link or button inside it wins — the ⋯
   // menu and an inline form must not be swallowed by the row's own navigation.
   body.addEventListener('click',function(e){
+    if(e.target.closest('a,button,input,form,label')) return;
+    var row=e.target.closest('.tlc-row'); if(!row) return;
+    var href=row.getAttribute('data-href'); if(href) location.href=href;
+  });
+  // Not every row has a separate link or button a keyboard user could reach
+  // instead (a row with no Edit action, only a dash) — the row itself carries
+  // a tabindex when it has somewhere to go, so Enter has to work here too.
+  body.addEventListener('keydown',function(e){
+    if(e.key!=='Enter') return;
     if(e.target.closest('a,button,input,form,label')) return;
     var row=e.target.closest('.tlc-row'); if(!row) return;
     var href=row.getAttribute('data-href'); if(href) location.href=href;
@@ -757,6 +766,8 @@ export const ADMIN_UI_CSS = `
    on those rows — the emitter above omits it — so matching an empty string
    here was a selector that matched nothing, and every row wore a pointer. */
 .tlc-row:not([data-href]){cursor:default;}
+.tlc-row:focus{outline:none;}
+.tlc-row:focus-visible{outline:2px solid var(--tlc-navy);outline-offset:-2px;background:var(--tlc-row-hover);}
 .tlc-td{font-size:13px;color:var(--tlc-body);min-width:0;overflow-wrap:anywhere;}
 .tlc-right{text-align:right;justify-self:end;}
 .tlc-actions{display:flex;align-items:center;gap:12px;white-space:nowrap;}

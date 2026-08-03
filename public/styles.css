@@ -37,6 +37,16 @@ body::before{content:'';position:absolute;inset:0;background-image:url("/images/
 img{display:block;max-width:100%;}
 a{color:var(--mid);text-decoration:none;}
 a:hover{color:var(--steel);}
+/* KEYBOARD FOCUS — the post-redesign review found no :focus-visible styling
+   anywhere on the public site, so a visitor tabbing through nav links, cards
+   and buttons had no way to see where they were. A click or tap gets no ring
+   (it already has its own hover/active feedback); Tab navigation always does.
+   .form-input keeps its separate amber box-shadow on plain :focus below —
+   this only adds the outline, it doesn't touch that. */
+a:focus,button:focus,input:focus,textarea:focus,select:focus,[tabindex]:focus{outline:none;}
+a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,[tabindex]:focus-visible{
+  outline:3px solid var(--amber);outline-offset:2px;
+}
 .page{display:none;}
 .page.active{display:block;}
 .wrap{max-width:1080px;margin:0 auto;padding:0 28px;}
