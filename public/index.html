@@ -89,7 +89,13 @@
      public page; the admin loads its own separate Lora set for that. Every
      other requested weight (300/400/600/700/800 sans, 400/700 serif, 400
      italic serif) is confirmed in use — do not trim further without
-     re-checking BLOCK_CSS too, since it ships here but is edited in blocks.js. -->
+     re-checking BLOCK_CSS too, since it ships here but is edited in blocks.js.
+     ⚠ Sans weight 300 is real, not leftover: .hero-sub, .welcome-body,
+     .mdo-desc, .page-hero p (styles.css) and .tlcb-hero-sub/.tlcb-slide-sub
+     (blocks.js) all set font-weight:300. A parallel trim on main dropped it
+     from this link on the assumption it was unused — restored on merge
+     2026-08-03, since those rules would otherwise fall back to a synthetic
+     or 400-weight render instead of the real light face. -->
 <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,700;1,400&family=Source+Sans+3:wght@300;400;600;700;800&display=swap" rel="stylesheet">
 <!-- Cloudflare Web Analytics — no cookies, no GDPR issues, free -->
 <script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "db24b7b0a3044db6be76e51675a0eb1d"}'></script>
@@ -98,13 +104,13 @@
 
 <nav class="nav">
   <div class="nav-inner">
-    <div class="nav-brand" onclick="showPage('home')">
+    <button class="nav-brand" onclick="showPage('home')">
       <img src="/logo.png?v=20260328" alt="Timothy Lutheran Church" class="nav-logo-img" fetchpriority="high" width="500" height="500">
       <div>
         <span class="nav-brand-name">Timothy Lutheran Church</span>
         <span class="nav-brand-sub">from our Neighborhood to the Nations</span>
       </div>
-    </div>
+    </button>
     <button class="nav-toggle" id="navToggle">☰</button>
     <ul class="nav-links">
       <li><button onclick="showPage('about')">About</button></li>

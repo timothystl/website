@@ -1482,31 +1482,124 @@ enough that nothing had caught up with it):
   999px radius. ▲/◆ marks are `aria-hidden`; the dead
   `.tlc-row-wrap[data-href=""]` selector (wrong element, wrong state — the
   attribute is absent, not empty) is `.tlc-row:not([data-href])`.
+- **The shell's ~89KB of CSS/JS is externalised now (2026-08-03)** — item 2
+  from the report-only list below, once Andrew signed off on it. It used to
+  be inlined into every admin `<style>`/`<script>` on a `private, max-age=10`
+  response, so the same ~89KB was re-sent and re-parsed on every click.
+  `ADMIN_SHELL_CSS`/`ADMIN_SHELL_JS` in `admin/helpers.js` hold it now;
+  `/assets/admin.css` and `/assets/admin.js` (routed in
+  `tlc-admin-worker.js`, ahead of the schema gate — a static string needs no
+  D1 read at all) serve it `public, max-age=31536000, immutable`, cache-busted
+  by the `?v=VERSION` query string `html()` already appends every deploy. The
+  CSP's existing `'self'` already covered same-origin requests, so nothing
+  there needed to change. ⚠ Several tests asserted this content by searching
+  the *page* body for CSS/JS substrings — `test/admin-redesign.test.mjs` and
+  `test/shell-layout.test.mjs` now fetch the two asset routes and check
+  there instead; a stub server that serves only `html()`'s literal output
+  (the shape `shell-layout` used) has to answer `/assets/admin.css` and
+  `/assets/admin.js` itself or every rectangle it measures is unstyled.
 
 **Reported, not fixed — Andrew's call, in rough order of payoff:**
 
-1. **A build/minify step.** `public/index.html` is 221KB (36KB brotli), ~95KB
-   of it inline JS re-downloaded with every HTML fetch. Minification alone is
-   a ~50% transfer cut, but it reverses the deliberate no-toolchain stance.
-2. **Externalising the admin's CSS/JS** — ~89KB unminified is inlined into
+1. **A build/minify step for `public/index.html`.** Declined 2026-08-03, not
+   just deferred: `public/index.html` is 221KB (36KB brotli), ~95KB of it
+   inline JS re-downloaded with every HTML fetch, and minifying it would cut
+   that roughly in half — but only via an automated step in the deploy
+   pipeline, since the file changes constantly and a one-off hand-pass would
+   drift the moment anybody next edited it. That reverses the deliberate
+   no-toolchain stance the site has kept since launch, and the real risk is
+   not cosmetic: this repo has already been bitten twice by naive text
+   transforms silently breaking a template literal at a stray backtick (see
+   "node --check does not catch a broken module" and the AC-3 fix above) —
+   the exact failure mode a text-based minifier invites, on the one file with
+   no test suite driving a real browser against every code path. Externalising
+   the *admin's* CSS/JS (item 2, done the same day) captured the safer half of
+   this win — a plain file move, no minifier, no build step — without that
+   risk. If minification is wanted later, it needs its own decision alongside
+   picking a minifier and wiring it into `.github/workflows/deploy.yml`, not a
+   default to reach for.
+2. ~~**Externalising the admin's CSS/JS** — ~89KB unminified is inlined into
    every admin screen at `private, max-age=10`, so it is re-parsed on nearly
    every click. A cacheable `/assets/admin.css` fixes it and costs a
-   versioning scheme.
-3. **The heavy admin handlers**, each needing its own design: `/media` scans
+   versioning scheme.~~ **Done 2026-08-03** — see "The shell's ~89KB of
+   CSS/JS is externalised now" above.
+3. ~~**The heavy admin handlers**, each needing its own design: `/media` scans
    every page's block JSON per media row; `/subscribers` pages Brevo serially
    in the render path; `/newsitems` runs its expiry sweep inline (R2 delete +
    DELETE per expired row); `/api/search` fires up to 10 LIKE scans per
    keystroke with no debounce; `/audit-log` renders one anchor per 50-row
-   page with no retention.
-4. **~1.55MB of `IMG_*.jpg` in `public/images` referenced nowhere** — user
-   files, so deletion needs sign-off. `food-pantry.webp`/`Bees.webp` (~175KB
-   each) serve as both thumbnails and full-width. No `width`/`height`
-   attributes anywhere (CLS).
-5. **Nine Google Font faces** — likely half unused.
+   page with no retention.~~ **Four of five done 2026-08-03**, per Andrew's
+   "go with making it faster":
+   - **`/newsitems`** no longer `await`s the sweep before rendering —
+     `ctx.waitUntil(sweepExpiredItems(...))` now, so an R2 delete plus a D1
+     DELETE per expired row (almost always zero rows) no longer blocks every
+     single visit to the screen. The row's `state` already reads 'expired'
+     off `expire_date` regardless of whether the sweep has run yet, so
+     deferring it costs nothing but the row surviving one extra page load
+     before it is actually removed.
+   - **`/subscribers`** fetches its first Brevo page alone (the only one that
+     can be serial — it's where `count` comes from), then every remaining
+     page together via `Promise.all` instead of one round trip at a time. A
+     failed page no longer costs the pages that succeeded. Covered by a new
+     test group in `test/admin-redesign.test.mjs` asserting concurrent
+     fetching and partial-failure tolerance.
+   - **`/api/search`** ran its up-to-ten permission-gated LIKE queries one
+     `await` at a time in a `for` loop; they don't depend on each other, so
+     they now run together via `Promise.all`, with `active`'s array order
+     (not resolution order) still deciding section order in the results.
+   - **`/audit-log`**'s pager rendered one `<a>` per page — harmless at 3
+     pages, hundreds of links at 300, which is exactly the shape a table
+     with **no retention** (a deliberate choice — it is the accountability
+     record, not ephemeral data, so auto-deleting it was never on the table)
+     grows into. `paginationWindow()` in `admin/ui.js` is a pure function —
+     first, last, and a couple either side of where you are, with a gap
+     collapsed to `…` — capping the pager at a constant handful of links
+     regardless of total pages. `admin/ui.test.mjs` covers it directly.
+   - **`/media`'s per-media-row scan of every page's block JSON is still
+     open.** It is real substring search (a stored URL and the one written
+     into a block can differ by origin, so it has to match on the filename
+     tail, not an exact key) across text that can genuinely contain the tail
+     anywhere — that is not a job a normal B-tree index can do, and doing it
+     properly means a real inverted index or SQLite FTS5, which is its own
+     schema change and its own `SCHEMA_VERSION` bump, not a quick parallelise.
+4. ~~**~1.55MB of `IMG_*.jpg` in `public/images` referenced nowhere**~~ —
+   **done 2026-08-03**, with Andrew's sign-off. All ten (~1.6MB) confirmed
+   unreferenced anywhere in the repo — `public/index.html`, every admin
+   route, every generated page seed — and deleted. `food-pantry.webp`/
+   `Bees.webp` (~175KB each, still serving as both thumbnails and full-width)
+   and the missing `width`/`height` attributes (CLS exposure) were not part
+   of this ask and are still open.
+5. ~~**Nine Google Font faces** — likely half unused.~~ **Checked 2026-08-03**:
+   `public/index.html` only ever sets `font-weight` to 400, 600, 700 or 800
+   (plus italic at 400) — verified against every style rule and inline style
+   in the file, not just a sample. Lora 500 and Source Sans 3 300 were loaded
+   but never used anywhere; the font `<link>` now requests only the four
+   weights each family actually needs (7 faces, down from 9). The admin's
+   separate font links (`admin/helpers.js`, `admin/gym.js`,
+   `admin/ministry-editor.html`, `admin/scheduler.html`) were not touched —
+   this pass was scoped to the public site, which is what the 221KB /
+   9-face figure in the review referred to.
 6. **`:has()` fallback** for the form-width cap (Firefox ESR / Safari <15.4
    get the 1900px forms back) — depends on what the office actually runs.
+   **Scope check 2026-08-03**: this cap only ever applied to the ~29
+   hand-written *admin* forms (`.tlc-wrap .card:has(.form-group)` in
+   `admin/ui.js`) — things like the "add a news post" or "edit a staff
+   bio" screens. It was never on the public website. It also does not
+   reach the ministry/page block editor at all — that screen has never
+   used the capped form wrapper, already renders at full width with its
+   own Desktop/Tablet/Phone size switcher, and needs no change here.
 7. **A dedicated a11y pass**: list rows are mouse-only, the public site has
-   no `:focus-visible` styles.
+   no `:focus-visible` styles. **The public-site half is done 2026-08-03** —
+   `public/styles.css` gained a global, on-brand (amber) `:focus-visible`
+   ring for links, buttons, and form fields, visible only to keyboard
+   navigation (a mouse click never triggers `:focus-visible`, so nothing
+   changes for a mouse/touch visitor). Found and fixed the same day: the
+   header logo was a `<div onclick>`, not reachable by keyboard at all —
+   every other nav link was already a real `<button>`; the logo now is too.
+   **Still open**: the admin's list rows are still mouse-only — a keyboard
+   user cannot open a row without a pointer. That is a bigger, separate piece
+   of work (every `renderListSection()` row across ~25 screens) and was not
+   part of this pass.
 
 **Looked at and left alone**: the `:has` choice-chip concern was wrong (the
 input is visible; only a decorative tint is at stake); `calcTotal`'s two
@@ -2425,24 +2518,15 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 
 ### From the Post-Redesign Review — Andrew's Call (2026-08-02)
 
-The full review (three scouts + a synthesis pass, everything verified by reading or measuring rather than pattern-matched) is recorded above under "The post-redesign review (v4.14.0–v4.15.0)". Everything it found that was safe to fix outright shipped in PRs #378–#379. Of the seven report-only items surfaced without a decision, five are now resolved (v4.16.0, below); two remain genuinely deferred:
+The full review (three scouts + a synthesis pass, everything verified by reading or measuring rather than pattern-matched) is recorded above under "The post-redesign review (v4.14.0–v4.15.0)". Everything it found that was safe to fix outright shipped in PRs #378–#379. Of the seven report-only items, two parallel sessions worked the list independently the same day (2026-08-03) — PRs #382–#385 on one side, this PR on the other — and between them all seven now have an answer:
 
-1. **A build/minify step.** Still not done — reverses the deliberate no-toolchain stance the site has kept since launch. `public/index.html` is 221KB (36KB brotli), ~95KB of it inline JS re-downloaded with every HTML fetch.
-2. **Externalise the admin's CSS/JS.** Still not done — ~89KB unminified is inlined into every admin screen at `private, max-age=10`, re-parsed on nearly every click. A cacheable `/assets/admin.css` fixes it and costs a versioning scheme.
-
-The other five — **done in v4.16.0**:
-
-- **Image CLS.** All 13 `<img>` tags on the public site with a fixed intrinsic size (logo, ministry-card thumbnails, partner logos, three full-width ministry photos) now carry `width`/`height` read straight from the file. The other 4 (news item, ministry update, staff photo, music-ministry photo) render admin-uploaded content with no fixed aspect ratio — a real fix needs width/height stored at upload time, not a markup sweep, so those are still open. Resizing the double-duty `food-pantry.webp`/`Bees.webp` (each serving both a 72px thumbnail and a full-width image from the same 170KB+ file) is **still not done** — there is no image-processing tool anywhere in this repo and none in the sandbox that made this pass; it needs a machine with real image tooling, not just repo access.
-- **`:focus-visible` on the public site.** Nav links, buttons and form fields now show a ring on keyboard focus and none on mouse/touch — `public/styles.css`, right after the base `img`/`a` rules.
-- **Admin list rows are keyboard-reachable.** `renderListSection()`'s `.tlc-row` now carries `tabindex="0" role="link"` whenever it has somewhere to go, `LIST_SECTION_JS` answers Enter the same way it answers a click, and `.tlc-row:focus-visible` gets a real outline (there was previously only a `cursor:pointer` hint, no focus styling at all). This mattered beyond cosmetics: most rows have a fallback `<a class="tlc-edit">Edit</a>` a keyboard user could reach instead, but not every row does — gym bookings render a plain `<span>—</span>` for confirmed/past bookings, so that row was a genuine keyboard dead end before this. `test/list-section.test.mjs` covers it with a row that has no separate link.
-- **`/newsitems`' expiry sweep no longer blocks the response.** `sweepExpiredItems()` (an R2 delete + a DB delete per expired row) now runs in `ctx.waitUntil()` instead of being awaited before the page renders — the risk was never the normal 0-2-item backlog, it was a long-neglected one making the first person to open the screen after a gap eat a multi-second synchronous sweep.
-- **`/subscribers` parallelizes Brevo pagination.** It fetches the first 500-contact page to learn the total, then `Promise.all`s whatever pages remain instead of awaiting them one at a time — same number of round trips, no longer serialized. At today's ~600 subscribers this was 2 sequential calls; it only gets worse as the list grows.
-
-Still open, not touched this pass, and why:
-- **`:has()` form-width fallback** (`admin/ui.js:945-947`) — confirmed to have no `@supports` guard, so pre-`:has()` browsers just see the uncapped form rather than anything broken. A real fallback needs a plain-class marker added across ~29 hand-written form routes (the rule matches on DOM shape, which older CSS can't express at all) — real effort for browsers with no evidence the office runs. Revisit if someone reports the wide-form symptom on an actual machine.
-- **`/media`'s O(media × pages) scan** — real algorithmic issue, but at the site's actual scale (`pages`/`youth_pages` each dozens of rows) a substring scan over modest JSON completes in single-digit milliseconds; not a felt problem today. The real fix is a maintained usage index updated on page save, which is a design task, not a patch.
-- **`/gym-rentals` unbounded scans and `/pages`'s O(n²) parentName lookup** — not re-scoped this pass; original report-only status stands rather than guessing at a fix without reading the code.
-- **Nine Google Font faces** — one unused weight (Lora 500) was confirmed and dropped in this pass; the rest are confirmed in use. No further trimming without re-checking `BLOCK_CSS` too, since it ships to the public site via `/api/pages` but is edited in `admin/blocks.js`.
+1. ~~**A build/minify step.**~~ **Declined, not deferred** — a text-based minifier is exactly the failure mode this repo has already been bitten by twice (a stray backtick silently breaking a template literal), and only an automated build step keeps that from drifting, which reverses the deliberate no-toolchain stance. See "Pending / Deferred Items".
+2. ~~**Externalise the admin's CSS/JS.**~~ **Done** — `ADMIN_SHELL_CSS`/`ADMIN_SHELL_JS` (`admin/helpers.js`) now serve at `/assets/admin.css` and `/assets/admin.js`, `public, max-age=31536000, immutable`, cache-busted by `?v=${VERSION}`. No longer inlined into every response.
+3. ~~**The heavy admin handlers**~~ — **all five named in the original item now addressed**: `/newsitems`' expiry sweep backgrounded via `ctx.waitUntil`; `/subscribers` and `/api/search` both parallelize what used to be serial round trips (`Promise.all` over independent offsets/sources); `/audit-log`'s pager is windowed (`paginationWindow()`) instead of one anchor per 50-row page. `/media`'s O(media × pages) substring scan is the one left alone on purpose — a real fix needs a maintained usage index updated on page save, not a parallelise, and at the site's actual scale (`pages`/`youth_pages` each dozens of rows) it isn't a felt problem today. Two more from the fuller handler catalog were never part of this seven-item list and are still untouched: `/gym-rentals`'s three unbounded `gym_bookings` scans with joins, and `/pages`'s O(n²) parentName lookup.
+4. ~~**~1.55MB of `IMG_*.jpg` in `public/images` referenced nowhere. No `width`/`height` attributes anywhere on the site (CLS exposure).**~~ **Both done.** All 10 unreferenced files confirmed and deleted. Of the 17 `<img>` tags on the public site, 13 have one fixed intrinsic size (logo, ministry-card thumbnails, partner logos, three full-width ministry photos) and now carry `width`/`height` read straight from the file, so the browser reserves their space before the image loads. The other 4 render admin-uploaded content (news item, ministry update, staff photo, music-ministry photo) with no fixed aspect ratio — a real fix needs width/height stored at upload time, not a markup sweep, so those stay open. Resizing the double-duty `food-pantry.webp`/`Bees.webp` (each serving both a 72px thumbnail and a full-width image from the same 170KB+ file) is also still open — no image-processing tool exists anywhere in this repo or in the sandbox that made this pass; it needs a machine with real image tooling, not just repo access.
+5. ~~**Nine Google Font faces loaded**~~ — **done, with a correction.** One weight really was unused (Lora 500 — confirmed against every `var(--serif)` rule including `BLOCK_CSS`, which ships to the public site via `/api/pages` but is edited in `admin/blocks.js`) and was dropped, 9 → 8. A first pass at this also dropped Source Sans 3 weight 300, on the assumption it was unused too — it isn't: `.hero-sub`, `.welcome-body`, `.mdo-desc`, `.page-hero p` (`styles.css`) and `.tlcb-hero-sub`/`.tlcb-slide-sub` (`blocks.js`) all set `font-weight:300`, and dropping it from the font link would have silently swapped every one of those to a synthetic or 400-weight render. Restored on merge.
+6. **A `:has()` fallback** for the Task 19 form-width cap — still open. Firefox ESR and Safari <15.4 get the old uncapped-width forms back rather than anything broken; a real fallback needs a plain-class marker added across ~29 hand-written admin form routes (the rule matches on DOM shape, which older CSS can't express at all) for browsers nobody's confirmed the office runs. Scoped to the admin's hand-written forms only — never the public site, and doesn't touch the block editor.
+7. **A dedicated accessibility pass** — **both halves now done.** `:focus-visible` styling on the public site (nav, buttons, form fields — `public/styles.css`) and admin list rows are real tab stops now too: `renderListSection()`'s `.tlc-row` carries `tabindex="0" role="link"` whenever it has somewhere to go, `LIST_SECTION_JS` answers Enter the same way it answers a click, and `.tlc-row:focus-visible` gets an outline (there was previously only a `cursor:pointer` hint, no focus styling at all). This mattered beyond cosmetics: most rows have a fallback `<a class="tlc-edit">Edit</a>` a keyboard user could reach instead, but not every row does — gym bookings render a plain `<span>—</span>` for confirmed/past bookings, so that row was a genuine keyboard dead end before this. `test/list-section.test.mjs` covers it with a row that has no separate link.
 
 ### Pinned / Low Priority
 - **manual.html** — Keep this updated whenever new features, pages, or admin tabs are added. It is the staff reference guide at `/manual` and should always reflect the current state of the site and admin portal.

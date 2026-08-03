@@ -130,14 +130,21 @@ group('enter & approve');
   // Three church staff, the one childcare person with hours, and the salaried
   // MDO director — who has no hours to show but is still owed a salary.
   ok(rows.length === 5, 'everybody who is owed something this period: ' + rows.length);
-  ok(rows.some((r) => r.includes('Andrew Dinger') && r.includes('Salaried')), 'a salaried person is marked salaried');
+  // The Paid As column was removed — salaried is now read off the row having
+  // no hours box (checked below) rather than a "Salaried" pill.
+  ok(rows.some((r) => r.includes('Andrew Dinger')), 'the salaried lead pastor has a row');
   ok(rows.some((r) => r.includes("Maria O'Brien")), 'an apostrophe in a name renders as itself');
+  ok(rows.some((r) => r.includes('Andrew Dinger') && /Edit/.test(r)),
+    'the Edit button moved up onto the person\'s own row');
 
-  // Salaried people have no hours box — there is nothing to type.
+  // Salaried people have no hours box — there is nothing to type. PTO is an
+  // hourly idea too (v4.2.0): a salaried person is paid the same whether or
+  // not they take the day off, so they get neither box.
   const boxes = await p.$$eval('#entryRows input.tlc-pay-in', (ns) => ns.map((n) => n.dataset.staff + ':' + n.dataset.field));
   ok(!boxes.includes('c1:hours_worked'), 'a salaried person gets no hours box');
   ok(boxes.includes('c2:hours_worked'), 'an hourly person does');
-  ok(boxes.includes('c1:pto_hours_used'), 'but everybody can record PTO');
+  ok(!boxes.includes('c1:pto_hours_used'), 'and no PTO box either');
+  ok(boxes.includes('c2:pto_hours_used'), 'but an hourly person can record PTO');
 
   // The status column says the thing that actually blocks a payroll run.
   ok((await text('#entryRows')).includes('Needs hours'), 'somebody with no hours yet is flagged');

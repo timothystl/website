@@ -818,6 +818,55 @@ group('staff, users and subscribers on the shared pattern');
   has(subs, 'Website signup', 'website signups show even when Brevo cannot be read');
 }
 
+group('subscribers fetches Brevo pages together, not one at a time');
+{
+  // The first page is the only one that can be serial — it is where `count`
+  // comes from. Everything after it should go out together rather than as
+  // one round trip per page, which is what this asserts by counting requests
+  // and by checking every page's contacts actually made it into the list.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  env.BREVO_API_KEY = 'test-key';
+  env.BREVO_LIST_ID = '9';
+
+  const requested = [];
+  const realFetch = globalThis.fetch;
+  const page = (n, count) => new Response(JSON.stringify({
+    count,
+    contacts: [{ email: `p${n}@example.com`, attributes: { FIRSTNAME: 'Page', LASTNAME: String(n) } }],
+  }), { status: 200 });
+  globalThis.fetch = async (u) => {
+    const off = Number(new URL(String(u)).searchParams.get('offset'));
+    requested.push(off);
+    // 3 pages of 500 = 1500 contacts on paper; the stub returns one contact
+    // per page so the test can tell them apart without building 1500 rows.
+    return page(off, 1500);
+  };
+  const body = await (await call(env, '/subscribers', { cookie })).text();
+  globalThis.fetch = realFetch;
+
+  eq(requested.length, 3, 'three pages requested for 1500 contacts at 500 each');
+  eq(new Set(requested).size, 3, 'three distinct offsets, not the same page three times');
+  for (const off of [0, 500, 1000]) has(body, `Page ${off}`, `page at offset ${off} made it into the list`);
+
+  // A page that fails should not cost the pages that succeeded — the render
+  // path already tolerated Brevo being unreachable entirely; one bad page
+  // partway through a pagination run is the same kind of partial failure.
+  const requested2 = [];
+  globalThis.fetch = async (u) => {
+    const off = Number(new URL(String(u)).searchParams.get('offset'));
+    requested2.push(off);
+    if (off === 500) return new Response('', { status: 500 });
+    return page(off, 1500);
+  };
+  const body2 = await (await call(env, '/subscribers', { cookie })).text();
+  globalThis.fetch = realFetch;
+
+  has(body2, 'Page 0', 'the page before the failure still shows');
+  has(body2, 'Page 1000', 'and the page after it — the failure did not cancel the rest');
+  ok(!body2.includes('Page 500'), 'only the page that actually failed is missing');
+}
+
 group('the permission checkboxes are the truth');
 {
   const { db, env } = await boot();
@@ -1609,12 +1658,20 @@ group('the shell is the sidebar plus a context bar');
   // The white util bar that held Sign Out is gone for good — that is the part
   // the design rejected. Sign Out lives in the sidebar foot now.
   ok(!body.includes('util-bar'), 'the util bar is gone');
+
+  // The shell's CSS/JS is no longer inlined into the page — it is served
+  // from its own cacheable routes (see "the shared shell CSS/JS is
+  // externalised" below) and linked in rather than embedded, so these checks
+  // read the asset responses rather than the page body.
+  const shellCss = await (await call(env, '/assets/admin.css')).text();
+  const shellJs = await (await call(env, '/assets/admin.js')).text();
+
   // Two flex columns, not a fixed rail plus matching body padding. The rail
   // width is a single custom property now, read by both sides.
-  ok(body.includes('body{display:flex;align-items:stretch;}'), 'the shell is a flex row');
-  ok(body.includes('.tlc-main{flex:1;min-width:0'), 'the content column takes what is left');
-  ok(body.includes('--tlc-rail:228px'), 'and the rail width is declared once');
-  ok(!body.includes('body{padding-left:228px'), 'the old padding arithmetic is gone');
+  ok(shellCss.includes('body{display:flex;align-items:stretch;}'), 'the shell is a flex row');
+  ok(shellCss.includes('.tlc-main{flex:1;min-width:0'), 'the content column takes what is left');
+  ok(shellCss.includes('--tlc-rail:228px'), 'and the rail width is declared once');
+  ok(!shellCss.includes('body{padding-left:228px'), 'the old padding arithmetic is gone');
 
   // ⚠ Below 900px it is a slide-over, and the CSS and the handler cannot ship
   // apart. A previous pass deleted the handler and kept the CSS, so a phone
@@ -1622,8 +1679,8 @@ group('the shell is the sidebar plus a context bar');
   // no navigation at all.
   ok(body.includes('id="sidebar-toggle"'), 'the hamburger is rendered');
   ok(body.includes('id="sidebar-backdrop"'), 'and the scrim it needs');
-  ok(body.includes("getElementById('sidebar-toggle')"), 'and the handler that opens it');
-  ok(body.includes("classList.toggle('is-open'"), 'which really toggles the class the CSS reads');
+  ok(shellJs.includes("getElementById('sidebar-toggle')"), 'and the handler that opens it');
+  ok(shellJs.includes("classList.toggle('is-open'"), 'which really toggles the class the CSS reads');
 
   // The context bar reports; it does not navigate.
   has(body, 'class="tlc-ctx"', 'the context bar is above the content');
@@ -1647,6 +1704,46 @@ group('the shell is the sidebar plus a context bar');
   const gym = await (await call(env, '/gym-rentals', { cookie })).text();
   has(gym, 'class="tlc-ctx-group">Money &amp; Building<', 'a gym screen names its group');
   has(gym, 'class="tlc-ctx-section">Gym rentals<', 'and its section');
+}
+
+group('the shared shell CSS/JS is externalised, not inlined');
+{
+  const { env } = await boot();
+
+  // A visitor is never signed in when the browser first asks for these — the
+  // login page needs its own CSS too — so both routes must answer with no
+  // session at all.
+  const cssRes = await call(env, '/assets/admin.css');
+  const jsRes = await call(env, '/assets/admin.js');
+  eq(cssRes.status, 200, 'the stylesheet loads with no session');
+  eq(jsRes.status, 200, 'the script loads with no session');
+
+  // A year, immutable — the whole point is that a browser only ever fetches
+  // this once per deploy, not once per click.
+  has(cssRes.headers.get('cache-control') || '', 'immutable', 'the stylesheet is cached for a year');
+  has(jsRes.headers.get('cache-control') || '', 'immutable', 'so is the script');
+  ok(!/private|max-age=10\b/.test(cssRes.headers.get('cache-control') || ''), 'not the page’s own short-lived header');
+
+  // If a request for a plain static string ever touches the schema gate, the
+  // whole reason it was moved ahead of it — zero D1 round-trips — is gone.
+  // A DB whose prepare() always throws proves nothing was ever asked of it.
+  const brokenDb = { prepare() { throw new Error('should never be queried for a static asset'); } };
+  const untouched = await worker.fetch(
+    new Request('https://admin.timothystl.org/assets/admin.css'),
+    { ...env, DB: brokenDb }, ctx);
+  eq(untouched.status, 200, 'serving the asset never touches the database');
+
+  // And the page that used to carry this content inline now just points at
+  // it, cache-busted by the same VERSION every deploy already bumps.
+  // ⚠ Same env as the session it signs in to — a fresh boot() pairs a new
+  // db with its own env, and signing in to one while calling the other
+  // means the lookup finds no session at all.
+  const { db: db2, env: env2 } = await boot();
+  const { cookie } = signIn(db2);
+  const page = await (await call(env2, '/dashboard', { cookie })).text();
+  ok(/\/assets\/admin\.css\?v=v[\d.]+/.test(page), 'the page links the stylesheet, versioned');
+  ok(/\/assets\/admin\.js\?v=v[\d.]+/.test(page), 'and the script, versioned');
+  ok(!page.includes('<style>'), 'and carries no inline shell <style> of its own');
 }
 
 group('what is under Pages folds away');
@@ -2052,7 +2149,15 @@ group('the July review\u2019s open security items');
   ok(!anonBody.includes('Worship Schedule'), 'a signed-out visitor does not get the scheduler');
   has(anonBody, 'Sign in', 'they get the login page');
 
-  const inside = await (await call(env, '/scheduler', { cookie })).text();
+  // ⚠ Needs its OWN session — the `cookie` above was just invalidated by the
+  // /logout call for the AC-1 check. Reusing it here used to pass anyway,
+  // because a logged-out request lands on the login page and that page was,
+  // by coincidence, also padded past 10000 bytes with the shell's inlined
+  // CSS/JS — so this assertion was really re-checking the login page, not
+  // the scheduler. Externalising that CSS/JS (see admin/helpers.js) shrank
+  // the login page below the threshold and exposed it.
+  const staff = signIn(db, ALL_PERMISSIONS, 'office-staff');
+  const inside = await (await call(env, '/scheduler', { cookie: staff.cookie })).text();
   ok(inside.length > 10000, 'a signed-in staff member does get it: ' + inside.length + ' bytes');
 }
 
