@@ -65,6 +65,9 @@ function apiPages({ publish = {}, redirects = {}, pages = SITE_PAGES, details = 
   };
 }
 
+// The one base Tithe.ly link the office manages, served the way the admin does.
+let GIVE_URL = 'https://give.tithe.ly/?formId=NEW-FORM-ID&locationId=LOC';
+
 async function visit(urlPath, api) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
@@ -77,6 +80,10 @@ async function visit(urlPath, api) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(api) });
     }
     if (u.includes('/api/redirects')) return route.fulfill({ status: 200, contentType: 'application/json', body: '{"redirects":[]}' });
+    if (u.includes('/api/settings/give_url')) {
+      if (GIVE_URL === null) return route.fulfill({ status: 500, contentType: 'text/plain', body: 'down' });
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ value: GIVE_URL }) });
+    }
     if (u.endsWith('/posts')) return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
     if (u.includes('/api/ministry/')) return route.fulfill({ status: 404, contentType: 'text/plain', body: 'nope' });
     return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
@@ -138,6 +145,37 @@ group('the footer reads the church details record');
   ok((await page.locator('.footer-brand-addr').innerHTML()).includes('6704 Fyler Ave'),
     'with no record the footer keeps what shipped with the page');
   await ctx.close();
+}
+
+group('every give button follows the one link the office manages');
+{
+  const { page, ctx, errors } = await visit('/give', apiPages());
+  eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
+  const href = await page.getAttribute('#page-give [data-give-link]', 'href');
+  ok(href.includes('NEW-FORM-ID'), 'the Give Online button uses the admin-managed link, got: ' + href);
+  ok(!href.includes('e1769a0f'), 'and not the copy baked into the page');
+  // the CCS appeal shares the base link but keeps its own fund
+  await page.evaluate(() => window.showPage('ccs'));
+  await page.waitForTimeout(600);
+  const ccs = await page.$$eval('#page-ccs [data-give-link]', (els) => els.map((e) => e.getAttribute('href')));
+  eq(ccs.length, 2, 'both CCS buttons are wired');
+  for (const h of ccs) {
+    ok(h.includes('NEW-FORM-ID'), 'CCS follows the managed link too: ' + h);
+    ok(h.includes('fundId=49cdc381-ff0e-4b7e-b029-091f206850c1'), 'and keeps its own fund');
+    eq((h.match(/fundId=/g) || []).length, 1, 'with one fundId, not two');
+    ok(h.includes('frequency=one-time'), 'and its one-time frequency');
+  }
+  await ctx.close();
+}
+{
+  // If the admin cannot be reached the buttons must still give someone a way to
+  // give — the href in the markup is the fallback.
+  GIVE_URL = null;
+  const { page, ctx } = await visit('/give', apiPages());
+  const href = await page.getAttribute('#page-give [data-give-link]', 'href');
+  ok(/^https:\/\/give\.tithe\.ly\//.test(href), 'the button still points somewhere real: ' + href);
+  await ctx.close();
+  GIVE_URL = 'https://give.tithe.ly/?formId=NEW-FORM-ID&locationId=LOC';
 }
 
 group('the site still works when the admin is unreachable');

@@ -251,9 +251,9 @@ export const PAGE_SEEDS = {
       "title": "",
       "subtitle": "",
       "eyebrow": "What is Stephen Ministry?",
-      "body": "<h2>One-to-one Christian care</h2>\n<p>Stephen Ministry equips congregation members to provide confidential, one-to-one Christian care to people going through difficult times — grief, illness, job loss, divorce, loneliness, or any of life's challenges. A trained Stephen Minister walks alongside you as a caring presence for as long as you need.</p>\n<p>Stephen Ministers are not counselors or therapists. They are listeners — people who have been trained to be fully present, to keep confidence, and to bring the compassion of Christ to someone who is hurting.</p>\n<p>If you or someone you know is going through a difficult time, reaching out is the first step. Everything is kept strictly confidential.</p>\n<p>Stephen Ministers complete approximately 50 hours of training before being commissioned. New training cohorts form periodically.</p>",
+      "body": "<h2>One-to-one Christian care</h2>\n<p>Stephen Ministry equips congregation members to provide confidential, one-to-one Christian care to people going through difficult times — grief, illness, job loss, divorce, loneliness, or any of life's challenges. A trained Stephen Minister walks alongside you as a caring presence for as long as you need.</p>\n<p>Stephen Ministers are not counselors or therapists. They are listeners — people who have been trained to be fully present, to keep confidence, and to bring the compassion of Christ to someone who is hurting.</p>",
       "url": "",
-      "spaceAbove": 88,
+      "spaceAbove": 64,
       "spaceBelow": 24,
       "gap": 32,
       "height": 48,
@@ -285,14 +285,14 @@ export const PAGE_SEEDS = {
     },
     {
       "id": "stephen-3",
-      "type": "buttons",
+      "type": "cardgrid",
       "title": "",
       "subtitle": "",
       "eyebrow": "",
       "body": "",
       "url": "",
-      "spaceAbove": 0,
-      "spaceBelow": 88,
+      "spaceAbove": 24,
+      "spaceBelow": 24,
       "gap": 32,
       "height": 48,
       "split": "40",
@@ -315,11 +315,19 @@ export const PAGE_SEEDS = {
       "hidden": false,
       "items": [
         {
-          "title": "Contact the office",
+          "img": "",
+          "eyebrow": "",
+          "title": "Request a Caregiver",
+          "body": "<p>If you or someone you know is going through a difficult time, reaching out is the first step. Everything is kept strictly confidential.</p>",
+          "linkLabel": "Contact the office",
           "url": "mailto:dinger@timothystl.org"
         },
         {
-          "title": "Inquire about training",
+          "img": "",
+          "eyebrow": "",
+          "title": "Become a Stephen Minister",
+          "body": "<p>Stephen Ministers complete approximately 50 hours of training before being commissioned. New training cohorts form periodically.</p>",
+          "linkLabel": "Inquire about training",
           "url": "mailto:dinger@timothystl.org"
         }
       ],

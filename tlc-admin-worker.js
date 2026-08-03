@@ -45,7 +45,7 @@ import MINISTRY_EDITOR_HTML from './admin/ministry-editor.html';
 import { PAGE_SEEDS } from './admin/page-seeds.js';
 import { SITE_PAGES } from './admin/site-pages.js';
 import { orderPages, filterPages, pageStatus, slugify, uniqueSlug, pageRename,
-         withShortLinks, shortLinkFor, shortLinkRoutes, outboundUrl } from './admin/pages.js';
+         withShortLinks, shortLinkFor, shortLinkRoutes, outboundUrl, canReseed } from './admin/pages.js';
 import { MENUS, menuTree, publicMenu, orphanPages, menuWarnings, renumber,
          normalizeMenu, normalizeKind, normalizeStyle, normalizeDepth } from './admin/menu.js';
 import { diffSummary, auditGroup, canRollback as auditCanRollback, rollbackNote, actionTone } from './admin/audit.js';
@@ -1007,7 +1007,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-02-6'; // bumped: church_name setting (the map block's half-width card names the church)
+    const SCHEMA_VERSION = '2026-08-02-7'; // bumped: re-seed untouched page drafts — /give's other-ways cards now convert
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -1528,6 +1528,18 @@ export default {
           "VALUES (?, ?, ?, ?, ?, ?, ?, 'published', ?, ?, ?, ?, 'migration')"
         ).bind(p.id, p.title, p.menu_label || '', p.slug, p.parent_id, p.sort, p.template, p.in_menu,
                p.seo_description || '', JSON.stringify(sanitizeBlocks(p.blocks)), now).run();
+      }
+
+      // Improving the converter produces a better draft for a page that is
+      // already a row, and INSERT OR IGNORE above would never deliver it. So
+      // refresh the draft — but only for pages nobody has touched: still
+      // stamped 'migration' and never published. A page someone has edited or
+      // put live keeps exactly what it has.
+      for (const p of SITE_PAGES) {
+        const row = await env.DB.prepare('SELECT id, updated_by, published_blocks FROM pages WHERE id = ?').bind(p.id).first();
+        if (!canReseed(row)) continue;
+        await env.DB.prepare("UPDATE pages SET blocks = ?, updated_at = ?, updated_by = 'migration' WHERE id = ?")
+          .bind(JSON.stringify(sanitizeBlocks(p.blocks)), now, p.id).run();
       }
     } catch (e) { console.error('Site page seed failed:', e && e.message); }
 

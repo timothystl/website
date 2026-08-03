@@ -103,6 +103,17 @@ function buttonsIn(chunk) {
     const label = text(m[2]);
     if (href && label) out.push({ title: label, url: href });
   }
+  // The giving page's main call to action is a <button> that opens a window
+  // rather than a link. It is a button in every sense that matters here.
+  const re2 = /<a\b[^>]*data-give-link[^>]*>([\s\S]*?)<\/a>|<button\b[^>]*onclick="window\.open\('([^']+)'[^"]*"[^>]*>([\s\S]*?)<\/button>/gi;
+  while ((m = re2.exec(chunk)) !== null) {
+    // A give link is deliberately pointed at give.timothystl.org: a block's URL
+    // is fixed once published, and that page resolves the office's own Tithe.ly
+    // link at request time, so the address can never go stale in a block.
+    if (m[1] !== undefined) { out.push({ title: text(m[1]), url: 'https://give.timothystl.org' }); continue; }
+    const label = text(m[3]);
+    if (m[2] && label) out.push({ title: label, url: m[2] });
+  }
   return out;
 }
 
@@ -132,6 +143,96 @@ function sections(chunk) {
   return out;
 }
 
+// The same tag-counting split, for <div>. Used to walk a section's own children
+// when the interesting structure is in divs rather than nested sections.
+function divs(chunk) {
+  const out = [];
+  const re = /<div\b[^>]*>/gi;
+  let m;
+  while ((m = re.exec(chunk)) !== null) {
+    let depth = 1;
+    const inner = /<div\b[^>]*>|<\/div>/gi;
+    inner.lastIndex = m.index + m[0].length;
+    let x;
+    while (depth > 0 && (x = inner.exec(chunk)) !== null) depth += x[0][1] === '/' ? -1 : 1;
+    if (depth !== 0) continue;
+    const body = chunk.slice(m.index + m[0].length, x.index);
+    // `whole` includes the element's own open tag — cardRun() looks there for
+    // the class that says "this is a grid", and a body alone never has it.
+    out.push({ open: m[0], body, whole: m[0] + body + '</div>' });
+    re.lastIndex = x.index;
+  }
+  return out;
+}
+
+// A panel: an eyebrow, a heading, some prose and usually one button — /give's
+// "Give securely online" and "Give through service" boxes.
+function panelOf(html) {
+  const eyebrow = text(grab(html, /<span[^>]*class="[^"]*eyebrow[^"]*"[^>]*>([\s\S]*?)<\/span>/i));
+  const heading = text(grab(html, /<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/i));
+  const body = prose(html);
+  const buttons = buttonsIn(html);
+  if (!heading && !body) return null;
+  return { eyebrow, heading, body, buttons };
+}
+
+// One section, several kinds of thing: /give stacks an intro, a full-width
+// panel, a card grid, and another panel inside a single <section>. recognise()
+// below reads a section as one shape, so on that page it sees only the grid and
+// throws the panels away — and the panels are where the IRA, DAF and planned
+// giving copy lives.
+//
+// So when a section holds a grid AND panels beside it, walk its children in
+// order instead. Card detection still goes through cardRun(), so there is one
+// idea of what a card is.
+function mixedSection(sec, push, bg) {
+  const wrap = sec.body.match(/<div class="wrap"[^>]*>([\s\S]*)<\/div>/i);
+  const inner = wrap ? wrap[1] : sec.body;
+  const children = divs(inner);
+  const grids = children.filter((d) => cardRun(d.whole));
+  if (!grids.length) return false;
+  const panels = children.filter((d) => !cardRun(d.whole) && panelOf(d.body));
+
+  const firstAt = inner.indexOf(children[0].open);
+  const before = inner.slice(0, firstAt > -1 ? firstAt : 0);
+  const intro = panelOf(before);
+  const hasIntro = !!(intro && (intro.heading || intro.body));
+
+  // Only when the grid is not the whole story.
+  //
+  // A heading and ONE line above a grid is that grid's own title and standfirst,
+  // and recognise() already places them there — /ministries and /worship read
+  // better through it. What this function is for is the case recognise() cannot
+  // express: several paragraphs of their own above the grid (/stephen), or
+  // full-width panels beside it (/give). Losing those is losing content.
+  const introParas = (before.match(/<p\b/gi) || []).length;
+  if (!panels.length && !(hasIntro && introParas >= 2)) return false;
+
+  if (hasIntro) {
+    push('text', { eyebrow: intro.eyebrow, title: intro.heading, body: intro.body, bg, spaceAbove: 64, spaceBelow: 24 });
+  }
+
+  for (const child of children) {
+    const cards = cardRun(child.whole);
+    if (cards) {
+      push('cardgrid', {
+        eyebrow: '', title: '', subtitle: '',
+        cols: cards.length % 3 === 0 ? 3 : 2,
+        items: cards, bg, spaceAbove: 24, spaceBelow: 24,
+      });
+      continue;
+    }
+    const panel = panelOf(child.body);
+    if (!panel) continue;
+    if (panel.heading || panel.body) {
+      push('text', { eyebrow: panel.eyebrow, title: panel.heading, body: panel.body, bg,
+        spaceAbove: 24, spaceBelow: panel.buttons.length ? 8 : 24 });
+    }
+    if (panel.buttons.length) push('buttons', { items: panel.buttons, bg, spaceAbove: 0, spaceBelow: 24 });
+  }
+  return true;
+}
+
 // Sections whose markup says plainly what block they are. Recognising these is
 // what turns a wall of divs into something staff can actually edit; anything
 // unrecognised falls through to the generic text/photo conversion below.
@@ -148,7 +249,11 @@ function sections(chunk) {
 // panels are STACKED FULL-WIDTH BOXES, not cards. "Two headings near each
 // other" is not a grid; "these are laid out as a grid" is, and the markup
 // already says so, either with a -grid class or an inline display:grid.
-const GRID_OPEN = /<div\b[^>]*(?:class="[^"]*\b[a-z-]*grid\b[^"]*"|style="[^"]*display:\s*grid)[^>]*>/i;
+// `two-col` is the site's own name for a two-column grid, used by /give's six
+// other-ways-to-give cards. It still satisfies the rule above — the container
+// declares its layout — and it does not reach /give's stacked panels, which
+// carry no layout class at all.
+const GRID_OPEN = /<div\b[^>]*(?:class="[^"]*(?:\b[a-z-]*grid\b|\btwo-col\b)[^"]*"|style="[^"]*display:\s*grid)[^>]*>/i;
 
 function cardRun(body) {
   const open = body.match(GRID_OPEN);
@@ -174,7 +279,29 @@ function cardRun(body) {
       eyebrow: '',
     });
   }
-  return cards.length >= 2 ? cards : null;
+  if (cards.length >= 2) return cards;
+
+  // Second pass, for cards that head themselves with a styled <div> instead of
+  // an <h3> — /give's six other-ways boxes. The pattern above cannot see them:
+  // its lookahead stops at the first nested <div>, which on those cards is the
+  // heading itself. Split by depth instead.
+  //
+  // The grid-container guard above still does the real work of deciding this is
+  // a grid at all, so this cannot sweep up stacked panels.
+  const byDepth = [];
+  for (const d of divs(inner)) {
+    const title = text(grab(d.body, /<div[^>]*style="[^"]*font-family:\s*var\(--serif\)[^"]*"[^>]*>([^<>]{2,80})<\/div>/i));
+    const first = text(grab(d.body, /<p\b[^>]*>([\s\S]*?)<\/p>/i));
+    if (!title || !first) continue;
+    const link = d.body.match(/<a\b([^>]*)>([\s\S]*?)<\/a>/i);
+    byDepth.push({
+      img: '', title, body: '<p>' + first + '</p>',
+      linkLabel: link ? text(link[2]) : '',
+      url: link ? (grab(link[1], /href="([^"]*)"/) || '') : '',
+      eyebrow: '',
+    });
+  }
+  return byDepth.length >= 2 ? byDepth : null;
 }
 
 function recognise(sec, push, ctx) {
@@ -260,6 +387,9 @@ function convert(slug) {
     if (id && DYNAMIC_IDS.test(id)) continue;
     if (/display:none/.test(sec.open)) continue;
     if (/class="hero"/.test(sec.open)) continue; // already taken as the banner
+    // Mixed sections first: recognise() would read /give's section as nothing
+    // but its card grid and drop the panels either side of it.
+    if (mixedSection(sec, push, /section--linen|section--mist/.test(sec.open) ? 1 : 0)) continue;
     if (recognise(sec, push, { slug })) continue;
 
     const eyebrow = text(grab(sec.body, /<span[^>]*class="[^"]*eyebrow[^"]*"[^>]*>([\s\S]*?)<\/span>/i));

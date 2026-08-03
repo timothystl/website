@@ -2,7 +2,7 @@
 // No test framework (the repo has no build step or dev dependencies).
 import { orderPages, filterPages, pageStatus, menuTree, slugify, uniqueSlug, pageRename, PILLS,
          shortLinkFor, shortLinkClashes, withShortLinks, shortLinkRoutes,
-         outboundUrl, isOutbound, slugPath } from './pages.js';
+         outboundUrl, isOutbound, slugPath, canReseed } from './pages.js';
 import { newBlock, sanitizeBlocks } from './blocks.js';
 
 let pass = 0, fail = 0;
@@ -303,3 +303,19 @@ group('short links decorated onto a list');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
+
+// ── re-seeding ───────────────────────────────────────────────────────────────
+// Improving the converter should reach pages nobody has touched, and must never
+// reach one that someone has edited or published.
+group('re-seeding an untouched draft');
+{
+  ok(canReseed({ updated_by: 'migration', published_blocks: null }), 'a page still exactly as the migration left it can take a better draft');
+  ok(canReseed({ updated_by: 'migration', published_blocks: '' }), 'an empty published column counts as never published');
+
+  ok(!canReseed({ updated_by: 'dinger', published_blocks: null }), 'a page someone has edited is left alone');
+  ok(!canReseed({ updated_by: 'migration', published_blocks: '[]' }), 'a page that has been published is left alone');
+  ok(!canReseed({ updated_by: 'dinger', published_blocks: '[{}]' }), 'edited and published is doubly left alone');
+  ok(!canReseed({ updated_by: '', published_blocks: null }), 'an unknown editor is treated as a person, not the migration');
+  ok(!canReseed(null), 'a page that does not exist cannot be re-seeded');
+  ok(!canReseed(undefined), 'and neither can a missing row');
+}
