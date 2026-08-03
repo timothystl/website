@@ -97,6 +97,11 @@
 .tlc-pay-saved{font:600 12px var(--tlc-sans);color:#3B4C2E;opacity:0;transition:opacity .2s;}
 .tlc-pay-saved.is-on{opacity:1;}
 .tlc-pay-status{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+/* Sized to match the status pill beside it (same font-size, same
+   border-radius family) but roomier — a status pill is read, this is
+   clicked, and 999px + real padding says so without growing taller. */
+.tlc-pay-edit{display:inline-block;font:600 10.5px/1.5 var(--tlc-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--tlc-navy);background:#fff;border:1px solid var(--tlc-edge);border-radius:999px;padding:3px 14px;cursor:pointer;white-space:nowrap;}
+.tlc-pay-edit:hover{border-color:var(--tlc-blue);color:var(--tlc-blue);}
 /* The one decision on this screen, at the bottom of the run it signs off —
    after the figures, not above them. */
 .tlc-pay-foot{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:13px 18px;background:var(--tlc-parchment);border-top:1px solid var(--tlc-edge);font-size:13px;color:var(--tlc-body);}
@@ -147,6 +152,7 @@
         <span class="tlc-pay-head-title" id="entryPeriodLabel">Pay period</span>
         <span id="entryState"></span>
         <span class="tlc-pay-head-right" id="entryPays"></span>
+        <button type="button" class="tlc-pay-btn" id="addStaffBtn">+ Add person</button>
       </div>
       <!-- The design draws an "Import from childcare app" button here. There is
            no import step: MDO hours are read live from the childcare app every
@@ -172,15 +178,7 @@
     </div>
 
     <p class="tlc-note" style="margin:14px 0 0;"><span class="tlc-note-mark">◆</span><span>Church hours are typed here and save on their own. Childcare hours come from the MDO app and cannot be edited here — one number for what somebody worked, in one place.</span></p>
-
-    <div class="tlc-panel" style="margin-top:22px;">
-      <div class="tlc-panel-head">
-        <span class="tlc-panel-title">Church staff</span>
-        <span class="tlc-panel-right"><button type="button" class="tlc-pay-btn" id="addStaffBtn">+ Add person</button></span>
-      </div>
-      <div class="tlc-panel-body tlc-panel-body-flush"><div id="staffRows"><div class="tlc-pay-empty">Loading…</div></div></div>
-    </div>
-    <p class="tlc-note" style="margin:10px 0 0;"><span class="tlc-note-mark">◆</span><span>Rates for church staff are entered here. Rates for childcare staff live in the MDO app and are read from it — there is deliberately no field for them here, because two places to set what somebody is paid is two places to be wrong.</span></p>
+    <p class="tlc-note" style="margin:10px 0 0;"><span class="tlc-note-mark">◆</span><span>Rates for church staff are entered here, shown beside each name above. Rates for childcare staff live in the MDO app and are read from it — there is deliberately no field for them here, because two places to set what somebody is paid is two places to be wrong.</span></p>
   </section>
 
   <!-- ── REPORT ──────────────────────────────────────────────── -->
@@ -455,11 +453,9 @@ async function loadStaff() {
   const { data, error } = await sb.from('church_staff').select('*').eq('active', true).order('name');
   if (error) {
     showError('Church staff could not be read: ' + error.message);
-    $('staffRows').innerHTML = '<div class="tlc-pay-empty">Could not read the staff list.</div>';
     return;
   }
   churchStaff = data || [];
-  renderStaffRows();
 }
 
 async function onPeriodChange(value) {
@@ -645,8 +641,9 @@ function renderEntry(periodStart) {
     const hoursVal = entry.hours_worked === undefined || entry.hours_worked === null ? '' : entry.hours_worked;
     const ptoVal = entry.pto_hours_used === undefined || entry.pto_hours_used === null ? '' : entry.pto_hours_used;
     const st = entryStatus(isSalary ? 'salary' : 'hourly', Number(hoursVal) > 0);
+    const rate = isSalary ? money(s.base_salary_biweekly) + '/period' : money(s.hourly_rate) + '/hr';
     rows.push('<div class="tlc-pay-row tlc-pay-grid">'
-      + '<span class="tlc-pay-name"><b>' + esc(s.name) + '</b><span>' + esc(s.role || 'Church staff') + '</span></span>'
+      + '<span class="tlc-pay-name"><b>' + esc(s.name) + '</b><span>' + esc(s.role || 'Church staff') + ' · ' + esc(rate) + '</span></span>'
       + '<span>' + (isSalary
         ? '<span class="tlc-pay-na">n/a</span>'
         : '<span class="tlc-pay-inwrap"><input class="tlc-pay-in" type="number" min="0" step="0.25" value="' + esc(hoursVal)
@@ -658,7 +655,7 @@ function renderEntry(periodStart) {
           + '" aria-label="PTO used by ' + esc(s.name) + '"><small>hrs</small></span>'
         : '<span class="tlc-pay-na">n/a</span>') + '</span>'
       + '<span class="tlc-pay-status">' + pill(st.tone, st.label)
-        + '<button type="button" class="tlc-edit" data-edit-staff="' + esc(s.id) + '">Edit</button></span>'
+        + '<button type="button" class="tlc-pay-edit" data-edit-staff="' + esc(s.id) + '">Edit</button></span>'
       + '</div>');
   });
 
@@ -774,25 +771,6 @@ function flashSaved() {
   el.classList.add('is-on');
   clearTimeout(flashSaved._t);
   flashSaved._t = setTimeout(() => el.classList.remove('is-on'), 1800);
-}
-
-// ════════════════════════════════════════════════════════════
-// THE STAFF LIST
-// ════════════════════════════════════════════════════════════
-function renderStaffRows() {
-  if (!churchStaff.length) {
-    $('staffRows').innerHTML = '<div class="tlc-pay-empty">No church staff yet. Add the first person to begin.</div>';
-    return;
-  }
-  $('staffRows').innerHTML = churchStaff.map((s) => {
-    const rate = s.pay_type === 'hourly'
-      ? money(s.hourly_rate) + '/hr'
-      : money(s.base_salary_biweekly) + '/period';
-    return '<div class="tlc-pl">'
-      + '<span class="tlc-pl-text"><span class="tlc-pl-name">' + esc(s.name) + '</span>'
-      + '<span class="tlc-pl-sub">' + esc(s.role || 'No role recorded') + ' · ' + esc(rate) + '</span></span>'
-      + '</div>';
-  }).join('');
 }
 
 // ════════════════════════════════════════════════════════════
