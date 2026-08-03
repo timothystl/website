@@ -1498,13 +1498,32 @@ enough that nothing had caught up with it):
    DELETE per expired row); `/api/search` fires up to 10 LIKE scans per
    keystroke with no debounce; `/audit-log` renders one anchor per 50-row
    page with no retention.
-4. **~1.55MB of `IMG_*.jpg` in `public/images` referenced nowhere** — user
-   files, so deletion needs sign-off. `food-pantry.webp`/`Bees.webp` (~175KB
-   each) serve as both thumbnails and full-width. No `width`/`height`
-   attributes anywhere (CLS).
-5. **Nine Google Font faces** — likely half unused.
+4. ~~**~1.55MB of `IMG_*.jpg` in `public/images` referenced nowhere**~~ —
+   **done 2026-08-03**, with Andrew's sign-off. All ten (~1.6MB) confirmed
+   unreferenced anywhere in the repo — `public/index.html`, every admin
+   route, every generated page seed — and deleted. `food-pantry.webp`/
+   `Bees.webp` (~175KB each, still serving as both thumbnails and full-width)
+   and the missing `width`/`height` attributes (CLS exposure) were not part
+   of this ask and are still open.
+5. ~~**Nine Google Font faces** — likely half unused.~~ **Checked 2026-08-03**:
+   `public/index.html` only ever sets `font-weight` to 400, 600, 700 or 800
+   (plus italic at 400) — verified against every style rule and inline style
+   in the file, not just a sample. Lora 500 and Source Sans 3 300 were loaded
+   but never used anywhere; the font `<link>` now requests only the four
+   weights each family actually needs (7 faces, down from 9). The admin's
+   separate font links (`admin/helpers.js`, `admin/gym.js`,
+   `admin/ministry-editor.html`, `admin/scheduler.html`) were not touched —
+   this pass was scoped to the public site, which is what the 221KB /
+   9-face figure in the review referred to.
 6. **`:has()` fallback** for the form-width cap (Firefox ESR / Safari <15.4
    get the 1900px forms back) — depends on what the office actually runs.
+   **Scope check 2026-08-03**: this cap only ever applied to the ~29
+   hand-written *admin* forms (`.tlc-wrap .card:has(.form-group)` in
+   `admin/ui.js`) — things like the "add a news post" or "edit a staff
+   bio" screens. It was never on the public website. It also does not
+   reach the ministry/page block editor at all — that screen has never
+   used the capped form wrapper, already renders at full width with its
+   own Desktop/Tablet/Phone size switcher, and needs no change here.
 7. **A dedicated a11y pass**: list rows are mouse-only, the public site has
    no `:focus-visible` styles.
 
@@ -2430,9 +2449,9 @@ The full review (three scouts + a synthesis pass, everything verified by reading
 1. **A build/minify step.** `public/index.html` is 221KB (36KB brotli), ~95KB of it inline JS re-downloaded with every HTML fetch. Minification alone is a ~50% transfer cut, but it reverses the deliberate no-toolchain stance the site has kept since launch.
 2. **Externalise the admin's CSS/JS.** ~89KB unminified is inlined into every admin screen at `private, max-age=10`, re-parsed on nearly every click. A cacheable `/assets/admin.css` fixes it and costs a versioning scheme.
 3. **The heavy admin handlers**, each needing its own design rather than a shared fix: `/media` scans every page's block JSON per media row; `/subscribers` pages Brevo serially inside the render path; `/newsitems` runs its expiry sweep inline (an R2 delete + a DELETE per expired row); `/api/search` fires up to 10 unindexed LIKE scans per keystroke with no debounce; `/audit-log` renders one anchor per 50-row page with no retention.
-4. **~1.55MB of `IMG_*.jpg` in `public/images` referenced nowhere.** User-uploaded files, so deletion needs sign-off before anything touches them. `food-pantry.webp`/`Bees.webp` (~175KB each) double as both card thumbnails and full-width images. No `width`/`height` attributes anywhere on the site (CLS exposure).
-5. **Nine Google Font faces loaded** — likely half are unused; worth an audit before trimming.
-6. **A `:has()` fallback** for the Task 19 form-width cap — Firefox ESR and Safari <15.4 get the old 1900px-wide forms back with no cap. Depends on whether the office's browsers actually include either.
+4. ~~**~1.55MB of `IMG_*.jpg` in `public/images` referenced nowhere.**~~ **Done 2026-08-03** — see the matching item under "Pending / Deferred Items" for what was checked and removed.
+5. ~~**Nine Google Font faces loaded** — likely half are unused; worth an audit before trimming.~~ **Done 2026-08-03** — trimmed to the 7 actually used; see "Pending / Deferred Items".
+6. **A `:has()` fallback** for the Task 19 form-width cap — Firefox ESR and Safari <15.4 get the old 1900px-wide forms back with no cap. Depends on whether the office's browsers actually include either. **Scoped 2026-08-03**: this is the admin's hand-written forms only, never the public site, and does not touch the block editor — see "Pending / Deferred Items".
 7. **A dedicated accessibility pass** — admin list rows are mouse-only (not keyboard-reachable), and the public site has no `:focus-visible` styles anywhere.
 
 ### Pinned / Low Priority
