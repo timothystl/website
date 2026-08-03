@@ -27,7 +27,7 @@ const STATIC_PAGES = [
 ];
 import { html, sidebarShell, loginPage, setupPage, forgotPasswordPage, resetPasswordPage, permissionCheckboxes, formatDate, escapeHtml, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection, ADMIN_SHELL_CSS, ADMIN_SHELL_JS } from './admin/helpers.js';
 import { renderListSection, renderDrawer, renderFormSection, primaryCell, statusPill, valueChip, valueChips, panel, countLabel, pluralise,
-         rowActions, toggleCell, panelList } from './admin/ui.js';
+         rowActions, toggleCell, panelList, paginationWindow } from './admin/ui.js';
 import { SECTIONS, section as sectionCfg, columnsOf, filtersOf } from './admin/sections.js';
 import { dayKey, pruneBefore, countInMonth, tapCountLabel, everCounted, validTapId } from './admin/taps.js';
 import { VALUES, valueByKey, normalizeValue } from './admin/values.js';
@@ -2870,13 +2870,19 @@ ${sidebarShell('dashboard', currentUser, '', badges)}
           map: (r) => ({ label: `/${r.path}`, meta: r.label || r.url, href: `/redirects/edit/${encodeURIComponent(r.path)}` }) },
       ];
 
+      // Every permission-gated source ran one at a time — up to ten serial
+      // D1 round-trips for one keystroke. They don't depend on each other, so
+      // run them together; `active`'s order is what decides section order in
+      // the results, not resolution order, so the palette groups the same way
+      // it always did.
+      const active = sources.filter((s) => s.on);
+      const perSource = await Promise.all(active.map((s) => grab(s.sql, like, like)));
       const results = [];
-      for (const s of sources) {
-        if (!s.on) continue;
-        for (const r of await grab(s.sql, like, like)) {
+      active.forEach((s, i) => {
+        for (const r of perSource[i]) {
           results.push(Object.assign({ section: s.section }, s.map(r)));
         }
-      }
+      });
       return jsonResponse({ results: results.slice(0, 40) });
     }
     // ── MEDIA ──────────────────────────────────────────────────
@@ -5343,7 +5349,14 @@ ${classesJs}
 
     // ── NEWS & EVENTS: COMBINED LIST (Newsletter + News Posts) ──
     if (path === '/newsitems' && method === 'GET') {
-      await sweepExpiredItems(env, new URL(request.url).origin);
+      // Backgrounded, not awaited: an R2 delete plus a D1 DELETE per expired
+      // row was blocking every single visit to this screen on work that is a
+      // no-op almost every time. An item's own `state` already reads
+      // 'expired' straight off its `expire_date` regardless of whether this
+      // sweep has run yet, so deferring it costs nothing but one extra
+      // "Expired" pill showing for the one visit before the row is actually
+      // removed — the same screen already shows that state on purpose.
+      ctx.waitUntil(sweepExpiredItems(env, new URL(request.url).origin));
       const itemsRes = await env.DB.prepare(
         'SELECT * FROM news_items ORDER BY pinned DESC, COALESCE(event_date, publish_date) DESC, id DESC'
       ).all();
@@ -7712,18 +7725,35 @@ ${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; 
         brevoError = 'BREVO_LIST_ID secret not configured.';
       } else {
         try {
-          let offset = 0;
           const limit = 500;
-          while (true) {
-            const resp = await fetch(`https://api.brevo.com/v3/contacts/lists/${listId}/contacts?limit=${limit}&offset=${offset}`, {
-              headers: { 'api-key': env.BREVO_API_KEY, 'Accept': 'application/json' }
-            });
-            if (!resp.ok) { brevoError = `Brevo API error: ${resp.status}`; break; }
-            const data = await resp.json();
-            brevoContacts = brevoContacts.concat(data.contacts || []);
-            brevoTotal = data.count;
-            if (brevoContacts.length >= data.count) break;
-            offset += limit;
+          const fetchPage = (offset) => fetch(`https://api.brevo.com/v3/contacts/lists/${listId}/contacts?limit=${limit}&offset=${offset}`, {
+            headers: { 'api-key': env.BREVO_API_KEY, 'Accept': 'application/json' }
+          });
+          // The first page is the one request that has to go alone — it is
+          // the only way to learn `count`. Every page after that is an offset
+          // this response already told us, so none of them depend on each
+          // other; fetching them one at a time (the old shape) turned a list
+          // of any real size into that many serial round trips inside the
+          // render path.
+          const first = await fetchPage(0);
+          if (!first.ok) {
+            brevoError = `Brevo API error: ${first.status}`;
+          } else {
+            const firstData = await first.json();
+            brevoContacts = firstData.contacts || [];
+            brevoTotal = firstData.count;
+            const offsets = [];
+            for (let offset = limit; offset < (brevoTotal || 0); offset += limit) offsets.push(offset);
+            if (offsets.length) {
+              const pages = await Promise.all(offsets.map(fetchPage));
+              for (const resp of pages) {
+                // One failed page still leaves the rest usable — same spirit
+                // as the old loop breaking with whatever it already had.
+                if (!resp.ok) { brevoError = brevoError || `Brevo API error: ${resp.status}`; continue; }
+                const data = await resp.json();
+                brevoContacts = brevoContacts.concat(data.contacts || []);
+              }
+            }
           }
         } catch (e) {
           brevoError = `Failed to fetch from Brevo: ${e.message}`;
@@ -8797,9 +8827,17 @@ ${sidebarShell('users', currentUser, '', await pageBadges())}
         ],
       }) : '';
 
-      const pagination = totalPages > 1 ? `<div class="tlc-section" style="padding-top:0;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">${
-        Array.from({ length: totalPages }, (_, i) => i + 1).map((p) =>
-          `<a href="/audit-log?page=${p}" class="tlc-filter${p === pageNum ? ' is-on' : ''}">${p}</a>`).join('')
+      // Windowed, not one <a> per page — the log has no retention (a
+      // deliberate call: it is the accountability record, not ephemeral
+      // data), so it only grows, and a table a year in means a page number
+      // for every one of a few hundred pages. First, last, and a few either
+      // side of where you are covers the same ground in a constant number
+      // of links.
+      const pagination = totalPages > 1 ? `<div class="tlc-section" style="padding-top:0;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;align-items:center;">${
+        paginationWindow(pageNum, totalPages).map((p) =>
+          p === '…' ? `<span style="color:var(--tlc-muted);padding:0 4px;">…</span>`
+            : `<a href="/audit-log?page=${p}" class="tlc-filter${p === pageNum ? ' is-on' : ''}">${p}</a>`
+        ).join('')
       }</div>` : '';
 
       return html(`

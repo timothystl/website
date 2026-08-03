@@ -8,7 +8,7 @@
 // toggle posts a value even when it is off.
 import {
   esc, pluralise, countLabel, toneOf, statusPill, valueChip, valueSelect,
-  primaryCell, renderListSection, renderDrawer, TONES, PALETTE,
+  primaryCell, renderListSection, renderDrawer, TONES, PALETTE, paginationWindow,
 } from './ui.js';
 import { readFileSync } from 'node:fs';
 import { tinymceField } from './helpers.js';
@@ -48,6 +48,19 @@ group('count label');
   eq(countLabel(5, 5, 'notice'), '5 notices shown', 'nothing filtered out reads as a plain total');
   eq(countLabel(1, 1, 'notice'), '1 notice shown', 'and pluralises the total form');
   eq(countLabel(3, 8, 'notice'), '3 of 8 shown', 'a search inside a filter reads as N of M');
+}
+
+// ── the audit log's pager ───────────────────────────────────────────────────
+// It used to render one <a> per page — fine at 3 pages, a wall of links at
+// 300, which is exactly the shape a log with no retention grows into.
+group('pagination stays a constant handful of links');
+{
+  eq(paginationWindow(1, 1).join(','), '1', 'a single page is just itself');
+  eq(paginationWindow(1, 5).join(','), '1,2,3,…,5', 'near the start, the tail collapses');
+  eq(paginationWindow(5, 5).join(','), '1,…,3,4,5', 'near the end, the head collapses');
+  eq(paginationWindow(50, 300).join(','), '1,…,48,49,50,51,52,…,300', 'the middle of a long run is windowed both sides');
+  eq(paginationWindow(1, 300).join(','), '1,2,3,…,300', 'a run of 300 never grows the pager past a handful of links');
+  ok(paginationWindow(1, 300).length < 10, 'no matter how many pages exist, the link count stays small');
 }
 
 // ── tones ────────────────────────────────────────────────────────────────────
