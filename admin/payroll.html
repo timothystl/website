@@ -40,7 +40,7 @@
 .tlc-pay-head-right{margin-left:auto;font-size:12.5px;color:var(--tlc-muted);}
 .tlc-pay-live{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 18px;background:#EDF4F8;border-bottom:1px solid var(--tlc-edge);font-size:13px;color:var(--tlc-body);}
 .tlc-pay-live-mark{flex:none;color:var(--tlc-blue);font-size:15px;}
-.tlc-pay-grid{display:grid;grid-template-columns:2fr 1fr 1.1fr 1fr minmax(126px,1.3fr);gap:12px;align-items:center;}
+.tlc-pay-grid{display:grid;grid-template-columns:2fr 1.1fr 1fr minmax(126px,1.3fr);gap:12px;align-items:center;}
 .tlc-pay-thead{padding:11px 18px;background:var(--tlc-parchment);border-bottom:1px solid var(--tlc-edge);font:600 10.5px/1 var(--tlc-sans);letter-spacing:.12em;text-transform:uppercase;color:var(--tlc-muted);}
 .tlc-pay-row{padding:12px 18px;border-bottom:1px solid var(--tlc-divider);}
 .tlc-pay-row:last-child{border-bottom:0;}
@@ -159,7 +159,7 @@
         <span style="margin-left:auto;"><button type="button" class="tlc-pay-btn" id="refreshMdoBtn">Read again</button></span>
       </div>
       <div class="tlc-pay-thead tlc-pay-grid">
-        <span>Person</span><span>Paid as</span><span>Hours</span><span>PTO used</span><span>Status</span>
+        <span>Person</span><span>Hours</span><span>PTO used</span><span>Status</span>
       </div>
       <div id="entryRows"><div class="tlc-pay-empty">Loading…</div></div>
       <!-- One decision about one run, made once. -->
@@ -647,7 +647,6 @@ function renderEntry(periodStart) {
     const st = entryStatus(isSalary ? 'salary' : 'hourly', Number(hoursVal) > 0);
     rows.push('<div class="tlc-pay-row tlc-pay-grid">'
       + '<span class="tlc-pay-name"><b>' + esc(s.name) + '</b><span>' + esc(s.role || 'Church staff') + '</span></span>'
-      + '<span>' + pill('plain', isSalary ? 'Salaried' : 'Hourly') + '</span>'
       + '<span>' + (isSalary
         ? '<span class="tlc-pay-na">n/a</span>'
         : '<span class="tlc-pay-inwrap"><input class="tlc-pay-in" type="number" min="0" step="0.25" value="' + esc(hoursVal)
@@ -658,7 +657,8 @@ function renderEntry(periodStart) {
           + '" placeholder="0"' + lockAttr() + ' data-staff="' + esc(s.id) + '" data-field="pto_hours_used" data-period="' + esc(periodStart)
           + '" aria-label="PTO used by ' + esc(s.name) + '"><small>hrs</small></span>'
         : '<span class="tlc-pay-na">n/a</span>') + '</span>'
-      + '<span class="tlc-pay-status">' + pill(st.tone, st.label) + '</span>'
+      + '<span class="tlc-pay-status">' + pill(st.tone, st.label)
+        + '<button type="button" class="tlc-edit" data-edit-staff="' + esc(s.id) + '">Edit</button></span>'
       + '</div>');
   });
 
@@ -670,7 +670,6 @@ function renderEntry(periodStart) {
     const st = entryStatus(isSalary ? 'salary' : 'hourly', true);
     rows.push('<div class="tlc-pay-row tlc-pay-grid">'
       + '<span class="tlc-pay-name"><b>' + esc(s.name) + '</b><span>' + esc(s.role || 'Childcare') + '</span></span>'
-      + '<span>' + pill('plain', isSalary ? 'Salaried' : 'Childcare app') + '</span>'
       + '<span class="' + (isSalary ? 'tlc-pay-na' : 'tlc-pay-num') + '">' + (isSalary ? 'n/a' : hrs(h)) + '</span>'
       + '<span class="' + (isSalary ? 'tlc-pay-na' : 'tlc-pay-num') + '">' + (isSalary ? 'n/a' : hrs(pto)) + '</span>'
       + '<span class="tlc-pay-status">' + pill(st.tone, st.label) + '</span>'
@@ -792,7 +791,6 @@ function renderStaffRows() {
     return '<div class="tlc-pl">'
       + '<span class="tlc-pl-text"><span class="tlc-pl-name">' + esc(s.name) + '</span>'
       + '<span class="tlc-pl-sub">' + esc(s.role || 'No role recorded') + ' · ' + esc(rate) + '</span></span>'
-      + '<span class="tlc-pl-act"><button type="button" class="tlc-edit" data-edit-staff="' + esc(s.id) + '">Edit</button></span>'
       + '</div>';
   }).join('');
 }
