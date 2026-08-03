@@ -1923,7 +1923,7 @@ export const SITE_PAGES = [
         "title": "",
         "subtitle": "",
         "eyebrow": "Online giving",
-        "body": "<h2>Give securely online</h2>\n<p>Our online giving is processed by <strong>Tithe.ly</strong>, a trusted platform used by over 37,000 churches. Give by credit card, debit card, or ACH bank transfer — one-time or recurring. No account required. A tax receipt is emailed automatically after every gift.</p>\n<p>You will be taken to Tithe.ly's secure giving page.</p>",
+        "body": "<h2>Give securely online</h2>\n<p>Choose an amount and a fund on our giving page, then finish on <strong>Tithe.ly</strong> — a trusted platform used by over 37,000 churches. Give by credit card, debit card, or ACH bank transfer, one-time or recurring. No account required. A tax receipt is emailed automatically after every gift.</p>\n<p>Takes you to give.timothystl.org, then on to Tithe.ly's secure page.</p>",
         "url": "",
         "spaceAbove": 24,
         "spaceBelow": 8,
@@ -3240,10 +3240,6 @@ export const SITE_PAGES = [
         "corner": "tr",
         "hidden": false,
         "items": [
-          {
-            "title": "Give to CCS",
-            "url": "https://give.tithe.ly/?formId=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8&locationId=fe6ddef2-d6d2-4c85-adfd-f19eac997d38&fundId=49cdc381-ff0e-4b7e-b029-091f206850c1&frequency=one-time"
-          },
           {
             "title": "Give to CCS",
             "url": "https://give.timothystl.org"

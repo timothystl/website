@@ -1007,7 +1007,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-02-7'; // bumped: re-seed untouched page drafts — /give's other-ways cards now convert
+    const SCHEMA_VERSION = '2026-08-03-1'; // bumped: re-seed untouched page drafts — /give hands off, /ccs no longer seeds its button twice
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {

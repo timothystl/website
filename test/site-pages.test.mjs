@@ -147,20 +147,38 @@ group('the footer reads the church details record');
   await ctx.close();
 }
 
-group('every give button follows the one link the office manages');
+// The two giving pages have separate jobs. /give is where somebody decides HOW
+// to give — the plate, bank bill pay, a QCD, a bequest — and its online button
+// simply hands off. give.timothystl.org is the transaction, and it resolves the
+// office's link server-side, so /give never holds a second copy of it.
+group('the giving pages hand off rather than each carrying the link');
 {
   const { page, ctx, errors } = await visit('/give', apiPages());
   eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
-  const href = await page.getAttribute('#page-give [data-give-link]', 'href');
-  ok(href.includes('NEW-FORM-ID'), 'the Give Online button uses the admin-managed link, got: ' + href);
-  ok(!href.includes('e1769a0f'), 'and not the copy baked into the page');
-  // the CCS appeal shares the base link but keeps its own fund
-  await page.evaluate(() => window.showPage('ccs'));
+  const href = await page.getAttribute('#page-give a.btn-primary', 'href');
+  eq(href, 'https://give.timothystl.org', 'the Give Online button hands off to the giving page');
+  eq(await page.locator('#page-give [data-give-link]').count(), 0,
+    'and nothing on /give resolves the Tithe.ly link itself');
+  ok(!(await page.innerHTML('#page-give')).includes('give.tithe.ly'),
+    'the page holds no Tithe.ly address at all');
+  // all six offline paths are still the reason to come here
+  const body = await page.textContent('#page-give');
+  for (const way of ['On Sunday morning', 'Bank bill pay', 'Thrivent Charitable',
+                     'IRA charitable distribution', 'Donor Advised Fund', 'Planned giving']) {
+    ok(body.includes(way), `/give still explains "${way}"`);
+  }
+  await ctx.close();
+}
+{
+  // The CCS appeal is the exception: it asks for a specific fund, which cannot
+  // be expressed as a link to give.timothystl.org, so it is resolved in the page.
+  const { page, ctx } = await visit('/ccs', apiPages());
   await page.waitForTimeout(600);
   const ccs = await page.$$eval('#page-ccs [data-give-link]', (els) => els.map((e) => e.getAttribute('href')));
   eq(ccs.length, 2, 'both CCS buttons are wired');
   for (const h of ccs) {
-    ok(h.includes('NEW-FORM-ID'), 'CCS follows the managed link too: ' + h);
+    ok(h.includes('NEW-FORM-ID'), 'CCS follows the managed link: ' + h);
+    ok(!h.includes('e1769a0f'), 'and not the copy baked into the page');
     ok(h.includes('fundId=49cdc381-ff0e-4b7e-b029-091f206850c1'), 'and keeps its own fund');
     eq((h.match(/fundId=/g) || []).length, 1, 'with one fundId, not two');
     ok(h.includes('frequency=one-time'), 'and its one-time frequency');
@@ -168,11 +186,12 @@ group('every give button follows the one link the office manages');
   await ctx.close();
 }
 {
-  // If the admin cannot be reached the buttons must still give someone a way to
-  // give — the href in the markup is the fallback.
+  // If the admin cannot be reached the CCS buttons must still give someone a
+  // way to give — the href in the markup is the fallback.
   GIVE_URL = null;
-  const { page, ctx } = await visit('/give', apiPages());
-  const href = await page.getAttribute('#page-give [data-give-link]', 'href');
+  const { page, ctx } = await visit('/ccs', apiPages());
+  await page.waitForTimeout(600);
+  const href = await page.getAttribute('#page-ccs [data-give-link]', 'href');
   ok(/^https:\/\/give\.tithe\.ly\//.test(href), 'the button still points somewhere real: ' + href);
   await ctx.close();
   GIVE_URL = 'https://give.tithe.ly/?formId=NEW-FORM-ID&locationId=LOC';

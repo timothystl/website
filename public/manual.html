@@ -512,6 +512,15 @@ li{margin-bottom:6px;}
     <span class="toc-anchor" id="giving-tab"></span>
     <h3>Giving tab</h3>
     <p><span class="badge badge--sky">Requires Giving permission</span> Manages everything related to giving/payment links, added 2026-07-27:</p>
+
+    <div class="callout">
+      <p><strong>There are two giving pages, and they do different jobs.</strong></p>
+      <ul>
+        <li><a href="https://give.timothystl.org" target="_blank"><strong>give.timothystl.org</strong></a> is where someone <em>actually gives</em> — pick an amount, pick a fund, go. This is the page the Base Tithe.ly Link, Amount Tiers and Funds below all control.</li>
+        <li><a href="https://timothystl.org/give" target="_blank"><strong>timothystl.org/give</strong></a> is where someone works out <em>how</em> they want to give — the offering plate, bank bill pay, Thrivent, an IRA distribution, a Donor Advised Fund, leaving a gift in a will. Its "Give Online" button simply sends people to the page above.</li>
+      </ul>
+      <p><strong>You only ever change the Tithe.ly link in one place: the Base Tithe.ly Link below.</strong> Every giving button on the whole site follows it. If you are ever asked to paste a Tithe.ly address anywhere else on the website, something is wrong — check with whoever maintains the site first.</p>
+    </div>
     <ul>
       <li><strong>Base Tithe.ly Link</strong> — should include <code>formId</code>, <code>locationId</code>, and <code>fundId</code>, but <strong>not</strong> an <code>amount</code> — the page automatically appends the right amount (in cents) for whichever chip is picked, including a typed "other amount." Get this by generating a link for General Fund giving from Tithe.ly, then delete the trailing <code>&amp;amount=...</code> before pasting it here.</li>
       <li><strong>Amount Tiers</strong> — the chip amounts shown in the interactive amount picker on <a href="https://give.timothystl.org" target="_blank">give.timothystl.org</a> (e.g. $30/$50/$100) — every chip automatically gets a working Tithe.ly link built from the Base Tithe.ly Link above, <strong>no per-tier link generation needed.</strong> The optional link field on each tier is only for the rare case where one specific amount should go somewhere else entirely (a different fund or form) — leave it blank normally. Check "Default" on the one tier that should be pre-selected when the page loads.</li>

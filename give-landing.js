@@ -49,6 +49,26 @@ const valuesBandHtml = VALUES_BAND.map(v => `
     <div class="vb-word">${v.word}</div>
   </div>`).join('');
 
+// ── The two giving pages, and which one does what ──────────────────────────
+// This page is the transaction: pick an amount, pick a fund, go. The *other*
+// ways to give — the offering plate, bank bill pay, Thrivent, an IRA qualified
+// charitable distribution, a Donor Advised Fund, a gift through a will — need
+// paragraphs and a phone call, not a button, and they live on
+// timothystl.org/give.
+//
+// So this strip names them and links there. It deliberately does not repeat the
+// copy: two descriptions of a QCD, in two files, is one of them going stale.
+const OTHER_WAYS = [
+  'On Sunday morning',
+  'Bank bill pay',
+  'Thrivent Charitable',
+  'IRA charitable distribution',
+  'Donor Advised Fund',
+  'Planned giving',
+];
+
+const otherWaysHtml = OTHER_WAYS.map(w => `<span class="ow-item">${w}</span>`).join('');
+
 // The "What Your Generosity Makes Possible" ministry ladder — Andrew's exact copy
 // (updated 2026-07-27, weekly framing). Each row links directly to Tithe.ly for that
 // amount, same as the leadership tiers below — not just informational.
@@ -299,6 +319,32 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds) {
   }
   .leadership-cta:hover { background: #E8C070; }
 
+  /* ── Other ways to give ── */
+  .other-ways {
+    background: #FBF8F3; border-top: 1px solid #DDE3ED; padding: 30px 40px 34px;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 20px;
+  }
+  .ow-copy { max-width: 620px; }
+  .ow-eyebrow {
+    font-size: 11px; font-weight: 800; text-transform: uppercase;
+    letter-spacing: .06em; color: #4A5E3A;
+  }
+  .ow-heading {
+    font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 21px;
+    color: #1A1A2A; margin-top: 5px;
+  }
+  .ow-items { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .ow-item {
+    background: #FFFFFF; border: 1px solid #DDE3ED; border-radius: 999px;
+    padding: 5px 13px; font-size: 12.5px; color: #4A4860; white-space: nowrap;
+  }
+  .ow-cta {
+    background: #1E2D4A; color: #FFFFFF; font-weight: 800; font-size: 14.5px;
+    padding: 12px 22px; border-radius: 8px; white-space: nowrap; transition: background .2s;
+  }
+  .ow-cta:hover { background: #2E4670; }
+
   /* ── Values band ── */
   .values-band {
     background: #F7F3EC; border-top: 1px solid #DDE3ED; padding: 32px 40px 36px;
@@ -322,6 +368,8 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds) {
     .give-row { grid-template-columns: 1fr; }
     .ladder-col { border-right: none; border-bottom: 1px solid #DDE3ED; padding: 32px 22px; }
     .values-band { grid-template-columns: 1fr 1fr; padding: 24px 20px 28px; }
+    .other-ways { padding: 26px 20px 30px; }
+    .ow-cta { width: 100%; text-align: center; }
     .amount-chips { gap: 8px; }
     .chip { font-size: 14px; padding: 11px 0; }
     .topbar { padding: 14px 20px; }
@@ -396,6 +444,15 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds) {
       <div class="leadership-sub">A child hearing about Jesus. A family receiving hope. A teenager discovering lifelong faith. A teacher serving with confidence. A sanctuary filled with worship. A church whose doors stay open to the neighborhood.</div>
     </div>
     <div class="leadership-table">${leadershipRowsHtml}</div>
+  </div>
+
+  <div class="other-ways">
+    <div class="ow-copy">
+      <div class="ow-eyebrow">Other ways to give</div>
+      <div class="ow-heading">Not every gift starts with a card.</div>
+      <div class="ow-items">${otherWaysHtml}</div>
+    </div>
+    <a class="ow-cta" href="https://timothystl.org/give">See all the ways to give</a>
   </div>
 
   <div class="values-band">${valuesBandHtml}</div>
