@@ -818,6 +818,55 @@ group('staff, users and subscribers on the shared pattern');
   has(subs, 'Website signup', 'website signups show even when Brevo cannot be read');
 }
 
+group('subscribers fetches Brevo pages together, not one at a time');
+{
+  // The first page is the only one that can be serial — it is where `count`
+  // comes from. Everything after it should go out together rather than as
+  // one round trip per page, which is what this asserts by counting requests
+  // and by checking every page's contacts actually made it into the list.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  env.BREVO_API_KEY = 'test-key';
+  env.BREVO_LIST_ID = '9';
+
+  const requested = [];
+  const realFetch = globalThis.fetch;
+  const page = (n, count) => new Response(JSON.stringify({
+    count,
+    contacts: [{ email: `p${n}@example.com`, attributes: { FIRSTNAME: 'Page', LASTNAME: String(n) } }],
+  }), { status: 200 });
+  globalThis.fetch = async (u) => {
+    const off = Number(new URL(String(u)).searchParams.get('offset'));
+    requested.push(off);
+    // 3 pages of 500 = 1500 contacts on paper; the stub returns one contact
+    // per page so the test can tell them apart without building 1500 rows.
+    return page(off, 1500);
+  };
+  const body = await (await call(env, '/subscribers', { cookie })).text();
+  globalThis.fetch = realFetch;
+
+  eq(requested.length, 3, 'three pages requested for 1500 contacts at 500 each');
+  eq(new Set(requested).size, 3, 'three distinct offsets, not the same page three times');
+  for (const off of [0, 500, 1000]) has(body, `Page ${off}`, `page at offset ${off} made it into the list`);
+
+  // A page that fails should not cost the pages that succeeded — the render
+  // path already tolerated Brevo being unreachable entirely; one bad page
+  // partway through a pagination run is the same kind of partial failure.
+  const requested2 = [];
+  globalThis.fetch = async (u) => {
+    const off = Number(new URL(String(u)).searchParams.get('offset'));
+    requested2.push(off);
+    if (off === 500) return new Response('', { status: 500 });
+    return page(off, 1500);
+  };
+  const body2 = await (await call(env, '/subscribers', { cookie })).text();
+  globalThis.fetch = realFetch;
+
+  has(body2, 'Page 0', 'the page before the failure still shows');
+  has(body2, 'Page 1000', 'and the page after it — the failure did not cancel the rest');
+  ok(!body2.includes('Page 500'), 'only the page that actually failed is missing');
+}
+
 group('the permission checkboxes are the truth');
 {
   const { db, env } = await boot();

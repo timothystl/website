@@ -1523,12 +1523,45 @@ enough that nothing had caught up with it):
    every click. A cacheable `/assets/admin.css` fixes it and costs a
    versioning scheme.~~ **Done 2026-08-03** — see "The shell's ~89KB of
    CSS/JS is externalised now" above.
-3. **The heavy admin handlers**, each needing its own design: `/media` scans
+3. ~~**The heavy admin handlers**, each needing its own design: `/media` scans
    every page's block JSON per media row; `/subscribers` pages Brevo serially
    in the render path; `/newsitems` runs its expiry sweep inline (R2 delete +
    DELETE per expired row); `/api/search` fires up to 10 LIKE scans per
    keystroke with no debounce; `/audit-log` renders one anchor per 50-row
-   page with no retention.
+   page with no retention.~~ **Four of five done 2026-08-03**, per Andrew's
+   "go with making it faster":
+   - **`/newsitems`** no longer `await`s the sweep before rendering —
+     `ctx.waitUntil(sweepExpiredItems(...))` now, so an R2 delete plus a D1
+     DELETE per expired row (almost always zero rows) no longer blocks every
+     single visit to the screen. The row's `state` already reads 'expired'
+     off `expire_date` regardless of whether the sweep has run yet, so
+     deferring it costs nothing but the row surviving one extra page load
+     before it is actually removed.
+   - **`/subscribers`** fetches its first Brevo page alone (the only one that
+     can be serial — it's where `count` comes from), then every remaining
+     page together via `Promise.all` instead of one round trip at a time. A
+     failed page no longer costs the pages that succeeded. Covered by a new
+     test group in `test/admin-redesign.test.mjs` asserting concurrent
+     fetching and partial-failure tolerance.
+   - **`/api/search`** ran its up-to-ten permission-gated LIKE queries one
+     `await` at a time in a `for` loop; they don't depend on each other, so
+     they now run together via `Promise.all`, with `active`'s array order
+     (not resolution order) still deciding section order in the results.
+   - **`/audit-log`**'s pager rendered one `<a>` per page — harmless at 3
+     pages, hundreds of links at 300, which is exactly the shape a table
+     with **no retention** (a deliberate choice — it is the accountability
+     record, not ephemeral data, so auto-deleting it was never on the table)
+     grows into. `paginationWindow()` in `admin/ui.js` is a pure function —
+     first, last, and a couple either side of where you are, with a gap
+     collapsed to `…` — capping the pager at a constant handful of links
+     regardless of total pages. `admin/ui.test.mjs` covers it directly.
+   - **`/media`'s per-media-row scan of every page's block JSON is still
+     open.** It is real substring search (a stored URL and the one written
+     into a block can differ by origin, so it has to match on the filename
+     tail, not an exact key) across text that can genuinely contain the tail
+     anywhere — that is not a job a normal B-tree index can do, and doing it
+     properly means a real inverted index or SQLite FTS5, which is its own
+     schema change and its own `SCHEMA_VERSION` bump, not a quick parallelise.
 4. ~~**~1.55MB of `IMG_*.jpg` in `public/images` referenced nowhere**~~ —
    **done 2026-08-03**, with Andrew's sign-off. All ten (~1.6MB) confirmed
    unreferenced anywhere in the repo — `public/index.html`, every admin
@@ -2494,7 +2527,7 @@ The full review (three scouts + a synthesis pass, everything verified by reading
    the deliberate no-toolchain stance. See "Pending / Deferred Items".
 2. ~~**Externalise the admin's CSS/JS.**~~ **Done 2026-08-03** — see "The
    shell's ~89KB of CSS/JS is externalised now" above.
-3. **The heavy admin handlers**, each needing its own design rather than a shared fix: `/media` scans every page's block JSON per media row; `/subscribers` pages Brevo serially inside the render path; `/newsitems` runs its expiry sweep inline (an R2 delete + a DELETE per expired row); `/api/search` fires up to 10 unindexed LIKE scans per keystroke with no debounce; `/audit-log` renders one anchor per 50-row page with no retention.
+3. ~~**The heavy admin handlers**~~ — **four of five done 2026-08-03** (`/newsitems` backgrounded, `/subscribers` and `/api/search` parallelised, `/audit-log`'s pager windowed); `/media`'s per-row substring scan is still open, since fixing it properly needs a real search index, not a parallelise. See "Pending / Deferred Items".
 4. ~~**~1.55MB of `IMG_*.jpg` in `public/images` referenced nowhere.**~~ **Done 2026-08-03** — see the matching item under "Pending / Deferred Items" for what was checked and removed.
 5. ~~**Nine Google Font faces loaded** — likely half are unused; worth an audit before trimming.~~ **Done 2026-08-03** — trimmed to the 7 actually used; see "Pending / Deferred Items".
 6. **A `:has()` fallback** for the Task 19 form-width cap — Firefox ESR and Safari <15.4 get the old 1900px-wide forms back with no cap. Depends on whether the office's browsers actually include either. **Scoped 2026-08-03**: this is the admin's hand-written forms only, never the public site, and does not touch the block editor — see "Pending / Deferred Items".

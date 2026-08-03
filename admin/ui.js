@@ -90,6 +90,25 @@ export function countLabel(shown, total, noun) {
   return `${shown} of ${total} shown`;
 }
 
+// First, last, and a couple either side of where you are, with a gap
+// collapsed to '…' rather than every page number in between. The audit log
+// has no retention (a deliberate call — it is the accountability record, not
+// ephemeral data), so it only grows; enumerating every page meant a pager
+// with one <a> for every one of however many hundred pages it had reached.
+// This caps the pager at a constant handful of links regardless of total.
+export function paginationWindow(current, total) {
+  const keep = new Set([1, total, current - 2, current - 1, current, current + 1, current + 2]);
+  const pages = [...keep].filter((p) => p >= 1 && p <= total).sort((a, b) => a - b);
+  const out = [];
+  let prev = 0;
+  for (const p of pages) {
+    if (prev && p - prev > 1) out.push('…');
+    out.push(p);
+    prev = p;
+  }
+  return out;
+}
+
 // ── PILLS AND CHIPS ──────────────────────────────────────────
 
 export function statusPill(tone, label) {
