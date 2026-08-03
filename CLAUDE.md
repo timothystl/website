@@ -2251,6 +2251,19 @@ navigation is generated from those rows.
   also regenerates `admin/page-seeds.js`, and takes `--dry-run`). Do not
   hand-edit it. Block ids are derived from the page, so re-running produces a
   diff only when the content actually changed.
+- **Improving the converter needs a `SCHEMA_VERSION` bump to reach anything.**
+  The seed loop is `INSERT OR IGNORE`, so a better conversion never arrives at
+  a page that is already a row. The re-seed pass after it refreshes a page's
+  draft only when `canReseed()` says so — still stamped `updated_by='migration'`
+  and never published. A page anyone has edited or put live keeps what it has.
+- **A section that mixes a grid with panels is walked child by child.**
+  `recognise()` reads a whole section as one shape, which on `/give` sees only
+  the card grid and throws away the panels either side — and those panels hold
+  the IRA, DAF and planned-giving copy. `mixedSection()` handles that shape and
+  runs first; card detection still goes through `cardRun()`, so there is one
+  idea of what a card is. `GRID_OPEN` also accepts `two-col`, the site's own
+  name for a two-column grid, and `cardRun()` has a second pass for cards that
+  head themselves with a serif-styled `<div>` rather than an `<h3>`.
 - **Seeds land in the draft, never in `published_blocks`.** A page with nothing
   published renders its hardcoded markup in `public/index.html` exactly as
   before. That fallback is what makes the conversion page-by-page and what keeps
@@ -2275,6 +2288,14 @@ navigation is generated from those rows.
 - **Locked blocks** (`locked` on the block) are the site's design rather than
   the page's content: marked `🔒` in the rail, and a `site_pages_own` save that
   drops one is refused server-side. The office sets the flag from the Block tab.
+- **Every give button reads one link.** The Tithe.ly base link lives only in the
+  Giving tab (`give_url`). `loadGiveLinks()` in `public/index.html` rewrites
+  every `[data-give-link]` from it; the href in the markup is the offline
+  fallback, and `data-give-fund` overrides the fund (the CCS appeal) by
+  *replacing* it rather than appending a second `fundId`. The `/give` seed's
+  online-giving button points at **give.timothystl.org** on purpose: a block's
+  URL is fixed once published, and that page resolves `give_url` at request
+  time, so no block ever carries a copy of the Tithe.ly link.
 - **Church details** live in `site_settings` under `church_*`, edited at
   `/pages/details`. The map block, the service-times block, the `sidebar`
   layout and the public footer all read that one record.

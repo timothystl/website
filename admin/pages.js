@@ -90,6 +90,21 @@ export function filterPages(ordered, filter) {
   return ordered;
 }
 
+// Whether a page's seeded draft may safely be replaced by a newer conversion of
+// the same hardcoded markup.
+//
+// The seeds are generated from public/index.html, so improving the converter
+// produces a better draft — but only pages nobody has touched may take it.
+// `updated_by` is stamped 'migration' on insert and overwritten the moment a
+// person saves, and an empty `published_blocks` means the page has never gone
+// live from the editor. Both must hold, or a re-seed would throw away work.
+export function canReseed(row) {
+  if (!row) return false;
+  const untouched = (row.updated_by || '') === 'migration';
+  const neverPublished = row.published_blocks == null || String(row.published_blocks).trim() === '';
+  return untouched && neverPublished;
+}
+
 // The public menu: two levels, in-menu only, published only.
 export function menuTree(rows) {
   const list = rows.filter((p) => p.in_menu && p.status === 'published');
