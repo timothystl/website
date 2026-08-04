@@ -442,7 +442,7 @@ async function portalOrigin(env) {
 }
 // `/api/tap-hit` is called server-to-server by site-worker.js when it resolves
 // one of the /tapN short addresses, so it has no Origin to check against.
-const PUBLIC_CROSS_ORIGIN_POSTS = new Set(['/api/contact', '/api/prayer', '/api/subscribe', '/api/tap-hit']);
+const PUBLIC_CROSS_ORIGIN_POSTS = new Set(['/api/contact', '/api/prayer', '/api/subscribe', '/api/tap-hit', '/api/push/notify']);
 
 // Real ChMS fund names — read-only, cross-Worker call — shown as suggestions in the
 // Giving tab's Funds card so staff can pick a real fund name instead of retyping one from
@@ -948,6 +948,30 @@ export default {
     if (path === '/api/push/vapid-public-key' && method === 'GET') {
       if (!env.VAPID_PUBLIC_KEY) return new Response('Push notifications are not configured.', { status: 501 });
       return new Response(env.VAPID_PUBLIC_KEY, { headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' } });
+    }
+
+    // Cross-app push relay: a shared-secret-authenticated way for OTHER Workers
+    // (today, connect.timothystl.org — the ChMS/scheduler repo) to ring the same
+    // admin devices this repo's own four triggers already reach, without a
+    // second push_subscriptions table or a second RFC 8291/8292 implementation.
+    // Not a session route — the caller is a server, not a signed-in browser —
+    // so it's gated by ADMIN_PUSH_API_KEY (same shared-secret pattern as
+    // CHMS_INTAKE_API_KEY/X-Intake-Key, just the other direction) instead of a
+    // cookie. It has to sit above the CSRF Origin gate for the same reason
+    // /api/tap-hit does: a Worker-to-Worker fetch carries no Origin/Referer.
+    if (path === '/api/push/notify' && method === 'POST') {
+      if (!env.ADMIN_PUSH_API_KEY) return new Response(JSON.stringify({ error: 'Push relay not configured' }), { status: 503 });
+      const key = request.headers.get('X-Push-Key') || '';
+      if (key !== env.ADMIN_PUSH_API_KEY) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+      let body;
+      try { body = await request.json(); } catch { return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 }); }
+      const title = String(body?.title || '').slice(0, 200);
+      const text = String(body?.body || '').slice(0, 500);
+      if (!title || !text) return new Response(JSON.stringify({ error: 'title and body are required' }), { status: 400 });
+      const payload = { title, body: text, tag: String(body?.tag || 'connect-notify').slice(0, 100) };
+      if (body?.url) payload.url = String(body.url).slice(0, 500);
+      ctx.waitUntil(pushToAllSubscribers(env, payload));
+      return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     // Reject obviously oversized requests up front. 25MB is a generous ceiling
