@@ -221,6 +221,19 @@ export const DB_INIT_PUSH_SUBSCRIPTIONS = `CREATE TABLE IF NOT EXISTS push_subsc
   created_at  TEXT DEFAULT (datetime('now'))
 )`;
 
+// A period's "ready to approve" push has to fire exactly once, ever — not
+// once per browser. Payroll hours live in Supabase, which this Worker holds
+// no server-side credentials for, so admin/payroll.html (which already
+// computes readiness to draw the status pill) is the one that notices and
+// asks for the push — and since two different staff members' browsers could
+// each notice the same period turning ready around the same time, the INSERT
+// here (not a client-side flag) is what makes only the first one actually
+// send it.
+export const DB_INIT_PAYROLL_READY_NOTIFIED = `CREATE TABLE IF NOT EXISTS payroll_ready_notified (
+  period_start TEXT PRIMARY KEY,
+  notified_at  TEXT DEFAULT (datetime('now'))
+)`;
+
 // ── GYM RENTAL DB TABLES ─────────────────────────────────────
 export const DB_INIT_GYM_GROUPS = `CREATE TABLE IF NOT EXISTS gym_groups (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,

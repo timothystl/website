@@ -318,31 +318,82 @@ what a live device would also need to be true. Run: `node admin/webpush.js`
 is not runnable directly (it's WebCrypto, browser/Workers-only); run
 `node admin/webpush.test.mjs`.
 
-- **One trigger exists today: held mail.** `screenSubmission()` (see "Form
-  Spam Screening" below) already makes a held contact/prayer submission
-  invisible by design — the point of that design is that the Dashboard's
-  "Needs your attention" worklist is what keeps it from being *silently*
-  invisible. A push is the same idea for whoever isn't staring at the
-  dashboard: `/api/contact` and `/api/prayer` call
-  `pushToAllSubscribers(env, {...})` inside `ctx.waitUntil()` — never
-  `await`ed, because a push failure (no one subscribed yet, a dead endpoint)
-  must never turn into a real visitor's submission failing. A subscription
-  the push service reports as gone (404/410) is deleted on the spot rather
-  than retried forever.
+- **Four triggers exist today** (the first two shipped alongside the
+  infrastructure; the second two followed once Andrew confirmed which events
+  he actually wanted a phone to buzz for, 2026-08-04):
+  - **Held mail.** `screenSubmission()` (see "Form Spam Screening" below)
+    already makes a held contact/prayer submission invisible by design — the
+    point of that design is that the Dashboard's "Needs your attention"
+    worklist is what keeps it from being *silently* invisible. A push is the
+    same idea for whoever isn't staring at the dashboard.
+  - **Every delivered contact/prayer message, too** — not just held ones.
+    Andrew's call: he wants to know the moment somebody reaches out through
+    the site, not only when the spam filter caught something.
+  - **A new gym hold or recurring request.** Three separate submission paths
+    in `admin/gym.js` (`/hold`, the multi-slot `/request-slots`, and
+    `/recurring`) each already emailed `gym_admin_email` on a new request; the
+    push rides alongside that, same event.
+  - **A payroll period turning "ready to approve."** This one is different in
+    kind from the other three: the Worker holds no server-side Supabase
+    credentials (see "Payroll & Supabase" below), so it cannot notice this on
+    its own the way it notices a form POST or a gym booking INSERT.
+    `admin/payroll.html` already computes readiness client-side to draw the
+    status pill (`renderPeriodState()`) — that screen is what asks the Worker
+    to push, via `POST /api/push/payroll-ready`. Because *any* staff member's
+    browser might be the one to notice a period turn ready, the dedup can't
+    live client-side (two people opening Payroll the same day would both
+    fire it) — `payroll_ready_notified` (`admin/db.js`) is a one-row-per-period
+    table where the INSERT itself is the lock: whichever request's INSERT
+    lands sends the push, and every other one silently no-ops.
+  All four call `pushToAllSubscribers(env, {...})` inside `ctx.waitUntil()` —
+  never `await`ed, because a push failure (no one subscribed yet, a dead
+  endpoint) must never turn into a real visitor's submission failing or a
+  staff action being refused. A subscription the push service reports as
+  gone (404/410) is deleted on the spot rather than retried forever.
 - **Requires a manual step outside this repo, like Turnstile and the ChMS
   intake key before it**: `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` must be
   set as Worker secrets (`wrangler secret put VAPID_PUBLIC_KEY --name
   tlc-newsletter-admin`, same for the private key) — until both are set,
   `/api/push/vapid-public-key` answers 501 and the sidebar's toggle would
-  subscribe browsers to nothing. **Not committed here** — Andrew has the
-  actual generated keypair from the PR that added this.
-- **Other places a push would make sense, not wired up yet**: a new gym hold
-  awaiting review, a payroll period ready to approve. Left for a future pass
-  once the office has actually used the held-mail push for a while — wiring a
-  second trigger is a few lines once the infrastructure above exists; picking
-  the *right* second and third triggers is worth waiting to see which one
-  Andrew actually reaches for the dashboard to check instead of a phone
-  buzzing.
+  subscribe browsers to nothing. **Done 2026-08-04** — Andrew set both by
+  hand from the generated keypair.
+- **Not wired up here, deliberately**: the Worship Schedule Builder and
+  volunteer sign-ups both now live on `connect.timothystl.org`, a separate
+  repo this session doesn't have access to. Andrew wants a prompt for a
+  future session with both repos attached — see "Cross-repo follow-up" below.
+- The payroll email report (`POST /payroll/email`) now also always CC's
+  `dinger@timothystl.org` alongside the `payroll_bookkeeper_email` setting —
+  Andrew asked for his own copy of every report, deduped against the
+  bookkeeper's address in case they're ever the same.
+
+### Cross-repo follow-up: scheduler and volunteer sign-up notifications (noted 2026-08-04)
+
+Andrew wants push notifications for two more events, and both now live on
+`connect.timothystl.org` rather than in this repo: the Worship Schedule
+Builder (distinct from the dead `/scheduler` in *this* repo — see "Four
+security fixes from the July review" above, VS-2) and volunteer sign-ups.
+That backend is a separate codebase this session was never given access to.
+
+**Prompt for a future session, with both repos attached:**
+
+> Add web push notifications for two events on connect.timothystl.org (the
+> ChMS/scheduler repo) to ring the same devices that admin.timothystl.org's
+> push notifications already reach: (1) a new volunteer sign-up, and (2) a
+> scheduler notification — check that repo's own CLAUDE.md and code for what
+> "scheduler notification" concretely means there before assuming an event
+> shape. This repo (timothystl/website) already has the full Web Push
+> infrastructure built — `admin/webpush.js` (hand-rolled RFC 8291/8292,
+> verified by an independent round-trip test in `admin/webpush.test.mjs`),
+> a `push_subscriptions` table, and `pushToAllSubscribers(env, payload)` — do
+> not rebuild this in the other repo. Instead, have connect.timothystl.org
+> call an endpoint on admin.timothystl.org (e.g. a new authenticated
+> `POST /api/push/notify` accepting a title/body/tag/url, gated by a shared
+> secret the way the ChMS intake key already works for contact/prayer
+> forwarding — see `CHMS_INTAKE_API_KEY` in the Giving Tab section) so there
+> is exactly one push-sending implementation and one `push_subscriptions`
+> table, not two drifting copies. Read "The admin is a PWA, with web push"
+> section of this repo's CLAUDE.md first for the full design and its
+> constraints (never `await`ed, dedup considerations, VAPID key handling).
 
 ### Form Spam Screening (added 2026-07-31)
 
