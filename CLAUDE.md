@@ -357,10 +357,31 @@ is not runnable directly (it's WebCrypto, browser/Workers-only); run
   `/api/push/vapid-public-key` answers 501 and the sidebar's toggle would
   subscribe browsers to nothing. **Done 2026-08-04** — Andrew set both by
   hand from the generated keypair.
-- **Not wired up here, deliberately**: the Worship Schedule Builder and
-  volunteer sign-ups both now live on `connect.timothystl.org`, a separate
-  repo this session doesn't have access to. Andrew wants a prompt for a
-  future session with both repos attached — see "Cross-repo follow-up" below.
+- **A fifth and sixth trigger arrived from `connect.timothystl.org` (2026-08-04)**,
+  via the cross-app relay below — not new triggers built in this repo. New
+  `POST /api/push/notify` (`tlc-admin-worker.js`, placed above the CSRF Origin
+  gate alongside `/api/push/vapid-public-key`, and in `PUBLIC_CROSS_ORIGIN_POSTS`
+  for the same reason `/api/tap-hit` is — a server-to-server `fetch()` carries no
+  `Origin`/`Referer`) accepts `{title, body, tag, url}`, checks the caller against
+  a new `ADMIN_PUSH_API_KEY` shared secret in an `X-Push-Key` header (same
+  pattern as `CHMS_INTAKE_API_KEY`/`X-Intake-Key`, just the other direction —
+  ChMS is the caller here, not this repo), and calls the same
+  `pushToAllSubscribers(env, {...})` inside `ctx.waitUntil()` the other four
+  triggers use. **One push-sending implementation, one `push_subscriptions`
+  table** — ChMS does not have its own copy of `admin/webpush.js`. See the
+  chms repo's own CLAUDE.md for what it sends and when (a new volunteer
+  sign-up, a volunteer confirming/declining an RSVP).
+- **Requires a manual step outside this repo, same shape as `CHMS_INTAKE_API_KEY`
+  and the VAPID keys**: `ADMIN_PUSH_API_KEY` must be set as a secret on this
+  Worker (`wrangler secret put ADMIN_PUSH_API_KEY --name tlc-newsletter-admin`)
+  **and** the identical value set as a secret on the chms repo's Worker
+  (`wrangler secret put ADMIN_PUSH_API_KEY --name tlc-chms`) — until both sides
+  have the same value, `/api/push/notify` answers 503 (key unset here) or 401
+  (mismatched). Not done as part of this change — flagged for an admin.
+- **Not wired up here, deliberately**: the rest of the Worship Schedule Builder
+  and volunteer sign-up surface still lives on `connect.timothystl.org`, a
+  separate repo. Everything below this line is the original prompt that led to
+  the relay above — kept for context, not because it's still outstanding.
 - The payroll email report (`POST /payroll/email`) now also always CC's
   `dinger@timothystl.org` alongside the `payroll_bookkeeper_email` setting —
   Andrew asked for his own copy of every report, deduped against the
