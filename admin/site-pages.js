@@ -4233,7 +4233,7 @@ export const SITE_PAGES = [
         "title": "Send a prayer request",
         "subtitle": "",
         "eyebrow": "",
-        "body": "<p>The pastoral staff wants to know how to pray for you and walk alongside you in the joys and struggles of life. We can't care well if we don't know what's happening.</p> <p>Submit a request below and someone from our team will pray for you — and reach out if you'd like pastoral care. You can also reach us at <a href=\"https://timothystl.org/prayer\" target=\"_blank\">timothystl.org/prayer</a>.</p>",
+        "body": "<p>The pastoral staff wants to know how to pray for you and walk alongside you in the joys and struggles of life. We can't care well if we don't know what's happening.</p>\n<p>Submit a request below and someone from our team will pray for you — and reach out if you'd like pastoral care. You can also reach us at <a href=\"https://timothystl.org/prayer\" target=\"_blank\" rel=\"noopener noreferrer\">timothystl.org/prayer</a>.</p>",
         "url": "",
         "spaceAbove": 64,
         "spaceBelow": 64,

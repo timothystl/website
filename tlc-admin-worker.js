@@ -1889,7 +1889,7 @@ export default {
          FROM news_items
          WHERE publish_date <= ? AND (expire_date IS NULL OR expire_date >= ?)
            AND (channels IS NULL OR channels LIKE '%web%')
-         ORDER BY pinned DESC, COALESCE(event_date, publish_date) ASC
+         ORDER BY pinned DESC, COALESCE(event_date, publish_date) DESC, id DESC
          LIMIT ?`
       ).bind(today, today, limit).all();
       return new Response(JSON.stringify(rows.results), {

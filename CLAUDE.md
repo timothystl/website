@@ -486,6 +486,88 @@ blocks, paste), `site-roles` (roles, locked blocks, undo),
 `site-pages` (generated nav, published pages, fallback) and `ministries-list`.
 Run any with `node <path>`. Chromium is at `/opt/pw-browsers/chromium`.
 
+### Align + bold/italic, seven block types (added 2026-08-03)
+
+Andrew asked whether the **Give** block ("Support this ministry" — the
+$25/$100/Give now card) could be centered, bolded, italicized. It couldn't —
+alignment only existed on Card grid, and bold/italic only on Text,
+Photo+photo, Callout, and item bodies inside Columns/Card grid/FAQ. Give had
+neither.
+
+- **`align: true` on a `BLOCK_DEFS` entry is the one flag that opts a type
+  in**, same idiom as `richBody`/`photo`/`url` — `CENTER_ALIGNABLE_TYPES` in
+  `admin/blocks.js` is *derived* from that flag, not a second list to keep in
+  step. Seven types have it now: Give, Text, Text+photo, Callout, Notice bar,
+  Signup form, Newsletter — all a flex column of heading + prose + (for four
+  of them) a row of buttons, close enough in shape that one shared mechanism
+  covers all seven. Card grid keeps its own separate, older centering
+  mechanism (`tlcb-cg--center`), untouched.
+- **One class does the centering, not seven copies of cardgrid's pattern.**
+  `renderBlock()` appends `tlcb--center` to the block's own universal wrapper
+  when `align:true` in the def and `b.align === 'center'` — CSS keyed off
+  `.tlcb--center.tlcb--<type>` picks it up from there, relying on
+  `text-align`'s natural inheritance for the plain-prose part of each type
+  and adding only what doesn't inherit: `.tlcb-inline`'s `justify-content`
+  for the four with a button row, `align-items` for Callout's flex column
+  (which sets `align-items:flex-start` on its own, so text-align alone would
+  center the words but leave the boxes hugging the left edge). Notice bar is
+  the one real outlier — a horizontal row, not a heading+prose stack — so
+  "centered" there means centering the row itself
+  (`.tlcb-alert{justify-content:center}`), not text-align.
+- **Bold/italic is the `richBody` flag, added to the same four types that
+  didn't have it** (Give, Notice bar, Signup form, Newsletter — Text,
+  Photo+photo, Callout already did). Nothing else needed wiring by hand: the
+  inline TinyMCE toolbar, the `sanitizeRich()` allowlist, and the client
+  config all read `def.richBody` already. Three render branches (Give,
+  Notice bar) that hand-rolled `esc(b.body)` instead of the shared
+  `renderBody()`/`field(...,rich)` helper had to be switched over — otherwise
+  the sanitized HTML would have rendered double-escaped as literal tags.
+  Titles stay plain everywhere, including these seven — no block type
+  anywhere has a rich-text heading, so giving Give a rich title would be
+  inventing a new pattern rather than extending the one that exists.
+- **Font-family and per-character font color were explicitly left out.** A
+  background/text-color pair already exists for every block ("Theme
+  colours"), so that part of the ask was already covered. A font-family
+  toggle has a real precedent to build from if it's ever wanted — the SIZES
+  (S/M/L) control's full path from definition through to a CSS variable
+  (`blocks.js:39-43` → `wrapperVars()`/`styleVars()` → the inspector chips)
+  — but it's a genuinely new mechanism, not an extension of one already
+  there, so it's its own future piece of work.
+- **Pre-existing, unrelated bug found while researching this, not touched:**
+  seven CSS rules already reference `var(--tlcb-serif)`/`var(--tlcb-sans)`
+  (Card grid's heading/eyebrow/link/intro, the Map card's three text rules)
+  but those two custom properties are never defined anywhere, so those
+  specific declarations currently fall back to the browser default font
+  rather than Lora/Source Sans 3. Flagged here so a future font-family pass
+  doesn't have to rediscover it.
+
+Covered by a new `admin/blocks.test.mjs` group: all seven types get the
+class when centered and none of the other twenty-one do; each type's body
+keeps real markup instead of getting escaped; the inspector's client config
+(`blocksClientConfig()`) reports `align:true` for the seven and `false` for
+Card grid, whose Alignment chip is a separate, untouched branch.
+
+### The public news feed sorts newest-first (added 2026-08-03)
+
+`/api/news` already sorted by `COALESCE(event_date, publish_date)` — the
+actual bug was the direction. It was ascending (soonest-upcoming-first,
+calendar-style), so a freshly published post with a future `event_date` sat
+at the *bottom* of its own feed instead of leading it. The admin's own News
+& Events list sorts the identical expression descending; `/api/news` now
+matches it (`tlc-admin-worker.js`, `ORDER BY pinned DESC, COALESCE(event_date,
+publish_date) DESC, id DESC`).
+
+Found in the same pass, fixed alongside it since it's the same page: the
+`/news` page's date label read `item.event_date || ''` with no fallback, so
+a pure announcement with no `event_date` showed no date at all — the home
+page's own news card already had the right fallback
+(`item.event_date || item.publish_date`); `/news` now matches.
+
+**Not touched, flagged only:** the newsletter composer's two "which news
+items to embed" pickers (`tlc-admin-worker.js`, the create- and
+edit-newsletter routes) sort the same expression ascending too — same bug
+shape, a different screen nobody asked about.
+
 ### The v3.0.0 Admin Overhaul (added 2026-08-01) — Phases 0–2 of 9
 
 Built from the design handoff in `design_handoff_admin_overhaul/`. Andrew's own
