@@ -5,7 +5,8 @@
 // Last modified: 2026-03-27
 
 
-import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes } from './admin/db.js';
+import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS } from './admin/db.js';
+import { pushToAllSubscribers } from './admin/webpush.js';
 
 // Static pages that can carry self-serve notices (matches the SPA's page ids in public/index.html)
 // The one address the link cards are shown at. A tap pointing anywhere else
@@ -25,7 +26,7 @@ const STATIC_PAGES = [
   { slug: 'news',       label: 'News & Events' },
   { slug: 'calendar',   label: 'Calendar' },
 ];
-import { html, sidebarShell, loginPage, setupPage, forgotPasswordPage, resetPasswordPage, permissionCheckboxes, formatDate, escapeHtml, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection, ADMIN_SHELL_CSS, ADMIN_SHELL_JS } from './admin/helpers.js';
+import { html, sidebarShell, loginPage, setupPage, forgotPasswordPage, resetPasswordPage, permissionCheckboxes, formatDate, escapeHtml, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection, ADMIN_SHELL_CSS, ADMIN_SHELL_JS, SERVICE_WORKER_JS } from './admin/helpers.js';
 import { renderListSection, renderDrawer, renderFormSection, primaryCell, statusPill, valueChip, valueChips, panel, countLabel, pluralise,
          rowActions, toggleCell, panelList, paginationWindow } from './admin/ui.js';
 import { SECTIONS, section as sectionCfg, columnsOf, filtersOf } from './admin/sections.js';
@@ -924,6 +925,31 @@ export default {
       }), { headers: { 'Content-Type': 'application/manifest+json', 'Cache-Control': 'public, max-age=3600' } });
     }
 
+    // The service worker script. Must be served from the root so its default
+    // scope covers the whole admin origin, not just one subpath — and served
+    // early like the manifest and /assets/*, since it's a static string that
+    // needs no D1 read. A short cache (unlike the immutable /assets/* files):
+    // the browser already re-checks a registered SW's URL on every navigation
+    // and treats a byte-for-byte-identical response as "nothing changed", so
+    // there's no install-storm risk from staying short — and a long cache here
+    // would mean a bug fix in this file taking up to a year to reach a device
+    // that already installed the old one.
+    if (path === '/sw.js' && method === 'GET') {
+      return new Response(SERVICE_WORKER_JS, { headers: {
+        'Content-Type': 'text/javascript; charset=utf-8',
+        'Cache-Control': 'public, max-age=300',
+        'Service-Worker-Allowed': '/',
+      }});
+    }
+
+    // The VAPID public key the browser needs as `applicationServerKey` when
+    // subscribing. Public by design — it's not a secret, only the matching
+    // private key (which never leaves the Worker) can actually sign a push.
+    if (path === '/api/push/vapid-public-key' && method === 'GET') {
+      if (!env.VAPID_PUBLIC_KEY) return new Response('Push notifications are not configured.', { status: 501 });
+      return new Response(env.VAPID_PUBLIC_KEY, { headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' } });
+    }
+
     // Reject obviously oversized requests up front. 25MB is a generous ceiling
     // for image/PDF uploads; text-only forms are well under 1MB. Without this,
     // a single malicious POST could push tens of MB into D1 / R2 / memory.
@@ -1007,7 +1033,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-03-1'; // bumped: re-seed untouched page drafts — /give hands off, /ccs no longer seeds its button twice
+    const SCHEMA_VERSION = '2026-08-04-1'; // bumped: push_subscriptions table for web push notifications
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -1547,6 +1573,7 @@ export default {
     try { await env.DB.prepare(DB_INIT_FORM_SUBMISSIONS).run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_form_submissions_status ON form_submissions(status, created_at DESC)').run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_form_submissions_ip ON form_submissions(ip, created_at)').run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_PUSH_SUBSCRIPTIONS).run(); } catch (_) {}
 
     // Performance indexes
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)').run(); } catch (_) {}
@@ -2162,7 +2189,17 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
           token: form.get('form_token'),
           turnstileToken: form.get('cf-turnstile-response'),
         });
-        if (screen.held) return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
+        if (screen.held) {
+          // Held mail is invisible by design (see admin/forms.js) — a push is
+          // what keeps that from also being silent. Never awaited: a push
+          // failure (no subscribers yet, a dead endpoint) must never turn
+          // into a real visitor's submission failing.
+          ctx.waitUntil(pushToAllSubscribers(env, {
+            title: 'Filtered Mail', body: 'A contact form message was held for review.',
+            tag: 'held-mail', url: '/filtered',
+          }));
+          return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
+        }
 
         const result = await sendTransactionalEmail(env, {
           subject: officeSubject('contact', name, screen.suspect),
@@ -2209,7 +2246,13 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
           token: form.get('form_token'),
           turnstileToken: form.get('cf-turnstile-response'),
         });
-        if (screen.held) return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
+        if (screen.held) {
+          ctx.waitUntil(pushToAllSubscribers(env, {
+            title: 'Filtered Mail', body: 'A prayer request was held for review.',
+            tag: 'held-mail', url: '/filtered',
+          }));
+          return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
+        }
 
         const result = await sendTransactionalEmail(env, {
           subject: officeSubject('prayer', name, screen.suspect),
@@ -2556,6 +2599,37 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
     // sidebarShell call.
     let _badgesPromise = null;
     const pageBadges = () => (_badgesPromise ||= badgeCounts(env, currentUser));
+
+    // ── PUSH NOTIFICATIONS: subscribe / unsubscribe ──
+    // Any signed-in account may opt its own browser in — this is a personal
+    // "ring this device" preference, not a permission, and it carries no
+    // content of its own (see the push payloads below, which are all just
+    // "something is waiting, go look"). One row per browser, not per user:
+    // the same person subscribing from a desktop and a phone should get both.
+    if (path === '/api/push/subscribe' && method === 'POST') {
+      try {
+        const sub = await request.json();
+        if (!sub?.endpoint || !sub?.keys?.p256dh || !sub?.keys?.auth) {
+          return new Response(JSON.stringify({ error: 'Invalid subscription' }), { status: 400 });
+        }
+        await env.DB.prepare(
+          `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (?, ?, ?, ?)
+           ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth`
+        ).bind(currentUser.id, sub.endpoint, sub.keys.p256dh, sub.keys.auth).run();
+        return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Could not save subscription' }), { status: 500 });
+      }
+    }
+    if (path === '/api/push/unsubscribe' && method === 'POST') {
+      try {
+        const { endpoint } = await request.json();
+        if (endpoint) await env.DB.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').bind(endpoint).run();
+        return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Could not remove subscription' }), { status: 500 });
+      }
+    }
 
     // ── DASHBOARD (new post-login landing page) ──
     if (path === '/dashboard' && method === 'GET') {

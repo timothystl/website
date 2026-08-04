@@ -206,6 +206,21 @@ export const DB_INIT_FORM_SUBMISSIONS = `CREATE TABLE IF NOT EXISTS form_submiss
   released_by TEXT
 )`;
 
+// One row per browser/device a staff member has said yes to notifications on
+// — not per user, since the same person can enable it on a desktop and a
+// phone and both should ring. `endpoint` (the push service URL the browser
+// handed back) is the natural unique key: it already IS the address a
+// message is sent to, and a second subscribe from the same browser (e.g.
+// after clearing cookies) reuses it rather than double-sending.
+export const DB_INIT_PUSH_SUBSCRIPTIONS = `CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id     INTEGER,
+  endpoint    TEXT NOT NULL UNIQUE,
+  p256dh      TEXT NOT NULL,
+  auth        TEXT NOT NULL,
+  created_at  TEXT DEFAULT (datetime('now'))
+)`;
+
 // ── GYM RENTAL DB TABLES ─────────────────────────────────────
 export const DB_INIT_GYM_GROUPS = `CREATE TABLE IF NOT EXISTS gym_groups (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,
