@@ -1009,9 +1009,10 @@ group('payroll emails its report to the bookkeeper');
   globalThis.fetch = realFetch;
 
   eq(ok1.status, 200, 'with an address it sends');
-  eq((await ok1.json()).to, 'books@example.com', 'and reports where it went');
+  eq((await ok1.json()).to, 'books@example.com, dinger@timothystl.org', 'and reports where it went — Andrew rides along with the bookkeeper');
   eq(sent.length, 1, 'exactly one email');
   eq(sent[0].to[0].email, 'books@example.com', 'to the bookkeeper');
+  eq(sent[0].to[1].email, 'dinger@timothystl.org', 'and a copy to Andrew');
   ok(sent[0].subject.includes('Jul 16'), 'with the period in the subject: ' + sent[0].subject);
   ok(sent[0].htmlContent.includes('$7,630.00'), 'and the combined total in the body');
   ok(sent[0].htmlContent.includes('Approved by dinger'), 'saying it was signed off, and by whom');

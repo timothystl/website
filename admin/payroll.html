@@ -316,6 +316,12 @@ let periodApproval = null;
 let payView = 'entry';
 let payLayout = 'cards';
 let lastFocus = null;
+// Periods that have already asked for a "ready to approve" push this page
+// load. The Worker holds no Supabase credentials of its own (see CLAUDE.md,
+// "The dashboard has no payroll task"), so it can't notice this on its own —
+// this screen is what computes it, and the dedup keeps every hours save from
+// re-firing the same push while somebody is still typing figures in.
+let notifiedReadyPeriods = new Set();
 
 const $ = (id) => document.getElementById(id);
 
@@ -589,6 +595,7 @@ function renderPeriodState() {
     $('entryState').innerHTML = pill('warn', missing.length + (missing.length === 1 ? ' still needs hours' : ' still need hours'));
   } else {
     $('entryState').innerHTML = pill('plain', people ? 'Ready to approve' : 'Nothing to pay');
+    if (people) notifyPayrollReady();
   }
 
   // What the run adds up to, said once, beside the button that signs it off.
@@ -607,6 +614,23 @@ function renderPeriodState() {
   btn.textContent = periodApproval ? 'Take back approval' : 'Approve period';
   btn.classList.toggle('is-done', !!periodApproval);
   btn.disabled = !people;
+}
+
+// Asks the Worker to send the "payroll ready" push, once per period per page
+// load (notifiedReadyPeriods guards re-firing on every keystroke while
+// hours are still being typed in). The Worker holds the real, once-ever
+// dedup — see payroll_ready_notified in tlc-admin-worker.js — since two
+// different staff members' browsers could each notice the same period
+// turning ready and both call this. Never awaited and never surfaced as an
+// error: a push failing must not read as the period itself being wrong.
+function notifyPayrollReady() {
+  const [periodStart, periodEnd] = ($('periodSelect').value || '').split('|');
+  if (!periodStart || !periodEnd || notifiedReadyPeriods.has(periodStart)) return;
+  notifiedReadyPeriods.add(periodStart);
+  fetch('/api/push/payroll-ready', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ periodStart, periodLabel: periodLabel(periodStart, periodEnd) }),
+  }).catch(() => {});
 }
 
 // How many rows this period has. Approving an empty period would be a

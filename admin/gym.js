@@ -5,6 +5,7 @@ import { html, sidebarShell, formatDate, tinymceEditorSection, escapeHtml } from
 import { sendTransactionalEmail } from './email.js';
 import { renderListSection, primaryCell, statusPill } from './ui.js';
 import { section as sectionCfg, columnsOf, filtersOf } from './sections.js';
+import { pushToAllSubscribers } from './webpush.js';
 
 // ── IMAGE HELPERS ───────────────────────────────────────────
 export function extractImageKeys(body, origin) {
@@ -1455,6 +1456,10 @@ function calcTotal() {
             });
           } catch (_) {}
         }
+        if (ctx) ctx.waitUntil(pushToAllSubscribers(env, {
+          title: 'Gym hold requested', body: `${group.name} \u2014 ${formatDate(fields.booking_date)}, ${fmt12h(fields.start_time)}\u2013${fmt12h(fields.end_time)}`,
+          tag: 'gym-hold', url: '/gym-rentals',
+        }));
 
         return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?msg=hold` } });
       }
@@ -1751,6 +1756,10 @@ document.getElementById('cancel-confirm-btn').addEventListener('click', function
               toEmails: [adminEmail],
             });
           } catch (_) {}
+          if (ctx) ctx.waitUntil(pushToAllSubscribers(env, {
+            title: 'Gym hold requested', body: `${group.name} — ${created} session${created===1?'':'s'} requested`,
+            tag: 'gym-hold', url: '/gym-rentals',
+          }));
 
           // Confirm to renter
           if (group.email) {
@@ -1926,6 +1935,10 @@ ${portalHeader}
             toEmails: [adminEmail],
           });
         } catch (_) {}
+        if (ctx) ctx.waitUntil(pushToAllSubscribers(env, {
+          title: 'Recurring gym request', body: `${group.name} — ${DOW_NAMES[dow]}s, ${fmt12h(st)}–${fmt12h(et)}`,
+          tag: 'gym-hold', url: '/gym-rentals/recurring',
+        }));
 
         return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?msg=recurring` } });
       }

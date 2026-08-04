@@ -5,7 +5,7 @@
 // Last modified: 2026-03-27
 
 
-import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS } from './admin/db.js';
+import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS, DB_INIT_PAYROLL_READY_NOTIFIED } from './admin/db.js';
 import { pushToAllSubscribers } from './admin/webpush.js';
 
 // Static pages that can carry self-serve notices (matches the SPA's page ids in public/index.html)
@@ -1033,7 +1033,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-04-1'; // bumped: push_subscriptions table for web push notifications
+    const SCHEMA_VERSION = '2026-08-04-2'; // bumped: payroll_ready_notified table for the payroll-ready push dedup
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -1574,6 +1574,7 @@ export default {
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_form_submissions_status ON form_submissions(status, created_at DESC)').run(); } catch (_) {}
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_form_submissions_ip ON form_submissions(ip, created_at)').run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_PUSH_SUBSCRIPTIONS).run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_PAYROLL_READY_NOTIFIED).run(); } catch (_) {}
 
     // Performance indexes
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)').run(); } catch (_) {}
@@ -2208,6 +2209,13 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
           replyTo: email ? { email, name } : undefined
         });
         if (result.error) return new Response(JSON.stringify({ error: result.error }), { status: 500, headers: corsHeaders });
+        // A delivered message already reaches the office inbox — this push is
+        // just a faster way to notice it than checking email, same reasoning
+        // as every other trigger here (see admin/webpush.js callers).
+        ctx.waitUntil(pushToAllSubscribers(env, {
+          title: 'New message from ' + (name || 'the website'), body: message.slice(0, 150),
+          tag: 'contact-message', url: '/dashboard',
+        }));
         // Confirmation email to the sender. Skipped for anything that scored as
         // suspect: the address is attacker-supplied, so auto-replying to it
         // turns this form into a way to mail someone else's inbox.
@@ -2261,6 +2269,10 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
           replyTo: email ? { email, name } : undefined
         });
         if (result.error) return new Response(JSON.stringify({ error: result.error }), { status: 500, headers: corsHeaders });
+        ctx.waitUntil(pushToAllSubscribers(env, {
+          title: 'New prayer request from ' + (name || 'the website'), body: message.slice(0, 150),
+          tag: 'prayer-message', url: '/dashboard',
+        }));
         // Confirmation email to the sender — suppressed for suspect messages,
         // see the note on the contact route above.
         if (!screen.suspect && email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -3565,6 +3577,41 @@ ${sidebarShell('payroll', currentUser, '', await pageBadges())}
 ${PAYROLL_HTML}`, 'Payroll');
     }
 
+    // A period's hours live in Supabase, which this Worker holds no server-side
+    // credentials for (see "The dashboard has no payroll task" in CLAUDE.md) —
+    // so it cannot notice "all hours are in" on its own the way it notices a
+    // held submission or a gym request. admin/payroll.html already computes
+    // that client-side (it's what turns the status pill to "Ready to approve"),
+    // so it's the one that asks for the push, once per period per page load —
+    // renderPeriodState() in admin/payroll.html is the caller.
+    if (path === '/api/push/payroll-ready' && method === 'POST') {
+      if (!hasPermission(currentUser, 'payroll_manage')) {
+        return new Response(JSON.stringify({ error: 'Access denied.' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+      }
+      let body;
+      try { body = await request.json(); } catch (_) { body = {}; }
+      const periodStart = String(body?.periodStart || '').slice(0, 20);
+      const label = String(body?.periodLabel || 'the current period').slice(0, 80);
+      if (periodStart) {
+        // The INSERT is the dedup: two different staff members' browsers can
+        // each notice the same period turning ready, but only the one whose
+        // INSERT actually lands (doesn't collide on the PRIMARY KEY) sends
+        // the push. A period that was already notified is a silent no-op.
+        let firstToNotice = false;
+        try {
+          await env.DB.prepare('INSERT INTO payroll_ready_notified (period_start) VALUES (?)').bind(periodStart).run();
+          firstToNotice = true;
+        } catch (_) { /* already notified — not an error */ }
+        if (firstToNotice) {
+          ctx.waitUntil(pushToAllSubscribers(env, {
+            title: 'Payroll ready to approve', body: `${label} — all hours are in.`,
+            tag: 'payroll-ready', url: '/payroll',
+          }));
+        }
+      }
+      return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
     // Email the gross-pay report to the bookkeeper. The page posts the figures
     // rather than rendered HTML, and the table is built here with everything
     // escaped — a staff name must not be able to become markup in something
@@ -3633,10 +3680,16 @@ ${PAYROLL_HTML}`, 'Payroll');
 
       // sendTransactionalEmail RETURNS {error}, it does not throw — a bare
       // try/catch here would report success on every failure.
+      // Andrew's own address always rides along with the bookkeeper's — he
+      // asked for a copy of every report he sends, not just the bookkeeper's
+      // copy. Deduped in case it's ever also the configured bookkeeper address.
+      const recipients = Array.from(new Set(
+        [...to.split(','), 'dinger@timothystl.org'].map((x) => x.trim().toLowerCase()).filter(Boolean)
+      ));
       let sent;
       try {
         sent = await sendTransactionalEmail(env, {
-          toEmails: to.split(',').map((x) => x.trim()).filter(Boolean),
+          toEmails: recipients,
           subject: `Payroll — ${label}`,
           htmlContent: emailHtml,
         });
@@ -3648,8 +3701,8 @@ ${PAYROLL_HTML}`, 'Payroll');
           status: 502, headers: { 'Content-Type': 'application/json' },
         });
       }
-      await logAudit(env.DB, currentUser, 'email', 'payroll', String(body.periodStart || ''), `Payroll ${label}`, null, { to, total: body.total });
-      return new Response(JSON.stringify({ ok: true, to }), { headers: { 'Content-Type': 'application/json' } });
+      await logAudit(env.DB, currentUser, 'email', 'payroll', String(body.periodStart || ''), `Payroll ${label}`, null, { to: recipients.join(', '), total: body.total });
+      return new Response(JSON.stringify({ ok: true, to: recipients.join(', ') }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     // ── GYM ADMIN ROUTES (auth + gym_manage) ───────────────────
