@@ -5,7 +5,7 @@ import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, SIDEBAR_JS, TOGGLE_WORD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 
-export const VERSION = 'v4.18.1'; // minor: the two giving pages split jobs — /give explains, give.timothystl.org transacts
+export const VERSION = 'v4.19.0'; // minor: the admin is a PWA now — installable, with web push for held mail
 
 // ── THE SHARED SHELL CSS/JS, EXTERNALISED ───────────────────────
 // This used to be inlined into every admin response inside <style>/<script>
@@ -219,11 +219,11 @@ body{display:flex;align-items:stretch;}
    disagree exactly when the content overflows, which is when it shows. */
 .sidebar-groups{flex:1;min-height:0;overflow-y:auto;}
 .sidebar-footer{padding:14px 20px 18px;border-top:1px solid rgba(237,242,247,.12);display:flex;flex-direction:column;gap:8px;flex-shrink:0;}
-.sidebar-footer a{font-family:var(--sans);font-size:11.5px;font-weight:600;color:#8397AF;text-decoration:none;}
+.sidebar-footer a,.sidebar-footer button{font-family:var(--sans);font-size:11.5px;font-weight:600;color:#8397AF;text-decoration:none;background:none;border:0;padding:0;text-align:left;cursor:pointer;}
 /* ⚠ :hover is ABOVE :last-child on purpose. They tie on specificity, so
    source order decides — and today the last footer link keeps its gold on
    hover rather than turning white. Swapping these lines changes that. */
-.sidebar-footer a:hover{color:#fff;}
+.sidebar-footer a:hover,.sidebar-footer button:hover{color:#fff;}
 .sidebar-footer a:last-child{font-size:12.5px;color:var(--tlc-gold);}
 .sidebar-signout{color:var(--tlc-gold) !important;}
 
@@ -339,6 +339,110 @@ ${TOAST_CSS}
 ${CMDK_CSS}
 `;
 
+// ── PUSH NOTIFICATIONS ───────────────────────────────────────
+// Registers the admin's service worker (installability + push delivery) and
+// drives the sidebar's "Notifications" toggle. The button starts hidden
+// (see sidebarShell) — it only appears once the browser has proven it can
+// actually do this (Push API + a secure context), so nobody on an
+// unsupported browser sees a control that would just fail silently.
+const PUSH_JS = `
+(function(){
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('/sw.js').catch(function(){});
+  if (!('PushManager' in window)) return;
+
+  var btn = document.getElementById('tlc-push-toggle');
+  if (!btn) return;
+
+  function b64ToUint8Array(b64) {
+    var pad = '='.repeat((4 - b64.length % 4) % 4);
+    var base64 = (b64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+    var raw = atob(base64);
+    var out = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+
+  function setLabel(subscribed) {
+    btn.textContent = subscribed ? 'Notifications: On' : 'Notifications: Off';
+    btn.setAttribute('aria-pressed', subscribed ? 'true' : 'false');
+  }
+
+  navigator.serviceWorker.ready.then(function(reg) {
+    return reg.pushManager.getSubscription();
+  }).then(function(sub) {
+    btn.hidden = false;
+    setLabel(!!sub);
+  }).catch(function(){});
+
+  btn.addEventListener('click', function() {
+    btn.disabled = true;
+    navigator.serviceWorker.ready.then(function(reg) {
+      return reg.pushManager.getSubscription().then(function(existing) {
+        if (existing) {
+          return existing.unsubscribe().then(function() {
+            return fetch('/api/push/unsubscribe', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ endpoint: existing.endpoint })
+            });
+          }).then(function() { setLabel(false); tlcToast('Notifications off · this device will no longer ring'); });
+        }
+        return fetch('/api/push/vapid-public-key').then(function(r) { return r.text(); }).then(function(key) {
+          return reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: b64ToUint8Array(key)
+          });
+        }).then(function(newSub) {
+          return fetch('/api/push/subscribe', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newSub.toJSON())
+          });
+        }).then(function() { setLabel(true); tlcToast('Notifications on · held mail will ring this device'); });
+      });
+    }).catch(function() {
+      tlcToast('Could not change notifications — check the browser prompt');
+    }).finally(function() { btn.disabled = false; });
+  });
+})();
+`;
+
+// ── SERVICE WORKER ───────────────────────────────────────────
+// Deliberately does NOT cache the shell or intercept fetch — everything the
+// admin shows (a queue of gym holds, a payroll period, held mail) is exactly
+// as stale as the last successful request, and serving a cached copy while
+// offline would let staff act on numbers that are already wrong. Its whole
+// job is the two things a PWA actually needs a worker registered for:
+// installability, and being addressable for a push event.
+export const SERVICE_WORKER_JS = `
+self.addEventListener('install', function(event){ self.skipWaiting(); });
+self.addEventListener('activate', function(event){ event.waitUntil(self.clients.claim()); });
+
+self.addEventListener('push', function(event){
+  var data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (e) {}
+  var title = data.title || 'Timothy Lutheran Admin';
+  var url = data.url || '/dashboard';
+  event.waitUntil(self.registration.showNotification(title, {
+    body: data.body || '',
+    icon: 'https://timothystl.org/images/android-chrome-192x192.png',
+    badge: 'https://timothystl.org/images/android-chrome-192x192.png',
+    tag: data.tag || undefined,
+    data: { url: url }
+  }));
+});
+
+self.addEventListener('notificationclick', function(event){
+  event.notification.close();
+  var url = (event.notification.data && event.notification.data.url) || '/dashboard';
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(list){
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].url.indexOf(url) !== -1 && 'focus' in list[i]) return list[i].focus();
+    }
+    if (self.clients.openWindow) return self.clients.openWindow(url);
+  }));
+});
+`;
+
 export const ADMIN_SHELL_JS = `
 function toggleSchedule(id){var row=document.getElementById('sched-row-'+id);if(row)row.style.display=row.style.display==='none'?'':'none';}
 // Converts the datetime-local field to an ISO instant using the browser's own
@@ -359,6 +463,7 @@ ${SIDEBAR_JS}
 ${TOGGLE_WORD_JS}
 ${TOAST_JS}
 ${CMDK_JS}
+${PUSH_JS}
 `;
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
@@ -373,6 +478,10 @@ export function html(body, title = 'TLC Admin', extraHead = '') {
 <link rel="icon" href="https://timothystl.org/images/favicon-32x32.png" type="image/png" sizes="32x32">
 <link rel="apple-touch-icon" href="https://timothystl.org/apple-touch-icon.png" sizes="180x180">
 <meta name="theme-color" content="#12243D">
+<!-- iOS ignores the manifest for "Add to Home Screen" and reads these instead. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="TLC Admin">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600&family=Source+Sans+3:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -551,6 +660,7 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}, crum
   ${setupItems ? `<div class="sidebar-group"><div class="sidebar-group-label">${escapeHtml(GROUPS.setup)}</div>${setupItems}</div>` : ''}
   </div>
   <div class="sidebar-footer">
+    <button type="button" id="tlc-push-toggle" hidden>Notifications</button>
     <a href="#" id="tlc-k-open">⌘K searches every section</a>
     <a href="/logout" class="sidebar-signout">Sign out</a>
   </div>

@@ -273,6 +273,77 @@ matches *both* (`class="btn"` and `data-give-link`). The class pass skips
 `data-give-link` for that reason. Remove that guard and `/ccs` seeds its button
 twice, once with a hardcoded Tithe.ly URL.
 
+### The admin is a PWA, with web push (added 2026-08-04)
+
+`admin.timothystl.org` is installable — "Add to Home Screen" / "Install
+admin.timothystl.org" now actually does something, on desktop Chrome/Edge and
+on Android and iOS. Two pieces:
+
+- **The manifest already existed** (`/site.webmanifest`, served from
+  `tlc-admin-worker.js`) but nothing registered a service worker, and Chrome's
+  installability check wants one. `admin/helpers.js` now exports
+  `SERVICE_WORKER_JS`, served at `/sw.js` (root scope, so it covers the whole
+  origin — a worker registered at `/gym-rentals/sw.js` would only ever control
+  `/gym-rentals/*`). **It deliberately does not cache the shell or intercept
+  `fetch`.** Everything this admin shows — a gym hold queue, a payroll period,
+  held mail — is only useful as fresh as the last request; serving a cached
+  copy while offline would let staff act on numbers that are already wrong.
+  Its only two jobs are the ones a PWA actually needs a worker registered for:
+  installability, and being addressable for a `push` event. iOS ignores the
+  manifest for "Add to Home Screen" and reads `apple-mobile-web-app-*` meta
+  tags instead, so those are in `html()` too.
+- **The "Notifications" toggle** lives in the sidebar footer, hidden until the
+  client-side `PUSH_JS` (`admin/helpers.js`) confirms the browser actually has
+  `PushManager` — nobody on an unsupported browser sees a control that would
+  just fail. Clicking it subscribes via the browser's own Push API and POSTs
+  the subscription to `POST /api/push/subscribe`, stored in
+  `push_subscriptions` (`admin/db.js`) keyed on `endpoint`, not on the user —
+  the same person subscribing from a desktop and a phone should get both
+  rung, not just the second one they registered.
+
+**Sending a push means implementing RFC 8291 (aes128gcm) and RFC 8292 (VAPID)
+by hand**, in `admin/webpush.js` — Cloudflare Workers has no room for the
+`web-push` npm package, which shells out to Node APIs Workers doesn't have.
+The derivation (HKDF info strings, the `salt‖rs‖idlen‖keyid` header layout,
+per-record nonce math) is copied from the actual `web-push`/`http_ece`
+reference implementation rather than reconstructed from memory, specifically
+*because* a single wrong byte in an HKDF info string produces a push that
+silently never decrypts on the device — there is no error message, no failed
+request, nothing to grep for. **`admin/webpush.test.mjs` is the check that
+matters**: it encrypts a payload with our code, then decrypts the raw bytes
+back with an independent implementation built on Node's `crypto` module
+(different primitives, same spec) and asserts the plaintext round-trips —
+proof the header layout and key derivation agree with themselves, which is
+what a live device would also need to be true. Run: `node admin/webpush.js`
+is not runnable directly (it's WebCrypto, browser/Workers-only); run
+`node admin/webpush.test.mjs`.
+
+- **One trigger exists today: held mail.** `screenSubmission()` (see "Form
+  Spam Screening" below) already makes a held contact/prayer submission
+  invisible by design — the point of that design is that the Dashboard's
+  "Needs your attention" worklist is what keeps it from being *silently*
+  invisible. A push is the same idea for whoever isn't staring at the
+  dashboard: `/api/contact` and `/api/prayer` call
+  `pushToAllSubscribers(env, {...})` inside `ctx.waitUntil()` — never
+  `await`ed, because a push failure (no one subscribed yet, a dead endpoint)
+  must never turn into a real visitor's submission failing. A subscription
+  the push service reports as gone (404/410) is deleted on the spot rather
+  than retried forever.
+- **Requires a manual step outside this repo, like Turnstile and the ChMS
+  intake key before it**: `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` must be
+  set as Worker secrets (`wrangler secret put VAPID_PUBLIC_KEY --name
+  tlc-newsletter-admin`, same for the private key) — until both are set,
+  `/api/push/vapid-public-key` answers 501 and the sidebar's toggle would
+  subscribe browsers to nothing. **Not committed here** — Andrew has the
+  actual generated keypair from the PR that added this.
+- **Other places a push would make sense, not wired up yet**: a new gym hold
+  awaiting review, a payroll period ready to approve. Left for a future pass
+  once the office has actually used the held-mail push for a while — wiring a
+  second trigger is a few lines once the infrastructure above exists; picking
+  the *right* second and third triggers is worth waiting to see which one
+  Andrew actually reaches for the dashboard to check instead of a phone
+  buzzing.
+
 ### Form Spam Screening (added 2026-07-31)
 
 The public contact / prayer / newsletter forms had one defence — a hidden
