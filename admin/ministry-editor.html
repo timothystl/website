@@ -1309,6 +1309,17 @@ function inspectorSections(b, d) {
       '</div><span class="ed-note">A coloured hairline across the top of every card in this grid.</span></div>';
   }
 
+  // 1b. Alignment for everything else that has one — Give, Text, Text+photo,
+  // Callout, Notice bar, Signup form, Newsletter. Card grid's own Alignment
+  // chips above are unaffected; this is the same control, offered wherever
+  // d.align says a block type can use it.
+  if (d.align && b.type !== 'cardgrid') {
+    out += '<div class="ed-sec"><span class="ed-lab">Alignment</span><div class="ed-chips">' +
+      chip('align', 'left', 'Left', b.align !== 'center') +
+      chip('align', 'center', 'Centre', b.align === 'center') +
+      '</div></div>';
+  }
+
   // 2 + 3. Photo position and column split
   if (b.type === 'textphoto') {
     out += '<div class="ed-sec"><span class="ed-lab">Photo position</span><div class="ed-chips">' +

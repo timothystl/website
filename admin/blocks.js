@@ -99,7 +99,7 @@ export const BLOCK_DEFS = {
   alert: {
     label: 'Notice bar', glyph: '!',
     defaults: { body: 'Something everyone needs to know.', spaceAbove: 0, spaceBelow: 16, url: '' },
-    url: true, urlLabel: 'Where "Details" goes (optional)',
+    url: true, urlLabel: 'Where "Details" goes (optional)', richBody: true, align: true,
   },
   slideshow: {
     label: 'Welcome banner', glyph: '❏',
@@ -156,12 +156,12 @@ export const BLOCK_DEFS = {
   text: {
     label: 'Rich text', glyph: '¶',
     defaults: { body: '<p>Tell people what this ministry is and who it is for.</p>', spaceAbove: 8, spaceBelow: 8 },
-    richBody: true,
+    richBody: true, align: true,
   },
   textphoto: {
     label: 'Text + photo', glyph: '◲',
     defaults: { title: 'A heading', body: '<p>A short paragraph beside the photo.</p>', spaceAbove: 24, spaceBelow: 24 },
-    richBody: true, photo: true,
+    richBody: true, photo: true, align: true,
   },
   columns: {
     label: 'Columns', glyph: '▥',
@@ -251,7 +251,7 @@ export const BLOCK_DEFS = {
   callout: {
     label: 'Callout box', glyph: '❢',
     defaults: { title: 'Please note', body: '<p>Something people need to know.</p>', spaceAbove: 24, spaceBelow: 24 },
-    richBody: true, infoCard: true,
+    richBody: true, infoCard: true, align: true,
   },
   buttons: {
     label: 'Button bar', glyph: '⬒',
@@ -274,18 +274,36 @@ export const BLOCK_DEFS = {
   form: {
     label: 'Signup form', glyph: '◉',
     defaults: { title: 'Sign up', body: 'Fill this in and the office will be in touch.', spaceAbove: 24, spaceBelow: 24, url: '' },
-    url: true, urlLabel: 'Google Form embed URL',
+    url: true, urlLabel: 'Google Form embed URL', richBody: true, align: true,
   },
   newsletter: {
     label: 'Newsletter', glyph: '✉',
     defaults: { title: 'Get news by email', body: 'A short note each month.', spaceAbove: 24, spaceBelow: 24 },
+    richBody: true, align: true,
   },
   give: {
     label: 'Give', glyph: '♡',
     defaults: { title: 'Support this ministry', body: 'Gifts go directly toward this work.', spaceAbove: 24, spaceBelow: 24, url: 'https://give.timothystl.org' },
-    url: true, urlLabel: 'Giving link',
+    url: true, urlLabel: 'Giving link', richBody: true, align: true,
   },
 };
+
+// Which block types opt into the shared "align" chip and .tlcb--center CSS
+// (below) is a def-level flag, `align: true`, same idiom as `richBody`/
+// `photo`/`url` — one source of truth, not a second list to keep in step.
+// The seven that have it are a flex column — a heading, some prose, and
+// (for four of them) a row of buttons/links — close enough in shape to
+// Card grid's own centering (its own long-standing, separate mechanism,
+// untouched) that one shared rule covers all of them. Everything else is
+// either self-filling (Sermon, News, Staff, Service times, Map, Posts,
+// Events — the layout is the data's, not typed prose), already centered by
+// design (Hero), a grid of its own (Columns, FAQ, Times, Partners, Buttons,
+// Quick links — centering a grid's cells and centering the grid itself are
+// different problems, each needing its own bespoke CSS, not this shared
+// rule), or has no text to center at all (Spacer).
+export const CENTER_ALIGNABLE_TYPES = new Set(
+  Object.keys(BLOCK_DEFS).filter((k) => BLOCK_DEFS[k].align)
+);
 
 // The design's own four groups, in its order. Structure leads because that is
 // what somebody reaches for first on an empty page — the banner and the shape
@@ -756,6 +774,21 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-cg--center{text-align:center;}
 .tlcb-cg--center .tlcb-cg-img img{margin:0 auto;}
 .tlcb-cg--center .tlcb-cg-intro{margin-left:auto;margin-right:auto;}
+/* CENTER_ALIGNABLE_TYPES's shared rule (see its own comment for which seven
+   block types this is and why). text-align inherits from .tlcb--center down
+   into .tlcb-prose/.tlcb-give-note/etc. on its own — nothing in that chain
+   resets it — so most of this is only the extra rule each type needs for
+   whatever ISN'T plain text: a flex action row (justify-content doesn't
+   inherit), or a flex column whose own align-items would otherwise leave
+   the boxes hugging the left edge even with their own text centered. */
+.tlcb--center.tlcb--give,.tlcb--center.tlcb--text,.tlcb--center.tlcb--textphoto,
+.tlcb--center.tlcb--callout,.tlcb--center.tlcb--form,.tlcb--center.tlcb--newsletter{text-align:center;}
+.tlcb--center .tlcb-inline{justify-content:center;}
+.tlcb--center.tlcb--callout .tlcb-band-text{align-items:center;}
+/* Alert is a one-line horizontal notice row, not a heading+prose column like
+   the other six — text-align has nothing to act on, so "centered" here means
+   centering the row itself within the block's width. */
+.tlcb--center.tlcb--alert .tlcb-alert{justify-content:center;}
 .tlcb-media{order:var(--tlcb-media-order,0);min-height:150px;border-radius:8px;background:#E4EAF2 center/cover no-repeat;
   display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;}
 .tlcb-media img{width:100%;height:100%;object-fit:cover;display:block;border-radius:8px;}
@@ -1029,7 +1062,7 @@ export function blocksClientConfig() {
       items: !!d.items, itemFields: d.itemFields || [], itemLabel: d.itemLabel || 'Row',
       auto: d.auto || '', autoNote: d.autoNote || '', autoCount: d.auto ? d.autoCount !== false : false,
       itemPlaceholders: d.itemPlaceholders || {}, richItemFields: d.richItemFields || [],
-      itemUrlFields: d.itemUrlFields || [], richBody: !!d.richBody,
+      itemUrlFields: d.itemUrlFields || [], richBody: !!d.richBody, align: !!d.align,
       gallery: !!d.gallery, feed: d.feed || '', infoCard: !!d.infoCard,
       defaults: d.defaults || {}, defaultItems: d.defaultItems || [],
     };
@@ -1290,7 +1323,7 @@ function renderInner(b, opts) {
       ? `<a class="tlcb-alert-link" href="${esc(href)}">Details</a>`
       : (opts.editing && href ? `<span class="tlcb-alert-link">Details</span>` : '');
     return `<div class="tlcb-alert"><span class="tlcb-alert-tag">Notice</span>
-      ${field(opts, b, 'body', 'span', 'tlcb-alert-body', esc(b.body || ''), ' data-ph="One line everyone needs to read"')}
+      ${field(opts, b, 'body', 'div', 'tlcb-alert-body', b.body || '', ' data-ph="One line everyone needs to read"', true)}
       ${link}</div>`;
   }
 
@@ -1611,7 +1644,7 @@ function renderInner(b, opts) {
       : `<div class="tlcb-stack" style="gap:9px"><span class="tlcb-field"></span><span class="tlcb-field"></span>
           <span class="tlcb-btn" style="align-self:flex-start;background:#2E7EA6;border-color:#2E7EA6;color:#fff">Sign up</span>
           <span class="tlcb-note">${src ? 'Form embed' : 'Paste a Google Form URL in the panel on the right.'}</span></div>`;
-    return `<div class="tlcb-panel tlcb-panel--form">${renderHead(opts, b)}${field(opts, b, 'body', 'div', 'tlcb-prose', esc(b.body || ''), ' data-ph="A line of introduction"')}${inner}</div>`;
+    return `<div class="tlcb-panel tlcb-panel--form">${renderHead(opts, b)}${renderBody(opts, b, def)}${inner}</div>`;
   }
 
   if (t === 'newsletter') {
@@ -1620,7 +1653,7 @@ function renderInner(b, opts) {
       : `<form class="tlcb-inline" method="POST" action="https://admin.timothystl.org/api/subscribe" target="_blank">
           <input class="tlcb-field" type="email" name="email" placeholder="you@email.com" required aria-label="Email address">
           <button class="tlcb-btn" type="submit">Subscribe</button></form>`;
-    return `<div class="tlcb-panel">${renderHead(opts, b)}${field(opts, b, 'body', 'div', 'tlcb-prose', esc(b.body || ''), ' data-ph="A line of introduction"')}${form}</div>`;
+    return `<div class="tlcb-panel">${renderHead(opts, b)}${renderBody(opts, b, def)}${form}</div>`;
   }
 
   if (t === 'give') {
@@ -1632,7 +1665,7 @@ function renderInner(b, opts) {
       ? `<span class="tlcb-chip tlcb-chip--go">Give now</span>`
       : `<a class="tlcb-chip tlcb-chip--go" href="${esc(href)}" target="_blank" rel="noopener noreferrer">Give now</a>`;
     return `<div class="tlcb-give">${renderHead(opts, b)}
-      ${field(opts, b, 'body', 'div', 'tlcb-give-note', esc(b.body || ''), ' data-ph="Why it matters"')}
+      ${field(opts, b, 'body', 'div', 'tlcb-give-note', b.body || '', ' data-ph="Why it matters"', true)}
       <div class="tlcb-inline">${chip('$25', 2500)}${chip('$100', 10000)}${go}</div>
     </div>`;
   }
@@ -1646,6 +1679,13 @@ export function renderBlock(b, opts = {}) {
   if (!def) return '';
   const classes = ['tlcb', 'tlcb--' + b.type];
   if (b.hidden) classes.push('tlcb-hide-phone');
+  // Card grid has its own long-standing centering mechanism (tlcb-cg--center,
+  // appended in its own render branch below) — untouched. These seven are a
+  // second, later set of block types that share one shape (a heading, some
+  // prose, and an optional row of buttons/links), so one shared class here
+  // is enough for all of them rather than repeating the append in each
+  // branch — CENTER_ALIGNABLE_TYPES is the one place that list lives.
+  if (CENTER_ALIGNABLE_TYPES.has(b.type) && b.align === 'center') classes.push('tlcb--center');
   const attrs = opts.editing
     ? ` data-id="${esc(b.id)}" data-type="${esc(b.type)}" tabindex="0" role="group"` +
       ` aria-label="${esc(def.label)} block${opts.total ? ', position ' + (opts.index + 1) + ' of ' + opts.total : ''}"`

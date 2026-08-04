@@ -1843,6 +1843,18 @@ group('per-screen, part two');
   // "No emoji anywhere in the admin chrome."
   ok(!news.includes('\u{1F4F0}'), 'the newspaper emoji is gone — icons are typographic glyphs');
 
+  // /api/news: the public feed sorts newest-date-first now, matching the
+  // admin list above rather than the old soonest-upcoming-first order — a
+  // freshly published post with a future event_date used to sit at the
+  // bottom instead of leading.
+  db.prepare("INSERT INTO news_items (id,title,summary,publish_date,event_date,expire_date,pinned) VALUES (3,'Old announcement','s',?,NULL,?,0)").run('2026-01-01', '2099-01-01');
+  db.prepare("INSERT INTO news_items (id,title,summary,publish_date,event_date,expire_date,pinned) VALUES (4,'Upcoming market','s',?,?,?,0)").run(today, '2026-12-01', '2099-01-01');
+  const apiNews = await (await call(env, '/api/news')).json();
+  const titles = apiNews.map((r) => r.title);
+  ok(titles.indexOf('Upcoming market') < titles.indexOf('Old announcement'),
+    'the post with the later date leads, event_date and publish_date compared on the same footing: ' + titles.join(', '));
+  ok(titles.indexOf('Pinned post') < titles.indexOf('Upcoming market'), 'pinned still always leads everything else');
+
   // 20-audit: a read-only drawer. No save, no delete; fields are sand-filled
   // rather than greyed, because grey text reads as broken.
   db.prepare("INSERT INTO audit_log (user_id,username,action,entity_type,entity_id,entity_label,before_state,after_state,created_at) VALUES (NULL,'office','update','news_item','1','Pinned post','{\"title\":\"Old\"}','{\"title\":\"New\"}',?)").run(now);
