@@ -3,6 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>
+// Browsers restore the page's last scroll position on a plain reload — so a
+// refresh after scrolling down first paints wherever you left off (the MDO
+// strip, a ministry card, whatever), then showPage()'s own window.scrollTo(0,0)
+// snaps it back to the top a moment later. That flash is what looks like a
+// glimpse of stray content; it isn't — it's real, current copy on the page,
+// just seen for a frame before the reset. Turning restoration off here, before
+// the browser has applied it, is the standard fix (this must run this early —
+// doing it from the main script further down is too late).
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+</script>
 <title>Timothy Lutheran Church — St. Louis, MO</title>
 <meta name="description" content="Timothy Lutheran Church is a congregation alive to the Gospel of Jesus Christ in Lindenwood Park, South City St. Louis. Come as you are — two Sunday services, Wednesday worship, and a community open to all.">
 <meta name="keywords" content="Lutheran church St. Louis, LCMS church St. Louis, Lutheran church Lindenwood Park, church near me St. Louis, Mother's Day Out St. Louis, Sunday school St. Louis, food pantry St. Louis, Christmas market St. Louis">
