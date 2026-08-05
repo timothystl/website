@@ -64,22 +64,28 @@ p{margin-bottom:16px;line-height:1.75;}
 p:last-child{margin-bottom:0;}
 
 /* NAV */
-.nav{position:sticky;top:0;z-index:100;background:var(--sage);border-bottom:3px solid var(--amber);}
+/* The header's colours, the logo and the wording are editable from the admin
+   (Menu -> Appearance). Every value below is `var(--nav-*, <what shipped>)`,
+   so the fallback IS the site as it has always looked: if admin.timothystl.org
+   is unreachable, or nobody has ever opened that screen, the header renders
+   exactly as it did before any of this existed. See admin/appearance.js. */
+.nav{position:sticky;top:0;z-index:100;background:var(--nav-bar,var(--sage));border-bottom:3px solid var(--nav-rule,var(--amber));}
 .nav-inner{max-width:1080px;margin:0 auto;padding:0 28px;height:64px;display:flex;align-items:center;justify-content:space-between;}
 .nav-brand{display:flex;align-items:center;gap:12px;cursor:pointer;background:none;border:none;padding:0;font:inherit;text-align:left;}
 .nav-logo-img{width:44px;height:44px;border-radius:50%;flex-shrink:0;object-fit:contain;background:white;padding:3px;}
-.nav-brand-name{font-family:var(--sans);font-size:14px;font-weight:800;color:white;display:block;}
+.nav-logo-img.is-square{border-radius:var(--r-sm);}
+.nav-brand-name{font-family:var(--sans);font-size:14px;font-weight:800;color:var(--nav-ink,white);display:block;}
 .nav-brand-sub{font-family:var(--sans);font-size:10px;font-weight:600;color:var(--honey);display:block;letter-spacing:.04em;}
 .nav-links{display:flex;align-items:center;gap:4px;list-style:none;}
-.nav-links button,.nav-links a{font-family:var(--font-ui);font-size:13px;font-weight:700;color:rgba(255,255,255,.85);background:none;border:none;cursor:pointer;padding:6px 10px;border-radius:var(--r-sm);transition:background .15s,color .15s;text-decoration:none;}
-.nav-links button:hover,.nav-links a:hover{background:rgba(255,255,255,.12);color:white;}
-.nav-cta{background:var(--amber) !important;color:white !important;padding:7px 16px !important;font-weight:800 !important;}
-.nav-cta:hover{background:var(--amber-dk) !important;color:white !important;}
-.nav-toggle{display:none;background:none;border:none;cursor:pointer;color:white;font-size:22px;padding:8px;}
-.nav-mobile{display:none;flex-direction:column;background:var(--sage);padding:12px 28px 20px;border-bottom:3px solid var(--amber);}
+.nav-links button,.nav-links a{font-family:var(--font-ui);font-size:13px;font-weight:700;color:var(--nav-ink,white);opacity:.85;background:none;border:none;cursor:pointer;padding:6px 10px;border-radius:var(--r-sm);transition:background .15s,color .15s;text-decoration:none;}
+.nav-links button:hover,.nav-links a:hover{background:rgba(255,255,255,.12);opacity:1;}
+.nav-cta{background:var(--nav-cta,var(--amber)) !important;color:var(--nav-cta-ink,white) !important;opacity:1 !important;padding:7px 16px !important;font-weight:800 !important;}
+.nav-cta:hover{filter:brightness(.92);}
+.nav-toggle{display:none;background:none;border:none;cursor:pointer;color:var(--nav-ink,white);font-size:22px;padding:8px;}
+.nav-mobile{display:none;flex-direction:column;background:var(--nav-bar,var(--sage));padding:12px 28px 20px;border-bottom:3px solid var(--nav-rule,var(--amber));}
 .nav-mobile.open{display:flex;}
-.nav-mobile button,.nav-mobile a{font-family:var(--font-ui);font-size:14px;font-weight:700;color:rgba(255,255,255,.85);background:none;border:none;cursor:pointer;padding:10px 0;text-align:left;border-bottom:1px solid rgba(255,255,255,.1);text-decoration:none;}
-.nav-mobile button:hover,.nav-mobile a:hover{color:white;}
+.nav-mobile button,.nav-mobile a{font-family:var(--font-ui);font-size:14px;font-weight:700;color:var(--nav-ink,white);opacity:.85;background:none;border:none;cursor:pointer;padding:10px 0;text-align:left;border-bottom:1px solid rgba(255,255,255,.1);text-decoration:none;}
+.nav-mobile button:hover,.nav-mobile a:hover{opacity:1;}
 
 /* BUTTONS */
 .btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--font-ui);font-size:14px;font-weight:700;padding:12px 26px;border-radius:var(--r-sm);border:none;cursor:pointer;text-decoration:none;transition:transform .15s,background .2s;line-height:1;}

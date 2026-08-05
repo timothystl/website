@@ -615,6 +615,21 @@ function renderField(f) {
         </label>`).join('')
       }</div>${hint}</div>`;
 
+    // A colour is picked from the site's own palette, never typed. See the note
+    // at the top of admin/appearance.js for why there is no hex field: the nav
+    // text is light and is not editable, so a free value is one paste away
+    // from an unreadable header on every page of the site at once.
+    //
+    // The swatch shows the colour AND names it, because "the third one" is not
+    // something anyone can say to a colleague over the phone.
+    case 'swatch':
+      return `<div class="tlc-field">${label}<div class="tlc-sw" role="radiogroup"${f.label ? ` aria-label="${esc(f.label)}"` : ''}>${
+        (f.options || []).map((o) => `<label>
+          <input type="radio" name="${esc(f.name)}" value="${esc(o.value)}"${String(o.value) === String(f.value) ? ' checked' : ''}>
+          <span><i style="background:${esc(o.colour)};" aria-hidden="true"></i>${esc(o.label)}</span>
+        </label>`).join('')
+      }</div>${hint}</div>`;
+
     case 'choice':
       return `<div class="tlc-field">${label}<select id="${id}" name="${esc(f.name)}">${
         (f.options || []).map((o) => `<option value="${esc(o.value)}"${String(o.value) === String(f.value) ? ' selected' : ''}>${esc(o.label)}</option>`).join('')

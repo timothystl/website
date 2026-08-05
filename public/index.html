@@ -1815,12 +1815,19 @@ if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 </div>
 
 <!-- FOOTER -->
-<!-- ── NEWSLETTER SIGNUP ── -->
-<section style="background:var(--steel);padding:56px 28px;">
+<!-- ── NEWSLETTER SIGNUP ──
+     ⚠ This sits OUTSIDE every page div, so it renders on all of them — it is
+     site-wide chrome like the footer, not a section of the homepage. It has
+     been described as "the homepage newsletter block" and it is not one, which
+     matters because converting the homepage to blocks would not reach it.
+     Its colour, wording and whether it appears at all are edited in the admin
+     under Menu → Appearance; what is written below is the fallback, shown
+     when admin.timothystl.org cannot be reached. See admin/appearance.js. -->
+<section id="newsletter-band" style="background:var(--steel);padding:56px 28px;">
   <div style="max-width:640px;margin:0 auto;text-align:center;">
-    <div class="eyebrow eyebrow--light">Stay Connected</div>
-    <h2 style="color:white;margin-bottom:10px;">Get our weekly newsletter</h2>
-    <p style="color:rgba(255,255,255,.72);font-size:16px;margin-bottom:32px;">News, upcoming events, and a word from Pastor Dinger — delivered to your inbox each week.</p>
+    <div class="eyebrow eyebrow--light" id="newsletter-band-eyebrow">Stay Connected</div>
+    <h2 style="color:white;margin-bottom:10px;" id="newsletter-band-heading">Get our weekly newsletter</h2>
+    <p style="color:rgba(255,255,255,.72);font-size:16px;margin-bottom:32px;" id="newsletter-band-body">News, upcoming events, and a word from Pastor Dinger — delivered to your inbox each week.</p>
     <div id="newsletter-signup-wrap">
       <form id="newsletter-signup-form" onsubmit="handleNewsletterSignup(event)" style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
         <input type="text" name="name" placeholder="Your name (optional)" class="form-input" style="flex:1;min-width:160px;max-width:220px;background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.25);color:white;" autocomplete="given-name">
@@ -2608,6 +2615,7 @@ function loadSitePages() {
       if (d.css && !document.getElementById('tlcb-css')) document.head.insertAdjacentHTML('beforeend', d.css);
       buildNav(d.pages, d.menu);
       fillFooter(d.details);
+      applyAppearance(d.details && d.details.appearance);
       return d;
     })
     .catch(function () { return null; });
@@ -2626,6 +2634,63 @@ function loadSitePages() {
 async function tlcEnsureBlockCss() {
   if (document.getElementById('tlcb-css')) return;
   await loadSitePages();
+}
+
+// ── THE HEADER AND THE NEWSLETTER BAND ───────────────────────
+// The two parts of the site that appear on every page, so neither can be a
+// block on any one page. They are edited in the admin under Menu → Appearance
+// and arrive here already resolved to real colours — the palette lives in
+// admin/appearance.js and deliberately has no copy on this side.
+//
+// Everything here is an override of markup that is already correct. If this
+// never runs — the admin is unreachable, the fetch fails, nobody has ever
+// opened that screen — the header and the band render exactly as they shipped.
+// That is why the CSS is written as `var(--nav-bar, var(--sage))` rather than
+// as a variable the page has to define before it looks right.
+//
+// Only the PUBLISHED record ever reaches this function; the draft stays in the
+// admin. See the note on the two settings keys in tlc-admin-worker.js.
+function applyAppearance(a) {
+  if (!a) return;
+  var root = document.documentElement.style;
+  if (a.bar) root.setProperty('--nav-bar', a.bar);
+  if (a.rule) root.setProperty('--nav-rule', a.rule);
+  if (a.cta) root.setProperty('--nav-cta', a.cta);
+  if (a.ink) root.setProperty('--nav-ink', a.ink);
+  if (a.ctaInk) root.setProperty('--nav-cta-ink', a.ctaInk);
+
+  var logo = document.querySelector('.nav-logo-img');
+  if (logo) {
+    // An empty logo is a real choice — the church name on its own — so it
+    // hides the image rather than leaving a broken one in the bar.
+    if (a.logo) { logo.src = a.logo; logo.style.display = ''; }
+    else { logo.style.display = 'none'; }
+    logo.classList.toggle('is-square', a.logoShape === 'square');
+  }
+  var name = document.querySelector('.nav-brand-name');
+  if (name && a.name != null) { name.textContent = a.name; name.style.display = a.name ? '' : 'none'; }
+  // The tagline arrives empty when it is switched off, so there is one thing
+  // to check here rather than a flag and a string that can disagree.
+  var tag = document.querySelector('.nav-brand-sub');
+  if (tag) { tag.textContent = a.tagline || ''; tag.style.display = a.tagline ? '' : 'none'; }
+
+  var band = document.getElementById('newsletter-band');
+  if (band) {
+    if (!a.newsletter) { band.style.display = 'none'; return; }
+    band.style.display = '';
+    band.style.background = a.newsletter.bg;
+    var set = function (id, text) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = text || '';
+      el.style.display = text ? '' : 'none';
+    };
+    set('newsletter-band-eyebrow', a.newsletter.eyebrow);
+    set('newsletter-band-heading', a.newsletter.heading);
+    set('newsletter-band-body', a.newsletter.body);
+    var btn = document.getElementById('newsletter-signup-btn');
+    if (btn && a.newsletter.button) btn.textContent = a.newsletter.button;
+  }
 }
 
 // The footer reads the same church-details record the map block and the sidebar

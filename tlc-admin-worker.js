@@ -89,6 +89,40 @@ import { BLOCKS as NL_BLOCKS, parseBlocks as parseNlBlocks, serializeBlocks as s
          parseExtras, extrasFromForm, serializeExtras, MAX_EXTRA_NOTES } from './admin/newsletter.js';
 import { screenSubmission, formConfig, forwardToChms, officeEmailHtml, officeSubject,
          handleFilteredRoutes, heldCount, OFFICE_EMAIL } from './admin/forms.js';
+import { PALETTE as CHROME_PALETTE, BAR_KEYS, DEFAULTS as CHROME_DEFAULTS,
+         parseAppearance, appearanceFromForm, sanitizeAppearance, publicAppearance,
+         isDirty as chromeDirty, changedFields as chromeChanged, FIELD_LABELS as CHROME_LABELS,
+         renderHeaderPreview, renderNewsletterPreview } from './admin/appearance.js';
+
+// ── THE CHROME RECORD, DRAFT AND LIVE ────────────────────────
+// Two settings rows, the same split a page has between `blocks` and
+// `published_blocks`. The draft is what the admin screen draws; the published
+// row is the only thing /api/pages ever sends to a visitor.
+const CHROME_DRAFT_KEY = 'site_appearance_draft';
+const CHROME_LIVE_KEY = 'site_appearance';
+
+async function readChrome(env, key) {
+  const row = await env.DB.prepare('SELECT value FROM site_settings WHERE key = ?').bind(key).first().catch(() => null);
+  return parseAppearance(row && row.value);
+}
+
+// Both rows at once, because every screen that shows one wants to say how it
+// differs from the other.
+async function readChromePair(env) {
+  const [draft, live] = await Promise.all([readChrome(env, CHROME_DRAFT_KEY), readChrome(env, CHROME_LIVE_KEY)]);
+  return { draft, live, dirty: chromeDirty(draft, live) };
+}
+
+async function writeChrome(env, key, value) {
+  await env.DB.prepare(
+    'INSERT OR REPLACE INTO site_settings (key, value, label, hint) VALUES (?, ?, ?, ?)'
+  ).bind(
+    key, JSON.stringify(sanitizeAppearance(value)),
+    key === CHROME_LIVE_KEY ? 'Header and newsletter band (live)' : 'Header and newsletter band (draft)',
+    key === CHROME_LIVE_KEY ? 'What visitors see. Written only by Publish on the Appearance screen.'
+      : 'What the Appearance screen shows. Never reaches the site until it is published.'
+  ).run();
+}
 
 // Allowlist of site_settings keys readable via the public /api/settings/{key}
 // endpoint. Everything else returns 404 — keeps internal config (gym admin
@@ -386,8 +420,12 @@ async function pageData(env, reqKey) {
     const q = async (sql, ...binds) => {
       try { return (await env.DB.prepare(sql).bind(...binds).all()).results || []; } catch (_) { return []; }
     };
-    const [settingRows, sermonRow, news, staff, newsletters] = await Promise.all([
+    const [settingRows, chromeRow, sermonRow, news, staff, newsletters] = await Promise.all([
       q("SELECT key, value FROM site_settings WHERE key LIKE 'church_%'"),
+      // ⚠ The PUBLISHED row only. The draft exists so that somebody can try a
+      // colour without it being on the front of the church website, and
+      // reading the wrong key here would undo that in one line.
+      env.DB.prepare('SELECT value FROM site_settings WHERE key = ?').bind(CHROME_LIVE_KEY).first().catch(() => null),
       env.DB.prepare(
         'SELECT n.title, n.date, n.scripture, n.youtube_url, n.audio_url, s.title AS series ' +
         'FROM sermon_notes n LEFT JOIN sermon_series s ON s.id = n.series_id ' +
@@ -412,6 +450,9 @@ async function pageData(env, reqKey) {
     return {
       settings: { address_line: s.address_line || '', address_city: s.address_city || '', phone: s.phone || '', email: s.email || '' },
       services: parseServiceTimes(s.service_times),
+      // Resolved to real colours by publicAppearance, so public/index.html
+      // never carries a copy of the palette and cannot drift from it.
+      appearance: publicAppearance(parseAppearance(chromeRow && chromeRow.value)),
       sermon: sermonRow || null,
       news, staff, newsletters,
     };
@@ -1774,6 +1815,41 @@ export default {
       } catch (_) { /* retried on the next request */ }
     }
 
+    // ── ONE-TIME: PUT /give ON THE BLOCK EDITOR (2026-08-05) ──
+    // Every page on the site has had a block draft waiting since the site
+    // editor shipped; none of them was ever published, so the whole editor
+    // sits behind a Publish nobody has pressed and /give still renders the
+    // hardcoded markup in public/index.html. Andrew asked for this one to go
+    // live, so it is published here rather than left as a click to remember.
+    //
+    // ⚠ Two guards, and both matter:
+    //   canReseed() — publish ONLY a page nobody has touched and that has
+    //     never been published. If the office has edited /give since, what
+    //     they typed is what they meant, and this does nothing.
+    //   the marker — the schema block re-runs on every SCHEMA_VERSION bump,
+    //     so without one this would re-publish /give over any later edit,
+    //     every deploy. Same reasoning as the sign-up card above.
+    //
+    // The draft was read against the live page before this shipped: the six
+    // offline giving paths come across as a card grid, and both buttons keep
+    // their real destinations — give.timothystl.org and serve.timothystl.org.
+    // Neither carries a Tithe.ly address, which is the one thing a published
+    // block must never hold, because a block's URL is frozen at publish time.
+    const GIVE_PUBLISH_MARKER = 'give_page_published_v1';
+    const givePublished = markersOk || markers.get(GIVE_PUBLISH_MARKER) === 'done';
+    if (!givePublished) {
+      try {
+        const row = await env.DB.prepare('SELECT id, blocks, published_blocks, updated_by, status FROM pages WHERE id = ?')
+          .bind('give').first().catch(() => null);
+        if (row && canReseed(row) && row.blocks) {
+          await env.DB.prepare("UPDATE pages SET published_blocks = blocks, status = 'published', updated_at = datetime('now') WHERE id = ?")
+            .bind('give').run();
+        }
+        await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run();
+        await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, 'done')").bind(GIVE_PUBLISH_MARKER).run();
+      } catch (_) { /* retried on the next request */ }
+    }
+
     // ── THE SERVICE LABELS THE SITE ACTUALLY USES ────────────────────────
     // The seed said "Traditional" and "Contemporary"; /worship and the
     // homepage have always said "English worship" for both. That is not just
@@ -1922,7 +1998,7 @@ export default {
       const pagesRes = new Response(JSON.stringify({
         // The church details, so the footer reads the same record the map
         // block and the sidebar do. Staff change a phone number once.
-        details: { settings: data.settings, services: data.services },
+        details: { settings: data.settings, services: data.services, appearance: data.appearance },
         pages: list.map(publicPage),
         menu: {
           header: publicMenu(menuRows.results || [], menuPages, 'header').map(strip),
@@ -3214,6 +3290,158 @@ ${sidebarShell('media', currentUser, '', await pageBadges())}
         return { list, pageRows, byId: new Map(pageRows.map((p) => [p.id, p])) };
       };
 
+
+      // ── APPEARANCE ───────────────────────────────────────────
+      // The header bar and the newsletter band. Everything else the Menu
+      // screen writes is live the moment it is saved; this is the one part
+      // that is drafted first, because somebody trying a colour or cropping a
+      // logo is experimenting, and an experiment that is instantly on the
+      // front of the church website is not one. See admin/appearance.js.
+      const chromeItems = (list, byId) =>
+        menuTree(list, byId, 'header').filter((i) => i.visible && !i.broken).map((i) => ({ label: i.label, style: i.style }));
+
+      if (path === '/menu/appearance' && method === 'GET') {
+        const [{ list, byId }, chrome] = await Promise.all([loadMenu(), readChromePair(env)]);
+        const items = chromeItems(list, byId);
+        const msg = url.searchParams.get('msg');
+        const a = chrome.draft;
+
+        const swatches = (name, value, keys) => ({
+          kind: 'swatch', name, value,
+          options: CHROME_PALETTE.filter((c) => keys.includes(c.key))
+            .map((c) => ({ value: c.key, label: c.label, colour: c.value })),
+        });
+
+        // What differs, named. "You have unpublished changes" tells somebody
+        // that something is waiting without telling them what, which is the
+        // half of the message that would actually let them decide.
+        const changed = chromeChanged(chrome.draft, chrome.live);
+        const changedList = changed.map((k) => CHROME_LABELS[k]).filter(Boolean).join(', ');
+
+        const alertHtml = msg === 'published' ? `<div class="alert alert-success">✓ Published — this is on the site now. It reaches visitors within about two minutes.</div>`
+          : msg === 'saved' ? `<div class="alert alert-info">Draft saved. Nothing has reached the site yet — press Publish when it looks right.</div>`
+          : msg === 'discarded' ? `<div class="alert alert-info">Draft thrown away. The screen is back to what is on the site.</div>` : '';
+
+        // When there is something unpublished, the two bars are shown one
+        // above the other rather than the draft alone. "Is this different from
+        // what people are seeing?" is the question somebody actually has, and
+        // a single bar cannot answer it.
+        const previews = chrome.dirty
+          ? `${panel('On the site now', renderHeaderPreview(chrome.live, items) + renderNewsletterPreview(chrome.live), { right: 'What visitors see' })}
+             ${panel('Your draft', renderHeaderPreview(chrome.draft, items) + renderNewsletterPreview(chrome.draft), { right: 'Not published' })}`
+          : panel('The site', renderHeaderPreview(chrome.draft, items, { note: 'This is what visitors see.' }) + renderNewsletterPreview(chrome.draft), { right: 'Published' });
+
+        const publishBar = chrome.dirty
+          ? `<div class="alert alert-warn" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+               <span>Not published yet${changedList ? ` — ${escapeHtml(changedList)}` : ''}. Visitors still see the bar above.</span>
+               <span style="display:flex;gap:8px;">
+                 <form method="POST" action="/menu/appearance/discard" style="margin:0;" onsubmit="return confirm('Throw away the draft and go back to what is on the site?')"><button type="submit" class="tlc-btn-quiet">Discard draft</button></form>
+                 <form method="POST" action="/menu/appearance/publish" style="margin:0;"><button type="submit" class="tlc-btn-primary">Publish to the site</button></form>
+               </span>
+             </div>`
+          : `<div class="alert alert-info">Everything on this screen is on the site. Changes you make below are saved as a draft first.</div>`;
+
+        return html(`
+${sidebarShell('menu', currentUser, `<a href="/menu">← Menu</a>`, await pageBadges())}
+<div class="tlc-wrap">
+${renderFormSection({
+  title: 'Appearance',
+  purpose: 'The header bar and the newsletter band — the two parts of the site that are on every page. Changes are saved as a draft and only reach visitors when you press Publish.',
+  action: '/menu/appearance/save',
+  cancelHref: '/menu',
+  cancelLabel: 'Back to Menu',
+  saveLabel: 'Save draft',
+  extraHead: alertHtml + publishBar + previews,
+  note: 'Colours come from the church palette rather than a colour picker: the words in the bar are white and cannot be changed, so a pale colour here would be a header nobody can read — on every page at once.',
+  fields: [
+    { kind: 'html', html: '<div class="tlc-field"><span class="tlc-label">The header</span></div>' },
+    { kind: 'photo', name: 'logo_url', label: 'Logo', value: a.logo_url,
+      hint: 'Shown at 44 pixels. A square picture crops best. Leave it empty to show the church name on its own.' },
+    { kind: 'chips', name: 'logo_shape', label: 'Logo shape', value: a.logo_shape,
+      options: [{ value: 'round', label: 'Round' }, { value: 'square', label: 'Square' }] },
+    { name: 'brand_name', label: 'Church name', value: a.brand_name,
+      hint: 'The words beside the logo. This is also the link back to the homepage.' },
+    { name: 'tagline', label: 'Tagline', value: a.tagline,
+      hint: 'The small gold line under the name.' },
+    { kind: 'toggle', name: 'show_tagline', label: 'Tagline shown', value: a.show_tagline, on: 'Showing', off: 'Hidden' },
+    swatches('bar', a.bar, BAR_KEYS),
+    { kind: 'html', html: '<p class="tlc-hint" style="margin-top:-10px;">The bar colour. Gold is not offered here — white text on gold cannot be read.</p>' },
+    swatches('rule', a.rule, CHROME_PALETTE.map((c) => c.key)),
+    { kind: 'html', html: '<p class="tlc-hint" style="margin-top:-10px;">The line along the bottom of the bar.</p>' },
+    swatches('cta', a.cta, CHROME_PALETTE.map((c) => c.key)),
+    { kind: 'html', html: '<p class="tlc-hint" style="margin-top:-10px;">The Give button.</p>' },
+
+    { kind: 'html', html: '<div class="tlc-field" style="margin-top:26px;"><span class="tlc-label">The newsletter band</span><p class="tlc-hint">The sign-up strip above the footer. It is on every page of the site, not just the homepage — which is why it is edited here and not in the page editor.</p></div>' },
+    { kind: 'toggle', name: 'nl_show', label: 'Newsletter band', value: a.nl_show, on: 'On every page', off: 'Off everywhere' },
+    swatches('nl_bg', a.nl_bg, BAR_KEYS),
+    { name: 'nl_eyebrow', label: 'Small line above the heading', value: a.nl_eyebrow },
+    { name: 'nl_heading', label: 'Heading', value: a.nl_heading },
+    { kind: 'textarea', name: 'nl_body', label: 'Wording', value: a.nl_body, rows: 3 },
+    { name: 'nl_button', label: 'Button label', value: a.nl_button },
+  ],
+})}
+</div>
+<script>
+// The logo file picker. The photo field kind in admin/ui.js has never had an
+// uploader of its own — it renders the file input and nothing listens to it —
+// so it is wired here rather than left as a control that looks live and does
+// nothing. (No backticks in this comment: it lives inside a template literal,
+// and one would end the string. See the note in CLAUDE.md.)
+(function(){
+  var input = document.querySelector('.tlc-photo-input');
+  if (!input) return;
+  input.addEventListener('change', async function(){
+    var f = input.files && input.files[0];
+    if (!f) return;
+    var hidden = document.querySelector('input[type=hidden][name="' + input.dataset.target + '"]');
+    var img = document.querySelector('.tlc-photo-preview');
+    var wrap = input.closest('.tlc-photo');
+    if (wrap) wrap.setAttribute('data-busy', '1');
+    try {
+      var fd = new FormData(); fd.append('file', f, f.name);
+      var r = await fetch('/api/upload-image', { method: 'POST', body: fd });
+      var d = await r.json();
+      if (!r.ok || !d.location) throw new Error((d && d.error) || 'Upload failed');
+      if (hidden) hidden.value = d.location;
+      if (img) { img.src = d.location; }
+      else if (wrap) { wrap.insertAdjacentHTML('afterbegin', '<img src="' + d.location + '" alt="" class="tlc-photo-preview">'); var e = wrap.querySelector('.tlc-photo-empty'); if (e) e.remove(); }
+      if (window.tlcToast) window.tlcToast('Logo uploaded · save the draft to keep it');
+    } catch (err) {
+      alert('That image could not be uploaded. ' + (err && err.message ? err.message : ''));
+    } finally { if (wrap) wrap.removeAttribute('data-busy'); }
+  });
+})();
+</script>`, 'Appearance');
+      }
+
+      if (path === '/menu/appearance/save' && method === 'POST') {
+        const form = await request.formData();
+        const next = appearanceFromForm(form);
+        const before = await readChrome(env, CHROME_DRAFT_KEY);
+        await writeChrome(env, CHROME_DRAFT_KEY, next);
+        await logAudit(env.DB, currentUser, 'update', 'appearance', 'draft', 'Header and newsletter band (draft)', before, next);
+        return new Response('', { status: 302, headers: { Location: '/menu/appearance?msg=saved' } });
+      }
+
+      // Publishing is the ONLY thing that writes the live row. It copies the
+      // draft across whole rather than taking fields from the request, so a
+      // crafted POST can only ever publish what is already on the screen —
+      // there is no way to publish something nobody has looked at.
+      if (path === '/menu/appearance/publish' && method === 'POST') {
+        const { draft, live } = await readChromePair(env);
+        await writeChrome(env, CHROME_LIVE_KEY, draft);
+        await logAudit(env.DB, currentUser, 'publish', 'appearance', 'live', 'Header and newsletter band', live, draft);
+        return new Response('', { status: 302, headers: { Location: '/menu/appearance?msg=published' } });
+      }
+
+      // The other direction: throw the draft away and go back to the site.
+      if (path === '/menu/appearance/discard' && method === 'POST') {
+        const { draft, live } = await readChromePair(env);
+        await writeChrome(env, CHROME_DRAFT_KEY, live);
+        await logAudit(env.DB, currentUser, 'update', 'appearance', 'draft', 'Header and newsletter band (draft discarded)', draft, live);
+        return new Response('', { status: 302, headers: { Location: '/menu/appearance?msg=discarded' } });
+      }
+
       if (path === '/menu' && method === 'GET') {
         const { list, pageRows, byId } = await loadMenu();
         const msg = url.searchParams.get('msg');
@@ -3226,11 +3454,19 @@ ${sidebarShell('media', currentUser, '', await pageBadges())}
         const orphans = orphanPages(pageRows, list);
         const warnings = menuWarnings(list, byId);
 
-        // The preview is rendered from the real items, so it cannot flatter the
-        // menu it describes. Top level only — that is what the bar shows.
-        const previewHtml = header.filter((i) => i.visible && !i.broken).map((i) =>
-          `<span class="tlc-preview-item${i.style === 'button' ? ' tlc-preview-item--button' : ''}">${escapeHtml(i.label)}</span>`
-        ).join('');
+        // ⚠ The preview used to be admin navy with a hardcoded "T" badge and
+        // the literal words "Timothy Lutheran", beside a real site that is moss
+        // green with a round photographic logo and a strapline. It was built
+        // from the real menu ITEMS — which was the honest half — but drew them
+        // into a bar that does not exist anywhere. Staff were being shown a
+        // picture of a header the site does not have and asked to arrange it.
+        //
+        // It now draws the published appearance record through the same
+        // renderer the Appearance screen uses. A preview that can disagree
+        // with the site is worse than no preview, because it is believed.
+        const liveChrome = await readChrome(env, CHROME_LIVE_KEY);
+        const previewItems = header.filter((i) => i.visible && !i.broken)
+          .map((i) => ({ label: i.label, style: i.style }));
 
         const itemHtml = (i) => `<div class="tlc-mi${i.depth ? ' is-child' : ''}${i.broken ? ' tlc-mi-broken' : ''}" draggable="true" data-id="${i.id}" data-depth="${i.depth}">
     <span class="tlc-mi-grip" aria-hidden="true">⠿</span>
@@ -3271,18 +3507,15 @@ ${sidebarShell('menu', currentUser, `<a href="https://timothystl.org" target="_b
       <h1 class="tlc-title">Menu</h1>
       <p class="tlc-purpose">The order and shape of the header and footer. An item can point at a page, an outside site, or a short link — and the label in the bar can be shorter than the page name.</p>
     </div>
-    <a class="tlc-action" href="/menu/new">+ Add item</a>
+    <div style="display:flex;gap:8px;align-items:center;flex:none;">
+      <a class="tlc-btn-quiet" href="/menu/appearance">Appearance</a>
+      <a class="tlc-action" href="/menu/new">+ Add item</a>
+    </div>
   </div>
   ${alertHtml}
   ${warnings.length ? `<div class="alert alert-error" style="margin:0 0 14px;">${warnings.map(escapeHtml).join('<br>')}</div>` : ''}
 
-  <div class="tlc-preview">
-    <div class="tlc-preview-bar">
-      <span class="tlc-preview-brand"><span class="tlc-preview-mark">T</span>Timothy Lutheran</span>
-      ${previewHtml}
-    </div>
-    <div class="tlc-preview-note">Live preview · top level only</div>
-  </div>
+  ${renderHeaderPreview(liveChrome, previewItems, { note: 'This is the site — top level only. Colours, the logo and the wording are on the Appearance screen.' })}
 
   <div class="tlc-menu-cols">
     <div style="display:flex;flex-direction:column;gap:16px;">
@@ -8303,6 +8536,13 @@ ${sidebarShell('redirects', currentUser, '', await pageBadges())}
         { key: 'church_phone', label: 'Office phone', group: 'church-details', used: 'Contact page · footer', href: '/pages/details' },
         { key: 'church_email', label: 'Office email', group: 'church-details', used: 'Contact page · footer', href: '/pages/details' },
         { key: 'church_service_times', label: 'Service times', group: 'church-details', used: 'Service-times blocks · sidebar layout', href: '/pages/details' },
+        // Two rows for one idea, because there really are two rows and hiding
+        // the draft would make this screen a half-truth about what is stored.
+        // Both link to the screen that owns them rather than offering a field
+        // here: a JSON blob is not something to hand-edit, and two forms
+        // writing one key is two places to disagree about what it means.
+        { key: 'site_appearance', label: 'Header and newsletter band', group: 'church-details', used: 'Every page — the top bar and the sign-up strip', href: '/menu/appearance' },
+        { key: 'site_appearance_draft', label: 'Header appearance (draft)', group: 'church-details', used: 'The Appearance screen only — never sent to visitors', href: '/menu/appearance' },
         { key: 'give_url', label: 'Online giving link', group: 'links', used: 'Give blocks · newsletter · gym invoices', href: '/giving' },
         { key: 'zoom_url', label: 'Zoom meeting link', group: 'links', used: 'The /zoom short link' },
         { key: 'councilfiles_url', label: 'Council files link', group: 'links', used: 'The /councilfiles short link' },
