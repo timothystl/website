@@ -1864,9 +1864,20 @@
     <div class="footer-col">
       <h4>Programs</h4>
       <ul>
-        <li><a href="https://wordoflifeschool.net" target="_blank">Word of Life School</a></li>
         <li><a href="https://mdo.timothystl.org" target="_blank">Mother's Day Out</a></li>
         <li><button onclick="showPage('news')">News &amp; updates</button></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Partners</h4>
+      <!-- Filled from /api/values (renderFooterPartners()), sorted by each
+           partner's admin-set order. This fallback is what a visitor sees if
+           the admin is unreachable — never an empty column. -->
+      <ul id="footer-partners-list">
+        <li><a href="https://lasmstl.org" target="_blank">Lindenwood Area Senior Ministry</a></li>
+        <li><a href="https://csl.edu" target="_blank">Concordia Seminary</a></li>
+        <li><a href="https://wordoflifeschool.net" target="_blank">Word of Life School</a></li>
+        <li><a href="https://cfna-stl.org" target="_blank">Christian Friends of New Americans</a></li>
       </ul>
     </div>
   </div>
@@ -2313,6 +2324,26 @@ function loadValues() {
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (d) { TLC_VALUES_CACHE = Array.isArray(d) && d.length ? d : null; return TLC_VALUES_CACHE; })
     .catch(function () { return null; });
+}
+
+// The footer's Partners column is every value's partner, sorted by the order
+// set on the admin Partners screen (its drag-to-reorder panel). A value with
+// no partner is simply absent here — unlike the values page, this is a list
+// of partners, not a list of values, so there is nothing to say a gap about.
+function renderFooterPartners() {
+  var host = document.getElementById('footer-partners-list');
+  if (!host) return;
+  loadValues().then(function (vals) {
+    if (!vals) return;   // keep the hardcoded fallback already on the page
+    var paired = vals.filter(function (v) { return v.partner; }).map(function (v) { return v.partner; });
+    if (!paired.length) return;
+    paired.sort(function (a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
+    host.innerHTML = paired.map(function (p) {
+      return '<li>' + (p.site_url
+        ? '<a href="' + tlcEsc(p.site_url) + '" target="_blank">' + tlcEsc(p.short_name || p.name) + '</a>'
+        : '<span>' + tlcEsc(p.short_name || p.name) + '</span>') + '</li>';
+    }).join('');
+  });
 }
 
 function renderAboutValues() {
@@ -3066,6 +3097,9 @@ window.showPage = function(id, addHistory) {
     });
   });
 };
+// The footer is present on every page, so its Partners column is filled here
+// rather than from any single page's load.
+renderFooterPartners();
 // Route on load based on URL path; replace (don't push) so back goes to previous site.
 // Runs here (not in the first <script> block) so it can call the real window.showPage
 // above — which sets per-page <title>/meta/OG/canonical/robots tags via updatePageMeta —

@@ -270,14 +270,14 @@ textarea.form-input{min-height:120px;resize:vertical;}
 
 /* FOOTER */
 footer{background:var(--steel-dk2);padding:48px 28px 28px;}
-.footer-inner{max-width:1080px;margin:0 auto;display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:40px;margin-bottom:40px;}
+.footer-inner{max-width:1080px;margin:0 auto;display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;gap:40px;margin-bottom:40px;}
 .footer-brand-name{font-family:var(--sans);font-size:14px;font-weight:800;color:white;margin-bottom:4px;}
 .footer-brand-tag{font-family:var(--serif);font-size:13px;font-style:italic;color:var(--amber);margin-bottom:14px;}
 .footer-brand-addr{font-family:var(--sans);font-size:12px;color:rgba(255,255,255,.5);line-height:1.8;}
 .footer-col h4{font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:12px;}
 .footer-col ul{list-style:none;}
 .footer-col ul li{margin-bottom:8px;}
-.footer-col ul li a,.footer-col ul li button{font-family:var(--sans);font-size:12px;color:rgba(255,255,255,.55);text-decoration:none;background:none;border:none;cursor:pointer;padding:0;}
+.footer-col ul li a,.footer-col ul li button,.footer-col ul li span{font-family:var(--sans);font-size:12px;color:rgba(255,255,255,.55);text-decoration:none;background:none;border:none;cursor:pointer;padding:0;}
 .footer-col ul li a:hover,.footer-col ul li button:hover{color:var(--amber);}
 .footer-social{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;}
 .footer-social a{font-family:var(--sans);font-size:11px;font-weight:700;color:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.15);border-radius:var(--r-sm);padding:5px 10px;text-decoration:none;}

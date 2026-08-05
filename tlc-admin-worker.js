@@ -1930,7 +1930,7 @@ export default {
     if (path === '/api/values' && method === 'GET') {
       const q = async (sql) => { try { return (await env.DB.prepare(sql).all()).results || []; } catch (_) { return []; } };
       const [partners, counts] = await Promise.all([
-        q('SELECT name, short_name, value, blurb, site_url, also_note FROM partners'),
+        q('SELECT name, short_name, value, blurb, site_url, also_note, sort_order FROM partners'),
         q("SELECT value, slug, title FROM youth_pages WHERE value IS NOT NULL AND value <> '' AND COALESCE(in_menu,1) = 1"),
       ]);
       const byValue = Object.fromEntries(partners.map((p) => [p.value, p]));
@@ -3411,6 +3411,21 @@ ${sidebarShell('menu', currentUser, `<a href="/menu">← Menu</a>`, await pageBa
         return new Response('Access denied.', { status: 403 });
       }
 
+      // Reordering posts the whole resulting order, same contract as the
+      // Menu and Giving's funds/tiers panels: the server renumbers from
+      // scratch in steps of 10 so a dropped row cannot leave two partners
+      // claiming one position. This is what the public footer's new
+      // Partners column sorts by (see /api/values' sort_order).
+      if (path === '/partners/reorder' && method === 'POST') {
+        const form = await request.formData();
+        let ids = [];
+        try { ids = JSON.parse(form.get('order') || '[]'); } catch (_) {}
+        for (let i = 0; i < ids.length; i++) {
+          await env.DB.prepare('UPDATE partners SET sort_order = ? WHERE id = ?').bind((i + 1) * 10, parseInt(ids[i], 10)).run();
+        }
+        return new Response('', { status: 302, headers: { Location: '/partners?msg=saved' } });
+      }
+
       if (path === '/partners' && method === 'GET') {
         const rows = await env.DB.prepare('SELECT * FROM partners ORDER BY sort_order, id').all();
         const msg = url.searchParams.get('msg');
@@ -3454,6 +3469,23 @@ ${sidebarShell('menu', currentUser, `<a href="/menu">← Menu</a>`, await pageBa
           };
         });
 
+        // The order here is what the public footer's Partners column follows
+        // (sort_order, read by /api/values). Reordering only means something
+        // once there are at least two partners to put in an order.
+        const orderPanelHtml = rows.results.length > 1 ? panelList({
+          id: 'partners-order',
+          reorderAction: '/partners/reorder',
+          rows: rows.results.map((p) => {
+            const v = VALUES.find((x) => x.key === p.value);
+            return {
+              id: p.id,
+              name: p.name,
+              sub: v ? v.name : p.value,
+              action: `<a class="tlc-edit" href="/partners/edit/${p.id}">Edit</a>`,
+            };
+          }),
+        }) : '';
+
         return html(`
 ${sidebarShell('partners', currentUser, `<a href="https://timothystl.org/about/values" target="_blank">View values page</a>`, await pageBadges())}
 <div class="tlc-wrap">
@@ -3471,6 +3503,11 @@ ${sidebarShell('partners', currentUser, `<a href="https://timothystl.org/about/v
     empty: 'No partners yet.',
     note: sectionCfg('partners').note,
   })}
+  ${orderPanelHtml ? `<div class="card" style="margin-top:20px;">
+    <h3 style="margin:0 0 4px;">Footer order</h3>
+    <p class="page-sub" style="margin:0 0 12px;">Drag to set the order these appear in the site footer's Partners column.</p>
+    ${orderPanelHtml}
+  </div>` : ''}
 </div>`, 'Partners');
       }
 
