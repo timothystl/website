@@ -131,6 +131,23 @@ export const BLOCK_DEFS = {
     defaults: { title: 'What\u2019s happening', spaceAbove: 24, spaceBelow: 24 },
     auto: 'news', autoNote: 'Shows the newest posts. Pin a post to keep it in front.',
   },
+  // The /news page's own feed - every current announcement AND event, as full
+  // expandable cards (image, summary, body), not the title-and-date list
+  // "News highlights" shows elsewhere. It shares that block's data but not its
+  // shape, so pages already using "News highlights" are untouched by this.
+  newsfeed: {
+    label: 'News feed', glyph: '☰',
+    defaults: { title: 'Announcements & events', spaceAbove: 24, spaceBelow: 24 },
+    auto: 'newsfeed',
+    autoNote: 'Every current announcement and event. An event (one with a date) sorts soonest-first and drops off once it has passed; a plain announcement sorts newest-first. Nothing to update by hand.',
+    autoCount: false,
+  },
+  newsletterarchive: {
+    label: 'Newsletter archive', glyph: '✉',
+    defaults: { title: 'Weekly newsletters', spaceAbove: 24, spaceBelow: 24, count: 2 },
+    auto: 'newsletterarchive',
+    autoNote: 'Every sent newsletter, newest first. The count below is how many of the most recent get a preview - the rest are just a title to click.',
+  },
   staff: {
     label: 'Staff grid', glyph: '☺',
     defaults: { title: 'People to know', spaceAbove: 24, spaceBelow: 24 },
@@ -151,7 +168,7 @@ export const BLOCK_DEFS = {
   hero: {
     label: 'Hero banner', glyph: '▣',
     defaults: { title: 'Ministry name', eyebrow: 'Ministry', subtitle: 'One line about this ministry.', spaceAbove: 0, spaceBelow: 0 },
-    photo: true, subtitle: true, banner: true, infoCard: true,
+    photo: true, subtitle: true, banner: true, infoCard: true, align: true,
   },
   text: {
     label: 'Rich text', glyph: '¶',
@@ -291,16 +308,28 @@ export const BLOCK_DEFS = {
 // Which block types opt into the shared "align" chip and .tlcb--center CSS
 // (below) is a def-level flag, `align: true`, same idiom as `richBody`/
 // `photo`/`url` — one source of truth, not a second list to keep in step.
-// The seven that have it are a flex column — a heading, some prose, and
-// (for four of them) a row of buttons/links — close enough in shape to
-// Card grid's own centering (its own long-standing, separate mechanism,
-// untouched) that one shared rule covers all of them. Everything else is
-// either self-filling (Sermon, News, Staff, Service times, Map, Posts,
-// Events — the layout is the data's, not typed prose), already centered by
-// design (Hero), a grid of its own (Columns, FAQ, Times, Partners, Buttons,
-// Quick links — centering a grid's cells and centering the grid itself are
-// different problems, each needing its own bespoke CSS, not this shared
-// rule), or has no text to center at all (Spacer).
+// Eight types have it now — a flex column: a heading, some prose, and (for
+// five of them) a row of buttons/links — close enough in shape to Card
+// grid's own centering (its own long-standing, separate mechanism, untouched)
+// that one shared rule covers all of them. Everything else is either
+// self-filling (Sermon, News, Staff, Service times, Map, Posts, Events — the
+// layout is the data's, not typed prose), a grid of its own (Columns, FAQ,
+// Times, Partners, Buttons, Quick links — centering a grid's cells and
+// centering the grid itself are different problems, each needing its own
+// bespoke CSS, not this shared rule), or has no text to center at all
+// (Spacer).
+//
+// ⚠ Hero was believed "already centered by design" and left off this list —
+// wrong. `.tlcb-hero{text-align:center}` only ever centered inline text
+// *inside* each already-left-positioned box; `.tlcb-band-text`'s own
+// `align-items:flex-start` (shared with every banner-shaped block) is what
+// actually decides whether the eyebrow/title/subtitle sit centered or
+// hugging the left edge, and nothing overrode it for Hero the way Callout's
+// own `.tlcb--center.tlcb--callout .tlcb-band-text{align-items:center}`
+// does. So Hero was rendering left in practice the whole time, and joining
+// this shared mechanism changes nothing for a page that has never touched
+// its Alignment chip — 'left' was already the truth on screen, not a new
+// default being imposed.
 export const CENTER_ALIGNABLE_TYPES = new Set(
   Object.keys(BLOCK_DEFS).filter((k) => BLOCK_DEFS[k].align)
 );
@@ -310,9 +339,9 @@ export const CENTER_ALIGNABLE_TYPES = new Set(
 // of it — and Content is what they fill it with afterwards.
 export const GROUPS = [
   { name: 'Structure', types: ['alert', 'hero', 'slideshow', 'quicklinks', 'cardgrid', 'buttons', 'callout', 'partners', 'spacer'] },
-  { name: 'Content',   types: ['text', 'textphoto', 'video', 'columns', 'gallery', 'faq', 'sermon', 'news', 'staff', 'posts'] },
+  { name: 'Content',   types: ['text', 'textphoto', 'video', 'columns', 'gallery', 'faq', 'sermon', 'news', 'newsfeed', 'staff', 'posts'] },
   { name: 'Dates',     types: ['servicetimes', 'map', 'events', 'times', 'download', 'calendar'] },
-  { name: 'Sign up',   types: ['form', 'newsletter', 'give'] },
+  { name: 'Sign up',   types: ['form', 'newsletter', 'newsletterarchive', 'give'] },
 ];
 
 export const BLOCK_TYPE_KEYS = Object.keys(BLOCK_DEFS);
@@ -699,28 +728,23 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb{position:relative;border-radius:10px;background:var(--tlcb-bg,#FBF8F3);color:var(--tlcb-ink,#3A3A4A);
   padding:14px var(--tlcb-pad);border:2px solid transparent;
   margin-top:var(--tlcb-space-above,0px);margin-bottom:var(--tlcb-space-below,0px);}
-/* A RUN of half blocks flows into two balanced columns, with the same 32px gap
-   the column blocks use.
+/* Two consecutive Halves make one row, left then right, in the order they
+   were dropped — a THIRD starts a new row rather than joining a three-up.
 
-   ⚠ COLUMNS, NOT A TWO-CELL GRID. A grid puts blocks in fixed rows, so a tall
-   block beside a short one leaves the short one's row half empty and the next
-   block starts below BOTH — which is exactly the hole Andrew photographed: a
-   450px map beside a 150px news list, then 300px of nothing. Real columns
-   balance by height, so whatever comes next in the run flows up into the
-   shorter side.
-
-   This is a deliberate departure from the spec's "a third consecutive Half
-   starts a new row". That rule produces the gap; Andrew asked for it filled.
-
-   break-inside:avoid is what stops a block being sliced in half across the
-   column boundary — without it a card can be cut through the middle. */
-.tlcb-pair{column-count:2;column-gap:32px;
+   ⚠ A GRID, NOT CSS COLUMNS. This used to be column-count:2, which reads the
+   whole run into two balanced columns instead of left-to-right rows — so a
+   run of four halves went top-to-bottom in the left track before starting
+   the right one, not across. Andrew asked for reading order instead, plus a
+   way to make two blocks in a row line up — align-items:stretch does both:
+   grid cells are placed row-major (left, right, left, right...) and each
+   block's box stretches to the row's own height, so a short block beside a
+   tall one still ends flush with it rather than leaving a gap under itself.
+   That was the original reason columns replaced a grid here (a 450px map
+   beside a 150px news list, 300px of nothing before the next block); stretch
+   fills that same gap instead of flowing content around it. */
+.tlcb-pair{display:grid;grid-template-columns:1fr 1fr;column-gap:32px;align-items:stretch;
   margin-top:var(--tlcb-space-above,0px);margin-bottom:var(--tlcb-space-below,0px);}
-.tlcb-pair > .tlcb{break-inside:avoid;-webkit-column-break-inside:avoid;
-  margin-top:0;margin-bottom:32px;}
-/* A lone half keeps both tracks, so it sits at half width with the right side
-   empty — the spec's legitimate layout, not a gap to apologise for. */
-.tlcb-pair--lone > .tlcb{margin-bottom:0;}
+.tlcb-pair > .tlcb{margin:0;height:100%;}
 .tlcb--hero{padding:0;}
 .tlcb--spacer{padding:0 var(--tlcb-pad);}
 .tlcb *{box-sizing:border-box;}
@@ -782,9 +806,11 @@ export const BLOCK_CSS = `<style id="tlcb-css">
    inherit), or a flex column whose own align-items would otherwise leave
    the boxes hugging the left edge even with their own text centered. */
 .tlcb--center.tlcb--give,.tlcb--center.tlcb--text,.tlcb--center.tlcb--textphoto,
-.tlcb--center.tlcb--callout,.tlcb--center.tlcb--form,.tlcb--center.tlcb--newsletter{text-align:center;}
+.tlcb--center.tlcb--callout,.tlcb--center.tlcb--form,.tlcb--center.tlcb--newsletter,
+.tlcb--center.tlcb--hero{text-align:center;}
 .tlcb--center .tlcb-inline{justify-content:center;}
-.tlcb--center.tlcb--callout .tlcb-band-text{align-items:center;}
+.tlcb--center.tlcb--callout .tlcb-band-text,.tlcb--center.tlcb--hero .tlcb-band-text{align-items:center;}
+.tlcb--center.tlcb--hero .tlcb-hero-sub{margin-left:auto;margin-right:auto;}
 /* Alert is a one-line horizontal notice row, not a heading+prose column like
    the other six — text-align has nothing to act on, so "centered" here means
    centering the row itself within the block's width. */
@@ -794,14 +820,19 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-media img{width:100%;height:100%;object-fit:cover;display:block;border-radius:8px;}
 /* Matches .page-hero in public/styles.css — this is the page banner, so it has
    to be the same thing whether the page draws it or a block does. */
-.tlcb-hero{border-radius:8px;padding:56px 28px;text-align:center;position:relative;
+.tlcb-hero{border-radius:8px;padding:56px 28px;position:relative;
   background:#1E2D4A var(--tlcb-hero-img,none) center/cover;}
 .tlcb-hero::before{content:'';position:absolute;inset:0;border-radius:inherit;
   background:linear-gradient(135deg,rgba(30,45,74,.82),rgba(17,30,50,.92));opacity:var(--tlcb-hero-veil,0);}
 .tlcb-hero > *{position:relative;z-index:1;}
 .tlcb-hero-eyebrow{font:700 11px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#E8C070;margin-bottom:8px;}
 .tlcb-hero-title{font-family:Lora,Georgia,serif;font-weight:700;font-size:var(--tlcb-hero,38px);line-height:1.15;color:#fff;margin:0;}
-.tlcb-hero-sub{font-size:17px;color:rgba(255,255,255,.72);max-width:600px;margin:12px auto 0;font-weight:300;line-height:1.5;}
+/* No auto side margins by default — align-items:flex-start (.tlcb-band-text's
+   own base) already puts this flush left; a flex item's own horizontal auto
+   margins self-centre regardless of the container's align-items, which is
+   what let the subtitle alone drift centred even in "left" mode before Hero
+   had a real Alignment control. .tlcb--center.tlcb--hero below restores them. */
+.tlcb-hero-sub{font-size:17px;color:rgba(255,255,255,.72);max-width:600px;margin:12px 0 0;font-weight:300;line-height:1.5;}
 .tlcb-embed{position:relative;aspect-ratio:16/9;border-radius:8px;overflow:hidden;background:#1E2D4A;}
 .tlcb-embed iframe{position:absolute;inset:0;width:100%;height:100%;border:0;}
 .tlcb-embed-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#FBF8F3;font-size:30px;}
@@ -947,6 +978,28 @@ aside.tlcb-card{background:#FFFFFF;border-radius:18px;padding:34px 32px;box-shad
 .tlcb-news{display:flex;align-items:baseline;gap:14px;padding:11px 13px;border:1px solid #DDE3ED;border-radius:8px;background:#F7F3EC;}
 .tlcb-news-d{flex:none;width:56px;font:700 12px/1.4 'Source Sans 3',sans-serif;color:#8A8898;letter-spacing:.03em;}
 .tlcb-news-t{flex:1;font:600 13.5px/1.35 'Source Sans 3',sans-serif;color:#1E2D4A;}
+.tlcb-nf-list{display:flex;flex-direction:column;gap:10px;}
+.tlcb-nf-item{background:#fff;border:1px solid #E4E0D4;border-radius:12px;overflow:hidden;}
+.tlcb-nf-item summary{list-style:none;cursor:pointer;padding:15px 18px;display:flex;align-items:center;justify-content:space-between;gap:14px;}
+.tlcb-nf-item summary::-webkit-details-marker{display:none;}
+.tlcb-nf-head{display:flex;flex-direction:column;gap:3px;min-width:0;}
+.tlcb-nf-pin{align-self:flex-start;font:700 9px/1.4 'Source Sans 3',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#C9973A;}
+.tlcb-nf-date{font:700 11px/1.4 'Source Sans 3',sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#8A8898;}
+.tlcb-nf-title{font-family:Lora,Georgia,serif;font-size:17px;line-height:1.3;color:#1E2D4A;}
+.tlcb-nf-chev{flex:none;width:12px;height:12px;border-right:2px solid #8A8898;border-bottom:2px solid #8A8898;transform:rotate(45deg);transition:transform .15s;}
+.tlcb-nf-item[open] .tlcb-nf-chev{transform:rotate(-135deg);}
+.tlcb-nf-body{padding:0 18px 18px;}
+.tlcb-nf-body img{width:100%;max-height:340px;object-fit:contain;background:#F7F3EC;border-radius:8px;margin-bottom:12px;}
+.tlcb-nf-body p{font-size:14px;line-height:1.7;color:#3A3A4A;margin:0 0 8px;}
+.tlcb-nl-list{display:flex;flex-direction:column;gap:10px;}
+.tlcb-nl-item{background:#fff;border:1px solid #E4E0D4;border-radius:12px;padding:20px;}
+.tlcb-nl-date{display:block;font:700 11px/1.4 'Source Sans 3',sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#C9973A;margin-bottom:4px;}
+.tlcb-nl-subj{display:block;font-family:Lora,Georgia,serif;font-size:19px;color:#1E2D4A;margin-bottom:8px;}
+.tlcb-nl-note{font-size:14px;line-height:1.7;color:#6A6858;margin:0 0 10px;}
+.tlcb-nl-link{font:700 13px 'Source Sans 3',sans-serif;color:#2E7EA6;text-decoration:none;}
+.tlcb-nl-row{display:flex;align-items:baseline;gap:14px;padding:10px 13px;border:1px solid #E4E0D4;border-radius:8px;text-decoration:none;}
+.tlcb-nl-row-d{flex:none;width:64px;font:700 11px/1.4 'Source Sans 3',sans-serif;color:#8A8898;letter-spacing:.03em;}
+.tlcb-nl-row-t{flex:1;font:600 13.5px/1.35 'Source Sans 3',sans-serif;color:#1E2D4A;}
 .tlcb-people{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
 .tlcb-person{display:flex;flex-direction:column;gap:6px;}
 .tlcb-person-p{aspect-ratio:1/1;border-radius:9px;background:#DDE3ED center/cover no-repeat;}
@@ -1014,11 +1067,13 @@ function phoneRules(p) {
     // A 4-up of cards is still readable two across on a tablet; a 3-up is not,
     // because each card keeps its padding and the text column collapses.
     `${p}.tlcb-cg-grid{grid-template-columns:1fr!important;}`,
-    // Halves stack full width in source order. ⚠ The pair is CSS COLUMNS, not
-    // a grid — a grid-template rule here was a silent no-op, and halves
-    // rendered as two ~165px columns on a 390px phone. column-count is the
-    // property the pair actually uses, so it is the one that stacks it.
-    `${p}.tlcb-pair{column-count:1!important;}`,
+    // Halves stack full width in source order. ⚠ The pair is a CSS GRID, not
+    // columns — a column-count rule here would be a silent no-op, and halves
+    // would render as two side-by-side tracks on a 390px phone.
+    // grid-template-columns is the property the pair actually uses, so it is
+    // the one that stacks it: with one column, the second half wraps to its
+    // own row automatically.
+    `${p}.tlcb-pair{grid-template-columns:1fr!important;}`,
     `${p}.tlcb-media{order:0!important;}`,
     `${p}.tlcb-cards{grid-template-columns:1fr!important;}`,
     `${p}.tlcb-gallery{grid-template-columns:1fr 1fr!important;}`,
@@ -1082,6 +1137,19 @@ const splitOf = (b) => SPLITS.find((s) => s.key === b.split) || SPLITS[1];
 // both, strip every character that could close either one — a legitimate image
 // URL never contains them.
 const cssUrl = (u) => String(u || '').replace(/["'\\()\s<>;{}]/g, '');
+
+// news_items/newsletters store plain ISO dates (no time). Reading it back at
+// noon local time, the same convention the rest of the site uses for these
+// dates, is what stops a date-only value drifting a day in either direction
+// across a timezone boundary.
+function fmtNewsDate(iso, short) {
+  if (!iso) return '';
+  const d = new Date(String(iso).slice(0, 10) + 'T12:00:00');
+  if (Number.isNaN(d.getTime())) return '';
+  return short
+    ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    : d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+}
 
 function wrapperVars(b) {
   const sz = sizeOf(b);
@@ -1400,11 +1468,62 @@ function renderInner(b, opts) {
 
   if (t === 'news') {
     const rows = (data.news || []).slice(0, b.count).map((n) => `<div class="tlcb-news">
-        <span class="tlcb-news-d">${esc(n.date || '')}</span>
+        <span class="tlcb-news-d">${esc(fmtNewsDate(n.event_date || n.publish_date, true))}</span>
         <span class="tlcb-news-t">${esc(n.title || '')}</span>
       </div>`).join('');
     return `<div class="tlcb-stack">${renderHead(opts, b)}
       ${rows ? `<div class="tlcb-rows">${rows}</div>` : `<p class="tlcb-note">No posts yet.</p>`}</div>`;
+  }
+
+  if (t === 'newsfeed') {
+    const rows = (data.news || []).map((n) => {
+      const dateLabel = fmtNewsDate(n.event_date || n.publish_date);
+      const hasImage = n.image_url && n.image_url.trim();
+      const hasBody = (n.body && n.body.trim()) || n.summary;
+      const summary = `<summary>
+        <span class="tlcb-nf-head">
+          ${n.pinned ? '<span class="tlcb-nf-pin">Pinned</span>' : ''}
+          ${dateLabel ? `<span class="tlcb-nf-date">${esc(dateLabel)}</span>` : ''}
+          <span class="tlcb-nf-title">${esc(n.title || '')}</span>
+        </span>
+        ${hasBody ? '<span class="tlcb-nf-chev" aria-hidden="true"></span>' : ''}
+      </summary>`;
+      const body = hasBody ? `<div class="tlcb-nf-body">
+        ${hasImage ? `<img src="${esc(n.image_url)}" alt="" loading="lazy">` : ''}
+        ${n.summary ? `<p>${esc(n.summary)}</p>` : ''}
+        ${n.body ? `<div class="rich-content">${n.body}</div>` : ''}
+      </div>` : '';
+      return `<details class="tlcb-nf-item"${opts.editing ? ' open' : ''}>${summary}${body}</details>`;
+    }).join('');
+    return `<div class="tlcb-stack">${renderHead(opts, b)}
+      ${rows ? `<div class="tlcb-nf-list">${rows}</div>` : `<p class="tlcb-note">No current announcements or events.</p>`}</div>`;
+  }
+
+  if (t === 'newsletterarchive') {
+    const issues = data.newsletters || [];
+    // Only the most recent b.count issues carry a preview (the pastor's note,
+    // truncated) — the rest are a plain title-and-date row. A newsletter
+    // archive that previews every issue back to launch is a wall of text
+    // nobody scrolls through; a bare list of every issue loses the one thing
+    // that gets somebody to click "Read this letter" on THIS week's.
+    const rows = issues.map((n, i) => {
+      const dateLabel = fmtNewsDate(n.published_at);
+      if (i < b.count) {
+        const note = (n.pastor_note || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 220);
+        return `<div class="tlcb-nl-item">
+          <span class="tlcb-nl-date">${esc(dateLabel)}</span>
+          <span class="tlcb-nl-subj">${esc(n.subject || '')}</span>
+          ${note ? `<p class="tlcb-nl-note">${esc(note)}${note.length >= 220 ? '…' : ''}</p>` : ''}
+          <a class="tlcb-nl-link" href="/news/${esc(n.id)}"${opts.editing ? ' onclick="return false"' : ''}>Read this letter</a>
+        </div>`;
+      }
+      return `<a class="tlcb-nl-row" href="/news/${esc(n.id)}"${opts.editing ? ' onclick="return false"' : ''}>
+        <span class="tlcb-nl-row-d">${esc(dateLabel)}</span>
+        <span class="tlcb-nl-row-t">${esc(n.subject || '')}</span>
+      </a>`;
+    }).join('');
+    return `<div class="tlcb-stack">${renderHead(opts, b)}
+      ${rows ? `<div class="tlcb-nl-list">${rows}</div>` : `<p class="tlcb-note">No newsletters yet.</p>`}</div>`;
   }
 
   if (t === 'staff') {
@@ -1658,15 +1777,15 @@ function renderInner(b, opts) {
 
   if (t === 'give') {
     const href = safeUrl(b.url) || 'https://give.timothystl.org';
-    const chip = (label, amt) => opts.editing
-      ? `<span class="tlcb-chip">${esc(label)}</span>`
-      : `<a class="tlcb-chip" href="${esc(href + (href.includes('?') ? '&' : '?') + 'amount=' + amt)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`;
+    // Just the one button — an amount is a choice give.timothystl.org's own
+    // widget already asks for; suggesting one here duplicated that page
+    // instead of just handing off to it.
     const go = opts.editing
       ? `<span class="tlcb-chip tlcb-chip--go">Give now</span>`
       : `<a class="tlcb-chip tlcb-chip--go" href="${esc(href)}" target="_blank" rel="noopener noreferrer">Give now</a>`;
     return `<div class="tlcb-give">${renderHead(opts, b)}
       ${field(opts, b, 'body', 'div', 'tlcb-give-note', b.body || '', ' data-ph="Why it matters"', true)}
-      <div class="tlcb-inline">${chip('$25', 2500)}${chip('$100', 10000)}${go}</div>
+      <div class="tlcb-inline">${go}</div>
     </div>`;
   }
 
@@ -1794,21 +1913,22 @@ export function pairHalves(list, opts = {}) {
   let i = 0;
   while (i < list.length) {
     if (list[i] && list[i].width === 'half') {
-      // Take the WHOLE RUN of consecutive halves, not two at a time.
-      let j = i;
-      while (j < list.length && list[j] && list[j].width === 'half') j += 1;
-      const run = list.slice(i, j);
-      const above = Math.max(...run.map((b) => b.spaceAbove || 0));
-      const below = Math.max(...run.map((b) => b.spaceBelow || 0));
-      const inner = run.map((blk, n) => renderBlock(
-        // A member's own spacing is spent by the run, so it must not be spent
-        // twice. Inside the run, blocks are separated by the column gap.
+      // Take exactly TWO consecutive halves, not the whole run — a third
+      // starts a new row, so a run of four reads left, right, left, right
+      // down the page instead of left column top-to-bottom then right.
+      const hasPartner = list[i + 1] && list[i + 1].width === 'half';
+      const row = hasPartner ? list.slice(i, i + 2) : [list[i]];
+      const above = Math.max(...row.map((b) => b.spaceAbove || 0));
+      const below = Math.max(...row.map((b) => b.spaceBelow || 0));
+      const inner = row.map((blk, n) => renderBlock(
+        // A member's own spacing is spent by the row, so it must not be spent
+        // twice. Inside the row, blocks are separated by the column gap.
         Object.assign({}, blk, { spaceAbove: 0, spaceBelow: 0 }),
         Object.assign({}, opts, { index: i + n, total }),
       )).join('');
-      const lone = run.length === 1 ? ' tlcb-pair--lone' : '';
+      const lone = row.length === 1 ? ' tlcb-pair--lone' : '';
       out.push(`<div class="tlcb-pair${lone}" style="--tlcb-space-above:${above}px;--tlcb-space-below:${below}px">${inner}</div>`);
-      i = j;
+      i += row.length;
       continue;
     }
     out.push(renderBlock(list[i], Object.assign({}, opts, { index: i, total })));

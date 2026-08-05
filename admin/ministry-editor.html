@@ -69,11 +69,10 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
 /* A paired row is bracketed down the left edge, so you can see two blocks sit
    side by side without going to the canvas. Dragging one out breaks the pair
    and the bracket goes with it, because it is computed from the list. */
-.ed-row--run-top,.ed-row--run-mid,.ed-row--run-bottom{position:relative;margin-left:9px;}
-.ed-row--run-top::before,.ed-row--run-mid::before,.ed-row--run-bottom::before{content:'';position:absolute;left:-9px;width:7px;
+.ed-row--run-top,.ed-row--run-bottom{position:relative;margin-left:9px;}
+.ed-row--run-top::before,.ed-row--run-bottom::before{content:'';position:absolute;left:-9px;width:7px;
   border-left:2px solid #2E7EA6;}
 .ed-row--run-top::before{top:8px;bottom:-4px;border-top:2px solid #2E7EA6;border-radius:3px 0 0 0;}
-.ed-row--run-mid::before{top:-4px;bottom:-4px;}
 .ed-row--run-bottom::before{top:-4px;bottom:8px;border-bottom:2px solid #2E7EA6;border-radius:0 0 0 3px;}
 .ed-row.is-dragging{opacity:.4;}
 .ed-row-grip{color:#B8BECB;font-size:13px;cursor:grab;}
@@ -510,22 +509,22 @@ function renderTop() {
   el.edView.href = 'https://timothystl.org' + S.path;
 }
 
-// Which indexes begin a pair, walked from the top the same way pairHalves()
-// walks the list — so a third consecutive half starts a new row here too. Any
-// other rule would let the rail draw a bracket the page does not honour.
-// Where a RUN of half blocks starts and ends, walked the same way
-// pairHalves() walks the list — so the rail cannot bracket a grouping the page
-// does not draw. A run is every consecutive half; a full-width block ends it.
+// Which row (top/bottom of a pair) each half belongs to, walked the same way
+// pairHalves() walks the list: two consecutive halves make a row, a third
+// starts a new one — so the rail cannot bracket a grouping the page does not
+// draw. Rows are always exactly one or two blocks, so there is no "middle" of
+// a row to mark, only its top and bottom half.
 function runEdges(i) {
   var b = S.blocks[i];
   if (!b || b.width !== 'half') return '';
-  var prev = S.blocks[i - 1], next = S.blocks[i + 1];
-  var first = !prev || prev.width !== 'half';
-  var last = !next || next.width !== 'half';
-  if (first && last) return '';          // a lone half brackets nothing
-  if (first) return ' ed-row--run-top';
-  if (last) return ' ed-row--run-bottom';
-  return ' ed-row--run-mid';
+  // Find the start of this half-run, then count pairs of two off from there
+  // to know whether i is the top or bottom half of its own row.
+  var runStart = i;
+  while (runStart > 0 && S.blocks[runStart - 1] && S.blocks[runStart - 1].width === 'half') runStart -= 1;
+  var posInRow = (i - runStart) % 2;
+  var partner = posInRow === 0 ? S.blocks[i + 1] : S.blocks[i - 1];
+  if (!partner || partner.width !== 'half') return '';   // a lone half brackets nothing
+  return posInRow === 0 ? ' ed-row--run-top' : ' ed-row--run-bottom';
 }
 
 function renderRail() {

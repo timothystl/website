@@ -1844,17 +1844,27 @@ group('per-screen, part two');
   // "No emoji anywhere in the admin chrome."
   ok(!news.includes('\u{1F4F0}'), 'the newspaper emoji is gone — icons are typographic glyphs');
 
-  // /api/news: the public feed sorts newest-date-first now, matching the
-  // admin list above rather than the old soonest-upcoming-first order — a
-  // freshly published post with a future event_date used to sit at the
-  // bottom instead of leading.
+  // /api/news: an EVENT (has event_date) sorts soonest-first and disappears
+  // once its date passes, whatever its expire_date says; a plain
+  // ANNOUNCEMENT (no event_date) sorts newest-published-first, same as
+  // before. Events lead announcements as a group, regardless of how far out
+  // the soonest one is — a member deciding "what's next" should not have to
+  // skim past a stale announcement to find it.
   db.prepare("INSERT INTO news_items (id,title,summary,publish_date,event_date,expire_date,pinned) VALUES (3,'Old announcement','s',?,NULL,?,0)").run('2026-01-01', '2099-01-01');
-  db.prepare("INSERT INTO news_items (id,title,summary,publish_date,event_date,expire_date,pinned) VALUES (4,'Upcoming market','s',?,?,?,0)").run(today, '2026-12-01', '2099-01-01');
+  db.prepare("INSERT INTO news_items (id,title,summary,publish_date,event_date,expire_date,pinned) VALUES (4,'New announcement','s',?,NULL,?,0)").run(today, '2099-01-01');
+  db.prepare("INSERT INTO news_items (id,title,summary,publish_date,event_date,expire_date,pinned) VALUES (5,'Christmas Market','s',?,?,?,0)").run('2026-01-01', '2026-12-01', '2099-01-01');
+  db.prepare("INSERT INTO news_items (id,title,summary,publish_date,event_date,expire_date,pinned) VALUES (6,'VBS','s',?,?,?,0)").run('2026-01-01', '2026-08-20', '2099-01-01');
+  // A past event, still inside its (generous) expire_date — must not appear.
+  db.prepare("INSERT INTO news_items (id,title,summary,publish_date,event_date,expire_date,pinned) VALUES (7,'Last month''s rummage sale','s',?,?,?,0)").run('2026-01-01', '2020-01-01', '2099-01-01');
   const apiNews = await (await call(env, '/api/news')).json();
   const titles = apiNews.map((r) => r.title);
-  ok(titles.indexOf('Upcoming market') < titles.indexOf('Old announcement'),
-    'the post with the later date leads, event_date and publish_date compared on the same footing: ' + titles.join(', '));
-  ok(titles.indexOf('Pinned post') < titles.indexOf('Upcoming market'), 'pinned still always leads everything else');
+  ok(!titles.includes("Last month's rummage sale"), 'a past event drops off entirely, even with time left on its expire_date');
+  ok(titles.indexOf('VBS') < titles.indexOf('Christmas Market'), 'the soonest event leads the next one: ' + titles.join(', '));
+  ok(titles.indexOf('Christmas Market') < titles.indexOf('New announcement'),
+    'every event leads every plain announcement, however far out the event is');
+  ok(titles.indexOf('New announcement') < titles.indexOf('Old announcement'),
+    'within plain announcements, the newest published still leads');
+  ok(titles.indexOf('Pinned post') < titles.indexOf('VBS'), 'pinned still always leads everything else');
 
   // 20-audit: a read-only drawer. No save, no delete; fields are sand-filled
   // rather than greyed, because grey text reads as broken.

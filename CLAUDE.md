@@ -1997,6 +1997,26 @@ thing beside a short thing with the next block tucked under it. That is the
 point, but it means reordering blocks changes the shape of the page more than
 it used to.
 
+**⚠ Superseded 2026-08-05 — back to rows of two, now with stretch instead of
+balance.** Dinger: a run of four halves was reading top-to-bottom in the left
+column before starting the right one, not left-right-left-right as dropped —
+`column-count` balances by height, it does not preserve row order. He also
+wanted two blocks in a row to line up rather than leave a gap under the
+shorter one. Both together are what this section's `column-count` fix was
+trying to avoid *without* asking for anything from the office — but stretch
+does the same job on purpose: `.tlcb-pair` is `display:grid` again (pairs of
+exactly two, third starts a new row, matching the ORIGINAL spec this section
+departed from) with `align-items:stretch`, so the shorter block's box grows to
+match the row instead of leaving the 300px hole the screenshot above was about.
+The editor rail brackets **pairs** again, not the whole run — `runEdges()` in
+`admin/ministry-editor.html` walks pairs of two from the start of each
+half-run, and the CSS gained an `ed-row--run-top`/`ed-row--run-bottom` pair
+only (no `-mid`, since a row is never more than two). The phone override moved
+from `column-count:1!important` back to `grid-template-columns:1fr!important`
+— `admin/blocks.test.mjs`'s "half-width blocks" group pins all of this, including
+that three consecutive halves now render as **two** `.tlcb-pair` wrappers (a
+full row plus a lone one), not one.
+
 #### The renter portal follows the brand, and the calendar stops saying it twice (v4.9.0, 2026-08-02)
 
 Tasks 17b and 18. The portal keeping its own `:root` was right and still is — a

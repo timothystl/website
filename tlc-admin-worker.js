@@ -45,6 +45,38 @@ import SCHEDULER_HTML from './admin/scheduler.html';
 import MINISTRY_EDITOR_HTML from './admin/ministry-editor.html';
 import { PAGE_SEEDS } from './admin/page-seeds.js';
 import { SITE_PAGES } from './admin/site-pages.js';
+
+// /news has no hardcoded markup for tools/extract-pages.mjs to lift — its
+// content (the news list, the newsletter archive, the calendar) was always
+// fetched live by JS into empty containers, so the extractor found nothing
+// to convert and the page never got a `pages` row at all. Hand-authored
+// here rather than in admin/site-pages.js, which is generated and would
+// have this dropped the next time the extractor runs. Only the fields the
+// office would actually want to change are set; sanitizeBlocks() below
+// fills in every default a real block needs.
+const NEWS_PAGE_SEED = {
+  id: 'news', title: 'News & Events', menu_label: '', slug: '/news', parent_id: null, sort: 70,
+  template: 'standard', in_menu: 0,
+  seo_description: 'Announcements, upcoming events, and weekly newsletters from Timothy Lutheran Church.',
+  blocks: [
+    {
+      id: 'news-1', type: 'hero',
+      title: 'News & Events',
+      subtitle: 'Announcements, upcoming events, and weekly letters from our congregation.',
+      eyebrow: "What's happening at Timothy",
+    },
+    {
+      id: 'news-2', type: 'newsfeed', title: 'Current news', eyebrow: 'Announcements', spaceAbove: 24, spaceBelow: 24,
+    },
+    {
+      id: 'news-3', type: 'newsletterarchive', title: 'Weekly newsletters', eyebrow: 'From the pastor', count: 2, spaceAbove: 24, spaceBelow: 24,
+    },
+    {
+      id: 'news-4', type: 'calendar', title: "What's coming up", eyebrow: 'On the calendar', spaceAbove: 24, spaceBelow: 24,
+      url: 'https://calendar.google.com/calendar/embed?src=calendar%40timothystl.org&src=c_7f6d3db77b48c01af48592e21b2743d22fdf2b221d9d3c4e0c02680b73b89041%40group.calendar.google.com&ctz=America%2FChicago&mode=MONTH&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0',
+    },
+  ],
+};
 import { orderPages, filterPages, pageStatus, slugify, uniqueSlug, pageRename,
          withShortLinks, shortLinkFor, shortLinkRoutes, outboundUrl, canReseed } from './admin/pages.js';
 import { MENUS, menuTree, publicMenu, orphanPages, menuWarnings, renumber,
@@ -339,21 +371,41 @@ async function badgeCounts(env, user) {
   return { gym, pages, newsletter };
 }
 
+// One sort rule, shared by /api/news and pageData()'s self-filling news
+// blocks: pinned first, then an event (has event_date) before a plain
+// announcement, events soonest-first, announcements newest-published-first.
+// CASE WHEN … ASC picks which group comes first; the two date columns each
+// keep their own direction, which a single ORDER BY column cannot do.
+const NEWS_ORDER_SQL = `ORDER BY pinned DESC,
+  CASE WHEN event_date IS NOT NULL THEN 0 ELSE 1 END ASC,
+  event_date ASC, publish_date DESC, id DESC`;
+
 async function pageData(env, reqKey) {
   if (reqKey && PAGE_DATA_CACHE.has(reqKey)) return PAGE_DATA_CACHE.get(reqKey);
   const p = (async () => {
     const q = async (sql, ...binds) => {
       try { return (await env.DB.prepare(sql).bind(...binds).all()).results || []; } catch (_) { return []; }
     };
-    const [settingRows, sermonRow, news, staff] = await Promise.all([
+    const [settingRows, sermonRow, news, staff, newsletters] = await Promise.all([
       q("SELECT key, value FROM site_settings WHERE key LIKE 'church_%'"),
       env.DB.prepare(
         'SELECT n.title, n.date, n.scripture, n.youtube_url, n.audio_url, s.title AS series ' +
         'FROM sermon_notes n LEFT JOIN sermon_series s ON s.id = n.series_id ' +
         'ORDER BY COALESCE(n.date, \'\') DESC, n.id DESC LIMIT 1'
       ).first().catch(() => null),
-      q("SELECT title, summary, publish_date AS date FROM news_items WHERE (expire_date IS NULL OR expire_date >= date('now')) ORDER BY pinned DESC, publish_date DESC, id DESC LIMIT 6"),
+      // Full fields, not just title+date — the "News feed" block (unlike the
+      // older "News highlights" block, which only ever needed a title and a
+      // date) shows the same expandable image/summary/body cards the /news
+      // page used to hand-roll. Both blocks read this one list.
+      q(`SELECT id, title, summary, body, image_url, publish_date, event_date, pinned FROM news_items
+         WHERE (expire_date IS NULL OR expire_date >= date('now'))
+           AND (event_date IS NULL OR event_date >= date('now'))
+         ${NEWS_ORDER_SQL} LIMIT 30`),
       q('SELECT name, title, email, photo_url FROM staff_members ORDER BY display_order ASC, id ASC LIMIT 12'),
+      // Same "published" filter /api/newsletters itself uses (status IS NULL
+      // counts too — issues sent before the status column existed).
+      q(`SELECT id, subject, published_at, pastor_note FROM newsletters
+         WHERE (status IS NULL OR status = 'published') ORDER BY published_at DESC, id DESC LIMIT 12`),
     ]);
     const s = {};
     for (const r of settingRows) s[r.key.replace(/^church_/, '')] = r.value;
@@ -361,7 +413,7 @@ async function pageData(env, reqKey) {
       settings: { address_line: s.address_line || '', address_city: s.address_city || '', phone: s.phone || '', email: s.email || '' },
       services: parseServiceTimes(s.service_times),
       sermon: sermonRow || null,
-      news, staff,
+      news, staff, newsletters,
     };
   })();
   if (reqKey) PAGE_DATA_CACHE.set(reqKey, p);
@@ -1057,7 +1109,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-04-2'; // bumped: payroll_ready_notified table for the payroll-ready push dedup
+    const SCHEMA_VERSION = '2026-08-05-1'; // bumped: seed the /news page row (NEWS_PAGE_SEED) so it has an editor draft
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -1572,7 +1624,17 @@ export default {
       await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_pages_menu ON pages(parent_id, sort)').run();
       await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_page_revisions_page ON page_revisions(page_id, created_at DESC)').run();
       const now = new Date().toISOString();
-      for (const p of SITE_PAGES) {
+      // ⚠ status stays 'published' here, same as every extracted page —
+      // NOT 'draft'. The menu_items seed already points a header AND footer
+      // entry at page_id 'news' (it has for as long as the Menu editor has
+      // existed), and publicMenu() in admin/menu.js drops a menu item to a
+      // non-published page as broken, which would have taken "News & Events"
+      // out of the live site's navigation entirely the moment this migration
+      // ran. What actually keeps this page from rendering from blocks before
+      // anyone presses Publish is `published_blocks` staying NULL below —
+      // the same mechanism every other seeded page already relies on.
+      const ALL_SEEDED_PAGES = [...SITE_PAGES, NEWS_PAGE_SEED];
+      for (const p of ALL_SEEDED_PAGES) {
         await env.DB.prepare(
           'INSERT OR IGNORE INTO pages (id, title, menu_label, slug, parent_id, sort, template, status, in_menu, seo_description, blocks, updated_at, updated_by) ' +
           "VALUES (?, ?, ?, ?, ?, ?, ?, 'published', ?, ?, ?, ?, 'migration')"
@@ -1585,7 +1647,7 @@ export default {
       // refresh the draft — but only for pages nobody has touched: still
       // stamped 'migration' and never published. A page someone has edited or
       // put live keeps exactly what it has.
-      for (const p of SITE_PAGES) {
+      for (const p of ALL_SEEDED_PAGES) {
         const row = await env.DB.prepare('SELECT id, updated_by, published_blocks FROM pages WHERE id = ?').bind(p.id).first();
         if (!canReseed(row)) continue;
         await env.DB.prepare("UPDATE pages SET blocks = ?, updated_at = ?, updated_by = 'migration' WHERE id = ?")
@@ -1906,6 +1968,14 @@ export default {
     }
 
     // ── PUBLIC: news items API ──
+    // ⚠ Two different kinds of row, two different sort rules, in ONE list —
+    // that is what NEWS_ORDER_SQL/NEWS_WHERE_SQL below encode once so every
+    // consumer (this route, pageData()'s self-filling blocks) agrees:
+    //   - An EVENT (has event_date) is a date on the calendar. It sorts
+    //     soonest-first, and once that date has passed it drops off the list
+    //     entirely — expire_date does not keep a past event alive.
+    //   - A plain ANNOUNCEMENT (no event_date) sorts newest-published-first,
+    //     same as before, and is only ever hidden by its own expire_date.
     if (path === '/api/news' && method === 'GET') {
       const limit = parseInt(url.searchParams.get('limit') || '20', 10);
       const today = new Date().toISOString().split('T')[0];
@@ -1913,10 +1983,11 @@ export default {
         `SELECT id, title, summary, body, image_url, publish_date, event_date, expire_date, pinned, theme, content_type, channels
          FROM news_items
          WHERE publish_date <= ? AND (expire_date IS NULL OR expire_date >= ?)
+           AND (event_date IS NULL OR event_date >= ?)
            AND (channels IS NULL OR channels LIKE '%web%')
-         ORDER BY pinned DESC, COALESCE(event_date, publish_date) DESC, id DESC
+         ${NEWS_ORDER_SQL}
          LIMIT ?`
-      ).bind(today, today, limit).all();
+      ).bind(today, today, today, limit).all();
       return new Response(JSON.stringify(rows.results), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
       });
