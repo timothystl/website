@@ -5,7 +5,7 @@
 // Last modified: 2026-03-27
 
 
-import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS, DB_INIT_PAYROLL_READY_NOTIFIED } from './admin/db.js';
+import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, DB_INIT_FOOTER_COLUMNS, FOOTER_COLUMN_SEED, FOOTER_ITEM_COLUMNS, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS, DB_INIT_PAYROLL_READY_NOTIFIED } from './admin/db.js';
 import { pushToAllSubscribers } from './admin/webpush.js';
 
 // Static pages that can carry self-serve notices (matches the SPA's page ids in public/index.html)
@@ -80,7 +80,8 @@ const NEWS_PAGE_SEED = {
 import { orderPages, filterPages, pageStatus, slugify, uniqueSlug, pageRename,
          withShortLinks, shortLinkFor, shortLinkRoutes, outboundUrl, canReseed } from './admin/pages.js';
 import { MENUS, menuTree, publicMenu, orphanPages, menuWarnings, renumber,
-         normalizeMenu, normalizeKind, normalizeStyle, normalizeDepth } from './admin/menu.js';
+         normalizeMenu, normalizeKind, normalizeStyle, normalizeDepth,
+         COLUMN_SOURCES, normalizeSource, footerColumns, publicFooter, renumberColumns } from './admin/menu.js';
 import { diffSummary, auditGroup, canRollback as auditCanRollback, rollbackNote, actionTone } from './admin/audit.js';
 import { BLOCKS as NL_BLOCKS, parseBlocks as parseNlBlocks, serializeBlocks as serializeNlBlocks,
          blockOn, AUDIENCES, normalizeAudience, subjectAdvice, preheaderAdvice,
@@ -1150,7 +1151,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-05-1'; // bumped: seed the /news page row (NEWS_PAGE_SEED) so it has an editor draft
+    const SCHEMA_VERSION = '2026-08-05-2'; // bumped: footer_columns + menu_items.column_id, so the footer's headings and groupings are admin-managed
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -1755,6 +1756,28 @@ export default {
         ).bind(m.id, m.menu, m.label || null, m.kind, m.page_id || null, m.target || null, m.style || 'link', m.depth || 0, m.sort_order).run();
       } catch (_) {}
     }
+    // ── FOOTER COLUMNS ──
+    // The footer's headings and which link sits under each. See the note at
+    // the top of admin/menu.js for why this is a table and not a position
+    // convention inside the flat list.
+    try { await env.DB.prepare('ALTER TABLE menu_items ADD COLUMN column_id INTEGER').run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_FOOTER_COLUMNS).run(); } catch (_) {}
+    for (const c of FOOTER_COLUMN_SEED) {
+      try {
+        await env.DB.prepare('INSERT OR IGNORE INTO footer_columns (id, heading, source, sort_order, visible) VALUES (?, ?, ?, ?, 1)')
+          .bind(c.id, c.heading, c.source, c.sort_order).run();
+      } catch (_) {}
+    }
+    // ⚠ Only where nothing is set. An install that already has a footer needs
+    // its links put into columns once; a link the office has since moved must
+    // never be dragged back by a later deploy.
+    for (const [itemId, columnId] of Object.entries(FOOTER_ITEM_COLUMNS)) {
+      try {
+        await env.DB.prepare('UPDATE menu_items SET column_id = ? WHERE id = ? AND column_id IS NULL AND menu = ?')
+          .bind(columnId, Number(itemId), 'footer').run();
+      } catch (_) {}
+    }
+
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_news_items_value ON news_items(value)').run(); } catch (_) {}
     for (const p of PARTNER_SEED) {
       try {
@@ -1992,6 +2015,7 @@ export default {
       // filtered out by publicMenu() — the admin shows them flagged, the site
       // must not show them at all.
       const menuRows = await env.DB.prepare('SELECT * FROM menu_items ORDER BY menu, sort_order, id').all().catch(() => ({ results: [] }));
+      const colRows = await env.DB.prepare('SELECT * FROM footer_columns ORDER BY sort_order, id').all().catch(() => ({ results: [] }));
       const menuPages = new Map(list.map((p) => [p.id, p]));
       const strip = (i) => ({ label: i.label, href: i.href, style: i.style, kind: i.kind,
         children: (i.children || []).map((c) => ({ label: c.label, href: c.href, kind: c.kind })) });
@@ -2003,6 +2027,11 @@ export default {
         menu: {
           header: publicMenu(menuRows.results || [], menuPages, 'header').map(strip),
           footer: publicMenu(menuRows.results || [], menuPages, 'footer').map(strip),
+          // The footer's real shape: headed columns. `footer` above stays as
+          // it was — the mobile drawer repeats the footer's outside links from
+          // it, and it is the fallback for a site whose columns have somehow
+          // gone missing.
+          footerColumns: publicFooter(colRows.results || [], menuRows.results || [], menuPages),
         },
         rendered,
         css: Object.keys(rendered).length ? BLOCK_CSS : '',
@@ -3291,6 +3320,88 @@ ${sidebarShell('media', currentUser, '', await pageBadges())}
       };
 
 
+      // ── FOOTER COLUMNS ───────────────────────────────────────
+      // A column is a heading and an order. Which links sit under it is the
+      // links' business (menu_items.column_id), so nothing here ever writes
+      // a list of items — a column and its contents cannot fall out of step
+      // because only one of them records the relationship.
+      if (path === '/menu/columns/new' || path.startsWith('/menu/columns/')) {
+        const idPart = path.slice('/menu/columns/'.length);
+
+        if (path === '/menu/columns/save' && method === 'POST') {
+          const form = await request.formData();
+          const id = parseInt(form.get('id'), 10);
+          const heading = String(form.get('heading') || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+          const source = normalizeSource(form.get('source'));
+          // ⚠ A toggle posts a hidden 0 ahead of its checkbox, so form.get()
+          // is the 0 either way and always reads as on.
+          const visible = form.getAll('visible').includes('1') ? 1 : 0;
+          if (!heading) return new Response('', { status: 302, headers: { Location: '/menu?msg=saved' } });
+          if (Number.isFinite(id)) {
+            const before = await env.DB.prepare('SELECT * FROM footer_columns WHERE id = ?').bind(id).first().catch(() => null);
+            await env.DB.prepare('UPDATE footer_columns SET heading = ?, source = ?, visible = ? WHERE id = ?')
+              .bind(heading, source, visible, id).run();
+            await logAudit(env.DB, currentUser, 'update', 'footer_column', String(id), heading, before, { heading, source, visible });
+          } else {
+            const max = await env.DB.prepare('SELECT COALESCE(MAX(sort_order),0) AS m FROM footer_columns').first().catch(() => ({ m: 0 }));
+            await env.DB.prepare('INSERT INTO footer_columns (heading, source, sort_order, visible) VALUES (?, ?, ?, ?)')
+              .bind(heading, source, ((max && max.m) || 0) + 10, visible).run();
+            await logAudit(env.DB, currentUser, 'create', 'footer_column', heading, heading, null, { heading, source });
+          }
+          return new Response('', { status: 302, headers: { Location: '/menu?msg=saved' } });
+        }
+
+        // Deleting a column never deletes a link. The links fall out of any
+        // column and show up in the "Not in a column" band, still on the site
+        // — losing somebody's footer links because they tidied a heading is
+        // exactly the silent damage this screen should not be able to do.
+        if (path.startsWith('/menu/columns/delete/') && method === 'POST') {
+          const id = parseInt(path.slice('/menu/columns/delete/'.length), 10);
+          if (Number.isFinite(id)) {
+            const before = await env.DB.prepare('SELECT * FROM footer_columns WHERE id = ?').bind(id).first().catch(() => null);
+            await env.DB.prepare('UPDATE menu_items SET column_id = NULL WHERE column_id = ?').bind(id).run().catch(() => {});
+            await env.DB.prepare('DELETE FROM footer_columns WHERE id = ?').bind(id).run();
+            await logAudit(env.DB, currentUser, 'delete', 'footer_column', String(id), before ? before.heading : '', before, null);
+          }
+          return new Response('', { status: 302, headers: { Location: '/menu?msg=column-deleted' } });
+        }
+
+        if (method === 'GET') {
+          const editing = idPart === 'new' ? null
+            : await env.DB.prepare('SELECT * FROM footer_columns WHERE id = ?').bind(parseInt(idPart, 10)).first().catch(() => null);
+          if (idPart !== 'new' && !editing) return new Response('', { status: 302, headers: { Location: '/menu' } });
+          const inUse = editing
+            ? await env.DB.prepare('SELECT COUNT(*) AS n FROM menu_items WHERE column_id = ?').bind(editing.id).first().catch(() => ({ n: 0 }))
+            : { n: 0 };
+          return html(`
+${sidebarShell('menu', currentUser, `<a href="/menu">← Menu</a>`, await pageBadges())}
+<div class="tlc-wrap">
+${renderFormSection({
+  title: editing ? `The ${editing.heading} column` : 'A new footer column',
+  purpose: 'A heading in the footer, and a place to drag links into. Which links sit under it is set by dragging them on the Menu screen.',
+  action: '/menu/columns/save',
+  cancelHref: '/menu',
+  saveLabel: editing ? 'Save column' : 'Add column',
+  deleteAction: editing ? `/menu/columns/delete/${editing.id}` : '',
+  deleteLabel: 'Delete column',
+  deleteConfirm: inUse.n
+    ? `Delete the ${editing.heading} column? The ${inUse.n} link(s) in it stay on the site and move to "Not in a column" so you can put them somewhere else.`
+    : 'Delete this column?',
+  note: 'Deleting a column never deletes the links in it. They come out into "Not in a column" and keep showing on the site.',
+  fields: [
+    ...(editing ? [{ kind: 'html', html: `<input type="hidden" name="id" value="${editing.id}">` }] : []),
+    { name: 'heading', label: 'Heading', value: editing ? editing.heading : '', required: true,
+      hint: 'The word above the links. Short — it sits in a narrow column.' },
+    { kind: 'chips', name: 'source', label: 'What is in it', value: editing ? editing.source : 'menu',
+      options: [{ value: 'menu', label: 'Links I choose' }, { value: 'partners', label: 'Partner ministries' }] },
+    { kind: 'html', html: '<p class="tlc-hint" style="margin-top:-10px;">A partner column fills itself from the partner ministries — one per core value — so there is nothing to drag into it.</p>' },
+    { kind: 'toggle', name: 'visible', label: 'Column shown', value: editing ? !!editing.visible : true, on: 'Showing', off: 'Hidden' },
+  ],
+})}
+</div>`, editing ? editing.heading : 'New footer column');
+        }
+      }
+
       // ── APPEARANCE ───────────────────────────────────────────
       // The header bar and the newsletter band. Everything else the Menu
       // screen writes is live the moment it is saved; this is the one part
@@ -3499,6 +3610,34 @@ ${renderFormSection({
     </form>
   </div>`).join('');
 
+        // ── THE FOOTER, AS COLUMNS ──
+        // One drop target per column. An unassigned link is shown in its own
+        // band rather than quietly folded into a column: the site does put it
+        // under the first heading (it has to appear somewhere), and the band
+        // is what makes that visible instead of mysterious.
+        const colRows = await env.DB.prepare('SELECT * FROM footer_columns ORDER BY sort_order, id').all().catch(() => ({ results: [] }));
+        const { columns: fcols, orphans: fspare } = footerColumns(colRows.results || [], list, byId);
+        const firstMenuCol = fcols.find((c) => c.source === 'menu' && c.visible);
+
+        const columnHtml = fcols.map((c) => `<div class="tlc-fcol">
+    <div class="tlc-fcol-head">
+      <span class="tlc-fcol-name">${escapeHtml(c.heading || 'Untitled column')}${c.visible ? '' : ' <span class="tlc-mi-kind">Hidden</span>'}</span>
+      <a class="tlc-edit" href="/menu/columns/${c.id}">Edit</a>
+    </div>
+    ${c.source === 'partners'
+      ? `<div class="tlc-menu-hint" style="padding:10px 14px;">Filled automatically from the partner ministries — one per core value. Edit them under <a href="/partners" style="color:var(--tlc-blue);">Partners</a>.</div>`
+      : `<div data-menu="footer" data-column="${c.id}" class="tlc-fcol-list">${c.items.length ? c.items.map(itemHtml).join('') : '<div class="tlc-menu-empty">Drag a link here.</div>'}</div>`}
+  </div>`).join('');
+
+        const footerPanelHtml = `<div class="tlc-fcols">${columnHtml}</div>
+    ${fspare.length ? `<div class="tlc-fcol tlc-fcol--spare">
+      <div class="tlc-fcol-head"><span class="tlc-fcol-name">Not in a column</span></div>
+      <div class="tlc-mi-warn">▲ ${fspare.length === 1 ? 'This link is' : `These ${fspare.length} links are`} showing on the site under ${escapeHtml(firstMenuCol ? firstMenuCol.heading : 'the first column')}, because every link has to appear somewhere. Drag ${fspare.length === 1 ? 'it' : 'them'} into the column ${fspare.length === 1 ? 'it belongs' : 'they belong'} in.</div>
+      <div data-menu="footer" class="tlc-fcol-list">${fspare.map(itemHtml).join('')}</div>
+    </div>` : ''}
+    <div class="tlc-menu-hint">Drag a link by its ⠿ handle to move it within a column or into another one. The footer does not nest — a column heading is the only level there is.
+      <a href="/menu/columns/new" style="color:var(--tlc-blue);font-weight:600;">Add a column</a></div>`;
+
         return html(`
 ${sidebarShell('menu', currentUser, `<a href="https://timothystl.org" target="_blank">View site</a>`, await pageBadges())}
 <div class="tlc-menu-wrap">
@@ -3522,9 +3661,7 @@ ${sidebarShell('menu', currentUser, `<a href="https://timothystl.org" target="_b
       ${panel('Header menu', `<div id="menu-header" data-menu="header">${listHtml(header, 'header')}</div>
         <div class="tlc-menu-hint">Drag a row by its ⠿ handle to reorder it. Drop it <strong>onto another item’s name</strong> to nest it underneath. Two levels is the limit — a third is a menu nobody can use on a phone.</div>`,
         { right: 'Drag to reorder · drop onto an item to nest', pad: false })}
-      ${panel('Footer menu', `<div id="menu-footer" data-menu="footer">${listHtml(footer, 'footer')}</div>
-        <div class="tlc-menu-hint">The footer is a flat list — no nesting.</div>`,
-        { right: 'Drag to reorder', pad: false })}
+      ${panel('Footer columns', footerPanelHtml, { right: 'Drag a link between columns', pad: false })}
     </div>
     <div>
       ${panel('Live pages not in the menu', orphanHtml + `<div class="tlc-menu-hint">Nothing here is broken. These pages are live and reachable by their address — they are simply not listed in a menu, which is right for a thank-you page or a one-off landing page.</div>`, { pad: false })}
@@ -3542,11 +3679,15 @@ ${sidebarShell('menu', currentUser, `<a href="https://timothystl.org" target="_b
   function rows(list){ return Array.prototype.slice.call(list.querySelectorAll('.tlc-mi')); }
   function save(){
     var out = [];
-    ['header','footer'].forEach(function(m){
-      var list = document.getElementById('menu-' + m);
-      if (!list) return;
+    // Every drop target, not two fixed ids: the footer is one list per column
+    // now, so a column is simply another container. Dragging a link from one
+    // column to another is then the same gesture as reordering within one,
+    // and it records where it landed.
+    Array.prototype.forEach.call(document.querySelectorAll('[data-menu]'), function(list){
+      var col = list.dataset.column ? parseInt(list.dataset.column, 10) : null;
       rows(list).forEach(function(r){
-        out.push({ id: parseInt(r.dataset.id,10), menu: m, depth: parseInt(r.dataset.depth,10) || 0 });
+        out.push({ id: parseInt(r.dataset.id,10), menu: list.dataset.menu,
+                   depth: parseInt(r.dataset.depth,10) || 0, column: col });
       });
     });
     document.getElementById('menu-order-input').value = JSON.stringify(out);
@@ -3596,9 +3737,7 @@ ${sidebarShell('menu', currentUser, `<a href="https://timothystl.org" target="_b
       save();
     });
   }
-  ['menu-header','menu-footer'].forEach(function(id){
-    var el = document.getElementById(id); if (el) wire(el);
-  });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-menu]'), wire);
 })();</script>`, 'Menu');
       }
 
@@ -3607,11 +3746,15 @@ ${sidebarShell('menu', currentUser, `<a href="https://timothystl.org" target="_b
         const form = await request.formData();
         let order = [];
         try { order = JSON.parse(form.get('order') || '[]'); } catch (_) { order = []; }
+        // Which column a footer row landed in travels with the drag, so
+        // moving a link between columns and reordering within one are the
+        // same posted order rather than two mechanisms that can disagree.
+        const columnOf = new Map(order.map((o) => [o.id, Number.isFinite(Number(o.column)) && o.column != null ? Number(o.column) : null]));
         for (const menu of MENUS) {
           const inMenu = order.filter((o) => normalizeMenu(o.menu) === menu);
           for (const row of renumber(inMenu, menu)) {
-            await env.DB.prepare('UPDATE menu_items SET menu = ?, sort_order = ?, depth = ? WHERE id = ?')
-              .bind(row.menu, row.sort_order, row.depth, row.id).run().catch(() => {});
+            await env.DB.prepare('UPDATE menu_items SET menu = ?, sort_order = ?, depth = ?, column_id = ? WHERE id = ?')
+              .bind(row.menu, row.sort_order, row.depth, menu === 'footer' ? (columnOf.get(row.id) ?? null) : null, row.id).run().catch(() => {});
           }
         }
         await logAudit(env.DB, currentUser, 'update', 'menu', 'order', 'Menu order', null, { count: order.length });

@@ -1157,6 +1157,18 @@ export const MENU_CSS = `
 .tlc-orphan-btn:hover{border-color:var(--tlc-blue);}
 .tlc-menu-hint{padding:12px 16px;font-size:12.5px;line-height:1.6;color:var(--tlc-body);background:var(--tlc-parchment);border-top:1px solid var(--tlc-edge);text-wrap:pretty;}
 .tlc-menu-empty{padding:26px 16px;text-align:center;font-size:13px;color:var(--tlc-muted);}
+
+/* The footer is headed columns, so each column is its own drop target. A link
+   dragged from one into another is the same gesture as reordering inside one,
+   which is why they are ordinary [data-menu] lists rather than a special case. */
+.tlc-fcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;padding:12px;}
+.tlc-fcol{border:1px solid var(--tlc-edge);border-radius:8px;background:var(--tlc-card);overflow:hidden;}
+.tlc-fcol--spare{margin:0 12px 12px;border-color:#E4C9A6;}
+.tlc-fcol-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px;background:var(--tlc-sand);border-bottom:1px solid var(--tlc-edge);}
+.tlc-fcol-name{font:700 12px var(--tlc-sans);color:var(--tlc-navy);letter-spacing:.04em;text-transform:uppercase;}
+.tlc-fcol-list{min-height:52px;}
+.tlc-fcol-list .tlc-mi{padding-left:10px;padding-right:10px;}
+.tlc-fcol-list .tlc-mi-kind{display:none;}
 `;
 
 // Presets sit above the permission checkboxes in the Users drawer.

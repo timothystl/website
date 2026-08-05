@@ -7,6 +7,7 @@
 import {
   MENUS, KINDS, MAX_DEPTH, normalizeMenu, normalizeKind, normalizeStyle, normalizeDepth,
   resolveItem, menuTree, publicMenu, orphanPages, menuWarnings, renumber,
+  COLUMN_SOURCES, normalizeSource, footerColumns, publicFooter, renumberColumns,
 } from './menu.js';
 
 let pass = 0, fail = 0;
@@ -183,6 +184,88 @@ group('renumbering');
     'the first item cannot be nested — there is nothing above it to nest under');
   eq(renumber([{ id: 1, depth: 0 }, { id: 2, depth: 1 }], 'footer')[1].depth, 0,
     'the footer flattens any nesting');
+}
+
+group('the footer is headed columns, not a flat list');
+{
+  // The header is one bar, so an ordered list describes it completely. The
+  // footer is groups with headings, and "which group is this under" has
+  // nowhere to live in an ordered list — infer it from position and a link
+  // silently changes column the moment somebody reorders the one above it.
+  const cols = [
+    { id: 1, heading: 'Visit', source: 'menu', sort_order: 10, visible: 1 },
+    { id: 2, heading: 'Connect', source: 'menu', sort_order: 20, visible: 1 },
+    { id: 3, heading: 'Partners', source: 'partners', sort_order: 30, visible: 1 },
+  ];
+  const items = [
+    item({ id: 1, menu: 'footer', kind: 'page', page_id: 'visit', column_id: 1, sort_order: 10 }),
+    item({ id: 2, menu: 'footer', kind: 'page', page_id: 'about', column_id: 2, sort_order: 20 }),
+    item({ id: 3, menu: 'footer', kind: 'page', page_id: 'give', column_id: 1, sort_order: 30 }),
+    item({ id: 4, menu: 'header', kind: 'page', page_id: 'about', sort_order: 10 }),
+  ];
+  const { columns, orphans } = footerColumns(cols, items, PAGES);
+  eq(columns.length, 3, 'every column is returned');
+  eq(columns[0].items.length, 2, 'with the items assigned to it');
+  eq(columns[1].items.length, 1, 'and only those');
+  eq(orphans.length, 0, 'nothing is stranded');
+  eq(columns[2].items.length, 0, 'a partners column carries no menu items — the site fills it');
+  ok(!columns.some((c) => c.items.some((i) => i.id === 4)), 'a header item never leaks into the footer');
+
+  eq(normalizeSource('nonsense'), 'menu', 'an unknown source falls back');
+  ok(COLUMN_SOURCES.includes('partners'), 'partners is a real source');
+}
+
+group('a footer link is never lost to a deleted column');
+{
+  // ⚠ The property that makes deleting a column safe. A link the office put in
+  // the footer vanishing because of a column somebody removed is exactly the
+  // silent loss the rest of this file exists to prevent.
+  const cols = [{ id: 1, heading: 'Visit', source: 'menu', sort_order: 10, visible: 1 }];
+  const items = [
+    item({ id: 1, menu: 'footer', kind: 'page', page_id: 'visit', column_id: 99, sort_order: 10 }),
+    item({ id: 2, menu: 'footer', kind: 'page', page_id: 'about', column_id: null, sort_order: 20 }),
+  ];
+  const { orphans } = footerColumns(cols, items, PAGES);
+  eq(orphans.length, 2, 'both a dead column and no column at all read as stranded');
+
+  const pub = publicFooter(cols, items, PAGES);
+  eq(pub.length, 1, 'the site still renders one column');
+  eq(pub[0].items.length, 2, 'and both stranded links appear in it rather than disappearing');
+  eq(pub[0].heading, 'Visit', 'under the first real column, not a headless one');
+}
+
+group('what the footer shows the site, and what it does not');
+{
+  const cols = [
+    { id: 1, heading: 'Visit', source: 'menu', sort_order: 10, visible: 1 },
+    { id: 2, heading: 'Empty', source: 'menu', sort_order: 20, visible: 1 },
+    { id: 3, heading: 'Hidden', source: 'menu', sort_order: 30, visible: 0 },
+    { id: 4, heading: 'Partners', source: 'partners', sort_order: 40, visible: 1 },
+  ];
+  const items = [
+    item({ id: 1, menu: 'footer', kind: 'page', page_id: 'visit', column_id: 1, sort_order: 10 }),
+    item({ id: 2, menu: 'footer', kind: 'page', page_id: 'draftp', column_id: 1, sort_order: 20 }),
+    item({ id: 3, menu: 'footer', kind: 'page', page_id: 'about', column_id: 1, sort_order: 30, visible: 0 }),
+  ];
+  const pub = publicFooter(cols, items, PAGES);
+  const headings = pub.map((c) => c.heading);
+  ok(headings.includes('Visit'), 'a column with links shows');
+  ok(!headings.includes('Empty'), 'one with none does not — a heading over nothing reads as a fault');
+  ok(!headings.includes('Hidden'), 'and a hidden column stays off');
+  ok(headings.includes('Partners'), 'but an empty partners column is kept — the site fills it after this runs');
+  eq(pub[0].items.length, 1, 'a draft page and a hidden item are both left out');
+
+  // The admin sees what the site does not, which is the whole point of the split.
+  const admin = footerColumns(cols, items, PAGES);
+  eq(admin.columns[0].items.length, 3, 'the admin still lists the broken and hidden ones so they can be fixed');
+}
+
+group('columns renumber from scratch');
+{
+  const out = renumberColumns([{ id: 5 }, { id: 2 }, { id: 9 }]);
+  eq(out[0].sort_order, 10, 'numbering starts at 10');
+  eq(out[2].id, 9, 'in the order posted');
+  eq(new Set(out.map((c) => c.sort_order)).size, 3, 'and no two columns claim one position');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

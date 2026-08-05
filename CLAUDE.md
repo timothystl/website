@@ -416,6 +416,123 @@ That backend is a separate codebase this session was never given access to.
 > section of this repo's CLAUDE.md first for the full design and its
 > constraints (never `await`ed, dedup considerations, VAPID key handling).
 
+### The chrome is editable, and drafted first (v4.23.0, 2026-08-05)
+
+Dinger, with two screenshots side by side — the Menu screen's preview bar, and
+the live site: *"i want to be able to edit the appearance of the menu and
+publish it to go live."*
+
+**Two separate problems, and the first one is the interesting one.**
+
+- **The preview was lying.** It was admin navy with a hardcoded `T` in a gold
+  square and the literal words "Timothy Lutheran", beside a real header that is
+  moss green with a round photographic logo and a strapline under the name. It
+  was built from the real menu ITEMS — the honest half — but drew them into a
+  bar that exists nowhere. Staff were being shown a picture of a header the
+  site does not have and asked to arrange it. `renderHeaderPreview()` in
+  `admin/appearance.js` is now the one renderer, used by the Menu screen and
+  the Appearance screen alike. **A preview that can disagree with the site is
+  worse than no preview, because it is believed.**
+- **The menu was already live** — every write went straight through, reaching
+  the site inside the 120s `/api/pages` cache. So "publish it to go live" was
+  describing a gap that was really a *trust* gap, not a plumbing one.
+
+**`admin/appearance.js` is the record**: bar colour, bottom rule, Give button,
+logo (with upload) and its shape, church name, tagline — plus the newsletter
+band's colour, wording and whether it appears at all.
+
+- **Drafted, then published.** Two `site_settings` rows,
+  `site_appearance_draft` and `site_appearance`, the same split a page has
+  between `blocks` and `published_blocks`. Everything else the Menu screen
+  writes is live on save and for reordering a link that is right; somebody
+  trying a colour or cropping a logo is *experimenting*, and an experiment
+  that is instantly on the front of the church website is not one. **Only
+  Publish writes the live row, and it copies the draft across whole rather
+  than taking fields from the request** — so a crafted POST can only ever
+  publish what is already on the screen. `pageData()` reads the published key
+  and only that.
+- **The screen names what differs** ("Bar colour, Logo") and shows both bars
+  when something is pending. "You have unpublished changes" tells somebody
+  that something is waiting without telling them what, which is the half that
+  would let them decide.
+- **⚠ Colours are a palette, not a picker, and gold is excluded from the bar.**
+  The nav links, the tagline and the brand name are all white and none is
+  editable, so a free hex field is one paste away from an unreadable header on
+  every page at once. White on gold is 2.6:1, so `bar: false` keeps it off the
+  bar and the newsletter band while leaving it available for the rule (no
+  text) and the Give button (how the site already looks). **Enforced in
+  `sanitizeAppearance()`, not by which chips get drawn** — a stale tab is
+  exactly how the unreadable header would otherwise be saved.
+- **⚠ Known and deliberately not fixed: the Give button is white on gold**,
+  2.6:1, below the 4.5:1 a label needs. That is the site as it already is, and
+  recolouring the most-clicked button on the church website should be somebody's
+  decision, not a side effect. Picking a darker Give colour on the new screen
+  fixes it today with no code change — which is part of why the choice exists.
+- **The public CSS is `var(--nav-bar, var(--sage))` throughout**, so the
+  fallback IS the site as it always looked. If the admin is unreachable, or
+  nobody ever opens the screen, nothing changes.
+- **⚠ The newsletter band is chrome, not a homepage block.** It sits OUTSIDE
+  every page div and renders on all 28 of them. It had been recorded here as
+  "the homepage newsletter signup block", and that description is what would
+  send somebody looking for it in the page editor, where it will never be —
+  converting the homepage to blocks would not have reached it. Its colour,
+  wording and on/off switch are on the Appearance screen, and the markup says
+  so.
+- The `photo` field kind in `admin/ui.js` renders a file input and **nothing
+  ever listened to it** — the uploader is wired on this screen rather than
+  left as a control that looks live and does nothing.
+
+Run: `node admin/appearance.test.mjs`, plus three groups in
+`test/admin-redesign.test.mjs`.
+
+### The footer is columns now (v4.23.0, 2026-08-05)
+
+The footer's headings and which links sit under each were hardcoded; the Menu
+screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
+"which column is this under".
+
+- **`footer_columns` is its own table and `menu_items.column_id` points at
+  it.** Inferring the grouping from position would mean a link silently
+  changing column the moment somebody reordered the one above it.
+- **A column's `source` is where its links come from** — `menu`, or
+  `partners`, which the site fills from the partner ministries, one per core
+  value. Those were never menu items, so the alternative to a source flag was
+  faking eleven rows or pretending the column does not exist.
+- **⚠ Deleting a column never deletes the links in it.** They fall out into a
+  "Not in a column" band, still on the site. Losing somebody's footer links
+  because they tidied a heading is exactly the silent damage this screen must
+  not be able to do.
+- **A stranded link is shown, not dropped.** It has to appear somewhere, so
+  `publicFooter()` puts it under the first column and the admin says in as
+  many words that that is where it went — visible rather than mysterious.
+- **A column is another drop target, not a special case.** `save()` in the
+  Menu screen's drag script walks every `[data-menu]` container and records
+  `data-column`, so dragging a link between columns and reordering inside one
+  are the same gesture and the same posted order.
+- An empty `menu` column is left off the site — a heading over nothing reads
+  as a fault — while an empty `partners` column is kept, because the site
+  fills it a moment later.
+
+Run: `node admin/menu.test.mjs`, plus two groups in
+`test/admin-redesign.test.mjs`.
+
+### /give is on the block editor, and the rest is scoped (2026-08-05)
+
+**Every page has had a block draft since the site editor shipped and not one
+had ever been published**, so the whole editor sat behind a Publish nobody had
+pressed. `/give` is the first published, by a one-time marker-gated migration
+— guarded by `canReseed()` so it never lands on a page somebody has touched.
+
+The draft was read against the live page first: the six offline giving paths
+come across as a card grid, and both buttons keep their real destinations
+(`give.timothystl.org`, `serve.timothystl.org`). Neither carries a Tithe.ly
+address, which is the one thing a published block must never hold.
+
+**`admin/BLOCK-EDITOR-ROLLOUT.md` is the full scope** — all 28 SPA pages, the
+three that deliberately are not block pages (`404`, `values`, `voters`), the
+other surfaces, and what converting `give.timothystl.org` would actually take.
+Read it before starting any of that work.
+
 ### Form Spam Screening (added 2026-07-31)
 
 The public contact / prayer / newsletter forms had one defence — a hidden
@@ -2813,7 +2930,11 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 ## Pending / Deferred Items
 
 ### Still Needs to Be Built
-- **The footer is not admin-editable at all** — flagged 2026-08-05, while adding the footer's Partners column (v4.22.0/#395,#396). The footer's column headings ("Visit", "Connect", "Programs", "Partners") and which links sit under each are hardcoded in `public/index.html` — the admin's Menu screen only manages the *header* nav and a flat list of footer outside-links repeated on mobile, neither of which touches the desktop footer's structure at all. What's wanted: real admin control over the footer's column headings and which links sit under each, add/remove/rename a column, reassign a link between columns — not just reordering within a fixed set of columns like the Partners tab's new drag-to-reorder. This is a genuinely separate build from the Menu screen's existing flat `menu_items` list (`MAX_DEPTH.footer = 0`), not an extension of it — likely wants its own "footer columns" concept (a new table for column headings + order, with footer links assigned to one) rather than shoehorning grouping into `menu_items`. Scoped but not started.
+- ~~**The footer is not admin-editable at all**~~ — **done v4.23.0, 2026-08-05.** `footer_columns` + `menu_items.column_id`; headings, membership and order are all editable under Menu → Footer columns, and deleting a column never deletes its links. See "The footer is columns now" above. *(Original note kept below for context.)* The footer's column headings ("Visit", "Connect", "Programs", "Partners") and which links sit under each were hardcoded in `public/index.html` — the admin's Menu screen only manages the *header* nav and a flat list of footer outside-links repeated on mobile, neither of which touches the desktop footer's structure at all. What's wanted: real admin control over the footer's column headings and which links sit under each, add/remove/rename a column, reassign a link between columns — not just reordering within a fixed set of columns like the Partners tab's new drag-to-reorder. This is a genuinely separate build from the Menu screen's existing flat `menu_items` list (`MAX_DEPTH.footer = 0`), not an extension of it — likely wants its own "footer columns" concept (a new table for column headings + order, with footer links assigned to one) rather than shoehorning grouping into `menu_items`. Scoped but not started.
+- **`give.timothystl.org` is not a block-editor page** — deferred by Andrew's own call 2026-08-05 (*"publish /give and then let's come back to give.timothystl.org. make note for that"*). `timothystl.org/give` IS one now. The giving landing page resolves the Tithe.ly link at request time, computes `&amount=<cents>` per chip and recomputes every link when the fund changes, so extracting it to text blocks would produce a page that looks right and takes no money. Converting it properly needs a real `giving` block type that resolves `give_url` at render time (never storing it — a block's URL is frozen at publish), the ministry ladder and leadership tiers as blocks, and `site-worker.js` learning to render a block page on a non-SPA hostname with `give-landing.js` kept as the fallback. Full scope in `admin/BLOCK-EDITOR-ROLLOUT.md` §3. **Also flagged there:** `give_keep_in_step` is a `site_settings` key that nothing reads — wire it up during that work or delete it.
+
+- **24 of the 25 page drafts are still unpublished** — not a code gap. Every page has had a block draft since the site editor shipped; `/give` is the first published. The rest need somebody to compare each draft against the live page, fix what the extractor flattened, and press Publish. Sequencing, known extractor gaps and the three pages that deliberately are not block pages are all in `admin/BLOCK-EDITOR-ROLLOUT.md`.
+
 - **Weekly newsletter display wants adjustments** — flagged 2026-08-05, Andrew's own words, no specifics given yet. Needs a follow-up conversation to pin down what "adjustments" means — the newsletter composer/email itself (`admin/newsletter.js`, `email.js`), or how issues are displayed on `/news`'s archive (now the Newsletter archive block, v4.22.0) — before there's anything to build.
 - **`/volunteer` short-URL redirect does not actually exist** — confirmed live 2026-07-20 while chasing the 2026-07-20 volunteer→serve rebrand: the Redirects tab in `admin.timothystl.org` has no `/volunteer` entry at all. This table's earlier documentation of `/volunteer → volunteer.timothystl.org` as an existing "Utility Redirect" was aspirational/planned, not a live row — `site-worker.js` has no hardcoded fallback either (confirmed by grep), so `timothystl.org/volunteer` simply falls through to the normal 404 page today, not to a dead external host. Nothing broke as part of the volunteer.timothystl.org→serve.timothystl.org cutover (see the chms repo's own CLAUDE.md). If a short link is wanted, an admin can add one via the Redirects tab: path `/volunteer` (or `/serve`), target `https://serve.timothystl.org` — optional, not a fix for anything broken.
 - ~~**links.timothystl.org "Volunteer" card still points at the old host**~~ — **not true, checked 2026-08-01.** Andrew looked and the live card already reads `serve.timothystl.org`; the seed constant says the same. This entry was written as a prediction about a row nobody had looked at, and it stayed on the list long enough to waste his time. Nothing to do.
@@ -2822,9 +2943,11 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 - **Ministry page editor rollout** — every ministry page now has a full-page block draft waiting in the editor (banner and all sections). The office reviews each one and presses Publish; until then the live page renders from its hardcoded markup exactly as before. Once a page is published from the editor, its hardcoded section markup in `public/index.html` is dead and can be deleted.
 - **Music page video strip** — the three fallback video cards on `/music` were not converted (they need real YouTube URLs). Add Video blocks in the editor, or drop them.
 - **Sermons page** — YouTube embed page exists; confirm it's pulling the correct channel or that it's manually maintained.
-- **Homepage newsletter signup block is hardcoded, not admin-editable** — flagged by Dinger 2026-08-05: the "Get our weekly newsletter" block on the homepage is plain markup in `public/index.html`, not a page-builder block, so it can't be edited or removed from the admin today. The homepage isn't on the block editor at all yet (unlike ministry pages / the site editor's other pages). Fixing this needs either converting the homepage to blocks, or a one-off admin toggle/field for this specific section.
-- **Confirm the Menu screen actually publishes live, and how fast** — Dinger asked 2026-08-05 how to "make the top bar menu go live"; per the Menu design it should already be live (it writes to the same `pages`/`menu_items` data the public nav reads, no separate publish step), but this wasn't verified end-to-end in that conversation. `/api/pages` is cached ~120s and busts on any pages/menu POST, so worth confirming a saved menu change actually shows on timothystl.org within a couple minutes, and if not, treating it as a bug.
-- **No logo image upload for the top nav bar, and header color scheme isn't admin-editable either** — Dinger asked 2026-08-05 about adding the church logo to the top bar; today the header only supports the "T" initial badge shown in the Menu preview, no image field. Would need a new setting (e.g. under Settings or Menu) wired into the header template to support an uploaded logo image. Same conversation also asked for editing the header's color scheme and "the publish button" for these — not yet scoped: is the color scheme just the header, or the site-wide palette (`--steel`/`--amber`/etc. in `public/styles.css`)? Does "publish" mean a draft/live split for this, like the page editor's `blocks`/`published_blocks`, so a color or logo change can be previewed before it goes out to every visitor at once, or does it just mean "make the save button actually take effect" (see the Menu-publish-timing question above, which may be the same underlying question)? Needs a real scoping conversation before design.
+- ~~**Homepage newsletter signup block is hardcoded**~~ — **done v4.23.0, 2026-08-05**, and the premise was wrong in a way worth recording: it is **not** on the homepage. It sits outside every page div and renders on all 28 pages, so converting the homepage to blocks would never have reached it. It is site-wide chrome, and its colour, wording and on/off switch are now on the Appearance screen beside the header. See "The chrome is editable, and drafted first" above.
+- ~~**Confirm the Menu screen actually publishes live**~~ — **answered 2026-08-05.** It was already live: every menu write goes straight through and the `/api/pages` edge copy is busted by the chokepoint on any POST under `/pages` or `/menu`, so a change reaches the site inside the 120s window. What made it *look* unpublished was the preview bar, which drew a header the site does not have — fixed in v4.23.0. Menu items stay instant; only the new appearance record is drafted and published.
+- ~~**No logo image upload for the top nav bar, and header color scheme isn't admin-editable**~~ — **done v4.23.0, 2026-08-05.** Logo upload (R2, with shape), church name, tagline, bar colour, bottom rule and Give button, all under Menu → Appearance. Note the "T" badge in the old Menu preview was never the site's logo — it was invented by that preview, which is why the header looked unchangeable. Both open questions were answered: **scope** is the header and the newsletter band only, not the site-wide palette (`--steel`/`--amber` still belong to the stylesheet); **publish** is a real draft/live split, `site_appearance_draft` vs `site_appearance`, exactly like `blocks`/`published_blocks`.
+
+- **The site-wide palette is still not admin-editable, deliberately.** The Appearance screen changes the header and the newsletter band; `--steel`/`--amber`/`--sage` in `public/styles.css` colour every button, card, heading and section on the site. Exposing those would be a theme editor, and a bad pick there is not one unreadable bar but an unreadable site. If it is ever wanted it needs its own design — starting from which of the ~20 variables are genuinely independent choices rather than shades of each other.
 
 ### From the Post-Redesign Review — Andrew's Call (2026-08-02)
 
@@ -2896,7 +3019,7 @@ This section used to restate the site's status in full; it drifted for months (l
 - **Every admin tab's status** is the "Admin Portal Plan" table near the top of this file — kept current all session, every row DONE.
 - **The live inventory of every admin screen** against the v3.0.0 mockups is `admin/REDESIGN-STATUS.md` — see "The design handoff is in the repo now" below for why that file, not this one, is the source of truth for per-screen fidelity.
 - **The public site's colors, typography and socials** are under "Design System" below.
-- **The admin worker version** is `VERSION` in `admin/helpers.js`, currently `v4.15.0` — see "Versioning" below for what bumps mean.
+- **The admin worker version** is `VERSION` in `admin/helpers.js`, currently `v4.23.0` — see "Versioning" below for what bumps mean.
 
 ### What's actually next
 - Youth director content entry for `/confirmation`, `/sundayschool`, `/vbs`, `/egghunt`, `/family` — the `youth_pages` rows exist, waiting on real content.

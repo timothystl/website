@@ -622,6 +622,62 @@ group('publishing /give never overwrites an edit the office made');
   ok(!row.published_blocks, 'a page somebody is working on is left alone, not pushed live under them');
 }
 
+group('the footer is admin-managed columns');
+{
+  // The footer's headings and groupings were hardcoded in public/index.html —
+  // the Menu screen only ever managed a flat list, which cannot express "which
+  // column is this link under".
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  const cols = db.prepare('SELECT * FROM footer_columns ORDER BY sort_order').all();
+  eq(cols.length, 4, 'the four columns the footer has today are seeded');
+  eq(cols.map((c) => c.heading).join(','), 'Visit,Connect,Programs,Partners', 'with their real headings');
+  eq(cols[3].source, 'partners', 'and Partners is filled from the partner ministries, not from menu items');
+
+  // An existing install has footer links with no column; they are placed once.
+  const assigned = db.prepare('SELECT COUNT(*) AS n FROM menu_items WHERE menu = ? AND column_id IS NOT NULL').get('footer');
+  ok(assigned.n >= 8, 'existing footer links were put into columns rather than left stranded');
+
+  const body = await (await call(env, '/menu', { cookie })).text();
+  has(body, 'Footer columns', 'the Menu screen shows them');
+  has(body, 'data-column=', 'each column is its own drop target, so a link can be dragged between them');
+  has(body, '/menu/columns/new', 'and a column can be added');
+
+  const api = await (await call(env, '/api/pages', { fresh: true })).json();
+  const fc = api.menu.footerColumns;
+  ok(Array.isArray(fc) && fc.length >= 3, 'the public bundle carries the columns');
+  ok(fc.some((c) => c.heading === 'Visit' && c.items.length), 'Visit has its links');
+  ok(fc.some((c) => c.source === 'partners'), 'and the partners column comes through even though it has no items here');
+}
+
+group('renaming a column, and deleting one without losing links');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  await call(env, '/menu/columns/save', { cookie, method: 'POST', form: { id: '1', heading: 'Plan a visit', source: 'menu', visible: '1' } });
+  eq(db.prepare('SELECT heading FROM footer_columns WHERE id=1').get().heading, 'Plan a visit', 'a column can be renamed');
+
+  await call(env, '/menu/columns/save', { cookie, method: 'POST', form: { heading: 'Serve', source: 'menu', visible: '1' } });
+  ok(db.prepare("SELECT id FROM footer_columns WHERE heading='Serve'").get(), 'and a new one added');
+
+  // ⚠ A toggle posts a hidden 0 first, so form.get() reads as on either way.
+  await call(env, '/menu/columns/save', { cookie, method: 'POST', form: { id: '2', heading: 'Connect', source: 'menu' } });
+  eq(db.prepare('SELECT visible FROM footer_columns WHERE id=2').get().visible, 0, 'an unticked Shown really stores hidden');
+
+  // The property that makes deleting safe: the links survive.
+  const before = db.prepare('SELECT COUNT(*) AS n FROM menu_items WHERE column_id=3').get().n;
+  ok(before > 0, 'the Programs column has links in it');
+  await call(env, '/menu/columns/delete/3', { cookie, method: 'POST' });
+  ok(!db.prepare('SELECT id FROM footer_columns WHERE id=3').get(), 'the column is gone');
+  eq(db.prepare('SELECT COUNT(*) AS n FROM menu_items WHERE id IN (28,29,30)').get().n, 3,
+     'and every link that was in it still exists — deleting a heading must never delete somebody\'s links');
+
+  const page = await (await call(env, '/menu', { cookie })).text();
+  has(page, 'Not in a column', 'they surface in their own band rather than vanishing');
+}
+
 group('the header is drafted before it is published');
 {
   // The point of this screen is that somebody can try a colour on the front of
