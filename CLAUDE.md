@@ -528,6 +528,20 @@ come across as a card grid, and both buttons keep their real destinations
 (`give.timothystl.org`, `serve.timothystl.org`). Neither carries a Tithe.ly
 address, which is the one thing a published block must never hold.
 
+**⚠ Found while checking that draft, and fixed before publishing: an in-site
+link in `public/index.html` is `href="#" onclick="showPage('contact')"`.** The
+extractor read the href alone, so `/give`'s "Speak with a pastor" came out as a
+link to `#` — which sanitises perfectly cleanly, because `#` is a valid URL, and
+would have reached the live giving page as a link that goes nowhere. **A dead
+link is worse than a missing one: it looks like it works.** `hrefOf()` in
+`tools/extract-pages.mjs` now reads the onclick first and resolves it to the
+page's own address, and `admin/blocks.test.mjs` asserts no seed anywhere
+carries a `#` url — the same shape of rule as the no-Tithe.ly-link assertion
+beside it, and for the same reason: it has to hold for every page, not just the
+one where it was noticed. ⚠ There are **two** card-building passes in
+`cardRun()` and both read a href; fixing one and not the other is exactly how
+this survived the first attempt at the fix.
+
 **`admin/BLOCK-EDITOR-ROLLOUT.md` is the full scope** — all 28 SPA pages, the
 three that deliberately are not block pages (`404`, `values`, `voters`), the
 other surfaces, and what converting `give.timothystl.org` would actually take.

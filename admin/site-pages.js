@@ -1093,7 +1093,7 @@ export const SITE_PAGES = [
           {
             "img": "/images/ministries/Bees.webp?v=20260328",
             "eyebrow": "",
-            "title": "Timothy Urban Beekeepers",
+            "title": "Urban Beekeepers",
             "body": "<p>St. Louis neighbors learning about and supporting the art of beekeeping in an urban setting — a joyful reminder that creation care is part of our calling.</p>",
             "linkLabel": "Learn more",
             "url": "/bees"
@@ -2075,7 +2075,7 @@ export const SITE_PAGES = [
             "title": "Planned giving",
             "body": "<p>A gift through your will or estate is one of the most significant ways to invest in the future of this congregation and its mission. We'd be honored to talk with you. Speak with a pastor</p>",
             "linkLabel": "Speak with a pastor",
-            "url": "#"
+            "url": "/contact"
           }
         ],
         "links": [],
