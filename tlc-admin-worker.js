@@ -84,7 +84,7 @@ import { MENUS, menuTree, publicMenu, orphanPages, menuWarnings, renumber,
          COLUMN_SOURCES, normalizeSource, footerColumns, publicFooter, renumberColumns } from './admin/menu.js';
 import { diffSummary, auditGroup, canRollback as auditCanRollback, rollbackNote, actionTone } from './admin/audit.js';
 import { BLOCKS as NL_BLOCKS, parseBlocks as parseNlBlocks, serializeBlocks as serializeNlBlocks,
-         blockOn, AUDIENCES, normalizeAudience, subjectAdvice, preheaderAdvice,
+         blockOn, normalizeAudience, subjectAdvice, preheaderAdvice,
          isSent as isNewsletterSent, canEdit as canEditNewsletter, approvalState,
          issueStatus, sendSummary, parseSubscriberCsv,
          parseExtras, extrasFromForm, serializeExtras, MAX_EXTRA_NOTES } from './admin/newsletter.js';
@@ -4922,10 +4922,11 @@ ${sidebarShell('news', currentUser, `<a href="/newsitems">← News &amp; Events<
       <div class="card-title">Send email</div>
       <div style="font-family:var(--sans);font-size:12px;color:var(--gray);margin-bottom:12px;"><strong>Publish</strong> sends to the selected list and goes live on the website. <strong>Save as draft</strong> saves without sending anything.</div>
       <div class="radio-row">
-        <label><input type="radio" name="email_send" value="test" checked> Test list only</label>
-        <label><input type="radio" name="email_send" value="all"> All subscribers</label>
+        <label><input type="radio" name="email_send" value="test" checked> Test list</label>
+        <label><input type="radio" name="email_send" value="all"> Members</label>
         <label><input type="radio" name="email_send" value="none"> Website only (no email)</label>
       </div>
+      <div style="font-family:var(--sans);font-size:12px;color:var(--gray);margin-top:6px;">These are the two lists in Brevo &mdash; the test list and the member list. This is the only place the audience is chosen.</div>
       <div style="margin-top:14px;padding:12px 14px;background:var(--mist);border-radius:8px;border:1px solid var(--ice);font-family:var(--sans);font-size:12px;color:var(--charcoal);line-height:1.7;">
         📊 <strong>Email is sent via Brevo.</strong> To see open rates, clicks, and delivery stats after sending, log in at <a href="https://app.brevo.com" target="_blank" style="color:var(--mid);font-weight:700;">app.brevo.com</a> → Campaigns.
       </div>
@@ -5049,7 +5050,15 @@ addEvent();
       const status = (action === 'publish' && emailSend !== 'test') ? 'published' : 'draft';
 
       const preheader = form.get('preheader') || '';
-      const audience = normalizeAudience(form.get('audience'));
+      // `audience` no longer has a control on the form — the Send email card picks the real
+      // Brevo list, and the three-way "Who gets it" select named lists that do not exist. The
+      // column stays and keeps whatever an older issue recorded, rather than every save
+      // silently rewriting it to the default; nothing reads it today either way.
+      let audience = normalizeAudience(form.get('audience'));
+      if (!form.has('audience') && editId) {
+        const prior = await env.DB.prepare('SELECT audience FROM newsletters WHERE id = ?').bind(editId).first().catch(() => null);
+        if (prior && prior.audience) audience = normalizeAudience(prior.audience);
+      }
       // Only the switches the form actually rendered are considered. A checkbox
       // posts nothing when off, so `block_seen` records which ones were on the
       // page — without it, a form that never showed a switch would read as
@@ -5443,6 +5452,26 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
         : '';
       const nlLocked = !canEditNewsletter(row).ok;
       const nlBlocks = parseNlBlocks(row.blocks);
+      // ── Schedule send ──
+      // A pending schedule is worth stating outright: Brevo already holds a campaign, and
+      // scheduling again REPLACES nothing — it creates a second one — so somebody needs to
+      // see that one is already booked before they book another.
+      const schedAt = row.scheduled_send_at ? new Date(row.scheduled_send_at) : null;
+      const schedPending = schedAt && !isNaN(schedAt.getTime()) && schedAt.getTime() > Date.now();
+      const scheduledNote = schedPending
+        ? `<div class="alert alert-info" style="margin-bottom:10px;">Already scheduled with Brevo for <strong>${escapeHtml(schedAt.toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short', timeZone: 'America/Chicago' }))}</strong> (${escapeHtml(row.scheduled_list_type === 'test' ? 'test list' : 'members')}). Scheduling again adds a second campaign rather than moving this one &mdash; cancel the first in <a href="https://app.brevo.com" target="_blank">Brevo</a> if that is not what you want.</div>`
+        : '';
+      // Default the picker to the issue's own publish date at 9am, which is when this
+      // newsletter actually goes out — a blank datetime field is a small chore every time.
+      // Falls forward to tomorrow if that date has already passed, so the field never opens
+      // on a time Brevo will reject.
+      const schedBase = new Date(`${row.published_at || new Date().toISOString().split('T')[0]}T09:00:00`);
+      if (isNaN(schedBase.getTime()) || schedBase.getTime() <= Date.now()) {
+        schedBase.setTime(Date.now() + 24 * 60 * 60 * 1000);
+        schedBase.setHours(9, 0, 0, 0);
+      }
+      const pad2 = (n) => String(n).padStart(2, '0');
+      const defaultScheduleAt = `${schedBase.getFullYear()}-${pad2(schedBase.getMonth() + 1)}-${pad2(schedBase.getDate())}T${pad2(schedBase.getHours())}:${pad2(schedBase.getMinutes())}`;
       const subjAdvice = subjectAdvice(row.subject || '');
       const preAdvice = preheaderAdvice(row.preheader || '');
       const lockedMsg = url.searchParams.get('msg') === 'locked'
@@ -5528,13 +5557,6 @@ ${sidebarShell('newsletter', currentUser, '', await pageBadges())}
             <input type="date" name="published_at" value="${row.published_at||''}" ${nlLocked ? 'readonly' : ''}>
           </div>
         </div>
-      </div>
-      <div class="card-title" style="margin-top:18px;">Who gets it</div>
-      <div class="form-group" style="margin-bottom:0;">
-        <select name="audience" ${nlLocked ? 'disabled' : ''}>
-          ${AUDIENCES.map((a) => `<option value="${a.key}"${normalizeAudience(row.audience) === a.key ? ' selected' : ''}>${escapeHtml(a.label)}</option>`).join('')}
-        </select>
-        <div style="font-size:12px;color:var(--gray);margin-top:4px;">Brevo decides the actual list; this records who the issue was written for.</div>
       </div>
     </div>
 
@@ -5639,10 +5661,11 @@ ${sidebarShell('newsletter', currentUser, '', await pageBadges())}
       <div class="card-title">Send email</div>
       <div style="font-family:var(--sans);font-size:12px;color:var(--gray);margin-bottom:12px;"><strong>Publish</strong> sends to the selected list and goes live on the website. <strong>Save as draft</strong> saves without sending anything.</div>
       <div class="radio-row">
-        <label><input type="radio" name="email_send" value="test" checked> Test list only</label>
-        <label><input type="radio" name="email_send" value="all"> All subscribers</label>
+        <label><input type="radio" name="email_send" value="test" checked> Test list</label>
+        <label><input type="radio" name="email_send" value="all"> Members</label>
         <label><input type="radio" name="email_send" value="none"> Website only (no email)</label>
       </div>
+      <div style="font-family:var(--sans);font-size:12px;color:var(--gray);margin-top:6px;">These are the two lists in Brevo &mdash; the test list and the member list. This is the only place the audience is chosen.</div>
       <div style="margin-top:14px;padding:12px 14px;background:var(--mist);border-radius:8px;border:1px solid var(--ice);font-family:var(--sans);font-size:12px;color:var(--charcoal);line-height:1.7;">
         📊 <strong>Email is sent via Brevo.</strong> To see open rates, clicks, and delivery stats after sending, log in at <a href="https://app.brevo.com" target="_blank" style="color:var(--mid);font-weight:700;">app.brevo.com</a> → Campaigns.
       </div>
@@ -5655,6 +5678,44 @@ ${sidebarShell('newsletter', currentUser, '', await pageBadges())}
     </div>
 
   </form>
+
+    ${hasPermission(currentUser, 'newsletter_approve') ? `
+    <!-- Schedule send. Sits OUTSIDE #nl-form on purpose: a form inside a form is invalid
+         HTML and the browser drops the inner one, so this has to be its own form even
+         though it reads as part of the button row above it.
+         ⚠ It posts the issue AS ALREADY SAVED. Brevo builds the campaign from the stored
+         row at this moment, so anything typed but not saved is not in the scheduled email —
+         hence the reminder in the copy rather than a silent surprise next Sunday. -->
+    <div class="card" style="margin-top:14px;">
+      <div class="card-title">Schedule send <span class="tag">Optional</span></div>
+      <div style="font-family:var(--sans);font-size:12px;color:var(--gray);margin-bottom:10px;">
+        Hand the issue to Brevo now and have it go out at a set date and time. Save your changes first &mdash; Brevo builds the email from the saved issue, not from what is on screen.
+      </div>
+      ${scheduledNote}
+      <button type="button" class="btn btn-secondary" onclick="toggleSchedule(${row.id})">${row.scheduled_send_at ? 'Reschedule&hellip;' : 'Schedule send&hellip;'}</button>
+      <div id="sched-row-${row.id}" style="display:none;margin-top:12px;">
+        <form method="POST" action="/schedule-email/${row.id}" onsubmit="return prepSchedule(this)">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+            <div class="form-group" style="margin:0;">
+              <label>Date and time</label>
+              <input type="datetime-local" name="scheduled_at_local" value="${defaultScheduleAt}" required>
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label>Send to</label>
+              <select name="list_type">
+                <option value="all">Members</option>
+                <option value="test">Test list</option>
+              </select>
+            </div>
+            <button type="submit" class="btn btn-primary">Schedule</button>
+          </div>
+          <!-- prepSchedule() fills this with a real ISO instant computed in the browser's own
+               timezone: the Worker runs in UTC and cannot turn "2026-08-09T09:00" back into
+               the office's local time. -->
+          <input type="hidden" name="scheduled_at">
+        </form>
+      </div>
+    </div>` : ''}
   </div>
 
   <aside class="tlc-nl-preview">

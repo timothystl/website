@@ -100,6 +100,13 @@ export function extrasFromForm(form) {
 
 export const serializeExtras = (list) => JSON.stringify(parseExtras(list));
 
+// ⚠ These are no longer offered anywhere. The editor used to carry a "Who gets it" select
+// built from this list, next to the Send email card that picks the actual Brevo list — two
+// controls for one question, and this one named three lists that do not exist (there are
+// exactly two in Brevo: the test list and the member list). The select was removed 2026-08-05;
+// the column and this vocabulary stay so an issue that already recorded a value keeps it and
+// still normalizes. Nothing reads it. If a real church/school split ever exists in Brevo,
+// this is where it would start again.
 export const AUDIENCES = [
   { key: 'everyone', label: 'Everyone' },
   { key: 'church',   label: 'Church only' },

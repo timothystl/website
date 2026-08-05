@@ -904,6 +904,71 @@ group('a sent issue cannot be modified by any path');
   has(page, 'Live preview', 'which is labelled');
 }
 
+// Reported: the editor asked who gets the issue twice — a "Who gets it" select offering
+// Everyone / Church only / School & MDO families, and a Send email radio group. There are
+// exactly two lists in Brevo (BREVO_TEST_LIST_ID, BREVO_LIST_ID), so the select named three
+// audiences that do not exist and, by its own caption, decided nothing.
+group('the newsletter editor asks who gets it once, in the real lists Brevo has');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  db.prepare("INSERT INTO newsletters (id,subject,pastor_note,format,status,published_at,audience) VALUES (21,'Weekly','<p>Hi</p>','weekly','draft','2026-08-09','church')").run();
+  const edit = await (await call(env, '/edit/21', { cookie })).text();
+
+  has(edit, 'Test list', 'the send card names the test list');
+  has(edit, '> Members', 'and the member list, by the name Brevo uses');
+  has(edit, 'Website only', 'and the option to publish without emailing');
+  lacks(edit, 'All subscribers', 'no longer offers a list nobody has');
+
+  lacks(edit, 'Who gets it', 'the second, decorative audience question is gone');
+  lacks(edit, 'name="audience"', 'along with its field');
+  lacks(edit, 'School &amp; MDO families', 'and the audiences that were never real lists');
+
+  // The column keeps what an older issue recorded rather than every save rewriting it.
+  const save = await worker.fetch(new Request('https://admin.timothystl.org/publish', {
+    method: 'POST',
+    headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
+    body: 'newsletter_id=21&subject=Weekly&format=weekly&pastor_note=%3Cp%3EHi%3C%2Fp%3E&published_at=2026-08-09&action=draft&email_send=none',
+  }), env, ctx);
+  eq(save.status, 302, 'the issue saves without an audience field on the form');
+  eq(db.prepare('SELECT audience FROM newsletters WHERE id=21').get().audience, 'church',
+     'and what it recorded before is left alone, not reset to the default');
+}
+
+// Reported: "we used to have a button that had schedule send — put that back in under the
+// publish. it should have a time too." The /schedule-email/:id route and prepSchedule() both
+// survived the redesign; only the control that reached them was dropped.
+group('the editor can schedule a send, with a date and a time');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  db.prepare("INSERT INTO newsletters (id,subject,pastor_note,format,status,published_at) VALUES (22,'Weekly','<p>Hi</p>','weekly','draft','2099-08-09')").run();
+  const edit = await (await call(env, '/edit/22', { cookie })).text();
+
+  has(edit, 'Schedule send', 'the button is back');
+  has(edit, 'action="/schedule-email/22"', 'pointing at the route that was already there');
+  has(edit, 'type="datetime-local"', 'and it asks for a time, not just a date');
+  has(edit, 'prepSchedule', 'submitted through the helper that converts to a real instant');
+  has(edit, 'toggleSchedule(22)', 'revealed by the toggle rather than always open');
+  has(edit, 'T09:00', 'defaulting to 9am on the issue’s own publish date');
+  has(edit, '>Members<', 'offering the member list');
+  has(edit, '>Test list<', 'and the test list');
+
+  // A form inside a form is invalid HTML and the browser silently drops the inner one, so
+  // the schedule form has to sit outside #nl-form — which is exactly what would regress if
+  // somebody later moved it up beside the Publish button it visually belongs to.
+  const nlFormStart = edit.indexOf('id="nl-form"');
+  const nlFormEnd = edit.indexOf('</form>', nlFormStart);
+  const scheduleAt = edit.indexOf('action="/schedule-email/22"');
+  ok(scheduleAt > nlFormEnd, 'and it is not nested inside the editor form');
+
+  // A pending schedule says so — booking a second one does not move the first.
+  db.prepare("UPDATE newsletters SET scheduled_send_at='2099-01-01T15:00:00.000Z', scheduled_list_type='all' WHERE id=22").run();
+  const booked = await (await call(env, '/edit/22', { cookie })).text();
+  has(booked, 'Already scheduled with Brevo', 'a booked issue says so');
+  has(booked, 'Reschedule', 'and the button changes accordingly');
+}
+
 group('duplicating a sent issue gives an editable draft');
 {
   const { db, env } = await boot();
