@@ -178,6 +178,22 @@ function recordTap(request, ctx, path) {
   if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(beacon);
 }
 
+function isHtmlResponse(res) {
+  return (res.headers.get('content-type') || '').includes('text/html');
+}
+
+// HTMLRewriter is a Workers streaming parser — it edits the attribute as the
+// bytes go past rather than buffering the whole 220KB page to run a regex over
+// it. Both the Open Graph and Twitter tags are set, because the two are read
+// by different crawlers and one without the other means half of them show the
+// old picture.
+function rewriteSocialImage(res, imageUrl) {
+  return new HTMLRewriter()
+    .on('meta[property="og:image"]', { element(el) { el.setAttribute('content', imageUrl); } })
+    .on('meta[name="twitter:image"]', { element(el) { el.setAttribute('content', imageUrl); } })
+    .transform(res);
+}
+
 async function getSettingUrl(key, fallback) {
   const now = Date.now();
   if (settingsCache[key] && now - (settingsCacheTime[key] || 0) < CACHE_TTL) {
@@ -319,7 +335,25 @@ export default {
 
     // Fall through to static assets (SPA), with caching the edge and the
     // browser can actually use — see withAssetCaching below.
-    return withAssetCaching(await env.ASSETS.fetch(request), url.pathname);
+    const assetRes = await env.ASSETS.fetch(request);
+
+    // ── [B7] THE SOCIAL PREVIEW IMAGE ────────────────────────────
+    // og:image is read by crawlers out of the HTML as it is served. Facebook
+    // and Bluesky do not run the page's JavaScript, so this is the one thing
+    // on the site that CANNOT be swapped client-side the way the header and
+    // the footer now are — it has to be rewritten here, before the bytes leave.
+    //
+    // Default is the logo, which is what the markup says, so nothing changes
+    // until somebody sets the setting. A proper 1200x630 photograph of the
+    // congregation is what actually improves a shared link; this is the field
+    // to put it in when there is one.
+    if (isHtmlResponse(assetRes)) {
+      const social = await getSettingUrl('social_image_url', '');
+      if (/^https:\/\/\S+$/.test(social)) {
+        return withAssetCaching(rewriteSocialImage(assetRes, social), url.pathname);
+      }
+    }
+    return withAssetCaching(assetRes, url.pathname);
     } catch (err) {
       return new Response(ERROR_PAGE_HTML, {
         status: 500,

@@ -5,7 +5,7 @@
 // Last modified: 2026-03-27
 
 
-import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, DB_INIT_FOOTER_COLUMNS, FOOTER_COLUMN_SEED, FOOTER_ITEM_COLUMNS, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS, DB_INIT_PAYROLL_READY_NOTIFIED } from './admin/db.js';
+import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_BOOKING_SLOT_INDEX, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, DB_INIT_FOOTER_COLUMNS, FOOTER_COLUMN_SEED, FOOTER_ITEM_COLUMNS, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS, DB_INIT_PAYROLL_READY_NOTIFIED } from './admin/db.js';
 import { pushToAllSubscribers } from './admin/webpush.js';
 
 // Static pages that can carry self-serve notices (matches the SPA's page ids in public/index.html)
@@ -90,6 +90,9 @@ import { BLOCKS as NL_BLOCKS, parseBlocks as parseNlBlocks, serializeBlocks as s
          parseExtras, extrasFromForm, serializeExtras, MAX_EXTRA_NOTES } from './admin/newsletter.js';
 import { screenSubmission, formConfig, forwardToChms, officeEmailHtml, officeSubject,
          handleFilteredRoutes, heldCount, OFFICE_EMAIL } from './admin/forms.js';
+import { stripImageMetadata } from './admin/exif.js';
+import { normalizeChannelInput, channelPageUrl, channelIdFrom, feedUrl,
+         parseFeed, pickLatest, isChannelId } from './admin/sermons-feed.js';
 import { PALETTE as CHROME_PALETTE, BAR_KEYS, DEFAULTS as CHROME_DEFAULTS,
          parseAppearance, appearanceFromForm, sanitizeAppearance, publicAppearance,
          isDirty as chromeDirty, changedFields as chromeChanged, FIELD_LABELS as CHROME_LABELS,
@@ -128,7 +131,7 @@ async function writeChrome(env, key, value) {
 // Allowlist of site_settings keys readable via the public /api/settings/{key}
 // endpoint. Everything else returns 404 — keeps internal config (gym admin
 // email, Brevo keys, etc.) from leaking to anyone who can guess a key name.
-const PUBLIC_SETTINGS_KEYS = new Set(['zoom_url', 'councilfiles_url', 'give_url']);
+const PUBLIC_SETTINGS_KEYS = new Set(['zoom_url', 'councilfiles_url', 'give_url', 'social_image_url']);
 
 // /api/pages is the public site's one bundle — nav, church details, every
 // published page's HTML — rebuilt from five queries and a full render on
@@ -1151,7 +1154,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-05-2'; // bumped: footer_columns + menu_items.column_id, so the footer's headings and groupings are admin-managed
+    const SCHEMA_VERSION = '2026-08-05-4'; // bumped: the gym slot lock (B1), sessions.last_activity (B5), and the indexes AC-7 named
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -1756,6 +1759,39 @@ export default {
         ).bind(m.id, m.menu, m.label || null, m.kind, m.page_id || null, m.target || null, m.style || 'link', m.depth || 0, m.sort_order).run();
       } catch (_) {}
     }
+    // ── [AC-7] INDEXES ON THE COLUMNS THAT ARE ACTUALLY FILTERED ──
+    // Named in the July 2026 review and never added. Every one of these backs a
+    // WHERE or ORDER BY that runs on a screen somebody opens daily; without
+    // them each is a full table scan, which is invisible at today's row counts
+    // and is exactly the kind of thing that degrades quietly as they grow.
+    for (const ix of [
+      'CREATE INDEX IF NOT EXISTS idx_gym_bookings_status_date ON gym_bookings(status, booking_date)',
+      'CREATE INDEX IF NOT EXISTS idx_gym_bookings_group_date ON gym_bookings(group_id, booking_date)',
+      'CREATE INDEX IF NOT EXISTS idx_gym_invoices_group ON gym_invoices(group_id, created_at)',
+      'CREATE INDEX IF NOT EXISTS idx_news_items_dates ON news_items(publish_date, expire_date, pinned)',
+      'CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at, entity_type)',
+      'CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_form_submissions_created ON form_submissions(created_at)',
+    ]) {
+      try { await env.DB.prepare(ix).run(); } catch (_) {}
+    }
+
+    // [B5] When a session was last used, for the idle timeout in admin/auth.js.
+    try { await env.DB.prepare('ALTER TABLE sessions ADD COLUMN last_activity TEXT').run(); } catch (_) {}
+
+    // ── [B1] THE GYM SLOT LOCK ──
+    // ⚠ If this throws it is almost always because the live table ALREADY
+    // holds two active bookings for one slot — exactly the thing the index
+    // exists to prevent, sitting there from before it existed. It cannot be
+    // fixed automatically (which of the two is the real booking is a question
+    // for whoever took them), so it is logged loudly rather than swallowed:
+    // carrying on silently would leave the gym unprotected with nobody aware.
+    try {
+      await env.DB.prepare(DB_INIT_GYM_BOOKING_SLOT_INDEX).run();
+    } catch (e) {
+      console.error('gym slot lock NOT created — resolve duplicate active bookings first:', e && e.message);
+    }
+
     // ── FOOTER COLUMNS ──
     // The footer's headings and which link sits under each. See the note at
     // the top of admin/menu.js for why this is a table and not a position
@@ -2081,6 +2117,68 @@ export default {
     //     entirely — expire_date does not keep a past event alive.
     //   - A plain ANNOUNCEMENT (no event_date) sorts newest-published-first,
     //     same as before, and is only ever hidden by its own expire_date.
+    // ── PUBLIC: THIS WEEK'S WORSHIP SERVICE ──
+    // The /sermons page used to be a link out to the channel. This is what
+    // makes it show the current service without anybody posting a link each
+    // week: YouTube's per-channel Atom feed, which needs no API key and so
+    // needs no secret to set, rotate, or notice had expired.
+    //
+    // Cached at the edge for 30 minutes. A new service appears within half an
+    // hour of being posted, which is the right trade for a page nobody is
+    // watching change — and it means a burst of Sunday traffic costs one
+    // fetch of somebody else's server rather than thousands.
+    if (path === '/api/latest-sermon' && method === 'GET') {
+      const cache = edgeCache();
+      const cacheKey = new Request('https://admin.timothystl.org/api/latest-sermon');
+      if (cache) {
+        const hit = await cache.match(cacheKey);
+        if (hit) return hit;
+      }
+
+      // Everything here fails to `{video:null}` rather than to an error. The
+      // page treats that as "no embed" and shows the link out it always had,
+      // so a YouTube outage costs the embed and nothing else.
+      const answer = async () => {
+        const row = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'sermon_youtube_channel'")
+          .first().catch(() => null);
+        const parsed = normalizeChannelInput(row && row.value);
+        if (parsed.kind === 'none') return { video: null, reason: 'no channel set' };
+
+        let channelId = parsed.kind === 'id' ? parsed.value : '';
+        if (!channelId) {
+          // ⚠ A scrape of the channel page, because there is no public way to
+          // turn a handle into a channel ID. It is written back to the setting
+          // once it succeeds, so this runs about once in the life of the site
+          // rather than every time the cache expires — and if YouTube ever
+          // changes the markup, the ID that was already found keeps working.
+          const page = await fetch(channelPageUrl(parsed.value), {
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; TimothyLutheranBot/1.0)' },
+          }).catch(() => null);
+          if (!page || !page.ok) return { video: null, reason: 'channel page unreachable' };
+          channelId = channelIdFrom(await page.text());
+          if (!isChannelId(channelId)) return { video: null, reason: 'channel id not found' };
+          await env.DB.prepare("UPDATE site_settings SET value = ? WHERE key = 'sermon_youtube_channel'")
+            .bind(channelId).run().catch(() => {});
+        }
+
+        const res = await fetch(feedUrl(channelId)).catch(() => null);
+        if (!res || !res.ok) return { video: null, reason: 'feed unreachable' };
+        const filterRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'sermon_title_filter'")
+          .first().catch(() => null);
+        const video = pickLatest(parseFeed(await res.text()), filterRow && filterRow.value);
+        return { video: video || null, reason: video ? '' : 'nothing matched' };
+      };
+
+      let payload;
+      try { payload = await answer(); } catch (_) { payload = { video: null, reason: 'error' }; }
+      const out = new Response(JSON.stringify(payload), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*',
+                   'Cache-Control': 'public, max-age=1800' },
+      });
+      if (cache && ctx && ctx.waitUntil) ctx.waitUntil(cache.put(cacheKey, out.clone()));
+      return out;
+    }
+
     if (path === '/api/news' && method === 'GET') {
       const limit = parseInt(url.searchParams.get('limit') || '20', 10);
       const today = new Date().toISOString().split('T')[0];
@@ -3216,13 +3314,33 @@ ${sidebarShell('dashboard', currentUser, '', badges)}
         for (const m of (ministryRes.results || [])) {
           haystacks.push({ label: m.title || m.slug, text: `${m.blocks || ''}${m.published_blocks || ''}${m.hero_image_url || ''}` });
         }
+        // ⚠ Inverted, because the obvious way round is O(media × pages): every
+        // media row scanning every page's block JSON with a substring search.
+        // Each page is read ONCE here, its filenames pulled out into a map, and
+        // a media row then costs one lookup. With dozens of pages and hundreds
+        // of files that is the difference between thousands of scans over large
+        // JSON blobs and one pass.
+        //
+        // It also happens to be more accurate. The old substring test said
+        // `logo.png` was in use if a page mentioned `church-logo.png`, because
+        // one filename contains the other. Matching whole filenames cannot make
+        // that mistake — and a false "in use" is the worse direction here, since
+        // it hides a file that could be cleaned up forever.
+        const usageIndex = new Map();
+        const FILENAME = /[A-Za-z0-9][A-Za-z0-9._-]*\.[A-Za-z0-9]{2,5}/g;
+        for (const h of haystacks) {
+          for (const name of new Set(h.text.match(FILENAME) || [])) {
+            if (!usageIndex.has(name)) usageIndex.set(name, []);
+            usageIndex.get(name).push(h.label);
+          }
+        }
         const usedBy = (u) => {
           if (!u) return [];
           // The stored URL and the one written into a block can differ by
           // origin, so match on the filename tail rather than the whole thing.
           const tail = String(u).split('/').pop();
           if (!tail) return [];
-          return haystacks.filter((h) => h.text.includes(tail)).map((h) => h.label);
+          return usageIndex.get(tail) || [];
         };
 
         const OVER = 1024 * 1024;
@@ -4261,7 +4379,24 @@ ${PAYROLL_HTML}`, 'Payroll');
       }
       const ext = ALLOWED_IMAGE_TYPES.get(mimeType);
       const key = `news-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      await env.IMAGES.put(key, file.stream(), { httpMetadata: { contentType: mimeType } });
+      // ── [B6] STRIP THE METADATA BEFORE IT IS STORED ──
+      // A photo off a phone carries EXIF, and EXIF routinely carries GPS. Every
+      // file that lands here is then served publicly from this domain forever,
+      // so somebody's home address can end up in a staff portrait with nobody
+      // involved aware it is there.
+      //
+      // It happens HERE rather than in the browser because only one of the
+      // uploaders re-encodes (the staff photo picker) — the news header image,
+      // the rich-text editors and the logo picker all post the file exactly as
+      // it came off the phone, and they all come through this route. A privacy
+      // guarantee that depends on which button somebody clicked is not one.
+      //
+      // Reading the body into memory is a real cost that streaming avoided, but
+      // it is bounded by the 8MB cap above and the metadata cannot be found
+      // without it. stripImageMetadata fails open: anything it cannot parse
+      // with confidence comes back untouched rather than mangled.
+      const clean = stripImageMetadata(new Uint8Array(await file.arrayBuffer()));
+      await env.IMAGES.put(key, clean, { httpMetadata: { contentType: mimeType } });
       const url = `${new URL(request.url).origin}/images/${key}`;
       return new Response(JSON.stringify({ url, location: url }), { headers: { 'Content-Type': 'application/json' } });
     }
@@ -8748,6 +8883,9 @@ ${sidebarShell('redirects', currentUser, '', await pageBadges())}
         { key: 'site_appearance', label: 'Header and newsletter band', group: 'church-details', used: 'Every page — the top bar and the sign-up strip', href: '/menu/appearance' },
         { key: 'site_appearance_draft', label: 'Header appearance (draft)', group: 'church-details', used: 'The Appearance screen only — never sent to visitors', href: '/menu/appearance' },
         { key: 'give_url', label: 'Online giving link', group: 'links', used: 'Give blocks · newsletter · gym invoices', href: '/giving' },
+        { key: 'social_image_url', label: 'Social preview image', group: 'church-details', used: 'The picture shown when a link to the site is shared' },
+        { key: 'sermon_youtube_channel', label: 'Worship service channel', group: 'links', used: 'This week’s service on /sermons' },
+        { key: 'sermon_title_filter', label: 'Only show services titled', group: 'links', used: 'Which video on that channel counts as the service' },
         { key: 'zoom_url', label: 'Zoom meeting link', group: 'links', used: 'The /zoom short link' },
         { key: 'councilfiles_url', label: 'Council files link', group: 'links', used: 'The /councilfiles short link' },
         { key: 'gym_rate_per_hour', label: 'Gym rate per hour', group: 'gym-rentals', used: 'Gym invoices · booking portal', href: '/gym-rentals' },

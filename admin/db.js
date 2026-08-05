@@ -262,6 +262,27 @@ export const DB_INIT_GYM_BOOKINGS = `CREATE TABLE IF NOT EXISTS gym_bookings (
   created_at       TEXT DEFAULT (datetime('now'))
 )`;
 
+// ── [B1] THE SLOT LOCK ───────────────────────────────────────
+// The booking flow checks for a clash with a SELECT and then INSERTs, with
+// nothing between them: two people submitting the same slot at the same moment
+// both pass the check and the gym is double-booked. Andrew's rule is simply
+// "once it is booked it should be locked out", so the database enforces it —
+// the only place that can, because it is the one thing both requests share.
+//
+// ⚠ PARTIAL, on the active statuses only. A released or expired booking is
+// history and must not reserve the slot forever — the whole point of releasing
+// a hold is that somebody else can take it.
+//
+// ⚠ This catches an EXACT duplicate slot, which is the race that actually
+// happens (two people clicking the same button). It cannot express *overlap* —
+// 1–3pm against 2–4pm — because a unique index compares values, not ranges.
+// The SELECT check in admin/gym.js still does that, and still has the race it
+// always had for partial overlaps. This narrows the hole to the common case
+// rather than closing it completely, and saying so here is the point.
+export const DB_INIT_GYM_BOOKING_SLOT_INDEX = `CREATE UNIQUE INDEX IF NOT EXISTS idx_gym_bookings_slot
+  ON gym_bookings(booking_date, start_time, end_time)
+  WHERE status IN ('confirmed','hold')`;
+
 export const DB_INIT_GYM_RECURRENCES = `CREATE TABLE IF NOT EXISTS gym_recurrences (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   group_id     INTEGER NOT NULL,
@@ -438,6 +459,16 @@ export const INITIAL_STAFF = [
 export const INITIAL_SETTINGS = [
   { key: 'zoom_url',          value: 'https://us02web.zoom.us/j/3147818673',                                                                   label: 'Zoom meeting URL',      hint: 'Used for the /zoom redirect. Update when the Zoom link changes.' },
   { key: 'councilfiles_url',  value: 'https://drive.google.com/drive/folders/1pgqJ32H3HS7SNYnnf7rOswC5c87IAzA4?usp=drive_link',              label: 'Council files URL',     hint: 'Used for the /councilfiles redirect. Update when the Google Drive folder changes.' },
+  // The weekly worship service on /sermons. A handle is what somebody would
+  // paste; the Worker resolves it to a channel ID once and writes the ID back
+  // here, because the Atom feed is keyed on the ID and there is no public way
+  // to convert one to the other. See admin/sermons-feed.js.
+  { key: 'social_image_url', value: '', label: 'Social preview image',
+    hint: 'The picture shown when somebody shares a link to the site. Leave blank to use the church logo. A photograph at 1200x630 works best.' },
+  { key: 'sermon_youtube_channel', value: '@TimothySTL', label: 'Worship service channel',
+    hint: 'The YouTube channel the weekly service is posted to. A handle or a channel ID; the site works out the rest.' },
+  { key: 'sermon_title_filter', value: '', label: 'Only show videos titled',
+    hint: 'Leave blank to show the newest video. Fill it in (e.g. "worship") if the channel also carries concerts or other recordings that should not appear as the service.' },
   { key: 'give_url',          value: 'https://give.tithe.ly/?formId=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8',                                    label: 'Online giving URL',        hint: 'Used for the Give link in emails and invoices. Update when the giving platform changes.' },
   { key: 'gym_rate_per_hour', value: '25.00',                   label: 'Gym rental rate (per hour, $)',  hint: 'Hourly rate charged for gym rentals. Shown to groups when they confirm a booking.' },
   { key: 'gym_hold_hours',    value: '48',                      label: 'Gym hold duration (hours)',      hint: 'How many hours a tentative hold lasts before auto-expiring. Default: 48.' },

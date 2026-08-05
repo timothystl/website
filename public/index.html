@@ -530,6 +530,19 @@ if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
     <p>Full worship services, live and archived — every Sunday on YouTube.</p>
   </div>
   <div id="notices-sermons"></div>
+  <!-- THIS WEEK'S SERVICE — filled by loadLatestSermon() from the channel's own
+       feed, so nobody has to post a link each week. Hidden until there is
+       something to show: an empty video frame reads as a broken page, and the
+       "Watch on YouTube" button below has always been the way through. -->
+  <section class="section section--white" id="sermons-latest-section" style="display:none;">
+    <div class="wrap">
+      <span class="eyebrow">This week</span>
+      <h2 id="sermons-latest-title" style="margin:8px 0 18px;"></h2>
+      <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:var(--r-md);box-shadow:var(--shadow);">
+        <iframe id="sermons-latest-frame" src="" title="This week's worship service" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy" style="position:absolute;top:0;left:0;width:100%;height:100%;"></iframe>
+      </div>
+    </div>
+  </section>
   <!-- CURRENT SERIES — loaded dynamically -->
   <section class="section section--white" id="sermons-series-section">
     <div class="wrap" id="sermons-series-content">
@@ -574,7 +587,7 @@ if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
           <a href="/wol" onclick="event.preventDefault();showPage('wol')">Learn more</a>
         </div>
         <div class="min-card">
-          <img src="/images/ministries/mdo.webp" alt="Mother's Day Out" class="min-card-img" loading="lazy" width="500" height="500">
+          <img src="/images/ministries/mdo-thumb.webp" alt="Mother's Day Out" class="min-card-img" loading="lazy" width="240" height="240">
           <h3>Mother's Day Out</h3>
           <p>Over twenty years of experienced, caring childcare for children from birth through preschool. Small classrooms, flexible scheduling, community.</p>
           <a href="https://mdo.timothystl.org" target="_blank">Visit MDO site</a>
@@ -591,7 +604,7 @@ if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
           <a href="/stephen" onclick="event.preventDefault();showPage('stephen')">Learn more</a>
         </div>
         <div class="min-card">
-          <img src="/images/ministries/food-pantry.webp" alt="Food Pantry" class="min-card-img" loading="lazy" width="2000" height="1545">
+          <img src="/images/ministries/food-pantry-thumb.webp" alt="Food Pantry" class="min-card-img" loading="lazy" width="311" height="240">
           <h3>Food Pantry</h3>
           <p>Timothy operates a food pantry for members and neighbors. Open monthly, serving families in Lindenwood Park with practical care in the name of Christ.</p>
           <a href="/foodpantry" onclick="event.preventDefault();showPage('foodpantry')">Get details</a>
@@ -608,13 +621,13 @@ if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
           <a href="https://lwml.org" target="_blank">Visit LWML</a>
         </div>
         <div class="min-card">
-          <img src="/images/ministries/Bees.webp?v=20260328" alt="Urban Beekeepers" class="min-card-img" loading="lazy" width="1500" height="750">
+          <img src="/images/ministries/Bees-thumb.webp?v=20260328" alt="Urban Beekeepers" class="min-card-img" loading="lazy" width="480" height="240">
           <h3>Urban Beekeepers</h3>
           <p>St. Louis neighbors learning about and supporting the art of beekeeping in an urban setting — a joyful reminder that creation care is part of our calling.</p>
           <a href="/bees" onclick="event.preventDefault();showPage('bees')">Learn more</a>
         </div>
         <div class="min-card">
-          <img src="/images/ministries/christmas-mkt.webp" alt="Christmas Market" class="min-card-img" loading="lazy" width="980" height="784">
+          <img src="/images/ministries/christmas-mkt-thumb.webp" alt="Christmas Market" class="min-card-img" loading="lazy" width="300" height="240">
           <h3>Christmas Market</h3>
           <p>An annual community event in Lindenwood Park. Shopping, fellowship, and celebration — a gift to the neighborhood every December.</p>
           <a href="/christmasmarket" onclick="event.preventDefault();showPage('christmasmarket')">Learn more</a>
@@ -2643,6 +2656,38 @@ async function tlcEnsureBlockCss() {
   await loadSitePages();
 }
 
+// ── THIS WEEK'S WORSHIP SERVICE ──────────────────────────────
+// The channel carries one service a week and /sermons used to be a link out to
+// it, so somebody had to know to go looking. This asks the admin worker, which
+// reads the channel's own feed — no API key anywhere, and nothing to post each
+// week.
+//
+// Everything about it fails to "show nothing": no channel set, YouTube down,
+// an empty feed, a filter that matched nothing. The section stays hidden and
+// the page is exactly what it was before, button and all. An embed is worth
+// having; it is not worth a broken-looking page when it cannot be had.
+var latestSermonLoaded = false;
+async function loadLatestSermon() {
+  if (latestSermonLoaded) return;
+  latestSermonLoaded = true;
+  var sec = document.getElementById('sermons-latest-section');
+  var frame = document.getElementById('sermons-latest-frame');
+  if (!sec || !frame) return;
+  try {
+    var r = await fetch('https://admin.timothystl.org/api/latest-sermon');
+    if (!r.ok) return;
+    var d = await r.json();
+    if (!d || !d.video || !d.video.videoId) return;
+    // The id comes from somebody else's server, so it is checked against the
+    // shape a YouTube id actually has before it goes anywhere near a src.
+    if (!/^[A-Za-z0-9_-]{6,20}$/.test(d.video.videoId)) return;
+    var t = document.getElementById('sermons-latest-title');
+    if (t) t.textContent = d.video.title || 'Sunday Worship';
+    frame.src = 'https://www.youtube.com/embed/' + d.video.videoId;
+    sec.style.display = '';
+  } catch (e) { /* the page keeps the link it always had */ }
+}
+
 // ── THE FOOTER'S COLUMNS ─────────────────────────────────────
 // The headings, and which links sit under each. Both are admin-managed now
 // (Menu → Footer columns); the markup in the page is the fallback and is left
@@ -3191,7 +3236,7 @@ window.showPage = function(id, addHistory) {
     var wolFrame = document.getElementById('wol-yt-frame');
     if (wolFrame && !wolFrame.getAttribute('src')) { wolFrame.src = wolFrame.dataset.src; }
   }
-  if (id === 'sermons') { loadSermons(); }
+  if (id === 'sermons') { loadSermons(); loadLatestSermon(); }
   if (id === 'christmasmarket') { loadChristmasMarketPosts(); }
   if (id === 'voters') { loadVotersPage(); }
   if (id === 'home') { loadNotices('home'); }

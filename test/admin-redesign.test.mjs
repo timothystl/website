@@ -16,6 +16,8 @@ import worker from '../tlc-admin-worker.js';
 import { ALL_PERMISSIONS } from '../admin/auth.js';
 
 let pass = 0, fail = 0;
+const { readFileSync } = await import('node:fs');
+const { hasMetadata } = await import('../admin/exif.js');
 const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error('  ✗ ' + msg); } };
 const eq = (a, b, msg) => ok(a === b, `${msg} — expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`);
 const has = (hay, needle, msg) => ok(String(hay).includes(needle), `${msg} — missing ${JSON.stringify(needle)}`);
@@ -620,6 +622,202 @@ group('publishing /give never overwrites an edit the office made');
 
   const row = db.prepare("SELECT published_blocks FROM pages WHERE id='give'").get();
   ok(!row.published_blocks, 'a page somebody is working on is left alone, not pushed live under them');
+}
+
+group('the Media screen answers "used where" from one pass, not one per file');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const now = new Date().toISOString();
+  db.prepare("INSERT INTO pages (id,title,slug,status,blocks,published_blocks,updated_at) VALUES ('choirpage','Choir','/choir','published',?,?,?)")
+    .run(JSON.stringify([{ id: 'a', type: 'photo', url: '/images/choir-2026.webp' }]), '[]', now);
+  for (const [id, url] of [[1, 'https://admin.timothystl.org/images/choir-2026.webp'], [2, '/images/unused-2019.webp'], [3, '/images/logo.png']]) {
+    db.prepare("INSERT INTO ministry_media (id, kind, url, filename, alt, bytes, created_at) VALUES (?,'photo',?,?,'',1000,?)")
+      .run(id, url, url.split('/').pop(), now);
+  }
+  // Same filename, different origin — the stored URL and the one written into
+  // a block routinely differ that way, so matching is on the filename tail.
+  const body = await (await call(env, '/media', { cookie })).text();
+  has(body, 'On Choir', 'a photo used in a page says where, even though the origins differ');
+  has(body, 'Used nowhere', 'and one nothing references says so');
+
+  // ⚠ The old substring test called logo.png used because a page mentioned
+  // church-logo.png. Whole-filename matching cannot make that mistake, and a
+  // false "in use" is the worse direction — it hides a file forever.
+  db.prepare("UPDATE pages SET blocks = ? WHERE id='choirpage'").run(JSON.stringify([
+    { id: 'a', type: 'photo', url: '/images/choir-2026.webp' },
+    { id: 'b', type: 'photo', url: '/images/church-logo.png' },
+  ]));
+  const again = await (await call(env, '/media', { cookie, fresh: true })).text();
+  eq((again.match(/Used nowhere/g) || []).length, 2,
+     'logo.png and unused-2019.webp are both unused — logo.png is NOT counted as used just because church-logo.png contains it');
+  has(again, 'On Choir', 'while the photo genuinely on that page still says so');
+}
+
+group('/sermons shows this week\'s service without anybody posting a link');
+{
+  const { db, env } = await boot();
+  const realFetch = globalThis.fetch;
+  const FEED = '<feed><entry><yt:videoId>abc123XYZ_-</yt:videoId>' +
+    '<title>Sunday Worship &amp; Holy Communion</title><published>2026-08-03T15:00:00+00:00</published></entry></feed>';
+
+  globalThis.fetch = async (u) => {
+    const url = String(u && u.url ? u.url : u);
+    if (url.includes('/feeds/videos.xml')) return new Response(FEED, { status: 200 });
+    if (url.includes('youtube.com/@')) return new Response('{"externalId":"UCaaaaaaaaaaaaaaaaaaaaaa"}', { status: 200 });
+    return new Response('{}', { status: 200 });
+  };
+  try {
+    const r = await call(env, '/api/latest-sermon', { fresh: true });
+    const d = await r.json();
+    eq(r.status, 200, 'the endpoint answers');
+    eq(d.video.videoId, 'abc123XYZ_-', 'with the newest video from the channel feed');
+    eq(d.video.title, 'Sunday Worship & Holy Communion', 'and its title, entities decoded');
+
+    // ⚠ The handle is resolved to a channel ID once and written back, because
+    // the feed is keyed on the ID and finding it means scraping a page. Doing
+    // that on every cache miss would make a Sunday depend on a scrape holding.
+    eq(db.prepare("SELECT value FROM site_settings WHERE key='sermon_youtube_channel'").get().value,
+       'UCaaaaaaaaaaaaaaaaaaaaaa', 'the resolved channel ID replaces the handle in the setting');
+  } finally { globalThis.fetch = realFetch; }
+}
+
+group('the sermons embed fails to nothing, never to a broken page');
+{
+  // No channel, YouTube down, an empty feed — all of them mean "no embed", and
+  // the page keeps the Watch on YouTube link it has always had. An empty video
+  // frame reads as a broken page, which is worse than no frame.
+  const { db, env } = await boot();
+  const realFetch = globalThis.fetch;
+
+  db.prepare("UPDATE site_settings SET value='' WHERE key='sermon_youtube_channel'").run();
+  let d = await (await call(env, '/api/latest-sermon', { fresh: true })).json();
+  eq(d.video, null, 'no channel set means no video');
+
+  db.prepare("UPDATE site_settings SET value='UCaaaaaaaaaaaaaaaaaaaaaa' WHERE key='sermon_youtube_channel'").run();
+  globalThis.fetch = async () => { throw new Error('network down'); };
+  try {
+    d = await (await call(env, '/api/latest-sermon', { fresh: true })).json();
+    eq(d.video, null, 'YouTube being unreachable means no video, not an error');
+  } finally { globalThis.fetch = realFetch; }
+
+  globalThis.fetch = async () => new Response('<feed></feed>', { status: 200 });
+  try {
+    d = await (await call(env, '/api/latest-sermon', { fresh: true })).json();
+    eq(d.video, null, 'and an empty feed means no video');
+  } finally { globalThis.fetch = realFetch; }
+}
+
+group('[B5] a session left idle stops working');
+{
+  // Seven days is right for somebody who uses this weekly, but on its own it
+  // means a session left open on a shared office machine stays usable for a
+  // week of doing nothing — and this admin sends email to the congregation,
+  // reads prayer requests and approves payroll.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  eq((await call(env, '/menu', { cookie })).status, 200, 'a fresh session works');
+  const stamped = db.prepare('SELECT last_activity FROM sessions').get();
+  ok(stamped.last_activity, 'and using it records when');
+
+  const stale = new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString();  // 30h
+  db.prepare('UPDATE sessions SET last_activity = ?').run(stale);
+  // An unauthenticated request renders the login page (200), it does not 302.
+  const after = await (await call(env, '/menu', { cookie })).text();
+  has(after, 'name="password"', 'a session idle for longer than a day is sent back to the login page');
+  eq(db.prepare('SELECT COUNT(*) AS n FROM sessions').get().n, 0, 'and the row is deleted, not just refused');
+}
+
+group('[B5] ⚠ a session with no activity stamp is NOT signed out');
+{
+  // The column arrives by migration, so at that moment every existing session
+  // has NULL in it. Failing closed would sign out the whole office on deploy —
+  // for a security improvement nobody asked to be logged out for.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  db.prepare('UPDATE sessions SET last_activity = NULL').run();
+  eq((await call(env, '/menu', { cookie })).status, 200, 'it still works');
+  ok(db.prepare('SELECT last_activity FROM sessions').get().last_activity,
+     'and gets a stamp on the way through, so the clock starts from now');
+}
+
+group('[B5] the absolute seven-day expiry still applies');
+{
+  // Recent activity must not keep a session alive forever — that would turn a
+  // seven-day limit into no limit at all for anybody who visits daily.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  db.prepare('UPDATE sessions SET expires_at = ?, last_activity = ?')
+    .run(new Date(Date.now() - 1000).toISOString(), new Date().toISOString());
+  has(await (await call(env, '/menu', { cookie })).text(), 'name="password"',
+      'an expired session is refused however recently it was used');
+}
+
+group('[B6] an uploaded photo reaches storage with its GPS removed');
+{
+  // The unit tests prove the stripper; this proves it is actually WIRED to the
+  // route every uploader posts to. A correct stripper nobody calls protects
+  // nobody, and that was the state of the client-side one — it was attached to
+  // the staff photo picker only.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const gps = new Uint8Array(readFileSync(new URL('./fixtures/gps.jpg', import.meta.url)));
+
+  const stored = [];
+  env.IMAGES = {
+    put: async (key, body) => { stored.push({ key, body }); },
+    get: async () => null, head: async () => null, delete: async () => {},
+  };
+
+  const fd = new FormData();
+  fd.append('file', new File([gps], 'photo.jpg', { type: 'image/jpeg' }));
+  const res = await worker.fetch(new Request('https://admin.timothystl.org/api/upload-image', {
+    method: 'POST', headers: { cookie, origin: 'https://admin.timothystl.org' }, body: fd,
+  }), env, ctx);
+  eq(res.status, 200, 'the upload succeeds');
+  eq(stored.length, 1, 'and one object was written');
+
+  const bytes = new Uint8Array(stored[0].body);
+  ok(!hasMetadata(bytes), 'what reached storage carries no EXIF');
+  ok(bytes.length < gps.length, 'and is smaller than what was uploaded');
+  ok(bytes[0] === 0xFF && bytes[1] === 0xD8, 'while still being a JPEG');
+}
+
+group('[B1] the gym cannot be double-booked for the same slot');
+{
+  // "Once it is booked it should be locked out." The booking flow checks for a
+  // clash with a SELECT and then INSERTs; two requests can both pass the check.
+  // The database is the only thing both requests share, so it is what enforces
+  // this — a partial unique index over the active statuses.
+  const { db } = await boot();
+  db.prepare("INSERT INTO gym_groups (id, name, contact, email, active) VALUES (1,'Scouts','A','a@b.org',1)").run();
+  const book = (status) => db.prepare(
+    "INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, status) VALUES (1,'2026-09-01','18:00','20:00',?)"
+  ).run(status);
+
+  book('confirmed');
+  let refused = false;
+  try { book('hold'); } catch (_) { refused = true; }
+  ok(refused, 'a second active booking for the same slot is refused by the database itself');
+
+  // ⚠ Partial on purpose. Releasing a hold has to hand the slot back — a
+  // released booking reserving it forever would break the whole point.
+  let releasedOk = true;
+  try { book('released'); } catch (_) { releasedOk = false; }
+  ok(releasedOk, 'but a released booking may sit on the same slot — it is history, not a reservation');
+
+  db.prepare("UPDATE gym_bookings SET status='released' WHERE status='confirmed'").run();
+  let rebookable = true;
+  try { book('confirmed'); } catch (_) { rebookable = false; }
+  ok(rebookable, 'and once the active one is released the slot can be booked again');
+
+  // A different time on the same day is a different slot, not a clash.
+  let other = true;
+  try {
+    db.prepare("INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, status) VALUES (1,'2026-09-01','09:00','10:00','confirmed')").run();
+  } catch (_) { other = false; }
+  ok(other, 'an unrelated time on the same day is unaffected');
 }
 
 group('the footer is admin-managed columns');
@@ -1599,6 +1797,14 @@ group('rows carry an overflow menu');
 // so its button says so rather than promising an editor.
 group('the giving page: two addresses, each pointing where it is actually edited');
 {
+  // ⚠ This panel used to say "One set of blocks · two places it appears",
+  // beside a switch labelled "Kept in step: edit either one and the other
+  // follows". Neither was true: give.timothystl.org is rendered by
+  // give-landing.js and takes the money, timothystl.org/give is a block page
+  // about how to give. The switch wrote a setting nothing ever read.
+  //
+  // A control that claims a behaviour the code does not have is worse than no
+  // control — somebody flips it, believes it worked, and stops checking.
   const { db, env } = await boot();
   const { cookie } = signIn(db);
   const body = await (await call(env, '/giving', { cookie })).text();

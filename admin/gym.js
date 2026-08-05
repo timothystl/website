@@ -1441,9 +1441,19 @@ function calcTotal() {
         if (conflict) return backToForm('conflict', fields);
 
         // Create hold
+        // ⚠ The check above and this INSERT are two statements, so a second
+        // request for the same slot can arrive between them. The unique index
+        // on active bookings is what actually stops the double-booking; this
+        // catch is how the loser of that race is told, and it says the same
+        // thing the check above would have — the slot is taken — rather than
+        // failing with an error nobody can act on.
         const holdExpiresAt = new Date(Date.now() + 48 * 3600000).toISOString();
-        await env.DB.prepare(`INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, notes, status, hold_expires_at, created_by) VALUES (?, ?, ?, ?, ?, 'hold', ?, 'group')`
-        ).bind(group.id, fields.booking_date, fields.start_time, fields.end_time, fields.notes, holdExpiresAt).run();
+        try {
+          await env.DB.prepare(`INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, notes, status, hold_expires_at, created_by) VALUES (?, ?, ?, ?, ?, 'hold', ?, 'group')`
+          ).bind(group.id, fields.booking_date, fields.start_time, fields.end_time, fields.notes, holdExpiresAt).run();
+        } catch (_) {
+          return backToForm('conflict', fields);
+        }
 
         // Notify admin
         const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'gym_admin_email'").first();
@@ -1481,9 +1491,14 @@ function calcTotal() {
         const conflict = await env.DB.prepare(`SELECT id FROM gym_bookings WHERE booking_date = ? AND status IN ('confirmed','hold') AND start_time < ? AND end_time > ?`).bind(fields.booking_date, fields.end_time, fields.start_time).first();
         if (conflict) return backToForm('conflict', fields);
 
-        // Create confirmed booking
-        const bRes = await env.DB.prepare(`INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, notes, status, created_by) VALUES (?, ?, ?, ?, ?, 'confirmed', 'group')`
-        ).bind(group.id, fields.booking_date, fields.start_time, fields.end_time, fields.notes).run();
+        // Create confirmed booking — same race, same answer as the hold above.
+        let bRes;
+        try {
+          bRes = await env.DB.prepare(`INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, notes, status, created_by) VALUES (?, ?, ?, ?, ?, 'confirmed', 'group')`
+          ).bind(group.id, fields.booking_date, fields.start_time, fields.end_time, fields.notes).run();
+        } catch (_) {
+          return backToForm('conflict', fields);
+        }
         const bookingId = bRes.meta.last_row_id;
 
         // Invoice
@@ -1955,9 +1970,16 @@ ${portalHeader}
       if (!feedToken || feedToken !== validToken) {
         return new Response('Not found', { status: 404 });
       }
+      // ⚠ Bounded, where it used to return every confirmed booking ever taken.
+      // This is a subscription feed: a calendar app re-fetches it constantly,
+      // and an unbounded history means the response grows forever for events
+      // nobody is looking at. A year back keeps recent history visible in
+      // somebody's calendar — which is the only reason to send the past at all
+      // — while giving the feed a ceiling.
+      const icalFrom = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);
       const bookings = await env.DB.prepare(
-        `SELECT b.*, g.name as group_name FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id WHERE b.status = 'confirmed' ORDER BY b.booking_date, b.start_time`
-      ).all();
+        `SELECT b.*, g.name as group_name FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id WHERE b.status = 'confirmed' AND b.booking_date >= ? ORDER BY b.booking_date, b.start_time`
+      ).bind(icalFrom).all();
       const now = new Date();
       const stamp = now.toISOString().replace(/[-:]/g,'').replace(/\.\d{3}/,'');
       const toIcalDt = (dateStr, timeStr) => {
