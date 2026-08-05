@@ -1527,24 +1527,48 @@ group('rows carry an overflow menu');
   has(body, 'View live', 'including the rarely-wanted ones that should not sit in the row');
 }
 
-group('the giving page has both surfaces');
+// The two giving addresses are NOT one set of blocks, and this screen used to say they were:
+// both cards offered "Edit this page" pointing at the same explainer, under a "kept in step"
+// switch that wrote a setting nothing has ever read. /give really is a published block page,
+// so its card now opens the real editor; give.timothystl.org really is still give-landing.js,
+// so its button says so rather than promising an editor.
+group('the giving page: two addresses, each pointing where it is actually edited');
 {
   const { db, env } = await boot();
   const { cookie } = signIn(db);
   const body = await (await call(env, '/giving', { cookie })).text();
   has(body, 'give.timothystl.org', 'the standalone address is shown');
   has(body, 'timothystl.org/give', 'and the on-site one');
-  has(body, 'One set of blocks', 'described as one set of blocks in two places');
-  has(body, 'Kept in step', 'with the keep-in-step switch');
   has(body, 'the amounts and funds offered on it', 'and the design’s purpose line');
 
-  const res = await worker.fetch(new Request('https://admin.timothystl.org/giving/keep-in-step', {
+  // /give opens the real page editor — it is published, so an Edit button must reach it.
+  has(body, '/pages/give/edit', 'the on-site page links to the real block editor');
+  // ...and the standalone one does not claim an editor it does not have.
+  has(body, "What's editable here", 'the standalone page offers an explanation instead');
+
+  lacks(body, 'One set of blocks', 'no longer claims one set of blocks in two places');
+  lacks(body, 'Kept in step', 'and the switch that controlled nothing is gone');
+
+  // The route is gone too. This Worker's tail falls through to the newsletter screen for any
+  // unmatched path, so the assertion that means something is that the POST no longer WRITES —
+  // not the status code, which an unrelated fallback happens to own.
+  await worker.fetch(new Request('https://admin.timothystl.org/giving/keep-in-step', {
     method: 'POST',
     headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
     body: 'value=0',
   }), env, ctx);
-  eq(res.status, 302, 'the switch posts');
-  eq(db.prepare("SELECT value FROM site_settings WHERE key='give_keep_in_step'").get().value, '0', 'and is stored');
+  ok(!db.prepare("SELECT value FROM site_settings WHERE key='give_keep_in_step'").get(),
+     'and the setting it used to write stays unwritten');
+}
+
+group('the giving-page explainer is about the standalone page only');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const body = await (await call(env, '/giving/page', { cookie })).text();
+  has(body, 'not a block-editor page', 'it says the standalone page is not a block page');
+  has(body, '/pages/give/edit', 'and sends /give to the editor that does exist');
+  lacks(body, 'View /give', 'rather than only offering to view it');
 }
 
 group('Giving: funds and amounts are two panels, side by side');

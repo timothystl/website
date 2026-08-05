@@ -8937,8 +8937,6 @@ ${sidebarShell('settings', currentUser, '', await pageBadges())}
         <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
           ${chmsFunds.map(f => `<button type="button" class="btn btn-sm" style="background:var(--mist);color:var(--steel);${existingFundNames.has((f.name||'').trim().toLowerCase()) ? 'opacity:.45;' : ''}" data-fund-name="${escapeHtml(f.name || '')}" onclick="document.querySelector('form[action=\\'/giving-funds/add\\'] input[name=name]').value=this.dataset.fundName">${escapeHtml(f.name || '')}</button>`).join('')}
         </div>`;
-      const keepRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'give_keep_in_step'").first().catch(() => null);
-      const keepInStep = !keepRow || keepRow.value !== '0';
       const msg = url.searchParams.get('msg');
       const alertHtml = msg === 'giving-saved'   ? `<div class="alert alert-success">✓ Saved.</div>`
         : msg === 'giving-added'   ? `<div class="alert alert-success">✓ Added.</div>`
@@ -9028,41 +9026,42 @@ ${sidebarShell('giving', currentUser, '', await pageBadges())}
   <h1 class="tlc-title">${escapeHtml(sectionCfg('giving').title)}</h1>
   <p class="tlc-purpose" style="margin:6px 0 18px;">${escapeHtml(sectionCfg('giving').purpose)}</p>
 
-  <!-- The giving page exists at two addresses. One set of blocks, two places it
-       appears — the standalone card address, and the same thing inside the site
-       for somebody already browsing. -->
+  <!-- Two giving addresses, and they are NOT the same page. /give is a published
+       block page and opens in the real page editor. give.timothystl.org is still
+       rendered by give-landing.js — it computes every Tithe.ly link at request
+       time, which is why it was left in code (see admin/BLOCK-EDITOR-ROLLOUT.md
+       §3). This card used to claim "one set of blocks, two places it appears"
+       and offered an Edit button on both that led to the same explainer, plus a
+       "kept in step" switch that wrote a setting nothing has ever read. All three
+       promised something that does not happen, so each now says what is true. -->
   <div class="tlc-panel" style="margin-bottom:18px;">
     <div class="tlc-panel-head">
       <span class="tlc-panel-title">The giving page</span>
-      <span class="tlc-panel-right">One set of blocks · two places it appears</span>
+      <span class="tlc-panel-right">Two addresses · edited in two different places</span>
     </div>
     <div class="tlc-panel-body">
       <div class="tlc-give-surfaces">
         <div class="tlc-give-surface">
           <span class="tlc-give-badge">Standalone</span>
           <span class="tlc-give-addr">give.timothystl.org</span>
-          <p class="tlc-give-note">No header, no menu — one job. This is the address on the plate cards, the NFC tap, and anything printed.</p>
+          <p class="tlc-give-note">No header, no menu — one job. This is the address on the plate cards, the NFC tap, and anything printed. Its amounts, funds and Tithe.ly link are edited on this screen; the wording around them is still in code.</p>
           <div class="tlc-give-btns">
-            <a class="tlc-action" href="/giving/page">Edit this page</a>
+            <a class="tlc-action" href="/giving/page">What's editable here</a>
             <a class="tlc-tap-btn" href="https://give.timothystl.org" target="_blank" rel="noopener">View live</a>
           </div>
         </div>
         <div class="tlc-give-surface">
           <span class="tlc-give-badge">On the site</span>
           <span class="tlc-give-addr">timothystl.org/give</span>
-          <p class="tlc-give-note">The same blocks with the normal header, menu, and footer, so someone browsing the site can land here without leaving it.</p>
+          <p class="tlc-give-note">Where somebody decides <em>how</em> to give — the offering plate, bank bill pay, Thrivent, an IRA distribution, planned giving. A block page: edit it like any other page on the site.</p>
           <div class="tlc-give-btns">
-            <a class="tlc-action" href="/giving/page">Edit this page</a>
+            <a class="tlc-action" href="/pages/give/edit">Edit this page</a>
             <a class="tlc-tap-btn" href="https://timothystl.org/give" target="_blank" rel="noopener">View live</a>
           </div>
         </div>
       </div>
       <div class="tlc-give-sync">
-        <span>Kept in step: edit either one and the other follows. Only the header and footer differ.</span>
-        <form method="POST" action="/giving/keep-in-step" style="margin:0;">
-          <input type="hidden" name="value" value="${keepInStep ? '0' : '1'}">
-          <button type="submit" class="tlc-switch${keepInStep ? ' is-on' : ''}" role="switch" aria-checked="${keepInStep ? 'true' : 'false'}" aria-label="Keep the two giving pages in step"><span class="tlc-switch-knob"></span></button>
-        </form>
+        <span>These two are edited separately, and deliberately: one is the transaction, the other is the explanation. Changing an amount or a fund below changes it on <strong>both</strong>.</span>
       </div>
     </div>
   </div>
@@ -9177,29 +9176,20 @@ ${sidebarShell('giving', currentUser, '', await pageBadges())}
 </div>`, 'Giving');
     }
 
-    if (path === '/giving/keep-in-step' && method === 'POST') {
-      if (!hasPermission(currentUser, 'giving_manage')) return new Response('Access denied.', { status: 403 });
-      const form = await request.formData();
-      const next = form.get('value') === '1' ? '1' : '0';
-      await env.DB.prepare("INSERT OR REPLACE INTO site_settings (key, value, label, hint) VALUES ('give_keep_in_step', ?, 'Giving pages kept in step', 'When on, give.timothystl.org and /give show the same blocks.')")
-        .bind(next).run();
-      await logAudit(env.DB, currentUser, 'update', 'giving', 'keep_in_step', 'Giving pages kept in step', null, { value: next });
-      return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-saved' } });
-    }
-
-    // The giving page is still rendered by give-landing.js rather than by the
-    // block editor, so "Edit this page" explains where its parts actually live
-    // instead of opening an editor that would not control it. Converting it is
-    // a deliberate change to the church's donation page, not a side effect of
-    // this screen.
+    // give.timothystl.org only. timothystl.org/give is a published block page and
+    // its card links straight to /pages/give/edit; this screen exists because the
+    // standalone page is still rendered by give-landing.js, so it explains where
+    // that page's parts actually live instead of opening an editor that would not
+    // control it. Converting it is a deliberate change to the church's donation
+    // page, not a side effect of this screen — see admin/BLOCK-EDITOR-ROLLOUT.md §3.
     if (path === '/giving/page' && method === 'GET') {
       if (!hasPermission(currentUser, 'giving_manage')) return new Response('Access denied.', { status: 403 });
       return html(`
 ${sidebarShell('giving', currentUser, `<a href="/giving">← Giving</a>`, await pageBadges())}
 <div class="tlc-wrap">
-  <div class="page-title">The giving page</div>
-  <div class="page-sub">Where each part of give.timothystl.org and /give is edited.</div>
-  <div class="alert alert-info">This page is not yet a block-editor page. Everything on it that changes is edited from the Giving screen; the narrative sections are still in code, because it is the church's donation page and moving it wants a deliberate change with somebody watching.</div>
+  <div class="page-title">give.timothystl.org</div>
+  <div class="page-sub">Where each part of the standalone giving page is edited.</div>
+  <div class="alert alert-info">This one page is not a block-editor page. Everything on it that changes — amounts, funds, the Tithe.ly link — is edited from the Giving screen; the wording around them is still in code, because it is the church's donation page and every link on it is computed at the moment somebody loads it. Moving it wants a deliberate change with somebody watching. <strong>timothystl.org/give is different</strong> — that one is a normal block page and opens in the page editor.</div>
   <div class="card">
     <div class="card-title">What is editable today</div>
     <ul style="font-family:var(--sans);font-size:14px;line-height:2;color:var(--charcoal);padding-left:20px;">
@@ -9217,7 +9207,7 @@ ${sidebarShell('giving', currentUser, `<a href="/giving">← Giving</a>`, await 
   </div>
   <div class="btn-row">
     <a href="https://give.timothystl.org" target="_blank" class="btn btn-primary">View give.timothystl.org</a>
-    <a href="https://timothystl.org/give" target="_blank" class="btn btn-secondary">View /give</a>
+    <a href="/pages/give/edit" class="btn btn-secondary">Edit timothystl.org/give</a>
   </div>
 </div>`, 'The giving page');
     }
