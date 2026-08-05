@@ -3,6 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>
+// Browsers restore the page's last scroll position on a plain reload — so a
+// refresh after scrolling down first paints wherever you left off (the MDO
+// strip, a ministry card, whatever), then showPage()'s own window.scrollTo(0,0)
+// snaps it back to the top a moment later. That flash is what looks like a
+// glimpse of stray content; it isn't — it's real, current copy on the page,
+// just seen for a frame before the reset. Turning restoration off here, before
+// the browser has applied it, is the standard fix (this must run this early —
+// doing it from the main script further down is too late).
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+</script>
 <title>Timothy Lutheran Church — St. Louis, MO</title>
 <meta name="description" content="Timothy Lutheran Church is a congregation alive to the Gospel of Jesus Christ in Lindenwood Park, South City St. Louis. Come as you are — two Sunday services, Wednesday worship, and a community open to all.">
 <meta name="keywords" content="Lutheran church St. Louis, LCMS church St. Louis, Lutheran church Lindenwood Park, church near me St. Louis, Mother's Day Out St. Louis, Sunday school St. Louis, food pantry St. Louis, Christmas market St. Louis">
@@ -597,8 +608,8 @@
           <a href="https://lwml.org" target="_blank">Visit LWML</a>
         </div>
         <div class="min-card">
-          <img src="/images/ministries/Bees.webp?v=20260328" alt="Timothy Urban Beekeepers" class="min-card-img" loading="lazy" width="1500" height="750">
-          <h3>Timothy Urban Beekeepers</h3>
+          <img src="/images/ministries/Bees.webp?v=20260328" alt="Urban Beekeepers" class="min-card-img" loading="lazy" width="1500" height="750">
+          <h3>Urban Beekeepers</h3>
           <p>St. Louis neighbors learning about and supporting the art of beekeeping in an urban setting — a joyful reminder that creation care is part of our calling.</p>
           <a href="/bees" onclick="event.preventDefault();showPage('bees')">Learn more</a>
         </div>
@@ -1234,7 +1245,7 @@
           </div>
         </div>
         <div>
-          <img src="/images/ministries/Bees.webp?v=20260328" alt="Timothy Urban Beekeepers" loading="lazy" width="1500" height="750" style="width:100%;border-radius:var(--r-md);box-shadow:var(--shadow);">
+          <img src="/images/ministries/Bees.webp?v=20260328" alt="Urban Beekeepers" loading="lazy" width="1500" height="750" style="width:100%;border-radius:var(--r-md);box-shadow:var(--shadow);">
         </div>
       </div>
     </div>
@@ -3043,18 +3054,6 @@ window.showPage = function(id, addHistory) {
     history.pushState({page:id},'',url);
   }
   updatePageMeta(id);
-  if (id === 'news') {
-    // Reset to archive view (in case coming back from newsletter detail)
-    var nlArchive = document.getElementById('news-archive');
-    var nlDetail = document.getElementById('newsletter-detail');
-    if (nlArchive) nlArchive.style.display = '';
-    if (nlDetail) nlDetail.style.display = 'none';
-    loadNewsletters(); loadNewsItems();
-    // The calendar iframe is only given its src when the page is actually
-    // opened, so /news costs no more to load than it did before.
-    var newsCal = document.getElementById('gcal-frame-news');
-    if (newsCal && !newsCal.getAttribute('src')) { newsCal.src = newsCal.dataset.src; }
-  }
   if (id === 'calendar') {
     var gcalFrame = document.getElementById('gcal-frame');
     if (gcalFrame && !gcalFrame.getAttribute('src')) { gcalFrame.src = gcalFrame.dataset.src; }
@@ -3088,7 +3087,14 @@ window.showPage = function(id, addHistory) {
   // and for every page — ministry pages exist in both systems, and the newer
   // one wins. Only when nothing has been published do the legacy loaders run.
   tlcMaybeTakeOverSitePage(id).then(function (took) {
-    if (took || ministryPages.indexOf(id) === -1) return;
+    if (took) return;
+    // /news is not a "ministry page" — it has always had its own hardcoded
+    // markup and its own loaders, not loadMinistryPage(). This is that page's
+    // half of the fallback: it runs only once the block-editor draft has NOT
+    // been published, exactly the same condition every ministry page's own
+    // legacy loader below is gated on.
+    if (id === 'news') { loadLegacyNewsPage(); return; }
+    if (ministryPages.indexOf(id) === -1) return;
     return tlcMaybeTakeOver(id).then(function (tookMinistry) {
       if (tookMinistry) return;
       if (id === 'youth') { loadYouthPage(); return; }
@@ -3097,6 +3103,30 @@ window.showPage = function(id, addHistory) {
     });
   });
 };
+
+// The pre-editor /news page: newsletters, news items, and the calendar
+// iframe. Runs only when /news has not (yet) been published from the page
+// editor — see the takeover check in showPage() above.
+function loadLegacyNewsPage() {
+  // Reset to archive view — UNLESS the address is a newsletter detail link
+  // (/news/:id), in which case the router's own nlDetailMatch handler has
+  // already called showPage('news') and then loadNewsletterDetail() in the
+  // same synchronous pass; the takeover check this runs behind is async, so
+  // by the time this fires that detail view may already be on screen. Reset
+  // it here and it flips straight back to the archive under the visitor.
+  var onDetailUrl = /\/news\/\d+$/.test(location.pathname);
+  var nlArchive = document.getElementById('news-archive');
+  var nlDetail = document.getElementById('newsletter-detail');
+  if (!onDetailUrl) {
+    if (nlArchive) nlArchive.style.display = '';
+    if (nlDetail) nlDetail.style.display = 'none';
+  }
+  loadNewsletters(); loadNewsItems();
+  // The calendar iframe is only given its src when the page is actually
+  // opened, so /news costs no more to load than it did before.
+  var newsCal = document.getElementById('gcal-frame-news');
+  if (newsCal && !newsCal.getAttribute('src')) { newsCal.src = newsCal.dataset.src; }
+}
 // The footer is present on every page, so its Partners column is filled here
 // rather than from any single page's load.
 renderFooterPartners();
