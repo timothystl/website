@@ -251,6 +251,21 @@ group('site-worker: a nonsense response is treated as no response');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+group('on a phone the button comes before the case for pressing it');
+{
+  // #400 fixed this in the hardcoded page: stacking the two columns in source
+  // order buries the Give button under the whole ministry ladder, so somebody
+  // who arrived to give has to scroll past the argument to reach it. The block
+  // version stacks the same way and would have quietly undone that fix the
+  // moment the page was published.
+  const { BLOCK_CSS } = await import('../admin/blocks.js');
+  has(BLOCK_CSS, '.tlcb-pair > .tlcb--giving{order:-1', 'the widget is pulled above the ladder when a pair stacks');
+  // Scoped to the giving widget, not to pairs generally — every other pair on
+  // the site reads correctly top-to-bottom.
+  hasNot(BLOCK_CSS, '.tlcb-pair > .tlcb{order:-1', 'and pairs are not reversed generally');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 group('the chrome: a way home, and assets that are not the page');
 {
   const w = await freshWorker();

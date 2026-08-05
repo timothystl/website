@@ -159,6 +159,27 @@ tiers are the same shape and differ only in colour, which is already a
 block-level choice. Two near-identical types would drift apart the first time
 somebody improved one of them.
 
+### What #400 found first, and what is left of it
+
+Andrew, before this work: *"the giving pages are still not editor block pages"*
+and *"it says edit the page but then nothing."* Both were fair, and the Giving
+screen was the reason. It described the two addresses as one set of blocks
+appearing in two places, pointed both Edit buttons at the same explainer, and
+sat all of it under a switch offering to keep them in step. Three claims, none
+true — and the switch wrote `give_keep_in_step`, which nothing has ever read.
+
+#400 corrected the wording while `give.timothystl.org` was still rendered from
+code, and removed the switch. This change finishes the job the complaint was
+really about: **both addresses now open a real editor**, so the panel's
+remaining distinction is the honest one — they are separate pages doing
+separate jobs, and an amount or fund change applies to both because neither
+stores a copy of the link.
+
+`give_keep_in_step` is **deleted** rather than left for reuse. A key nothing
+reads, kept under a name that describes a feature that does not exist, is how
+the next person concludes the pages are synchronised.
+
+
 ### Five things worth knowing before touching this
 
 1. **`give-link.js` is the one definition of how an amount becomes a link.** It

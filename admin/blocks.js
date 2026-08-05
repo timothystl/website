@@ -803,7 +803,16 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-page--full > .tlcb-pair{
   padding-left:max(var(--tlcb-pad), calc((100% - var(--tlcb-wrap)) / 2));
   padding-right:max(var(--tlcb-pad), calc((100% - var(--tlcb-wrap)) / 2));}
-.tlcb-page{--tlcb-pad:24px;font-family:'Source Sans 3',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
+/* ⚠ These two were USED in seven rules and DEFINED nowhere, so those rules
+   fell back to the browser's default font — the card-grid headings, eyebrow,
+   link and intro, and the map card's three text rules, on every public page
+   that carries one of those blocks. Nothing errored and nothing looked
+   obviously broken, which is why it survived. Defined here, on the wrapper
+   every render path emits, so there is one place they come from. */
+.tlcb-page{--tlcb-pad:24px;
+  --tlcb-serif:Lora,Georgia,serif;
+  --tlcb-sans:'Source Sans 3',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  font-family:var(--tlcb-sans);}
 .tlcb{position:relative;border-radius:10px;background:var(--tlcb-bg,#FBF8F3);color:var(--tlcb-ink,#3A3A4A);
   padding:14px var(--tlcb-pad);border:2px solid transparent;
   margin-top:var(--tlcb-space-above,0px);margin-bottom:var(--tlcb-space-below,0px);}
@@ -829,12 +838,12 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb *{box-sizing:border-box;}
 .tlcb-eyebrow{font:700 11px/1.4 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;
   color:#C9973A;margin-bottom:8px;}
-.tlcb-head{font-family:Lora,Georgia,serif;font-weight:700;line-height:1.2;margin:0;
+.tlcb-head{font-family:var(--tlcb-serif);font-weight:700;line-height:1.2;margin:0;
   font-size:var(--tlcb-head,22px);color:var(--tlcb-head-ink,#1E2D4A);}
 .tlcb-prose{font-size:var(--tlcb-body,15px);line-height:1.75;color:var(--tlcb-ink,#3A3A4A);text-wrap:pretty;}
-.tlcb-prose h2{font-family:Lora,Georgia,serif;font-weight:700;line-height:1.2;margin:0 0 16px;
+.tlcb-prose h2{font-family:var(--tlcb-serif);font-weight:700;line-height:1.2;margin:0 0 16px;
   font-size:var(--tlcb-head,30px);color:var(--tlcb-head-ink,#1E2D4A);}
-.tlcb-prose h3{font-family:Lora,Georgia,serif;font-weight:700;line-height:1.25;margin:0 0 12px;
+.tlcb-prose h3{font-family:var(--tlcb-serif);font-weight:700;line-height:1.25;margin:0 0 12px;
   font-size:calc(var(--tlcb-head,30px) * .72);color:var(--tlcb-head-ink,#1E2D4A);}
 .tlcb-prose h4{font:600 calc(var(--tlcb-body,15px) * 1.15)/1.35 'Source Sans 3',sans-serif;margin:0 0 8px;
   color:var(--tlcb-head-ink,#1E2D4A);}
@@ -916,7 +925,7 @@ export const BLOCK_CSS = `<style id="tlcb-css">
   background:linear-gradient(135deg,rgba(30,45,74,.82),rgba(17,30,50,.92));opacity:var(--tlcb-hero-veil,0);}
 .tlcb-hero > *{position:relative;z-index:1;}
 .tlcb-hero-eyebrow{font:700 11px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#E8C070;margin-bottom:8px;}
-.tlcb-hero-title{font-family:Lora,Georgia,serif;font-weight:700;font-size:var(--tlcb-hero,38px);line-height:1.15;color:#fff;margin:0;}
+.tlcb-hero-title{font-family:var(--tlcb-serif);font-weight:700;font-size:var(--tlcb-hero,38px);line-height:1.15;color:#fff;margin:0;}
 /* No auto side margins by default — align-items:flex-start (.tlcb-band-text's
    own base) already puts this flush left; a flex item's own horizontal auto
    margins self-centre regardless of the container's align-items, which is
@@ -1047,7 +1056,7 @@ export const BLOCK_CSS = `<style id="tlcb-css">
   background:#43536F var(--tlcb-slide-img,none) center/cover;}
 .tlcb-slide::before{content:'';position:absolute;inset:0;background:linear-gradient(105deg,rgba(17,30,50,.86),rgba(30,45,74,.55));}
 .tlcb-slide > *{position:relative;z-index:1;}
-.tlcb-slide-title{font-family:Lora,Georgia,serif;font-weight:700;font-size:var(--tlcb-hero,38px);line-height:1.12;color:#fff;margin:0;max-width:16em;}
+.tlcb-slide-title{font-family:var(--tlcb-serif);font-weight:700;font-size:var(--tlcb-hero,38px);line-height:1.12;color:#fff;margin:0;max-width:16em;}
 .tlcb-slide-sub{font-size:16px;line-height:1.55;color:rgba(255,255,255,.8);margin:0;max-width:34em;font-weight:300;}
 .tlcb-btn--ghost-light{background:transparent;color:#F3EDE1;border:1px solid rgba(245,228,192,.5);}
 .tlcb-dots{display:flex;gap:6px;margin-top:4px;}
@@ -1103,7 +1112,7 @@ aside.tlcb-card{background:#FFFFFF;border-radius:18px;padding:34px 32px;box-shad
 .tlcb-svcs{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
 .tlcb-svc{display:flex;flex-direction:column;gap:4px;padding:14px 16px;border:1px solid #DDE3ED;border-radius:9px;background:#FBF8F3;}
 .tlcb-svc-d{font:700 10px/1.6 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8898;}
-.tlcb-svc-t{font-family:Lora,Georgia,serif;font-weight:700;font-size:21px;color:#1E2D4A;line-height:1.2;}
+.tlcb-svc-t{font-family:var(--tlcb-serif);font-weight:700;font-size:21px;color:#1E2D4A;line-height:1.2;}
 .tlcb-svc-n{font-size:12.5px;color:#6A6858;}
 .tlcb-sermon{display:grid;grid-template-columns:var(--tlcb-cols,4fr 6fr);gap:var(--tlcb-gap,32px);align-items:center;}
 .tlcb-sermon--text{grid-template-columns:1fr;}
@@ -1113,7 +1122,7 @@ aside.tlcb-card{background:#FFFFFF;border-radius:18px;padding:34px 32px;box-shad
 .tlcb-sermon-play span{width:46px;height:46px;border-radius:50%;background:rgba(251,248,243,.92);color:#1E2D4A;
   display:flex;align-items:center;justify-content:center;font-size:17px;}
 .tlcb-sermon-b{display:flex;flex-direction:column;gap:6px;min-width:0;}
-.tlcb-sermon-t{font-family:Lora,Georgia,serif;font-weight:700;font-size:calc(var(--tlcb-head,30px) * .78);line-height:1.25;color:var(--tlcb-head-ink,#1E2D4A);}
+.tlcb-sermon-t{font-family:var(--tlcb-serif);font-weight:700;font-size:calc(var(--tlcb-head,30px) * .78);line-height:1.25;color:var(--tlcb-head-ink,#1E2D4A);}
 .tlcb-sermon-m{font-size:13px;color:#8A8898;}
 .tlcb-sermon-all{font-size:13px;color:#2E7EA6;text-decoration:none;font-weight:600;}
 .tlcb-news{display:flex;align-items:baseline;gap:14px;padding:11px 13px;border:1px solid #DDE3ED;border-radius:8px;background:#F7F3EC;}
@@ -1126,7 +1135,7 @@ aside.tlcb-card{background:#FFFFFF;border-radius:18px;padding:34px 32px;box-shad
 .tlcb-nf-head{display:flex;flex-direction:column;gap:3px;min-width:0;}
 .tlcb-nf-pin{align-self:flex-start;font:700 9px/1.4 'Source Sans 3',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#C9973A;}
 .tlcb-nf-date{font:700 11px/1.4 'Source Sans 3',sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#8A8898;}
-.tlcb-nf-title{font-family:Lora,Georgia,serif;font-size:17px;line-height:1.3;color:#1E2D4A;}
+.tlcb-nf-title{font-family:var(--tlcb-serif);font-size:17px;line-height:1.3;color:#1E2D4A;}
 .tlcb-nf-chev{flex:none;width:12px;height:12px;border-right:2px solid #8A8898;border-bottom:2px solid #8A8898;transform:rotate(45deg);transition:transform .15s;}
 .tlcb-nf-item[open] .tlcb-nf-chev{transform:rotate(-135deg);}
 .tlcb-nf-body{padding:0 18px 18px;}
@@ -1135,7 +1144,7 @@ aside.tlcb-card{background:#FFFFFF;border-radius:18px;padding:34px 32px;box-shad
 .tlcb-nl-list{display:flex;flex-direction:column;gap:10px;}
 .tlcb-nl-item{background:#fff;border:1px solid #E4E0D4;border-radius:12px;padding:20px;}
 .tlcb-nl-date{display:block;font:700 11px/1.4 'Source Sans 3',sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#C9973A;margin-bottom:4px;}
-.tlcb-nl-subj{display:block;font-family:Lora,Georgia,serif;font-size:19px;color:#1E2D4A;margin-bottom:8px;}
+.tlcb-nl-subj{display:block;font-family:var(--tlcb-serif);font-size:19px;color:#1E2D4A;margin-bottom:8px;}
 .tlcb-nl-note{font-size:14px;line-height:1.7;color:#6A6858;margin:0 0 10px;}
 .tlcb-nl-link{font:700 13px 'Source Sans 3',sans-serif;color:#2E7EA6;text-decoration:none;}
 .tlcb-nl-row{display:flex;align-items:baseline;gap:14px;padding:10px 13px;border:1px solid #E4E0D4;border-radius:8px;text-decoration:none;}
@@ -1190,7 +1199,7 @@ aside.tlcb-card{background:#FFFFFF;border-radius:18px;padding:34px 32px;box-shad
   display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;}
 .tlcb-kid{display:flex;flex-direction:column;gap:5px;padding:16px 18px;border:1px solid #DDE3ED;
   border-radius:11px;background:#FBF8F3;text-decoration:none;}
-.tlcb-kid-t{font-family:Lora,Georgia,serif;font-weight:700;font-size:17px;color:#1E2D4A;line-height:1.25;}
+.tlcb-kid-t{font-family:var(--tlcb-serif);font-weight:700;font-size:17px;color:#1E2D4A;line-height:1.25;}
 .tlcb-kid-d{font-size:13px;color:#6A6858;line-height:1.5;}
 @media(max-width:640px){
 PHONE_RULES_PLACEHOLDER
@@ -1215,6 +1224,18 @@ function phoneRules(p) {
     // the one that stacks it: with one column, the second half wraps to its
     // own row automatically.
     `${p}.tlcb-pair{grid-template-columns:1fr!important;}`,
+    // ⚠ The ONE exception to "halves stack in source order", and it is about
+    // money rather than taste. On the giving page the ladder sits left and the
+    // widget right, so stacking in source order buries the actual Give button
+    // under the whole case for giving — somebody who arrived to give has to
+    // scroll past the argument to reach the button. #400 fixed exactly this in
+    // the hardcoded page (`.widget-col{order:-1}`); without this rule,
+    // publishing the block version would quietly undo that fix.
+    //
+    // Scoped to the giving widget, which only ever appears on that one page,
+    // rather than reversing pairs generally — every other pair on the site
+    // reads correctly top-to-bottom and must keep doing so.
+    `${p}.tlcb-pair > .tlcb--giving{order:-1!important;}`,
     `${p}.tlcb-media{order:0!important;}`,
     `${p}.tlcb-cards{grid-template-columns:1fr!important;}`,
     `${p}.tlcb-gallery{grid-template-columns:1fr 1fr!important;}`,

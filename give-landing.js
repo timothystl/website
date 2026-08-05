@@ -420,13 +420,18 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds, appearance, details
     .hero-header { padding: 40px 20px; }
     .hero-header h1 { font-size: 32px; }
     .give-row { grid-template-columns: 1fr; }
-    .ladder-col { border-right: none; border-bottom: 1px solid #DDE3ED; padding: 32px 22px; }
+    /* On a phone the two columns stack in source order, which buries the actual giving widget
+       under the whole ministry ladder — someone arriving to give has to scroll past the case
+       for giving to reach the button. Put the widget first; the ladder then reads as the
+       supporting argument below it, which is the right order on a small screen. The divider
+       moves with it, so the line still falls between the two. */
+    .widget-col { order: -1; border-bottom: 1px solid #DDE3ED; padding: 32px 22px; }
+    .ladder-col { order: 0; border-right: none; padding: 32px 22px; }
     .values-band { grid-template-columns: 1fr 1fr; padding: 24px 20px 28px; }
     .other-ways { padding: 26px 20px 30px; }
     .ow-cta { width: 100%; text-align: center; }
     .amount-chips { gap: 8px; }
     .chip { font-size: 14px; padding: 11px 0; }
-    .widget-col { padding: 32px 22px; }
     .leadership-section { padding: 36px 20px; }
     .ladder-row { flex-direction: column; align-items: flex-start; }
     .ladder-cta { width: 100%; text-align: center; }

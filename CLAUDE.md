@@ -589,6 +589,13 @@ perfect**.
   this very page, were served an HTML document instead of an image. Silently:
   no error, no log, just a church logo that has never appeared on the giving
   page. Asset paths fall through to the static assets now.
+- **⚠ A phone shows the button before the case for pressing it.** #400 fixed
+  this in the hardcoded page — stacking the two columns in source order buries
+  the Give button under the whole ministry ladder. The block version stacks the
+  same way, so `phoneRules()` pulls the widget above the ladder
+  (`.tlcb-pair > .tlcb--giving{order:-1}`). Scoped to the giving widget, which
+  only ever appears on that one page, rather than reversing pairs generally.
+  Without it, publishing would have quietly undone #400.
 - **The Giving screen stopped lying.** Its panel claimed the two giving pages
   were one set of blocks shown in two places, and carried a switch offering to
   keep them in step. Neither was true — they have separate jobs, and the switch
@@ -638,6 +645,141 @@ this survived the first attempt at the fix.
 three that deliberately are not block pages (`404`, `values`, `voters`), the
 other surfaces, and what converting `give.timothystl.org` would actually take.
 Read it before starting any of that work.
+
+### The backlog pass (v4.24.0, 2026-08-05)
+
+Andrew went through the pending list and picked. What follows is what each one
+turned out to be, because in three cases the item on the list was not the
+problem.
+
+**The font variables were never defined.** `--tlcb-serif` and `--tlcb-sans`
+were used in seven `BLOCK_CSS` rules and declared **nowhere**, so the card-grid
+heading, eyebrow, link and intro and the map card's three text rules rendered
+in the browser's default font on every public page carrying one of those
+blocks. A `var()` that cannot resolve fails silently — nothing errors, nothing
+looks obviously broken — which is why it survived being noted in passing.
+Defined once on `.tlcb-page` (the wrapper every render path emits), and the ten
+rules that wrote the Lora stack out literally now use the variable.
+`admin/blocks.test.mjs` asserts the **general** rule: every `var(--tlcb-*)` is
+defined or carries a fallback.
+
+**[B1] the gym slot is locked by the database.** Andrew: *"once it is booked it
+should be locked out"*. A partial unique index over the active statuses, so the
+race cannot happen rather than being narrowly avoided.
+- **Partial on purpose** — a released or expired booking must not reserve the
+  slot forever, or releasing a hold would stop meaning anything.
+- **⚠ It catches an exact duplicate slot, not an overlap.** 1–3pm against
+  2–4pm is a range comparison and a unique index compares values. The SELECT
+  check still does that and still has its old race for partial overlaps. This
+  narrows the hole to the case that actually happens (two people clicking the
+  same button); it does not close it.
+- **⚠ If the index cannot be created, the live table already holds two active
+  bookings for one slot.** That is logged loudly rather than swallowed — which
+  of the two is real is a question for whoever took them.
+
+**[B4] was already fixed, and the measurement says so.** The item claimed ~130
+D1 queries per admin request. Measured against the real Worker: a cold isolate
+pays **411** statements once, a warm request pays **0** — the `MARKERS_SEEN`
+work did it. There is nothing left to gate behind KV. Item closed by
+measurement, not by building anything.
+
+**[B6] EXIF is stripped server-side.** There *was* a client-side re-encode that
+strips metadata as a side effect of drawing to a canvas — wired to the staff
+photo picker **only**. The news header image, both rich-text editors and the
+logo picker all posted the file exactly as it came off the phone, and that
+re-encoder falls back to the untouched original whenever the canvas cannot
+produce a WebP. `admin/exif.js` cuts the metadata out at `/api/upload-image`,
+which every path goes through.
+- **Byte-level, not a decode.** Workers has no image library and needs none:
+  in JPEG, PNG and WebP the metadata sits in its own self-delimiting chunk.
+  JPEG keeps APP0 and APP14 (JFIF density, Adobe colour transform) and stops at
+  SOS, because past that a `0xFF` is image data. WebP rewrites the RIFF size
+  and honours the pad byte that is not counted in a chunk's own size.
+- **⚠ Every path fails OPEN.** Anything unrecognised, truncated or malformed
+  comes back untouched. Losing a photo to a parser that misread it is worse
+  than the metadata, and nobody would find out until it was already on a page.
+- The fixtures are **real files with real GPS**, so the test greps the raw
+  bytes rather than trusting our own parser, and checks the image still decodes
+  at the same size with the scan data byte-for-byte unchanged.
+
+**[B5] a session now also has to have been used recently.** Seven days was
+right for somebody who uses this weekly, but on its own it meant a session left
+open on a shared machine stayed usable for a week of doing nothing — on an
+admin that mails the congregation, reads prayer requests and approves payroll.
+Both limits apply now: seven days since sign-in, 24 hours since the last
+request. **⚠ A missing `last_activity` is treated as active** — the column
+arrives by migration, so failing closed would have signed out the whole office
+on deploy.
+
+**[B7] the social preview image is a setting.** ⚠ `og:image` is read by
+crawlers out of the HTML **as served** — Facebook and Bluesky do not run the
+page's JavaScript — so this is the one thing on the site that cannot be swapped
+client-side the way the header and footer now are. `site-worker.js` rewrites it
+with `HTMLRewriter`, streaming, defaulting to the logo so nothing changes until
+somebody sets `social_image_url`. A real 1200×630 photograph is still wanted;
+this is the field to put it in.
+
+**[B8] the tap-through is a test, not an afternoon.** The item asked for "a tap
+through on a real phone". A person doing that tells you about the day they did
+it; `test/public-phone.test.mjs` measures at 390px on every change. It found
+**footer links 14px tall**, a 36×42 hamburger, drawer links at 43px, six
+buttons between 31 and 40px, and the newsletter fields at 40px. None of it
+looked wrong on a desktop.
+- Padding and minimum heights only — **no type sizes changed**, so nothing
+  reflows.
+- **⚠ The footer is the one place 44px is the wrong answer**: eighteen links at
+  44px is a footer taller than the phone. 36px is a real target without turning
+  the footer into its own page, and the test asserts 30px there rather than 44.
+
+**The Media screen's usage scan is inverted.** It was O(media × pages) — every
+file substring-searching every page's block JSON. Each page is read once into a
+filename map; a file is then one lookup. It is also **more accurate**: the
+substring test called `logo.png` used whenever a page mentioned
+`church-logo.png`, and a false "in use" is the worse direction because it hides
+a file that could be cleaned up forever.
+
+**The gym iCal feed is bounded** to a year back, where it returned every
+confirmed booking ever taken — to a calendar app that re-fetches it constantly.
+And the **seven indexes AC-7 named** in the July review now exist.
+
+**Four images were serving a 72px card from a full-size photo** — 488KB between
+them, to be drawn 72 pixels tall. Thumbnails at 240px (2× the block grid's
+120px cap), originals untouched for the full-width uses. 488KB → 84KB.
+**⚠ The first pass produced a 128-byte `ss-logo`**: `mdo` and `ss-logo` are
+RGBA and converting to RGB flattened their transparency into a solid block. The
+source mode is preserved now.
+
+**`/sermons` shows this week's service.** Andrew: *"youtube.com/timothystl is
+the general worship service displayed each week. I don't know how we can make
+it pull the most current one every time."* YouTube's per-channel Atom feed,
+which needs **no API key** — and so no secret to set, rotate, or notice had
+expired, on a feature whose point is that nobody touches it weekly.
+- ⚠ The feed is keyed on the channel **ID**, not the handle, and nothing public
+  converts one to the other. The Worker scrapes the channel page once and
+  **writes the ID back into the setting**, so the scrape runs about once in the
+  life of the site rather than on every cache miss.
+- **⚠ `parseFeed` deliberately does not re-sort on `published`.** That is the
+  upload time, and a stream scheduled days ahead carries the date it was
+  scheduled — sorting on it reliably picks the wrong service. The test proves
+  it with a concert that has the latest date of the three.
+- `sermon_title_filter` exists because "newest video" is one concert away from
+  being wrong. Blank by default.
+- Everything fails to "no embed": the section stays hidden and the page is
+  exactly what it was, Watch-on-YouTube button and all.
+
+**⚠ `/api/latest-sermon` was written below the session gate at first**, so
+every request 302'd to the login page. It is a public endpoint and belongs with
+`/api/news`. The integration test caught it; a unit test never would have.
+
+**The "Kept in step" switch is deleted.** It was labelled *"edit either one and
+the other follows"* and nothing implemented that; it wrote `give_keep_in_step`,
+which nothing read. The panel beside it said the two giving pages were "One set
+of blocks · two places it appears", and they are not. **A control that claims a
+behaviour the code does not have is worse than no control** — somebody flips
+it, believes it worked, and stops checking.
+
+Run: `node admin/exif.test.mjs`, `node admin/sermons-feed.test.mjs`,
+`node test/public-phone.test.mjs`.
 
 ### Form Spam Screening (added 2026-07-31)
 
@@ -3048,7 +3190,7 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 - **Christmas Market annual content** — Page structure is built. Needs dates, description, photos, and Google Form link for vendors entered via the admin Ministries tab each year.
 - **Ministry page editor rollout** — every ministry page now has a full-page block draft waiting in the editor (banner and all sections). The office reviews each one and presses Publish; until then the live page renders from its hardcoded markup exactly as before. Once a page is published from the editor, its hardcoded section markup in `public/index.html` is dead and can be deleted.
 - **Music page video strip** — the three fallback video cards on `/music` were not converted (they need real YouTube URLs). Add Video blocks in the editor, or drop them.
-- **Sermons page** — YouTube embed page exists; confirm it's pulling the correct channel or that it's manually maintained.
+- ~~**Sermons page**~~ — **done v4.24.0, 2026-08-05.** Andrew: the channel is `youtube.com/timothystl`, one general worship service a week, and *"I dont knwo how we can make it pull the most current one every time"*. It does now — `/sermons` embeds the newest video from the channel's own Atom feed, no API key, nothing to post weekly. `sermon_youtube_channel` and `sermon_title_filter` are the two settings. See "The backlog pass" above.
 - ~~**Homepage newsletter signup block is hardcoded**~~ — **done v4.23.0, 2026-08-05**, and the premise was wrong in a way worth recording: it is **not** on the homepage. It sits outside every page div and renders on all 28 pages, so converting the homepage to blocks would never have reached it. It is site-wide chrome, and its colour, wording and on/off switch are now on the Appearance screen beside the header. See "The chrome is editable, and drafted first" above.
 - ~~**Confirm the Menu screen actually publishes live**~~ — **answered 2026-08-05.** It was already live: every menu write goes straight through and the `/api/pages` edge copy is busted by the chokepoint on any POST under `/pages` or `/menu`, so a change reaches the site inside the 120s window. What made it *look* unpublished was the preview bar, which drew a header the site does not have — fixed in v4.23.0. Menu items stay instant; only the new appearance record is drafted and published.
 - ~~**No logo image upload for the top nav bar, and header color scheme isn't admin-editable**~~ — **done v4.23.0, 2026-08-05.** Logo upload (R2, with shape), church name, tagline, bar colour, bottom rule and Give button, all under Menu → Appearance. Note the "T" badge in the old Menu preview was never the site's logo — it was invented by that preview, which is why the header looked unchangeable. Both open questions were answered: **scope** is the header and the newsletter band only, not the site-wide palette (`--steel`/`--amber` still belong to the stylesheet); **publish** is a real draft/live split, `site_appearance_draft` vs `site_appearance`, exactly like `blocks`/`published_blocks`.
@@ -3069,14 +3211,14 @@ The full review (three scouts + a synthesis pass, everything verified by reading
 
 ### Pinned / Low Priority
 - **manual.html** — Keep this updated whenever new features, pages, or admin tabs are added. It is the staff reference guide at `/manual` and should always reflect the current state of the site and admin portal.
-- **[B1] Gym booking race condition** — `admin/gym.js` checks for a booking-slot conflict with a `SELECT` and then does a separate `INSERT`, with no transaction or unique constraint on `(booking_date, start_time, end_time)`. Two concurrent hold requests for the same slot could both pass the check and double-book. Needs a design decision (D1 batch/transaction vs. a unique index + handling the constraint-violation error) rather than a quick fix. Flagged in the July 2026 code review; not yet fixed. Very low urgency in practice — two people booking the exact same slot at the exact same instant is rare; keep on the list to think about, no rush.
+- ~~**[B1] Gym booking race condition**~~ — **done v4.24.0**, Andrew's rule: *"once it is booked it should be locked out"*. A partial unique index over the active statuses. ⚠ It catches an exact duplicate slot, not a partial overlap — see "The backlog pass" above for why and what is still open. *(Original note kept.)* **[B1] Gym booking race condition** — `admin/gym.js` checks for a booking-slot conflict with a `SELECT` and then does a separate `INSERT`, with no transaction or unique constraint on `(booking_date, start_time, end_time)`. Two concurrent hold requests for the same slot could both pass the check and double-book. Needs a design decision (D1 batch/transaction vs. a unique index + handling the constraint-violation error) rather than a quick fix. Flagged in the July 2026 code review; not yet fixed. Very low urgency in practice — two people booking the exact same slot at the exact same instant is rare; keep on the list to think about, no rush.
 - **[B2] Newsletter Format 3** — Single-event announcement (date, time, location, RSVP). Skipped for now, add if needed.
 - **[B3] R2 image uploads (card thumbnail)** — Body editors (TinyMCE) across News, Youth Pages, Pages, and Posts all have R2 upload fully wired via `tlcUploadHandler` — drag/drop or paste images and they upload automatically. The only remaining URL-only field is the News item card thumbnail (`image_url` text input). A file-picker button for that field could be added if needed.
-- **[B4] KV-gate startup migrations** — ~130 D1 queries run on every admin request (no-ops after first deploy). Gate behind a KV schema-version key to reduce to 1 KV read per cold start. Low urgency.
-- **[B5] Session idle timeout** — Admin sessions expire after 7 days fixed. Could add idle timeout (~24h) via a `last_activity` column on the sessions table.
-- **[B6] EXIF metadata in uploaded images** — Staff photos uploaded via admin may contain GPS/device EXIF data. Consider documenting that staff should strip EXIF before uploading, or add Cloudflare Images processing.
-- **[B7] Social preview image** *(future work — social media polish, not a near-term task)* — `og:image` currently uses the logo, which is fine for now. A proper 1200×630 photo of the church/congregation would improve click-through when the site is shared on Facebook/Twitter, whenever this gets picked up. When it does, consider making the image swappable via an admin setting (e.g. under Redirects) instead of a one-off hardcoded edit to `public/index.html`'s head section.
-- **[B8] Mobile touch targets** — do a tap-through on a real phone to verify button/link sizes feel comfortable, especially on ministry and youth sub-pages added since launch.
+- ~~**[B4] KV-gate startup migrations**~~ — **closed by measurement 2026-08-05, nothing built.** The premise was already false: measured against the real Worker, a cold isolate pays 411 statements once and a **warm request pays 0** — the `MARKERS_SEEN` work did it. There is nothing left for a KV gate to save.
+- ~~**[B5] Session idle timeout**~~ — **done v4.24.0.** Both limits apply now: seven days since sign-in, 24 hours since the last request. ⚠ A missing `last_activity` is treated as active, so the migration does not sign out the whole office on deploy.
+- ~~**[B6] EXIF metadata in uploaded images**~~ — **done v4.24.0**, and neither of the suggested ways: `admin/exif.js` cuts the metadata out byte-level at `/api/upload-image`, so it covers every uploader rather than depending on which button somebody clicked or on a Cloudflare Images subscription. Fails open on anything it cannot parse.
+- **[B7] Social preview image** — **the mechanism shipped v4.24.0; the photograph has not.** `social_image_url` is a setting and `site-worker.js` rewrites the tags with HTMLRewriter, so swapping it is one field. ⚠ It had to be server-side: crawlers read `og:image` out of the HTML as served and do not run the page's JavaScript. What is still wanted is a real 1200×630 photo of the church or congregation — until one exists the logo is still what gets shared. *(Original note:)* `og:image` currently uses the logo, which is fine for now. A proper 1200×630 photo of the church/congregation would improve click-through when the site is shared on Facebook/Twitter, whenever this gets picked up. When it does, consider making the image swappable via an admin setting (e.g. under Redirects) instead of a one-off hardcoded edit to `public/index.html`'s head section.
+- ~~**[B8] Mobile touch targets**~~ — **done v4.24.0, as a test rather than an afternoon.** `test/public-phone.test.mjs` measures at 390px on every change. It found footer links **14px** tall, a 36px hamburger and six buttons under 44px. Fixed with padding and minimum heights only — no type sizes changed. ⚠ The footer is held to 36px, not 44: eighteen links at 44px is a footer taller than the phone.
 
 ---
 
@@ -3125,7 +3267,7 @@ This section used to restate the site's status in full; it drifted for months (l
 - **Every admin tab's status** is the "Admin Portal Plan" table near the top of this file — kept current all session, every row DONE.
 - **The live inventory of every admin screen** against the v3.0.0 mockups is `admin/REDESIGN-STATUS.md` — see "The design handoff is in the repo now" below for why that file, not this one, is the source of truth for per-screen fidelity.
 - **The public site's colors, typography and socials** are under "Design System" below.
-- **The admin worker version** is `VERSION` in `admin/helpers.js`, currently `v4.23.0` — see "Versioning" below for what bumps mean.
+- **The admin worker version** is `VERSION` in `admin/helpers.js`, currently `v4.24.0` — see "Versioning" below for what bumps mean.
 
 ### What's actually next
 - Youth director content entry for `/confirmation`, `/sundayschool`, `/vbs`, `/egghunt`, `/family` — the `youth_pages` rows exist, waiting on real content.

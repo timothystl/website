@@ -1043,7 +1043,7 @@ export const SITE_PAGES = [
             "url": "/wol"
           },
           {
-            "img": "/images/ministries/mdo.webp",
+            "img": "/images/ministries/mdo-thumb.webp",
             "eyebrow": "",
             "title": "Mother's Day Out",
             "body": "<p>Over twenty years of experienced, caring childcare for children from birth through preschool. Small classrooms, flexible scheduling, community.</p>",
@@ -1067,7 +1067,7 @@ export const SITE_PAGES = [
             "url": "/stephen"
           },
           {
-            "img": "/images/ministries/food-pantry.webp",
+            "img": "/images/ministries/food-pantry-thumb.webp",
             "eyebrow": "",
             "title": "Food Pantry",
             "body": "<p>Timothy operates a food pantry for members and neighbors. Open monthly, serving families in Lindenwood Park with practical care in the name of Christ.</p>",
@@ -1091,7 +1091,7 @@ export const SITE_PAGES = [
             "url": "https://lwml.org"
           },
           {
-            "img": "/images/ministries/Bees.webp?v=20260328",
+            "img": "/images/ministries/Bees-thumb.webp?v=20260328",
             "eyebrow": "",
             "title": "Urban Beekeepers",
             "body": "<p>St. Louis neighbors learning about and supporting the art of beekeeping in an urban setting — a joyful reminder that creation care is part of our calling.</p>",
@@ -1099,7 +1099,7 @@ export const SITE_PAGES = [
             "url": "/bees"
           },
           {
-            "img": "/images/ministries/christmas-mkt.webp",
+            "img": "/images/ministries/christmas-mkt-thumb.webp",
             "eyebrow": "",
             "title": "Christmas Market",
             "body": "<p>An annual community event in Lindenwood Park. Shopping, fellowship, and celebration — a gift to the neighborhood every December.</p>",

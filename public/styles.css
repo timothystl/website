@@ -319,6 +319,31 @@ footer{background:var(--steel-dk2);padding:48px 28px 28px;}
   .two-col{grid-template-columns:1fr;}
   .nav-mobile button,.nav-mobile a{padding:13px 0;}
   .bio-more{padding:10px 0 0;font-size:12px;}
+
+  /* ── [B8] TAP TARGETS ──────────────────────────────────────────
+     Measured at 390px by test/public-phone.test.mjs rather than judged by
+     eye, because "feels about right" on a desktop mouse is how a 14px link
+     ships. 44px is Apple's minimum and roughly where WCAG 2.5.5 settles.
+
+     Type sizes are deliberately NOT changed — this is padding and minimum
+     height only, so nothing reflows and no page gets longer than the extra
+     tap area costs. */
+  .nav-toggle{min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;padding:0;}
+  .nav-mobile button,.nav-mobile a{min-height:44px;display:flex;align-items:center;}
+  .btn{min-height:44px;display:inline-flex;align-items:center;justify-content:center;}
+  #newsletter-signup-form .form-input,#newsletter-signup-form .btn{min-height:44px;}
+
+  /* ⚠ The footer is the one place a full 44px is the wrong answer: eighteen
+     links at 44px each is a footer taller than the phone. These were 14px,
+     which is genuinely a wrong-link-opened problem; 36px is a real target
+     without turning the footer into its own page. The list gets a little
+     more room between rows for the same reason. */
+  .footer-col ul li{margin-bottom:2px;}
+  .footer-col ul li a,.footer-col ul li button,.footer-col ul li span{
+    min-height:36px;display:flex;align-items:center;}
+  .footer-social a{min-height:36px;}
+  /* The colophon link at the very bottom is still a link somebody taps. */
+  .footer-base a{min-height:36px;display:inline-flex;align-items:center;}
 }
 
 /* Newsletter signup — white-on-dark input placeholders */

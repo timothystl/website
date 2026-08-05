@@ -117,12 +117,19 @@ jobs:
 #   node test/editor.test.mjs            # the block editor shell
 #   node test/site-editor.test.mjs       # the pages rail and Page tab
 #   node test/public-page.test.mjs       # the live site
+#   node test/public-phone.test.mjs      # [B8] tap targets at 390px, MEASURED
 #   node test/payroll.test.mjs           # payroll, against a stubbed Supabase
 #   ... and editor-edit, editor-dnd, editor-media, editor-publish,
 #       editor-resize, editor-sections, site-roles, site-pages, whole-page
 #
 # Chromium is at /opt/pw-browsers/chromium in the Claude Code environment, or
 # set CHROME_PATH.
+#
+# ⚠ public-phone is the one to run after any change to public/styles.css. The
+# backlog asked for "a tap-through on a real phone"; a person doing that tells
+# you about the day they did it, and this tells you on every change. It found
+# footer links 14px tall, a 36px hamburger and six buttons under 44px — none of
+# which looked wrong on a desktop, which is the whole point.
 #
 # ⚠ shell-layout is the one worth running by hand after ANY change to the
 # sidebar or the page shell. Three separate releases have shipped an admin with
