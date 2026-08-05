@@ -90,6 +90,7 @@ import { BLOCKS as NL_BLOCKS, parseBlocks as parseNlBlocks, serializeBlocks as s
          parseExtras, extrasFromForm, serializeExtras, MAX_EXTRA_NOTES } from './admin/newsletter.js';
 import { screenSubmission, formConfig, forwardToChms, officeEmailHtml, officeSubject,
          handleFilteredRoutes, heldCount, OFFICE_EMAIL } from './admin/forms.js';
+import { stripImageMetadata } from './admin/exif.js';
 import { PALETTE as CHROME_PALETTE, BAR_KEYS, DEFAULTS as CHROME_DEFAULTS,
          parseAppearance, appearanceFromForm, sanitizeAppearance, publicAppearance,
          isDirty as chromeDirty, changedFields as chromeChanged, FIELD_LABELS as CHROME_LABELS,
@@ -4311,7 +4312,24 @@ ${PAYROLL_HTML}`, 'Payroll');
       }
       const ext = ALLOWED_IMAGE_TYPES.get(mimeType);
       const key = `news-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      await env.IMAGES.put(key, file.stream(), { httpMetadata: { contentType: mimeType } });
+      // ── [B6] STRIP THE METADATA BEFORE IT IS STORED ──
+      // A photo off a phone carries EXIF, and EXIF routinely carries GPS. Every
+      // file that lands here is then served publicly from this domain forever,
+      // so somebody's home address can end up in a staff portrait with nobody
+      // involved aware it is there.
+      //
+      // It happens HERE rather than in the browser because only one of the
+      // uploaders re-encodes (the staff photo picker) — the news header image,
+      // the rich-text editors and the logo picker all post the file exactly as
+      // it came off the phone, and they all come through this route. A privacy
+      // guarantee that depends on which button somebody clicked is not one.
+      //
+      // Reading the body into memory is a real cost that streaming avoided, but
+      // it is bounded by the 8MB cap above and the metadata cannot be found
+      // without it. stripImageMetadata fails open: anything it cannot parse
+      // with confidence comes back untouched rather than mangled.
+      const clean = stripImageMetadata(new Uint8Array(await file.arrayBuffer()));
+      await env.IMAGES.put(key, clean, { httpMetadata: { contentType: mimeType } });
       const url = `${new URL(request.url).origin}/images/${key}`;
       return new Response(JSON.stringify({ url, location: url }), { headers: { 'Content-Type': 'application/json' } });
     }

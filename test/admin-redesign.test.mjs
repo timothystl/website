@@ -16,6 +16,8 @@ import worker from '../tlc-admin-worker.js';
 import { ALL_PERMISSIONS } from '../admin/auth.js';
 
 let pass = 0, fail = 0;
+const { readFileSync } = await import('node:fs');
+const { hasMetadata } = await import('../admin/exif.js');
 const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error('  ✗ ' + msg); } };
 const eq = (a, b, msg) => ok(a === b, `${msg} — expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`);
 const has = (hay, needle, msg) => ok(String(hay).includes(needle), `${msg} — missing ${JSON.stringify(needle)}`);
@@ -650,6 +652,36 @@ group('the Media screen answers "used where" from one pass, not one per file');
   eq((again.match(/Used nowhere/g) || []).length, 2,
      'logo.png and unused-2019.webp are both unused — logo.png is NOT counted as used just because church-logo.png contains it');
   has(again, 'On Choir', 'while the photo genuinely on that page still says so');
+}
+
+group('[B6] an uploaded photo reaches storage with its GPS removed');
+{
+  // The unit tests prove the stripper; this proves it is actually WIRED to the
+  // route every uploader posts to. A correct stripper nobody calls protects
+  // nobody, and that was the state of the client-side one — it was attached to
+  // the staff photo picker only.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const gps = new Uint8Array(readFileSync(new URL('./fixtures/gps.jpg', import.meta.url)));
+
+  const stored = [];
+  env.IMAGES = {
+    put: async (key, body) => { stored.push({ key, body }); },
+    get: async () => null, head: async () => null, delete: async () => {},
+  };
+
+  const fd = new FormData();
+  fd.append('file', new File([gps], 'photo.jpg', { type: 'image/jpeg' }));
+  const res = await worker.fetch(new Request('https://admin.timothystl.org/api/upload-image', {
+    method: 'POST', headers: { cookie, origin: 'https://admin.timothystl.org' }, body: fd,
+  }), env, ctx);
+  eq(res.status, 200, 'the upload succeeds');
+  eq(stored.length, 1, 'and one object was written');
+
+  const bytes = new Uint8Array(stored[0].body);
+  ok(!hasMetadata(bytes), 'what reached storage carries no EXIF');
+  ok(bytes.length < gps.length, 'and is smaller than what was uploaded');
+  ok(bytes[0] === 0xFF && bytes[1] === 0xD8, 'while still being a JPEG');
 }
 
 group('[B1] the gym cannot be double-booked for the same slot');
