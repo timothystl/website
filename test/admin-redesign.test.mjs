@@ -654,6 +654,106 @@ group('the Media screen answers "used where" from one pass, not one per file');
   has(again, 'On Choir', 'while the photo genuinely on that page still says so');
 }
 
+group('/sermons shows this week\'s service without anybody posting a link');
+{
+  const { db, env } = await boot();
+  const realFetch = globalThis.fetch;
+  const FEED = '<feed><entry><yt:videoId>abc123XYZ_-</yt:videoId>' +
+    '<title>Sunday Worship &amp; Holy Communion</title><published>2026-08-03T15:00:00+00:00</published></entry></feed>';
+
+  globalThis.fetch = async (u) => {
+    const url = String(u && u.url ? u.url : u);
+    if (url.includes('/feeds/videos.xml')) return new Response(FEED, { status: 200 });
+    if (url.includes('youtube.com/@')) return new Response('{"externalId":"UCaaaaaaaaaaaaaaaaaaaaaa"}', { status: 200 });
+    return new Response('{}', { status: 200 });
+  };
+  try {
+    const r = await call(env, '/api/latest-sermon', { fresh: true });
+    const d = await r.json();
+    eq(r.status, 200, 'the endpoint answers');
+    eq(d.video.videoId, 'abc123XYZ_-', 'with the newest video from the channel feed');
+    eq(d.video.title, 'Sunday Worship & Holy Communion', 'and its title, entities decoded');
+
+    // ⚠ The handle is resolved to a channel ID once and written back, because
+    // the feed is keyed on the ID and finding it means scraping a page. Doing
+    // that on every cache miss would make a Sunday depend on a scrape holding.
+    eq(db.prepare("SELECT value FROM site_settings WHERE key='sermon_youtube_channel'").get().value,
+       'UCaaaaaaaaaaaaaaaaaaaaaa', 'the resolved channel ID replaces the handle in the setting');
+  } finally { globalThis.fetch = realFetch; }
+}
+
+group('the sermons embed fails to nothing, never to a broken page');
+{
+  // No channel, YouTube down, an empty feed — all of them mean "no embed", and
+  // the page keeps the Watch on YouTube link it has always had. An empty video
+  // frame reads as a broken page, which is worse than no frame.
+  const { db, env } = await boot();
+  const realFetch = globalThis.fetch;
+
+  db.prepare("UPDATE site_settings SET value='' WHERE key='sermon_youtube_channel'").run();
+  let d = await (await call(env, '/api/latest-sermon', { fresh: true })).json();
+  eq(d.video, null, 'no channel set means no video');
+
+  db.prepare("UPDATE site_settings SET value='UCaaaaaaaaaaaaaaaaaaaaaa' WHERE key='sermon_youtube_channel'").run();
+  globalThis.fetch = async () => { throw new Error('network down'); };
+  try {
+    d = await (await call(env, '/api/latest-sermon', { fresh: true })).json();
+    eq(d.video, null, 'YouTube being unreachable means no video, not an error');
+  } finally { globalThis.fetch = realFetch; }
+
+  globalThis.fetch = async () => new Response('<feed></feed>', { status: 200 });
+  try {
+    d = await (await call(env, '/api/latest-sermon', { fresh: true })).json();
+    eq(d.video, null, 'and an empty feed means no video');
+  } finally { globalThis.fetch = realFetch; }
+}
+
+group('[B5] a session left idle stops working');
+{
+  // Seven days is right for somebody who uses this weekly, but on its own it
+  // means a session left open on a shared office machine stays usable for a
+  // week of doing nothing — and this admin sends email to the congregation,
+  // reads prayer requests and approves payroll.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  eq((await call(env, '/menu', { cookie })).status, 200, 'a fresh session works');
+  const stamped = db.prepare('SELECT last_activity FROM sessions').get();
+  ok(stamped.last_activity, 'and using it records when');
+
+  const stale = new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString();  // 30h
+  db.prepare('UPDATE sessions SET last_activity = ?').run(stale);
+  // An unauthenticated request renders the login page (200), it does not 302.
+  const after = await (await call(env, '/menu', { cookie })).text();
+  has(after, 'name="password"', 'a session idle for longer than a day is sent back to the login page');
+  eq(db.prepare('SELECT COUNT(*) AS n FROM sessions').get().n, 0, 'and the row is deleted, not just refused');
+}
+
+group('[B5] ⚠ a session with no activity stamp is NOT signed out');
+{
+  // The column arrives by migration, so at that moment every existing session
+  // has NULL in it. Failing closed would sign out the whole office on deploy —
+  // for a security improvement nobody asked to be logged out for.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  db.prepare('UPDATE sessions SET last_activity = NULL').run();
+  eq((await call(env, '/menu', { cookie })).status, 200, 'it still works');
+  ok(db.prepare('SELECT last_activity FROM sessions').get().last_activity,
+     'and gets a stamp on the way through, so the clock starts from now');
+}
+
+group('[B5] the absolute seven-day expiry still applies');
+{
+  // Recent activity must not keep a session alive forever — that would turn a
+  // seven-day limit into no limit at all for anybody who visits daily.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  db.prepare('UPDATE sessions SET expires_at = ?, last_activity = ?')
+    .run(new Date(Date.now() - 1000).toISOString(), new Date().toISOString());
+  has(await (await call(env, '/menu', { cookie })).text(), 'name="password"',
+      'an expired session is refused however recently it was used');
+}
+
 group('[B6] an uploaded photo reaches storage with its GPS removed');
 {
   // The unit tests prove the stripper; this proves it is actually WIRED to the

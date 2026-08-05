@@ -91,6 +91,8 @@ import { BLOCKS as NL_BLOCKS, parseBlocks as parseNlBlocks, serializeBlocks as s
 import { screenSubmission, formConfig, forwardToChms, officeEmailHtml, officeSubject,
          handleFilteredRoutes, heldCount, OFFICE_EMAIL } from './admin/forms.js';
 import { stripImageMetadata } from './admin/exif.js';
+import { normalizeChannelInput, channelPageUrl, channelIdFrom, feedUrl,
+         parseFeed, pickLatest, isChannelId } from './admin/sermons-feed.js';
 import { PALETTE as CHROME_PALETTE, BAR_KEYS, DEFAULTS as CHROME_DEFAULTS,
          parseAppearance, appearanceFromForm, sanitizeAppearance, publicAppearance,
          isDirty as chromeDirty, changedFields as chromeChanged, FIELD_LABELS as CHROME_LABELS,
@@ -129,7 +131,7 @@ async function writeChrome(env, key, value) {
 // Allowlist of site_settings keys readable via the public /api/settings/{key}
 // endpoint. Everything else returns 404 — keeps internal config (gym admin
 // email, Brevo keys, etc.) from leaking to anyone who can guess a key name.
-const PUBLIC_SETTINGS_KEYS = new Set(['zoom_url', 'councilfiles_url', 'give_url']);
+const PUBLIC_SETTINGS_KEYS = new Set(['zoom_url', 'councilfiles_url', 'give_url', 'social_image_url']);
 
 // /api/pages is the public site's one bundle — nav, church details, every
 // published page's HTML — rebuilt from five queries and a full render on
@@ -1152,7 +1154,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-05-3'; // bumped: the gym slot lock (B1) — a partial unique index over active bookings
+    const SCHEMA_VERSION = '2026-08-05-4'; // bumped: the gym slot lock (B1), sessions.last_activity (B5), and the indexes AC-7 named
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -1774,6 +1776,9 @@ export default {
       try { await env.DB.prepare(ix).run(); } catch (_) {}
     }
 
+    // [B5] When a session was last used, for the idle timeout in admin/auth.js.
+    try { await env.DB.prepare('ALTER TABLE sessions ADD COLUMN last_activity TEXT').run(); } catch (_) {}
+
     // ── [B1] THE GYM SLOT LOCK ──
     // ⚠ If this throws it is almost always because the live table ALREADY
     // holds two active bookings for one slot — exactly the thing the index
@@ -2112,6 +2117,68 @@ export default {
     //     entirely — expire_date does not keep a past event alive.
     //   - A plain ANNOUNCEMENT (no event_date) sorts newest-published-first,
     //     same as before, and is only ever hidden by its own expire_date.
+    // ── PUBLIC: THIS WEEK'S WORSHIP SERVICE ──
+    // The /sermons page used to be a link out to the channel. This is what
+    // makes it show the current service without anybody posting a link each
+    // week: YouTube's per-channel Atom feed, which needs no API key and so
+    // needs no secret to set, rotate, or notice had expired.
+    //
+    // Cached at the edge for 30 minutes. A new service appears within half an
+    // hour of being posted, which is the right trade for a page nobody is
+    // watching change — and it means a burst of Sunday traffic costs one
+    // fetch of somebody else's server rather than thousands.
+    if (path === '/api/latest-sermon' && method === 'GET') {
+      const cache = edgeCache();
+      const cacheKey = new Request('https://admin.timothystl.org/api/latest-sermon');
+      if (cache) {
+        const hit = await cache.match(cacheKey);
+        if (hit) return hit;
+      }
+
+      // Everything here fails to `{video:null}` rather than to an error. The
+      // page treats that as "no embed" and shows the link out it always had,
+      // so a YouTube outage costs the embed and nothing else.
+      const answer = async () => {
+        const row = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'sermon_youtube_channel'")
+          .first().catch(() => null);
+        const parsed = normalizeChannelInput(row && row.value);
+        if (parsed.kind === 'none') return { video: null, reason: 'no channel set' };
+
+        let channelId = parsed.kind === 'id' ? parsed.value : '';
+        if (!channelId) {
+          // ⚠ A scrape of the channel page, because there is no public way to
+          // turn a handle into a channel ID. It is written back to the setting
+          // once it succeeds, so this runs about once in the life of the site
+          // rather than every time the cache expires — and if YouTube ever
+          // changes the markup, the ID that was already found keeps working.
+          const page = await fetch(channelPageUrl(parsed.value), {
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; TimothyLutheranBot/1.0)' },
+          }).catch(() => null);
+          if (!page || !page.ok) return { video: null, reason: 'channel page unreachable' };
+          channelId = channelIdFrom(await page.text());
+          if (!isChannelId(channelId)) return { video: null, reason: 'channel id not found' };
+          await env.DB.prepare("UPDATE site_settings SET value = ? WHERE key = 'sermon_youtube_channel'")
+            .bind(channelId).run().catch(() => {});
+        }
+
+        const res = await fetch(feedUrl(channelId)).catch(() => null);
+        if (!res || !res.ok) return { video: null, reason: 'feed unreachable' };
+        const filterRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'sermon_title_filter'")
+          .first().catch(() => null);
+        const video = pickLatest(parseFeed(await res.text()), filterRow && filterRow.value);
+        return { video: video || null, reason: video ? '' : 'nothing matched' };
+      };
+
+      let payload;
+      try { payload = await answer(); } catch (_) { payload = { video: null, reason: 'error' }; }
+      const out = new Response(JSON.stringify(payload), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*',
+                   'Cache-Control': 'public, max-age=1800' },
+      });
+      if (cache && ctx && ctx.waitUntil) ctx.waitUntil(cache.put(cacheKey, out.clone()));
+      return out;
+    }
+
     if (path === '/api/news' && method === 'GET') {
       const limit = parseInt(url.searchParams.get('limit') || '20', 10);
       const today = new Date().toISOString().split('T')[0];
@@ -8816,6 +8883,9 @@ ${sidebarShell('redirects', currentUser, '', await pageBadges())}
         { key: 'site_appearance', label: 'Header and newsletter band', group: 'church-details', used: 'Every page — the top bar and the sign-up strip', href: '/menu/appearance' },
         { key: 'site_appearance_draft', label: 'Header appearance (draft)', group: 'church-details', used: 'The Appearance screen only — never sent to visitors', href: '/menu/appearance' },
         { key: 'give_url', label: 'Online giving link', group: 'links', used: 'Give blocks · newsletter · gym invoices', href: '/giving' },
+        { key: 'social_image_url', label: 'Social preview image', group: 'church-details', used: 'The picture shown when a link to the site is shared' },
+        { key: 'sermon_youtube_channel', label: 'Worship service channel', group: 'links', used: 'This week’s service on /sermons' },
+        { key: 'sermon_title_filter', label: 'Only show services titled', group: 'links', used: 'Which video on that channel counts as the service' },
         { key: 'zoom_url', label: 'Zoom meeting link', group: 'links', used: 'The /zoom short link' },
         { key: 'councilfiles_url', label: 'Council files link', group: 'links', used: 'The /councilfiles short link' },
         { key: 'gym_rate_per_hour', label: 'Gym rate per hour', group: 'gym-rentals', used: 'Gym invoices · booking portal', href: '/gym-rentals' },

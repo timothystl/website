@@ -147,20 +147,55 @@ export async function createSession(db, user) {
   return token;
 }
 
+// Signed out after this long without a request, however much of the seven-day
+// window is left. A day is long enough that nobody is logged out mid-task or
+// between one working day and the next, and short enough that a machine left
+// unattended over a weekend is not still signed in on Monday.
+export const IDLE_LIMIT_MS = 24 * 60 * 60 * 1000;
+// How stale the stamp has to be before it is worth a write.
+const ACTIVITY_WRITE_MS = 5 * 60 * 1000;
+
 export async function getSession(db, request) {
   const token = getTokenFromRequest(request);
   if (!token) return null;
   // Read permissions from the users table (not the session row) so permission
   // changes take effect on the next request instead of requiring re-login.
   const row = await db.prepare(
-    `SELECT s.user_id, s.username, u.permissions AS permissions, s.expires_at, u.active
+    `SELECT s.user_id, s.username, u.permissions AS permissions, s.expires_at, s.last_activity, u.active
      FROM sessions s JOIN users u ON u.id = s.user_id
      WHERE s.token = ?`
   ).bind(token).first();
   if (!row || !row.active) return null;
-  if (new Date(row.expires_at) < new Date()) {
+  const now = Date.now();
+  if (new Date(row.expires_at).getTime() < now) {
     await db.prepare('DELETE FROM sessions WHERE token = ?').bind(token).run();
     return null;
+  }
+  // ── [B5] IDLE TIMEOUT ────────────────────────────────────────
+  // The absolute expiry is seven days, which is the right length for somebody
+  // who uses this every week. On its own it means a session left open on a
+  // shared office machine, or on a laptop somebody lends out, stays usable for
+  // a week of doing nothing — and this admin can send email to the whole
+  // congregation, read everyone's prayer requests and approve payroll.
+  //
+  // So a session also has to have been USED recently. Both limits apply: seven
+  // days since sign-in, and IDLE_LIMIT since the last request.
+  //
+  // ⚠ A missing last_activity is treated as active, not as expired. The column
+  // is added by migration, so every session that exists at that moment has
+  // NULL in it — failing closed would sign out the whole office on deploy, for
+  // a security improvement nobody asked to be logged out for.
+  const last = row.last_activity ? new Date(row.last_activity).getTime() : NaN;
+  if (Number.isFinite(last) && now - last > IDLE_LIMIT_MS) {
+    await db.prepare('DELETE FROM sessions WHERE token = ?').bind(token).run();
+    return null;
+  }
+  // Written back only once the stamp is meaningfully stale, so an ordinary
+  // screen — which makes several requests — costs one write rather than one
+  // per request. A minute of drift on a 24-hour limit is not worth the writes.
+  if (!Number.isFinite(last) || now - last > ACTIVITY_WRITE_MS) {
+    await db.prepare('UPDATE sessions SET last_activity = ? WHERE token = ?')
+      .bind(new Date(now).toISOString(), token).run().catch(() => {});
   }
   return { id: row.user_id, username: row.username, permissions: row.permissions, token };
 }
