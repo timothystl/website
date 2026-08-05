@@ -262,6 +262,27 @@ export const DB_INIT_GYM_BOOKINGS = `CREATE TABLE IF NOT EXISTS gym_bookings (
   created_at       TEXT DEFAULT (datetime('now'))
 )`;
 
+// ── [B1] THE SLOT LOCK ───────────────────────────────────────
+// The booking flow checks for a clash with a SELECT and then INSERTs, with
+// nothing between them: two people submitting the same slot at the same moment
+// both pass the check and the gym is double-booked. Andrew's rule is simply
+// "once it is booked it should be locked out", so the database enforces it —
+// the only place that can, because it is the one thing both requests share.
+//
+// ⚠ PARTIAL, on the active statuses only. A released or expired booking is
+// history and must not reserve the slot forever — the whole point of releasing
+// a hold is that somebody else can take it.
+//
+// ⚠ This catches an EXACT duplicate slot, which is the race that actually
+// happens (two people clicking the same button). It cannot express *overlap* —
+// 1–3pm against 2–4pm — because a unique index compares values, not ranges.
+// The SELECT check in admin/gym.js still does that, and still has the race it
+// always had for partial overlaps. This narrows the hole to the common case
+// rather than closing it completely, and saying so here is the point.
+export const DB_INIT_GYM_BOOKING_SLOT_INDEX = `CREATE UNIQUE INDEX IF NOT EXISTS idx_gym_bookings_slot
+  ON gym_bookings(booking_date, start_time, end_time)
+  WHERE status IN ('confirmed','hold')`;
+
 export const DB_INIT_GYM_RECURRENCES = `CREATE TABLE IF NOT EXISTS gym_recurrences (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   group_id     INTEGER NOT NULL,

@@ -5,7 +5,7 @@
 // Last modified: 2026-03-27
 
 
-import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, DB_INIT_FOOTER_COLUMNS, FOOTER_COLUMN_SEED, FOOTER_ITEM_COLUMNS, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS, DB_INIT_PAYROLL_READY_NOTIFIED } from './admin/db.js';
+import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_BOOKING_SLOT_INDEX, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, DB_INIT_FOOTER_COLUMNS, FOOTER_COLUMN_SEED, FOOTER_ITEM_COLUMNS, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS, DB_INIT_PAYROLL_READY_NOTIFIED } from './admin/db.js';
 import { pushToAllSubscribers } from './admin/webpush.js';
 
 // Static pages that can carry self-serve notices (matches the SPA's page ids in public/index.html)
@@ -1151,7 +1151,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-05-2'; // bumped: footer_columns + menu_items.column_id, so the footer's headings and groupings are admin-managed
+    const SCHEMA_VERSION = '2026-08-05-3'; // bumped: the gym slot lock (B1) — a partial unique index over active bookings
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -1756,6 +1756,36 @@ export default {
         ).bind(m.id, m.menu, m.label || null, m.kind, m.page_id || null, m.target || null, m.style || 'link', m.depth || 0, m.sort_order).run();
       } catch (_) {}
     }
+    // ── [AC-7] INDEXES ON THE COLUMNS THAT ARE ACTUALLY FILTERED ──
+    // Named in the July 2026 review and never added. Every one of these backs a
+    // WHERE or ORDER BY that runs on a screen somebody opens daily; without
+    // them each is a full table scan, which is invisible at today's row counts
+    // and is exactly the kind of thing that degrades quietly as they grow.
+    for (const ix of [
+      'CREATE INDEX IF NOT EXISTS idx_gym_bookings_status_date ON gym_bookings(status, booking_date)',
+      'CREATE INDEX IF NOT EXISTS idx_gym_bookings_group_date ON gym_bookings(group_id, booking_date)',
+      'CREATE INDEX IF NOT EXISTS idx_gym_invoices_group ON gym_invoices(group_id, created_at)',
+      'CREATE INDEX IF NOT EXISTS idx_news_items_dates ON news_items(publish_date, expire_date, pinned)',
+      'CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at, entity_type)',
+      'CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_form_submissions_created ON form_submissions(created_at)',
+    ]) {
+      try { await env.DB.prepare(ix).run(); } catch (_) {}
+    }
+
+    // ── [B1] THE GYM SLOT LOCK ──
+    // ⚠ If this throws it is almost always because the live table ALREADY
+    // holds two active bookings for one slot — exactly the thing the index
+    // exists to prevent, sitting there from before it existed. It cannot be
+    // fixed automatically (which of the two is the real booking is a question
+    // for whoever took them), so it is logged loudly rather than swallowed:
+    // carrying on silently would leave the gym unprotected with nobody aware.
+    try {
+      await env.DB.prepare(DB_INIT_GYM_BOOKING_SLOT_INDEX).run();
+    } catch (e) {
+      console.error('gym slot lock NOT created — resolve duplicate active bookings first:', e && e.message);
+    }
+
     // ── FOOTER COLUMNS ──
     // The footer's headings and which link sits under each. See the note at
     // the top of admin/menu.js for why this is a table and not a position
@@ -3216,13 +3246,33 @@ ${sidebarShell('dashboard', currentUser, '', badges)}
         for (const m of (ministryRes.results || [])) {
           haystacks.push({ label: m.title || m.slug, text: `${m.blocks || ''}${m.published_blocks || ''}${m.hero_image_url || ''}` });
         }
+        // ⚠ Inverted, because the obvious way round is O(media × pages): every
+        // media row scanning every page's block JSON with a substring search.
+        // Each page is read ONCE here, its filenames pulled out into a map, and
+        // a media row then costs one lookup. With dozens of pages and hundreds
+        // of files that is the difference between thousands of scans over large
+        // JSON blobs and one pass.
+        //
+        // It also happens to be more accurate. The old substring test said
+        // `logo.png` was in use if a page mentioned `church-logo.png`, because
+        // one filename contains the other. Matching whole filenames cannot make
+        // that mistake — and a false "in use" is the worse direction here, since
+        // it hides a file that could be cleaned up forever.
+        const usageIndex = new Map();
+        const FILENAME = /[A-Za-z0-9][A-Za-z0-9._-]*\.[A-Za-z0-9]{2,5}/g;
+        for (const h of haystacks) {
+          for (const name of new Set(h.text.match(FILENAME) || [])) {
+            if (!usageIndex.has(name)) usageIndex.set(name, []);
+            usageIndex.get(name).push(h.label);
+          }
+        }
         const usedBy = (u) => {
           if (!u) return [];
           // The stored URL and the one written into a block can differ by
           // origin, so match on the filename tail rather than the whole thing.
           const tail = String(u).split('/').pop();
           if (!tail) return [];
-          return haystacks.filter((h) => h.text.includes(tail)).map((h) => h.label);
+          return usageIndex.get(tail) || [];
         };
 
         const OVER = 1024 * 1024;

@@ -622,6 +622,72 @@ group('publishing /give never overwrites an edit the office made');
   ok(!row.published_blocks, 'a page somebody is working on is left alone, not pushed live under them');
 }
 
+group('the Media screen answers "used where" from one pass, not one per file');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const now = new Date().toISOString();
+  db.prepare("INSERT INTO pages (id,title,slug,status,blocks,published_blocks,updated_at) VALUES ('choirpage','Choir','/choir','published',?,?,?)")
+    .run(JSON.stringify([{ id: 'a', type: 'photo', url: '/images/choir-2026.webp' }]), '[]', now);
+  for (const [id, url] of [[1, 'https://admin.timothystl.org/images/choir-2026.webp'], [2, '/images/unused-2019.webp'], [3, '/images/logo.png']]) {
+    db.prepare("INSERT INTO ministry_media (id, kind, url, filename, alt, bytes, created_at) VALUES (?,'photo',?,?,'',1000,?)")
+      .run(id, url, url.split('/').pop(), now);
+  }
+  // Same filename, different origin — the stored URL and the one written into
+  // a block routinely differ that way, so matching is on the filename tail.
+  const body = await (await call(env, '/media', { cookie })).text();
+  has(body, 'On Choir', 'a photo used in a page says where, even though the origins differ');
+  has(body, 'Used nowhere', 'and one nothing references says so');
+
+  // ⚠ The old substring test called logo.png used because a page mentioned
+  // church-logo.png. Whole-filename matching cannot make that mistake, and a
+  // false "in use" is the worse direction — it hides a file forever.
+  db.prepare("UPDATE pages SET blocks = ? WHERE id='choirpage'").run(JSON.stringify([
+    { id: 'a', type: 'photo', url: '/images/choir-2026.webp' },
+    { id: 'b', type: 'photo', url: '/images/church-logo.png' },
+  ]));
+  const again = await (await call(env, '/media', { cookie, fresh: true })).text();
+  eq((again.match(/Used nowhere/g) || []).length, 2,
+     'logo.png and unused-2019.webp are both unused — logo.png is NOT counted as used just because church-logo.png contains it');
+  has(again, 'On Choir', 'while the photo genuinely on that page still says so');
+}
+
+group('[B1] the gym cannot be double-booked for the same slot');
+{
+  // "Once it is booked it should be locked out." The booking flow checks for a
+  // clash with a SELECT and then INSERTs; two requests can both pass the check.
+  // The database is the only thing both requests share, so it is what enforces
+  // this — a partial unique index over the active statuses.
+  const { db } = await boot();
+  db.prepare("INSERT INTO gym_groups (id, name, contact, email, active) VALUES (1,'Scouts','A','a@b.org',1)").run();
+  const book = (status) => db.prepare(
+    "INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, status) VALUES (1,'2026-09-01','18:00','20:00',?)"
+  ).run(status);
+
+  book('confirmed');
+  let refused = false;
+  try { book('hold'); } catch (_) { refused = true; }
+  ok(refused, 'a second active booking for the same slot is refused by the database itself');
+
+  // ⚠ Partial on purpose. Releasing a hold has to hand the slot back — a
+  // released booking reserving it forever would break the whole point.
+  let releasedOk = true;
+  try { book('released'); } catch (_) { releasedOk = false; }
+  ok(releasedOk, 'but a released booking may sit on the same slot — it is history, not a reservation');
+
+  db.prepare("UPDATE gym_bookings SET status='released' WHERE status='confirmed'").run();
+  let rebookable = true;
+  try { book('confirmed'); } catch (_) { rebookable = false; }
+  ok(rebookable, 'and once the active one is released the slot can be booked again');
+
+  // A different time on the same day is a different slot, not a clash.
+  let other = true;
+  try {
+    db.prepare("INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, status) VALUES (1,'2026-09-01','09:00','10:00','confirmed')").run();
+  } catch (_) { other = false; }
+  ok(other, 'an unrelated time on the same day is unaffected');
+}
+
 group('the footer is admin-managed columns');
 {
   // The footer's headings and groupings were hardcoded in public/index.html —
