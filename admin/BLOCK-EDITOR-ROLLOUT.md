@@ -155,10 +155,38 @@ would produce a page that looks the same and takes no money.
 church's donation page. It wants its own session with somebody watching, which
 is exactly why it is a note here rather than a thing half-done.
 
-The `give_keep_in_step` setting already exists in `site_settings` and **nothing
-reads it** — it was written for a "keep the two giving pages in step" switch
-that was never built. Either wire it up during this work or delete it; a
-setting that does nothing is worse than no setting.
+The `give_keep_in_step` setting exists in `site_settings` and **nothing reads
+it** — it was written for a "keep the two giving pages in step" switch that was
+never built. Its **switch and its POST route were removed 2026-08-05** (see
+below); the setting key is left alone in the database, so if this conversion
+wants a real keep-in-step control it can reuse the name.
+
+### Update, 2026-08-05 — the Giving screen was telling the office something untrue
+
+Reported: *"the giving pages are still not editor block pages"* and *"it says
+edit the page but then nothing."* Both were fair, and the screen was the reason.
+
+The Giving panel described the two addresses as **"One set of blocks · two
+places it appears"**, gave each an **Edit this page** button pointing at the
+same `/giving/page` explainer, and sat all of it under a **"Kept in step: edit
+either one and the other follows"** switch. Three claims, none of them true:
+`/give` and `give.timothystl.org` are not one set of blocks, only one of them
+has an editor, and the switch wrote a setting nothing has ever read.
+
+What it says now:
+
+- **`timothystl.org/give`** — "Edit this page" opens **`/pages/give/edit`**, the
+  real editor. It has been a published block page since the one-time publish in
+  `tlc-admin-worker.js`; the button just never pointed at it.
+- **`give.timothystl.org`** — the button reads **"What's editable here"** and
+  still opens `/giving/page`, which no longer describes both pages, only this
+  one.
+- The switch is gone, replaced by a line saying the two are edited separately on
+  purpose — and that an amount or fund change does apply to both, which is the
+  one thing that genuinely is shared.
+
+None of this converts `give.timothystl.org`; §3 above is still the work. It only
+stops the screen from promising that somebody already had.
 
 ---
 
