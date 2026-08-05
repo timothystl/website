@@ -121,6 +121,98 @@ export function publicMenu(items, pagesById, menu = 'header') {
     .map((i) => Object.assign({}, i, { children: i.children.filter((c) => !c.broken) }));
 }
 
+// ── FOOTER COLUMNS ───────────────────────────────────────────
+// The header is one bar, so a flat ordered list describes it completely. The
+// footer is not: it is headed groups — Visit, Connect, Programs, Partners —
+// and "which group is this link under" is a fact that has nowhere to live in
+// an ordered list. That is why `footer_columns` is its own table and
+// `menu_items.column_id` points at it, rather than the grouping being inferred
+// from position (which would mean a link silently changing column the moment
+// somebody reordered the one above it).
+//
+// A column's `source` is where its links come from:
+//   'menu'     — ordinary menu items assigned to it
+//   'partners' — filled from the partner ministries, on the site, at load
+//
+// Partners is a real column on the site today and its contents are not menu
+// items at all, so modelling it as one would mean either faking eleven rows or
+// pretending the column does not exist. It gets a source instead.
+export const COLUMN_SOURCES = ['menu', 'partners'];
+
+export function normalizeSource(v) {
+  return COLUMN_SOURCES.includes(v) ? v : 'menu';
+}
+
+// Columns with their items, in order. `orphans` is every footer item that is
+// not in any column — a link pointing at a deleted column, or one that predates
+// this table.
+//
+// ⚠ An orphan is NOT dropped. A link the office put in the footer disappearing
+// because of a column they deleted is exactly the kind of silent loss the rest
+// of this file exists to avoid, so it stays in the list and the admin says
+// where it is showing. See publicFooter().
+export function footerColumns(columns, items, pagesById) {
+  const cols = (columns || [])
+    .slice()
+    .sort((a, b) => (a.sort_order - b.sort_order) || (a.id - b.id))
+    .map((c) => ({
+      id: c.id,
+      heading: c.heading || '',
+      source: normalizeSource(c.source),
+      visible: !!c.visible,
+      items: [],
+    }));
+  const byId = new Map(cols.map((c) => [c.id, c]));
+
+  const footerItems = (items || [])
+    .filter((i) => normalizeMenu(i.menu) === 'footer')
+    .sort((a, b) => (a.sort_order - b.sort_order) || (a.id - b.id));
+
+  const orphans = [];
+  for (const raw of footerItems) {
+    const resolved = Object.assign(resolveItem(raw, pagesById), { columnId: raw.column_id || null });
+    const col = raw.column_id != null ? byId.get(raw.column_id) : null;
+    if (col && col.source === 'menu') col.items.push(resolved);
+    else orphans.push(resolved);
+  }
+  return { columns: cols, orphans };
+}
+
+// What the site renders. Hidden and broken items are left out — the admin
+// shows them, flagged, and the site must not — and an empty 'menu' column is
+// dropped, because a heading with nothing under it reads as a broken page.
+//
+// Orphans are shown under the FIRST column rather than in a headless fifth
+// one: they have to appear somewhere, an unheaded column at the end of a
+// footer looks like a fault, and the admin states plainly where they went.
+// A 'partners' column is kept even though it is empty here — the site fills it
+// after this runs, from the partner ministries.
+export function publicFooter(columns, items, pagesById) {
+  const { columns: cols, orphans } = footerColumns(columns, items, pagesById);
+  const live = (list) => list.filter((i) => i.visible && !i.broken)
+    .map((i) => ({ label: i.label, href: i.href, kind: i.kind }));
+
+  const out = cols.filter((c) => c.visible).map((c) => ({
+    heading: c.heading,
+    source: c.source,
+    items: live(c.items),
+  }));
+  const spare = live(orphans);
+  if (spare.length) {
+    const first = out.find((c) => c.source === 'menu');
+    if (first) first.items = first.items.concat(spare);
+    else out.push({ heading: '', source: 'menu', items: spare });
+  }
+  return out.filter((c) => c.source !== 'menu' || c.items.length);
+}
+
+// Same contract as renumber(): the whole resulting order is posted and the
+// server renumbers from scratch, so a dropped row cannot leave two columns
+// claiming one position.
+export function renumberColumns(order) {
+  return order.map((c, i) => ({ id: c.id, sort_order: (i + 1) * 10 }));
+}
+
 // ── ORPHANS ──────────────────────────────────────────────────
 // Published pages that no menu item points at. Not an error — "Thank You" and a
 // concert landing page are meant to be reachable only by link — so the panel

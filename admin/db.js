@@ -575,6 +575,43 @@ export const MENU_SEED = [
   { id: 30, menu: 'footer', label: 'Volunteer Sign-up',   kind: 'external', target: 'https://serve.timothystl.org', sort_order: 110 },
 ];
 
+// ── FOOTER COLUMNS ───────────────────────────────────────────
+// The header is one bar; the footer is headed groups. "Which group is this
+// link under" is a fact with nowhere to live in an ordered list, so it lives
+// here and `menu_items.column_id` points at it. See the long note in
+// admin/menu.js.
+//
+// `source` says where a column's links come from. 'partners' is filled on the
+// site from the partner ministries — those are not menu items and never were,
+// so the alternative to a source flag was faking rows for them or pretending
+// the column does not exist.
+export const DB_INIT_FOOTER_COLUMNS = `CREATE TABLE IF NOT EXISTS footer_columns (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  heading TEXT NOT NULL DEFAULT '',
+  source TEXT NOT NULL DEFAULT 'menu',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  visible INTEGER NOT NULL DEFAULT 1
+)`;
+
+// The four headings the footer has today, with explicit ids for the same
+// reason MENU_SEED uses them: INSERT OR IGNORE against a fixed id means
+// renaming or reordering a column survives every later deploy.
+export const FOOTER_COLUMN_SEED = [
+  { id: 1, heading: 'Visit',    source: 'menu',     sort_order: 10 },
+  { id: 2, heading: 'Connect',  source: 'menu',     sort_order: 20 },
+  { id: 3, heading: 'Programs', source: 'menu',     sort_order: 30 },
+  { id: 4, heading: 'Partners', source: 'partners', sort_order: 40 },
+];
+
+// Which seeded footer item starts in which column. Applied only where
+// column_id IS NULL, so it fills in an existing install once and never moves
+// a link the office has since put somewhere else.
+export const FOOTER_ITEM_COLUMNS = {
+  21: 1, 22: 1, 24: 1,             // Worship, Sermons, News & Events
+  20: 2, 23: 2, 25: 2, 26: 2, 27: 2, // About, Ministries, Contact, Prayer, Give
+  28: 3, 29: 3, 30: 3,             // Word of Life, Mother's Day Out, Volunteer
+};
+
 // ── NFC TAPS ─────────────────────────────────────────────────
 // The four physical tags, seeded from §5.10 of the design handoff. The ids are
 // fixed because they ARE the addresses: tap 1 is /tap1. Names and placements

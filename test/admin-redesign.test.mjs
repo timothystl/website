@@ -62,7 +62,12 @@ async function boot() {
   return { db, env };
 }
 
-async function call(env, path, { cookie = '', method = 'GET', form = null } = {}) {
+// `fresh: true` gives this call its own ExecutionContext. pageData() memoises
+// per request, keyed on the ctx object — correct in production, where every
+// request has its own — but this harness shares one ctx across the whole file,
+// so without this a second /api/pages would serve the first one's answer
+// forever and a test could never see a change take effect.
+async function call(env, path, { cookie = '', method = 'GET', form = null, fresh = false } = {}) {
   const headers = new Headers();
   if (cookie) headers.set('cookie', cookie);
   headers.set('origin', 'https://admin.timothystl.org');
@@ -72,7 +77,7 @@ async function call(env, path, { cookie = '', method = 'GET', form = null } = {}
     headers.set('content-type', 'application/x-www-form-urlencoded');
   }
   const req = new Request('https://admin.timothystl.org' + path, { method, headers, body });
-  return worker.fetch(req, env, ctx);
+  return worker.fetch(req, env, fresh ? { waitUntil: () => {}, passThroughOnException: () => {} } : ctx);
 }
 
 // A signed-in session, created directly in the tables the way login does.
@@ -556,10 +561,214 @@ group('the menu is seeded from the nav as it stands');
 
   const body = await (await call(env, '/menu', { cookie })).text();
   eq((await call(env, '/menu', { cookie })).status, 200, 'the Menu screen renders');
-  has(body, 'Live preview', 'with a live preview of the real bar');
+  // ⚠ The preview used to be admin navy with a hardcoded "T" badge and the
+  // literal words "Timothy Lutheran" — beside a real site that is moss green
+  // with a round logo and a strapline. It drew the real menu ITEMS into a bar
+  // that exists nowhere, so staff were shown a picture of a header the site
+  // does not have. These assertions pin the fix: the bar carries the real
+  // colours and the real brand, and the old fiction is gone.
+  has(body, 'tlc-hp-bar', 'with a preview built by the shared header renderer');
+  has(body, '--hp-bar:#4A5E3A', 'painted in the moss green the site actually uses');
+  has(body, 'Neighborhood to the Nations', 'carrying the real tagline');
+  lacks(body, 'tlc-preview-mark', 'and not the invented "T" badge it used to show');
+  has(body, '/menu/appearance', 'and it points at where those things are edited');
   has(body, 'Word of Life School', 'listing the outside links');
   has(body, 'Live pages not in the menu', 'and the orphan panel');
   has(body, 'Drag a row by its', 'explaining how to reorder');
+}
+
+group('/give is on the block editor and published');
+{
+  // Every page has had a block draft since the site editor shipped and none
+  // was ever published, so the whole editor sat behind a Publish nobody had
+  // pressed. This is the first page moved across.
+  const { db, env } = await boot();
+  const row = db.prepare("SELECT blocks, published_blocks, status FROM pages WHERE id='give'").get();
+  ok(row, 'the page exists');
+  ok(row.published_blocks && row.published_blocks === row.blocks, 'the draft has been published whole');
+  eq(row.status, 'published', 'and the page is live');
+
+  const blocks = JSON.parse(row.published_blocks);
+  eq(blocks[0].type, 'hero', 'it leads with a hero, so the page renders entirely from blocks');
+  const btns = blocks.filter((b) => b.type === 'buttons').flatMap((b) => b.items || []);
+  ok(btns.some((b) => b.url === 'https://give.timothystl.org'), 'the online-giving button survives the conversion');
+  ok(btns.some((b) => b.url === 'https://serve.timothystl.org'), 'and so does the time-and-talent one');
+
+  // ⚠ The one thing a published block must never hold. A block's URL is frozen
+  // at publish time, so a Tithe.ly address here would go stale the moment the
+  // office changed the link on the Giving screen — and nobody would notice.
+  lacks(row.published_blocks, 'give.tithe.ly', 'and no block carries a Tithe.ly address');
+
+  const cards = blocks.filter((b) => b.type === 'cardgrid').flatMap((b) => b.items || []);
+  ok(cards.length >= 6, 'the six offline ways to give came across as cards');
+  ok(cards.some((c) => /Qualified Charitable Distribution|QCD/i.test(c.body || '')), 'including the IRA copy');
+
+  const api = await (await call(env, '/api/pages', { fresh: true })).json();
+  ok(api.rendered && api.rendered.give, 'and the public bundle now renders it');
+}
+
+group('publishing /give never overwrites an edit the office made');
+{
+  // The guard that makes a one-time publish safe to ship. If somebody has
+  // already worked on this page, what they typed is what they meant.
+  const { db, env } = await boot();
+  db.prepare("UPDATE pages SET blocks = ?, published_blocks = NULL, updated_by = 'dinger' WHERE id='give'")
+    .run(JSON.stringify([{ id: 'x', type: 'text', title: 'Half-finished' }]));
+  db.prepare("DELETE FROM _schema_version WHERE key='give_page_published_v1'").run();
+
+  await call(env, '/api/pages', { fresh: true });   // any request re-runs the gate
+
+  const row = db.prepare("SELECT published_blocks FROM pages WHERE id='give'").get();
+  ok(!row.published_blocks, 'a page somebody is working on is left alone, not pushed live under them');
+}
+
+group('the footer is admin-managed columns');
+{
+  // The footer's headings and groupings were hardcoded in public/index.html —
+  // the Menu screen only ever managed a flat list, which cannot express "which
+  // column is this link under".
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  const cols = db.prepare('SELECT * FROM footer_columns ORDER BY sort_order').all();
+  eq(cols.length, 4, 'the four columns the footer has today are seeded');
+  eq(cols.map((c) => c.heading).join(','), 'Visit,Connect,Programs,Partners', 'with their real headings');
+  eq(cols[3].source, 'partners', 'and Partners is filled from the partner ministries, not from menu items');
+
+  // An existing install has footer links with no column; they are placed once.
+  const assigned = db.prepare('SELECT COUNT(*) AS n FROM menu_items WHERE menu = ? AND column_id IS NOT NULL').get('footer');
+  ok(assigned.n >= 8, 'existing footer links were put into columns rather than left stranded');
+
+  const body = await (await call(env, '/menu', { cookie })).text();
+  has(body, 'Footer columns', 'the Menu screen shows them');
+  has(body, 'data-column=', 'each column is its own drop target, so a link can be dragged between them');
+  has(body, '/menu/columns/new', 'and a column can be added');
+
+  const api = await (await call(env, '/api/pages', { fresh: true })).json();
+  const fc = api.menu.footerColumns;
+  ok(Array.isArray(fc) && fc.length >= 3, 'the public bundle carries the columns');
+  ok(fc.some((c) => c.heading === 'Visit' && c.items.length), 'Visit has its links');
+  ok(fc.some((c) => c.source === 'partners'), 'and the partners column comes through even though it has no items here');
+}
+
+group('renaming a column, and deleting one without losing links');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  await call(env, '/menu/columns/save', { cookie, method: 'POST', form: { id: '1', heading: 'Plan a visit', source: 'menu', visible: '1' } });
+  eq(db.prepare('SELECT heading FROM footer_columns WHERE id=1').get().heading, 'Plan a visit', 'a column can be renamed');
+
+  await call(env, '/menu/columns/save', { cookie, method: 'POST', form: { heading: 'Serve', source: 'menu', visible: '1' } });
+  ok(db.prepare("SELECT id FROM footer_columns WHERE heading='Serve'").get(), 'and a new one added');
+
+  // ⚠ A toggle posts a hidden 0 first, so form.get() reads as on either way.
+  await call(env, '/menu/columns/save', { cookie, method: 'POST', form: { id: '2', heading: 'Connect', source: 'menu' } });
+  eq(db.prepare('SELECT visible FROM footer_columns WHERE id=2').get().visible, 0, 'an unticked Shown really stores hidden');
+
+  // The property that makes deleting safe: the links survive.
+  const before = db.prepare('SELECT COUNT(*) AS n FROM menu_items WHERE column_id=3').get().n;
+  ok(before > 0, 'the Programs column has links in it');
+  await call(env, '/menu/columns/delete/3', { cookie, method: 'POST' });
+  ok(!db.prepare('SELECT id FROM footer_columns WHERE id=3').get(), 'the column is gone');
+  eq(db.prepare('SELECT COUNT(*) AS n FROM menu_items WHERE id IN (28,29,30)').get().n, 3,
+     'and every link that was in it still exists — deleting a heading must never delete somebody\'s links');
+
+  const page = await (await call(env, '/menu', { cookie })).text();
+  has(page, 'Not in a column', 'they surface in their own band rather than vanishing');
+}
+
+group('the header is drafted before it is published');
+{
+  // The point of this screen is that somebody can try a colour on the front of
+  // the church website WITHOUT it being on the front of the church website.
+  // These assertions are that promise: a save reaches the draft and nothing
+  // else, and only Publish moves it across.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  const first = await (await call(env, '/menu/appearance', { cookie })).text();
+  has(first, 'Appearance', 'the screen renders');
+  has(first, '--hp-bar:#4A5E3A', 'showing the site as it stands, not an empty form');
+  has(first, 'Everything on this screen is on the site', 'and says so when there is nothing pending');
+  lacks(first, 'name="bar" value="gold"', 'gold is not offered as a BAR colour');
+  has(first, 'name="cta" value="gold"', 'but it is still offered for the Give button');
+
+  const save = await call(env, '/menu/appearance/save', {
+    cookie, method: 'POST',
+    form: { bar: 'navy', rule: 'gold', cta: 'gold', nl_bg: 'navy', brand_name: 'Timothy Lutheran Church',
+            tagline: 'from our Neighborhood to the Nations', logo_url: '/logo.png', logo_shape: 'round',
+            nl_eyebrow: 'Stay Connected', nl_heading: 'Get our weekly newsletter', nl_body: 'x', nl_button: 'Subscribe',
+            show_tagline: '1', nl_show: '1' },
+  });
+  eq(save.status, 302, 'saving redirects');
+
+  const draftRow = db.prepare("SELECT value FROM site_settings WHERE key='site_appearance_draft'").get();
+  eq(JSON.parse(draftRow.value).bar, 'navy', 'the draft has the new colour');
+  const liveRow = db.prepare("SELECT value FROM site_settings WHERE key='site_appearance'").get();
+  ok(!liveRow, 'and NOTHING has been written to the live row — this is the whole promise');
+
+  // The public bundle is what a visitor actually gets, so it is checked there
+  // and not only in the table.
+  const apiBefore = await (await call(env, '/api/pages', { fresh: true })).json();
+  eq(apiBefore.details.appearance.bar, '#4A5E3A', 'visitors still see the moss bar');
+
+  const pending = await (await call(env, '/menu/appearance', { cookie })).text();
+  has(pending, 'Not published yet', 'the screen says something is waiting');
+  has(pending, 'Bar colour', 'and names what differs rather than saying only that something does');
+  has(pending, 'On the site now', 'showing both bars so they can be compared');
+
+  eq((await call(env, '/menu/appearance/publish', { cookie, method: 'POST' })).status, 302, 'publishing redirects');
+  eq(JSON.parse(db.prepare("SELECT value FROM site_settings WHERE key='site_appearance'").get().value).bar,
+     'navy', 'now the live row has it');
+  const apiAfter = await (await call(env, '/api/pages', { fresh: true })).json();
+  eq(apiAfter.details.appearance.bar, '#1E2D4A', 'and visitors get it, resolved to a real colour');
+
+  // Discarding is the other direction, and it must not touch what is live.
+  await call(env, '/menu/appearance/save', { cookie, method: 'POST', form: { bar: 'plum', nl_show: '0' } });
+  eq((await call(env, '/menu/appearance/discard', { cookie, method: 'POST' })).status, 302, 'discarding redirects');
+  eq(JSON.parse(db.prepare("SELECT value FROM site_settings WHERE key='site_appearance_draft'").get().value).bar,
+     'navy', 'the draft is back to what is published');
+  eq(JSON.parse(db.prepare("SELECT value FROM site_settings WHERE key='site_appearance'").get().value).bar,
+     'navy', 'and the live row was never involved');
+}
+
+group('an unreadable header cannot be saved from a stale tab');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  // The form does not draw a gold bar chip, so this can only arrive from a
+  // stale tab or a crafted POST — which is exactly why the rule is enforced on
+  // the server and not by which chips get rendered.
+  await call(env, '/menu/appearance/save', { cookie, method: 'POST', form: { bar: 'gold', nl_bg: 'gold' } });
+  const d = JSON.parse(db.prepare("SELECT value FROM site_settings WHERE key='site_appearance_draft'").get().value);
+  eq(d.bar, 'moss', 'a gold bar is refused — white on gold is 2.6:1');
+  eq(d.nl_bg, 'navy', 'and so is a gold newsletter band');
+
+  await call(env, '/menu/appearance/save', { cookie, method: 'POST', form: { logo_url: 'javascript:alert(1)' } });
+  eq(JSON.parse(db.prepare("SELECT value FROM site_settings WHERE key='site_appearance_draft'").get().value).logo_url,
+     '', 'and a logo address that is not an image address is dropped, not escaped later');
+}
+
+group('the newsletter band is chrome, and can be switched off');
+{
+  // ⚠ It sits outside every page div, so it renders on all of them. It has
+  // been called "the homepage newsletter block" and it is not one — which is
+  // why switching it off has to be possible from here and not from the page
+  // editor, where it would never be found.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  await call(env, '/menu/appearance/save', { cookie, method: 'POST', form: { nl_show: '0' } });
+  await call(env, '/menu/appearance/publish', { cookie, method: 'POST' });
+  const api = await (await call(env, '/api/pages', { fresh: true })).json();
+  eq(api.details.appearance.newsletter, null, 'a switched-off band is absent, not present-and-off');
+
+  await call(env, '/menu/appearance/save', { cookie, method: 'POST', form: { nl_show: '1', nl_heading: 'Church news, weekly' } });
+  await call(env, '/menu/appearance/publish', { cookie, method: 'POST' });
+  const api2 = await (await call(env, '/api/pages', { fresh: true })).json();
+  eq(api2.details.appearance.newsletter.heading, 'Church news, weekly', 'and its wording is editable');
 }
 
 group('the menu never records a page address');

@@ -84,6 +84,26 @@ const decode = (s) => String(s).replace(/&(#\d+|#x[0-9a-f]+|[a-z]+);/gi, (m, e) 
 const text = (s) => decode(strip(s).replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
 const grab = (chunk, re) => { const m = chunk.match(re); return m ? m[1] : ''; };
 
+// ⚠ An in-site link in this markup is `href="#" onclick="showPage('contact')"`
+// — the href is a placeholder and the onclick is the real destination. Reading
+// the href alone produces a link to `#`, which survives sanitising (it is a
+// perfectly valid URL) and lands on the page as a link that goes nowhere.
+//
+// That is exactly how /give's "Speak with a pastor" came out dead, and a dead
+// link is worse than a missing one: it looks like it works. So the onclick is
+// read first and resolved to the page's own address, and the href is the
+// fallback for ordinary links.
+function hrefOf(attrs) {
+  const target = grab(attrs, /onclick="[^"]*showPage\('([^']+)'\)/);
+  if (target) {
+    const page = PAGES.find((p) => p.id === target);
+    if (page) return page.slug;
+    if (MINISTRY_SLUGS.includes(target)) return '/' + target;
+  }
+  const href = grab(attrs, /href="([^"]*)"/);
+  return href === '#' ? '' : href;
+}
+
 // Keeps the inline formatting the copy actually uses and drops layout markup.
 function prose(chunk) {
   const ps = chunk.match(/<p\b[^>]*>[\s\S]*?<\/p>/gi) || [];
@@ -105,7 +125,7 @@ function buttonsIn(chunk) {
     // page seeds the button twice — once correctly and once with a hardcoded
     // Tithe.ly address that goes stale the moment the office changes the link.
     if (/data-give-link/i.test(m[1])) continue;
-    const href = grab(m[1], /href="([^"]*)"/);
+    const href = hrefOf(m[1]);
     const label = text(m[2]);
     if (href && label) out.push({ title: label, url: href });
   }
@@ -281,7 +301,7 @@ function cardRun(body) {
       // markup has more, the rest is layout noise rather than the card's body.
       body: (() => { const t = text(grab(c, /<p\b[^>]*>([\s\S]*?)<\/p>/i)); return t ? '<p>' + t + '</p>' : ''; })(),
       linkLabel: link ? text(link[2]) : '',
-      url: link ? (grab(link[1], /href="([^"]*)"/) || '') : '',
+      url: link ? hrefOf(link[1]) : '',
       eyebrow: '',
     });
   }
@@ -303,7 +323,7 @@ function cardRun(body) {
     byDepth.push({
       img: '', title, body: '<p>' + first + '</p>',
       linkLabel: link ? text(link[2]) : '',
-      url: link ? (grab(link[1], /href="([^"]*)"/) || '') : '',
+      url: link ? hrefOf(link[1]) : '',
       eyebrow: '',
     });
   }

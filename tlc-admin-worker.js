@@ -5,7 +5,7 @@
 // Last modified: 2026-03-27
 
 
-import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS, DB_INIT_PAYROLL_READY_NOTIFIED } from './admin/db.js';
+import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, DB_INIT_FOOTER_COLUMNS, FOOTER_COLUMN_SEED, FOOTER_ITEM_COLUMNS, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS, DB_INIT_PAYROLL_READY_NOTIFIED } from './admin/db.js';
 import { pushToAllSubscribers } from './admin/webpush.js';
 
 // Static pages that can carry self-serve notices (matches the SPA's page ids in public/index.html)
@@ -80,7 +80,8 @@ const NEWS_PAGE_SEED = {
 import { orderPages, filterPages, pageStatus, slugify, uniqueSlug, pageRename,
          withShortLinks, shortLinkFor, shortLinkRoutes, outboundUrl, canReseed } from './admin/pages.js';
 import { MENUS, menuTree, publicMenu, orphanPages, menuWarnings, renumber,
-         normalizeMenu, normalizeKind, normalizeStyle, normalizeDepth } from './admin/menu.js';
+         normalizeMenu, normalizeKind, normalizeStyle, normalizeDepth,
+         COLUMN_SOURCES, normalizeSource, footerColumns, publicFooter, renumberColumns } from './admin/menu.js';
 import { diffSummary, auditGroup, canRollback as auditCanRollback, rollbackNote, actionTone } from './admin/audit.js';
 import { BLOCKS as NL_BLOCKS, parseBlocks as parseNlBlocks, serializeBlocks as serializeNlBlocks,
          blockOn, AUDIENCES, normalizeAudience, subjectAdvice, preheaderAdvice,
@@ -89,6 +90,40 @@ import { BLOCKS as NL_BLOCKS, parseBlocks as parseNlBlocks, serializeBlocks as s
          parseExtras, extrasFromForm, serializeExtras, MAX_EXTRA_NOTES } from './admin/newsletter.js';
 import { screenSubmission, formConfig, forwardToChms, officeEmailHtml, officeSubject,
          handleFilteredRoutes, heldCount, OFFICE_EMAIL } from './admin/forms.js';
+import { PALETTE as CHROME_PALETTE, BAR_KEYS, DEFAULTS as CHROME_DEFAULTS,
+         parseAppearance, appearanceFromForm, sanitizeAppearance, publicAppearance,
+         isDirty as chromeDirty, changedFields as chromeChanged, FIELD_LABELS as CHROME_LABELS,
+         renderHeaderPreview, renderNewsletterPreview } from './admin/appearance.js';
+
+// ── THE CHROME RECORD, DRAFT AND LIVE ────────────────────────
+// Two settings rows, the same split a page has between `blocks` and
+// `published_blocks`. The draft is what the admin screen draws; the published
+// row is the only thing /api/pages ever sends to a visitor.
+const CHROME_DRAFT_KEY = 'site_appearance_draft';
+const CHROME_LIVE_KEY = 'site_appearance';
+
+async function readChrome(env, key) {
+  const row = await env.DB.prepare('SELECT value FROM site_settings WHERE key = ?').bind(key).first().catch(() => null);
+  return parseAppearance(row && row.value);
+}
+
+// Both rows at once, because every screen that shows one wants to say how it
+// differs from the other.
+async function readChromePair(env) {
+  const [draft, live] = await Promise.all([readChrome(env, CHROME_DRAFT_KEY), readChrome(env, CHROME_LIVE_KEY)]);
+  return { draft, live, dirty: chromeDirty(draft, live) };
+}
+
+async function writeChrome(env, key, value) {
+  await env.DB.prepare(
+    'INSERT OR REPLACE INTO site_settings (key, value, label, hint) VALUES (?, ?, ?, ?)'
+  ).bind(
+    key, JSON.stringify(sanitizeAppearance(value)),
+    key === CHROME_LIVE_KEY ? 'Header and newsletter band (live)' : 'Header and newsletter band (draft)',
+    key === CHROME_LIVE_KEY ? 'What visitors see. Written only by Publish on the Appearance screen.'
+      : 'What the Appearance screen shows. Never reaches the site until it is published.'
+  ).run();
+}
 
 // Allowlist of site_settings keys readable via the public /api/settings/{key}
 // endpoint. Everything else returns 404 — keeps internal config (gym admin
@@ -386,8 +421,12 @@ async function pageData(env, reqKey) {
     const q = async (sql, ...binds) => {
       try { return (await env.DB.prepare(sql).bind(...binds).all()).results || []; } catch (_) { return []; }
     };
-    const [settingRows, sermonRow, news, staff, newsletters] = await Promise.all([
+    const [settingRows, chromeRow, sermonRow, news, staff, newsletters] = await Promise.all([
       q("SELECT key, value FROM site_settings WHERE key LIKE 'church_%'"),
+      // ⚠ The PUBLISHED row only. The draft exists so that somebody can try a
+      // colour without it being on the front of the church website, and
+      // reading the wrong key here would undo that in one line.
+      env.DB.prepare('SELECT value FROM site_settings WHERE key = ?').bind(CHROME_LIVE_KEY).first().catch(() => null),
       env.DB.prepare(
         'SELECT n.title, n.date, n.scripture, n.youtube_url, n.audio_url, s.title AS series ' +
         'FROM sermon_notes n LEFT JOIN sermon_series s ON s.id = n.series_id ' +
@@ -412,6 +451,9 @@ async function pageData(env, reqKey) {
     return {
       settings: { address_line: s.address_line || '', address_city: s.address_city || '', phone: s.phone || '', email: s.email || '' },
       services: parseServiceTimes(s.service_times),
+      // Resolved to real colours by publicAppearance, so public/index.html
+      // never carries a copy of the palette and cannot drift from it.
+      appearance: publicAppearance(parseAppearance(chromeRow && chromeRow.value)),
       sermon: sermonRow || null,
       news, staff, newsletters,
     };
@@ -1109,7 +1151,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-05-1'; // bumped: seed the /news page row (NEWS_PAGE_SEED) so it has an editor draft
+    const SCHEMA_VERSION = '2026-08-05-2'; // bumped: footer_columns + menu_items.column_id, so the footer's headings and groupings are admin-managed
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -1714,6 +1756,28 @@ export default {
         ).bind(m.id, m.menu, m.label || null, m.kind, m.page_id || null, m.target || null, m.style || 'link', m.depth || 0, m.sort_order).run();
       } catch (_) {}
     }
+    // ── FOOTER COLUMNS ──
+    // The footer's headings and which link sits under each. See the note at
+    // the top of admin/menu.js for why this is a table and not a position
+    // convention inside the flat list.
+    try { await env.DB.prepare('ALTER TABLE menu_items ADD COLUMN column_id INTEGER').run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_FOOTER_COLUMNS).run(); } catch (_) {}
+    for (const c of FOOTER_COLUMN_SEED) {
+      try {
+        await env.DB.prepare('INSERT OR IGNORE INTO footer_columns (id, heading, source, sort_order, visible) VALUES (?, ?, ?, ?, 1)')
+          .bind(c.id, c.heading, c.source, c.sort_order).run();
+      } catch (_) {}
+    }
+    // ⚠ Only where nothing is set. An install that already has a footer needs
+    // its links put into columns once; a link the office has since moved must
+    // never be dragged back by a later deploy.
+    for (const [itemId, columnId] of Object.entries(FOOTER_ITEM_COLUMNS)) {
+      try {
+        await env.DB.prepare('UPDATE menu_items SET column_id = ? WHERE id = ? AND column_id IS NULL AND menu = ?')
+          .bind(columnId, Number(itemId), 'footer').run();
+      } catch (_) {}
+    }
+
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_news_items_value ON news_items(value)').run(); } catch (_) {}
     for (const p of PARTNER_SEED) {
       try {
@@ -1771,6 +1835,41 @@ export default {
           .bind(s.title, s.description, s.icon_emoji, s.icon_color, s.sort_order).run();
         await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run();
         await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, 'done')").bind(SIGNUP_CARD_MARKER).run();
+      } catch (_) { /* retried on the next request */ }
+    }
+
+    // ── ONE-TIME: PUT /give ON THE BLOCK EDITOR (2026-08-05) ──
+    // Every page on the site has had a block draft waiting since the site
+    // editor shipped; none of them was ever published, so the whole editor
+    // sits behind a Publish nobody has pressed and /give still renders the
+    // hardcoded markup in public/index.html. Andrew asked for this one to go
+    // live, so it is published here rather than left as a click to remember.
+    //
+    // ⚠ Two guards, and both matter:
+    //   canReseed() — publish ONLY a page nobody has touched and that has
+    //     never been published. If the office has edited /give since, what
+    //     they typed is what they meant, and this does nothing.
+    //   the marker — the schema block re-runs on every SCHEMA_VERSION bump,
+    //     so without one this would re-publish /give over any later edit,
+    //     every deploy. Same reasoning as the sign-up card above.
+    //
+    // The draft was read against the live page before this shipped: the six
+    // offline giving paths come across as a card grid, and both buttons keep
+    // their real destinations — give.timothystl.org and serve.timothystl.org.
+    // Neither carries a Tithe.ly address, which is the one thing a published
+    // block must never hold, because a block's URL is frozen at publish time.
+    const GIVE_PUBLISH_MARKER = 'give_page_published_v1';
+    const givePublished = markersOk || markers.get(GIVE_PUBLISH_MARKER) === 'done';
+    if (!givePublished) {
+      try {
+        const row = await env.DB.prepare('SELECT id, blocks, published_blocks, updated_by, status FROM pages WHERE id = ?')
+          .bind('give').first().catch(() => null);
+        if (row && canReseed(row) && row.blocks) {
+          await env.DB.prepare("UPDATE pages SET published_blocks = blocks, status = 'published', updated_at = datetime('now') WHERE id = ?")
+            .bind('give').run();
+        }
+        await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run();
+        await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, 'done')").bind(GIVE_PUBLISH_MARKER).run();
       } catch (_) { /* retried on the next request */ }
     }
 
@@ -1916,17 +2015,23 @@ export default {
       // filtered out by publicMenu() — the admin shows them flagged, the site
       // must not show them at all.
       const menuRows = await env.DB.prepare('SELECT * FROM menu_items ORDER BY menu, sort_order, id').all().catch(() => ({ results: [] }));
+      const colRows = await env.DB.prepare('SELECT * FROM footer_columns ORDER BY sort_order, id').all().catch(() => ({ results: [] }));
       const menuPages = new Map(list.map((p) => [p.id, p]));
       const strip = (i) => ({ label: i.label, href: i.href, style: i.style, kind: i.kind,
         children: (i.children || []).map((c) => ({ label: c.label, href: c.href, kind: c.kind })) });
       const pagesRes = new Response(JSON.stringify({
         // The church details, so the footer reads the same record the map
         // block and the sidebar do. Staff change a phone number once.
-        details: { settings: data.settings, services: data.services },
+        details: { settings: data.settings, services: data.services, appearance: data.appearance },
         pages: list.map(publicPage),
         menu: {
           header: publicMenu(menuRows.results || [], menuPages, 'header').map(strip),
           footer: publicMenu(menuRows.results || [], menuPages, 'footer').map(strip),
+          // The footer's real shape: headed columns. `footer` above stays as
+          // it was — the mobile drawer repeats the footer's outside links from
+          // it, and it is the fallback for a site whose columns have somehow
+          // gone missing.
+          footerColumns: publicFooter(colRows.results || [], menuRows.results || [], menuPages),
         },
         rendered,
         css: Object.keys(rendered).length ? BLOCK_CSS : '',
@@ -3214,6 +3319,240 @@ ${sidebarShell('media', currentUser, '', await pageBadges())}
         return { list, pageRows, byId: new Map(pageRows.map((p) => [p.id, p])) };
       };
 
+
+      // ── FOOTER COLUMNS ───────────────────────────────────────
+      // A column is a heading and an order. Which links sit under it is the
+      // links' business (menu_items.column_id), so nothing here ever writes
+      // a list of items — a column and its contents cannot fall out of step
+      // because only one of them records the relationship.
+      if (path === '/menu/columns/new' || path.startsWith('/menu/columns/')) {
+        const idPart = path.slice('/menu/columns/'.length);
+
+        if (path === '/menu/columns/save' && method === 'POST') {
+          const form = await request.formData();
+          const id = parseInt(form.get('id'), 10);
+          const heading = String(form.get('heading') || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+          const source = normalizeSource(form.get('source'));
+          // ⚠ A toggle posts a hidden 0 ahead of its checkbox, so form.get()
+          // is the 0 either way and always reads as on.
+          const visible = form.getAll('visible').includes('1') ? 1 : 0;
+          if (!heading) return new Response('', { status: 302, headers: { Location: '/menu?msg=saved' } });
+          if (Number.isFinite(id)) {
+            const before = await env.DB.prepare('SELECT * FROM footer_columns WHERE id = ?').bind(id).first().catch(() => null);
+            await env.DB.prepare('UPDATE footer_columns SET heading = ?, source = ?, visible = ? WHERE id = ?')
+              .bind(heading, source, visible, id).run();
+            await logAudit(env.DB, currentUser, 'update', 'footer_column', String(id), heading, before, { heading, source, visible });
+          } else {
+            const max = await env.DB.prepare('SELECT COALESCE(MAX(sort_order),0) AS m FROM footer_columns').first().catch(() => ({ m: 0 }));
+            await env.DB.prepare('INSERT INTO footer_columns (heading, source, sort_order, visible) VALUES (?, ?, ?, ?)')
+              .bind(heading, source, ((max && max.m) || 0) + 10, visible).run();
+            await logAudit(env.DB, currentUser, 'create', 'footer_column', heading, heading, null, { heading, source });
+          }
+          return new Response('', { status: 302, headers: { Location: '/menu?msg=saved' } });
+        }
+
+        // Deleting a column never deletes a link. The links fall out of any
+        // column and show up in the "Not in a column" band, still on the site
+        // — losing somebody's footer links because they tidied a heading is
+        // exactly the silent damage this screen should not be able to do.
+        if (path.startsWith('/menu/columns/delete/') && method === 'POST') {
+          const id = parseInt(path.slice('/menu/columns/delete/'.length), 10);
+          if (Number.isFinite(id)) {
+            const before = await env.DB.prepare('SELECT * FROM footer_columns WHERE id = ?').bind(id).first().catch(() => null);
+            await env.DB.prepare('UPDATE menu_items SET column_id = NULL WHERE column_id = ?').bind(id).run().catch(() => {});
+            await env.DB.prepare('DELETE FROM footer_columns WHERE id = ?').bind(id).run();
+            await logAudit(env.DB, currentUser, 'delete', 'footer_column', String(id), before ? before.heading : '', before, null);
+          }
+          return new Response('', { status: 302, headers: { Location: '/menu?msg=column-deleted' } });
+        }
+
+        if (method === 'GET') {
+          const editing = idPart === 'new' ? null
+            : await env.DB.prepare('SELECT * FROM footer_columns WHERE id = ?').bind(parseInt(idPart, 10)).first().catch(() => null);
+          if (idPart !== 'new' && !editing) return new Response('', { status: 302, headers: { Location: '/menu' } });
+          const inUse = editing
+            ? await env.DB.prepare('SELECT COUNT(*) AS n FROM menu_items WHERE column_id = ?').bind(editing.id).first().catch(() => ({ n: 0 }))
+            : { n: 0 };
+          return html(`
+${sidebarShell('menu', currentUser, `<a href="/menu">← Menu</a>`, await pageBadges())}
+<div class="tlc-wrap">
+${renderFormSection({
+  title: editing ? `The ${editing.heading} column` : 'A new footer column',
+  purpose: 'A heading in the footer, and a place to drag links into. Which links sit under it is set by dragging them on the Menu screen.',
+  action: '/menu/columns/save',
+  cancelHref: '/menu',
+  saveLabel: editing ? 'Save column' : 'Add column',
+  deleteAction: editing ? `/menu/columns/delete/${editing.id}` : '',
+  deleteLabel: 'Delete column',
+  deleteConfirm: inUse.n
+    ? `Delete the ${editing.heading} column? The ${inUse.n} link(s) in it stay on the site and move to "Not in a column" so you can put them somewhere else.`
+    : 'Delete this column?',
+  note: 'Deleting a column never deletes the links in it. They come out into "Not in a column" and keep showing on the site.',
+  fields: [
+    ...(editing ? [{ kind: 'html', html: `<input type="hidden" name="id" value="${editing.id}">` }] : []),
+    { name: 'heading', label: 'Heading', value: editing ? editing.heading : '', required: true,
+      hint: 'The word above the links. Short — it sits in a narrow column.' },
+    { kind: 'chips', name: 'source', label: 'What is in it', value: editing ? editing.source : 'menu',
+      options: [{ value: 'menu', label: 'Links I choose' }, { value: 'partners', label: 'Partner ministries' }] },
+    { kind: 'html', html: '<p class="tlc-hint" style="margin-top:-10px;">A partner column fills itself from the partner ministries — one per core value — so there is nothing to drag into it.</p>' },
+    { kind: 'toggle', name: 'visible', label: 'Column shown', value: editing ? !!editing.visible : true, on: 'Showing', off: 'Hidden' },
+  ],
+})}
+</div>`, editing ? editing.heading : 'New footer column');
+        }
+      }
+
+      // ── APPEARANCE ───────────────────────────────────────────
+      // The header bar and the newsletter band. Everything else the Menu
+      // screen writes is live the moment it is saved; this is the one part
+      // that is drafted first, because somebody trying a colour or cropping a
+      // logo is experimenting, and an experiment that is instantly on the
+      // front of the church website is not one. See admin/appearance.js.
+      const chromeItems = (list, byId) =>
+        menuTree(list, byId, 'header').filter((i) => i.visible && !i.broken).map((i) => ({ label: i.label, style: i.style }));
+
+      if (path === '/menu/appearance' && method === 'GET') {
+        const [{ list, byId }, chrome] = await Promise.all([loadMenu(), readChromePair(env)]);
+        const items = chromeItems(list, byId);
+        const msg = url.searchParams.get('msg');
+        const a = chrome.draft;
+
+        const swatches = (name, value, keys) => ({
+          kind: 'swatch', name, value,
+          options: CHROME_PALETTE.filter((c) => keys.includes(c.key))
+            .map((c) => ({ value: c.key, label: c.label, colour: c.value })),
+        });
+
+        // What differs, named. "You have unpublished changes" tells somebody
+        // that something is waiting without telling them what, which is the
+        // half of the message that would actually let them decide.
+        const changed = chromeChanged(chrome.draft, chrome.live);
+        const changedList = changed.map((k) => CHROME_LABELS[k]).filter(Boolean).join(', ');
+
+        const alertHtml = msg === 'published' ? `<div class="alert alert-success">✓ Published — this is on the site now. It reaches visitors within about two minutes.</div>`
+          : msg === 'saved' ? `<div class="alert alert-info">Draft saved. Nothing has reached the site yet — press Publish when it looks right.</div>`
+          : msg === 'discarded' ? `<div class="alert alert-info">Draft thrown away. The screen is back to what is on the site.</div>` : '';
+
+        // When there is something unpublished, the two bars are shown one
+        // above the other rather than the draft alone. "Is this different from
+        // what people are seeing?" is the question somebody actually has, and
+        // a single bar cannot answer it.
+        const previews = chrome.dirty
+          ? `${panel('On the site now', renderHeaderPreview(chrome.live, items) + renderNewsletterPreview(chrome.live), { right: 'What visitors see' })}
+             ${panel('Your draft', renderHeaderPreview(chrome.draft, items) + renderNewsletterPreview(chrome.draft), { right: 'Not published' })}`
+          : panel('The site', renderHeaderPreview(chrome.draft, items, { note: 'This is what visitors see.' }) + renderNewsletterPreview(chrome.draft), { right: 'Published' });
+
+        const publishBar = chrome.dirty
+          ? `<div class="alert alert-warn" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+               <span>Not published yet${changedList ? ` — ${escapeHtml(changedList)}` : ''}. Visitors still see the bar above.</span>
+               <span style="display:flex;gap:8px;">
+                 <form method="POST" action="/menu/appearance/discard" style="margin:0;" onsubmit="return confirm('Throw away the draft and go back to what is on the site?')"><button type="submit" class="tlc-btn-quiet">Discard draft</button></form>
+                 <form method="POST" action="/menu/appearance/publish" style="margin:0;"><button type="submit" class="tlc-btn-primary">Publish to the site</button></form>
+               </span>
+             </div>`
+          : `<div class="alert alert-info">Everything on this screen is on the site. Changes you make below are saved as a draft first.</div>`;
+
+        return html(`
+${sidebarShell('menu', currentUser, `<a href="/menu">← Menu</a>`, await pageBadges())}
+<div class="tlc-wrap">
+${renderFormSection({
+  title: 'Appearance',
+  purpose: 'The header bar and the newsletter band — the two parts of the site that are on every page. Changes are saved as a draft and only reach visitors when you press Publish.',
+  action: '/menu/appearance/save',
+  cancelHref: '/menu',
+  cancelLabel: 'Back to Menu',
+  saveLabel: 'Save draft',
+  extraHead: alertHtml + publishBar + previews,
+  note: 'Colours come from the church palette rather than a colour picker: the words in the bar are white and cannot be changed, so a pale colour here would be a header nobody can read — on every page at once.',
+  fields: [
+    { kind: 'html', html: '<div class="tlc-field"><span class="tlc-label">The header</span></div>' },
+    { kind: 'photo', name: 'logo_url', label: 'Logo', value: a.logo_url,
+      hint: 'Shown at 44 pixels. A square picture crops best. Leave it empty to show the church name on its own.' },
+    { kind: 'chips', name: 'logo_shape', label: 'Logo shape', value: a.logo_shape,
+      options: [{ value: 'round', label: 'Round' }, { value: 'square', label: 'Square' }] },
+    { name: 'brand_name', label: 'Church name', value: a.brand_name,
+      hint: 'The words beside the logo. This is also the link back to the homepage.' },
+    { name: 'tagline', label: 'Tagline', value: a.tagline,
+      hint: 'The small gold line under the name.' },
+    { kind: 'toggle', name: 'show_tagline', label: 'Tagline shown', value: a.show_tagline, on: 'Showing', off: 'Hidden' },
+    swatches('bar', a.bar, BAR_KEYS),
+    { kind: 'html', html: '<p class="tlc-hint" style="margin-top:-10px;">The bar colour. Gold is not offered here — white text on gold cannot be read.</p>' },
+    swatches('rule', a.rule, CHROME_PALETTE.map((c) => c.key)),
+    { kind: 'html', html: '<p class="tlc-hint" style="margin-top:-10px;">The line along the bottom of the bar.</p>' },
+    swatches('cta', a.cta, CHROME_PALETTE.map((c) => c.key)),
+    { kind: 'html', html: '<p class="tlc-hint" style="margin-top:-10px;">The Give button.</p>' },
+
+    { kind: 'html', html: '<div class="tlc-field" style="margin-top:26px;"><span class="tlc-label">The newsletter band</span><p class="tlc-hint">The sign-up strip above the footer. It is on every page of the site, not just the homepage — which is why it is edited here and not in the page editor.</p></div>' },
+    { kind: 'toggle', name: 'nl_show', label: 'Newsletter band', value: a.nl_show, on: 'On every page', off: 'Off everywhere' },
+    swatches('nl_bg', a.nl_bg, BAR_KEYS),
+    { name: 'nl_eyebrow', label: 'Small line above the heading', value: a.nl_eyebrow },
+    { name: 'nl_heading', label: 'Heading', value: a.nl_heading },
+    { kind: 'textarea', name: 'nl_body', label: 'Wording', value: a.nl_body, rows: 3 },
+    { name: 'nl_button', label: 'Button label', value: a.nl_button },
+  ],
+})}
+</div>
+<script>
+// The logo file picker. The photo field kind in admin/ui.js has never had an
+// uploader of its own — it renders the file input and nothing listens to it —
+// so it is wired here rather than left as a control that looks live and does
+// nothing. (No backticks in this comment: it lives inside a template literal,
+// and one would end the string. See the note in CLAUDE.md.)
+(function(){
+  var input = document.querySelector('.tlc-photo-input');
+  if (!input) return;
+  input.addEventListener('change', async function(){
+    var f = input.files && input.files[0];
+    if (!f) return;
+    var hidden = document.querySelector('input[type=hidden][name="' + input.dataset.target + '"]');
+    var img = document.querySelector('.tlc-photo-preview');
+    var wrap = input.closest('.tlc-photo');
+    if (wrap) wrap.setAttribute('data-busy', '1');
+    try {
+      var fd = new FormData(); fd.append('file', f, f.name);
+      var r = await fetch('/api/upload-image', { method: 'POST', body: fd });
+      var d = await r.json();
+      if (!r.ok || !d.location) throw new Error((d && d.error) || 'Upload failed');
+      if (hidden) hidden.value = d.location;
+      if (img) { img.src = d.location; }
+      else if (wrap) { wrap.insertAdjacentHTML('afterbegin', '<img src="' + d.location + '" alt="" class="tlc-photo-preview">'); var e = wrap.querySelector('.tlc-photo-empty'); if (e) e.remove(); }
+      if (window.tlcToast) window.tlcToast('Logo uploaded · save the draft to keep it');
+    } catch (err) {
+      alert('That image could not be uploaded. ' + (err && err.message ? err.message : ''));
+    } finally { if (wrap) wrap.removeAttribute('data-busy'); }
+  });
+})();
+</script>`, 'Appearance');
+      }
+
+      if (path === '/menu/appearance/save' && method === 'POST') {
+        const form = await request.formData();
+        const next = appearanceFromForm(form);
+        const before = await readChrome(env, CHROME_DRAFT_KEY);
+        await writeChrome(env, CHROME_DRAFT_KEY, next);
+        await logAudit(env.DB, currentUser, 'update', 'appearance', 'draft', 'Header and newsletter band (draft)', before, next);
+        return new Response('', { status: 302, headers: { Location: '/menu/appearance?msg=saved' } });
+      }
+
+      // Publishing is the ONLY thing that writes the live row. It copies the
+      // draft across whole rather than taking fields from the request, so a
+      // crafted POST can only ever publish what is already on the screen —
+      // there is no way to publish something nobody has looked at.
+      if (path === '/menu/appearance/publish' && method === 'POST') {
+        const { draft, live } = await readChromePair(env);
+        await writeChrome(env, CHROME_LIVE_KEY, draft);
+        await logAudit(env.DB, currentUser, 'publish', 'appearance', 'live', 'Header and newsletter band', live, draft);
+        return new Response('', { status: 302, headers: { Location: '/menu/appearance?msg=published' } });
+      }
+
+      // The other direction: throw the draft away and go back to the site.
+      if (path === '/menu/appearance/discard' && method === 'POST') {
+        const { draft, live } = await readChromePair(env);
+        await writeChrome(env, CHROME_DRAFT_KEY, live);
+        await logAudit(env.DB, currentUser, 'update', 'appearance', 'draft', 'Header and newsletter band (draft discarded)', draft, live);
+        return new Response('', { status: 302, headers: { Location: '/menu/appearance?msg=discarded' } });
+      }
+
       if (path === '/menu' && method === 'GET') {
         const { list, pageRows, byId } = await loadMenu();
         const msg = url.searchParams.get('msg');
@@ -3226,11 +3565,19 @@ ${sidebarShell('media', currentUser, '', await pageBadges())}
         const orphans = orphanPages(pageRows, list);
         const warnings = menuWarnings(list, byId);
 
-        // The preview is rendered from the real items, so it cannot flatter the
-        // menu it describes. Top level only — that is what the bar shows.
-        const previewHtml = header.filter((i) => i.visible && !i.broken).map((i) =>
-          `<span class="tlc-preview-item${i.style === 'button' ? ' tlc-preview-item--button' : ''}">${escapeHtml(i.label)}</span>`
-        ).join('');
+        // ⚠ The preview used to be admin navy with a hardcoded "T" badge and
+        // the literal words "Timothy Lutheran", beside a real site that is moss
+        // green with a round photographic logo and a strapline. It was built
+        // from the real menu ITEMS — which was the honest half — but drew them
+        // into a bar that does not exist anywhere. Staff were being shown a
+        // picture of a header the site does not have and asked to arrange it.
+        //
+        // It now draws the published appearance record through the same
+        // renderer the Appearance screen uses. A preview that can disagree
+        // with the site is worse than no preview, because it is believed.
+        const liveChrome = await readChrome(env, CHROME_LIVE_KEY);
+        const previewItems = header.filter((i) => i.visible && !i.broken)
+          .map((i) => ({ label: i.label, style: i.style }));
 
         const itemHtml = (i) => `<div class="tlc-mi${i.depth ? ' is-child' : ''}${i.broken ? ' tlc-mi-broken' : ''}" draggable="true" data-id="${i.id}" data-depth="${i.depth}">
     <span class="tlc-mi-grip" aria-hidden="true">⠿</span>
@@ -3263,6 +3610,34 @@ ${sidebarShell('media', currentUser, '', await pageBadges())}
     </form>
   </div>`).join('');
 
+        // ── THE FOOTER, AS COLUMNS ──
+        // One drop target per column. An unassigned link is shown in its own
+        // band rather than quietly folded into a column: the site does put it
+        // under the first heading (it has to appear somewhere), and the band
+        // is what makes that visible instead of mysterious.
+        const colRows = await env.DB.prepare('SELECT * FROM footer_columns ORDER BY sort_order, id').all().catch(() => ({ results: [] }));
+        const { columns: fcols, orphans: fspare } = footerColumns(colRows.results || [], list, byId);
+        const firstMenuCol = fcols.find((c) => c.source === 'menu' && c.visible);
+
+        const columnHtml = fcols.map((c) => `<div class="tlc-fcol">
+    <div class="tlc-fcol-head">
+      <span class="tlc-fcol-name">${escapeHtml(c.heading || 'Untitled column')}${c.visible ? '' : ' <span class="tlc-mi-kind">Hidden</span>'}</span>
+      <a class="tlc-edit" href="/menu/columns/${c.id}">Edit</a>
+    </div>
+    ${c.source === 'partners'
+      ? `<div class="tlc-menu-hint" style="padding:10px 14px;">Filled automatically from the partner ministries — one per core value. Edit them under <a href="/partners" style="color:var(--tlc-blue);">Partners</a>.</div>`
+      : `<div data-menu="footer" data-column="${c.id}" class="tlc-fcol-list">${c.items.length ? c.items.map(itemHtml).join('') : '<div class="tlc-menu-empty">Drag a link here.</div>'}</div>`}
+  </div>`).join('');
+
+        const footerPanelHtml = `<div class="tlc-fcols">${columnHtml}</div>
+    ${fspare.length ? `<div class="tlc-fcol tlc-fcol--spare">
+      <div class="tlc-fcol-head"><span class="tlc-fcol-name">Not in a column</span></div>
+      <div class="tlc-mi-warn">▲ ${fspare.length === 1 ? 'This link is' : `These ${fspare.length} links are`} showing on the site under ${escapeHtml(firstMenuCol ? firstMenuCol.heading : 'the first column')}, because every link has to appear somewhere. Drag ${fspare.length === 1 ? 'it' : 'them'} into the column ${fspare.length === 1 ? 'it belongs' : 'they belong'} in.</div>
+      <div data-menu="footer" class="tlc-fcol-list">${fspare.map(itemHtml).join('')}</div>
+    </div>` : ''}
+    <div class="tlc-menu-hint">Drag a link by its ⠿ handle to move it within a column or into another one. The footer does not nest — a column heading is the only level there is.
+      <a href="/menu/columns/new" style="color:var(--tlc-blue);font-weight:600;">Add a column</a></div>`;
+
         return html(`
 ${sidebarShell('menu', currentUser, `<a href="https://timothystl.org" target="_blank">View site</a>`, await pageBadges())}
 <div class="tlc-menu-wrap">
@@ -3271,27 +3646,22 @@ ${sidebarShell('menu', currentUser, `<a href="https://timothystl.org" target="_b
       <h1 class="tlc-title">Menu</h1>
       <p class="tlc-purpose">The order and shape of the header and footer. An item can point at a page, an outside site, or a short link — and the label in the bar can be shorter than the page name.</p>
     </div>
-    <a class="tlc-action" href="/menu/new">+ Add item</a>
+    <div style="display:flex;gap:8px;align-items:center;flex:none;">
+      <a class="tlc-btn-quiet" href="/menu/appearance">Appearance</a>
+      <a class="tlc-action" href="/menu/new">+ Add item</a>
+    </div>
   </div>
   ${alertHtml}
   ${warnings.length ? `<div class="alert alert-error" style="margin:0 0 14px;">${warnings.map(escapeHtml).join('<br>')}</div>` : ''}
 
-  <div class="tlc-preview">
-    <div class="tlc-preview-bar">
-      <span class="tlc-preview-brand"><span class="tlc-preview-mark">T</span>Timothy Lutheran</span>
-      ${previewHtml}
-    </div>
-    <div class="tlc-preview-note">Live preview · top level only</div>
-  </div>
+  ${renderHeaderPreview(liveChrome, previewItems, { note: 'This is the site — top level only. Colours, the logo and the wording are on the Appearance screen.' })}
 
   <div class="tlc-menu-cols">
     <div style="display:flex;flex-direction:column;gap:16px;">
       ${panel('Header menu', `<div id="menu-header" data-menu="header">${listHtml(header, 'header')}</div>
         <div class="tlc-menu-hint">Drag a row by its ⠿ handle to reorder it. Drop it <strong>onto another item’s name</strong> to nest it underneath. Two levels is the limit — a third is a menu nobody can use on a phone.</div>`,
         { right: 'Drag to reorder · drop onto an item to nest', pad: false })}
-      ${panel('Footer menu', `<div id="menu-footer" data-menu="footer">${listHtml(footer, 'footer')}</div>
-        <div class="tlc-menu-hint">The footer is a flat list — no nesting.</div>`,
-        { right: 'Drag to reorder', pad: false })}
+      ${panel('Footer columns', footerPanelHtml, { right: 'Drag a link between columns', pad: false })}
     </div>
     <div>
       ${panel('Live pages not in the menu', orphanHtml + `<div class="tlc-menu-hint">Nothing here is broken. These pages are live and reachable by their address — they are simply not listed in a menu, which is right for a thank-you page or a one-off landing page.</div>`, { pad: false })}
@@ -3309,11 +3679,15 @@ ${sidebarShell('menu', currentUser, `<a href="https://timothystl.org" target="_b
   function rows(list){ return Array.prototype.slice.call(list.querySelectorAll('.tlc-mi')); }
   function save(){
     var out = [];
-    ['header','footer'].forEach(function(m){
-      var list = document.getElementById('menu-' + m);
-      if (!list) return;
+    // Every drop target, not two fixed ids: the footer is one list per column
+    // now, so a column is simply another container. Dragging a link from one
+    // column to another is then the same gesture as reordering within one,
+    // and it records where it landed.
+    Array.prototype.forEach.call(document.querySelectorAll('[data-menu]'), function(list){
+      var col = list.dataset.column ? parseInt(list.dataset.column, 10) : null;
       rows(list).forEach(function(r){
-        out.push({ id: parseInt(r.dataset.id,10), menu: m, depth: parseInt(r.dataset.depth,10) || 0 });
+        out.push({ id: parseInt(r.dataset.id,10), menu: list.dataset.menu,
+                   depth: parseInt(r.dataset.depth,10) || 0, column: col });
       });
     });
     document.getElementById('menu-order-input').value = JSON.stringify(out);
@@ -3363,9 +3737,7 @@ ${sidebarShell('menu', currentUser, `<a href="https://timothystl.org" target="_b
       save();
     });
   }
-  ['menu-header','menu-footer'].forEach(function(id){
-    var el = document.getElementById(id); if (el) wire(el);
-  });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-menu]'), wire);
 })();</script>`, 'Menu');
       }
 
@@ -3374,11 +3746,15 @@ ${sidebarShell('menu', currentUser, `<a href="https://timothystl.org" target="_b
         const form = await request.formData();
         let order = [];
         try { order = JSON.parse(form.get('order') || '[]'); } catch (_) { order = []; }
+        // Which column a footer row landed in travels with the drag, so
+        // moving a link between columns and reordering within one are the
+        // same posted order rather than two mechanisms that can disagree.
+        const columnOf = new Map(order.map((o) => [o.id, Number.isFinite(Number(o.column)) && o.column != null ? Number(o.column) : null]));
         for (const menu of MENUS) {
           const inMenu = order.filter((o) => normalizeMenu(o.menu) === menu);
           for (const row of renumber(inMenu, menu)) {
-            await env.DB.prepare('UPDATE menu_items SET menu = ?, sort_order = ?, depth = ? WHERE id = ?')
-              .bind(row.menu, row.sort_order, row.depth, row.id).run().catch(() => {});
+            await env.DB.prepare('UPDATE menu_items SET menu = ?, sort_order = ?, depth = ?, column_id = ? WHERE id = ?')
+              .bind(row.menu, row.sort_order, row.depth, menu === 'footer' ? (columnOf.get(row.id) ?? null) : null, row.id).run().catch(() => {});
           }
         }
         await logAudit(env.DB, currentUser, 'update', 'menu', 'order', 'Menu order', null, { count: order.length });
@@ -8303,6 +8679,13 @@ ${sidebarShell('redirects', currentUser, '', await pageBadges())}
         { key: 'church_phone', label: 'Office phone', group: 'church-details', used: 'Contact page · footer', href: '/pages/details' },
         { key: 'church_email', label: 'Office email', group: 'church-details', used: 'Contact page · footer', href: '/pages/details' },
         { key: 'church_service_times', label: 'Service times', group: 'church-details', used: 'Service-times blocks · sidebar layout', href: '/pages/details' },
+        // Two rows for one idea, because there really are two rows and hiding
+        // the draft would make this screen a half-truth about what is stored.
+        // Both link to the screen that owns them rather than offering a field
+        // here: a JSON blob is not something to hand-edit, and two forms
+        // writing one key is two places to disagree about what it means.
+        { key: 'site_appearance', label: 'Header and newsletter band', group: 'church-details', used: 'Every page — the top bar and the sign-up strip', href: '/menu/appearance' },
+        { key: 'site_appearance_draft', label: 'Header appearance (draft)', group: 'church-details', used: 'The Appearance screen only — never sent to visitors', href: '/menu/appearance' },
         { key: 'give_url', label: 'Online giving link', group: 'links', used: 'Give blocks · newsletter · gym invoices', href: '/giving' },
         { key: 'zoom_url', label: 'Zoom meeting link', group: 'links', used: 'The /zoom short link' },
         { key: 'councilfiles_url', label: 'Council files link', group: 'links', used: 'The /councilfiles short link' },
