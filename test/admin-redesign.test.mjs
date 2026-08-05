@@ -1665,6 +1665,14 @@ group('rows carry an overflow menu');
 // so its button says so rather than promising an editor.
 group('the giving page: two addresses, each pointing where it is actually edited');
 {
+  // ⚠ This panel used to say "One set of blocks · two places it appears",
+  // beside a switch labelled "Kept in step: edit either one and the other
+  // follows". Neither was true: give.timothystl.org is rendered by
+  // give-landing.js and takes the money, timothystl.org/give is a block page
+  // about how to give. The switch wrote a setting nothing ever read.
+  //
+  // A control that claims a behaviour the code does not have is worse than no
+  // control — somebody flips it, believes it worked, and stops checking.
   const { db, env } = await boot();
   const { cookie } = signIn(db);
   const body = await (await call(env, '/giving', { cookie })).text();
