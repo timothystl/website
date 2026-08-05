@@ -19,6 +19,11 @@
 // ask the Worker to re-render, and those are rare enough that a ~50ms fetch is
 // imperceptible.
 
+// The one definition of how an amount becomes a Tithe.ly link — shared with
+// give-landing.js so the block editor and the hardcoded fallback page can
+// never disagree about what a gift of $25 costs. See give-link.js.
+import { withAmountAndFund, parseAmount, fmtAmount, GIVE_LINK_JS } from '../give-link.js';
+
 // ── PALETTES (guardrails: staff can only pick from these) ────────────────────
 
 export const BG = [
@@ -303,6 +308,66 @@ export const BLOCK_DEFS = {
     defaults: { title: 'Support this ministry', body: 'Gifts go directly toward this work.', spaceAbove: 24, spaceBelow: 24, url: 'https://give.timothystl.org' },
     url: true, urlLabel: 'Giving link', richBody: true, align: true,
   },
+
+  // ── THE TWO GIVING-PAGE BLOCKS ────────────────────────────────────────────
+  // These are what let give.timothystl.org be edited without ever putting a
+  // Tithe.ly address into a block.
+  //
+  // ⚠ THE RULE THAT MAKES THIS SAFE, and the reason the giving page sat in
+  // hardcoded code until now: a block's URL is frozen the moment the page is
+  // published. Storing the Tithe.ly link in a block would mean the office
+  // changing the base link on the Giving screen and the donation page going
+  // on charging to the old form — silently, because the page would still look
+  // perfect. So NEITHER of these types has a `url` field and neither has an
+  // `itemUrlFields` entry. There is nowhere to put a link even by accident.
+  // Every href on both is COMPUTED at render time from ctx.data.give, exactly
+  // as give-landing.js has always computed it.
+
+  // The transaction itself: chips, the fund dropdown, a custom amount, the
+  // button. Entirely self-filling — the amounts come from the Giving screen's
+  // Amount Tiers, the funds from its Funds, the base link from its Base
+  // Tithe.ly Link. What is editable here is the wording around them.
+  giving: {
+    label: 'Giving widget', glyph: '$',
+    defaults: {
+      title: 'Give to Timothy', subtitle: 'From Our Neighborhood to the Nations',
+      body: 'Secure, encrypted giving through Tithe.ly. Receipt emailed instantly · tax-deductible · no account required.',
+      eyebrow: '', spaceAbove: 24, spaceBelow: 24,
+    },
+    subtitle: true, richBody: true, align: true,
+    auto: 'give',
+    autoNote: 'The amounts, the funds and the Tithe.ly link all come from the Giving screen. Nothing here holds a payment link, so changing the base link on that screen changes this the moment it is saved.',
+    autoCount: false,
+  },
+
+  // The ministry ladder and the leadership tiers are the SAME SHAPE — a
+  // heading, a short intro, and a list of "$X /period — what it does" rows,
+  // each with its own Give button. They differ only in colour, which is
+  // already a block-level choice (Theme colours). So this is one type used
+  // twice, not two near-identical types that would drift apart the first time
+  // somebody improved one of them.
+  amounts: {
+    label: 'Amount ladder', glyph: '≣',
+    defaults: {
+      eyebrow: 'What your generosity makes possible',
+      title: 'Every gift accomplishes great things in His Kingdom.',
+      body: '', spaceAbove: 24, spaceBelow: 24,
+    },
+    richBody: true, align: true,
+    items: true,
+    // No URL field, on purpose — see the note above. `amount` is a plain field
+    // rather than a number because it is typed by hand; it is parsed when the
+    // link is built, and a row that is not a number renders as prose with no
+    // button rather than as a broken one.
+    itemFields: ['amount', 'period', 'body'],
+    richItemFields: ['body'],
+    itemLabel: 'Amount',
+    itemPlaceholders: { amount: '25', period: 'week', body: 'What this gift does.' },
+    defaultItems: [
+      { amount: '30', period: 'week', body: '<p>Puts flowers on the altar.</p>' },
+      { amount: '100', period: 'week', body: '<p>Provides tuition assistance for a child to Word of Life.</p>' },
+    ],
+  },
 };
 
 // Which block types opt into the shared "align" chip and .tlcb--center CSS
@@ -341,7 +406,11 @@ export const GROUPS = [
   { name: 'Structure', types: ['alert', 'hero', 'slideshow', 'quicklinks', 'cardgrid', 'buttons', 'callout', 'partners', 'spacer'] },
   { name: 'Content',   types: ['text', 'textphoto', 'video', 'columns', 'gallery', 'faq', 'sermon', 'news', 'newsfeed', 'staff', 'posts'] },
   { name: 'Dates',     types: ['servicetimes', 'map', 'events', 'times', 'download', 'calendar'] },
-  { name: 'Sign up',   types: ['form', 'newsletter', 'newsletterarchive', 'give'] },
+  // `giving` and `amounts` join the group that already holds `give` rather
+  // than starting a fifth. They belong to one page, and a group of two that
+  // only ever appears on the giving page would read on every other page as a
+  // section of the library that is broken.
+  { name: 'Sign up',   types: ['form', 'newsletter', 'newsletterarchive', 'give', 'giving', 'amounts'] },
 ];
 
 export const BLOCK_TYPE_KEYS = Object.keys(BLOCK_DEFS);
@@ -505,7 +574,17 @@ export function sanitizeBlock(b) {
     subtitle: cleanText(b.subtitle, 300),
     eyebrow: cleanText(b.eyebrow, 80),
     body: richBody ? sanitizeRich(b.body) : cleanText(b.body, 600),
-    url: safeUrl(b.url).slice(0, 600),
+    // ⚠ Gated on the DEFINITION, the same way `card` is below. It used to be
+    // stored for every block type whether or not that type had a URL field,
+    // so a type with no link — including the two giving-page types, whose
+    // entire safety argument is that there is nowhere to put a payment
+    // address — would quietly keep whatever was posted at it. Nothing
+    // rendered it, so nothing was broken; but "the renderer happens not to
+    // read it" is a much weaker guarantee than "it was never stored", and the
+    // first one is one new render branch away from failing. Every type that
+    // reads b.url declares url:true (alert, download, calendar, form, give),
+    // so nothing loses a link it was using.
+    url: def.url ? safeUrl(b.url).slice(0, 600) : '',
     spaceAbove: snapSpace(b.spaceAbove),
     spaceBelow: snapSpace(b.spaceBelow),
     gap: snapSpace(b.gap == null ? 32 : b.gap),
@@ -807,8 +886,19 @@ export const BLOCK_CSS = `<style id="tlcb-css">
    the boxes hugging the left edge even with their own text centered. */
 .tlcb--center.tlcb--give,.tlcb--center.tlcb--text,.tlcb--center.tlcb--textphoto,
 .tlcb--center.tlcb--callout,.tlcb--center.tlcb--form,.tlcb--center.tlcb--newsletter,
-.tlcb--center.tlcb--hero{text-align:center;}
+.tlcb--center.tlcb--hero,.tlcb--center.tlcb--giving{text-align:center;}
 .tlcb--center .tlcb-inline{justify-content:center;}
+/* Amount ladder centres its INTRO ONLY, named rather than inherited. The rows
+   below it are "$100 /week ———— [Give $100]" — a left column and a right
+   button — and centring their text is not what "centre this section" means to
+   anybody looking at it. The live leadership section is exactly this: a
+   centred heading over left-aligned rows. Written as three explicit selectors
+   rather than as text-align:center plus a text-align:left reset on the row,
+   because a rule that exists only to undo the rule above it is the shape that
+   goes wrong the moment a fourth element is added. */
+.tlcb--center.tlcb--amounts .tlcb-am>.tlcb-eyebrow,.tlcb--center.tlcb--amounts .tlcb-am>.tlcb-head,
+.tlcb--center.tlcb--amounts .tlcb-am>.tlcb-prose{text-align:center;}
+.tlcb--center.tlcb--amounts .tlcb-am>.tlcb-prose{margin-left:auto;margin-right:auto;max-width:680px;}
 .tlcb--center.tlcb--callout .tlcb-band-text,.tlcb--center.tlcb--hero .tlcb-band-text{align-items:center;}
 .tlcb--center.tlcb--hero .tlcb-hero-sub{margin-left:auto;margin-right:auto;}
 /* Alert is a one-line horizontal notice row, not a heading+prose column like
@@ -879,6 +969,57 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-chip{padding:8px 14px;border:1px solid rgba(245,228,192,.4);border-radius:7px;color:#F3EDE1;
   font:600 13px/1 'Source Sans 3',sans-serif;text-decoration:none;}
 .tlcb-chip--go{background:#C9973A;color:#1B1608;border-color:#C9973A;padding:10px 18px;font-weight:700;}
+/* ── The giving widget ── the one block that takes money. Its colours are
+   fixed rather than following the block's Theme colours palette: this is the
+   most-clicked control on the church website and a staff member trying a
+   background on it is one pick away from an invisible Give button. The
+   wording around it is fully editable; the button is not. */
+.tlcb-gv{display:flex;flex-direction:column;padding:26px 24px;border:1px solid #DDE3ED;border-radius:11px;background:#FBF8F3;}
+.tlcb-gv-title{font:600 27px/1.2 'Lora',Georgia,serif;color:#1E2D4A;}
+.tlcb-gv-tag{font:italic 400 15.5px/1.4 'Lora',Georgia,serif;color:#2E7EA6;margin-top:4px;}
+.tlcb-gv-lab{font:800 11px/1 'Source Sans 3',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#6B6A5F;margin:24px 0 9px;}
+.tlcb-gv-fund{width:100%;background:#fff;border:1px solid #DDE3ED;border-radius:9px;padding:12px 14px;
+  font:600 15px/1 'Source Sans 3',sans-serif;color:#1E2D4A;cursor:pointer;}
+.tlcb-gv-chips{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.tlcb-gv-chip{border-radius:8px;font:700 17px/1 'Source Sans 3',sans-serif;text-align:center;padding:14px 0;
+  background:#fff;color:#1E2D4A;border:1px solid #DDE3ED;cursor:pointer;transition:all .15s;}
+.tlcb-gv-chip.is-on{background:#1E2D4A;color:#fff;border-color:#1E2D4A;}
+.tlcb-gv-other{margin-top:10px;background:#fff;border:1px solid #DDE3ED;border-radius:9px;padding:12px 14px;
+  display:flex;align-items:center;gap:8px;font:400 19px/1 'Lora',Georgia,serif;color:#8C8880;}
+.tlcb-gv-other input{border:none;outline:none;font:400 15px/1 'Source Sans 3',sans-serif;color:#1E2D4A;flex:1;min-width:0;background:transparent;}
+.tlcb-gv-err{font-size:12.5px;color:#B0821E;margin:6px 0 0;}
+.tlcb-gv-cta{margin-top:22px;display:block;text-align:center;background:#C9973A;color:#1E2D4A;
+  font:800 21px/1 'Source Sans 3',sans-serif;padding:20px;border-radius:10px;text-decoration:none;}
+.tlcb-gv-trust{margin-top:16px;font-size:12.5px;line-height:1.55;color:#6B6A5F;}
+.tlcb-gv-trust p{margin:0;}
+
+/* ── The amount ladder ── one row per "$X /period does Y". Follows the
+   block's own Theme colours, which is how the same type renders as the pale
+   ministry ladder and as the navy leadership section. */
+.tlcb-am{display:flex;flex-direction:column;}
+.tlcb-am-list{margin-top:20px;display:flex;flex-direction:column;gap:10px;}
+/* ⚠ The card fill is derived from the block's OWN background rather than
+   written twice (a pale rule plus a dark override). Two rules for one surface
+   means the later one wins at equal specificity whatever the theme, which is
+   how a "dark mode" fix silently applies itself to the light one — this repo
+   has shipped that bug more than once. color-mix lightens whichever
+   background is set, so Parchment gives the near-white ministry ladder and
+   Navy gives the leadership panel, from one declaration. It also tracks
+   --tlcb-bg live, which matters: changing Theme colours in the editor patches
+   that variable on the wrapper without re-rendering, so anything keyed off a
+   CLASS instead would not follow until the next structural change. */
+.tlcb-am-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
+  background:color-mix(in srgb, var(--tlcb-bg,#FBF8F3) 82%, #fff);
+  border:1px solid color-mix(in srgb, var(--tlcb-ink,#1E2D4A) 18%, transparent);
+  border-radius:10px;padding:14px 16px;}
+.tlcb-am-l{flex:1;min-width:220px;}
+.tlcb-am-amt{display:flex;align-items:baseline;gap:1px;}
+.tlcb-am-n{font:700 19px/1.2 'Lora',Georgia,serif;color:var(--tlcb-head-ink,#1E2D4A);}
+.tlcb-am-p{font:400 12px/1 'Source Sans 3',sans-serif;color:var(--tlcb-ink,#8C8880);opacity:.75;}
+.tlcb-am-o{font-size:13px;line-height:1.5;color:var(--tlcb-ink,#4A4860);margin-top:2px;max-width:420px;}
+.tlcb-am-o p{margin:0;}
+.tlcb-am-cta{background:#C9973A;color:#1B1608;font:800 13px/1 'Source Sans 3',sans-serif;
+  padding:11px 16px;border-radius:8px;white-space:nowrap;text-decoration:none;}
 .tlcb-dl{display:flex;align-items:center;gap:14px;padding:14px 16px;border:1px solid #DDE3ED;border-radius:9px;background:#F7F3EC;}
 .tlcb-dl-i{flex:none;width:38px;height:46px;border-radius:5px;background:#FBF8F3;border:1px solid #C4CEDF;display:flex;
   align-items:center;justify-content:center;font:700 10px/1 'Source Sans 3',sans-serif;color:#8A8898;}
@@ -1374,6 +1515,79 @@ function renderInfoCard(b, opts) {
   return `<aside class="tlcb-card">${eyebrow}<div class="tlcb-card-body" contenteditable="false">${body}</div></aside>`;
 }
 
+// ── THE GIVING WIDGET'S BROWSER HALF ─────────────────────────────────────────
+// Shipped inside the block so the block works wherever it is rendered rather
+// than only on the one page whose shell remembered to include a script — the
+// same self-contained property every other block type has.
+//
+// It is delegated off `document` and guarded, so N widgets on a page share one
+// listener and a second copy of this script is a no-op. It is never emitted in
+// the editor: the canvas shows the widget as furniture, because a chip that
+// really navigated to Tithe.ly is not something to have under a cursor that is
+// trying to drag a block.
+//
+// ⚠ No backticks anywhere in this string — it lives inside a template literal
+// and one would terminate it, breaking the module while still passing
+// `node --check`. That has happened three times in this repo.
+const GIVING_WIDGET_SCRIPT = '<script>' + GIVE_LINK_JS + `
+  (function () {
+    if (window.__tlcGiveWired) return;
+    window.__tlcGiveWired = 1;
+    function cfgOf(w) { try { return JSON.parse(w.getAttribute('data-give') || '{}'); } catch (e) { return {}; } }
+    function paint(w, amount) {
+      var cfg = cfgOf(w);
+      var fundSel = w.querySelector('.tlcb-gv-fund');
+      var fund = fundSel ? fundSel.value : (cfg.fund || '');
+      var cta = w.querySelector('.tlcb-gv-cta');
+      if (!cta || !(amount > 0)) return;
+      var over = cfg.overrides || {};
+      // A tier's own override link ignores the fund entirely — it is a
+      // deliberate "send this amount somewhere else", not an amount+fund pair.
+      cta.setAttribute('href', over[amount] || tlcGiveLink(cfg.baseUrl || '', amount, fund));
+      cta.textContent = 'Give $' + Number(amount).toLocaleString('en-US');
+    }
+    function current(w) {
+      var on = w.querySelector('.tlcb-gv-chip.is-on');
+      if (on) return Number(on.getAttribute('data-amount'));
+      var other = w.querySelector('.tlcb-gv-other input');
+      return other ? Number(other.value) : 0;
+    }
+    document.addEventListener('click', function (e) {
+      var chip = e.target.closest && e.target.closest('.tlcb-gv-chip');
+      if (!chip) return;
+      var w = chip.closest('.tlcb-gv');
+      if (!w) return;
+      var list = w.querySelectorAll('.tlcb-gv-chip');
+      for (var i = 0; i < list.length; i++) list[i].classList.remove('is-on');
+      chip.classList.add('is-on');
+      var other = w.querySelector('.tlcb-gv-other input');
+      if (other) other.value = '';
+      var err = w.querySelector('.tlcb-gv-err');
+      if (err) err.hidden = true;
+      paint(w, Number(chip.getAttribute('data-amount')));
+    });
+    document.addEventListener('change', function (e) {
+      if (!e.target.classList || !e.target.classList.contains('tlcb-gv-fund')) return;
+      var w = e.target.closest('.tlcb-gv');
+      if (w) paint(w, current(w));
+    });
+    document.addEventListener('input', function (e) {
+      var inp = e.target.closest && e.target.closest('.tlcb-gv-other input');
+      if (!inp) return;
+      var w = inp.closest('.tlcb-gv');
+      if (!w) return;
+      var err = w.querySelector('.tlcb-gv-err');
+      var val = parseInt(inp.value, 10);
+      if (!inp.value) { if (err) err.hidden = true; return; }
+      if (!val || val < 1) { if (err) err.hidden = false; return; }
+      if (err) err.hidden = true;
+      var list = w.querySelectorAll('.tlcb-gv-chip');
+      for (var i = 0; i < list.length; i++) list[i].classList.remove('is-on');
+      paint(w, val);
+    });
+  })();
+` + '<\/script>';
+
 function renderInner(b, opts) {
   const def = BLOCK_DEFS[b.type];
   const t = b.type;
@@ -1787,6 +2001,117 @@ function renderInner(b, opts) {
       ${field(opts, b, 'body', 'div', 'tlcb-give-note', b.body || '', ' data-ph="Why it matters"', true)}
       <div class="tlcb-inline">${go}</div>
     </div>`;
+  }
+
+  // ── THE GIVING WIDGET ─────────────────────────────────────────────────────
+  // Self-filling from ctx.data.give. The block carries the wording; the Giving
+  // screen carries the amounts, the funds and the link. Nothing here is stored
+  // on the page, which is the property that lets this be a published block at
+  // all.
+  if (t === 'giving') {
+    const give = data.give || {};
+    const tiers = Array.isArray(give.tiers) ? give.tiers : [];
+    const funds = Array.isArray(give.funds) ? give.funds : [];
+    const baseUrl = give.baseUrl || '';
+    const head = `${renderEyebrow(opts, b)}
+      ${field(opts, b, 'title', 'div', 'tlcb-gv-title', esc(b.title || ''), ' data-ph="Give to Timothy"')}
+      ${field(opts, b, 'subtitle', 'div', 'tlcb-gv-tag', esc(b.subtitle || ''), ' data-ph="A line under the heading"')}`;
+    const note = field(opts, b, 'body', 'div', 'tlcb-gv-trust', b.body || '', ' data-ph="What happens after they press the button"', true);
+
+    // Nothing to give to. Say so in the editor; on the live page an empty
+    // widget would be the church asking for money with no way to send it, so
+    // it says that plainly too rather than rendering dead furniture.
+    if (!tiers.length || !baseUrl) {
+      return `<div class="tlcb-gv">${head}
+        <p class="tlcb-note">${baseUrl
+          ? 'No amounts are switched on yet — add them under Giving, Amount Tiers.'
+          : 'The base Tithe.ly link has not been filled in yet, so this cannot take a gift. Add it under Giving.'}</p>
+        ${note}</div>`;
+    }
+
+    const defaultFund = funds.find((f) => f.isDefault) || funds[0] || { tithelyFundId: '' };
+    const defaultTier = tiers.find((x) => x.isDefault) || tiers[0];
+    const fundId = defaultFund.tithelyFundId || '';
+    // A tier's own `url` is a full override — it ignores the fund selector
+    // entirely, because it exists for the rare case an amount should go
+    // somewhere else altogether. That is set on the Giving screen, not here.
+    const overrides = {};
+    for (const x of tiers) if (x.url) overrides[x.amount] = x.url;
+    const linkFor = (amt) => overrides[amt] || withAmountAndFund(baseUrl, amt, fundId);
+
+    const chips = tiers.map((x) => {
+      const on = x.amount === defaultTier.amount ? ' is-on' : '';
+      return `<button type="button" class="tlcb-gv-chip${on}" data-amount="${esc(String(x.amount))}"${opts.editing ? ' disabled' : ''}>$${esc(String(x.amount))}</button>`;
+    }).join('');
+
+    // Hidden entirely when there is only one fund — a dropdown with one option
+    // is a question with one answer.
+    const fundPick = funds.length > 1 ? `<label class="tlcb-gv-lab" for="tlcb-gv-fund-${esc(b.id)}">Give to</label>
+      <select class="tlcb-gv-fund" id="tlcb-gv-fund-${esc(b.id)}"${opts.editing ? ' disabled' : ''}>
+        ${funds.map((f) => `<option value="${esc(f.tithelyFundId || '')}"${f.id === defaultFund.id ? ' selected' : ''}>${esc(f.name || '')}</option>`).join('')}
+      </select>` : '';
+
+    const cta = opts.editing
+      ? `<span class="tlcb-gv-cta">Give $${esc(String(defaultTier.amount))}</span>`
+      : `<a class="tlcb-gv-cta" href="${esc(linkFor(defaultTier.amount))}" target="_blank" rel="noopener">Give $${esc(String(defaultTier.amount))}</a>`;
+
+    // The state the browser needs, as data rather than as generated code —
+    // one attribute to read instead of a script per block.
+    const cfg = esc(JSON.stringify({ baseUrl, overrides, fund: fundId }));
+
+    return `<div class="tlcb-gv" data-give="${cfg}">${head}
+      ${fundPick}
+      <div class="tlcb-gv-lab">Choose an amount</div>
+      <div class="tlcb-gv-chips" role="group" aria-label="Gift amount">${chips}</div>
+      <div class="tlcb-gv-other">
+        <span aria-hidden="true">$</span>
+        <input type="number" min="1" step="1" placeholder="Other amount" aria-label="Other amount"${opts.editing ? ' disabled' : ''}>
+      </div>
+      <p class="tlcb-gv-err" hidden>Please enter an amount of at least $1.</p>
+      ${cta}
+      ${note}
+    </div>${opts.editing ? '' : GIVING_WIDGET_SCRIPT}`;
+  }
+
+  // ── THE AMOUNT LADDER ─────────────────────────────────────────────────────
+  // "$100 /week — provides tuition assistance for a child." The amount and the
+  // words are the block's; the link is computed, every time, from the Giving
+  // screen's base link.
+  if (t === 'amounts') {
+    const give = data.give || {};
+    const baseUrl = give.baseUrl || '';
+    const funds = Array.isArray(give.funds) ? give.funds : [];
+    // The ladder always gives to the default fund. These are specific,
+    // narrative asks — "sends a youth to the National Youth Gathering" — not a
+    // generic amount somebody picks a fund for, so the widget's fund selector
+    // deliberately does not reach them.
+    const fundId = (funds.find((f) => f.isDefault) || funds[0] || {}).tithelyFundId || '';
+
+    const rows = (b.items || []).map((it, i) => {
+      const amt = parseAmount(it.amount);
+      const period = String(it.period || '').replace(/^\/+/, '');
+      const label = amt == null ? esc(String(it.amount || '')) : '$' + esc(fmtAmount(amt));
+      // No amount, or no link to build one from, means no button — never a
+      // button that goes nowhere. A dead link is worse than a missing one
+      // because it looks like it works.
+      const btn = (amt == null || !baseUrl)
+        ? ''
+        : (opts.editing
+          ? `<span class="tlcb-am-cta">Give $${esc(fmtAmount(amt))}</span>`
+          : `<a class="tlcb-am-cta" href="${esc(withAmountAndFund(baseUrl, amt, fundId))}" target="_blank" rel="noopener">Give $${esc(fmtAmount(amt))}</a>`);
+      return `<div class="tlcb-am-row">
+        <div class="tlcb-am-l">
+          <div class="tlcb-am-amt">${itemField(opts, i, 'amount', 'span', 'tlcb-am-n', label, ' data-ph="25"')}${
+            (period || opts.editing) ? itemField(opts, i, 'period', 'span', 'tlcb-am-p', esc(period ? '/' + period : ''), ' data-ph="/week"') : ''}</div>
+          ${itemField(opts, i, 'body', 'div', 'tlcb-am-o', it.body || '', ' data-ph="What this gift does."', true)}
+        </div>${btn}
+      </div>`;
+    }).join('');
+
+    return `<div class="tlcb-am">${renderHead(opts, b, 'A heading for this ladder')}
+      ${(b.body || opts.editing) ? renderBody(opts, b, def) : ''}
+      ${rows ? `<div class="tlcb-am-list">${rows}</div>`
+        : `<p class="tlcb-note">No amounts yet — add one in the panel on the right.</p>`}</div>`;
   }
 
   return `<div class="tlcb-note">Unknown block</div>`;

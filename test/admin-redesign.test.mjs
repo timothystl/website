@@ -1534,17 +1534,46 @@ group('the giving page has both surfaces');
   const body = await (await call(env, '/giving', { cookie })).text();
   has(body, 'give.timothystl.org', 'the standalone address is shown');
   has(body, 'timothystl.org/give', 'and the on-site one');
-  has(body, 'One set of blocks', 'described as one set of blocks in two places');
-  has(body, 'Kept in step', 'with the keep-in-step switch');
   has(body, 'the amounts and funds offered on it', 'and the design’s purpose line');
+
+  // ⚠ This group used to assert the panel said "One set of blocks" and
+  // carried a "Kept in step" switch. BOTH WERE FALSE and the test was pinning
+  // them down: the two pages have separate jobs (settled 2026-08-03), and the
+  // switch wrote `give_keep_in_step`, which nothing in the codebase ever read.
+  // A test asserting that a lie is displayed is worse than no test — it makes
+  // correcting the lie look like a regression. It now asserts the opposite:
+  // the claim is gone, the dead switch is gone, and the setting is never
+  // written.
+  ok(!body.includes('One set of blocks'), 'no longer claims the two pages share one set of blocks');
+  ok(!body.includes('Kept in step'), 'and the switch that never kept anything in step is gone');
+  has(body, 'Separate pages', 'it says what is actually true');
 
   const res = await worker.fetch(new Request('https://admin.timothystl.org/giving/keep-in-step', {
     method: 'POST',
     headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
     body: 'value=0',
   }), env, ctx);
-  eq(res.status, 302, 'the switch posts');
-  eq(db.prepare("SELECT value FROM site_settings WHERE key='give_keep_in_step'").get().value, '0', 'and is stored');
+  ok(res.status !== 302, 'the route is gone rather than silently still writing the setting');
+  eq(db.prepare("SELECT value FROM site_settings WHERE key='give_keep_in_step'").get(), undefined,
+    'and nothing writes the dead setting');
+}
+
+// The giving page is a block-editor page now, so "Edit this page" has to reach
+// the editor rather than a screen explaining why it cannot.
+group('the giving page opens in the block editor');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const res = await call(env, '/giving/page', { cookie });
+  eq(res.status, 302, 'Edit this page redirects');
+  eq(res.headers.get('location'), '/pages/give-landing/edit', 'into the page editor');
+
+  const row = db.prepare("SELECT blocks, published_blocks FROM pages WHERE id='give-landing'").get();
+  ok(row, 'the giving page is seeded as a page row');
+  ok(row.blocks && row.blocks.includes('amounts'), 'with the amount ladder in its draft');
+  // ⚠ The load-bearing assertion. This is the page that takes the money;
+  // the deploy must not switch its rendering path out from under anybody.
+  ok(!row.published_blocks, 'and NOTHING published — the live page is untouched until somebody presses Publish');
 }
 
 group('Giving: funds and amounts are two panels, side by side');

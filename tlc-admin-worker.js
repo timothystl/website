@@ -45,6 +45,7 @@ import SCHEDULER_HTML from './admin/scheduler.html';
 import MINISTRY_EDITOR_HTML from './admin/ministry-editor.html';
 import { PAGE_SEEDS } from './admin/page-seeds.js';
 import { SITE_PAGES } from './admin/site-pages.js';
+import { GIVE_LANDING_PAGE, GIVE_LANDING_PAGE_ID } from './admin/give-landing-seed.js';
 
 // /news has no hardcoded markup for tools/extract-pages.mjs to lift — its
 // content (the news list, the newsletter archive, the calendar) was always
@@ -415,13 +416,23 @@ const NEWS_ORDER_SQL = `ORDER BY pinned DESC,
   CASE WHEN event_date IS NOT NULL THEN 0 ELSE 1 END ASC,
   event_date ASC, publish_date DESC, id DESC`;
 
+// An uploaded image is stored as a root-relative /images/… path, which only
+// resolves on this Worker's own origin. Every rendered page is consumed
+// somewhere else — timothystl.org for /api/pages, give.timothystl.org for the
+// giving page — so the path is made absolute on the way out. One definition,
+// because a page rendered for one hostname and not the other would show broken
+// images on exactly one surface, which is the kind of thing nobody notices
+// until a visitor mentions it.
+const fixImageUrls = (s) => (s ? s.replace(/src="\/images\//g, 'src="https://admin.timothystl.org/images/') : s);
+
 async function pageData(env, reqKey) {
   if (reqKey && PAGE_DATA_CACHE.has(reqKey)) return PAGE_DATA_CACHE.get(reqKey);
   const p = (async () => {
     const q = async (sql, ...binds) => {
       try { return (await env.DB.prepare(sql).bind(...binds).all()).results || []; } catch (_) { return []; }
     };
-    const [settingRows, chromeRow, sermonRow, news, staff, newsletters] = await Promise.all([
+    const [settingRows, chromeRow, sermonRow, news, staff, newsletters,
+           giveTiers, giveFunds, giveUrlRow] = await Promise.all([
       q("SELECT key, value FROM site_settings WHERE key LIKE 'church_%'"),
       // ⚠ The PUBLISHED row only. The draft exists so that somebody can try a
       // colour without it being on the front of the church website, and
@@ -445,6 +456,15 @@ async function pageData(env, reqKey) {
       // counts too — issues sent before the status column existed).
       q(`SELECT id, subject, published_at, pastor_note FROM newsletters
          WHERE (status IS NULL OR status = 'published') ORDER BY published_at DESC, id DESC LIMIT 12`),
+      // The giving page's three moving parts. They are read here, with
+      // everything else a block might need, so the Giving widget and the
+      // Amount ladder can be SELF-FILLING blocks — the one property that
+      // makes putting the donation page in the block editor safe at all. A
+      // block that stored the Tithe.ly link would freeze it at publish time
+      // and go on charging to the old form after the office changed it.
+      q('SELECT amount, url, is_default FROM give_amount_tiers WHERE active != 0 ORDER BY sort_order'),
+      q('SELECT id, name, tithely_fund_id, is_default FROM give_funds WHERE active != 0 ORDER BY sort_order'),
+      env.DB.prepare("SELECT value FROM site_settings WHERE key = 'give_url'").first().catch(() => null),
     ]);
     const s = {};
     for (const r of settingRows) s[r.key.replace(/^church_/, '')] = r.value;
@@ -456,6 +476,13 @@ async function pageData(env, reqKey) {
       appearance: publicAppearance(parseAppearance(chromeRow && chromeRow.value)),
       sermon: sermonRow || null,
       news, staff, newsletters,
+      // Same shape /api/give-amounts and /api/give-funds already publish, so
+      // the blocks and the hardcoded fallback page read identical objects.
+      give: {
+        baseUrl: (giveUrlRow && giveUrlRow.value) || '',
+        tiers: giveTiers.map((r) => ({ amount: r.amount, url: r.url || '', isDefault: !!r.is_default })),
+        funds: giveFunds.map((r) => ({ id: r.id, name: r.name, tithelyFundId: r.tithely_fund_id || '', isDefault: !!r.is_default })),
+      },
     };
   })();
   if (reqKey) PAGE_DATA_CACHE.set(reqKey, p);
@@ -1151,7 +1178,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-05-2'; // bumped: footer_columns + menu_items.column_id, so the footer's headings and groupings are admin-managed
+    const SCHEMA_VERSION = '2026-08-05-3'; // bumped: the give.timothystl.org page row, so its block draft reaches an existing database
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -1675,7 +1702,13 @@ export default {
       // ran. What actually keeps this page from rendering from blocks before
       // anyone presses Publish is `published_blocks` staying NULL below —
       // the same mechanism every other seeded page already relies on.
-      const ALL_SEEDED_PAGES = [...SITE_PAGES, NEWS_PAGE_SEED];
+      // GIVE_LANDING_PAGE is give.timothystl.org, which has never been part of
+      // the SPA and so was never reachable by the extractor. It rides the same
+      // seed-and-refresh path as every other page, which means the same
+      // guarantee: the blocks land in the DRAFT and `published_blocks` stays
+      // empty, so the live donation page is untouched until somebody presses
+      // Publish. See admin/give-landing-seed.js.
+      const ALL_SEEDED_PAGES = [...SITE_PAGES, NEWS_PAGE_SEED, GIVE_LANDING_PAGE];
       for (const p of ALL_SEEDED_PAGES) {
         await env.DB.prepare(
           'INSERT OR IGNORE INTO pages (id, title, menu_label, slug, parent_id, sort, template, status, in_menu, seo_description, blocks, updated_at, updated_by) ' +
@@ -1994,8 +2027,14 @@ export default {
         "SELECT id, title, menu_label, slug, parent_id, sort, template, status, in_menu, short_link, external_url, seo_description, published_blocks " +
         "FROM pages WHERE status = 'published' ORDER BY sort ASC, title ASC"
       ).all().catch(() => ({ results: [] }));
-      const list = rows.results || [];
-      const fixUrl = (s) => s ? s.replace(/src="\/images\//g, 'src="https://admin.timothystl.org/images/') : s;
+      // ⚠ give.timothystl.org is a page row so that it gets the editor, the
+      // publish flow, revisions and permissions for free — but it is NOT a
+      // page of this site. Left in, the SPA would serve the donation page at
+      // /give-landing as well, and there would be three giving surfaces where
+      // the settled rule says two, each with its own job. It is also why its
+      // slug can never collide with a real one: nothing here ever offers it.
+      const list = (rows.results || []).filter((r) => r.id !== GIVE_LANDING_PAGE_ID);
+      const fixUrl = fixImageUrls;
       const data = await pageData(env, ctx);
       const rendered = {};
       for (const r of list) {
@@ -2615,6 +2654,43 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
       }));
       return new Response(JSON.stringify({ tiers }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }
+      });
+    }
+
+    // ── PUBLIC: give.timothystl.org, as a page ───────────────────────────────
+    // One request for everything site-worker.js needs to build that hostname:
+    // the published blocks if there are any, the editable chrome, the church
+    // details for the footer, and the amounts/funds/base link.
+    //
+    // ⚠ The amounts, funds and base link are returned WHETHER OR NOT the page
+    // has been published, because they are what the hardcoded fallback in
+    // give-landing.js needs. The fallback is not decoration — this is the page
+    // that takes the money, and it has to keep taking it when a block render
+    // is unavailable. Returning them here is what lets site-worker.js drop
+    // from "blocks" to "fallback" without a second round trip on the slow
+    // path.
+    //
+    // `html` empty means "not published yet", which is a normal state and the
+    // one every deploy starts in. It is not an error and site-worker.js must
+    // not treat it as one.
+    if (path === '/api/give-page' && method === 'GET') {
+      const data = await pageData(env, ctx);
+      const row = await env.DB.prepare('SELECT template, published_blocks FROM pages WHERE id = ?')
+        .bind(GIVE_LANDING_PAGE_ID).first().catch(() => null);
+      const blocks = sanitizeBlocks(parseBlocks(row && row.published_blocks));
+      const rendered = blocks.length
+        ? fixImageUrls(renderPage(blocks, { slug: GIVE_LANDING_PAGE_ID, template: (row && row.template) || 'standard', data, withCss: false }))
+        : '';
+      return new Response(JSON.stringify({
+        html: rendered,
+        css: rendered ? BLOCK_CSS : '',
+        appearance: data.appearance,
+        details: data.settings,
+        baseUrl: data.give.baseUrl,
+        tiers: data.give.tiers,
+        funds: data.give.funds,
+      }), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=120' },
       });
     }
 
@@ -8937,8 +9013,6 @@ ${sidebarShell('settings', currentUser, '', await pageBadges())}
         <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
           ${chmsFunds.map(f => `<button type="button" class="btn btn-sm" style="background:var(--mist);color:var(--steel);${existingFundNames.has((f.name||'').trim().toLowerCase()) ? 'opacity:.45;' : ''}" data-fund-name="${escapeHtml(f.name || '')}" onclick="document.querySelector('form[action=\\'/giving-funds/add\\'] input[name=name]').value=this.dataset.fundName">${escapeHtml(f.name || '')}</button>`).join('')}
         </div>`;
-      const keepRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'give_keep_in_step'").first().catch(() => null);
-      const keepInStep = !keepRow || keepRow.value !== '0';
       const msg = url.searchParams.get('msg');
       const alertHtml = msg === 'giving-saved'   ? `<div class="alert alert-success">✓ Saved.</div>`
         : msg === 'giving-added'   ? `<div class="alert alert-success">✓ Added.</div>`
@@ -9028,41 +9102,49 @@ ${sidebarShell('giving', currentUser, '', await pageBadges())}
   <h1 class="tlc-title">${escapeHtml(sectionCfg('giving').title)}</h1>
   <p class="tlc-purpose" style="margin:6px 0 18px;">${escapeHtml(sectionCfg('giving').purpose)}</p>
 
-  <!-- The giving page exists at two addresses. One set of blocks, two places it
-       appears — the standalone card address, and the same thing inside the site
-       for somebody already browsing. -->
+  <!-- ⚠ This panel used to claim the two giving pages were one set of blocks
+       shown in two places, and carried a switch offering to keep them in step.
+       Neither was true. They are two separate pages with two separate jobs
+       (settled 2026-08-03), and the switch wrote a setting nothing in the
+       codebase ever read, so it could not have synchronised anything even in
+       principle. A control that appears to do something and does nothing is
+       worse than no control: somebody flips it, believes the pages are tied
+       together, and edits one. Both are gone. The panel now says what each
+       page is FOR, which is the question staff actually arrive here with.
+
+       This comment deliberately paraphrases the removed wording rather than
+       quoting it — an HTML comment ships to the browser, so a quoted label
+       puts a second copy of that string on the page and defeats the test
+       asserting it is gone. That is not hypothetical: it happened while
+       writing this. -->
   <div class="tlc-panel" style="margin-bottom:18px;">
     <div class="tlc-panel-head">
-      <span class="tlc-panel-title">The giving page</span>
-      <span class="tlc-panel-right">One set of blocks · two places it appears</span>
+      <span class="tlc-panel-title">The two giving pages</span>
+      <span class="tlc-panel-right">Separate pages · separate jobs</span>
     </div>
     <div class="tlc-panel-body">
       <div class="tlc-give-surfaces">
         <div class="tlc-give-surface">
-          <span class="tlc-give-badge">Standalone</span>
+          <span class="tlc-give-badge">The transaction</span>
           <span class="tlc-give-addr">give.timothystl.org</span>
-          <p class="tlc-give-note">No header, no menu — one job. This is the address on the plate cards, the NFC tap, and anything printed.</p>
+          <p class="tlc-give-note">Amounts, funds, and the button. One job. This is the address on the plate cards, the NFC tap, and anything printed.</p>
           <div class="tlc-give-btns">
             <a class="tlc-action" href="/giving/page">Edit this page</a>
             <a class="tlc-tap-btn" href="https://give.timothystl.org" target="_blank" rel="noopener">View live</a>
           </div>
         </div>
         <div class="tlc-give-surface">
-          <span class="tlc-give-badge">On the site</span>
+          <span class="tlc-give-badge">How to give</span>
           <span class="tlc-give-addr">timothystl.org/give</span>
-          <p class="tlc-give-note">The same blocks with the normal header, menu, and footer, so someone browsing the site can land here without leaving it.</p>
+          <p class="tlc-give-note">The offering plate, bank bill pay, an IRA distribution, a gift in a will — the ways that need a paragraph rather than a button. Its Give Online button hands off to the page on the left.</p>
           <div class="tlc-give-btns">
-            <a class="tlc-action" href="/giving/page">Edit this page</a>
+            <a class="tlc-action" href="/pages/give/edit">Edit this page</a>
             <a class="tlc-tap-btn" href="https://timothystl.org/give" target="_blank" rel="noopener">View live</a>
           </div>
         </div>
       </div>
       <div class="tlc-give-sync">
-        <span>Kept in step: edit either one and the other follows. Only the header and footer differ.</span>
-        <form method="POST" action="/giving/keep-in-step" style="margin:0;">
-          <input type="hidden" name="value" value="${keepInStep ? '0' : '1'}">
-          <button type="submit" class="tlc-switch${keepInStep ? ' is-on' : ''}" role="switch" aria-checked="${keepInStep ? 'true' : 'false'}" aria-label="Keep the two giving pages in step"><span class="tlc-switch-knob"></span></button>
-        </form>
+        <span>Both read the base Tithe.ly link below, every time somebody loads them. Neither one stores a copy of it, so changing it here changes both at once.</span>
       </div>
     </div>
   </div>
@@ -9177,49 +9259,31 @@ ${sidebarShell('giving', currentUser, '', await pageBadges())}
 </div>`, 'Giving');
     }
 
-    if (path === '/giving/keep-in-step' && method === 'POST') {
-      if (!hasPermission(currentUser, 'giving_manage')) return new Response('Access denied.', { status: 403 });
-      const form = await request.formData();
-      const next = form.get('value') === '1' ? '1' : '0';
-      await env.DB.prepare("INSERT OR REPLACE INTO site_settings (key, value, label, hint) VALUES ('give_keep_in_step', ?, 'Giving pages kept in step', 'When on, give.timothystl.org and /give show the same blocks.')")
-        .bind(next).run();
-      await logAudit(env.DB, currentUser, 'update', 'giving', 'keep_in_step', 'Giving pages kept in step', null, { value: next });
-      return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-saved' } });
-    }
-
-    // The giving page is still rendered by give-landing.js rather than by the
-    // block editor, so "Edit this page" explains where its parts actually live
-    // instead of opening an editor that would not control it. Converting it is
-    // a deliberate change to the church's donation page, not a side effect of
-    // this screen.
+    // ── "EDIT THIS PAGE" OPENS THE EDITOR NOW ────────────────────────────
+    // It used to render a card explaining that the giving page was not a
+    // block-editor page and listing where its parts really lived. It is one
+    // now, so this redirects into the editor rather than describing it.
+    //
+    // A redirect rather than a direct link from the panel, because the page's
+    // id is this Worker's business and not something to spell out in markup in
+    // two places. It also keeps /giving/page working as an address staff may
+    // have bookmarked from the version that was a screen.
+    //
+    // ⚠ The page needs both permissions to be useful and they are checked in
+    // that order: `giving_manage` is what gets somebody to this screen, but
+    // the editor itself is gated on `pages_edit`, so somebody holding only the
+    // first would arrive at a 403 with no explanation. Say it here instead.
     if (path === '/giving/page' && method === 'GET') {
       if (!hasPermission(currentUser, 'giving_manage')) return new Response('Access denied.', { status: 403 });
-      return html(`
+      if (!hasPermission(currentUser, 'pages_edit')) {
+        return html(`
 ${sidebarShell('giving', currentUser, `<a href="/giving">← Giving</a>`, await pageBadges())}
 <div class="tlc-wrap">
   <div class="page-title">The giving page</div>
-  <div class="page-sub">Where each part of give.timothystl.org and /give is edited.</div>
-  <div class="alert alert-info">This page is not yet a block-editor page. Everything on it that changes is edited from the Giving screen; the narrative sections are still in code, because it is the church's donation page and moving it wants a deliberate change with somebody watching.</div>
-  <div class="card">
-    <div class="card-title">What is editable today</div>
-    <ul style="font-family:var(--sans);font-size:14px;line-height:2;color:var(--charcoal);padding-left:20px;">
-      <li><strong>Amount chips</strong> and which is preselected — <a href="/giving" style="color:var(--steel);">Giving → Amount Tiers</a></li>
-      <li><strong>Funds</strong> in the "Give to" dropdown — <a href="/giving" style="color:var(--steel);">Giving → Funds</a></li>
-      <li><strong>The base Tithe.ly link</strong> every amount is built from — <a href="/giving" style="color:var(--steel);">Giving → Base link</a></li>
-      <li><strong>Vendor and market links</strong> — <a href="/giving" style="color:var(--steel);">Giving → Giving &amp; payment links</a></li>
-    </ul>
-  </div>
-  <div class="card">
-    <div class="card-title">Still in code</div>
-    <div style="font-family:var(--sans);font-size:14px;line-height:1.8;color:var(--charcoal);">
-      The hero banner, the "What Your Generosity Makes Possible" ministry ladder, and the leadership-giving section are written in <code>give-landing.js</code>. They are narrative copy rather than amount/link pairs, which is why they were never made data.
-    </div>
-  </div>
-  <div class="btn-row">
-    <a href="https://give.timothystl.org" target="_blank" class="btn btn-primary">View give.timothystl.org</a>
-    <a href="https://timothystl.org/give" target="_blank" class="btn btn-secondary">View /give</a>
-  </div>
+  <div class="alert alert-info">The giving page is edited in the page editor, which needs the <code>pages_edit</code> permission. You can change the amounts, the funds and the Tithe.ly link on the <a href="/giving">Giving screen</a> without it — ask an admin for page access to change the wording and the layout.</div>
 </div>`, 'The giving page');
+      }
+      return new Response('', { status: 302, headers: { Location: `/pages/${GIVE_LANDING_PAGE_ID}/edit` } });
     }
 
     // ── USER MANAGEMENT ────────────────────────────────────────

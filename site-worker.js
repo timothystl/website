@@ -2,7 +2,7 @@
 // Handles server-side redirects before falling through to static assets.
 // Custom redirects are fetched from the admin API and cached in memory for 60s.
 
-import { renderGiveLandingHtml, FALLBACK_TIERS, FALLBACK_BASE_URL, FALLBACK_FUNDS } from './give-landing.js';
+import { renderGiveLandingHtml, renderGiveBlocksHtml, FALLBACK_TIERS, FALLBACK_BASE_URL, FALLBACK_FUNDS } from './give-landing.js';
 
 const ERROR_PAGE_HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -74,10 +74,8 @@ let redirectCache = null;
 let redirectCacheTime = 0;
 const settingsCache = {};
 const settingsCacheTime = {};
-let giveAmountsCache = null;
-let giveAmountsCacheTime = 0;
-let giveFundsCache = null;
-let giveFundsCacheTime = 0;
+let givePageCache = null;
+let givePageCacheTime = 0;
 // 5 minutes. Was 60s, which meant the admin subrequest sat IN FRONT of the
 // HTML once a minute per isolate — for a list of short links that changes a
 // few times a year. A re-pointed redirect taking up to five minutes to settle
@@ -195,40 +193,44 @@ async function getSettingUrl(key, fallback) {
   return fallback;
 }
 
-// give.timothystl.org amount tiers — admin-editable via the Giving tab. Falls back to
-// give-landing.js's hardcoded FALLBACK_TIERS if admin.timothystl.org is unreachable, so
-// the giving page never breaks outright.
-async function getGiveAmounts() {
+// ── give.timothystl.org, in ONE request ──────────────────────────────────────
+// This used to be three separate cached subrequests — amounts, funds, and the
+// base link — each with its own cache entry and its own way of failing. They
+// are now one call to /api/give-page, which also carries the page's published
+// blocks (if anybody has published them), the editable masthead and the church
+// details for the footer.
+//
+// ⚠ ONE ROUND TRIP, THREE LEVELS OF FALLING BACK, and the order is the whole
+// point on the page that takes the money:
+//
+//   1. the admin answers and the page has been published  → render the blocks
+//   2. the admin answers and it has not                   → render the
+//      hardcoded body with the REAL amounts and base link it just returned
+//   3. the admin cannot be reached at all                 → render the
+//      hardcoded body from the last good response, or from the constants in
+//      give-landing.js if there has never been one
+//
+// Level 3 still takes a gift. That is not a nicety: an admin outage must never
+// mean somebody arriving from a bulletin insert finds a page that cannot
+// accept their offering.
+async function getGivePage() {
   const now = Date.now();
-  if (giveAmountsCache && now - giveAmountsCacheTime < CACHE_TTL) return giveAmountsCache;
+  if (givePageCache && now - givePageCacheTime < CACHE_TTL) return givePageCache;
   try {
-    const res = await fetch('https://admin.timothystl.org/api/give-amounts');
+    const res = await fetch('https://admin.timothystl.org/api/give-page');
     if (res.ok) {
       const data = await res.json();
-      if (Array.isArray(data.tiers) && data.tiers.length) {
-        giveAmountsCache = data.tiers;
-        giveAmountsCacheTime = now;
+      // Amounts are the test of a usable response rather than `html`, which is
+      // legitimately empty until somebody presses Publish. Treating an
+      // unpublished page as a failed fetch would throw away the real amounts
+      // that came with it and quietly serve the hardcoded ones instead.
+      if (data && Array.isArray(data.tiers)) {
+        givePageCache = data;
+        givePageCacheTime = now;
       }
     }
   } catch (_) {}
-  return giveAmountsCache || FALLBACK_TIERS;
-}
-
-// give.timothystl.org fund selector — same fetch-and-cache pattern, own fallback.
-async function getGiveFunds() {
-  const now = Date.now();
-  if (giveFundsCache && now - giveFundsCacheTime < CACHE_TTL) return giveFundsCache;
-  try {
-    const res = await fetch('https://admin.timothystl.org/api/give-funds');
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data.funds) && data.funds.length) {
-        giveFundsCache = data.funds;
-        giveFundsCacheTime = now;
-      }
-    }
-  } catch (_) {}
-  return giveFundsCache || FALLBACK_FUNDS;
+  return givePageCache;
 }
 
 export default {
@@ -247,16 +249,36 @@ export default {
     // give.timothystl.org — standalone giving landing page, not part of the main SPA.
     // Same Worker, different hostname (same pattern used in the chms repo for
     // connect.timothystl.org) — serves one single-purpose page regardless of path.
-    // Amount tiers + base link are admin-editable (Giving tab) and fetched/cached the
-    // same way as the custom redirects and zoom/councilfiles settings above.
+    // As of v4.24.0 the page itself is editable in the block editor, not just
+    // its amounts — see getGivePage() above for the three ways this can be
+    // answered and why the last one still has to take a gift.
     if (url.hostname === 'give.timothystl.org') {
-      const [tiers, baseUrl, funds] = await Promise.all([
-        getGiveAmounts(),
-        getSettingUrl('give_url', FALLBACK_BASE_URL),
-        getGiveFunds(),
-      ]);
-      return new Response(renderGiveLandingHtml(tiers, baseUrl, funds), {
-        headers: { 'Content-Type': 'text/html;charset=UTF-8' }
+      // ⚠ Assets first, and this is a real bug fix rather than tidying. This
+      // branch used to answer EVERY path on this hostname with the giving
+      // page, so the masthead logo and the favicon — /logo.png and
+      // /images/favicon-32x32.png, both referenced by this very page — were
+      // served the HTML document instead of an image. No error, no log: just a
+      // church logo that has never appeared on the giving page. Anything that
+      // names a real asset file now falls through to the static assets, the
+      // same as on every other hostname.
+      if (ASSET_FILE_RE.test(url.pathname)) {
+        return withAssetCaching(await env.ASSETS.fetch(request), url.pathname);
+      }
+
+      const page = await getGivePage();
+      if (page && page.html) {
+        return new Response(renderGiveBlocksHtml(page.html, page.css, page.appearance, page.details), {
+          headers: { 'Content-Type': 'text/html;charset=UTF-8' },
+        });
+      }
+      return new Response(renderGiveLandingHtml(
+        page ? page.tiers : FALLBACK_TIERS,
+        (page && page.baseUrl) || FALLBACK_BASE_URL,
+        page ? page.funds : FALLBACK_FUNDS,
+        page && page.appearance,
+        page && page.details,
+      ), {
+        headers: { 'Content-Type': 'text/html;charset=UTF-8' },
       });
     }
 

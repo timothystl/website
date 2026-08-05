@@ -1,28 +1,42 @@
 // Standalone giving landing page — served at give.timothystl.org (site-worker.js).
-// This is NOT part of the public/index.html SPA and has no nav back into it by design:
-// per Andrew, someone lands here from a bulletin/QR/text link, sees one thing, and gives.
 //
-// Built from the "Giving Landing" design handoff (option 4a — "Conversion patterns"),
-// adapted from the literal spec: (1) the top nav's Visit/Worship/Learn links and the nav
-// "Give" button are dropped — there's nowhere else on this page to send someone, and the
-// whole page already is the give action; (2) the impact-figures block (real $ / meals-
-// served / cents-per-dollar stats) is omitted entirely rather than shipping the design's
-// placeholder numbers; (3) the Monthly/One-time toggle from the original build was removed
-// 2026-07-27 — Tithe.ly has no way to generate a custom link that prefills specifically as
-// recurring vs. one-time, so the toggle never actually changed anything real. The giver
-// picks frequency on Tithe.ly's own page.
+// This file now does two jobs, and the difference between them matters:
 //
-// ── Tithe.ly linking ────────────────────────────────────────────────────────────────
-// Correction, 2026-07-27: Tithe.ly DOES support prefilling the gift amount — confirmed
-// against a real link Andrew generated (`?formId=...&locationId=...&fundId=...&amount=2500`
-// for a $25 gift — amount is in CENTS). This supersedes the earlier assumption (based on
-// generic Tithe.ly help-doc search results, not a real generated link) that a distinct link
-// had to be pre-made per amount. Now: the base link (`give_url` setting) is expected to
-// hold everything EXCEPT amount — formId + locationId + fundId — and `withAmount()` below
-// appends `&amount=<cents>` for whatever amount is selected/typed, computed on the fly. A
-// tier's optional `url` field becomes a full override (e.g. to send one specific tier to a
-// different fund entirely) rather than the normal case — the normal case now needs no
-// per-tier link management at all.
+//  1. `renderGiveDocument()` is the SHELL — the masthead, the footer and the
+//     document around them. It is used whichever way the page's middle is
+//     produced, so the chrome cannot differ between the two.
+//  2. `renderGiveLandingHtml()` is the FALLBACK BODY — the whole page written
+//     in code, exactly as it has been. It is what visitors get when the page
+//     has not been published from the block editor yet, and when the admin
+//     cannot be reached at all.
+//
+// ⚠ THE FALLBACK IS NOT DECORATION. This is the page that takes the money. If
+// admin.timothystl.org is down, or a block render fails, or nobody has pressed
+// Publish, somebody arriving from a bulletin insert still has to be able to
+// give. That is why the amounts, the funds and the base link are all still
+// hardcoded here as a last resort, and why site-worker.js drops from blocks to
+// this body one step at a time rather than showing an error.
+//
+// ── Tithe.ly linking ────────────────────────────────────────────────────────
+// The rule itself lives in give-link.js now — one definition, shared with
+// admin/blocks.js so the block editor and this page can never disagree about
+// what a gift of $25 costs. It used to be written out twice inside this file
+// alone (once server-side, once as a client-side mirror).
+//
+// The base link (`give_url`) holds formId + locationId + fundId and NO amount;
+// `withAmount()` appends `&amount=<cents>` on the fly. A tier's optional `url`
+// is a full override for the rare case an amount should go somewhere else
+// entirely.
+//
+// ── A note on what changed, and whose call it was ───────────────────────────
+// This page used to have no way back into the site "by design: someone lands
+// here from a bulletin/QR/text link, sees one thing, and gives." Andrew
+// reversed that on 2026-08-05, asking for an editable header and footer and
+// "at least a button that links back to the homepage". Recorded here rather
+// than quietly overwritten, because the original reasoning was sound and a
+// future session should know it was traded away deliberately, not forgotten.
+
+import { withAmountAndFund, withAmount, fmtAmount, GIVE_LINK_JS } from './give-link.js';
 
 // Used only if the admin API is unreachable when site-worker.js builds the page, so the
 // giving page never breaks outright. Matches the ministry-ladder amounts Andrew provided
@@ -35,6 +49,30 @@ export const FALLBACK_TIERS = [30, 50, 75, 90, 150, 250].map(amount => ({
 // already in the base link" — no fund override applied. This is what a fresh/unseeded DB
 // gets too (see the give_funds seed in tlc-admin-worker.js).
 export const FALLBACK_FUNDS = [{ id: 0, name: 'General Fund', tithelyFundId: '', isDefault: true }];
+
+// The site as it stands, so an unreachable admin still produces the church's
+// own masthead rather than an unstyled bar. These mirror DEFAULTS in
+// admin/appearance.js resolved through publicAppearance() — the same values
+// that screen starts from.
+export const FALLBACK_APPEARANCE = {
+  bar: '#4A5E3A', rule: '#C9973A', cta: '#C9973A', ink: '#FFFFFF', ctaInk: '#FFFFFF',
+  logo: '/logo.png?v=20260328', logoShape: 'round',
+  name: 'Timothy Lutheran Church', tagline: 'from our Neighborhood to the Nations',
+};
+export const FALLBACK_DETAILS = {
+  address_line: '6704 Fyler Ave', address_city: 'St. Louis, MO 63139',
+  phone: '', email: 'office@timothystl.org',
+};
+
+const HOME_URL = 'https://timothystl.org';
+
+// Everything interpolated below is either staff-entered (the church name, the
+// tagline, the address) or a palette value, so it is escaped on the way out.
+// Short and local rather than imported: this module is loaded by site-worker.js,
+// which must not pull in the admin's much larger block engine.
+const esc = (s) => String(s == null ? '' : s)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
 const VALUES_BAND = [
   { key: 'acceptance', label: 'Acceptance', word: 'Welcome', color: '#4A5E3A' },
@@ -94,31 +132,113 @@ const LEADERSHIP_TIERS = [
   { amount: 18000, outcome: 'Provides health insurance for one member of our ministry staff, allowing them to care for people instead of worrying about their family’s healthcare.' },
 ];
 
-const fmtAmount = n => n.toLocaleString('en-US');
+// ── THE CHROME ───────────────────────────────────────────────────────────────
+// The masthead reads the same `site_appearance` record the main site's header
+// does, so the church changes its logo, name, tagline or bar colour once and
+// this page follows. It deliberately carries NO navigation: the settled job of
+// this page is one action, and a row of section links is a row of ways to
+// leave before giving. What it does carry, as of 2026-08-05, is a way home —
+// the masthead itself, and one plain link.
 
-// Appends Tithe.ly's amount param (cents), and optionally overrides fundId, on a base link
-// that already carries formId/locationId/fundId. Robust to a base link with or without
-// existing query params, and to one that may (incorrectly) already have its own amount=/
-// fundId= — this always wins.
-function withAmountAndFund(baseUrl, amountDollars, tithelyFundId) {
-  const cents = Math.round(amountDollars * 100);
-  try {
-    const u = new URL(baseUrl);
-    if (tithelyFundId) u.searchParams.set('fundId', tithelyFundId);
-    u.searchParams.set('amount', String(cents));
-    return u.toString();
-  } catch {
-    // baseUrl isn't a valid absolute URL (shouldn't happen — validated on save) — best
-    // effort rather than throwing on a public page.
-    const sep = baseUrl.includes('?') ? '&' : '?';
-    const fundPart = tithelyFundId ? `&fundId=${encodeURIComponent(tithelyFundId)}` : '';
-    return `${baseUrl}${sep}amount=${cents}${fundPart}`;
-  }
+function chromeCss(a) {
+  return `
+  .gv-top{background:${esc(a.bar)};padding:14px 40px;display:flex;align-items:center;gap:14px;
+    border-bottom:3px solid ${esc(a.rule)};}
+  .gv-brand{display:flex;align-items:center;gap:12px;text-decoration:none;min-width:0;}
+  .gv-logo{width:42px;height:42px;background:#fff;display:flex;align-items:center;justify-content:center;
+    padding:4px;flex-shrink:0;}
+  .gv-logo--round{border-radius:50%;}
+  .gv-logo--square{border-radius:8px;}
+  .gv-logo img{width:100%;height:100%;object-fit:contain;}
+  .gv-names{display:flex;flex-direction:column;min-width:0;}
+  .gv-name{font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:${esc(a.ink)};}
+  .gv-tag{font-family:'Lora',Georgia,serif;font-style:italic;font-size:12.5px;color:${esc(a.ink)};opacity:.82;}
+  .gv-home{margin-left:auto;color:${esc(a.ink)};font-size:13.5px;font-weight:600;text-decoration:none;
+    border:1px solid rgba(255,255,255,.45);border-radius:8px;padding:8px 14px;white-space:nowrap;}
+  .gv-home:hover{background:rgba(255,255,255,.14);}
+  .gv-home:focus-visible,.gv-brand:focus-visible{outline:2px solid #fff;outline-offset:2px;}
+
+  .gv-foot{background:#111E32;padding:26px 40px;display:flex;justify-content:space-between;align-items:center;
+    flex-wrap:wrap;gap:12px;color:rgba(255,255,255,.72);font-size:13.5px;border-top:1px solid rgba(255,255,255,.1);}
+  .gv-foot a{color:#C9973A;font-weight:600;text-decoration:none;}
+  .gv-foot a:hover{text-decoration:underline;}
+  @media (max-width:900px){
+    .gv-top{padding:12px 20px;gap:10px;}
+    .gv-tag{display:none;}
+    .gv-home{padding:8px 12px;font-size:12.5px;}
+    .gv-foot{padding:22px 20px;justify-content:center;text-align:center;}
+  }`;
 }
-const withAmount = (baseUrl, amountDollars) => withAmountAndFund(baseUrl, amountDollars, '');
+
+function topbarHtml(a) {
+  const shape = a.logoShape === 'square' ? 'square' : 'round';
+  const logo = a.logo
+    ? `<span class="gv-logo gv-logo--${shape}"><img src="${esc(a.logo)}" alt=""></span>`
+    : '';
+  const tag = a.tagline ? `<span class="gv-tag">${esc(a.tagline)}</span>` : '';
+  // The masthead is itself the link home — the thing everybody already tries
+  // first — and the button beside it is for everybody who does not know that.
+  return `<header class="gv-top">
+    <a class="gv-brand" href="${HOME_URL}">
+      ${logo}
+      <span class="gv-names"><span class="gv-name">${esc(a.name)}</span>${tag}</span>
+    </a>
+    <a class="gv-home" href="${HOME_URL}">Back to timothystl.org</a>
+  </header>`;
+}
+
+function footerHtml(d) {
+  const addr = [d.address_line, d.address_city].filter(Boolean).join(', ');
+  const mail = d.email
+    ? `Questions? <a href="mailto:${esc(d.email)}">${esc(d.email)}</a>`
+    : '';
+  return `<footer class="gv-foot">
+    <div>${esc([d.name, addr].filter(Boolean).join(' · ') || addr)}</div>
+    <div>${mail}${mail ? ' &middot; ' : ''}<a href="${HOME_URL}">timothystl.org</a></div>
+  </footer>`;
+}
+
+// The document around whatever produced the middle. `css` is whatever that
+// middle needs — this page's own stylesheet on the fallback path, the block
+// engine's on the published path.
+export function renderGiveDocument({ body, css = '', appearance, details, title = 'Give — Timothy Lutheran Church' }) {
+  const a = Object.assign({}, FALLBACK_APPEARANCE, appearance || {});
+  const d = Object.assign({}, FALLBACK_DETAILS, details || {});
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${esc(title)}</title>
+<meta name="description" content="Support the ministry of Timothy Lutheran Church — give securely online through Tithe.ly, one-time or monthly.">
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/png" href="/images/favicon-32x32.png">
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Source Sans 3', Arial, sans-serif; color: #4A4860; background: #F7F3EC; }
+  a { text-decoration: none; }
+  ${chromeCss(a)}
+</style>
+${css}
+</head>
+<body>
+${topbarHtml(a)}
+${body}
+${footerHtml(d)}
+</body>
+</html>`;
+}
+
+// The published-from-the-editor path. The blocks were rendered by the admin
+// worker (which is where the block engine and the database are); this only has
+// to put them in the shell.
+export function renderGiveBlocksHtml(html, css, appearance, details) {
+  return renderGiveDocument({ body: html, css: css || '', appearance, details });
+}
 
 // tiers: [{amount, url, isDefault}], baseUrl: string, funds: [{id, name, tithelyFundId, isDefault}]
-export function renderGiveLandingHtml(tiers, baseUrl, funds) {
+export function renderGiveLandingHtml(tiers, baseUrl, funds, appearance, details) {
   const safeTiers = Array.isArray(tiers) && tiers.length ? tiers : FALLBACK_TIERS;
   const safeBaseUrl = baseUrl || FALLBACK_BASE_URL;
   const safeFunds = Array.isArray(funds) && funds.length ? funds : FALLBACK_FUNDS;
@@ -153,62 +273,17 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds) {
       <a class="leadership-cta" href="${withAmount(safeBaseUrl, row.amount)}" target="_blank" rel="noopener">Give $${fmtAmount(row.amount)}</a>
     </div>`).join('');
 
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Give — Timothy Lutheran Church</title>
-<meta name="description" content="Support the ministry of Timothy Lutheran Church — give securely online through Tithe.ly, one-time or monthly.">
-<meta name="robots" content="noindex">
-<link rel="icon" type="image/png" href="/images/favicon-32x32.png">
-<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Source+Sans+3:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-<style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: 'Source Sans 3', Arial, sans-serif;
-    color: #4A4860;
-    background: #F7F3EC;
-  }
-  a { text-decoration: none; }
-
-  /* ── Top bar ── */
-  .topbar {
-    background: #111E32;
-    padding: 14px 40px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  .topbar .logo-disc {
-    width: 34px; height: 34px; border-radius: 50%;
-    background: #fff; display: flex; align-items: center; justify-content: center;
-    padding: 4px; flex-shrink: 0;
-  }
-  .topbar .logo-disc img { width: 100%; height: 100%; object-fit: contain; }
-  .topbar .church-name {
-    font-size: 11px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase;
-    color: #fff;
-  }
-
-  /* ── Hero header (full-width, replaces the old photo panel) ── */
-  .hero-header {
-    background: #111E32; padding: 56px 40px; text-align: center;
-  }
+  const css = `<style>
+  /* ── Hero header (full-width) ── */
+  .hero-header { background: #111E32; padding: 56px 40px; text-align: center; }
   .hero-header h1 {
     font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 48px; line-height: 1.1;
     color: #fff; text-wrap: balance; max-width: 820px; margin: 0 auto;
   }
 
   /* ── Give row: ministry ladder (left) + giving widget (right) ── */
-  .give-row {
-    display: grid;
-    grid-template-columns: 1.15fr .85fr;
-    background: #FBF8F3;
-  }
-  .ladder-col {
-    padding: 48px 44px; border-right: 1px solid #DDE3ED;
-  }
+  .give-row { display: grid; grid-template-columns: 1.15fr .85fr; background: #FBF8F3; }
+  .ladder-col { padding: 48px 44px; border-right: 1px solid #DDE3ED; }
   .ladder-eyebrow {
     font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
     color: #C9973A; margin-bottom: 10px;
@@ -234,11 +309,7 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds) {
   }
   .ladder-cta:hover { background: #E8C070; }
 
-  .widget-col {
-    background: #FBF8F3;
-    padding: 48px 40px;
-    display: flex; flex-direction: column;
-  }
+  .widget-col { background: #FBF8F3; padding: 48px 40px; display: flex; flex-direction: column; }
   .widget-col .give-title { font-family: 'Lora', Georgia, serif; font-weight: 600; font-size: 27px; color: #1E2D4A; }
   .widget-col .tagline { font-family: 'Lora', Georgia, serif; font-style: italic; font-size: 15.5px; color: #2E7EA6; margin-top: 4px; }
 
@@ -289,11 +360,8 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds) {
   .cta:hover { background: #E8C070; transform: translateY(-2px); }
   .cta:focus-visible { outline: 2px solid #2E7EA6; outline-offset: 2px; }
 
-  .trust-line {
-    margin-top: 16px; display: flex; gap: 9px; font-size: 12.5px; line-height: 1.55; color: #6b6a5f;
-  }
+  .trust-line { margin-top: 16px; display: flex; gap: 9px; font-size: 12.5px; line-height: 1.55; color: #6b6a5f; }
   .trust-line svg { flex-shrink: 0; margin-top: 2px; }
-
 
   /* ── Leadership giving ── */
   .leadership-section { background: #111E32; padding: 48px 40px; }
@@ -326,14 +394,8 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds) {
     flex-wrap: wrap; gap: 20px;
   }
   .ow-copy { max-width: 620px; }
-  .ow-eyebrow {
-    font-size: 11px; font-weight: 800; text-transform: uppercase;
-    letter-spacing: .06em; color: #4A5E3A;
-  }
-  .ow-heading {
-    font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 21px;
-    color: #1A1A2A; margin-top: 5px;
-  }
+  .ow-eyebrow { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: #4A5E3A; }
+  .ow-heading { font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 21px; color: #1A1A2A; margin-top: 5px; }
   .ow-items { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
   .ow-item {
     background: #FFFFFF; border: 1px solid #DDE3ED; border-radius: 999px;
@@ -354,14 +416,6 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds) {
   .vb-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
   .vb-word { font-family: 'Lora', Georgia, serif; font-weight: 700; font-size: 22px; color: #1A1A2A; margin-top: 4px; }
 
-  /* ── Footer ── */
-  .footer {
-    background: #111E32; padding: 26px 40px; display: flex; justify-content: space-between;
-    flex-wrap: wrap; gap: 12px; color: rgba(255,255,255,.7); font-size: 13.5px;
-    border-top: 1px solid rgba(255,255,255,.1);
-  }
-  .footer a { color: #C9973A; font-weight: 600; }
-
   @media (max-width: 900px) {
     .hero-header { padding: 40px 20px; }
     .hero-header h1 { font-size: 32px; }
@@ -372,23 +426,16 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds) {
     .ow-cta { width: 100%; text-align: center; }
     .amount-chips { gap: 8px; }
     .chip { font-size: 14px; padding: 11px 0; }
-    .topbar { padding: 14px 20px; }
     .widget-col { padding: 32px 22px; }
-    .footer { padding: 22px 20px; text-align: center; justify-content: center; }
     .leadership-section { padding: 36px 20px; }
     .ladder-row { flex-direction: column; align-items: flex-start; }
     .ladder-cta { width: 100%; text-align: center; }
     .leadership-row { flex-direction: column; align-items: flex-start; }
     .leadership-cta { width: 100%; text-align: center; }
   }
-</style>
-</head>
-<body>
-  <div class="topbar">
-    <div class="logo-disc"><img src="/logo.png" alt=""></div>
-    <div class="church-name">Timothy Lutheran Church</div>
-  </div>
+</style>`;
 
+  const body = `
   <div class="hero-header">
     <h1>Your Gift Continues His Work</h1>
   </div>
@@ -412,7 +459,7 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds) {
       ${safeFunds.length > 1 ? `
       <div class="fund-label">Give to</div>
       <select class="fund-select" id="fund-select" onchange="setFund(this.value)">
-        ${safeFunds.map(f => `<option value="${(f.tithelyFundId||'').replace(/"/g,'&quot;')}"${f.id===defaultFund.id?' selected':''}>${f.name}</option>`).join('')}
+        ${safeFunds.map(f => `<option value="${(f.tithelyFundId||'').replace(/"/g,'&quot;')}"${f.id===defaultFund.id?' selected':''}>${esc(f.name)}</option>`).join('')}
       </select>` : ''}
 
       <div class="amount-label">Choose an amount</div>
@@ -452,45 +499,22 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds) {
       <div class="ow-heading">Not every gift starts with a card.</div>
       <div class="ow-items">${otherWaysHtml}</div>
     </div>
-    <a class="ow-cta" href="https://timothystl.org/give">See all the ways to give</a>
+    <a class="ow-cta" href="${HOME_URL}/give">See all the ways to give</a>
   </div>
 
   <div class="values-band">${valuesBandHtml}</div>
 
-  <div class="footer">
-    <div>Timothy Lutheran Church &middot; 6704 Fyler Ave, St. Louis, MO 63139</div>
-    <div>Questions? <a href="mailto:office@timothystl.org">office@timothystl.org</a></div>
-  </div>
-
 <script>
+  ${GIVE_LINK_JS}
   var BASE_URL = ${JSON.stringify(safeBaseUrl)};
   var TIER_OVERRIDES = ${JSON.stringify(tierOverrideByAmount)};
   var state = { amount: ${JSON.stringify(defaultAmount)}, fundId: ${JSON.stringify(defaultFund.tithelyFundId || '')} };
-
-  // Client-side mirror of the server's withAmountAndFund() — Tithe.ly prefills the gift
-  // amount via a plain ?amount=<cents> query param, and lets a different fund be selected
-  // via ?fundId=..., both appended to the base formId/locationId/fundId link. Recomputed
-  // here (not just server-side) so changing the fund selector or typing a custom "other
-  // amount" both produce a real prefilled link without a page reload.
-  function withAmountAndFund(baseUrl, amountDollars, tithelyFundId) {
-    var cents = Math.round(amountDollars * 100);
-    try {
-      var u = new URL(baseUrl);
-      if (tithelyFundId) u.searchParams.set('fundId', tithelyFundId);
-      u.searchParams.set('amount', String(cents));
-      return u.toString();
-    } catch (e) {
-      var sep = baseUrl.indexOf('?') === -1 ? '?' : '&';
-      var fundPart = tithelyFundId ? ('&fundId=' + encodeURIComponent(tithelyFundId)) : '';
-      return baseUrl + sep + 'amount=' + cents + fundPart;
-    }
-  }
 
   function linkFor(amount) {
     // A tier's own override link ignores the fund selector entirely — it's a full,
     // deliberate override (e.g. a different fund/form), not just an amount+fund combo.
     if (TIER_OVERRIDES[amount]) return TIER_OVERRIDES[amount];
-    return withAmountAndFund(BASE_URL, amount, state.fundId);
+    return tlcGiveLink(BASE_URL, amount, state.fundId);
   }
 
   function render() {
@@ -527,11 +551,11 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds) {
     state.amount = val;
     document.querySelectorAll('#amount-chips .chip').forEach(function(c) { c.classList.remove('active'); });
     document.getElementById('cta-label').textContent = 'Give $' + val;
-    document.getElementById('give-cta').href = withAmountAndFund(BASE_URL, val, state.fundId);
+    document.getElementById('give-cta').href = tlcGiveLink(BASE_URL, val, state.fundId);
   }
 
   render();
-</script>
-</body>
-</html>`;
+<\/script>`;
+
+  return renderGiveDocument({ body, css, appearance, details });
 }

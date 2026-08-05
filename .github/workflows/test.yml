@@ -38,6 +38,7 @@ jobs:
           node --check site-worker.js
           node --check tlc-links-worker.js
           node --check give-landing.js
+          node --check give-link.js
           for f in admin/*.js; do node --check "$f"; done
 
       # ⚠ `node --check` is NOT enough on its own, and believing it was cost
@@ -90,6 +91,16 @@ jobs:
       # sign-up card that has no address to check.
       - name: Links page
         run: node test/links-page.test.mjs
+
+      # The giving page, and the only question worth asking about it: does it
+      # still TAKE MONEY. Drives site-worker.js with the admin stubbed and
+      # asserts the arithmetic ($25 becomes amount=2500, in cents), that a fund
+      # override replaces the base link's fundId rather than adding a second,
+      # that neither giving block can store a Tithe.ly address even when one is
+      # posted at it, and that the page still transacts when it is unpublished,
+      # when the admin is unreachable, and when the admin returns nonsense.
+      - name: The giving page still transacts
+        run: node test/give-page.test.mjs
 
 # Not run here, and why:
 #

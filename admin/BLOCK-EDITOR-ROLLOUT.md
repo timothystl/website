@@ -61,7 +61,7 @@ It is the first, and it is the proof the mechanism works end to end.
 
 | Surface | Worker | Block editor? |
 |---|---|---|
-| `give.timothystl.org` | `site-worker.js` → `give-landing.js` | **No — deferred, see §3** |
+| `give.timothystl.org` | `site-worker.js` → blocks, `give-landing.js` as fallback | **Yes — built, awaiting Publish. See §3** |
 | `links.timothystl.org` | `tlc-links-worker.js` | No — it is a card list, already fully admin-managed under NFC Taps |
 | `timothystl.org/gym/*` | `admin/gym.js` | No — a renter-facing booking flow, not a page |
 | The header, the footer, the newsletter band | `public/index.html` + admin | **Not pages, and should not be.** See §4 |
@@ -112,55 +112,123 @@ day.
 
 ---
 
-## 3. `give.timothystl.org` — deferred, deliberately
+## 3. `give.timothystl.org` — built, and waiting on one Publish
 
-Andrew, 2026-08-05: *"publish /give and then let's come back to
-give.timothystl.org. make note for that."* This is that note.
+Andrew, 2026-08-05, after the deferral below: *"the things i want to be able to
+edit are the layout, the descriptions of what each thing does, and the amounts /
+period, and the heading for each section"* — plus the header, the footer, and
+*"at least a button that links back to the homepage"*.
 
-**The two giving pages have separate jobs** and this must survive any
-conversion:
+**It is a block-editor page now.** The draft is seeded, `published_blocks` is
+empty, and the live page still renders `give-landing.js` until somebody opens
+`/pages/give-landing/edit` and presses Publish. That last part is deliberate —
+see "What is still to do" below.
+
+**The two giving pages still have separate jobs** and that has not changed:
 
 - **`timothystl.org/give`** is where somebody decides *how* to give — the
   theology, the offering plate, bank bill pay, Thrivent, an IRA QCD, a Donor
-  Advised Fund, planned giving. Now a block page.
+  Advised Fund, planned giving. A block page since 2026-08-05.
 - **`give.timothystl.org`** is the *transaction*: amount chips, a fund
   selector, a custom amount, the ministry ladder, the leadership tiers.
 
-**Why it is not a simple conversion.** `give-landing.js` is not narrative
-markup with a button on the end. It resolves the office's Tithe.ly base link at
-request time, computes `&amount=<cents>` per chip through `withAmount()`,
-recomputes every link when the fund selector changes, and falls back to
-hardcoded tiers when the admin is unreachable. Extracting that into text blocks
-would produce a page that looks the same and takes no money.
+### The problem it had to solve, and how
 
-**What converting it properly needs — the real scope:**
+`give-landing.js` was never narrative markup with a button on the end. It
+resolves the office's Tithe.ly base link at request time, computes
+`&amount=<cents>` per chip, recomputes every link when the fund selector
+changes, and falls back to hardcoded tiers when the admin is unreachable.
+Extracting that into **text** blocks would have produced a page that looked
+identical and took no money.
 
-1. **A new `giving` block type** in `admin/blocks.js`: amount chips, the fund
-   dropdown, the custom-amount field. It must resolve `give_url` **at render
-   time**, never store it — the frozen-URL rule above is the whole reason this
-   page was left in code in the first place.
-2. **The ministry ladder and leadership tiers** as either a card grid with
-   per-amount links or a second block type. Seven weekly amounts, each tied to
-   a concrete outcome, each linked through the same `withAmount()` mechanism.
-3. **`site-worker.js` learning to render a block page** on a non-SPA hostname.
-   It currently calls `renderGiveLandingHtml()`; it would need to fetch
-   published blocks and render them, with `give-landing.js` retained as the
-   fallback for when the admin cannot be reached. That fallback is not
-   optional — this is the page that takes the money.
-4. **A test that the page still transacts**, not just that it renders: the
-   chips carry the right amounts in cents, the fund selector rewrites every
-   link, and no block holds a `give.tithe.ly` address.
+**The answer is that the two new block types have no URL field at all.** They
+store the amount and the words; every href is computed at render time from
+`ctx.data.give`, which `pageData()` fills from the Giving screen. There is
+nowhere to put a payment address even by accident, which is what makes
+publishing this page safe — a block's URL is frozen the moment it is
+published, so a stored Tithe.ly link would go on charging to the old form after
+the office changed the base link, and **the page would still look perfect**.
 
-**Estimate: this is the largest single item on the list**, and it is on the
-church's donation page. It wants its own session with somebody watching, which
-is exactly why it is a note here rather than a thing half-done.
+| Type | What it is | What is editable |
+|---|---|---|
+| `giving` — Giving widget | The transaction: chips, fund dropdown, custom amount, the button | The heading, the tagline, the trust line, alignment, spacing, position on the page |
+| `amounts` — Amount ladder | A heading over "$X /period — what it does" rows, each with its own Give button | The eyebrow, heading and intro; every row's amount, period and description; the theme colours; alignment |
 
-The `give_keep_in_step` setting already exists in `site_settings` and **nothing
-reads it** — it was written for a "keep the two giving pages in step" switch
-that was never built. Either wire it up during this work or delete it; a
-setting that does nothing is worse than no setting.
+**One type for both ladders, not two.** The ministry ladder and the leadership
+tiers are the same shape and differ only in colour, which is already a
+block-level choice. Two near-identical types would drift apart the first time
+somebody improved one of them.
 
----
+### Five things worth knowing before touching this
+
+1. **`give-link.js` is the one definition of how an amount becomes a link.** It
+   used to exist three times inside `give-landing.js` alone (server-side, and
+   again as a client-side mirror). `admin/blocks.js` and `give-landing.js` both
+   import it. Three copies of an arithmetic rule about somebody's money is
+   three chances for one to be wrong in a way nobody notices, because a wrong
+   link still looks like a working link.
+2. **The fallback falls back in three steps, and the last one still takes a
+   gift.** Published blocks → the hardcoded body with the admin's *real*
+   amounts → the hardcoded body with the compiled-in constants. Step two
+   matters: dropping straight to hardcoded amounts when a page is merely
+   unpublished would quietly undo the office's own Amount Tiers.
+3. **A row with no numeric amount gets no button**, rather than one pointing at
+   `$NaN`. "Any amount" is a legitimate row to write. A dead link is worse than
+   a missing one because it looks like it works.
+4. **`sanitizeBlock` now gates `url` on the definition.** It used to store a
+   posted URL for every block type whether or not that type had a URL field.
+   Nothing rendered it, so nothing was broken — but "the renderer happens not
+   to read it" is one new render branch away from failing, and this page's
+   whole safety argument rests on it.
+5. **The page row is excluded from `/api/pages`.** It is a `pages` row so it
+   gets the editor, publishing, revisions and permissions for free, but it is
+   not a page of this site: left in, the SPA would also serve the donation page
+   at `/give-landing` and there would be three giving surfaces where the
+   settled rule says two.
+
+### The chrome
+
+The masthead reads the same `site_appearance` record the main site's header
+does — logo, name, tagline, bar colour, bottom rule — so the church changes it
+once on Menu → Appearance and this page follows. The footer reads the church
+details. Both were previously hardcoded here.
+
+⚠ **This page used to have no way back into the site, by design**: "someone
+lands here from a bulletin/QR/text link, sees one thing, and gives." Andrew
+reversed that on 2026-08-05. The masthead is now a link home and there is a
+named `Back to timothystl.org` beside it. Recorded because the original
+reasoning was sound and was traded away deliberately, not forgotten.
+
+### ⚠ A real bug fixed on the way past
+
+The `give.timothystl.org` branch in `site-worker.js` answered **every** path on
+that hostname with the giving page — so `/logo.png` and
+`/images/favicon-32x32.png`, both referenced by this very page, were served an
+HTML document instead of an image. Silently: no error, no log, just a church
+logo that has never appeared on the giving page. Asset paths now fall through
+to the static assets.
+
+### What is still to do
+
+- **Press Publish.** Open `/pages/give-landing/edit`, read the draft against
+  the live page, and publish it. Nothing about the live page changes until
+  then. It is the last step on purpose: this is the page that takes the money,
+  and a deploy that swaps its rendering path while nobody is watching is
+  exactly the risk the deferral below existed to avoid.
+- **After publishing, watch one real gift go through** before deleting
+  anything. `give-landing.js` stays as the fallback permanently — it is not
+  dead code once the page is published, it is what runs during an admin outage.
+- `give_keep_in_step` is **gone**. It was a `site_settings` key nothing ever
+  read, wired to a switch on the Giving screen that promised to keep the two
+  pages in step. A control that appears to do something and does nothing is
+  worse than no control.
+
+### Superseded: the original deferral (2026-08-05, kept for context)
+
+Andrew: *"publish /give and then let's come back to give.timothystl.org. make
+note for that."* That note estimated this as "the largest single item on the
+list", wanting its own session with somebody watching. That was the right call
+at the time and the work above is that session.
 
 ## 4. The chrome is not pages, and converting it would be a mistake
 
@@ -191,6 +259,6 @@ They are admin-managed as of v4.23.0, but through their own screens:
 | Review + publish the other 24 | ~1 hour each, spread out | **Not started — office work, not code** |
 | Delete dead markup as pages go live | small, per page | Follows publication by weeks |
 | `/music` video cards | small | Needs real YouTube URLs |
-| `give.timothystl.org` | **large** | Deferred by decision — §3 |
+| `give.timothystl.org` | **large** | **Built.** Draft seeded, unpublished — §3 |
 | `404`, `values`, `voters` | — | Deliberately not block pages |
 | Header, footer, newsletter band | — | Done, and correctly not blocks |
