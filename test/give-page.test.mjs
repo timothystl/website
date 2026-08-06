@@ -36,6 +36,7 @@ const hasNot = (hay, needle, msg) => ok(!String(hay).includes(needle), msg + ` (
 const worker = (await import('../site-worker.js')).default;
 const { renderBlock, sanitizeBlock, renderPage, BLOCK_DEFS } = await import('../admin/blocks.js');
 const { withAmountAndFund } = await import('../give-link.js');
+const { renderGiveLandingHtml } = await import('../give-landing.js');
 const { GIVE_LANDING_BLOCKS } = await import('../admin/give-landing-seed.js');
 
 const BASE = 'https://give.tithe.ly/?formId=FORM&locationId=LOC&fundId=GENERAL';
@@ -155,6 +156,79 @@ group('the blocks compute their links from the data, at render time');
   const editing = renderBlock(sanitizeBlock({ type: 'giving' }), { data, editing: true });
   has(editing, 'disabled', 'the editor canvas renders the controls inert');
   hasNot(editing, '<script', 'and ships no script into the editor');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The commitment and the transaction are two different numbers. A row that
+// says $5,000 a year must not hand Tithe.ly a single $5,000 charge — "no one
+// is going to click to do a one time gift of 5000" (Dinger, 2026-08-06) — so
+// the ask is a twelfth of it, and the LINK has to carry that same twelfth. A
+// button labelled $416 that charges $5,000 would be the worst outcome on this
+// page, so both halves are asserted, not just the label.
+group('an annual row asks for one month of it, in the label AND in the link');
+{
+  const data = { give: { baseUrl: BASE, tiers: [], funds: [] } };
+  const annual = renderBlock(sanitizeBlock({
+    type: 'amounts',
+    items: [{ amount: '5000', period: 'year', body: '<p>Helps ensure every child hears about Jesus.</p>' }],
+  }), { data });
+  has(annual, 'Give $416/month', 'the button asks for a month, not the year');
+  has(annual, 'amount=41600', 'and the link charges that same $416, in cents');
+  hasNot(annual, 'amount=500000', 'never the whole annual figure');
+  has(annual, '$5,000', 'while the row still states the annual commitment');
+  has(annual, '/year', 'and the period it is committed for');
+  has(annual, 'choose <strong>Monthly</strong>', 'and the page says the one step the link cannot take');
+
+  // Weekly and monthly rows are already figures somebody would put through a
+  // card in one go, so they are left exactly as written. A silent /12 there
+  // would halve the ministry ladder's asks.
+  const weekly = renderBlock(sanitizeBlock({
+    type: 'amounts', items: [{ amount: '15', period: 'week', body: '<p>x</p>' }],
+  }), { data });
+  has(weekly, 'Give $15', 'a weekly row asks for exactly what it says');
+  hasNot(weekly, '/month', 'with no monthly conversion');
+  hasNot(weekly, 'choose <strong>Monthly</strong>', 'and no instruction about a screen it never reaches');
+
+  // Under $12 a year there is no whole-dollar month to ask for. Asking for $0
+  // would be a button that cannot take a gift.
+  const tiny = renderBlock(sanitizeBlock({
+    type: 'amounts', items: [{ amount: '10', period: 'year', body: '<p>x</p>' }],
+  }), { data });
+  has(tiny, 'Give $10', 'an annual row too small to split monthly asks for itself');
+  hasNot(tiny, 'Give $0', 'never a button for nothing');
+
+  // The leadership section of the hardcoded fallback — the page that is live
+  // until somebody presses Publish — has to have made the same move, or the
+  // two versions of this page ask for different money.
+  const fallback = renderGiveLandingHtml(
+    [{ amount: 25, url: '', isDefault: true }], BASE,
+    [{ id: 1, name: 'General Fund', tithelyFundId: '', isDefault: true }],
+  );
+  has(fallback, 'Give $416/month', 'the fallback page asks monthly too');
+  hasNot(fallback, 'amount=500000', 'and no button on it charges a year at once');
+  has(fallback, 'Weekly giving', 'the ministry ladder has a heading over its rows');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+group('a ladder can carry a heading over the rows themselves');
+{
+  const data = { give: { baseUrl: BASE, tiers: [], funds: [] } };
+  const titled = renderBlock(sanitizeBlock({
+    type: 'amounts', subtitle: 'Weekly giving',
+    items: [{ amount: '15', period: 'week', body: '<p>x</p>' }],
+  }), { data });
+  has(titled, 'tlcb-am-lab', 'the heading renders');
+  has(titled, 'Weekly giving', 'with the words typed');
+
+  const untitled = renderBlock(sanitizeBlock({
+    type: 'amounts', items: [{ amount: '15', period: 'week', body: '<p>x</p>' }],
+  }), { data });
+  hasNot(untitled, 'tlcb-am-lab', 'and is absent on a ladder that has not been given one');
+  // But it is offered in the editor, or nobody would know the field exists.
+  const editing = renderBlock(sanitizeBlock({
+    type: 'amounts', items: [{ amount: '15', period: 'week', body: '<p>x</p>' }],
+  }), { data, editing: true });
+  has(editing, 'tlcb-am-lab', 'the editor shows the empty field as a placeholder');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

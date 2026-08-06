@@ -1928,6 +1928,34 @@ group('the giving page opens in the block editor');
   ok(!row.published_blocks, 'and NOTHING published — the live page is untouched until somebody presses Publish');
 }
 
+// Dinger, 2026-08-06: "on the giving settings page, i can only edit the weekly
+// giving tiers and not the larger commitment amounts." The ladders stay on the
+// page they belong to — each row carries its own sentence about what the gift
+// pays for — but this screen said nothing about them at all, so "the amounts
+// live on the Giving screen" read as a complete statement.
+group('Giving: the ladders are shown, with what each button will ask for');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const body = await (await call(env, '/giving', { cookie })).text();
+
+  has(body, 'Amount ladders on the giving page', 'the ladders have a place on this screen');
+  has(body, '$5,000', 'the larger commitments are listed');
+  // The point of showing them here at all: the commitment and the ask are two
+  // different numbers, and only one of them ends up on the button.
+  has(body, 'Give $416/month', 'each row states what its button will actually ask for');
+  has(body, '/giving/page', 'and links to the one place they are edited');
+
+  // The seeded page is unpublished — that is the state every deploy starts in
+  // — so editing the draft changes nothing a visitor sees. Saying so is the
+  // difference between "my edit did not work" and "I have not published yet".
+  has(body, 'still showing the built-in version', 'and says plainly that the live page is not the draft');
+
+  db.prepare("UPDATE pages SET published_blocks = blocks WHERE id='give-landing'").run();
+  const published = await (await call(env, '/giving', { cookie })).text();
+  lacks(published, 'still showing the built-in version', 'the warning goes once the page is published');
+}
+
 group('Giving: funds and amounts are two panels, side by side');
 {
   const { db, env } = await boot();

@@ -22,7 +22,7 @@
 // The one definition of how an amount becomes a Tithe.ly link — shared with
 // give-landing.js so the block editor and the hardcoded fallback page can
 // never disagree about what a gift of $25 costs. See give-link.js.
-import { withAmountAndFund, parseAmount, fmtAmount, GIVE_LINK_JS } from '../give-link.js';
+import { withAmountAndFund, parseAmount, fmtAmount, giftForPeriod, giveButtonLabel, GIVE_LINK_JS } from '../give-link.js';
 
 // ── PALETTES (guardrails: staff can only pick from these) ────────────────────
 
@@ -906,7 +906,8 @@ export const BLOCK_CSS = `<style id="tlcb-css">
    because a rule that exists only to undo the rule above it is the shape that
    goes wrong the moment a fourth element is added. */
 .tlcb--center.tlcb--amounts .tlcb-am>.tlcb-eyebrow,.tlcb--center.tlcb--amounts .tlcb-am>.tlcb-head,
-.tlcb--center.tlcb--amounts .tlcb-am>.tlcb-prose{text-align:center;}
+.tlcb--center.tlcb--amounts .tlcb-am>.tlcb-prose,.tlcb--center.tlcb--amounts .tlcb-am>.tlcb-am-lab,
+.tlcb--center.tlcb--amounts .tlcb-am>.tlcb-am-note{text-align:center;}
 .tlcb--center.tlcb--amounts .tlcb-am>.tlcb-prose{margin-left:auto;margin-right:auto;max-width:680px;}
 .tlcb--center.tlcb--callout .tlcb-band-text,.tlcb--center.tlcb--hero .tlcb-band-text{align-items:center;}
 .tlcb--center.tlcb--hero .tlcb-hero-sub{margin-left:auto;margin-right:auto;}
@@ -1029,6 +1030,17 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-am-o p{margin:0;}
 .tlcb-am-cta{background:#C9973A;color:#1B1608;font:800 13px/1 'Source Sans 3',sans-serif;
   padding:11px 16px;border-radius:8px;white-space:nowrap;text-decoration:none;}
+/* Follows the block's own ink so it is readable on the pale ministry ladder
+   and on the navy leadership panel alike — the same reason the row card is
+   derived from --tlcb-bg rather than written twice. */
+.tlcb-am-note{margin-top:14px;font-size:12.5px;line-height:1.5;color:var(--tlcb-ink,#4A4860);opacity:.8;}
+/* The label over the rows. Deliberately the same shape as the giving widget's
+   own "Choose an amount" label beside it — the two sit side by side in the
+   page's top row, and two different ways of labelling a list of amounts on one
+   screen reads as two different kinds of thing. */
+.tlcb-am-lab{margin:22px 0 0;font:800 12px/1.3 'Source Sans 3',sans-serif;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--tlcb-head-ink,#1E2D4A);opacity:.85;}
+.tlcb-am-lab + .tlcb-am-list{margin-top:10px;}
 .tlcb-dl{display:flex;align-items:center;gap:14px;padding:14px 16px;border:1px solid #DDE3ED;border-radius:9px;background:#F7F3EC;}
 .tlcb-dl-i{flex:none;width:38px;height:46px;border-radius:5px;background:#FBF8F3;border:1px solid #C4CEDF;display:flex;
   align-items:center;justify-content:center;font:700 10px/1 'Source Sans 3',sans-serif;color:#8A8898;}
@@ -2108,18 +2120,29 @@ function renderInner(b, opts) {
     // deliberately does not reach them.
     const fundId = (funds.find((f) => f.isDefault) || funds[0] || {}).tithelyFundId || '';
 
+    // Whether any row's button ends up asking for a month of an annual
+    // commitment, which is a fact the page has to state — see the note below.
+    let anyMonthly = false;
+
     const rows = (b.items || []).map((it, i) => {
       const amt = parseAmount(it.amount);
       const period = String(it.period || '').replace(/^\/+/, '');
       const label = amt == null ? esc(String(it.amount || '')) : '$' + esc(fmtAmount(amt));
+      // The row's amount is the COMMITMENT ("$5,000 /year"); the button asks
+      // for the TRANSACTION, which for an annual row is a twelfth of it. The
+      // rule lives in give-link.js beside the link arithmetic, so this and the
+      // hardcoded fallback in give-landing.js cannot come to different answers
+      // about what somebody is being asked to pay.
+      const gift = giftForPeriod(it.amount, period);
+      if (gift && gift.per === 'month') anyMonthly = true;
       // No amount, or no link to build one from, means no button — never a
       // button that goes nowhere. A dead link is worse than a missing one
       // because it looks like it works.
-      const btn = (amt == null || !baseUrl)
+      const btn = (gift == null || !baseUrl)
         ? ''
         : (opts.editing
-          ? `<span class="tlcb-am-cta">Give $${esc(fmtAmount(amt))}</span>`
-          : `<a class="tlcb-am-cta" href="${esc(withAmountAndFund(baseUrl, amt, fundId))}" target="_blank" rel="noopener">Give $${esc(fmtAmount(amt))}</a>`);
+          ? `<span class="tlcb-am-cta">${esc(giveButtonLabel(gift))}</span>`
+          : `<a class="tlcb-am-cta" href="${esc(withAmountAndFund(baseUrl, gift.amount, fundId))}" target="_blank" rel="noopener">${esc(giveButtonLabel(gift))}</a>`);
       return `<div class="tlcb-am-row">
         <div class="tlcb-am-l">
           <div class="tlcb-am-amt">${itemField(opts, i, 'amount', 'span', 'tlcb-am-n', label, ' data-ph="25"')}${
@@ -2129,9 +2152,31 @@ function renderInner(b, opts) {
       </div>`;
     }).join('');
 
+    // ⚠ Tithe.ly cannot be told from a link that a gift is recurring — that is
+    // why the frequency toggle came off this page in 2026-07. So a button
+    // reading "Give $416/month" prefills one month and nothing more, and the
+    // one step it cannot take for somebody has to be said out loud. Rendered
+    // only when a monthly button actually exists, so a purely weekly ladder
+    // does not carry an instruction about a screen it never reaches.
+    const monthlyNote = anyMonthly
+      ? `<p class="tlcb-am-note">Each button opens the giving form with one month&rsquo;s amount already filled in &mdash; choose <strong>Monthly</strong> there to make it repeat.</p>`
+      : '';
+
+    // A heading over the ROWS THEMSELVES, distinct from the block's own
+    // heading and intro above it (Dinger, 2026-08-06). On this page the block
+    // heading is an argument — "Every gift accomplishes great things in His
+    // Kingdom" — and several paragraphs can sit under it; by the time the eye
+    // reaches the cards there is nothing saying what the list of them IS.
+    // Empty on every existing page, so nothing gains a heading it did not ask
+    // for; in the editor it shows as a placeholder, because a field nobody can
+    // see is a field nobody uses.
+    const listHead = (b.subtitle || opts.editing)
+      ? field(opts, b, 'subtitle', 'div', 'tlcb-am-lab', esc(b.subtitle || ''), ' data-ph="A heading for this list, e.g. Weekly giving"')
+      : '';
+
     return `<div class="tlcb-am">${renderHead(opts, b, 'A heading for this ladder')}
       ${(b.body || opts.editing) ? renderBody(opts, b, def) : ''}
-      ${rows ? `<div class="tlcb-am-list">${rows}</div>`
+      ${rows ? `${listHead}<div class="tlcb-am-list">${rows}</div>${monthlyNote}`
         : `<p class="tlcb-note">No amounts yet — add one in the panel on the right.</p>`}</div>`;
   }
 
