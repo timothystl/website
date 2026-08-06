@@ -77,7 +77,39 @@ const section = renderListSection({
 const page = `<!doctype html><html><head><meta charset="utf-8"><style>${ADMIN_UI_CSS}</style></head>`
   + `<body>${section}<script>${LIST_SECTION_JS}</script></body></html>`;
 
-const srv = http.createServer((q, r) => { r.writeHead(200, { 'Content-Type': 'text/html' }); r.end(page); });
+// A second, synthetic section with pageSize set — the newsletter list is the
+// one caller of this so far, but the mechanism itself belongs to the shared
+// component and needs its own coverage independent of that screen's data.
+const paginatedSection = renderListSection({
+  key: 'paginated-demo',
+  title: 'Demo',
+  search: 'Search rows',
+  filters: [
+    { label: 'All', value: 'all' },
+    { label: 'A', value: 'tag-a' },
+    { label: 'B', value: 'tag-b' },
+  ],
+  columns: [{ label: 'Row', width: '1fr' }],
+  rows: Array.from({ length: 7 }, (_, i) => {
+    const n = i + 1;
+    return {
+      href: `/row/${n}`,
+      filter: [n <= 3 ? 'tag-a' : 'tag-b'],
+      search: `row${n}`,
+      cells: [primaryCell(`Row ${n}`)],
+    };
+  }),
+  pageSize: 3,
+  noun: 'row', nounPlural: 'rows',
+  empty: 'No rows.',
+});
+const paginatedPage = `<!doctype html><html><head><meta charset="utf-8"><style>${ADMIN_UI_CSS}</style></head>`
+  + `<body>${paginatedSection}<script>${LIST_SECTION_JS}</script></body></html>`;
+
+const srv = http.createServer((q, r) => {
+  r.writeHead(200, { 'Content-Type': 'text/html' });
+  r.end(q.url === '/paginated' ? paginatedPage : page);
+});
 await new Promise((r) => srv.listen(0, r));
 const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium' });
 const p = await (await b.newContext()).newPage();
@@ -183,6 +215,45 @@ ok(await p.evaluate(() => document.activeElement.getAttribute('data-href')) === 
 await p.keyboard.press('Enter');
 await p.waitForTimeout(150);
 ok(p.url().endsWith('/ministries/editor/youthfamily'), 'Enter on a focused row with no separate link still navigates: ' + p.url());
+
+// ── pagination (opt-in via cfg.pageSize) ──
+await p.goto('http://localhost:' + srv.address().port + '/paginated');
+await p.waitForTimeout(150);
+
+const pagerInfo = () => p.$eval('.tlc-pager-info', (n) => n.textContent);
+const prevDisabled = () => p.$eval('.tlc-pager-prev', (n) => n.disabled);
+const nextDisabled = () => p.$eval('.tlc-pager-next', (n) => n.disabled);
+
+ok((await shown()).length === 3, 'only pageSize rows show on the first page');
+ok((await pagerInfo()) === 'Page 1 of 3', 'the pager says which page: ' + (await pagerInfo()));
+ok(await prevDisabled(), 'Previous is disabled on page 1');
+ok(!(await nextDisabled()), 'Next is enabled with more pages to go');
+// The count line still answers "how many match", not "how many on this
+// page" — conflating the two would make it lie the moment a filter spans
+// more than one page.
+ok((await count()) === '7 rows shown', 'the count still counts every match, not just this page: ' + (await count()));
+
+await p.click('.tlc-pager-next'); await p.waitForTimeout(100);
+ok((await shown())[0] === 'row4', 'Next advances to the next window');
+ok((await pagerInfo()) === 'Page 2 of 3', 'and the pager updates: ' + (await pagerInfo()));
+
+await p.click('.tlc-pager-next'); await p.waitForTimeout(100);
+ok((await shown()).length === 1, 'the last page only shows what is left');
+ok(await nextDisabled(), 'Next is disabled on the last page');
+
+// Narrowing to a filter that fits on one page hides the pager, and does not
+// strand the view on a page number that no longer exists.
+await clickFilter('A');
+ok((await shown()).length === 3, 'the filter narrows to its 3 rows');
+ok(await p.locator('.tlc-pager').isHidden(), 'one page of results hides the pager');
+
+await clickFilter('All');
+ok((await pagerInfo()) === 'Page 1 of 3', 'changing the filter lands back on page 1: ' + (await pagerInfo()));
+
+await p.click('.tlc-pager-next');
+await p.fill('.tlc-search input', 'row7'); await p.waitForTimeout(100);
+ok((await shown()).length === 1, 'searching mid-pagination still finds the row');
+ok(await p.locator('.tlc-pager').isHidden(), 'and a single match hides the pager too');
 
 await b.close(); srv.close();
 console.log(`${pass} passed, ${fail} failed`);

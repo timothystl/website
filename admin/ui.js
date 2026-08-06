@@ -184,7 +184,7 @@ export function renderListSection(cfg) {
   const {
     key, title, purpose = '', action = null, altActions = [], search = '', filters = [], valueChips = false,
     columns = [], rows = [], note = '', noun = 'item', nounPlural = '',
-    empty = 'Nothing here yet.', headerExtra = '',
+    empty = 'Nothing here yet.', headerExtra = '', pageSize = 0,
   } = cfg;
 
   const plural = nounPlural || noun + 's';
@@ -248,7 +248,7 @@ export function renderListSection(cfg) {
     `<button type="button" class="tlc-chipfilter" data-value="${esc(c.value)}" style="background:${esc(c.tint)};color:${esc(c.ink)};--tlc-chip-solid:${esc(c.solid || c.ink)};">${esc(c.label)}</button>`
   ).join('');
 
-  return `<section class="tlc-section" id="sec-${esc(key)}" data-noun="${esc(noun)}" data-noun-plural="${esc(plural)}">
+  return `<section class="tlc-section" id="sec-${esc(key)}" data-noun="${esc(noun)}" data-noun-plural="${esc(plural)}"${pageSize ? ` data-page-size="${esc(String(pageSize))}"` : ''}>
   <header class="tlc-section-head">
     <div class="tlc-section-headings">
       <h1 class="tlc-title">${esc(title)}</h1>
@@ -284,6 +284,11 @@ export function renderListSection(cfg) {
       <span class="tlc-empty-help" data-empty="Use the button above to add the first one.">Use the button above to add the first one.</span>
     </div>
   </div>
+  ${pageSize ? `<div class="tlc-pager" hidden>
+    <button type="button" class="tlc-pager-btn tlc-pager-prev">Previous</button>
+    <span class="tlc-pager-info"></span>
+    <button type="button" class="tlc-pager-btn tlc-pager-next">Next</button>
+  </div>` : ''}
   ${note ? `<p class="tlc-note"><span class="tlc-note-mark" aria-hidden="true">◆</span><span>${esc(note)}</span></p>` : ''}
 </section>`;
 }
@@ -409,6 +414,16 @@ function wire(sec){
   var noun=sec.getAttribute('data-noun')||'item';
   var plural=sec.getAttribute('data-noun-plural')||noun+'s';
   var active=pills.length?pills[0].getAttribute('data-value'):'all';
+  // Opt-in: only a section whose config set pageSize carries this attribute
+  // (and a pager container). Every other list keeps showing everything, same
+  // as before — this must never change behaviour for a section that didn't
+  // ask for it.
+  var pageSize=parseInt(sec.getAttribute('data-page-size')||'0',10)||0;
+  var pager=sec.querySelector('.tlc-pager');
+  var pagerPrev=pager&&pager.querySelector('.tlc-pager-prev');
+  var pagerNext=pager&&pager.querySelector('.tlc-pager-next');
+  var pagerInfo=pager&&pager.querySelector('.tlc-pager-info');
+  var page=1;
   function matchesFilter(r){
     if(active==='all') return true;
     return (' '+(r.getAttribute('data-filter')||'')+' ').indexOf(' '+active+' ')>-1;
@@ -416,18 +431,30 @@ function wire(sec){
   function apply(){
     var raw=(input&&input.value||'').trim();
     var q=raw.toLowerCase();
-    var shown=0,reachable=0;
+    var matched=[],reachable=0;
     rows.forEach(function(r){
       var inFilter=matchesFilter(r)&&(!chip||(' '+(r.getAttribute('data-filter')||'')+' ').indexOf(' '+chip+' ')>-1);
       if(inFilter) reachable++;
       var hit=inFilter&&(!q||(r.getAttribute('data-search')||'').indexOf(q)>-1);
-      r.hidden=!hit; if(hit) shown++;
+      if(hit) matched.push(r);
+    });
+    // The count line keeps meaning "how many match", not "how many on this
+    // page" — the pager below answers the second question. Conflating them
+    // would make "3 of 8 shown" lie the moment a filter spans two pages.
+    var totalPages=pageSize?Math.max(1,Math.ceil(matched.length/pageSize)):1;
+    if(page>totalPages) page=totalPages;
+    if(page<1) page=1;
+    var windowStart=pageSize?(page-1)*pageSize:0;
+    var windowEnd=pageSize?windowStart+pageSize:matched.length;
+    rows.forEach(function(r){ r.hidden=true; });
+    matched.forEach(function(r,i){
+      if(i>=windowStart&&i<windowEnd) r.hidden=false;
     });
     // Two different empty states, because they need two different actions:
     // a search that matches nothing wants the words changed, an empty section
     // wants the first row added.
     if(empty){
-      empty.hidden=shown!==0;
+      empty.hidden=matched.length!==0;
       var et=empty.querySelector('.tlc-empty-title'), eh=empty.querySelector('.tlc-empty-help');
       if(et&&eh){
         if(q){
@@ -439,16 +466,25 @@ function wire(sec){
         }
       }
     }
-    if(count) count.textContent=shown===reachable
+    if(count) count.textContent=matched.length===reachable
       ? (reachable+' '+(reachable===1?noun:plural)+' shown')
-      : (shown+' of '+reachable+' shown');
+      : (matched.length+' of '+reachable+' shown');
+    if(pager){
+      pager.hidden=totalPages<=1;
+      if(pagerPrev) pagerPrev.disabled=page<=1;
+      if(pagerNext) pagerNext.disabled=page>=totalPages;
+      if(pagerInfo) pagerInfo.textContent='Page '+page+' of '+totalPages;
+    }
   }
+  // Changing what matches has to land back on page 1 — staying on page 3 of a
+  // filter that now has one page would show nothing and look broken.
+  function applyFromFilter(){ page=1; apply(); }
   var chips=Array.prototype.slice.call(sec.querySelectorAll('.tlc-chipfilter'));
   var chip=null;
-  if(input) input.addEventListener('input',apply);
+  if(input) input.addEventListener('input',applyFromFilter);
   pills.forEach(function(p){p.addEventListener('click',function(){
     pills.forEach(function(o){o.classList.remove('is-on');});
-    p.classList.add('is-on'); active=p.getAttribute('data-value'); apply();
+    p.classList.add('is-on'); active=p.getAttribute('data-value'); applyFromFilter();
   });});
   // A value chip narrows whatever the row above already selected, and clicking
   // the active one clears it — so "Live" and "Grow" can be asked together.
@@ -456,8 +492,10 @@ function wire(sec){
     var v=c.getAttribute('data-value');
     if(chip===v){chip=null;c.classList.remove('is-on');}
     else{chips.forEach(function(o){o.classList.remove('is-on');});c.classList.add('is-on');chip=v;}
-    apply();
+    applyFromFilter();
   });});
+  if(pagerPrev) pagerPrev.addEventListener('click',function(){ page--; apply(); });
+  if(pagerNext) pagerNext.addEventListener('click',function(){ page++; apply(); });
   // The whole row is the target, but a link or button inside it wins — the ⋯
   // menu and an inline form must not be swallowed by the row's own navigation.
   body.addEventListener('click',function(e){
@@ -862,6 +900,14 @@ export const ADMIN_UI_CSS = `
 .tlc-empty-help{font-size:13px;color:var(--tlc-muted);}
 .tlc-note{display:flex;gap:9px;align-items:baseline;margin:14px 0 0;font-size:13px;line-height:1.65;color:var(--tlc-body);max-width:66em;text-wrap:pretty;}
 .tlc-note-mark{flex:none;color:var(--tlc-gold);font-size:11px;}
+/* ── Pager (opt-in via cfg.pageSize) ── */
+.tlc-pager{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:14px;}
+.tlc-pager[hidden]{display:none;}
+.tlc-pager-btn{flex:none;display:inline-flex;align-items:center;background:#fff;color:var(--tlc-navy);
+  font:600 13px var(--tlc-sans);padding:8px 14px;border:1px solid var(--tlc-edge);border-radius:8px;cursor:pointer;}
+.tlc-pager-btn:hover:not(:disabled){border-color:var(--tlc-blue);}
+.tlc-pager-btn:disabled{opacity:.4;cursor:default;}
+.tlc-pager-info{font-size:12.5px;color:var(--tlc-muted);white-space:nowrap;}
 /* ── Giving surfaces ── */
 .tlc-give-surfaces{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
 @media (max-width:820px){.tlc-give-surfaces{grid-template-columns:1fr;}}

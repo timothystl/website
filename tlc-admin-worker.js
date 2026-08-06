@@ -10041,6 +10041,7 @@ ${sidebarShell('newsletter', currentUser, `<a href="https://timothystl.org/news"
     filters: filtersOf('newsletter'),
     columns: columnsOf('newsletter'),
     rows: listRows,
+    pageSize: 10,
     noun: 'issue', nounPlural: 'issues',
     empty: 'No newsletters yet.',
     // The design's one ◆ line. The read-only rule is not stated here because the
