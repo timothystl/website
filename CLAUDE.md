@@ -516,6 +516,96 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### Anything can be left, centred or right (v4.28.0, 2026-08-06)
+
+Dinger, with a **Button bar** selected — one button, hard left, no control to
+move it: *"for this selected block, and all blocks i want alignment of left,
+center and right and that should work for buttons too."*
+
+**Alignment was left/centre on ten types.** The reason written here for
+excluding the other twenty-one was that centring a grid's cells and centring
+the grid itself are different problems, each needing their own CSS. That is
+true, and it is a description of what the CSS has to do — not a reason to
+withhold the control. `align: true` is on 31 of the 32 defs now; **Spacer is
+the one genuine exclusion**, having no content to align.
+
+- **`ALIGNABLE_TYPES` is still derived from the def flag**, not a second list.
+  It was `CENTER_ALIGNABLE_TYPES`; the name stopped being true the moment
+  right existed.
+- **⚠ Left is the ABSENCE of a class.** An untouched page renders from exactly
+  the CSS it always did, rather than from a new rule that happens to agree
+  with it. Only `center` and `right` add one.
+- **`text-align` does the bulk, and it inherits** — one declaration reaches
+  every heading, eyebrow and paragraph in the subtree without naming them.
+  Everything after it is only what inheritance cannot do: the three button and
+  notice rows (`justify-content` is not inherited), the flex columns whose own
+  `align-items` beats any amount of text-align, and the max-width elements
+  that need their side margins moved.
+- **Three type-specific rules were deleted, not lost** — Callout and Hero's
+  band-text, Hero's subtitle margins, the Notice bar's row. Each is now the
+  generic rule doing that job for every type at once. Two rules for one job is
+  two places to disagree.
+- **Card grid gave up its own duplicate Alignment chips** and joined the
+  shared control, gaining right with everything else. It keeps its own inner
+  `tlcb-cg--*` classes, which reach *inside* a card where the generic rules
+  deliberately do not.
+- **⚠ The amount ladder still aligns its intro only.** Its rows are an amount
+  on the left and a Give button on the right, and moving that text is not what
+  "centre this section" means to anybody looking at it. It is now a **reset on
+  the row** rather than a list of the five elements to align — the older note
+  here argued the opposite, on the grounds that a rule existing only to undo
+  the rule above it goes wrong when a sixth element is added. That inverted
+  once alignment became general: anything added inside a row now inherits the
+  row's left and anything added to the intro inherits the block's alignment,
+  with no list to keep in step either way.
+- **⚠ A backtick in a CSS comment broke the module** while writing this — the
+  exact trap recorded under "node --check does not catch a broken module".
+  Describe a class in these comments; do not quote one.
+
+Run: `node admin/blocks.test.mjs`.
+
+### A ladder row is edited on the Giving screen (v4.28.0, 2026-08-06)
+
+Dinger, on the read-only ladder panel v4.27.0 added: *"here you now just are
+showing what the amounts are but no way to EDIT them"* — and, with a
+screenshot of the Funds / Amount tiers panels, *"use this as a template for
+the edit design"*.
+
+**The read-only panel was my call and it was overruled.** The reasoning was
+that each row carries its own sentence about what that gift pays for, so a
+second form here would be two places that disagree about what $5,000 a year
+buys. The correct reading of the overrule is not "he wants a duplicate": it is
+that **a screen called Giving, which already edits every other amount on the
+page, cannot be the one place these amounts are merely displayed.**
+
+The duplication worry is answered by where the words are *stored* rather than
+by refusing the control. There is still exactly one copy of a ladder row — the
+`amounts` block on the giving page — and these routes are a second **door**
+onto it, not a second record. There is no ladder table and there must not be
+one.
+
+- **The panels are `panelList()`**, the same shape as Funds and Amount tiers:
+  grip to reorder, name, what the button asks for, Edit into a drawer, and
+  `+ Add amount`.
+- **A row has no id of its own**, being an item inside a block's JSON, so it
+  is addressed as `?row=<blockId>:<index>` and `:new` appends.
+- **⚠ Every route writes `blocks` and never `published_blocks`.** Editing here
+  is exactly as live as editing in the page editor — which is to say not at
+  all until somebody publishes. A side screen must not be able to change the
+  giving page without passing through the one step that exists to make that
+  deliberate. The toast says where it went rather than just "Saved".
+- **Rich text survives an edit that leaves the words alone.** The description
+  is rich on the page and a plain textarea here; the save keeps the stored
+  markup when the plain text is unchanged, so fixing an amount never quietly
+  flattens emphasis somebody added in the editor.
+- **An unknown block id writes nothing at all.** A stale tab or a hand-typed
+  address gets the screen back, not a page of blocks written from a request
+  describing something no longer there.
+- **Reorder posts the whole resulting order**, same contract as the menu, and
+  anything the post did not mention is appended rather than dropped.
+
+Run: two groups in `test/admin-redesign.test.mjs`.
+
 ### A year is asked for a month at a time (v4.27.0, 2026-08-06)
 
 Dinger, on the Giving screen: *"i can only edit the weekly giving tiers and not
