@@ -1812,13 +1812,20 @@ group('the giving page: two addresses, each pointing where it is actually edited
   has(body, 'timothystl.org/give', 'and the on-site one');
   has(body, 'the amounts and funds offered on it', 'and the design’s purpose line');
 
-  // /give opens the real page editor — it is published, so an Edit button must reach it.
-  has(body, '/pages/give/edit', 'the on-site page links to the real block editor');
-  // ...and the standalone one does not claim an editor it does not have.
-  has(body, "What's editable here", 'the standalone page offers an explanation instead');
-
+  // ⚠ This group used to assert the panel said "One set of blocks" and carried
+  // a "Kept in step" switch. BOTH WERE FALSE and the test was pinning them
+  // down: the two pages have separate jobs, and the switch wrote
+  // `give_keep_in_step`, which nothing in the codebase ever read. A test
+  // asserting that a lie is displayed is worse than no test — it makes
+  // correcting the lie look like a regression.
   lacks(body, 'One set of blocks', 'no longer claims one set of blocks in two places');
   lacks(body, 'Kept in step', 'and the switch that controlled nothing is gone');
+  has(body, 'Separate pages', 'it says what is actually true');
+
+  // BOTH addresses open a real editor now. #400 could only point one of them
+  // at an editor because only one existed; the standalone page has its own.
+  has(body, '/pages/give/edit', 'the on-site page links to the real block editor');
+  lacks(body, "What's editable here", 'and the standalone page no longer offers an explainer instead of an editor');
 
   // The route is gone too. This Worker's tail falls through to the newsletter screen for any
   // unmatched path, so the assertion that means something is that the POST no longer WRITES —
@@ -1832,14 +1839,22 @@ group('the giving page: two addresses, each pointing where it is actually edited
      'and the setting it used to write stays unwritten');
 }
 
-group('the giving-page explainer is about the standalone page only');
+// The standalone giving page is a block-editor page now, so "Edit this page"
+// has to reach the editor rather than a screen explaining why it cannot.
+group('the giving page opens in the block editor');
 {
   const { db, env } = await boot();
   const { cookie } = signIn(db);
-  const body = await (await call(env, '/giving/page', { cookie })).text();
-  has(body, 'not a block-editor page', 'it says the standalone page is not a block page');
-  has(body, '/pages/give/edit', 'and sends /give to the editor that does exist');
-  lacks(body, 'View /give', 'rather than only offering to view it');
+  const res = await call(env, '/giving/page', { cookie });
+  eq(res.status, 302, 'Edit this page redirects');
+  eq(res.headers.get('location'), '/pages/give-landing/edit', 'into the page editor');
+
+  const row = db.prepare("SELECT blocks, published_blocks FROM pages WHERE id='give-landing'").get();
+  ok(row, 'the giving page is seeded as a page row');
+  ok(row.blocks && row.blocks.includes('amounts'), 'with the amount ladder in its draft');
+  // ⚠ The load-bearing assertion. This is the page that takes the money;
+  // the deploy must not switch its rendering path out from under anybody.
+  ok(!row.published_blocks, 'and NOTHING published — the live page is untouched until somebody presses Publish');
 }
 
 group('Giving: funds and amounts are two panels, side by side');

@@ -6,7 +6,7 @@ import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, SIDEBAR_JS, TOGGLE_WORD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 import { APPEARANCE_CSS } from './appearance.js';
 
-export const VERSION = 'v4.24.1'; // minor: the CLAUDE.md backlog pass — EXIF stripped on upload (B6), session idle timeout (B5), gym slot locked by the database (B1), tap targets measured at 390px (B8), a settable social image (B7), this week's service on /sermons, and the block CSS font variables that were never defined
+export const VERSION = 'v4.25.0'; // minor: give.timothystl.org is a block-editor page - two new self-filling block types that compute every Tithe.ly link at render time and can never store one
 
 // ── THE SHARED SHELL CSS/JS, EXTERNALISED ───────────────────────
 // This used to be inlined into every admin response inside <style>/<script>

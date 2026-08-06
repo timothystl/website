@@ -516,6 +516,105 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### give.timothystl.org is a block-editor page (v4.24.0, 2026-08-05)
+
+Andrew: *"we have been trying to convert give.timothystl.org to blocks. That
+page computes every Tithe.ly link at request time — extracting that into text
+blocks would produce a page that looks identical and takes no money. The things
+i want to be able to edit are the layout, the descriptions of what each thing
+does, and the amounts / period, and the heading for each section"* — plus the
+header, the footer, and *"at least a button that links back to the homepage"*.
+
+**His diagnosis was exactly right, and it is the whole design constraint.** The
+answer is that the two new block types **have no URL field at all**. They store
+the amount and the words; every href is computed at render time from
+`ctx.data.give`, which `pageData()` fills from the Giving screen. There is
+nowhere to put a payment address even by accident — which is what makes
+publishing this page safe, because **a block's URL is frozen the moment it is
+published**, so a stored Tithe.ly link would go on charging to the old form
+after the office changed the base link and **the page would still look
+perfect**.
+
+| Type | What it is | What is editable |
+|---|---|---|
+| `giving` — Giving widget | The transaction: chips, fund dropdown, custom amount, the button | Heading, tagline, trust line, alignment, spacing, where it sits on the page |
+| `amounts` — Amount ladder | A heading over "$X /period — what it does" rows, each with its own Give button | Eyebrow, heading, intro; every row's amount, period and description; theme colours; alignment |
+
+- **One type for both ladders.** The ministry ladder and the leadership tiers
+  are the same shape and differ only in colour, which is already a block-level
+  choice. Two near-identical types would drift apart the first time somebody
+  improved one of them.
+- **⚠ `give-link.js` is the ONE definition of how an amount becomes a link.**
+  It existed three times inside `give-landing.js` alone — server-side, and
+  again as a client-side mirror — and a fourth copy was one block type away.
+  `admin/blocks.js` and `give-landing.js` both import it now. Three copies of
+  an arithmetic rule about somebody's money is three chances for one to be
+  wrong in a way nobody notices, because a wrong link still looks like a
+  working link. The rule: the base link holds formId + locationId + fundId and
+  no amount; `&amount=<cents>` — **cents** — is appended per gift; a fund
+  override **replaces** the base `fundId` rather than appending a second one.
+- **⚠ The fallback falls back in three steps, and the last one still takes a
+  gift.** Published blocks → the hardcoded body with the admin's *real* amounts
+  → the hardcoded body with the constants compiled into `give-landing.js`. Step
+  two is the one worth understanding: an unpublished page is a normal state,
+  not a failed fetch, and dropping straight to hardcoded amounts there would
+  quietly undo the office's own Amount Tiers. `give-landing.js` is therefore
+  **not dead code once the page is published** — it is what runs during an
+  admin outage, on the page that takes the money.
+- **A row with no numeric amount gets no button**, rather than one pointing at
+  `$NaN`. "Any amount" is a legitimate row to write. A dead link is worse than
+  a missing one because it looks like it works.
+- **⚠ `sanitizeBlock` now gates `url` on the definition**, the way `card`
+  already was. It used to store a posted URL for *every* block type whether or
+  not that type had a URL field. Nothing rendered it, so nothing was broken —
+  but "the renderer happens not to read it" is a much weaker guarantee than "it
+  was never stored", and it is one new render branch away from failing. All
+  five types that read `b.url` declare `url:true`, so nothing lost a link.
+- **The page row is excluded from `/api/pages`.** It is a `pages` row so it
+  gets the editor, publishing, revisions and permissions for free, but it is
+  not a page of this site: left in, the SPA would serve the donation page at
+  `/give-landing` too and there would be three giving surfaces where the
+  settled rule says two.
+- **The chrome reads the site's own records.** The masthead takes its logo,
+  name, tagline, bar colour and rule from `site_appearance` (Menu →
+  Appearance); the footer reads the church details. Both were hardcoded here.
+  ⚠ This page used to have **no way back into the site, by design** — "someone
+  lands here from a bulletin/QR/text link, sees one thing, and gives". Andrew
+  reversed that; the masthead is a link home and there is a named
+  `Back to timothystl.org` beside it. Recorded because the original reasoning
+  was sound and was traded away deliberately, not forgotten.
+- **⚠ A real bug found on the way past.** The `give.timothystl.org` branch in
+  `site-worker.js` answered **every** path on that hostname with the giving
+  page — so `/logo.png` and `/images/favicon-32x32.png`, both referenced by
+  this very page, were served an HTML document instead of an image. Silently:
+  no error, no log, just a church logo that has never appeared on the giving
+  page. Asset paths fall through to the static assets now.
+- **⚠ A phone shows the button before the case for pressing it.** #400 fixed
+  this in the hardcoded page — stacking the two columns in source order buries
+  the Give button under the whole ministry ladder. The block version stacks the
+  same way, so `phoneRules()` pulls the widget above the ladder
+  (`.tlcb-pair > .tlcb--giving{order:-1}`). Scoped to the giving widget, which
+  only ever appears on that one page, rather than reversing pairs generally.
+  Without it, publishing would have quietly undone #400.
+- **The Giving screen stopped lying.** Its panel claimed the two giving pages
+  were one set of blocks shown in two places, and carried a switch offering to
+  keep them in step. Neither was true — they have separate jobs, and the switch
+  wrote `give_keep_in_step`, which nothing ever read. Both are gone. ⚠ The test
+  that had pinned those strings down was asserting a *lie was displayed*, which
+  makes correcting it look like a regression; it now asserts the opposite.
+- **Nothing is live yet, on purpose.** The seed lands in the draft and
+  `published_blocks` stays empty, so give.timothystl.org renders exactly what
+  it rendered yesterday. Open `/pages/give-landing/edit`, read the draft
+  against the live page, press Publish — then watch one real gift go through
+  before touching anything else.
+
+Run: `node test/give-page.test.mjs` (in CI). It asks the only question worth
+asking about this page — does it still **take money** — rather than whether it
+renders: $25 becomes `amount=2500`, a fund override leaves exactly one
+`fundId`, neither block will store a Tithe.ly address even when one is posted
+at it, and the page still transacts unpublished, with the admin unreachable,
+and with the admin returning nonsense.
+
 ### /give is on the block editor, and the rest is scoped (2026-08-05)
 
 **Every page has had a block draft since the site editor shipped and not one
@@ -3080,7 +3179,7 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 
 ### Still Needs to Be Built
 - ~~**The footer is not admin-editable at all**~~ — **done v4.23.0, 2026-08-05.** `footer_columns` + `menu_items.column_id`; headings, membership and order are all editable under Menu → Footer columns, and deleting a column never deletes its links. See "The footer is columns now" above. *(Original note kept below for context.)* The footer's column headings ("Visit", "Connect", "Programs", "Partners") and which links sit under each were hardcoded in `public/index.html` — the admin's Menu screen only manages the *header* nav and a flat list of footer outside-links repeated on mobile, neither of which touches the desktop footer's structure at all. What's wanted: real admin control over the footer's column headings and which links sit under each, add/remove/rename a column, reassign a link between columns — not just reordering within a fixed set of columns like the Partners tab's new drag-to-reorder. This is a genuinely separate build from the Menu screen's existing flat `menu_items` list (`MAX_DEPTH.footer = 0`), not an extension of it — likely wants its own "footer columns" concept (a new table for column headings + order, with footer links assigned to one) rather than shoehorning grouping into `menu_items`. Scoped but not started.
-- **`give.timothystl.org` is not a block-editor page** — deferred by Andrew's own call 2026-08-05 (*"publish /give and then let's come back to give.timothystl.org. make note for that"*). `timothystl.org/give` IS one now. The giving landing page resolves the Tithe.ly link at request time, computes `&amount=<cents>` per chip and recomputes every link when the fund changes, so extracting it to text blocks would produce a page that looks right and takes no money. Converting it properly needs a real `giving` block type that resolves `give_url` at render time (never storing it — a block's URL is frozen at publish), the ministry ladder and leadership tiers as blocks, and `site-worker.js` learning to render a block page on a non-SPA hostname with `give-landing.js` kept as the fallback. Full scope in `admin/BLOCK-EDITOR-ROLLOUT.md` §3. **Also flagged there:** `give_keep_in_step` is a `site_settings` key that nothing reads — wire it up during that work or delete it.
+- ~~**`give.timothystl.org` is not a block-editor page**~~ — **built v4.24.0, 2026-08-05**, and **waiting on one Publish**. The draft is seeded; `published_blocks` is empty, so the live page still renders `give-landing.js` until somebody opens `/pages/give-landing/edit` and presses Publish. That last step is deliberately manual: this is the page that takes the money, and a deploy that swaps its rendering path while nobody is watching is exactly the risk the original deferral existed to avoid. See "give.timothystl.org is a block-editor page" below and `admin/BLOCK-EDITOR-ROLLOUT.md` §3. `give_keep_in_step` was **deleted**, not wired up — it was a key nothing ever read, attached to a switch that promised to keep the two giving pages in step.
 
 - **24 of the 25 page drafts are still unpublished** — not a code gap. Every page has had a block draft since the site editor shipped; `/give` is the first published. The rest need somebody to compare each draft against the live page, fix what the extractor flattened, and press Publish. Sequencing, known extractor gaps and the three pages that deliberately are not block pages are all in `admin/BLOCK-EDITOR-ROLLOUT.md`.
 
