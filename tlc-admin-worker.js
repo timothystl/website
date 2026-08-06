@@ -5405,6 +5405,19 @@ addEvent();
           emailSuffix = result.success
             ? `&emailed=${emailSend}`
             : `&emailerr=${encodeURIComponent(result.error)}`;
+          // sent_at/sent_count are what isSent() and the list's "Sent" pill
+          // read — without this the email genuinely goes out but the row
+          // keeps reading Draft, same as the dedicated /send-email/:id route.
+          if (emailSend === 'all' && result.success) {
+            let recipients = null;
+            try {
+              const c = await env.DB.prepare('SELECT COUNT(*) AS n FROM newsletter_subscribers').first();
+              recipients = c ? c.n : null;
+            } catch (_) { recipients = null; }
+            await env.DB.prepare(
+              "UPDATE newsletters SET sent_at = COALESCE(sent_at, ?), sent_count = COALESCE(sent_count, ?) WHERE id = ?"
+            ).bind(new Date().toISOString(), recipients, newsletterId).run();
+          }
         }
       }
 
