@@ -516,6 +516,64 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### A year is asked for a month at a time (v4.27.0, 2026-08-06)
+
+Dinger, on the Giving screen: *"i can only edit the weekly giving tiers and not
+the larger commitment amounts, i woudl liek those to be able to enter lets say
+$5000/year and then the give button woudl read 416 per month. no one is goign
+to click to do a one time gift of 5000"* — and, separately, *"i woudl like to
+put a heading to these list of giving tiers"*.
+
+**The commitment and the transaction are two different numbers, and only one of
+them belongs on a button.** A leadership row says $5,000 a year — something
+somebody decides once and keeps — and its button was handing Tithe.ly a single
+$5,000 charge, which is not a thing anybody presses.
+
+- **The period a row is written in decides what its button asks for.**
+  `giftForPeriod()` in `give-link.js`, beside the link arithmetic and shared by
+  `admin/blocks.js` and `give-landing.js`, so the published page and the
+  hardcoded fallback cannot come to different answers about what somebody is
+  being asked to pay. `/year` asks for a twelfth; `week`, `month` and everything
+  else ask for exactly what the row says, because those are already figures
+  somebody puts through a card in one go.
+- **⚠ The label and the LINK both change.** A button reading $416 that charges
+  $5,000 would be the worst thing this page could do, so `test/give-page.test.mjs`
+  asserts `amount=41600` and the absence of `amount=500000`, not just the words.
+- **The monthly figure rounds DOWN to a whole dollar** ($416 × 12 = $4,992). A
+  button must never ask for more than the number printed on the row beside it,
+  and it is the figure Dinger wrote himself. Under $12 a year there is no
+  whole-dollar month, so the row asks for itself rather than for $0.
+- **⚠ Tithe.ly cannot be told from a link that a gift repeats** — that is why
+  the frequency toggle came off this page in July. So the ladder says, in as
+  many words, to choose Monthly on the form. Rendered **only when a monthly
+  button exists**, so a purely weekly ladder carries no instruction about a
+  screen it never reaches.
+- **A ladder can carry a heading over the rows themselves**, stored in the
+  block's existing `subtitle` (already sanitised for every type, so no schema
+  change) and edited inline in the canvas. The block heading above it is an
+  argument — "Every gift accomplishes great things in His Kingdom" — with
+  several paragraphs under it; by the time the eye reached the cards nothing
+  said what the list of them was. Empty on every existing page, so nothing
+  gains a heading it did not ask for, and shown as a placeholder in the editor,
+  because a field nobody can see is a field nobody uses.
+
+**The Giving screen now shows the ladders — and does not offer to edit them.**
+Each row carries its own sentence about what that gift pays for, so it belongs
+on the page with the words it explains; a second form here would be two places
+that disagree about what $5,000 a year buys. What was really wrong is that this
+screen said *nothing* about them, so "the amounts live on the Giving screen"
+read as a complete statement and the larger commitments looked unchangeable.
+The panel lists every ladder row, states **what each button will actually ask
+for**, and links to the editor.
+
+- **⚠ It also says when the live page is not the draft.** `give-landing` is
+  seeded unpublished on purpose, so editing in the editor changes nothing a
+  visitor sees until Publish. Without that line the whole feature reads as
+  "my edit did not work". The warning disappears once the page is published.
+
+Run: `node test/give-page.test.mjs`, plus two groups in
+`test/admin-redesign.test.mjs`.
+
 ### give.timothystl.org is a block-editor page (v4.24.0, 2026-08-05)
 
 Andrew: *"we have been trying to convert give.timothystl.org to blocks. That

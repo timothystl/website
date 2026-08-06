@@ -46,6 +46,7 @@ import MINISTRY_EDITOR_HTML from './admin/ministry-editor.html';
 import { PAGE_SEEDS } from './admin/page-seeds.js';
 import { SITE_PAGES } from './admin/site-pages.js';
 import { GIVE_LANDING_PAGE, GIVE_LANDING_PAGE_ID } from './admin/give-landing-seed.js';
+import { giftForPeriod, giveButtonLabel, parseAmount as parseGiveAmount, fmtAmount as fmtGiveAmount } from './give-link.js';
 
 // /news has no hardcoded markup for tools/extract-pages.mjs to lift — its
 // content (the news list, the newsletter archive, the calendar) was always
@@ -9319,6 +9320,52 @@ ${sidebarShell('settings', currentUser, '', await pageBadges())}
         } <a href="${href}" style="color:var(--tlc-blue);">Fix it</a></span></p>`;
       };
 
+      // ── THE LADDERS ────────────────────────────────────────────────────────
+      // Dinger, 2026-08-06: "on the giving settings page, i can only edit the
+      // weekly giving tiers and not the larger commitment amounts."
+      //
+      // He is right about what this screen showed, and the reason is that the
+      // ladders are NOT settings — each row carries its own sentence about
+      // what that gift does, so they are rows on the giving page itself,
+      // edited in the page editor with the words they belong to. Copying them
+      // into a form here would make two places that disagree about what
+      // $5,000 a year pays for.
+      //
+      // What was missing is that this screen said nothing about them at all,
+      // so "the amounts live on the Giving screen" read as a complete
+      // statement and the larger commitments looked unchangeable. So: show
+      // them, show what each button will ASK for (which is not the same
+      // number as the commitment), and link to the one place they are edited.
+      const givePageRow = await env.DB.prepare('SELECT blocks, published_blocks FROM pages WHERE id = ?')
+        .bind(GIVE_LANDING_PAGE_ID).first().catch(() => null);
+      const ladderBlocks = sanitizeBlocks(parseBlocks(givePageRow && givePageRow.blocks))
+        .filter((b) => b.type === 'amounts');
+      const givePagePublished = sanitizeBlocks(parseBlocks(givePageRow && givePageRow.published_blocks)).length > 0;
+      const plainText = (s) => escapeHtml(String(s || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim());
+      const ladderHtml = ladderBlocks.length === 0
+        ? `<div style="font-size:13px;color:var(--gray);padding:12px 0;">The giving page has no amount ladders on it. Add an <strong>Amount ladder</strong> block in <a href="/giving/page" style="color:var(--tlc-blue);">the page editor</a>.</div>`
+        : ladderBlocks.map((b) => `
+          <div style="padding:14px 0;border-bottom:1px solid var(--border);">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+              <div style="font-weight:700;color:var(--charcoal);">${escapeHtml(b.subtitle || b.title || b.eyebrow || 'Amount ladder')}</div>
+              <a class="tlc-edit" href="/giving/page">Edit these amounts</a>
+            </div>
+            ${(b.items || []).length === 0
+              ? `<div style="font-size:13px;color:var(--gray);margin-top:6px;">No amounts on this ladder yet.</div>`
+              : `<div style="margin-top:8px;display:flex;flex-direction:column;gap:4px;">${(b.items || []).map((it) => {
+                const amt = parseGiveAmount(it.amount);
+                const gift = giftForPeriod(it.amount, it.period);
+                const period = String(it.period || '').replace(/^\/+/, '');
+                return `<div style="display:grid;grid-template-columns:140px 1fr auto;gap:12px;align-items:baseline;font-size:13px;">
+                  <span style="font-weight:700;color:var(--charcoal);white-space:nowrap;">${
+                    amt == null ? plainText(it.amount) : '$' + escapeHtml(fmtGiveAmount(amt))
+                  }${period ? `<span style="font-weight:400;color:var(--gray);">/${escapeHtml(period)}</span>` : ''}</span>
+                  <span style="color:var(--gray);">${plainText(it.body)}</span>
+                  <span style="color:var(--gray);white-space:nowrap;">${gift ? escapeHtml(giveButtonLabel(gift)) : 'No button &mdash; the amount is not a number'}</span>
+                </div>`;
+              }).join('')}</div>`}
+          </div>`).join('');
+
       const editFund = url.searchParams.get('fund');
       const editTier = url.searchParams.get('tier');
       const fundRec = editFund && editFund !== 'new' ? funds.results.find((f) => String(f.id) === editFund) : null;
@@ -9421,6 +9468,16 @@ ${sidebarShell('giving', currentUser, '', await pageBadges())}
   </div>
 
   <p class="tlc-note" style="margin:14px 0 0;"><span class="tlc-note-mark">◆</span><span>Every amount builds its own Tithe.ly link from the base link above, with the amount appended in cents. You never need to make a link per amount — the override field in the drawer is only for an amount that should go somewhere else entirely, such as a different fund.</span></p>
+
+  <div class="card" style="margin-top:20px;">
+    <div class="card-title">Amount ladders on the giving page</div>
+    <div style="font-size:13px;color:var(--gray);margin-bottom:8px;">The <strong>$X a week</strong> and <strong>$X a year</strong> rows — the ministry ladder and the larger commitments. These are not settings: each one carries its own sentence about what that gift pays for, so they are edited on the giving page itself, with the words they belong to. Everything here is read from that page; <a href="/giving/page" style="color:var(--tlc-blue);">open the editor</a> to change an amount, a period or a description, or to add a row.</div>
+    ${ladderHtml}
+    <div style="font-size:13px;color:var(--gray);margin-top:14px;line-height:1.6;">
+      <strong>A year is asked for a month at a time.</strong> A row written as <code>/year</code> gets a button for a twelfth of it — $5,000 a year becomes <strong>Give $416/month</strong> — because nobody presses a button for a single $5,000 charge. Write the period as <code>week</code> or <code>month</code> and the button asks for exactly what the row says. Tithe.ly cannot be told from a link that a gift repeats, so the page tells the giver to choose Monthly on the form.
+    </div>
+    ${givePagePublished ? '' : `<p class="tlc-note" style="margin:14px 0 0;"><span class="tlc-note-mark">▲</span><span><strong>give.timothystl.org is still showing the built-in version of this page.</strong> Changes made in the editor are saved as a draft and will not appear to anybody until you open it and press <strong>Publish</strong>. <a href="/giving/page" style="color:var(--tlc-blue);">Open the editor</a></span></p>`}
+  </div>
 
   <div class="card" style="margin-top:20px;">
     <div class="card-title">Giving &amp; payment links</div>

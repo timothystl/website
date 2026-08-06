@@ -36,7 +36,7 @@
 // than quietly overwritten, because the original reasoning was sound and a
 // future session should know it was traded away deliberately, not forgotten.
 
-import { withAmountAndFund, withAmount, fmtAmount, GIVE_LINK_JS } from './give-link.js';
+import { withAmountAndFund, withAmount, fmtAmount, giftForPeriod, giveButtonLabel, GIVE_LINK_JS } from './give-link.js';
 
 // Used only if the admin API is unreachable when site-worker.js builds the page, so the
 // giving page never breaks outright. Matches the ministry-ladder amounts Andrew provided
@@ -124,6 +124,12 @@ const MINISTRY_LADDER = [
 // copy (2026-07-27). Each gets its own direct Give button rather than joining the chip
 // picker above — fewer, larger, more narrative asks. Both $10,000 items are intentional:
 // two distinct real costs (heat, power) that happen to land at the same figure.
+//
+// ⚠ The amount here is the ANNUAL COMMITMENT; the button asks for a month of
+// it (2026-08-06, Dinger: "no one is going to click to do a one time gift of
+// 5000"). The arithmetic is giftForPeriod() in give-link.js, shared with the
+// `amounts` block, so this fallback and the published page cannot come to
+// different answers about what a $5,000/year row asks somebody to pay.
 const LEADERSHIP_TIERS = [
   { amount: 5000,  outcome: 'Helps ensure every child hears about Jesus regardless of a family’s ability to pay.' },
   { amount: 9000,  outcome: 'Funds an entire year of music ministry that leads worship every Sunday.' },
@@ -264,14 +270,20 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds, appearance, details
       <a class="ladder-cta" href="${withAmount(safeBaseUrl, row.amount)}" target="_blank" rel="noopener">Give $${row.amount}</a>
     </div>`).join('');
 
-  const leadershipRowsHtml = LEADERSHIP_TIERS.map(row => `
+  const leadershipRowsHtml = LEADERSHIP_TIERS.map(row => {
+    // The row states the annual commitment; the button asks for one month of
+    // it. Same helper the `amounts` block uses, so the fallback and the
+    // published page cannot disagree about the figure.
+    const gift = giftForPeriod(row.amount, 'year');
+    return `
     <div class="leadership-row">
       <div class="leadership-left">
         <div class="leadership-amount">$${fmtAmount(row.amount)}<span class="leadership-period">/year</span></div>
         <div class="leadership-outcome">${row.outcome}</div>
       </div>
-      <a class="leadership-cta" href="${withAmount(safeBaseUrl, row.amount)}" target="_blank" rel="noopener">Give $${fmtAmount(row.amount)}</a>
-    </div>`).join('');
+      <a class="leadership-cta" href="${withAmount(safeBaseUrl, gift.amount)}" target="_blank" rel="noopener">${giveButtonLabel(gift)}</a>
+    </div>`;
+  }).join('');
 
   const css = `<style>
   /* ── Hero header (full-width) ── */
@@ -294,7 +306,11 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds, appearance, details
     display: flex; flex-direction: column; gap: 5px;
   }
   .ladder-steps b { color: #1E2D4A; }
-  .ladder-list { margin-top: 24px; display: flex; flex-direction: column; gap: 10px; }
+  .ladder-list-label {
+    margin-top: 24px; font-size: 12px; font-weight: 800; letter-spacing: .1em;
+    text-transform: uppercase; color: #1E2D4A; opacity: .85;
+  }
+  .ladder-list { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
   .ladder-row {
     display: flex; align-items: center; justify-content: space-between; gap: 14px;
     background: #fff; border: 1px solid #DDE3ED; border-radius: 10px; padding: 14px 16px;
@@ -386,6 +402,11 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds, appearance, details
     padding: 12px 20px; border-radius: 8px; white-space: nowrap; transition: background .2s;
   }
   .leadership-cta:hover { background: #E8C070; }
+  .leadership-note {
+    max-width: 780px; margin: 16px auto 0; text-align: center;
+    font-size: 13px; line-height: 1.55; color: rgba(255,255,255,.7);
+  }
+  .leadership-note strong { color: #E8C070; }
 
   /* ── Other ways to give ── */
   .other-ways {
@@ -454,6 +475,13 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds, appearance, details
         <div><b>2.</b> Strengthen your recurring gift by increasing it to the next level.</div>
         <div><b>3.</b> Sustain the mission through leadership-level gifts that underwrite the ministries the whole congregation depends on.</div>
       </div>
+      <!-- A label over the rows themselves. The heading above is an argument
+           and the three steps under it are a paragraph; by the time the eye
+           reaches the cards nothing has said what the list of them is. On the
+           block version of this page this is an editable field on the block
+           (2026-08-06) — here it is fixed, because this body is the fallback
+           for when the admin cannot be reached. -->
+      <div class="ladder-list-label">Weekly giving</div>
       <div class="ladder-list">${ladderRowsHtml}</div>
     </div>
 
@@ -496,6 +524,11 @@ export function renderGiveLandingHtml(tiers, baseUrl, funds, appearance, details
       <div class="leadership-sub">A child hearing about Jesus. A family receiving hope. A teenager discovering lifelong faith. A teacher serving with confidence. A sanctuary filled with worship. A church whose doors stay open to the neighborhood.</div>
     </div>
     <div class="leadership-table">${leadershipRowsHtml}</div>
+    <!-- ⚠ Tithe.ly cannot be told from a link that a gift recurs — that is why
+         the frequency toggle came off this page in July. A button reading
+         "Give $416/month" prefills one month and nothing else, so the one step
+         it cannot take for somebody is said plainly rather than assumed. -->
+    <p class="leadership-note">Each button opens the giving form with one month&rsquo;s amount already filled in &mdash; choose <strong>Monthly</strong> there to make it repeat.</p>
   </div>
 
   <div class="other-ways">

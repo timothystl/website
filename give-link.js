@@ -49,6 +49,49 @@ export function parseAmount(v) {
 // Thousands separators, so a leadership tier reads $10,000 rather than $10000.
 export const fmtAmount = (n) => Number(n).toLocaleString('en-US');
 
+// ── AN ANNUAL COMMITMENT IS ASKED FOR ONE MONTH AT A TIME ────────────────────
+//
+// Dinger, 2026-08-06: "i would like those to be able to enter lets say
+// $5000/year and then the give button would read 416 per month. no one is
+// going to click to do a one time gift of 5000."
+//
+// He is describing the gap between what a leadership row PROMISES and what its
+// button ASKED FOR. The row says $5,000 a year — a commitment somebody makes
+// once and keeps — and the button was handing Tithe.ly a single $5,000 charge,
+// which is not a thing anybody presses. The commitment and the transaction are
+// two different numbers, and only one of them belongs on a button.
+//
+// So the period a row is written in decides what its button asks for. An
+// annual row asks for a twelfth; everything else asks for exactly what it
+// says, because a $15/week or a $100/month row is already a figure somebody
+// would put through a card in one go.
+export function isAnnualPeriod(period) {
+  return /^\s*\/?\s*(a\s+|per\s+)?(year|yr|yrs|years|annual|annually|annum)\s*$/i
+    .test(String(period == null ? '' : period));
+}
+
+// What the button actually asks for: `{ amount, per }`, or null when there is
+// no usable number (the caller then renders NO button — a dead link is worse
+// than a missing one, because it looks like it works).
+//
+// ⚠ The monthly figure is rounded DOWN to a whole dollar. Twelve of them come
+// to a little less than the annual figure ($416 × 12 = $4,992), and that is
+// the right direction to be wrong in: a button must never ask for more than
+// the number printed on the row beside it. It is also the figure Dinger
+// himself wrote for $5,000 — whole dollars, no cents on a button.
+export function giftForPeriod(amountDollars, period) {
+  const amt = parseAmount(amountDollars);
+  if (amt == null) return null;
+  if (!isAnnualPeriod(period)) return { amount: amt, per: '' };
+  const monthly = Math.floor(amt / 12);
+  // Under $12 a year there is no whole-dollar month to ask for, so the row is
+  // left asking for the amount as written rather than for $0.
+  return monthly >= 1 ? { amount: monthly, per: 'month' } : { amount: amt, per: '' };
+}
+
+export const giveButtonLabel = (gift) =>
+  'Give $' + fmtAmount(gift.amount) + (gift.per ? '/' + gift.per : '');
+
 // ── THE CLIENT-SIDE MIRROR ───────────────────────────────────────────────────
 // The same rule again, but it HAS to be in the browser as well: switching fund
 // or typing a custom amount must rewrite every link without a page reload.
