@@ -646,6 +646,50 @@ three that deliberately are not block pages (`404`, `values`, `voters`), the
 other surfaces, and what converting `give.timothystl.org` would actually take.
 Read it before starting any of that work.
 
+### A password is changed on its own screen (v4.26.0, 2026-08-06)
+
+Dinger: *"when i am trying to edit users it is autofilling in from password
+manager software the username and passwords and so changing it. fix that so i
+dont have to reset user name and password everytime that i want to edit user
+access."*
+
+**The cause is a browser rule, not a bug in this code: a password manager fills
+a form's username box whenever it fills a password box beside it.** The access
+screen at `/users/edit/:id` carried both, so opening it to tick one permission
+and pressing Save wrote back whatever the manager had put there — a different
+username, and a password hash for a password nobody chose.
+
+- **The fix is that the form no longer HAS a password field.** Every
+  `autocomplete="new-password"` / `="off"` hint was already on those inputs and
+  every one of them was ignored — they are advisory, and managers routinely
+  override them. Removing the field removes the thing being filled, and it
+  removes the trigger for the username fill in the same move. **Do not put a
+  password field back on that screen**; that is the whole defect.
+- **`/users/edit/:id/password` is where a password changes**, and nowhere else.
+  ⚠ It has to be matched **before** the two `/users/edit/` handlers, which read
+  the id off the last path segment and would otherwise take the word *password*
+  for an account id and 404. Both are exact regex matches now rather than
+  `startsWith`.
+- **The POST stopped reading a password at all**, so the rule holds against a
+  stale tab or a crafted POST and not just against the markup. A test posts a
+  password at the access form and asserts the stored hash is byte-identical
+  afterwards.
+- **The username is `readonly` until somebody presses Change.** Belt and
+  braces — with no password field a manager has little reason to fill it — but
+  it is also the honest shape: editing what somebody can *reach* should never
+  quietly rewrite *who they are*. `LOCKED_FIELD_JS` (`admin/ui.js`) is the
+  delegated handler, and the button removes itself once used, because a control
+  that has done its one job reads as one still waiting to be pressed.
+- The email field's `autocomplete="email"` was dropped for the same reason: it
+  is somebody *else's* address, so the browser's own address book is the wrong
+  source for it.
+- Setting a password still signs that person out everywhere, exactly as the old
+  combined form did. Saving *access* no longer does, because it no longer
+  changes a password — sessions are still dropped on a permission change or a
+  deactivation.
+
+Covered by a group in `test/admin-redesign.test.mjs`.
+
 ### The backlog pass (v4.24.0, 2026-08-05)
 
 Andrew went through the pending list and picked. What follows is what each one

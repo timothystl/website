@@ -9494,7 +9494,8 @@ ${sidebarShell('giving', currentUser, `<a href="/giving">← Giving</a>`, await 
       const users = await env.DB.prepare('SELECT id, username, email, permissions, last_login, active, created_at FROM users ORDER BY created_at').all();
       const msg = url.searchParams.get('msg');
       const alertHtml = msg === 'created' ? `<div class="alert alert-success">✓ User created.</div>`
-        : msg === 'updated' ? `<div class="alert alert-success">✓ User updated.</div>`
+        : msg === 'updated' ? `<div class="alert alert-success">✓ User updated. Their password is unchanged — that is set on its own screen.</div>`
+        : msg === 'password' ? `<div class="alert alert-success">✓ Password set. They have been signed out of the admin everywhere and sign back in with the new one.</div>`
         : msg === 'deleted' ? `<div class="alert alert-info">User deleted.</div>` : '';
 
       const accessLabel = (perms) => {
@@ -9588,8 +9589,60 @@ ${sidebarShell('users', currentUser, '', await pageBadges())}
       return new Response('', { status: 302, headers: { Location: '/users?msg=created' } });
     }
 
-    if (path.startsWith('/users/edit/') && method === 'GET') {
-      const uid = path.split('/').pop();
+    // ⚠ The password screen has to be matched BEFORE the two /users/edit/
+    // handlers below it. Both used to read the id off the last path segment,
+    // which would take the word "password" for an account id and 404.
+    const userPwPath = path.match(/^\/users\/edit\/(\d+)\/password$/);
+    const userEditPath = path.match(/^\/users\/edit\/(\d+)$/);
+
+    // A password is changed here and nowhere else. It used to be two fields on
+    // the access screen, and a browser password manager fills a form's username
+    // box whenever it fills a password box beside it — so opening someone's
+    // permissions and pressing Save silently rewrote both their name and their
+    // password. With no password field on that form there is nothing for a
+    // manager to fill, which is the actual fix rather than another autocomplete
+    // hint browsers are free to ignore.
+    if (userPwPath && method === 'GET') {
+      const u = await env.DB.prepare('SELECT id, username FROM users WHERE id = ?').bind(userPwPath[1]).first();
+      if (!u) return new Response('Not found', { status: 404 });
+      return html(`
+${sidebarShell('users', currentUser, '', await pageBadges())}
+<div class="tlc-wrap">
+  <div class="page-title">Set a password for ${escapeHtml(u.username)}</div>
+  <div class="page-sub">The one screen that changes a password. Editing someone's access never touches it, so nothing your browser fills in on that screen can lock them out.</div>
+  <form method="POST" action="/users/edit/${u.id}/password" autocomplete="off">
+    <div class="card">
+      <div class="form-group"><label>New password <span style="color:#B85C3A;">*</span></label><input type="password" name="password" required autocomplete="new-password" placeholder="Min 8 characters"></div>
+      <div class="form-group"><label>Confirm new password <span style="color:#B85C3A;">*</span></label><input type="password" name="password2" required autocomplete="new-password"></div>
+      <p class="tlc-hint">Saving signs ${escapeHtml(u.username)} out of the admin everywhere. They sign back in with the new password.</p>
+    </div>
+    <div class="btn-row">
+      <button type="submit" class="btn btn-primary">Set password</button>
+      <a href="/users/edit/${u.id}" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
+    </div>
+  </form>
+</div>`, 'Set password');
+    }
+
+    if (userPwPath && method === 'POST') {
+      if (!hasPermission(currentUser, 'users_manage')) return new Response('Access denied.', { status: 403 });
+      const uid = userPwPath[1];
+      const target = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(uid).first();
+      if (!target) return new Response('Not found', { status: 404 });
+      const form = await request.formData();
+      const password = form.get('password') || '';
+      const password2 = form.get('password2') || '';
+      if (!password) return new Response('Password required.', { status: 400 });
+      if (password !== password2) return new Response('Passwords do not match.', { status: 400 });
+      if (password.length < 8) return new Response('Password must be at least 8 characters.', { status: 400 });
+      const hash = await hashPassword(password);
+      await env.DB.prepare('UPDATE users SET password_hash = ? WHERE id = ?').bind(hash, uid).run();
+      await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(uid).run();
+      return new Response('', { status: 302, headers: { Location: '/users?msg=password' } });
+    }
+
+    if (userEditPath && method === 'GET') {
+      const uid = userEditPath[1];
       const u = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(uid).first();
       if (!u) return new Response('Not found', { status: 404 });
       let selectedPerms = [];
@@ -9599,15 +9652,21 @@ ${sidebarShell('users', currentUser, '', await pageBadges())}
 <div class="tlc-wrap">
   <div class="page-title">${escapeHtml(u.username)}</div>
   <div class="page-sub">What this person can reach. Changing it takes effect the next time they load a screen, not at their next sign-in.</div>
-  <form method="POST" action="/users/edit/${u.id}">
+  <form method="POST" action="/users/edit/${u.id}" autocomplete="off">
     <div class="card">
-      <div class="form-group"><label>Username</label><input type="text" name="username" value="${(u.username || '').replace(/"/g,'&quot;')}" required autocomplete="off"></div>
-      <div class="form-group"><label>Email <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— used for password reset</span></label><input type="email" name="email" value="${(u.email || '').replace(/"/g,'&quot;')}" autocomplete="email" placeholder="user@timothystl.org"></div>
       <div class="form-group">
-        <label>New password <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— leave blank to keep current</span></label>
-        <input type="password" name="password" autocomplete="new-password" placeholder="Leave blank to keep current password">
+        <label>Username</label>
+        <div class="tlc-lockrow">
+          <input type="text" id="user-username" name="username" value="${(u.username || '').replace(/"/g,'&quot;')}" required readonly autocomplete="off">
+          <button type="button" class="btn btn-sm" data-unlock="user-username">Change</button>
+        </div>
+        <p class="tlc-hint">Locked while you edit access, so it cannot be rewritten by accident. Press Change to rename the account.</p>
       </div>
-      <div class="form-group"><label>Confirm new password</label><input type="password" name="password2" autocomplete="new-password"></div>
+      <div class="form-group"><label>Email <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— used for password reset</span></label><input type="email" name="email" value="${(u.email || '').replace(/"/g,'&quot;')}" autocomplete="off" placeholder="user@timothystl.org"></div>
+      <div class="form-group">
+        <label>Password</label>
+        <div class="tlc-static">Changed on its own screen, so nothing here can change it by mistake. <a href="/users/edit/${u.id}/password">Set a new password</a></div>
+      </div>
       <div class="form-group"><label>Permissions</label>${permissionCheckboxes(selectedPerms)}</div>
       <div class="form-group">
         <label>Status</label>
@@ -9625,36 +9684,29 @@ ${sidebarShell('users', currentUser, '', await pageBadges())}
 </div>`, `Edit User`);
     }
 
-    if (path.startsWith('/users/edit/') && method === 'POST') {
+    // ⚠ This route no longer reads a password from the form, and must not be
+    // given one back. The screen it serves is the one somebody opens to change
+    // permissions; a password field on it is what let a password manager
+    // rewrite an account's credentials as a side effect of ticking a box.
+    if (userEditPath && method === 'POST') {
       if (!hasPermission(currentUser, 'users_manage')) return new Response('Access denied.', { status: 403 });
-      const uid = path.split('/').pop();
+      const uid = userEditPath[1];
       const form = await request.formData();
       const username = (form.get('username') || '').trim();
       const email = (form.get('email') || '').trim().toLowerCase() || null;
-      const password = form.get('password') || '';
-      const password2 = form.get('password2') || '';
       const active = form.get('active') === '1' ? 1 : 0;
       const perms = Object.keys(PERMISSIONS).filter(k => form.get('perm_' + k) === '1');
       if (!username) return new Response('Username required.', { status: 400 });
-      if (password && password !== password2) return new Response('Passwords do not match.', { status: 400 });
-      if (password && password.length < 8) return new Response('Password must be at least 8 characters.', { status: 400 });
-      // Fetch existing user to detect permission or password changes
+      // Fetch existing user to detect permission changes
       const existingUser = await env.DB.prepare('SELECT permissions, active FROM users WHERE id = ?').bind(uid).first();
       const oldPerms = existingUser ? existingUser.permissions : '[]';
       const newPermsJson = JSON.stringify(perms);
       const permsChanged = oldPerms !== newPermsJson;
-      const passwordChanged = !!password;
       const deactivated = existingUser && existingUser.active && !active;
-      if (password) {
-        const hash = await hashPassword(password);
-        await env.DB.prepare('UPDATE users SET username = ?, email = ?, password_hash = ?, permissions = ?, active = ? WHERE id = ?')
-          .bind(username, email, hash, newPermsJson, active, uid).run();
-      } else {
-        await env.DB.prepare('UPDATE users SET username = ?, email = ?, permissions = ?, active = ? WHERE id = ?')
-          .bind(username, email, newPermsJson, active, uid).run();
-      }
+      await env.DB.prepare('UPDATE users SET username = ?, email = ?, permissions = ?, active = ? WHERE id = ?')
+        .bind(username, email, newPermsJson, active, uid).run();
       // Invalidate sessions only when something relevant changed
-      if (deactivated || passwordChanged || permsChanged) {
+      if (deactivated || permsChanged) {
         await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(uid).run();
       }
       return new Response('', { status: 302, headers: { Location: '/users?msg=updated' } });
