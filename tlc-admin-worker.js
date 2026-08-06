@@ -5585,9 +5585,21 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
     }
 
     // ── NEWSLETTER APPROVE / REJECT (requires newsletter_approve) ──
+    // Sent is permanent: neither of these has anywhere in the UI that offers
+    // them on an already-sent issue, but with no server-side check that was
+    // only ever a matter of the right stale tab or a stray click away —
+    // Reject in particular would have reset a genuinely sent issue back to
+    // draft with no warning. canEditNewsletter() is the one check the main
+    // save path already trusts for this.
     if (path.startsWith('/newsletter/approve/') && method === 'POST') {
       if (!hasPermission(currentUser, 'newsletter_approve')) return new Response('Access denied.', { status: 403 });
       const id = path.split('/').pop();
+      const existing = await env.DB.prepare(
+        'SELECT status, approval_status, sent_at, beehiiv_id, brevo_campaign_id FROM newsletters WHERE id = ?'
+      ).bind(id).first();
+      if (!canEditNewsletter(existing).ok) {
+        return new Response('', { status: 302, headers: { Location: '/newsletters?msg=locked' } });
+      }
       await env.DB.prepare("UPDATE newsletters SET status = 'published', approval_status = 'approved', approved_by_username = ? WHERE id = ?").bind(currentUser.username, id).run();
       return new Response('', { status: 302, headers: { Location: '/newsletters?msg=approved' } });
     }
@@ -5595,6 +5607,12 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
     if (path.startsWith('/newsletter/reject/') && method === 'POST') {
       if (!hasPermission(currentUser, 'newsletter_approve')) return new Response('Access denied.', { status: 403 });
       const id = path.split('/').pop();
+      const existing = await env.DB.prepare(
+        'SELECT status, approval_status, sent_at, beehiiv_id, brevo_campaign_id FROM newsletters WHERE id = ?'
+      ).bind(id).first();
+      if (!canEditNewsletter(existing).ok) {
+        return new Response('', { status: 302, headers: { Location: '/newsletters?msg=locked' } });
+      }
       await env.DB.prepare("UPDATE newsletters SET status = 'draft', approval_status = NULL, approved_by_username = NULL WHERE id = ?").bind(id).run();
       return new Response('', { status: 302, headers: { Location: '/newsletters?msg=rejected' } });
     }
@@ -9957,6 +9975,8 @@ ${sidebarShell('audit', currentUser, '', await pageBadges())}
       alertHtml = `<div class="alert alert-success">✓ Newsletter approved and published.</div>`;
     } else if (msgParam === 'rejected') {
       alertHtml = `<div class="alert alert-info">Newsletter returned to draft for revisions.</div>`;
+    } else if (msgParam === 'locked') {
+      alertHtml = `<div class="alert alert-info">That issue has already been sent, so it can't be approved or rejected. Duplicate it as a draft to work from a copy.</div>`;
     }
 
     const rows = newsletters.results;

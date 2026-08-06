@@ -1100,6 +1100,21 @@ group('a sent issue cannot be modified by any path');
   has(page, 'Duplicate as draft', 'and offers the way forward');
   has(page, 'tlc-nl-cols', 'and is the two-column editor — form beside a live preview');
   has(page, 'Live preview', 'which is labelled');
+
+  // Approve/Reject are a second path to the same state a sent issue must
+  // never re-enter — neither has a UI affordance on a sent issue, but with
+  // no server-side check either was one stray click or stale tab away from
+  // resetting a genuinely-sent issue back to draft.
+  const approveRes = await post(env, '/newsletter/approve/7', cookie, form({}));
+  eq(approveRes.status, 302, 'approve is refused with a redirect');
+  has(approveRes.headers.get('location'), 'msg=locked', 'and says why');
+  const rejectRes = await post(env, '/newsletter/reject/7', cookie, form({}));
+  eq(rejectRes.status, 302, 'reject is refused with a redirect');
+  has(rejectRes.headers.get('location'), 'msg=locked', 'and says why');
+
+  const untouched = db.prepare('SELECT status, approval_status FROM newsletters WHERE id=7').get();
+  eq(untouched.status, 'published', 'approve/reject left status alone');
+  eq(untouched.approval_status, null, 'and approval_status alone');
 }
 
 // Reported: the editor asked who gets the issue twice — a "Who gets it" select offering
