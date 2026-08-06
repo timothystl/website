@@ -46,6 +46,30 @@ export async function sendBrevoNewsletter(env, { subject, htmlContent, listIds, 
   return { success: true, campaignId: id };
 }
 
+// ── BREVO LIST SIZE ──────────────────────────────────────────
+// The "Sends" column and sent_count both need "how many people does this
+// actually reach", and that is the Brevo list — built up from Breeze imports
+// and manual adds as well as the website's own subscribe form. The local
+// newsletter_subscribers D1 table only ever holds the website-form signups,
+// so counting it there undercounts the real audience by everyone who was
+// added any other way. Returns null (never throws) so a Brevo outage or a
+// missing key falls back to the caller's own estimate rather than breaking
+// the screen.
+export async function getBrevoListCount(env, listId) {
+  const apiKey = env.BREVO_API_KEY;
+  if (!apiKey || !listId) return null;
+  try {
+    const resp = await fetch(`https://api.brevo.com/v3/contacts/lists/${listId}`, {
+      headers: { 'api-key': apiKey }
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    return Number.isFinite(data.totalSubscribers) ? data.totalSubscribers : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 // ── BREVO CAMPAIGN CANCEL ────────────────────────────────────
 // Deletes a not-yet-sent scheduled campaign so it never goes out.
 export async function cancelBrevoCampaign(env, campaignId) {

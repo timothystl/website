@@ -33,7 +33,7 @@ import { SECTIONS, section as sectionCfg, columnsOf, filtersOf } from './admin/s
 import { dayKey, pruneBefore, countInMonth, tapCountLabel, everCounted, validTapId } from './admin/taps.js';
 import { VALUES, valueByKey, normalizeValue } from './admin/values.js';
 import { hashPassword, verifyPassword, createSession, getSession, deleteSession, sessionCookieHeader, clearSessionCookieHeader, logAudit, hasPermission, ALL_PERMISSIONS, PERMISSIONS, PERMISSION_PRESETS, migratePermissionKeys } from './admin/auth.js';
-import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHtml, cancelBrevoCampaign } from './admin/email.js';
+import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHtml, cancelBrevoCampaign, getBrevoListCount } from './admin/email.js';
 import { handleGymRoutes, sweepExpiredItems, extractImageKeys } from './admin/gym.js';
 import { migrateLegacyPage, starterBlocks, sanitizeBlocks, sanitizeBlock, parseBlocks, newBlock,
          renderPage, renderBlock, BLOCK_DEFS, BLOCK_TYPE_KEYS, GROUPS, BG, INK, SIZES, SPLITS, TONES,
@@ -3217,6 +3217,15 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
       <span class="tlc-tail-when">${timeAgo(a.created_at)}</span>
     </div>`).join('');
 
+      // The real audience is the Brevo list, not the local signup table —
+      // that table only holds website-form signups and badly undercounts an
+      // audience also built from Breeze imports/manual adds. Falls back to
+      // the local count (rather than showing nothing) if Brevo can't be reached.
+      const subscriberCount = async () => {
+        const n = await getBrevoListCount(env, parseInt(env.BREVO_LIST_ID || '0', 10));
+        return n != null ? { n } : one('SELECT COUNT(*) AS n FROM newsletter_subscribers');
+      };
+
       // ── "Overview": the same week as four numbers ────────────
       // Counted only when the Overview layout is the one being rendered.
       // "Needs you" is the default screen everybody lands on, and it was
@@ -3224,7 +3233,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
       const [liveNews, liveMinistries, subscribers, upcomingBookings] = view === 'overview' ? await Promise.all([
         canNews ? one("SELECT COUNT(*) AS n FROM news_items WHERE expire_date IS NULL OR expire_date >= date('now')") : null,
         one("SELECT COUNT(*) AS n FROM youth_pages"),
-        hasPermission(currentUser, 'settings_manage') ? one('SELECT COUNT(*) AS n FROM newsletter_subscribers') : null,
+        hasPermission(currentUser, 'settings_manage') ? subscriberCount() : null,
         canGym ? one("SELECT COUNT(*) AS n FROM gym_bookings WHERE status='confirmed' AND booking_date >= date('now')") : null,
       ]) : [null, null, null, null];
       const tiles = [
@@ -5408,12 +5417,11 @@ addEvent();
           // sent_at/sent_count are what isSent() and the list's "Sent" pill
           // read — without this the email genuinely goes out but the row
           // keeps reading Draft, same as the dedicated /send-email/:id route.
+          // The count is the real Brevo list size, not the local signup
+          // table — that table only holds website-form signups and badly
+          // undercounts an audience also built from Breeze imports/manual adds.
           if (emailSend === 'all' && result.success) {
-            let recipients = null;
-            try {
-              const c = await env.DB.prepare('SELECT COUNT(*) AS n FROM newsletter_subscribers').first();
-              recipients = c ? c.n : null;
-            } catch (_) { recipients = null; }
+            const recipients = await getBrevoListCount(env, listId);
             await env.DB.prepare(
               "UPDATE newsletters SET sent_at = COALESCE(sent_at, ?), sent_count = COALESCE(sent_count, ?) WHERE id = ?"
             ).bind(new Date().toISOString(), recipients, newsletterId).run();
@@ -6076,13 +6084,12 @@ ${classesJs}
       // Sending to all = publish the newsletter so it appears on the website,
       // and record what actually went out. sent_at is what locks the issue from
       // then on, and sent_count is what the list shows instead of guessing —
-      // "Sent 24 July to 609 subscribers" is a fact, not an estimate.
+      // "Sent 24 July to 609 subscribers" is a fact, not an estimate. The count
+      // comes from the real Brevo list, not the local signup table — that table
+      // only holds website-form signups and badly undercounts an audience also
+      // built from Breeze imports/manual adds.
       if (listType === 'all' && result.success) {
-        let recipients = null;
-        try {
-          const c = await env.DB.prepare('SELECT COUNT(*) AS n FROM newsletter_subscribers').first();
-          recipients = c ? c.n : null;
-        } catch (_) { recipients = null; }
+        const recipients = await getBrevoListCount(env, listId);
         await env.DB.prepare(
           "UPDATE newsletters SET status = 'published', approval_status = 'approved', approved_by_username = ?, published_at = COALESCE(published_at, ?), sent_at = COALESCE(sent_at, ?), sent_count = COALESCE(sent_count, ?) WHERE id = ?"
         ).bind(currentUser.username, new Date().toISOString().split('T')[0], new Date().toISOString(), recipients, id).run();
@@ -9957,8 +9964,16 @@ ${sidebarShell('audit', currentUser, '', await pageBadges())}
     // How many an issue went to, or — for one not yet sent — how many it would
     // go to today. Both answer the question somebody brings to this column;
     // the difference between them is exactly the difference between "Sent" and
-    // everything else, which the Status column already states.
-    const audienceNow = await env.DB.prepare('SELECT COUNT(*) AS n FROM newsletter_subscribers').first().catch(() => null);
+    // everything else, which the Status column already states. The real
+    // audience is the Brevo list, not the local signup table — that table
+    // only holds website-form signups and badly undercounts an audience also
+    // built from Breeze imports/manual adds. Falls back to the local count
+    // (rather than showing nothing) if Brevo can't be reached.
+    const brevoListId = parseInt(env.BREVO_LIST_ID || '0', 10);
+    const brevoCount = await getBrevoListCount(env, brevoListId);
+    const audienceNow = brevoCount != null
+      ? { n: brevoCount }
+      : await env.DB.prepare('SELECT COUNT(*) AS n FROM newsletter_subscribers').first().catch(() => null);
 
     const dateCell = (r, sent) => {
       const iso = r.published_at || r.scheduled_send_at || r.sent_at || '';
