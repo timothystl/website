@@ -5396,6 +5396,16 @@ addEvent();
       // Approval workflow: editors without newsletter_approve submit for approval
       if (action === 'publish' && !hasPermission(currentUser, 'newsletter_approve')) {
         await env.DB.prepare("UPDATE newsletters SET status = 'draft', approval_status = 'pending' WHERE id = ?").bind(newsletterId).run();
+        // This is what makes the approval queue worth having — without it,
+        // "awaiting approval" is a tag nobody notices until they happen to
+        // open the newsletter list. Never awaited, same reasoning as every
+        // other push trigger here: a push failure must never turn into a
+        // failure to submit.
+        ctx.waitUntil(pushToAllSubscribers(env, {
+          title: 'Newsletter awaiting approval',
+          body: `${currentUser.username} submitted "${subject}" for approval.`,
+          tag: 'newsletter-approval', url: `/edit/${newsletterId}`,
+        }));
         return new Response('', {
           status: 302,
           headers: { Location: `/newsletters?msg=submitted&subject=${encodeURIComponent(subject)}` }
