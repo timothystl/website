@@ -367,6 +367,25 @@ export const SIDEBAR_JS = `(function(){
   });
 })();`;
 
+// A locked field is one a browser password manager would otherwise rewrite
+// behind the office's back. It stays read-only until somebody presses the
+// button beside it, so a rename is always a decision rather than an autofill.
+// The button removes itself once used — a control that has already done its
+// one job reads as another one still waiting to be pressed.
+export const LOCKED_FIELD_JS = `(function(){
+  document.addEventListener('click', function(e){
+    var btn = e.target.closest && e.target.closest('[data-unlock]');
+    if (!btn) return;
+    e.preventDefault();
+    var field = document.getElementById(btn.getAttribute('data-unlock'));
+    if (!field) return;
+    field.removeAttribute('readonly');
+    field.focus();
+    try { field.setSelectionRange(field.value.length, field.value.length); } catch (_) {}
+    btn.parentNode && btn.parentNode.removeChild(btn);
+  });
+})();`;
+
 // The state word beside a drawer toggle follows the switch. Rendering it once
 // server-side and leaving it stale would be worse than not having it — it
 // would confidently say "Showing" about something now hidden.
@@ -1026,6 +1045,13 @@ export const ADMIN_UI_CSS = `
   width:100%;border:1px solid var(--tlc-edge);border-radius:8px;padding:9px 11px;font:400 13.5px var(--tlc-sans);
   color:var(--tlc-ink);background:#fff;outline:none;}
 .tlc-wrap input:focus,.tlc-wrap textarea:focus,.tlc-wrap select:focus{border-color:var(--tlc-blue);box-shadow:0 0 0 3px rgba(46,126,166,.14);}
+/* Read-only is a sand fill, never greyed text — grey text reads as broken.
+   Paired with the unlock button beside it, this is how a field says it is
+   waiting for a deliberate press rather than sitting there failing. */
+.tlc-wrap input[readonly],.tlc-wrap textarea[readonly]{background:var(--tlc-sand);}
+.tlc-lockrow{display:flex;gap:8px;align-items:center;}
+.tlc-lockrow input{flex:1;min-width:0;}
+.tlc-lockrow .btn{flex:none;}
 .tlc-wrap .btn-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:16px;}
 .tlc-wrap .btn{display:inline-flex;align-items:center;gap:8px;font:600 13px var(--tlc-sans);padding:10px 18px;
   border-radius:8px;border:1px solid var(--tlc-edge);background:#fff;color:var(--tlc-navy);text-decoration:none;cursor:pointer;

@@ -1339,6 +1339,62 @@ group('subscribers fetches Brevo pages together, not one at a time');
   ok(!body2.includes('Page 500'), 'only the page that actually failed is missing');
 }
 
+group('editing access cannot change a username or a password by accident');
+{
+  // A browser password manager fills a form's username box whenever it fills a
+  // password box beside it. The access screen carried both, so opening it to
+  // tick a permission and pressing Save silently rewrote the account's name and
+  // its password. The fix is that the form no longer HAS a password field —
+  // there is nothing for a manager to fill — rather than another autocomplete
+  // hint browsers are free to ignore.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  db.prepare('INSERT INTO users (username, password_hash, permissions, created_at, active, email) VALUES (?,?,?,?,1,?)')
+    .run('jinah', 'pbkdf2:1:known:hash', JSON.stringify(['news_edit']), '2026-01-01T00:00:00Z', 'jinah@timothystl.org');
+  const target = db.prepare("SELECT id FROM users WHERE username='jinah'").get().id;
+
+  const edit = await (await call(env, `/users/edit/${target}`, { cookie })).text();
+  ok(!/name="password"/.test(edit), 'the access screen has no password field at all');
+  ok(!/name="password2"/.test(edit), 'nor a confirm field');
+  has(edit, 'readonly', 'the username is locked against a password manager');
+  has(edit, 'data-unlock="user-username"', 'with a deliberate press to unlock it');
+  has(edit, `/users/edit/${target}/password`, 'and a link to the one screen that sets a password');
+
+  // The server half of the same rule: even a crafted POST carrying a password
+  // must not change one, or the fix is only in the markup.
+  const res = await call(env, `/users/edit/${target}`, {
+    method: 'POST', cookie,
+    form: { username: 'jinah', email: 'jinah@timothystl.org', active: '1', password: 'hunter2hunter2', password2: 'hunter2hunter2', perm_news_edit: '1' },
+  });
+  eq(res.status, 302, 'saving access redirects');
+  eq(db.prepare('SELECT password_hash FROM users WHERE id = ?').get(target).password_hash, 'pbkdf2:1:known:hash',
+    'and the password hash is untouched by a password posted at the access form');
+
+  // The dedicated screen is where it really changes.
+  const pw = await call(env, `/users/edit/${target}/password`, { cookie });
+  eq(pw.status, 200, 'the password screen answers — the id is read past the word password');
+  has(await pw.text(), 'Set a password for jinah', 'and names who it is for');
+
+  const short = await call(env, `/users/edit/${target}/password`, {
+    method: 'POST', cookie, form: { password: 'short', password2: 'short' },
+  });
+  eq(short.status, 400, 'a password under 8 characters is refused');
+
+  const mismatch = await call(env, `/users/edit/${target}/password`, {
+    method: 'POST', cookie, form: { password: 'a-real-password', password2: 'a-real-passwordX' },
+  });
+  eq(mismatch.status, 400, 'and two that do not match');
+  eq(db.prepare('SELECT password_hash FROM users WHERE id = ?').get(target).password_hash, 'pbkdf2:1:known:hash',
+    'neither refusal left a half-written hash behind');
+
+  const set = await call(env, `/users/edit/${target}/password`, {
+    method: 'POST', cookie, form: { password: 'a-real-password', password2: 'a-real-password' },
+  });
+  eq(set.status, 302, 'a good pair is accepted');
+  ok(db.prepare('SELECT password_hash FROM users WHERE id = ?').get(target).password_hash !== 'pbkdf2:1:known:hash',
+    'and the password really changed on the screen that exists to change it');
+}
+
 group('the permission checkboxes are the truth');
 {
   const { db, env } = await boot();
