@@ -1956,6 +1956,81 @@ group('Giving: the ladders are shown, with what each button will ask for');
   lacks(published, 'still showing the built-in version', 'the warning goes once the page is published');
 }
 
+// Dinger, seeing the read-only panel: "here you now just are showing what the
+// amounts are but no way to EDIT them." So they are edited here, in the same
+// panel-and-drawer shape as Funds and Amount tiers beside them. What makes
+// that safe is not a second table — there is exactly one copy of a ladder row,
+// the block on the giving page, and these routes are a second door onto it.
+group('Giving: a ladder row is edited here, and it is the same record');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const post = (path, form) => worker.fetch(new Request('https://admin.timothystl.org' + path, {
+    method: 'POST',
+    headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(form).toString(),
+  }), env, ctx);
+  const ladders = () => JSON.parse(db.prepare("SELECT blocks FROM pages WHERE id='give-landing'").get().blocks)
+    .filter((b) => b.type === 'amounts');
+
+  const first = ladders()[0];
+  ok(first && first.items.length, 'the seeded giving page has a ladder with rows on it');
+
+  const body = await (await call(env, '/giving', { cookie })).text();
+  has(body, 'data-sortlist="/giving-ladder/reorder', 'the rows drag to reorder');
+  has(body, 'href="/giving?row=', 'and every row has an Edit that opens a drawer');
+  has(body, '+ Add amount', 'a ladder can gain a row');
+
+  // Editing an amount rewrites that row and nothing else.
+  const before = first.items.length;
+  await post('/giving-ladder/update', { block: first.id, index: '0', amount: '42', period: 'week', body: 'Buys a thing.' });
+  const after = ladders()[0];
+  eq(after.items.length, before, 'editing a row does not add or drop one');
+  eq(after.items[0].amount, '42', 'the amount is stored');
+  eq(after.items[0].period, 'week', 'and its period');
+  has(after.items[0].body, 'Buys a thing.', 'and the sentence beside it');
+
+  // ⚠ The draft, never the live copy. Editing from a side screen must not be
+  // able to change the giving page without passing through Publish.
+  const row = db.prepare("SELECT blocks, published_blocks FROM pages WHERE id='give-landing'").get();
+  ok(!String(row.published_blocks || '').includes('Buys a thing.'),
+     'the edit lands in the draft and NOT in what the site renders');
+
+  // Rich text already in a description survives an edit that leaves the words
+  // alone — otherwise editing an amount would quietly flatten it.
+  const blocks2 = JSON.parse(row.blocks);
+  const lad2 = blocks2.find((b) => b.type === 'amounts');
+  lad2.items[1].body = '<p>Puts <em>flowers</em> on the altar.</p>';
+  db.prepare("UPDATE pages SET blocks=? WHERE id='give-landing'").run(JSON.stringify(blocks2));
+  await post('/giving-ladder/update', { block: lad2.id, index: '1', amount: '30', period: 'week',
+    body: 'Puts flowers on the altar.' });
+  has(ladders()[0].items[1].body, '<em>flowers</em>', 'unchanged words keep their markup');
+
+  // Adding and deleting.
+  await post('/giving-ladder/add', { block: first.id, amount: '7', period: 'month', body: 'A new row.' });
+  eq(ladders()[0].items.length, before + 1, 'a row can be added');
+  await post('/giving-ladder/delete/' + encodeURIComponent(first.id) + '/' + before, {});
+  eq(ladders()[0].items.length, before, 'and deleted again');
+
+  // Reorder posts the whole resulting order, same contract as the menu.
+  const idx = ladders()[0].items.map((_, i) => i);
+  const reversed = idx.slice().reverse();
+  const firstAmountBefore = ladders()[0].items[0].amount;
+  await post('/giving-ladder/reorder?block=' + encodeURIComponent(first.id), { order: JSON.stringify(reversed) });
+  const reordered = ladders()[0];
+  eq(reordered.items.length, idx.length, 'reordering never loses a row');
+  eq(reordered.items[reordered.items.length - 1].amount, firstAmountBefore, 'the first row is now last');
+
+  // A block id that is not on the page is a stale tab, and the answer is the
+  // screen again — not a page of blocks written from a request about something
+  // that is no longer there.
+  const intact = db.prepare("SELECT blocks FROM pages WHERE id='give-landing'").get().blocks;
+  const res = await post('/giving-ladder/update', { block: 'no-such-block', index: '0', amount: '999' });
+  eq(res.status, 302, 'an unknown ladder redirects');
+  eq(db.prepare("SELECT blocks FROM pages WHERE id='give-landing'").get().blocks, intact,
+     'and writes nothing at all');
+}
+
 group('Giving: funds and amounts are two panels, side by side');
 {
   const { db, env } = await boot();

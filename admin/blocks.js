@@ -108,6 +108,7 @@ export const BLOCK_DEFS = {
   },
   slideshow: {
     label: 'Welcome banner', glyph: '❏',
+    align: true,
     defaults: { title: 'A line that says who you are', subtitle: 'A sentence underneath it.', spaceAbove: 0, spaceBelow: 24 },
     photo: true, subtitle: true, banner: true, infoCard: true,
     links: true, defaultLinks: [{ title: 'Plan your visit', url: '/visit' }, { title: 'Watch a service', url: '/worship' }],
@@ -115,6 +116,7 @@ export const BLOCK_DEFS = {
   },
   quicklinks: {
     label: 'Link tiles', glyph: '⊞',
+    align: true,
     defaults: { title: 'Start here', spaceAbove: 24, spaceBelow: 24 },
     items: true, itemFields: ['title', 'url', 'meta'], itemUrlFields: ['url'], itemLabel: 'Tile',
     itemPlaceholders: { title: 'Label', url: 'Where it goes', meta: 'Small note' },
@@ -127,12 +129,14 @@ export const BLOCK_DEFS = {
   },
   sermon: {
     label: 'Latest sermon', glyph: '♪',
+    align: true,
     defaults: { title: 'The latest sermon', spaceAbove: 24, spaceBelow: 24 },
     auto: 'sermon', autoNote: 'Shows the newest sermon from the sermon library. Nothing to update by hand.',
     autoCount: false,
   },
   news: {
     label: 'News highlights', glyph: '▤',
+    align: true,
     defaults: { title: 'What\u2019s happening', spaceAbove: 24, spaceBelow: 24 },
     auto: 'news', autoNote: 'Shows the newest posts. Pin a post to keep it in front.',
   },
@@ -142,6 +146,7 @@ export const BLOCK_DEFS = {
   // shape, so pages already using "News highlights" are untouched by this.
   newsfeed: {
     label: 'News feed', glyph: '☰',
+    align: true,
     defaults: { title: 'Announcements & events', spaceAbove: 24, spaceBelow: 24 },
     auto: 'newsfeed',
     autoNote: 'Every current announcement and event. An event (one with a date) sorts soonest-first and drops off once it has passed; a plain announcement sorts newest-first. Nothing to update by hand.',
@@ -149,23 +154,27 @@ export const BLOCK_DEFS = {
   },
   newsletterarchive: {
     label: 'Newsletter archive', glyph: '✉',
+    align: true,
     defaults: { title: 'Weekly newsletters', spaceAbove: 24, spaceBelow: 24, count: 2 },
     auto: 'newsletterarchive',
     autoNote: 'Every sent newsletter, newest first. The count below is how many of the most recent get a preview - the rest are just a title to click.',
   },
   staff: {
     label: 'Staff grid', glyph: '☺',
+    align: true,
     defaults: { title: 'People to know', spaceAbove: 24, spaceBelow: 24 },
     auto: 'staff', autoNote: 'Pulls from the staff directory.',
   },
   servicetimes: {
     label: 'Service times', glyph: '◷',
+    align: true,
     defaults: { title: 'When we gather', spaceAbove: 24, spaceBelow: 24 },
     auto: 'servicetimes', autoNote: 'Reads the one service-times record in the admin, so a change lands on every page at once.',
     autoCount: false,
   },
   map: {
     label: 'Map & address', glyph: '◎',
+    align: true,
     defaults: { title: 'Find us', body: '<p>Where to park and which door to use.</p>', spaceAbove: 24, spaceBelow: 24 },
     richBody: true, auto: 'map', autoNote: 'The address, phone and email come from the church details in the admin.',
     autoCount: false, split: true,
@@ -187,6 +196,7 @@ export const BLOCK_DEFS = {
   },
   columns: {
     label: 'Columns', glyph: '▥',
+    align: true,
     defaults: { title: 'Three ways to take part', spaceAbove: 24, spaceBelow: 24, cols: 2 },
     items: true, itemFields: ['title', 'body'], richItemFields: ['body'],
     itemLabel: 'Column',
@@ -207,6 +217,7 @@ export const BLOCK_DEFS = {
   // half-finished. /ministries mixes a wordmark, a roundel and a photograph.
   cardgrid: {
     label: 'Card grid', glyph: '▩',
+    align: true,
     defaults: {
       eyebrow: 'WHAT WE OFFER', title: 'Ways to take part', subtitle: '',
       spaceAbove: 24, spaceBelow: 24, cols: 3, align: 'left', topRule: false,
@@ -228,33 +239,39 @@ export const BLOCK_DEFS = {
   },
   video: {
     label: 'Video', glyph: '▶',
+    align: true,
     defaults: { title: 'Watch', spaceAbove: 24, spaceBelow: 24 },
     video: true,
   },
   gallery: {
     label: 'Photo gallery', glyph: '▦',
+    align: true,
     defaults: { title: 'Through the church year', spaceAbove: 24, spaceBelow: 24 },
     items: true, itemFields: ['url', 'title'], itemUrlFields: ['url'], itemLabel: 'Photo', gallery: true,
     defaultItems: [],
   },
   posts: {
     label: 'Posts feed', glyph: '☰',
+    align: true,
     defaults: { title: 'From this ministry', spaceAbove: 24, spaceBelow: 24 },
     feed: 'posts', auto: 'posts', autoNote: 'Shows the newest posts for this page.',
   },
   faq: {
     label: 'FAQ', glyph: '?',
+    align: true,
     defaults: { title: 'Questions people ask', spaceAbove: 24, spaceBelow: 24 },
     items: true, itemFields: ['title', 'body'], richItemFields: ['body'], itemLabel: 'Question',
     defaultItems: [{ title: 'A question people ask', body: '<p>The answer.</p>' }],
   },
   events: {
     label: 'Upcoming events', glyph: '▤',
+    align: true,
     defaults: { title: 'Upcoming', spaceAbove: 24, spaceBelow: 24 },
     feed: 'events', auto: 'events', autoNote: 'Pulls from the church calendar.',
   },
   times: {
     label: 'Meeting times', glyph: '◷',
+    align: true,
     defaults: { title: 'When we gather', spaceAbove: 24, spaceBelow: 24 },
     items: true, itemFields: ['title', 'body', 'meta'], itemLabel: 'Row',
     itemPlaceholders: { title: 'Who', body: 'When', meta: 'Where' },
@@ -262,11 +279,13 @@ export const BLOCK_DEFS = {
   },
   calendar: {
     label: 'Calendar', glyph: '▩',
+    align: true,
     defaults: { title: 'Calendar', spaceAbove: 24, spaceBelow: 24, url: '' },
     url: true, urlLabel: 'Google Calendar embed URL',
   },
   download: {
     label: 'File download', glyph: '⤓',
+    align: true,
     defaults: { title: 'A document to download', body: 'PDF', spaceAbove: 16, spaceBelow: 16 },
     url: true, urlLabel: 'File URL',
   },
@@ -277,6 +296,7 @@ export const BLOCK_DEFS = {
   },
   buttons: {
     label: 'Button bar', glyph: '⬒',
+    align: true,
     defaults: { spaceAbove: 16, spaceBelow: 16 },
     items: true, itemFields: ['title', 'url'], itemUrlFields: ['url'], itemLabel: 'Button',
     itemPlaceholders: { title: 'Button label', url: 'https://…' },
@@ -288,6 +308,7 @@ export const BLOCK_DEFS = {
   },
   partners: {
     label: 'Partner logos', glyph: '◈',
+    align: true,
     defaults: { title: 'With thanks to', spaceAbove: 24, spaceBelow: 24 },
     items: true, itemFields: ['title', 'url', 'meta'], itemUrlFields: ['url', 'meta'], itemLabel: 'Partner',
     itemPlaceholders: { title: 'Partner name', url: 'Link (optional)', meta: 'Logo image URL' },
@@ -370,19 +391,19 @@ export const BLOCK_DEFS = {
   },
 };
 
-// Which block types opt into the shared "align" chip and .tlcb--center CSS
-// (below) is a def-level flag, `align: true`, same idiom as `richBody`/
-// `photo`/`url` — one source of truth, not a second list to keep in step.
-// Eight types have it now — a flex column: a heading, some prose, and (for
-// five of them) a row of buttons/links — close enough in shape to Card
-// grid's own centering (its own long-standing, separate mechanism, untouched)
-// that one shared rule covers all of them. Everything else is either
-// self-filling (Sermon, News, Staff, Service times, Map, Posts, Events — the
-// layout is the data's, not typed prose), a grid of its own (Columns, FAQ,
-// Times, Partners, Buttons, Quick links — centering a grid's cells and
-// centering the grid itself are different problems, each needing its own
-// bespoke CSS, not this shared rule), or has no text to center at all
-// (Spacer).
+// Which block types offer the Alignment chips is a def-level flag,
+// `align: true`, same idiom as `richBody`/`photo`/`url` — one source of truth,
+// not a second list to keep in step.
+//
+// ⚠ EVERY type has it now except Spacer, and that is a deliberate reversal.
+// It used to be ten, and the reasoning written here for excluding the rest was
+// that "centering a grid's cells and centering the grid itself are different
+// problems, each needing its own bespoke CSS". That is true, and it is not a
+// reason to withhold the control — it is a description of what the CSS below
+// has to do. Dinger asked for left/centre/right on "all blocks… and that
+// should work for buttons too" while looking at a Button bar, which was one of
+// the excluded ones: a lone button sitting hard left with no way to move it.
+// Spacer is the one genuine exclusion — it has no content to align.
 //
 // ⚠ Hero was believed "already centered by design" and left off this list —
 // wrong. `.tlcb-hero{text-align:center}` only ever centered inline text
@@ -395,7 +416,7 @@ export const BLOCK_DEFS = {
 // this shared mechanism changes nothing for a page that has never touched
 // its Alignment chip — 'left' was already the truth on screen, not a new
 // default being imposed.
-export const CENTER_ALIGNABLE_TYPES = new Set(
+export const ALIGNABLE_TYPES = new Set(
   Object.keys(BLOCK_DEFS).filter((k) => BLOCK_DEFS[k].align)
 );
 
@@ -595,7 +616,10 @@ export function sanitizeBlock(b) {
     // needs 4-up for /worship; `columns` only ever offers 2 or 3 in its own
     // inspector, and a crafted 4 there is a wide text row, not a broken page.
     cols: [2, 3, 4].includes(Number(b.cols)) ? Number(b.cols) : 2,
-    align: b.align === 'center' ? 'center' : 'left',
+    // Left, centre or right. Anything else is 'left' — an unknown alignment is
+    // a stale tab or a crafted POST, and the answer to both is the default the
+    // page has always had rather than a third state nothing has CSS for.
+    align: b.align === 'center' || b.align === 'right' ? b.align : 'left',
     // Task 13c. Full or Half — a property of the BLOCK, never a container the
     // office drags things into. The rail is a flat list and stays one; pairing
     // is what two adjacent halves DO, not a level of nesting they live in.
@@ -886,35 +910,63 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-cg--center{text-align:center;}
 .tlcb-cg--center .tlcb-cg-img img{margin:0 auto;}
 .tlcb-cg--center .tlcb-cg-intro{margin-left:auto;margin-right:auto;}
-/* CENTER_ALIGNABLE_TYPES's shared rule (see its own comment for which seven
-   block types this is and why). text-align inherits from .tlcb--center down
-   into .tlcb-prose/.tlcb-give-note/etc. on its own — nothing in that chain
-   resets it — so most of this is only the extra rule each type needs for
-   whatever ISN'T plain text: a flex action row (justify-content doesn't
-   inherit), or a flex column whose own align-items would otherwise leave
-   the boxes hugging the left edge even with their own text centered. */
-.tlcb--center.tlcb--give,.tlcb--center.tlcb--text,.tlcb--center.tlcb--textphoto,
-.tlcb--center.tlcb--callout,.tlcb--center.tlcb--form,.tlcb--center.tlcb--newsletter,
-.tlcb--center.tlcb--hero,.tlcb--center.tlcb--giving{text-align:center;}
-.tlcb--center .tlcb-inline{justify-content:center;}
-/* Amount ladder centres its INTRO ONLY, named rather than inherited. The rows
-   below it are "$100 /week ———— [Give $100]" — a left column and a right
-   button — and centring their text is not what "centre this section" means to
-   anybody looking at it. The live leadership section is exactly this: a
-   centred heading over left-aligned rows. Written as three explicit selectors
-   rather than as text-align:center plus a text-align:left reset on the row,
-   because a rule that exists only to undo the rule above it is the shape that
-   goes wrong the moment a fourth element is added. */
-.tlcb--center.tlcb--amounts .tlcb-am>.tlcb-eyebrow,.tlcb--center.tlcb--amounts .tlcb-am>.tlcb-head,
-.tlcb--center.tlcb--amounts .tlcb-am>.tlcb-prose,.tlcb--center.tlcb--amounts .tlcb-am>.tlcb-am-lab,
-.tlcb--center.tlcb--amounts .tlcb-am>.tlcb-am-note{text-align:center;}
+.tlcb-cg--right{text-align:right;}
+.tlcb-cg--right .tlcb-cg-img img{margin-left:auto;}
+.tlcb-cg--right .tlcb-cg-intro{margin-left:auto;}
+/* ── Alignment, for every block type except Spacer ────────────────────────
+   ALIGNABLE_TYPES (see its comment) decides who gets the chips; these are the
+   rules those chips drive. One pair of classes, tlcb--center/tlcb--right,
+   with left deliberately having NO class at all — left is what every block
+   has always rendered as, so the untouched page keeps rendering from exactly
+   the CSS it always did rather than from a new rule that happens to agree.
+
+   text-align is the workhorse and it INHERITS, so one declaration reaches
+   every heading, eyebrow and paragraph in the subtree without naming them.
+   What follows it is only the things inheritance cannot do: a flex row (whose
+   justify-content is not inherited), a flex column whose own align-items
+   would leave the boxes hugging one edge with their text aligned inside them,
+   and a max-width element that needs its side margins moved. */
+.tlcb--center{text-align:center;}
+.tlcb--right{text-align:right;}
+/* Every row of buttons or links on the site, in one place: tlcb-inline is
+   the action row shared by the banner-shaped types, tlcb-btns is the Button
+   bar's own row (and the Welcome banner's), tlcb-alert is the Notice bar,
+   which is a horizontal row rather than a heading+prose column — so
+   "centred" there means moving the row, not the text inside it. Button bar
+   is the block Dinger had selected when he asked for this. */
+.tlcb--center .tlcb-inline,.tlcb--center .tlcb-btns,.tlcb--center .tlcb-alert{justify-content:center;}
+.tlcb--right .tlcb-inline,.tlcb--right .tlcb-btns,.tlcb--right .tlcb-alert{justify-content:flex-end;}
+/* The flex columns. .tlcb-band-text (Welcome banner, Page banner, Callout)
+   sets align-items:flex-start itself, which beats any amount of text-align.
+   A tag pinned with align-self has to be moved on its own for the same
+   reason — it opts out of the container's alignment by definition. */
+.tlcb--center .tlcb-band-text{align-items:center;}
+.tlcb--right .tlcb-band-text{align-items:flex-end;}
+.tlcb--center .tlcb-callout-tag{align-self:center;}
+.tlcb--right .tlcb-callout-tag{align-self:flex-end;}
+/* Elements carrying their own max-width sit at the left of the space they are
+   given, whatever their text does, until the side margins are moved. */
+.tlcb--center .tlcb-hero-sub,.tlcb--center .tlcb-cg-intro{margin-left:auto;margin-right:auto;}
+.tlcb--right .tlcb-hero-sub,.tlcb--right .tlcb-cg-intro{margin-left:auto;margin-right:0;}
+/* ⚠ The amount ladder aligns its INTRO ONLY. Its rows are
+   "$100 /week ———— [Give $100]" — a left column and a right button — and
+   moving that text is not what "centre this section" means to anybody looking
+   at it. The live leadership section is exactly this shape: a centred heading
+   over left-aligned rows.
+   This used to be written as a list of the five elements to centre, on the
+   grounds that a rule existing only to undo the rule above it goes wrong the
+   moment a sixth element is added. That reasoning inverted when alignment
+   became general: the undo is now the robust half. Anything added INSIDE a
+   row inherits the row's own left, and anything added to the intro inherits
+   the block's alignment, with no list to keep in step either way. */
+.tlcb--center.tlcb--amounts .tlcb-am-row,.tlcb--right.tlcb--amounts .tlcb-am-row{text-align:left;}
 .tlcb--center.tlcb--amounts .tlcb-am>.tlcb-prose{margin-left:auto;margin-right:auto;max-width:680px;}
-.tlcb--center.tlcb--callout .tlcb-band-text,.tlcb--center.tlcb--hero .tlcb-band-text{align-items:center;}
-.tlcb--center.tlcb--hero .tlcb-hero-sub{margin-left:auto;margin-right:auto;}
-/* Alert is a one-line horizontal notice row, not a heading+prose column like
-   the other six — text-align has nothing to act on, so "centered" here means
-   centering the row itself within the block's width. */
-.tlcb--center.tlcb--alert .tlcb-alert{justify-content:center;}
+.tlcb--right.tlcb--amounts .tlcb-am>.tlcb-prose{margin-left:auto;margin-right:0;max-width:680px;}
+/* The three type-specific rules that used to sit here — Callout and Hero's
+   band-text align-items, Hero's subtitle margins, and the Notice bar's row
+   justify-content — are gone, not lost: each is now the generic rule above
+   that does the same job for every type at once. Two rules for one job is two
+   places to disagree, and the generic one had to exist regardless. */
 .tlcb-media{order:var(--tlcb-media-order,0);min-height:150px;border-radius:8px;background:#E4EAF2 center/cover no-repeat;
   display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;}
 .tlcb-media img{width:100%;height:100%;object-fit:cover;display:block;border-radius:8px;}
@@ -1885,7 +1937,7 @@ function renderInner(b, opts) {
     const intro = b.subtitle
       ? field(opts, b, 'subtitle', 'div', 'tlcb-cg-intro', esc(b.subtitle), ' data-ph="One short paragraph of introduction."')
       : (opts.editing ? field(opts, b, 'subtitle', 'div', 'tlcb-cg-intro', '', ' data-ph="One short paragraph of introduction."') : '');
-    return `<div class="tlcb-stack tlcb-cg${b.align === 'center' ? ' tlcb-cg--center' : ''}${b.topRule ? ' tlcb-cg--rule' : ''}">
+    return `<div class="tlcb-stack tlcb-cg${b.align === 'left' ? '' : ' tlcb-cg--' + b.align}${b.topRule ? ' tlcb-cg--rule' : ''}">
       ${renderHead(opts, b, 'Section heading')}${intro}
       <div class="tlcb-cg-grid">${cards}</div>
     </div>`;
@@ -2189,13 +2241,12 @@ export function renderBlock(b, opts = {}) {
   if (!def) return '';
   const classes = ['tlcb', 'tlcb--' + b.type];
   if (b.hidden) classes.push('tlcb-hide-phone');
-  // Card grid has its own long-standing centering mechanism (tlcb-cg--center,
-  // appended in its own render branch below) — untouched. These seven are a
-  // second, later set of block types that share one shape (a heading, some
-  // prose, and an optional row of buttons/links), so one shared class here
-  // is enough for all of them rather than repeating the append in each
-  // branch — CENTER_ALIGNABLE_TYPES is the one place that list lives.
-  if (CENTER_ALIGNABLE_TYPES.has(b.type) && b.align === 'center') classes.push('tlcb--center');
+  // One class for the whole page's worth of alignment. ALIGNABLE_TYPES is the
+  // one place the list lives, and it is derived from the defs rather than
+  // written out again. Card grid ALSO carries its own older `tlcb-cg--*`
+  // classes from its own render branch — those handle the inside of a card,
+  // which the generic rules deliberately do not reach.
+  if (ALIGNABLE_TYPES.has(b.type) && b.align !== 'left') classes.push('tlcb--' + b.align);
   const attrs = opts.editing
     ? ` data-id="${esc(b.id)}" data-type="${esc(b.type)}" tabindex="0" role="group"` +
       ` aria-label="${esc(def.label)} block${opts.total ? ', position ' + (opts.index + 1) + ' of ' + opts.total : ''}"`
