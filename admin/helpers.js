@@ -6,7 +6,7 @@ import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, SIDEBAR_JS, TOGGLE_WORD_JS, LOCKED_FIELD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 import { APPEARANCE_CSS } from './appearance.js';
 
-export const VERSION = 'v4.27.0'; // minor: an annual giving row asks for one month of it - a $5,000/year commitment buttons at $416/month, the ladders are shown on the Giving screen, and a ladder can carry a heading over its rows
+export const VERSION = 'v4.27.1'; // minor: an annual giving row asks for one month of it - a $5,000/year commitment buttons at $416/month, the ladders are shown on the Giving screen, and a ladder can carry a heading over its rows
 
 // ── THE SHARED SHELL CSS/JS, EXTERNALISED ───────────────────────
 // This used to be inlined into every admin response inside <style>/<script>
