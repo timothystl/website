@@ -9247,6 +9247,77 @@ ${sidebarShell('settings', currentUser, '', await pageBadges())}
       return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-updated' } });
     }
 
+    // ── LADDER ROWS ───────────────────────────────────────────────────────
+    // A ladder row is an item inside an `amounts` block on the giving page, so
+    // every one of these routes is read-modify-write of that page's draft
+    // block JSON. There is no ladder table and there must not be one: the row
+    // and the sentence explaining it are the same record, and the page is
+    // where that record lives. These routes are a second DOOR onto it, not a
+    // second copy of it.
+    //
+    // ⚠ They write `blocks` (the draft) and never `published_blocks`. Editing
+    // here is exactly as live as editing in the page editor — which is to say
+    // not at all until somebody publishes — and quietly writing the live copy
+    // from a side screen would mean the giving page could change without ever
+    // passing through the one step that exists to make that deliberate.
+    if (path.startsWith('/giving-ladder/') && method === 'POST') {
+      const form = await request.formData();
+      const pageRow = await env.DB.prepare('SELECT blocks FROM pages WHERE id = ?')
+        .bind(GIVE_LANDING_PAGE_ID).first().catch(() => null);
+      const blocks = sanitizeBlocks(parseBlocks(pageRow && pageRow.blocks));
+      const blockId = path.startsWith('/giving-ladder/delete/')
+        ? decodeURIComponent(path.split('/')[3] || '')
+        : (url.searchParams.get('block') || form.get('block') || '');
+      const target = blocks.find((b) => b.id === blockId && b.type === 'amounts');
+      // A block that is not there is a stale tab or a hand-typed address, and
+      // the honest answer is the screen again rather than a page of blocks
+      // written from a request that was describing something else.
+      if (!target) return new Response('', { status: 302, headers: { Location: '/giving?msg=ladder-missing' } });
+      target.items = Array.isArray(target.items) ? target.items : [];
+
+      if (path === '/giving-ladder/reorder') {
+        let order = [];
+        try { order = JSON.parse(form.get('order') || '[]'); } catch (_) {}
+        // The posted order is the whole resulting list, same contract as the
+        // menu and the fund panels: a diff would let a dropped row leave two
+        // items claiming one position. Anything the post did not mention is
+        // appended rather than dropped — losing a row to a half-delivered
+        // reorder is not a trade worth making.
+        const seen = new Set();
+        const next = [];
+        for (const raw of order) {
+          const i = parseInt(raw, 10);
+          if (Number.isInteger(i) && i >= 0 && i < target.items.length && !seen.has(i)) { seen.add(i); next.push(target.items[i]); }
+        }
+        target.items.forEach((it, i) => { if (!seen.has(i)) next.push(it); });
+        target.items = next;
+      } else if (path === '/giving-ladder/add' || path === '/giving-ladder/update') {
+        const idx = parseInt(form.get('index') || '', 10);
+        const existing = path === '/giving-ladder/update' && Number.isInteger(idx) ? target.items[idx] : null;
+        if (path === '/giving-ladder/update' && !existing) {
+          return new Response('', { status: 302, headers: { Location: '/giving?msg=ladder-missing' } });
+        }
+        const period = String(form.get('period') || '').replace(/^\/+/, '').trim();
+        const words = String(form.get('body') || '').replace(/\s+/g, ' ').trim();
+        // Keep the stored markup when the words have not changed, so editing
+        // an amount here never silently flattens emphasis somebody added in
+        // the page editor. Only a real edit to the text replaces it.
+        const priorPlain = String(existing?.body || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        const body = existing && words === priorPlain ? existing.body : (words ? '<p>' + escapeHtml(words) + '</p>' : '');
+        const item = { ...(existing || {}), amount: String(form.get('amount') || '').trim(), period, body };
+        if (existing) target.items[idx] = item; else target.items.push(item);
+      } else if (path.startsWith('/giving-ladder/delete/')) {
+        const i = parseInt(path.split('/')[4] || '', 10);
+        if (Number.isInteger(i) && i >= 0 && i < target.items.length) target.items.splice(i, 1);
+      }
+
+      const json = JSON.stringify(sanitizeBlocks(blocks));
+      await env.DB.prepare('UPDATE pages SET blocks = ?, updated_at = ?, updated_by = ? WHERE id = ?')
+        .bind(json, new Date().toISOString(), currentUser?.username || '', GIVE_LANDING_PAGE_ID).run();
+      await logAudit(env.DB, currentUser, 'update', 'page', GIVE_LANDING_PAGE_ID, 'Giving page amounts', null, { ladder: blockId });
+      return new Response('', { status: 302, headers: { Location: '/giving?msg=ladder-saved' } });
+    }
+
     if (path === '/giving' && method === 'GET') {
       const baseUrlRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'give_url'").first();
       const tiers = await env.DB.prepare('SELECT * FROM give_amount_tiers ORDER BY sort_order').all();
@@ -9266,6 +9337,11 @@ ${sidebarShell('settings', currentUser, '', await pageBadges())}
         : msg === 'giving-added'   ? `<div class="alert alert-success">✓ Added.</div>`
         : msg === 'giving-updated' ? `<div class="alert alert-success">✓ Updated.</div>`
         : msg === 'giving-deleted' ? `<div class="alert alert-info">Deleted.</div>`
+        // Says where it went, not just that it happened. A ladder edit lands
+        // in the giving page's draft, and somebody who reads this as "done"
+        // and goes to check the live page will find it unchanged.
+        : msg === 'ladder-saved'   ? `<div class="alert alert-success">✓ Saved to the giving page's draft. Publish the page for it to reach givers.</div>`
+        : msg === 'ladder-missing' ? `<div class="alert alert-info">That ladder is no longer on the giving page — nothing was changed.</div>`
         : msg === 'redirect-added'   ? `<div class="alert alert-success">✓ Link added.</div>`
         : msg === 'redirect-updated' ? `<div class="alert alert-success">✓ Link updated.</div>`
         : msg === 'redirect-deleted' ? `<div class="alert alert-info">Link deleted.</div>`
@@ -9322,52 +9398,74 @@ ${sidebarShell('settings', currentUser, '', await pageBadges())}
 
       // ── THE LADDERS ────────────────────────────────────────────────────────
       // Dinger, 2026-08-06: "on the giving settings page, i can only edit the
-      // weekly giving tiers and not the larger commitment amounts."
+      // weekly giving tiers and not the larger commitment amounts" — then,
+      // looking at the panel built in answer to it: "here you now just are
+      // showing what the amounts are but no way to EDIT them."
       //
-      // He is right about what this screen showed, and the reason is that the
-      // ladders are NOT settings — each row carries its own sentence about
-      // what that gift does, so they are rows on the giving page itself,
-      // edited in the page editor with the words they belong to. Copying them
-      // into a form here would make two places that disagree about what
-      // $5,000 a year pays for.
+      // ⚠ The first answer was to SHOW the ladders read-only and link to the
+      // page editor, on the reasoning that each row carries its own sentence
+      // about what that gift pays for, so a second form here would be two
+      // places that disagree about what $5,000 a year buys. He overruled it,
+      // and the correct reading of that is not "he wants a duplicate": it is
+      // that a screen called Giving, which already edits every other amount on
+      // the page, cannot be the one place these amounts are merely displayed.
       //
-      // What was missing is that this screen said nothing about them at all,
-      // so "the amounts live on the Giving screen" read as a complete
-      // statement and the larger commitments looked unchangeable. So: show
-      // them, show what each button will ASK for (which is not the same
-      // number as the commitment), and link to the one place they are edited.
+      // So they are edited here — and the duplication worry is answered by
+      // where the words are STORED rather than by refusing the control. There
+      // is still exactly one copy of a ladder row: the block on the page.
+      // These panels read and write that same block, so this screen and the
+      // page editor are two doors into one record, not two records.
       const givePageRow = await env.DB.prepare('SELECT blocks, published_blocks FROM pages WHERE id = ?')
         .bind(GIVE_LANDING_PAGE_ID).first().catch(() => null);
       const ladderBlocks = sanitizeBlocks(parseBlocks(givePageRow && givePageRow.blocks))
         .filter((b) => b.type === 'amounts');
       const givePagePublished = sanitizeBlocks(parseBlocks(givePageRow && givePageRow.published_blocks)).length > 0;
       const plainText = (s) => escapeHtml(String(s || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim());
+      const ladderTitle = (b) => b.subtitle || b.title || b.eyebrow || 'Amount ladder';
       const ladderHtml = ladderBlocks.length === 0
         ? `<div style="font-size:13px;color:var(--gray);padding:12px 0;">The giving page has no amount ladders on it. Add an <strong>Amount ladder</strong> block in <a href="/giving/page" style="color:var(--tlc-blue);">the page editor</a>.</div>`
-        : ladderBlocks.map((b) => `
-          <div style="padding:14px 0;border-bottom:1px solid var(--border);">
-            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-              <div style="font-weight:700;color:var(--charcoal);">${escapeHtml(b.subtitle || b.title || b.eyebrow || 'Amount ladder')}</div>
-              <a class="tlc-edit" href="/giving/page">Edit these amounts</a>
-            </div>
-            ${(b.items || []).length === 0
-              ? `<div style="font-size:13px;color:var(--gray);margin-top:6px;">No amounts on this ladder yet.</div>`
-              : `<div style="margin-top:8px;display:flex;flex-direction:column;gap:4px;">${(b.items || []).map((it) => {
+        : ladderBlocks.map((b) => panel(ladderTitle(b),
+            panelList({
+              id: 'ladder-' + b.id,
+              reorderAction: '/giving-ladder/reorder?block=' + encodeURIComponent(b.id),
+              empty: 'No amounts on this ladder yet.',
+              rows: (b.items || []).map((it, i) => {
                 const amt = parseGiveAmount(it.amount);
                 const gift = giftForPeriod(it.amount, it.period);
                 const period = String(it.period || '').replace(/^\/+/, '');
-                return `<div style="display:grid;grid-template-columns:140px 1fr auto;gap:12px;align-items:baseline;font-size:13px;">
-                  <span style="font-weight:700;color:var(--charcoal);white-space:nowrap;">${
-                    amt == null ? plainText(it.amount) : '$' + escapeHtml(fmtGiveAmount(amt))
-                  }${period ? `<span style="font-weight:400;color:var(--gray);">/${escapeHtml(period)}</span>` : ''}</span>
-                  <span style="color:var(--gray);">${plainText(it.body)}</span>
-                  <span style="color:var(--gray);white-space:nowrap;">${gift ? escapeHtml(giveButtonLabel(gift)) : 'No button &mdash; the amount is not a number'}</span>
-                </div>`;
-              }).join('')}</div>`}
-          </div>`).join('');
+                return {
+                  id: String(i),
+                  nameHtml: `${amt == null ? plainText(it.amount) : '$' + escapeHtml(fmtGiveAmount(amt))}${
+                    period ? `<span style="font-weight:400;color:var(--tlc-muted);">/${escapeHtml(period)}</span>` : ''}`,
+                  sub: String(it.body || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(),
+                  // What the BUTTON asks for, which for a /year row is not the
+                  // number printed beside it. This column is the whole reason
+                  // somebody would open this screen rather than the editor.
+                  mid: gift ? giveButtonLabel(gift) : 'No button — not a number',
+                  action: `<a class="tlc-edit" href="/giving?row=${encodeURIComponent(b.id)}:${i}">Edit</a>`,
+                };
+              }),
+            }),
+            { right: `<a class="tlc-edit" href="/giving?row=${encodeURIComponent(b.id)}:new">+ Add amount</a>`, pad: false }
+          )).join('');
 
       const editFund = url.searchParams.get('fund');
       const editTier = url.searchParams.get('tier');
+      // "?row=<blockId>:<index>" — a ladder row is identified by the block it
+      // lives on and its position in it, because it has no id of its own: it
+      // is an item inside a block's JSON, not a database row. `:new` appends.
+      const editRow = url.searchParams.get('row');
+      const rowBlockId = editRow ? editRow.slice(0, editRow.lastIndexOf(':')) : '';
+      const rowIdxRaw = editRow ? editRow.slice(editRow.lastIndexOf(':') + 1) : '';
+      const rowIndex = /^\d+$/.test(rowIdxRaw) ? Number(rowIdxRaw) : -1;
+      const rowBlock = editRow ? ladderBlocks.find((b) => b.id === rowBlockId) : null;
+      const rowRec = rowBlock && rowIndex >= 0 ? (rowBlock.items || [])[rowIndex] : null;
+      // The description is rich text on the page and a plain textarea here.
+      // Stripping the markup to edit it and re-wrapping it on save would throw
+      // away any emphasis somebody had added in the editor, so the textarea
+      // shows the words and the SAVE keeps the original markup when the words
+      // are unchanged — see /giving-ladder/update.
+      const plainRowBody = (s) => String(s || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
       const fundRec = editFund && editFund !== 'new' ? funds.results.find((f) => String(f.id) === editFund) : null;
       const tierRec = editTier && editTier !== 'new' ? tiers.results.find((t) => String(t.id) === editTier) : null;
       const givingRowsHtml = givingLinks.results.length === 0
@@ -9471,7 +9569,7 @@ ${sidebarShell('giving', currentUser, '', await pageBadges())}
 
   <div class="card" style="margin-top:20px;">
     <div class="card-title">Amount ladders on the giving page</div>
-    <div style="font-size:13px;color:var(--gray);margin-bottom:8px;">The <strong>$X a week</strong> and <strong>$X a year</strong> rows — the ministry ladder and the larger commitments. These are not settings: each one carries its own sentence about what that gift pays for, so they are edited on the giving page itself, with the words they belong to. Everything here is read from that page; <a href="/giving/page" style="color:var(--tlc-blue);">open the editor</a> to change an amount, a period or a description, or to add a row.</div>
+    <div style="font-size:13px;color:var(--gray);margin-bottom:8px;">The <strong>$X a week</strong> and <strong>$X a year</strong> rows — the ministry ladder and the larger commitments. Edit an amount, its period or the sentence beside it here, or drag a row to reorder it. The right-hand column is <strong>what that row's button will actually ask for</strong>, which for a yearly commitment is a month of it. These are rows on the giving page rather than settings of their own, so the same rows are also editable in <a href="/giving/page" style="color:var(--tlc-blue);">the page editor</a> — one record, two doors onto it.</div>
     ${ladderHtml}
     <div style="font-size:13px;color:var(--gray);margin-top:14px;line-height:1.6;">
       <strong>A year is asked for a month at a time.</strong> A row written as <code>/year</code> gets a button for a twelfth of it — $5,000 a year becomes <strong>Give $416/month</strong> — because nobody presses a button for a single $5,000 charge. Write the period as <code>week</code> or <code>month</code> and the button asks for exactly what the row says. Tithe.ly cannot be told from a link that a gift repeats, so the page tells the giver to choose Monthly on the form.
@@ -9520,7 +9618,34 @@ ${sidebarShell('giving', currentUser, '', await pageBadges())}
       </div>
     </form>
   </div>
-  ${(editFund || editTier) ? renderDrawer(editFund ? {
+  ${editRow ? renderDrawer({
+    key: 'give-ladder-row',
+    title: rowRec ? (parseGiveAmount(rowRec.amount) == null ? String(rowRec.amount || 'Amount') : '$' + fmtGiveAmount(parseGiveAmount(rowRec.amount))) : 'New amount',
+    sub: rowBlock ? `A row on the ${ladderTitle(rowBlock)} ladder, on the giving page.` : 'A row on a giving-page ladder.',
+    action: rowRec ? '/giving-ladder/update' : '/giving-ladder/add',
+    cancelHref: '/giving',
+    saveLabel: rowRec ? 'Save changes' : 'Add amount',
+    deleteAction: rowRec ? `/giving-ladder/delete/${encodeURIComponent(rowBlockId)}/${rowIndex}` : '',
+    deleteConfirm: rowRec ? 'Delete this row from the ladder? The words explaining what it pays for go with it.' : '',
+    fields: [
+      { kind: 'html', html: `<input type="hidden" name="block" value="${escapeHtml(rowBlockId)}">` +
+        (rowRec ? `<input type="hidden" name="index" value="${rowIndex}">` : '') },
+      { name: 'amount', label: 'Amount', value: rowRec?.amount ?? '', required: true, placeholder: '5000',
+        hint: 'Digits only for a real amount — the $ and the commas are added for you. Words are allowed (“Any amount”), and a row that is not a number simply gets no Give button rather than one pointing at nothing.' },
+      // Four options, so chips rather than a select — and the period is what
+      // decides what the button asks for, which is the one thing on this
+      // drawer somebody can get wrong in a way that costs money.
+      { kind: 'chips', name: 'period', label: 'Given every', value: String(rowRec?.period || 'week').replace(/^\/+/, ''),
+        options: [
+          { value: 'week', label: 'Week' }, { value: 'month', label: 'Month' },
+          { value: 'year', label: 'Year' }, { value: '', label: 'One gift' },
+        ],
+        hint: 'A yearly amount is asked for a month at a time — $5,000 a year becomes a $416/month button — because nobody presses a one-off $5,000. Week, month and one-off ask for exactly what is typed above.' },
+      { kind: 'textarea', name: 'body', label: 'What this gift pays for', value: plainRowBody(rowRec?.body), rows: 3,
+        placeholder: 'Sends a youth to the National Youth Gathering.',
+        hint: 'The sentence printed beside the amount. This is why a ladder row is not a setting — it is the words that make the number mean something.' },
+    ],
+  }) : (editFund || editTier) ? renderDrawer(editFund ? {
     key: 'give-fund',
     title: fundRec ? fundRec.name || 'Untitled fund' : 'New fund',
     sub: 'A fund is one of the choices in the "Give to" dropdown on the giving page.',
