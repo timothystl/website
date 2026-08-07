@@ -1,12 +1,12 @@
 // ── HELPERS, TINYMCE, TOPBAR, LOGIN ─────────────────────────
 // Extracted from tlc-admin-worker.js
 
-import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
+import { TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, SIDEBAR_JS, TOGGLE_WORD_JS, LOCKED_FIELD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 import { APPEARANCE_CSS } from './appearance.js';
 
-export const VERSION = 'v4.28.1'; // minor: alignment is left/centre/right on every block but Spacer, buttons included, and giving-page ladder rows are edited on the Giving screen
+export const VERSION = 'v4.30.1'; // minor: the payroll exports are back to the format the bookkeeper has always had — MDO first, church allowance columns, one printed page
 
 // ── THE SHARED SHELL CSS/JS, EXTERNALISED ───────────────────────
 // This used to be inlined into every admin response inside <style>/<script>
@@ -505,7 +505,7 @@ ${extraHead}
       // fonts.googleapis.com serves the Lora / Source Sans 3 stylesheet and
       // fonts.gstatic.com the font files themselves — the redesign's type
       // system needs both, and a blocked font silently falls back to Georgia.
-      'Content-Security-Policy': "default-src 'self'; script-src 'self' https://cdn.tiny.cloud 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://cdn.tiny.cloud https://fonts.googleapis.com; font-src 'self' https://cdn.tiny.cloud https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.tiny.cloud; frame-src 'self' https://cdn.tiny.cloud;"
+      'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self'; frame-src 'self';"
     }
   });
 }
@@ -948,7 +948,19 @@ export function tinymceField({ id, name, value = '', minHeight = 200, label = ''
 _onTinymce(function(){
 tinymce.init({
   selector: '#${id}',
-  plugins: 'image link lists blockquote table code',
+  // Self-hosted, not cloud — see TINYMCE_HEAD in db.js. base_url/suffix point
+  // TinyMCE's own lazy loads (theme, model, icons, skin, plugins) at the same
+  // route the core came from; license_key 'gpl' is the self-hosting licence
+  // and stops the editor rendering an "invalid licence" notice.
+  base_url: '/assets/tinymce',
+  suffix: '.min',
+  license_key: 'gpl',
+  // 'blockquote' was listed here for a long time and is not a TinyMCE plugin —
+  // it is a core format, so there is no plugins/blockquote/ to fetch. Against
+  // the cloud that was a silent 404; against our own route it would be a 404
+  // we serve ourselves. Dropped: nothing is lost, and the toolbar above never
+  // had a blockquote button to begin with.
+  plugins: 'image link lists table code',
   toolbar: '${TINY_TOOLBAR}',
   menubar: false,
   min_height: ${Number(minHeight) || 200},

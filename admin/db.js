@@ -1,9 +1,20 @@
 // ── CONSTANTS & INITIAL DATA ─────────────────────────────────
 // Extracted from tlc-admin-worker.js
 
-// TinyMCE rich-text editor — loaded only on news item form pages
-export const TINYMCE_API_KEY = '5wrsrinqxeqvej5slykwic6rgpfb0v8wvj0f21fgk1r4nhs0';
-export const TINYMCE_HEAD = `<script>window._tinyQ=[];function _onTinymce(fn){if(window.tinymce){fn();}else{window._tinyQ.push(fn);}}<\/script><script async src="https://cdn.tiny.cloud/1/${TINYMCE_API_KEY}/tinymce/7/tinymce.min.js" referrerpolicy="origin" onload="window._tinyQ.forEach(function(fn){fn();});window._tinyQ=[]"><\/script>`;
+// TinyMCE rich-text editor — loaded only on the screens that carry an editor.
+//
+// Self-hosted out of admin/vendor/tinymce/ (served by the /assets/tinymce/
+// route in tlc-admin-worker.js), not cdn.tiny.cloud. The cloud build is
+// metered: Tiny counts an "editor load" per editor and bills overage past the
+// monthly limit, and this admin spends them fast — the page editor creates one
+// inline editor per rich field, and a page carries tens of them. Self-hosting
+// is free (TinyMCE 7 is GPL v2+), needs no account or API key, and is what the
+// ChMS app next door has done since its v1.64.0.
+//
+// The version query string is TinyMCE's own, not the app's: this file changes
+// only when TinyMCE is upgraded, so it can be cached immutably across deploys.
+export const TINYMCE_VERSION = '7.9.3';
+export const TINYMCE_HEAD = `<script>window._tinyQ=[];function _onTinymce(fn){if(window.tinymce){fn();}else{window._tinyQ.push(fn);}}<\/script><script async src="/assets/tinymce/tinymce.min.js?v=${TINYMCE_VERSION}" onload="window._tinyQ.forEach(function(fn){fn();});window._tinyQ=[]"><\/script>`;
 
 // ── DB INIT ─────────────────────────────────────────────────
 export const DB_INIT_NEWSLETTERS = `CREATE TABLE IF NOT EXISTS newsletters (
