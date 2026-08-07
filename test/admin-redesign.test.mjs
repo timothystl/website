@@ -1519,12 +1519,20 @@ group('payroll emails its report to the bookkeeper');
 {
   const { db, env } = await boot();
   const { cookie } = signIn(db);
+  // The shape exportReport() posts: MDO first with its own columns, church
+  // staff with theirs. The emailed report is the same report as the printed
+  // page and the CSV, so the allowance columns have to reach the bookkeeper.
   const report = {
     periodStart: '2026-07-16', periodEnd: '2026-07-31', periodLabel: 'Jul 16 – Jul 31, 2026',
     approved: true, approvedBy: 'dinger', total: 7630,
-    groups: [{ name: 'Church staff', subtotal: 5190, people: [
-      { name: '<img src=x onerror=alert(1)>', kind: 'Salaried', basis: '—', pto: 0, gross: 3966 },
-    ] }],
+    mdo: { subtotal: 3664, rows: [
+      { name: 'Alyssa Ramsey', salaried: false, rate: 16, hours: 27.57, pto: 0, gross: 441.12 },
+      { name: 'Jacinda Jockel', salaried: true, rate: 0, hours: 0, pto: 0, gross: 3222.88 },
+    ] },
+    church: { subtotal: 3966, rows: [
+      { name: '<img src=x onerror=alert(1)>', salaried: true, rate: 0, hours: 0,
+        base: 1908, housing: 1908, optOut: 0, hsa: 0, mileage: 150, b403: 0, gross: 3966 },
+    ] },
   };
   const post = (body) => worker.fetch(new Request('https://admin.timothystl.org/payroll/email', {
     method: 'POST',
@@ -1559,6 +1567,21 @@ group('payroll emails its report to the bookkeeper');
   ok(sent[0].subject.includes('Jul 16'), 'with the period in the subject: ' + sent[0].subject);
   ok(sent[0].htmlContent.includes('$7,630.00'), 'and the combined total in the body');
   ok(sent[0].htmlContent.includes('Approved by dinger'), 'saying it was signed off, and by whom');
+
+  // The two groups have different columns and always have — an MDO person is
+  // a rate and hours, a church person is a base plus four allowances. Rolling
+  // both into one Person/Gross table loses every figure that gets keyed in.
+  ok(sent[0].htmlContent.includes('MDO Staff'), 'MDO staff have their own section');
+  ok(sent[0].htmlContent.includes('MDO Subtotal'), 'with their own subtotal');
+  ok(sent[0].htmlContent.includes('Church Subtotal'), 'and church staff theirs');
+  ok(sent[0].htmlContent.indexOf('MDO Staff') < sent[0].htmlContent.indexOf('Church Staff'),
+    'MDO comes first, as it does on the printed report and in the CSV');
+  for (const col of ['Base / Earnings', 'Housing', 'Ins Opt-Out', 'HSA', 'Mileage', '403(b)']) {
+    ok(sent[0].htmlContent.includes(col), 'the church table keeps its ' + col + ' column');
+  }
+  ok(sent[0].htmlContent.includes('$16.00/hr'), 'an hourly MDO rate is shown');
+  ok(sent[0].htmlContent.includes('27.57'), 'with the hours behind it');
+  ok(sent[0].htmlContent.includes('$150.00'), 'and a mileage figure reaches the bookkeeper');
 
   // The page posts figures, not markup. A name is escaped on the way in, so it
   // cannot become HTML in something that lands in an outside inbox.

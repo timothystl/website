@@ -313,19 +313,108 @@ group('when the childcare app cannot be read, the report says so');
   mdoDown = false;
 }
 
-group('CSV export');
+// ── THE EXPORTS ─────────────────────────────────────────────────────────────
+// The CSV and the printed report are what leave this building: the bookkeeper
+// keys the church allowance columns in by hand and reconciles the CSV against
+// the printed page. Their SHAPE is therefore part of the contract, not a
+// styling choice — the two drifted into a generic Person / Paid as / Gross
+// table once, which dropped every allowance column and put church staff above
+// MDO, and nobody found out until a payroll run. These assertions pin the
+// format down so that cannot happen quietly again.
+group('the CSV export keeps its format');
 {
-  const csv = await p.evaluate(() => {
-    // eslint-disable-next-line no-undef
-    const rows = reportGroups();
-    return JSON.stringify(rows.map((g) => g.people.map((x) => x.name)));
-  }).catch(() => null);
-  ok(csv === null || typeof csv === 'string', 'reportGroups is reachable for the exporter');
+  const csv = await p.evaluate(async () => {
+    let captured = null;
+    const realCreate = URL.createObjectURL.bind(URL);
+    const realClick = HTMLAnchorElement.prototype.click;
+    URL.createObjectURL = (blob) => { captured = blob; return 'blob:stub'; };
+    HTMLAnchorElement.prototype.click = function () {};
+    document.getElementById('exportBtn').click();
+    URL.createObjectURL = realCreate;
+    HTMLAnchorElement.prototype.click = realClick;
+    return captured ? await captured.text() : null;
+  });
+  ok(typeof csv === 'string' && csv.length > 0, 'pressing Export CSV produces a file');
+  const lines = (csv || '').split('\r\n');
+  const at = (s) => lines.findIndex((l) => l.startsWith(s));
+
+  ok(lines[0].startsWith('"TLC Payroll — '), 'it opens with the title and period in column A alone: ' + lines[0]);
+  ok(lines[1] === '', 'then a blank row');
+
+  // MDO first. Not the order of reportGroups() (which drives the screen) —
+  // this is the order of the report the office has always sent out.
+  ok(at('"MDO Staff"') === 2, 'MDO staff lead the file');
+  ok(at('"MDO Staff"') < at('"Church Staff"'), 'and church staff follow them');
+  ok(lines[2] === '"MDO Staff","Type","Rate","Hours","PTO Hours","Gross Pay"',
+    'with the MDO columns: ' + lines[2]);
+  ok(lines[at('"Church Staff"')] === '"Church Staff","Type","Base/Earnings","Housing","Ins Opt-Out","HSA","Mileage","403(b)","Gross Pay"',
+    'and the church columns, allowances and all: ' + lines[at('"Church Staff"')]);
+
+  // An hourly row carries its rate and hours; a salaried one leaves them blank
+  // rather than writing 0.00, which would read as "worked no hours".
+  ok(lines.includes('"Skylor Murray","Hourly","17.25","40.00","","690.00"'),
+    'an hourly childcare row: ' + lines.find((l) => l.startsWith('"Skylor Murray"')));
+  ok(lines.includes('"T. Nguyen","Salary","","","","1750.00"'),
+    'a salaried one leaves rate, hours and PTO blank: ' + lines.find((l) => l.startsWith('"T. Nguyen"')));
+
+  // The columns the generic table lost. Mileage and housing are real money
+  // somebody has to key in; an allowance that is not paid is blank, not 0.00.
+  ok(lines.includes('"Andrew Dinger","Salary","1908.00","1908.00","","","150.00","","3966.00"'),
+    'a church row keeps base, housing and mileage: ' + lines.find((l) => l.startsWith('"Andrew Dinger"')));
+  // PY-2: the 403(b) base includes PTO, so 10% of (60+8)×$20 is $136, and it
+  // is written as a negative because it comes off the gross. The church table
+  // has no PTO column, so the PTO is named inside Base / Earnings — otherwise
+  // that cell reads as $1,200 of earnings beside a gross built on $1,360.
+  ok(lines.some((l) => l.startsWith('"Maria O\'Brien"') && l.includes('"60.00 + 8.00 PTO @ 20.00"') && l.includes('"-136.00"') && l.endsWith('"1224.00"')),
+    'an hourly church row shows hours @ rate and a negative 403(b): ' + lines.find((l) => l.startsWith('"Maria O\'Brien"')));
+
+  // Subtotal and total rows are padded to their own table's width, so the
+  // figure lands under the Gross Pay column instead of in column B.
+  ok(lines.includes('"MDO Subtotal",,,,,"2440.00"'), 'the MDO subtotal sits under Gross Pay: ' + lines.find((l) => l.startsWith('"MDO Subtotal"')));
+  ok(lines.includes('"Church Subtotal",,,,,,,,"5190.00"'), 'and so does the church one: ' + lines.find((l) => l.startsWith('"Church Subtotal"')));
+  ok(lines.includes('"TOTAL GROSS PAY",,,,,,,,"7630.00"'), 'and the combined total: ' + lines.find((l) => l.startsWith('"TOTAL')));
 
   // A cell starting with = is a formula to a spreadsheet (PY-5).
-  const quoted = await p.evaluate(() => csvCell('=cmd|calc'));
-  ok(quoted.startsWith('"\''), 'a cell beginning with = is prefixed so it cannot execute: ' + quoted);
-  ok((await p.evaluate(() => csvCell('Smith "Jones"'))) === '"Smith ""Jones"""', 'quotes are doubled');
+  const quoted = await p.evaluate(() => csvText('=cmd|calc'));
+  ok(quoted.startsWith('"\''), 'a typed cell beginning with = is prefixed so it cannot execute: ' + quoted);
+  ok((await p.evaluate(() => csvText('Smith "Jones"'))) === '"Smith ""Jones"""', 'quotes are doubled');
+  // ⚠ And the guard must NOT reach our own figures. The 403(b) is written as a
+  // negative, so prefixing it would turn -136.00 into text and the
+  // bookkeeper's column would stop summing.
+  ok((await p.evaluate(() => csvNum('-136.00'))) === '"-136.00"', 'a negative figure we formatted ourselves is left as a number');
+}
+
+group('the printed report keeps its format');
+{
+  await p.click('#viewReport');
+  await p.waitForTimeout(150);
+  const html = await p.$eval('#tlcPayPrint', (n) => n.innerHTML);
+  const txt = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+
+  ok(html.includes('Timothy Lutheran — Combined Payroll'), 'it is headed as the combined payroll');
+  ok(html.includes('Pay Period:'), 'and names the period');
+  ok(html.indexOf('MDO Staff') < html.indexOf('Church Staff'), 'MDO staff print first, church staff second');
+  ok(html.includes('MDO Subtotal') && html.includes('Church Subtotal'), 'each group has its own subtotal');
+  ok(html.includes('Total Gross Pay'), 'and there is one combined total');
+  for (const col of ['Base / Earnings', 'Housing', 'Ins Opt-Out', 'HSA', 'Mileage', '403(b)']) {
+    ok(html.includes(col), 'the church table keeps its ' + col + ' column');
+  }
+  ok(txt.includes('$17.25/hr') && txt.includes('40.00'), 'an hourly rate and its hours are printed');
+  ok(txt.includes('$690.00') && txt.includes('$2,440.00'), 'with the gross and the MDO subtotal');
+  ok(txt.includes('$7,630.00'), 'and the combined total');
+  // An allowance that is not paid is an em dash, not $0.00.
+  ok(txt.includes('—'), 'an allowance nobody has reads as a dash rather than a zero');
+
+  // ⚠ The printed report must NOT follow the three screen layouts. It is the
+  // bookkeeper's copy and has one shape; printing started following the screen
+  // once, and the report changed shape depending on which tab was selected.
+  const before = await p.$eval('#tlcPayPrint', (n) => n.innerHTML);
+  await p.click('.tlc-pay-lay[data-layout="summary"]');
+  await p.waitForTimeout(150);
+  const after = await p.$eval('#tlcPayPrint', (n) => n.innerHTML);
+  ok(before === after, 'switching to Totals only does not change what would print');
+  await p.click('.tlc-pay-lay[data-layout="cards"]');
+  await p.waitForTimeout(150);
 }
 
 group('money is rounded to cents before it is summed');

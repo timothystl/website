@@ -116,10 +116,58 @@
   .tlc-pay-thead{display:none;}
   .tlc-pay-row{padding:14px 16px;}
 }
+
+/* ══════════════════════════════════════════════════════════════
+   THE PRINTED REPORT
+   ⚠ This is a SEPARATE, print-only rendering, not a print stylesheet over
+   the on-screen one, and it has to stay that way. The three screen layouts
+   (detail cards / one line each / totals only) are how somebody reads the
+   run at their desk; the bookkeeper's copy is one fixed compact table per
+   group, and it must not change shape depending on which layout tab
+   happened to be selected when Print was pressed. That is exactly what
+   went wrong: printing started following the screen, and the report the
+   bookkeeper has had for years turned into whichever layout was on.
+   ══════════════════════════════════════════════════════════════ */
+#tlcPayPrint{display:none;}
+.pt-header{margin-bottom:10px;}
+.pt-header h2{margin:0;font:600 17px/1.3 var(--tlc-serif);color:var(--tlc-navy);}
+.pt-header .pt-period{font:400 12px/1.4 var(--tlc-sans);color:var(--tlc-muted);}
+.pt-section{margin-bottom:14px;}
+.pt-section-label{font:800 10.5px/1 var(--tlc-sans);letter-spacing:.09em;text-transform:uppercase;color:var(--tlc-muted);border-bottom:1.5px solid var(--tlc-edge);padding-bottom:2px;margin-bottom:4px;}
+.pt-table{width:100%;border-collapse:collapse;font:400 12.5px/1.4 var(--tlc-sans);color:var(--tlc-ink);}
+.pt-table th{text-align:left;padding:3px 8px;background:var(--tlc-parchment);font:700 10px/1.3 var(--tlc-sans);letter-spacing:.05em;text-transform:uppercase;color:var(--tlc-muted);border-bottom:1.5px solid var(--tlc-edge);}
+.pt-table td{padding:3px 8px;border-bottom:1px solid var(--tlc-parchment);}
+.pt-table .pt-name{font-weight:700;}
+.pt-table .pt-num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.pt-table .pt-sub td{font-weight:800;background:var(--tlc-parchment);border-top:1.5px solid var(--tlc-edge);border-bottom:0;padding:5px 8px;}
+.pt-total{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-top:10px;padding:9px 12px;border-radius:7px;background:var(--tlc-navy);color:#fff;font:800 14px/1.2 var(--tlc-sans);}
+.pt-warn{margin:0 0 12px;padding:9px 12px;border:1px solid #E4C8C8;border-radius:8px;background:#FAEFEF;color:#8A4A4A;font:400 12px/1.45 var(--tlc-sans);}
+
+@page{size:portrait;margin:.5in;}
 @media print{
-  .tlc-nav,.tlc-pay-bar,.tlc-pay-layouts,.tlc-k-scrim,.tlc-k{display:none !important;}
+  /* The shell, the controls and BOTH on-screen views come off. What prints
+     is the print table and nothing else. */
+  .sidebar,.sidebar-backdrop,.tlc-ctx,.tlc-nav,.tlc-nav-back,.tlc-k,.tlc-k-scrim,
+  .tlc-drawer,.tlc-drawer-scrim,.tlc-toast,
+  .tlc-pay-bar,.tlc-pay-layouts,.tlc-pay-err,
+  #entryView,#reportView,.tlc-pay > .tlc-title,.tlc-pay > .tlc-purpose{display:none !important;}
+  /* The shell body is a flex row; a printed page is not. */
+  body,.tlc-main{display:block !important;background:#fff !important;}
   .tlc-pay{padding:0;max-width:none;}
-  .tlc-pay-card,.tlc-pay-tbl,.tlc-pay-stat{break-inside:avoid;}
+  #tlcPayPrint{display:block !important;}
+  .pt-table{font-size:8.5pt;}
+  .pt-table th{font-size:7.5pt;}
+  /* ⚠ break-inside:avoid belongs on a ROW, never on .pt-section. A section is
+     two dozen people; told not to break, a church table that does not fit in
+     what is left of the page moves to a second sheet whole, and a one-page
+     report becomes two with most of page one blank. A row is small enough to
+     genuinely never split. */
+  .pt-table tr{break-inside:avoid;}
+  .pt-table thead{display:table-header-group;}
+  /* Without print-color-adjust a browser drops the fills and the total bar
+     prints as white-on-white — the one number on the page nobody can lose. */
+  .pt-total{background:#1E2D4A !important;color:#fff !important;font-size:9.5pt;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .pt-table th,.pt-table .pt-sub td{background:#F0ECE0 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
 }
 </style>
 
@@ -192,6 +240,12 @@
     </div>
     <div id="reportBody"><div class="tlc-pay-empty">Loading…</div></div>
   </section>
+
+  <!-- ── THE PRINTED REPORT ───────────────────────────────────
+       Hidden on screen, and the only thing on the page when printed.
+       Rendered by renderPrintTable() from the same exportReport() the CSV
+       and the bookkeeper's email are built from. -->
+  <div id="tlcPayPrint" aria-hidden="true"></div>
 </div>
 
 <!-- ── ADD / EDIT A PERSON ───────────────────────────────────── -->
@@ -876,10 +930,145 @@ function reportGroups() {
 
 function subtotal(people) { return fromCents(people.reduce((n, p) => n + cents(p.gross), 0)); }
 
+// ════════════════════════════════════════════════════════════
+// THE EXPORTED REPORT — one shape, three destinations
+// ════════════════════════════════════════════════════════════
+// The printed report, the CSV and the bookkeeper's email are the SAME report
+// and are all built from this one function. They used to be written out three
+// times, which is how they drifted apart into three different column sets for
+// one payroll run — the bookkeeper reconciles the CSV against the printed
+// page, so two shapes for one set of figures is work somebody has to do by
+// hand every fortnight.
+//
+// ⚠ MDO comes FIRST here, and Church second. That is the order of the report
+// the office has always sent out, and it is deliberately NOT the order of
+// reportGroups() (which drives the on-screen layouts). Do not "tidy" the two
+// into agreement by flipping this one.
+//
+// The two groups genuinely have different columns and always have: an MDO
+// person is an hourly rate and hours, a church person is a base plus four
+// allowances less a 403(b). Squashing both into one Person/Paid as/Gross
+// table loses every figure the bookkeeper actually keys in.
+function exportReport(periodStart, periodEnd) {
+  const num = (v) => Number(v) || 0;
+
+  const mdoRows = mdoStaff.filter((s) => calcMdoGross(s) > 0).map((s) => ({
+    name: s.name,
+    salaried: s.pay_type === 'salary',
+    rate: num(s.hourly_rate),
+    hours: mdoPeriodMap.get(s.id) || 0,
+    pto: takesPto(s.pay_type) ? (mdoPtoMap.get(s.id) || 0) : 0,
+    gross: calcMdoGross(s),
+  }));
+
+  const churchRows = churchStaff.filter((s) => calcGross(s) > 0).map((s) => {
+    const entry = periodEntries[s.id] || {};
+    return {
+      name: s.name,
+      salaried: s.pay_type === 'salary',
+      rate: num(s.hourly_rate),
+      hours: num(entry.hours_worked),
+      pto: takesPto(s.pay_type) ? num(entry.pto_hours_used) : 0,
+      // The one base figure, from the same helper the gross uses, so a
+      // person's line items still add up to their own Gross Pay (PY-2).
+      base: baseEarnings(s),
+      housing: num(s.housing_allowance_biweekly),
+      optOut: num(s.insurance_opt_out_biweekly),
+      hsa: num(s.hsa_contribution_biweekly),
+      mileage: num(s.mileage_biweekly),
+      b403: calc403b(s, baseEarnings(s)),
+      gross: calcGross(s),
+    };
+  });
+
+  const mdoSub = fromCents(mdoRows.reduce((n, p) => n + cents(p.gross), 0));
+  const churchSub = fromCents(churchRows.reduce((n, p) => n + cents(p.gross), 0));
+  return {
+    periodStart, periodEnd,
+    label: periodLabel(periodStart, periodEnd),
+    mdo: { rows: mdoRows, subtotal: mdoSub },
+    church: { rows: churchRows, subtotal: churchSub },
+    total: fromCents(cents(mdoSub) + cents(churchSub)),
+    incomplete: !!mdoError,
+  };
+}
+
+// The Base / Earnings cell for an hourly church person. The church table has
+// no PTO column — it never has — so writing "60.00 @ 20.00" beside a gross
+// computed on 68 hours puts a figure in a column headed Earnings that does
+// not reconcile to the Gross Pay two columns along. That is PY-2 again, in the
+// one place it can still happen. The PTO is named when there is any, and a row
+// with none reads exactly as it always did.
+function hoursAtRate(p, rate, unit) {
+  const n2 = (v) => (Number(v) || 0).toFixed(2);
+  const pto = Number(p.pto) || 0;
+  return n2(p.hours) + (pto > 0 ? ' + ' + n2(pto) + ' PTO' : '') + (unit || '') + ' @ ' + rate;
+}
+
+// ── THE PRINTED REPORT ──────────────────────────────────────
+function renderPrintTable(rep) {
+  const el = $('tlcPayPrint');
+  if (!el) return;
+  if (!rep.mdo.rows.length && !rep.church.rows.length) { el.innerHTML = ''; return; }
+
+  // An amount that is not there reads as an em dash, not $0.00 — "no housing
+  // allowance" and "a housing allowance of nothing" are different claims.
+  const amt = (v) => (Number(v) > 0 ? money(v) : '—');
+  const n2 = (v) => (Number(v) || 0).toFixed(2);
+
+  const mdoSection = rep.mdo.rows.length ? '<div class="pt-section">'
+    + '<div class="pt-section-label">MDO Staff</div>'
+    + '<table class="pt-table"><thead><tr>'
+    + '<th>Name</th><th>Rate</th><th class="pt-num">Hours</th><th class="pt-num">PTO</th><th class="pt-num">Gross Pay</th>'
+    + '</tr></thead><tbody>'
+    + rep.mdo.rows.map((p) => '<tr>'
+      + '<td class="pt-name">' + esc(p.name) + '</td>'
+      + '<td>' + (p.salaried ? 'Salary' : money(p.rate) + '/hr') + '</td>'
+      + '<td class="pt-num">' + (p.salaried ? '—' : n2(p.hours)) + '</td>'
+      + '<td class="pt-num">' + (p.pto > 0 ? n2(p.pto) : '—') + '</td>'
+      + '<td class="pt-num">' + money(p.gross) + '</td>'
+      + '</tr>').join('')
+    + '<tr class="pt-sub"><td colspan="4">MDO Subtotal</td>'
+    + '<td class="pt-num">' + money(rep.mdo.subtotal) + '</td></tr>'
+    + '</tbody></table></div>' : '';
+
+  const churchSection = rep.church.rows.length ? '<div class="pt-section">'
+    + '<div class="pt-section-label">Church Staff</div>'
+    + '<table class="pt-table"><thead><tr>'
+    + '<th>Name</th><th class="pt-num">Base / Earnings</th><th class="pt-num">Housing</th>'
+    + '<th class="pt-num">Ins Opt-Out</th><th class="pt-num">HSA</th><th class="pt-num">Mileage</th>'
+    + '<th class="pt-num">403(b)</th><th class="pt-num">Gross Pay</th>'
+    + '</tr></thead><tbody>'
+    + rep.church.rows.map((p) => '<tr>'
+      + '<td class="pt-name">' + esc(p.name) + '</td>'
+      + '<td class="pt-num">' + (p.salaried ? money(p.base) : hoursAtRate(p, money(p.rate), ' hrs')) + '</td>'
+      + '<td class="pt-num">' + amt(p.housing) + '</td>'
+      + '<td class="pt-num">' + amt(p.optOut) + '</td>'
+      + '<td class="pt-num">' + amt(p.hsa) + '</td>'
+      + '<td class="pt-num">' + amt(p.mileage) + '</td>'
+      + '<td class="pt-num">' + (p.b403 > 0 ? '−' + money(p.b403) : '—') + '</td>'
+      + '<td class="pt-num">' + money(p.gross) + '</td>'
+      + '</tr>').join('')
+    + '<tr class="pt-sub"><td colspan="7">Church Subtotal</td>'
+    + '<td class="pt-num">' + money(rep.church.subtotal) + '</td></tr>'
+    + '</tbody></table></div>' : '';
+
+  el.innerHTML = '<div class="pt-header">'
+    + '<h2>Timothy Lutheran — Combined Payroll</h2>'
+    + '<div class="pt-period">Pay Period: ' + esc(rep.label) + '</div></div>'
+    + (rep.incomplete ? '<p class="pt-warn"><b>Incomplete:</b> the childcare app could not be reached, so no MDO staff are in this report.</p>' : '')
+    + mdoSection + churchSection
+    + '<div class="pt-total"><span>Total Gross Pay</span><span>' + money(rep.total) + '</span></div>';
+}
+
 function renderReport(periodStart, periodEnd) {
   const groups = reportGroups();
   const total = fromCents(groups.reduce((n, g) => n + cents(subtotal(g.people)), 0));
   const body = $('reportBody');
+
+  // The printed report does not follow the layout tabs, so it is rebuilt
+  // whenever the figures change rather than whenever the screen does.
+  renderPrintTable(exportReport(periodStart, periodEnd));
 
   if (!groups.some((g) => g.people.length)) {
     body.innerHTML = '<div class="tlc-pay-empty">Nobody has pay recorded in this period yet.</div>';
@@ -979,9 +1168,12 @@ document.querySelectorAll('.tlc-pay-lay').forEach((b) => {
   });
 });
 
-// Printing prints the report, whichever view you happen to be looking at —
-// nobody means "print the hours entry boxes".
-$('printBtn').addEventListener('click', () => { setView('report'); setTimeout(() => window.print(), 60); });
+// Printing prints the report whichever view you are looking at — nobody means
+// "print the hours entry boxes" — and it prints the FIXED report table, not
+// whichever of the three screen layouts is selected. There is nothing to
+// switch to first: #tlcPayPrint is rebuilt by renderReport() every time the
+// figures change and is the only thing @media print leaves on the page.
+$('printBtn').addEventListener('click', () => window.print());
 $('refreshMdoBtn').addEventListener('click', () => onPeriodChange($('periodSelect').value));
 
 // ════════════════════════════════════════════════════════════
@@ -989,35 +1181,74 @@ $('refreshMdoBtn').addEventListener('click', () => onPeriodChange($('periodSelec
 // ════════════════════════════════════════════════════════════
 // A cell starting = + - @ is a formula to a spreadsheet, so a name or note
 // beginning with one would execute on open. Prefixed with a quote (PY-5).
-function csvCell(v) {
+//
+// ⚠ That guard is for text somebody TYPED — a staff name. It must not be put
+// in front of a number this file formatted itself, and the 403(b) column is
+// exactly where that goes wrong: it is written as a negative, so a blanket
+// guard turns -118.00 into the text '-118.00 and the bookkeeper's column
+// stops summing. csvText() for anything a person typed, csvNum() for our own
+// figures — which are already known to be digits, a dot and a minus.
+function csvText(v) {
   let s = String(v === null || v === undefined ? '' : v);
   if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
   return '"' + s.replace(/"/g, '""') + '"';
 }
+function csvNum(v) { return '"' + String(v === null || v === undefined ? '' : v) + '"'; }
 
 $('exportBtn').addEventListener('click', () => {
   const sel = $('periodSelect');
   if (!sel.value) return;
   const [periodStart, periodEnd] = sel.value.split('|');
-  const groups = reportGroups();
-  const rows = [[csvCell('TLC Payroll — ' + periodLabel(periodStart, periodEnd))], []];
+  const rep = exportReport(periodStart, periodEnd);
+  const n2 = (v) => (Number(v) || 0).toFixed(2);
+  // An amount that is not there is left BLANK, not written as 0.00 — a zero
+  // in a spreadsheet reads as "this person has a housing allowance and it is
+  // nothing", which is a different claim from "this column does not apply".
+  const opt = (v) => (Number(v) > 0 ? n2(v) : '');
 
-  groups.filter((g) => g.people.length).forEach((g) => {
-    rows.push([csvCell(g.name), csvCell('Paid as'), csvCell('Hours / salary'), csvCell('PTO used'), csvCell('Gross')]);
-    g.people.forEach((p) => {
-      // n/a rather than 0.00 for a salaried person, matching the screen. A
-      // zero in a spreadsheet reads as "took none", which is a different
-      // claim from "the column does not apply".
-      rows.push([csvCell(p.name), csvCell(p.kind), csvCell(p.basis),
-        csvCell(p.salaried ? 'n/a' : p.pto.toFixed(2)), csvCell(p.gross.toFixed(2))]);
+  // Title + period go in a single cell (column A only) so long text here does
+  // not force a spreadsheet to auto-widen column B past what its data needs —
+  // that used to push the whole table past one printed page width.
+  const rows = [[csvText('TLC Payroll — ' + rep.label)], []];
+
+  if (rep.mdo.rows.length) {
+    rows.push([csvText('MDO Staff'), csvText('Type'), csvText('Rate'), csvText('Hours'), csvText('PTO Hours'), csvText('Gross Pay')]);
+    rep.mdo.rows.forEach((p) => {
+      rows.push([
+        csvText(p.name),
+        csvText(p.salaried ? 'Salary' : 'Hourly'),
+        csvNum(p.salaried ? '' : n2(p.rate)),
+        csvNum(p.salaried ? '' : n2(p.hours)),
+        csvNum(opt(p.pto)),
+        csvNum(n2(p.gross)),
+      ]);
     });
-    rows.push([csvCell(g.name + ' subtotal'), '', '', '', csvCell(subtotal(g.people).toFixed(2))]);
+    rows.push([csvText('MDO Subtotal'), '', '', '', '', csvNum(n2(rep.mdo.subtotal))]);
     rows.push([]);
-  });
+  }
 
-  const total = fromCents(groups.reduce((n, g) => n + cents(subtotal(g.people)), 0));
-  rows.push([csvCell('TOTAL GROSS PAY'), '', '', '', csvCell(total.toFixed(2))]);
-  if (mdoError) rows.push([csvCell('WARNING: the childcare app could not be read, so MDO staff are missing from this export.')]);
+  if (rep.church.rows.length) {
+    rows.push([csvText('Church Staff'), csvText('Type'), csvText('Base/Earnings'), csvText('Housing'),
+      csvText('Ins Opt-Out'), csvText('HSA'), csvText('Mileage'), csvText('403(b)'), csvText('Gross Pay')]);
+    rep.church.rows.forEach((p) => {
+      rows.push([
+        csvText(p.name),
+        csvText(p.salaried ? 'Salary' : 'Hourly'),
+        csvNum(p.salaried ? n2(p.base) : hoursAtRate(p, n2(p.rate))),
+        csvNum(opt(p.housing)),
+        csvNum(opt(p.optOut)),
+        csvNum(opt(p.hsa)),
+        csvNum(opt(p.mileage)),
+        csvNum(p.b403 > 0 ? '-' + n2(p.b403) : ''),
+        csvNum(n2(p.gross)),
+      ]);
+    });
+    rows.push([csvText('Church Subtotal'), '', '', '', '', '', '', '', csvNum(n2(rep.church.subtotal))]);
+    rows.push([]);
+  }
+
+  rows.push([csvText('TOTAL GROSS PAY'), '', '', '', '', '', '', '', csvNum(n2(rep.total))]);
+  if (rep.incomplete) rows.push([csvText('WARNING: the childcare app could not be read, so MDO staff are missing from this export.')]);
 
   const blob = new Blob([rows.map((r) => r.join(',')).join('\r\n')], { type: 'text/csv' });
   const a = document.createElement('a');
@@ -1038,8 +1269,11 @@ $('emailBtn').addEventListener('click', async () => {
   const sel = $('periodSelect');
   if (!sel.value) return;
   const [periodStart, periodEnd] = sel.value.split('|');
-  const groups = reportGroups();
-  if (!groups.some((g) => g.people.length)) { showError('There is nothing to send for this period yet.'); return; }
+  // Same report as the printed page and the CSV — one builder, so the copy
+  // the bookkeeper receives cannot be a different shape from the copy that
+  // arrives on paper beside it.
+  const rep = exportReport(periodStart, periodEnd);
+  if (!rep.mdo.rows.length && !rep.church.rows.length) { showError('There is nothing to send for this period yet.'); return; }
 
   const btn = $('emailBtn');
   btn.disabled = true; btn.textContent = 'Sending…';
@@ -1051,16 +1285,13 @@ $('emailBtn').addEventListener('click', async () => {
       credentials: 'same-origin',
       body: JSON.stringify({
         periodStart, periodEnd,
-        periodLabel: periodLabel(periodStart, periodEnd),
+        periodLabel: rep.label,
         approved: !!periodApproval,
         approvedBy: periodApproval ? (periodApproval.approved_by || '') : '',
-        incomplete: !!mdoError,
-        total: fromCents(groups.reduce((n, g) => n + cents(subtotal(g.people)), 0)),
-        groups: groups.filter((g) => g.people.length).map((g) => ({
-          name: g.name,
-          subtotal: subtotal(g.people),
-          people: g.people.map((x) => ({ name: x.name, kind: x.kind, basis: x.basis, pto: x.pto, salaried: x.salaried, gross: x.gross })),
-        })),
+        incomplete: rep.incomplete,
+        total: rep.total,
+        mdo: rep.mdo,
+        church: rep.church,
       }),
     });
     body = await res.json().catch(() => ({}));
