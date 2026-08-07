@@ -516,6 +516,65 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### The payroll exports are the bookkeeper's format again (v4.30.0, 2026-08-07)
+
+Dinger, with the July 6 PDF and CSV attached: *"read these file exports that is
+how it used to be for payroll exports then this last edits you altered it. it
+needs to return to these formats"*.
+
+**The v3.2.0 rebuild moved the payroll SCREEN onto the shared shell and took
+the printed report with it.** The old page had a separate print-only table
+(`#printTable`, `pt-*` classes) that never appeared on screen; the rebuild
+dropped it, so Print started printing whichever of the three report layouts
+happened to be selected. The CSV went the same way — one generic
+`Person · Paid as · Hours/salary · PTO used · Gross` table per group, church
+staff first.
+
+**What that generic table actually costs:** an MDO person is an hourly rate
+and hours; a church person is a base plus **Housing, Ins Opt-Out, HSA, Mileage
+and 403(b)**. Five columns of real money the bookkeeper keys in by hand
+vanished into a single "Gross" figure. Two shapes for one payroll run is also
+work somebody does by hand every fortnight, because the CSV is reconciled
+against the printed page.
+
+- **`exportReport()` in `admin/payroll.html` is the one builder**, and the
+  printed report, the CSV **and** the bookkeeper's email are all rendered from
+  it. They were written out three times, which is how they drifted apart.
+- **⚠ MDO comes first there and church second — deliberately NOT the order of
+  `reportGroups()`**, which drives the on-screen layouts. Do not tidy the two
+  into agreement.
+- **⚠ `#tlcPayPrint` is a separate print-only rendering, not a print
+  stylesheet over the screen.** That is the whole defect: the bookkeeper's
+  copy has one shape and must not change with a layout tab. A test asserts
+  that switching to Totals only leaves the print markup byte-identical.
+- **⚠ `break-inside:avoid` goes on a ROW, never on `.pt-section`.** A section
+  is two dozen people; told not to break, a church table that does not fit in
+  what is left of the page moves to a second sheet whole, and the one-page
+  report becomes two with most of page one blank. Found by rendering the real
+  July 6 figures to PDF and comparing, not by reading the CSS.
+- **⚠ The PY-5 formula guard is for text somebody TYPED, not for our own
+  figures.** The 403(b) is written as a negative, so a blanket guard turns
+  `-136.00` into the text `'-136.00` and the bookkeeper's column stops
+  summing. `csvText()` for names, `csvNum()` for figures this file formatted.
+- **The July 6 file does not add up to itself, and the restored export does.**
+  Its MDO rows sum to `16348.78` beside a printed subtotal of `16348.79` —
+  that is PY-6 (summing unrounded floats), and the same run's *PDF* prints one
+  of the rows as `$670.43` where its CSV says `$670.42`. Every other line
+  reproduces byte-for-byte; the subtotal and total are one cent different
+  because they now equal the rows above them. **Do not "fix" this backwards.**
+- The stray `Pay Period` heading at the top of the old PDF was the period
+  card's own `<h2>` leaking through a print rule that hid only the row beneath
+  it. Not reproduced.
+- **The emailed report was rebuilt to the same two tables** — same report, same
+  recipient, so it must not be a third shape. The page still posts figures and
+  the Worker still builds and escapes the markup.
+
+Run: `node test/payroll.test.mjs` (Chromium, stubbed Supabase) — it captures
+the Blob the Export button produces and pins the header rows, an hourly row, a
+salaried row, the subtotal padding widths and the total row, plus the printed
+report's columns and its independence from the layout tabs. Also two groups in
+`test/admin-redesign.test.mjs` for the email.
+
 ### Anything can be left, centred or right (v4.28.0, 2026-08-06)
 
 Dinger, with a **Button bar** selected — one button, hard left, no control to
