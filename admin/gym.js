@@ -2,6 +2,7 @@
 // Extracted from tlc-admin-worker.js
 
 import { html, sidebarShell, formatDate, tinymceEditorSection, escapeHtml } from './helpers.js';
+import { churchDate } from './when.js';
 import { sendTransactionalEmail } from './email.js';
 import { renderListSection, primaryCell, statusPill } from './ui.js';
 import { section as sectionCfg, columnsOf, filtersOf } from './sections.js';
@@ -19,7 +20,9 @@ export function extractImageKeys(body, origin) {
 }
 
 export async function sweepExpiredItems(env, origin) {
-  const today = new Date().toISOString().split('T')[0];
+  // ⚠ Church time. In UTC this deleted a post — and its image out of R2 — a
+  // day before the office had asked for, every evening after about 7pm.
+  const today = churchDate();
   try {
     const expired = await env.DB.prepare(
       "SELECT id, body FROM news_items WHERE expire_date IS NOT NULL AND expire_date < ?"
@@ -183,7 +186,7 @@ function buildGymInvoiceEmailHtml(inv, group, bookingOrBookings, paymentLink = P
     ${totalHoursRow}`;
   }
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = churchDate();
   const dueDateStr = (() => {
     const d = new Date((inv.invoice_date || '') + 'T12:00:00');
     d.setDate(d.getDate() + 14);
@@ -463,7 +466,7 @@ function buildSlotMap(bookings) {
 
 function buildMonthCalendar(year, month, slotMap, blockedDates, token) {
   const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  const today = new Date().toISOString().split('T')[0];
+  const today = churchDate();
   const firstDay = new Date(year, month, 1);
   const lastDay  = new Date(year, month + 1, 0);
   const startDow = firstDay.getDay();
@@ -587,7 +590,9 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
       // ── SELECTION CALENDAR ────────────────────────────────────
       if (!sub || sub === '') {
         const today = new Date();
-        const todayStr = today.toISOString().split('T')[0];
+        // ⚠ Church time. In UTC this reads as tomorrow after about 7pm, so the
+        // renter portal greys out today's date and refuses a booking for it.
+        const todayStr = churchDate();
         const numMonths = 6;
         const windowEnd = new Date(today.getFullYear(), today.getMonth() + numMonths, 0).toISOString().split('T')[0];
 
@@ -1316,7 +1321,7 @@ document.getElementById('req-form-wrap').style.display = 'none';
 
       // ── NEW BOOKING FORM ──────────────────────────────────────
       if (sub === 'new' && method === 'GET') {
-        const today = new Date().toISOString().split('T')[0];
+        const today = churchDate();
         const selDate  = url.searchParams.get('dt') || '';
         const selStart = url.searchParams.get('st') || '';
         const selEnd   = url.searchParams.get('et') || '';
@@ -1505,7 +1510,7 @@ function calcTotal() {
         const {rate, rateType} = await getGroupRate(env, group);
         const hours   = calcHours(fields.start_time, fields.end_time);
         const total   = calcTotal(rateType, rate, hours, 1);
-        const invoiceDate = new Date().toISOString().split('T')[0];
+        const invoiceDate = churchDate();
         const iRes = await env.DB.prepare(`INSERT INTO gym_invoices (group_id, booking_id, invoice_date, period_start, period_end, total_hours, rate, rate_type, total_amount, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid')`
         ).bind(group.id, bookingId, invoiceDate, fields.booking_date, fields.booking_date, hours, rate, rateType, total).run();
         const invoiceId = iRes.meta.last_row_id;
@@ -1539,7 +1544,7 @@ function calcTotal() {
         const {rate, rateType} = await getGroupRate(env, group);
         const hours   = calcHours(booking.start_time, booking.end_time);
         const total   = calcTotal(rateType, rate, hours, 1);
-        const invoiceDate = new Date().toISOString().split('T')[0];
+        const invoiceDate = churchDate();
         const iRes = await env.DB.prepare(`INSERT INTO gym_invoices (group_id, booking_id, invoice_date, period_start, period_end, total_hours, rate, rate_type, total_amount, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid')`
         ).bind(group.id, bid, invoiceDate, booking.booking_date, booking.booking_date, hours, rate, rateType, total).run();
         const invoiceId = iRes.meta.last_row_id;
@@ -1566,7 +1571,7 @@ function calcTotal() {
 
       // ── BOOKING HISTORY ───────────────────────────────────────
       if (sub === 'history' && method === 'GET') {
-        const today = new Date().toISOString().split('T')[0];
+        const today = churchDate();
         const [upcoming, past] = await Promise.all([
           env.DB.prepare("SELECT * FROM gym_bookings WHERE group_id = ? AND booking_date >= ? AND status IN ('confirmed','hold') ORDER BY booking_date, start_time").bind(group.id, today).all(),
           env.DB.prepare("SELECT * FROM gym_bookings WHERE group_id = ? AND booking_date < ? ORDER BY booking_date DESC LIMIT 20").bind(group.id, today).all(),
@@ -1699,7 +1704,7 @@ document.getElementById('cancel-confirm-btn').addEventListener('click', function
         const slots  = form.getAll('slots');   // each "DATE|ST|ET"
         const notes  = form.get('notes') || '';
         const agree  = form.get('agree');
-        const today  = new Date().toISOString().split('T')[0];
+        const today  = churchDate();
 
         if (!slots.length)
           return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?msg=noselect` } });
@@ -1798,13 +1803,13 @@ document.getElementById('cancel-confirm-btn').addEventListener('click', function
         const slots  = form.getAll('slots');
         const notes  = form.get('notes') || '';
         const agree  = form.get('agree');
-        const today  = new Date().toISOString().split('T')[0];
+        const today  = churchDate();
 
         if (!agree || !slots.length)
           return new Response('', { status: 302, headers: { Location: `/gym/book/${token}?err=agree` } });
 
         const {rate, rateType} = await getGroupRate(env, group);
-        const invoiceDate = new Date().toISOString().split('T')[0];
+        const invoiceDate = churchDate();
         const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_admin_email'").first();
         const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
 
@@ -1859,7 +1864,7 @@ document.getElementById('cancel-confirm-btn').addEventListener('click', function
         const DOW_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
         const dowOpts = DOW_NAMES.map((n, i) => `<option value="${i}">${n}</option>`).join('');
         const timeOpts5to9 = ['17:00','18:00','19:00','20:00','21:00'].map(t => `<option value="${t}">${fmt12h(t)}</option>`).join('');
-        const today = new Date().toISOString().split('T')[0];
+        const today = churchDate();
         const errParam = url.searchParams.get('err');
         const errAlert = errParam === 'invalid' ? `<div class="alert alert-error">Please fill in all required fields and ensure end time is after start time.</div>`
           : errParam === 'dates' ? `<div class="alert alert-error">Start date must be today or later, and end date must be after start date.</div>`
@@ -1919,7 +1924,7 @@ ${portalHeader}
         const sd      = form.get('start_date') || '';
         const ed      = form.get('end_date')   || '';
         const notes   = form.get('notes') || '';
-        const today   = new Date().toISOString().split('T')[0];
+        const today   = churchDate();
 
         if (isNaN(dow) || dow < 0 || dow > 6)
           return new Response('', { status: 302, headers: { Location: `/gym/book/${token}/recurring?err=invalid` } });
@@ -2026,7 +2031,7 @@ ${portalHeader}
 
       // ── DASHBOARD ──────────────────────────────────────────────
       if (path === '/gym-rentals' && method === 'GET') {
-        const today = new Date().toISOString().split('T')[0];
+        const today = churchDate();
         const DOW_FULL = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
         const fmtShort = d => d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
 
@@ -3036,7 +3041,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/groups">← Groups</a>
         // Step 4: create test event
         let eventCreated = false, eventError = '';
         if (token && calId) {
-          const today = new Date().toISOString().split('T')[0];
+          const today = churchDate();
           const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -3331,7 +3336,9 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`, b
       // ── BLOCKED DATES CALENDAR ───────────────────────────────
       if (path === '/gym-rentals/blocked' && method === 'GET') {
         const today = new Date();
-        const todayStr = today.toISOString().split('T')[0];
+        // ⚠ Church time. In UTC this reads as tomorrow after about 7pm, so the
+        // renter portal greys out today's date and refuses a booking for it.
+        const todayStr = churchDate();
         const numMonths = Math.min(18, Math.max(3, parseInt(url.searchParams.get('months') || '6', 10)));
 
         const [blocked, bookings] = await Promise.all([
@@ -3535,7 +3542,7 @@ updateSummary();
       // ── DELETE RECURRING CONFIRMED BOOKINGS ───────────────────
       if (path.startsWith('/gym-rentals/bookings/delete-recurring/') && method === 'POST') {
         const rid = parseInt(path.split('/').pop(), 10);
-        const today = new Date().toISOString().split('T')[0];
+        const today = churchDate();
         await env.DB.prepare("DELETE FROM gym_bookings WHERE recurrence_id=? AND status='confirmed' AND booking_date >= ?").bind(rid, today).run();
         await env.DB.prepare("UPDATE gym_recurrences SET status='cancelled' WHERE id=?").bind(rid).run();
         return new Response('', { status: 302, headers: { Location: '/gym-rentals?msg=deleted' } });
@@ -3574,7 +3581,9 @@ updateSummary();
 
         // Build calendar server-side
         const today = new Date();
-        const todayStr = today.toISOString().split('T')[0];
+        // ⚠ Church time. In UTC this reads as tomorrow after about 7pm, so the
+        // renter portal greys out today's date and refuses a booking for it.
+        const todayStr = churchDate();
         const numMonths = Math.min(18, Math.max(3, parseInt(url.searchParams.get('months') || '6', 10)));
         const yearEndStr = new Date(today.getFullYear(), today.getMonth() + numMonths, 0).toISOString().split('T')[0];
 
@@ -4246,7 +4255,7 @@ ${sidebarShell('gym', currentUser, `<a href="${editBack}">← Edit</a>`, badges)
           const sortedDates = bookings.map(b => b.booking_date).sort();
           const totalHours  = Math.round(bookings.reduce((a, b) => a + calcHours(b.start_time, b.end_time), 0) * 100) / 100;
           const totalAmount = calcTotal(rate_type, rate, totalHours, bookings.length);
-          const invoiceDate = new Date().toISOString().split('T')[0];
+          const invoiceDate = churchDate();
 
           step = 'insert-invoice';
           const iRes = await env.DB.prepare(
@@ -4332,7 +4341,7 @@ ${sidebarShell('gym', currentUser, `<a href="${editBack}">← Edit</a>`, badges)
 
       // ── ALL BOOKINGS LIST ─────────────────────────────────────
       if (path === '/gym-rentals/bookings' && method === 'GET') {
-        const today = new Date().toISOString().split('T')[0];
+        const today = churchDate();
         // One list, newest-relevant first: everything still to come, then the
         // recent past. The old screen split them into two accordions grouped by
         // organisation, which meant "when is Southside next in" had two places
@@ -4483,7 +4492,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`, b
           const form = await request.formData();
           const totalAmount = parseFloat(form.get('total_amount') || '0');
           const invoiceNotes = form.get('notes') || '';
-          const invoiceDate = new Date().toISOString().split('T')[0];
+          const invoiceDate = churchDate();
           const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_admin_email'").first();
           const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
           const pymtLink = await getPaymentLink(env);
@@ -4539,7 +4548,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`, b
         const {rate, rateType} = await getGroupRate(env, group);
         const hours = calcHours(booking.start_time, booking.end_time);
         const total = calcTotal(rateType, rate, hours, 1);
-        const invoiceDate = new Date().toISOString().split('T')[0];
+        const invoiceDate = churchDate();
         const iRes = await env.DB.prepare(
           `INSERT INTO gym_invoices (group_id, booking_id, invoice_date, period_start, period_end, total_hours, rate, rate_type, total_amount, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid')`
         ).bind(booking.group_id, bid, invoiceDate, booking.booking_date, booking.booking_date, hours, rate, rateType, total).run();
@@ -4566,7 +4575,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`, b
         const allHolds = await env.DB.prepare(
           "SELECT b.*, r.day_of_week as rec_dow, r.start_time as rec_start_time, r.end_time as rec_end_time, r.start_date as rec_start_date, r.end_date as rec_end_date FROM gym_bookings b LEFT JOIN gym_recurrences r ON r.id = b.recurrence_id WHERE b.status='hold'"
         ).all();
-        const invoiceDate = new Date().toISOString().split('T')[0];
+        const invoiceDate = churchDate();
         const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_admin_email'").first();
         const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
         const pymtLink = await getPaymentLink(env);
@@ -4632,7 +4641,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`, b
         const ids = form.getAll('ids').map(id => parseInt(id, 10)).filter(Boolean);
         if (!ids.length) return new Response('', { status: 302, headers: { Location: '/gym-rentals' } });
 
-        const invoiceDate = new Date().toISOString().split('T')[0];
+        const invoiceDate = churchDate();
         const adminEmailRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='gym_admin_email'").first();
         const adminEmail = adminEmailRow?.value || 'office@timothystl.org';
         const pymtLink = await getPaymentLink(env);
@@ -5262,7 +5271,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/recurring">← Recurri
         const hours = calcHours(rec.start_time, rec.end_time);
         const totalHours  = hours * newSessions.length;
         const totalAmount = calcTotal(rateType, rate, totalHours, newSessions.length);
-        const invoiceDate = new Date().toISOString().split('T')[0];
+        const invoiceDate = churchDate();
 
         const iRes = await env.DB.prepare(
           `INSERT INTO gym_invoices (group_id, recurrence_id, invoice_date, period_start, period_end, total_hours, rate, rate_type, total_amount, notes, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid')`

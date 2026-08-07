@@ -12,6 +12,7 @@
 // because "works when seeded" and "works on a fresh install" are different
 // claims and the second one is what a new deploy actually hits.
 import { DatabaseSync } from 'node:sqlite';
+import { churchDate } from '../admin/when.js';
 import worker from '../tlc-admin-worker.js';
 import { ALL_PERMISSIONS } from '../admin/auth.js';
 
@@ -2535,7 +2536,12 @@ group('per-screen, part two');
   const { db, env } = await boot();
   const { cookie } = signIn(db);
   const now = new Date().toISOString();
-  const today = now.slice(0, 10);
+  // ⚠ The CHURCH's today, not UTC's — the same helper /api/news now filters on.
+  // Seeding a post with the UTC date made this block fail every evening after
+  // about 7pm Central, because the Worker correctly read it as published
+  // tomorrow. It used to pass only because the test and the code shared the
+  // same wrong assumption about what day it was.
+  const today = churchDate();
 
   // 06-sermons: the media pill is YouTube / Audio / Text only. "Text only" is
   // NOT a warning — a sermon with no recording is a good text card, and
@@ -2820,7 +2826,9 @@ group('the taps are counted');
 
   await hit(1);
   await hit(2);
-  const day = new Date().toISOString().slice(0, 10);
+  // ⚠ The bucket is keyed on the CHURCH's day, so the expectation has to be
+  // too. In UTC this line disagreed with the code every evening after 7pm.
+  const day = churchDate();
   eq(db.prepare('SELECT hits FROM tap_hits WHERE tap_id=1 AND day=?').get(day).hits, 2,
     'two taps on one tag on one day are one row counting two');
   eq(db.prepare('SELECT hits FROM tap_hits WHERE tap_id=2 AND day=?').get(day).hits, 1,

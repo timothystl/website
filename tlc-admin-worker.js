@@ -26,6 +26,7 @@ const STATIC_PAGES = [
   { slug: 'news',       label: 'News & Events' },
   { slug: 'calendar',   label: 'Calendar' },
 ];
+import { churchDate, churchDatePlus, partOfDay, churchFormat } from './admin/when.js';
 import { html, sidebarShell, loginPage, setupPage, forgotPasswordPage, resetPasswordPage, permissionCheckboxes, formatDate, escapeHtml, tinymceEditorSection, tinymcePostSection, tinymceSermonSection, tinymceYouthSection, tinymcePageSection, tinymcePastorSection, tinymceNoteSection, ADMIN_SHELL_CSS, ADMIN_SHELL_JS, SERVICE_WORKER_JS } from './admin/helpers.js';
 import { renderListSection, renderDrawer, renderFormSection, primaryCell, statusPill, valueChip, valueChips, panel, countLabel, pluralise,
          rowActions, toggleCell, panelList, paginationWindow } from './admin/ui.js';
@@ -2268,7 +2269,7 @@ export default {
 
     if (path === '/api/news' && method === 'GET') {
       const limit = parseInt(url.searchParams.get('limit') || '20', 10);
-      const today = new Date().toISOString().split('T')[0];
+      const today = churchDate();
       const rows = await env.DB.prepare(
         `SELECT id, title, summary, body, image_url, publish_date, event_date, expire_date, pinned, theme, content_type, channels
          FROM news_items
@@ -2326,7 +2327,7 @@ export default {
       const parts = rest.split('/');
       const slug = parts[0];
       if (parts[1] === 'posts') {
-        const today2 = new Date().toISOString().split('T')[0];
+        const today2 = churchDate();
         const rows = await env.DB.prepare(
           'SELECT id, ministry_slug, title, post_date, event_date, expire_date, pinned, body, created_at FROM ministry_posts WHERE ministry_slug = ? AND (expire_date IS NULL OR expire_date >= ?) ORDER BY pinned DESC, COALESCE(event_date, post_date) ASC, id ASC'
         ).bind(slug, today2).all();
@@ -3305,10 +3306,11 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
         canPages ? '<a href="/pages">All pages</a>' : '',
       ].filter(Boolean).join('');
 
-      const hour = new Date().getHours();
-      const partOfDay = hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
-      const weekday = new Date().toLocaleDateString('en-US', { weekday: 'long' });
-      const longDate = new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' });
+      // ⚠ In church time, not the Worker's UTC. This greeting is what surfaced
+      // the whole bug: it read "Friday morning" on a Thursday evening, because
+      // 8pm in St. Louis is already 1am the next day in UTC. See admin/when.js.
+      const weekday = churchFormat({ weekday: 'long' });
+      const longDate = churchFormat({ weekday: 'long', day: 'numeric', month: 'long' });
 
       const needsBody = `
   ${panel(`Needs you${tasks.length ? ` · ${tasks.length}` : ''}`, tasksHtml, { right: escapeHtml(longDate), pad: false })}
@@ -5051,7 +5053,7 @@ ${sidebarShell('sermons', currentUser, `<a href="${n.series_id ? '/sermons/notes
     </script>`;
 
     if (path === '/new' && method === 'GET') {
-      const today = new Date().toISOString().split('T')[0];
+      const today = churchDate();
       // Fetch recent news items available for email inclusion
       const emailItems = await env.DB.prepare(
         `SELECT id, title, summary, publish_date FROM news_items
@@ -5340,7 +5342,7 @@ addEvent();
         }
       }
       const subject = form.get('subject') || '';
-      const publishedAt = form.get('published_at') || new Date().toISOString().split('T')[0];
+      const publishedAt = form.get('published_at') || churchDate();
       const action = form.get('action') || 'publish';
       const fmt = form.get('format') || 'weekly';
       const editId = form.get('newsletter_id') || null; // present when editing an existing newsletter
@@ -5713,7 +5715,7 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
       if (!row) return new Response('Not found', { status: 404 });
       const eventsRows = await env.DB.prepare('SELECT * FROM events WHERE newsletter_id = ? ORDER BY sort_order').bind(editId).all();
       const fmt = row.format || 'weekly';
-      const today2 = new Date().toISOString().split('T')[0];
+      const today2 = churchDate();
       const savedNewsIds = (row.news_item_ids || '').split(',').map(s => s.trim()).filter(Boolean);
       const editEmailItems = await env.DB.prepare(
         `SELECT id, title, summary, publish_date FROM news_items
@@ -5804,7 +5806,7 @@ ${sidebarShell('christian-education', currentUser, `<a href="/christian-educatio
       // newsletter actually goes out — a blank datetime field is a small chore every time.
       // Falls forward to tomorrow if that date has already passed, so the field never opens
       // on a time Brevo will reject.
-      const schedBase = new Date(`${row.published_at || new Date().toISOString().split('T')[0]}T09:00:00`);
+      const schedBase = new Date(`${row.published_at || churchDate()}T09:00:00`);
       if (isNaN(schedBase.getTime()) || schedBase.getTime() <= Date.now()) {
         schedBase.setTime(Date.now() + 24 * 60 * 60 * 1000);
         schedBase.setHours(9, 0, 0, 0);
@@ -6199,7 +6201,7 @@ ${classesJs}
         const recipients = await getBrevoListCount(env, listId);
         await env.DB.prepare(
           "UPDATE newsletters SET status = 'published', approval_status = 'approved', approved_by_username = ?, published_at = COALESCE(published_at, ?), sent_at = COALESCE(sent_at, ?), sent_count = COALESCE(sent_count, ?) WHERE id = ?"
-        ).bind(currentUser.username, new Date().toISOString().split('T')[0], new Date().toISOString(), recipients, id).run();
+        ).bind(currentUser.username, churchDate(), new Date().toISOString(), recipients, id).run();
       }
 
       const suffix = result.success
@@ -6257,7 +6259,7 @@ ${classesJs}
         if (listType === 'all') {
           await env.DB.prepare(
             "UPDATE newsletters SET status = 'published', approval_status = 'approved', approved_by_username = ?, published_at = COALESCE(published_at, ?) WHERE id = ?"
-          ).bind(currentUser.username, new Date().toISOString().split('T')[0], id).run();
+          ).bind(currentUser.username, churchDate(), id).run();
         }
       }
 
@@ -6335,7 +6337,7 @@ ${classesJs}
         events,
         on('wol') ? (f.get('wol_content') || '') : '',
         on('lasm') ? (f.get('lasm_content') || '') : '',
-        f.get('published_at') || new Date().toISOString().split('T')[0],
+        f.get('published_at') || churchDate(),
         newsItems,
         on('secondary') ? (f.get('secondary_note') || '') : '',
         f.get('newsletter_id') || null,
@@ -6373,7 +6375,7 @@ ${classesJs}
       const row = await env.DB.prepare('SELECT * FROM newsletters WHERE id = ?').bind(id).first();
       if (!row) return new Response('Not found', { status: 404 });
       const eventsRows = await env.DB.prepare('SELECT * FROM events WHERE newsletter_id = ? ORDER BY sort_order').bind(id).all();
-      const copyPublishedAt = row.published_at || new Date().toISOString().split('T')[0];
+      const copyPublishedAt = row.published_at || churchDate();
       const result = await env.DB.prepare(
         'INSERT INTO newsletters (subject, pastor_note, ministry_content, ministry_type, published_at, format, cta_url, cta_label, status, wol_content, lasm_content, secondary_note, news_item_ids, tertiary_note, tertiary_cta_label, tertiary_cta_url, bible_classes, extra_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       ).bind(
@@ -6406,8 +6408,8 @@ ${classesJs}
       const itemsRes = await env.DB.prepare(
         'SELECT * FROM news_items ORDER BY pinned DESC, COALESCE(event_date, publish_date) DESC, id DESC'
       ).all();
-      const today = new Date().toISOString().split('T')[0];
-      const soon = new Date(Date.now() + 3 * 864e5).toISOString().split('T')[0];
+      const today = churchDate();
+      const soon = churchDatePlus(3);
       const msgParam = url.searchParams.get('msg');
       const alertHtml = msgParam === 'saved' ? `<div class="alert alert-success">✓ News post saved.</div>`
         : msgParam === 'deleted' ? `<div class="alert alert-info">Post deleted.</div>` : '';
@@ -6486,8 +6488,8 @@ ${sidebarShell('news', currentUser, `<a href="https://timothystl.org/news" targe
     // opened from the redesigned list stays in the redesign.
     const newsFormHtml = (item = null) => {
       const isNew = !item;
-      const today = new Date().toISOString().split('T')[0];
-      const in90 = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const today = churchDate();
+      const in90 = churchDatePlus(90);
       const ch = item ? (item.channels == null ? 'web' : item.channels) : 'web,email';
       const on = (k) => (item ? ch.includes(k) : (k === 'web' || k === 'email'));
       const box = (name, label, checked) =>
@@ -6554,7 +6556,7 @@ ${newsImageUploadScript()}`, 'New post — TLC Admin', TINYMCE_HEAD);
       // blob: URLs are only valid in the browser tab that created them — dead
       // for every other visitor. Drop rather than store one if it slips through.
       const image_url = (form.get('image_url') || '').trim().startsWith('blob:') ? '' : (form.get('image_url') || '');
-      const publish_date = form.get('publish_date') || new Date().toISOString().split('T')[0];
+      const publish_date = form.get('publish_date') || churchDate();
       const event_date = form.get('event_date') || '';
       const expire_date = form.get('expire_date') || '';
       // A toggle posts a hidden 0 ahead of its checkbox, so get() always sees
@@ -7732,7 +7734,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministr
           'SELECT id, title, post_date, event_date, expire_date, pinned, created_at FROM ministry_posts WHERE ministry_slug = ? ORDER BY pinned DESC, COALESCE(event_date, post_date) ASC, id ASC'
         ).bind(slug).all();
         const msg = url.searchParams.get('msg');
-        const today = new Date().toISOString().split('T')[0];
+        const today = churchDate();
         const base = `/ministries/${encodeURIComponent(slug)}/posts`;
 
         // Task 15 #1. This was the last hand-rolled table in the admin — its own
@@ -7796,7 +7798,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries">← All ministr
         const slug = path.split('/')[2];
         const page = await env.DB.prepare('SELECT title FROM youth_pages WHERE slug = ?').bind(slug).first();
         if (!page) return new Response('Not found', { status: 404 });
-        const today = new Date().toISOString().split('T')[0];
+        const today = churchDate();
         return html(`
 ${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">← Posts</a>`, await pageBadges())}
 <div class="tlc-wrap">
@@ -7844,7 +7846,7 @@ ${sidebarShell('ministries', currentUser, `<a href="/ministries/${slug}/posts">�
         const slug = path.split('/')[2];
         const form = await request.formData();
         const title = form.get('title') || '';
-        const post_date = form.get('post_date') || new Date().toISOString().split('T')[0];
+        const post_date = form.get('post_date') || churchDate();
         const event_date = form.get('event_date') || null;
         const expire_date = form.get('expire_date') || null;
         const body = form.get('body') || '';

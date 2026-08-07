@@ -665,6 +665,61 @@ one.
 
 Run: two groups in `test/admin-redesign.test.mjs`.
 
+### The admin knows what day it is here (v4.31.0, 2026-08-07)
+
+Dinger, with a screenshot of the dashboard reading **"Friday morning"**: *"it
+thinks that it is friday morning. but where i am it is thursday evening can we
+fix this"*.
+
+**The Worker runs in UTC and the church is in St. Louis.** Every evening from
+about 7pm those two disagree about the date — 8pm Thursday in St. Louis is 1am
+Friday in UTC. The greeting was `new Date().getHours()` and
+`toLocaleDateString()` with no timezone, so it read the Worker's day.
+
+**The greeting was the harmless one.** The same `new Date().toISOString().split('T')[0]`
+— the UTC date — was how forty-odd other places asked what today was:
+
+- **A news post written on Thursday evening was DATED FRIDAY.** The form's
+  default `publish_date` was the UTC date.
+- **`/api/news` published and expired posts five hours early on the public
+  site**, since it filters `publish_date <= today` and `expire_date >= today`.
+- **The expiry sweep deleted a post, and its image out of R2, a day sooner**
+  than the office had asked for.
+- **The gym portal greyed out today's date** and refused a booking for it, and
+  invoices generated in the evening were dated tomorrow.
+- **A tap counted after 7pm on the last day of a month** went into the next
+  month's total, which is the only number that screen reports.
+
+`admin/when.js` is the one answer now — `churchDate()`, `churchDatePlus()`,
+`churchHour()`, `partOfDay()`, `churchFormat()` — and every one of those call
+sites goes through it.
+
+- **⚠ `Intl` does the DST arithmetic and that is the point.** Central is UTC-5
+  in summer and UTC-6 in winter; a hardcoded offset is wrong for half the year,
+  and the changeover is not a date to keep in the code.
+- **⚠ `churchDatePlus` is calendar arithmetic, NOT `Date.now() + n * 864e5`.**
+  Across a DST boundary a day is 23 or 25 hours, so the millisecond version
+  lands an hour out — and an hour is enough to cross midnight and report the
+  wrong **day**. The test pins the case that actually differs (11:30pm the
+  night before spring forward, +90 days, which is the news form's expiry
+  default); at other times of day both approaches agree, and a case where they
+  agree would prove nothing.
+- **⚠ `hour12: false` renders midnight as "24"** in some engines, which would
+  have made the greeting say "evening" at half past midnight. `churchHour`
+  folds 24 to 0.
+- **⚠ This is for dates somebody READS OR PICKS, never for timestamps.**
+  `created_at`, `sent_at` and the audit log are instants, and an instant belongs
+  in UTC. `new Date().toISOString()` is still right in those places and was left
+  alone.
+- **⚠ The suite was passing because it shared the bug.** `test/admin-redesign.test.mjs`
+  seeded `publish_date` with the UTC date and asserted the post was visible; the
+  moment `/api/news` started telling the truth, that row was correctly a
+  tomorrow post and the assertion failed. It seeds in church time now. A test
+  that makes the same wrong assumption as the code cannot catch the code.
+
+Run: `node admin/when.test.mjs`, plus `node admin/taps.test.mjs` and the
+`/api/news` group in `test/admin-redesign.test.mjs`.
+
 ### A rich field costs nothing until it is opened (v4.29.0, 2026-08-07)
 
 Dinger forwarded Tiny's automated notice: *"You are receiving this automated
