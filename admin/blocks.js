@@ -294,10 +294,16 @@ export const BLOCK_DEFS = {
     defaults: { title: 'Please note', body: '<p>Something people need to know.</p>', spaceAbove: 24, spaceBelow: 24 },
     richBody: true, infoCard: true, align: true,
   },
+  // A call to action, not a bare row of buttons. The heading and the
+  // description default to EMPTY, so every Button bar already on a page keeps
+  // rendering exactly the row it renders today — the head is drawn only when
+  // somebody has written one (or when the editor is open, where it shows as a
+  // placeholder to type into).
   buttons: {
     label: 'Button bar', glyph: '⬒',
     align: true,
-    defaults: { spaceAbove: 16, spaceBelow: 16 },
+    defaults: { eyebrow: '', title: '', body: '', spaceAbove: 16, spaceBelow: 16 },
+    richBody: true,
     items: true, itemFields: ['title', 'url'], itemUrlFields: ['url'], itemLabel: 'Button',
     itemPlaceholders: { title: 'Button label', url: 'https://…' },
     defaultItems: [{ title: 'Get in touch', url: 'mailto:office@timothystl.org' }],
@@ -306,10 +312,21 @@ export const BLOCK_DEFS = {
     label: 'Spacer', glyph: '↕',
     defaults: { spaceAbove: 0, spaceBelow: 0, height: 48 },
   },
+  // ⚠ Two sources, and 'record' is the default for a NEW block on purpose.
+  // A logo typed in here is a logo the values page and the footer's Partners
+  // column never get, and one that goes stale the moment a partner rebrands —
+  // the same argument that makes the sermon and staff blocks self-filling. The
+  // hand-typed list stays available (`manual`) because not every logo on the
+  // site is a partner ministry: a sponsor, a denomination mark or a one-off
+  // event supporter has no business being a row in `partners`.
+  //
+  // Existing blocks keep 'manual' — see sanitizeBlock, which only defaults to
+  // 'record' when the block carries no items and no source of its own.
   partners: {
     label: 'Partner logos', glyph: '◈',
     align: true,
-    defaults: { title: 'With thanks to', spaceAbove: 24, spaceBelow: 24 },
+    partnerSource: true,
+    defaults: { title: 'With thanks to', spaceAbove: 24, spaceBelow: 24, source: 'record', partnerIds: [] },
     items: true, itemFields: ['title', 'url', 'meta'], itemUrlFields: ['url', 'meta'], itemLabel: 'Partner',
     itemPlaceholders: { title: 'Partner name', url: 'Link (optional)', meta: 'Logo image URL' },
     defaultItems: [{ title: 'Partner name', url: '', meta: '' }],
@@ -576,6 +593,8 @@ export function newBlock(type, over = {}) {
     tone: 0,
     corner: 'tr',
     hidden: false,
+    source: def.partnerSource ? (d.source || 'manual') : undefined,
+    partnerIds: [],
     items: def.items ? JSON.parse(JSON.stringify(def.defaultItems || [])) : [],
     links: def.links ? JSON.parse(JSON.stringify(def.defaultLinks || [])) : [],
   }, over));
@@ -658,6 +677,31 @@ export function sanitizeBlock(b) {
       url: safeUrl(raw && raw.url).slice(0, 600),
     }))
     : [];
+
+  // Where a Partner logos block gets its logos. Gated on the definition, the
+  // same way `url` and `card` are — a type with no source choice cannot be
+  // given one by a stale tab or a crafted POST.
+  //
+  // ⚠ 'manual' IS THE FALLBACK, and that is what leaves every existing block
+  // alone. A block saved before this existed carries no `source` and a list of
+  // typed items; reading that as 'record' would replace somebody's hand-built
+  // logo row with the four partner ministries the moment this deployed. The
+  // new-block default lives in `defaults`, where it only ever reaches a block
+  // somebody is creating now.
+  //
+  // Both keys are set ONLY on a type that has the choice, rather than on every
+  // block the way `card` is. A type with no source has no `source` field at
+  // all — and, incidentally, that is what keeps this change out of the
+  // generated page seeds for the twenty-odd types it means nothing to.
+  if (def.partnerSource) {
+    out.source = b.source === 'record' ? 'record' : 'manual';
+  // Which partners, by id. Empty means all of them — so a partner added later
+  // appears without anybody editing the page, which is the point of reading the
+  // record at all. A chosen subset is a deliberate act and is kept as one.
+    out.partnerIds = Array.isArray(b.partnerIds)
+      ? [...new Set(b.partnerIds.map((n) => Math.floor(Number(n))).filter((n) => Number.isFinite(n) && n > 0))].slice(0, 24)
+      : [];
+  }
 
   if (def.items && Array.isArray(b.items)) {
     const fields = def.itemFields || [];
@@ -1334,7 +1378,10 @@ export function editorPhoneCss() {
 
 // Everything the editor client needs to draw the rail, palette and inspector,
 // derived from the definitions above rather than restated in the editor page.
-export function blocksClientConfig() {
+// `data` is the same bundle renderPage gets. Only the partner list is read out
+// of it, and only so the inspector can offer real partners to tick rather than
+// a text field to retype their names into.
+export function blocksClientConfig(data) {
   const types = {};
   for (const [key, d] of Object.entries(BLOCK_DEFS)) {
     types[key] = {
@@ -1345,10 +1392,12 @@ export function blocksClientConfig() {
       itemPlaceholders: d.itemPlaceholders || {}, richItemFields: d.richItemFields || [],
       itemUrlFields: d.itemUrlFields || [], richBody: !!d.richBody, align: !!d.align,
       gallery: !!d.gallery, feed: d.feed || '', infoCard: !!d.infoCard,
+      partnerSource: !!d.partnerSource,
       defaults: d.defaults || {}, defaultItems: d.defaultItems || [],
     };
   }
   return { types, groups: GROUPS, templates: TEMPLATES, BG, INK, SIZES, SPLITS, TONES,
+    partners: (data && data.partners) || [],
     cardSides: CARD_SIDES, cardShows: CARD_SHOWS, starters: STARTERS.map((s) => ({ key: s.key, label: s.label, note: s.note })),
     stamps: STAMP_PRESETS, step: SPACE_STEP, max: SPACE_MAX };
 }
@@ -1430,9 +1479,9 @@ function itemField(opts, idx, key, tag, cls, value, extra = '', rich = false) {
 
 const ytId = (u) => (String(u || '').match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/)([A-Za-z0-9_-]{11})/) || [])[1] || '';
 
-function renderBody(opts, b, def) {
+function renderBody(opts, b, def, ph = 'Write something here…') {
   const val = def.richBody ? (b.body || '') : esc(b.body || '');
-  return field(opts, b, 'body', 'div', 'tlcb-prose', val, ' data-ph="Write something here…"', !!def.richBody);
+  return field(opts, b, 'body', 'div', 'tlcb-prose', val, ` data-ph="${esc(ph)}"`, !!def.richBody);
 }
 
 // The small uppercase label the site puts above a heading (.eyebrow in
@@ -2013,7 +2062,13 @@ function renderInner(b, opts) {
       return href ? `<a class="${cls}" href="${esc(href)}"${/^https?:/i.test(href) ? ' target="_blank" rel="noopener noreferrer"' : ''}>${esc(it.title || '')}</a>`
         : `<span class="${cls}">${esc(it.title || '')}</span>`;
     }).join('');
-    return `<div class="tlcb-btns">${btns}</div>`;
+    // ⚠ The head is CONDITIONAL, and that is what keeps every existing Button
+    // bar unchanged. renderHead/renderBody always emit their element so the
+    // editor has something to click into; on the live site an empty one would
+    // be a stray blank line above the buttons on pages nobody has touched.
+    const hasHead = !!(b.eyebrow || b.title || (b.body || '').replace(/<[^>]*>/g, '').trim());
+    if (!opts.editing && !hasHead) return `<div class="tlcb-btns">${btns}</div>`;
+    return `<div class="tlcb-stack">${renderHead(opts, b, 'Heading (optional)')}${renderBody(opts, b, def, 'A sentence about why (optional)')}<div class="tlcb-btns">${btns}</div></div>`;
   }
 
   if (t === 'spacer') {
@@ -2023,9 +2078,29 @@ function renderInner(b, opts) {
   }
 
   if (t === 'partners') {
-    const logos = (b.items || []).map((it) => {
-      const inner = it.meta ? `<img src="${esc(it.meta)}" alt="${esc(it.title || '')}" loading="lazy">` : esc(it.title || 'LOGO');
-      const href = safeUrl(it.url);
+    // From the record, or hand-typed. Both end up as the same {title,url,logo}
+    // shape so there is one row renderer below, not two that drift apart.
+    let rows;
+    if (b.source === 'record') {
+      const chosen = new Set(b.partnerIds || []);
+      rows = (data.partners || [])
+        .filter((p) => !chosen.size || chosen.has(p.id))
+        .map((p) => ({ title: p.name, url: p.url, logo: p.logo }));
+    } else {
+      rows = (b.items || []).map((it) => ({ title: it.title, url: it.url, logo: it.meta }));
+    }
+    if (!rows.length) {
+      // Says what is missing and where to fix it, rather than rendering an
+      // empty strip that reads as a broken page.
+      const why = b.source === 'record'
+        ? 'No partner ministries yet — add them under Partners in the admin.'
+        : 'No logos added yet.';
+      return `<div class="tlcb-stack">${renderHead(opts, b)}${opts.editing ? `<p class="tlcb-note">${why}</p>` : ''}</div>`;
+    }
+    const logos = rows.map((r) => {
+      const logo = safeUrl(r.logo);
+      const inner = logo ? `<img src="${esc(logo)}" alt="${esc(r.title || '')}" loading="lazy">` : esc(r.title || 'LOGO');
+      const href = safeUrl(r.url);
       return href && !opts.editing
         ? `<a class="tlcb-logo" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${inner}</a>`
         : `<span class="tlcb-logo">${inner}</span>`;

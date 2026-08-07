@@ -438,7 +438,7 @@ async function pageData(env, reqKey) {
       try { return (await env.DB.prepare(sql).bind(...binds).all()).results || []; } catch (_) { return []; }
     };
     const [settingRows, chromeRow, sermonRow, news, staff, newsletters,
-           giveTiers, giveFunds, giveUrlRow] = await Promise.all([
+           giveTiers, giveFunds, giveUrlRow, partners] = await Promise.all([
       q("SELECT key, value FROM site_settings WHERE key LIKE 'church_%'"),
       // ⚠ The PUBLISHED row only. The draft exists so that somebody can try a
       // colour without it being on the front of the church website, and
@@ -471,6 +471,11 @@ async function pageData(env, reqKey) {
       q('SELECT amount, url, is_default FROM give_amount_tiers WHERE active != 0 ORDER BY sort_order'),
       q('SELECT id, name, tithely_fund_id, is_default FROM give_funds WHERE active != 0 ORDER BY sort_order'),
       env.DB.prepare("SELECT value FROM site_settings WHERE key = 'give_url'").first().catch(() => null),
+      // The partner ministries, so the Partner logos block can be self-filling
+      // the way the staff grid and the sermon block already are. A logo changed
+      // on the Partners screen lands on every page showing it at once, and
+      // nobody retypes a partner's name into a page for it to go stale there.
+      q('SELECT id, name, short_name, value, site_url, logo_url FROM partners ORDER BY sort_order, id'),
     ]);
     const s = {};
     for (const r of settingRows) s[r.key.replace(/^church_/, '')] = r.value;
@@ -482,6 +487,10 @@ async function pageData(env, reqKey) {
       appearance: publicAppearance(parseAppearance(chromeRow && chromeRow.value)),
       sermon: sermonRow || null,
       news, staff, newsletters,
+      partners: partners.map((p) => ({
+        id: p.id, name: p.name, shortName: p.short_name || '',
+        url: p.site_url || '', logo: p.logo_url || '',
+      })),
       // Same shape /api/give-amounts and /api/give-funds already publish, so
       // the blocks and the hardcoded fallback page read identical objects.
       give: {
@@ -1141,7 +1150,11 @@ export default {
     // edge copy. Over-busting (a draft save, a refused POST) costs one
     // rebuild; a missed bust would cost a stale public site, and the route
     // list under these prefixes keeps growing.
-    if (method === 'POST' && (path.startsWith('/pages') || path.startsWith('/menu'))) {
+    // `/partners` joined the list once a Partner logos block started reading
+    // that record: uploading a logo changes what a published page renders
+    // without any page itself being touched, so without this the new logo
+    // would sit behind the edge copy until it aged out on its own.
+    if (method === 'POST' && (path.startsWith('/pages') || path.startsWith('/menu') || path.startsWith('/partners'))) {
       bustPagesCache(ctx);
     }
 
@@ -1231,7 +1244,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-05-5'; // bumped: the give.timothystl.org page row, so its block draft reaches an existing database
+    const SCHEMA_VERSION = '2026-08-07-1'; // bumped: partners.logo_url, so the Partner logos block can read a logo off the record
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -1809,6 +1822,13 @@ export default {
     // it just stops being listed. The old admin conflated the two.
     try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN in_menu INTEGER DEFAULT 1').run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_PARTNERS).run(); } catch (_) {}
+    // The partner's logo, uploaded on the Partners screen. It lives on the
+    // RECORD rather than in whichever block happens to show it: the same
+    // partner appears in the footer's Partners column, on the values page and
+    // in any Partner logos block, and a logo typed into one of those is a logo
+    // the other two never get. Nullable — a partner with no logo falls back to
+    // its name, which is what the block already did.
+    try { await env.DB.prepare('ALTER TABLE partners ADD COLUMN logo_url TEXT').run(); } catch (_) {}
     // Short links (phase 3). Nullable on purpose: the link is derived from the
     // last segment of the address so it cannot drift when a page is renamed.
     // This column is only ever set by hand, and only to resolve a clash.
@@ -4162,7 +4182,11 @@ ${sidebarShell('menu', currentUser, `<a href="/menu">← Menu</a>`, await pageBa
             filter: 'paired',
             search: `${p.name} ${p.short_name || ''} ${v.short} ${v.name} ${host}`.toLowerCase(),
             cells: [
-              primaryCell(p.name, p.blurb || ''),
+              // The logo state rides on the sub-line rather than taking a
+              // column of its own — the columns are the design's, in
+              // sections.js, and "no logo yet" is a note about a record, not a
+              // status the section filters on.
+              primaryCell(p.name, p.logo_url ? (p.blurb || 'Logo set') : [p.blurb, 'No logo yet'].filter(Boolean).join(' · ')),
               valueChip(p.value),
               host ? `<a href="${escapeHtml(p.site_url)}" target="_blank" rel="noopener">${escapeHtml(host)}</a>` : '—',
             ],
@@ -4249,6 +4273,15 @@ ${sidebarShell('partners', currentUser, `<a href="/partners">← All partners</a
         <input type="text" name="site_url" value="${escapeHtml(p?.site_url || '')}" placeholder="https://example.org">
       </div>
       <div class="form-group">
+        <label>Logo <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— shown by the Partner logos block on any page</span></label>
+        <input type="hidden" name="logo_url" id="partner_logo_val" value="${escapeHtml(p?.logo_url || '')}">
+        <div id="partner-logo-preview" style="${p?.logo_url ? '' : 'display:none;'}margin-bottom:8px;background:var(--linen);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center;">
+          ${p?.logo_url ? `<img src="${escapeHtml(p.logo_url)}" alt="" style="max-height:64px;max-width:220px;">` : ''}
+        </div>
+        <input type="file" id="partner_logo_file" accept="image/*">
+        <div id="partner-logo-status" class="tlc-hint" style="margin-top:6px;">A transparent PNG or an SVG-style wordmark reads best. Leave it empty and the block shows the partner's name instead.</div>
+      </div>
+      <div class="form-group">
         <label>Also on this record <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— a person or project named alongside the partner</span></label>
         <input type="text" name="also_note" value="${escapeHtml(p?.also_note || '')}" placeholder="e.g. Pastor Rall and Mary Ann, missionaries to Papua New Guinea">
       </div>
@@ -4259,7 +4292,37 @@ ${sidebarShell('partners', currentUser, `<a href="/partners">← All partners</a
       </div>
     </form>
   </div>
-</div>`, isNew ? 'Add a partner' : 'Edit partner');
+</div>
+<script>
+// The logo picker. Uploads on change and fills the hidden field, so the form
+// posts an R2 address rather than a file — same shape as the news header image
+// and the header logo on the Appearance screen. (No backticks in this comment:
+// it lives inside a template literal and one would end the string.)
+(function(){
+  var input = document.getElementById('partner_logo_file');
+  if (!input) return;
+  input.addEventListener('change', async function(){
+    var f = input.files && input.files[0];
+    if (!f) return;
+    var hidden = document.getElementById('partner_logo_val');
+    var box = document.getElementById('partner-logo-preview');
+    var status = document.getElementById('partner-logo-status');
+    status.textContent = 'Uploading...';
+    try {
+      var fd = new FormData(); fd.append('file', f, f.name);
+      var r = await fetch('/api/upload-image', { method: 'POST', body: fd });
+      var d = await r.json();
+      if (!r.ok || !d.url) throw new Error((d && d.error) || 'Upload failed');
+      hidden.value = d.url;
+      box.innerHTML = '<img src="' + d.url + '" alt="" style="max-height:64px;max-width:220px;">';
+      box.style.display = '';
+      status.textContent = 'Uploaded - save the partner to keep it.';
+    } catch (err) {
+      status.textContent = 'That image could not be uploaded. ' + (err && err.message ? err.message : '');
+    }
+  });
+})();
+</script>`, isNew ? 'Add a partner' : 'Edit partner');
       }
 
       if ((path === '/partners/create' || path.startsWith('/partners/update/')) && method === 'POST') {
@@ -4274,18 +4337,22 @@ ${sidebarShell('partners', currentUser, `<a href="/partners">← All partners</a
           (form.get('blurb') || '').trim() || null,
           (form.get('site_url') || '').trim() || null,
           (form.get('also_note') || '').trim() || null,
+          // Whatever the uploader put in the hidden field, through the same
+          // safeUrl gate every other stored address goes through — the value
+          // arrives in a POST, so "our own script wrote it" is not a guarantee.
+          safeUrl((form.get('logo_url') || '').trim()) || null,
         ];
         try {
           if (path === '/partners/create') {
             await env.DB.prepare(
-              'INSERT INTO partners (name, short_name, value, blurb, site_url, also_note, sort_order) VALUES (?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order),0)+10 FROM partners))'
+              'INSERT INTO partners (name, short_name, value, blurb, site_url, also_note, logo_url, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order),0)+10 FROM partners))'
             ).bind(...fields).run();
             await logAudit(env.DB, currentUser, 'create', 'partner', value, name, null, { name, value });
           } else {
             const id = path.slice('/partners/update/'.length);
             const before = await env.DB.prepare('SELECT * FROM partners WHERE id = ?').bind(id).first();
             await env.DB.prepare(
-              'UPDATE partners SET name = ?, short_name = ?, value = ?, blurb = ?, site_url = ?, also_note = ? WHERE id = ?'
+              'UPDATE partners SET name = ?, short_name = ?, value = ?, blurb = ?, site_url = ?, also_note = ?, logo_url = ? WHERE id = ?'
             ).bind(...fields, id).run();
             await logAudit(env.DB, currentUser, 'update', 'partner', value, name, before, { name, value });
           }
@@ -7042,7 +7109,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
             // Who a page can be handed to. Only the office assigns owners, so
             // only the office is sent the list.
             editors: fullAccess ? await pageEditors(env) : [],
-            config: blocksClientConfig(),
+            config: blocksClientConfig(await pageData(env, ctx)),
             media: media.results || [],
             html: renderPage(blocks, {
               editing: true, slug: row.id, template: row.template, withCss: true,
@@ -7278,7 +7345,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
             blocks, changes: parseBlocks(row.change_log),
             published_count: sanitizeBlocks(parseBlocks(row.published_blocks)).length,
           },
-          config: blocksClientConfig(),
+          config: blocksClientConfig(await pageData(env, ctx)),
           media: media.results || [],
           html: renderPage(blocks, { editing: true, slug, withCss: true, data: await pageData(env, ctx) }),
         });

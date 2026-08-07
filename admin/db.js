@@ -581,6 +581,7 @@ export const DB_INIT_PARTNERS = `CREATE TABLE IF NOT EXISTS partners (
   blurb TEXT,
   site_url TEXT,
   also_note TEXT,
+  logo_url TEXT,
   sort_order INTEGER DEFAULT 0
 )`;
 

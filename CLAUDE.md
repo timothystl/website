@@ -516,6 +516,83 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### A button bar is a call to action, and a logo lives on the partner (v4.32.0, 2026-08-07)
+
+Dinger, in the block editor: *"i don't see a CTA button, a place to set partner
+logos and then select that. in the button bar i need it to be able to have a
+heading, description and then the button. right now it is just a button."* And,
+separately: *"in a rich text box can i create on line that is a Heading and
+larger bold font and then the text under it"*.
+
+**Three findings, and two of them were controls that were missing rather than
+broken.**
+
+- **The rich field had no headings control at all.** `h2`, `h3` and `h4` have
+  always been in `sanitizeRich`'s allowlist, always in the inline editor's
+  `valid_elements`, and always styled in `BLOCK_CSS` — the toolbar was
+  `bold italic underline | bullist numlist | link` and simply never offered
+  them. So the answer was one config line, not a feature. ⚠ The **classic**
+  admin forms (news, sermons, the newsletter) already had `blocks` in
+  `TINY_TOOLBAR`; only the block editor's inline instance was short. The three
+  names are the site's own hierarchy (`Text` / `Heading` / `Subheading` /
+  `Small heading`) and **H1 is deliberately not offered** — a block already
+  draws the page's heading, so an H1 inside a rich field is a second page title
+  halfway down the page.
+- **The Button bar is a call to action now** — optional eyebrow, heading and
+  rich description above the row. ⚠ **The head is conditional and that is the
+  whole safety property**: `renderHead`/`renderBody` always emit their element
+  so the editor has something to click into, so a Button bar already on a page
+  would have grown a blank line above its buttons. The public render returns
+  the bare row unless something has actually been written, and the defaults are
+  empty strings, so every existing block is byte-identical.
+- **`renderBody` takes a placeholder now** rather than always saying "Write
+  something here…", so the Button bar's description can ask for what it wants.
+
+**The partner logos were the interesting one, because the missing thing was not
+a field — it was an owner.** The block stored each logo as a typed image URL in
+its own `items`, which meant the same partner's logo had to be typed into every
+page showing it, and none of those copies were the one the values page or the
+footer's Partners column read. There was nowhere to *set* a partner's logo at
+all.
+
+- **`partners.logo_url` is the record**, uploaded on the Partners screen through
+  the same `/api/upload-image` path as every other image, and put through
+  `safeUrl` on the way in — our own script wrote the hidden field, but the value
+  still arrives in a POST.
+- **The block reads it.** `pageData()` carries the partner list, so Partner
+  logos joins the sermon block and the staff grid as self-filling. A logo
+  uploaded once appears everywhere it is shown.
+- **⚠ `manual` IS THE FALLBACK IN `sanitizeBlock`, and `record` is the default
+  only in `defaults`.** A block saved before this existed carries typed items
+  and no `source`; reading that as `record` would have replaced somebody's
+  hand-built logo row with the four partner ministries the moment this
+  deployed. The new default reaches only a block somebody creates now.
+- **The hand-typed list stays**, because not every logo on the site is a partner
+  ministry — a sponsor or a one-off event supporter has no business being a row
+  in `partners`. Switching to the record **hides** that list rather than
+  deleting it, so switching back brings it back exactly as it was.
+- **Empty `partnerIds` means all of them**, so a partner added later appears
+  with nobody editing the page. ⚠ That makes unticking one of an untouched
+  block write out every *other* partner, not an empty list — otherwise the
+  first untick would read as "show them all" and appear to do nothing. Ticking
+  the last one back collapses to empty again.
+- **Both keys are set only on a type that has the choice**, unlike `card`, which
+  every block carries. A type with no source has no `source` field — which also
+  keeps this change out of the generated page seeds for the twenty-odd types it
+  means nothing to.
+- **⚠ `/partners` joined the `/api/pages` cache chokepoint.** Uploading a logo
+  changes what a published page renders without any page being touched, so
+  without that the new logo would sit behind the edge copy until it aged out.
+- A partner with no logo renders as its name — what the block already did — and
+  the inspector says how many are in that state with somewhere to go and fix it.
+
+⚠ A test caught itself: `includes('tlcb-head')` is always true, because every
+block's wrapper carries a `--tlcb-head` custom property in its style attribute.
+The assertions match `class="tlcb-head"`.
+
+Run: `node admin/blocks.test.mjs` (two new groups), plus `node test/editor.test.mjs`
+and `node test/editor-edit.test.mjs`.
+
 ### The payroll exports are the bookkeeper's format again (v4.30.0, 2026-08-07)
 
 Dinger, with the July 6 PDF and CSV attached: *"read these file exports that is
