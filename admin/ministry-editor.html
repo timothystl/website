@@ -733,7 +733,18 @@ function openRichField(node) {
         license_key: 'gpl',
         inline: true, menubar: false, statusbar: false, branding: false,
         plugins: 'lists link autolink',
-        toolbar: 'bold italic underline | bullist numlist | link',
+        // The headings dropdown is first because it is the one control that
+        // changes the SHAPE of what is written rather than the weight of a few
+        // words — "a heading, then the text under it" was not expressible here
+        // at all before, even though h2/h3/h4 have always been allowed through
+        // the sanitiser and have always had styles in BLOCK_CSS.
+        //
+        // ⚠ The three names are the site's own hierarchy, not TinyMCE's H1–H6.
+        // A block already draws its own title as the page's heading, so a rich
+        // field's h2 is a heading WITHIN that section — offering H1 would put a
+        // second page title in the middle of a page.
+        toolbar: 'blocks | bold italic underline | bullist numlist | link',
+        block_formats: 'Text=p;Heading=h2;Subheading=h3;Small heading=h4',
         valid_elements: 'p,br,strong/b,em/i,u,s,ul,ol,li,a[href|target|rel],h2,h3,h4,blockquote',
         link_default_target: '_blank',
         setup: function (ed) {
@@ -1414,8 +1425,18 @@ function inspectorSections(b, d) {
       '<input class="ed-field" id="edUrl" data-in="url" data-k="url" value="' + esc(b.url) + '" placeholder="https://…"></div>';
   }
 
-  // Repeating rows
-  if (d.items) out += itemsSection(b, d);
+  // 6b. Where the logos come from. Reading the partner ministries is the
+  // default for a new block because a logo typed into a page is one the values
+  // page and the footer never get, and one nobody remembers to change when the
+  // partner rebrands. The hand-typed list stays for logos that are not partner
+  // ministries at all.
+  if (d.partnerSource) out += partnerSourceSection(b);
+
+  // Repeating rows. Hidden while the block is reading the record — a list of
+  // typed logos nothing renders is a list somebody will edit and wonder about.
+  // It is not deleted: switching back to Chosen by hand brings it back exactly
+  // as it was.
+  if (d.items && !(d.partnerSource && b.source === 'record')) out += itemsSection(b, d);
 
   // 7. Theme colours
   out += '<div class="ed-sec"><div class="ed-lab-row"><span class="ed-lab">Theme colours</span>' +
@@ -1473,6 +1494,39 @@ function inspectorSections(b, d) {
     '</div></div>' + lockRow;
 
   return out;
+}
+
+// The Partner logos block's source: the partner ministries record, or a list
+// typed here. When it reads the record, the partners are ticked rather than
+// retyped, and a partner with no logo says so with a link to go and add one —
+// the logo lives on the partner, not on this page.
+function partnerSourceSection(b) {
+  var list = S.config.partners || [];
+  var chosen = b.partnerIds || [];
+  var out = '<div class="ed-sec"><span class="ed-lab">Logos come from</span><div class="ed-chips">' +
+    chip('source', 'record', 'Partner ministries', b.source === 'record') +
+    chip('source', 'manual', 'Chosen by hand', b.source !== 'record') +
+    '</div><span class="ed-note">Reading the partner ministries means a logo uploaded once on the Partners screen appears everywhere it is shown, and nothing here goes stale when a partner rebrands.</span></div>';
+  if (b.source !== 'record') return out;
+
+  if (!list.length) {
+    return out + '<div class="ed-sec"><span class="ed-lab">Which partners</span>' +
+      '<span class="ed-note">There are no partner ministries yet. Add them under Partners in the admin and they appear here.</span></div>';
+  }
+  var missing = 0;
+  var rows = list.map(function (p) {
+    if (!p.logo) missing++;
+    var on = !chosen.length || chosen.indexOf(p.id) > -1;
+    return '<label class="ed-check"><input type="checkbox" data-in="partner:' + p.id + '"' + (on ? ' checked' : '') + '>' +
+      esc(p.name) + (p.logo ? '' : ' <span style="color:#8C3A28">— no logo yet</span>') + '</label>';
+  }).join('');
+  return out + '<div class="ed-sec"><span class="ed-lab">Which partners</span>' + rows +
+    '<span class="ed-note">' +
+      (chosen.length
+        ? 'Only the ticked ones are shown. A partner added later will not appear until it is ticked here.'
+        : 'All of them, including any added later. Untick one to choose a set instead.') +
+      (missing ? ' ' + missing + (missing === 1 ? ' partner has' : ' partners have') + ' no logo uploaded, so ' + (missing === 1 ? 'it shows' : 'they show') + ' as a name — upload one on the Partners screen.' : '') +
+    '</span></div>';
 }
 
 function itemsSection(b, d) {
@@ -1629,6 +1683,14 @@ function inspectorAction(action, value) {
       say(value === 'off' ? 'Card off' : 'Card on the ' + value);
       break;
     }
+    // Structural: which logos exist is decided server-side from the record, so
+    // the Worker re-renders rather than the editor patching a style variable.
+    case 'source': {
+      if ((b.source || 'manual') === value) return;
+      patch(b.id, { source: value }, value === 'record' ? 'Reads the partner ministries' : 'Logos chosen by hand', 'rerender');
+      say(value === 'record' ? 'Reading the partner ministries' : 'Logos chosen by hand');
+      break;
+    }
     case 'cardShows': {
       if (b.cardShows === value) return;
       var shows = C.cardShows.filter(function (s) { return s.key === value; })[0];
@@ -1667,6 +1729,21 @@ function inspectorInput(target) {
     // rather than on the 700ms input debounce below.
     patch(b.id, { locked: target.checked }, target.checked ? 'Marked as set by the office' : 'Unmarked as set by the office', 'none');
     renderRail();
+    return;
+  }
+  if (spec.indexOf('partner:') === 0) {
+    // ⚠ Empty means ALL, so unticking one of an untouched block has to write
+    // out every OTHER partner rather than an empty list — otherwise unticking
+    // one would read as "show them all" and the tick would appear to do
+    // nothing. Ticking the last missing one collapses back to empty, so a
+    // partner added later is picked up again without anybody editing the page.
+    var pid = Number(spec.slice('partner:'.length));
+    var all = (S.config.partners || []).map(function (p) { return p.id; });
+    var now = (b.partnerIds && b.partnerIds.length) ? b.partnerIds.slice() : all.slice();
+    if (target.checked) { if (now.indexOf(pid) === -1) now.push(pid); }
+    else now = now.filter(function (n) { return n !== pid; });
+    var next = now.length === all.length ? [] : all.filter(function (n) { return now.indexOf(n) > -1; });
+    patch(b.id, { partnerIds: next }, 'Changed which partners are shown', 'rerender');
     return;
   }
   if (spec === 'url') b.url = value;
