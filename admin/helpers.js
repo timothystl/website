@@ -1,16 +1,16 @@
 // ── HELPERS, TINYMCE, TOPBAR, LOGIN ─────────────────────────
 // Extracted from tlc-admin-worker.js
 
-import { TINYMCE_HEAD, TINYMCE_SELF_HOSTED } from './db.js';
+import { TINYMCE_HEAD, TINYMCE_BASE } from './db.js';
+// The preview a closed rich field shows is stored admin HTML rendered inside
+// another admin's session, so it goes through the same allowlist the page
+// editor's canvas uses. Preview only — nothing here touches what is stored.
+import { sanitizeRich } from './blocks.js';
 import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, SIDEBAR_JS, TOGGLE_WORD_JS, LOCKED_FIELD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 import { APPEARANCE_CSS } from './appearance.js';
-// The preview a closed rich field shows is stored admin HTML rendered inside
-// another admin's session, so it goes through the same allowlist the block
-// editor's canvas uses. Preview only — nothing here touches what is stored.
-import { sanitizeRich } from './blocks.js';
 
-export const VERSION = 'v4.30.0'; // minor: TinyMCE is self-hosted from public/tinymce — no API key, no editor-load meter — and rich fields still open on demand
+export const VERSION = 'v4.30.0'; // minor: rich fields open on demand — the page editor used to build one editor per rich field and rebuild all of them on every nudge
 
 // ── THE SHARED SHELL CSS/JS, EXTERNALISED ───────────────────────
 // This used to be inlined into every admin response inside <style>/<script>
@@ -472,10 +472,9 @@ self.addEventListener('notificationclick', function(event){
 });
 `;
 
-// Every rich-text field in the admin shares one toolbar — the design's own
-// note is "painted on all of them, not just the first", because a field that
-// looks like a plain textarea gets typed into like one.
+// Every rich-text field in the admin shares one toolbar.
 const TINY_TOOLBAR = 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image | table | code';
+
 
 // The activation, once, in the cached shell script rather than repeated inside
 // every field's own inline <script> — which is also why a field is now markup
@@ -503,11 +502,16 @@ export const RICH_FIELD_JS = `
       if (!window.tinymce || !document.body.contains(ta)) return;
       window.tinymce.init({
         target: ta,
-        // ⚠ Self-hosted: the licence acknowledgement and the plugin list both
-        // come from admin/db.js, so there is one place a plugin name is
-        // written and one place the vendored folder is checked against.
-        license_key: '${TINYMCE_SELF_HOSTED.license_key}',
-        promotion: ${TINYMCE_SELF_HOSTED.promotion},
+        base_url: '${TINYMCE_BASE}',
+        suffix: '.min',
+        // ⚠ Self-hosted, not cloud. base_url/suffix point TinyMCE's own lazy
+        // loads (theme, model, icons, skin, plugins) at the versioned route the
+        // core came from; license_key 'gpl' is the self-hosting licence and is
+        // what stops the editor rendering an "invalid licence" notice.
+        // 'blockquote' used to be in this list and is not a TinyMCE plugin —
+        // it is a core format. admin/tinymce-assets.test.mjs checks every name
+        // here against what is actually vendored.
+        license_key: 'gpl',
         plugins: 'image link lists table code',
         toolbar: TOOLBAR,
         menubar: false,
@@ -646,7 +650,7 @@ ${extraHead}
       // fonts.googleapis.com serves the Lora / Source Sans 3 stylesheet and
       // fonts.gstatic.com the font files themselves — the redesign's type
       // system needs both, and a blocked font silently falls back to Georgia.
-      'Content-Security-Policy': "default-src 'self'; script-src 'self' https://timothystl.org 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://timothystl.org https://fonts.googleapis.com; font-src 'self' https://timothystl.org https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://timothystl.org; frame-src 'self';"
+      'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self'; frame-src 'self';"
     }
   });
 }
@@ -1052,19 +1056,21 @@ function tlcUploadHandler(blobInfo) {
 
 // ── ONE RICH-TEXT FIELD BUILDER ──────────────────────────────
 // There used to be seven near-identical copies of this, ~500 lines of them.
-// That was AC-10 in the July 2026 review, and the reason it mattered is AC-3,
-// which sat unfixed underneath it: the saved content was interpolated into an
+// That was AC-10 in the July 2026 review, and the reason it mattered is
+// AC-3, which sat unfixed underneath it: the content is interpolated into an
 // inline <script>, and every copy escaped backslash, backtick and $ — but not
-// `</script>`, which the HTML parser honours regardless of JavaScript string
-// context. v3.6.0 fixed that with one builder and a `jsString()` that split the
-// closing tag.
+// `</script>`.
 //
-// ⚠ `jsString` is gone, and its absence is the point: saved content no longer
-// reaches an inline script AT ALL. It is HTML-escaped into the textarea and
-// allowlist-sanitised into the preview, so the whole class of break-out is
-// closed by construction rather than by remembering to escape one more
-// sequence. Do not reintroduce a path that interpolates stored content into a
-// <script> — the escaping is easy to get right and easy to forget.
+// ⚠ The HTML parser ends a script block at the first `</script` REGARDLESS of
+// JavaScript string context. Somebody with content-edit rights could save a
+// post containing it, break out of the init block, and run script in the
+// session of any admin who later opened that screen. Escaping it in one place
+// is the whole point of there being one place.
+
+// Every rich-text field in the admin comes from here. The toolbar is the same
+// on all of them — the design's own note is "painted on all of them, not just
+// the first", because a field that looks like a plain textarea gets typed into
+// like one.
 
 // Every rich-text field in the admin comes from here.
 //

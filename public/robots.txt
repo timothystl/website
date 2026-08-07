@@ -3,7 +3,5 @@ Allow: /
 Disallow: /manual
 Disallow: /voters
 Disallow: /how-to-give
-# The self-hosted rich-text editor the admin loads. Nothing here is a page.
-Disallow: /tinymce/
 
 Sitemap: https://timothystl.org/sitemap.xml

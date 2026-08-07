@@ -6,13 +6,14 @@
 // account to bill. It serves public/tinymce/<version>/ off a local static
 // server, points the loader at it, and opens a field.
 //
-// ⚠ THE ASSERTION THAT EARNS THIS SUITE is that every /tinymce/ request comes
-// back as JavaScript or CSS. `wrangler-site.toml` sets
-// `not_found_handling = "single-page-application"`, so in production a missing
-// file under /tinymce/ does not 404 — it returns index.html with a **200**, and
-// the browser feeds an HTML document into a <script> tag. Checking status codes
-// alone would sail straight past that, which is why this checks content types.
-// The local server below imitates that behaviour deliberately.
+// ⚠ THE ASSERTION THAT EARNS THIS SUITE is that every /assets/tinymce/ request
+// comes back 200 AND as JavaScript or CSS. In production that route proxies
+// raw.githubusercontent.com, so what arrives is whatever GitHub returned — a
+// rate-limit page, a 404 body, an outage page — and only the content type
+// distinguishes those from the file. Checking status codes alone would sail
+// straight past it. The local server below serves a wrong-content-type body
+// for anything missing, deliberately, so that is what a broken path looks
+// like here too.
 import http from 'node:http'; import path from 'node:path';
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module'; import { execSync } from 'node:child_process';
@@ -22,7 +23,7 @@ import { TINYMCE_VERSION, TINYMCE_BASE, TINYMCE_HEAD } from '../admin/db.js';
 import { tinymceField, RICH_FIELD_JS, ADMIN_SHELL_CSS } from '../admin/helpers.js';
 
 const TYPES = { '.js': 'text/javascript', '.css': 'text/css', '.md': 'text/plain', '.txt': 'text/plain', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
-const pub = new URL('../public/', import.meta.url);
+const vendor = new URL('../admin/vendor/tinymce/', import.meta.url);
 
 const STORED = '<p>The office wrote this <strong>last week</strong>.</p>';
 const CLASSIC = tinymceField({ id: 'pastor-editor', name: 'pastor_note', value: STORED, minHeight: 200, label: 'Your message this week' });
@@ -33,7 +34,7 @@ const INLINE_BOOT = `
 window._onTinymce(function () {
   window.tinymce.init({
     target: document.getElementById('canvasField'),
-    license_key: 'gpl', promotion: false,
+    base_url: BASE, suffix: '.min', license_key: 'gpl',
     inline: true, menubar: false, statusbar: false, branding: false,
     plugins: 'lists link autolink',
     toolbar: 'bold italic underline | bullist numlist | link',
@@ -44,6 +45,7 @@ window._onTinymce(function () {
 });`;
 
 const page = (base) => `<!doctype html><html><head><meta charset="utf-8">
+<script>var BASE = '${base}';<\/script>
 <style>${ADMIN_SHELL_CSS}</style>
 ${TINYMCE_HEAD.split(TINYMCE_BASE).join(base)}
 </head><body>
@@ -61,19 +63,24 @@ const srv = http.createServer((q, r) => {
     return;
   }
   const url = decodeURIComponent(q.url.split('?')[0]);
-  if (url.startsWith('/tinymce/')) {
-    const f = new URL('.' + url, pub);
+  if (url.startsWith('/assets/tinymce/')) {
+    let rel = url.slice('/assets/tinymce/'.length);
+    const v = /^(\d+\.\d+\.\d+)\/(.*)$/.exec(rel);
+    // The route in tlc-admin-worker.js strips the version segment the same way.
+    if (v) { if (v[1] !== TINYMCE_VERSION) { r.writeHead(404); return r.end('nf'); } rel = v[2]; }
+    const f = new URL('./' + rel, vendor);
     if (existsSync(f) && statSync(f).isFile()) {
       r.writeHead(200, { 'Content-Type': TYPES[path.extname(url)] || 'application/octet-stream' });
       return r.end(readFileSync(f));
     }
-    // ⚠ Imitating production on purpose: single-page-application not_found
-    // handling turns a missing asset into a 200 of HTML, not a 404.
+    // ⚠ Imitating the proxy on purpose: what comes back for a missing file is
+    // whatever the upstream said, not the file, and the content type is the
+    // only thing that tells you.
     r.writeHead(200, { 'Content-Type': 'text/html' });
-    return r.end('<!doctype html><html><body>SPA fallback</body></html>');
+    return r.end('<!doctype html><html><body>not the file</body></html>');
   }
   r.writeHead(200, { 'Content-Type': 'text/html' });
-  r.end(page('http://localhost:' + srv.address().port + '/tinymce/' + TINYMCE_VERSION));
+  r.end(page(TINYMCE_BASE));
 });
 await new Promise((r) => srv.listen(0, r));
 const base = 'http://localhost:' + srv.address().port;
@@ -85,7 +92,7 @@ p.on('pageerror', (e) => errs.push(String(e)));
 p.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') logs.push(m.text()); });
 p.on('response', async (res) => {
   const u = new URL(res.url());
-  if (u.pathname.startsWith('/tinymce/')) assets.push({ path: u.pathname, status: res.status(), type: res.headers()['content-type'] || '' });
+  if (u.pathname.startsWith('/assets/tinymce/')) assets.push({ path: u.pathname, status: res.status(), type: res.headers()['content-type'] || '' });
 });
 
 let pass = 0, fail = 0;
@@ -96,7 +103,7 @@ await p.goto(base);
 await p.waitForTimeout(200);
 
 group('the library is not fetched until a field is opened');
-ok(assets.length === 0, 'nothing under /tinymce/ requested on load — got ' + assets.map((a) => a.path).join(', '));
+ok(assets.length === 0, 'nothing under /assets/tinymce/ requested on load — got ' + assets.map((a) => a.path).join(', '));
 
 group('opening a field boots the real editor from our own files');
 await p.locator('.tlc-rich-view').first().click();
@@ -106,10 +113,10 @@ await p.waitForTimeout(900);
 ok(await p.locator('.tox-tinymce').count() > 0, 'the editor chrome rendered');
 ok(assets.length > 0, 'and it pulled its own assets: ' + assets.length + ' requests');
 
-group('every asset is what it claims to be, not the SPA fallback');
+group('every asset is what it claims to be, not an error page');
 for (const a of assets) {
   ok(a.status === 200, a.path + ' → ' + a.status);
-  ok(!/text\/html/.test(a.type), a.path + ' came back as HTML — that is the missing-file fallback, not the file');
+  ok(!/text\/html/.test(a.type), a.path + ' came back as HTML — that is not the file — an error page or a rate limit reached the browser instead');
 }
 ok(assets.some((a) => a.path.endsWith('/tinymce.min.js')), 'the library itself');
 ok(assets.some((a) => a.path.includes('/themes/silver/')), 'the theme');
@@ -122,6 +129,8 @@ ok(errs.length === 0, 'no page errors: ' + errs.join(' | '));
 // TinyMCE 7 shouts about a missing licence key. If this fires, license_key: 'gpl' is not reaching init.
 const licence = logs.filter((l) => /licen[cs]e/i.test(l));
 ok(licence.length === 0, 'no licence complaint: ' + licence.join(' | '));
+// Checked rather than configured: the community build draws no Upgrade
+// button with menubar off, so `promotion: false` is not needed.
 ok(await p.locator('.tox-promotion').count() === 0, 'no "Upgrade" promotion in the chrome');
 ok(await p.locator('.tox-notification').count() === 0, 'no warning notification over the editor');
 

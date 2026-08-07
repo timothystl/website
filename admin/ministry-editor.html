@@ -690,21 +690,20 @@ function setCanvas(html) {
 // page. The toolbar carries no font, size or colour controls — those live in
 // the inspector where they are constrained to the site's own scale and palette.
 // If TinyMCE fails to load the fields stay plain contenteditable, which still
-// types and still saves — and that fallback is what makes the rest of this
-// safe.
+// types and still saves — and that fallback is what makes the rest of this safe.
 //
 // ⚠ ONE FIELD AT A TIME, ON FOCUS. This used to init every [data-rich="1"] on
 // the canvas at once, and setCanvas() runs again on every add, delete,
-// duplicate, reorder, undo and reset — so a page with fourteen rich fields
-// (/ministries has exactly that) spent fourteen TinyMCE EDITOR LOADS per
-// structural change, and TinyMCE Cloud bills per instance that finishes
-// initialising. An afternoon of tidying one page could cost several hundred.
-// Now the only thing that creates an editor is somebody putting the caret in a
-// field, so the bill matches the work.
+// duplicate, reorder, alignment click and undo — so a page with fourteen rich
+// fields (/ministries has exactly that) built and tore down fourteen editors
+// per structural change. Against the old cloud account that was fourteen
+// BILLED editor loads; self-hosted it is merely fourteen editors' worth of work
+// on every nudge, which is still the wrong thing to do. Now the only thing that
+// creates an editor is somebody putting the caret in a field.
 function openRichField(node) {
   if (!node || !node.dataset || node.dataset.rich !== '1') return;
   // TinyMCE marks the element it has taken over. Re-initialising a live editor
-  // would both double-count and detach the toolbar.
+  // would detach the toolbar.
   if (node.classList.contains('mce-content-body')) return;
   if (typeof window._onTinymce !== 'function') return;
   // ⚠ Where the caret is. The browser has already put it where the person
@@ -727,13 +726,12 @@ function openRichField(node) {
     try {
       window.tinymce.init({
         target: node,
-        // ⚠ Self-hosted open-source build: TinyMCE 7 refuses to start without
-        // either a cloud API key or this acknowledgement of the GPL, and the
-        // community build otherwise paints an "Upgrade" button into the chrome.
-        license_key: 'gpl', promotion: false,
+        // Self-hosted, not cloud — see TINYMCE_HEAD in admin/db.js. Every
+        // plugin named below must exist in admin/vendor/tinymce/plugins.
+        base_url: '/assets/tinymce/7.9.3',
+        suffix: '.min',
+        license_key: 'gpl',
         inline: true, menubar: false, statusbar: false, branding: false,
-        // ⚠ Every name here must exist in public/tinymce/<version>/plugins —
-        // see TINYMCE_PLUGINS in admin/db.js for why a typo is silent now.
         plugins: 'lists link autolink',
         toolbar: 'bold italic underline | bullist numlist | link',
         valid_elements: 'p,br,strong/b,em/i,u,s,ul,ol,li,a[href|target|rel],h2,h3,h4,blockquote',

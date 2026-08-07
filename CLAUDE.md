@@ -689,10 +689,11 @@ screen nobody edits now costs nothing at all — it does not even fetch the
   if it is not the caret simply stays where focus left it. This did not arise
   before because every field was initialised long before anybody clicked one.
 
-**⚠ The ceiling was still there after this, and Andrew removed it** — see "It is
-self-hosted now" below. This section stays because the lazy opening is still the
-right design and still the reason the block editor is not ruinous: free is not a
-reason to build fourteen editors per re-render.
+**⚠ The meter is gone — see "It is self-hosted now" below — and none of this
+became unnecessary.** Metering was what made it urgent, not what made it wrong:
+without the lazy opening the page editor still builds and destroys fourteen
+editors every time somebody nudges a block on /ministries. Free is not a reason
+to do that.
 
 Run: `node test/rich-field.test.mjs` (Chromium; **it stubs TinyMCE and never
 loads the real library**), plus the rich-text group in `node admin/ui.test.mjs`.
@@ -705,7 +706,7 @@ then *"Self host it. We don't need the paid functions."*
 
 **Where they went.** Not a leak, and nothing on the public site — `timothystl.org`
 is an approved domain on the Tiny account, which invites that theory, but nothing
-public, no worker and no email ever loaded TinyMCE. It was the **block editor**,
+public, no worker and no email ever loaded TinyMCE. It was the **page editor**,
 being used. One editor per rich field on the page, rebuilt on every structural
 change, and `/ministries` renders **14** rich fields, `/worship` and `/give` 9
 each. 614 over two days is about 45 re-renders of a 14-field page — an afternoon
@@ -723,59 +724,64 @@ Two things made it much worse than it had been:
 
 So "before we were doing only 100 a month" is exactly right: before, the only
 TinyMCE in the admin was the classic forms — open a news post, spend one. Nobody
-was living in the block editor yet.
+was living in the page editor yet.
 
 **⚠ Tiny's dashboard shows the count and nothing else** — no per-page, per-day or
 per-referrer breakdown, so the account cannot tell you this. The arithmetic above
 came from reading the code and rendering the seeded pages in editing mode; that
 is the way to answer it again.
 
-**And now there is nothing to count.** `public/tinymce/7.9.3/` is the open-source
-build, vendored and served off `timothystl.org` by the site worker. No API key,
-no meter, no overage, and the paid account can go.
+**The self-hosting itself shipped separately, in #417**, while this branch was
+open — `admin/vendor/tinymce/` (TinyMCE 7.9.3, GPLv2+) served by the
+`/assets/tinymce/` route in `tlc-admin-worker.js`, which proxies
+`raw.githubusercontent.com` rather than carrying 1.4MB in the Worker bundle.
+Same-origin to the browser, so no CSP allowance was needed. That mechanism is
+the one in the tree; a second, parallel attempt on this branch (vendoring into
+`public/` and serving from the site worker) was dropped rather than kept
+alongside it. What this branch adds on top:
 
-- **1.4MB, 17 files, trimmed by hand** from an 11MB package: the library, the
-  DOM model, the silver theme, the default icons, the oxide skin, the six
-  plugins actually named in a config, and TinyMCE's own `license.md` and
-  `notices.txt`, which travel with it because the build is **GPLv2+**.
-- **⚠ The version is in the PATH, not a query string.** TinyMCE reads its own
-  base URL off the script tag and loads the theme, model, icons, skin and every
-  plugin relative to it — a `?v=` is stripped from those, so they would sit in a
-  browser cache forever with nothing able to bust them. Upgrading is: drop a new
-  folder in, change `TINYMCE_VERSION`, delete the old one. `site-worker.js`
-  serves a versioned path `immutable` for a year on the strength of that.
-- **⚠ A MISSING FILE IS NOT A 404 HERE.** `wrangler-site.toml` sets
-  `not_found_handling = "single-page-application"`, so anything missing under
-  `/tinymce/` returns **index.html with a 200** and the browser feeds an HTML
-  document into a `<script>` tag. The real symptom is
-  `SyntaxError: Unexpected token '<'` and a network tab full of 200s. This repo
-  has been bitten by that behaviour before — it is why `/scheduler.html` needed
-  a real redirect rather than being left to 404.
-- **⚠ `blockquote` was in the classic plugin list for months and is not a
-  TinyMCE plugin at all.** Against the CDN it cost nothing. Self-hosted it would
-  have been the first thing to break, by the mechanism above. It is gone, and
-  `TINYMCE_PLUGINS` in `admin/db.js` is now the one list — the test checks both
-  init configs against it and it against the folder, so neither drifts alone.
-- **⚠ `license_key: 'gpl'` is required.** TinyMCE 7 refuses to start self-hosted
-  without either a cloud key or that acknowledgement, and the community build
-  otherwise paints an **"Upgrade"** button into the editor chrome. Both are set
-  at both init sites; the browser suite asserts no licence complaint reaches the
-  console and no promotion element is drawn.
-- **⚠ The admin is a different ORIGIN from `timothystl.org`**, so both CSPs
-  (`admin/helpers.js`'s `html()` and `EDITOR_HEADERS` in `tlc-admin-worker.js`)
-  name it explicitly. Drop it from either and every rich field on that screen
-  silently loses its toolbar — the field still types and still saves, which is
-  exactly why nobody would notice quickly.
-- `Disallow: /tinymce/` is in `robots.txt`. None of it is a page.
+- **⚠ THE VERSION IS IN THE PATH NOW** — `/assets/tinymce/7.9.3/…`, and the
+  route strips and checks that segment. It was `?v=` on the entry script only,
+  and that does not reach the rest: TinyMCE fetches its theme, model, icons,
+  skin and every plugin from `base_url` **with no query string**, and the route
+  serves everything `immutable` for a year. An upgrade would have busted
+  `tinymce.min.js` and left every browser running a year-old theme and model
+  against a new core — a broken editor that no reload fixes and no deploy
+  clears. Versioning the path changes every URL at once.
+- **⚠ Nothing initialises at page load** (see the section above). Metering is
+  gone but the work is not: without this, the page editor still builds and
+  destroys fourteen editors every time somebody nudges a block.
+- **⚠ The blank-on-save hole got MORE likely, not less.** The stored value used
+  to arrive only via `init_instance_callback` → `setContent`, with the textarea
+  left empty — so if TinyMCE failed to load, opening a post and pressing Save
+  wrote an empty body over it. Self-hosting puts `raw.githubusercontent.com` in
+  that path at request time, which is a weaker dependency than a commercial CDN,
+  not a stronger one. The value lives in the textarea now.
+- **`notices.txt`** ships beside `license.md`. GPL: the notices travel with the
+  code we redistribute.
+- **`blockquote` was already dropped in #417** — it sat in the classic plugin
+  list for months and is not a TinyMCE plugin at all, just a core format.
+  `TINYMCE_PLUGINS` in `admin/db.js` is now the one list, and the test checks
+  both init configs against it and it against the folder, so neither drifts
+  alone.
+- **`promotion: false` is NOT set, deliberately.** The community build is
+  supposed to paint an "Upgrade" button into the chrome; checked in a real
+  browser with `menubar: false`, it draws none. The browser suite asserts that
+  rather than configuring around it, so if a future version starts drawing one
+  the test says so.
+- **⚠ `license_key: 'gpl'` is required** and is not a key you obtain — it is a
+  literal string acknowledging the GPL. Without it TinyMCE 7 renders an invalid
+  licence notice over the editor.
 
 Run: `node admin/tinymce-assets.test.mjs` (**in CI** — every file present, no
-config naming a plugin we did not vendor, the version in the path, the licence
-acknowledged, the folder still trimmed) and `node test/tinymce-selfhost.test.mjs`
-(Chromium, **loads the real library** — which now costs nothing — and asserts
-every `/tinymce/` response is JS or CSS rather than HTML, every configured plugin
+config naming a plugin we did not vendor, the version in the path and in both
+`base_url`s, the licence acknowledged, the folder still trimmed) and
+`node test/tinymce-selfhost.test.mjs` (Chromium, **loads the real library** —
+which now costs nothing — and asserts every `/assets/tinymce/` response is 200
+**and** JavaScript or CSS rather than an error page, every configured plugin
 drew its toolbar button, content round-trips through a save, and the inline
 config boots. Verified by deleting `theme.min.js`, which fails it with the
-genuine symptom).
+genuine symptom, `SyntaxError: Unexpected token '<'`).
 
 ### A year is asked for a month at a time (v4.27.0, 2026-08-06)
 
@@ -3548,7 +3554,7 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 ## Pending / Deferred Items
 
 ### Still Needs to Be Built
-- ~~**Whether to keep paying Tiny at all**~~ — **decided and done, v4.30.0, 2026-08-07.** Dinger: *"Self host it. We don't need the paid functions."* The open-source build is vendored into `public/tinymce/7.9.3/` and served off `timothystl.org`; there is no API key and no editor-load meter. See "It is self-hosted now, and where the 614 went" above for the trimmed file set, the SPA-200 trap that self-hosting introduces, and why the version has to sit in the path. **One thing left for an admin, outside this repo: cancel the paid Tiny plan** — nothing in the code calls it any more, so the subscription is now paying for nothing. Keep the account itself if you want the usage history; it should read zero from the day this deploys, which is also the cheapest confirmation that the change worked.
+- ~~**Whether to keep paying Tiny at all**~~ — **decided and done, 2026-08-07.** Dinger: *"Self host it. We don't need the paid functions."* Shipped in #417: `admin/vendor/tinymce/` (GPLv2+) served by the `/assets/tinymce/` route, no API key and no editor-load meter. See "It is self-hosted now, and where the 614 went" above for where the loads were going, and for the version-in-path fix that keeps a future upgrade from leaving a year-old theme cached against a new core. **One thing left for an admin, outside this repo: cancel the paid Tiny plan** — nothing in the code calls it any more, so the subscription is now paying for nothing. Keep the account itself if you want the usage history; it should read zero from the day this deploys, which is also the cheapest confirmation that the change worked.
 - ~~**The footer is not admin-editable at all**~~ — **done v4.23.0, 2026-08-05.** `footer_columns` + `menu_items.column_id`; headings, membership and order are all editable under Menu → Footer columns, and deleting a column never deletes its links. See "The footer is columns now" above. *(Original note kept below for context.)* The footer's column headings ("Visit", "Connect", "Programs", "Partners") and which links sit under each were hardcoded in `public/index.html` — the admin's Menu screen only manages the *header* nav and a flat list of footer outside-links repeated on mobile, neither of which touches the desktop footer's structure at all. What's wanted: real admin control over the footer's column headings and which links sit under each, add/remove/rename a column, reassign a link between columns — not just reordering within a fixed set of columns like the Partners tab's new drag-to-reorder. This is a genuinely separate build from the Menu screen's existing flat `menu_items` list (`MAX_DEPTH.footer = 0`), not an extension of it — likely wants its own "footer columns" concept (a new table for column headings + order, with footer links assigned to one) rather than shoehorning grouping into `menu_items`. Scoped but not started.
 - ~~**`give.timothystl.org` is not a block-editor page**~~ — **built v4.24.0, 2026-08-05**, and **waiting on one Publish**. The draft is seeded; `published_blocks` is empty, so the live page still renders `give-landing.js` until somebody opens `/pages/give-landing/edit` and presses Publish. That last step is deliberately manual: this is the page that takes the money, and a deploy that swaps its rendering path while nobody is watching is exactly the risk the original deferral existed to avoid. See "give.timothystl.org is a block-editor page" below and `admin/BLOCK-EDITOR-ROLLOUT.md` §3. `give_keep_in_step` was **deleted**, not wired up — it was a key nothing ever read, attached to a switch that promised to keep the two giving pages in step.
 
