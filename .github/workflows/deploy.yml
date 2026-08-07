@@ -76,37 +76,86 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          # Read current version from helpers.js (e.g. 'v1.76.3').
-          # Auto-bump is patch-only; major and minor are intentionally manual
-          # so the version number means something. To cut a minor or major
-          # release, edit admin/helpers.js by hand before merging.
-          # [^']* (not .*) so this stops at the version string's closing
-          # quote instead of greedily running to the last quote on the line
-          # — a trailing comment containing an apostrophe (e.g. "Brevo's")
-          # used to make .* swallow past the real value and break the sed
-          # below with an unbalanced delimiter.
-          CURRENT=$(grep "export const VERSION = " admin/helpers.js | sed "s/.*VERSION = '\([^']*\)'.*/\1/")
-
-          # Strip leading 'v' and split on '.'. If the current version is
-          # still in the old two-segment form (e.g. 'v1.76'), treat it as
-          # 'v1.76.0' so we land on 'v1.76.1' the first run.
-          STRIPPED=${CURRENT#v}
-          MAJOR=$(echo "$STRIPPED" | awk -F. '{print $1+0}')
-          MINOR=$(echo "$STRIPPED" | awk -F. '{print $2+0}')
-          PATCH=$(echo "$STRIPPED" | awk -F. '{print ($3=="" ? 0 : $3+0)}')
-          NEW_PATCH=$((PATCH + 1))
-          NEW_VERSION="v${MAJOR}.${MINOR}.${NEW_PATCH}"
-
-          sed -i "s/export const VERSION = '${CURRENT}'/export const VERSION = '${NEW_VERSION}'/" admin/helpers.js
-
-          echo "Bumped: ${CURRENT} → ${NEW_VERSION}"
-
-          # Redeploy admin with the new version baked in
-          wrangler deploy
-
-          # Commit and push the version bump (skip ci prevents re-triggering)
+          set -u
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add admin/helpers.js
-          git commit -m "Bump version to ${NEW_VERSION} [skip ci]"
-          git push
+
+          # ⚠ THIS JOB RACES ITSELF, and used to lose. It deployed, committed
+          # the bump and pushed — and a plain `git push` is rejected whenever
+          # another merge reached main while this run was working. On
+          # 2026-08-06 that happened on three consecutive merges (#407, #408,
+          # #411): every deploy SUCCEEDED, every job went red on the push, and
+          # because the bump commit never landed, the next run read the same
+          # stale number and re-bumped to the same value. Three merges, three
+          # red runs, and a version stuck at v4.26.1 — which is what somebody
+          # reads to tell whether their change is live.
+          #
+          # So the number is computed from ORIGIN/MAIN rather than from the
+          # tree this run checked out, and a rejected push is retried rather
+          # than being the end of it. Recomputing is the part that matters: a
+          # bare retry would keep proposing a number that main has already
+          # used.
+          for attempt in 1 2 3 4 5; do
+            git fetch --quiet origin main
+
+            # Start each attempt from what is actually on main. Anything that
+            # merged while we worked is code we WANT deployed under the new
+            # number — this job's whole purpose is to make the live worker
+            # match main with the version baked in.
+            git reset --quiet --hard origin/main
+
+            # Read the current version from helpers.js (e.g. 'v1.76.3').
+            # Auto-bump is patch-only; major and minor are intentionally
+            # manual so the version number means something. To cut a minor or
+            # major release, edit admin/helpers.js by hand before merging.
+            # [^']* (not .*) so this stops at the version string's closing
+            # quote instead of greedily running to the last quote on the line
+            # — a trailing comment containing an apostrophe (e.g. "Brevo's")
+            # used to make .* swallow past the real value and break the sed
+            # below with an unbalanced delimiter.
+            CURRENT=$(grep "export const VERSION = " admin/helpers.js | sed "s/.*VERSION = '\([^']*\)'.*/\1/")
+
+            # Strip leading 'v' and split on '.'. If the current version is
+            # still in the old two-segment form (e.g. 'v1.76'), treat it as
+            # 'v1.76.0' so we land on 'v1.76.1' the first run.
+            STRIPPED=${CURRENT#v}
+            MAJOR=$(echo "$STRIPPED" | awk -F. '{print $1+0}')
+            MINOR=$(echo "$STRIPPED" | awk -F. '{print $2+0}')
+            PATCH=$(echo "$STRIPPED" | awk -F. '{print ($3=="" ? 0 : $3+0)}')
+            NEW_PATCH=$((PATCH + 1))
+            NEW_VERSION="v${MAJOR}.${MINOR}.${NEW_PATCH}"
+
+            sed -i "s/export const VERSION = '${CURRENT}'/export const VERSION = '${NEW_VERSION}'/" admin/helpers.js
+
+            # Refuse to push a no-op. If the sed matched nothing the file is
+            # unchanged, and committing nothing then pushing would report
+            # success while the version silently never moved.
+            if git diff --quiet -- admin/helpers.js; then
+              echo "::error::Could not rewrite the VERSION line (read '${CURRENT}') — nothing was bumped."
+              exit 1
+            fi
+
+            echo "Attempt ${attempt}: bumping ${CURRENT} → ${NEW_VERSION}"
+
+            # Deploy BEFORE pushing, so the repo never claims a version that
+            # was never served. The reverse failure — the worker serving a
+            # number the repo has not recorded — is the harmless direction,
+            # and the next run corrects it.
+            wrangler deploy
+
+            git add admin/helpers.js
+            git commit --quiet -m "Bump version to ${NEW_VERSION} [skip ci]"
+
+            if git push --quiet origin HEAD:main; then
+              echo "Pushed ${NEW_VERSION}"
+              exit 0
+            fi
+
+            echo "Push rejected — main moved while this run was working. Recomputing."
+            # Sleep a little longer each time so two runs racing each other do
+            # not keep colliding in lockstep.
+            sleep $((attempt * 5))
+          done
+
+          echo "::error::Could not push the version bump after 5 attempts. The deploy itself succeeded — the live worker is current; only the version commit is missing."
+          exit 1
