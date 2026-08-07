@@ -104,9 +104,18 @@ const SHORT_CACHE_RE = /\.(css|js|mjs|json|xml|txt|map|webmanifest)$/i;
 // (the ?v= busting on index.html's references stays the real control); HTML
 // gets no-cache so a publish is visible on the next load — no-cache still
 // allows storing, it just forces the etag revalidation env.ASSETS supports.
+// TinyMCE is vendored under /tinymce/<version>/ and the admin loads it from
+// here. The version is in the path, so a given URL's bytes never change and it
+// can be cached forever — which matters more than it looks: the library pulls
+// its theme, model, icons, skin and plugins relative to itself, so an hour's
+// cache means the office re-downloads about 1.4MB across a dozen requests every
+// time somebody opens an editor after lunch.
+const IMMUTABLE_RE = /^\/tinymce\/\d+\.\d+\.\d+\//;
+
 function withAssetCaching(res, pathname) {
   const h = new Headers(res.headers);
-  if (LONG_CACHE_RE.test(pathname)) h.set('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+  if (IMMUTABLE_RE.test(pathname)) h.set('Cache-Control', 'public, max-age=31536000, immutable');
+  else if (LONG_CACHE_RE.test(pathname)) h.set('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
   else if (SHORT_CACHE_RE.test(pathname)) h.set('Cache-Control', 'public, max-age=3600');
   else h.set('Cache-Control', 'no-cache');
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });

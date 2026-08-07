@@ -1,7 +1,7 @@
 // ── HELPERS, TINYMCE, TOPBAR, LOGIN ─────────────────────────
 // Extracted from tlc-admin-worker.js
 
-import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
+import { TINYMCE_HEAD, TINYMCE_SELF_HOSTED } from './db.js';
 import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, SIDEBAR_JS, TOGGLE_WORD_JS, LOCKED_FIELD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 import { APPEARANCE_CSS } from './appearance.js';
@@ -10,7 +10,7 @@ import { APPEARANCE_CSS } from './appearance.js';
 // editor's canvas uses. Preview only — nothing here touches what is stored.
 import { sanitizeRich } from './blocks.js';
 
-export const VERSION = 'v4.29.0'; // minor: rich-text fields open on demand — TinyMCE bills per editor instance that initialises, and this admin was creating up to fourteen of them per canvas re-render
+export const VERSION = 'v4.30.0'; // minor: TinyMCE is self-hosted from public/tinymce — no API key, no editor-load meter — and rich fields still open on demand
 
 // ── THE SHARED SHELL CSS/JS, EXTERNALISED ───────────────────────
 // This used to be inlined into every admin response inside <style>/<script>
@@ -503,7 +503,12 @@ export const RICH_FIELD_JS = `
       if (!window.tinymce || !document.body.contains(ta)) return;
       window.tinymce.init({
         target: ta,
-        plugins: 'image link lists blockquote table code',
+        // ⚠ Self-hosted: the licence acknowledgement and the plugin list both
+        // come from admin/db.js, so there is one place a plugin name is
+        // written and one place the vendored folder is checked against.
+        license_key: '${TINYMCE_SELF_HOSTED.license_key}',
+        promotion: ${TINYMCE_SELF_HOSTED.promotion},
+        plugins: 'image link lists table code',
         toolbar: TOOLBAR,
         menubar: false,
         min_height: Number(mount.dataset.richMin) || 200,
@@ -641,7 +646,7 @@ ${extraHead}
       // fonts.googleapis.com serves the Lora / Source Sans 3 stylesheet and
       // fonts.gstatic.com the font files themselves — the redesign's type
       // system needs both, and a blocked font silently falls back to Georgia.
-      'Content-Security-Policy': "default-src 'self'; script-src 'self' https://cdn.tiny.cloud 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://cdn.tiny.cloud https://fonts.googleapis.com; font-src 'self' https://cdn.tiny.cloud https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.tiny.cloud; frame-src 'self' https://cdn.tiny.cloud;"
+      'Content-Security-Policy': "default-src 'self'; script-src 'self' https://timothystl.org 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://timothystl.org https://fonts.googleapis.com; font-src 'self' https://timothystl.org https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://timothystl.org; frame-src 'self';"
     }
   });
 }

@@ -727,7 +727,13 @@ function openRichField(node) {
     try {
       window.tinymce.init({
         target: node,
+        // ⚠ Self-hosted open-source build: TinyMCE 7 refuses to start without
+        // either a cloud API key or this acknowledgement of the GPL, and the
+        // community build otherwise paints an "Upgrade" button into the chrome.
+        license_key: 'gpl', promotion: false,
         inline: true, menubar: false, statusbar: false, branding: false,
+        // ⚠ Every name here must exist in public/tinymce/<version>/plugins —
+        // see TINYMCE_PLUGINS in admin/db.js for why a typo is silent now.
         plugins: 'lists link autolink',
         toolbar: 'bold italic underline | bullist numlist | link',
         valid_elements: 'p,br,strong/b,em/i,u,s,ul,ol,li,a[href|target|rel],h2,h3,h4,blockquote',

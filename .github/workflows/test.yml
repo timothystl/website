@@ -120,11 +120,23 @@ jobs:
 #   node test/public-phone.test.mjs      # [B8] tap targets at 390px, MEASURED
 #   node test/payroll.test.mjs           # payroll, against a stubbed Supabase
 #   node test/rich-field.test.mjs        # rich fields open on demand — see below
+#   node test/tinymce-selfhost.test.mjs  # the vendored TinyMCE BOOTS — see below
 #   ... and editor-edit, editor-dnd, editor-media, editor-publish,
 #       editor-resize, editor-sections, site-roles, site-pages, whole-page
 #
 # Chromium is at /opt/pw-browsers/chromium in the Claude Code environment, or
 # set CHROME_PATH.
+#
+# ⚠ tinymce-selfhost is the one to run after touching public/tinymce/, the
+# plugin lists, or the loader. TinyMCE is self-hosted now, so a missing file
+# is not a 404: wrangler-site.toml's single-page-application not_found
+# handling returns index.html with a 200, and the browser feeds an HTML
+# document into a <script> tag. This suite boots the real library off the
+# repo's own files and asserts every /tinymce/ response is JS or CSS rather
+# than HTML — verified by deleting theme.min.js, which fails it with the
+# genuine symptom, SyntaxError: Unexpected token '<'. The parts that need no
+# browser (every file present, no config naming a plugin we did not vendor)
+# are in admin/tinymce-assets.test.mjs, which DOES run above.
 #
 # ⚠ rich-field is the one to run after any change to tinymceField or
 # RICH_FIELD_JS. TinyMCE Cloud bills per editor instance that finishes

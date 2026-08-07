@@ -1,28 +1,37 @@
 // ── CONSTANTS & INITIAL DATA ─────────────────────────────────
 // Extracted from tlc-admin-worker.js
 
-// TinyMCE rich-text editor — included on the screens that carry a rich field.
+// ── TINYMCE: SELF-HOSTED, AND LOADED ONLY WHEN A FIELD IS OPENED ────────────
 //
-// ⚠ TinyMCE Cloud bills by EDITOR LOAD, and an editor load is one *instance*
-// finishing its init, not one page view. The newsletter composer alone carries
-// nine rich fields, so opening it once used to spend nine of them whether or
-// not anybody typed in one; the block editor spent one per rich field on the
-// page and did it again on every add, delete, reorder and undo. Hitting 50% of
-// a month's allowance by the first week is what that arithmetic looks like.
+// ⚠ THIS IS NO LONGER TinyMCE Cloud. It is the open-source build, vendored into
+// `public/tinymce/<version>/` and served off our own domain, so there is no API
+// key, no editor-load meter and no overage. That change was made after the
+// account did 614 editor loads in two days against a previous rate of about a
+// hundred a month — see the note in CLAUDE.md for where those went.
 //
-// So nothing here initialises anything. `_onTinymce(fn)` fetches the library on
-// FIRST DEMAND and queues callers until it lands — a screen where nobody opens
-// a field never loads TinyMCE at all, and never spends a load. The one place an
-// editor is created from is the shared activation in ADMIN_SHELL_JS
-// (`RICH_FIELD_JS`, admin/helpers.js) and the canvas handler in
-// admin/ministry-editor.html, both of which run on a real click.
+// Two things still matter and neither is about the bill:
+//
+// ⚠ An editor is created ONLY when somebody opens a field. `_onTinymce(fn)`
+// fetches the library on FIRST DEMAND and queues callers until it lands, so a
+// screen where nobody edits never downloads 1.4MB. The block editor used to
+// build one editor per rich field and do it again on every add, delete,
+// reorder and undo; on /ministries that is fourteen at a time. Free is not a
+// reason to go back to that.
 //
 // ⚠ `_onTinymce` must stay tolerant of the script never arriving. Every caller
 // checks `window.tinymce` again inside the callback, because on an `onerror`
 // the queue is dropped and the field falls back to something that still types
 // and still saves. A rich field that eats what was written is far worse than
 // one with no toolbar.
-export const TINYMCE_API_KEY = '5wrsrinqxeqvej5slykwic6rgpfb0v8wvj0f21fgk1r4nhs0';
+//
+// ⚠ The version is in the PATH, not a query string. TinyMCE reads its own base
+// URL off this script tag and loads the theme, model, icons, skin and every
+// plugin relative to it — a `?v=` would be stripped from those, so they would
+// sit in a browser cache forever with no way to bust them. Upgrading means
+// dropping a new folder in, changing this constant, and deleting the old one.
+export const TINYMCE_VERSION = '7.9.3';
+export const TINYMCE_BASE = `https://timothystl.org/tinymce/${TINYMCE_VERSION}`;
+export const TINYMCE_SRC = `${TINYMCE_BASE}/tinymce.min.js`;
 export const TINYMCE_HEAD = `<script>
 window._tinyQ = [];
 window._onTinymce = function (fn) {
@@ -32,13 +41,40 @@ window._onTinymce = function (fn) {
   if (window._tinyLoading) return;
   window._tinyLoading = true;
   var s = document.createElement('script');
-  s.src = 'https://cdn.tiny.cloud/1/${TINYMCE_API_KEY}/tinymce/7/tinymce.min.js';
+  s.src = '${TINYMCE_SRC}';
   s.referrerPolicy = 'origin';
   s.onload = function () { var q = window._tinyQ; window._tinyQ = []; q.forEach(function (f) { f(); }); };
   s.onerror = function () { window._tinyFailed = true; var q = window._tinyQ; window._tinyQ = []; q.forEach(function (f) { f(); }); };
   document.head.appendChild(s);
 };
 <\/script>`;
+
+// Every self-hosted init needs these two, and getting either wrong is quiet
+// rather than loud:
+//   license_key — TinyMCE 7 refuses to start without either a cloud API key or
+//     an explicit acknowledgement of the GPL. 'gpl' is that acknowledgement.
+//   promotion   — the community build otherwise paints an "Upgrade" button
+//     into the editor chrome, which is not something to put in front of the
+//     church office.
+export const TINYMCE_SELF_HOSTED = { license_key: 'gpl', promotion: false };
+
+// ⚠ EVERY PLUGIN NAMED IN AN INIT CONFIG MUST EXIST IN THE VENDORED FOLDER, and
+// this list is what `admin/tinymce-assets.test.mjs` checks the configs against.
+// On the cloud build a misspelt plugin was a 404 and a console warning. Self-
+// hosted it is worse: `wrangler-site.toml` sets
+// `not_found_handling = "single-page-application"`, so a missing file returns
+// index.html with a **200**, and the browser feeds a whole HTML document into a
+// <script> tag. `blockquote` was in the classic toolbar's plugin list for
+// months and is not a TinyMCE plugin at all — harmless against the CDN, a
+// broken editor here.
+//
+// This is the UNION of what the two configs ask for — the classic fields use
+// image/link/lists/table/code and the block editor's inline fields use the
+// narrower lists/link/autolink, which is deliberate: the canvas toolbar offers
+// no image, table or code button, so loading those there would be four files
+// fetched to sit idle. The test checks both configs against this list and this
+// list against the folder, so neither can drift alone.
+export const TINYMCE_PLUGINS = ['image', 'link', 'lists', 'table', 'code', 'autolink'];
 
 // ── DB INIT ─────────────────────────────────────────────────
 export const DB_INIT_NEWSLETTERS = `CREATE TABLE IF NOT EXISTS newsletters (
