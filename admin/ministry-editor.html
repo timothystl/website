@@ -697,6 +697,10 @@ function initRichText() {
   try {
     window.tinymce.init({
       selector: '#edPaper [data-rich="1"]',
+      // Self-hosted, not cloud — see TINYMCE_HEAD in admin/db.js.
+      base_url: '/assets/tinymce',
+      suffix: '.min',
+      license_key: 'gpl',
       inline: true, menubar: false, statusbar: false, branding: false,
       plugins: 'lists link autolink',
       toolbar: 'bold italic underline | bullist numlist | link',

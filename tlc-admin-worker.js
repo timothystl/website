@@ -5,7 +5,7 @@
 // Last modified: 2026-03-27
 
 
-import { TINYMCE_API_KEY, TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_BOOKING_SLOT_INDEX, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, DB_INIT_FOOTER_COLUMNS, FOOTER_COLUMN_SEED, FOOTER_ITEM_COLUMNS, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS, DB_INIT_PAYROLL_READY_NOTIFIED } from './admin/db.js';
+import { TINYMCE_HEAD, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_BOOKING_SLOT_INDEX, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, DB_INIT_FOOTER_COLUMNS, FOOTER_COLUMN_SEED, FOOTER_ITEM_COLUMNS, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS, DB_INIT_PAYROLL_READY_NOTIFIED } from './admin/db.js';
 import { pushToAllSubscribers } from './admin/webpush.js';
 
 // Static pages that can carry self-serve notices (matches the SPA's page ids in public/index.html)
@@ -200,10 +200,10 @@ const EDITOR_HEADERS = {
   'Content-Type': 'text/html; charset=utf-8',
   'X-Robots-Tag': 'noindex, nofollow',
   'Cache-Control': 'no-store',
-  'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tiny.cloud; " +
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tiny.cloud; " +
-    "font-src https://fonts.gstatic.com https://cdn.tiny.cloud; img-src 'self' data: blob: https:; " +
-    "connect-src 'self' https://cdn.tiny.cloud; frame-src 'self' https://www.youtube-nocookie.com https://docs.google.com https://calendar.google.com; " +
+  'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; " +
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+    "font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; " +
+    "connect-src 'self'; frame-src 'self' https://www.youtube-nocookie.com https://docs.google.com https://calendar.google.com; " +
     "frame-ancestors 'none'; base-uri 'none'",
 };
 
@@ -1161,6 +1161,40 @@ export default {
     if (path === '/assets/admin.js' && method === 'GET') {
       return new Response(ADMIN_SHELL_JS, { headers: {
         'Content-Type': 'text/javascript; charset=utf-8',
+        'Cache-Control': 'public, max-age=31536000, immutable',
+        'X-Robots-Tag': 'noindex, nofollow',
+      }});
+    }
+
+    // ── PUBLIC: self-hosted TinyMCE ──
+    // The editor used to come from cdn.tiny.cloud against an account API key.
+    // That build is metered per "editor load" and bills overage past the
+    // monthly limit, so the files are served out of this repo instead — free
+    // (GPL v2+), no key, no cap. See TINYMCE_HEAD in admin/db.js.
+    //
+    // Same shape as the ChMS app's own /admin/vendor/tinymce/ route: proxied
+    // from this public repo rather than inlined as string constants the way
+    // admin.css/admin.js above are, because 1.4 MB of editor across sixteen
+    // files is not something to carry in the Worker bundle. Same-origin to the
+    // browser either way, so the CSP needs no third-party allowance.
+    // Placed here with the other static assets, ahead of the schema gate — it
+    // needs no D1 access at all.
+    if (path.startsWith('/assets/tinymce/') && method === 'GET') {
+      const rel = path.slice('/assets/tinymce/'.length);
+      // Allowlist the shape, not the filenames: TinyMCE fetches its own
+      // theme/model/icons/skin/plugin paths by convention, so they can't be
+      // enumerated here — but this must not become a general proxy for the
+      // repo either.
+      if (rel.includes('..') || !/^[\w./-]+\.(js|css)$/.test(rel)) {
+        return new Response('Not found', { status: 404 });
+      }
+      const upstream = await fetch(
+        'https://raw.githubusercontent.com/timothystl/website/main/admin/vendor/tinymce/' + rel,
+        { cf: { cacheEverything: true, cacheTtl: 86400 } },
+      );
+      if (!upstream.ok) return new Response('Not found', { status: 404 });
+      return new Response(upstream.body, { headers: {
+        'Content-Type': rel.endsWith('.css') ? 'text/css; charset=utf-8' : 'text/javascript; charset=utf-8',
         'Cache-Control': 'public, max-age=31536000, immutable',
         'X-Robots-Tag': 'noindex, nofollow',
       }});
