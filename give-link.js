@@ -118,3 +118,35 @@ export const GIVE_LINK_JS = `
     }
   }
 `;
+
+// The period arithmetic, mirrored for the browser for the same reason: the
+// Giving screen's ladder drawer shows what a row's button will ask for, live,
+// as somebody types the amount and picks the period. Without it that drawer
+// would be asking staff to divide by twelve in their heads and trust the
+// answer — which is how the wrong figure ends up on a button.
+//
+// ⚠ Two copies again, so `test/give-page.test.mjs` runs this string and the
+// exported functions above over the same table of inputs and asserts they
+// agree. That is what makes a mirror safe rather than a second chance to be
+// wrong: they cannot drift without a test going red.
+export const GIVE_PERIOD_JS = `
+  function tlcParseAmount(v) {
+    var n = Number(String(v == null ? '' : v).replace(/[^0-9.]/g, ''));
+    return isFinite(n) && n > 0 ? n : null;
+  }
+  function tlcFmtAmount(n) { return Number(n).toLocaleString('en-US'); }
+  function tlcIsAnnual(period) {
+    return /^\\s*\\/?\\s*(a\\s+|per\\s+)?(year|yr|yrs|years|annual|annually|annum)\\s*$/i
+      .test(String(period == null ? '' : period));
+  }
+  function tlcGiftForPeriod(amountDollars, period) {
+    var amt = tlcParseAmount(amountDollars);
+    if (amt == null) return null;
+    if (!tlcIsAnnual(period)) return { amount: amt, per: '' };
+    var monthly = Math.floor(amt / 12);
+    return monthly >= 1 ? { amount: monthly, per: 'month' } : { amount: amt, per: '' };
+  }
+  function tlcGiveButtonLabel(gift) {
+    return 'Give $' + tlcFmtAmount(gift.amount) + (gift.per ? '/' + gift.per : '');
+  }
+`;

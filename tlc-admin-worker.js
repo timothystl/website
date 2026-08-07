@@ -47,7 +47,8 @@ import MINISTRY_EDITOR_HTML from './admin/ministry-editor.html';
 import { PAGE_SEEDS } from './admin/page-seeds.js';
 import { SITE_PAGES } from './admin/site-pages.js';
 import { GIVE_LANDING_PAGE, GIVE_LANDING_PAGE_ID } from './admin/give-landing-seed.js';
-import { giftForPeriod, giveButtonLabel, parseAmount as parseGiveAmount, fmtAmount as fmtGiveAmount } from './give-link.js';
+import { giftForPeriod, giveButtonLabel, parseAmount as parseGiveAmount, fmtAmount as fmtGiveAmount,
+         GIVE_PERIOD_JS } from './give-link.js';
 
 // /news has no hardcoded markup for tools/extract-pages.mjs to lift — its
 // content (the news list, the newsletter archive, the calendar) was always
@@ -9384,7 +9385,13 @@ ${sidebarShell('settings', currentUser, '', await pageBadges())}
         // the page editor. Only a real edit to the text replaces it.
         const priorPlain = String(existing?.body || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
         const body = existing && words === priorPlain ? existing.body : (words ? '<p>' + escapeHtml(words) + '</p>' : '');
-        const item = { ...(existing || {}), amount: String(form.get('amount') || '').trim(), period, body };
+        // Store digits when it IS a number, so the page's own formatter owns
+        // the $ and the commas and there is one place that decides how an
+        // amount looks. Words are stored as typed — "Any amount" is a
+        // legitimate row, and normalising it would erase it.
+        const typedAmount = String(form.get('amount') || '').trim();
+        const parsedAmount = parseGiveAmount(typedAmount);
+        const item = { ...(existing || {}), amount: parsedAmount == null ? typedAmount : String(parsedAmount), period, body };
         if (existing) target.items[idx] = item; else target.items.push(item);
       } else if (path.startsWith('/giving-ladder/delete/')) {
         const i = parseInt(path.split('/')[4] || '', 10);
@@ -9546,6 +9553,10 @@ ${sidebarShell('settings', currentUser, '', await pageBadges())}
       // shows the words and the SAVE keeps the original markup when the words
       // are unchanged — see /giving-ladder/update.
       const plainRowBody = (s) => String(s || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+      // Digits for editing. A stored "$5,000" is shown as 5000; a row written
+      // in words ("Any amount") is left exactly as it is, since stripping it
+      // to nothing would delete somebody's copy on the way into the form.
+      const plainRowAmount = (v) => (parseGiveAmount(v) == null ? String(v == null ? '' : v) : String(parseGiveAmount(v)));
       const fundRec = editFund && editFund !== 'new' ? funds.results.find((f) => String(f.id) === editFund) : null;
       const tierRec = editTier && editTier !== 'new' ? tiers.results.find((t) => String(t.id) === editTier) : null;
       const givingRowsHtml = givingLinks.results.length === 0
@@ -9710,17 +9721,33 @@ ${sidebarShell('giving', currentUser, '', await pageBadges())}
     fields: [
       { kind: 'html', html: `<input type="hidden" name="block" value="${escapeHtml(rowBlockId)}">` +
         (rowRec ? `<input type="hidden" name="index" value="${rowIndex}">` : '') },
-      { name: 'amount', label: 'Amount', value: rowRec?.amount ?? '', required: true, placeholder: '5000',
-        hint: 'Digits only for a real amount — the $ and the commas are added for you. Words are allowed (“Any amount”), and a row that is not a number simply gets no Give button rather than one pointing at nothing.' },
-      // Four options, so chips rather than a select — and the period is what
-      // decides what the button asks for, which is the one thing on this
-      // drawer somebody can get wrong in a way that costs money.
-      { kind: 'chips', name: 'period', label: 'Given every', value: String(rowRec?.period || 'week').replace(/^\/+/, ''),
+      // ⚠ Shown as digits whatever is stored. Some rows on the live draft were
+      // seeded by an older version that stored the formatted string ("$5,000"),
+      // and putting that straight into a field whose hint says "digits only"
+      // is a screen arguing with itself. The save normalises too, so editing
+      // any row quietly cleans it up.
+      { name: 'amount', label: 'Amount', value: rowRec ? plainRowAmount(rowRec.amount) : '', required: true, placeholder: '5000',
+        hint: 'Digits only — the $ and the commas are added for you. Words are allowed (“Any amount”), and a row that is not a number simply gets no Give button rather than one pointing at nothing.' },
+      // ⚠ These chips used to be labelled "Given every", and that wording is
+      // what made this drawer confusing: "given every month" reads as how the
+      // giver PAYS, so picking Month on a $5,000 row looks like it should
+      // produce the $416/month button when it would really ask for $5,000 a
+      // month. The field has always meant "the amount above is per ___" — the
+      // unit the row is written in, and what the page prints beside it. It now
+      // says so, and the line underneath states the outcome outright so the
+      // meaning never has to be inferred from a label at all.
+      { kind: 'chips', name: 'period', label: 'The amount above is per', value: String(rowRec?.period || 'week').replace(/^\/+/, ''),
         options: [
           { value: 'week', label: 'Week' }, { value: 'month', label: 'Month' },
           { value: 'year', label: 'Year' }, { value: '', label: 'One gift' },
-        ],
-        hint: 'A yearly amount is asked for a month at a time — $5,000 a year becomes a $416/month button — because nobody presses a one-off $5,000. Week, month and one-off ask for exactly what is typed above.' },
+        ] },
+      // The calculation, done for you and updated as you type. A leadership
+      // row promises one number and its button asks for another, and working
+      // that out in your head is exactly what somebody should not have to do
+      // on the screen that sets what a giver is charged.
+      { kind: 'html', html: `<div class="tlc-field"><label class="tlc-label">On the page</label>
+        <div class="tlc-static" id="ladder-preview" aria-live="polite">&mdash;</div>
+        <p class="tlc-hint">A yearly commitment is asked for a month at a time, because nobody presses a one-off $5,000. Every other period asks for exactly what is typed above.</p></div>` },
       { kind: 'textarea', name: 'body', label: 'What this gift pays for', value: plainRowBody(rowRec?.body), rows: 3,
         placeholder: 'Sends a youth to the National Youth Gathering.',
         hint: 'The sentence printed beside the amount. This is why a ladder row is not a setting — it is the words that make the number mean something.' },
@@ -9765,6 +9792,34 @@ ${sidebarShell('giving', currentUser, '', await pageBadges())}
       { kind: 'toggle', name: 'active', label: 'Showing on the giving page', value: tierRec ? !!tierRec.active : true },
     ],
   }) : ''}
+${editRow ? `<script>
+${GIVE_PERIOD_JS}
+(function(){
+  var form = document.getElementById('drawer-give-ladder-row') || document;
+  var amt = form.querySelector('input[name=amount]');
+  var out = document.getElementById('ladder-preview');
+  if (!amt || !out) return;
+  function periodNow(){
+    var r = form.querySelector('input[name=period]:checked');
+    return r ? r.value : '';
+  }
+  function draw(){
+    var v = amt.value, p = periodNow();
+    var n = tlcParseAmount(v);
+    // The row exactly as the page will print it, then what the button will
+    // ask for. Both, because the whole confusion this replaces is that those
+    // are two different numbers on a yearly row.
+    var reads = (n == null ? (v || '—') : '$' + tlcFmtAmount(n)) + (p ? '/' + p : '');
+    var gift = tlcGiftForPeriod(v, p);
+    out.textContent = gift
+      ? 'Reads ' + reads + ' \\u2014 button: ' + tlcGiveButtonLabel(gift)
+      : 'Reads ' + reads + ' \\u2014 no button, because that is not an amount';
+  }
+  amt.addEventListener('input', draw);
+  form.addEventListener('change', function(e){ if (e.target.name === 'period') draw(); });
+  draw();
+})();
+</script>` : ''}
 </div>`, 'Giving');
     }
 

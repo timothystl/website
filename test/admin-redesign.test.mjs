@@ -2045,6 +2045,44 @@ group('Giving: a ladder row is edited here, and it is the same record');
   eq(reordered.items.length, idx.length, 'reordering never loses a row');
   eq(reordered.items[reordered.items.length - 1].amount, firstAmountBefore, 'the first row is now last');
 
+  // ⚠ The drawer shows DIGITS whatever is stored. Some rows on the live draft
+  // were seeded by an older version that stored the formatted string, and a
+  // field whose hint says "digits only" prefilled with "$5,000" is a screen
+  // arguing with itself.
+  {
+    const b = JSON.parse(db.prepare("SELECT blocks FROM pages WHERE id='give-landing'").get().blocks);
+    const lad = b.find((x) => x.type === 'amounts');
+    lad.items[0].amount = '$5,000';
+    db.prepare("UPDATE pages SET blocks=? WHERE id='give-landing'").run(JSON.stringify(b));
+    const drawer = await (await call(env, '/giving?row=' + encodeURIComponent(lad.id) + ':0', { cookie })).text();
+    has(drawer, 'value="5000"', 'a stored "$5,000" is offered for editing as 5000');
+    lacks(drawer, 'value="$5,000"', 'and never as the formatted string');
+
+    // Saving normalises, so editing any row quietly cleans it up.
+    await post('/giving-ladder/update', { block: lad.id, index: '0', amount: '$9,500', period: 'year', body: 'x' });
+    eq(ladders()[0].items[0].amount, '9500', 'a formatted amount is stored as digits');
+
+    // Words are a legitimate row and must survive untouched — stripping them
+    // to nothing would delete somebody's copy.
+    await post('/giving-ladder/update', { block: lad.id, index: '0', amount: 'Any amount', period: '', body: 'x' });
+    eq(ladders()[0].items[0].amount, 'Any amount', 'but words are stored exactly as typed');
+  }
+
+  // The drawer does the arithmetic rather than asking staff to divide by 12 in
+  // their heads — the commitment and what the button charges are two different
+  // numbers on a yearly row, which is the whole trap.
+  {
+    const lad = ladders()[0];
+    const drawer = await (await call(env, '/giving?row=' + encodeURIComponent(lad.id) + ':1', { cookie })).text();
+    has(drawer, 'id="ladder-preview"', 'the drawer carries a live preview of what the button will ask');
+    has(drawer, 'tlcGiftForPeriod', 'driven by the shared arithmetic, not a retyped copy');
+    // ⚠ The old label read "Given every", which reads as how the giver PAYS —
+    // so Month on a $5,000 row looked like it should produce $416/month when
+    // it would really charge $5,000 a month.
+    has(drawer, 'The amount above is per', 'and the period is labelled as the unit, not the cadence');
+    lacks(drawer, 'Given every', 'the misleading label is gone');
+  }
+
   // A block id that is not on the page is a stale tab, and the answer is the
   // screen again — not a page of blocks written from a request about something
   // that is no longer there.
