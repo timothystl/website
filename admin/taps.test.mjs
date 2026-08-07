@@ -66,7 +66,11 @@ group('buckets');
   // Thirteen months keeps "this month against the same month last year"
   // answerable without the table growing forever.
   ok(KEEP_DAYS > 365, 'retention covers more than a year, so a year-on-year comparison survives');
-  eq(pruneBefore('2026-08-01T00:00:00Z'), '2025-06-27', 'anything older than that is dropped');
+  // ⚠ Church time, so this instant is 7pm on 2026-07-31 in St. Louis, not
+  // midnight on 08-01 — and the boundary is 400 days before THAT. It read
+  // 2025-06-27 while the buckets were keyed in UTC; the day it moved by is the
+  // same day every tap after 7pm was being filed under.
+  eq(pruneBefore('2026-08-01T00:00:00Z'), '2025-06-26', 'anything older than that is dropped');
 }
 
 

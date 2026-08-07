@@ -683,7 +683,6 @@ function setCanvas(html) {
   if (pageDiv) pageDiv.classList.toggle('tlcb-page--full', !!(S.blocks[0] && S.blocks[0].type === 'hero'));
   applySelection();
   fitPaper();
-  initRichText();
 }
 
 // Rich text uses the same TinyMCE the office already knows, in inline mode: a
@@ -691,26 +690,62 @@ function setCanvas(html) {
 // page. The toolbar carries no font, size or colour controls — those live in
 // the inspector where they are constrained to the site's own scale and palette.
 // If TinyMCE fails to load the fields stay plain contenteditable, which still
-// types and still saves.
-function initRichText() {
-  if (!window.tinymce || !el.edPaper.querySelector('[data-rich="1"]')) return;
+// types and still saves — and that fallback is what makes the rest of this safe.
+//
+// ⚠ ONE FIELD AT A TIME, ON FOCUS. This used to init every [data-rich="1"] on
+// the canvas at once, and setCanvas() runs again on every add, delete,
+// duplicate, reorder, alignment click and undo — so a page with fourteen rich
+// fields (/ministries has exactly that) built and tore down fourteen editors
+// per structural change. Against the old cloud account that was fourteen
+// BILLED editor loads; self-hosted it is merely fourteen editors' worth of work
+// on every nudge, which is still the wrong thing to do. Now the only thing that
+// creates an editor is somebody putting the caret in a field.
+function openRichField(node) {
+  if (!node || !node.dataset || node.dataset.rich !== '1') return;
+  // TinyMCE marks the element it has taken over. Re-initialising a live editor
+  // would detach the toolbar.
+  if (node.classList.contains('mce-content-body')) return;
+  if (typeof window._onTinymce !== 'function') return;
+  // ⚠ Where the caret is. The browser has already put it where the person
+  // clicked; TinyMCE's own focus() has no bookmark to restore on a brand-new
+  // editor and sends it to the start of the field. Clicking into the middle of
+  // a paragraph and typing at the beginning of it is the kind of small wrong
+  // thing nobody reports and everybody works around, so the range is taken
+  // before init and put back after. Inline mode edits the element in place, so
+  // it is usually still valid; if it is not, setRng throws and the caret simply
+  // stays where focus left it.
+  var saved = null;
   try {
-    window.tinymce.init({
-      selector: '#edPaper [data-rich="1"]',
-      // Self-hosted, not cloud — see TINYMCE_HEAD in admin/db.js.
-      base_url: '/assets/tinymce',
-      suffix: '.min',
-      license_key: 'gpl',
-      inline: true, menubar: false, statusbar: false, branding: false,
-      plugins: 'lists link autolink',
-      toolbar: 'bold italic underline | bullist numlist | link',
-      valid_elements: 'p,br,strong/b,em/i,u,s,ul,ol,li,a[href|target|rel],h2,h3,h4,blockquote',
-      link_default_target: '_blank',
-      setup: function (ed) {
-        ed.on('blur', function () { commitField(ed.getElement()); });
-      },
-    });
-  } catch (_) { /* plain contenteditable is a fine fallback */ }
+    var sel = window.getSelection();
+    if (sel && sel.rangeCount && node.contains(sel.anchorNode)) saved = sel.getRangeAt(0).cloneRange();
+  } catch (_) { /* no selection to keep */ }
+  window._onTinymce(function () {
+    if (!window.tinymce) return;
+    // The canvas may have been redrawn while the library was still arriving.
+    if (!el.edPaper.contains(node) || node.classList.contains('mce-content-body')) return;
+    try {
+      window.tinymce.init({
+        target: node,
+        // Self-hosted, not cloud — see TINYMCE_HEAD in admin/db.js. Every
+        // plugin named below must exist in admin/vendor/tinymce/plugins.
+        base_url: '/assets/tinymce/7.9.3',
+        suffix: '.min',
+        license_key: 'gpl',
+        inline: true, menubar: false, statusbar: false, branding: false,
+        plugins: 'lists link autolink',
+        toolbar: 'bold italic underline | bullist numlist | link',
+        valid_elements: 'p,br,strong/b,em/i,u,s,ul,ol,li,a[href|target|rel],h2,h3,h4,blockquote',
+        link_default_target: '_blank',
+        setup: function (ed) {
+          ed.on('blur', function () { commitField(ed.getElement()); });
+        },
+        init_instance_callback: function (ed) {
+          ed.focus();
+          if (saved) { try { ed.selection.setRng(saved); } catch (_) {} }
+        },
+      });
+    } catch (_) { /* plain contenteditable is a fine fallback */ }
+  });
 }
 
 function applySelection() {
@@ -1751,6 +1786,13 @@ function bindStatic() {
     if (e.target.closest('[contenteditable="true"]')) { select(wrap.dataset.id); return; }
     select(wrap.dataset.id);
   });
+
+  // A rich field becomes a TinyMCE editor the moment somebody puts the caret in
+  // it, and not before — see openRichField for what that is protecting.
+  el.edPaper.addEventListener('focusin', function (e) {
+    var node = e.target.closest ? e.target.closest('[data-rich="1"]') : null;
+    if (node) openRichField(node);
+  }, true);
 
   // commit text on blur
   el.edPaper.addEventListener('focusout', function (e) {

@@ -119,11 +119,33 @@ jobs:
 #   node test/public-page.test.mjs       # the live site
 #   node test/public-phone.test.mjs      # [B8] tap targets at 390px, MEASURED
 #   node test/payroll.test.mjs           # payroll, against a stubbed Supabase
+#   node test/rich-field.test.mjs        # rich fields open on demand — see below
+#   node test/tinymce-selfhost.test.mjs  # the vendored TinyMCE BOOTS — see below
 #   ... and editor-edit, editor-dnd, editor-media, editor-publish,
 #       editor-resize, editor-sections, site-roles, site-pages, whole-page
 #
 # Chromium is at /opt/pw-browsers/chromium in the Claude Code environment, or
 # set CHROME_PATH.
+#
+# ⚠ tinymce-selfhost is the one to run after touching admin/vendor/tinymce/,
+# the plugin lists, or the loader. TinyMCE is self-hosted, and the
+# /assets/tinymce/ route proxies raw.githubusercontent.com — so what reaches
+# the browser for a bad path is whatever GitHub returned (a 404 body, a rate
+# limit, an outage page), and only the CONTENT TYPE tells you it is not the
+# file. This suite boots the real library and asserts every response is 200
+# AND JavaScript or CSS — verified by deleting theme.min.js, which fails it
+# with the genuine symptom, SyntaxError: Unexpected token '<'. The parts that
+# need no browser (every file present, no config naming a plugin we did not
+# vendor, the version in the path) are in admin/tinymce-assets.test.mjs,
+# which DOES run above.
+#
+# ⚠ rich-field is the one to run after any change to tinymceField or
+# RICH_FIELD_JS. TinyMCE Cloud bills per editor instance that finishes
+# initialising, so a field that quietly goes back to initialising at page
+# load is a bill, not a visible bug — and the same suite covers the other
+# half, that a field nobody opened still submits exactly what it held. It
+# stubs TinyMCE and never fetches the real library, so running it costs no
+# editor loads against the church's account.
 #
 # ⚠ public-phone is the one to run after any change to public/styles.css. The
 # backlog asked for "a tap-through on a real phone"; a person doing that tells

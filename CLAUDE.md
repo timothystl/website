@@ -665,6 +665,244 @@ one.
 
 Run: two groups in `test/admin-redesign.test.mjs`.
 
+### The admin knows what day it is here (v4.31.0, 2026-08-07)
+
+Dinger, with a screenshot of the dashboard reading **"Friday morning"**: *"it
+thinks that it is friday morning. but where i am it is thursday evening can we
+fix this"*.
+
+**The Worker runs in UTC and the church is in St. Louis.** Every evening from
+about 7pm those two disagree about the date — 8pm Thursday in St. Louis is 1am
+Friday in UTC. The greeting was `new Date().getHours()` and
+`toLocaleDateString()` with no timezone, so it read the Worker's day.
+
+**The greeting was the harmless one.** The same `new Date().toISOString().split('T')[0]`
+— the UTC date — was how forty-odd other places asked what today was:
+
+- **A news post written on Thursday evening was DATED FRIDAY.** The form's
+  default `publish_date` was the UTC date.
+- **`/api/news` published and expired posts five hours early on the public
+  site**, since it filters `publish_date <= today` and `expire_date >= today`.
+- **The expiry sweep deleted a post, and its image out of R2, a day sooner**
+  than the office had asked for.
+- **The gym portal greyed out today's date** and refused a booking for it, and
+  invoices generated in the evening were dated tomorrow.
+- **A tap counted after 7pm on the last day of a month** went into the next
+  month's total, which is the only number that screen reports.
+
+`admin/when.js` is the one answer now — `churchDate()`, `churchDatePlus()`,
+`churchHour()`, `partOfDay()`, `churchFormat()` — and every one of those call
+sites goes through it.
+
+- **⚠ `Intl` does the DST arithmetic and that is the point.** Central is UTC-5
+  in summer and UTC-6 in winter; a hardcoded offset is wrong for half the year,
+  and the changeover is not a date to keep in the code.
+- **⚠ `churchDatePlus` is calendar arithmetic, NOT `Date.now() + n * 864e5`.**
+  Across a DST boundary a day is 23 or 25 hours, so the millisecond version
+  lands an hour out — and an hour is enough to cross midnight and report the
+  wrong **day**. The test pins the case that actually differs (11:30pm the
+  night before spring forward, +90 days, which is the news form's expiry
+  default); at other times of day both approaches agree, and a case where they
+  agree would prove nothing.
+- **⚠ `hour12: false` renders midnight as "24"** in some engines, which would
+  have made the greeting say "evening" at half past midnight. `churchHour`
+  folds 24 to 0.
+- **⚠ This is for dates somebody READS OR PICKS, never for timestamps.**
+  `created_at`, `sent_at` and the audit log are instants, and an instant belongs
+  in UTC. `new Date().toISOString()` is still right in those places and was left
+  alone.
+- **⚠ The suite was passing because it shared the bug.** `test/admin-redesign.test.mjs`
+  seeded `publish_date` with the UTC date and asserted the post was visible; the
+  moment `/api/news` started telling the truth, that row was correctly a
+  tomorrow post and the assertion failed. It seeds in church time now. A test
+  that makes the same wrong assumption as the code cannot catch the code.
+
+Run: `node admin/when.test.mjs`, plus `node admin/taps.test.mjs` and the
+`/api/news` group in `test/admin-redesign.test.mjs`.
+
+### A rich field costs nothing until it is opened (v4.29.0, 2026-08-07)
+
+Dinger forwarded Tiny's automated notice: *"You are receiving this automated
+email notice because you have reached 50% of your TinyMCE Editor Load limits for
+the current month"*, with the reminder that going over is an overage charge.
+
+**The bill is not per page view. An editor load is one instance finishing its
+init and dispatching `init`** — Tiny's own words — so a screen with nine rich
+fields spent nine of them the moment it opened, whether or not anybody typed.
+Nothing here was doing anything unreasonable-looking; the arithmetic was simply
+invisible.
+
+Two places were doing almost all of the spending, and the second is the one that
+explains reaching half a month's allowance in a week:
+
+| | fields | spent per | notes |
+|---|---|---|---|
+| Newsletter composer | 9 (pastor, secondary, WOL, LASM, tertiary, quick, 3 extras) | 9 per open | most weeks two or three get written in |
+| Block editor | 1 per rich field on the page — `/ministries` has **14** | 14 per **re-render** | and `setCanvas()` runs again on every add, delete, duplicate, reorder, undo and reset |
+
+The block editor tore every editor down and built them all again on each
+structural change. An afternoon of arranging one page was several hundred loads
+on its own.
+
+**So nothing initialises at page load any more, anywhere.** `_onTinymce()`
+(`TINYMCE_HEAD`, `admin/db.js`) fetches the library on first demand and queues
+callers; an editor is created only when somebody puts the caret in a field. A
+screen nobody edits now costs nothing at all — it does not even fetch the
+~500KB.
+
+- **⚠ This reverses the newsletter composer's own stated reasoning** — *"all of
+  them are rendered so TinyMCE can initialise each one at load … creating an
+  editor instance on click would be a second way for a rich field to exist, and
+  that is how one of them ends up behaving differently from the rest."* The
+  worry was right and the answer is not to init everything: click-to-open is now
+  the **only** way a rich field exists, for all of them, through the one
+  `tinymceField()` builder. There is still exactly one kind of rich field.
+- **⚠ The stored value lives in the TEXTAREA now, not in an init callback that
+  called `setContent`.** That is what lets an unopened field round-trip its
+  content untouched — and it closes a real hole that was there all along: with
+  the value arriving only from the script, a blocked CDN meant opening a post
+  and pressing Save wrote an **empty body** back over it. `test/rich-field.test.mjs`
+  drives that case (`?dead`, no TinyMCE at all) and was verified against the old
+  markup, where four assertions fail.
+- **A closed field shows its content, at the height the editor would be.** A
+  placeholder would make every screen look emptier than it is, and a box that
+  grows on click makes the page jump. The preview is `sanitizeRich`'d — the
+  block editor's own allowlist — because it is admin-authored HTML rendered
+  inside another admin's authenticated session. **Preview only: what is stored
+  and what is submitted are byte-identical.** Tables are among what that
+  allowlist drops, so a body containing one previews without it and edits fine.
+- **⚠ `.tlc-rich-view *{pointer-events:none}` is load-bearing.** The preview is
+  real markup, so without it, opening a field whose content starts with a link
+  navigates away from the form instead of editing it.
+- **⚠ `jsString()` is gone, and its absence is the point.** AC-3 was that saved
+  content interpolated into an inline `<script>` could break out at the first
+  `</script`; v3.6.0 fixed it by splitting the tag in one builder. Saved content
+  no longer reaches a script **at all** — HTML-escaped into the textarea,
+  allowlist-sanitised into the preview — so the class of bug is closed by
+  construction rather than by remembering one more escape. Do not reintroduce a
+  path that interpolates stored content into a `<script>`.
+- **The per-field inline `<script>` is gone with it.** The activation is
+  `RICH_FIELD_JS`, once, inside `ADMIN_SHELL_JS` — so it is served from
+  `/assets/admin.js`, `immutable`, instead of ~1.5KB repeated nine times in the
+  newsletter page body.
+- **The submit handler now attaches to the form the field is in.** It used to
+  take `document.querySelector('form')`, the page's *first* form, which is the
+  right one only by luck. Same behaviour otherwise: it waits on in-flight image
+  uploads, strips leftover `blob:` images, and carries the submit button's own
+  name across the programmatic submit (Publish vs Save as draft turns on it).
+- **In the block editor a field opens on `focusin`**, which is also its `select`
+  gesture, so there is no new interaction to learn. Plain `contenteditable` and
+  the canvas's own `focusout` → `commitField` already did the typing and the
+  saving; TinyMCE only ever added the floating toolbar, and that is still all it
+  adds — it just arrives when asked for.
+- **⚠ The caret is saved across that init and put back.** A brand-new inline
+  editor has no bookmark to restore, so `ed.focus()` sends the caret to the
+  start of the field — click into the middle of a paragraph, start typing at the
+  beginning of it. The range is cloned before init and `setRng` after, inside a
+  try: inline mode edits the element in place so it is normally still valid, and
+  if it is not the caret simply stays where focus left it. This did not arise
+  before because every field was initialised long before anybody clicked one.
+
+**⚠ The meter is gone — see "It is self-hosted now" below — and none of this
+became unnecessary.** Metering was what made it urgent, not what made it wrong:
+without the lazy opening the page editor still builds and destroys fourteen
+editors every time somebody nudges a block on /ministries. Free is not a reason
+to do that.
+
+Run: `node test/rich-field.test.mjs` (Chromium; **it stubs TinyMCE and never
+loads the real library**), plus the rich-text group in `node admin/ui.test.mjs`.
+
+### It is self-hosted now, and where the 614 went (v4.30.0, 2026-08-07)
+
+Dinger, on the lazy-loading change: *"What is the problem? We are showing 614
+loads in 2 days. What changed? Before we were doing only 100 a month"* — and
+then *"Self host it. We don't need the paid functions."*
+
+**Where they went.** Not a leak, and nothing on the public site — `timothystl.org`
+is an approved domain on the Tiny account, which invites that theory, but nothing
+public, no worker and no email ever loaded TinyMCE. It was the **page editor**,
+being used. One editor per rich field on the page, rebuilt on every structural
+change, and `/ministries` renders **14** rich fields, `/worship` and `/give` 9
+each. 614 over two days is about 45 re-renders of a 14-field page — an afternoon
+of arranging one page, twice.
+
+Two things made it much worse than it had been:
+
+- **v4.28.0 put the Alignment control on 31 of 32 block types**, up from 11.
+  Alignment is a `'rerender'` patch, so the most-clicked new control on the
+  screen costs the whole page's worth of editor loads per click. Eighteen
+  inspector actions are `'rerender'`; alignment is now on nearly every block.
+- **`richBody` went from 4 block types to 10** (2026-08-03), and the card-grid
+  extraction gave pages many more rich *items*. The same page grew more fields
+  to rebuild.
+
+So "before we were doing only 100 a month" is exactly right: before, the only
+TinyMCE in the admin was the classic forms — open a news post, spend one. Nobody
+was living in the page editor yet.
+
+**⚠ Tiny's dashboard shows the count and nothing else** — no per-page, per-day or
+per-referrer breakdown, so the account cannot tell you this. The arithmetic above
+came from reading the code and rendering the seeded pages in editing mode; that
+is the way to answer it again.
+
+**The self-hosting itself shipped separately, in #417**, while this branch was
+open — `admin/vendor/tinymce/` (TinyMCE 7.9.3, GPLv2+) served by the
+`/assets/tinymce/` route in `tlc-admin-worker.js`, which proxies
+`raw.githubusercontent.com` rather than carrying 1.4MB in the Worker bundle.
+Same-origin to the browser, so no CSP allowance was needed. That mechanism is
+the one in the tree; a second, parallel attempt on this branch (vendoring into
+`public/` and serving from the site worker) was dropped rather than kept
+alongside it. What this branch adds on top:
+
+- **⚠ THE VERSION IS IN THE PATH NOW** — `/assets/tinymce/7.9.3/…`, and the
+  route strips and checks that segment. It was `?v=` on the entry script only,
+  and that does not reach the rest: TinyMCE fetches its theme, model, icons,
+  skin and every plugin from `base_url` **with no query string**, and the route
+  serves everything `immutable` for a year. An upgrade would have busted
+  `tinymce.min.js` and left every browser running a year-old theme and model
+  against a new core — a broken editor that no reload fixes and no deploy
+  clears. Versioning the path changes every URL at once.
+- **⚠ Nothing initialises at page load** (see the section above). Metering is
+  gone but the work is not: without this, the page editor still builds and
+  destroys fourteen editors every time somebody nudges a block.
+- **⚠ The blank-on-save hole got MORE likely, not less.** The stored value used
+  to arrive only via `init_instance_callback` → `setContent`, with the textarea
+  left empty — so if TinyMCE failed to load, opening a post and pressing Save
+  wrote an empty body over it. Self-hosting puts `raw.githubusercontent.com` in
+  that path at request time, which is a weaker dependency than a commercial CDN,
+  not a stronger one. The value lives in the textarea now.
+- **`notices.txt`** ships beside `license.md`. GPL: the notices travel with the
+  code we redistribute.
+- **`blockquote` was already dropped in #417** — it sat in the classic plugin
+  list for months and is not a TinyMCE plugin at all, just a core format.
+  `TINYMCE_PLUGINS` in `admin/db.js` is now the one list, and the test checks
+  both init configs against it and it against the folder, so neither drifts
+  alone.
+- **`promotion: false` is NOT set, deliberately.** The community build is
+  supposed to paint an "Upgrade" button into the chrome; checked in a real
+  browser with `menubar: false`, it draws none. The browser suite asserts that
+  rather than configuring around it, so if a future version starts drawing one
+  the test says so.
+- **⚠ `license_key: 'gpl'` is required** and is not a key you obtain — it is a
+  literal string acknowledging the GPL. Without it TinyMCE 7 renders an invalid
+  licence notice over the editor.
+- **⚠ THE PAID PLAN IS CANCELLED (2026-08-07)**, so there is no longer an
+  account to fall back to. `cdn.tiny.cloud` is not a slower or costlier option
+  now; it is a broken one. `test/tinymce-selfhost.test.mjs` boots the real
+  library and asserts **no request leaves the origin during a full boot** —
+  which is the check worth having, because a residual call would show up as a
+  licence notice over somebody's editor rather than as anything in a log.
+
+Run: `node admin/tinymce-assets.test.mjs` (**in CI** — every file present, no
+config naming a plugin we did not vendor, the version in the path and in both
+`base_url`s, the licence acknowledged, the folder still trimmed) and
+`node test/tinymce-selfhost.test.mjs` (Chromium, **loads the real library** —
+which now costs nothing — and asserts every `/assets/tinymce/` response is 200
+**and** JavaScript or CSS rather than an error page, every configured plugin
+drew its toolbar button, content round-trips through a save, and the inline
+config boots. Verified by deleting `theme.min.js`, which fails it with the
+genuine symptom, `SyntaxError: Unexpected token '<'`).
+
 ### A year is asked for a month at a time (v4.27.0, 2026-08-06)
 
 Dinger, on the Giving screen: *"i can only edit the weekly giving tiers and not
@@ -2077,6 +2315,13 @@ also AC-10, the reason AC-3 survived: any escaping fix had to be made seven
 times. `jsString()` splits the closing tag so the parser never sees it, and
 `admin/ui.test.mjs` asserts it directly.
 
+**⚠ Superseded v4.29.0** — `jsString()` no longer exists, and neither does the
+inline `<script>` it was protecting. Saved content is HTML-escaped into the
+field's textarea and allowlist-sanitised into its closed-state preview, so there
+is nothing left for it to break out of. See "A rich field costs nothing until it
+is opened" above; the test group in `admin/ui.test.mjs` now pins that stronger
+property instead.
+
 The submit handler that waits for in-flight image uploads and strips leftover
 `blob:` images went into the shared builder rather than being lost — it lived
 only in the pastor's-note copy but was wired to the whole form, so folding the
@@ -3429,6 +3674,7 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 ## Pending / Deferred Items
 
 ### Still Needs to Be Built
+- ~~**Whether to keep paying Tiny at all**~~ — **done, and the plan is CANCELLED (2026-08-07).** Dinger: *"Self host it. We don't need the paid functions"*, then *"i canceled the plan"*. The editor is `admin/vendor/tinymce/` (TinyMCE 7 open-source, GPLv2+) served by the `/assets/tinymce/` route; there is no API key, no meter and no account behind it any more. ⚠ **Nothing may reintroduce a cloud dependency** — `cdn.tiny.cloud` now points at a cancelled subscription, so a stray call would not merely cost money, it would put a licence notice over the editor. Two tests hold that line: `admin/tinymce-assets.test.mjs` fails on the hostname appearing in any live code, and `test/tinymce-selfhost.test.mjs` boots the real library and asserts **no request leaves the origin at all**. See "It is self-hosted now, and where the 614 went" above for where the loads were going.
 - ~~**The footer is not admin-editable at all**~~ — **done v4.23.0, 2026-08-05.** `footer_columns` + `menu_items.column_id`; headings, membership and order are all editable under Menu → Footer columns, and deleting a column never deletes its links. See "The footer is columns now" above. *(Original note kept below for context.)* The footer's column headings ("Visit", "Connect", "Programs", "Partners") and which links sit under each were hardcoded in `public/index.html` — the admin's Menu screen only manages the *header* nav and a flat list of footer outside-links repeated on mobile, neither of which touches the desktop footer's structure at all. What's wanted: real admin control over the footer's column headings and which links sit under each, add/remove/rename a column, reassign a link between columns — not just reordering within a fixed set of columns like the Partners tab's new drag-to-reorder. This is a genuinely separate build from the Menu screen's existing flat `menu_items` list (`MAX_DEPTH.footer = 0`), not an extension of it — likely wants its own "footer columns" concept (a new table for column headings + order, with footer links assigned to one) rather than shoehorning grouping into `menu_items`. Scoped but not started.
 - ~~**`give.timothystl.org` is not a block-editor page**~~ — **built v4.24.0, 2026-08-05**, and **waiting on one Publish**. The draft is seeded; `published_blocks` is empty, so the live page still renders `give-landing.js` until somebody opens `/pages/give-landing/edit` and presses Publish. That last step is deliberately manual: this is the page that takes the money, and a deploy that swaps its rendering path while nobody is watching is exactly the risk the original deferral existed to avoid. See "give.timothystl.org is a block-editor page" below and `admin/BLOCK-EDITOR-ROLLOUT.md` §3. `give_keep_in_step` was **deleted**, not wired up — it was a key nothing ever read, attached to a switch that promised to keep the two giving pages in step.
 
@@ -3599,7 +3845,7 @@ core modules · `GY-` gym module · `PY-` payroll.
 | AW-2 | High | Admin worker | Stored XSS in admin UI via unescaped DB content → cross-privilege escalation (low-perm editor → admin) |
 | AC-1 | ~~High~~ **FIXED v3.8.0** | Core | Session cookie missing `Secure` flag — added, on both the set and clear headers |
 | AC-2 | High | Core | Email templates interpolate titles/subjects/URLs into broadcast HTML with **no** escaping (`email.js`) |
-| AC-3 | ~~High~~ **FIXED v3.6.0** | Core | `</script>` in saved editor content breaks out of the inline TinyMCE init block (`helpers.js`) — one builder now, `jsString()` splits the tag |
+| AC-3 | ~~High~~ **FIXED v3.6.0** | Core | `</script>` in saved editor content breaks out of the inline TinyMCE init block (`helpers.js`) — one builder now; v4.29.0 removed the inline script entirely, so there is nothing to break out of |
 | AC-4 | High | Core | No UNIQUE constraint on `gym_bookings(booking_date,start_time,end_time)` — schema half of GY-1 |
 | VS-3 | High | Scheduler | Breeze/Resend/Worker **secrets stored plaintext** in localStorage AND synced to D1 in plaintext |
 | VS-4 | High | Scheduler | RSVP tokens generated with `Math.random()` — guessable; sole authenticator for `/rsvp` |
@@ -3676,7 +3922,7 @@ GY-7, PY-6. Modal/keyboard accessibility — VS-7, VS-12, PY-7, PY-8, GY-12.
 
 - **AC-1** ~~(High, security)~~ **FIXED v3.8.0** — session cookie (`auth.js` 109/113) set `HttpOnly; SameSite=Strict` but not `Secure`. Appended on both the set and clear headers, so sign-out can't leave a non-Secure cookie a browser refuses to overwrite.
 - **AC-2** (High, security) — `email.js` drops subjects/titles/event names/CTA URLs into broadcast HTML with no escaping; `escapeHtml` exists in `helpers.js` but isn't imported here. Wrap all short plain-text fields.
-- **AC-3** ~~(High, security)~~ **FIXED v3.6.0** — `helpers.js`'s six near-identical TinyMCE section builders escaped backtick/`$` but not `</script>`, which the HTML parser honors regardless of JS-string context — a saved post could break out of the inline init block and run script in an admin's session. One builder now (`tinymceField()`), and `jsString()` splits the closing tag so the parser never sees it; see "AC-3 is fixed" above.
+- **AC-3** ~~(High, security)~~ **FIXED v3.6.0** — `helpers.js`'s six near-identical TinyMCE section builders escaped backtick/`$` but not `</script>`, which the HTML parser honors regardless of JS-string context — a saved post could break out of the inline init block and run script in an admin's session. One builder now (`tinymceField()`), and `jsString()` split the closing tag so the parser never saw it; see "AC-3 is fixed" above. ⚠ v4.29.0 went further and removed the inline script — saved content never reaches a `<script>` at all now.
 - **AC-4** (High, correctness) — `db.js` `DB_INIT_GYM_BOOKINGS` (133) has no unique index → root of GY-1. Add a partial unique index over active statuses; bump `SCHEMA_VERSION`.
 - **AC-5** (Medium, correctness) — `gym_invoices` money columns are `REAL` (db.js 175). Store integer cents. (Schema change → version bump.)
 - **AC-6** (Medium, correctness) — `audit_log.user_id` is `NOT NULL` (db.js 231) but `logAudit` binds null for system actions (auth.js 134); the INSERT throws and is silently swallowed → those actions vanish from the audit trail. Make nullable or use a sentinel.

@@ -8,6 +8,7 @@
 // month is, and what the screen is allowed to claim can be tested directly
 // without a Worker or a database.
 
+import { churchDate, churchDatePlus } from './when.js';
 // ── WHAT COUNTS ──────────────────────────────────────────────────────────────
 // The realistic way this number goes wrong is not somebody attacking a church's
 // tap counter. It is a crawler walking /tap1…/tap4, or a browser prefetching a
@@ -47,8 +48,11 @@ export function countsAsTap(headers) {
 // nobody will ever slice that finely. Four taps times 365 days is 1,460 rows a
 // year, and the write is a single upsert.
 
-export const dayKey = (d) => new Date(d).toISOString().slice(0, 10);
-export const monthKey = (d) => new Date(d).toISOString().slice(0, 7);
+// ⚠ Church time, like every other date somebody reads. A tap at 8pm lands on
+// the next UTC day, so on the last evening of a month its count went into next
+// month's total — and "taps this month" is the only question this screen asks.
+export const dayKey = (d) => churchDate(new Date(d));
+export const monthKey = (d) => dayKey(d).slice(0, 7);
 
 // Buckets older than this are pruned. Thirteen months keeps "this month against
 // the same month last year" answerable, which is the comparison somebody would
@@ -57,9 +61,9 @@ export const monthKey = (d) => new Date(d).toISOString().slice(0, 7);
 export const KEEP_DAYS = 400;
 
 export function pruneBefore(now) {
-  const d = new Date(now);
-  d.setUTCDate(d.getUTCDate() - KEEP_DAYS);
-  return dayKey(d);
+  // Calendar arithmetic in church time, matching the buckets it prunes — the
+  // boundary is KEEP_DAYS before the church's today, not before UTC's.
+  return churchDatePlus(-KEEP_DAYS, new Date(now));
 }
 
 // Sums the buckets for one tap in one month. Rows are `{tap_id, day, hits}` as
