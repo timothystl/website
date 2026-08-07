@@ -90,6 +90,11 @@ const p = await (await b.newContext()).newPage();
 const errs = []; const logs = []; const assets = [];
 p.on('pageerror', (e) => errs.push(String(e)));
 p.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') logs.push(m.text()); });
+const offsite = [];
+p.on('request', (req) => {
+  const u = new URL(req.url());
+  if (u.hostname !== 'localhost' && u.hostname !== '127.0.0.1') offsite.push(u.href);
+});
 p.on('response', async (res) => {
   const u = new URL(res.url());
   if (u.pathname.startsWith('/assets/tinymce/')) assets.push({ path: u.pathname, status: res.status(), type: res.headers()['content-type'] || '' });
@@ -123,6 +128,17 @@ ok(assets.some((a) => a.path.includes('/themes/silver/')), 'the theme');
 ok(assets.some((a) => a.path.includes('/models/dom/')), 'the model');
 ok(assets.some((a) => a.path.includes('/skins/ui/oxide/skin')), 'the skin');
 ok(assets.some((a) => a.path.includes('/icons/default/')), 'the icons');
+
+group('nothing reaches for Tiny at all');
+{
+  // ⚠ The paid Tiny plan is CANCELLED (2026-08-07). The open-source build has
+  // no key and no phone-home, and this asserts that against the real library
+  // rather than against the source: a boot that quietly contacted tiny.cloud
+  // would now be contacting an account that no longer exists, and the symptom
+  // would be a licence notice over the editor rather than anything in a log.
+  ok(offsite.length === 0, 'no request left this origin during a full boot: ' + offsite.join(' | '));
+  ok(!offsite.some((u) => u.includes('tiny.cloud')), 'and none of them to tiny.cloud');
+}
 
 group('the open-source build starts clean');
 ok(errs.length === 0, 'no page errors: ' + errs.join(' | '));
