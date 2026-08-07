@@ -78,7 +78,7 @@
 .tlc-pay-li.is-total .tlc-pay-li-val{font-size:15px;}
 .tlc-pay-tbl{border:1px solid var(--tlc-edge);border-radius:11px;overflow:hidden;background:#fff;margin-bottom:16px;}
 .tlc-pay-tbl-bar{padding:11px 16px;background:#F4EFE5;color:#8A8271;font:600 10.5px/1 var(--tlc-sans);letter-spacing:.12em;text-transform:uppercase;}
-.tlc-pay-tgrid{display:grid;grid-template-columns:2fr 1fr 1.4fr 1fr 1fr;gap:12px;align-items:center;}
+.tlc-pay-tgrid{display:grid;grid-template-columns:2fr 1.4fr 1fr 1fr;gap:12px;align-items:center;}
 .tlc-pay-right{text-align:right;}
 .tlc-pay-cards2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
 @media (max-width:820px){.tlc-pay-cards2{grid-template-columns:1fr;}}
@@ -903,8 +903,7 @@ function mdoLines(s) {
 
 function reportGroups() {
   const church = churchStaff.filter((s) => calcGross(s) > 0).map((s) => ({
-    name: s.name, title: s.role || 'Church staff',
-    kind: s.pay_type === 'salary' ? 'Salaried' : 'Hourly',
+    name: s.name,
     basis: s.pay_type === 'salary' ? '—' : hrs((periodEntries[s.id] || {}).hours_worked || 0) + ' @ ' + money(s.hourly_rate),
     // Zeroed rather than hidden here, so the group's PTO total is right
     // whatever a salaried person may still have stored against them.
@@ -914,8 +913,7 @@ function reportGroups() {
     gross: calcGross(s), lines: churchLines(s),
   }));
   const mdo = mdoStaff.filter((s) => calcMdoGross(s) > 0).map((s) => ({
-    name: s.name, title: s.role || 'Childcare',
-    kind: s.pay_type === 'salary' ? 'Salaried' : 'Childcare app',
+    name: s.name,
     basis: s.pay_type === 'salary' ? '—' : hrs(mdoPeriodMap.get(s.id) || 0) + ' @ ' + money(s.hourly_rate),
     pto: takesPto(s.pay_type) ? (mdoPtoMap.get(s.id) || 0) : 0,
     hours: s.pay_type === 'salary' ? 0 : (mdoPeriodMap.get(s.id) || 0),
@@ -1098,10 +1096,14 @@ function renderReport(periodStart, periodEnd) {
     body.innerHTML = incomplete + groups.filter((g) => g.people.length).map((g) =>
       '<div class="tlc-pay-tbl">'
       + '<div class="tlc-pay-tbl-bar">' + esc(g.name) + '</div>'
-      + '<div class="tlc-pay-thead tlc-pay-tgrid"><span>Person</span><span>Paid as</span><span>Hours / salary</span><span>PTO used</span><span class="tlc-pay-right">Gross</span></div>'
+      // No "Paid as" column. It was a whole column repeating one word per row,
+      // and the row already says it twice over: a salaried person has a dash
+      // under Hours / salary and n/a under PTO used, an hourly one has their
+      // hours and rate. A column that only ever restates its neighbours is a
+      // column of noise on the layout whose job is to be scannable.
+      + '<div class="tlc-pay-thead tlc-pay-tgrid"><span>Person</span><span>Hours / salary</span><span>PTO used</span><span class="tlc-pay-right">Gross</span></div>'
       + g.people.map((p) => '<div class="tlc-pay-row tlc-pay-tgrid">'
         + '<span class="tlc-pay-name"><b>' + esc(p.name) + '</b></span>'
-        + '<span class="tlc-pay-na">' + esc(p.kind) + '</span>'
         + '<span class="tlc-pay-na">' + esc(p.basis) + '</span>'
         + (p.salaried ? '<span class="tlc-pay-na">n/a</span>' : '<span class="tlc-pay-num">' + hrs(p.pto) + '</span>')
         + '<span class="tlc-pay-num tlc-pay-right">' + money(p.gross) + '</span>'

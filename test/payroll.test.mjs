@@ -246,6 +246,15 @@ group('the report — one line each');
   ok(body.includes('Hours / salary'), 'the compact layout has the design’s columns');
   ok(body.includes('60.00 hrs @ $20.00'), 'and states the basis of an hourly gross');
   ok((await text('#layoutNote')).includes('reconcile against the service'), 'with the design’s note');
+  // No "Paid as" column: it repeated one word per row and said nothing the
+  // row did not already say twice — a dash under Hours / salary and n/a under
+  // PTO used IS "salaried". Four columns, not five.
+  ok(!body.includes('Paid as'), 'and no Paid as column');
+  ok(!body.includes('Childcare app'), 'nor the words that column carried');
+  const cols = await p.$eval('#reportBody .tlc-pay-thead', (n) => n.children.length);
+  ok(cols === 4, 'four columns in the header: ' + cols);
+  const cells = await p.$eval('#reportBody .tlc-pay-row', (n) => n.children.length);
+  ok(cells === 4, 'and four in every row, so the grid still lines up: ' + cells);
 }
 
 group('the report — totals only');
