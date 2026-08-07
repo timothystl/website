@@ -35,7 +35,7 @@ const hasNot = (hay, needle, msg) => ok(!String(hay).includes(needle), msg + ` (
 
 const worker = (await import('../site-worker.js')).default;
 const { renderBlock, sanitizeBlock, renderPage, BLOCK_DEFS } = await import('../admin/blocks.js');
-const { withAmountAndFund } = await import('../give-link.js');
+const { withAmountAndFund, giftForPeriod, giveButtonLabel, GIVE_PERIOD_JS } = await import('../give-link.js');
 const { renderGiveLandingHtml } = await import('../give-landing.js');
 const { GIVE_LANDING_BLOCKS } = await import('../admin/give-landing-seed.js');
 
@@ -362,6 +362,49 @@ group('the chrome: a way home, and assets that are not the page');
   eq(await logo.text(), 'asset', 'an image path on this hostname serves the asset, not the page');
   const ico = await getGive(w, '/images/favicon-32x32.png');
   eq(await ico.text(), 'asset', 'and so does the favicon the page references');
+}
+
+// ── THE CLIENT MIRROR CANNOT DRIFT ───────────────────────────────────────────
+// GIVE_PERIOD_JS is the period arithmetic again, in browser JS, so the Giving
+// screen's ladder drawer can show what a row's button will ask for as somebody
+// types. A second copy of a rule about somebody's money is only safe if it is
+// PROVEN to agree with the first, so this runs both over the same inputs.
+// Without this the mirror is exactly the "three chances for one to be wrong"
+// that give-link.js exists to prevent.
+group('the browser copy of the period arithmetic agrees with the server copy');
+{
+  const sandbox = {};
+  new Function(GIVE_PERIOD_JS + '; this.gift = tlcGiftForPeriod; this.label = tlcGiveButtonLabel;').call(sandbox);
+
+  const amounts = ['5000', '$5,000', '15', '9000', '10000', '18000', '11', '12', '13', '1',
+                   '0', '', 'Any amount', 'ask the office', '7.50', '99999', '-5'];
+  const periods = ['week', 'month', 'year', '', '/year', 'Year', 'annually', 'per year', 'yr', 'day'];
+
+  let checked = 0;
+  for (const a of amounts) {
+    for (const p of periods) {
+      const mine = giftForPeriod(a, p);
+      const theirs = sandbox.gift(a, p);
+      if (mine === null) {
+        eq(theirs, null, `both refuse ${JSON.stringify(a)} @ ${JSON.stringify(p)}`);
+      } else {
+        eq(theirs && theirs.amount, mine.amount, `same amount for ${JSON.stringify(a)} @ ${JSON.stringify(p)}`);
+        eq(theirs && theirs.per, mine.per, `same period for ${JSON.stringify(a)} @ ${JSON.stringify(p)}`);
+        eq(sandbox.label(theirs), giveButtonLabel(mine), `same label for ${JSON.stringify(a)} @ ${JSON.stringify(p)}`);
+      }
+      checked++;
+    }
+  }
+  ok(checked === amounts.length * periods.length, `${checked} combinations compared`);
+
+  // The case the whole feature exists for, stated outright rather than left
+  // to be inferred from the sweep above.
+  eq(giveButtonLabel(giftForPeriod('5000', 'year')), 'Give $416/month',
+     '$5,000 a year asks for $416 a month');
+  eq(sandbox.label(sandbox.gift('5000', 'year')), 'Give $416/month',
+     'and the browser says the same thing');
+  eq(giveButtonLabel(giftForPeriod('5000', 'month')), 'Give $5,000',
+     'while $5,000 a MONTH asks for $5,000 — which is why the chip label matters');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
