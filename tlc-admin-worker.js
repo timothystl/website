@@ -3361,7 +3361,7 @@ ${sidebarShell('dashboard', currentUser, '', badges)}
 <div class="tlc-dash">
   <div class="tlc-dash-head">
     <div>
-      <h1 class="tlc-dash-greeting">${escapeHtml(weekday)} ${partOfDay}</h1>
+      <h1 class="tlc-dash-greeting">${escapeHtml(weekday)} ${escapeHtml(partOfDay())}</h1>
       <p class="tlc-dash-sub">What needs you today, what happens Sunday, and what changed since yesterday.</p>
     </div>
     <nav class="tlc-seg" aria-label="Dashboard view">
