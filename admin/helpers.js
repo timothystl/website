@@ -5,8 +5,12 @@ import { TINYMCE_API_KEY, TINYMCE_HEAD } from './db.js';
 import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, SIDEBAR_JS, TOGGLE_WORD_JS, LOCKED_FIELD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 import { APPEARANCE_CSS } from './appearance.js';
+// The preview a closed rich field shows is stored admin HTML rendered inside
+// another admin's session, so it goes through the same allowlist the block
+// editor's canvas uses. Preview only — nothing here touches what is stored.
+import { sanitizeRich } from './blocks.js';
 
-export const VERSION = 'v4.28.3'; // minor: alignment is left/centre/right on every block but Spacer, buttons included, and giving-page ladder rows are edited on the Giving screen
+export const VERSION = 'v4.29.0'; // minor: rich-text fields open on demand — TinyMCE bills per editor instance that initialises, and this admin was creating up to fourteen of them per canvas re-render
 
 // ── THE SHARED SHELL CSS/JS, EXTERNALISED ───────────────────────
 // This used to be inlined into every admin response inside <style>/<script>
@@ -330,6 +334,29 @@ body{display:flex;align-items:stretch;}
    action on the screen, and a filter is not that. */
 .filter-pill{font:600 11.5px/1 var(--sans);color:#4A4860;background:#FAF7F1;border:1px solid #E7DFD1;border-radius:8px;padding:7px 12px;cursor:pointer;}
 .filter-pill.active{border:2px solid #1E2D4A;background:#E7EEF7;color:#1E2D4A;padding:6px 11px;}
+/* A rich field before anybody opens it: what is in it, and one affordance.
+   It is drawn as the editor's own content area rather than as a placeholder,
+   so opening it changes what the field can DO and not what the page looks
+   like. See tinymceField / RICH_FIELD_JS below for why it starts closed. */
+.tlc-rich{position:relative;}
+.tlc-rich-view{background:#fff;border:1px solid #E7DFD1;border-radius:8px;padding:12px 14px;font-family:var(--sans);font-size:13.5px;line-height:1.55;color:var(--charcoal);overflow:hidden;cursor:text;transition:border-color .15s,box-shadow .15s;}
+.tlc-rich-view:hover{border-color:#2E7EA6;}
+.tlc-rich-view:focus-visible{outline:none;border-color:#2E7EA6;box-shadow:0 0 0 3px rgba(46,126,166,.15);}
+/* Every click lands on the surface, never on a link inside the preview —
+   otherwise opening a field that happens to start with a link navigates away
+   from the form instead of editing it. */
+.tlc-rich-view *{pointer-events:none;max-width:100%;}
+.tlc-rich-view h2,.tlc-rich-view h3,.tlc-rich-view h4{font-family:var(--serif);font-weight:500;margin:0 0 6px;}
+.tlc-rich-view p,.tlc-rich-view ul,.tlc-rich-view ol,.tlc-rich-view blockquote{margin:0 0 8px;}
+.tlc-rich-view ul,.tlc-rich-view ol{padding-left:20px;}
+.tlc-rich-ph{color:#8A8271;font-style:italic;}
+/* A closed field takes exactly the room its editor will, so opening one
+   never moves the rest of the form. A long note is clipped rather than
+   allowed to run on — the editor it becomes scrolls at this height too —
+   and the fade is what says there is more below. */
+.tlc-rich:not([data-rich-on="1"])::after{content:'';position:absolute;left:1px;right:1px;bottom:1px;height:34px;border-radius:0 0 8px 8px;background:linear-gradient(rgba(255,255,255,0),#fff);pointer-events:none;}
+.tlc-rich-hint{position:absolute;top:8px;right:10px;font:600 10px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:#8A8271;background:#FAF7F1;border:1px solid #E7DFD1;border-radius:8px;padding:4px 7px;pointer-events:none;}
+.tlc-rich[data-rich-on="1"] .tlc-rich-hint{display:none;}
 ${ADMIN_UI_CSS}
 ${MENU_CSS}
 ${PRESET_CSS}
@@ -445,6 +472,114 @@ self.addEventListener('notificationclick', function(event){
 });
 `;
 
+// Every rich-text field in the admin shares one toolbar — the design's own
+// note is "painted on all of them, not just the first", because a field that
+// looks like a plain textarea gets typed into like one.
+const TINY_TOOLBAR = 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image | table | code';
+
+// The activation, once, in the cached shell script rather than repeated inside
+// every field's own inline <script> — which is also why a field is now markup
+// and no script at all.
+export const RICH_FIELD_JS = `
+(function () {
+  var TOOLBAR = '${TINY_TOOLBAR}';
+  function uploadImage(blobInfo) { return (${tlcUploadHandler})(blobInfo); }
+
+  function open(mount) {
+    if (!mount || mount.dataset.richOn === '1') return;
+    mount.dataset.richOn = '1';
+    var ta = mount.querySelector('textarea');
+    var view = mount.querySelector('[data-rich-open]');
+    if (!ta) return;
+    if (view) view.remove();
+    ta.removeAttribute('hidden');
+    wireSubmit(ta.form);
+    // Whatever happens next, the textarea is now a working field holding the
+    // real content, focused and typeable. TinyMCE only ever upgrades it — so a
+    // slow CDN costs a moment of looking at the markup, not a dead field.
+    ta.focus();
+    if (typeof window._onTinymce !== 'function') return;
+    window._onTinymce(function () {
+      if (!window.tinymce || !document.body.contains(ta)) return;
+      window.tinymce.init({
+        target: ta,
+        plugins: 'image link lists blockquote table code',
+        toolbar: TOOLBAR,
+        menubar: false,
+        min_height: Number(mount.dataset.richMin) || 200,
+        skin: 'oxide',
+        content_css: 'default',
+        convert_urls: false,
+        image_advtab: false,
+        automatic_uploads: true,
+        images_upload_handler: uploadImage,
+        paste_data_images: true,
+        content_style: 'img { margin: 8px; max-width: 100%; height: auto; }',
+        setup: function (editor) {
+          editor.on('change input', function () { editor.save(); });
+          editor.on('NodeChange', function () {
+            editor.dom.select('img').forEach(function (img) {
+              if (!img.style.margin) { img.style.margin = '8px'; img.style.maxWidth = '100%'; img.style.height = 'auto'; }
+            });
+          });
+        },
+        init_instance_callback: function (editor) { editor.focus(); },
+      });
+    });
+  }
+
+  // Submitting has to wait for images still uploading, or a pasted photo goes
+  // out as a blob: reference that resolves to nothing in an inbox. Wired to the
+  // form the field is actually in — it used to take the page's FIRST form,
+  // which is only the same thing by luck.
+  function wireSubmit(form) {
+    if (!form || form.dataset.richSubmit === '1') return;
+    form.dataset.richSubmit = '1';
+    form.addEventListener('submit', function (e) {
+      if (window._tlcSubmitting) return;
+      var eds = window.tinymce ? window.tinymce.editors : [];
+      if (!eds.length) return;
+      e.preventDefault();
+      window._tlcSubmitting = true;
+      var submitter = e.submitter;
+      // A submit button's own name/value is lost when the form is submitted
+      // programmatically, and several screens branch on it (Publish vs Save as
+      // draft), so it is carried across by hand.
+      if (submitter && submitter.name) {
+        var hid = document.createElement('input');
+        hid.type = 'hidden';
+        hid.name = submitter.name;
+        hid.value = submitter.value;
+        form.appendChild(hid);
+      }
+      var done = function () {
+        eds.forEach(function (ed) { ed.save(); });
+        // Strip any blob: image that failed to upload — it would render as a
+        // broken icon in the sent email.
+        form.querySelectorAll('textarea').forEach(function (t) {
+          if (t.value && t.value.indexOf('blob:') !== -1) {
+            t.value = t.value.replace(/<img[^>]*src=["']blob:[^"']*["'][^>]*>/gi, '');
+          }
+        });
+        form.submit();
+      };
+      Promise.all(eds.map(function (ed) { return ed.uploadImages(); })).then(done, done);
+    });
+  }
+
+  var mountOf = function (t) { return t && t.closest ? t.closest('[data-rich]') : null; };
+  document.addEventListener('mousedown', function (e) {
+    if (e.target.closest && e.target.closest('[data-rich-open]')) open(mountOf(e.target));
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    if (!e.target.closest || !e.target.closest('[data-rich-open]')) return;
+    e.preventDefault();
+    open(mountOf(e.target));
+  });
+})();
+`;
+
 export const ADMIN_SHELL_JS = `
 function toggleSchedule(id){var row=document.getElementById('sched-row-'+id);if(row)row.style.display=row.style.display==='none'?'':'none';}
 // Converts the datetime-local field to an ISO instant using the browser's own
@@ -467,6 +602,7 @@ ${LOCKED_FIELD_JS}
 ${TOAST_JS}
 ${CMDK_JS}
 ${PUSH_JS}
+${RICH_FIELD_JS}
 `;
 
 export function html(body, title = 'TLC Admin', extraHead = '') {
@@ -911,111 +1047,60 @@ function tlcUploadHandler(blobInfo) {
 
 // ── ONE RICH-TEXT FIELD BUILDER ──────────────────────────────
 // There used to be seven near-identical copies of this, ~500 lines of them.
-// That was AC-10 in the July 2026 review, and the reason it mattered is
-// AC-3, which sat unfixed underneath it: the content is interpolated into an
+// That was AC-10 in the July 2026 review, and the reason it mattered is AC-3,
+// which sat unfixed underneath it: the saved content was interpolated into an
 // inline <script>, and every copy escaped backslash, backtick and $ — but not
-// `</script>`.
+// `</script>`, which the HTML parser honours regardless of JavaScript string
+// context. v3.6.0 fixed that with one builder and a `jsString()` that split the
+// closing tag.
 //
-// ⚠ The HTML parser ends a script block at the first `</script` REGARDLESS of
-// JavaScript string context. Somebody with content-edit rights could save a
-// post containing it, break out of the init block, and run script in the
-// session of any admin who later opened that screen. Escaping it in one place
-// is the whole point of there being one place.
-function jsString(value) {
-  return String(value == null ? '' : value)
-    .replace(/\\/g, '\\\\')
-    .replace(/`/g, '\\`')
-    .replace(/\$/g, '\\$')
-    // Split the closing tag so the parser never sees it. The string still
-    // reads as "</script>" once JavaScript joins it back up.
-    .replace(/<\/(script)/gi, '<\\/$1');
-}
+// ⚠ `jsString` is gone, and its absence is the point: saved content no longer
+// reaches an inline script AT ALL. It is HTML-escaped into the textarea and
+// allowlist-sanitised into the preview, so the whole class of break-out is
+// closed by construction rather than by remembering to escape one more
+// sequence. Do not reintroduce a path that interpolates stored content into a
+// <script> — the escaping is easy to get right and easy to forget.
 
-// Every rich-text field in the admin comes from here. The toolbar is the same
-// on all of them — the design's own note is "painted on all of them, not just
-// the first", because a field that looks like a plain textarea gets typed into
-// like one.
-const TINY_TOOLBAR = 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image | table | code';
-
+// Every rich-text field in the admin comes from here.
+//
+// A field starts as a preview of what is in it and becomes an editor when
+// somebody opens it. Nothing is initialised at page load — see TINYMCE_HEAD in
+// admin/db.js for why (an editor load is one instance finishing its init, and
+// this admin renders nine of them on the newsletter screen alone).
+//
+// ⚠ This deliberately reverses the note the newsletter composer used to carry —
+// "all of them are rendered so TinyMCE can initialise each one at load …
+// creating an editor instance on click would be a second way for a rich field
+// to exist". The concern was right and the answer is not to init everything: it
+// is that click-to-open is now the ONLY way a rich field exists, for all of
+// them, through this one builder. There is still exactly one kind of rich
+// field; it just costs nothing until it is used.
+//
+// ⚠ The stored value now lives in the TEXTAREA, not in an init callback that
+// called setContent. That is what makes an unopened field round-trip its
+// content untouched on save — and it also closes a real hole: with the value
+// only ever arriving from the script, a blocked or failed CDN meant opening a
+// post and pressing Save wrote back an empty body.
+//
+// The preview is `sanitizeRich`'d rather than the raw stored markup, because
+// this is admin-authored HTML rendered inside another admin's authenticated
+// session. It is the same allowlist the block editor's canvas already relies on
+// for the same reason. Preview-only: what is stored and what is submitted are
+// byte-identical to what was there before.
 export function tinymceField({ id, name, value = '', minHeight = 200, label = '', labelNote = '', wrap = true }) {
-  const field = `<textarea id="${escapeHtml(id)}" name="${escapeHtml(name)}"></textarea>`;
+  const mh = Number(minHeight) || 200;
+  const preview = sanitizeRich(value).trim() || '<span class="tlc-rich-ph">Nothing here yet — click to write</span>';
+  const field = `<div class="tlc-rich" data-rich data-rich-min="${mh}">
+  <div class="tlc-rich-view" data-rich-open role="button" tabindex="0" aria-label="${escapeHtml(label || 'Rich text')} — click to edit" style="min-height:${mh}px;max-height:${mh}px">${preview}</div>
+  <span class="tlc-rich-hint" aria-hidden="true">Click to edit</span>
+  <textarea id="${escapeHtml(id)}" name="${escapeHtml(name)}" hidden>${escapeHtml(value)}</textarea>
+</div>`;
   const head = label
     ? `<label>${escapeHtml(label)}${labelNote ? ` <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">${escapeHtml(labelNote)}</span>` : ''}</label>`
     : '';
-  const body = wrap ? `<div class="form-group">\n  ${head}\n  ${field}\n</div>` : field;
-  return `${body}
-<script>
-_onTinymce(function(){
-tinymce.init({
-  selector: '#${id}',
-  plugins: 'image link lists blockquote table code',
-  toolbar: '${TINY_TOOLBAR}',
-  menubar: false,
-  min_height: ${Number(minHeight) || 200},
-  skin: 'oxide',
-  content_css: 'default',
-  convert_urls: false,
-  image_advtab: false,
-  automatic_uploads: true,
-  images_upload_handler: ${tlcUploadHandler},
-  paste_data_images: true,
-  content_style: 'img { margin: 8px; max-width: 100%; height: auto; }',
-  setup: function(editor) {
-    editor.on('change input', function() { editor.save(); });
-    editor.on('NodeChange', function() {
-      editor.dom.select('img').forEach(function(img) {
-        if (!img.style.margin) { img.style.margin = '8px'; img.style.maxWidth = '100%'; img.style.height = 'auto'; }
-      });
-    });
-  },
-  init_instance_callback: function(editor) {
-    var initial = \`${jsString(value)}\`;
-    if (initial.trim()) { editor.setContent(initial); editor.save(); }
-  }
-});
+  return wrap ? `<div class="form-group">\n  ${head}\n  ${field}\n</div>` : field;
+}
 
-// Submitting has to wait for images still uploading, or a pasted photo goes
-// out as a blob: reference that resolves to nothing in an inbox. Wired once
-// per page however many editors are on it — the flag is on window, not on the
-// field, because the handler is on the form.
-if (!window._tlcSubmitWired) {
-  window._tlcSubmitWired = true;
-  var f = document.querySelector('form');
-  if (f) f.addEventListener('submit', function(e) {
-    if (window._tlcSubmitting) return;
-    var eds = window.tinymce ? tinymce.editors : [];
-    if (!eds.length) return;
-    e.preventDefault();
-    window._tlcSubmitting = true;
-    var form = e.target;
-    var submitter = e.submitter;
-    // A submit button's own name/value is lost when the form is submitted
-    // programmatically, and several screens branch on it (Publish vs Save as
-    // draft), so it is carried across by hand.
-    if (submitter && submitter.name) {
-      var hid = document.createElement('input');
-      hid.type = 'hidden';
-      hid.name = submitter.name;
-      hid.value = submitter.value;
-      form.appendChild(hid);
-    }
-    var done = function() {
-      eds.forEach(function(ed) { ed.save(); });
-      // Strip any blob: image that failed to upload — it would render as a
-      // broken icon in the sent email.
-      form.querySelectorAll('textarea').forEach(function(t) {
-        if (t.value && t.value.indexOf('blob:') !== -1) {
-          t.value = t.value.replace(/<img[^>]*src=["']blob:[^"']*["'][^>]*>/gi, '');
-        }
-      });
-      form.submit();
-    };
-    Promise.all(eds.map(function(ed) { return ed.uploadImages(); })).then(done, done);
-  });
-}
-});
-<\/script>`;
-}
 
 // The seven call sites, each now one line. Kept as named functions rather than
 // inlined so the routes do not have to know the id and name of every field.

@@ -11,7 +11,7 @@ import {
   primaryCell, renderListSection, renderDrawer, TONES, PALETTE, paginationWindow,
 } from './ui.js';
 import { readFileSync } from 'node:fs';
-import { tinymceField } from './helpers.js';
+import { tinymceField, RICH_FIELD_JS, ADMIN_SHELL_JS } from './helpers.js';
 import { VALUES, VALUE_KEYS, valueByKey, normalizeValue } from './values.js';
 
 let pass = 0, fail = 0;
@@ -291,28 +291,48 @@ group('one class, one component');
 
 group('the rich-text field cannot be escaped from');
 {
-  // ⚠ AC-3. The content is interpolated into an inline <script>, and the HTML
-  // parser ends a script block at the first `</script` REGARDLESS of JavaScript
-  // string context. Seven near-identical builders each escaped backslash,
-  // backtick and $ — and none of them escaped this. Somebody with
-  // content-edit rights could have saved a post containing it and run script
-  // in the session of any admin who later opened that screen.
+  // ⚠ AC-3 was: the content is interpolated into an inline <script>, and the
+  // HTML parser ends a script block at the first `</script` REGARDLESS of
+  // JavaScript string context. Seven near-identical builders each escaped
+  // backslash, backtick and $ — and none of them escaped this. v3.6.0 fixed it
+  // with one builder and a jsString() that split the tag.
+  //
+  // The field no longer puts saved content in a script at all — it is escaped
+  // into the textarea and sanitised into the preview — so these now assert the
+  // stronger property that replaced the escaping: there is no script for
+  // content to break out of.
   const out = tinymceField({ id: 'x', name: 'x', value: '</script><img src=x onerror=alert(1)>' });
-  lacks(out, '</script><img', 'a closing script tag in saved content does not close the block');
-  has(out, '<\\/script>', 'it is split so the parser never sees it');
-  // And it must still be the same string once JavaScript joins it up.
-  eq(JSON.parse('"' + '<\\/script>'.replace(/\\\//g, '\\/').replace(/\\\//g, '/') + '"'), '</script>',
-    'the escape is a JS escape, not a mangling — the content round-trips');
+  lacks(out, '</script><img', 'a closing script tag in saved content does not close anything');
+  lacks(out, '<script', 'the builder emits no inline script for content to be interpolated into');
+  has(out, '&lt;/script&gt;&lt;img', 'it is HTML-escaped inside the textarea, whole');
+  // The preview is live markup in another admin's session, so it goes through
+  // the block editor's allowlist. Read it on its own — the textarea beside it
+  // legitimately holds the same characters, escaped.
+  const view = out.slice(out.indexOf('data-rich-open'), out.indexOf('</div>\n  <span'));
+  lacks(view, 'onerror', 'the preview drops the event handler rather than rendering it');
+  lacks(view, '<script', 'and drops the script tag with its contents');
 
-  // The other three, which were already handled, must stay handled.
+  // A never-opened field has to submit exactly what it was given back — this is
+  // what makes lazy initialising safe, and it is also why a blocked CDN can no
+  // longer blank a post on save.
+  const round = tinymceField({ id: 'r', name: 'r', value: '<p>a &amp; b</p>' });
+  has(round, '<textarea id="r" name="r" hidden>&lt;p&gt;a &amp;amp; b&lt;/p&gt;</textarea>',
+    'the stored value round-trips through the textarea unchanged');
+
+  // The other three, which the old escaper handled, must still be harmless.
   const t = tinymceField({ id: 'y', name: 'y', value: 'a`b${c}d\\e' });
-  has(t, '\\`', 'a backtick is escaped');
-  has(t, '\\$', 'and a dollar');
+  has(t, 'a`b${c}d\\e', 'a backtick, a dollar and a backslash are ordinary text now');
 
-  // Every field gets the same toolbar — the design's "painted on all of them,
-  // not just the first".
-  has(out, 'bold italic underline', 'the toolbar is on it');
-  has(t, 'bold italic underline', 'and on the next one too');
+  // ⚠ Nothing initialises at page load. TinyMCE Cloud bills per editor
+  // instance that finishes initialising, and this admin renders nine rich
+  // fields on the newsletter screen alone.
+  lacks(out, 'tinymce.init', 'the field does not initialise an editor');
+  has(out, 'data-rich-open', 'it opens on demand instead');
+
+  // Every field still gets the same toolbar — the design's "painted on all of
+  // them, not just the first" — now from the one shared activation script.
+  has(RICH_FIELD_JS, 'bold italic underline', 'the toolbar is in the shared activation');
+  has(ADMIN_SHELL_JS, 'data-rich-open', 'which ships once, in the cached shell script');
 
   // The id and name are attribute-escaped, since both reach markup.
   const q = tinymceField({ id: 'a"b', name: 'c"d', value: '' });

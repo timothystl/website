@@ -1,9 +1,44 @@
 // ── CONSTANTS & INITIAL DATA ─────────────────────────────────
 // Extracted from tlc-admin-worker.js
 
-// TinyMCE rich-text editor — loaded only on news item form pages
+// TinyMCE rich-text editor — included on the screens that carry a rich field.
+//
+// ⚠ TinyMCE Cloud bills by EDITOR LOAD, and an editor load is one *instance*
+// finishing its init, not one page view. The newsletter composer alone carries
+// nine rich fields, so opening it once used to spend nine of them whether or
+// not anybody typed in one; the block editor spent one per rich field on the
+// page and did it again on every add, delete, reorder and undo. Hitting 50% of
+// a month's allowance by the first week is what that arithmetic looks like.
+//
+// So nothing here initialises anything. `_onTinymce(fn)` fetches the library on
+// FIRST DEMAND and queues callers until it lands — a screen where nobody opens
+// a field never loads TinyMCE at all, and never spends a load. The one place an
+// editor is created from is the shared activation in ADMIN_SHELL_JS
+// (`RICH_FIELD_JS`, admin/helpers.js) and the canvas handler in
+// admin/ministry-editor.html, both of which run on a real click.
+//
+// ⚠ `_onTinymce` must stay tolerant of the script never arriving. Every caller
+// checks `window.tinymce` again inside the callback, because on an `onerror`
+// the queue is dropped and the field falls back to something that still types
+// and still saves. A rich field that eats what was written is far worse than
+// one with no toolbar.
 export const TINYMCE_API_KEY = '5wrsrinqxeqvej5slykwic6rgpfb0v8wvj0f21fgk1r4nhs0';
-export const TINYMCE_HEAD = `<script>window._tinyQ=[];function _onTinymce(fn){if(window.tinymce){fn();}else{window._tinyQ.push(fn);}}<\/script><script async src="https://cdn.tiny.cloud/1/${TINYMCE_API_KEY}/tinymce/7/tinymce.min.js" referrerpolicy="origin" onload="window._tinyQ.forEach(function(fn){fn();});window._tinyQ=[]"><\/script>`;
+export const TINYMCE_HEAD = `<script>
+window._tinyQ = [];
+window._onTinymce = function (fn) {
+  if (window.tinymce) { fn(); return; }
+  if (window._tinyFailed) { fn(); return; }
+  window._tinyQ.push(fn);
+  if (window._tinyLoading) return;
+  window._tinyLoading = true;
+  var s = document.createElement('script');
+  s.src = 'https://cdn.tiny.cloud/1/${TINYMCE_API_KEY}/tinymce/7/tinymce.min.js';
+  s.referrerPolicy = 'origin';
+  s.onload = function () { var q = window._tinyQ; window._tinyQ = []; q.forEach(function (f) { f(); }); };
+  s.onerror = function () { window._tinyFailed = true; var q = window._tinyQ; window._tinyQ = []; q.forEach(function (f) { f(); }); };
+  document.head.appendChild(s);
+};
+<\/script>`;
 
 // ── DB INIT ─────────────────────────────────────────────────
 export const DB_INIT_NEWSLETTERS = `CREATE TABLE IF NOT EXISTS newsletters (

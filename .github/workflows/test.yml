@@ -119,11 +119,20 @@ jobs:
 #   node test/public-page.test.mjs       # the live site
 #   node test/public-phone.test.mjs      # [B8] tap targets at 390px, MEASURED
 #   node test/payroll.test.mjs           # payroll, against a stubbed Supabase
+#   node test/rich-field.test.mjs        # rich fields open on demand — see below
 #   ... and editor-edit, editor-dnd, editor-media, editor-publish,
 #       editor-resize, editor-sections, site-roles, site-pages, whole-page
 #
 # Chromium is at /opt/pw-browsers/chromium in the Claude Code environment, or
 # set CHROME_PATH.
+#
+# ⚠ rich-field is the one to run after any change to tinymceField or
+# RICH_FIELD_JS. TinyMCE Cloud bills per editor instance that finishes
+# initialising, so a field that quietly goes back to initialising at page
+# load is a bill, not a visible bug — and the same suite covers the other
+# half, that a field nobody opened still submits exactly what it held. It
+# stubs TinyMCE and never fetches the real library, so running it costs no
+# editor loads against the church's account.
 #
 # ⚠ public-phone is the one to run after any change to public/styles.css. The
 # backlog asked for "a tap-through on a real phone"; a person doing that tells
