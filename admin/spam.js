@@ -75,7 +75,7 @@ const ITEM_GIFT_OFFER = /\b(for free|free of charge|at no cost|no cost to you|do
 const ITEM_GIFT_WEIGHT = 2;
 
 // Written about a named third party rather than by the person who owns it.
-// Only worth a little on its own: a member relaying a neighbour's offer writes
+// Only worth a little on its own: a member relaying a neighbor's offer writes
 // this way too, and that message must still reach the office.
 const GIFT_THIRD_PARTY = [
   [/\b(is|are) (offering|donating|gifting|giving away|looking to donate)\b.{0,40}\b(her|his|their)\b/, 'offered on behalf of someone else'],
@@ -117,7 +117,7 @@ const IMPERSONAL_WEIGHT = 3;
 // matched here.
 const URL_RE = /(https?:\/\/|www\.)[^\s<>"']+/gi;
 // Cyrillic, CJK, Arabic, Hebrew, Thai, Devanagari. An English-language parish
-// in south St. Louis does not receive these from real neighbours.
+// in south St. Louis does not receive these from real neighbors.
 const NON_LATIN_RE = /[Ѐ-ӿ֐-׿؀-ۿऀ-ॿ฀-๿぀-ヿ一-鿿가-힯]/;
 const MARKUP_RE = /<a\s|<script|\[url[=\]]|\[link[=\]]|<iframe/i;
 

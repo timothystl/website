@@ -8,7 +8,7 @@
 // sections, so this is where search, filtering and the count label are pinned
 // down.
 //
-// Note on a deliberate behaviour change: the old Ministries list had a sort
+// Note on a deliberate behavior change: the old Ministries list had a sort
 // dropdown (name / recently updated). The shared pattern has no sort control —
 // each section states its own order, and the count label plus filters are what
 // a volunteer uses to narrow a list. Nothing here tests sorting because there

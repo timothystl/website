@@ -60,7 +60,7 @@ eq(await page.locator('.ed-toast').count(), 0, 'the toast dismisses itself');
 
 group('the published page really is what the editor showed');
 {
-  // Comparing raw HTML against a browser-serialised DOM is a losing game
+  // Comparing raw HTML against a browser-serialized DOM is a losing game
   // (attribute order, entities, whitespace). What has to hold is that the
   // published blocks are the ones the canvas is showing, and that rendering
   // them publicly produces the same content without any editor chrome.

@@ -233,7 +233,7 @@ group('the report — detail cards');
   ok(body.includes('$1,224.00'), 'PTO counts towards the 403(b) base, so the card reconciles to its own gross');
   ok(body.includes('−$136.00'), 'and the deduction shown is the one that was actually applied');
 
-  ok(body.includes('Church staff'), 'the church group is labelled');
+  ok(body.includes('Church staff'), 'the church group is labeled');
   ok(body.includes('Timothy MDO'), 'and so is MDO');
   ok(body.includes('Combined total'), 'with a combined total');
 }

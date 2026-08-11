@@ -10,7 +10,7 @@
 // ── WHY THERE IS A DRAFT AND A PUBLISHED COPY ────────────────
 // Everything else the Menu screen writes is live the moment it is saved, and
 // for reordering a link that is right: the worst case is a link in the wrong
-// order for two minutes. Appearance is different. Somebody trying a colour, or
+// order for two minutes. Appearance is different. Somebody trying a color, or
 // uploading a logo to see how it crops, is *experimenting*, and an experiment
 // that is instantly on the front of the church website is not an experiment.
 //
@@ -22,14 +22,14 @@
 //
 // Publishing copies the first over the second. Nothing else does.
 //
-// ── WHY THE COLOURS ARE A LIST AND NOT A COLOUR PICKER ───────
+// ── WHY THE COLORS ARE A LIST AND NOT A COLOR PICKER ───────
 // The nav text, the tagline and the Give button's label are all light, and they
 // are not editable. A free hex field is therefore one paste away from white
 // text on a pale background — a header nobody can read, on every page at once,
 // put there by somebody who was only trying to make it a bit lighter.
 //
 // The palette below is the site's own (public/styles.css), so every choice in
-// it is a colour the church already uses and every one of them carries light
+// it is a color the church already uses and every one of them carries light
 // text safely. This is the same rule the block editor follows: a constrained
 // choice, never a free value.
 //
@@ -37,10 +37,10 @@
 // tested directly. See admin/appearance.test.mjs.
 
 // ── THE PALETTE ──────────────────────────────────────────────
-// The site's own colours (public/styles.css), so every choice here is one the
-// church already uses. `ink` is what the site puts ON that colour.
+// The site's own colors (public/styles.css), so every choice here is one the
+// church already uses. `ink` is what the site puts ON that color.
 //
-// ⚠ `bar: false` means "not offered as a bar colour", and gold is the reason
+// ⚠ `bar: false` means "not offered as a bar color", and gold is the reason
 // the flag exists. The nav links, the tagline and the brand name are all white
 // and none of them is editable, so a gold bar would be white-on-#C9973A —
 // 2.6:1, a header nobody can read, on every page at once, chosen by somebody
@@ -65,7 +65,7 @@ export const PALETTE_KEYS = PALETTE.map((c) => c.key);
 // this shorter list. The rule and the Give button choose from the whole one.
 export const BAR_KEYS = PALETTE.filter((c) => c.bar).map((c) => c.key);
 
-export function colourOf(key, fallback = 'moss') {
+export function colorOf(key, fallback = 'moss') {
   return PALETTE.find((c) => c.key === key) || PALETTE.find((c) => c.key === fallback) || PALETTE[0];
 }
 
@@ -97,7 +97,7 @@ export const DEFAULTS = {
 };
 
 export const TEXT_FIELDS = ['logo_url', 'brand_name', 'tagline', 'nl_eyebrow', 'nl_heading', 'nl_body', 'nl_button'];
-export const COLOUR_FIELDS = ['bar', 'rule', 'cta', 'nl_bg'];
+export const COLOR_FIELDS = ['bar', 'rule', 'cta', 'nl_bg'];
 export const FLAG_FIELDS = ['show_tagline', 'nl_show'];
 
 // Long enough for the real strings and short enough that this record can never
@@ -117,7 +117,7 @@ export function safeLogoUrl(raw) {
   return '';
 }
 
-// ── SANITISING ───────────────────────────────────────────────
+// ── SANITIZING ───────────────────────────────────────────────
 // Every write goes through here — the form, and anything else that ever calls
 // it. A stale tab, a crafted POST and a hand-edited settings row all arrive at
 // this function, so the guardrails cannot live in the browser.
@@ -125,10 +125,10 @@ export function sanitizeAppearance(raw) {
   const src = (raw && typeof raw === 'object') ? raw : {};
   const out = Object.assign({}, DEFAULTS);
 
-  // The bar and the newsletter band are text on colour, so they take the
+  // The bar and the newsletter band are text on color, so they take the
   // narrower list — enforced here rather than only in the form, because a
   // stale tab is exactly how an unreadable header would get saved.
-  for (const f of COLOUR_FIELDS) {
+  for (const f of COLOR_FIELDS) {
     const allowed = (f === 'bar' || f === 'nl_bg') ? BAR_KEYS : PALETTE_KEYS;
     if (allowed.includes(src[f])) out[f] = src[f];
   }
@@ -145,7 +145,7 @@ export function sanitizeAppearance(raw) {
 
   // A header with no name and no logo is a bar with nothing in it, and the
   // brand block is also the way back to the homepage. Emptying both is
-  // therefore treated as a mistake rather than honoured: the name comes back.
+  // therefore treated as a mistake rather than honored: the name comes back.
   if (!out.brand_name && !out.logo_url) out.brand_name = DEFAULTS.brand_name;
 
   return out;
@@ -171,7 +171,7 @@ export function parseAppearance(json) {
 // here would silently hide the tagline and the newsletter band on every page.
 export function appearanceFromForm(form) {
   const raw = {};
-  for (const f of [...TEXT_FIELDS, ...COLOUR_FIELDS]) raw[f] = form.get(f);
+  for (const f of [...TEXT_FIELDS, ...COLOR_FIELDS]) raw[f] = form.get(f);
   raw.logo_shape = form.get('logo_shape');
   for (const f of FLAG_FIELDS) raw[f] = form.getAll(f).includes('1');
   return sanitizeAppearance(raw);
@@ -186,12 +186,12 @@ export function isDirty(draft, published) {
   return JSON.stringify(sanitizeAppearance(draft)) !== JSON.stringify(sanitizeAppearance(published));
 }
 
-// What actually differs, so the screen can say "the bar colour and the logo"
+// What actually differs, so the screen can say "the bar color and the logo"
 // rather than the unhelpfully vague "you have unpublished changes".
 export const FIELD_LABELS = {
-  bar: 'Bar colour', rule: 'Bottom rule', cta: 'Give button', logo_url: 'Logo',
+  bar: 'Bar color', rule: 'Bottom rule', cta: 'Give button', logo_url: 'Logo',
   logo_shape: 'Logo shape', brand_name: 'Church name', tagline: 'Tagline',
-  show_tagline: 'Tagline shown', nl_show: 'Newsletter band', nl_bg: 'Newsletter colour',
+  show_tagline: 'Tagline shown', nl_show: 'Newsletter band', nl_bg: 'Newsletter color',
   nl_eyebrow: 'Newsletter eyebrow', nl_heading: 'Newsletter heading',
   nl_body: 'Newsletter wording', nl_button: 'Newsletter button',
 };
@@ -222,9 +222,9 @@ export function changedFields(draft, published) {
 const pesc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-// The tagline's colour is not editable — it is the site's `--honey`, chosen to
+// The tagline's color is not editable — it is the site's `--honey`, chosen to
 // sit on a dark bar. If the bar ever becomes light this has to be revisited,
-// which is another reason pale bar colours are not offered.
+// which is another reason pale bar colors are not offered.
 const TAGLINE_INK = '#E8C070';
 
 export function renderHeaderPreview(appearance, items = [], { note = '' } = {}) {
@@ -298,31 +298,31 @@ export const APPEARANCE_CSS = `
 `;
 
 // ── WHAT THE PUBLIC SITE GETS ────────────────────────────────
-// Resolved to real colours here rather than in the browser, so public/index.html
+// Resolved to real colors here rather than in the browser, so public/index.html
 // never has to carry a copy of the palette. A palette entry renamed or
 // re-valued in this file reaches the site on the next deploy with nothing to
 // keep in step — which is the whole reason the site is sent values and not keys.
 export function publicAppearance(a) {
   const s = sanitizeAppearance(a);
   return {
-    bar: colourOf(s.bar).value,
-    rule: colourOf(s.rule, 'gold').value,
-    cta: colourOf(s.cta, 'gold').value,
-    ink: colourOf(s.bar).ink,
+    bar: colorOf(s.bar).value,
+    rule: colorOf(s.rule, 'gold').value,
+    cta: colorOf(s.cta, 'gold').value,
+    ink: colorOf(s.bar).ink,
     // ⚠ The Give button's label is white on gold today — 2.6:1, which is below
     // the 4.5:1 a body of text needs. That is the site as it already is, and
-    // it is sent on unchanged here rather than quietly corrected: recolouring
+    // it is sent on unchanged here rather than quietly corrected: recoloring
     // the most-clicked button on the church website is a decision somebody
     // should make on purpose, not a side effect of making the header editable.
-    // Flagged in CLAUDE.md. Picking a darker CTA colour on this screen fixes
+    // Flagged in CLAUDE.md. Picking a darker CTA color on this screen fixes
     // it today without any code change, which is part of why the choice exists.
-    ctaInk: colourOf(s.cta, 'gold').ink,
+    ctaInk: colorOf(s.cta, 'gold').ink,
     logo: s.logo_url,
     logoShape: s.logo_shape,
     name: s.brand_name,
     tagline: s.show_tagline ? s.tagline : '',
     newsletter: s.nl_show
-      ? { bg: colourOf(s.nl_bg, 'navy').value, eyebrow: s.nl_eyebrow, heading: s.nl_heading, body: s.nl_body, button: s.nl_button }
+      ? { bg: colorOf(s.nl_bg, 'navy').value, eyebrow: s.nl_eyebrow, heading: s.nl_heading, body: s.nl_body, button: s.nl_button }
       : null,
   };
 }

@@ -437,25 +437,25 @@ publish it to go live."*
   the site inside the 120s `/api/pages` cache. So "publish it to go live" was
   describing a gap that was really a *trust* gap, not a plumbing one.
 
-**`admin/appearance.js` is the record**: bar colour, bottom rule, Give button,
+**`admin/appearance.js` is the record**: bar color, bottom rule, Give button,
 logo (with upload) and its shape, church name, tagline — plus the newsletter
-band's colour, wording and whether it appears at all.
+band's color, wording and whether it appears at all.
 
 - **Drafted, then published.** Two `site_settings` rows,
   `site_appearance_draft` and `site_appearance`, the same split a page has
   between `blocks` and `published_blocks`. Everything else the Menu screen
   writes is live on save and for reordering a link that is right; somebody
-  trying a colour or cropping a logo is *experimenting*, and an experiment
+  trying a color or cropping a logo is *experimenting*, and an experiment
   that is instantly on the front of the church website is not one. **Only
   Publish writes the live row, and it copies the draft across whole rather
   than taking fields from the request** — so a crafted POST can only ever
   publish what is already on the screen. `pageData()` reads the published key
   and only that.
-- **The screen names what differs** ("Bar colour, Logo") and shows both bars
+- **The screen names what differs** ("Bar color, Logo") and shows both bars
   when something is pending. "You have unpublished changes" tells somebody
   that something is waiting without telling them what, which is the half that
   would let them decide.
-- **⚠ Colours are a palette, not a picker, and gold is excluded from the bar.**
+- **⚠ Colors are a palette, not a picker, and gold is excluded from the bar.**
   The nav links, the tagline and the brand name are all white and none is
   editable, so a free hex field is one paste away from an unreadable header on
   every page at once. White on gold is 2.6:1, so `bar: false` keeps it off the
@@ -465,8 +465,8 @@ band's colour, wording and whether it appears at all.
   exactly how the unreadable header would otherwise be saved.
 - **⚠ Known and deliberately not fixed: the Give button is white on gold**,
   2.6:1, below the 4.5:1 a label needs. That is the site as it already is, and
-  recolouring the most-clicked button on the church website should be somebody's
-  decision, not a side effect. Picking a darker Give colour on the new screen
+  recoloring the most-clicked button on the church website should be somebody's
+  decision, not a side effect. Picking a darker Give color on the new screen
   fixes it today with no code change — which is part of why the choice exists.
 - **The public CSS is `var(--nav-bar, var(--sage))` throughout**, so the
   fallback IS the site as it always looked. If the admin is unreachable, or
@@ -475,7 +475,7 @@ band's colour, wording and whether it appears at all.
   every page div and renders on all 28 of them. It had been recorded here as
   "the homepage newsletter signup block", and that description is what would
   send somebody looking for it in the page editor, where it will never be —
-  converting the homepage to blocks would not have reached it. Its colour,
+  converting the homepage to blocks would not have reached it. Its color,
   wording and on/off switch are on the Appearance screen, and the markup says
   so.
 - The `photo` field kind in `admin/ui.js` renders a file input and **nothing
@@ -652,14 +652,14 @@ salaried row, the subtotal padding widths and the total row, plus the printed
 report's columns and its independence from the layout tabs. Also two groups in
 `test/admin-redesign.test.mjs` for the email.
 
-### Anything can be left, centred or right (v4.28.0, 2026-08-06)
+### Anything can be left, centered or right (v4.28.0, 2026-08-06)
 
 Dinger, with a **Button bar** selected — one button, hard left, no control to
 move it: *"for this selected block, and all blocks i want alignment of left,
 center and right and that should work for buttons too."*
 
-**Alignment was left/centre on ten types.** The reason written here for
-excluding the other twenty-one was that centring a grid's cells and centring
+**Alignment was left/center on ten types.** The reason written here for
+excluding the other twenty-one was that centering a grid's cells and centering
 the grid itself are different problems, each needing their own CSS. That is
 true, and it is a description of what the CSS has to do — not a reason to
 withhold the control. `align: true` is on 31 of the 32 defs now; **Spacer is
@@ -687,7 +687,7 @@ the one genuine exclusion**, having no content to align.
   deliberately do not.
 - **⚠ The amount ladder still aligns its intro only.** Its rows are an amount
   on the left and a Give button on the right, and moving that text is not what
-  "centre this section" means to anybody looking at it. It is now a **reset on
+  "center this section" means to anybody looking at it. It is now a **reset on
   the row** rather than a list of the five elements to align — the older note
   here argued the opposite, on the grounds that a rule existing only to undo
   the rule above it goes wrong when a sixth element is added. That inverted
@@ -762,7 +762,7 @@ Friday in UTC. The greeting was `new Date().getHours()` and
   site**, since it filters `publish_date <= today` and `expire_date >= today`.
 - **The expiry sweep deleted a post, and its image out of R2, a day sooner**
   than the office had asked for.
-- **The gym portal greyed out today's date** and refused a booking for it, and
+- **The gym portal grayed out today's date** and refused a booking for it, and
   invoices generated in the evening were dated tomorrow.
 - **A tap counted after 7pm on the last day of a month** went into the next
   month's total, which is the only number that screen reports.
@@ -821,14 +821,14 @@ The block editor tore every editor down and built them all again on each
 structural change. An afternoon of arranging one page was several hundred loads
 on its own.
 
-**So nothing initialises at page load any more, anywhere.** `_onTinymce()`
+**So nothing initializes at page load any more, anywhere.** `_onTinymce()`
 (`TINYMCE_HEAD`, `admin/db.js`) fetches the library on first demand and queues
 callers; an editor is created only when somebody puts the caret in a field. A
 screen nobody edits now costs nothing at all — it does not even fetch the
 ~500KB.
 
 - **⚠ This reverses the newsletter composer's own stated reasoning** — *"all of
-  them are rendered so TinyMCE can initialise each one at load … creating an
+  them are rendered so TinyMCE can initialize each one at load … creating an
   editor instance on click would be a second way for a rich field to exist, and
   that is how one of them ends up behaving differently from the rest."* The
   worry was right and the answer is not to init everything: click-to-open is now
@@ -855,7 +855,7 @@ screen nobody edits now costs nothing at all — it does not even fetch the
   content interpolated into an inline `<script>` could break out at the first
   `</script`; v3.6.0 fixed it by splitting the tag in one builder. Saved content
   no longer reaches a script **at all** — HTML-escaped into the textarea,
-  allowlist-sanitised into the preview — so the class of bug is closed by
+  allowlist-sanitized into the preview — so the class of bug is closed by
   construction rather than by remembering one more escape. Do not reintroduce a
   path that interpolates stored content into a `<script>`.
 - **The per-field inline `<script>` is gone with it.** The activation is
@@ -864,7 +864,7 @@ screen nobody edits now costs nothing at all — it does not even fetch the
   newsletter page body.
 - **The submit handler now attaches to the form the field is in.** It used to
   take `document.querySelector('form')`, the page's *first* form, which is the
-  right one only by luck. Same behaviour otherwise: it waits on in-flight image
+  right one only by luck. Same behavior otherwise: it waits on in-flight image
   uploads, strips leftover `blob:` images, and carries the submit button's own
   name across the programmatic submit (Publish vs Save as draft turns on it).
 - **In the block editor a field opens on `focusin`**, which is also its `select`
@@ -878,7 +878,7 @@ screen nobody edits now costs nothing at all — it does not even fetch the
   beginning of it. The range is cloned before init and `setRng` after, inside a
   try: inline mode edits the element in place so it is normally still valid, and
   if it is not the caret simply stays where focus left it. This did not arise
-  before because every field was initialised long before anybody clicked one.
+  before because every field was initialized long before anybody clicked one.
 
 **⚠ The meter is gone — see "It is self-hosted now" below — and none of this
 became unnecessary.** Metering was what made it urgent, not what made it wrong:
@@ -939,7 +939,7 @@ alongside it. What this branch adds on top:
   `tinymce.min.js` and left every browser running a year-old theme and model
   against a new core — a broken editor that no reload fixes and no deploy
   clears. Versioning the path changes every URL at once.
-- **⚠ Nothing initialises at page load** (see the section above). Metering is
+- **⚠ Nothing initializes at page load** (see the section above). Metering is
   gone but the work is not: without this, the page editor still builds and
   destroys fourteen editors every time somebody nudges a block.
 - **⚠ The blank-on-save hole got MORE likely, not less.** The stored value used
@@ -962,17 +962,17 @@ alongside it. What this branch adds on top:
   the test says so.
 - **⚠ `license_key: 'gpl'` is required** and is not a key you obtain — it is a
   literal string acknowledging the GPL. Without it TinyMCE 7 renders an invalid
-  licence notice over the editor.
+  license notice over the editor.
 - **⚠ THE PAID PLAN IS CANCELLED (2026-08-07)**, so there is no longer an
   account to fall back to. `cdn.tiny.cloud` is not a slower or costlier option
   now; it is a broken one. `test/tinymce-selfhost.test.mjs` boots the real
   library and asserts **no request leaves the origin during a full boot** —
   which is the check worth having, because a residual call would show up as a
-  licence notice over somebody's editor rather than as anything in a log.
+  license notice over somebody's editor rather than as anything in a log.
 
 Run: `node admin/tinymce-assets.test.mjs` (**in CI** — every file present, no
 config naming a plugin we did not vendor, the version in the path and in both
-`base_url`s, the licence acknowledged, the folder still trimmed) and
+`base_url`s, the license acknowledged, the folder still trimmed) and
 `node test/tinymce-selfhost.test.mjs` (Chromium, **loads the real library** —
 which now costs nothing — and asserts every `/assets/tinymce/` response is 200
 **and** JavaScript or CSS rather than an error page, every configured plugin
@@ -1013,7 +1013,7 @@ $5,000 charge, which is not a thing anybody presses.
   button exists**, so a purely weekly ladder carries no instruction about a
   screen it never reaches.
 - **A ladder can carry a heading over the rows themselves**, stored in the
-  block's existing `subtitle` (already sanitised for every type, so no schema
+  block's existing `subtitle` (already sanitized for every type, so no schema
   change) and edited inline in the canvas. The block heading above it is an
   argument — "Every gift accomplishes great things in His Kingdom" — with
   several paragraphs under it; by the time the eye reached the cards nothing
@@ -1060,10 +1060,10 @@ perfect**.
 | Type | What it is | What is editable |
 |---|---|---|
 | `giving` — Giving widget | The transaction: chips, fund dropdown, custom amount, the button | Heading, tagline, trust line, alignment, spacing, where it sits on the page |
-| `amounts` — Amount ladder | A heading over "$X /period — what it does" rows, each with its own Give button | Eyebrow, heading, intro; every row's amount, period and description; theme colours; alignment |
+| `amounts` — Amount ladder | A heading over "$X /period — what it does" rows, each with its own Give button | Eyebrow, heading, intro; every row's amount, period and description; theme colors; alignment |
 
 - **One type for both ladders.** The ministry ladder and the leadership tiers
-  are the same shape and differ only in colour, which is already a block-level
+  are the same shape and differ only in color, which is already a block-level
   choice. Two near-identical types would drift apart the first time somebody
   improved one of them.
 - **⚠ `give-link.js` is the ONE definition of how an amount becomes a link.**
@@ -1098,7 +1098,7 @@ perfect**.
   `/give-landing` too and there would be three giving surfaces where the
   settled rule says two.
 - **The chrome reads the site's own records.** The masthead takes its logo,
-  name, tagline, bar colour and rule from `site_appearance` (Menu →
+  name, tagline, bar color and rule from `site_appearance` (Menu →
   Appearance); the footer reads the church details. Both were hardcoded here.
   ⚠ This page used to have **no way back into the site, by design** — "someone
   lands here from a bulletin/QR/text link, sees one thing, and gives". Andrew
@@ -1152,7 +1152,7 @@ address, which is the one thing a published block must never hold.
 **⚠ Found while checking that draft, and fixed before publishing: an in-site
 link in `public/index.html` is `href="#" onclick="showPage('contact')"`.** The
 extractor read the href alone, so `/give`'s "Speak with a pastor" came out as a
-link to `#` — which sanitises perfectly cleanly, because `#` is a valid URL, and
+link to `#` — which sanitizes perfectly cleanly, because `#` is a valid URL, and
 would have reached the live giving page as a link that goes nowhere. **A dead
 link is worse than a missing one: it looks like it works.** `hrefOf()` in
 `tools/extract-pages.mjs` now reads the onclick first and resolves it to the
@@ -1258,10 +1258,10 @@ produce a WebP. `admin/exif.js` cuts the metadata out at `/api/upload-image`,
 which every path goes through.
 - **Byte-level, not a decode.** Workers has no image library and needs none:
   in JPEG, PNG and WebP the metadata sits in its own self-delimiting chunk.
-  JPEG keeps APP0 and APP14 (JFIF density, Adobe colour transform) and stops at
+  JPEG keeps APP0 and APP14 (JFIF density, Adobe color transform) and stops at
   SOS, because past that a `0xFF` is image data. WebP rewrites the RIFF size
-  and honours the pad byte that is not counted in a chunk's own size.
-- **⚠ Every path fails OPEN.** Anything unrecognised, truncated or malformed
+  and honors the pad byte that is not counted in a chunk's own size.
+- **⚠ Every path fails OPEN.** Anything unrecognized, truncated or malformed
   comes back untouched. Losing a photo to a parser that misread it is worse
   than the metadata, and nobody would find out until it was already on a page.
 - The fixtures are **real files with real GPS**, so the test greps the raw
@@ -1337,11 +1337,11 @@ expired, on a feature whose point is that nobody touches it weekly.
 every request 302'd to the login page. It is a public endpoint and belongs with
 `/api/news`. The integration test caught it; a unit test never would have.
 
-**The "Kept in step" switch is deleted.** It was labelled *"edit either one and
+**The "Kept in step" switch is deleted.** It was labeled *"edit either one and
 the other follows"* and nothing implemented that; it wrote `give_keep_in_step`,
 which nothing read. The panel beside it said the two giving pages were "One set
 of blocks · two places it appears", and they are not. **A control that claims a
-behaviour the code does not have is worse than no control** — somebody flips
+behavior the code does not have is worse than no control** — somebody flips
 it, believes it worked, and stops checking.
 
 Run: `node admin/exif.test.mjs`, `node admin/sermons-feed.test.mjs`,
@@ -1349,7 +1349,7 @@ Run: `node admin/exif.test.mjs`, `node admin/sermons-feed.test.mjs`,
 
 ### Form Spam Screening (added 2026-07-31)
 
-The public contact / prayer / newsletter forms had one defence — a hidden
+The public contact / prayer / newsletter forms had one defense — a hidden
 honeypot field — and the forms POST cross-origin to
 `admin.timothystl.org/api/contact`, so a bot never has to load the site at all
 and the honeypot never gets a chance. Marketing pitches were arriving in the
@@ -1418,11 +1418,11 @@ Ministry pages are an ordered list of typed **blocks** rather than one TinyMCE b
 edited in a full-viewport drag-and-drop editor at `/ministries/editor/:slug`. Built
 from the design handoff in `design_handoff_ministry_page_editor/`. The pastor's
 stated constraint — *it must not be possible to break the page* — is why every
-layout control is a constrained choice (an 8px spacing step, a palette colour, an
+layout control is a constrained choice (an 8px spacing step, a palette color, an
 S/M/L size) and never a free-form pixel or hex value.
 
 **`admin/blocks.js` is the single renderer.** It owns the block schema, the
-guardrails, the sanitiser, and the HTML template for all 19 block types. The public
+guardrails, the sanitizer, and the HTML template for all 19 block types. The public
 site and the editor canvas both render through `renderPage()`, so the WYSIWYG
 preview cannot drift from the live page. If you add a block type, add it there and
 it appears in both places at once. Do **not** add a second copy of a template
@@ -1437,9 +1437,9 @@ anywhere — that is the one thing this design exists to prevent.
   a block (blocks render into the content region below it, via `blocks_html` on
   `GET /api/ministry/:slug`).
 - **Guardrails are enforced server-side**, in `sanitizeBlock()`, not just in the
-  client: spacing snaps to 8px steps capped at 96, colours must come from the two
+  client: spacing snaps to 8px steps capped at 96, colors must come from the two
   palettes and an unreadable ink/background pair is corrected on write, unknown
-  block types are dropped, rich text goes through an allowlist sanitiser. A stale
+  block types are dropped, rich text goes through an allowlist sanitizer. A stale
   tab cannot write `spaceAbove: 900`.
 - **The editor does not re-render to restyle.** Every inspector knob is emitted as
   a CSS custom property on the block wrapper, so the editor patches the DOM node
@@ -1477,7 +1477,7 @@ anywhere — that is the one thing this design exists to prevent.
   whole page, as a reusable named section and drop it in from the palette's
   "Saved" group. Inserted copies get fresh block ids and no live link back.
 
-**Tests** — `node admin/blocks.test.mjs` (renderer, guardrails, sanitising,
+**Tests** — `node admin/blocks.test.mjs` (renderer, guardrails, sanitizing,
 migration, layouts, the generated site-page seeds) and `node admin/pages.test.mjs`
 (what counts as a draft, list order, filters, addresses, renaming), plus browser
 suites in `test/` driven by Playwright against `test/editor-server.mjs`, a local
@@ -1530,7 +1530,7 @@ neither.
   inventing a new pattern rather than extending the one that exists.
 - **Font-family and per-character font color were explicitly left out.** A
   background/text-color pair already exists for every block ("Theme
-  colours"), so that part of the ask was already covered. A font-family
+  colors"), so that part of the ask was already covered. A font-family
   toggle has a real precedent to build from if it's ever wanted — the SIZES
   (S/M/L) control's full path from definition through to a CSS variable
   (`blocks.js:39-43` → `wrapperVars()`/`styleVars()` → the inspector chips)
@@ -1591,8 +1591,8 @@ was the build order.
   means writing a config. `LIST_SECTION_JS` is included once by `sidebarShell()`
   and discovers sections, so a new one needs no script of its own.
 - **Five status tones and only five** (`TONES` in `admin/ui.js`): green live,
-  amber needs attention, red broken, grey deliberately off, blue-grey automatic.
-  An unrecognised tone clamps to grey rather than rendering unstyled.
+  amber needs attention, red broken, gray deliberately off, blue-gray automatic.
+  An unrecognized tone clamps to gray rather than rendering unstyled.
 - **The count label is scoped to the filter, not the table.** "3 of 8 shown"
   where 8 is what the *active filter* can reach. "5 of 12" when only 5 can ever
   be shown teaches a volunteer that seven rows are hiding somewhere.
@@ -1644,7 +1644,7 @@ Every list section now reads from `admin/sections.js` (see below). Gym Rentals,
 Payroll and the Giving link table keep their bespoke screens on purpose.
 
 - **The sidebar is the design's five groups** — Website, Email, Money &
-  Building, People & Access, Setup, with Dashboard above them unlabelled —
+  Building, People & Access, Setup, with Dashboard above them unlabeled —
   and the page-producing sections nested under Pages. Badges only show to
   somebody who can act on them.
 - **Newsletter and News & Events are now separate sections.** `/newsitems` is
@@ -1829,7 +1829,7 @@ Run: `node admin/newsletter.test.mjs`.
 
 #### Phase 6 — Staff, Users, Subscribers (2026-08-01)
 
-Three more sections onto the shared pattern. Little new behaviour — the value
+Three more sections onto the shared pattern. Little new behavior — the value
 is that these are now the same screen as the other nine.
 
 - **Staff** — Person / Email / Order / Photo. The per-person photo crop the
@@ -1868,7 +1868,7 @@ has **Queue** and **Calendar** views.
   and it says on its face that confirming, releasing and invoicing happen in
   the Queue view. Two places to confirm a hold would be two places to get it
   wrong.
-- Holds are amber, confirmed bookings green, blocked dates greyed with their
+- Holds are amber, confirmed bookings green, blocked dates grayed with their
   reason. Month navigation preserves the view.
 
 #### Phase 7 (part) — Giving: Gift vs Payment (2026-08-01)
@@ -2028,7 +2028,7 @@ Requested · Conflicts · Status`, with `Approve` and `Open` on every row.
   at one price, releasing several holds, deleting a run of confirmed dates —
   those carry the invoice generation and the Google Calendar push, and one
   person's whole job runs through them. They moved *below* the queue under a
-  "By organisation" heading, untouched. Deleting a working invoice flow because
+  "By organization" heading, untouched. Deleting a working invoice flow because
   a mockup does not draw it would be the wrong reading of "match the mockups".
 - The calendar view gained the design's four-tone legend (Confirmed · Hold ·
   Conflict · Blocked) and `‹ ›` month arrows. It stays read-only on purpose.
@@ -2051,7 +2051,7 @@ Requested · Conflicts · Status`, with `Approve` and `Open` on every row.
   been a lie.
 - **There is no "Import from childcare app" button**, because there is no
   import step — MDO hours are read live every time the period changes. A button
-  labelled Import would imply a staleness that does not exist. The row says
+  labeled Import would imply a staleness that does not exist. The row says
   what is true and offers the one real action: read again.
 - **⚠ Still no rate field for MDO staff, deliberately.** Church rates are typed
   in here; MDO rates are read from the MDO app. The screen says so in as many
@@ -2139,10 +2139,10 @@ and `VALUES` (`admin/values.js`). What had drifted:
 | Filter chips | 999px pills | radius 8, on = 2px `#1E2D4A` on `#E7EEF7` |
 | Primary button | navy with white text | `#1E2D4A` with `#F5E4C0` text |
 
-- **A value chip keeps its own colours in both states** — selected only adds
-  the 2px `solid` border. Recolouring it would read as a *different value*
+- **A value chip keeps its own colors in both states** — selected only adds
+  the 2px `solid` border. Recoloring it would read as a *different value*
   rather than the same one, chosen. That is why `solid` exists as a third
-  colour per value.
+  color per value.
 - **A child nav row's marker is an elbow**, not a circle: 7×7 with left and
   bottom hairlines, radius `0 0 0 3px`. It draws the relationship instead of
   asserting it with indentation alone.
@@ -2153,8 +2153,8 @@ and `VALUES` (`admin/values.js`). What had drifted:
   server-side would confidently say "Showing" about something now hidden.
 - **Four options or fewer is chips, not a select** (`kind: 'chips'`). A select
   hides three of four choices behind a click.
-- **Read-only is a sand fill, never greyed text.** Grey text reads as broken.
-- **Toasts** (`TOAST_CSS` / `TOAST_JS`) — bottom centre, navy on cream, 2.2s.
+- **Read-only is a sand fill, never grayed text.** Gray text reads as broken.
+- **Toasts** (`TOAST_CSS` / `TOAST_JS`) — bottom center, navy on cream, 2.2s.
   The rule that makes them worth having is the copy: *state the consequence,
   not the event*. "Saved · written to the audit log", not "Saved". A redirect
   carrying `?toast=` raises one and then strips it from the address bar, so a
@@ -2210,7 +2210,7 @@ the block library's full grouping. Recorded here so the next pass has the list.
 `screens/01-…` through `screens/21-…` each carry a written spec under the
 reference render: how the screen is built, its columns and widths, its filter
 chips *in order*, its drawer fields *in order* with the helper text under each,
-the rules the build must honour, and a "get this wrong and it shows" list.
+the rules the build must honor, and a "get this wrong and it shows" list.
 `admin/sections.js` already had the titles, filters and columns. This pass is
 the rest.
 
@@ -2218,7 +2218,7 @@ What changed:
 
 - **The four values are chips, not a select** (`valueChips()` in `admin/ui.js`),
   on Ministries, Partners, News and Christian Ed. Four options is four chips —
-  a select hides three of them behind a click. Each keeps its own colour when
+  a select hides three of them behind a click. Each keeps its own color when
   selected; only the 2px `solid` border is added.
 - **A person is a round 52px avatar; a file is a 64×48 rectangle.** They were
   the same 30px circle. A square crop of a landscape photo tells you less than
@@ -2255,7 +2255,7 @@ counting to exist at all — see "The taps are counted" below.
     offers no "Open editor" for the same reason.
   - **Only `http(s)` is stored.** A `javascript:` address here would be a link
     the office clicks from inside their own admin session, so anything else is
-    dropped rather than half-honoured. `outboundUrl()` is the one gate, used by
+    dropped rather than half-honored. `outboundUrl()` is the one gate, used by
     the pill, the row, the API and the menu alike.
   - **`/api/pages` resolves one hop.** The outbound map is applied to every
     other entry after merging, so a short link or a retired address pointing at
@@ -2265,7 +2265,7 @@ counting to exist at all — see "The taps are counted" below.
 - **The pill vocabulary is the design's**: `Live` (was "Published") ·
   `Draft edits` · `Not in menu` · `Links out` · `Link clash`. Each `PILLS` entry
   now carries its own **tone**; the list used to pick a tone by comparing the
-  label string, so renaming a pill silently recoloured it.
+  label string, so renaming a pill silently recolored it.
 - **A clashing short link is shown in the problem ink** rather than the ordinary
   link blue — it is the thing on that row that is not working.
 - **The short-link screen is gone; it is a field in the Details drawer.** One
@@ -2308,7 +2308,7 @@ the month alone.
   exactly why it cannot hide the one thing that would stop them.
 - Month arrows keep whichever layout you are in, rather than always landing on
   the calendar.
-- **⚠ The "By organisation" bulk tools are on BOTH layouts now.** They used to
+- **⚠ The "By organization" bulk tools are on BOTH layouts now.** They used to
   be hidden in the calendar view, which was harmless while Queue was the
   default and a regression the moment Calendar became it — they carry the
   invoice generation, the price-setting and the Google Calendar push, so
@@ -2394,7 +2394,7 @@ times. `jsString()` splits the closing tag so the parser never sees it, and
 
 **⚠ Superseded v4.29.0** — `jsString()` no longer exists, and neither does the
 inline `<script>` it was protecting. Saved content is HTML-escaped into the
-field's textarea and allowlist-sanitised into its closed-state preview, so there
+field's textarea and allowlist-sanitized into its closed-state preview, so there
 is nothing left for it to break out of. See "A rich field costs nothing until it
 is opened" above; the test group in `admin/ui.test.mjs` now pins that stronger
 property instead.
@@ -2422,8 +2422,8 @@ sent newsletter.
 - **The audit log has its read-only drawer.** `renderDrawer({ readOnly: true })`
   is a real option now rather than a regex stripping the save button: no save,
   no delete, and Cancel reads `Close`. Fields use `.tlc-static`, which is a
-  **sand fill** — the spec's "never grey out text to signal read-only", because
-  grey text reads as broken and a filled field reads as a fact.
+  **sand fill** — the spec's "never gray out text to signal read-only", because
+  gray text reads as broken and a filled field reads as a fact.
 
 #### ⚠ The NFC taps did not answer (fixed v3.7.0, 2026-08-01)
 
@@ -2631,7 +2631,7 @@ enough that nothing had caught up with it):
 - `phoneRules()` spoke `grid-template-columns` at a pair that is CSS
   *columns* — a silent no-op, halves rendered ~165px wide on a phone.
   `column-count:1` now, one shared text, so the editor's Phone tab fixed too.
-- Pair members are grandchildren, so `.tlcb-page--full > .tlcb` centring
+- Pair members are grandchildren, so `.tlcb-page--full > .tlcb` centering
   never reached them; the wrapper carries the padding now.
 - The info card stacks inside a half column; the editor's drop indicator no
   longer throws `NotFoundError` mid-drag over a pair (walk to the page's own
@@ -2821,7 +2821,7 @@ nowhere to put a run of cards and flattened them into a paragraph. `/ministries`
 came out as `hero, text, text, text, buttons` for a page that is really nine
 cards and four partners.
 
-- **`cardRun()` recognises a grid**, and the drafts now carry `cardgrid` blocks
+- **`cardRun()` recognizes a grid**, and the drafts now carry `cardgrid` blocks
   on `/ministries` (9 + 4), `/worship` (the four plan-your-visit cards) and
   `/youthfamily` (6) — with each card's image, heading, body and link intact.
 - **⚠ THE CONTAINER HAS TO SAY IT IS A GRID.** The first version took any two
@@ -2927,7 +2927,7 @@ the next block starts below **both**.
   decision.
 - The editor rail brackets the **whole run** now rather than pairs, walked the
   same way the renderer walks it — the rail must never draw a grouping the page
-  does not honour.
+  does not honor.
 
 ⚠ **A tall block still decides the layout.** Two halves whose content differs
 wildly in length will not look like a tidy two-up; they will look like a tall
@@ -2971,11 +2971,11 @@ things.
   the page: an obligation that comes *after* booking, put above the calendar, so
   a renter had to take in a compliance requirement before finding out whether
   their date was even free.
-- **The calendar encoded availability twice, in colour only** — a red numeral
+- **The calendar encoded availability twice, in color only** — a red numeral
   *and* a red dot. Red numerals read as errors, the dot was redundant, and
-  colour alone fails for anyone who cannot separate the two hues. Available days
+  color alone fails for anyone who cannot separate the two hues. Available days
   are a navy numeral in an outlined cell that raises on hover; unavailable days
-  are the numeral alone in grey, no cell, not clickable. **Absence of affordance
+  are the numeral alone in gray, no cell, not clickable. **Absence of affordance
   is the signal**, so the legend is gone too.
 - **⚠ The client repainted every dot green or red in two places**, which would
   have undone that redraw the first time anybody pressed Clear. Both aligned.
@@ -3249,7 +3249,7 @@ nothing.
 
 - **`payrollPeriodLocked()` guards the `/sb` proxy**, scoped to
   `church_staff_period_entries`. A stale tab, a second window and a crafted
-  POST all arrive at that line; the greyed inputs on the screen are a courtesy
+  POST all arrive at that line; the grayed inputs on the screen are a courtesy
   so nobody types a figure that is going to be refused.
 - **Rates are deliberately NOT locked.** They live on `church_staff` and are
   not period-scoped, so locking them would stop the office fixing a rate for a
@@ -3409,7 +3409,7 @@ review page and two staff emails. All three escape now.
 `group.name` / `contact` / `email` are still interpolated unescaped in the gym
 portal's own markup. Those are **office-entered** — `gym_groups` is writable
 only through `/gym-rentals/groups/update/`, behind `gym_manage` — so it is
-defence-in-depth against a typo, not an attack path, and a mass edit across a
+defense-in-depth against a typo, not an attack path, and a mass edit across a
 hundred call sites was the riskier change. Left deliberately, noted here.
 
 #### The handoff's own open questions (§8), as answered
@@ -3479,7 +3479,7 @@ navigation is generated from those rows.
   draft only when `canReseed()` says so — still stamped `updated_by='migration'`
   and never published. A page anyone has edited or put live keeps what it has.
 - **A section that mixes a grid with panels is walked child by child.**
-  `recognise()` reads a whole section as one shape, which on `/give` sees only
+  `recognize()` reads a whole section as one shape, which on `/give` sees only
   the card grid and throws away the panels either side — and those panels hold
   the IRA, DAF and planned-giving copy. `mixedSection()` handles that shape and
   runs first; card detection still goes through `cardRun()`, so there is one
@@ -3644,6 +3644,57 @@ many words.
 
 ## Design System
 
+### ⚠ American spellings everywhere (settled 2026-08-11)
+
+Dinger: *"in the admin side of this british spellings have crept in like
+neighbourhood and colour. look all through and remove those."* He was right —
+401 of them, across the admin screens, the block editor, the Worker, the staff
+manual and this file. All swept.
+
+**The rule is American English, in everything a human reads: screen labels,
+button text, purpose lines, `◆` notes, toasts, code comments, this file, and
+`public/manual.html`.** That is not a style preference — this is a church in
+St. Louis writing to its own office staff and congregation, and "colour" on an
+admin screen reads as a typo to every one of them.
+
+The ones that had actually crept in: `colour` · `neighbourhood` · `centre` /
+`centred` · `behaviour` · `organisation` · `grey` / `greyed` · `licence` ·
+`labelled` · `honoured` · `sanitise` · `normalise` · `initialise` ·
+`recognise` · `serialise` · `summarise` · `optimise` · `synchronise` ·
+`capitalise`, plus their prefixed forms (`unrecognised`, `recoloured`,
+`sanitisation`) and the identifiers built on them (`colourOf`,
+`COLOUR_FIELDS`). American: color, neighborhood, center, behavior,
+organization, gray, license, labeled, honored, sanitize, normalize,
+initialize, recognize, and so on — `-ize` / `-or` / `-er`.
+
+**⚠ Four things that look British and must NOT be "corrected":**
+
+| Leave alone | Why |
+|---|---|
+| `aria-labelledby` | An HTML attribute name. Renaming it silently unlabels the drawer and the block rail for a screen reader, with nothing to see in a browser. |
+| `'cancelled'` | A stored `gym_bookings.status` value. Changing the spelling in code without a migration orphans every cancelled booking in the live table. |
+| `/licen[cs]e/i` in `test/tinymce-selfhost.test.mjs` | Deliberately matches both, because it is grepping TinyMCE's *own* console output for a licence complaint, not ours. |
+| `admin/vendor/tinymce/**` and `design_handoff_admin_overhaul/**` | Third-party code and an archived designer deliverable. Neither is ours to rewrite, and editing the vendored library breaks the checksum the asset test relies on. |
+
+Also unchanged: `fulfilled` (a Promise term, and standard American anyway) and
+`enrolling`, which is spelled the same either way.
+
+**How to check.** A word-boundary grep over the tracked files, minus the two
+excluded trees:
+
+```
+git ls-files | grep -vE '^(admin/vendor|design_handoff_admin_overhaul)/|^CLAUDE\.md$' \
+  | xargs grep -rniE '\w*(colour|neighbour|centre|centred|behaviour|organis[eai]|recognis|initialis|sanitis|normalis|serialis|summaris|optimis|licenc|labelled|grey|honour)\w*' \
+  | grep -vE 'labelledby|licen\[cs\]e'
+```
+
+It should return nothing. Worth running before opening a PR that adds a screen.
+
+⚠ **`CLAUDE.md` is excluded from its own check, and that is not laziness** —
+the section you are reading spells every one of those words out in order to
+name them, so leaving it in guarantees ten hits on a clean tree. A check that
+always fails is a check nobody runs.
+
 ### Colors (CSS Variables) — matches volunteer page color system
 - Primary: Navy `#1E2D4A` (--steel)
 - Accent: Gold `#C9973A` (--amber)
@@ -3751,7 +3802,7 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 ## Pending / Deferred Items
 
 ### Still Needs to Be Built
-- ~~**Whether to keep paying Tiny at all**~~ — **done, and the plan is CANCELLED (2026-08-07).** Dinger: *"Self host it. We don't need the paid functions"*, then *"i canceled the plan"*. The editor is `admin/vendor/tinymce/` (TinyMCE 7 open-source, GPLv2+) served by the `/assets/tinymce/` route; there is no API key, no meter and no account behind it any more. ⚠ **Nothing may reintroduce a cloud dependency** — `cdn.tiny.cloud` now points at a cancelled subscription, so a stray call would not merely cost money, it would put a licence notice over the editor. Two tests hold that line: `admin/tinymce-assets.test.mjs` fails on the hostname appearing in any live code, and `test/tinymce-selfhost.test.mjs` boots the real library and asserts **no request leaves the origin at all**. See "It is self-hosted now, and where the 614 went" above for where the loads were going.
+- ~~**Whether to keep paying Tiny at all**~~ — **done, and the plan is CANCELLED (2026-08-07).** Dinger: *"Self host it. We don't need the paid functions"*, then *"i canceled the plan"*. The editor is `admin/vendor/tinymce/` (TinyMCE 7 open-source, GPLv2+) served by the `/assets/tinymce/` route; there is no API key, no meter and no account behind it any more. ⚠ **Nothing may reintroduce a cloud dependency** — `cdn.tiny.cloud` now points at a cancelled subscription, so a stray call would not merely cost money, it would put a license notice over the editor. Two tests hold that line: `admin/tinymce-assets.test.mjs` fails on the hostname appearing in any live code, and `test/tinymce-selfhost.test.mjs` boots the real library and asserts **no request leaves the origin at all**. See "It is self-hosted now, and where the 614 went" above for where the loads were going.
 - ~~**The footer is not admin-editable at all**~~ — **done v4.23.0, 2026-08-05.** `footer_columns` + `menu_items.column_id`; headings, membership and order are all editable under Menu → Footer columns, and deleting a column never deletes its links. See "The footer is columns now" above. *(Original note kept below for context.)* The footer's column headings ("Visit", "Connect", "Programs", "Partners") and which links sit under each were hardcoded in `public/index.html` — the admin's Menu screen only manages the *header* nav and a flat list of footer outside-links repeated on mobile, neither of which touches the desktop footer's structure at all. What's wanted: real admin control over the footer's column headings and which links sit under each, add/remove/rename a column, reassign a link between columns — not just reordering within a fixed set of columns like the Partners tab's new drag-to-reorder. This is a genuinely separate build from the Menu screen's existing flat `menu_items` list (`MAX_DEPTH.footer = 0`), not an extension of it — likely wants its own "footer columns" concept (a new table for column headings + order, with footer links assigned to one) rather than shoehorning grouping into `menu_items`. Scoped but not started.
 - ~~**`give.timothystl.org` is not a block-editor page**~~ — **built v4.24.0, 2026-08-05**, and **waiting on one Publish**. The draft is seeded; `published_blocks` is empty, so the live page still renders `give-landing.js` until somebody opens `/pages/give-landing/edit` and presses Publish. That last step is deliberately manual: this is the page that takes the money, and a deploy that swaps its rendering path while nobody is watching is exactly the risk the original deferral existed to avoid. See "give.timothystl.org is a block-editor page" below and `admin/BLOCK-EDITOR-ROLLOUT.md` §3. `give_keep_in_step` was **deleted**, not wired up — it was a key nothing ever read, attached to a switch that promised to keep the two giving pages in step.
 
@@ -3765,11 +3816,11 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 - **Ministry page editor rollout** — every ministry page now has a full-page block draft waiting in the editor (banner and all sections). The office reviews each one and presses Publish; until then the live page renders from its hardcoded markup exactly as before. Once a page is published from the editor, its hardcoded section markup in `public/index.html` is dead and can be deleted.
 - **Music page video strip** — the three fallback video cards on `/music` were not converted (they need real YouTube URLs). Add Video blocks in the editor, or drop them.
 - ~~**Sermons page**~~ — **done v4.24.0, 2026-08-05.** Andrew: the channel is `youtube.com/timothystl`, one general worship service a week, and *"I dont knwo how we can make it pull the most current one every time"*. It does now — `/sermons` embeds the newest video from the channel's own Atom feed, no API key, nothing to post weekly. `sermon_youtube_channel` and `sermon_title_filter` are the two settings. See "The backlog pass" above.
-- ~~**Homepage newsletter signup block is hardcoded**~~ — **done v4.23.0, 2026-08-05**, and the premise was wrong in a way worth recording: it is **not** on the homepage. It sits outside every page div and renders on all 28 pages, so converting the homepage to blocks would never have reached it. It is site-wide chrome, and its colour, wording and on/off switch are now on the Appearance screen beside the header. See "The chrome is editable, and drafted first" above.
+- ~~**Homepage newsletter signup block is hardcoded**~~ — **done v4.23.0, 2026-08-05**, and the premise was wrong in a way worth recording: it is **not** on the homepage. It sits outside every page div and renders on all 28 pages, so converting the homepage to blocks would never have reached it. It is site-wide chrome, and its color, wording and on/off switch are now on the Appearance screen beside the header. See "The chrome is editable, and drafted first" above.
 - ~~**Confirm the Menu screen actually publishes live**~~ — **answered 2026-08-05.** It was already live: every menu write goes straight through and the `/api/pages` edge copy is busted by the chokepoint on any POST under `/pages` or `/menu`, so a change reaches the site inside the 120s window. What made it *look* unpublished was the preview bar, which drew a header the site does not have — fixed in v4.23.0. Menu items stay instant; only the new appearance record is drafted and published.
-- ~~**No logo image upload for the top nav bar, and header color scheme isn't admin-editable**~~ — **done v4.23.0, 2026-08-05.** Logo upload (R2, with shape), church name, tagline, bar colour, bottom rule and Give button, all under Menu → Appearance. Note the "T" badge in the old Menu preview was never the site's logo — it was invented by that preview, which is why the header looked unchangeable. Both open questions were answered: **scope** is the header and the newsletter band only, not the site-wide palette (`--steel`/`--amber` still belong to the stylesheet); **publish** is a real draft/live split, `site_appearance_draft` vs `site_appearance`, exactly like `blocks`/`published_blocks`.
+- ~~**No logo image upload for the top nav bar, and header color scheme isn't admin-editable**~~ — **done v4.23.0, 2026-08-05.** Logo upload (R2, with shape), church name, tagline, bar color, bottom rule and Give button, all under Menu → Appearance. Note the "T" badge in the old Menu preview was never the site's logo — it was invented by that preview, which is why the header looked unchangeable. Both open questions were answered: **scope** is the header and the newsletter band only, not the site-wide palette (`--steel`/`--amber` still belong to the stylesheet); **publish** is a real draft/live split, `site_appearance_draft` vs `site_appearance`, exactly like `blocks`/`published_blocks`.
 
-- **The site-wide palette is still not admin-editable, deliberately.** The Appearance screen changes the header and the newsletter band; `--steel`/`--amber`/`--sage` in `public/styles.css` colour every button, card, heading and section on the site. Exposing those would be a theme editor, and a bad pick there is not one unreadable bar but an unreadable site. If it is ever wanted it needs its own design — starting from which of the ~20 variables are genuinely independent choices rather than shades of each other.
+- **The site-wide palette is still not admin-editable, deliberately.** The Appearance screen changes the header and the newsletter band; `--steel`/`--amber`/`--sage` in `public/styles.css` color every button, card, heading and section on the site. Exposing those would be a theme editor, and a bad pick there is not one unreadable bar but an unreadable site. If it is ever wanted it needs its own design — starting from which of the ~20 variables are genuinely independent choices rather than shades of each other.
 
 ### From the Post-Redesign Review — Andrew's Call (2026-08-02)
 

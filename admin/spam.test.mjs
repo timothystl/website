@@ -164,11 +164,11 @@ group('a real gift to the church is not');
   }, viaForm);
   ok(relay.verdict !== 'spam', `a member relaying a real offer still gets through (scored ${relay.score})`);
 
-  const neighbour = scoreSubmission({
+  const neighbor = scoreSubmission({
     name: 'Tiffany', email: 't@example.com',
     message: 'A family in the neighborhood is offering their upright piano for free if the school could use it.',
   }, viaForm);
-  ok(neighbour.verdict !== 'spam', `so does a neighbourhood offer relayed second-hand (scored ${neighbour.score})`);
+  ok(neighbor.verdict !== 'spam', `so does a neighborhood offer relayed second-hand (scored ${neighbor.score})`);
 }
 
 group('borderline pitches are flagged but still delivered');

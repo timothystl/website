@@ -86,7 +86,7 @@ const grab = (chunk, re) => { const m = chunk.match(re); return m ? m[1] : ''; }
 
 // ⚠ An in-site link in this markup is `href="#" onclick="showPage('contact')"`
 // — the href is a placeholder and the onclick is the real destination. Reading
-// the href alone produces a link to `#`, which survives sanitising (it is a
+// the href alone produces a link to `#`, which survives sanitizing (it is a
 // perfectly valid URL) and lands on the page as a link that goes nowhere.
 //
 // That is exactly how /give's "Speak with a pastor" came out dead, and a dead
@@ -203,7 +203,7 @@ function panelOf(html) {
 }
 
 // One section, several kinds of thing: /give stacks an intro, a full-width
-// panel, a card grid, and another panel inside a single <section>. recognise()
+// panel, a card grid, and another panel inside a single <section>. recognize()
 // below reads a section as one shape, so on that page it sees only the grid and
 // throws the panels away — and the panels are where the IRA, DAF and planned
 // giving copy lives.
@@ -227,8 +227,8 @@ function mixedSection(sec, push, bg) {
   // Only when the grid is not the whole story.
   //
   // A heading and ONE line above a grid is that grid's own title and standfirst,
-  // and recognise() already places them there — /ministries and /worship read
-  // better through it. What this function is for is the case recognise() cannot
+  // and recognize() already places them there — /ministries and /worship read
+  // better through it. What this function is for is the case recognize() cannot
   // express: several paragraphs of their own above the grid (/stephen), or
   // full-width panels beside it (/give). Losing those is losing content.
   const introParas = (before.match(/<p\b/gi) || []).length;
@@ -259,9 +259,9 @@ function mixedSection(sec, push, bg) {
   return true;
 }
 
-// Sections whose markup says plainly what block they are. Recognising these is
+// Sections whose markup says plainly what block they are. Recognizing these is
 // what turns a wall of divs into something staff can actually edit; anything
-// unrecognised falls through to the generic text/photo conversion below.
+// unrecognized falls through to the generic text/photo conversion below.
 // ── A RUN OF CARDS ───────────────────────────────────────────────────────────
 // The live site uses one layout on four pages that the editor could not make
 // until Task 14 shipped the card grid: /ministries' eight cards, the community
@@ -330,7 +330,7 @@ function cardRun(body) {
   return byDepth.length >= 2 ? byDepth : null;
 }
 
-function recognise(sec, push, ctx) {
+function recognize(sec, push, ctx) {
   const b = sec.body;
   const bg = /section--linen|section--mist/.test(sec.open) ? 1 : 0;
   const eyebrow = text(grab(b, /<span[^>]*class="[^"]*eyebrow[^"]*"[^>]*>([\s\S]*?)<\/span>/i));
@@ -365,7 +365,7 @@ function recognise(sec, push, ctx) {
     return true;
   }
 
-  // A run of cards. Checked LAST, so a section the recognisers above already
+  // A run of cards. Checked LAST, so a section the recognizers above already
   // understand — staff, the sermon pair, the contact form — is never mistaken
   // for a grid just because it happens to contain headings.
   const cards = cardRun(b);
@@ -413,10 +413,10 @@ function convert(slug) {
     if (id && DYNAMIC_IDS.test(id)) continue;
     if (/display:none/.test(sec.open)) continue;
     if (/class="hero"/.test(sec.open)) continue; // already taken as the banner
-    // Mixed sections first: recognise() would read /give's section as nothing
+    // Mixed sections first: recognize() would read /give's section as nothing
     // but its card grid and drop the panels either side of it.
     if (mixedSection(sec, push, /section--linen|section--mist/.test(sec.open) ? 1 : 0)) continue;
-    if (recognise(sec, push, { slug })) continue;
+    if (recognize(sec, push, { slug })) continue;
 
     const eyebrow = text(grab(sec.body, /<span[^>]*class="[^"]*eyebrow[^"]*"[^>]*>([\s\S]*?)<\/span>/i));
     const heading = text(grab(sec.body, /<h2[^>]*>([\s\S]*?)<\/h2>/i));

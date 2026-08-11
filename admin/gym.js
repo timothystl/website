@@ -533,7 +533,7 @@ function tlcUploadHandler(blobInfo) {
 // `portalOrigin` is where renters reach their booking portal — the public site
 // origin, not this admin one. Blank until the Cloudflare route exists, in which
 // case links fall back to whatever host the request came in on, which is the
-// behaviour this had before the portal moved.
+// behavior this had before the portal moved.
 export async function handleGymRoutes(path, method, url, request, env, currentUser = null, ctx = null, portalOrigin = '', badges = {}) {
 
     // ── GROUP BOOKING PORTAL (/gym/book/:token/*) ───────────────
@@ -591,7 +591,7 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
       if (!sub || sub === '') {
         const today = new Date();
         // ⚠ Church time. In UTC this reads as tomorrow after about 7pm, so the
-        // renter portal greys out today's date and refuses a booking for it.
+        // renter portal grays out today's date and refuses a booking for it.
         const todayStr = churchDate();
         const numMonths = 6;
         const windowEnd = new Date(today.getFullYear(), today.getMonth() + numMonths, 0).toISOString().split('T')[0];
@@ -761,7 +761,7 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
     <div id="cal-months-wrap">
       ${calMonthsHtml}
     </div>
-    <div style="font-size:11.5px;color:var(--gray);margin-top:14px;">Tap a day to see its hours. Days you cannot book are greyed out. Everything you pick is listed below before you send it.</div>
+    <div style="font-size:11.5px;color:var(--gray);margin-top:14px;">Tap a day to see its hours. Days you cannot book are grayed out. Everything you pick is listed below before you send it.</div>
   </div>
 
   <!-- Day slot panel (shown when a day is tapped) -->
@@ -991,14 +991,14 @@ function updateDotForDate(date) {
   const validH = validHoursForDow(dow);
   const validHours = [...validH];
   const openCount = validHours.filter(h => !takenSet.has(h)).length;
-  // Four day states, none of them carried by colour alone. Open is a navy
+  // Four day states, none of them carried by color alone. Open is a navy
   // numeral in an outlined cell — the cell IS the affordance, so it needs no
   // green dot to confirm it. In-your-request is a FILLED cell with the count
-  // beneath, which is a fact the colour cannot state on its own.
+  // beneath, which is a fact the color cannot state on its own.
   //
   // ⚠ This used to repaint every dot green or red on the client, which would
   // silently undo the server-side redraw: availability was encoded twice, in
-  // colour only, and a red numeral reads as an error rather than as "already
+  // color only, and a red numeral reads as an error rather than as "already
   // taken". A day that is genuinely full is rendered unclickable server-side,
   // so there is nothing left for a red dot to say.
   const count = [...selected.keys()].filter(k => k.startsWith(date + '|')).length;
@@ -2320,7 +2320,7 @@ ${portalHeader}
         // cards, which meant the question "what needs me?" had three places to
         // look. Group · Requested · Conflicts · Status, and two actions.
         //
-        // The bulk tools and the per-organisation accordions are NOT dropped —
+        // The bulk tools and the per-organization accordions are NOT dropped —
         // they carry the invoice generation and the calendar push, and one
         // person's whole job runs through them. They moved below the queue,
         // under a heading, rather than being replaced by a prettier list that
@@ -2602,11 +2602,11 @@ ${sidebarShell('gym', currentUser, '', badges)}
     <div style="margin-left:auto;font-size:12px;color:var(--gray);">Mon–Fri 5–9 PM &nbsp;·&nbsp; Sat 8 AM–8 PM &nbsp;·&nbsp; Sun 1–8 PM</div>
   </div>
   <!-- The queue above answers "what needs me". This is the same bookings
-       grouped by organisation, and it is where the bulk tools live: confirming
+       grouped by organization, and it is where the bulk tools live: confirming
        a whole group at one price, releasing several holds at once, deleting a
        run of confirmed dates. One person's whole job runs through these, so
        they stayed exactly as they were. -->
-  <h2 class="tlc-title" style="font-size:20px;margin-bottom:2px;">By organisation</h2>
+  <h2 class="tlc-title" style="font-size:20px;margin-bottom:2px;">By organization</h2>
   <p class="tlc-purpose" style="margin-bottom:16px;">The same bookings, grouped — and where confirming, releasing or deleting several at once happens.</p>
   <div class="card">
     <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
@@ -3337,7 +3337,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals">← Dashboard</a>`, b
       if (path === '/gym-rentals/blocked' && method === 'GET') {
         const today = new Date();
         // ⚠ Church time. In UTC this reads as tomorrow after about 7pm, so the
-        // renter portal greys out today's date and refuses a booking for it.
+        // renter portal grays out today's date and refuses a booking for it.
         const todayStr = churchDate();
         const numMonths = Math.min(18, Math.max(3, parseInt(url.searchParams.get('months') || '6', 10)));
 
@@ -3582,7 +3582,7 @@ updateSummary();
         // Build calendar server-side
         const today = new Date();
         // ⚠ Church time. In UTC this reads as tomorrow after about 7pm, so the
-        // renter portal greys out today's date and refuses a booking for it.
+        // renter portal grays out today's date and refuses a booking for it.
         const todayStr = churchDate();
         const numMonths = Math.min(18, Math.max(3, parseInt(url.searchParams.get('months') || '6', 10)));
         const yearEndStr = new Date(today.getFullYear(), today.getMonth() + numMonths, 0).toISOString().split('T')[0];
@@ -4344,7 +4344,7 @@ ${sidebarShell('gym', currentUser, `<a href="${editBack}">← Edit</a>`, badges)
         const today = churchDate();
         // One list, newest-relevant first: everything still to come, then the
         // recent past. The old screen split them into two accordions grouped by
-        // organisation, which meant "when is Southside next in" had two places
+        // organization, which meant "when is Southside next in" had two places
         // to look and neither was sorted by date.
         const rows = await env.DB.prepare(
           `SELECT b.*, g.name as group_name FROM gym_bookings b LEFT JOIN gym_groups g ON g.id = b.group_id

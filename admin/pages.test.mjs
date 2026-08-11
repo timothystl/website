@@ -142,9 +142,9 @@ group('renaming');
 
 group('pill wording');
 for (const [key, p] of Object.entries(PILLS)) {
-  ok(p.label && p.bg && p.fg, `${key} pill has a label and colours`);
+  ok(p.label && p.bg && p.fg, `${key} pill has a label and colors`);
   // The list used to pick its tone by comparing the label string, so renaming a
-  // pill silently recoloured it. The tone travels with the words now.
+  // pill silently recolored it. The tone travels with the words now.
   ok(p.tone, `${key} pill carries its own tone`);
 }
 // The design's vocabulary for this screen, spelled out so a rename has to be
@@ -209,7 +209,7 @@ group('short links');
   eq(shortLinkFor(P('h', '/')), null, 'the homepage has no short link — / has no last segment');
   eq(shortLinkFor(null), null, 'a missing page does not throw');
 
-  // The override exists so a volunteer can resolve a clash; it is normalised so
+  // The override exists so a volunteer can resolve a clash; it is normalized so
   // "visit", "/visit" and "/visit/" all mean the same thing.
   eq(shortLinkFor(P('d', '/about/plan-a-visit', 'visit')), '/visit', 'an override wins over the derived value');
   eq(shortLinkFor(P('e', '/x/y', '/visit')), '/visit', 'a leading slash in the override is fine');

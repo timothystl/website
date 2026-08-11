@@ -28,7 +28,7 @@
 // somebody adding a sixth status tone: **a status tone is pale and low-chroma,
 // a value tint is saturated.** Status is a state the row is passing through;
 // a value is what the row *is*. Separating the two categories by chroma means
-// they stay distinguishable even where the hues are neighbours, and it cannot
+// they stay distinguishable even where the hues are neighbors, and it cannot
 // be undone by a later tone landing on a hue a value already uses.
 //
 // The hues are the church's own (moss, navy, teal, plum — see the design

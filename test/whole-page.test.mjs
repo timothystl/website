@@ -62,7 +62,7 @@ group('the seeds are faithful to the pages they came from');
     ok(blocks[0].title.length > 0, `${slug} banner has a title`);
     ok(blocks.length >= 2, `${slug} carries its sections too`);
     const clean = sanitizeBlocks(blocks);
-    eq(JSON.stringify(clean), JSON.stringify(blocks), `${slug} seed is already sanitised`);
+    eq(JSON.stringify(clean), JSON.stringify(blocks), `${slug} seed is already sanitized`);
   }
   const music = PAGE_SEEDS.music;
   eq(music[0].title, 'Praise the Lord with Every Gift', 'music banner title came across');

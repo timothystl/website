@@ -29,8 +29,8 @@ const item = (o) => Object.assign({
   style: 'link', depth: 0, sort_order: 10, visible: 1,
 }, o);
 
-// ── normalisers ──────────────────────────────────────────────────────────────
-group('normalisers');
+// ── normalizers ──────────────────────────────────────────────────────────────
+group('normalizers');
 {
   eq(normalizeMenu('footer'), 'footer', 'a real menu passes through');
   eq(normalizeMenu('sidebar'), 'header', 'an unknown menu falls back to header');

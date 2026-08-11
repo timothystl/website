@@ -153,7 +153,7 @@ console.log('\npublic ministry page — every block type renders without error')
   await ctx.close();
 }
 
-console.log('\npublic ministry page — half blocks stack on a phone and centre on a full-bleed page');
+console.log('\npublic ministry page — half blocks stack on a phone and center on a full-bleed page');
 {
   const blocks = [
     newBlock('hero'),
@@ -163,16 +163,16 @@ console.log('\npublic ministry page — half blocks stack on a phone and centre 
   const { page, ctx, errors } = await visit('vbs', apiFor('vbs', blocks, { title: 'VBS' }));
   eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
 
-  // ⚠ Pair members are GRANDCHILDREN of the page, so the > .tlcb centring
+  // ⚠ Pair members are GRANDCHILDREN of the page, so the > .tlcb centering
   // rule never reaches them — the wrapper has to carry the padding, or a half
   // run on a hero-led page sits hard against the viewport edge while every
-  // full block around it is centred. At 1280 wide with an 1100px wrap that
+  // full block around it is centered. At 1280 wide with an 1100px wrap that
   // padding is 90px a side.
   const pad = await page.evaluate(() => {
     const pair = document.querySelector('.tlcb-page--full > .tlcb-pair');
     return pair ? parseFloat(getComputedStyle(pair).paddingLeft) : null;
   });
-  ok(pad !== null && pad > 80, 'the pair wrapper carries the full-bleed centring (got ' + pad + ')');
+  ok(pad !== null && pad > 80, 'the pair wrapper carries the full-bleed centering (got ' + pad + ')');
 
   const wide = await page.$$eval('.tlcb-pair .tlcb', (ns) => ns.map((n) => Math.round(n.getBoundingClientRect().width)));
   ok(wide.length === 2 && wide[0] < 700 && Math.abs(wide[0] - wide[1]) < 2,

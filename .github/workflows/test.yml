@@ -141,7 +141,7 @@ jobs:
 #
 # ⚠ rich-field is the one to run after any change to tinymceField or
 # RICH_FIELD_JS. TinyMCE Cloud bills per editor instance that finishes
-# initialising, so a field that quietly goes back to initialising at page
+# initializing, so a field that quietly goes back to initializing at page
 # load is a bill, not a visible bug — and the same suite covers the other
 # half, that a field nobody opened still submits exactly what it held. It
 # stubs TinyMCE and never fetches the real library, so running it costs no

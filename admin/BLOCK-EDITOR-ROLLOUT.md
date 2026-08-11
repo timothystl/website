@@ -152,10 +152,10 @@ the office changed the base link, and **the page would still look perfect**.
 | Type | What it is | What is editable |
 |---|---|---|
 | `giving` — Giving widget | The transaction: chips, fund dropdown, custom amount, the button | The heading, the tagline, the trust line, alignment, spacing, position on the page |
-| `amounts` — Amount ladder | A heading over "$X /period — what it does" rows, each with its own Give button | The eyebrow, heading and intro; every row's amount, period and description; the theme colours; alignment |
+| `amounts` — Amount ladder | A heading over "$X /period — what it does" rows, each with its own Give button | The eyebrow, heading and intro; every row's amount, period and description; the theme colors; alignment |
 
 **One type for both ladders, not two.** The ministry ladder and the leadership
-tiers are the same shape and differ only in colour, which is already a
+tiers are the same shape and differ only in color, which is already a
 block-level choice. Two near-identical types would drift apart the first time
 somebody improved one of them.
 
@@ -177,7 +177,7 @@ stores a copy of the link.
 
 `give_keep_in_step` is **deleted** rather than left for reuse. A key nothing
 reads, kept under a name that describes a feature that does not exist, is how
-the next person concludes the pages are synchronised.
+the next person concludes the pages are synchronized.
 
 
 ### Five things worth knowing before touching this
@@ -210,7 +210,7 @@ the next person concludes the pages are synchronised.
 ### The chrome
 
 The masthead reads the same `site_appearance` record the main site's header
-does — logo, name, tagline, bar colour, bottom rule — so the church changes it
+does — logo, name, tagline, bar color, bottom rule — so the church changes it
 once on Menu → Appearance and this page follows. The footer reads the church
 details. Both were previously hardcoded here.
 
@@ -259,7 +259,7 @@ either editing it 28 times or picking one page to secretly own it.
 
 They are admin-managed as of v4.23.0, but through their own screens:
 
-- **Header** — Menu → Appearance. Colours, logo, name, tagline, drafted then
+- **Header** — Menu → Appearance. Colors, logo, name, tagline, drafted then
   published.
 - **Newsletter band** — the same screen. ⚠ It is *not* a homepage block: it
   sits outside every page div and renders on all 28. It has been described as

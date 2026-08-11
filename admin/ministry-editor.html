@@ -10,7 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Source+Sans+3:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 /* ── Editor chrome ────────────────────────────────────────────────────────
-   Colours and type come from the live site's palette (see CLAUDE.md → Design
+   Colors and type come from the live site's palette (see CLAUDE.md → Design
    System). Block styling itself is NOT here — it ships with the rendered
    block HTML from admin/blocks.js, so the canvas and the public page cannot
    drift apart. */
@@ -322,7 +322,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
    the same module the public page renders through. Structural changes (add,
    delete, duplicate, reorder, undo, reset) ask the Worker to re-render;
    everything the inspector adjusts is a CSS custom property applied straight
-   to the block node, so spacing/colour/size changes are instant and cannot
+   to the block node, so spacing/color/size changes are instant and cannot
    drift from what the public page will do with the same value. */
 (function () {
 'use strict';
@@ -475,7 +475,7 @@ function cacheEls() {
 // ── canvas sizing ──────────────────────────────────────────────────────────
 // The paper keeps its true pixel width and is scaled to fit with `zoom`.
 // `transform: scale()` is wrong here: it does not affect the layout box, so a
-// centred scaled paper drifts out of view. The paper must not flex-shrink
+// centered scaled paper drifts out of view. The paper must not flex-shrink
 // either, or the device switcher looks like it does nothing.
 function fitPaper() {
   var w = WIDTHS[S.device] || WIDTHS.desktop;
@@ -687,7 +687,7 @@ function setCanvas(html) {
 
 // Rich text uses the same TinyMCE the office already knows, in inline mode: a
 // floating toolbar on selection rather than a second editor chrome inside the
-// page. The toolbar carries no font, size or colour controls — those live in
+// page. The toolbar carries no font, size or color controls — those live in
 // the inspector where they are constrained to the site's own scale and palette.
 // If TinyMCE fails to load the fields stay plain contenteditable, which still
 // types and still saves — and that fallback is what makes the rest of this safe.
@@ -702,7 +702,7 @@ function setCanvas(html) {
 // creates an editor is somebody putting the caret in a field.
 function openRichField(node) {
   if (!node || !node.dataset || node.dataset.rich !== '1') return;
-  // TinyMCE marks the element it has taken over. Re-initialising a live editor
+  // TinyMCE marks the element it has taken over. Re-initializing a live editor
   // would detach the toolbar.
   if (node.classList.contains('mce-content-body')) return;
   if (typeof window._onTinymce !== 'function') return;
@@ -737,7 +737,7 @@ function openRichField(node) {
         // changes the SHAPE of what is written rather than the weight of a few
         // words — "a heading, then the text under it" was not expressible here
         // at all before, even though h2/h3/h4 have always been allowed through
-        // the sanitiser and have always had styles in BLOCK_CSS.
+        // the sanitizer and have always had styles in BLOCK_CSS.
         //
         // ⚠ The three names are the site's own hierarchy, not TinyMCE's H1–H6.
         // A block already draws its own title as the page's heading, so a rich
@@ -881,7 +881,7 @@ function restyle(b) {
   }
 }
 
-// Redraws are serialised. Clicking two things quickly starts two round trips,
+// Redraws are serialized. Clicking two things quickly starts two round trips,
 // and without this the slower one can land last and repaint the canvas from a
 // state that has already been superseded.
 var renderChain = Promise.resolve();
@@ -892,7 +892,7 @@ function rerender() {
 async function doRerender() {
   try {
     var out = await api(API + '/render', { method: 'POST', body: JSON.stringify({ blocks: S.blocks, slug: S.slug }) });
-    S.blocks = out.blocks; // take the server's sanitised version back as the truth
+    S.blocks = out.blocks; // take the server's sanitized version back as the truth
     setCanvas(out.html);
     renderRail();
     renderInspector();
@@ -945,7 +945,7 @@ async function goToPage(id) {
   location.href = '/pages/' + encodeURIComponent(id) + '/edit';
 }
 
-// ── Page tab behaviour ─────────────────────────────────────────────────────
+// ── Page tab behavior ─────────────────────────────────────────────────────
 // Page settings save on their own (debounced), separate from the block draft:
 // they are not part of what Publish promotes, so treating them as draft edits
 // would put a page permanently in "Draft edits" for changing its own name.
@@ -1340,7 +1340,7 @@ function inspectorSections(b, d) {
       '</div><span class="ed-note">Columns stack on a phone automatically.</span></div>';
   }
 
-  // 1b. Card grid — cards per row, alignment, and the coloured top rule.
+  // 1b. Card grid — cards per row, alignment, and the colored top rule.
   // Four options or fewer is chips, not a select: a select hides three of the
   // four choices behind a click.
   if (b.type === 'cardgrid') {
@@ -1351,7 +1351,7 @@ function inspectorSections(b, d) {
     out += '<div class="ed-sec"><span class="ed-lab">Card top rule</span><div class="ed-chips">' +
       chip('topRule', '0', 'Off', !b.topRule) +
       chip('topRule', '1', 'On', !!b.topRule) +
-      '</div><span class="ed-note">A coloured hairline across the top of every card in this grid.</span></div>';
+      '</div><span class="ed-note">A colored hairline across the top of every card in this grid.</span></div>';
   }
 
   // 1b. Alignment — every block type except Spacer, Card grid included. Card
@@ -1363,7 +1363,7 @@ function inspectorSections(b, d) {
   if (d.align) {
     out += '<div class="ed-sec"><span class="ed-lab">Alignment</span><div class="ed-chips">' +
       chip('align', 'left', 'Left', b.align !== 'center' && b.align !== 'right') +
-      chip('align', 'center', 'Centre', b.align === 'center') +
+      chip('align', 'center', 'Center', b.align === 'center') +
       chip('align', 'right', 'Right', b.align === 'right') +
       '</div></div>';
   }
@@ -1384,7 +1384,7 @@ function inspectorSections(b, d) {
 
   // 3b. Block width (Task 13c) — on EVERY block, above Spacing.
   // Two consecutive Half blocks pair into one row. A half with no half
-  // neighbour sits at half width with the right side empty; that is a
+  // neighbor sits at half width with the right side empty; that is a
   // legitimate layout, so the note says so rather than warning about it.
   out += '<div class="ed-sec"><span class="ed-lab">Block width</span><div class="ed-chips">' +
     chip('width', 'full', 'Full', b.width !== 'half') +
@@ -1438,8 +1438,8 @@ function inspectorSections(b, d) {
   // as it was.
   if (d.items && !(d.partnerSource && b.source === 'record')) out += itemsSection(b, d);
 
-  // 7. Theme colours
-  out += '<div class="ed-sec"><div class="ed-lab-row"><span class="ed-lab">Theme colours</span>' +
+  // 7. Theme colors
+  out += '<div class="ed-sec"><div class="ed-lab-row"><span class="ed-lab">Theme colors</span>' +
     '<span class="ed-read">' + esc(C.BG[b.bg].name) + ' · ' + esc(C.INK[b.ink].name) + '</span></div>' +
     '<span class="ed-note">Background</span><div class="ed-chips">' +
     C.BG.map(function (t, i) {
@@ -1451,10 +1451,10 @@ function inspectorSections(b, d) {
       var usable = t.onDark === C.BG[b.bg].dark;
       return '<button type="button" class="ed-sw" data-a="ink" data-v="' + i + '" data-k="ink:' + i + '" title="' +
         esc(t.name + (usable ? '' : ' — unreadable on ' + C.BG[b.bg].name)) + '"' +
-        ' aria-label="Text colour ' + esc(t.name) + (usable ? '' : ', unreadable on ' + esc(C.BG[b.bg].name)) + '"' +
+        ' aria-label="Text color ' + esc(t.name) + (usable ? '' : ', unreadable on ' + esc(C.BG[b.bg].name)) + '"' +
         ' aria-pressed="' + (i === b.ink) + '" aria-disabled="' + (!usable) + '" style="background:' + t.c + '"></button>';
     }).join('') + '</div>' +
-    '<span class="ed-note">Only the site\'s own palette, and only pairs that stay readable — unusable combinations are greyed out.</span></div>';
+    '<span class="ed-note">Only the site\'s own palette, and only pairs that stay readable — unusable combinations are grayed out.</span></div>';
 
   // 8. Text size
   var sz = C.SIZES.filter(function (x) { return x.key === b.size; })[0] || C.SIZES[1];
@@ -1586,7 +1586,7 @@ function inspectorAction(action, value) {
       break;
     }
     case 'width': {
-      // Structural: whether this block pairs with its neighbour changes the
+      // Structural: whether this block pairs with its neighbor changes the
       // markup around both, so the Worker re-renders rather than the editor
       // patching a custom property.
       patch(b.id, { width: value === 'half' ? 'half' : 'full' },
@@ -1596,7 +1596,7 @@ function inspectorAction(action, value) {
     case 'align': {
       var al = value === 'center' || value === 'right' ? value : 'left';
       patch(b.id, { align: al },
-        al === 'center' ? 'Centred' : al === 'right' ? 'Right-aligned' : 'Left-aligned', 'rerender');
+        al === 'center' ? 'Centered' : al === 'right' ? 'Right-aligned' : 'Left-aligned', 'rerender');
       break;
     }
     case 'topRule': {
@@ -1646,7 +1646,7 @@ function inspectorAction(action, value) {
         say(C.INK[inkIdx].name + ' would be unreadable on ' + C.BG[b.bg].name);
         return;
       }
-      patch(b.id, { ink: inkIdx }, 'Text colour ' + C.INK[inkIdx].name);
+      patch(b.id, { ink: inkIdx }, 'Text color ' + C.INK[inkIdx].name);
       break;
     }
     case 'size': patch(b.id, { size: value }, 'Text size ' + value.toUpperCase()); break;
@@ -1654,7 +1654,7 @@ function inspectorAction(action, value) {
     // state change, which the arrow rule allows in as many words. The v4.12.0
     // sweep took it anyway and the change log read 'Stamp Upcoming'.
     case 'stamp': patch(b.id, { stamp: value }, value ? 'Stamp → ' + value : 'Removed stamp', 'rerender'); break;
-    case 'tone': patch(b.id, { tone: Number(value) }, 'Stamp colour ' + C.TONES[Number(value)].name, 'rerender'); break;
+    case 'tone': patch(b.id, { tone: Number(value) }, 'Stamp color ' + C.TONES[Number(value)].name, 'rerender'); break;
     case 'corner': patch(b.id, { corner: value }, 'Stamp moved ' + (value === 'tl' ? 'left' : 'right'), 'rerender'); break;
     case 'hide': toggleHide(b.id); break;
     case 'reset': resetBlock(b.id); break;
@@ -1911,7 +1911,7 @@ function bindStatic() {
     el.edTabPage.addEventListener('click', function () { S.tab = 'page'; renderInspector(); });
   }
 
-  // Pasting from Word or a website brings its own fonts, sizes and colours with
+  // Pasting from Word or a website brings its own fonts, sizes and colors with
   // it. Without this the palette guarantee is worthless — one paste and the
   // page carries markup nothing in the editor can reach. Plain text only.
   el.edPaper.addEventListener('paste', function (e) {
@@ -2500,7 +2500,7 @@ async function shrink(file, maxDim, cap) {
     if (src.close) src.close();
   }
   if (!best) return null;
-  // Re-encoding a small, already-optimised image can make it bigger — but only
+  // Re-encoding a small, already-optimized image can make it bigger — but only
   // leave the original in place if it is itself within the limit.
   if (best.blob.size >= file.size && best.scale === 1 && file.size <= limit) return null;
   return best;

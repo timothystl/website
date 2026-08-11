@@ -42,7 +42,7 @@ group('the diff');
   eq(cleared.length, 1, 'clearing a field is a change');
   eq(cleared[0].to, 'empty', 'and reads as empty rather than as nothing');
 
-  // Long values are summarised — a diff full of markup is a diff nobody reads.
+  // Long values are summarized — a diff full of markup is a diff nobody reads.
   const long = diffStates({ body: 'x'.repeat(500) }, { body: 'y'.repeat(900) });
   eq(long[0].from, '500 characters', 'a long value is described by length');
   eq(long[0].to, '900 characters', 'on both sides');
@@ -66,7 +66,7 @@ group('the one-line summary');
   eq(diffSummary({ title: 'A' }, { title: 'B' }), 'title: A → B', 'reads as field: before → after');
   eq(diffSummary({ a: '1', b: '2', c: '3' }, { a: 'x', b: 'y', c: 'z' }),
     'a: 1 → x · b: 2 → y · and 1 more', 'and is capped so the row stays a row');
-  eq(diffSummary({ a: '1' }, { a: '1' }), '', 'no change summarises to nothing');
+  eq(diffSummary({ a: '1' }, { a: '1' }), '', 'no change summarizes to nothing');
   eq(diffSummary(null, { title: 'New' }), 'title: New', 'a create reads without an arrow');
   eq(diffSummary({ title: 'Old' }, null), 'title: was Old', 'and a delete says was');
 }
@@ -80,7 +80,7 @@ group('grouping');
   // A type nobody has classified yet must land somewhere, or it vanishes from
   // every filter and effectively from the log.
   eq(auditGroup({ entity_type: 'something_new', action: 'update' }), 'content',
-    'an unrecognised entity type falls into content rather than disappearing');
+    'an unrecognized entity type falls into content rather than disappearing');
   eq(auditGroup(null), 'content', 'and nothing at all does not throw');
 }
 

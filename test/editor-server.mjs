@@ -2,7 +2,7 @@
 // editor in a real browser without Cloudflare or D1.
 //
 // It calls the SAME functions the Worker calls (admin/blocks.js) for rendering
-// and sanitising, so the interesting logic is genuinely under test; only the
+// and sanitizing, so the interesting logic is genuinely under test; only the
 // routing and SQL are re-implemented here. Keep the endpoint contracts in step
 // with the `/ministries/api/...` routes in tlc-admin-worker.js.
 import http from 'node:http';

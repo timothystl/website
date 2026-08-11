@@ -25,7 +25,7 @@ export const SECTIONS = {
     note: 'Short links are generated automatically from the last part of the address, so /visit works as well as /plan-a-visit. Conflicts are flagged rather than guessed at.'
   },
   partners: {
-    label: 'Partners', glyph: '⚭', title: 'Partner ministries', purpose: 'Four partners, one for each of our values — from our neighbourhood to the nations. This is both the page visitors see and the menu item under Ministries.',
+    label: 'Partners', glyph: '⚭', title: 'Partner ministries', purpose: 'Four partners, one for each of our values — from our neighborhood to the nations. This is both the page visitors see and the menu item under Ministries.',
     action: '+ Add partner', search: 'Search partners', filters: ['All'],
     columns: [['Partner', '2.7fr'], ['Value', '.9fr'], ['Their site', '1.3fr']],
     openMode: 'editor',
@@ -122,7 +122,7 @@ export const SECTIONS = {
   },
   gymBlocked: {
     label: 'Blocked dates', glyph: '⊘', title: 'Blocked dates',
-    purpose: 'Days the gym cannot be booked — a market, a funeral, a floor refinish. Renters see them greyed out.',
+    purpose: 'Days the gym cannot be booked — a market, a funeral, a floor refinish. Renters see them grayed out.',
     action: '+ Block a date', search: 'Search blocked dates', filters: ['All', 'Upcoming', 'Past'],
     columns: [['Date', '1.4fr'], ['Reason', '3fr'], ['', '1fr']],
     note: 'Blocking a date does not cancel bookings already confirmed on it — those are flagged on the calendar instead, so somebody has to be told.'

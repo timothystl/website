@@ -69,7 +69,7 @@ group('the pages rail');
   ok(titles.includes('Home') && titles.includes('About') && titles.includes('What We Believe'), 'every page is listed');
   eq(await page.locator('.ed-page.is-here .ed-page-t').textContent(), 'About', 'the page being edited is marked');
   eq(await page.locator('.ed-page[data-page="beliefs"].ed-page--child').count(), 1, 'a child page is indented');
-  eq(await page.locator('.ed-page[data-page="secret"] .ed-page-tag').textContent(), 'hidden', 'a page out of the menu is labelled');
+  eq(await page.locator('.ed-page[data-page="secret"] .ed-page-tag').textContent(), 'hidden', 'a page out of the menu is labeled');
   eq(await page.locator('.ed-page[data-page="home"] .ed-page-tag').count(), 1, 'the homepage carries its own mark');
   eq(await page.locator('.ed-page-dot').count(), 0, 'nothing has unpublished changes yet');
 }
@@ -241,7 +241,7 @@ group('pasting brings text, not formatting');
   await page.click('.ed-paper .tlcb--text [data-field="body"]');
   await page.waitForTimeout(120);
   await page.keyboard.press('Control+A');
-  // a paste carrying its own fonts, sizes and colours, exactly as Word sends it
+  // a paste carrying its own fonts, sizes and colors, exactly as Word sends it
   await page.evaluate(() => {
     const dt = new DataTransfer();
     dt.setData('text/plain', 'Pasted words');

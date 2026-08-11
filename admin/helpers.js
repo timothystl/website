@@ -73,7 +73,7 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
    and on the four screens with no sidebar (login, forgot, reset, first-run
    setup) this wrapper is the only flex item. Without a width it shrinks to
    fit its 380px card — the navy background collapsed to a strip on the left
-   of the viewport with the warm page colour filling the rest, which is how
+   of the viewport with the warm page color filling the rest, which is how
    the sign-in screen looked broken for a day. flex:1 makes it take the row. */
 .login-wrap{flex:1;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#1E2D4A;}
 .login-card{background:#FFFDF9;border-radius:12px;padding:36px 34px;width:100%;max-width:380px;text-align:center;box-shadow:0 18px 44px rgba(11,22,44,.28);}
@@ -157,8 +157,8 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
    the flow — check that before adding anything else at this level. */
 body{display:flex;align-items:stretch;}
 .tlc-main{flex:1;min-width:0;display:flex;flex-direction:column;}
-/* Colour and type here are the Foundations spec's, merged into the shell
-   geometry. These selectors used to be declared TWICE — geometry here, colour
+/* Color and type here are the Foundations spec's, merged into the shell
+   geometry. These selectors used to be declared TWICE — geometry here, color
    in a second block 150 lines down, past the interpolated stylesheets — with
    different values for the same properties, so source order silently decided
    which won. That is the same mechanism that hid the hamburger for a release.
@@ -167,7 +167,7 @@ body{display:flex;align-items:stretch;}
    AFTER these desktop defaults.
    ⚠ The width is --tlc-rail and is set once, here. Do not restate it.
    The active row is RAISED (a lighter navy plus a hairline inset), not
-   recoloured with a gold bar — that was mine, and the spec's way won. */
+   recolored with a gold bar — that was mine, and the spec's way won. */
 .sidebar{flex:0 0 var(--tlc-rail);width:var(--tlc-rail);position:sticky;top:0;
   height:100vh;background:var(--tlc-sidebar);font-family:var(--tlc-sans);
   display:flex;flex-direction:column;overflow:hidden;z-index:100;}
@@ -506,8 +506,8 @@ export const RICH_FIELD_JS = `
         suffix: '.min',
         // ⚠ Self-hosted, not cloud. base_url/suffix point TinyMCE's own lazy
         // loads (theme, model, icons, skin, plugins) at the versioned route the
-        // core came from; license_key 'gpl' is the self-hosting licence and is
-        // what stops the editor rendering an "invalid licence" notice.
+        // core came from; license_key 'gpl' is the self-hosting license and is
+        // what stops the editor rendering an "invalid license" notice.
         // 'blockquote' used to be in this list and is not a TinyMCE plugin —
         // it is a core format. admin/tinymce-assets.test.mjs checks every name
         // here against what is actually vendored.
@@ -1075,12 +1075,12 @@ function tlcUploadHandler(blobInfo) {
 // Every rich-text field in the admin comes from here.
 //
 // A field starts as a preview of what is in it and becomes an editor when
-// somebody opens it. Nothing is initialised at page load — see TINYMCE_HEAD in
+// somebody opens it. Nothing is initialized at page load — see TINYMCE_HEAD in
 // admin/db.js for why (an editor load is one instance finishing its init, and
 // this admin renders nine of them on the newsletter screen alone).
 //
 // ⚠ This deliberately reverses the note the newsletter composer used to carry —
-// "all of them are rendered so TinyMCE can initialise each one at load …
+// "all of them are rendered so TinyMCE can initialize each one at load …
 // creating an editor instance on click would be a second way for a rich field
 // to exist". The concern was right and the answer is not to init everything: it
 // is that click-to-open is now the ONLY way a rich field exists, for all of

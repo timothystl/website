@@ -85,8 +85,8 @@ group('core values');
   eq(valueByKey('nope'), null, 'an unknown key is null, not a throw — value is nullable everywhere');
 
   // The write path has to survive a form posting a display label.
-  eq(normalizeValue('Welcome'), 'acceptance', 'a short name normalises to its key');
-  eq(normalizeValue('CHRISTIAN EDUCATION'), 'education', 'a full name normalises case-insensitively');
+  eq(normalizeValue('Welcome'), 'acceptance', 'a short name normalizes to its key');
+  eq(normalizeValue('CHRISTIAN EDUCATION'), 'education', 'a full name normalizes case-insensitively');
   eq(normalizeValue('worship'), 'worship', 'a key passes through');
   eq(normalizeValue(''), null, 'blank is untagged');
   eq(normalizeValue('purple'), null, 'nonsense is untagged rather than stored');
@@ -221,11 +221,11 @@ group('palette');
 {
   // Straight from the Foundations spec. These are asserted because they had
   // already drifted once: the sidebar was a darker navy of my own invention
-  // and the tone colours were approximations.
+  // and the tone colors were approximations.
   eq(PALETTE.gold, '#C9973A', 'gold is the one accent');
   eq(PALETTE.navy, '#1D3557', 'navy');
   eq(PALETTE.sidebarNavy, '#1D3557', 'the sidebar is that same navy, not a darker one');
-  eq(PALETTE.navyRaised, '#27496E', 'the active nav row is raised, not recoloured');
+  eq(PALETTE.navyRaised, '#27496E', 'the active nav row is raised, not recolored');
   eq(PALETTE.navyInk, '#1E2D4A', 'headings and primary buttons');
   eq(PALETTE.card, '#FFFDF9', 'cards are one step brighter than the background');
   eq(PALETTE.parchment, '#FAF7F1', 'and the background is the warm white');
@@ -298,7 +298,7 @@ group('the rich-text field cannot be escaped from');
   // with one builder and a jsString() that split the tag.
   //
   // The field no longer puts saved content in a script at all — it is escaped
-  // into the textarea and sanitised into the preview — so these now assert the
+  // into the textarea and sanitized into the preview — so these now assert the
   // stronger property that replaced the escaping: there is no script for
   // content to break out of.
   const out = tinymceField({ id: 'x', name: 'x', value: '</script><img src=x onerror=alert(1)>' });
@@ -313,7 +313,7 @@ group('the rich-text field cannot be escaped from');
   lacks(view, '<script', 'and drops the script tag with its contents');
 
   // A never-opened field has to submit exactly what it was given back — this is
-  // what makes lazy initialising safe, and it is also why a blocked CDN can no
+  // what makes lazy initializing safe, and it is also why a blocked CDN can no
   // longer blank a post on save.
   const round = tinymceField({ id: 'r', name: 'r', value: '<p>a &amp; b</p>' });
   has(round, '<textarea id="r" name="r" hidden>&lt;p&gt;a &amp;amp; b&lt;/p&gt;</textarea>',
@@ -323,10 +323,10 @@ group('the rich-text field cannot be escaped from');
   const t = tinymceField({ id: 'y', name: 'y', value: 'a`b${c}d\\e' });
   has(t, 'a`b${c}d\\e', 'a backtick, a dollar and a backslash are ordinary text now');
 
-  // ⚠ Nothing initialises at page load. TinyMCE Cloud bills per editor
-  // instance that finishes initialising, and this admin renders nine rich
+  // ⚠ Nothing initializes at page load. TinyMCE Cloud bills per editor
+  // instance that finishes initializing, and this admin renders nine rich
   // fields on the newsletter screen alone.
-  lacks(out, 'tinymce.init', 'the field does not initialise an editor');
+  lacks(out, 'tinymce.init', 'the field does not initialize an editor');
   has(out, 'data-rich-open', 'it opens on demand instead');
 
   // Every field still gets the same toolbar — the design's "painted on all of
@@ -358,7 +358,7 @@ group('one palette');
   const allCss = shell + uiSrc;
 
   for (const [hex, was] of [['#0A3C5C', 'the old steel'], ['#D4922A', 'the old amber'],
-                            ['#3D3530', 'the old charcoal'], ['#7A6E60', 'the old grey']]) {
+                            ['#3D3530', 'the old charcoal'], ['#7A6E60', 'the old gray']]) {
     ok(!allCss.includes(hex), `the shell carries no ${hex} — ${was}`);
   }
 
@@ -373,7 +373,7 @@ group('one palette');
   {
     const emailSrc = readFileSync(new URL('./email.js', import.meta.url), 'utf8');
     for (const [hex, was] of [['#0A3C5C', 'the old steel'], ['#D4922A', 'the old amber'],
-                              ['#3D3530', 'the old charcoal'], ['#7A6E60', 'the old grey'],
+                              ['#3D3530', 'the old charcoal'], ['#7A6E60', 'the old gray'],
                               ['#E8E0D0', 'the old border']]) {
       ok(!emailSrc.includes(hex), `the emails carry no ${hex} — ${was}`);
     }
@@ -403,7 +403,7 @@ group('one palette');
   ok(!shell.includes('-apple-system'), 'the system font stack is gone — the admin is Source Sans 3');
   ok(allCss.includes("--steel:#1E2D4A"), 'the legacy names point at the Foundations values');
   ok(allCss.includes("--amber:#C9973A"), 'including the amber');
-  ok(allCss.includes("--border:#E7DFD1"), 'and one border colour');
+  ok(allCss.includes("--border:#E7DFD1"), 'and one border color');
 
   // Radii: 8 (inputs, chips, buttons), 9 (nav rows, search), 11–12 (cards),
   // 999 (pills, toggles). Anything else is somebody eyeballing it.
@@ -423,7 +423,7 @@ group('one palette');
     eq(illegal.join(','), '', `every radius in ${name} is one of the legal values`);
   }
 
-  // The focus ring is blue. It was amber, which is the colour this admin uses
+  // The focus ring is blue. It was amber, which is the color this admin uses
   // for "needs attention" — a focused field is not a problem.
   ok(shell.includes('rgba(46,126,166,.15)'), 'the focus ring is blue, not amber');
 

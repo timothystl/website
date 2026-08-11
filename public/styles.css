@@ -64,7 +64,7 @@ p{margin-bottom:16px;line-height:1.75;}
 p:last-child{margin-bottom:0;}
 
 /* NAV */
-/* The header's colours, the logo and the wording are editable from the admin
+/* The header's colors, the logo and the wording are editable from the admin
    (Menu -> Appearance). Every value below is `var(--nav-*, <what shipped>)`,
    so the fallback IS the site as it has always looked: if admin.timothystl.org
    is unreachable, or nobody has ever opened that screen, the header renders
