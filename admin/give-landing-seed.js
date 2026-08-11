@@ -27,7 +27,7 @@
 export const GIVE_LANDING_PAGE_ID = 'give-landing';
 
 // Palette indices into BG/INK in admin/blocks.js, named so a reordering of
-// those arrays is a one-line fix here rather than four silent colour changes.
+// those arrays is a one-line fix here rather than four silent color changes.
 const BG_PARCHMENT = 0;
 const BG_NAVY = 3;
 const INK_INK = 0;

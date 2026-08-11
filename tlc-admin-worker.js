@@ -275,7 +275,7 @@ async function sharedEditorApi(path, method, request, env, ctx, currentUser, P) 
     // ── MEDIA LIBRARY ───────────────────────────────────────────────────
     // Photos land in the same R2 bucket as every other admin upload (via
     // /api/upload-image); a "video" row is just a YouTube URL. Both are
-    // catalogued here so staff pick from a library instead of pasting URLs.
+    // catalogd here so staff pick from a library instead of pasting URLs.
     if (path === P + '/media' && method === 'GET') {
       const rows = await env.DB.prepare(
         'SELECT id, filename, kind, url, thumb_url, alt, meta FROM ministry_media ORDER BY id DESC LIMIT 200'
@@ -441,7 +441,7 @@ async function pageData(env, reqKey) {
            giveTiers, giveFunds, giveUrlRow, partners] = await Promise.all([
       q("SELECT key, value FROM site_settings WHERE key LIKE 'church_%'"),
       // ⚠ The PUBLISHED row only. The draft exists so that somebody can try a
-      // colour without it being on the front of the church website, and
+      // color without it being on the front of the church website, and
       // reading the wrong key here would undo that in one line.
       env.DB.prepare('SELECT value FROM site_settings WHERE key = ?').bind(CHROME_LIVE_KEY).first().catch(() => null),
       env.DB.prepare(
@@ -482,7 +482,7 @@ async function pageData(env, reqKey) {
     return {
       settings: { address_line: s.address_line || '', address_city: s.address_city || '', phone: s.phone || '', email: s.email || '' },
       services: parseServiceTimes(s.service_times),
-      // Resolved to real colours by publicAppearance, so public/index.html
+      // Resolved to real colors by publicAppearance, so public/index.html
       // never carries a copy of the palette and cannot drift from it.
       appearance: publicAppearance(parseAppearance(chromeRow && chromeRow.value)),
       sermon: sermonRow || null,
@@ -571,7 +571,7 @@ async function portalOrigin(env) {
     if (!raw) return '';
     const u = new URL(raw);
     // Anything but http(s) here would be a link the office hands to renters,
-    // so it is dropped rather than half-honoured.
+    // so it is dropped rather than half-honored.
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
     return u.origin;
   } catch (_) { return ''; }
@@ -982,7 +982,7 @@ export default {
       // Approving a payroll run is somebody signing off a set of figures. If
       // the hours can still change afterwards, the signature is on nothing.
       // The fix list is explicit that this is enforced HERE and not by hiding
-      // the button — the screen greys the inputs as a courtesy, but a stale
+      // the button — the screen grays the inputs as a courtesy, but a stale
       // tab, a second window, or a crafted POST all arrive at this line.
       //
       // Scoped to the period's own entries. Rates live on `church_staff` and
@@ -2022,7 +2022,7 @@ export default {
     // ⚠ It rewrites the setting ONLY IF IT IS STILL EXACTLY THE OLD SEED.
     // This is an office-editable field: if anybody has touched it, whatever
     // they typed is what they meant, and correcting a stale default is not a
-    // licence to overwrite somebody's edit. Gated on its own marker like the
+    // license to overwrite somebody's edit. Gated on its own marker like the
     // permission rename and the sign-up card, so a later SCHEMA_VERSION bump
     // cannot run it a second time and undo a rename made after this shipped.
     const SERVICE_LABEL_MARKER = 'service_labels_v2';
@@ -3337,7 +3337,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
   ${panel(`Needs you${tasks.length ? ` · ${tasks.length}` : ''}`, tasksHtml, { right: escapeHtml(longDate), pad: false })}
   <div class="tlc-eyebrow">
     <span class="tlc-eyebrow-label">Our four values</span>
-    <span class="tlc-eyebrow-note">From our neighbourhood to the nations</span>
+    <span class="tlc-eyebrow-note">From our neighborhood to the nations</span>
   </div>
   <div class="tlc-values">${valuesHtml}</div>
   <div style="height:18px;"></div>
@@ -3679,7 +3679,7 @@ ${renderFormSection({
       // ── APPEARANCE ───────────────────────────────────────────
       // The header bar and the newsletter band. Everything else the Menu
       // screen writes is live the moment it is saved; this is the one part
-      // that is drafted first, because somebody trying a colour or cropping a
+      // that is drafted first, because somebody trying a color or cropping a
       // logo is experimenting, and an experiment that is instantly on the
       // front of the church website is not one. See admin/appearance.js.
       const chromeItems = (list, byId) =>
@@ -3694,7 +3694,7 @@ ${renderFormSection({
         const swatches = (name, value, keys) => ({
           kind: 'swatch', name, value,
           options: CHROME_PALETTE.filter((c) => keys.includes(c.key))
-            .map((c) => ({ value: c.key, label: c.label, colour: c.value })),
+            .map((c) => ({ value: c.key, label: c.label, color: c.value })),
         });
 
         // What differs, named. "You have unpublished changes" tells somebody
@@ -3737,7 +3737,7 @@ ${renderFormSection({
   cancelLabel: 'Back to Menu',
   saveLabel: 'Save draft',
   extraHead: alertHtml + publishBar + previews,
-  note: 'Colours come from the church palette rather than a colour picker: the words in the bar are white and cannot be changed, so a pale colour here would be a header nobody can read — on every page at once.',
+  note: 'Colors come from the church palette rather than a color picker: the words in the bar are white and cannot be changed, so a pale color here would be a header nobody can read — on every page at once.',
   fields: [
     { kind: 'html', html: '<div class="tlc-field"><span class="tlc-label">The header</span></div>' },
     { kind: 'photo', name: 'logo_url', label: 'Logo', value: a.logo_url,
@@ -3750,7 +3750,7 @@ ${renderFormSection({
       hint: 'The small gold line under the name.' },
     { kind: 'toggle', name: 'show_tagline', label: 'Tagline shown', value: a.show_tagline, on: 'Showing', off: 'Hidden' },
     swatches('bar', a.bar, BAR_KEYS),
-    { kind: 'html', html: '<p class="tlc-hint" style="margin-top:-10px;">The bar colour. Gold is not offered here — white text on gold cannot be read.</p>' },
+    { kind: 'html', html: '<p class="tlc-hint" style="margin-top:-10px;">The bar color. Gold is not offered here — white text on gold cannot be read.</p>' },
     swatches('rule', a.rule, CHROME_PALETTE.map((c) => c.key)),
     { kind: 'html', html: '<p class="tlc-hint" style="margin-top:-10px;">The line along the bottom of the bar.</p>' },
     swatches('cta', a.cta, CHROME_PALETTE.map((c) => c.key)),
@@ -3928,7 +3928,7 @@ ${sidebarShell('menu', currentUser, `<a href="https://timothystl.org" target="_b
   ${alertHtml}
   ${warnings.length ? `<div class="alert alert-error" style="margin:0 0 14px;">${warnings.map(escapeHtml).join('<br>')}</div>` : ''}
 
-  ${renderHeaderPreview(liveChrome, previewItems, { note: 'This is the site — top level only. Colours, the logo and the wording are on the Appearance screen.' })}
+  ${renderHeaderPreview(liveChrome, previewItems, { note: 'This is the site — top level only. Colors, the logo and the wording are on the Appearance screen.' })}
 
   <div class="tlc-menu-cols">
     <div style="display:flex;flex-direction:column;gap:16px;">
@@ -5080,7 +5080,7 @@ ${sidebarShell('sermons', currentUser, `<a href="${n.series_id ? '/sermons/notes
     }
 
     // ── NEW NEWSLETTER FORM ──
-    // The extra note slots. All of them are rendered so TinyMCE can initialise
+    // The extra note slots. All of them are rendered so TinyMCE can initialize
     // each one at load; the unused ones are simply hidden, and "+ Add another
     // note" reveals the next. Creating an editor instance on click would be a
     // second way for a rich field to exist, and that is how one of them ends up
@@ -5636,7 +5636,7 @@ addEvent();
           { name: 'leader', label: 'Leader', value: c ? (c.leader || '') : '', placeholder: 'Pastor Matt' },
           { name: 'location', label: 'Location', value: c ? (c.location || '') : '', placeholder: 'Fellowship Hall' },
           { kind: 'html', html: `<div class="tlc-field"><label class="tlc-label">Core value</label>${valueChips('value', c ? c.value : null)}<p class="tlc-hint">Which of the four this class serves.</p></div>` },
-          { kind: 'choice', name: 'accent', label: 'Accent colour', value: c ? (c.accent || 'mid') : 'mid',
+          { kind: 'choice', name: 'accent', label: 'Accent color', value: c ? (c.accent || 'mid') : 'mid',
             options: ACCENT_OPTS.map(([v, l]) => ({ value: v, label: l })) },
           { kind: 'number', name: 'sort_order', label: 'Order', value: c ? (c.sort_order || 0) : 0, min: 0, step: 1,
             hint: 'Lower numbers come first on the education page.' },
@@ -5950,7 +5950,7 @@ ${sidebarShell('newsletter', currentUser, '', await pageBadges())}
       <div class="card-title" style="margin-top:18px;">Preview text</div>
       <div class="form-group">
         <input type="text" name="preheader" value="${escapeHtml(row.preheader || '')}" ${nlLocked ? 'readonly' : ''} placeholder="e.g. Advent begins Sunday, plus the Christmas Market dates">
-        <div style="font-size:12px;color:${preAdvice.tone === 'warn' ? '#8a6a00' : 'var(--gray)'};margin-top:4px;">${escapeHtml(preAdvice.text)} — this is the grey line after the subject in an inbox.</div>
+        <div style="font-size:12px;color:${preAdvice.tone === 'warn' ? '#8a6a00' : 'var(--gray)'};margin-top:4px;">${escapeHtml(preAdvice.text)} — this is the gray line after the subject in an inbox.</div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
         <div>
@@ -6735,7 +6735,7 @@ ${newsImageUploadScript(item.image_url || '')}`, 'Edit post — TLC Admin', TINY
       const newPage = path === '/pages/new' && method === 'GET';
       if ((path === '/pages' || detailsMatch || newPage) && method === 'GET') {
         // Anything whose scheduled time has passed goes live before the list is
-        // drawn, so staff never see a page still labelled "scheduled" after the
+        // drawn, so staff never see a page still labeled "scheduled" after the
         // moment it was meant to publish.
         await promoteScheduledPages(env);
         const filter = url.searchParams.get('filter') || 'all';
@@ -6926,14 +6926,14 @@ ${sidebarShell('pages', currentUser, `<a href="/pages/details">Church details</a
         const form = await request.formData();
 
         const title = String(form.get('title') || '').trim().slice(0, 200) || page.title;
-        // Normalised the same way shortLinkFor() reads it, so what is stored and
+        // Normalized the same way shortLinkFor() reads it, so what is stored and
         // what is displayed cannot disagree. Anything that is not a plain
         // address segment is dropped rather than stored and quietly ignored.
         const short = String(form.get('short_link') || '').trim().replace(/^\/+|\/+$/g, '')
           .toLowerCase().replace(/[^a-z0-9\-\/]+/g, '-').replace(/^-+|-+$/g, '');
         // Only http(s) is stored. Anything else — a `javascript:` address most
         // of all — would become a link the office clicks from inside their own
-        // session, so it is dropped rather than half-honoured.
+        // session, so it is dropped rather than half-honored.
         const extRaw = String(form.get('external_url') || '').trim().slice(0, 500);
         const ext = /^https?:\/\/\S+$/i.test(extRaw) ? extRaw : '';
 
@@ -7211,7 +7211,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
           return jsonResponse({ ok: true });
         }
 
-        // Autosaved working draft. Sanitised on the way in — client-side
+        // Autosaved working draft. Sanitized on the way in — client-side
         // clamping is a courtesy, this is the control.
         if (action === '/draft' && method === 'POST') {
           const body = await request.json().catch(() => ({}));
@@ -7351,7 +7351,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
         });
       }
 
-      // Autosaved working draft. Sanitised on the way in — client-side clamping
+      // Autosaved working draft. Sanitized on the way in — client-side clamping
       // is a courtesy, this is the control.
       if (path.startsWith('/ministries/api/page/') && path.endsWith('/draft') && method === 'POST') {
         const slug = decodeURIComponent(path.slice('/ministries/api/page/'.length, -('/draft'.length)));
@@ -7442,7 +7442,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
       // ── Ministry list ──
       if (path === '/ministries' && method === 'GET') {
         // Anything whose scheduled time has passed goes live before the list is
-        // drawn, so staff never see a page still labelled "scheduled" after the
+        // drawn, so staff never see a page still labeled "scheduled" after the
         // moment it was meant to publish.
         await promoteScheduledPages(env);
         const pages = await env.DB.prepare(
@@ -8141,7 +8141,7 @@ ${sidebarShell('notices', currentUser, `<a href="/notices">← All notices</a>`,
 
       if (path === '/notices/add' && method === 'GET') {
         // A new notice arrives with the Visibility box already ticked, so the
-        // old "publishes immediately" behaviour is what happens if you change
+        // old "publishes immediately" behavior is what happens if you change
         // nothing — but writing one ahead of a season and leaving it hidden is
         // now possible, which it simply was not before.
         return html(noticeForm({
@@ -8628,7 +8628,7 @@ ${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; 
               hint: 'Move a card between taps without retyping it. “Every tap” shows it behind all four.',
             }] : []),
             { name: 'icon_emoji', label: 'Icon', value: c.icon_emoji || '🔗', placeholder: '🔗' },
-            { kind: 'choice', name: 'icon_color', label: 'Icon colour', value: c.icon_color || 'sky',
+            { kind: 'choice', name: 'icon_color', label: 'Icon color', value: c.icon_color || 'sky',
               options: COLOR_OPTIONS.map((v) => ({ value: v, label: COLOR_LABELS[v] })) },
             { kind: 'number', name: 'sort_order', label: 'Order', value: c.sort_order || 0, min: 0, step: 1,
               hint: 'Lower numbers come first.' },
@@ -9455,7 +9455,7 @@ ${sidebarShell('settings', currentUser, '', await pageBadges())}
         // Store digits when it IS a number, so the page's own formatter owns
         // the $ and the commas and there is one place that decides how an
         // amount looks. Words are stored as typed — "Any amount" is a
-        // legitimate row, and normalising it would erase it.
+        // legitimate row, and normalizing it would erase it.
         const typedAmount = String(form.get('amount') || '').trim();
         const parsedAmount = parseGiveAmount(typedAmount);
         const item = { ...(existing || {}), amount: parsedAmount == null ? typedAmount : String(parsedAmount), period, body };
@@ -9791,11 +9791,11 @@ ${sidebarShell('giving', currentUser, '', await pageBadges())}
       // ⚠ Shown as digits whatever is stored. Some rows on the live draft were
       // seeded by an older version that stored the formatted string ("$5,000"),
       // and putting that straight into a field whose hint says "digits only"
-      // is a screen arguing with itself. The save normalises too, so editing
+      // is a screen arguing with itself. The save normalizes too, so editing
       // any row quietly cleans it up.
       { name: 'amount', label: 'Amount', value: rowRec ? plainRowAmount(rowRec.amount) : '', required: true, placeholder: '5000',
         hint: 'Digits only — the $ and the commas are added for you. Words are allowed (“Any amount”), and a row that is not a number simply gets no Give button rather than one pointing at nothing.' },
-      // ⚠ These chips used to be labelled "Given every", and that wording is
+      // ⚠ These chips used to be labeled "Given every", and that wording is
       // what made this drawer confusing: "given every month" reads as how the
       // giver PAYS, so picking Month on a $5,000 row looks like it should
       // produce the $416/month button when it would really ask for $5,000 a
@@ -10209,7 +10209,7 @@ ${sidebarShell('users', currentUser, '', await pageBadges())}
 
       // The drawer, read-only end to end. The spec is explicit that it has no
       // save and no delete, and that read-only fields are a sand FILL rather
-      // than greyed text — grey text reads as broken, a filled field reads as
+      // than grayed text — gray text reads as broken, a filled field reads as
       // "this is a fact, not a question".
       const entryId = url.searchParams.get('entry');
       const entry = entryId ? rows.results.find((r) => String(r.id) === entryId) : null;

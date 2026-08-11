@@ -2,7 +2,7 @@
 //
 // A ministry page is an ordered array of typed blocks. This module owns:
 //   • the block schema (types, defaults, allowed values)
-//   • server-side sanitisation of anything written by a client
+//   • server-side sanitization of anything written by a client
 //   • the HTML templates for every block type
 //
 // CRITICAL: this is the ONLY place a block turns into HTML. The public site
@@ -11,7 +11,7 @@
 // add a block type, add it here and it appears in both places at once.
 //
 // How the editor avoids re-rendering on every keystroke/click:
-// every visual knob a staff member can turn (spacing, colours, text size,
+// every visual knob a staff member can turn (spacing, colors, text size,
 // column split, gap, spacer height) is emitted as a CSS custom property on the
 // block wrapper. The editor changes the property on the DOM node directly and
 // the browser repaints — no round trip, no second copy of these templates.
@@ -208,7 +208,7 @@ export const BLOCK_DEFS = {
   // ── CARD GRID (Task 14) ──────────────────────────────────────────────────
   // The live site uses this layout on four pages and the editor could not make
   // it: /worship's four info cards, /education's three class cards,
-  // /ministries' eight cards with a coloured top rule, and the community
+  // /ministries' eight cards with a colored top rule, and the community
   // partners row. `columns` is plain text with no card, no image and no link;
   // `quicklinks` is a fixed 4-up of short labels. Neither is this.
   //
@@ -380,8 +380,8 @@ export const BLOCK_DEFS = {
 
   // The ministry ladder and the leadership tiers are the SAME SHAPE — a
   // heading, a short intro, and a list of "$X /period — what it does" rows,
-  // each with its own Give button. They differ only in colour, which is
-  // already a block-level choice (Theme colours). So this is one type used
+  // each with its own Give button. They differ only in color, which is
+  // already a block-level choice (Theme colors). So this is one type used
   // twice, not two near-identical types that would drift apart the first time
   // somebody improved one of them.
   amounts: {
@@ -417,7 +417,7 @@ export const BLOCK_DEFS = {
 // that "centering a grid's cells and centering the grid itself are different
 // problems, each needing its own bespoke CSS". That is true, and it is not a
 // reason to withhold the control — it is a description of what the CSS below
-// has to do. Dinger asked for left/centre/right on "all blocks… and that
+// has to do. Dinger asked for left/center/right on "all blocks… and that
 // should work for buttons too" while looking at a Button bar, which was one of
 // the excluded ones: a lone button sitting hard left with no way to move it.
 // Spacer is the one genuine exclusion — it has no content to align.
@@ -467,7 +467,7 @@ export const TEMPLATES = [
 
 export const templateOf = (key) => TEMPLATES.find((t) => t.key === key) || TEMPLATES[1];
 
-// ── ESCAPING / SANITISING ────────────────────────────────────────────────────
+// ── ESCAPING / SANITIZING ────────────────────────────────────────────────────
 
 export function esc(s) {
   if (s == null) return '';
@@ -494,7 +494,7 @@ export function safeUrl(u) {
 const RICH_TAGS = new Set(['p', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'ul', 'ol', 'li',
   'a', 'h2', 'h3', 'h4', 'blockquote', 'span', 'div', 'img', 'hr', 'sup', 'sub']);
 // `rel` is deliberately NOT allowed through: it is re-added below, once. Letting
-// the incoming one survive as well made every sanitise pass append another copy.
+// the incoming one survive as well made every sanitize pass append another copy.
 const RICH_ATTRS = { a: ['href', 'target'], img: ['src', 'alt', 'width', 'height'] };
 const RICH_VOID = new Set(['br', 'img', 'hr']);
 
@@ -601,7 +601,7 @@ export function newBlock(type, over = {}) {
 }
 
 // Never trust the client. Client-side clamping is a courtesy; this is the
-// control. A stale tab must not be able to write spaceAbove:900 or a hex colour.
+// control. A stale tab must not be able to write spaceAbove:900 or a hex color.
 export function sanitizeBlock(b) {
   if (!b || typeof b !== 'object') return null;
   const def = BLOCK_DEFS[b.type];
@@ -635,7 +635,7 @@ export function sanitizeBlock(b) {
     // needs 4-up for /worship; `columns` only ever offers 2 or 3 in its own
     // inspector, and a crafted 4 there is a wide text row, not a broken page.
     cols: [2, 3, 4].includes(Number(b.cols)) ? Number(b.cols) : 2,
-    // Left, centre or right. Anything else is 'left' — an unknown alignment is
+    // Left, center or right. Anything else is 'left' — an unknown alignment is
     // a stale tab or a crafted POST, and the answer to both is the default the
     // page has always had rather than a third state nothing has CSS for.
     align: b.align === 'center' || b.align === 'right' ? b.align : 'left',
@@ -659,7 +659,7 @@ export function sanitizeBlock(b) {
     items: [],
     links: [],
   };
-  // Colour guardrail, enforced server-side too: an ink that is unreadable on
+  // Color guardrail, enforced server-side too: an ink that is unreadable on
   // the chosen background snaps back to a readable one.
   if (INK[out.ink].onDark !== BG[out.bg].dark) out.ink = BG[out.bg].dark ? 3 : 0;
 
@@ -851,11 +851,11 @@ export function starterBlocks(title, key = 'ministry') {
 // cannot collide with the public site's own stylesheet or the admin shell.
 
 export const BLOCK_CSS = `<style id="tlcb-css">
-/* Whole-page mode: the blocks are the page, so each one is centred at the
+/* Whole-page mode: the blocks are the page, so each one is centered at the
    site's own content width while the banner runs edge to edge. */
 .tlcb-page--full{--tlcb-wrap:1100px;}
 /* Backgrounds run edge to edge like the site's own sections, while the content
-   inside stays centred at the site's content width. */
+   inside stays centered at the site's content width. */
 .tlcb-page--full > .tlcb{max-width:none;border-radius:0;margin:0;
   padding-top:calc(14px + var(--tlcb-space-above,0px));
   padding-bottom:calc(14px + var(--tlcb-space-below,0px));
@@ -863,10 +863,10 @@ export const BLOCK_CSS = `<style id="tlcb-css">
   padding-right:max(var(--tlcb-pad), calc((100% - var(--tlcb-wrap)) / 2));}
 .tlcb-page--full > .tlcb--hero{padding:0;}
 .tlcb-page--full > .tlcb--hero .tlcb-hero{border-radius:0;}
-/* A half run's WRAPPER needs the same centring — pair members are
+/* A half run's WRAPPER needs the same centering — pair members are
    grandchildren, so the > .tlcb rule above never reaches them, and a run of
    halves on a hero-led page sat hard against the viewport edge while every
-   full-width block around it was centred. The math goes on the wrapper and
+   full-width block around it was centered. The math goes on the wrapper and
    only the wrapper: inside a half column, (100% - wrap)/2 means nothing. */
 .tlcb-page--full > .tlcb-pair{
   padding-left:max(var(--tlcb-pad), calc((100% - var(--tlcb-wrap)) / 2));
@@ -948,7 +948,7 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-cg-link:hover{text-decoration:underline;}
 .tlcb-cg-intro{font-family:var(--tlcb-sans);max-width:56em;color:var(--tlcb-body,#4A4860);}
 .tlcb-cg-intro:empty{display:none;}
-/* The coloured hairline across the card top on /ministries. It is switched on
+/* The colored hairline across the card top on /ministries. It is switched on
    for the whole grid rather than picked per card — one decision, not eight. */
 .tlcb-cg--rule .tlcb-cg-card{border-top:3px solid #2E7EA6;}
 .tlcb-cg--center{text-align:center;}
@@ -976,7 +976,7 @@ export const BLOCK_CSS = `<style id="tlcb-css">
    the action row shared by the banner-shaped types, tlcb-btns is the Button
    bar's own row (and the Welcome banner's), tlcb-alert is the Notice bar,
    which is a horizontal row rather than a heading+prose column — so
-   "centred" there means moving the row, not the text inside it. Button bar
+   "centered" there means moving the row, not the text inside it. Button bar
    is the block Dinger had selected when he asked for this. */
 .tlcb--center .tlcb-inline,.tlcb--center .tlcb-btns,.tlcb--center .tlcb-alert{justify-content:center;}
 .tlcb--right .tlcb-inline,.tlcb--right .tlcb-btns,.tlcb--right .tlcb-alert{justify-content:flex-end;}
@@ -994,10 +994,10 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb--right .tlcb-hero-sub,.tlcb--right .tlcb-cg-intro{margin-left:auto;margin-right:0;}
 /* ⚠ The amount ladder aligns its INTRO ONLY. Its rows are
    "$100 /week ———— [Give $100]" — a left column and a right button — and
-   moving that text is not what "centre this section" means to anybody looking
-   at it. The live leadership section is exactly this shape: a centred heading
+   moving that text is not what "center this section" means to anybody looking
+   at it. The live leadership section is exactly this shape: a centered heading
    over left-aligned rows.
-   This used to be written as a list of the five elements to centre, on the
+   This used to be written as a list of the five elements to center, on the
    grounds that a rule existing only to undo the rule above it goes wrong the
    moment a sixth element is added. That reasoning inverted when alignment
    became general: the undo is now the robust half. Anything added INSIDE a
@@ -1025,8 +1025,8 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-hero-title{font-family:var(--tlcb-serif);font-weight:700;font-size:var(--tlcb-hero,38px);line-height:1.15;color:#fff;margin:0;}
 /* No auto side margins by default — align-items:flex-start (.tlcb-band-text's
    own base) already puts this flush left; a flex item's own horizontal auto
-   margins self-centre regardless of the container's align-items, which is
-   what let the subtitle alone drift centred even in "left" mode before Hero
+   margins self-center regardless of the container's align-items, which is
+   what let the subtitle alone drift centered even in "left" mode before Hero
    had a real Alignment control. .tlcb--center.tlcb--hero below restores them. */
 .tlcb-hero-sub{font-size:17px;color:rgba(255,255,255,.72);max-width:600px;margin:12px 0 0;font-weight:300;line-height:1.5;}
 .tlcb-embed{position:relative;aspect-ratio:16/9;border-radius:8px;overflow:hidden;background:#1E2D4A;}
@@ -1075,8 +1075,8 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-chip{padding:8px 14px;border:1px solid rgba(245,228,192,.4);border-radius:7px;color:#F3EDE1;
   font:600 13px/1 'Source Sans 3',sans-serif;text-decoration:none;}
 .tlcb-chip--go{background:#C9973A;color:#1B1608;border-color:#C9973A;padding:10px 18px;font-weight:700;}
-/* ── The giving widget ── the one block that takes money. Its colours are
-   fixed rather than following the block's Theme colours palette: this is the
+/* ── The giving widget ── the one block that takes money. Its colors are
+   fixed rather than following the block's Theme colors palette: this is the
    most-clicked control on the church website and a staff member trying a
    background on it is one pick away from an invisible Give button. The
    wording around it is fully editable; the button is not. */
@@ -1100,7 +1100,7 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-gv-trust p{margin:0;}
 
 /* ── The amount ladder ── one row per "$X /period does Y". Follows the
-   block's own Theme colours, which is how the same type renders as the pale
+   block's own Theme colors, which is how the same type renders as the pale
    ministry ladder and as the navy leadership section. */
 .tlcb-am{display:flex;flex-direction:column;}
 .tlcb-am-list{margin-top:20px;display:flex;flex-direction:column;gap:10px;}
@@ -1111,7 +1111,7 @@ export const BLOCK_CSS = `<style id="tlcb-css">
    has shipped that bug more than once. color-mix lightens whichever
    background is set, so Parchment gives the near-white ministry ladder and
    Navy gives the leadership panel, from one declaration. It also tracks
-   --tlcb-bg live, which matters: changing Theme colours in the editor patches
+   --tlcb-bg live, which matters: changing Theme colors in the editor patches
    that variable on the wrapper without re-rendering, so anything keyed off a
    CLASS instead would not follow until the next structural change. */
 .tlcb-am-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
@@ -1132,7 +1132,7 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-am-note{margin-top:14px;font-size:12.5px;line-height:1.5;color:var(--tlcb-ink,#4A4860);opacity:.8;}
 /* The label over the rows. Deliberately the same shape as the giving widget's
    own "Choose an amount" label beside it — the two sit side by side in the
-   page's top row, and two different ways of labelling a list of amounts on one
+   page's top row, and two different ways of labeling a list of amounts on one
    screen reads as two different kinds of thing. */
 .tlcb-am-lab{margin:22px 0 0;font:800 12px/1.3 'Source Sans 3',sans-serif;letter-spacing:.1em;
   text-transform:uppercase;color:var(--tlcb-head-ink,#1E2D4A);opacity:.85;}
@@ -2416,7 +2416,7 @@ export function wrapTemplate(template, inner, ctx = {}) {
 // row is a pair or it is nothing, which is what makes this expressible without
 // a container.
 //
-// A Half with no Half neighbour renders at half width, left-aligned, with the
+// A Half with no Half neighbor renders at half width, left-aligned, with the
 // right side empty. That is a legitimate layout, not an error state, so it gets
 // no warning.
 //

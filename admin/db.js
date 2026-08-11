@@ -24,7 +24,7 @@
 export const TINYMCE_VERSION = '7.9.3';
 export const TINYMCE_BASE = `/assets/tinymce/${TINYMCE_VERSION}`;
 
-// ⚠ NOTHING IS INITIALISED AT PAGE LOAD, and self-hosting is not a reason to go
+// ⚠ NOTHING IS INITIALIZED AT PAGE LOAD, and self-hosting is not a reason to go
 // back to that. Metering is gone, but the work is not: the newsletter composer
 // carries nine rich fields and the page editor creates one per rich field —
 // fourteen on /ministries — and REBUILDS THEM ALL on every add, delete,
@@ -596,7 +596,7 @@ export const DB_INIT_PARTNERS = `CREATE TABLE IF NOT EXISTS partners (
 export const PARTNER_SEED = [
   {
     id: 1, name: 'Lindenwood Area Senior Ministry', short_name: 'LASM', value: 'acceptance',
-    blurb: 'Neighbours in Lindenwood Park cared for close to home — rides, visits, and company for seniors in the streets around the church.',
+    blurb: 'Neighbors in Lindenwood Park cared for close to home — rides, visits, and company for seniors in the streets around the church.',
     site_url: 'https://lasmstl.org', also_note: null, sort_order: 10,
   },
   {
@@ -611,7 +611,7 @@ export const PARTNER_SEED = [
   },
   {
     id: 4, name: 'Christian Friends of New Americans', short_name: 'CFNA', value: 'outreach',
-    blurb: 'Welcoming refugees and immigrants to St. Louis with food, English, health care, and the Gospel — from our neighbourhood to the nations.',
+    blurb: 'Welcoming refugees and immigrants to St. Louis with food, English, health care, and the Gospel — from our neighborhood to the nations.',
     site_url: 'https://cfna-stl.org',
     also_note: 'Pastor Rall and Mary Ann, missionaries to Papua New Guinea',
     sort_order: 40,

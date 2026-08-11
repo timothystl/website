@@ -25,7 +25,7 @@ group('what the office types can be any of the things they might paste');
   eq(normalizeChannelInput('https://www.youtube.com/@TimothySTL').value, '@TimothySTL',
     'and so is a full address');
 
-  eq(normalizeChannelInput(ID).kind, 'id', 'a channel ID is recognised as one');
+  eq(normalizeChannelInput(ID).kind, 'id', 'a channel ID is recognized as one');
   eq(normalizeChannelInput(`https://www.youtube.com/channel/${ID}`).value, ID,
     'including inside a channel URL');
 

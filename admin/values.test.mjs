@@ -1,4 +1,4 @@
-// The four values, as colour. Run: node admin/values.test.mjs
+// The four values, as color. Run: node admin/values.test.mjs
 //
 // This file exists because of a bug that no per-file review would have caught:
 // `values.js` was internally consistent, `ui.js` was internally consistent, and
@@ -21,7 +21,7 @@ const test = (name, fn) => {
   }
 };
 
-// ── colour maths ─────────────────────────────────────────────
+// ── color maths ─────────────────────────────────────────────
 const chan = (hex, i) => parseInt(hex.slice(i, i + 2), 16);
 const rgb = (hex) => [1, 3, 5].map((i) => chan(hex, i));
 
@@ -37,7 +37,7 @@ const contrast = (a, b) => {
 };
 
 // Largest single-channel gap. Crude next to a perceptual metric, but it is the
-// one a person can verify by eye against a colour picker, which matters more
+// one a person can verify by eye against a color picker, which matters more
 // here than precision — this test is read by whoever is about to change a hex.
 const spread = (a, b) => Math.max(...[1, 3, 5].map((i) => Math.abs(chan(a, i) - chan(b, i))));
 
@@ -146,7 +146,7 @@ test('normalizeValue passes a stored key through unchanged', () => {
 test('normalizeValue resolves a display label back to its stored key', () => {
   // Deliberate, and the reason the function exists: the chip says "Welcome"
   // and the column holds 'acceptance'. A form posting the label it rendered
-  // must not write a value no reader recognises.
+  // must not write a value no reader recognizes.
   assert.equal(normalizeValue('Welcome'), 'acceptance');
   assert.equal(normalizeValue('GROW'), 'education');
   assert.equal(normalizeValue('Christian Education'), 'education');

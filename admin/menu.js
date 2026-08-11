@@ -135,7 +135,7 @@ export function publicMenu(items, pagesById, menu = 'header') {
 //   'partners' — filled from the partner ministries, on the site, at load
 //
 // Partners is a real column on the site today and its contents are not menu
-// items at all, so modelling it as one would mean either faking eleven rows or
+// items at all, so modeling it as one would mean either faking eleven rows or
 // pretending the column does not exist. It gets a source instead.
 export const COLUMN_SOURCES = ['menu', 'partners'];
 

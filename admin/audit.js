@@ -10,7 +10,7 @@
 // telling anybody anything, and listing them buries the field that did change.
 const NOISE = new Set(['updated_at', 'created_at', 'updated_by', 'published_at_iso', 'change_log']);
 
-// Long values (a whole page of blocks, a newsletter body) are summarised rather
+// Long values (a whole page of blocks, a newsletter body) are summarized rather
 // than printed. A diff that fills the screen with markup is a diff nobody reads.
 const LONG = 60;
 
@@ -85,7 +85,7 @@ export function diffSummary(beforeRaw, afterRaw, max = 2) {
 // ── GROUPING ─────────────────────────────────────────────────
 // The handoff's filters are All / Content / People & ops / Rolled back, which
 // means every entity type has to fall into one of two buckets. Anything
-// unrecognised counts as content: the log is mostly content, and a new entity
+// unrecognized counts as content: the log is mostly content, and a new entity
 // type appearing under the wrong filter is better than it vanishing from both.
 const OPS_ENTITIES = new Set([
   'user', 'users', 'staff', 'staff_member', 'gym_booking', 'gym_group', 'gym_invoice',

@@ -125,7 +125,7 @@ group('gym sub-screens and filtered mail are configs, not route strings');
   for (const key of ['gymGroups', 'gymBookings', 'gymInvoices', 'gymRecurring', 'gymBlocked']) {
     const c = SECTIONS[key];
     ok(!!c, `${key} has a config`);
-    // Sentence case: only the first word is capitalised, bar a proper noun.
+    // Sentence case: only the first word is capitalized, bar a proper noun.
     ok(c.title && !/\s[A-Z][a-z]/.test(c.title), `${key}'s title is sentence case, not Title Case: ${c.title}`);
     ok(c.purpose && c.purpose.length > 30, `${key} says what the screen is for`);
     ok(Array.isArray(c.filters) && c.filters[0] === 'All', `${key} leads its filters with All`);

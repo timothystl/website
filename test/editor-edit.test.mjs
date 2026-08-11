@@ -73,7 +73,7 @@ eq(await page.locator('.ed-insp-body input[type="number"], .ed-insp-body input[t
 await flushSave();
 eq(savedBlocks()[1].spaceAbove, 0, 'spacing autosaved to the server');
 
-group('colour guardrail');
+group('color guardrail');
 await page.click('[data-k="bg:3"]'); // Navy
 await settle(120);
 let sel = () => page.evaluate(() => {
@@ -83,7 +83,7 @@ let sel = () => page.evaluate(() => {
 eq((await sel()).bg, '#1E2D4A', 'navy background applied');
 eq((await sel()).ink, '#F3EDE1', 'ink auto-switched to Cream on a dark background');
 eq(await page.locator('[data-k="ink:0"]').getAttribute('aria-disabled'), 'true', 'dark-background-unreadable ink is marked disabled');
-// force: the swatch is aria-disabled, which Playwright honours as "not
+// force: the swatch is aria-disabled, which Playwright honors as "not
 // actionable" — but a real mouse can still hit it, and the handler must refuse.
 await page.click('[data-k="ink:0"]', { force: true });
 await settle(120);
@@ -330,7 +330,7 @@ const bad = await (await fetch(base + '/ministries/api/render', {
   body: JSON.stringify({ blocks: [{ type: 'text', spaceAbove: 900, bg: 9, ink: 9, body: '<script>alert(1)</script><p>hi</p>' }] }),
 })).json();
 eq(bad.blocks[0].spaceAbove, 96, 'a stale tab cannot write spaceAbove:900');
-eq(bad.blocks[0].bg, 0, 'a stale tab cannot write an out-of-range colour');
+eq(bad.blocks[0].bg, 0, 'a stale tab cannot write an out-of-range color');
 ok(!bad.html.includes('<script>alert'), 'a stale tab cannot write a script tag');
 
 group('draft state on the server');

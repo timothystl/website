@@ -374,7 +374,7 @@ group('short links on the Pages screen');
     body: 'title=Sermon+Archive&slug=%2Fmedia%2Fsermons&short_link=archive&external_url=',
   }), env, ctx);
   eq(res.status, 302, 'saving the details redirects');
-  eq(db.prepare("SELECT short_link FROM pages WHERE id='archive'").get().short_link, 'archive', 'and stores the short link normalised');
+  eq(db.prepare("SELECT short_link FROM pages WHERE id='archive'").get().short_link, 'archive', 'and stores the short link normalized');
 
   body = await (await call(env, '/pages', { cookie })).text();
   lacks(body, 'Link clash', 'giving one of them a different short link clears the clash');
@@ -487,12 +487,12 @@ group('the Redirects screen shows every kind');
   // is a different section in the design and lists site_settings keys.
   const body = await (await call(env, '/redirects', { cookie })).text();
   has(body, '/zoom', 'a hand-made redirect appears');
-  has(body, 'Hand-made', 'labelled by kind');
+  has(body, 'Hand-made', 'labeled by kind');
   has(body, '/about/our-staff', 'an automatic 301 from a rename appears');
-  has(body, 'Automatic', 'labelled as automatic');
+  has(body, 'Automatic', 'labeled as automatic');
   has(body, 'Leave it', 'and staff are told not to touch it');
   has(body, '/beliefs', 'a derived short link appears too');
-  has(body, 'Short link', 'labelled as such');
+  has(body, 'Short link', 'labeled as such');
   has(body, 'Giving', 'and a giving link, managed elsewhere but listed here');
   has(body, 'keeps old bulletins and Google results working', 'the note is the design’s wording, not mine');
 
@@ -569,7 +569,7 @@ group('the menu is seeded from the nav as it stands');
   // with a round logo and a strapline. It drew the real menu ITEMS into a bar
   // that exists nowhere, so staff were shown a picture of a header the site
   // does not have. These assertions pin the fix: the bar carries the real
-  // colours and the real brand, and the old fiction is gone.
+  // colors and the real brand, and the old fiction is gone.
   has(body, 'tlc-hp-bar', 'with a preview built by the shared header renderer');
   has(body, '--hp-bar:#4A5E3A', 'painted in the moss green the site actually uses');
   has(body, 'Neighborhood to the Nations', 'carrying the real tagline');
@@ -879,7 +879,7 @@ group('renaming a column, and deleting one without losing links');
 
 group('the header is drafted before it is published');
 {
-  // The point of this screen is that somebody can try a colour on the front of
+  // The point of this screen is that somebody can try a color on the front of
   // the church website WITHOUT it being on the front of the church website.
   // These assertions are that promise: a save reaches the draft and nothing
   // else, and only Publish moves it across.
@@ -890,7 +890,7 @@ group('the header is drafted before it is published');
   has(first, 'Appearance', 'the screen renders');
   has(first, '--hp-bar:#4A5E3A', 'showing the site as it stands, not an empty form');
   has(first, 'Everything on this screen is on the site', 'and says so when there is nothing pending');
-  lacks(first, 'name="bar" value="gold"', 'gold is not offered as a BAR colour');
+  lacks(first, 'name="bar" value="gold"', 'gold is not offered as a BAR color');
   has(first, 'name="cta" value="gold"', 'but it is still offered for the Give button');
 
   const save = await call(env, '/menu/appearance/save', {
@@ -903,7 +903,7 @@ group('the header is drafted before it is published');
   eq(save.status, 302, 'saving redirects');
 
   const draftRow = db.prepare("SELECT value FROM site_settings WHERE key='site_appearance_draft'").get();
-  eq(JSON.parse(draftRow.value).bar, 'navy', 'the draft has the new colour');
+  eq(JSON.parse(draftRow.value).bar, 'navy', 'the draft has the new color');
   const liveRow = db.prepare("SELECT value FROM site_settings WHERE key='site_appearance'").get();
   ok(!liveRow, 'and NOTHING has been written to the live row — this is the whole promise');
 
@@ -914,14 +914,14 @@ group('the header is drafted before it is published');
 
   const pending = await (await call(env, '/menu/appearance', { cookie })).text();
   has(pending, 'Not published yet', 'the screen says something is waiting');
-  has(pending, 'Bar colour', 'and names what differs rather than saying only that something does');
+  has(pending, 'Bar color', 'and names what differs rather than saying only that something does');
   has(pending, 'On the site now', 'showing both bars so they can be compared');
 
   eq((await call(env, '/menu/appearance/publish', { cookie, method: 'POST' })).status, 302, 'publishing redirects');
   eq(JSON.parse(db.prepare("SELECT value FROM site_settings WHERE key='site_appearance'").get().value).bar,
      'navy', 'now the live row has it');
   const apiAfter = await (await call(env, '/api/pages', { fresh: true })).json();
-  eq(apiAfter.details.appearance.bar, '#1E2D4A', 'and visitors get it, resolved to a real colour');
+  eq(apiAfter.details.appearance.bar, '#1E2D4A', 'and visitors get it, resolved to a real color');
 
   // Discarding is the other direction, and it must not touch what is live.
   await call(env, '/menu/appearance/save', { cookie, method: 'POST', form: { bar: 'plum', nl_show: '0' } });
@@ -1100,7 +1100,7 @@ group('a sent issue cannot be modified by any path');
   has(page, 'read-only', 'explains the lock');
   has(page, 'Duplicate as draft', 'and offers the way forward');
   has(page, 'tlc-nl-cols', 'and is the two-column editor — form beside a live preview');
-  has(page, 'Live preview', 'which is labelled');
+  has(page, 'Live preview', 'which is labeled');
 
   // Approve/Reject are a second path to the same state a sent issue must
   // never re-enter — neither has a UI affordance on a sent issue, but with
@@ -1454,7 +1454,7 @@ group('gym rentals ships both layouts');
   // The bulk tools carry the invoice generation and the calendar push. They
   // moved below the queue; they were not replaced by it.
   has(queue, 'Confirm All', 'the bulk actions are intact');
-  has(queue, 'By organisation', 'under their own heading');
+  has(queue, 'By organization', 'under their own heading');
   has(queue, '/gym-rentals/invoices', 'and invoices are still reachable');
 
   // A hold on a blocked date is the one thing on this screen that is wrong.
@@ -1469,7 +1469,7 @@ group('gym rentals ships both layouts');
   const cal = await (await call(env, '/gym-rentals', { cookie })).text();
   eq((await call(env, '/gym-rentals', { cookie })).status, 200, 'the calendar view responds');
   has(cal, 'gymcal-grid', 'the month grid renders by default');
-  has(cal, 'gymcal-chip--hold', 'a hold is colour-coded');
+  has(cal, 'gymcal-chip--hold', 'a hold is color-coded');
   has(cal, 'gymcal-chip--confirmed', 'and so is a confirmed booking');
   has(cal, 'Christmas Market', 'a blocked date is shown with its reason');
   has(cal, 'Everything else about a booking', 'the calendar says where bookings actually change');
@@ -1494,7 +1494,7 @@ group('gym rentals ships both layouts');
   // ⚠ Calendar first is the default now, so the bulk tools must be on it too.
   // They carry the invoice generation, the price-setting and the calendar push;
   // hiding them on the view everybody lands on would be dropping them.
-  has(cal, 'By organisation', 'the bulk tools are on the default view as well');
+  has(cal, 'By organization', 'the bulk tools are on the default view as well');
   has(cal, 'Confirm All', 'including confirming a whole group at one price');
   // Approving from the panel must not mean approving blind.
   has(cal, 'This slot conflicts with something already booked',
@@ -1597,7 +1597,7 @@ group('payroll emails its report to the bookkeeper');
   };
   await post({ ...report, approved: false, incomplete: true });
   globalThis.fetch = realFetch;
-  ok(sent2[0].htmlContent.includes('Not yet approved'), 'an unapproved run is labelled as such');
+  ok(sent2[0].htmlContent.includes('Not yet approved'), 'an unapproved run is labeled as such');
   ok(sent2[0].htmlContent.includes('Incomplete'), 'and so is one missing its childcare figures');
 }
 
@@ -1743,7 +1743,7 @@ group('⌘K searches every section, within permissions');
   ok(d.results.some((r) => r.section === 'News & Events' && r.label.includes('Egg Hunt')), 'and finds a news post');
 
   const staff = await (await call(env, '/api/search?q=dinger', { cookie })).json();
-  ok(staff.results.some((r) => r.section === 'Staff'), 'and a staff member, labelled by section');
+  ok(staff.results.some((r) => r.section === 'Staff'), 'and a staff member, labeled by section');
 
   eq((await (await call(env, '/api/search?q=a', { cookie })).json()).results.length, 0,
     'a single letter searches nothing — that would return the whole database');
@@ -1840,7 +1840,7 @@ group('the MDO saved section, and the service labels the site uses');
   const after = db.prepare("SELECT COUNT(*) c FROM ministry_saved_sections WHERE name = ?").get("Mother's Day Out");
   eq(after.c, 0, 'deleting it makes it stay deleted');
 
-  // Two Sunday services, neither labelled — Andrew's call on 2 Aug. Both
+  // Two Sunday services, neither labeled — Andrew's call on 2 Aug. Both
   // blank means the welcome card reads them as one line, "8:00 & 10:45 am",
   // with nothing beneath it.
   const times = db.prepare("SELECT value FROM site_settings WHERE key = 'church_service_times'").get();
@@ -1871,7 +1871,7 @@ group('the last two borderline routes are on the shared pattern');
   const add = await (await call(env, '/notices/add', { cookie })).text();
   has(add, 'New notice', 'the add form still answers on its own address');
   has(add, 'Show this notice on the website', 'and now carries Visibility, like edit');
-  has(add, 'name="published" value="1" checked', 'ticked by default, so the old behaviour is the default');
+  has(add, 'name="published" value="1" checked', 'ticked by default, so the old behavior is the default');
   has(add, 'action="/notices/create"', 'posting to create');
 }
 
@@ -1893,12 +1893,12 @@ group('rows carry an overflow menu');
 group('the giving page: two addresses, each pointing where it is actually edited');
 {
   // ⚠ This panel used to say "One set of blocks · two places it appears",
-  // beside a switch labelled "Kept in step: edit either one and the other
+  // beside a switch labeled "Kept in step: edit either one and the other
   // follows". Neither was true: give.timothystl.org is rendered by
   // give-landing.js and takes the money, timothystl.org/give is a block page
   // about how to give. The switch wrote a setting nothing ever read.
   //
-  // A control that claims a behaviour the code does not have is worse than no
+  // A control that claims a behavior the code does not have is worse than no
   // control — somebody flips it, believes it worked, and stops checking.
   const { db, env } = await boot();
   const { cookie } = signIn(db);
@@ -2058,7 +2058,7 @@ group('Giving: a ladder row is edited here, and it is the same record');
     has(drawer, 'value="5000"', 'a stored "$5,000" is offered for editing as 5000');
     lacks(drawer, 'value="$5,000"', 'and never as the formatted string');
 
-    // Saving normalises, so editing any row quietly cleans it up.
+    // Saving normalizes, so editing any row quietly cleans it up.
     await post('/giving-ladder/update', { block: lad.id, index: '0', amount: '$9,500', period: 'year', body: 'x' });
     eq(ladders()[0].items[0].amount, '9500', 'a formatted amount is stored as digits');
 
@@ -2079,7 +2079,7 @@ group('Giving: a ladder row is edited here, and it is the same record');
     // ⚠ The old label read "Given every", which reads as how the giver PAYS —
     // so Month on a $5,000 row looked like it should produce $416/month when
     // it would really charge $5,000 a month.
-    has(drawer, 'The amount above is per', 'and the period is labelled as the unit, not the cadence');
+    has(drawer, 'The amount above is per', 'and the period is labeled as the unit, not the cadence');
     lacks(drawer, 'Given every', 'the misleading label is gone');
   }
 
@@ -2154,7 +2154,7 @@ group('payroll lives in the shared shell now');
   has(body, 'Enter hours and exceptions', 'the purpose line is the design’s');
 
   // The design's chrome.
-  has(body, 'Pay period', 'the pay-period picker is labelled');
+  has(body, 'Pay period', 'the pay-period picker is labeled');
   has(body, 'Enter &amp; approve', 'the two views are the design’s');
   has(body, 'Report', 'both of them');
   has(body, 'Print report', 'with Print report');
@@ -2239,7 +2239,7 @@ group('the renter portal has its own origin');
 
   // Only http(s). This value becomes a link the office hands to renters.
   setOrigin('javascript:alert(1)');
-  eq((await portalGet()).status, 200, 'an unsafe address is ignored rather than half-honoured');
+  eq((await portalGet()).status, 200, 'an unsafe address is ignored rather than half-honored');
   setOrigin('');
 
   // ── Tasks 17b and 18: the renter portal ──────────────────────────────
@@ -2265,15 +2265,15 @@ group('the renter portal has its own origin');
   has(portal, '>Recurring dates<', 'the second tab is Recurring dates');
   lacks(portal, 'Repeat weekly pattern', 'not a competing flow');
 
-  // 18.3. Availability was encoded twice, in colour only — a red numeral AND a
-  // red dot. Red numerals read as errors, and colour alone fails for anyone
+  // 18.3. Availability was encoded twice, in color only — a red numeral AND a
+  // red dot. Red numerals read as errors, and color alone fails for anyone
   // who cannot separate the two hues.
   // Scoped to the DAY CELLS. The hour-slot buttons inside a day still use red
   // for a taken hour, and that is a different control the spec does not touch —
   // asserting no red anywhere on the page would fail for the wrong reason.
   lacks(portal, 'font-weight:700;color:#D17070', 'no unavailable day is a red numeral');
-  has(portal, 'color:#A9A396', 'unavailable days are grey, with no cell and no dot');
-  lacks(portal, 'Fully booked</span>', 'and the colour legend is gone — the drawing says it');
+  has(portal, 'color:#A9A396', 'unavailable days are gray, with no cell and no dot');
+  lacks(portal, 'Fully booked</span>', 'and the color legend is gone — the drawing says it');
 
   // "Request", not "Confirm" — the office prices and approves it.
   has(portal, '>Request this booking<', 'the submit button says request');
@@ -2299,7 +2299,7 @@ group('the renter portal has its own origin');
   // Regenerate invalidates a link already in other people's inboxes. It is a
   // text button at the card foot, and the consequence is in the confirm where
   // it can actually stop somebody — not folded into the button label.
-  has(groupPage, '>Regenerate link<', 'Regenerate is quiet and plainly labelled');
+  has(groupPage, '>Regenerate link<', 'Regenerate is quiet and plainly labeled');
   lacks(groupPage, 'Regenerate token (old link stops working)', 'the warning is out of the label');
   has(groupPage, 'The link you have already shared will stop working',
     'and names what breaks, in the confirm');
@@ -2326,7 +2326,7 @@ group('an approved payroll period is locked server-side');
     const href = typeof u === 'string' ? u : u.url;
     if (!supabaseUp) throw new Error('supabase unreachable');
     if (href.includes('/payroll_periods')) {
-      // Honour the filter, or the stub answers "approved" for every period and
+      // Honor the filter, or the stub answers "approved" for every period and
       // the per-period scoping below would pass without being true.
       const want = decodeURIComponent((href.match(/period_start=eq\.([^&]+)/) || [])[1] || '');
       return new Response(JSON.stringify(approved.filter((r) => r.period_start === want)), { status: 200 });
@@ -2627,7 +2627,7 @@ group('per-screen, part two');
   ok(titles.indexOf('Pinned post') < titles.indexOf('VBS'), 'pinned still always leads everything else');
 
   // 20-audit: a read-only drawer. No save, no delete; fields are sand-filled
-  // rather than greyed, because grey text reads as broken.
+  // rather than grayed, because gray text reads as broken.
   db.prepare("INSERT INTO audit_log (user_id,username,action,entity_type,entity_id,entity_label,before_state,after_state,created_at) VALUES (NULL,'office','update','news_item','1','Pinned post','{\"title\":\"Old\"}','{\"title\":\"New\"}',?)").run(now);
   const logRow = db.prepare("SELECT id FROM audit_log ORDER BY id DESC LIMIT 1").get();
   const audit = await (await call(env, `/audit-log?entry=${logRow.id}`, { cookie })).text();
@@ -2826,7 +2826,7 @@ group('the gym sub-screens use the shared pattern');
   const bookings = await (await call(env, '/gym-rentals/bookings', { cookie })).text();
   has(bookings, 'Every hold and confirmed booking', 'All bookings is a list section');
   has(bookings, 'Southside Volleyball', 'with the bookings in it');
-  ok(!bookings.includes('<details open'), 'and not two accordions grouped by organisation');
+  ok(!bookings.includes('<details open'), 'and not two accordions grouped by organization');
 
   db.prepare("INSERT INTO gym_recurrences (group_id,day_of_week,start_time,end_time,start_date,end_date,status,created_at) VALUES (1,2,'18:00','20:00','2099-01-01','2099-03-01','pending_review',?)").run(now);
   const rec = await (await call(env, '/gym-rentals/recurring', { cookie })).text();

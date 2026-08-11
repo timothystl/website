@@ -3,7 +3,7 @@
 //
 // ⚠ WHY THIS EXISTS. TinyMCE Cloud bills by EDITOR LOAD, and an editor load is
 // one *instance* finishing its init — not one page view. Every rich field in
-// this admin used to initialise at page load, so opening the newsletter
+// this admin used to initialize at page load, so opening the newsletter
 // composer spent nine of them before anybody typed a word. Fields are now
 // closed until somebody opens one, and that saving is only real if the closed
 // state still holds the right content and the open state still edits and saves

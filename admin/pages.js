@@ -10,7 +10,7 @@ export const PAGE_FILTERS = ['all', 'published', 'drafts'];
 // and the tests cannot drift from it: Live / Draft edits / Hidden / Links out /
 // Clash. Each carries its tone as well as its words — the list used to pick a
 // tone by comparing the label string, which meant renaming a pill silently
-// recoloured it.
+// recolored it.
 export const PILLS = {
   published:  { label: 'Live',        tone: 'good',  bg: '#DCE6D6', fg: '#3B4C2E' },
   draft:      { label: 'Draft',       tone: 'warn',  bg: '#F5E4C0', fg: '#7A5A12' },
@@ -30,7 +30,7 @@ const json = (v) => JSON.stringify(sanitizeBlocks(parseBlocks(v)));
 //
 // Only http(s) counts. A `javascript:` address stored here would be a link the
 // office could click from their own admin, so anything else reads as "not an
-// outbound page" rather than being stored and half-honoured.
+// outbound page" rather than being stored and half-honored.
 export function outboundUrl(p) {
   const raw = String((p && p.external_url) || '').trim();
   if (!raw) return '';
@@ -216,7 +216,7 @@ export function slugify(title, parentSlug = '') {
 
 // An address typed by hand, cleaned up a segment at a time. slugify() collapses
 // everything that is not a letter or a digit, which would turn `/about/beliefs`
-// into `/about-beliefs` — so a typed path is normalised per segment and its
+// into `/about-beliefs` — so a typed path is normalized per segment and its
 // slashes are kept. Returns '' when nothing usable was typed, so the caller can
 // fall back to deriving the address from the title.
 export function slugPath(typed) {

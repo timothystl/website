@@ -140,7 +140,7 @@ const LEADERSHIP_TIERS = [
 
 // ── THE CHROME ───────────────────────────────────────────────────────────────
 // The masthead reads the same `site_appearance` record the main site's header
-// does, so the church changes its logo, name, tagline or bar colour once and
+// does, so the church changes its logo, name, tagline or bar color once and
 // this page follows. It deliberately carries NO navigation: the settled job of
 // this page is one action, and a row of section links is a row of ways to
 // leave before giving. What it does carry, as of 2026-08-05, is a way home —

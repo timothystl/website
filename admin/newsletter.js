@@ -118,7 +118,7 @@ export function normalizeAudience(v) {
 }
 
 // ── SUBJECT AND PREHEADER ────────────────────────────────────
-// Phones truncate a subject around 60 characters and the preheader — the grey
+// Phones truncate a subject around 60 characters and the preheader — the gray
 // line after the subject in an inbox — around 110. Neither is a hard limit, so
 // these are guidance, never a block on saving: a subject that is too long is a
 // worse email, not an invalid one.

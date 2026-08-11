@@ -73,7 +73,7 @@ group('the arithmetic: an amount becomes cents, never dollars');
   eq(withAmountAndFund(BASE, 5000, ''), 'https://give.tithe.ly/?formId=FORM&locationId=LOC&fundId=GENERAL&amount=500000',
     'a $5,000 leadership gift is 500000 cents');
   // ⚠ A fund override REPLACES the base link's fundId rather than appending a
-  // second one. Two fundId params is undefined behaviour at Tithe.ly's end,
+  // second one. Two fundId params is undefined behavior at Tithe.ly's end,
   // which is a coin-flip about which fund somebody's gift lands in.
   const organ = withAmountAndFund(BASE, 25, 'ORGAN');
   has(organ, 'fundId=ORGAN', 'the chosen fund reaches the link');
@@ -163,7 +163,7 @@ group('the blocks compute their links from the data, at render time');
 // says $5,000 a year must not hand Tithe.ly a single $5,000 charge — "no one
 // is going to click to do a one time gift of 5000" (Dinger, 2026-08-06) — so
 // the ask is a twelfth of it, and the LINK has to carry that same twelfth. A
-// button labelled $416 that charges $5,000 would be the worst outcome on this
+// button labeled $416 that charges $5,000 would be the worst outcome on this
 // page, so both halves are asserted, not just the label.
 group('an annual row asks for one month of it, in the label AND in the link');
 {
@@ -351,7 +351,7 @@ group('the chrome: a way home, and assets that are not the page');
   const body = await (await getGive(w)).text();
   has(body, 'https://timothystl.org', 'there is a way back to the site');
   has(body, 'Back to timothystl.org', 'as a named link, not only the logo');
-  has(body, '#4A5E3A', 'the masthead takes its colour from the Appearance record');
+  has(body, '#4A5E3A', 'the masthead takes its color from the Appearance record');
   has(body, 'from our Neighborhood to the Nations', 'and its tagline');
   has(body, '6704 Fyler Ave', 'the footer reads the church details');
 

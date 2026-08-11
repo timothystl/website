@@ -114,16 +114,16 @@ group('no config asks for a plugin we did not vendor');
 group('the open-source build is acknowledged as such');
 {
   // TinyMCE 7 refuses to start self-hosted without this and renders an
-  // "invalid licence" notice over the editor instead. (`promotion: false` is
+  // "invalid license" notice over the editor instead. (`promotion: false` is
   // NOT needed — checked in a real browser: the community build draws no
   // Upgrade button with menubar off.)
   ok(/license_key:\s*'gpl'/.test(RICH_FIELD_JS), 'the classic field sets it');
   ok(/license_key:\s*'gpl'/.test(editorHtml), 'the page editor sets it');
 
-  // GPL: the licence and notices travel with the code we redistribute.
-  ok(there('license.md'), "TinyMCE's own licence file ships alongside it");
+  // GPL: the license and notices travel with the code we redistribute.
+  ok(there('license.md'), "TinyMCE's own license file ships alongside it");
   ok(there('notices.txt'), 'and its third-party notices');
-  ok(readFileSync(at('license.md'), 'utf8').includes('General Public License'), 'the licence is the GPL one');
+  ok(readFileSync(at('license.md'), 'utf8').includes('General Public License'), 'the license is the GPL one');
 }
 
 group('the vendored folder stays a trimmed set');

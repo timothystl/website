@@ -24,7 +24,7 @@
 // out without touching a single pixel. The image that comes out is byte-for-
 // byte the same picture, minus the metadata.
 //
-// ⚠ EVERY function here fails OPEN — an unrecognised, truncated or malformed
+// ⚠ EVERY function here fails OPEN — an unrecognized, truncated or malformed
 // file is returned untouched rather than mangled. Losing somebody's photo to a
 // parser that misread it would be a worse outcome than the metadata it was
 // trying to remove, and the caller cannot tell a corrupted image from a valid

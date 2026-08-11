@@ -24,7 +24,7 @@ group('what counts as a tap');
   ok(!countsAsTap(h({ 'User-Agent': PHONE, 'Sec-Purpose': 'prefetch;anonymous-client-ip' })),
     'a prefetch is the browser guessing, not somebody tapping');
   ok(!countsAsTap(h({ 'User-Agent': PHONE, 'Sec-Purpose': 'prefetch;prerender' })), 'a prerender likewise');
-  ok(!countsAsTap(h({ 'User-Agent': PHONE, 'Purpose': 'prefetch' })), 'the older header is honoured too');
+  ok(!countsAsTap(h({ 'User-Agent': PHONE, 'Purpose': 'prefetch' })), 'the older header is honored too');
   ok(!countsAsTap(h({ 'User-Agent': PHONE, 'X-Moz': 'prefetch' })), 'and Firefox’s');
 
   ok(!countsAsTap(h({ 'User-Agent': 'Googlebot/2.1 (+http://www.google.com/bot.html)' })), 'a crawler does not count');

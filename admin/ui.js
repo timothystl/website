@@ -54,7 +54,7 @@ export const PALETTE = {
 };
 
 // Five tones, and only five. Green = good or live, amber = needs attention,
-// red = broken, grey = deliberately off, blue-grey = automatic (something the
+// red = broken, gray = deliberately off, blue-gray = automatic (something the
 // system did, which a volunteer should not feel responsible for).
 // Four of these are the spec's own Good / Waiting / Problem / Neutral. `auto`
 // is a fifth, for something the system did on its own (a rename 301, a lapsed
@@ -68,7 +68,7 @@ export const TONES = {
   auto:  { bg: '#EDF2F6', fg: '#3E5C76', bd: '#CFDCE6' },
 };
 
-// An unrecognised tone renders as `plain` rather than as an unstyled pill. A
+// An unrecognized tone renders as `plain` rather than as an unstyled pill. A
 // typo in a route should look deliberate-but-wrong, not broken.
 export function toneOf(name) {
   return TONES[name] ? name : 'plain';
@@ -117,7 +117,7 @@ export function statusPill(tone, label) {
 }
 
 // A value chip is tinted by the value itself, so the four values stay
-// recognisable at a glance across every section that carries them.
+// recognizable at a glance across every section that carries them.
 export function valueChip(key, { short = true } = {}) {
   const v = valueByKey(key);
   // ⚠ .tlc-vpill, not .tlc-chip. The read-only value pill in a list row and
@@ -140,8 +140,8 @@ export function valueSelect(name, selected, { allowNone = true } = {}) {
 }
 
 // Four values is four options, so the spec asks for chips rather than a select
-// — the whole choice visible at once, each in its own colour, and a selected
-// one marked by its `solid` border rather than by being recoloured.
+// — the whole choice visible at once, each in its own color, and a selected
+// one marked by its `solid` border rather than by being recolored.
 export function valueChips(name, selected, { allowNone = true } = {}) {
   const one = (v) => `<label class="tlc-vchip">
     <input type="radio" name="${esc(name)}" value="${esc(v.key)}"${v.key === selected ? ' checked' : ''}>
@@ -235,8 +235,8 @@ export function renderListSection(cfg) {
   // plain filters — that is how the design separates "which kind of thing" from
   // "which value it carries". They are additive: picking a value narrows
   // whatever the row above already selected.
-  // A value chip keeps its own colours in BOTH states — selected only adds the
-  // 2px solid border. Recolouring it on selection would read as a different
+  // A value chip keeps its own colors in BOTH states — selected only adds the
+  // 2px solid border. Recoloring it on selection would read as a different
   // value rather than the same one, chosen.
   // Derived from VALUES when the section declares `valueChips`, so the four
   // are described in one place (admin/values.js) rather than restated in every
@@ -416,7 +416,7 @@ function wire(sec){
   var active=pills.length?pills[0].getAttribute('data-value'):'all';
   // Opt-in: only a section whose config set pageSize carries this attribute
   // (and a pager container). Every other list keeps showing everything, same
-  // as before — this must never change behaviour for a section that didn't
+  // as before — this must never change behavior for a section that didn't
   // ask for it.
   var pageSize=parseInt(sec.getAttribute('data-page-size')||'0',10)||0;
   var pager=sec.querySelector('.tlc-pager');
@@ -540,7 +540,7 @@ document.addEventListener('keydown',function(e){
 //
 // Field kinds: text · textarea · toggle · choice · value · photo · perms ·
 // static · html. Every kind is a constrained control — there is deliberately
-// no free-form colour, pixel or font input anywhere in this list, because the
+// no free-form color, pixel or font input anywhere in this list, because the
 // governing rule of the redesign is that a volunteer cannot break the site.
 export function renderDrawer(cfg) {
   const {
@@ -672,18 +672,18 @@ function renderField(f) {
         </label>`).join('')
       }</div>${hint}</div>`;
 
-    // A colour is picked from the site's own palette, never typed. See the note
+    // A color is picked from the site's own palette, never typed. See the note
     // at the top of admin/appearance.js for why there is no hex field: the nav
     // text is light and is not editable, so a free value is one paste away
     // from an unreadable header on every page of the site at once.
     //
-    // The swatch shows the colour AND names it, because "the third one" is not
+    // The swatch shows the color AND names it, because "the third one" is not
     // something anyone can say to a colleague over the phone.
     case 'swatch':
       return `<div class="tlc-field">${label}<div class="tlc-sw" role="radiogroup"${f.label ? ` aria-label="${esc(f.label)}"` : ''}>${
         (f.options || []).map((o) => `<label>
           <input type="radio" name="${esc(f.name)}" value="${esc(o.value)}"${String(o.value) === String(f.value) ? ' checked' : ''}>
-          <span><i style="background:${esc(o.colour)};" aria-hidden="true"></i>${esc(o.label)}</span>
+          <span><i style="background:${esc(o.color)};" aria-hidden="true"></i>${esc(o.label)}</span>
         </label>`).join('')
       }</div>${hint}</div>`;
 
@@ -1091,7 +1091,7 @@ export const ADMIN_UI_CSS = `
   width:100%;border:1px solid var(--tlc-edge);border-radius:8px;padding:9px 11px;font:400 13.5px var(--tlc-sans);
   color:var(--tlc-ink);background:#fff;outline:none;}
 .tlc-wrap input:focus,.tlc-wrap textarea:focus,.tlc-wrap select:focus{border-color:var(--tlc-blue);box-shadow:0 0 0 3px rgba(46,126,166,.14);}
-/* Read-only is a sand fill, never greyed text — grey text reads as broken.
+/* Read-only is a sand fill, never grayed text — gray text reads as broken.
    Paired with the unlock button beside it, this is how a field says it is
    waiting for a deliberate press rather than sitting there failing. */
 .tlc-wrap input[readonly],.tlc-wrap textarea[readonly]{background:var(--tlc-sand);}
@@ -1136,18 +1136,18 @@ export const ADMIN_UI_CSS = `
 .tlc-field{margin-bottom:16px;}
 .tlc-label{display:block;font:600 10.5px/1 var(--tlc-sans);letter-spacing:.12em;text-transform:uppercase;color:var(--tlc-muted);margin-bottom:6px;}
 .tlc-field input[type=text],.tlc-field input[type=email],.tlc-field input[type=url],.tlc-field input[type=number],.tlc-field input[type=date],.tlc-field textarea,.tlc-field select{width:100%;border:1px solid var(--tlc-edge);border-radius:8px;padding:9px 11px;font:400 13.5px var(--tlc-sans);color:var(--tlc-ink);background:#fff;outline:none;}
-/* Read-only is a filled field, never greyed text — grey text reads as broken,
+/* Read-only is a filled field, never grayed text — gray text reads as broken,
    a sand fill reads as "this is a fact, not a question". */
 .tlc-field input[readonly],.tlc-field textarea[readonly]{background:var(--tlc-sand);}
 .tlc-field input:focus,.tlc-field textarea:focus,.tlc-field select:focus{border-color:var(--tlc-blue);box-shadow:0 0 0 3px rgba(46,126,166,.14);}
 .tlc-hint{margin:5px 0 0;font-size:12.5px;line-height:1.5;color:var(--tlc-muted);text-wrap:pretty;}
-/* A read-only field is a filled field, never greyed text. Grey text reads as
+/* A read-only field is a filled field, never grayed text. Gray text reads as
    broken; a sand fill reads as "this is a fact, not a question". */
 .tlc-static{font-size:13.5px;color:var(--tlc-body);background:var(--tlc-sand);border:1px solid var(--tlc-edge);border-radius:8px;padding:9px 11px;text-wrap:pretty;}
 .tlc-field-toggle{display:flex;flex-direction:column;gap:4px;}
 .tlc-toggle{display:flex;align-items:center;gap:10px;cursor:pointer;}
 .tlc-toggle input{position:absolute;opacity:0;width:0;height:0;}
-/* 40x22, moss when on — the spec's own numbers. Gold is the accent colour and
+/* 40x22, moss when on — the spec's own numbers. Gold is the accent color and
    is never a large fill; on/off is a state, not an accent. */
 .tlc-toggle-track{flex:none;width:40px;height:22px;border-radius:999px;background:var(--tlc-edge);position:relative;transition:background .15s;}
 .tlc-toggle-knob{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#FAF7F1;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:transform .15s;}
@@ -1163,7 +1163,7 @@ export const ADMIN_UI_CSS = `
 .tlc-chip span{display:inline-flex;align-items:center;font:600 12.5px var(--tlc-sans);color:var(--tlc-body);background:var(--tlc-parchment);border:1px solid var(--tlc-edge);border-radius:8px;padding:8px 13px;}
 .tlc-chip input:checked + span{border:2px solid var(--tlc-blue);background:#E7EEF7;color:var(--tlc-ink);padding:7px 12px;}
 .tlc-chip input:focus-visible + span{box-shadow:0 0 0 3px rgba(46,126,166,.25);}
-/* The four values as chips. Each keeps its own colour when selected — only the
+/* The four values as chips. Each keeps its own color when selected — only the
    2px border is added — so a chosen value still reads as that value. */
 .tlc-vchips{display:flex;flex-wrap:wrap;gap:8px;}
 .tlc-vchip{position:relative;cursor:pointer;}
@@ -1280,7 +1280,7 @@ a.gymcal-chip:hover{filter:brightness(.96);}
 .tlc-sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;}
 .gymcal-chip{display:block;font:600 10.5px/1.35 var(--tlc-sans);padding:3px 6px;border-radius:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 /* The design's four tones. Confirmed is blue rather than green because green
-   is the pill colour for "live" everywhere else and a calendar full of it
+   is the pill color for "live" everywhere else and a calendar full of it
    would read as reassurance rather than information. */
 .gymcal-chip--confirmed{background:#E4EEF4;color:#1E4A60;border:1px solid #C7DCE8;}
 .gymcal-chip--hold{background:#FBF1DC;color:#7A5B18;border:1px solid #EBD5A6;}

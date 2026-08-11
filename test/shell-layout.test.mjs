@@ -144,7 +144,7 @@ group('two columns, and the content gets the rest');
 
 group('the merged sidebar kept the Foundations values');
 {
-  // The colour-and-type block used to be a SECOND set of .sidebar* rules after
+  // The color-and-type block used to be a SECOND set of .sidebar* rules after
   // the interpolated stylesheets, winning on source order alone. It was merged
   // into the shell block; these are the values that came from the later block
   // and would quietly revert to the early ones if the merge ever regressed.
@@ -250,7 +250,7 @@ group('the login page fills the viewport');
   // flex ROW, and on the four screens with no sidebar (login, forgot, reset,
   // setup) the wrapper was the only flex item with no width — so the navy
   // backdrop shrank to fit its 380px card and sat as a strip on the left of
-  // the viewport, warm page colour filling the rest. Every string assertion
+  // the viewport, warm page color filling the rest. Every string assertion
   // stayed green. Only a browser asked "how wide is it?" would have noticed.
   await p.setViewportSize({ width: 1280, height: 800 });
   await p.goto('http://localhost:' + srv.address().port + '/login');
@@ -262,7 +262,7 @@ group('the login page fills the viewport');
 
   const card = await box('.login-card');
   const off = Math.abs((card.x + card.w / 2) - 640);
-  ok(off < 2, `the card is centred (midpoint off by ${Math.round(off)}px)`);
+  ok(off < 2, `the card is centered (midpoint off by ${Math.round(off)}px)`);
 
   const navy = await p.$eval('.login-wrap', (n) => getComputedStyle(n).backgroundColor);
   ok(navy === 'rgb(30, 45, 74)', `on the Foundations navy (got ${navy})`);

@@ -135,16 +135,16 @@ group('nothing reaches for Tiny at all');
   // no key and no phone-home, and this asserts that against the real library
   // rather than against the source: a boot that quietly contacted tiny.cloud
   // would now be contacting an account that no longer exists, and the symptom
-  // would be a licence notice over the editor rather than anything in a log.
+  // would be a license notice over the editor rather than anything in a log.
   ok(offsite.length === 0, 'no request left this origin during a full boot: ' + offsite.join(' | '));
   ok(!offsite.some((u) => u.includes('tiny.cloud')), 'and none of them to tiny.cloud');
 }
 
 group('the open-source build starts clean');
 ok(errs.length === 0, 'no page errors: ' + errs.join(' | '));
-// TinyMCE 7 shouts about a missing licence key. If this fires, license_key: 'gpl' is not reaching init.
-const licence = logs.filter((l) => /licen[cs]e/i.test(l));
-ok(licence.length === 0, 'no licence complaint: ' + licence.join(' | '));
+// TinyMCE 7 shouts about a missing license key. If this fires, license_key: 'gpl' is not reaching init.
+const license = logs.filter((l) => /licen[cs]e/i.test(l));
+ok(license.length === 0, 'no license complaint: ' + license.join(' | '));
 // Checked rather than configured: the community build draws no Upgrade
 // button with menubar off, so `promotion: false` is not needed.
 ok(await p.locator('.tox-promotion').count() === 0, 'no "Upgrade" promotion in the chrome');
@@ -169,7 +169,7 @@ group('the block editor\u2019s inline config boots too');
   const before = assets.length;
   await p.evaluate(() => window.bootInline());
   await p.waitForFunction(() => window.__inlineReady === true, null, { timeout: 20000 }).catch(() => {});
-  ok(await p.evaluate(() => window.__inlineReady === true), 'the inline editor initialised');
+  ok(await p.evaluate(() => window.__inlineReady === true), 'the inline editor initialized');
   ok(await p.locator('#canvasField.mce-content-body').count() > 0, 'and marked the canvas field as its own');
   ok(await p.locator('.tox-tinymce-inline').count() > 0, 'with the floating toolbar, not a second editor frame');
   for (const a of assets.slice(before)) ok(!/text\/html/.test(a.type), a.path + ' came back as HTML');

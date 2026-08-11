@@ -50,8 +50,8 @@
 .tlc-pay-num{font:600 13px var(--tlc-sans);color:var(--tlc-body);white-space:nowrap;}
 .tlc-pay-na{font-size:12.5px;color:var(--tlc-muted);}
 .tlc-pay-in{width:74px;font:600 13px var(--tlc-sans);color:var(--tlc-ink);border:1px solid var(--tlc-edge);border-radius:8px;padding:6px 8px;background:#fff;text-align:right;}
-/* Read-only is a SAND FILL, never greyed text — Foundations is explicit
-   that grey text reads as broken while a filled field reads as a fact. */
+/* Read-only is a SAND FILL, never grayed text — Foundations is explicit
+   that gray text reads as broken while a filled field reads as a fact. */
 .tlc-pay-in[readonly]{background:var(--tlc-sand);cursor:default;}
 .tlc-pay-in:focus{outline:2px solid var(--tlc-blue);outline-offset:-1px;}
 .tlc-pay-inwrap{display:flex;align-items:center;gap:6px;}
@@ -204,7 +204,7 @@
       </div>
       <!-- The design draws an "Import from childcare app" button here. There is
            no import step: MDO hours are read live from the childcare app every
-           time the period changes, so a button labelled Import would imply a
+           time the period changes, so a button labeled Import would imply a
            staleness that does not exist. It says what is actually true, and
            offers the one thing that is real — fetching again. -->
       <div class="tlc-pay-live" id="mdoLive">
@@ -1099,7 +1099,7 @@ function renderReport(periodStart, periodEnd) {
       // No "Paid as" column. It was a whole column repeating one word per row,
       // and the row already says it twice over: a salaried person has a dash
       // under Hours / salary and n/a under PTO used, an hourly one has their
-      // hours and rate. A column that only ever restates its neighbours is a
+      // hours and rate. A column that only ever restates its neighbors is a
       // column of noise on the layout whose job is to be scannable.
       + '<div class="tlc-pay-thead tlc-pay-tgrid"><span>Person</span><span>Hours / salary</span><span>PTO used</span><span class="tlc-pay-right">Gross</span></div>'
       + g.people.map((p) => '<div class="tlc-pay-row tlc-pay-tgrid">'

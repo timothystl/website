@@ -107,7 +107,7 @@ group('drop indicator');
   await page.waitForTimeout(80);
   eq(await page.locator('.ed-drop').count(), 1, 'a gold bar marks the drop point in the rail');
   eq(await page.locator('.ed-canvas-drop').count(), 1, 'and a gold line marks it on the page');
-  ok((await page.textContent('.ed-canvas-drop')).toLowerCase().includes('move here'), 'canvas line is labelled "move here"');
+  ok((await page.textContent('.ed-canvas-drop')).toLowerCase().includes('move here'), 'canvas line is labeled "move here"');
   await src.dispatchEvent('dragend');
   await page.waitForTimeout(80);
   eq(await page.locator('.ed-drop, .ed-canvas-drop').count(), 0, 'indicators disappear when the drag ends');

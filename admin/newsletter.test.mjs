@@ -46,7 +46,7 @@ group('what goes in an issue');
   eq(blockOn(null, 'events'), true, 'blockOn reads the same defaults');
   eq(blockOn(JSON.stringify({ events: false }), 'events'), false, 'and the same stored values');
 
-  // Serialising then parsing must be stable, or a save flips switches.
+  // Serializing then parsing must be stable, or a save flips switches.
   const round = parseBlocks(serializeBlocks(parseBlocks(JSON.stringify({ news: false }))));
   eq(round.news, false, 'round-tripping does not flip a switch');
   eq(round.events, true, 'or turn one on');
@@ -136,7 +136,7 @@ group('the issue list');
   eq(issueStatus({ status: 'draft' }).label, 'Draft', 'a draft reads as Draft');
   eq(issueStatus({ approval_status: 'pending' }).label, 'Awaiting approval', 'a submitted issue says so');
   eq(issueStatus({ status: 'sent' }).label, 'Sent', 'a sent issue says so');
-  eq(issueStatus({ status: 'sent' }).tone, 'plain', 'and is grey — done, not needing attention');
+  eq(issueStatus({ status: 'sent' }).tone, 'plain', 'and is gray — done, not needing attention');
   eq(issueStatus({ approval_status: 'pending' }).tone, 'warn', 'while awaiting approval is amber');
 
   const future = new Date(Date.now() + 864e5).toISOString();
@@ -231,7 +231,7 @@ group('extra notes');
   const many = parseExtras(Array.from({ length: 20 }, (_, i) => ({ title: 't' + i, body: '<p>x</p>' })));
   eq(many.length, MAX_EXTRA_NOTES, 'no more than the form can offer is ever stored');
 
-  eq(JSON.parse(serializeExtras([{ title: 'A', body: '<p>b</p>' }])).length, 1, 'serialising round-trips');
+  eq(JSON.parse(serializeExtras([{ title: 'A', body: '<p>b</p>' }])).length, 1, 'serializing round-trips');
   eq(serializeExtras([]), '[]', 'and empty is an empty list, not null');
 }
 
