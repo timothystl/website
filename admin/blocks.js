@@ -26,19 +26,44 @@ import { withAmountAndFund, parseAmount, fmtAmount, giftForPeriod, giveButtonLab
 
 // ── PALETTES (guardrails: staff can only pick from these) ────────────────────
 
+// ── THE BACKGROUND PALETTE, AND WHY IT CARRIES THE 1b LANGUAGE ───────────────
+// The first four are the site as it has always been. Entries 4–7 are the
+// redesign's own surfaces, and picking one does more than change a color: it
+// puts that block into the new language — display type at real scale, pill
+// buttons, the photo treatments. `lang: '1b'` is the flag that says so and
+// `renderBlock` turns it into a class.
+//
+// ⚠ APPEND ONLY. `bg` is stored on every block as an INDEX, so inserting an
+// entry silently repaints every page on the site. New surfaces go on the end.
+//
+// A 1b entry also carries the rest of its color set — the heading ink, the
+// eyebrow, the link, the hairline — because in this language they move
+// together: a navy band wants a gold eyebrow, a gold band wants a
+// gold-shadow one. Leaving those to a second control would let somebody
+// assemble a gold eyebrow on a gold field. One decision, not four.
 export const BG = [
   { name: 'Parchment', c: '#FBF8F3', dark: false },
   { name: 'Sand',      c: '#F7F3EC', dark: false },
   { name: 'Mist',      c: '#EDF2F7', dark: false },
   { name: 'Navy',      c: '#1E2D4A', dark: true },
+  { name: 'Paper',     c: '#F5F0E6', dark: false, lang: '1b', head: '#101B2E', eyebrow: '#B44A2E', link: '#B37F1E', rule: '#E7DFCD', chip: '#FFFDF8' },
+  { name: 'White',     c: '#FFFDF8', dark: false, lang: '1b', head: '#101B2E', eyebrow: '#B44A2E', link: '#B37F1E', rule: '#E7DFCD', chip: '#F5F0E6' },
+  { name: 'Ink navy',  c: '#101B2E', dark: true,  lang: '1b', head: '#FFFFFF', eyebrow: '#E4A93C', link: '#E4A93C', rule: 'rgba(245,240,230,.14)', chip: 'rgba(245,240,230,.08)' },
+  { name: 'Gold',      c: '#E4A93C', dark: false, lang: '1b', head: '#101B2E', eyebrow: '#7A4E12', link: '#101B2E', rule: 'rgba(16,27,46,.18)', chip: '#FFFDF8' },
 ];
 
+// ⚠ APPEND ONLY, for the same reason as BG.
+// "Body ink" and "Gold ink" exist so the two light 1b surfaces have a readable
+// partner: on a gold field the site's usual #3A3A4A is muddy, and the design's
+// own answer is a near-black brown.
 export const INK = [
-  { name: 'Ink',   c: '#3A3A4A', onDark: false },
-  { name: 'Navy',  c: '#1E2D4A', onDark: false },
-  { name: 'Slate', c: '#6A6858', onDark: false },
-  { name: 'Cream', c: '#F3EDE1', onDark: true },
-  { name: 'Gold',  c: '#C9973A', onDark: true },
+  { name: 'Ink',      c: '#3A3A4A', onDark: false },
+  { name: 'Navy',     c: '#1E2D4A', onDark: false },
+  { name: 'Slate',    c: '#6A6858', onDark: false },
+  { name: 'Cream',    c: '#F3EDE1', onDark: true },
+  { name: 'Gold',     c: '#C9973A', onDark: true },
+  { name: 'Body ink', c: '#453F30', onDark: false },
+  { name: 'Gold ink', c: '#3B2E12', onDark: false },
 ];
 
 export const SIZES = [
@@ -61,6 +86,52 @@ export const TONES = [
 ];
 
 export const STAMP_PRESETS = ['New', 'Upcoming', 'Take note', 'Registration open'];
+
+// ── THE 1b LANGUAGE ──────────────────────────────────────────────────────────
+// Andrew's brief was one sentence: "it just feels dead, and so do all the pages
+// on the site — the editor is helpful, it just all lacks energy." The answer
+// the designer landed on (direction 1b, chosen over a broadsheet and a bulletin
+// board) is three decisions in priority order: full-bleed photography, display
+// type at real scale, and a few things that move.
+//
+// It arrives as a set of BLOCK TYPES rather than as a site-wide restyle, which
+// is what makes it safe to adopt one page at a time: a page renders in the new
+// language exactly to the extent that it is built from these blocks.
+//
+// ⚠ THE ARROWS IN THE MOCKS ARE DELIBERATELY NOT HERE. Every link label in the
+// handoff ends with a decorative arrow glyph. This repo has a CI check
+// (admin/link-style.test.mjs) that forbids exactly that, added after Dinger
+// said it keeps coming back in and he does not want it — twice. The layout is
+// the design's; the trailing glyph is not.
+//
+// ⚠ And do not quote one of those labels in a comment either: the check greps
+// source, so a comment reproducing the glyph fails it as surely as markup
+// would. Describe the label; do not paste it. (This comment is the second
+// time that has been learned here.)
+
+// A banner is one of three heights. Not a pixel field: the whole guardrail of
+// this editor is that a layout choice is a choice from a short list.
+export const BANNER_HEIGHTS = [
+  { key: 'short', label: 'Short', px: 420 },
+  { key: 'mid', label: 'Medium', px: 520 },
+  { key: 'tall', label: 'Tall', px: 640 },
+];
+
+// How much dark is laid over the photograph. The gradient shape is fixed and
+// only its top stop moves, because the BOTTOM stop is what keeps the headline
+// legible and is not somebody's decision to weaken.
+export const VEILS = [
+  { key: 'light', label: 'Light', top: 0.5 },
+  { key: 'medium', label: 'Medium', top: 0.72 },
+  { key: 'heavy', label: 'Heavy', top: 0.88 },
+];
+
+// The calendar tray. Same reasoning as the banner: three heights, not a number.
+export const EMBED_HEIGHTS = [
+  { key: 's', label: 'Short', px: 420 },
+  { key: 'm', label: 'Medium', px: 560 },
+  { key: 'l', label: 'Tall', px: 700 },
+];
 
 // ── THE INFO CARD ────────────────────────────────────────────────────────────
 // The white box that sits over a banner — service times, the address, a phone
