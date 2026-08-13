@@ -75,3 +75,43 @@ export function partOfDay(d = new Date()) {
 export function churchFormat(opts, d = new Date()) {
   return new Intl.DateTimeFormat('en-US', { timeZone: CHURCH_TZ, ...opts }).format(d);
 }
+
+// ── THE ONE PLACE A WALL CLOCK BECOMES AN INSTANT ────────────────────────────
+// The opposite direction from everything above: given a date somebody PICKED
+// ('2026-08-23') and a time they mean by it ('09:30'), what moment is that?
+//
+// This exists for the /news banner countdown, which is the one thing on the
+// site that has to name an exact instant. A countdown is not a date somebody
+// reads — it is arithmetic against `Date.now()` in a visitor's browser, which
+// may be in any timezone at all. Emitting the bare date and letting the phone
+// interpret it means somebody in Denver is told the confirmation class starts
+// an hour later than it does.
+//
+// ⚠ It iterates rather than adding a fixed offset, and both passes matter.
+// The first pass measures Central's offset *at our guess*, which on the two
+// changeover weekends is measured on the wrong side of the boundary; the
+// second settles it. A hardcoded -5 or -6 is wrong for half the year, and
+// picking between them is the arithmetic `Intl` is here to do.
+//
+// Returns '' for anything unparseable — the caller renders no countdown rather
+// than one ticking toward Invalid Date.
+export function churchInstant(date, time = '00:00') {
+  const [y, m, d] = String(date || '').slice(0, 10).split('-').map(Number);
+  const [hh, mm] = String(time || '').split(':').map(Number);
+  if (!y || !m || !d) return '';
+  let t = Date.UTC(y, m - 1, d, hh || 0, mm || 0);
+  if (!Number.isFinite(t)) return '';
+  for (let i = 0; i < 2; i++) {
+    const p = parts(new Date(t), {
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    });
+    // `hour12: false` renders midnight as "24" in some engines — the same trap
+    // churchHour() carries, and it would push the instant a whole day out here.
+    const seen = Date.UTC(+p.year, +p.month - 1, +p.day, (+p.hour) % 24, +p.minute);
+    const off = seen - t;
+    if (!off) break;
+    t -= off;
+  }
+  return new Date(t).toISOString();
+}

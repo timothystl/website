@@ -332,6 +332,8 @@ export const PAGE_SEEDS = {
         }
       ],
       "links": [],
+      "logos": false,
+      "feature": false,
       "card": "off",
       "cardShows": "services",
       "cardEyebrow": "",

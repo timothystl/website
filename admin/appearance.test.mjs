@@ -7,7 +7,9 @@
 import {
   PALETTE, PALETTE_KEYS, BAR_KEYS, DEFAULTS, colorOf, safeLogoUrl, sanitizeAppearance,
   parseAppearance, appearanceFromForm, isDirty, changedFields, publicAppearance,
+  TYPEFACES, TYPEFACE_KEYS, typefaceOf, renderHeaderPreview, renderNewsletterPreview,
 } from './appearance.js';
+import { readFileSync } from 'node:fs';
 
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error('  ✗ ' + msg); } };
@@ -53,8 +55,8 @@ group('A bar color cannot be one the nav text disappears against');
 
   // Enforced server-side, not only by which chips the form draws: a stale tab
   // is exactly how an unreadable header would otherwise get saved.
-  eq(sanitizeAppearance({ bar: 'gold' }).bar, 'moss', 'a posted gold bar is refused, not honored');
-  eq(sanitizeAppearance({ nl_bg: 'gold' }).nl_bg, 'navy', 'and so is a gold newsletter band');
+  eq(sanitizeAppearance({ bar: 'gold' }).bar, DEFAULTS.bar, 'a posted gold bar is refused, not honored');
+  eq(sanitizeAppearance({ nl_bg: 'gold' }).nl_bg, DEFAULTS.nl_bg, 'and so is a gold newsletter band');
   eq(sanitizeAppearance({ cta: 'gold' }).cta, 'gold', 'while a gold Give button is accepted');
 
   ok(PALETTE.every((c) => /^#[0-9A-F]{6}$/.test(c.value)), 'every entry is a full six-digit hex');
@@ -67,7 +69,7 @@ group('The defaults are the site as it stands');
 {
   // Somebody opening this screen for the first time should recognize it. A
   // form full of blanks reads as "the header has no settings yet".
-  eq(DEFAULTS.bar, 'moss', 'the bar is the moss green that is on the site now');
+  eq(DEFAULTS.bar, 'ink', 'the bar is the redesign\u2019s ink navy');
   eq(DEFAULTS.rule, 'gold', 'over the gold rule');
   eq(DEFAULTS.brand_name, 'Timothy Lutheran Church', 'with the real church name');
   ok(DEFAULTS.tagline.includes('Neighborhood to the Nations'), 'and the real tagline');
@@ -77,7 +79,7 @@ group('The defaults are the site as it stands');
 group('Sanitizing refuses what the browser cannot be trusted to');
 {
   const bad = sanitizeAppearance({ bar: '#ff0000', rule: 'javascript', cta: null });
-  eq(bad.bar, 'moss', 'a raw hex is not a palette key, so it is dropped');
+  eq(bad.bar, DEFAULTS.bar, 'a raw hex is not a palette key, so it is dropped');
   eq(bad.rule, 'gold', 'and so is anything else not in the list');
 
   eq(sanitizeAppearance({ logo_shape: 'circle' }).logo_shape, 'round', 'an unknown shape clamps');
@@ -108,8 +110,8 @@ group('A logo address has to be an image address');
 
 group('Unreadable storage comes back as the current site');
 {
-  eq(parseAppearance('').bar, 'moss', 'an empty row is the defaults');
-  eq(parseAppearance('not json{').bar, 'moss', 'so is a truncated write');
+  eq(parseAppearance('').bar, DEFAULTS.bar, 'an empty row is the defaults');
+  eq(parseAppearance('not json{').bar, DEFAULTS.bar, 'so is a truncated write');
   eq(parseAppearance(null).brand_name, DEFAULTS.brand_name, 'and so is no row at all');
   eq(parseAppearance(JSON.stringify({ bar: 'teal' })).bar, 'teal', 'a good row is honored');
   eq(parseAppearance(JSON.stringify({ bar: 'teal' })).rule, 'gold',
@@ -138,7 +140,7 @@ group('Draft and published are compared, never remembered');
   const live = sanitizeAppearance({});
   ok(!isDirty(live, live), 'an untouched draft is not dirty');
   ok(isDirty(sanitizeAppearance({ bar: 'navy' }), live), 'a changed color is');
-  ok(!isDirty({ bar: 'moss', junk: 'ignored' }, live),
+  ok(!isDirty({ bar: DEFAULTS.bar, junk: 'ignored' }, live),
     'and a field nobody defined cannot make the screen claim an unpublished change');
 
   const changed = changedFields(sanitizeAppearance({ bar: 'navy', tagline: 'Hello' }), live);
@@ -158,6 +160,82 @@ group('What the public site is sent');
   eq(publicAppearance({ nl_show: false }).newsletter, null,
     'and a hidden newsletter band is absent, not present-and-off');
   ok(publicAppearance({ nl_show: true }).newsletter.heading, 'a shown one carries its wording');
+}
+
+group('The typeface reaches every page, so it is guarded like one');
+{
+  eq(TYPEFACES.length, 2, 'two pairs, not a font list');
+  ok(TYPEFACE_KEYS.includes('redesign') && TYPEFACE_KEYS.includes('classic'), 'the redesign and the way back');
+
+  // ⚠ THREE ROLES. Collapsing head/ui to one puts the reading serif on every
+  // button in the redesign, which is the single thing the design is emphatic
+  // about not doing — and it would do it silently, since the text is still
+  // legible, just wrong.
+  for (const t of TYPEFACES) {
+    ok(t.head && t.body && t.ui, t.key + ' names all three roles');
+    ok(t.note, t.key + ' says what picking it does');
+  }
+  ok(typefaceOf('redesign').ui === typefaceOf('redesign').head,
+    'in the redesign the UI face is the display face, not the reading face');
+  ok(typefaceOf('redesign').ui !== typefaceOf('redesign').body,
+    'and specifically not the serif — a serif Give button is the failure this pins');
+  ok(typefaceOf('classic').ui === typefaceOf('classic').body,
+    'classically the UI face is the body face, which is how the site read before');
+
+  eq(typefaceOf('nonsense').key, 'redesign', 'an unknown pair clamps to the default');
+  eq(sanitizeAppearance({ typeface: 'wingdings' }).typeface, 'redesign',
+    'and a crafted POST cannot select a pair the site has no fonts loaded for');
+  eq(sanitizeAppearance({ typeface: 'classic' }).typeface, 'classic', 'a real one is kept');
+
+  const pub = publicAppearance({ typeface: 'redesign' });
+  ok(/Bricolage/.test(pub.fonts.head), 'the site is sent a real stack, not the key');
+  ok(/Newsreader/.test(pub.fonts.body), 'including the reading face');
+  ok(!('typeface' in pub), 'and not the key alongside it, which would be two answers');
+
+  ok(changedFields({ typeface: 'classic' }, DEFAULTS).includes('typeface'),
+    'switching it counts as an unpublished change like any other');
+
+  // ⚠ THE ONE ASSERTION THAT CATCHES A REAL, VISIBLE BUG. public/styles.css
+  // holds the default that renders BEFORE the appearance fetch returns, and
+  // forever if the admin is unreachable. If it names a different pair from
+  // DEFAULTS.typeface, every page paints one pair and visibly reflows to the
+  // other on every single load — on all 28 pages, for every visitor.
+  const css = readFileSync(new URL('../public/styles.css', import.meta.url), 'utf8');
+  const root = css.slice(0, css.indexOf('}'));
+  const decl = (name) => (root.match(new RegExp('--' + name + ':([^;]+);')) || [, ''])[1];
+  const want = typefaceOf(DEFAULTS.typeface);
+  const firstFamily = (stack) => String(stack).split(',')[0].replace(/['"]/g, '').trim();
+  eq(firstFamily(decl('font-heading')), firstFamily(want.head),
+    'public/styles.css --font-heading matches DEFAULTS.typeface');
+  eq(firstFamily(decl('font-body')), firstFamily(want.body),
+    'public/styles.css --font-body matches DEFAULTS.typeface');
+  eq(firstFamily(decl('font-ui')), firstFamily(want.ui),
+    'public/styles.css --font-ui matches DEFAULTS.typeface');
+
+  // The unconverted pages still name these directly and do not follow the
+  // selector; re-pointing them restyles half-converted pages one variable at
+  // a time. They retire when the last page is converted.
+  ok(/--serif:'Lora'/.test(root), '--serif is deliberately left on the old pair');
+  ok(/--sans:'Source Sans 3'/.test(root), 'and so is --sans');
+
+  // Both pairs have to be REQUESTED, or the selected one renders as a
+  // fallback stack with nothing in the browser to show it.
+  const index = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  const links = index.slice(0, index.indexOf('</head>'));
+  for (const fam of ['Lora', 'Source+Sans+3', 'Bricolage+Grotesque', 'Newsreader']) {
+    ok(links.includes('family=' + fam), fam.replace(/\+/g, ' ') + ' is loaded on the public site');
+  }
+}
+
+group('The preview draws the site, including its type');
+{
+  // The whole reason this file exists rather than a few settings rows: a
+  // preview that can disagree with the site is worse than no preview. That
+  // argument does not stop at the colors.
+  const head = renderHeaderPreview({ typeface: 'redesign' }, [{ label: 'Give', style: 'button' }]);
+  ok(/--hp-head:[^"]*Bricolage/.test(head), 'the header preview carries the published pair');
+  const band = renderNewsletterPreview({ typeface: 'classic' });
+  ok(/--hp-head:[^"]*Lora/.test(band), 'and so does the newsletter band preview');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -46,6 +46,10 @@ import SCHEDULER_HTML from './admin/scheduler.html';
 import MINISTRY_EDITOR_HTML from './admin/ministry-editor.html';
 import { PAGE_SEEDS } from './admin/page-seeds.js';
 import { SITE_PAGES } from './admin/site-pages.js';
+// The four pages the redesign was authored for. Hand-written, because
+// site-pages.js is generated out of the markup these replace — see the note at
+// the top of that file.
+import { REDESIGN_BLOCKS } from './admin/redesign-seeds.js';
 import { GIVE_LANDING_PAGE, GIVE_LANDING_PAGE_ID } from './admin/give-landing-seed.js';
 import { giftForPeriod, giveButtonLabel, parseAmount as parseGiveAmount, fmtAmount as fmtGiveAmount,
          GIVE_PERIOD_JS } from './give-link.js';
@@ -55,31 +59,18 @@ import { giftForPeriod, giveButtonLabel, parseAmount as parseGiveAmount, fmtAmou
 // fetched live by JS into empty containers, so the extractor found nothing
 // to convert and the page never got a `pages` row at all. Hand-authored
 // here rather than in admin/site-pages.js, which is generated and would
-// have this dropped the next time the extractor runs. Only the fields the
-// office would actually want to change are set; sanitizeBlocks() below
-// fills in every default a real block needs.
+// have this dropped the next time the extractor runs.
+//
+// ⚠ ITS BLOCKS NOW COME FROM admin/redesign-seeds.js, along with Home,
+// Worship and Ministries. This record keeps only what /news IS — its title,
+// address and menu placement — because the extractor cannot produce a page
+// row for it at all: /news never had hardcoded markup to lift, its content
+// having always been fetched live by JS into empty containers.
 const NEWS_PAGE_SEED = {
   id: 'news', title: 'News & Events', menu_label: '', slug: '/news', parent_id: null, sort: 70,
   template: 'standard', in_menu: 0,
   seo_description: 'Announcements, upcoming events, and weekly newsletters from Timothy Lutheran Church.',
-  blocks: [
-    {
-      id: 'news-1', type: 'hero',
-      title: 'News & Events',
-      subtitle: 'Announcements, upcoming events, and weekly letters from our congregation.',
-      eyebrow: "What's happening at Timothy",
-    },
-    {
-      id: 'news-2', type: 'newsfeed', title: 'Current news', eyebrow: 'Announcements', spaceAbove: 24, spaceBelow: 24,
-    },
-    {
-      id: 'news-3', type: 'newsletterarchive', title: 'Weekly newsletters', eyebrow: 'From the pastor', count: 2, spaceAbove: 24, spaceBelow: 24,
-    },
-    {
-      id: 'news-4', type: 'calendar', title: "What's coming up", eyebrow: 'On the calendar', spaceAbove: 24, spaceBelow: 24,
-      url: 'https://calendar.google.com/calendar/embed?src=calendar%40timothystl.org&src=c_7f6d3db77b48c01af48592e21b2743d22fdf2b221d9d3c4e0c02680b73b89041%40group.calendar.google.com&ctz=America%2FChicago&mode=MONTH&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0',
-    },
-  ],
+  blocks: REDESIGN_BLOCKS.news,
 };
 import { orderPages, filterPages, pageStatus, slugify, uniqueSlug, pageRename,
          withShortLinks, shortLinkFor, shortLinkRoutes, outboundUrl, canReseed } from './admin/pages.js';
@@ -100,7 +91,7 @@ import { normalizeChannelInput, channelPageUrl, channelIdFrom, feedUrl,
 import { PALETTE as CHROME_PALETTE, BAR_KEYS, DEFAULTS as CHROME_DEFAULTS,
          parseAppearance, appearanceFromForm, sanitizeAppearance, publicAppearance,
          isDirty as chromeDirty, changedFields as chromeChanged, FIELD_LABELS as CHROME_LABELS,
-         renderHeaderPreview, renderNewsletterPreview } from './admin/appearance.js';
+         renderHeaderPreview, renderNewsletterPreview, TYPEFACES } from './admin/appearance.js';
 
 // ── THE CHROME RECORD, DRAFT AND LIVE ────────────────────────
 // Two settings rows, the same split a page has between `blocks` and
@@ -1244,7 +1235,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-13-1'; // bumped: pages.owner_username moved to the ALTER list, so a live table missing it gets the column
+    const SCHEMA_VERSION = '2026-08-13-2'; // bumped: the four redesign page drafts (admin/redesign-seeds.js) — reaches a page only via canReseed(), so nothing anybody has edited or published is touched
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -1773,7 +1764,20 @@ export default {
       // guarantee: the blocks land in the DRAFT and `published_blocks` stays
       // empty, so the live donation page is untouched until somebody presses
       // Publish. See admin/give-landing-seed.js.
-      const ALL_SEEDED_PAGES = [...SITE_PAGES, NEWS_PAGE_SEED, GIVE_LANDING_PAGE];
+      // ⚠ The authored blocks replace the EXTRACTED ones for these pages, and
+      // only the blocks. A page's title, address, menu placement and layout
+      // stay generated — those are facts about the site's structure that the
+      // extractor gets right and that nobody should maintain twice. Only the
+      // content is the part a designer wrote.
+      //
+      // Everything below still lands in the DRAFT: `published_blocks` stays
+      // NULL, so the live site renders its hardcoded markup until somebody
+      // opens each page, reads the draft against the page it replaces, and
+      // presses Publish. On these four in particular that is not a formality —
+      // they are the most visited pages on the site, the language is new, and
+      // there are no photographs yet.
+      const ALL_SEEDED_PAGES = [...SITE_PAGES, NEWS_PAGE_SEED, GIVE_LANDING_PAGE]
+        .map((p) => (REDESIGN_BLOCKS[p.id] ? { ...p, blocks: REDESIGN_BLOCKS[p.id] } : p));
       for (const p of ALL_SEEDED_PAGES) {
         await env.DB.prepare(
           'INSERT OR IGNORE INTO pages (id, title, menu_label, slug, parent_id, sort, template, status, in_menu, seo_description, blocks, updated_at, updated_by) ' +
@@ -3749,7 +3753,17 @@ ${renderFormSection({
   extraHead: alertHtml + publishBar + previews,
   note: 'Colors come from the church palette rather than a color picker: the words in the bar are white and cannot be changed, so a pale color here would be a header nobody can read — on every page at once.',
   fields: [
-    { kind: 'html', html: '<div class="tlc-field"><span class="tlc-label">The header</span></div>' },
+    // ⚠ Sits ABOVE the header fields, and not because it is the most-used
+    // control — it is the widest-reaching one, and putting it under a heading
+    // that says "The header" would tell somebody it only changes the bar.
+    { kind: 'html', html: '<div class="tlc-field"><span class="tlc-label">The whole site</span></div>' },
+    { kind: 'chips', name: 'typeface', label: 'Typeface', value: a.typeface,
+      options: TYPEFACES.map((t) => ({ value: t.key, label: t.label })) },
+    { kind: 'html', html: '<p class="tlc-hint" style="margin-top:-10px;">'
+      + escapeHtml(TYPEFACES.map((t) => t.label + ' — ' + t.note).join('  ')) + '</p>' },
+    { kind: 'html', html: '<p class="tlc-hint" style="margin-top:-4px;">This is the one setting here that is not just the header. It changes every heading and every paragraph on every page, and every block in the page editor — there is deliberately no way to set a font on one page or one block, because that is how a site ends up reading like two sites. Like everything else on this screen it is a draft until you publish.</p>' },
+
+    { kind: 'html', html: '<div class="tlc-field" style="margin-top:26px;"><span class="tlc-label">The header</span></div>' },
     { kind: 'photo', name: 'logo_url', label: 'Logo', value: a.logo_url,
       hint: 'Shown at 44 pixels. A square picture crops best. Leave it empty to show the church name on its own.' },
     { kind: 'chips', name: 'logo_shape', label: 'Logo shape', value: a.logo_shape,
