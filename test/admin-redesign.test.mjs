@@ -15,6 +15,13 @@ import { DatabaseSync } from 'node:sqlite';
 import { churchDate } from '../admin/when.js';
 import worker from '../tlc-admin-worker.js';
 import { ALL_PERMISSIONS } from '../admin/auth.js';
+// ⚠ Read from the record rather than pinned to a literal hex. These assertions
+// are about "the preview shows the site's real bar, not a colour that exists
+// nowhere" — which was the v4.23.0 bug — and a hardcoded #4A5E3A turns every
+// future change of default into five unrelated-looking failures somebody has
+// to triage. The colour is not what is being asserted; the agreement is.
+import { DEFAULTS as CHROME_DEFAULTS, colorOf } from '../admin/appearance.js';
+const CHROME_BAR = colorOf(CHROME_DEFAULTS.bar).value;
 
 let pass = 0, fail = 0;
 const { readFileSync } = await import('node:fs');
@@ -615,7 +622,7 @@ group('the menu is seeded from the nav as it stands');
   // does not have. These assertions pin the fix: the bar carries the real
   // colors and the real brand, and the old fiction is gone.
   has(body, 'tlc-hp-bar', 'with a preview built by the shared header renderer');
-  has(body, '--hp-bar:#4A5E3A', 'painted in the moss green the site actually uses');
+  has(body, '--hp-bar:' + CHROME_BAR, 'painted in the color the site actually uses, not admin navy');
   has(body, 'Neighborhood to the Nations', 'carrying the real tagline');
   lacks(body, 'tlc-preview-mark', 'and not the invented "T" badge it used to show');
   has(body, '/menu/appearance', 'and it points at where those things are edited');
@@ -932,7 +939,7 @@ group('the header is drafted before it is published');
 
   const first = await (await call(env, '/menu/appearance', { cookie })).text();
   has(first, 'Appearance', 'the screen renders');
-  has(first, '--hp-bar:#4A5E3A', 'showing the site as it stands, not an empty form');
+  has(first, '--hp-bar:' + CHROME_BAR, 'showing the site as it stands, not an empty form');
   has(first, 'Everything on this screen is on the site', 'and says so when there is nothing pending');
   lacks(first, 'name="bar" value="gold"', 'gold is not offered as a BAR color');
   has(first, 'name="cta" value="gold"', 'but it is still offered for the Give button');
@@ -954,7 +961,7 @@ group('the header is drafted before it is published');
   // The public bundle is what a visitor actually gets, so it is checked there
   // and not only in the table.
   const apiBefore = await (await call(env, '/api/pages', { fresh: true })).json();
-  eq(apiBefore.details.appearance.bar, '#4A5E3A', 'visitors still see the moss bar');
+  eq(apiBefore.details.appearance.bar, CHROME_BAR, 'visitors still see the unpublished-draft bar, not the draft');
 
   const pending = await (await call(env, '/menu/appearance', { cookie })).text();
   has(pending, 'Not published yet', 'the screen says something is waiting');
@@ -986,8 +993,8 @@ group('an unreadable header cannot be saved from a stale tab');
   // the server and not by which chips get rendered.
   await call(env, '/menu/appearance/save', { cookie, method: 'POST', form: { bar: 'gold', nl_bg: 'gold' } });
   const d = JSON.parse(db.prepare("SELECT value FROM site_settings WHERE key='site_appearance_draft'").get().value);
-  eq(d.bar, 'moss', 'a gold bar is refused — white on gold is 2.6:1');
-  eq(d.nl_bg, 'navy', 'and so is a gold newsletter band');
+  eq(d.bar, CHROME_DEFAULTS.bar, 'a gold bar is refused — white on gold is 2.6:1');
+  eq(d.nl_bg, CHROME_DEFAULTS.nl_bg, 'and so is a gold newsletter band');
 
   await call(env, '/menu/appearance/save', { cookie, method: 'POST', form: { logo_url: 'javascript:alert(1)' } });
   eq(JSON.parse(db.prepare("SELECT value FROM site_settings WHERE key='site_appearance_draft'").get().value).logo_url,
