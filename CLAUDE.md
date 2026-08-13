@@ -522,6 +522,104 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### The redesign could not reach the pages it was written for (v5.2.0, 2026-08-13)
+
+Dinger, on `/news` a day after the redesign shipped: *"it doesnt look like you
+implemented the design changes"*, then *"the full newsletters are all still
+showing"*, then *"i had a different design that wasnt just fonts, it was cards
+and shadow over lay effects"*.
+
+**Three reports, one cause, and the cause was the release itself.**
+
+The four authored drafts (`admin/redesign-seeds.js`) arrive through the seed
+loop, which is gated on `canReseed()`: untouched by a person **and** never
+published. That guard is right — it is what stops a deploy throwing away
+somebody's work. But **the pages most likely to have been edited are exactly
+the four the redesign targeted.** `/news` had been rebuilt by hand and showed
+"8 edits", so its new draft was silently skipped, and the page looked untouched
+by the entire release.
+
+That one fact explains all three:
+
+| Reported | Why |
+|---|---|
+| The layout is unchanged | The block stack never arrived |
+| No cards, no overlay effects | The banner veil, the photo cards, the hover zoom and the lift shadow live in the **block types**. Only the typeface reached him, because it is the one part of the language that rides on the stylesheet rather than on a block. |
+| Full newsletters still showing | `loadNewsletters()` in `public/index.html` prints every letter's whole `pastor_note`. The month-folding from v4.35.0 is in the `newsletterarchive` **block** — so that fix has never been able to reach anybody either. Same Publish. |
+
+**⚠ THE LESSON IS ABOUT SHIPPING, NOT ABOUT THE GUARD.** A seed that can only
+land on an untouched page is fine for a converter improvement, which is what
+`canReseed()` was written for. It is the wrong delivery mechanism for a
+**designed** layout, because the pages worth redesigning are the pages people
+have been editing. Do not weaken `canReseed()`; give the thing a door.
+
+**`POST /pages/api/page/:id/use-redesign`**, and a "Use the redesigned layout"
+button on the editor's Page tab, shown only where `REDESIGN_BLOCKS` has an
+entry (`hasRedesign`, sent by the Worker rather than worked out in the browser,
+so the button cannot exist and then refuse).
+
+- **⚠ It snapshots to `page_revisions` FIRST.** That table normally holds one
+  entry per **publish**, and a page that has never been published has none — so
+  on `/news` the current draft was the only copy of work somebody did by hand.
+  This is the one place a revision is written for something other than a
+  publish, and that is exactly why.
+- **⚠ The DRAFT only.** `published_blocks` never moves; the live page is what
+  it was until somebody presses Publish. Same rule every seed follows.
+- **⚠ THE ROUTE REGEX WAS `([^/]+)(\/[a-z]+)?`.** No hyphen, so
+  `/use-redesign` never matched and the button returned "Not found" with the
+  handler sitting right there looking correct. Widened to `[a-z-]`. A test
+  pins it, verified by reverting the single character.
+- A page with no authored layout is refused with a message rather than writing
+  nothing and reporting success.
+
+Run: the `hand-edited page` group in `test/admin-redesign.test.mjs`.
+
+### A dead link is checked now, not just a safe one (v5.2.0, 2026-08-13)
+
+Every URL field in the block editor was a plain text box. `safeUrl()` decides
+whether a value is **safe** — no `javascript:`, no quote that breaks out of an
+attribute — and that is *all* it decides. It has no opinion about whether the
+address exists, so `/abuot` saved perfectly cleanly, rendered as an ordinary
+link, and sent the visitor to the page-not-found screen.
+
+That is this repo's own rule broken by omission: **a dead link is worse than a
+missing one, because it looks like it works.** It was written down when
+`/give`'s "Speak with a pastor" button came out of the extractor pointing at
+`#`; the fix there was one call site. `admin/links.js` is the general case.
+
+- **⚠ THREE SOURCES OF "SOMETHING IS THERE", NOT ONE.** `linkTargets()` in the
+  Worker reads page slugs, their **derived short links** (`shortLinkFor`), and
+  **active redirects**. A check that knew only about slugs would flag `/music`
+  and `/zoom` — which are the addresses the church prints on flyers and says
+  from the pulpit. Warning about the two most-used kinds of link on the site is
+  how a warning stops being read.
+- **⚠ NOT scoped to what the signed-in person may EDIT.** The rail's page list
+  is filtered by ownership; a ministry leader who can only open their own page
+  still needs to link to `/worship`. Different question, different query.
+- **⚠ IT WARNS, IT NEVER REFUSES.** A page somebody is about to create is a
+  legitimate reason to type an address that answers nothing today. Refusing
+  would be wrong often enough that the office would learn to work around it.
+- **⚠ Only `url`, and only when the list is not photos.** A gallery's and a
+  slideshow's `url` is an IMAGE address, as are a card grid's `img` and a
+  partner's `meta`; an embed URL (calendar, Google Form) is not somewhere a
+  visitor is sent either. `isLinkField()` is the one rule, so a new type with a
+  link field gets this free and one with an image field does not get it by
+  accident.
+- **The picker offers each destination once.** `/music` and `/ministries/music`
+  are the same place, and it offers the **short** one — the address the church
+  uses, and the one that survives a page moving under a different parent.
+- **`LINKS_JS` ships the browser copy** from the same file, the way
+  `give-link.js` ships its arithmetic: the warning has to appear while somebody
+  is still typing, and re-rendering the inspector to get it would steal the
+  focus out of the box. **The test evaluates that string and runs the same
+  sixteen cases against both implementations**, so they cannot drift.
+- ⚠ The template literal ate the regex escapes on the first attempt —
+  `/^https?:\/\//i` became `/^https?:////i` inside the string. Caught by the
+  mirror test, which is what it is for: a broken picker in somebody's editor
+  looks like a field that has simply stopped working.
+
+Run: `node admin/links.test.mjs` (156).
+
 ### A block's own rows can be reordered at last (v5.1.0, 2026-08-13)
 
 Dinger, on the drag-and-drop inventory: *"What other drag and drop type page
