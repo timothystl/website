@@ -522,6 +522,66 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### A block's own rows can be reordered at last (v5.1.0, 2026-08-13)
+
+Dinger, on the drag-and-drop inventory: *"What other drag and drop type page
+select elements are we missing?"* — and then, on the answer, *"Or could be
+added not in the design file."*
+
+**Ten block types carry an ordered list inside them** — Card grid, Button bar,
+Columns, FAQ, Photo gallery, Meeting times, Link tiles, Welcome banner slides,
+Partner logos, Amount ladder — and the inspector offered exactly two actions on
+them: `item-add` and `item-del`. **There was no way to reorder a row at all.**
+Moving the seventh card in a grid to the top meant deleting and retyping all
+seven.
+
+**The redesign made that concrete.** `/ministries` seeds **nine** cards, and
+that grid's `feature` switch draws **the first card** dark — deliberately the
+first rather than a chosen one, so reordering the grid moves it and there is no
+second setting to forget. Which meant *which ministry the page leads with* was
+decided by the order they were typed in, and could not be changed.
+
+- **A grip AND a pair of arrows.** The grip is the idiom the rest of this admin
+  already uses — `panelList`, the menu tree, the block rail. The arrows are what
+  keep it reachable without a mouse: drag on its own is a keyboard dead end,
+  which is exactly the finding the accessibility pass made about list rows. They
+  are also better in a 322px panel that may hold twenty-four rows.
+- **⚠ THE GRIP CARRIES `draggable`, NEVER THE ROW.** The row contains text
+  inputs, and a draggable ancestor stops the mouse selecting text inside them —
+  you drag the whole card instead of highlighting a word. A test asserts the row
+  itself is not draggable, which is the half that looks redundant and is not.
+- **⚠ The drag handlers are delegated off the inspector panel**, which is
+  rebuilt on every change. Handlers bound to the rows themselves would be thrown
+  away by the first reorder, so the second drag would silently do nothing —
+  the same trap the gym renter's basket hit in v4.11.0.
+- **⚠ `S.rowDrag` is its own field, not a share of `S.dragId`.** That one moves a
+  whole block between positions, pages and half-width pairs; this moves an index
+  inside one array. Sharing a field would let a half-finished row drag be
+  completed as a block drop.
+- **⚠ Dropping below a row is index+1, decremented when moving downward.** The
+  classic splice off-by-one: without it a row dragged downward lands one short
+  of where it was aimed, every time.
+- **The ends are disabled, not inert.** A control that looks live and does
+  nothing is worse than one that is visibly unavailable.
+- **One row draws neither control**, because there is no reordering to offer.
+- The card's own links got the same treatment from the same helper, so the two
+  lists cannot come to behave differently.
+
+**Still not reorderable, and worth knowing:** three list screens — Christian Ed
+classes, Link cards and Staff — still order by a typed "Order" number while
+Partners and Giving next door use drag handles. Same job, two controls,
+depending which screen you are on. Not fixed here; it is a `sort_order` column
+and a `panelList` away.
+
+**Two that look missing and are not:** the pages rail does not drag, because
+nav order is owned by the Menu screen and a second place deciding it is the
+defect this avoids; and blocks do not drag between the halves of a pair,
+because a pair is not a container — it is what two adjacent half-width blocks
+*do*, and dragging "into" one would invent the nesting the rail deliberately
+has none of.
+
+Run: the `rows can be reordered` group in `node test/editor-edit.test.mjs`.
+
 ### The site redesign, and the one setting that carries it (v5.0.0, 2026-08-13)
 
 Andrew's brief, verbatim: *"it just feels dead, and so do all the pages on the

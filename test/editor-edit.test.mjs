@@ -250,6 +250,59 @@ await page.click('.ed-paper .tlcb--text');
 await flushSave();
 eq(savedBlocks().find((b) => b.type === 'faq').items[0].title, 'Do I need to audition?', 'row text saved');
 
+// ── reordering a block's own rows ────────────────────────────────────────────
+// ⚠ There was no way to do this at all until v5.1.0: the inspector offered add
+// and remove and nothing else, so moving the seventh card in a grid to the top
+// meant deleting and retyping all seven. On /ministries that is nine cards, and
+// that grid's featured card is simply the FIRST one — so which ministry the
+// page led with was fixed at insertion order and could not be changed.
+group('rows can be reordered');
+await reload();
+await page.click('.ed-paper .tlcb--faq');
+// Three rows, so there is a middle one — with two, up and down are the same
+// move and a swapped sign would still pass.
+await page.click('[data-k="item-add"]'); await settle(450);
+await page.click('[data-k="item-add"]'); await settle(450);
+const titles = ['First', 'Second', 'Third'];
+for (let i = 0; i < 3; i++) {
+  await page.click(`.ed-paper .tlcb--faq [data-item="${i}"][data-field="title"]`);
+  await page.keyboard.press('Control+A');
+  await page.keyboard.type(titles[i]);
+}
+await page.click('.ed-paper .tlcb--text');
+await flushSave();
+const rowTitles = () => savedBlocks().find((x) => x.type === 'faq').items.map((r) => r.title);
+eq(rowTitles().join(','), 'First,Second,Third', 'three rows in the order they were typed');
+
+await page.click('.ed-paper .tlcb--faq');
+await page.click('[data-k="item-down:0"]');
+await settle(450);
+await flushSave();
+eq(rowTitles().join(','), 'Second,First,Third', 'the first row moves down');
+
+await page.click('[data-k="item-up:2"]');
+await settle(450);
+await flushSave();
+eq(rowTitles().join(','), 'Second,Third,First', 'and the last moves up');
+
+// ⚠ The ends are disabled rather than silently doing nothing — a control that
+// looks live and is not is worse than one that is visibly unavailable.
+eq(await page.locator('[data-k="item-up:0"]').isDisabled(), true, 'the first row cannot move up');
+eq(await page.locator('[data-k="item-down:2"]').isDisabled(), true, 'nor the last one down');
+
+// The grip carries draggable, NOT the row: a draggable ancestor stops the
+// mouse selecting text inside the row's inputs.
+eq(await page.locator('.ed-item[data-row="0"] .ed-grip').getAttribute('draggable'), 'true',
+  'the grip is the drag handle');
+eq(await page.locator('.ed-item[data-row="0"]').getAttribute('draggable'), null,
+  'and the row itself is not draggable, so its inputs stay selectable');
+
+// One row means no reordering to offer, so neither control is drawn.
+await page.click('[data-k="item-del:2"]'); await settle(450);
+await page.click('[data-k="item-del:1"]'); await settle(450);
+eq(await page.locator('.ed-item .ed-grip').count(), 0, 'a single row offers no grip');
+eq(await page.locator('.ed-move').count(), 0, 'and no arrows');
+
 // ── the info card ────────────────────────────────────────────────────────────
 // A slot on the banner, switched on in the inspector. The banner's own text
 // column narrows to make room, so the card can never overlap the words and
