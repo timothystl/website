@@ -212,6 +212,18 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
 .ed-item{border:1px solid #DDE3ED;border-radius:8px;padding:9px;background:#fff;display:flex;flex-direction:column;gap:6px;}
 .ed-item-h{display:flex;align-items:center;justify-content:space-between;font-size:11.5px;color:#8A8898;}
 .ed-item-h button{color:#B85C3A;font-size:11.5px;font-weight:600;}
+.ed-item-n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ed-grip{cursor:grab;color:#A8A69A;font-size:12px;line-height:1;flex:none;user-select:none;}
+.ed-grip:active{cursor:grabbing;}
+.ed-move{color:#4A5568!important;font-size:12px!important;line-height:1;padding:2px 4px;border-radius:5px;flex:none;}
+.ed-move:hover:not(:disabled){background:#EDF2F7;}
+.ed-move:disabled{opacity:.28;cursor:default;}
+.ed-rows{display:flex;flex-direction:column;gap:6px;}
+/* The drop line, drawn on the row the pointer is over rather than by moving
+   the rows themselves — a list that reflows under a dragging cursor is a list
+   you cannot aim at. */
+.ed-item.is-drop-before{box-shadow:0 -2px 0 0 #2E7EA6;}
+.ed-item.is-drop-after{box-shadow:0 2px 0 0 #2E7EA6;}
 .ed-add{align-self:flex-start;padding:6px 11px;border:1px solid #C4CEDF;border-radius:7px;font:600 12.5px/1 'Source Sans 3';color:#1E2D4A;}
 
 /* changes panel */
@@ -358,6 +370,11 @@ var S = {
   selectedId: null, device: 'desktop', group: null, paletteOpen: true,
   changes: [], history: [], saved: null, dirty: false,
   dragId: null, dragType: null, dragSection: null, dropIndex: null,
+  // A drag INSIDE the inspector — one of a block's own rows moving within its
+  // own array. Kept apart from dragId above, which moves a whole block between
+  // positions, pages and half-width pairs; sharing one field would let a
+  // half-finished row drag be completed as a block drop.
+  rowDrag: null,
   picker: null, toast: null, hint: true, loadError: '',
   publishPanel: false, publishAt: null, publishAtLocal: '', revisions: [], sections: [],
   template: '', siblings: [], railOpen: true, blocksOpen: true, leaving: false, tab: 'block',
@@ -1572,23 +1589,56 @@ function partnerSourceSection(b) {
     '</span></div>';
 }
 
+// The rows inside a block — a grid's cards, a bar's buttons, a gallery's photos.
+// Ten block types carry one of these lists.
+//
+// ⚠ THEY COULD NOT BE REORDERED AT ALL until this was written. The only two
+// actions were add and remove, so moving the seventh card in a grid to the top
+// meant deleting and retyping all seven. On the Ministries page that is nine
+// cards — and that grid's "featured" card is simply the FIRST one, so which
+// ministry the page leads with was decided by insertion order and could not be
+// changed afterwards at all.
+//
+// Both a grip and a pair of arrows, deliberately. The grip is the idiom the
+// rest of this admin already uses (panelList, the menu tree, the block rail);
+// the arrows are what keep it reachable without a mouse, since drag on its own
+// is a keyboard dead end — the same finding the accessibility pass made about
+// list rows. They are also simply better in a 322px panel that may hold
+// twenty-four rows.
+function moveRow(kind, i, n, label) {
+  var btn = function (dir, glyph, off) {
+    return '<button type="button" class="ed-move" data-a="' + kind + '-' + dir + '" data-v="' + i +
+      '" data-k="' + kind + '-' + dir + ':' + i + '"' + (off ? ' disabled' : '') +
+      ' aria-label="Move ' + esc(label) + ' ' + (i + 1) + ' ' + dir + '" title="Move ' + dir + '">' + glyph + '</button>';
+  };
+  return btn('up', '↑', i === 0) + btn('down', '↓', i === n - 1);
+}
+
 function itemsSection(b, d) {
   var inputFields = d.itemUrlFields.slice();
   if (d.gallery) inputFields = ['url'];
-  var rows = (b.items || []).map(function (it, i) {
+  var list = b.items || [];
+  var rows = list.map(function (it, i) {
     var fields = inputFields.map(function (f) {
       var ph = d.itemPlaceholders[f] || (f === 'url' ? 'https://…' : f);
       return '<input class="ed-field" data-in="item:' + i + ':' + f + '" data-k="item:' + i + ':' + f + '"' +
         ' value="' + esc(it[f] || '') + '" placeholder="' + esc(ph) + '" aria-label="' + esc(d.itemLabel + ' ' + (i + 1) + ' ' + f) + '">';
     }).join('');
-    var head = '<div class="ed-item-h"><span>' + esc(d.itemLabel + ' ' + (i + 1)) +
+    // ⚠ The GRIP carries draggable, never the row. The row contains text
+    // inputs, and a draggable ancestor stops the mouse selecting text inside
+    // them — you would drag the whole card instead of highlighting a word.
+    var grip = list.length > 1
+      ? '<span class="ed-grip" draggable="true" aria-hidden="true" title="Drag to reorder">⠿</span>' : '';
+    var head = '<div class="ed-item-h">' + grip + '<span class="ed-item-n">' + esc(d.itemLabel + ' ' + (i + 1)) +
       (it.title ? ' · ' + esc(String(it.title).slice(0, 22)) : '') + '</span>' +
+      (list.length > 1 ? moveRow('item', i, list.length, d.itemLabel) : '') +
       '<button type="button" data-a="item-del" data-v="' + i + '" data-k="item-del:' + i + '">Remove</button></div>';
     var hint = fields ? '' : '<span class="ed-note">Edit the wording on the page itself.</span>';
-    return '<div class="ed-item">' + head + fields + hint + '</div>';
+    return '<div class="ed-item" data-row="' + i + '">' + head + fields + hint + '</div>';
   }).join('');
   var full = (b.items || []).length >= 24;
-  return '<div class="ed-sec"><span class="ed-lab">' + esc(d.itemLabel) + 's</span>' + rows +
+  return '<div class="ed-sec"><span class="ed-lab">' + esc(d.itemLabel) + 's</span>' +
+    '<div class="ed-rows" data-rows="item">' + rows + '</div>' +
     (d.gallery
       ? '<button type="button" class="ed-add" data-a="gallery" data-k="gallery">Add photos from the library</button>'
       : '<button type="button" class="ed-add" data-a="item-add" data-k="item-add"' + (full ? ' disabled' : '') + '>+ Add ' + esc(d.itemLabel.toLowerCase()) + '</button>') +
@@ -1600,14 +1650,19 @@ function itemsSection(b, d) {
 // jobs is how a button ends up inside the card.
 function cardLinksSection(b) {
   var rows = (b.cardLinks || []).map(function (l, i) {
-    return '<div class="ed-item"><div class="ed-item-h"><span>Link ' + (i + 1) + '</span>' +
+    var n = (b.cardLinks || []).length;
+    return '<div class="ed-item" data-row="' + i + '"><div class="ed-item-h">' +
+      (n > 1 ? '<span class="ed-grip" draggable="true" aria-hidden="true" title="Drag to reorder">⠿</span>' : '') +
+      '<span class="ed-item-n">Link ' + (i + 1) + '</span>' +
+      (n > 1 ? moveRow('cardlink', i, n, 'Link') : '') +
       '<button type="button" data-a="cardlink-del" data-v="' + i + '" data-k="cardlink-del:' + i + '">Remove</button></div>' +
       '<input class="ed-field" data-in="cardlink:' + i + ':title" data-k="cardlink:' + i + ':title" value="' + esc(l.title || '') + '" placeholder="What it says" aria-label="Link ' + (i + 1) + ' label">' +
       '<input class="ed-field" data-in="cardlink:' + i + ':url" data-k="cardlink:' + i + ':url" value="' + esc(l.url || '') + '" placeholder="/visit" aria-label="Link ' + (i + 1) + ' address">' +
       '</div>';
   }).join('');
   var full = (b.cardLinks || []).length >= 4;
-  return '<div class="ed-sec"><span class="ed-lab">Links</span>' + rows +
+  return '<div class="ed-sec"><span class="ed-lab">Links</span>' +
+    '<div class="ed-rows" data-rows="cardlink">' + rows + '</div>' +
     '<button type="button" class="ed-add" data-a="cardlink-add" data-k="cardlink-add"' + (full ? ' disabled' : '') + '>+ Add link</button>' +
     '<span class="ed-note">Four at most — the card is a signpost, not a menu.</span></div>';
 }
@@ -1731,6 +1786,23 @@ function inspectorAction(action, value) {
       d.itemFields.forEach(function (f) { blank[f] = ''; });
       next.push(blank);
       patch(b.id, { items: next }, 'Added a ' + d.itemLabel.toLowerCase(), 'rerender');
+      break;
+    }
+    // Reordering a block's own rows. One helper for both lists, so the card
+    // links cannot come to behave differently from the cards.
+    case 'item-up': case 'item-down': case 'cardlink-up': case 'cardlink-down': {
+      var isCard = action.indexOf('cardlink') === 0;
+      var key = isCard ? 'cardLinks' : 'items';
+      var from = Number(value);
+      var to = from + (action.slice(-2) === 'up' ? -1 : 1);
+      var arr = (b[key] || []).slice();
+      if (to < 0 || to >= arr.length) return;
+      arr.splice(to, 0, arr.splice(from, 1)[0]);
+      var pp = {}; pp[key] = arr;
+      // Structural: the renderer emits the rows in array order, so the Worker
+      // re-renders rather than the editor patching a custom property.
+      patch(b.id, pp, 'Moved a ' + (isCard ? 'link' : d.itemLabel.toLowerCase()) + ' ' + action.slice(-2), 'rerender');
+      say('Moved to position ' + (to + 1));
       break;
     }
     case 'item-del': {
@@ -2202,6 +2274,65 @@ function bindDragAndDrop() {
   });
   el.edCanvas.addEventListener('drop', performDrop);
   el.edCanvas.addEventListener('dragend', clearDrag);
+
+  // ── the inspector's row lists ──────────────────────────────────────────
+  // Delegated off the panel, because it is rebuilt on every change — handlers
+  // bound to the rows themselves would be thrown away by the first reorder,
+  // so the second drag would silently do nothing. Same trap the gym renter's
+  // basket hit in v4.11.0.
+  //
+  // Deliberately its own small drag rather than a share of the block drag
+  // above: that one moves a block between pages and templates and carries the
+  // half-width pairing rules with it. This moves an index inside one array.
+  el.edInspBody.addEventListener('dragstart', function (e) {
+    var grip = e.target.closest ? e.target.closest('.ed-grip') : null;
+    if (!grip) { e.preventDefault(); return; }
+    var row = grip.closest('.ed-item');
+    var list = grip.closest('.ed-rows');
+    if (!row || !list) return;
+    S.rowDrag = { kind: list.dataset.rows, from: Number(row.dataset.row) };
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', String(S.rowDrag.from)); } catch (_) {}
+    }
+  });
+  el.edInspBody.addEventListener('dragover', function (e) {
+    if (!S.rowDrag) return;
+    var row = e.target.closest ? e.target.closest('.ed-item') : null;
+    var list = e.target.closest ? e.target.closest('.ed-rows') : null;
+    if (!row || !list || list.dataset.rows !== S.rowDrag.kind) return;
+    e.preventDefault();
+    // Halfway down the row is the boundary, so the drop lands where the
+    // pointer is rather than where the row started.
+    var box = row.getBoundingClientRect();
+    S.rowDrag.to = Number(row.dataset.row) + (e.clientY > box.top + box.height / 2 ? 1 : 0);
+    var rows = list.querySelectorAll('.ed-item');
+    for (var i = 0; i < rows.length; i++) {
+      rows[i].classList.toggle('is-drop-before', i === S.rowDrag.to);
+      rows[i].classList.toggle('is-drop-after', i === rows.length - 1 && S.rowDrag.to >= rows.length);
+    }
+  });
+  el.edInspBody.addEventListener('drop', function (e) {
+    if (!S.rowDrag || S.rowDrag.to == null) { S.rowDrag = null; return; }
+    e.preventDefault();
+    var blk = findBlock(S.selectedId);
+    var drag = S.rowDrag;
+    S.rowDrag = null;
+    if (!blk) return;
+    var key = drag.kind === 'cardlink' ? 'cardLinks' : 'items';
+    var arr = (blk[key] || []).slice();
+    var to = drag.to > drag.from ? drag.to - 1 : drag.to;
+    if (to === drag.from || drag.from >= arr.length) { renderInspector(); return; }
+    arr.splice(to, 0, arr.splice(drag.from, 1)[0]);
+    var pp = {}; pp[key] = arr;
+    patch(blk.id, pp, 'Moved a ' + (drag.kind === 'cardlink' ? 'link' : def(blk.type).itemLabel.toLowerCase()), 'rerender');
+    say('Moved to position ' + (to + 1));
+  });
+  el.edInspBody.addEventListener('dragend', function () {
+    S.rowDrag = null;
+    var rows = el.edInspBody.querySelectorAll('.ed-item');
+    for (var i = 0; i < rows.length; i++) rows[i].classList.remove('is-drop-before', 'is-drop-after');
+  });
 
   // palette chips
   el.edPalChips.addEventListener('dragstart', function (e) {
