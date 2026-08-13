@@ -1416,8 +1416,12 @@ group('editing access cannot change a username or a password by accident');
   const edit = await (await call(env, `/users/edit/${target}`, { cookie })).text();
   ok(!/name="password"/.test(edit), 'the access screen has no password field at all');
   ok(!/name="password2"/.test(edit), 'nor a confirm field');
-  has(edit, 'readonly', 'the username is locked against a password manager');
-  has(edit, 'data-unlock="user-username"', 'with a deliberate press to unlock it');
+  // ⚠ `readonly` was the old answer and it was not enough: it stops the
+  // browser's own autofill, not an extension, so a manager still wrote `admin`
+  // into katig's name box and Save collided with the real admin account.
+  // The field is simply not on this form now — same fix as the password.
+  ok(!/name="username"/.test(edit), 'the access screen has no username field either');
+  has(edit, `/users/edit/${target}/username`, 'just a link to the screen that renames the account');
   has(edit, `/users/edit/${target}/password`, 'and a link to the one screen that sets a password');
 
   // The server half of the same rule: even a crafted POST carrying a password
@@ -1429,6 +1433,39 @@ group('editing access cannot change a username or a password by accident');
   eq(res.status, 302, 'saving access redirects');
   eq(db.prepare('SELECT password_hash FROM users WHERE id = ?').get(target).password_hash, 'pbkdf2:1:known:hash',
     'and the password hash is untouched by a password posted at the access form');
+
+  // The reported failure, exactly: a manager fills the name box with the
+  // signed-in account's own name and Save posts it. It must be ignored — not
+  // written and not thrown over.
+  const hijack = await call(env, `/users/edit/${target}`, {
+    method: 'POST', cookie,
+    form: { username: 'dinger', email: 'jinah@timothystl.org', active: '1', perm_news_edit: '1' },
+  });
+  eq(hijack.status, 302, 'a posted username does not error');
+  eq(db.prepare('SELECT username FROM users WHERE id = ?').get(target).username, 'jinah',
+    'and never renames the account it was posted at');
+  eq(db.prepare("SELECT COUNT(*) AS n FROM users WHERE username='dinger'").get().n, 1,
+    'so the signed-in account is not duplicated or clobbered');
+
+  // Renaming still has to be possible — on the screen whose subject it is.
+  const rn = await call(env, `/users/edit/${target}/username`, { cookie });
+  eq(rn.status, 200, 'the rename screen answers — the id is read past the word username');
+  ok(!/type="password"/.test(await rn.text()), 'and carries no password field to anchor a manager on');
+
+  const taken = await call(env, `/users/edit/${target}/username`, {
+    method: 'POST', cookie, form: { username: 'dinger' },
+  });
+  eq(taken.status, 302, 'a name already in use redirects rather than throwing');
+  has(taken.headers.get('location') || '', 'err=taken', 'and says which problem it was');
+  eq(db.prepare('SELECT username FROM users WHERE id = ?').get(target).username, 'jinah', 'leaving the name alone');
+
+  const renamed = await call(env, `/users/edit/${target}/username`, {
+    method: 'POST', cookie, form: { username: 'jinah.kim' },
+  });
+  eq(renamed.status, 302, 'a free name is accepted');
+  eq(db.prepare('SELECT username FROM users WHERE id = ?').get(target).username, 'jinah.kim',
+    'and the account really is renamed on the screen that exists to rename it');
+  db.prepare("UPDATE users SET username='jinah' WHERE id = ?").run(target);
 
   // The dedicated screen is where it really changes.
   const pw = await call(env, `/users/edit/${target}/password`, { cookie });

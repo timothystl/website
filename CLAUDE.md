@@ -522,6 +522,54 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### A username is changed on its own screen too (v4.34.0, 2026-08-13)
+
+Dinger: *"when i try to change a person access it is forcing a name change and
+then hitting error"* — with a screenshot of `/users/edit/4`, headed **katig**,
+whose Username box read **`admin`**.
+
+**v4.26.0 fixed half of this and the half it left is the half that broke.** It
+removed the password field, correctly, because a manager fills a form's
+username box whenever it fills a password box beside it. The username box
+stayed, marked `readonly`. **⚠ `readonly` stops the browser's own autofill and
+does not stop an extension** — 1Password and LastPass fill readonly inputs — so
+a manager still wrote `admin` into katig's name box, and Save posted it.
+
+`users.username` is `UNIQUE`, so the UPDATE threw, the top-level catch turned it
+into "Something went wrong · Reference: …", and the office was told nothing
+except that access could not be saved.
+
+- **The field is not on the access form at all now**, which is the same fix as
+  the password and for the same reason: *removing the field removes the thing
+  being filled.* Do not put either one back on that screen.
+- **`/users/edit/:id/username` is where a name changes**, matched **before** the
+  two `/users/edit/` handlers — they read the id off the last path segment and
+  would otherwise take the word *username* for an account id. Exactly the
+  ordering note the password screen already carries.
+- **The POST stopped reading `username` at all**, so the rule holds against a
+  stale tab or a crafted POST and not merely against the markup. That matters
+  more here than in most places: the thing writing the field was never a person.
+- **⚠ A name already in use is CHECKED, not left to the UNIQUE constraint.** An
+  unhandled constraint error reaches the top-level catch and shows a reference
+  number, which tells somebody renaming an account nothing about the name being
+  taken. That error page *was* the reported bug.
+- **Renaming updates `sessions.username` rather than deleting the rows.**
+  Changing what somebody is called must not sign them out; changing what they
+  can *reach* still does.
+
+⚠ This can rewrite an account's identity as a side effect of an unrelated save,
+so it is a candidate for whatever left the Pages screen owner-scoped — see the
+section below. Not proven, and worth checking a suspect account's permissions
+against what its holder should have rather than assuming.
+
+`LOCKED_FIELD_JS` / `.tlc-lockrow` (`admin/ui.js`) now have no markup using
+them. Left in place deliberately — the mechanism is sound for a field that is
+genuinely only guarding against a slip, which is not what this was.
+
+Run: the users group in `test/admin-redesign.test.mjs`. It posts a rival
+username at the access form and asserts a 302 with the name unchanged —
+**verified against the bug**, where it fails with the real symptom, a 500.
+
 ### An empty list must say why it is empty (v4.33.0, 2026-08-13)
 
 Dinger, with a screenshot of the Pages screen: *"i no longer see the pages here

@@ -10084,6 +10084,14 @@ ${sidebarShell('users', currentUser, '', await pageBadges())}
     // handlers below it. Both used to read the id off the last path segment,
     // which would take the word "password" for an account id and 404.
     const userPwPath = path.match(/^\/users\/edit\/(\d+)\/password$/);
+    // Renaming an account is its own screen for exactly the reason the password
+    // is: a password manager fills a form's USERNAME box on sight, and marking
+    // the input `readonly` does not stop an extension — only the browser's own
+    // autofill. So opening katig's permissions and pressing Save posted
+    // `username=admin`, which collides with the real admin account
+    // (users.username is UNIQUE) and threw. Same shape of fix as the password:
+    // the field is not on the access form at all, so there is nothing to fill.
+    const userNamePath = path.match(/^\/users\/edit\/(\d+)\/username$/);
     const userEditPath = path.match(/^\/users\/edit\/(\d+)$/);
 
     // A password is changed here and nowhere else. It used to be two fields on
@@ -10132,6 +10140,64 @@ ${sidebarShell('users', currentUser, '', await pageBadges())}
       return new Response('', { status: 302, headers: { Location: '/users?msg=password' } });
     }
 
+    // ── Rename an account ──
+    // The one place a username changes. It carries no password field, so a
+    // manager has nothing to anchor on, and the name it writes is the one
+    // somebody typed on a screen whose entire subject is the name.
+    if (userNamePath && method === 'GET') {
+      const u = await env.DB.prepare('SELECT id, username FROM users WHERE id = ?').bind(userNamePath[1]).first();
+      if (!u) return new Response('Not found', { status: 404 });
+      const err = url.searchParams.get('err');
+      const errHtml = err === 'taken'
+        ? `<div class="alert alert-error">That username already belongs to another account. Pick a different one.</div>`
+        : err === 'blank'
+          ? `<div class="alert alert-error">A username cannot be blank.</div>` : '';
+      return html(`
+${sidebarShell('users', currentUser, '', await pageBadges())}
+<div class="tlc-wrap">
+  <div class="page-title">Rename ${escapeHtml(u.username)}</div>
+  <div class="page-sub">Changes who this person signs in as. It does not change what they can reach, and it does not sign them out.</div>
+  ${errHtml}
+  <form method="POST" action="/users/edit/${u.id}/username" autocomplete="off">
+    <div class="card">
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" name="username" value="${escapeHtml(u.username || '')}" required autocomplete="off">
+        <p class="tlc-hint">What they type to sign in. Their password and permissions are unchanged.</p>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button type="submit" class="btn btn-primary">Save the new name</button>
+      <a href="/users/edit/${u.id}" class="btn btn-sm" style="background:var(--linen);color:var(--charcoal);border:1px solid var(--border);">Cancel</a>
+    </div>
+  </form>
+</div>`, 'Rename account');
+    }
+
+    if (userNamePath && method === 'POST') {
+      if (!hasPermission(currentUser, 'users_manage')) return new Response('Access denied.', { status: 403 });
+      const uid = userNamePath[1];
+      const form = await request.formData();
+      const username = (form.get('username') || '').trim();
+      if (!username) return new Response('', { status: 302, headers: { Location: `/users/edit/${uid}/username?err=blank` } });
+      // ⚠ Checked, not left to the UNIQUE constraint. An unhandled constraint
+      // error reaches the top-level catch and shows "Something went wrong" with
+      // a reference number — which tells somebody renaming an account nothing
+      // at all about the name being taken.
+      const clash = await env.DB.prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(?) AND id <> ?')
+        .bind(username, uid).first();
+      if (clash) return new Response('', { status: 302, headers: { Location: `/users/edit/${uid}/username?err=taken` } });
+      const before = await env.DB.prepare('SELECT username FROM users WHERE id = ?').bind(uid).first();
+      if (!before) return new Response('Not found', { status: 404 });
+      await env.DB.prepare('UPDATE users SET username = ? WHERE id = ?').bind(username, uid).run();
+      // The session rows carry the name for display, so they follow the rename
+      // rather than being dropped — renaming somebody must not sign them out.
+      await env.DB.prepare('UPDATE sessions SET username = ? WHERE user_id = ?').bind(username, uid).run();
+      await logAudit(env.DB, currentUser, 'update', 'user', uid, username,
+        { username: before.username }, { username });
+      return new Response('', { status: 302, headers: { Location: `/users/edit/${uid}?toast=${encodeURIComponent('Renamed — they sign in as ' + username + ' from now on')}` } });
+    }
+
     if (userEditPath && method === 'GET') {
       const uid = userEditPath[1];
       const u = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(uid).first();
@@ -10147,11 +10213,7 @@ ${sidebarShell('users', currentUser, '', await pageBadges())}
     <div class="card">
       <div class="form-group">
         <label>Username</label>
-        <div class="tlc-lockrow">
-          <input type="text" id="user-username" name="username" value="${(u.username || '').replace(/"/g,'&quot;')}" required readonly autocomplete="off">
-          <button type="button" class="btn btn-sm" data-unlock="user-username">Change</button>
-        </div>
-        <p class="tlc-hint">Locked while you edit access, so it cannot be rewritten by accident. Press Change to rename the account.</p>
+        <div class="tlc-static">${escapeHtml(u.username || '')} — changed on its own screen, so nothing here can change it by mistake. <a href="/users/edit/${u.id}/username">Rename this account</a></div>
       </div>
       <div class="form-group"><label>Email <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— used for password reset</span></label><input type="email" name="email" value="${(u.email || '').replace(/"/g,'&quot;')}" autocomplete="off" placeholder="user@timothystl.org"></div>
       <div class="form-group">
@@ -10183,19 +10245,22 @@ ${sidebarShell('users', currentUser, '', await pageBadges())}
       if (!hasPermission(currentUser, 'users_manage')) return new Response('Access denied.', { status: 403 });
       const uid = userEditPath[1];
       const form = await request.formData();
-      const username = (form.get('username') || '').trim();
+      // ⚠ The username is deliberately NOT read here, exactly as the password
+      // is not. Editing what somebody can REACH must never rewrite who they
+      // ARE, and the rule has to hold against a stale tab or a crafted POST —
+      // not merely against the markup — because the thing that was writing it
+      // was never a person in the first place, it was a password manager.
       const email = (form.get('email') || '').trim().toLowerCase() || null;
       const active = form.get('active') === '1' ? 1 : 0;
       const perms = Object.keys(PERMISSIONS).filter(k => form.get('perm_' + k) === '1');
-      if (!username) return new Response('Username required.', { status: 400 });
       // Fetch existing user to detect permission changes
       const existingUser = await env.DB.prepare('SELECT permissions, active FROM users WHERE id = ?').bind(uid).first();
       const oldPerms = existingUser ? existingUser.permissions : '[]';
       const newPermsJson = JSON.stringify(perms);
       const permsChanged = oldPerms !== newPermsJson;
       const deactivated = existingUser && existingUser.active && !active;
-      await env.DB.prepare('UPDATE users SET username = ?, email = ?, permissions = ?, active = ? WHERE id = ?')
-        .bind(username, email, newPermsJson, active, uid).run();
+      await env.DB.prepare('UPDATE users SET email = ?, permissions = ?, active = ? WHERE id = ?')
+        .bind(email, newPermsJson, active, uid).run();
       // Invalidate sessions only when something relevant changed
       if (deactivated || permsChanged) {
         await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(uid).run();
