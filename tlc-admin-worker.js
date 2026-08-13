@@ -46,6 +46,8 @@ import SCHEDULER_HTML from './admin/scheduler.html';
 import MINISTRY_EDITOR_HTML from './admin/ministry-editor.html';
 import { PAGE_SEEDS } from './admin/page-seeds.js';
 import { SITE_PAGES } from './admin/site-pages.js';
+// Whether an address on this site actually answers, and the picker's own list.
+import { LINKS_JS } from './admin/links.js';
 // The four pages the redesign was authored for. Hand-written, because
 // site-pages.js is generated out of the markup these replace — see the note at
 // the top of that file.
@@ -3069,6 +3071,46 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
     // sidebarShell call.
     let _badgesPromise = null;
     const pageBadges = () => (_badgesPromise ||= badgeCounts(env, currentUser));
+
+    // ── EVERY ADDRESS ON THIS SITE THAT ANSWERS ──────────────────────────────
+    // Feeds the block editor's link picker and its dead-link check. Memoized
+    // per request, the same way the badges are, because both editor mounts ask
+    // for it and it is two reads.
+    //
+    // ⚠ THREE SOURCES, NOT ONE. A check that knew only about page slugs would
+    // flag /music and /zoom — the short link and the redirect — and those are
+    // exactly the addresses the church prints on flyers and says from the
+    // pulpit. Warning about the two most-used kinds of link on the site is how
+    // a warning stops being read.
+    //
+    // ⚠ NOT scoped to what the signed-in person may EDIT. A ministry leader
+    // who can only edit their own page still needs to link to /worship, and
+    // the rail's `openable` list is filtered by ownership. Different question,
+    // different query.
+    let _targetsPromise = null;
+    const linkTargets = () => (_targetsPromise ||= (async () => {
+      const out = [];
+      try {
+        const rows = (await env.DB.prepare(
+          "SELECT id, title, menu_label, slug, short_link, status FROM pages WHERE status = 'published'"
+        ).all()).results || [];
+        for (const r of rows) {
+          const label = r.menu_label || r.title || r.slug;
+          out.push({ url: r.slug, label, kind: 'page' });
+          const short = shortLinkFor(r);
+          // Only when it is genuinely a different address — shortLinkFor
+          // returns the last segment, which for a top-level page IS the slug.
+          if (short && short !== r.slug) out.push({ url: short, label, kind: 'short' });
+        }
+      } catch (_) { /* an unreadable page list means no picker, never a failed render */ }
+      try {
+        const rows = (await env.DB.prepare(
+          'SELECT path, label FROM redirects WHERE active != 0'
+        ).all()).results || [];
+        for (const r of rows) out.push({ url: r.path, label: r.label || r.path, kind: 'redirect' });
+      } catch (_) {}
+      return out;
+    })());
 
     // ── PUSH NOTIFICATIONS: subscribe / unsubscribe ──
     // Any signed-in account may opt its own browser in — this is a personal
@@ -7119,6 +7161,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
         if (!owns(exists)) return denied();
         return new Response(MINISTRY_EDITOR_HTML
           .replace('/*TLCB_EDITOR_CSS*/', editorPhoneCss())
+          .replace('/*TLCB_LINKS_JS*/', LINKS_JS)
           .replace('<!--TLCB_TINYMCE-->', TINYMCE_HEAD), { headers: EDITOR_HEADERS });
       }
 
@@ -7174,6 +7217,10 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
             // only the office is sent the list.
             editors: fullAccess ? await pageEditors(env) : [],
             config: blocksClientConfig(await pageData(env, ctx)),
+            // Every address on the site that answers, for the link picker and
+            // its dead-link check. Deliberately NOT the `pages` list above:
+            // that one is scoped to what this person may open.
+            linkTargets: await linkTargets(),
             media: media.results || [],
             html: renderPage(blocks, {
               editing: true, slug: row.id, template: row.template, withCss: true,
@@ -7387,6 +7434,9 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
         if (!exists) return new Response('', { status: 302, headers: { Location: '/ministries' } });
         const editorHtml = MINISTRY_EDITOR_HTML
           .replace('/*TLCB_EDITOR_CSS*/', editorPhoneCss())
+          // The link picker's rules, from the same file the Worker checks
+          // links with — one definition, two runtimes. See admin/links.js.
+          .replace('/*TLCB_LINKS_JS*/', LINKS_JS)
           .replace('<!--TLCB_TINYMCE-->', TINYMCE_HEAD);
         return new Response(editorHtml, { headers: EDITOR_HEADERS });
       }
@@ -7410,6 +7460,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
             published_count: sanitizeBlocks(parseBlocks(row.published_blocks)).length,
           },
           config: blocksClientConfig(await pageData(env, ctx)),
+          linkTargets: await linkTargets(),
           media: media.results || [],
           html: renderPage(blocks, { editing: true, slug, withCss: true, data: await pageData(env, ctx) }),
         });
