@@ -90,21 +90,24 @@ p:last-child{margin-bottom:0;}
 .nav-brand{display:flex;align-items:center;gap:12px;cursor:pointer;background:none;border:none;padding:0;font:inherit;text-align:left;}
 .nav-logo-img{width:44px;height:44px;border-radius:50%;flex-shrink:0;object-fit:contain;background:white;padding:3px;}
 .nav-logo-img.is-square{border-radius:var(--r-sm);}
-.nav-brand-name{font-family:var(--sans);font-size:14px;font-weight:800;color:var(--nav-ink,white);display:block;}
-.nav-brand-sub{font-family:var(--sans);font-size:10px;font-weight:600;color:var(--honey);display:block;letter-spacing:.04em;}
+.nav-brand-name{font-family:var(--font-ui);font-size:17px;font-weight:800;letter-spacing:-.01em;color:var(--nav-ink,white);display:block;}
+.nav-brand-sub{font-family:var(--font-body);font-size:12px;font-weight:300;color:var(--honey);display:block;letter-spacing:.01em;}
 .nav-links{display:flex;align-items:center;gap:4px;list-style:none;}
-.nav-links button,.nav-links a{font-family:var(--font-ui);font-size:13px;font-weight:700;color:var(--nav-ink,white);opacity:.85;background:none;border:none;cursor:pointer;padding:6px 10px;border-radius:var(--r-sm);transition:background .15s,color .15s;text-decoration:none;}
+.nav-links button,.nav-links a{font-family:var(--font-body);font-size:14px;font-weight:600;color:var(--nav-ink,white);opacity:.85;background:none;border:none;cursor:pointer;padding:6px 10px;border-radius:var(--r-sm);transition:background .15s,color .15s;text-decoration:none;}
 .nav-links button:hover,.nav-links a:hover{background:rgba(255,255,255,.12);opacity:1;}
-.nav-cta{background:var(--nav-cta,var(--amber)) !important;color:var(--nav-cta-ink,white) !important;opacity:1 !important;padding:7px 16px !important;font-weight:800 !important;}
+.nav-cta{background:var(--nav-cta,var(--amber)) !important;color:var(--nav-cta-ink,white) !important;opacity:1 !important;
+  font-family:var(--font-ui) !important;font-size:13px !important;padding:12px 19px !important;font-weight:800 !important;border-radius:999px !important;}
 .nav-cta:hover{filter:brightness(.92);}
 .nav-toggle{display:none;background:none;border:none;cursor:pointer;color:var(--nav-ink,white);font-size:22px;padding:8px;}
 .nav-mobile{display:none;flex-direction:column;background:var(--nav-bar,var(--sage));padding:12px 28px 20px;border-bottom:3px solid var(--nav-rule,var(--amber));}
 .nav-mobile.open{display:flex;}
-.nav-mobile button,.nav-mobile a{font-family:var(--font-ui);font-size:14px;font-weight:700;color:var(--nav-ink,white);opacity:.85;background:none;border:none;cursor:pointer;padding:10px 0;text-align:left;border-bottom:1px solid rgba(255,255,255,.1);text-decoration:none;}
+.nav-mobile button,.nav-mobile a{font-family:var(--font-body);font-size:15px;font-weight:600;color:var(--nav-ink,white);opacity:.85;background:none;border:none;cursor:pointer;padding:10px 0;text-align:left;border-bottom:1px solid rgba(255,255,255,.1);text-decoration:none;}
 .nav-mobile button:hover,.nav-mobile a:hover{opacity:1;}
 
 /* BUTTONS */
-.btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--font-ui);font-size:14px;font-weight:700;padding:12px 26px;border-radius:var(--r-sm);border:none;cursor:pointer;text-decoration:none;transition:transform .15s,background .2s;line-height:1;}
+/* Every button in this language is a pill — the one shape shared by the
+   header's Give button, the blocks' own buttons and these. */
+.btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--font-ui);font-size:14px;font-weight:800;padding:15px 26px;border-radius:999px;border:none;cursor:pointer;text-decoration:none;transition:transform .15s,background .2s;line-height:1;}
 .btn:hover{transform:translateY(-1px);}
 .btn-primary{background:var(--steel);color:white;}
 .btn-primary:hover{background:var(--steel-dk);color:white;}
@@ -293,16 +296,16 @@ textarea.form-input{min-height:120px;resize:vertical;}
 /* FOOTER */
 footer{background:var(--steel-dk2);padding:48px 28px 28px;}
 .footer-inner{max-width:1080px;margin:0 auto;display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;gap:40px;margin-bottom:40px;}
-.footer-brand-name{font-family:var(--sans);font-size:14px;font-weight:800;color:white;margin-bottom:4px;}
-.footer-brand-tag{font-family:var(--serif);font-size:13px;font-style:italic;color:var(--amber);margin-bottom:14px;}
-.footer-brand-addr{font-family:var(--sans);font-size:12px;color:rgba(255,255,255,.5);line-height:1.8;}
-.footer-col h4{font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:12px;}
+.footer-brand-name{font-family:var(--font-ui);font-size:15px;font-weight:800;letter-spacing:-.01em;color:white;margin-bottom:4px;}
+.footer-brand-tag{font-family:var(--font-body);font-size:15px;font-weight:300;font-style:italic;color:var(--amber);margin-bottom:14px;}
+.footer-brand-addr{font-family:var(--font-body);font-size:14px;font-weight:300;color:rgba(255,255,255,.55);line-height:1.8;}
+.footer-col h4{font-family:var(--font-ui);font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--amber);margin-bottom:12px;}
 .footer-col ul{list-style:none;}
 .footer-col ul li{margin-bottom:8px;}
-.footer-col ul li a,.footer-col ul li button,.footer-col ul li span{font-family:var(--sans);font-size:12px;color:rgba(255,255,255,.55);text-decoration:none;background:none;border:none;cursor:pointer;padding:0;}
+.footer-col ul li a,.footer-col ul li button,.footer-col ul li span{font-family:var(--font-body);font-size:14px;font-weight:300;color:rgba(255,255,255,.6);text-decoration:none;background:none;border:none;cursor:pointer;padding:0;}
 .footer-col ul li a:hover,.footer-col ul li button:hover{color:var(--amber);}
 .footer-social{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;}
-.footer-social a{font-family:var(--sans);font-size:11px;font-weight:700;color:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.15);border-radius:var(--r-sm);padding:5px 10px;text-decoration:none;}
+.footer-social a{font-family:var(--font-ui);font-size:11px;font-weight:800;color:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.15);border-radius:999px;padding:7px 14px;text-decoration:none;}
 .footer-social a:hover{color:var(--amber);border-color:var(--amber);}
 .footer-base{max-width:1080px;margin:0 auto;padding-top:24px;border-top:1px solid rgba(255,255,255,.08);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
 .footer-base p{font-family:var(--sans);font-size:11px;color:rgba(255,255,255,.3);}

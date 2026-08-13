@@ -51,6 +51,13 @@
 // already has — see the note on `cta` below. Pretending it passes here would
 // bury it.
 export const PALETTE = [
+  // ⚠ Ink navy is not the same as Navy, and both are here on purpose. Navy
+  // (#1E2D4A) is the site's own --steel, used by every button and heading on
+  // the pages that have not been converted; ink navy (#101B2E) is the
+  // redesign's darker ground, and a bar in the first against a page in the
+  // second reads as a mistake rather than as two shades. It leads the list
+  // because it is the default.
+  { key: 'ink',      label: 'Ink navy', value: '#101B2E', ink: '#FFFFFF', bar: true },
   { key: 'moss',     label: 'Moss',     value: '#4A5E3A', ink: '#FFFFFF', bar: true },
   { key: 'navy',     label: 'Navy',     value: '#1E2D4A', ink: '#FFFFFF', bar: true },
   { key: 'teal',     label: 'Teal',     value: '#2E7EA6', ink: '#FFFFFF', bar: true },
@@ -125,7 +132,13 @@ export const DEFAULTS = {
   // silently reverted to the old typefaces during an admin outage.
   typeface: 'redesign',
   // Header
-  bar: 'moss',
+  // ⚠ Also changed for the redesign, and with a caveat worth knowing: a
+  // default only decides what an UNSET field is. If somebody has already saved
+  // an appearance record — and this screen has existed since v4.23.0 — their
+  // stored 'moss' wins and the bar does not move until they pick ink navy on
+  // the screen. That is one click, and it is the right way round: the color of
+  // the church's header is theirs to change, not a deploy's.
+  bar: 'ink',
   rule: 'gold',
   cta: 'gold',
   logo_url: '/logo.png?v=20260328',
@@ -138,7 +151,7 @@ export const DEFAULTS = {
   // is why it is edited here and not in the page editor. See the note in
   // public/index.html above the section itself.
   nl_show: true,
-  nl_bg: 'navy',
+  nl_bg: 'ink',
   nl_eyebrow: 'Stay Connected',
   nl_heading: 'Get our weekly newsletter',
   nl_body: 'News, upcoming events, and a word from Pastor Dinger — delivered to your inbox each week.',

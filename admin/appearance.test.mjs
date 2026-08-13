@@ -55,8 +55,8 @@ group('A bar color cannot be one the nav text disappears against');
 
   // Enforced server-side, not only by which chips the form draws: a stale tab
   // is exactly how an unreadable header would otherwise get saved.
-  eq(sanitizeAppearance({ bar: 'gold' }).bar, 'moss', 'a posted gold bar is refused, not honored');
-  eq(sanitizeAppearance({ nl_bg: 'gold' }).nl_bg, 'navy', 'and so is a gold newsletter band');
+  eq(sanitizeAppearance({ bar: 'gold' }).bar, DEFAULTS.bar, 'a posted gold bar is refused, not honored');
+  eq(sanitizeAppearance({ nl_bg: 'gold' }).nl_bg, DEFAULTS.nl_bg, 'and so is a gold newsletter band');
   eq(sanitizeAppearance({ cta: 'gold' }).cta, 'gold', 'while a gold Give button is accepted');
 
   ok(PALETTE.every((c) => /^#[0-9A-F]{6}$/.test(c.value)), 'every entry is a full six-digit hex');
@@ -69,7 +69,7 @@ group('The defaults are the site as it stands');
 {
   // Somebody opening this screen for the first time should recognize it. A
   // form full of blanks reads as "the header has no settings yet".
-  eq(DEFAULTS.bar, 'moss', 'the bar is the moss green that is on the site now');
+  eq(DEFAULTS.bar, 'ink', 'the bar is the redesign\u2019s ink navy');
   eq(DEFAULTS.rule, 'gold', 'over the gold rule');
   eq(DEFAULTS.brand_name, 'Timothy Lutheran Church', 'with the real church name');
   ok(DEFAULTS.tagline.includes('Neighborhood to the Nations'), 'and the real tagline');
@@ -79,7 +79,7 @@ group('The defaults are the site as it stands');
 group('Sanitizing refuses what the browser cannot be trusted to');
 {
   const bad = sanitizeAppearance({ bar: '#ff0000', rule: 'javascript', cta: null });
-  eq(bad.bar, 'moss', 'a raw hex is not a palette key, so it is dropped');
+  eq(bad.bar, DEFAULTS.bar, 'a raw hex is not a palette key, so it is dropped');
   eq(bad.rule, 'gold', 'and so is anything else not in the list');
 
   eq(sanitizeAppearance({ logo_shape: 'circle' }).logo_shape, 'round', 'an unknown shape clamps');
@@ -110,8 +110,8 @@ group('A logo address has to be an image address');
 
 group('Unreadable storage comes back as the current site');
 {
-  eq(parseAppearance('').bar, 'moss', 'an empty row is the defaults');
-  eq(parseAppearance('not json{').bar, 'moss', 'so is a truncated write');
+  eq(parseAppearance('').bar, DEFAULTS.bar, 'an empty row is the defaults');
+  eq(parseAppearance('not json{').bar, DEFAULTS.bar, 'so is a truncated write');
   eq(parseAppearance(null).brand_name, DEFAULTS.brand_name, 'and so is no row at all');
   eq(parseAppearance(JSON.stringify({ bar: 'teal' })).bar, 'teal', 'a good row is honored');
   eq(parseAppearance(JSON.stringify({ bar: 'teal' })).rule, 'gold',
@@ -140,7 +140,7 @@ group('Draft and published are compared, never remembered');
   const live = sanitizeAppearance({});
   ok(!isDirty(live, live), 'an untouched draft is not dirty');
   ok(isDirty(sanitizeAppearance({ bar: 'navy' }), live), 'a changed color is');
-  ok(!isDirty({ bar: 'moss', junk: 'ignored' }, live),
+  ok(!isDirty({ bar: DEFAULTS.bar, junk: 'ignored' }, live),
     'and a field nobody defined cannot make the screen claim an unpublished change');
 
   const changed = changedFields(sanitizeAppearance({ bar: 'navy', tagline: 'Hello' }), live);
