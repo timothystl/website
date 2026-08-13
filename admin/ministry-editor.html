@@ -1269,7 +1269,13 @@ function pageTabHtml() {
       '</select>' +
       '<span class="ed-note">Hand a page to one person and it is the only page they see.</span>' +
     '</div>' : '') +
-    '<div class="ed-sec ed-sec--rule">' +
+        (S.hasRedesign ? '<div class="ed-sec ed-sec--rule">' +
+      '<span class="ed-lab">The redesigned layout</span>' +
+      '<span class="ed-note">There is a redesigned version of this page waiting \u2014 the photo banner, the cards and the overlays, laid out by the designer. Putting it here replaces the blocks on this page with it.</span>' +
+      '<button type="button" class="ed-reset" id="edUseRedesign">Use the redesigned layout</button>' +
+      '<span class="ed-note">It goes into your draft only, so the live page does not change until you press Publish. What is on the page now is saved to the version history first, so you can put it back.</span>' +
+    '</div>' : '') +
+'<div class="ed-sec ed-sec--rule">' +
       '<span class="ed-lab">Publishing</span>' +
       '<span class="ed-read" id="edPageSaved">' + (S.savingPage ? 'Saving\u2026' : 'Saved') + '</span>' +
       '<button type="button" class="ed-danger" id="edPageDelete">Delete this page</button>' +
@@ -2137,6 +2143,13 @@ function bindStatic() {
     if (e.target.dataset && e.target.dataset.in) inspectorInput(e.target);
   });
 
+  el.edInspBody.addEventListener('click', function (e) {
+    if (!e.target.closest || !e.target.closest('#edUseRedesign')) return;
+    if (!confirm('Replace the blocks on this page with the redesigned layout?\n\n'
+      + 'What is on the page now is saved to the version history first, and the live page does not change until you press Publish.')) return;
+    useRedesign();
+  });
+
   if (el.edTabBlock) {
     el.edTabBlock.addEventListener('click', function () { S.tab = 'block'; renderInspector(); });
     el.edTabPage.addEventListener('click', function () { S.tab = 'page'; renderInspector(); });
@@ -2598,6 +2611,25 @@ async function restoreRevision(id) {
   }
 }
 
+// Puts the designer's own layout for this page into the draft. The Worker
+// snapshots what is there first — see the note on /use-redesign — so this is
+// undoable from the version history, and it never touches the live page.
+async function useRedesign() {
+  try {
+    var out = await api(API + '/page/' + encodeURIComponent(S.slug) + '/use-redesign', { method: 'POST' });
+    pushHistory();
+    S.blocks = out.blocks;
+    S.selectedId = null;
+    S.status = 'draft';
+    note('Used the redesigned layout');
+    setCanvas(out.html);
+    renderTop(); renderRail(); renderChanges(); renderInspector();
+    toast('The redesigned layout is in your draft — press Publish when you are happy with it');
+  } catch (err) {
+    toast(err.message || 'Could not load the redesigned layout');
+  }
+}
+
 function bindPublish() {
   el.edPublish.addEventListener('click', publish);
   el.edMore.addEventListener('click', togglePublishPanel);
@@ -2960,6 +2992,10 @@ async function boot() {
     // what this person may EDIT: a ministry leader who can only open their own
     // page still needs to link to /worship.
     S.linkTargets = data.linkTargets || [];
+    // Whether a designer-authored layout exists for THIS page. Sent by the
+    // Worker rather than worked out here, so the editor never offers a button
+    // that would come back "there is no redesigned layout for this page".
+    S.hasRedesign = !!data.hasRedesign;
     S.media = data.media || [];
     S.path = data.page.path || ('/' + S.slug);
     S.template = data.page.template || '';

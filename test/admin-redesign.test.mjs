@@ -3097,5 +3097,59 @@ group('badges follow you into an edit screen');
   }
 }
 
+group('⚠ A hand-edited page can still be given the redesigned layout');
+{
+  // THE BUG THIS EXISTS FOR. The four redesigned drafts reach a page through
+  // the seed loop, which is gated on canReseed() — untouched by a person AND
+  // never published. That guard is right; it is what stops a deploy throwing
+  // away somebody's work. But it meant the redesign could not reach the four
+  // pages it was WRITTEN for, because those are exactly the pages most likely
+  // to have been edited. /news had been rebuilt by hand, so the new draft was
+  // silently skipped and the page looked untouched by the entire release.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  const handmade = JSON.stringify([{ id: 'x1', type: 'text', body: '<p>Something somebody wrote by hand.</p>' }]);
+  db.prepare(
+    "INSERT OR REPLACE INTO pages (id,title,slug,parent_id,sort,template,status,in_menu,blocks,published_blocks,updated_at,updated_by) " +
+    "VALUES ('news','News & Events','/news',NULL,70,'standard','published',1,?,NULL,?,'katig')"
+  ).run(handmade, new Date().toISOString());
+
+  const before = db.prepare("SELECT blocks, updated_by FROM pages WHERE id='news'").get();
+  eq(before.updated_by, 'katig', 'the page is stamped as edited by a person, so the seed loop skips it');
+
+  const res = await call(env, '/pages/api/page/news/use-redesign', { cookie, method: 'POST' });
+  eq(res.status, 200, 'the route matches');
+  // ⚠ The action segment carries a HYPHEN. The route regex was ([^/]+)(\/[a-z]+)?
+  // and would have missed it silently — a 404 with the handler sitting right
+  // there looking correct.
+  const out = await res.json();
+  ok(out.blocks.length > 1, 'the redesigned layout replaces the hand-made one');
+  ok(out.blocks.some((x) => x.type === 'photobanner'), 'including the photo banner, which is the whole look');
+  ok(out.html.includes('tlcb--photobanner'), 'and it comes back rendered');
+
+  const after = db.prepare("SELECT blocks, published_blocks, updated_by FROM pages WHERE id='news'").get();
+  ok(JSON.parse(after.blocks).some((x) => x.type === 'photobanner'), 'the draft is written');
+  // ⚠ THE LIVE PAGE MUST NOT MOVE. Same rule every seed in this repo follows:
+  // the draft changes, and a person presses Publish.
+  eq(after.published_blocks, null, 'and published_blocks is untouched, so the live page is exactly what it was');
+
+  // ⚠ SNAPSHOT FIRST. page_revisions normally holds one entry per PUBLISH, and
+  // a page that has never been published has none — so for /news the current
+  // draft was the only copy of work somebody did by hand.
+  const rev = db.prepare("SELECT blocks, note FROM page_revisions WHERE page_id='news' ORDER BY id DESC").get();
+  ok(rev, 'what was there is saved to the version history first');
+  eq(JSON.parse(rev.blocks)[0].type, 'text', 'as the hand-made blocks themselves, so they can be put back');
+
+  // A page with no authored layout says so rather than writing nothing and
+  // reporting success.
+  db.prepare(
+    "INSERT OR REPLACE INTO pages (id,title,slug,parent_id,sort,template,status,in_menu,blocks,updated_at) " +
+    "VALUES ('prayer','Prayer','/prayer',NULL,80,'standard','published',1,'[]',?)"
+  ).run(new Date().toISOString());
+  const none = await call(env, '/pages/api/page/prayer/use-redesign', { cookie, method: 'POST' });
+  eq(none.status, 400, 'a page with no redesigned layout is refused, not silently no-opped');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
