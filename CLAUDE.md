@@ -522,6 +522,152 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### The site redesign, and the one setting that carries it (v5.0.0, 2026-08-13)
+
+Andrew's brief, verbatim: *"it just feels dead, and so do all the pages on the
+site — the editor is helpful, it just all lacks energy."* The designer's answer
+is `design_handoff_news_redesign/` — three directions for `/news`, of which
+**1b was chosen**, then extended to Home, Worship and Ministries as a site
+language rather than one page's treatment.
+
+Dinger answered the seven open questions before any of it was built, and two of
+those answers are load-bearing:
+
+| | |
+|---|---|
+| Scope | All four pages |
+| Arrows | **No** — the repo rule wins |
+| A banner with no photo | Renders navy |
+| Header and footer | Move to the new language too |
+| Publishing | Unchanged — seeds land in the draft |
+| Fonts | Add both, **and add a font selector** |
+| Block types | **"one look one unified type"** |
+
+**⚠ THE TYPEFACE IS THE LEVER, AND THERE IS EXACTLY ONE OF THEM.** The first
+attempt made the new language opt-in per block — pick one of the redesign's
+backgrounds and that block speaks the new language. *"One look, one unified
+type"* rules that out: it is precisely the mechanism by which a site ends up
+reading like two sites, one block at a time, with nobody able to see it
+happening. So the lever is a single setting on **Menu → Appearance**, and it
+moves every page, the chrome, and every block in the page editor at once.
+
+- **Three roles, not two.** `--font-heading` / `--font-body` / `--font-ui`, the
+  three properties `public/styles.css` has always declared. Both pairs use
+  their families differently: classically Lora sets headings and Source Sans
+  does everything else; in the redesign **Bricolage sets headings AND the UI** —
+  buttons, eyebrows, small-caps meta — and Newsreader carries the reading copy.
+  ⚠ Collapse that to a heading/body pair and every button on the site is set in
+  a reading serif. It is still legible, so nothing looks broken; it is just the
+  wrong design, quietly, everywhere. A test pins it.
+- **⚠ `public/styles.css` HAS TO AGREE WITH `DEFAULTS.typeface`.** What is
+  written there is what renders before the appearance fetch returns and forever
+  if the admin is unreachable. If the two disagree, every page paints one pair
+  and visibly reflows to the other **on every single load, on all 28 pages**.
+  `admin/appearance.test.mjs` asserts they match; verified by flipping the
+  default, which fails it.
+- **⚠ `--serif` and `--sans` are deliberately NOT re-pointed.** Dozens of inline
+  styles in `public/index.html` still name them directly on pages not yet
+  converted, and those do not follow the selector. They retire when the last
+  page is converted, not before.
+- **Both pairs are loaded in the head**, not just the selected one — the setting
+  is fetched at runtime, so nothing at parse time knows which is in force, and
+  the classic pair is needed regardless for the call sites above.
+- `pageFontVars()` writes the pair onto the page wrapper every render path
+  emits, so the public page, the editor canvas and `/api/ministry/:slug` follow
+  from one line rather than three places remembering to. The header preview does
+  the same — it was drawing the site's header in the **admin's** fonts, which is
+  the exact class of lie that preview exists to end, moved from color to type.
+
+**The geometry went on the shared primitives**, for the same reason: pills on
+`.tlcb-btn`, display weight and negative tracking on `.tlcb-head`, the wide
+tracking on `.tlcb-eyebrow`, light reading copy on `.tlcb-prose`, the design's
+radii. Nineteen rules, and *which* nineteen is the whole decision — a parallel
+family of 1b block types would have guaranteed the patchwork.
+
+- **⚠ Motion is gated on `prefers-reduced-motion`.** The mocks did not do this
+  and the handoff says to add it. Not a taste preference: motion somebody did
+  not ask for causes real nausea with a vestibular disorder, on a church website
+  people open when they are looking for help. A test asserts the gate stops each
+  of the three movements, because a note in a handoff is not a mechanism.
+
+**Four new block types, not the handoff's six.** Its `cta` and `signup` are the
+**Button bar** and the **Newsletter** block already here — the Button bar has
+carried an eyebrow, a heading and a rich description above its buttons since
+v4.32.0, which is exactly what its `cta` draws. Put either on the Gold or Ink
+navy background and it is the mock. The four that earn their place are shapes
+nothing here could make: `photobanner`, `quote`, `chips`, `letter`.
+
+- **⚠ THE NO-PHOTO BANNER IS THE ONE THAT SHIPS.** There are no usable
+  photographs in the repo — the handoff says the design needs about eight and
+  that every picture in the mocks is an empty drop target. So a flat ink-navy
+  field is what goes live, and it has to read as deliberate: **the veil is drawn
+  only over an actual photograph**, because a dark gradient over navy is
+  precisely what a picture that failed to load looks like.
+- **⚠ The countdown emits an INSTANT, not a date.** It is arithmetic against
+  `Date.now()` in a browser that may be anywhere; a bare date tells somebody
+  outside Central the wrong start time. `churchInstant()` in `admin/when.js` is
+  the one place a wall clock becomes a moment — it iterates twice so the two DST
+  changeover weekends resolve, where a hardcoded offset is wrong for half the
+  year.
+- **⚠ The Coming-up strip renders NOTHING when nothing is coming up.** It is a
+  one-line aside between two real sections, and a strip announcing its own
+  emptiness is worse than the gap. Which surfaced a real bug: **`renderBlock`
+  emitted its wrapper even when the block rendered nothing**, so an empty strip
+  was an invisible colored band that still pushed the page down — and on a light
+  surface nobody could see what was making the gap. A block that renders nothing
+  now renders nothing, except in the editor, where a block you cannot select is
+  one you cannot delete.
+
+**`choices` and `switches` are declared on the type**, and `sanitizeBlock` and
+the inspector read the **same two arrays**. That is the whole reason they are
+declarations rather than a dozen more lines in the sanitizer and a dozen more
+if-branches in the editor: a control cannot appear on the screen without being
+guarded on the way in, and a guarded field cannot go missing from the screen. A
+test walks every type and asserts both directions. ⚠ A switch's `def` decides
+which way an **absent** value falls, so a switch that is on by default stays on
+for a block saved before it existed rather than silently losing a feature.
+
+**`BG` and `INK` gained the redesign's surfaces, APPEND ONLY** — `bg` is stored
+as an index, so inserting an entry silently repaints every page on the site. A
+1b entry carries its own heading ink, eyebrow, link and hairline, because in
+this language those move with the background; splitting them would let somebody
+assemble a gold eyebrow on a gold field. ⚠ **Ink navy `#101B2E` is not Navy
+`#1E2D4A`** — Navy is the site's `--steel`, on every unconverted page, and a bar
+in one against a page in the other reads as a mistake rather than two shades.
+
+**The four page drafts live in `admin/redesign-seeds.js`**, hand-authored,
+because `admin/site-pages.js` is generated out of the very markup they replace.
+It overrides **the blocks and only the blocks** — title, address, menu placement
+and layout stay generated. ⚠ They land in the **draft**: `published_blocks` stays
+NULL and `canReseed()` skips any page anybody has touched, so the live site
+renders its hardcoded markup until somebody opens each page and presses Publish.
+On these four that is not a formality.
+
+- Home carries **no** email sign-up block, though the design's does: that band
+  is site-wide chrome on all 28 pages, so a block would sit above a second copy
+  of itself.
+- ⚠ The seed test asks whether anything is **silently dropped**. A seed is
+  written by hand and read by a sanitizer whose job is to be unforgiving — an
+  unknown type vanishes, a bad value clamps, both invisibly. It walks every
+  field of every block and asserts it is stored as written, plus no trailing
+  arrows (a seed is exactly where one gets pasted from a mock, because it reads
+  as content rather than code, and the arrow grep reads **source** — a label
+  built from a seed at render time is not source).
+
+**The bar color default moved to ink navy**, with a caveat: a default only
+decides what an **unset** field is. The Appearance screen has existed since
+v4.23.0, so if a record has already been saved the stored moss wins and the bar
+does not move until somebody picks ink navy on the screen. That is one click,
+and it is the right way round — the color of the church's header is theirs, not
+a deploy's.
+
+**Still open, and deliberately:** the photographs. Nothing else in this work is
+waiting on anything.
+
+Run: `node admin/blocks.test.mjs` (2032), `node admin/appearance.test.mjs` (82),
+`node admin/when.test.mjs`, the integration suite, and in a browser
+`node test/editor-edit.test.mjs` and `node test/public-phone.test.mjs`.
+
 ### The newsletter archive folds away by month (v4.35.0, 2026-08-13)
 
 Dinger, in the `/news` page editor: *"there are news articles after all of what
@@ -3980,6 +4126,17 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 - ~~**Homepage newsletter signup block is hardcoded**~~ — **done v4.23.0, 2026-08-05**, and the premise was wrong in a way worth recording: it is **not** on the homepage. It sits outside every page div and renders on all 28 pages, so converting the homepage to blocks would never have reached it. It is site-wide chrome, and its color, wording and on/off switch are now on the Appearance screen beside the header. See "The chrome is editable, and drafted first" above.
 - ~~**Confirm the Menu screen actually publishes live**~~ — **answered 2026-08-05.** It was already live: every menu write goes straight through and the `/api/pages` edge copy is busted by the chokepoint on any POST under `/pages` or `/menu`, so a change reaches the site inside the 120s window. What made it *look* unpublished was the preview bar, which drew a header the site does not have — fixed in v4.23.0. Menu items stay instant; only the new appearance record is drafted and published.
 - ~~**No logo image upload for the top nav bar, and header color scheme isn't admin-editable**~~ — **done v4.23.0, 2026-08-05.** Logo upload (R2, with shape), church name, tagline, bar color, bottom rule and Give button, all under Menu → Appearance. Note the "T" badge in the old Menu preview was never the site's logo — it was invented by that preview, which is why the header looked unchangeable. Both open questions were answered: **scope** is the header and the newsletter band only, not the site-wide palette (`--steel`/`--amber` still belong to the stylesheet); **publish** is a real draft/live split, `site_appearance_draft` vs `site_appearance`, exactly like `blocks`/`published_blocks`.
+
+- **The photographs.** The redesign depends on about eight and the repo has
+  none — every banner ships as a flat ink-navy field until they exist. What is
+  wanted, from the handoff: a Sunday morning wide (Home), the sanctuary
+  mid-service (Worship), hands at work (Ministries), the coming event (/news),
+  a sermon still, the music photo, and one per feed card. Dropping one in is a
+  click in the editor and changes nothing else.
+- **The four redesign drafts are unpublished**, like every other page's. Open
+  `/pages/news/edit`, read the draft against the live page, press Publish — then
+  Worship, then Ministries, then Home last, which is the most bespoke markup and
+  the most visitors. See "The site redesign" above.
 
 - **The site-wide palette is still not admin-editable, deliberately.** The Appearance screen changes the header and the newsletter band; `--steel`/`--amber`/`--sage` in `public/styles.css` color every button, card, heading and section on the site. Exposing those would be a theme editor, and a bad pick there is not one unreadable bar but an unreadable site. If it is ever wanted it needs its own design — starting from which of the ~20 variables are genuinely independent choices rather than shades of each other.
 

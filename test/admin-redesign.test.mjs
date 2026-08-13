@@ -16,10 +16,10 @@ import { churchDate } from '../admin/when.js';
 import worker from '../tlc-admin-worker.js';
 import { ALL_PERMISSIONS } from '../admin/auth.js';
 // ⚠ Read from the record rather than pinned to a literal hex. These assertions
-// are about "the preview shows the site's real bar, not a colour that exists
+// are about "the preview shows the site's real bar, not a color that exists
 // nowhere" — which was the v4.23.0 bug — and a hardcoded #4A5E3A turns every
 // future change of default into five unrelated-looking failures somebody has
-// to triage. The colour is not what is being asserted; the agreement is.
+// to triage. The color is not what is being asserted; the agreement is.
 import { DEFAULTS as CHROME_DEFAULTS, colorOf } from '../admin/appearance.js';
 const CHROME_BAR = colorOf(CHROME_DEFAULTS.bar).value;
 

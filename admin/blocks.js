@@ -229,7 +229,7 @@ export const BLOCK_DEFS = {
     ],
     switches: [
       { key: 'photos', label: 'Show photos', def: true,
-        note: 'A post with no picture keeps its full card either way \u2014 it simply starts at the heading, rather than leaving a grey rectangle where a photograph should be.' },
+        note: 'A post with no picture keeps its full card either way \u2014 it simply starts at the heading, rather than leaving a gray rectangle where a photograph should be.' },
     ],
     autoNote: 'Every current announcement and event. An event (one with a date) sorts soonest-first and drops off once it has passed; a plain announcement sorts newest-first. Nothing to update by hand.',
     autoCount: false,
@@ -1572,7 +1572,7 @@ aside.tlcb-card{background:#FFFDF8;border-radius:22px;padding:34px 32px;box-shad
 /* PHOTO BANNER. Full-bleed, three heights, and readable with no photograph at
    all — which is the state it will be in until the church supplies some. The
    background is the block's own surface (ink navy by default), so a banner
-   with no picture is a flat navy field rather than a grey hole; the photo,
+   with no picture is a flat navy field rather than a gray hole; the photo,
    when there is one, is layered over it and the veil over that. */
 .tlcb-pb{position:relative;overflow:hidden;display:flex;align-items:flex-end;
   min-height:var(--tlcb-pb-h,520px);padding:44px;border-radius:0;
@@ -2887,7 +2887,7 @@ export function renderBlock(b, opts = {}) {
   const inner = renderInner(b, opts);
   // ⚠ A block that renders nothing renders NOTHING — not an empty wrapper.
   // The wrapper carries the block's background and its spacing, so an empty
-  // one is an invisible coloured band that still pushes the page down, and on
+  // one is an invisible colored band that still pushes the page down, and on
   // a light surface it is invisible in the worst way: nobody can see what is
   // making the gap. The Coming-up strip is the type that does this (it draws
   // no strip when nothing is coming up), and it will not be the last.
