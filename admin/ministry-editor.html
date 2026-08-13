@@ -851,7 +851,15 @@ function styleVars(b) {
   var v = [
     '--tlcb-bg:' + bg.c,
     '--tlcb-ink:' + ink.c,
-    '--tlcb-head-ink:' + (bg.dark ? '#F3EDE1' : '#1E2D4A'),
+    // ⚠ Must stay byte-identical to wrapperVars() in admin/blocks.js — the
+    // editor patches these onto the node directly instead of re-rendering, so
+    // a difference here is a canvas that disagrees with the published page.
+    // test/editor-edit.test.mjs asserts it.
+    '--tlcb-head-ink:' + (bg.head || (bg.dark ? '#F3EDE1' : '#1E2D4A')),
+    '--tlcb-eyebrow-ink:' + (bg.eyebrow || '#C9973A'),
+    '--tlcb-link-ink:' + (bg.link || '#2E7EA6'),
+    '--tlcb-rule:' + (bg.rule || (bg.dark ? 'rgba(245,240,230,.14)' : '#E7DFD1')),
+    '--tlcb-chip-bg:' + (bg.chip || 'rgba(0,0,0,.04)'),
     '--tlcb-body:' + sz.body + 'px',
     '--tlcb-head:' + sz.head + 'px',
     '--tlcb-hero:' + sz.hero + 'px',
@@ -1338,6 +1346,36 @@ function inspectorSections(b, d) {
     }
   }
 
+  // 0c. The def-driven controls. `choices` and `switches` are declared on the
+  // block type in admin/blocks.js and read here and by sanitizeBlock from the
+  // same two arrays — so a control cannot appear on this screen without being
+  // guarded on the way in, and a guarded field cannot go missing from the
+  // screen. That is the whole reason they are declarations rather than another
+  // dozen if-branches down this function.
+  (d.choices || []).forEach(function (c) {
+    out += '<div class="ed-sec"><span class="ed-lab">' + esc(c.label) + '</span><div class="ed-chips">' +
+      c.options.map(function (o) {
+        return chip('choice', c.key + ':' + o.key, o.label, String(b[c.key]) === String(o.key));
+      }).join('') +
+      '</div>' + (c.note ? '<span class="ed-note">' + esc(c.note) + '</span>' : '') + '</div>';
+  });
+  (d.switches || []).forEach(function (sw) {
+    // A real switch with its state in words beside it. A toggle on its own
+    // says only that a setting exists; which way is on is a convention nobody
+    // agreed to. Same rule the drawer toggles follow.
+    var on = !!b[sw.key];
+    out += '<div class="ed-sec" style="gap:8px">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;font-size:13.5px;color:#1E2D4A">' +
+        '<span id="edSw-' + esc(sw.key) + '">' + esc(sw.label) + '</span>' +
+        '<span style="display:flex;align-items:center;gap:9px">' +
+          '<span class="ed-read">' + (on ? 'On' : 'Off') + '</span>' +
+          '<button type="button" class="ed-track" data-a="switch" data-v="' + esc(sw.key) + '" data-k="switch:' + esc(sw.key) + '"' +
+          ' role="switch" aria-labelledby="edSw-' + esc(sw.key) + '" aria-checked="' + on + '" aria-pressed="' + on + '"><span class="ed-knob"></span></button>' +
+        '</span>' +
+      '</div>' +
+      (sw.note ? '<span class="ed-note">' + esc(sw.note) + '</span>' : '') + '</div>';
+  });
+
   // 1. Columns
   if (b.type === 'columns') {
     out += '<div class="ed-sec"><span class="ed-lab">Columns</span><div class="ed-chips">' +
@@ -1602,6 +1640,28 @@ function inspectorAction(action, value) {
       var al = value === 'center' || value === 'right' ? value : 'left';
       patch(b.id, { align: al },
         al === 'center' ? 'Centered' : al === 'right' ? 'Right-aligned' : 'Left-aligned', 'rerender');
+      break;
+    }
+    // Both are structural: they change what the renderer emits, not just a
+    // custom property on the node, so the Worker re-renders rather than the
+    // editor patching a variable that nothing reads.
+    case 'choice': {
+      var ci = value.indexOf(':');
+      var ckey = value.slice(0, ci);
+      var cval = value.slice(ci + 1);
+      var cdef = (d.choices || []).filter(function (x) { return x.key === ckey; })[0];
+      if (!cdef) return;
+      var copt = cdef.options.filter(function (o) { return String(o.key) === cval; })[0];
+      if (!copt) return;
+      var cp = {}; cp[ckey] = copt.key;
+      patch(b.id, cp, cdef.label + ' \u2192 ' + copt.label, 'rerender');
+      break;
+    }
+    case 'switch': {
+      var sdef = (d.switches || []).filter(function (x) { return x.key === value; })[0];
+      if (!sdef) return;
+      var sp = {}; sp[value] = !b[value];
+      patch(b.id, sp, sdef.label + (b[value] ? ' off' : ' on'), 'rerender');
       break;
     }
     case 'topRule': {

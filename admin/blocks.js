@@ -23,6 +23,9 @@
 // give-landing.js so the block editor and the hardcoded fallback page can
 // never disagree about what a gift of $25 costs. See give-link.js.
 import { withAmountAndFund, parseAmount, fmtAmount, giftForPeriod, giveButtonLabel, GIVE_LINK_JS } from '../give-link.js';
+// The countdown needs a real instant, not a date somebody reads — see the note
+// on churchInstant() itself.
+import { churchInstant } from './when.js';
 
 // ── PALETTES (guardrails: staff can only pick from these) ────────────────────
 
@@ -218,8 +221,16 @@ export const BLOCK_DEFS = {
   newsfeed: {
     label: 'News feed', glyph: '☰',
     align: true,
-    defaults: { title: 'Announcements & events', spaceAbove: 24, spaceBelow: 24 },
-    auto: 'newsfeed',
+    defaults: { title: 'Announcements & events', spaceAbove: 24, spaceBelow: 24, count: 4, cols: 2, photos: true },
+    auto: 'newsfeed', autoCount: true,
+    choices: [
+      { key: 'cols', label: 'Cards per row', def: 2, options: [{ key: 1, label: '1' }, { key: 2, label: '2' }],
+        note: 'Two reads as a feed you scan; one reads as a list you work through. Both stack on a phone.' },
+    ],
+    switches: [
+      { key: 'photos', label: 'Show photos', def: true,
+        note: 'A post with no picture keeps its full card either way \u2014 it simply starts at the heading, rather than leaving a grey rectangle where a photograph should be.' },
+    ],
     autoNote: 'Every current announcement and event. An event (one with a date) sorts soonest-first and drops off once it has passed; a plain announcement sorts newest-first. Nothing to update by hand.',
     autoCount: false,
   },
@@ -242,6 +253,10 @@ export const BLOCK_DEFS = {
     defaults: { title: 'When we gather', spaceAbove: 24, spaceBelow: 24 },
     auto: 'servicetimes', autoNote: 'Reads the one service-times record in the admin, so a change lands on every page at once.',
     autoCount: false,
+    choices: [
+      { key: 'layout', label: 'Shown as', def: 'rows', options: [{ key: 'rows', label: 'A list' }, { key: 'tiles', label: 'Big tiles' }],
+        note: 'Tiles set the time itself at full display size, alternating dark and gold \u2014 right when the times are the reason somebody opened the page. A list is right when they are one detail among several.' },
+    ],
   },
   map: {
     label: 'Map & address', glyph: '◎',
@@ -292,7 +307,14 @@ export const BLOCK_DEFS = {
     defaults: {
       eyebrow: 'WHAT WE OFFER', title: 'Ways to take part', subtitle: '',
       spaceAbove: 24, spaceBelow: 24, cols: 3, align: 'left', topRule: false,
+      logos: false, feature: false,
     },
+    switches: [
+      { key: 'logos', label: 'Pictures are logos', def: false,
+        note: 'Logos sit at their own size against the card, left-aligned and never cropped. Photographs fill the card top edge to edge. A grid of one kind should not be laid out as the other.' },
+      { key: 'feature', label: 'Lead with a featured card', def: false,
+        note: 'The first card is drawn dark, so the eye starts somewhere. It is the first card rather than a chosen one, so reordering the grid moves it \u2014 there is no second setting to forget.' },
+    ],
     items: true,
     itemFields: ['img', 'eyebrow', 'title', 'body', 'linkLabel', 'url'],
     richItemFields: ['body'],
@@ -351,8 +373,16 @@ export const BLOCK_DEFS = {
   calendar: {
     label: 'Calendar', glyph: '▩',
     align: true,
-    defaults: { title: 'Calendar', spaceAbove: 24, spaceBelow: 24, url: '' },
-    url: true, urlLabel: 'Google Calendar embed URL',
+    defaults: { title: 'Calendar', spaceAbove: 24, spaceBelow: 24, url: '', embedHeight: 'm', subscribe: true },
+    url: true, urlLabel: 'Google Calendar embed URL', richBody: true,
+    choices: [
+      { key: 'embedHeight', label: 'How tall', def: 'm', options: EMBED_HEIGHTS,
+        note: 'A month grid needs the room; a short tray is right when the calendar is not the point of the page.' },
+    ],
+    switches: [
+      { key: 'subscribe', label: 'Offer to add it to a phone', def: true,
+        note: 'A second button that subscribes somebody\u2019s own calendar app, so it keeps updating instead of relying on them coming back to this page.' },
+    ],
   },
   download: {
     label: 'File download', glyph: '⤓',
@@ -477,6 +507,87 @@ export const BLOCK_DEFS = {
       { amount: '100', period: 'week', body: '<p>Provides tuition assistance for a child to Word of Life.</p>' },
     ],
   },
+
+  // ── THE REDESIGN'S OWN FOUR ───────────────────────────────────────────────
+  // Four, not the handoff's six. Its `cta` and `signup` types are the Button
+  // bar and the Newsletter block already in this file — the Button bar has
+  // carried an eyebrow, a heading and a rich description above its buttons
+  // since v4.32.0, which is precisely what its `cta` draws. Adding them would
+  // have been two more near-identical types to drift apart the first time
+  // somebody improved one of them, which is the argument the Amount ladder
+  // above already settles. Put either on the Gold or Ink navy background and
+  // it is the mock.
+  //
+  // These four earn their place by being shapes nothing here can make.
+
+  // The full-bleed photograph with the headline over it. Distinct from the two
+  // banners above in the ways that matter to this design: it runs edge to edge
+  // at a real height, its shading is a choice, and it can count down.
+  photobanner: {
+    label: 'Photo banner', glyph: '◧',
+    align: true, photo: true, subtitle: true, banner: true, infoCard: true,
+    defaults: {
+      eyebrow: 'Happening next', title: 'The thing everyone should know about.',
+      subtitle: 'Where it is, when it starts, and who it is for.',
+      spaceAbove: 0, spaceBelow: 0, bg: 6, ink: 3,
+      bannerHeight: 'mid', veil: 'medium', countdown: true, pulse: true,
+    },
+    choices: [
+      { key: 'bannerHeight', label: 'Banner height', def: 'mid', options: BANNER_HEIGHTS,
+        note: 'Three heights rather than a pixel field, so a banner is never taller than the screen it opens on. All three come down on a phone.' },
+      { key: 'veil', label: 'Photo shading', def: 'medium', options: VEILS,
+        note: 'How much dark is laid over the photograph so the white headline stays readable. Heavier if the picture is bright or busy. With no photo there is nothing to shade and this does nothing.' },
+    ],
+    switches: [
+      { key: 'countdown', label: 'Countdown', def: true,
+        note: 'Counts down to the next dated event in News & Events, and moves itself on to the following one when that passes. Nothing to reset, and nothing shows if there is no upcoming event.' },
+      { key: 'pulse', label: 'Pulsing dot', def: true,
+        note: 'The small gold dot beside the label. It holds still for anyone whose device asks for reduced motion.' },
+    ],
+  },
+
+  // A sentence worth setting large, beside the paragraph that explains it.
+  // Callout box is a boxed notice; this is the opposite gesture — no box, no
+  // border, the words carrying it.
+  quote: {
+    label: 'Quote band', glyph: '\u275D',
+    align: true, richBody: true,
+    defaults: {
+      title: 'A diverse city church serving as a bold witness to the saving grace of God through Jesus Christ.',
+      body: '<p>The paragraph beside it \u2014 who this congregation is, in the plainest words you can find.</p>',
+      spaceAbove: 0, spaceBelow: 0, bg: 4, ink: 5,
+    },
+  },
+
+  // One line of dated pills. Not a feed and not a calendar: the thing you read
+  // without stopping, on your way down the page.
+  chips: {
+    label: 'Coming-up strip', glyph: '\u22EF',
+    align: true,
+    defaults: { title: 'Coming up', count: 5, spaceAbove: 0, spaceBelow: 0, bg: 5, ink: 5 },
+    auto: 'chips',
+    autoNote: 'The next few dated events from News & Events, shown as one line of pills. Nothing to update by hand, and the strip disappears entirely when there is nothing coming up.',
+  },
+
+  // The archive as a band rather than a column: this week's letter argued for
+  // on the left, everything else listed on the right. Same data as Newsletter
+  // archive, a different shape — the same relationship News highlights and
+  // News feed already have, and for the same reason.
+  letter: {
+    label: 'Weekly letter', glyph: '\u270E',
+    align: true, richBody: true,
+    defaults: {
+      eyebrow: '', title: 'The weekly letter',
+      body: '<p>Pastor Dinger writes every week \u2014 what we are preaching, who needs prayer, and what is on the calendar.</p>',
+      count: 5, spaceAbove: 0, spaceBelow: 0, bg: 6, ink: 3, signup: true,
+    },
+    auto: 'letter',
+    autoNote: 'The newest letter is what the button opens, and the ones before it are listed beside it. Both come from the newsletter archive, so nothing here goes stale.',
+    switches: [
+      { key: 'signup', label: 'Offer the email sign-up', def: true,
+        note: 'A second, quieter button beside the first, for somebody who would rather it arrived than remember to come back.' },
+    ],
+  },
 };
 
 // Which block types offer the Alignment chips is a def-level flag,
@@ -512,14 +623,14 @@ export const ALIGNABLE_TYPES = new Set(
 // what somebody reaches for first on an empty page — the banner and the shape
 // of it — and Content is what they fill it with afterwards.
 export const GROUPS = [
-  { name: 'Structure', types: ['alert', 'hero', 'slideshow', 'quicklinks', 'cardgrid', 'buttons', 'callout', 'partners', 'spacer'] },
-  { name: 'Content',   types: ['text', 'textphoto', 'video', 'columns', 'gallery', 'faq', 'sermon', 'news', 'newsfeed', 'staff', 'posts'] },
-  { name: 'Dates',     types: ['servicetimes', 'map', 'events', 'times', 'download', 'calendar'] },
+  { name: 'Structure', types: ['alert', 'photobanner', 'hero', 'slideshow', 'quicklinks', 'cardgrid', 'buttons', 'callout', 'partners', 'spacer'] },
+  { name: 'Content',   types: ['text', 'textphoto', 'quote', 'video', 'columns', 'gallery', 'faq', 'sermon', 'news', 'newsfeed', 'staff', 'posts'] },
+  { name: 'Dates',     types: ['servicetimes', 'chips', 'map', 'events', 'times', 'download', 'calendar'] },
   // `giving` and `amounts` join the group that already holds `give` rather
   // than starting a fifth. They belong to one page, and a group of two that
   // only ever appears on the giving page would read on every other page as a
   // section of the library that is broken.
-  { name: 'Sign up',   types: ['form', 'newsletter', 'newsletterarchive', 'give', 'giving', 'amounts'] },
+  { name: 'Sign up',   types: ['form', 'newsletter', 'letter', 'newsletterarchive', 'give', 'giving', 'amounts'] },
 ];
 
 export const BLOCK_TYPE_KEYS = Object.keys(BLOCK_DEFS);
@@ -654,8 +765,12 @@ export function newBlock(type, over = {}) {
     cols: d.cols || 2,
     count: d.count || 3,
     locked: false,
-    bg: 0,
-    ink: 0,
+    // ⚠ Read from the type's own defaults rather than hardcoded to 0. The
+    // redesign's four types are each born on a particular surface — a photo
+    // banner on ink navy, a quote on paper — and a new one landing on
+    // Parchment would have to be recolored by hand every time.
+    bg: d.bg == null ? 0 : d.bg,
+    ink: d.ink == null ? 0 : d.ink,
     size: 'm',
     photo: '',
     photoAlt: '',
@@ -668,6 +783,9 @@ export function newBlock(type, over = {}) {
     partnerIds: [],
     items: def.items ? JSON.parse(JSON.stringify(def.defaultItems || [])) : [],
     links: def.links ? JSON.parse(JSON.stringify(def.defaultLinks || [])) : [],
+    // The def-driven fields, from the same two arrays sanitizeBlock reads.
+    ...Object.fromEntries((def.choices || []).map((c) => [c.key, d[c.key] == null ? c.def : d[c.key]])),
+    ...Object.fromEntries((def.switches || []).map((sw) => [sw.key, d[sw.key] == null ? !!sw.def : !!d[sw.key]])),
   }, over));
 }
 
@@ -705,7 +823,12 @@ export function sanitizeBlock(b) {
     // 2, 3 or 4 — a constrained choice, never a free number. The card grid
     // needs 4-up for /worship; `columns` only ever offers 2 or 3 in its own
     // inspector, and a crafted 4 there is a wide text row, not a broken page.
-    cols: [2, 3, 4].includes(Number(b.cols)) ? Number(b.cols) : 2,
+    // ⚠ 1 is legal now. A one-up news feed is a real layout (a list you work
+    // through rather than a grid you scan), and `columns`/`cardgrid` rendering
+    // a single wide column from a crafted value is a wide row, not a broken
+    // page. Each type's own `choices` entry below narrows this to the set that
+    // type actually offers.
+    cols: [1, 2, 3, 4].includes(Number(b.cols)) ? Number(b.cols) : 2,
     // Left, center or right. Anything else is 'left' — an unknown alignment is
     // a stale tab or a crafted POST, and the answer to both is the default the
     // page has always had rather than a third state nothing has CSS for.
@@ -730,6 +853,33 @@ export function sanitizeBlock(b) {
     items: [],
     links: [],
   };
+  // ── THE DEF-DRIVEN FIELDS ──────────────────────────────────────────────
+  // `choices` and `switches` are declared on the type, beside its label and
+  // its defaults, and read here and by the inspector from the same two arrays.
+  // That is the whole reason they exist rather than another dozen lines above
+  // and another dozen if-branches in the editor: a field cannot appear on the
+  // screen without being guarded on the way in, because the same declaration
+  // produces both.
+  //
+  // ⚠ AFTER the base fields, deliberately. `cols` is sanitized above against
+  // every value any type may use, and a type offering only 1 or 2 has to be
+  // able to narrow that — otherwise a crafted 4 survives on a block whose
+  // renderer has no four-column layout.
+  //
+  // An unknown value takes the declared default rather than the first option,
+  // because for a banner height and a shading level the sensible default is
+  // the middle one, not the smallest.
+  for (const c of (def.choices || [])) {
+    const hit = c.options.find((o) => String(o.key) === String(b[c.key]));
+    out[c.key] = hit ? hit.key : c.def;
+  }
+  // A switch stores what it means, not what was posted: `def` decides which
+  // way an ABSENT value falls, so a switch that is on by default stays on for
+  // every block saved before it existed.
+  for (const sw of (def.switches || [])) {
+    out[sw.key] = b[sw.key] == null ? !!sw.def : !!b[sw.key] && b[sw.key] !== '0' && b[sw.key] !== 'false';
+  }
+
   // Color guardrail, enforced server-side too: an ink that is unreadable on
   // the chosen background snaps back to a readable one.
   if (INK[out.ink].onDark !== BG[out.bg].dark) out.ink = BG[out.bg].dark ? 3 : 0;
@@ -995,7 +1145,7 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb--spacer{padding:0 var(--tlcb-pad);}
 .tlcb *{box-sizing:border-box;}
 .tlcb-eyebrow{font:800 11.5px/1.4 var(--tlcb-ui);letter-spacing:.16em;text-transform:uppercase;
-  color:#C9973A;margin-bottom:8px;}
+  color:var(--tlcb-eyebrow-ink,#C9973A);margin-bottom:8px;}
 .tlcb-head{font-family:var(--tlcb-serif);font-weight:800;line-height:1.05;letter-spacing:-.02em;margin:0;
   font-size:var(--tlcb-head,22px);color:var(--tlcb-head-ink,#1E2D4A);}
 .tlcb-prose{font-size:var(--tlcb-body,15px);font-weight:300;line-height:1.6;color:var(--tlcb-ink,#3A3A4A);text-wrap:pretty;}
@@ -1028,13 +1178,13 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 /* A soft lift, not a drop — the card rises toward the reader. */
 .tlcb-cg-img{margin-bottom:14px;}
 .tlcb-cg-img img{display:block;max-width:100%;max-height:120px;width:auto;height:auto;object-fit:contain;}
-.tlcb-cg-eyebrow{font:800 11.5px/1.4 var(--tlcb-ui);letter-spacing:.16em;text-transform:uppercase;color:#2E7EA6;margin-bottom:6px;}
+.tlcb-cg-eyebrow{font:800 11.5px/1.4 var(--tlcb-ui);letter-spacing:.16em;text-transform:uppercase;color:var(--tlcb-eyebrow-ink,#2E7EA6);margin-bottom:6px;}
 .tlcb-cg-eyebrow:empty{display:none;}
 .tlcb-cg-head{font-family:var(--tlcb-serif);font-weight:700;font-size:calc(var(--tlcb-head,22px) * .78);line-height:1.15;letter-spacing:-.01em;color:#1E2D4A;margin-bottom:8px;}
 .tlcb-cg-body{margin-bottom:14px;}
 .tlcb-cg-foot{margin-top:auto;}
 .tlcb-cg-foot:empty{display:none;}
-.tlcb-cg-link{font:800 13px/1.3 var(--tlcb-ui);color:#2E7EA6;text-decoration:none;}
+.tlcb-cg-link{font:800 13px/1.3 var(--tlcb-ui);color:var(--tlcb-link-ink,#2E7EA6);text-decoration:none;}
 .tlcb-cg-link:hover{text-decoration:underline;}
 .tlcb-cg-intro{font-family:var(--tlcb-sans);max-width:56em;color:var(--tlcb-body,#4A4860);}
 .tlcb-cg-intro:empty{display:none;}
@@ -1415,6 +1565,73 @@ aside.tlcb-card{background:#FFFDF8;border-radius:22px;padding:34px 32px;box-shad
 .tlcb-kid-t{font-family:var(--tlcb-serif);font-weight:700;font-size:17px;color:#1E2D4A;line-height:1.25;}
 .tlcb-kid-d{font-size:13px;color:#6A6858;line-height:1.5;}
 
+/* ── THE REDESIGN'S FOUR OWN SHAPES ───────────────────────────────────────
+   Everything above is a primitive every block type shares. These four are the
+   shapes nothing already here could make. */
+
+/* PHOTO BANNER. Full-bleed, three heights, and readable with no photograph at
+   all — which is the state it will be in until the church supplies some. The
+   background is the block's own surface (ink navy by default), so a banner
+   with no picture is a flat navy field rather than a grey hole; the photo,
+   when there is one, is layered over it and the veil over that. */
+.tlcb-pb{position:relative;overflow:hidden;display:flex;align-items:flex-end;
+  min-height:var(--tlcb-pb-h,520px);padding:44px;border-radius:0;
+  background:var(--tlcb-bg,#101B2E) var(--tlcb-pb-img,none) center/cover no-repeat;}
+.tlcb-pb--short{--tlcb-pb-h:420px;}
+.tlcb-pb--mid{--tlcb-pb-h:520px;}
+.tlcb-pb--tall{--tlcb-pb-h:640px;}
+.tlcb-pb-veil{position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(180deg,rgba(16,27,46,var(--tlcb-pb-top,.72)) 0%,rgba(16,27,46,.16) 42%,rgba(16,27,46,.89) 100%);}
+.tlcb-pb-body{position:relative;z-index:1;display:flex;flex-direction:column;align-items:flex-start;width:100%;}
+.tlcb-pb-eyebrow{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
+.tlcb-pb-eyebrow-t{font:800 12px/1 var(--tlcb-ui);letter-spacing:.16em;text-transform:uppercase;
+  color:var(--tlcb-eyebrow-ink,#E4A93C);}
+/* 64px is the design's own figure and it is not derived from the block's text
+   size: this is the one place on the site set at display scale, and tying it
+   to the S/M/L control would make S produce a 30px hero. It comes down on a
+   phone in the media query at the foot of this stylesheet. */
+.tlcb-pb-title{font-family:var(--tlcb-serif);font-weight:800;font-size:64px;line-height:.98;
+  letter-spacing:-.03em;color:#fff;margin:0;max-width:19em;}
+.tlcb-pb--card .tlcb-pb-title{font-size:56px;}
+.tlcb-pb-foot{display:flex;align-items:flex-end;gap:34px;margin-top:26px;flex-wrap:wrap;}
+.tlcb-pb-count-l{display:block;font:800 11px/1 var(--tlcb-ui);letter-spacing:.16em;text-transform:uppercase;
+  color:rgba(255,255,255,.6);margin-bottom:8px;}
+/* Tabular figures, so the seconds place does not shove the whole line sideways
+   every time it ticks. */
+.tlcb-pb-count-v{font-family:var(--tlcb-serif);font-weight:700;font-size:34px;line-height:1;color:#fff;
+  font-variant-numeric:tabular-nums;}
+.tlcb-pb-sub{font-size:18px;font-weight:300;line-height:1.55;color:rgba(255,255,255,.82);max-width:26em;margin:0;}
+
+/* QUOTE BAND. No box and no border — the opposite gesture from Callout. */
+.tlcb-quote{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;}
+.tlcb-quote-q{font-family:var(--tlcb-sans);font-style:italic;font-weight:400;font-size:30px;line-height:1.35;
+  color:var(--tlcb-head-ink,#101B2E);border-left:3px solid var(--tlcb-eyebrow-ink,#E4A93C);
+  padding-left:26px;margin:0;}
+.tlcb-quote-b{font-size:calc(var(--tlcb-body,15px) * 1.15);font-weight:300;line-height:1.75;color:var(--tlcb-ink,#453F30);}
+
+/* COMING-UP STRIP. One line, read on the way past. */
+.tlcb-chips{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  border-bottom:1px solid var(--tlcb-rule,#E7DFCD);padding-bottom:16px;}
+.tlcb-chips-l{font:800 11px/1 var(--tlcb-ui);letter-spacing:.16em;text-transform:uppercase;
+  color:var(--tlcb-meta,#8A8168);flex:none;}
+.tlcb-chip-row{display:flex;gap:10px;flex-wrap:wrap;}
+.tlcb-chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--tlcb-rule,#D8CFBB);
+  border-radius:999px;padding:9px 16px;background:var(--tlcb-chip-bg,#F5F0E6);white-space:nowrap;}
+.tlcb-chip-d{font:800 12px/1 var(--tlcb-ui);letter-spacing:.06em;text-transform:uppercase;color:var(--tlcb-eyebrow-ink,#B44A2E);}
+.tlcb-chip-t{font:600 14px/1 var(--tlcb-ui);color:var(--tlcb-head-ink,#1B2C4A);}
+
+/* WEEKLY LETTER. This week argued for on the left, the back issues listed on
+   the right — rather than the archive's vertical column, which is a different
+   block for a different job. */
+.tlcb-lt{display:grid;grid-template-columns:1fr 1fr;gap:44px;align-items:center;}
+.tlcb-lt-b{display:flex;flex-direction:column;gap:14px;align-items:flex-start;}
+.tlcb-lt-list{display:flex;flex-direction:column;}
+.tlcb-lt-row{display:flex;justify-content:space-between;gap:14px;padding:15px 0;text-decoration:none;
+  border-bottom:1px solid var(--tlcb-rule,rgba(245,240,230,.14));}
+.tlcb-lt-s{font-size:16px;font-weight:600;line-height:1.3;color:var(--tlcb-head-ink,#F5F0E6);}
+.tlcb-lt-d{font:600 12px/1.5 var(--tlcb-ui);letter-spacing:.08em;text-transform:uppercase;
+  color:var(--tlcb-ink,rgba(245,240,230,.5));white-space:nowrap;}
+
 /* ── THE THINGS THAT MOVE ─────────────────────────────────────────────────
    Motion was a third of the brief, alongside the photography and the type:
    the site read as dead, and a page where nothing has ever moved reads as a
@@ -1497,6 +1714,20 @@ function phoneRules(p) {
     `${p}.tlcb-band--card-left .tlcb-band-text{order:0!important;}`,
     `${p}.tlcb-band--card-left .tlcb-card{order:1!important;}`,
     `${p}aside.tlcb-card{padding:24px 22px!important;}`,
+    // The redesign's own shapes. ⚠ The banner heights come down as well as the
+    // headline: 640px of photograph on a 390px phone is most of the screen
+    // before a word is read, and the design's own responsive note says so.
+    `${p}.tlcb-pb{padding:26px 22px!important;}`,
+    `${p}.tlcb-pb--short{--tlcb-pb-h:300px!important;}`,
+    `${p}.tlcb-pb--mid{--tlcb-pb-h:360px!important;}`,
+    `${p}.tlcb-pb--tall{--tlcb-pb-h:420px!important;}`,
+    `${p}.tlcb-pb-title,${p}.tlcb-pb--card .tlcb-pb-title{font-size:36px!important;}`,
+    `${p}.tlcb-pb-foot{gap:18px!important;}`,
+    `${p}.tlcb-quote,${p}.tlcb-lt{grid-template-columns:1fr!important;gap:26px!important;}`,
+    `${p}.tlcb-quote-q{font-size:23px!important;}`,
+    // The strip shows what fits and scrolls sideways for the rest rather than
+    // wrapping to four lines and pushing the page down.
+    `${p}.tlcb-chips{flex-wrap:nowrap!important;overflow-x:auto!important;}`,
     `${p}.tlcb-card-1{font-size:21px!important;}`,
   ].join('\n  ');
 }
@@ -1524,10 +1755,12 @@ export function blocksClientConfig(data) {
       itemUrlFields: d.itemUrlFields || [], richBody: !!d.richBody, align: !!d.align,
       gallery: !!d.gallery, feed: d.feed || '', infoCard: !!d.infoCard,
       partnerSource: !!d.partnerSource,
+      choices: d.choices || [], switches: d.switches || [],
       defaults: d.defaults || {}, defaultItems: d.defaultItems || [],
     };
   }
   return { types, groups: GROUPS, templates: TEMPLATES, BG, INK, SIZES, SPLITS, TONES,
+    bannerHeights: BANNER_HEIGHTS, veils: VEILS, embedHeights: EMBED_HEIGHTS,
     partners: (data && data.partners) || [],
     cardSides: CARD_SIDES, cardShows: CARD_SHOWS, starters: STARTERS.map((s) => ({ key: s.key, label: s.label, note: s.note })),
     stamps: STAMP_PRESETS, step: SPACE_STEP, max: SPACE_MAX };
@@ -1566,7 +1799,16 @@ function wrapperVars(b) {
   const v = [
     '--tlcb-bg:' + bg.c,
     '--tlcb-ink:' + ink.c,
-    '--tlcb-head-ink:' + (bg.dark ? '#F3EDE1' : '#1E2D4A'),
+    // The composed half of a background. The four redesign surfaces carry
+    // their own heading ink, eyebrow, link and hairline because in that
+    // language those move together with the background — see the note on BG.
+    // Every older surface falls back to exactly what it has always emitted,
+    // so nothing on an existing page shifts by a pixel.
+    '--tlcb-head-ink:' + (bg.head || (bg.dark ? '#F3EDE1' : '#1E2D4A')),
+    '--tlcb-eyebrow-ink:' + (bg.eyebrow || '#C9973A'),
+    '--tlcb-link-ink:' + (bg.link || '#2E7EA6'),
+    '--tlcb-rule:' + (bg.rule || (bg.dark ? 'rgba(245,240,230,.14)' : '#E7DFD1')),
+    '--tlcb-chip-bg:' + (bg.chip || 'rgba(0,0,0,.04)'),
     '--tlcb-body:' + sz.body + 'px',
     '--tlcb-head:' + sz.head + 'px',
     '--tlcb-hero:' + sz.hero + 'px',
@@ -1853,6 +2095,41 @@ const GIVING_WIDGET_SCRIPT = '<script>' + GIVE_LINK_JS + `
   })();
 ` + '<\/script>';
 
+
+// ── THE COUNTDOWN'S BROWSER HALF ─────────────────────────────────────────────
+// Shipped inside the block, like the giving widget's, so the block works
+// wherever it is rendered rather than only on a page whose shell remembered a
+// script. Delegated off one interval and guarded, so N banners share it and a
+// second copy of this string is a no-op.
+//
+// The server renders the first value, so the banner is correct in the HTML
+// before any script runs and correct forever if the script never does. All
+// this adds is the ticking.
+//
+// ⚠ No backticks anywhere in this string. It lives inside a template literal
+// and one would end it, breaking the module while still passing node --check.
+const COUNTDOWN_SCRIPT = '<script>' + `
+  (function () {
+    if (window.__tlcCountdown) return;
+    window.__tlcCountdown = 1;
+    function paint() {
+      var els = document.querySelectorAll('[data-countdown]');
+      for (var i = 0; i < els.length; i++) {
+        var t = Date.parse(els[i].getAttribute('data-countdown'));
+        if (!t) continue;
+        var s = Math.max(0, Math.floor((t - Date.now()) / 1000));
+        var d = Math.floor(s / 86400); s -= d * 86400;
+        var h = Math.floor(s / 3600); s -= h * 3600;
+        var m = Math.floor(s / 60); s -= m * 60;
+        var p2 = function (n) { return (n < 10 ? '0' : '') + n; };
+        els[i].textContent = d + 'd ' + p2(h) + 'h ' + p2(m) + 'm ' + p2(s) + 's';
+      }
+    }
+    paint();
+    setInterval(paint, 1000);
+  })();
+` + '<\/script>';
+
 function renderInner(b, opts) {
   const def = BLOCK_DEFS[b.type];
   const t = b.type;
@@ -1863,6 +2140,108 @@ function renderInner(b, opts) {
   // These read from ctx.data, never from the block. In the editor they show
   // real data too, so what staff arrange is what visitors get; when there is
   // nothing to show they say so plainly rather than rendering empty furniture.
+
+
+  // The next dated event, shared by the banner's countdown and the coming-up
+  // strip. Both answer "what is next", so both read the one list and neither
+  // stores a copy of it.
+  const upcoming = () => (data.news || [])
+    .filter((n) => n.event_date)
+    .sort((a2, b2) => String(a2.event_date).localeCompare(String(b2.event_date)));
+
+  if (t === 'photobanner') {
+    const h = BANNER_HEIGHTS.find((x) => x.key === b.bannerHeight) || BANNER_HEIGHTS[1];
+    const pick = opts.editing
+      ? `<button type="button" class="tlcb-pick" data-act="photo">Change photo</button>` : '';
+    // ⚠ THE VEIL IS ONLY DRAWN OVER A PHOTOGRAPH. With no photo the banner is
+    // a flat navy field, which is a deliberate look rather than a hole — the
+    // church has a handful of usable photographs and this has to read as
+    // finished before any of them are uploaded. Laying a dark gradient over
+    // navy would just make it look like a photograph failed to load.
+    const veil = b.photo
+      ? `<span class="tlcb-pb-veil" style="--tlcb-pb-top:${(VEILS.find((v) => v.key === b.veil) || VEILS[1]).top}"></span>`
+      : '';
+    const dot = b.pulse ? '<span class="tlcb-pulse"></span>' : '';
+    const eyebrow = (b.eyebrow || opts.editing)
+      ? `<div class="tlcb-pb-eyebrow">${dot}${field(opts, b, 'eyebrow', 'span', 'tlcb-pb-eyebrow-t', esc(b.eyebrow || ''), ' data-ph="Happening next"')}</div>`
+      : '';
+    const next = b.countdown ? upcoming()[0] : null;
+    // Church time, not the visitor's and not the Worker's. A countdown is
+    // arithmetic against Date.now() in a browser that may be anywhere, so the
+    // target has to be an instant rather than a date somebody reads.
+    const target = next ? churchInstant(next.event_date, '09:00') : '';
+    const clock = target
+      ? `<div class="tlcb-pb-count"><span class="tlcb-pb-count-l">Starts in</span>
+           <span class="tlcb-pb-count-v" data-countdown="${esc(target)}">\u2014</span></div>`
+      : '';
+    const sub = (b.subtitle || opts.editing)
+      ? field(opts, b, 'subtitle', 'p', 'tlcb-pb-sub', esc(b.subtitle || ''), ' data-ph="Where it is, when it starts, who it is for"')
+      : '';
+    const foot = clock || sub ? `<div class="tlcb-pb-foot">${clock}${sub}</div>` : '';
+    return `<div class="tlcb-pb tlcb-pb--${esc(h.key)}${cardClass(b)}"${b.photo ? ` style="--tlcb-pb-img:url('${cssUrl(b.photo)}')"` : ''}>${pick}${veil}
+      <div class="tlcb-band-text tlcb-pb-body">${eyebrow}
+      ${field(opts, b, 'title', 'h1', 'tlcb-pb-title', esc(b.title || ''), ' data-ph="The thing everyone should know about"')}
+      ${foot}</div>${renderInfoCard(b, opts)}
+      ${target ? COUNTDOWN_SCRIPT : ''}</div>`;
+  }
+
+  if (t === 'quote') {
+    return `<div class="tlcb-quote">
+      ${field(opts, b, 'title', 'blockquote', 'tlcb-quote-q', esc(b.title || ''), ' data-ph="The sentence worth setting large"')}
+      <div class="tlcb-quote-b">${renderBody(opts, b, def, 'The paragraph beside it')}</div>
+    </div>`;
+  }
+
+  if (t === 'chips') {
+    const rows = upcoming().slice(0, b.count);
+    // ⚠ Renders NOTHING when there is nothing coming up — not an empty strip,
+    // not a "no events" line. It is a one-line aside between two real sections,
+    // and a strip announcing its own emptiness is worse than the gap it leaves.
+    // In the editor it says so, because a block that vanishes from the canvas
+    // is a block somebody thinks they broke.
+    if (!rows.length) {
+      return opts.editing
+        ? `<div class="tlcb-chips">${renderHead(opts, b, 'Coming up')}<span class="tlcb-note">Nothing dated is coming up, so this strip will not appear on the page at all.</span></div>`
+        : '';
+    }
+    const pills = rows.map((n) => `<span class="tlcb-chip">`
+      + `<span class="tlcb-chip-d">${esc(fmtNewsDate(n.event_date, true))}</span>`
+      + `<span class="tlcb-chip-t">${esc(n.title || '')}</span></span>`).join('');
+    return `<div class="tlcb-chips">
+      ${field(opts, b, 'title', 'span', 'tlcb-chips-l', esc(b.title || ''), ' data-ph="Coming up"')}
+      <div class="tlcb-chip-row">${pills}</div></div>`;
+  }
+
+  if (t === 'letter') {
+    const issues = data.newsletters || [];
+    const newest = issues[0];
+    const rest = issues.slice(1, 1 + Math.max(0, b.count));
+    const dead = opts.editing ? ' onclick="return false"' : '';
+    const eyebrow = newest
+      ? `<div class="tlcb-eyebrow">${esc(fmtNewsDate(newest.published_at))}</div>`
+      : renderEyebrow(opts, b);
+    const read = newest
+      ? `<a class="tlcb-btn" href="/news/${esc(newest.id)}"${dead}>Read this week</a>`
+      : '';
+    // The sign-up goes to the site's own page rather than carrying a form of
+    // its own: there is exactly one newsletter sign-up on this site and it is
+    // site-wide chrome (Menu \u2192 Appearance), not something a block owns a
+    // second copy of.
+    const join = b.signup ? `<a class="tlcb-btn tlcb-btn--ghost-light" href="/news#subscribe"${dead}>Get it by email</a>` : '';
+    const list = rest.map((n) => `<a class="tlcb-lt-row" href="/news/${esc(n.id)}"${dead}>
+      <span class="tlcb-lt-s">${esc(n.subject || '')}</span>
+      <span class="tlcb-lt-d">${esc(fmtNewsDate(n.published_at, true))}</span></a>`).join('');
+    const right = list
+      ? `<div class="tlcb-lt-list">${list}</div>`
+      : (opts.editing ? `<span class="tlcb-note">Older letters will be listed here as they are sent.</span>` : '');
+    return `<div class="tlcb-lt">
+      <div class="tlcb-lt-b">${eyebrow}
+        ${field(opts, b, 'title', 'div', 'tlcb-head', esc(b.title || ''), ' data-ph="The weekly letter"')}
+        ${renderBody(opts, b, def, 'What the letter is, and who writes it')}
+        ${read || join ? `<div class="tlcb-btns">${read}${join}</div>` : ''}
+        ${newest ? '' : `<span class="tlcb-note">No letters have been sent yet, so the button is hidden until the first one goes out.</span>`}
+      </div>${right}</div>`;
+  }
 
   if (t === 'alert') {
     const href = safeUrl(b.url);
@@ -2505,7 +2884,19 @@ export function renderBlock(b, opts = {}) {
       <button type="button" class="tlcb-tool" data-act="hide">${b.hidden ? 'Show' : 'Hide'}</button>
       <button type="button" class="tlcb-tool tlcb-tool--del" data-act="del">Delete</button>
     </div><span class="tlcb-badge" contenteditable="false">${esc(def.label)}</span>` : '';
-  return `<div class="${classes.join(' ')}" style="${wrapperVars(b)}"${attrs}>${tools}${renderStamp(opts, b)}${renderInner(b, opts)}</div>`;
+  const inner = renderInner(b, opts);
+  // ⚠ A block that renders nothing renders NOTHING — not an empty wrapper.
+  // The wrapper carries the block's background and its spacing, so an empty
+  // one is an invisible coloured band that still pushes the page down, and on
+  // a light surface it is invisible in the worst way: nobody can see what is
+  // making the gap. The Coming-up strip is the type that does this (it draws
+  // no strip when nothing is coming up), and it will not be the last.
+  //
+  // Never in the editor, where the canvas has to keep something clickable for
+  // every block in the rail — a block you cannot select is a block you cannot
+  // delete.
+  if (!inner && !opts.editing) return '';
+  return `<div class="${classes.join(' ')}" style="${wrapperVars(b)}"${attrs}>${tools}${renderStamp(opts, b)}${inner}</div>`;
 }
 
 // The sidebar template's right-hand column. Reads the one site-settings record,
