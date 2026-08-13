@@ -522,6 +522,50 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### The newsletter archive folds away by month (v4.35.0, 2026-08-13)
+
+Dinger, in the `/news` page editor: *"there are news articles after all of what
+i can edit. i dont wnat every news article displaying there should be the most
+recent one open and then you cna do a list but by pages or by month all
+collapsed only week title for whole news letter"*.
+
+**This is the "weekly newsletter display wants adjustments" item from
+2026-08-05, which sat on the pending list for a week with no specifics.** It has
+them now.
+
+The Newsletter archive block printed a preview for the newest `count` issues
+and then **one title row per issue for everything else it had** — up to the
+`LIMIT 12` in `pageData()`. On a weekly letter that is a column of
+near-identical lines that only ever grows, and it sits below the blocks
+somebody is trying to edit.
+
+- **The newest letter is open; everything older folds into its month, closed.**
+  A month is the unit somebody remembers a letter by, and it turns a year into
+  twelve rows instead of fifty-two.
+- **`<details>`, not a script.** It opens with no JavaScript at all, it is a
+  keyboard and screen-reader control for free, and it behaves identically in the
+  editor canvas and on the live page. Verified in Chromium: the summary is a tab
+  stop and the caret really does rotate (`rotate(45deg)` → `rotate(-135deg)`).
+- **⚠ The group key is the raw `YYYY-MM` off the stored string, never a month
+  read back out of a `Date`.** Constructing a date and asking for its month puts
+  a letter published on the 1st into the previous month for anybody behind UTC —
+  correct in St. Louis, wrong in the Worker that renders it. The *label* still
+  goes through `fmtNewsDate`'s noon anchoring for the same reason. A test pins
+  the 1st-of-the-month case specifically.
+- **The default `count` is 1**, down from 2, which is what "the most recent one
+  open" asks for. ⚠ `defaults` only reaches blocks created from now on —
+  an existing archive block keeps its stored count, and the office changes it
+  on the inspector's own count control. `sanitizeBlock` clamps it to 1–6, so
+  "none open" is not reachable and does not need to be.
+- **A month's rows drop their own border.** They are already fenced by the
+  month's, and two borders reads as a box in a box.
+
+He offered "by pages or by month" — month, because it needs no pagination state
+in a static render and because a weekly letter is four or five to a month, which
+is a sensible thing to open.
+
+Run: the newsletter-archive group in `node admin/blocks.test.mjs`.
+
 ### A username is changed on its own screen too (v4.34.0, 2026-08-13)
 
 Dinger: *"when i try to change a person access it is forcing a name change and
@@ -3925,7 +3969,7 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 
 - **24 of the 25 page drafts are still unpublished** — not a code gap. Every page has had a block draft since the site editor shipped; `/give` is the first published. The rest need somebody to compare each draft against the live page, fix what the extractor flattened, and press Publish. Sequencing, known extractor gaps and the three pages that deliberately are not block pages are all in `admin/BLOCK-EDITOR-ROLLOUT.md`.
 
-- **Weekly newsletter display wants adjustments** — flagged 2026-08-05, Andrew's own words, no specifics given yet. Needs a follow-up conversation to pin down what "adjustments" means — the newsletter composer/email itself (`admin/newsletter.js`, `email.js`), or how issues are displayed on `/news`'s archive (now the Newsletter archive block, v4.22.0) — before there's anything to build.
+- ~~**Weekly newsletter display wants adjustments**~~ — **done v4.35.0, 2026-08-13.** It was the archive, not the composer: the newest letter is open and everything older folds away under its month, closed. See "The newsletter archive folds away by month" above. *(Original note:)* flagged 2026-08-05, Andrew's own words, no specifics given yet.
 - **`/volunteer` short-URL redirect does not actually exist** — confirmed live 2026-07-20 while chasing the 2026-07-20 volunteer→serve rebrand: the Redirects tab in `admin.timothystl.org` has no `/volunteer` entry at all. This table's earlier documentation of `/volunteer → volunteer.timothystl.org` as an existing "Utility Redirect" was aspirational/planned, not a live row — `site-worker.js` has no hardcoded fallback either (confirmed by grep), so `timothystl.org/volunteer` simply falls through to the normal 404 page today, not to a dead external host. Nothing broke as part of the volunteer.timothystl.org→serve.timothystl.org cutover (see the chms repo's own CLAUDE.md). If a short link is wanted, an admin can add one via the Redirects tab: path `/volunteer` (or `/serve`), target `https://serve.timothystl.org` — optional, not a fix for anything broken.
 - ~~**links.timothystl.org "Volunteer" card still points at the old host**~~ — **not true, checked 2026-08-01.** Andrew looked and the live card already reads `serve.timothystl.org`; the seed constant says the same. This entry was written as a prediction about a row nobody had looked at, and it stayed on the list long enough to waste his time. Nothing to do.
 - **`/confirmation`, `/sundayschool`, `/vbs`, `/egghunt`, `/family`** — Youth sub-pages. Admin portal has the youth_pages table, but these slugs need content entered by the youth director.

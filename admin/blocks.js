@@ -155,9 +155,9 @@ export const BLOCK_DEFS = {
   newsletterarchive: {
     label: 'Newsletter archive', glyph: '✉',
     align: true,
-    defaults: { title: 'Weekly newsletters', spaceAbove: 24, spaceBelow: 24, count: 2 },
+    defaults: { title: 'Weekly newsletters', spaceAbove: 24, spaceBelow: 24, count: 1 },
     auto: 'newsletterarchive',
-    autoNote: 'Every sent newsletter, newest first. The count below is how many of the most recent get a preview - the rest are just a title to click.',
+    autoNote: 'Every sent newsletter, newest first. The count below is how many of the most recent are open with a preview; everything older folds away under its month, closed, showing just the title of each letter.',
   },
   staff: {
     label: 'Staff grid', glyph: '☺',
@@ -1258,6 +1258,20 @@ aside.tlcb-card{background:#FFFFFF;border-radius:18px;padding:34px 32px;box-shad
 .tlcb-nl-row{display:flex;align-items:baseline;gap:14px;padding:10px 13px;border:1px solid #E4E0D4;border-radius:8px;text-decoration:none;}
 .tlcb-nl-row-d{flex:none;width:64px;font:700 11px/1.4 'Source Sans 3',sans-serif;color:#8A8898;letter-spacing:.03em;}
 .tlcb-nl-row-t{flex:1;font:600 13.5px/1.35 'Source Sans 3',sans-serif;color:#1E2D4A;}
+/* A closed month reads as one row, the same weight as a letter row, so the
+   list stays a list rather than becoming a stack of panels. */
+.tlcb-nl-month{border:1px solid #E4E0D4;border-radius:8px;background:#fff;}
+.tlcb-nl-msum{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 13px;cursor:pointer;font:700 13px/1.35 'Source Sans 3',sans-serif;color:#1E2D4A;list-style:none;}
+.tlcb-nl-msum::-webkit-details-marker{display:none;}
+/* The caret is drawn here and turns on open, so the control says which way it
+   goes without needing a word for it. */
+.tlcb-nl-msum::after{content:'';flex:none;width:7px;height:7px;border-right:2px solid #8A8898;border-bottom:2px solid #8A8898;transform:rotate(45deg);margin-right:3px;transition:transform .15s;}
+.tlcb-nl-month[open] > .tlcb-nl-msum::after{transform:rotate(-135deg);}
+.tlcb-nl-mcount{margin-left:auto;font:700 11px/1 'Source Sans 3',sans-serif;color:#6A6858;background:#F2EFE7;border-radius:999px;padding:4px 8px;}
+.tlcb-nl-mlist{display:flex;flex-direction:column;gap:8px;padding:0 13px 13px;}
+/* Inside a month the rows are already fenced by the month's own border, so a
+   second border on each one reads as a box in a box. */
+.tlcb-nl-mlist .tlcb-nl-row{border:0;padding:7px 0;border-top:1px solid #EFEBE1;border-radius:0;}
 .tlcb-people{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
 .tlcb-person{display:flex;flex-direction:column;gap:6px;}
 .tlcb-person-p{aspect-ratio:1/1;border-radius:9px;background:#DDE3ED center/cover no-repeat;}
@@ -1854,24 +1868,62 @@ function renderInner(b, opts) {
     // archive that previews every issue back to launch is a wall of text
     // nobody scrolls through; a bare list of every issue loses the one thing
     // that gets somebody to click "Read this letter" on THIS week's.
-    const rows = issues.map((n, i) => {
-      const dateLabel = fmtNewsDate(n.published_at);
-      if (i < b.count) {
-        const note = (n.pastor_note || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 220);
-        return `<div class="tlcb-nl-item">
-          <span class="tlcb-nl-date">${esc(dateLabel)}</span>
-          <span class="tlcb-nl-subj">${esc(n.subject || '')}</span>
-          ${note ? `<p class="tlcb-nl-note">${esc(note)}${note.length >= 220 ? '…' : ''}</p>` : ''}
-          <a class="tlcb-nl-link" href="/news/${esc(n.id)}"${opts.editing ? ' onclick="return false"' : ''}>Read this letter</a>
-        </div>`;
+    const open = issues.slice(0, b.count);
+    const rest = issues.slice(b.count);
+
+    const card = (n) => {
+      const note = (n.pastor_note || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 220);
+      return `<div class="tlcb-nl-item">
+        <span class="tlcb-nl-date">${esc(fmtNewsDate(n.published_at))}</span>
+        <span class="tlcb-nl-subj">${esc(n.subject || '')}</span>
+        ${note ? `<p class="tlcb-nl-note">${esc(note)}${note.length >= 220 ? '…' : ''}</p>` : ''}
+        <a class="tlcb-nl-link" href="/news/${esc(n.id)}"${opts.editing ? ' onclick="return false"' : ''}>Read this letter</a>
+      </div>`;
+    };
+    const row = (n) => `<a class="tlcb-nl-row" href="/news/${esc(n.id)}"${opts.editing ? ' onclick="return false"' : ''}>
+      <span class="tlcb-nl-row-d">${esc(fmtNewsDate(n.published_at, true))}</span>
+      <span class="tlcb-nl-row-t">${esc(n.subject || '')}</span>
+    </a>`;
+
+    // ── Everything older than the open ones folds away, a month at a time ──
+    // The archive used to print a title row for every issue it had, which on a
+    // WEEKLY letter is a column of near-identical lines that grows forever and
+    // buries the block under it. Grouping by month turns a year into twelve
+    // closed rows, and the month is the unit somebody actually remembers a
+    // letter by.
+    //
+    // ⚠ The group key is the raw `YYYY-MM` off the stored string, NOT a month
+    // read back out of a Date. Constructing a date and asking it for its month
+    // puts an issue published on the 1st into the previous month for anybody
+    // behind UTC — the archive would be correct in St. Louis and wrong in the
+    // Worker that renders it. The LABEL still goes through fmtNewsDate's noon
+    // anchoring for the same reason.
+    const groups = [];
+    for (const n of rest) {
+      const key = String(n.published_at || '').slice(0, 7);
+      let g = groups.find((x) => x.key === key);
+      if (!g) {
+        const d = new Date(key + '-01T12:00:00');
+        groups.push(g = {
+          key,
+          label: Number.isNaN(d.getTime()) ? 'Earlier' : d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+          items: [],
+        });
       }
-      return `<a class="tlcb-nl-row" href="/news/${esc(n.id)}"${opts.editing ? ' onclick="return false"' : ''}>
-        <span class="tlcb-nl-row-d">${esc(dateLabel)}</span>
-        <span class="tlcb-nl-row-t">${esc(n.subject || '')}</span>
-      </a>`;
-    }).join('');
+      g.items.push(n);
+    }
+    // <details> rather than a script: it opens with no JavaScript at all, it is
+    // a keyboard control and a screen-reader control for free, and it behaves
+    // the same in the editor canvas as on the live page. Every one starts
+    // closed — the point of the block is this week's letter.
+    const months = groups.map((g) => `<details class="tlcb-nl-month">
+      <summary class="tlcb-nl-msum">${esc(g.label)}<span class="tlcb-nl-mcount">${g.items.length}</span></summary>
+      <div class="tlcb-nl-mlist">${g.items.map(row).join('')}</div>
+    </details>`).join('');
+
+    const body = open.map(card).join('') + months;
     return `<div class="tlcb-stack">${renderHead(opts, b)}
-      ${rows ? `<div class="tlcb-nl-list">${rows}</div>` : `<p class="tlcb-note">No newsletters yet.</p>`}</div>`;
+      ${body ? `<div class="tlcb-nl-list">${body}</div>` : `<p class="tlcb-note">No newsletters yet.</p>`}</div>`;
   }
 
   if (t === 'staff') {
