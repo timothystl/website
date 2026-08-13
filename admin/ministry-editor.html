@@ -213,6 +213,13 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
 .ed-item-h{display:flex;align-items:center;justify-content:space-between;font-size:11.5px;color:#8A8898;}
 .ed-item-h button{color:#B85C3A;font-size:11.5px;font-weight:600;}
 .ed-item-n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ed-link{display:flex;flex-direction:column;gap:5px;}
+/* Deliberately below the box, not beside it: the picker is the ordinary way
+   in, and the box is for the address that is not a page on this site. */
+.ed-linkpick{width:100%;font-size:12px;padding:6px 7px;border:1px solid #DDE3ED;border-radius:6px;
+  background:#F7F9FC;color:#4A5568;}
+.ed-linkwarn{font-size:11.5px;line-height:1.45;color:#8C3A28;}
+.ed-linkwarn:empty{display:none;}
 .ed-grip{cursor:grab;color:#A8A69A;font-size:12px;line-height:1;flex:none;user-select:none;}
 .ed-grip:active{cursor:grabbing;}
 .ed-move{color:#4A5568!important;font-size:12px!important;line-height:1;padding:2px 4px;border-radius:5px;flex:none;}
@@ -333,6 +340,12 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
 <div id="root"><div class="ed-boot">Loading the page editor…</div></div>
 <div class="ed-sr" role="status" aria-live="polite" id="live"></div>
 <script>
+/* ── WHETHER A LINK GOES ANYWHERE ────────────────────────────────────────
+   Injected from admin/links.js, which is also what the Worker checks links
+   with — one definition, two runtimes, and a test that runs the same cases
+   against both so they cannot drift. Defines tlcNormalizePath, tlcLinkKind,
+   tlcResolveLink, tlcLinkWarning and tlcPickerGroups. */
+/*TLCB_LINKS_JS*/
 /* ── Ministry page editor ─────────────────────────────────────────────────
    Owns the rail, canvas, palette and inspector. It does NOT own the block
    templates: the canvas HTML is rendered by the Worker from admin/blocks.js,
@@ -375,6 +388,10 @@ var S = {
   // positions, pages and half-width pairs; sharing one field would let a
   // half-finished row drag be completed as a block drop.
   rowDrag: null,
+  // Every address on this site that answers — pages, their short links, and
+  // redirects. Filled from the editor's boot payload; an empty list simply
+  // means no picker and no check, never a broken screen.
+  linkTargets: [],
   picker: null, toast: null, hint: true, loadError: '',
   publishPanel: false, publishAt: null, publishAtLocal: '', revisions: [], sections: [],
   template: '', siblings: [], railOpen: true, blocksOpen: true, leaving: false, tab: 'block',
@@ -1252,7 +1269,13 @@ function pageTabHtml() {
       '</select>' +
       '<span class="ed-note">Hand a page to one person and it is the only page they see.</span>' +
     '</div>' : '') +
-    '<div class="ed-sec ed-sec--rule">' +
+        (S.hasRedesign ? '<div class="ed-sec ed-sec--rule">' +
+      '<span class="ed-lab">The redesigned layout</span>' +
+      '<span class="ed-note">There is a redesigned version of this page waiting \u2014 the photo banner, the cards and the overlays, laid out by the designer. Putting it here replaces the blocks on this page with it.</span>' +
+      '<button type="button" class="ed-reset" id="edUseRedesign">Use the redesigned layout</button>' +
+      '<span class="ed-note">It goes into your draft only, so the live page does not change until you press Publish. What is on the page now is saved to the version history first, so you can put it back.</span>' +
+    '</div>' : '') +
+'<div class="ed-sec ed-sec--rule">' +
       '<span class="ed-lab">Publishing</span>' +
       '<span class="ed-read" id="edPageSaved">' + (S.savingPage ? 'Saving\u2026' : 'Saved') + '</span>' +
       '<button type="button" class="ed-danger" id="edPageDelete">Delete this page</button>' +
@@ -1481,8 +1504,15 @@ function inspectorSections(b, d) {
 
   // Link / embed target
   if (d.url) {
+    // An embed URL is not a link to a page on this site, so those types get the
+    // plain box they always had. Only a type whose URL is somewhere a visitor
+    // is SENT gets the picker.
+    var isDest = b.type === 'alert' || b.type === 'give' || b.type === 'download';
     out += '<div class="ed-sec"><label class="ed-lab" for="edUrl">' + esc(d.urlLabel || 'Link') + '</label>' +
-      '<input class="ed-field" id="edUrl" data-in="url" data-k="url" value="' + esc(b.url) + '" placeholder="https://…"></div>';
+      (isDest
+        ? linkField('url', b.url, '/where-it-goes', 'edUrl')
+        : '<input class="ed-field" id="edUrl" data-in="url" data-k="url" value="' + esc(b.url) + '" placeholder="https://…">') +
+      '</div>';
   }
 
   // 6b. Where the logos come from. Reading the partner ministries is the
@@ -1614,6 +1644,54 @@ function moveRow(kind, i, n, label) {
   return btn('up', '↑', i === 0) + btn('down', '↓', i === n - 1);
 }
 
+// ── THE LINK FIELD ─────────────────────────────────────────────────────────
+// A text box was all there was, and safeUrl() only ever decided whether a value
+// was SAFE — it has no opinion about whether the address exists. So /abuot
+// saved cleanly, rendered as an ordinary link, and sent the visitor to the
+// page-not-found screen. That is the repo's own rule broken by omission: a dead
+// link is worse than a missing one, because it looks like it works.
+//
+// ⚠ ONLY `url`, AND ONLY WHEN THE LIST IS NOT PHOTOS. A gallery's and a
+// slideshow's `url` is an IMAGE address, and offering "pick a page" for a
+// photograph would be nonsense; a card grid's `img` and a partner's `meta` are
+// images too. One rule, so a new type with a link field gets this for free and
+// a new type with an image field does not get it by accident.
+function isLinkField(d, field) {
+  return field === 'url' && !d.gallery;
+}
+
+function linkPicker(spec) {
+  var groups = tlcPickerGroups(S.linkTargets || []);
+  if (!groups.length) return '';
+  var opts = groups.map(function (g) {
+    return '<optgroup label="' + esc(g.name) + '">' + g.items.map(function (i) {
+      return '<option value="' + esc(i.url) + '">' + esc(i.label) + ' — ' + esc(i.url) + '</option>';
+    }).join('') + '</optgroup>';
+  }).join('');
+  return '<select class="ed-linkpick" data-target="' + esc(spec) + '" aria-label="Pick a page on this site">' +
+    '<option value="">Pick a page on this site…</option>' + opts + '</select>';
+}
+
+// The whole control: the box, the picker, and the sentence.
+function linkField(spec, value, placeholder, id) {
+  return '<div class="ed-link">' +
+    '<input class="ed-field"' + (id ? ' id="' + id + '"' : '') + ' data-in="' + esc(spec) + '"' +
+      ' data-link="1" data-k="' + esc(spec) + '" value="' + esc(value || '') + '"' +
+      ' placeholder="' + esc(placeholder) + '">' +
+    linkPicker(spec) +
+    '<span class="ed-linkwarn" data-warn="' + esc(spec) + '">' + esc(tlcLinkWarning(value || '', S.linkTargets || [])) + '</span>' +
+    '</div>';
+}
+
+// Repaints one field's sentence without re-rendering the inspector — which
+// would steal focus out of the box somebody is still typing into.
+function paintLinkWarning(input) {
+  var spec = input.dataset.in;
+  var slot = el.edInspBody.querySelector('.ed-linkwarn[data-warn="' + spec.replace(/"/g, '') + '"]');
+  if (!slot) return;
+  slot.textContent = tlcLinkWarning(input.value, S.linkTargets || []);
+}
+
 function itemsSection(b, d) {
   var inputFields = d.itemUrlFields.slice();
   if (d.gallery) inputFields = ['url'];
@@ -1621,6 +1699,7 @@ function itemsSection(b, d) {
   var rows = list.map(function (it, i) {
     var fields = inputFields.map(function (f) {
       var ph = d.itemPlaceholders[f] || (f === 'url' ? 'https://…' : f);
+      if (isLinkField(d, f)) return linkField('item:' + i + ':' + f, it[f], ph);
       return '<input class="ed-field" data-in="item:' + i + ':' + f + '" data-k="item:' + i + ':' + f + '"' +
         ' value="' + esc(it[f] || '') + '" placeholder="' + esc(ph) + '" aria-label="' + esc(d.itemLabel + ' ' + (i + 1) + ' ' + f) + '">';
     }).join('');
@@ -1657,7 +1736,7 @@ function cardLinksSection(b) {
       (n > 1 ? moveRow('cardlink', i, n, 'Link') : '') +
       '<button type="button" data-a="cardlink-del" data-v="' + i + '" data-k="cardlink-del:' + i + '">Remove</button></div>' +
       '<input class="ed-field" data-in="cardlink:' + i + ':title" data-k="cardlink:' + i + ':title" value="' + esc(l.title || '') + '" placeholder="What it says" aria-label="Link ' + (i + 1) + ' label">' +
-      '<input class="ed-field" data-in="cardlink:' + i + ':url" data-k="cardlink:' + i + ':url" value="' + esc(l.url || '') + '" placeholder="/visit" aria-label="Link ' + (i + 1) + ' address">' +
+      linkField('cardlink:' + i + ':url', l.url, '/visit') +
       '</div>';
   }).join('');
   var full = (b.cardLinks || []).length >= 4;
@@ -2033,14 +2112,42 @@ function bindStatic() {
     var btn = e.target.closest('[data-a]');
     if (btn) inspectorAction(btn.dataset.a, btn.dataset.v || '');
   });
+  // Choosing a page fills the box beside it and commits through the same path
+  // typing does — so there is one way a link is saved, not two.
+  el.edInspBody.addEventListener('change', function (e) {
+    var pick = e.target.closest ? e.target.closest('.ed-linkpick') : null;
+    if (!pick || !pick.value) return;
+    var input = el.edInspBody.querySelector('input[data-in="' + pick.dataset.target.replace(/"/g, '') + '"]');
+    if (!input) return;
+    input.value = pick.value;
+    inspectorInput(input);
+    paintLinkWarning(input);
+    // Back to the prompt: the select says what to DO, not what was chosen —
+    // the box beside it is where the answer lives, and a select still reading
+    // "About" beside a box reading /contact is two controls disagreeing.
+    pick.value = '';
+    say('Linked to ' + input.value);
+  });
   el.edInspBody.addEventListener('input', function (e) {
     if (S.tab === 'page') return pageTabInput(e);
-    if (e.target.dataset && e.target.dataset.in) inspectorInput(e.target);
+    if (e.target.dataset && e.target.dataset.in) {
+      inspectorInput(e.target);
+      // Repainted here rather than by re-rendering the inspector, which would
+      // take the focus out of the box mid-word.
+      if (e.target.dataset.link) paintLinkWarning(e.target);
+    }
   });
   el.edInspBody.addEventListener('change', function (e) {
     if (S.tab === 'page') return pageTabInput(e);
     // Checkboxes fire `change`, not `input`, in every browser that matters.
     if (e.target.dataset && e.target.dataset.in) inspectorInput(e.target);
+  });
+
+  el.edInspBody.addEventListener('click', function (e) {
+    if (!e.target.closest || !e.target.closest('#edUseRedesign')) return;
+    if (!confirm('Replace the blocks on this page with the redesigned layout?\n\n'
+      + 'What is on the page now is saved to the version history first, and the live page does not change until you press Publish.')) return;
+    useRedesign();
   });
 
   if (el.edTabBlock) {
@@ -2504,6 +2611,25 @@ async function restoreRevision(id) {
   }
 }
 
+// Puts the designer's own layout for this page into the draft. The Worker
+// snapshots what is there first — see the note on /use-redesign — so this is
+// undoable from the version history, and it never touches the live page.
+async function useRedesign() {
+  try {
+    var out = await api(API + '/page/' + encodeURIComponent(S.slug) + '/use-redesign', { method: 'POST' });
+    pushHistory();
+    S.blocks = out.blocks;
+    S.selectedId = null;
+    S.status = 'draft';
+    note('Used the redesigned layout');
+    setCanvas(out.html);
+    renderTop(); renderRail(); renderChanges(); renderInspector();
+    toast('The redesigned layout is in your draft — press Publish when you are happy with it');
+  } catch (err) {
+    toast(err.message || 'Could not load the redesigned layout');
+  }
+}
+
 function bindPublish() {
   el.edPublish.addEventListener('click', publish);
   el.edMore.addEventListener('click', togglePublishPanel);
@@ -2861,6 +2987,15 @@ async function boot() {
     S.changes = data.page.changes || [];
     S.updatedAt = data.page.updated_at || '';
     S.config = data.config;
+    // Every address on this site that answers — pages, their short links and
+    // redirects. ⚠ NOT data.pages, which is the rail's list and is filtered by
+    // what this person may EDIT: a ministry leader who can only open their own
+    // page still needs to link to /worship.
+    S.linkTargets = data.linkTargets || [];
+    // Whether a designer-authored layout exists for THIS page. Sent by the
+    // Worker rather than worked out here, so the editor never offers a button
+    // that would come back "there is no redesigned layout for this page".
+    S.hasRedesign = !!data.hasRedesign;
     S.media = data.media || [];
     S.path = data.page.path || ('/' + S.slug);
     S.template = data.page.template || '';

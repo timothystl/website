@@ -46,6 +46,8 @@ import SCHEDULER_HTML from './admin/scheduler.html';
 import MINISTRY_EDITOR_HTML from './admin/ministry-editor.html';
 import { PAGE_SEEDS } from './admin/page-seeds.js';
 import { SITE_PAGES } from './admin/site-pages.js';
+// Whether an address on this site actually answers, and the picker's own list.
+import { LINKS_JS } from './admin/links.js';
 // The four pages the redesign was authored for. Hand-written, because
 // site-pages.js is generated out of the markup these replace — see the note at
 // the top of that file.
@@ -3069,6 +3071,46 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
     // sidebarShell call.
     let _badgesPromise = null;
     const pageBadges = () => (_badgesPromise ||= badgeCounts(env, currentUser));
+
+    // ── EVERY ADDRESS ON THIS SITE THAT ANSWERS ──────────────────────────────
+    // Feeds the block editor's link picker and its dead-link check. Memoized
+    // per request, the same way the badges are, because both editor mounts ask
+    // for it and it is two reads.
+    //
+    // ⚠ THREE SOURCES, NOT ONE. A check that knew only about page slugs would
+    // flag /music and /zoom — the short link and the redirect — and those are
+    // exactly the addresses the church prints on flyers and says from the
+    // pulpit. Warning about the two most-used kinds of link on the site is how
+    // a warning stops being read.
+    //
+    // ⚠ NOT scoped to what the signed-in person may EDIT. A ministry leader
+    // who can only edit their own page still needs to link to /worship, and
+    // the rail's `openable` list is filtered by ownership. Different question,
+    // different query.
+    let _targetsPromise = null;
+    const linkTargets = () => (_targetsPromise ||= (async () => {
+      const out = [];
+      try {
+        const rows = (await env.DB.prepare(
+          "SELECT id, title, menu_label, slug, short_link, status FROM pages WHERE status = 'published'"
+        ).all()).results || [];
+        for (const r of rows) {
+          const label = r.menu_label || r.title || r.slug;
+          out.push({ url: r.slug, label, kind: 'page' });
+          const short = shortLinkFor(r);
+          // Only when it is genuinely a different address — shortLinkFor
+          // returns the last segment, which for a top-level page IS the slug.
+          if (short && short !== r.slug) out.push({ url: short, label, kind: 'short' });
+        }
+      } catch (_) { /* an unreadable page list means no picker, never a failed render */ }
+      try {
+        const rows = (await env.DB.prepare(
+          'SELECT path, label FROM redirects WHERE active != 0'
+        ).all()).results || [];
+        for (const r of rows) out.push({ url: r.path, label: r.label || r.path, kind: 'redirect' });
+      } catch (_) {}
+      return out;
+    })());
 
     // ── PUSH NOTIFICATIONS: subscribe / unsubscribe ──
     // Any signed-in account may opt its own browser in — this is a personal
@@ -7119,6 +7161,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
         if (!owns(exists)) return denied();
         return new Response(MINISTRY_EDITOR_HTML
           .replace('/*TLCB_EDITOR_CSS*/', editorPhoneCss())
+          .replace('/*TLCB_LINKS_JS*/', LINKS_JS)
           .replace('<!--TLCB_TINYMCE-->', TINYMCE_HEAD), { headers: EDITOR_HEADERS });
       }
 
@@ -7128,7 +7171,11 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
         if (shared) return shared;
 
         const rest = path.slice('/pages/api'.length);
-        const pageMatch = rest.match(/^\/page\/([^/]+)(\/[a-z]+)?$/);
+        // ⚠ [a-z-] not [a-z]: the action segment may carry a hyphen
+        // (/use-redesign). Without it that route silently never matches and
+        // the button comes back "Not found" — with nothing in the code looking
+        // wrong, because the handler is right there.
+        const pageMatch = rest.match(/^\/page\/([^/]+)(\/[a-z-]+)?$/);
         const pageId = pageMatch ? decodeURIComponent(pageMatch[1]) : '';
         const action = pageMatch ? (pageMatch[2] || '') : '';
         if (!pageId) return jsonResponse({ error: 'Not found' }, 404);
@@ -7174,6 +7221,14 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
             // only the office is sent the list.
             editors: fullAccess ? await pageEditors(env) : [],
             config: blocksClientConfig(await pageData(env, ctx)),
+            // Every address on the site that answers, for the link picker and
+            // its dead-link check. Deliberately NOT the `pages` list above:
+            // that one is scoped to what this person may open.
+            linkTargets: await linkTargets(),
+            // Whether a designer-authored layout exists for THIS page. Sent
+            // rather than worked out in the browser, so the editor never draws
+            // a button that would come back "there is no redesigned layout".
+            hasRedesign: !!REDESIGN_BLOCKS[row.id],
             media: media.results || [],
             html: renderPage(blocks, {
               editing: true, slug: row.id, template: row.template, withCss: true,
@@ -7355,6 +7410,53 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
           });
         }
 
+        // ── PUT THE REDESIGNED LAYOUT ON THIS PAGE ────────────────────────
+        // The four redesigned drafts (admin/redesign-seeds.js) reach a page
+        // through the seed loop, and that loop is gated on canReseed() — a
+        // page has to be untouched by a person AND never published. That guard
+        // is right: it is what stops a deploy throwing away somebody's work.
+        //
+        // ⚠ But it meant the redesign could not reach the four pages it was
+        // written for, because those are exactly the pages most likely to have
+        // been edited. /news had been rebuilt by hand and showed "8 edits", so
+        // the new draft was silently skipped and the page looked untouched by
+        // the whole release. The answer is not to weaken the guard — it is to
+        // let somebody ASK for it, deliberately, while looking at the page.
+        if (action === '/use-redesign' && method === 'POST') {
+          const fresh = REDESIGN_BLOCKS[pageId];
+          if (!fresh) return jsonResponse({ error: 'There is no redesigned layout for this page.' }, 400);
+
+          // ⚠ Snapshot FIRST. page_revisions normally holds one entry per
+          // publish, and a page that has never been published has none — so
+          // for /news the current draft is the only copy of work somebody did
+          // by hand, and replacing it without a snapshot destroys it. This is
+          // the one place a revision is written for something other than a
+          // publish, and that is exactly why.
+          const current = sanitizeBlocks(parseBlocks(row.blocks));
+          if (current.length) {
+            await env.DB.prepare(
+              'INSERT INTO page_revisions (page_id, blocks, note, created_at, created_by) VALUES (?, ?, ?, ?, ?)'
+            ).bind(pageId, JSON.stringify(current), 'Before the redesigned layout was applied',
+                   new Date().toISOString(), currentUser.username).run().catch(() => {});
+          }
+
+          const blocks = sanitizeBlocks(fresh);
+          // The DRAFT only. published_blocks is untouched, so the live page is
+          // exactly what it was until somebody presses Publish — the same rule
+          // every seed in this repo follows.
+          await env.DB.prepare('UPDATE pages SET blocks = ?, updated_at = ?, updated_by = ? WHERE id = ?')
+            .bind(JSON.stringify(blocks), new Date().toISOString(), currentUser.username, pageId).run();
+          await logAudit(env.DB, currentUser, 'update', 'page', pageId, row.title || pageId,
+            { blocks: current.length + ' blocks' },
+            { blocks: blocks.length + ' blocks', layout: 'the redesigned layout' });
+          return jsonResponse({
+            ok: true, blocks,
+            html: renderPage(blocks, {
+              editing: true, slug: row.id, template: row.template, withCss: true, data: await pageData(env, ctx),
+            }),
+          });
+        }
+
         return jsonResponse({ error: 'Not found' }, 404);
       }
     }
@@ -7387,6 +7489,9 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
         if (!exists) return new Response('', { status: 302, headers: { Location: '/ministries' } });
         const editorHtml = MINISTRY_EDITOR_HTML
           .replace('/*TLCB_EDITOR_CSS*/', editorPhoneCss())
+          // The link picker's rules, from the same file the Worker checks
+          // links with — one definition, two runtimes. See admin/links.js.
+          .replace('/*TLCB_LINKS_JS*/', LINKS_JS)
           .replace('<!--TLCB_TINYMCE-->', TINYMCE_HEAD);
         return new Response(editorHtml, { headers: EDITOR_HEADERS });
       }
@@ -7410,6 +7515,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
             published_count: sanitizeBlocks(parseBlocks(row.published_blocks)).length,
           },
           config: blocksClientConfig(await pageData(env, ctx)),
+          linkTargets: await linkTargets(),
           media: media.results || [],
           html: renderPage(blocks, { editing: true, slug, withCss: true, data: await pageData(env, ctx) }),
         });
