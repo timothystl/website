@@ -10,7 +10,7 @@ import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, SIDEBAR_JS, TOGGLE_WORD_JS, LOCKED_FIELD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 import { APPEARANCE_CSS } from './appearance.js';
 
-export const VERSION = 'v4.32.5'; // minor: the button bar is a call to action, partner logos live on the partner record, and a rich field can carry a heading
+export const VERSION = 'v4.33.0'; // minor: an empty Pages list says why it is empty instead of reading as a site with no pages
 
 // ── THE SHARED SHELL CSS/JS, EXTERNALISED ───────────────────────
 // This used to be inlined into every admin response inside <style>/<script>
@@ -61,6 +61,10 @@ textarea{min-height:100px;resize:vertical;line-height:1.65;}
 .alert-success{background:#EDF0E4;border-color:#D8E0C6;color:#3F5424;}
 .alert-error{background:#F7E4DE;border-color:#E4C8C8;color:#8C3A28;}
 .alert-info{background:#E7EEF7;border-color:#D3DEEC;color:#1E2D4A;}
+/* The Waiting tone, from the Foundations palette. This variant was in use
+   before it was defined, so it drew the .alert border with no fill and no ink
+   and read as a plain box rather than as something wanting attention. */
+.alert-warn{background:#FAF0DC;border-color:#EADCBE;color:#7A5B18;}
 .newsletter-row{display:flex;align-items:center;gap:16px;padding:14px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
 .newsletter-row:last-child{border-bottom:none;}
 .newsletter-date{font-family:var(--sans);font-size:11px;font-weight:700;color:var(--gray);min-width:100px;}

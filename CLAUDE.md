@@ -522,6 +522,69 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### An empty list must say why it is empty (v4.33.0, 2026-08-13)
+
+Dinger, with a screenshot of the Pages screen: *"i no longer see the pages here
+to edit"* — and then *"edit giving pages is also broken"*. The table read **"No
+pages to show. Use the button above to add the first one."** beside a sidebar
+badge reading **"24 waiting"**.
+
+**The screen was contradicting itself and only one half was true.** The badge
+comes from `badgeCounts()`, which selects `status`/`blocks`/`published_blocks`
+only; the list selects fourteen more columns. So the badge counted 24 pages
+while the list showed none, and the list's own words said the site had no pages
+at all.
+
+**⚠ THE DEFECT IS `.catch(() => ({ results: [] }))`.** It turned any database
+error into an empty array, which `renderListSection` then rendered as its empty
+state — a sentence about a site with no pages, under a button offering to
+create the first one. That is the dead-link rule again: *a wrong answer that
+looks like a working answer is worse than no answer.* Somebody reading it goes
+looking for missing content, not a missing column, and on the Giving screen the
+same swallow said "The giving page has no amount ladders on it" beside a link
+inviting them to add one — which would have given the church's donation page a
+**second** set of giving amounts.
+
+**Three ways this screen can be empty, and they want three different actions**,
+so it now names which one it is:
+
+| | What the screen says |
+|---|---|
+| The read failed | The query was refused; the pages are still there; here is the error to hand on |
+| `pages_edit_own` with nothing assigned | N pages exist but none are yours — names the permission, and where an admin turns it back on |
+| Genuinely empty | The original wording |
+
+- **⚠ `emptyHelp` is why the second line is now overridable.** It was hardcoded
+  to "Use the button above to add the first one" for every section — wrong
+  wherever the reader cannot use that button. An owner-scoped account is
+  refused by `/pages/new`, and no button fixes a database fault. Telling
+  somebody to press a control that will refuse them is worse than saying
+  nothing. The client-side filter script reads it from `data-empty`, so the
+  override survives a search being typed and cleared.
+- **⚠ Both `pages_edit` and `pages_edit_own` reach this screen, and only one
+  of them shows anything.** `owns()` filters every row away for the second, and
+  the badge is scoped to *either*. An account that loses `pages_edit` while
+  keeping `pages_edit_own` therefore lands in exactly the state above — which
+  is what the `migratePermissionKeys()` double-run would produce on a
+  full-access account (it holds both, and a second pass rewrites `pages_edit`
+  to `notices_edit` while leaving `pages_edit_own` alone). See the v3.0.0
+  section for why that migration must never run twice.
+- **`pages.owner_username` moved to the ALTER list.** It was inside the bigger
+  `try` that seeds the page rows, sitting after three CREATEs and before a loop
+  of INSERTs, so anything above it throwing skipped the column and the outer
+  catch only logged "Site page seed failed". Every query except the ones naming
+  that column keeps working, which is a fault that hides for months and
+  surfaces as one screen mysteriously empty. **Every `ALTER TABLE pages` now
+  lives in one list, one per line, each with its own catch.** `SCHEMA_VERSION`
+  bumped so a live table missing the column actually gets it.
+- **`.alert-warn` was used before it was defined**, so it drew the `.alert`
+  border with no fill and no ink — a box that reads as plain when it is meant
+  to read as wanting attention. Defined from the Foundations Waiting tone.
+
+Run: two groups in `test/admin-redesign.test.mjs`. The failing-read one
+**drops the column** rather than stubbing an error, so it reproduces the real
+shape: the badge keeps counting while the list cannot be read.
+
 ### A button bar is a call to action, and a logo lives on the partner (v4.32.0, 2026-08-07)
 
 Dinger, in the block editor: *"i don't see a CTA button, a place to set partner
