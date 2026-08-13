@@ -1244,7 +1244,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-07-1'; // bumped: partners.logo_url, so the Partner logos block can read a logo off the record
+    const SCHEMA_VERSION = '2026-08-13-1'; // bumped: pages.owner_username moved to the ALTER list, so a live table missing it gets the column
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -1755,7 +1755,6 @@ export default {
       await env.DB.prepare(DB_INIT_PAGES).run();
       await env.DB.prepare(DB_INIT_PAGE_REDIRECTS).run();
       await env.DB.prepare(DB_INIT_PAGE_REVISIONS).run();
-      try { await env.DB.prepare('ALTER TABLE pages ADD COLUMN owner_username TEXT').run(); } catch (_) {}
       await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_pages_menu ON pages(parent_id, sort)').run();
       await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_page_revisions_page ON page_revisions(page_id, created_at DESC)').run();
       const now = new Date().toISOString();
@@ -1833,6 +1832,17 @@ export default {
     // last segment of the address so it cannot drift when a page is renamed.
     // This column is only ever set by hand, and only to resolve a clash.
     try { await env.DB.prepare('ALTER TABLE pages ADD COLUMN short_link TEXT').run(); } catch (_) {}
+    // ⚠ Every `ALTER TABLE pages` lives HERE, one per line, each with its own
+    // catch — never inside the bigger `try` that seeds the page rows. In that
+    // block an ALTER sits after three CREATEs and before a loop of INSERTs, so
+    // anything above it throwing skips the column silently and the outer catch
+    // just logs "Site page seed failed". The table then works for every query
+    // except the ones naming that column, which is a fault that hides for
+    // months and surfaces as one screen mysteriously empty.
+    //
+    // owner_username was in that block; this is the same statement, moved.
+    // It is a no-op on any database that already has the column.
+    try { await env.DB.prepare('ALTER TABLE pages ADD COLUMN owner_username TEXT').run(); } catch (_) {}
     // A page that stands in for somewhere else — /mdo is in the menu and in the
     // sitemap but sends the visitor to mdo.timothystl.org. Held on the page
     // rather than as a loose redirect so the menu can point at it by page id
@@ -6742,18 +6752,49 @@ ${newsImageUploadScript(item.image_url || '')}`, 'Edit post — TLC Admin', TINY
         const msg = url.searchParams.get('msg');
         const alertHtml = msg === 'linksaved' ? `<div class="alert alert-success">✓ Short link saved.</div>`
           : msg === 'linkcleared' ? `<div class="alert alert-info">Short link reset — it now follows the page address again.</div>` : '';
+        // ⚠ A FAILED READ MUST NOT RENDER AS AN EMPTY LIST. This used to be
+        // `.catch(() => ({ results: [] }))`, which turned any database error —
+        // a column the live table has not got, a table that did not migrate —
+        // into "No pages to show. Use the button above to add the first one."
+        // That is the worst possible answer: it is indistinguishable from a
+        // genuinely empty site, so it reads as *the pages are gone* and sends
+        // somebody hunting for missing content instead of a missing column.
+        // Same rule as the dead-link one — a wrong answer that looks like a
+        // working answer is worse than no answer.
+        let readError = '';
         const rows = await env.DB.prepare(
           'SELECT id, title, menu_label, slug, parent_id, sort, template, status, in_menu, owner_username, short_link, external_url, blocks, published_blocks, publish_at, updated_at, updated_by FROM pages ORDER BY sort ASC, title ASC'
-        ).all().catch(() => ({ results: [] }));
-        const all = (rows.results || []).filter(owns);
+        ).all().catch((e) => { readError = (e && e.message) || String(e); return { results: [] }; });
+        if (readError) console.error('Pages list read failed:', readError);
+        const everyPage = rows.results || [];
+        const all = everyPage.filter(owns);
 
         const ordered = orderPages(all);
         // Clashes are computed over EVERY page, not just the filtered view — a
         // ministry leader filtering to their own drafts must still be told that
         // their short link collides with a page they cannot see.
-        const linked = withShortLinks(orderPages((rows.results || [])));
+        const linked = withShortLinks(orderPages(everyPage));
         const linkById = Object.fromEntries(linked.map((p) => [p.id, p]));
         const shown = filterPages(ordered, filter);
+
+        // ── Why is this list empty? ──
+        // There are three reasons an empty Pages screen can happen and they
+        // want three different actions, so the screen names which one it is
+        // rather than showing the same blank table for all of them.
+        //
+        // The third is the one that caused a real support round-trip: an
+        // account holding `pages_edit_own` but not `pages_edit` sees every
+        // page filtered away by `owns`, while the sidebar badge — which is
+        // scoped to either permission — still counts them. So the sidebar
+        // says "24 waiting" beside a list that says there is nothing here,
+        // and there is nothing on screen to explain the contradiction.
+        const hiddenByOwnership = ownOnly && everyPage.length > 0 && all.length === 0;
+        const problemHtml = readError
+          ? `<div class="alert alert-error"><strong>The page list could not be read.</strong> The database refused the query, so this table is empty because of a fault and not because the site has no pages. Nothing has been lost and nothing has been changed — the pages are still there and the public site is unaffected. Tell whoever maintains the site, and give them this: <code>${escapeHtml(readError)}</code></div>`
+          : hiddenByOwnership
+            ? `<div class="alert alert-warn"><strong>${everyPage.length} ${everyPage.length === 1 ? 'page exists' : 'pages exist'}, but none are assigned to you.</strong> Your account can edit only the pages it owns (the <code>pages_edit_own</code> permission) rather than every page (<code>pages_edit</code>). If you used to see them all here, that permission has been turned off — an admin can turn it back on under People &amp; Access → Users.</div>`
+            : '';
+
         const parentName = (id) => {
           const p = ordered.find((x) => x.id === id);
           return p ? (p.menu_label || p.title) : '';
@@ -6837,7 +6878,7 @@ ${newsImageUploadScript(item.image_url || '')}`, 'Edit post — TLC Admin', TINY
         return html(`
 ${sidebarShell('pages', currentUser, `<a href="/pages/details">Church details</a>`, await pageBadges())}
 <div class="tlc-wrap">
-  ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
+  ${alertHtml || problemHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}${problemHtml}</div>` : ''}
   ${renderListSection({
     key: 'pages',
     title: sectionCfg('pages').title,
@@ -6848,7 +6889,16 @@ ${sidebarShell('pages', currentUser, `<a href="/pages/details">Church details</a
     columns: columnsOf('pages'),
     rows: listRows,
     noun: 'page',
-    empty: 'No pages to show.',
+    empty: readError ? 'The page list could not be read.'
+      : hiddenByOwnership ? 'No pages are assigned to you.'
+      : 'No pages to show.',
+    // Never "use the button above" when the button is not the answer: a failed
+    // read is not fixed by adding a page, and an owner-scoped account is
+    // refused by /pages/new anyway.
+    emptyHelp: readError ? 'See the message above — this is a fault, not an empty site.'
+      : hiddenByOwnership ? 'See the message above.'
+      : ownOnly ? 'Pages are assigned to you by the office.'
+      : 'Use the button above to add the first one.',
     note: sectionCfg('pages').note,
   })}
   ${newPage ? renderDrawer({
@@ -9569,14 +9619,23 @@ ${sidebarShell('settings', currentUser, '', await pageBadges())}
       // is still exactly one copy of a ladder row: the block on the page.
       // These panels read and write that same block, so this screen and the
       // page editor are two doors into one record, not two records.
+      // ⚠ Same rule as the Pages list: a failed read must not render as "there
+      // are no ladders". That sentence sends somebody to the page editor to
+      // add a block that is already there, and if they do, they get a second
+      // copy of the church's giving amounts.
+      let ladderReadError = '';
       const givePageRow = await env.DB.prepare('SELECT blocks, published_blocks FROM pages WHERE id = ?')
-        .bind(GIVE_LANDING_PAGE_ID).first().catch(() => null);
+        .bind(GIVE_LANDING_PAGE_ID).first()
+        .catch((e) => { ladderReadError = (e && e.message) || String(e); return null; });
+      if (ladderReadError) console.error('Giving ladder read failed:', ladderReadError);
       const ladderBlocks = sanitizeBlocks(parseBlocks(givePageRow && givePageRow.blocks))
         .filter((b) => b.type === 'amounts');
       const givePagePublished = sanitizeBlocks(parseBlocks(givePageRow && givePageRow.published_blocks)).length > 0;
       const plainText = (s) => escapeHtml(String(s || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim());
       const ladderTitle = (b) => b.subtitle || b.title || b.eyebrow || 'Amount ladder';
-      const ladderHtml = ladderBlocks.length === 0
+      const ladderHtml = ladderReadError
+        ? `<div class="alert alert-error"><strong>The giving page could not be read.</strong> The amounts below are missing because of a fault, not because the page has none — do not add an Amount ladder block to replace them, or the page will end up with two. Tell whoever maintains the site, and give them this: <code>${escapeHtml(ladderReadError)}</code></div>`
+        : ladderBlocks.length === 0
         ? `<div style="font-size:13px;color:var(--gray);padding:12px 0;">The giving page has no amount ladders on it. Add an <strong>Amount ladder</strong> block in <a href="/giving/page" style="color:var(--tlc-blue);">the page editor</a>.</div>`
         : ladderBlocks.map((b) => panel(ladderTitle(b),
             panelList({

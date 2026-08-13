@@ -332,6 +332,50 @@ group('badges match the worklist');
 }
 
 
+// ── an empty Pages list has to say WHY it is empty ───────────────────────────
+// Dinger opened /pages and got "No pages to show" beside a sidebar badge
+// reading "24 waiting". Two different faults produce that screen and neither
+// used to admit to being a fault, so the list read as a site whose pages had
+// vanished.
+group('an empty Pages list says why');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  // A read that FAILS must never render as a site with no pages. Dropping the
+  // column reproduces the real shape of this: a live table that migrated
+  // part-way, so every query naming that column throws while the rest of the
+  // admin — including the sidebar badge, which selects only status/blocks —
+  // carries on working and reporting pages that exist.
+  db.prepare('ALTER TABLE pages DROP COLUMN owner_username').run();
+  let body = await (await call(env, '/pages', { cookie })).text();
+  has(body, 'could not be read', 'a failed read says so instead of showing an empty table');
+  has(body, 'not because the site has no pages', 'and says explicitly that the pages are still there');
+  lacks(body, 'Use the button above to add the first one.',
+    'and never tells you to add a page to fix a database fault');
+
+  db.prepare('ALTER TABLE pages ADD COLUMN owner_username TEXT').run();
+  body = await (await call(env, '/pages', { cookie })).text();
+  lacks(body, 'could not be read', 'with the column back, the list reads normally again');
+}
+
+// The other way to get an empty list: an account that may only edit the pages
+// assigned to it, with none assigned. `owns` filters every row away while the
+// sidebar badge — scoped to EITHER pages permission — still counts them, so
+// the screen has to explain the contradiction it is showing.
+group('a page list emptied by ownership says so');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ['pages_edit_own'], 'leader');
+  ok(db.prepare('SELECT COUNT(*) AS n FROM pages').get().n > 0, 'the site has pages');
+
+  const body = await (await call(env, '/pages', { cookie })).text();
+  has(body, 'none are assigned to you', 'the screen says the pages exist but are not theirs');
+  has(body, 'pages_edit_own', 'and names the permission it is acting on');
+  lacks(body, 'Use the button above to add the first one.',
+    'and does not point at a New page button that would refuse them');
+}
+
 // ── phase 3: short links, clashes, redirects ─────────────────────────────────
 group('short links on the Pages screen');
 {

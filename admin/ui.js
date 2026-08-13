@@ -185,6 +185,13 @@ export function renderListSection(cfg) {
     key, title, purpose = '', action = null, altActions = [], search = '', filters = [], valueChips = false,
     columns = [], rows = [], note = '', noun = 'item', nounPlural = '',
     empty = 'Nothing here yet.', headerExtra = '', pageSize = 0,
+    // The second line of the empty state. It defaulted to "Use the button
+    // above to add the first one" and was not overridable, which is wrong
+    // wherever the reader cannot use that button — a section they can only
+    // read, or one that is empty because of a filter they did not choose
+    // rather than because nothing has been made yet. Telling somebody to
+    // press a button that will refuse them is worse than saying nothing.
+    emptyHelp = 'Use the button above to add the first one.',
   } = cfg;
 
   const plural = nounPlural || noun + 's';
@@ -281,7 +288,7 @@ export function renderListSection(cfg) {
     <div class="tlc-tbody">${rowsHtml}</div>
     <div class="tlc-empty" hidden>
       <span class="tlc-empty-title" data-empty="${esc(empty)}">${esc(empty)}</span>
-      <span class="tlc-empty-help" data-empty="Use the button above to add the first one.">Use the button above to add the first one.</span>
+      <span class="tlc-empty-help" data-empty="${esc(emptyHelp)}">${esc(emptyHelp)}</span>
     </div>
   </div>
   ${pageSize ? `<div class="tlc-pager" hidden>
