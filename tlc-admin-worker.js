@@ -100,7 +100,7 @@ import { normalizeChannelInput, channelPageUrl, channelIdFrom, feedUrl,
 import { PALETTE as CHROME_PALETTE, BAR_KEYS, DEFAULTS as CHROME_DEFAULTS,
          parseAppearance, appearanceFromForm, sanitizeAppearance, publicAppearance,
          isDirty as chromeDirty, changedFields as chromeChanged, FIELD_LABELS as CHROME_LABELS,
-         renderHeaderPreview, renderNewsletterPreview } from './admin/appearance.js';
+         renderHeaderPreview, renderNewsletterPreview, TYPEFACES } from './admin/appearance.js';
 
 // ── THE CHROME RECORD, DRAFT AND LIVE ────────────────────────
 // Two settings rows, the same split a page has between `blocks` and
@@ -3749,7 +3749,17 @@ ${renderFormSection({
   extraHead: alertHtml + publishBar + previews,
   note: 'Colors come from the church palette rather than a color picker: the words in the bar are white and cannot be changed, so a pale color here would be a header nobody can read — on every page at once.',
   fields: [
-    { kind: 'html', html: '<div class="tlc-field"><span class="tlc-label">The header</span></div>' },
+    // ⚠ Sits ABOVE the header fields, and not because it is the most-used
+    // control — it is the widest-reaching one, and putting it under a heading
+    // that says "The header" would tell somebody it only changes the bar.
+    { kind: 'html', html: '<div class="tlc-field"><span class="tlc-label">The whole site</span></div>' },
+    { kind: 'chips', name: 'typeface', label: 'Typeface', value: a.typeface,
+      options: TYPEFACES.map((t) => ({ value: t.key, label: t.label })) },
+    { kind: 'html', html: '<p class="tlc-hint" style="margin-top:-10px;">'
+      + escapeHtml(TYPEFACES.map((t) => t.label + ' — ' + t.note).join('  ')) + '</p>' },
+    { kind: 'html', html: '<p class="tlc-hint" style="margin-top:-4px;">This is the one setting here that is not just the header. It changes every heading and every paragraph on every page, and every block in the page editor — there is deliberately no way to set a font on one page or one block, because that is how a site ends up reading like two sites. Like everything else on this screen it is a draft until you publish.</p>' },
+
+    { kind: 'html', html: '<div class="tlc-field" style="margin-top:26px;"><span class="tlc-label">The header</span></div>' },
     { kind: 'photo', name: 'logo_url', label: 'Logo', value: a.logo_url,
       hint: 'Shown at 44 pixels. A square picture crops best. Leave it empty to show the church name on its own.' },
     { kind: 'chips', name: 'logo_shape', label: 'Logo shape', value: a.logo_shape,

@@ -7,7 +7,9 @@
 import {
   PALETTE, PALETTE_KEYS, BAR_KEYS, DEFAULTS, colorOf, safeLogoUrl, sanitizeAppearance,
   parseAppearance, appearanceFromForm, isDirty, changedFields, publicAppearance,
+  TYPEFACES, TYPEFACE_KEYS, typefaceOf, renderHeaderPreview, renderNewsletterPreview,
 } from './appearance.js';
+import { readFileSync } from 'node:fs';
 
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error('  ✗ ' + msg); } };
@@ -158,6 +160,82 @@ group('What the public site is sent');
   eq(publicAppearance({ nl_show: false }).newsletter, null,
     'and a hidden newsletter band is absent, not present-and-off');
   ok(publicAppearance({ nl_show: true }).newsletter.heading, 'a shown one carries its wording');
+}
+
+group('The typeface reaches every page, so it is guarded like one');
+{
+  eq(TYPEFACES.length, 2, 'two pairs, not a font list');
+  ok(TYPEFACE_KEYS.includes('redesign') && TYPEFACE_KEYS.includes('classic'), 'the redesign and the way back');
+
+  // ⚠ THREE ROLES. Collapsing head/ui to one puts the reading serif on every
+  // button in the redesign, which is the single thing the design is emphatic
+  // about not doing — and it would do it silently, since the text is still
+  // legible, just wrong.
+  for (const t of TYPEFACES) {
+    ok(t.head && t.body && t.ui, t.key + ' names all three roles');
+    ok(t.note, t.key + ' says what picking it does');
+  }
+  ok(typefaceOf('redesign').ui === typefaceOf('redesign').head,
+    'in the redesign the UI face is the display face, not the reading face');
+  ok(typefaceOf('redesign').ui !== typefaceOf('redesign').body,
+    'and specifically not the serif — a serif Give button is the failure this pins');
+  ok(typefaceOf('classic').ui === typefaceOf('classic').body,
+    'classically the UI face is the body face, which is how the site read before');
+
+  eq(typefaceOf('nonsense').key, 'redesign', 'an unknown pair clamps to the default');
+  eq(sanitizeAppearance({ typeface: 'wingdings' }).typeface, 'redesign',
+    'and a crafted POST cannot select a pair the site has no fonts loaded for');
+  eq(sanitizeAppearance({ typeface: 'classic' }).typeface, 'classic', 'a real one is kept');
+
+  const pub = publicAppearance({ typeface: 'redesign' });
+  ok(/Bricolage/.test(pub.fonts.head), 'the site is sent a real stack, not the key');
+  ok(/Newsreader/.test(pub.fonts.body), 'including the reading face');
+  ok(!('typeface' in pub), 'and not the key alongside it, which would be two answers');
+
+  ok(changedFields({ typeface: 'classic' }, DEFAULTS).includes('typeface'),
+    'switching it counts as an unpublished change like any other');
+
+  // ⚠ THE ONE ASSERTION THAT CATCHES A REAL, VISIBLE BUG. public/styles.css
+  // holds the default that renders BEFORE the appearance fetch returns, and
+  // forever if the admin is unreachable. If it names a different pair from
+  // DEFAULTS.typeface, every page paints one pair and visibly reflows to the
+  // other on every single load — on all 28 pages, for every visitor.
+  const css = readFileSync(new URL('../public/styles.css', import.meta.url), 'utf8');
+  const root = css.slice(0, css.indexOf('}'));
+  const decl = (name) => (root.match(new RegExp('--' + name + ':([^;]+);')) || [, ''])[1];
+  const want = typefaceOf(DEFAULTS.typeface);
+  const firstFamily = (stack) => String(stack).split(',')[0].replace(/['"]/g, '').trim();
+  eq(firstFamily(decl('font-heading')), firstFamily(want.head),
+    'public/styles.css --font-heading matches DEFAULTS.typeface');
+  eq(firstFamily(decl('font-body')), firstFamily(want.body),
+    'public/styles.css --font-body matches DEFAULTS.typeface');
+  eq(firstFamily(decl('font-ui')), firstFamily(want.ui),
+    'public/styles.css --font-ui matches DEFAULTS.typeface');
+
+  // The unconverted pages still name these directly and do not follow the
+  // selector; re-pointing them restyles half-converted pages one variable at
+  // a time. They retire when the last page is converted.
+  ok(/--serif:'Lora'/.test(root), '--serif is deliberately left on the old pair');
+  ok(/--sans:'Source Sans 3'/.test(root), 'and so is --sans');
+
+  // Both pairs have to be REQUESTED, or the selected one renders as a
+  // fallback stack with nothing in the browser to show it.
+  const index = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  const links = index.slice(0, index.indexOf('</head>'));
+  for (const fam of ['Lora', 'Source+Sans+3', 'Bricolage+Grotesque', 'Newsreader']) {
+    ok(links.includes('family=' + fam), fam.replace(/\+/g, ' ') + ' is loaded on the public site');
+  }
+}
+
+group('The preview draws the site, including its type');
+{
+  // The whole reason this file exists rather than a few settings rows: a
+  // preview that can disagree with the site is worse than no preview. That
+  // argument does not stop at the colors.
+  const head = renderHeaderPreview({ typeface: 'redesign' }, [{ label: 'Give', style: 'button' }]);
+  ok(/--hp-head:[^"]*Bricolage/.test(head), 'the header preview carries the published pair');
+  const band = renderNewsletterPreview({ typeface: 'classic' });
+  ok(/--hp-head:[^"]*Lora/.test(band), 'and so does the newsletter band preview');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

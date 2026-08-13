@@ -60,6 +60,44 @@ export const PALETTE = [
   { key: 'gold',     label: 'Gold',     value: '#C9973A', ink: '#FFFFFF', bar: false },
 ];
 
+// ── THE TYPEFACE ─────────────────────────────────────────────
+// One control, two pairs, and it moves the WHOLE site — the header, the
+// footer, every heading on every page and every block in the page editor.
+//
+// That is the point rather than a side effect. Dinger's answer to "should the
+// new language be opt-in per block?" was one look, one set of types; a per-
+// block font toggle would produce exactly the patchwork he was asking not to
+// have, and would do it one page at a time so nobody could see it happening.
+//
+// ⚠ THREE ROLES, NOT TWO. Both pairs use their two families differently:
+// classically Lora sets headings and Source Sans does everything else, while
+// in the redesign Bricolage sets headings AND the UI — buttons, eyebrows,
+// small-caps meta — and Newsreader carries the reading copy. Collapsing that
+// to a heading/body pair puts a serif on every button in the redesign, which
+// is the one thing the design is emphatic about not doing.
+//
+// The three names are the three custom properties public/styles.css already
+// declares, so switching the pair is re-pointing variables the site has always
+// used rather than a new mechanism laid over the old one.
+export const TYPEFACES = [
+  {
+    key: 'redesign', label: 'Bricolage & Newsreader',
+    head: "'Bricolage Grotesque',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+    body: "'Newsreader',Georgia,'Times New Roman',serif",
+    ui: "'Bricolage Grotesque',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+    note: 'The redesign. Display headings with tight, large type; a warm serif for reading.',
+  },
+  {
+    key: 'classic', label: 'Lora & Source Sans',
+    head: 'Lora,Georgia,serif',
+    body: "'Source Sans 3',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif",
+    ui: "'Source Sans 3',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif",
+    note: 'The site as it read before the redesign. Picking this puts every page back.',
+  },
+];
+export const TYPEFACE_KEYS = TYPEFACES.map((t) => t.key);
+export const typefaceOf = (key) => TYPEFACES.find((t) => t.key === key) || TYPEFACES[0];
+
 export const PALETTE_KEYS = PALETTE.map((c) => c.key);
 // The bar and the newsletter band both carry light text, so both choose from
 // this shorter list. The rule and the Give button choose from the whole one.
@@ -75,6 +113,17 @@ export function colorOf(key, fallback = 'moss') {
 // already on the website — a form full of blanks would read as "the header has
 // no settings" and invite them to fill it in from scratch.
 export const DEFAULTS = {
+  // ⚠ The one default here that is NOT the site as it stood before this
+  // screen existed. Dinger asked for the redesign to be the site's look —
+  // "have it all one look" — so the record ships pointing at it, and the
+  // control is how somebody goes back rather than how they opt in.
+  //
+  // It has to be the default rather than something to switch on afterwards
+  // for a reason beyond preference: this value also decides what renders when
+  // the admin is UNREACHABLE, since applyAppearance() never runs then and the
+  // static markup is all there is. A default of 'classic' would mean the site
+  // silently reverted to the old typefaces during an admin outage.
+  typeface: 'redesign',
   // Header
   bar: 'moss',
   rule: 'gold',
@@ -142,6 +191,10 @@ export function sanitizeAppearance(raw) {
     if (src[f] != null) out[f] = !!src[f] && src[f] !== '0' && src[f] !== 'false';
   }
   out.logo_shape = src.logo_shape === 'square' ? 'square' : 'round';
+  // Same shape as logo_shape: an unknown value is a stale tab or a crafted
+  // POST, and the answer to both is the default rather than a third state the
+  // site has no fonts loaded for.
+  if (TYPEFACE_KEYS.includes(src.typeface)) out.typeface = src.typeface;
 
   // A header with no name and no logo is a bar with nothing in it, and the
   // brand block is also the way back to the homepage. Emptying both is
@@ -173,6 +226,7 @@ export function appearanceFromForm(form) {
   const raw = {};
   for (const f of [...TEXT_FIELDS, ...COLOR_FIELDS]) raw[f] = form.get(f);
   raw.logo_shape = form.get('logo_shape');
+  raw.typeface = form.get('typeface');
   for (const f of FLAG_FIELDS) raw[f] = form.getAll(f).includes('1');
   return sanitizeAppearance(raw);
 }
@@ -189,6 +243,7 @@ export function isDirty(draft, published) {
 // What actually differs, so the screen can say "the bar color and the logo"
 // rather than the unhelpfully vague "you have unpublished changes".
 export const FIELD_LABELS = {
+  typeface: 'Typeface',
   bar: 'Bar color', rule: 'Bottom rule', cta: 'Give button', logo_url: 'Logo',
   logo_shape: 'Logo shape', brand_name: 'Church name', tagline: 'Tagline',
   show_tagline: 'Tagline shown', nl_show: 'Newsletter band', nl_bg: 'Newsletter color',
@@ -227,6 +282,12 @@ const pesc = (s) => String(s == null ? '' : s)
 // which is another reason pale bar colors are not offered.
 const TAGLINE_INK = '#E8C070';
 
+// The chosen pair, as custom properties the preview's own rules read. Without
+// this the preview would draw the site's header in the ADMIN's typefaces — the
+// exact class of lie this function was written to end, just moved from the
+// colors to the type.
+const fontVars = (a) => `--hp-head:${pesc(a.fonts.head)};--hp-body:${pesc(a.fonts.body)};--hp-ui:${pesc(a.fonts.ui)};`;
+
 export function renderHeaderPreview(appearance, items = [], { note = '' } = {}) {
   const a = publicAppearance(appearance);
   const brand = a.logo
@@ -234,7 +295,7 @@ export function renderHeaderPreview(appearance, items = [], { note = '' } = {}) 
     : '';
   const links = items.map((i) => `<span class="tlc-hp-item${i.style === 'button' ? ' is-button' : ''}">${pesc(i.label)}</span>`).join('');
 
-  return `<div class="tlc-hp" style="--hp-bar:${pesc(a.bar)};--hp-rule:${pesc(a.rule)};--hp-cta:${pesc(a.cta)};--hp-ink:${pesc(a.ink)};--hp-cta-ink:${pesc(a.ctaInk)};">
+  return `<div class="tlc-hp" style="--hp-bar:${pesc(a.bar)};--hp-rule:${pesc(a.rule)};--hp-cta:${pesc(a.cta)};--hp-ink:${pesc(a.ink)};--hp-cta-ink:${pesc(a.ctaInk)};${fontVars(a)}">
   <div class="tlc-hp-bar">
     <span class="tlc-hp-brand">
       ${brand}
@@ -251,11 +312,12 @@ export function renderHeaderPreview(appearance, items = [], { note = '' } = {}) 
 
 // The newsletter band, drawn the same way and for the same reason.
 export function renderNewsletterPreview(appearance) {
-  const n = publicAppearance(appearance).newsletter;
+  const a = publicAppearance(appearance);
+  const n = a.newsletter;
   if (!n) {
     return `<div class="tlc-hp-off">The newsletter band is switched off — no page shows it.</div>`;
   }
-  return `<div class="tlc-np" style="--np-bg:${pesc(n.bg)};">
+  return `<div class="tlc-np" style="--np-bg:${pesc(n.bg)};${fontVars(a)}">
   ${n.eyebrow ? `<div class="tlc-np-eyebrow">${pesc(n.eyebrow)}</div>` : ''}
   <div class="tlc-np-head">${pesc(n.heading)}</div>
   ${n.body ? `<div class="tlc-np-body">${pesc(n.body)}</div>` : ''}
@@ -274,17 +336,17 @@ export const APPEARANCE_CSS = `
 .tlc-hp-logo{width:44px;height:44px;border-radius:50%;flex-shrink:0;object-fit:contain;background:#fff;padding:3px;}
 .tlc-hp-logo.is-square{border-radius:8px;}
 .tlc-hp-words{display:flex;flex-direction:column;gap:2px;}
-.tlc-hp-name{font:800 14px var(--tlc-sans);color:var(--hp-ink);}
-.tlc-hp-tag{font:600 10px var(--tlc-sans);color:${TAGLINE_INK};letter-spacing:.04em;}
+.tlc-hp-name{font:800 14px var(--hp-head,var(--tlc-sans));color:var(--hp-ink);}
+.tlc-hp-tag{font:600 10px var(--hp-body,var(--tlc-sans));color:${TAGLINE_INK};letter-spacing:.04em;}
 .tlc-hp-links{display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
-.tlc-hp-item{font:700 13px var(--tlc-sans);color:var(--hp-ink);opacity:.85;padding:6px 10px;border-radius:8px;}
+.tlc-hp-item{font:700 13px var(--hp-ui,var(--tlc-sans));color:var(--hp-ink);opacity:.85;padding:6px 10px;border-radius:8px;}
 .tlc-hp-item.is-button{background:var(--hp-cta);color:var(--hp-cta-ink);opacity:1;font-weight:800;padding:7px 16px;}
 .tlc-hp-note{padding:0 20px 10px;font-size:11.5px;color:var(--hp-ink);opacity:.55;}
 .tlc-hp-off{background:var(--tlc-sand);border-radius:12px;padding:18px 20px;margin-bottom:18px;font:400 13.5px var(--tlc-sans);color:var(--tlc-secondary);}
 .tlc-np{background:var(--np-bg);border-radius:12px;padding:26px 24px;margin-bottom:18px;text-align:center;}
-.tlc-np-eyebrow{font:700 10.5px var(--tlc-sans);letter-spacing:.12em;text-transform:uppercase;color:${TAGLINE_INK};margin-bottom:8px;}
-.tlc-np-head{font:400 22px var(--tlc-serif);color:#fff;margin-bottom:6px;}
-.tlc-np-body{font:400 13.5px var(--tlc-sans);color:rgba(255,255,255,.72);max-width:460px;margin:0 auto 16px;line-height:1.5;}
+.tlc-np-eyebrow{font:700 10.5px var(--hp-ui,var(--tlc-sans));letter-spacing:.12em;text-transform:uppercase;color:${TAGLINE_INK};margin-bottom:8px;}
+.tlc-np-head{font:400 22px var(--hp-head,var(--tlc-serif));color:#fff;margin-bottom:6px;}
+.tlc-np-body{font:400 13.5px var(--hp-body,var(--tlc-sans));color:rgba(255,255,255,.72);max-width:460px;margin:0 auto 16px;line-height:1.5;}
 .tlc-np-form{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;}
 .tlc-np-input{font:400 12.5px var(--tlc-sans);color:rgba(255,255,255,.5);background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:8px 12px;}
 .tlc-np-btn{font:700 12.5px var(--tlc-sans);color:var(--tlc-gold-ink);background:var(--tlc-gold);border-radius:8px;padding:8px 18px;}
@@ -304,7 +366,14 @@ export const APPEARANCE_CSS = `
 // keep in step — which is the whole reason the site is sent values and not keys.
 export function publicAppearance(a) {
   const s = sanitizeAppearance(a);
+  const tf = typefaceOf(s.typeface);
   return {
+    // Real font stacks, not the key — same argument as the colors. The site
+    // never carries a copy of what "redesign" means, so renaming or re-cutting
+    // a pair here reaches every page on the next deploy with nothing to keep
+    // in step. These land on --font-heading / --font-body / --font-ui, which
+    // public/styles.css already declares and every block already reads.
+    fonts: { head: tf.head, body: tf.body, ui: tf.ui },
     bar: colorOf(s.bar).value,
     rule: colorOf(s.rule, 'gold').value,
     cta: colorOf(s.cta, 'gold').value,

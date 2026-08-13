@@ -636,7 +636,12 @@ export function html(body, title = 'TLC Admin', extraHead = '') {
 <meta name="apple-mobile-web-app-title" content="TLC Admin">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600&family=Source+Sans+3:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<!-- The admin chrome stays Lora + Source Sans. These two are the SITE's other
+     typeface pair, loaded here only so the header preview and the editor canvas
+     can draw the site in whatever pair is published — a preview in the admin's
+     own fonts is the same class of lie the preview exists to end. Nothing in
+     the admin's own furniture uses them. -->
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600&family=Source+Sans+3:wght@300;400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&display=swap" rel="stylesheet">
 ${extraHead}
 <link rel="stylesheet" href="/assets/admin.css?v=${VERSION}">
 </head>

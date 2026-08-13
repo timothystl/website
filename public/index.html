@@ -108,6 +108,30 @@ if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
      2026-08-03, since those rules would otherwise fall back to a synthetic
      or 400-weight render instead of the real light face. -->
 <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,700;1,400&family=Source+Sans+3:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+<!-- The redesign's pair, and the reason BOTH pairs are loaded rather than only
+     the selected one.
+
+     The typeface is a published setting (Menu → Appearance), fetched at
+     runtime — so at the moment this document is parsed nothing yet knows which
+     pair is in force, and loading the wrong one means every page repaints its
+     type after first paint. Injecting the link from applyAppearance() would do
+     exactly that.
+
+     But the deciding reason is simpler: Lora and Source Sans are NOT only
+     reached through --font-heading/--font-body. Dozens of inline styles in the
+     markup below still say var(--serif) and var(--sans) directly, on the pages
+     that have not been converted yet, and those do not follow the selector.
+     Dropping the classic link would silently render those in Georgia.
+
+     So both pairs ship until every page is converted, at which point the link
+     above can go. Variable fonts, cached immutable — the cost is one extra
+     request per family, once.
+
+     Weights: Bricolage 600/700/800 (display headings, buttons, eyebrows) and
+     Newsreader 300 (body), 400 italic (quotes), 600 (nav, meta). Requested as
+     the full variable range because a range is one file either way — trimming
+     the axis here saves nothing, unlike the static Source Sans weights above. -->
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&display=swap" rel="stylesheet">
 <!-- Cloudflare Web Analytics — no cookies, no GDPR issues, free -->
 <script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "db24b7b0a3044db6be76e51675a0eb1d"}'></script>
 </head>
@@ -2762,6 +2786,19 @@ function buildFooterColumns(columns) {
 function applyAppearance(a) {
   if (!a) return;
   var root = document.documentElement.style;
+  // ⚠ These three reach the WHOLE site, not just the header — every heading,
+  // every paragraph, every block rendered by admin/blocks.js, which reads the
+  // same three properties. That is deliberate: the typeface is one decision
+  // about how the site reads, so it is one control and one place it lands.
+  //
+  // Both pairs are loaded in the head, so switching here never waits on a
+  // font request. Real stacks arrive already resolved — the site holds no copy
+  // of what a pair name means. See admin/appearance.js.
+  if (a.fonts) {
+    if (a.fonts.head) root.setProperty('--font-heading', a.fonts.head);
+    if (a.fonts.body) root.setProperty('--font-body', a.fonts.body);
+    if (a.fonts.ui) root.setProperty('--font-ui', a.fonts.ui);
+  }
   if (a.bar) root.setProperty('--nav-bar', a.bar);
   if (a.rule) root.setProperty('--nav-rule', a.rule);
   if (a.cta) root.setProperty('--nav-cta', a.cta);

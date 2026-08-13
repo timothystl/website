@@ -15,11 +15,27 @@
   --warm:#F7F3EC;--linen:#EDE9E0;--white:#FBF8F3;
   /* Text & borders */
   --border:#DDE3ED;--charcoal:#1A1A2A;--gray:#4A4860;--text-muted:#8A8898;
-  /* Fonts & shape */
+  /* Fonts & shape
+     ── THE TYPEFACE IS A SETTING, AND THESE THREE ARE WHERE IT LANDS ────────
+     --font-heading / --font-body / --font-ui are re-pointed at runtime by
+     applyAppearance() in index.html from the published Appearance record.
+     What is written here is the DEFAULT — what renders before that fetch
+     returns, and what renders forever if the admin is unreachable.
+
+     ⚠ It therefore has to match DEFAULTS.typeface in admin/appearance.js. If
+     the two disagree, every page paints one pair and then visibly reflows to
+     the other on every single load. They are both 'redesign' today.
+
+     ⚠ --serif and --sans are NOT the same thing and are deliberately left on
+     the old pair. Dozens of inline styles in index.html still name them
+     directly on pages that have not been converted, and those do not follow
+     the selector — re-pointing them here would restyle half-converted pages
+     out from under the conversion, one variable at a time. They retire when
+     the last page is converted, not before. */
   --serif:'Lora',Georgia,serif;--sans:'Source Sans 3',Arial,sans-serif;
-  --font-heading:'Lora',Georgia,serif;
-  --font-body:'Source Sans 3',Arial,sans-serif;
-  --font-ui:'Source Sans 3',Arial,sans-serif;
+  --font-heading:'Bricolage Grotesque',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --font-body:'Newsreader',Georgia,'Times New Roman',serif;
+  --font-ui:'Bricolage Grotesque',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
   --r-sm:8px;--r-md:12px;--r-lg:20px;
   --shadow:0 2px 12px rgba(30,45,74,.08);--shadow-lift:0 6px 32px rgba(30,45,74,.14);
 }
