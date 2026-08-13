@@ -2,6 +2,12 @@
 
 This file captures the full project context so any Claude session can be resumed immediately.
 
+> **⚠ American English, in everything a human reads** — screen labels, button text, purpose
+> lines, `◆` notes, toasts, code comments, this file, and `public/manual.html`. The full rule,
+> the four things that look British and must **not** be "corrected", and the grep that checks it
+> are under **Design System → ⚠ American spellings everywhere**. The same rule now holds in the
+> `chms`, `childcare-portal` and `other` repos, each with its own exceptions table.
+
 ---
 
 ## Project Overview
