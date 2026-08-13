@@ -994,11 +994,11 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb--hero{padding:0;}
 .tlcb--spacer{padding:0 var(--tlcb-pad);}
 .tlcb *{box-sizing:border-box;}
-.tlcb-eyebrow{font:700 11px/1.4 var(--tlcb-ui);letter-spacing:.12em;text-transform:uppercase;
+.tlcb-eyebrow{font:800 11.5px/1.4 var(--tlcb-ui);letter-spacing:.16em;text-transform:uppercase;
   color:#C9973A;margin-bottom:8px;}
-.tlcb-head{font-family:var(--tlcb-serif);font-weight:700;line-height:1.2;margin:0;
+.tlcb-head{font-family:var(--tlcb-serif);font-weight:800;line-height:1.05;letter-spacing:-.02em;margin:0;
   font-size:var(--tlcb-head,22px);color:var(--tlcb-head-ink,#1E2D4A);}
-.tlcb-prose{font-size:var(--tlcb-body,15px);line-height:1.75;color:var(--tlcb-ink,#3A3A4A);text-wrap:pretty;}
+.tlcb-prose{font-size:var(--tlcb-body,15px);font-weight:300;line-height:1.6;color:var(--tlcb-ink,#3A3A4A);text-wrap:pretty;}
 .tlcb-prose h2{font-family:var(--tlcb-serif);font-weight:700;line-height:1.2;margin:0 0 16px;
   font-size:var(--tlcb-head,30px);color:var(--tlcb-head-ink,#1E2D4A);}
 .tlcb-prose h3{font-family:var(--tlcb-serif);font-weight:700;line-height:1.25;margin:0 0 12px;
@@ -1021,20 +1021,20 @@ export const BLOCK_CSS = `<style id="tlcb-css">
    text each card carries. That is the whole reason for the flex column and
    the margin-top:auto on the foot. */
 .tlcb-cg-grid{display:grid;grid-template-columns:var(--tlcb-cols,repeat(3,1fr));gap:24px;align-items:stretch;margin-top:8px;}
-.tlcb-cg-card{display:flex;flex-direction:column;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:12px;padding:26px 24px;
+.tlcb-cg-card{display:flex;flex-direction:column;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:20px;padding:28px 26px;
   box-shadow:0 2px 6px rgba(11,22,44,.05),0 10px 24px rgba(11,22,44,.06);
-  transition:box-shadow 140ms ease,transform 140ms ease;}
-.tlcb-cg-card:hover{box-shadow:0 4px 10px rgba(11,22,44,.07),0 16px 34px rgba(11,22,44,.09);transform:translateY(-2px);}
+  transition:box-shadow .3s cubic-bezier(.2,.8,.2,1),transform .3s cubic-bezier(.2,.8,.2,1);}
+.tlcb-cg-card:hover{box-shadow:0 18px 40px rgba(16,27,46,.16);transform:translateY(-4px);}
 /* A soft lift, not a drop — the card rises toward the reader. */
 .tlcb-cg-img{margin-bottom:14px;}
 .tlcb-cg-img img{display:block;max-width:100%;max-height:120px;width:auto;height:auto;object-fit:contain;}
-.tlcb-cg-eyebrow{font:700 11px/1.4 var(--tlcb-sans);letter-spacing:.14em;text-transform:uppercase;color:#2E7EA6;margin-bottom:6px;}
+.tlcb-cg-eyebrow{font:800 11.5px/1.4 var(--tlcb-ui);letter-spacing:.16em;text-transform:uppercase;color:#2E7EA6;margin-bottom:6px;}
 .tlcb-cg-eyebrow:empty{display:none;}
-.tlcb-cg-head{font-family:var(--tlcb-serif);font-size:calc(var(--tlcb-head,22px) * .78);line-height:1.25;color:#1E2D4A;margin-bottom:8px;}
+.tlcb-cg-head{font-family:var(--tlcb-serif);font-weight:700;font-size:calc(var(--tlcb-head,22px) * .78);line-height:1.15;letter-spacing:-.01em;color:#1E2D4A;margin-bottom:8px;}
 .tlcb-cg-body{margin-bottom:14px;}
 .tlcb-cg-foot{margin-top:auto;}
 .tlcb-cg-foot:empty{display:none;}
-.tlcb-cg-link{font:600 15px/1.3 var(--tlcb-sans);color:#2E7EA6;text-decoration:none;}
+.tlcb-cg-link{font:800 13px/1.3 var(--tlcb-ui);color:#2E7EA6;text-decoration:none;}
 .tlcb-cg-link:hover{text-decoration:underline;}
 .tlcb-cg-intro{font-family:var(--tlcb-sans);max-width:56em;color:var(--tlcb-body,#4A4860);}
 .tlcb-cg-intro:empty{display:none;}
@@ -1101,9 +1101,10 @@ export const BLOCK_CSS = `<style id="tlcb-css">
    justify-content — are gone, not lost: each is now the generic rule above
    that does the same job for every type at once. Two rules for one job is two
    places to disagree, and the generic one had to exist regardless. */
-.tlcb-media{order:var(--tlcb-media-order,0);min-height:150px;border-radius:8px;background:#E4EAF2 center/cover no-repeat;
+.tlcb-media{order:var(--tlcb-media-order,0);min-height:150px;border-radius:20px;overflow:hidden;background:#E4EAF2 center/cover no-repeat;
   display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;}
-.tlcb-media img{width:100%;height:100%;object-fit:cover;display:block;border-radius:8px;}
+.tlcb-media img{width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit;transition:transform .5s cubic-bezier(.2,.8,.2,1);}
+.tlcb-media:hover img{transform:scale(1.04);}
 /* Matches .page-hero in public/styles.css — this is the page banner, so it has
    to be the same thing whether the page draws it or a block does. */
 .tlcb-hero{border-radius:8px;padding:56px 28px;position:relative;
@@ -1111,8 +1112,8 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-hero::before{content:'';position:absolute;inset:0;border-radius:inherit;
   background:linear-gradient(135deg,rgba(30,45,74,.82),rgba(17,30,50,.92));opacity:var(--tlcb-hero-veil,0);}
 .tlcb-hero > *{position:relative;z-index:1;}
-.tlcb-hero-eyebrow{font:700 11px/1 var(--tlcb-ui);letter-spacing:.12em;text-transform:uppercase;color:#E8C070;margin-bottom:8px;}
-.tlcb-hero-title{font-family:var(--tlcb-serif);font-weight:700;font-size:var(--tlcb-hero,38px);line-height:1.15;color:#fff;margin:0;}
+.tlcb-hero-eyebrow{font:800 12px/1 var(--tlcb-ui);letter-spacing:.18em;text-transform:uppercase;color:#E8C070;margin-bottom:8px;}
+.tlcb-hero-title{font-family:var(--tlcb-serif);font-weight:800;font-size:var(--tlcb-hero,38px);line-height:1;letter-spacing:-.03em;color:#fff;margin:0;}
 /* No auto side margins by default — align-items:flex-start (.tlcb-band-text's
    own base) already puts this flush left; a flex item's own horizontal auto
    margins self-center regardless of the container's align-items, which is
@@ -1151,7 +1152,7 @@ export const BLOCK_CSS = `<style id="tlcb-css">
   font:700 10px/1.6 var(--tlcb-ui);letter-spacing:.1em;text-transform:uppercase;}
 .tlcb-callout-t{font:600 16px/1.35 var(--tlcb-ui);color:#1E2D4A;}
 .tlcb-btns{display:flex;gap:10px;flex-wrap:wrap;}
-.tlcb-btn{display:inline-block;padding:11px 20px;border-radius:8px;font:600 14px/1 var(--tlcb-ui);text-decoration:none;
+.tlcb-btn{display:inline-block;padding:15px 22px;border-radius:999px;font:800 14px/1 var(--tlcb-ui);text-decoration:none;
   background:#1E2D4A;color:#F5E4C0;border:1px solid #1E2D4A;}
 .tlcb-btn--ghost{background:transparent;color:#1E2D4A;border:1px solid #C4CEDF;}
 .tlcb-panel{display:flex;flex-direction:column;gap:10px;padding:18px 20px;border:1px solid #DDE3ED;border-radius:9px;background:#EDF2F7;}
@@ -1248,13 +1249,13 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-alert-tag{flex:none;padding:2px 8px;border-radius:5px;background:#C9973A;color:#1B1608;
   font:700 10px/1.6 var(--tlcb-ui);letter-spacing:.1em;text-transform:uppercase;}
 .tlcb-alert-body{flex:1;min-width:120px;}
-.tlcb-alert-link{flex:none;color:#2E7EA6;font-weight:600;text-decoration:none;}
+.tlcb-alert-link{flex:none;color:#2E7EA6;font-family:var(--tlcb-ui);font-weight:800;text-decoration:none;}
 .tlcb-slide{position:relative;border-radius:10px;overflow:hidden;padding:64px 40px;display:flex;flex-direction:column;
   align-items:flex-start;gap:14px;min-height:300px;justify-content:center;
   background:#43536F var(--tlcb-slide-img,none) center/cover;}
 .tlcb-slide::before{content:'';position:absolute;inset:0;background:linear-gradient(105deg,rgba(17,30,50,.86),rgba(30,45,74,.55));}
 .tlcb-slide > *{position:relative;z-index:1;}
-.tlcb-slide-title{font-family:var(--tlcb-serif);font-weight:700;font-size:var(--tlcb-hero,38px);line-height:1.12;color:#fff;margin:0;max-width:16em;}
+.tlcb-slide-title{font-family:var(--tlcb-serif);font-weight:800;font-size:var(--tlcb-hero,38px);line-height:1;letter-spacing:-.03em;color:#fff;margin:0;max-width:16em;}
 .tlcb-slide-sub{font-size:16px;line-height:1.55;color:rgba(255,255,255,.8);margin:0;max-width:34em;font-weight:300;}
 .tlcb-btn--ghost-light{background:transparent;color:#F3EDE1;border:1px solid rgba(245,228,192,.5);}
 .tlcb-dots{display:flex;gap:6px;margin-top:4px;}
@@ -1278,7 +1279,7 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-pair .tlcb-band--card{grid-template-columns:1fr;}
 .tlcb-pair .tlcb-band--card-left .tlcb-band-text{order:0;}
 .tlcb-pair .tlcb-band--card-left .tlcb-card{order:1;}
-aside.tlcb-card{background:#FFFFFF;border-radius:18px;padding:34px 32px;box-shadow:0 18px 44px rgba(11,22,44,.28);
+aside.tlcb-card{background:#FFFDF8;border-radius:22px;padding:34px 32px;box-shadow:0 18px 44px rgba(11,22,44,.28);
   display:flex;flex-direction:column;position:relative;z-index:1;}
 .tlcb-card-eyebrow{font:700 12.5px/1.4 var(--tlcb-ui);letter-spacing:.12em;text-transform:uppercase;color:#C9973A;}
 .tlcb-card-eyebrow:empty::before{content:attr(data-ph);opacity:.45;}
@@ -1327,13 +1328,13 @@ aside.tlcb-card{background:#FFFFFF;border-radius:18px;padding:34px 32px;box-shad
 .tlcb-news-d{flex:none;width:56px;font:700 12px/1.4 var(--tlcb-ui);color:#8A8898;letter-spacing:.03em;}
 .tlcb-news-t{flex:1;font:600 13.5px/1.35 var(--tlcb-ui);color:#1E2D4A;}
 .tlcb-nf-list{display:flex;flex-direction:column;gap:10px;}
-.tlcb-nf-item{background:#fff;border:1px solid #E4E0D4;border-radius:12px;overflow:hidden;}
+.tlcb-nf-item{background:#fff;border:1px solid #E4E0D4;border-radius:18px;overflow:hidden;}
 .tlcb-nf-item summary{list-style:none;cursor:pointer;padding:15px 18px;display:flex;align-items:center;justify-content:space-between;gap:14px;}
 .tlcb-nf-item summary::-webkit-details-marker{display:none;}
 .tlcb-nf-head{display:flex;flex-direction:column;gap:3px;min-width:0;}
-.tlcb-nf-pin{align-self:flex-start;font:700 9px/1.4 var(--tlcb-ui);letter-spacing:.1em;text-transform:uppercase;color:#C9973A;}
-.tlcb-nf-date{font:700 11px/1.4 var(--tlcb-ui);letter-spacing:.06em;text-transform:uppercase;color:#8A8898;}
-.tlcb-nf-title{font-family:var(--tlcb-serif);font-size:17px;line-height:1.3;color:#1E2D4A;}
+.tlcb-nf-pin{align-self:flex-start;font:800 10px/1.4 var(--tlcb-ui);letter-spacing:.14em;text-transform:uppercase;color:#C9973A;}
+.tlcb-nf-date{font:600 12px/1.4 var(--tlcb-ui);letter-spacing:.08em;text-transform:uppercase;color:#8A8898;}
+.tlcb-nf-title{font-family:var(--tlcb-serif);font-weight:700;font-size:19px;line-height:1.2;letter-spacing:-.01em;color:#1E2D4A;}
 .tlcb-nf-chev{flex:none;width:12px;height:12px;border-right:2px solid #8A8898;border-bottom:2px solid #8A8898;transform:rotate(45deg);transition:transform .15s;}
 .tlcb-nf-item[open] .tlcb-nf-chev{transform:rotate(-135deg);}
 .tlcb-nf-body{padding:0 18px 18px;}
@@ -1413,6 +1414,32 @@ aside.tlcb-card{background:#FFFFFF;border-radius:18px;padding:34px 32px;box-shad
   border-radius:11px;background:#FBF8F3;text-decoration:none;}
 .tlcb-kid-t{font-family:var(--tlcb-serif);font-weight:700;font-size:17px;color:#1E2D4A;line-height:1.25;}
 .tlcb-kid-d{font-size:13px;color:#6A6858;line-height:1.5;}
+
+/* ── THE THINGS THAT MOVE ─────────────────────────────────────────────────
+   Motion was a third of the brief, alongside the photography and the type:
+   the site read as dead, and a page where nothing has ever moved reads as a
+   printout. There are exactly three movements and they are all small — a
+   photo that pushes in under the cursor, a card that rises toward it, and one
+   dot that breathes to say something is imminent.
+
+   ⚠ ALL THREE ARE GATED ON prefers-reduced-motion, which the mocks did not do
+   and the handoff says in as many words to add. That setting is not a taste
+   preference: for somebody with a vestibular disorder, motion they did not
+   ask for causes actual nausea, and this is a church website that people open
+   because they are looking for help. The query tests for the reduce value
+   rather than for no-preference, so a browser that has never heard of it
+   still gets the animation. (No backticks in this comment — it lives inside a
+   template literal and one ends the string. See CLAUDE.md; this is the fourth
+   time.) */
+.tlcb-pulse{width:9px;height:9px;border-radius:50%;background:#E4A93C;display:inline-block;flex:none;
+  animation:tlcb-pulse 1.8s ease-in-out infinite;}
+@keyframes tlcb-pulse{0%,100%{opacity:1}50%{opacity:.35}}
+@media(prefers-reduced-motion:reduce){
+  .tlcb-pulse{animation:none;}
+  .tlcb-media img,.tlcb-cg-card{transition:none;}
+  .tlcb-media:hover img{transform:none;}
+  .tlcb-cg-card:hover{transform:none;}
+}
 @media(max-width:640px){
 PHONE_RULES_PLACEHOLDER
   .tlcb-hide-phone{display:none!important;}
