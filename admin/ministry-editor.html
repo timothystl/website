@@ -1417,6 +1417,14 @@ function inspectorSections(b, d) {
       (sw.note ? '<span class="ed-note">' + esc(sw.note) + '</span>' : '') + '</div>';
   });
 
+  // The Standout card's display line. Edited on the page like every other text,
+  // so this is a note rather than a field — but without it nobody knows the
+  // 56px line is a separate thing from the heading under it.
+  if (d.bigLine) {
+    out += '<div class="ed-sec"><span class="ed-lab">The big line</span>' +
+      '<span class="ed-note">The large number or time at the top of the card \u2014 click it on the page to change it. Keep it short: it is set at 56px, so a sentence there is not a display line.</span></div>';
+  }
+
   // 1. Columns
   if (b.type === 'columns') {
     out += '<div class="ed-sec"><span class="ed-lab">Columns</span><div class="ed-chips">' +

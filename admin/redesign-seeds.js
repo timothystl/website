@@ -190,9 +190,9 @@ export const REDESIGN_BLOCKS = {
       side: 'right', split: '50',
       bg: INK, ink: CREAM, spaceAbove: 24, spaceBelow: 0,
     },
-    // The two pills under it. Text + photo carries no buttons of its own, and
-    // giving it some would be a second way for a button row to exist — the
-    // Button bar is already that, and it sits on the same band.
+    // The two pills under the music band. Text + photo carries no buttons of
+    // its own, and giving it some would be a second way for a button row to
+    // exist — the Button bar is already that, and it sits on the same band.
     {
       id: 'worship-1b-5', type: 'buttons',
       bg: INK, ink: CREAM, spaceAbove: 0, spaceBelow: 24,
@@ -236,12 +236,12 @@ export const REDESIGN_BLOCKS = {
         { img: '/images/ministries/lwml.webp', title: 'LWML', body: '<p>Lutheran Women’s Missionary League — a community of women in mission for Christ. Rooted in Scripture, sent in service.</p>', linkLabel: 'Visit LWML', url: 'https://www.lwml.org' },
       ],
     },
-    // The design's call-to-action band, which is the Button bar on gold — it
-    // has carried an eyebrow, a heading and a rich description above its
-    // buttons since v4.32.0. A separate `cta` type would have been a second
-    // near-identical block to drift apart from this one.
+    // ⚠ This was a Button bar on gold in the first build, on the argument that
+    // the two are the same markup. The handoff lists `cta` as its own type and
+    // it is right: a Button bar is a row of choices that grew a heading, and
+    // this is one ask that happens to end in a button.
     {
-      id: 'min-1b-3', type: 'buttons',
+      id: 'min-1b-3', type: 'cta',
       eyebrow: 'Get involved',
       title: 'Ready to put your hands to work?',
       body: '<p>From Sunday setup to the pantry to the Christmas Market — there is always something, and it is never only one kind of person doing it.</p>',

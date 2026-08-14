@@ -544,6 +544,69 @@ export const BLOCK_DEFS = {
     ],
   },
 
+  // ── THE STANDOUT CARD ─────────────────────────────────────────────────────
+  // The handoff calls it "the service-times tile made general", and that is
+  // exactly how it is built: it shares its CSS with the Service times block's
+  // tiles rather than owning a second copy, so the two cannot drift. Two of
+  // these at half width reproduce the Worship layout by hand, which is the
+  // point — a page needs "8:00 am" beside "10:45 am" and it also needs
+  // "1,240 lbs" beside "68 households", and those are one shape.
+  highlight: {
+    label: 'Standout card', glyph: '\u25C9',
+    align: true, richBody: true,
+    defaults: {
+      eyebrow: 'Last month', big: '68', title: 'households served',
+      body: '<p>What the number means, in a sentence.</p>',
+      bg: 6, ink: 3, spaceAbove: 24, spaceBelow: 24,
+    },
+    // The one field no other type has: a display line set far larger than any
+    // heading. It is plain text and short on purpose — it is a number or a
+    // time, not a sentence.
+    bigLine: true,
+    items: true, itemFields: ['title', 'url'], itemUrlFields: ['url'], itemLabel: 'Button',
+    itemPlaceholders: { title: 'Button label', url: '/where-it-goes' },
+    defaultItems: [],
+  },
+
+  // ── THE CALL-TO-ACTION BAND ───────────────────────────────────────────────
+  // ⚠ I ARGUED AGAINST THIS TYPE AND WAS WRONG. The reasoning was that the
+  // Button bar already carries an eyebrow, a heading and a rich description
+  // above its buttons, so on a gold field it IS this. That is true of the
+  // markup and false of the job: a Button bar is a row of choices that grew a
+  // heading, and this is one ask that happens to end in a button. They want
+  // different defaults, different spacing and different wording in the
+  // palette, and asking somebody to reach for "Button bar" when they mean
+  // "ask the congregation to do something" is the kind of indirection this
+  // editor exists to remove. The handoff lists it; it is here.
+  cta: {
+    label: 'Call-to-action band', glyph: '\u2605',
+    align: true, richBody: true,
+    defaults: {
+      eyebrow: 'Get involved', title: 'Ready to put your hands to work?',
+      body: '<p>One short paragraph on why, and what happens next.</p>',
+      bg: 7, ink: 6, spaceAbove: 24, spaceBelow: 24,
+    },
+    items: true, itemFields: ['title', 'url'], itemUrlFields: ['url'], itemLabel: 'Button',
+    itemPlaceholders: { title: 'Button label', url: '/where-it-goes' },
+    defaultItems: [{ title: 'See what is open', url: '' }],
+  },
+
+  // ── THE EMAIL SIGNUP BAND ─────────────────────────────────────────────────
+  // ⚠ The Newsletter block is the same idea and stays; this is the redesign's
+  // banded version, centered by default and sitting on a field. The one real
+  // difference is that this one is a BAND — full width, its own surface — and
+  // Newsletter is a card in a column. Same argument as News highlights against
+  // News feed, which this repo already settled the same way.
+  signup: {
+    label: 'Email signup', glyph: '\u2709',
+    align: true, richBody: true,
+    defaults: {
+      eyebrow: 'Stay connected', title: 'The weekly letter',
+      body: '<p>News, what is coming up, and a word from Pastor Dinger \u2014 in your inbox each week.</p>',
+      align: 'center', bg: 4, ink: 5, spaceAbove: 24, spaceBelow: 24,
+    },
+  },
+
   // ── THE REDESIGN'S OWN FOUR ───────────────────────────────────────────────
   // Four, not the handoff's six. Its `cta` and `signup` types are the Button
   // bar and the Newsletter block already in this file — the Button bar has
@@ -661,14 +724,14 @@ export const ALIGNABLE_TYPES = new Set(
 // what somebody reaches for first on an empty page — the banner and the shape
 // of it — and Content is what they fill it with afterwards.
 export const GROUPS = [
-  { name: 'Structure', types: ['alert', 'photobanner', 'hero', 'slideshow', 'quicklinks', 'cardgrid', 'buttons', 'callout', 'partners', 'spacer'] },
+  { name: 'Structure', types: ['alert', 'photobanner', 'hero', 'slideshow', 'highlight', 'cta', 'quicklinks', 'cardgrid', 'buttons', 'callout', 'partners', 'spacer'] },
   { name: 'Content',   types: ['text', 'textphoto', 'quote', 'video', 'columns', 'gallery', 'faq', 'sermon', 'news', 'newsfeed', 'staff', 'posts'] },
   { name: 'Dates',     types: ['servicetimes', 'chips', 'map', 'events', 'times', 'download', 'calendar'] },
   // `giving` and `amounts` join the group that already holds `give` rather
   // than starting a fifth. They belong to one page, and a group of two that
   // only ever appears on the giving page would read on every other page as a
   // section of the library that is broken.
-  { name: 'Sign up',   types: ['form', 'newsletter', 'letter', 'newsletterarchive', 'give', 'giving', 'amounts'] },
+  { name: 'Sign up',   types: ['form', 'signup', 'newsletter', 'letter', 'newsletterarchive', 'give', 'giving', 'amounts'] },
 ];
 
 export const BLOCK_TYPE_KEYS = Object.keys(BLOCK_DEFS);
@@ -819,6 +882,7 @@ export function newBlock(type, over = {}) {
     hidden: false,
     source: def.partnerSource ? (d.source || 'manual') : undefined,
     partnerIds: [],
+    ...(def.bigLine ? { big: d.big || '' } : {}),
     items: def.items ? JSON.parse(JSON.stringify(def.defaultItems || [])) : [],
     links: def.links ? JSON.parse(JSON.stringify(def.defaultLinks || [])) : [],
     // The def-driven fields, from the same two arrays sanitizeBlock reads.
@@ -952,6 +1016,13 @@ export function sanitizeBlock(b) {
   // block the way `card` is. A type with no source has no `source` field at
   // all — and, incidentally, that is what keeps this change out of the
   // generated page seeds for the twenty-odd types it means nothing to.
+  // ⚠ Set ONLY on a type that has it, the same way `source` is below, rather
+  // than on every block the way `card` is. A key added to all 36 types is a key
+  // added to all 25 generated page seeds, for a field 35 of them can never
+  // render. Short on purpose too: it is a number or a time set at 56px, and a
+  // sentence at that size is not a display line, it is a broken page.
+  if (def.bigLine) out.big = cleanText(b.big, 24);
+
   if (def.partnerSource) {
     out.source = b.source === 'record' ? 'record' : 'manual';
   // Which partners, by id. Empty means all of them — so a partner added later
@@ -1467,9 +1538,13 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-pair .tlcb-band--card{grid-template-columns:1fr;}
 .tlcb-pair .tlcb-band--card-left .tlcb-band-text{order:0;}
 .tlcb-pair .tlcb-band--card-left .tlcb-card{order:1;}
-aside.tlcb-card{background:#FFFDF8;border-radius:22px;padding:34px 32px;box-shadow:0 18px 44px rgba(11,22,44,.28);
+/* ⚠ A GRADIENT, A REAL SHADOW AND A FADING RULE — all three off the
+   prototype, and all three things the first build flattened. The card is the
+   most-photographed element of this design (it sits on the Home banner) and a
+   flat white box with a hairline is not what it is. */
+aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);border-radius:22px;padding:34px 32px;box-shadow:0 20px 50px rgba(16,27,46,.40);
   display:flex;flex-direction:column;position:relative;z-index:1;}
-.tlcb-card-eyebrow{font:700 12.5px/1.4 var(--tlcb-ui);letter-spacing:.12em;text-transform:uppercase;color:#C9973A;}
+.tlcb-card-eyebrow{font:800 11px/1.4 var(--tlcb-ui);letter-spacing:.16em;text-transform:uppercase;color:#B44A2E;}
 .tlcb-card-eyebrow:empty::before{content:attr(data-ph);opacity:.45;}
 /* ⚠ NO BORDER PER ROW. The spec's own row list carries an explicit
    { rule: true } between the times and the address, which only makes sense if
@@ -1478,7 +1553,11 @@ aside.tlcb-card{background:#FFFDF8;border-radius:22px;padding:34px 32px;box-shad
    about twice the height of the one it reproduces. One hairline, not six. */
 .tlcb-card-row{display:flex;flex-direction:column;gap:2px;padding:9px 0;}
 .tlcb-card-row--tight{padding:7px 0;}
-.tlcb-card-rule{height:1px;background:#E7DFD1;margin:11px 0;}
+/* ⚠ A FADING rule, not a hairline. It is 2px of gold dissolving to nothing
+   across the card — the prototype's own declaration. A flat 1px line is what
+   the first build drew and it reads as a divider in a form; this reads as
+   part of the card. */
+.tlcb-card-rule{height:2px;background:linear-gradient(90deg,#E4A93C,rgba(228,169,60,0));margin:16px 0;border:0;}
 .tlcb-card-row--tight .tlcb-card-link{margin-top:5px;}
 .tlcb-card-free{display:block;font-size:14.5px;line-height:1.65;}
 .tlcb-card-free p{margin:0 0 8px;}
@@ -1640,6 +1719,33 @@ aside.tlcb-card{background:#FFFDF8;border-radius:22px;padding:34px 32px;box-shad
 .tlcb-pb-count-v{font-family:var(--tlcb-serif);font-weight:700;font-size:34px;line-height:1;color:#fff;
   font-variant-numeric:tabular-nums;}
 .tlcb-pb-sub{font-size:18px;font-weight:300;line-height:1.55;color:rgba(255,255,255,.82);max-width:26em;margin:0;}
+
+/* THE STANDOUT CARD, and the Service times tiles — ONE set of rules. The
+   handoff calls the standout card "the service-times tile made general", so
+   they share this by construction rather than by two copies that agree today. */
+.tlcb-tile{display:flex;flex-direction:column;align-items:flex-start;gap:8px;
+  border-radius:22px;padding:34px 32px;height:100%;
+  background:var(--tlcb-bg,#101B2E);box-shadow:0 18px 44px rgba(16,27,46,.14);}
+.tlcb-tile-big{font-family:var(--tlcb-serif);font-weight:800;font-size:56px;line-height:1;
+  letter-spacing:-.03em;color:var(--tlcb-head-ink,#fff);}
+.tlcb-tile-big:empty{display:none;}
+.tlcb-tile-t{font-family:var(--tlcb-serif);font-weight:700;font-size:calc(var(--tlcb-head,22px) * .74);
+  line-height:1.15;letter-spacing:-.01em;color:var(--tlcb-head-ink,#fff);}
+.tlcb-tile-t:empty{display:none;}
+.tlcb-tile .tlcb-prose{margin-top:2px;}
+/* The two service tiles, side by side, using the same card. */
+.tlcb-tiles2{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:stretch;}
+
+/* THE CALL-TO-ACTION BAND. One ask, ending in a button. */
+.tlcb-cta{display:flex;align-items:center;justify-content:space-between;gap:28px;flex-wrap:wrap;}
+.tlcb-cta-b{flex:1;min-width:min(100%,340px);display:flex;flex-direction:column;gap:10px;align-items:flex-start;}
+.tlcb--center .tlcb-cta{justify-content:center;text-align:center;}
+.tlcb--center .tlcb-cta-b{align-items:center;}
+
+/* THE EMAIL SIGNUP BAND. */
+.tlcb-signup{align-items:flex-start;}
+.tlcb--center .tlcb-signup{align-items:center;}
+.tlcb-signup .tlcb-inline{margin-top:6px;}
 
 /* QUOTE BAND. No box and no border — the opposite gesture from Callout. */
 .tlcb-quote{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;}
@@ -2235,6 +2341,55 @@ function renderInner(b, opts) {
       ${target ? COUNTDOWN_SCRIPT : ''}</div>`;
   }
 
+  // One row of buttons, shared by the three band types below so a button
+  // renders identically whichever of them it sits in.
+  const bandButtons = () => {
+    const rows = (b.items || []).filter((i) => i.title);
+    if (!rows.length) return '';
+    return `<div class="tlcb-btns">` + rows.map((it, i) => {
+      const cls = 'tlcb-btn' + (i > 0 ? (BG[b.bg] && BG[b.bg].dark ? ' tlcb-btn--ghost-light' : ' tlcb-btn--ghost') : '');
+      const href = safeUrl(it.url);
+      return href && !opts.editing
+        ? `<a class="${cls}" href="${esc(href)}">${esc(it.title)}</a>`
+        : `<span class="${cls}">${esc(it.title)}</span>`;
+    }).join('') + `</div>`;
+  };
+
+  if (t === 'highlight') {
+    // ⚠ .tlcb-tile is the Service times tile's own class, used here rather
+    // than copied. The handoff calls this "the service-times tile made
+    // general", so the two share their card CSS by construction — a second
+    // copy is how the general one and the specific one come to look different.
+    return `<div class="tlcb-tile">
+      ${renderEyebrow(opts, b)}
+      ${field(opts, b, 'big', 'div', 'tlcb-tile-big', esc(b.big || ''), ' data-ph="68"')}
+      ${field(opts, b, 'title', 'div', 'tlcb-tile-t', esc(b.title || ''), ' data-ph="What it is"')}
+      ${renderBody(opts, b, def, 'A sentence about it')}
+      ${bandButtons()}
+    </div>`;
+  }
+
+  if (t === 'cta') {
+    return `<div class="tlcb-cta">
+      <div class="tlcb-cta-b">${renderHead(opts, b, 'Ready to put your hands to work?')}
+        ${renderBody(opts, b, def, 'Why, and what happens next')}</div>
+      ${bandButtons()}
+    </div>`;
+  }
+
+  if (t === 'signup') {
+    // The form posts to the same place the site-wide band does. It is markup
+    // rather than a second sign-up mechanism — there is one subscriber list.
+    const form = opts.editing
+      ? `<div class="tlcb-inline"><span class="tlcb-field">you@example.com</span><span class="tlcb-btn">Subscribe</span></div>`
+      : `<form class="tlcb-inline" method="POST" action="https://admin.timothystl.org/api/subscribe">
+          <input class="tlcb-field" type="email" name="email" required placeholder="you@example.com" aria-label="Email address">
+          <button class="tlcb-btn" type="submit">Subscribe</button>
+        </form>`;
+    return `<div class="tlcb-stack tlcb-signup">${renderHead(opts, b, 'The weekly letter')}
+      ${renderBody(opts, b, def, 'What lands in their inbox, and how often')}${form}</div>`;
+  }
+
   if (t === 'quote') {
     return `<div class="tlcb-quote">
       ${field(opts, b, 'title', 'blockquote', 'tlcb-quote-q', esc(b.title || ''), ' data-ph="The sentence worth setting large"')}
@@ -2336,7 +2491,28 @@ function renderInner(b, opts) {
   }
 
   if (t === 'servicetimes') {
-    const rows = (data.services || []).map((r) => `<div class="tlcb-svc">
+    const svc = data.services || [];
+    // ⚠ The tiles use .tlcb-tile — the Standout card's own class — so the two
+    // are one set of rules rather than two that agree today. They alternate
+    // ink navy and gold, which is the design's own pairing and is why the
+    // second tile carries its colors inline: the block's single bg cannot
+    // express two surfaces.
+    if (b.layout === 'tiles' && svc.length) {
+      const gold = BG[7];
+      const tiles = svc.slice(0, 4).map((r, i) => {
+        const alt = i % 2 === 1
+          ? ` style="--tlcb-bg:${gold.grad};--tlcb-head-ink:${gold.head};--tlcb-ink:#3B2E12;--tlcb-eyebrow-ink:${gold.eyebrow}"`
+          : '';
+        return `<div class="tlcb-tile"${alt}>
+          ${r.note ? `<div class="tlcb-eyebrow">${esc(r.note)}</div>` : ''}
+          <div class="tlcb-tile-big">${esc(r.time || '')}</div>
+          ${r.day ? `<div class="tlcb-prose">${esc(r.day)}</div>` : ''}
+        </div>`;
+      }).join('');
+      return `<div class="tlcb-stack">${b.title || opts.editing ? renderHead(opts, b) : ''}
+        <div class="tlcb-tiles2">${tiles}</div></div>`;
+    }
+    const rows = svc.map((r) => `<div class="tlcb-svc">
         <span class="tlcb-svc-d">${esc(r.day || '')}</span>
         <span class="tlcb-svc-t">${esc(r.time || '')}</span>
         <span class="tlcb-svc-n">${esc(r.note || '')}</span>
