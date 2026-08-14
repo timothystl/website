@@ -71,6 +71,8 @@ export const REDESIGN_BLOCKS = {
       title: 'There is always something next.',
       subtitle: 'Services, classes, the pantry, the market — everything the congregation is doing between now and Advent.',
       bannerHeight: 'tall', veil: 'medium', countdown: true, pulse: true,
+      // Clay on News, per the handoff's per-page assignment.
+      glow: 'clay',
       bg: INK, ink: CREAM, spaceAbove: 0, spaceBelow: 0,
     },
     // Self-filling, and it disappears entirely when nothing is coming up —
@@ -120,6 +122,7 @@ export const REDESIGN_BLOCKS = {
       title: 'Whoever you are, wherever you have been — you are welcome here.',
       subtitle: 'A congregation shaped by grace — not by what we have done for God, but by what God has done for us in Jesus Christ.',
       bannerHeight: 'tall', veil: 'medium', countdown: false, pulse: false,
+      glow: 'gold',
       // The white card carrying the service times and the address. It reads the
       // church-details record, so the times are right on every page at once and
       // nobody retypes them here.
@@ -155,6 +158,7 @@ export const REDESIGN_BLOCKS = {
       title: 'Worship at Timothy',
       subtitle: 'Two services every Sunday. Come as you are — we mean it.',
       bannerHeight: 'mid', veil: 'medium', countdown: false, pulse: false,
+      glow: 'gold',
       bg: INK, ink: CREAM, spaceAbove: 0, spaceBelow: 0,
     },
     // The times set at display size, which is the design's whole argument for
@@ -207,6 +211,7 @@ export const REDESIGN_BLOCKS = {
       title: 'Ministries',
       subtitle: 'Ways to connect, serve, grow and belong — nine of them, and room for one more.',
       bannerHeight: 'short', veil: 'medium', countdown: false, pulse: false,
+      glow: 'gold',
       bg: INK, ink: CREAM, spaceAbove: 0, spaceBelow: 0,
     },
     {

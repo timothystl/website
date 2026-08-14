@@ -883,7 +883,8 @@ function styleVars(b) {
   var ink = C.INK[b.ink] || C.INK[0];
   var cols = b.side === 'above' ? '1fr' : (b.side === 'right' ? sp.b + ' ' + sp.a : sp.a + ' ' + sp.b);
   var v = [
-    '--tlcb-bg:' + bg.c,
+    '--tlcb-bg:' + (bg.grad || bg.c),
+    '--tlcb-bg-flat:' + bg.c,
     '--tlcb-ink:' + ink.c,
     // ⚠ Must stay byte-identical to wrapperVars() in admin/blocks.js — the
     // editor patches these onto the node directly instead of re-rendering, so

@@ -49,10 +49,27 @@ export const BG = [
   { name: 'Sand',      c: '#F7F3EC', dark: false },
   { name: 'Mist',      c: '#EDF2F7', dark: false },
   { name: 'Navy',      c: '#1E2D4A', dark: true },
-  { name: 'Paper',     c: '#F5F0E6', dark: false, lang: '1b', head: '#101B2E', eyebrow: '#B44A2E', link: '#B37F1E', rule: '#E7DFCD', chip: '#FFFDF8' },
-  { name: 'White',     c: '#FFFDF8', dark: false, lang: '1b', head: '#101B2E', eyebrow: '#B44A2E', link: '#B37F1E', rule: '#E7DFCD', chip: '#F5F0E6' },
-  { name: 'Ink navy',  c: '#101B2E', dark: true,  lang: '1b', head: '#FFFFFF', eyebrow: '#E4A93C', link: '#E4A93C', rule: 'rgba(245,240,230,.14)', chip: 'rgba(245,240,230,.08)' },
-  { name: 'Gold',      c: '#E4A93C', dark: false, lang: '1b', head: '#101B2E', eyebrow: '#7A4E12', link: '#101B2E', rule: 'rgba(16,27,46,.18)', chip: '#FFFDF8' },
+  // ⚠ EACH CARRIES A GRADIENT, AND THAT IS THE POINT. The handoff is blunt
+  // about it: "Flat navy and flat sand are a large part of why the old pages
+  // read as dead. Every large field in this language now carries a shallow
+  // gradient — 6–10% of value across the field, never a hue jump." The first
+  // build of this shipped flat fills, and the answer from Dinger was that the
+  // pages still did not look like the design. They were right.
+  //
+  // `c` stays the flat color and is still what the ink guardrail and the
+  // inspector's contrast maths read; `grad` is what actually gets painted.
+  // Copy these declarations verbatim — they are authored, not sampled.
+  { name: 'Paper',     c: '#F5F0E6', dark: false, lang: '1b', head: '#101B2E', eyebrow: '#B44A2E', link: '#B37F1E', rule: '#E7DFCD', chip: '#FFFDF8',
+    grad: 'linear-gradient(180deg,#F5F0E6 0%,#EFE8D9 100%)' },
+  { name: 'White',     c: '#FFFDF8', dark: false, lang: '1b', head: '#101B2E', eyebrow: '#B44A2E', link: '#B37F1E', rule: '#E7DFCD', chip: '#F5F0E6',
+    grad: 'linear-gradient(180deg,#FFFDF8 0%,#F7F2E6 100%)' },
+  { name: 'Ink navy',  c: '#101B2E', dark: true,  lang: '1b', head: '#FFFFFF', eyebrow: '#E4A93C', link: '#E4A93C', rule: 'rgba(245,240,230,.14)', chip: 'rgba(245,240,230,.08)',
+    grad: 'linear-gradient(135deg,#101B2E 0%,#1B2C4A 52%,#2A3E66 100%)' },
+  // ⚠ Gold ink is #3B2E12 on this field for EVERYTHING — body, headings and
+  // eyebrows alike. The README's "gold shadow" moved from #7A4E12 to #3B2E12
+  // between handoff revisions; this is the later value.
+  { name: 'Gold',      c: '#E4A93C', dark: false, lang: '1b', head: '#101B2E', eyebrow: '#3B2E12', link: '#101B2E', rule: 'rgba(16,27,46,.18)', chip: '#FFFDF8',
+    grad: 'linear-gradient(120deg,#E4A93C 0%,#F0C46B 52%,#D89428 100%)' },
 ];
 
 // ⚠ APPEND ONLY, for the same reason as BG.
@@ -127,6 +144,25 @@ export const VEILS = [
   { key: 'light', label: 'Light', top: 0.5 },
   { key: 'medium', label: 'Medium', top: 0.72 },
   { key: 'heavy', label: 'Heavy', top: 0.88 },
+];
+
+// ── THE SECOND LAYER OVER A HERO ─────────────────────────────────────────────
+// The handoff's own words: "This is what stops the heroes reading gray." A veil
+// on its own is neutral dark over a photograph, and over a photograph that does
+// not exist yet it is neutral dark over navy — which is exactly the flat, dead
+// field the redesign was commissioned to get rid of.
+//
+// Clay from the bottom corner on News, Sermons and Visit; gold from the top
+// corner on Worship, Ministries, About and Give. Warm either way, and warm is
+// the whole job.
+//
+// ⚠ It goes OVER the veil, in that order. Under it, the veil mutes the thing
+// whose entire purpose is to stop the field being muted.
+export const GLOWS = [
+  { key: 'clay', label: 'Clay', css: 'radial-gradient(880px 400px at 14% 104%, rgba(180,74,46,.44), transparent 68%)' },
+  { key: 'gold', label: 'Gold', css: 'radial-gradient(880px 400px at 86% -4%, rgba(228,169,60,.40), transparent 68%)' },
+  { key: 'green', label: 'Green', css: 'radial-gradient(880px 400px at 14% 104%, rgba(47,107,58,.44), transparent 68%)' },
+  { key: 'none', label: 'None', css: '' },
 ];
 
 // The calendar tray. Same reasoning as the banner: three heights, not a number.
@@ -537,6 +573,8 @@ export const BLOCK_DEFS = {
         note: 'Three heights rather than a pixel field, so a banner is never taller than the screen it opens on. All three come down on a phone.' },
       { key: 'veil', label: 'Photo shading', def: 'medium', options: VEILS,
         note: 'How much dark is laid over the photograph so the white headline stays readable. Heavier if the picture is bright or busy. With no photo there is nothing to shade and this does nothing.' },
+      { key: 'glow', label: 'Warm glow', def: 'clay', options: GLOWS,
+        note: 'A soft warm light from one corner. It is what keeps a banner from reading gray \u2014 with a photograph and without one. Clay on news and sermons, gold on worship and ministries, green on the values page.' },
     ],
     switches: [
       { key: 'countdown', label: 'Countdown', def: true,
@@ -1582,6 +1620,7 @@ aside.tlcb-card{background:#FFFDF8;border-radius:22px;padding:34px 32px;box-shad
 .tlcb-pb--tall{--tlcb-pb-h:640px;}
 .tlcb-pb-veil{position:absolute;inset:0;pointer-events:none;
   background:linear-gradient(180deg,rgba(16,27,46,var(--tlcb-pb-top,.72)) 0%,rgba(16,27,46,.16) 42%,rgba(16,27,46,.89) 100%);}
+.tlcb-pb-glow{position:absolute;inset:0;pointer-events:none;background:var(--tlcb-pb-glow,none);}
 .tlcb-pb-body{position:relative;z-index:1;display:flex;flex-direction:column;align-items:flex-start;width:100%;}
 .tlcb-pb-eyebrow{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
 .tlcb-pb-eyebrow-t{font:800 12px/1 var(--tlcb-ui);letter-spacing:.16em;text-transform:uppercase;
@@ -1760,7 +1799,7 @@ export function blocksClientConfig(data) {
     };
   }
   return { types, groups: GROUPS, templates: TEMPLATES, BG, INK, SIZES, SPLITS, TONES,
-    bannerHeights: BANNER_HEIGHTS, veils: VEILS, embedHeights: EMBED_HEIGHTS,
+    bannerHeights: BANNER_HEIGHTS, veils: VEILS, glows: GLOWS, embedHeights: EMBED_HEIGHTS,
     partners: (data && data.partners) || [],
     cardSides: CARD_SIDES, cardShows: CARD_SHOWS, starters: STARTERS.map((s) => ({ key: s.key, label: s.label, note: s.note })),
     stamps: STAMP_PRESETS, step: SPACE_STEP, max: SPACE_MAX };
@@ -1797,7 +1836,11 @@ function wrapperVars(b) {
   const ink = INK[b.ink] || INK[0];
   const cols = b.side === 'above' ? '1fr' : (b.side === 'right' ? sp.b + ' ' + sp.a : sp.a + ' ' + sp.b);
   const v = [
-    '--tlcb-bg:' + bg.c,
+    // The gradient when the surface has one, the flat color otherwise. Both
+    // land on --tlcb-bg because every rule that paints a block already says
+    // `background:`, which takes an image as happily as a color.
+    '--tlcb-bg:' + (bg.grad || bg.c),
+    '--tlcb-bg-flat:' + bg.c,
     '--tlcb-ink:' + ink.c,
     // The composed half of a background. The four redesign surfaces carry
     // their own heading ink, eyebrow, link and hairline because in that
@@ -2161,6 +2204,13 @@ function renderInner(b, opts) {
     const veil = b.photo
       ? `<span class="tlcb-pb-veil" style="--tlcb-pb-top:${(VEILS.find((v) => v.key === b.veil) || VEILS[1]).top}"></span>`
       : '';
+    // ⚠ AFTER the veil in source order, so it paints on top of it. Under the
+    // veil, the layer whose entire job is to stop the field reading gray is
+    // itself grayed. And unlike the veil this is drawn WITH OR WITHOUT a
+    // photograph — a banner with no picture is the state this site ships in,
+    // and it is the one that most needs the warmth.
+    const glowCss = (GLOWS.find((g) => g.key === b.glow) || GLOWS[0]).css;
+    const glow = glowCss ? `<span class="tlcb-pb-glow" style="--tlcb-pb-glow:${glowCss}"></span>` : '';
     const dot = b.pulse ? '<span class="tlcb-pulse"></span>' : '';
     const eyebrow = (b.eyebrow || opts.editing)
       ? `<div class="tlcb-pb-eyebrow">${dot}${field(opts, b, 'eyebrow', 'span', 'tlcb-pb-eyebrow-t', esc(b.eyebrow || ''), ' data-ph="Happening next"')}</div>`
@@ -2178,7 +2228,7 @@ function renderInner(b, opts) {
       ? field(opts, b, 'subtitle', 'p', 'tlcb-pb-sub', esc(b.subtitle || ''), ' data-ph="Where it is, when it starts, who it is for"')
       : '';
     const foot = clock || sub ? `<div class="tlcb-pb-foot">${clock}${sub}</div>` : '';
-    return `<div class="tlcb-pb tlcb-pb--${esc(h.key)}${cardClass(b)}"${b.photo ? ` style="--tlcb-pb-img:url('${cssUrl(b.photo)}')"` : ''}>${pick}${veil}
+    return `<div class="tlcb-pb tlcb-pb--${esc(h.key)}${cardClass(b)}"${b.photo ? ` style="--tlcb-pb-img:url('${cssUrl(b.photo)}')"` : ''}>${pick}${veil}${glow}
       <div class="tlcb-band-text tlcb-pb-body">${eyebrow}
       ${field(opts, b, 'title', 'h1', 'tlcb-pb-title', esc(b.title || ''), ' data-ph="The thing everyone should know about"')}
       ${foot}</div>${renderInfoCard(b, opts)}
