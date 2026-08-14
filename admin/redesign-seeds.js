@@ -71,6 +71,8 @@ export const REDESIGN_BLOCKS = {
       title: 'There is always something next.',
       subtitle: 'Services, classes, the pantry, the market — everything the congregation is doing between now and Advent.',
       bannerHeight: 'tall', veil: 'medium', countdown: true, pulse: true,
+      // Clay on News, per the handoff's per-page assignment.
+      glow: 'clay',
       bg: INK, ink: CREAM, spaceAbove: 0, spaceBelow: 0,
     },
     // Self-filling, and it disappears entirely when nothing is coming up —
@@ -120,6 +122,7 @@ export const REDESIGN_BLOCKS = {
       title: 'Whoever you are, wherever you have been — you are welcome here.',
       subtitle: 'A congregation shaped by grace — not by what we have done for God, but by what God has done for us in Jesus Christ.',
       bannerHeight: 'tall', veil: 'medium', countdown: false, pulse: false,
+      glow: 'gold',
       // The white card carrying the service times and the address. It reads the
       // church-details record, so the times are right on every page at once and
       // nobody retypes them here.
@@ -131,6 +134,15 @@ export const REDESIGN_BLOCKS = {
       title: 'A diverse city church serving as a bold witness to the saving grace of God through Jesus Christ.',
       body: '<p>Timothy Lutheran is rooted in Lindenwood Park. We are Lutheran, which means we lead with grace — not a reward for the righteous but a gift for the broken. Every person who walks through our doors carries something. The gospel is strong enough to carry it with them.</p>',
       bg: PAPER, ink: BODY_INK, spaceAbove: 0, spaceBelow: 0,
+    },
+    // The core-values strip. Self-filling, so it is the same record the
+    // /about/values page reads — a value reworded once is reworded here.
+    // The six ways in are OFF: on the homepage this is a signpost, and the
+    // full arc belongs on its own page.
+    {
+      id: 'home-1b-2b', type: 'values',
+      title: 'What we are for', cols: 4, ways: false,
+      bg: WHITE, ink: BODY_INK, spaceAbove: 24, spaceBelow: 24,
     },
     // Two halves, so the sermon card and the news list sit side by side. Both
     // fill themselves, so this pair is correct on the day it is published and
@@ -155,6 +167,7 @@ export const REDESIGN_BLOCKS = {
       title: 'Worship at Timothy',
       subtitle: 'Two services every Sunday. Come as you are — we mean it.',
       bannerHeight: 'mid', veil: 'medium', countdown: false, pulse: false,
+      glow: 'gold',
       bg: INK, ink: CREAM, spaceAbove: 0, spaceBelow: 0,
     },
     // The times set at display size, which is the design's whole argument for
@@ -186,9 +199,9 @@ export const REDESIGN_BLOCKS = {
       side: 'right', split: '50',
       bg: INK, ink: CREAM, spaceAbove: 24, spaceBelow: 0,
     },
-    // The two pills under it. Text + photo carries no buttons of its own, and
-    // giving it some would be a second way for a button row to exist — the
-    // Button bar is already that, and it sits on the same band.
+    // The two pills under the music band. Text + photo carries no buttons of
+    // its own, and giving it some would be a second way for a button row to
+    // exist — the Button bar is already that, and it sits on the same band.
     {
       id: 'worship-1b-5', type: 'buttons',
       bg: INK, ink: CREAM, spaceAbove: 0, spaceBelow: 24,
@@ -207,6 +220,7 @@ export const REDESIGN_BLOCKS = {
       title: 'Ministries',
       subtitle: 'Ways to connect, serve, grow and belong — nine of them, and room for one more.',
       bannerHeight: 'short', veil: 'medium', countdown: false, pulse: false,
+      glow: 'gold',
       bg: INK, ink: CREAM, spaceAbove: 0, spaceBelow: 0,
     },
     {
@@ -231,17 +245,49 @@ export const REDESIGN_BLOCKS = {
         { img: '/images/ministries/lwml.webp', title: 'LWML', body: '<p>Lutheran Women’s Missionary League — a community of women in mission for Christ. Rooted in Scripture, sent in service.</p>', linkLabel: 'Visit LWML', url: 'https://www.lwml.org' },
       ],
     },
-    // The design's call-to-action band, which is the Button bar on gold — it
-    // has carried an eyebrow, a heading and a rich description above its
-    // buttons since v4.32.0. A separate `cta` type would have been a second
-    // near-identical block to drift apart from this one.
+    // ⚠ This was a Button bar on gold in the first build, on the argument that
+    // the two are the same markup. The handoff lists `cta` as its own type and
+    // it is right: a Button bar is a row of choices that grew a heading, and
+    // this is one ask that happens to end in a button.
     {
-      id: 'min-1b-3', type: 'buttons',
+      id: 'min-1b-3', type: 'cta',
       eyebrow: 'Get involved',
       title: 'Ready to put your hands to work?',
       body: '<p>From Sunday setup to the pantry to the Christmas Market — there is always something, and it is never only one kind of person doing it.</p>',
       bg: GOLD, ink: GOLD_INK, spaceAbove: 24, spaceBelow: 24,
       items: [{ title: 'See what is open', url: 'https://serve.timothystl.org' }],
+    },
+  ],
+  // ── Our Values ────────────────────────────────────────────────────────────
+  // ⚠ THIS REVERSES A DECISION IN admin/BLOCK-EDITOR-ROLLOUT.md, and the
+  // reason it is safe to reverse is the whole point of the block. That file
+  // lists `values` among the three pages that deliberately are NOT block
+  // pages, because it "reads the four core values live from /api/values —
+  // converting it to blocks would freeze a list that currently updates
+  // itself."
+  //
+  // That was correct when the only way to put the values on a page was to
+  // type them into a card grid. The Core values block reads ctx.data at render
+  // time, exactly as the hardcoded page reads the API — so nothing freezes.
+  // The record stays the one source; this is a second view of it, not a copy.
+  values: [
+    {
+      id: 'val-1b-1', type: 'photobanner',
+      eyebrow: 'What we are for',
+      title: 'Welcome. Receive. Grow. Go.',
+      subtitle: 'Four things, in this order, and the order is the point — it starts with being let in and ends pointing out of the door.',
+      bannerHeight: 'short', veil: 'medium', countdown: false, pulse: false,
+      // Green here rather than clay or gold, per the handoff's note on this
+      // page specifically.
+      glow: 'green',
+      bg: INK, ink: CREAM, spaceAbove: 0, spaceBelow: 0,
+    },
+    // The full arc, with the six ways in switched ON — this is the one page
+    // where the block IS the page rather than a signpost on someone else's.
+    {
+      id: 'val-1b-2', type: 'values',
+      title: '', cols: 2, ways: true,
+      bg: WHITE, ink: BODY_INK, spaceAbove: 24, spaceBelow: 24,
     },
   ],
 };

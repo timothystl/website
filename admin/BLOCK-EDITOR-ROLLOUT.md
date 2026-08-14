@@ -50,10 +50,15 @@ It is the first, and it is the proof the mechanism works end to end.
 - **`404`** — the page shown when an address matches nothing. It is not
   content; making it editable would mean the office could produce a site with
   no working error page.
-- **`values`** (`/about/values`) — reads the four core values and their paired
-  partner ministries live from `/api/values`. It is a *view of a record that is
-  already admin-managed*, under Partners. Converting it to blocks would freeze
-  a list that currently updates itself.
+- ~~**`values`** (`/about/values`)~~ — **reversed 2026-08-14, and the reason it
+  was safe to reverse is worth keeping.** The argument here was that this page
+  "reads the four core values live from `/api/values`, so converting it to
+  blocks would freeze a list that currently updates itself." That was correct
+  while the only way to put the values on a page was to type them into a card
+  grid. The **Core values block reads `ctx.data` at render time**, exactly as
+  the hardcoded page reads the API — so nothing freezes. The record stays the
+  one source and the page is a second view of it, not a copy. See
+  `admin/redesign-seeds.js`.
 - **`voters`** — the members-only page: a Zoom link and uploaded reports, both
   already admin-managed, and `noindex`. Same reasoning as values.
 

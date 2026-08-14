@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..400&display=swap" rel="stylesheet" />
+<style>
+  body { margin:0; background:#FFFDF8; }
+  a { color:#B37F1E; }
+  a:hover { color:#101B2E; }
+  @media print { .noprint { display:none !important; } }
+</style>
+</helmet>
+
+<div style="font-family:'Newsreader',Georgia,serif;color:#453F30;background:#FFFDF8">
+
+  <div class="noprint" style="position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding:12px 44px;background:#101B2E;color:#F5F0E6">
+    <span style="font:800 12px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#E4A93C">Handoff</span>
+    <span style="font:600 13px/1 'Newsreader',serif;opacity:.8">timothystl.org — /news redesign &amp; the 1b site language</span>
+    <span style="flex:1"></span>
+    <a href="#why" style="font:600 13px/1 'Newsreader',serif;color:#F5F0E6;text-decoration:none;opacity:.8">Why</a>
+    <a href="#pages" style="font:600 13px/1 'Newsreader',serif;color:#F5F0E6;text-decoration:none;opacity:.8">Pages</a>
+    <a href="#proto" style="font:600 13px/1 'Newsreader',serif;color:#F5F0E6;text-decoration:none;opacity:.8">Prototype</a>
+    <a href="#values" style="font:600 13px/1 'Newsreader',serif;color:#F5F0E6;text-decoration:none;opacity:.8">Values</a>
+    <a href="#gradients" style="font:600 13px/1 'Newsreader',serif;color:#F5F0E6;text-decoration:none;opacity:.8">Gradients</a>
+    <a href="#editor" style="font:600 13px/1 'Newsreader',serif;color:#F5F0E6;text-decoration:none;opacity:.8">Editor</a>
+    <a href="#blocks" style="font:600 13px/1 'Newsreader',serif;color:#F5F0E6;text-decoration:none;opacity:.8">Blocks</a>
+    <a href="#tokens" style="font:600 13px/1 'Newsreader',serif;color:#F5F0E6;text-decoration:none;opacity:.8">Tokens</a>
+    <a href="#build" style="font:600 13px/1 'Newsreader',serif;color:#F5F0E6;text-decoration:none;opacity:.8">Build</a>
+  </div>
+
+  <div style="max-width:1120px;margin:0 auto;padding:56px 44px 120px">
+
+    <header style="border-bottom:1px solid #D8CFBB;padding-bottom:40px;margin-bottom:48px">
+      <div style="font:800 12px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#B44A2E">Design handoff · August 2026</div>
+      <h1 style="margin:18px 0 0;font:800 66px/1 'Bricolage Grotesque',sans-serif;letter-spacing:-.03em;color:#101B2E;max-width:14em">The 1b site language, and the editor that keeps it alive.</h1>
+      <p style="margin:22px 0 0;font:300 20px/1.6 'Newsreader',serif;max-width:44em">Everything a developer needs to build the redesigned <strong style="font-weight:600">/news</strong> page, extend the same language across the site — Home, Our Values, Worship, Ministries and the rest — and ship the block editor controls behind it. Screens, specifications, behavior, data sources, and a build order.</p>
+      <div style="margin-top:30px;background:linear-gradient(135deg,#101B2E 0%,#1B2C4A 60%,#2A3E66 100%);border-radius:20px;padding:26px 30px;display:flex;gap:26px;align-items:center;flex-wrap:wrap">
+        <div style="flex:1;min-width:280px">
+          <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#E4A93C">Implementing this with an agent?</div>
+          <div style="margin-top:9px;font:700 21px/1.25 'Bricolage Grotesque',sans-serif;color:#fff">Paste <code style="font:700 19px/1 ui-monospace,monospace;color:#E4A93C">KICKOFF_PROMPT.md</code> and let it read the rest.</div>
+          <p style="margin:9px 0 0;font:300 16px/1.6 'Newsreader',serif;color:rgba(245,240,230,.78);max-width:44em">That prompt points the agent at <code style="font-size:15px;color:#E4A93C">CLAUDE_CODE_BRIEF.md</code>, which carries the same specification as a phased build plan — with a Phase 0 list of the six things to verify against the repo <em>before</em> writing code, acceptance criteria per phase, and the gaps that were authored without confirming the repo side. This document stays the visual reference.</p>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:24px">
+        <div style="background:#F5F0E6;border:1px solid #E7DFCD;border-radius:18px;padding:20px 22px">
+          <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#8A8168">Repo</div>
+          <div style="margin-top:8px;font:600 16px/1.35 'Newsreader',serif;color:#101B2E">timothystl/website · main</div>
+          <div style="margin-top:4px;font:300 14px/1.5 'Newsreader',serif">Cloudflare Workers, no bundler</div>
+        </div>
+        <div style="background:#F5F0E6;border:1px solid #E7DFCD;border-radius:18px;padding:20px 22px">
+          <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#8A8168">Fidelity</div>
+          <div style="margin-top:8px;font:600 16px/1.35 'Newsreader',serif;color:#101B2E">High — build to the numbers</div>
+          <div style="margin-top:4px;font:300 14px/1.5 'Newsreader',serif">Desktop pixel-specified; phone described</div>
+        </div>
+        <div style="background:#F5F0E6;border:1px solid #E7DFCD;border-radius:18px;padding:20px 22px">
+          <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#8A8168">Blocked on</div>
+          <div style="margin-top:8px;font:600 16px/1.35 'Newsreader',serif;color:#101B2E">~8 real photographs</div>
+          <div style="margin-top:4px;font:300 14px/1.5 'Newsreader',serif">Every picture is a drop slot until then</div>
+        </div>
+      </div>
+    </header>
+
+    <section id="why" style="margin-bottom:72px">
+      <div style="font:800 12px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#B44A2E">01 · The problem</div>
+      <h2 style="margin:14px 0 0;font:800 40px/1.05 'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;color:#101B2E">The site renders correctly and reads as dead.</h2>
+      <p style="margin:18px 0 0;font:300 18px/1.6 'Newsreader',serif;max-width:42em">Andrew's brief, verbatim: <em>“it just feels dead, and so do all the pages on the site — the editor is helpful, it just all lacks energy.”</em> Nothing is broken. There is simply no photography, no scale, and nothing that moves. Three decisions fix it, in priority order.</p>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:28px">
+        <div style="background:#101B2E;color:#F5F0E6;border-radius:20px;padding:24px">
+          <div style="font:800 44px/1 'Bricolage Grotesque',sans-serif;color:#E4A93C">01</div>
+          <div style="margin-top:10px;font:700 22px/1.15 'Bricolage Grotesque',sans-serif">Full-bleed photography</div>
+          <p style="margin:10px 0 0;font:300 15px/1.6 'Newsreader',serif;color:rgba(245,240,230,.78)">Every page opens on a photograph that bleeds edge to edge, with the masthead sitting transparent over it.</p>
+        </div>
+        <div style="background:#101B2E;color:#F5F0E6;border-radius:20px;padding:24px">
+          <div style="font:800 44px/1 'Bricolage Grotesque',sans-serif;color:#E4A93C">02</div>
+          <div style="margin-top:10px;font:700 22px/1.15 'Bricolage Grotesque',sans-serif">Display type at real scale</div>
+          <p style="margin:10px 0 0;font:300 15px/1.6 'Newsreader',serif;color:rgba(245,240,230,.78)">64px headlines, not 32px. Bricolage Grotesque for display, Newsreader for reading.</p>
+        </div>
+        <div style="background:#101B2E;color:#F5F0E6;border-radius:20px;padding:24px">
+          <div style="font:800 44px/1 'Bricolage Grotesque',sans-serif;color:#E4A93C">03</div>
+          <div style="margin-top:10px;font:700 22px/1.15 'Bricolage Grotesque',sans-serif">A few live elements</div>
+          <p style="margin:10px 0 0;font:300 15px/1.6 'Newsreader',serif;color:rgba(245,240,230,.78)">A countdown to the next event, a pulsing “happening next” dot, hover zoom on photos. Restraint is the point.</p>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:36px;align-items:start">
+        <figure style="margin:0">
+          <img src="screens/_before-news.png" alt="The current /news page" style="width:100%;display:block;border:1px solid #D8CFBB;border-radius:14px" />
+          <figcaption style="margin-top:10px;font:600 12px/1.4 'Bricolage Grotesque',sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#8A8168">Before — /news today</figcaption>
+        </figure>
+        <figure style="margin:0">
+          <img src="screens/_news-1b-top.png" alt="The 1b /news design" style="width:100%;display:block;border:1px solid #D8CFBB;border-radius:14px" />
+          <figcaption style="margin-top:10px;font:600 12px/1.4 'Bricolage Grotesque',sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#8A8168">After — direction 1b, chosen</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="pages" style="margin-bottom:24px">
+      <div style="font:800 12px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#B44A2E">02 · The screens</div>
+      <h2 style="margin:14px 0 0;font:800 40px/1.05 'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;color:#101B2E">Five pages, one vocabulary</h2>
+      <p style="margin:18px 0 0;font:300 18px/1.6 'Newsreader',serif;max-width:42em">Each page below is a block stack. The numbered list beside each screenshot is the exact order of blocks and the settings they ship with — that is what goes into <code style="font:600 15px/1 ui-monospace,monospace;background:#F5F0E6;padding:2px 6px;border-radius:5px">SITE_PAGES</code>.</p>
+    </section>
+
+    <section style="margin-bottom:64px;display:grid;grid-template-columns:1.15fr .85fr;gap:34px;align-items:start">
+      <div>
+        <img src="screens/_news-1b-top.png" alt="/news top" style="width:100%;display:block;border:1px solid #D8CFBB;border-radius:14px" />
+        <img src="screens/_news-1b-bottom.png" alt="/news bottom" style="width:100%;display:block;border:1px solid #D8CFBB;border-radius:14px;margin-top:16px" />
+      </div>
+      <div style="position:sticky;top:80px">
+        <h3 style="margin:0;font:800 30px/1.05 'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;color:#101B2E">/news</h3>
+        <p style="margin:10px 0 18px;font:300 16px/1.6 'Newsreader',serif">The page the whole language was designed on. Announcements and events live in one feed, soonest first — Andrew chose combined, not split.</p>
+        <ol style="margin:0;padding-left:20px;font:300 15px/1.7 'Newsreader',serif">
+          <li style="margin-bottom:12px"><strong style="font-weight:600;color:#101B2E">Photo banner</strong> — 640px tall, medium veil, countdown on, pulse on. Pulsing gold dot + “HAPPENING NEXT”, 64px headline, then <code style="font-size:13px">9d 20h 11m 13s</code> labelled “STARTS IN” beside an 18px subtitle.</li>
+          <li style="margin-bottom:12px"><strong style="font-weight:600;color:#101B2E">Coming-up strip</strong> — “COMING UP” label + 5 chips (<code style="font-size:13px">Aug 23 · Confirmation</code>), 1px #D8CFBB border on #F5F0E6, hairline under the row.</li>
+          <li style="margin-bottom:12px"><strong style="font-weight:600;color:#101B2E">News feed</strong> — 36px heading, one-line intro, 2-up cards: 180px hover-zoom photo, navy tag pill + small-caps date · 22px heading · 15px body.</li>
+          <li style="margin-bottom:12px"><strong style="font-weight:600;color:#101B2E">Weekly letter</strong> — navy band, two columns: left date eyebrow + 36px heading + gold “Read this week” and ghost “Get it by email”; right the archive as <code style="font-size:13px">subject / date</code> rows on rgba(245,240,230,.14) hairlines.</li>
+          <li><strong style="font-weight:600;color:#101B2E">Calendar</strong> — clay eyebrow, 36px heading, two pills, then the live Google Calendar month embed in a #F5F0E6 tray (18px radius) with an 11px white inner frame, 560px tall.</li>
+        </ol>
+        <div style="margin-top:18px;background:#F5F0E6;border-left:3px solid #E4A93C;padding:14px 18px;font:300 15px/1.6 'Newsreader',serif">“Subscribe on your phone” is new and deliberate: it gets the calendar onto people's own devices instead of relying on them revisiting the page.</div>
+      </div>
+    </section>
+
+    <section style="margin-bottom:64px;display:grid;grid-template-columns:1.15fr .85fr;gap:34px;align-items:start">
+      <div>
+        <img src="screens/_proto-home.png" alt="Home hero" style="width:100%;display:block;border:1px solid #D8CFBB;border-radius:14px" />
+        <img src="screens/_proto-home-values.png" alt="Home core-values strip and sermon card" style="width:100%;display:block;border:1px solid #D8CFBB;border-radius:14px;margin-top:16px" />
+        <img src="screens/_home-signup-footer.png" alt="Home signup and footer" style="width:100%;display:block;border:1px solid #D8CFBB;border-radius:14px;margin-top:16px" />
+      </div>
+      <div style="position:sticky;top:80px">
+        <h3 style="margin:0;font:800 30px/1.05 'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;color:#101B2E">Home</h3>
+        <p style="margin:10px 0 18px;font:300 16px/1.6 'Newsreader',serif">Photo banner with the info card · quote band · core-values strip · sermon card and news list as two half-width blocks side by side · email signup.</p>
+        <ul style="margin:0;padding-left:20px;font:300 15px/1.7 'Newsreader',serif">
+          <li style="margin-bottom:12px">Headline is 800 58px/1 across three authored <code style="font-size:13px">&lt;br&gt;</code> lines. At 74px the copy needs ~800px and breaks to four — do not raise it.</li>
+          <li style="margin-bottom:12px">The info card is a <em>slot on the banner</em>, not a draggable block: white, 22px radius, “JOIN US SUNDAY”, <code style="font-size:13px">8:00 &amp; 10:45 am</code> at 32px, hairline, address, navy “Plan your visit” pill. It reads the church-details record (matches <code style="font-size:13px">CARD_SIDES</code>/<code style="font-size:13px">CARD_SHOWS</code>).</li>
+          <li style="margin-bottom:12px">Quote band: paper, two columns, vision quote in italic Newsreader 28px with a 3px gold left rule at 24px padding.</li>
+          <li style="margin-bottom:12px">Core-values strip: the <code style="font-size:13px">values</code> block at 4 columns, under a “What we are” eyebrow and a 38px heading, with an “Our four core values” paper pill on the right of the heading row. Each card links to its value on the Our Values page.</li>
+          <li style="margin-bottom:12px">Sermon card: navy, 22px radius, 240–280px photo with a 60px white play disc, gold series eyebrow, 30px title, “Watch or listen”.</li>
+          <li>News list: pulsing clay dot + eyebrow, rows of small-caps date / 20px title on #E7DFCD hairlines, ending in an “All news &amp; events” paper pill.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section style="margin-bottom:64px;display:grid;grid-template-columns:1.15fr .85fr;gap:34px;align-items:start">
+      <div>
+        <img src="screens/_proto-values-top.png" alt="Our Values page, top" style="width:100%;display:block;border:1px solid #D8CFBB;border-radius:14px" />
+        <img src="screens/_proto-values-grow.png" alt="Our Values page, Grow selected" style="width:100%;display:block;border:1px solid #D8CFBB;border-radius:14px;margin-top:16px" />
+      </div>
+      <div style="position:sticky;top:80px">
+        <h3 style="margin:0;font:800 30px/1.05 'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;color:#101B2E">Our Values</h3>
+        <p style="margin:10px 0 18px;font:300 16px/1.6 'Newsreader',serif">Photo banner (short, no card) · value selector · value panel · one-sheet slot and “why this order” card. Full treatment and the contrast budget are in <a href="#values">§04</a>.</p>
+        <ol style="margin:0;padding-left:20px;font:300 15px/1.7 'Newsreader',serif">
+          <li style="margin-bottom:12px"><strong style="font-weight:600;color:#101B2E">Photo banner</strong> — 460px, medium veil, no card, no countdown. Headline “Welcome. Receive. Grow. Go.” at 66px; the glow layer is green here rather than clay.</li>
+          <li style="margin-bottom:12px"><strong style="font-weight:600;color:#101B2E">Value selector</strong> — four cards in one row. The selected one sits on its field with light ink; the other three are paper with a 3px top rule in that value's bright accent and the word in the accent's deep tone.</li>
+          <li style="margin-bottom:12px"><strong style="font-weight:600;color:#101B2E">Value panel</strong> — the field, 44px padding, 22px radius. Left: the word in Newsreader italic 68px, the discipline label, a fading rule, the tagline in italic 21px, then the partner box on a <code style="font-size:13px">rgba(16,27,46,.18)</code> wash. Right: the six ways in, 2-up, each a ring marker plus an uppercase title and one line.</li>
+          <li><strong style="font-weight:600;color:#101B2E">One-sheet and why</strong> — a paper card holding the printed value card as an image slot, beside a navy card carrying one sentence on why the order is what it is. Both swap with the selection.</li>
+        </ol>
+        <div style="margin-top:18px;background:#F5F0E6;border-left:3px solid #E4A93C;padding:14px 18px;font:300 15px/1.6 'Newsreader',serif">Order is fixed — Welcome, Receive, Grow, Go. The editor must not expose a reorder control on this block.</div>
+      </div>
+    </section>
+
+    <section style="margin-bottom:64px;display:grid;grid-template-columns:1.15fr .85fr;gap:34px;align-items:start">
+      <div>
+        <img src="screens/_worship-top.png" alt="Worship hero" style="width:100%;display:block;border:1px solid #D8CFBB;border-radius:14px" />
+        <img src="screens/_worship-visit-cards.png" alt="Worship service tiles and visit cards" style="width:100%;display:block;border:1px solid #D8CFBB;border-radius:14px;margin-top:16px" />
+      </div>
+      <div style="position:sticky;top:80px">
+        <h3 style="margin:0;font:800 30px/1.05 'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;color:#101B2E">Worship</h3>
+        <p style="margin:10px 0 18px;font:300 16px/1.6 'Newsreader',serif">Photo banner (medium, no card) · service times · “First time visiting?” card grid · text + photo band.</p>
+        <ul style="margin:0;padding-left:20px;font:300 15px/1.7 'Newsreader',serif">
+          <li style="margin-bottom:12px">Service times are two 22px-radius tiles — navy <code style="font-size:13px">8:00 am</code>, gold <code style="font-size:13px">10:45 am</code> — each an eyebrow, a 52px numeral, and a one-line note. Self-filling from the service-times record.</li>
+          <li style="margin-bottom:12px">Visit cards are 2-up (Parking / Kids &amp; families / What to wear / Questions first?), card lift on hover.</li>
+          <li>Closing band: navy, “A soundscape as wide as grace”, photo right, gold “Watch the live stream” pill + ghost “Music ministry”.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section style="margin-bottom:80px;display:grid;grid-template-columns:1.15fr .85fr;gap:34px;align-items:start">
+      <div>
+        <img src="screens/_ministries-top.png" alt="Ministries hero" style="width:100%;display:block;border:1px solid #D8CFBB;border-radius:14px" />
+        <img src="screens/_ministries-grid-cta.png" alt="Ministries grid and CTA" style="width:100%;display:block;border:1px solid #D8CFBB;border-radius:14px;margin-top:16px" />
+      </div>
+      <div style="position:sticky;top:80px">
+        <h3 style="margin:0;font:800 30px/1.05 'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;color:#101B2E">Ministries</h3>
+        <p style="margin:10px 0 18px;font:300 16px/1.6 'Newsreader',serif">Photo banner (short) · 3-up card grid, nine ministries, logos on, first card featured navy · gold call-to-action band.</p>
+        <ul style="margin:0;padding-left:20px;font:300 15px/1.7 'Newsreader',serif">
+          <li style="margin-bottom:12px">Cards read the ministry record; the logo files already live at <code style="font-size:13px">public/images/ministries/*.webp</code> and render at their natural aspect inside a 44px-tall box.</li>
+          <li>CTA band: gold field, “Ready to put your hands to work?”, navy pill. Link labels carry no arrow glyphs — the pill or the colour does the work. Eyebrow on gold uses Gold shadow <code style="font-size:13px">#3B2E12</code>, body uses Gold ink <code style="font-size:13px">#3B2E12</code> — never white.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="proto" style="margin-bottom:72px">
+      <div style="font:800 12px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#B44A2E">03 · The working prototype</div>
+      <h2 style="margin:14px 0 0;font:800 40px/1.05 'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;color:#101B2E">Nine pages you can actually click</h2>
+      <p style="margin:18px 0 0;font:300 18px/1.6 'Newsreader',serif;max-width:42em"><code style="font-size:15px">Site Prototype - 1b.dc.html</code> is the functional build — real navigation, real state, real empty and success states. Open it and use it: every behavior below is demonstrated there rather than described. It is the reference for <em>how it works</em>; the block reference is the reference for <em>how it is made</em>.</p>
+
+      <div style="margin-top:24px;border:1px solid #D8CFBB;border-radius:18px;overflow:hidden">
+        <div style="display:grid;grid-template-columns:.7fr 1.1fr 2.2fr;background:#101B2E;color:#F5F0E6;font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.14em;text-transform:uppercase">
+          <div style="padding:12px 16px">Page</div><div style="padding:12px 16px">Interactions</div><div style="padding:12px 16px">What it settles</div>
+        </div>
+        <sc-for list="{{ proto }}" as="p" hint-placeholder-count="9">
+          <div style="display:grid;grid-template-columns:.7fr 1.1fr 2.2fr;border-top:1px solid #E7DFCD;background:#FFFDF8;font:300 14.5px/1.55 'Newsreader',serif">
+            <div style="padding:12px 16px;font:700 15px/1.4 'Bricolage Grotesque',sans-serif;color:#101B2E">{{ p.page }}</div>
+            <div style="padding:12px 16px;color:#4A4636">{{ p.does }}</div>
+            <div style="padding:12px 16px">{{ p.proves }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:26px">
+        <figure style="margin:0">
+          <img src="screens/_proto-sermons.png" alt="Sermons page with the player bar open" style="width:100%;display:block;border:1px solid #D8CFBB;border-radius:14px" />
+          <figcaption style="margin-top:10px;font:300 15px/1.6 'Newsreader',serif;color:#4A4636"><strong style="font-weight:600;color:#101B2E">Sermons.</strong> Series chips filter the list; clicking a row opens the sticky player bar with a ticking clock and a gold progress fill, and marks that row Playing on a warm gradient. Close returns it.</figcaption>
+        </figure>
+        <figure style="margin:0">
+          <img src="screens/_proto-give.png" alt="Give page with the gift form" style="width:100%;display:block;border:1px solid #D8CFBB;border-radius:14px" />
+          <figcaption style="margin-top:10px;font:300 15px/1.6 'Newsreader',serif;color:#4A4636"><strong style="font-weight:600;color:#101B2E">Give.</strong> Frequency, four preset amounts, a custom field that overrides them, a designation. The button label carries the whole decision (“Give $250 monthly”) and greys out at zero; submitting swaps the card for a receipt state.</figcaption>
+        </figure>
+        <figure style="margin:0">
+          <img src="screens/_proto-visit.png" alt="Visit page with RSVP and FAQ" style="width:100%;display:block;border:1px solid #D8CFBB;border-radius:14px" />
+          <figcaption style="margin-top:10px;font:300 15px/1.6 'Newsreader',serif;color:#4A4636"><strong style="font-weight:600;color:#101B2E">Visit.</strong> A short RSVP — name, email, service, multi-select needs — that answers by first name (“See you Sunday, Sarah.”) and repeats back what was flagged. Beside it a single-open FAQ accordion.</figcaption>
+        </figure>
+        <figure style="margin:0">
+          <img src="screens/_proto-worship.png" alt="Worship page with the service switcher" style="width:100%;display:block;border:1px solid #D8CFBB;border-radius:14px" />
+          <figcaption style="margin-top:10px;font:300 15px/1.6 'Newsreader',serif;color:#4A4636"><strong style="font-weight:600;color:#101B2E">Worship.</strong> The service switcher changes the whole panel — gradient, ink colour, facts table — so 8:00 reads navy and 10:45 reads gold. One block, two personalities, no duplicated markup.</figcaption>
+        </figure>
+      </div>
+
+      <div style="margin-top:20px;background:#F5F0E6;border-left:3px solid #E4A93C;padding:16px 20px;font:300 15.5px/1.65 'Newsreader',serif">Also live: the news countdown ticks against a real target date, news and ministry filters, the footer signup with a validation state and a thank-you state, footer links that navigate, and a page-enter rise. All of it gated by <code style="font-size:13px">prefers-reduced-motion</code>.</div>
+    </section>
+
+    <section id="values" style="margin-bottom:72px">
+      <div style="font:800 12px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#B44A2E">04 · Core values</div>
+      <h2 style="margin:14px 0 0;font:800 40px/1.05 'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;color:#101B2E">Welcome. Receive. Grow. Go.</h2>
+      <p style="margin:18px 0 0;font:300 18px/1.6 'Newsreader',serif;max-width:42em">The four values already exist as printed one-sheets, each with its own colour, a discipline label, six ways in, and a partner organisation. They are not four posters — they are an arc, and the site should say so: you are welcomed in, you receive God's gifts, you grow among people who know your name, and you are sent back out. <strong style="font-weight:600">Always in that order</strong>, never alphabetised, never reordered by the editor.</p>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:26px">
+        <sc-for list="{{ values }}" as="v" hint-placeholder-count="4">
+          <div style="{{ v.cardStyle }}">
+            <div style="{{ v.wordStyle }}">{{ v.word }}</div>
+            <div style="{{ v.subStyle }}">{{ v.sub }}</div>
+            <div style="{{ v.hexStyle }}">{{ v.hex }}</div>
+            <div style="{{ v.partnerStyle }}">{{ v.partner }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:26px">
+        <figure style="margin:0">
+          <img src="screens/_proto-values-welcome.png" alt="Values page, Welcome selected" style="width:100%;display:block;border:1px solid #D8CFBB;border-radius:14px" />
+          <figcaption style="margin-top:10px;font:300 15px/1.6 'Newsreader',serif;color:#4A4636"><strong style="font-weight:600;color:#101B2E">The value page.</strong> Four cards, the selected one on its field; below, a full panel with the word, the tagline, the six ways in, and the partner organisation.</figcaption>
+        </figure>
+        <figure style="margin:0">
+          <img src="screens/_proto-values-go.png" alt="Values page, Go selected" style="width:100%;display:block;border:1px solid #D8CFBB;border-radius:14px" />
+          <figcaption style="margin-top:10px;font:300 15px/1.6 'Newsreader',serif;color:#4A4636"><strong style="font-weight:600;color:#101B2E">Go, on the gold field.</strong> The one value that carries dark ink — same treatment as the Ministries CTA band, for the same contrast reason.</figcaption>
+        </figure>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:22px">
+        <div style="background:#F5F0E6;border:1px solid #E7DFCD;border-radius:18px;padding:20px 22px;font:300 15px/1.65 'Newsreader',serif"><strong style="font-weight:600;color:#101B2E">Colour, contained.</strong> The four hues are the one place the site departs from navy and gold, and they are allowed on exactly three things: the value card field, its top rule in the unselected state, and the accent on the “why this order” card. They never touch nav, buttons, links or headings elsewhere. <strong style="font-weight:600;color:#101B2E">Go is the gold field, and takes dark ink</strong> — <code style="font-size:13px">#101B2E</code> word, <code style="font-size:13px">#3B2E12</code> everything else. It deliberately uses the same flat, uniformly-light gold as the Ministries CTA band rather than a dark-to-light ramp: a field that travels from <code style="font-size:13px">#8A5A0C</code> to <code style="font-size:13px">#E8A93C</code> has no ink that passes at both ends. The other three are dark fields and take white. Each is a gradient field on the same 150° axis as Navy field, so the values read as part of the language rather than an imported brand.</div>
+        <div style="background:#F5F0E6;border:1px solid #E7DFCD;border-radius:18px;padding:20px 22px;font:300 15px/1.65 'Newsreader',serif"><strong style="font-weight:600;color:#101B2E">Two placements.</strong> A four-up strip (the <code style="font-size:13px">values</code> block) that goes on Home and can go anywhere; and the Our Values page, where selecting a card swaps a full panel carrying the tagline, the six ways in, and the partner. The printed one-sheet drops in below as an image, so the web and the rack card sit together.</div>
+      </div>
+
+      <div style="margin-top:20px;background:#F5F0E6;border-left:3px solid #E4A93C;padding:16px 20px;font:300 15.5px/1.65 'Newsreader',serif"><strong style="font-weight:600;color:#101B2E">The contrast budget — apply this to any new gradient field, not just these four.</strong> A field is authored against the ink it carries, and it is measured <em>at the end that hurts</em>: light stop for white ink, dark stop for dark ink. On a white-ink field the light stop must clear 4.5:1 against <code style="font-size:13px">#fff</code> — that is what set Welcome's <code style="font-size:13px">#3F7A38</code>, Receive's <code style="font-size:13px">#3266AE</code> and Grow's <code style="font-size:13px">#1F7A86</code>, all darker than the brand hues they came from. Two more rules that came out of getting this wrong: white ink is near-opaque (<code style="font-size:13px">.94</code> body, <code style="font-size:13px">.88</code> label) because every point of transparency is a point of contrast; and a translucent panel <em>inside</em> a coloured field uses a dark wash <code style="font-size:13px">rgba(16,27,46,.18)</code>, never a white one, which would lighten the very surface the white text sits on. The brighter brand hues survive as accents on rules and borders, where nothing is set on top of them.</div>
+
+      <div style="margin-top:16px;background:#F5F0E6;border-left:3px solid #B44A2E;padding:16px 20px;font:300 15.5px/1.65 'Newsreader',serif"><strong style="font-weight:600;color:#101B2E">Verify in Phase 0:</strong> the values, their six items and their partner organisations need a data record of their own — the <code style="font-size:13px">values</code> block is self-filling and must not store copies. If no record exists, this is a small one to add and worth adding properly: the same content is wanted on the printed cards, the visitor packet and the school materials.</div>
+
+      <div style="margin-top:20px;font:300 15px/1.6 'Newsreader',serif;color:#8A8168">Word marks are set in Newsreader italic rather than the script face on the printed cards — the script does not hold up at small sizes or in a nav, and adding a third family for four words is not worth the weight. If Andrew wants the script on the web, it belongs on the value page's large word only, as a webfont, and nowhere else.</div>
+    </section>
+
+    <section id="gradients" style="margin-bottom:72px">
+      <div style="font:800 12px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#B44A2E">05 · Gradients</div>
+      <h2 style="margin:14px 0 0;font:800 40px/1.05 'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;color:#101B2E">Six gradients, and where each is allowed</h2>
+      <p style="margin:18px 0 0;font:300 18px/1.6 'Newsreader',serif;max-width:42em">Flat navy and flat sand are a large part of why the old pages read as dead. Every large field in this language now carries a shallow gradient — 6–10% of value across the field, never a hue jump. Two exceptions carry real colour: the hero veils, which pick up a warm radial glow, and the gold band. Copy these declarations verbatim.</p>
+      <div style="display:grid;gap:14px;margin-top:24px">
+        <sc-for list="{{ grads }}" as="g" hint-placeholder-count="6">
+          <div style="border:1px solid #D8CFBB;border-radius:18px;overflow:hidden;background:#FFFDF8">
+            <div style="{{ g.swatchStyle }}">
+              <span style="{{ g.nameStyle }}">{{ g.name }}</span>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1.35fr;gap:0;border-top:1px solid #E7DFCD">
+              <div style="padding:14px 18px;font:300 15px/1.6 'Newsreader',serif;border-right:1px solid #E7DFCD"><strong style="font-weight:600;color:#101B2E">Used on:</strong> {{ g.where }}</div>
+              <div style="padding:14px 18px;font:400 12.5px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;color:#4A4636;word-break:break-word">{{ g.css }}</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:20px">
+        <div style="background:#F5F0E6;border-left:3px solid #B44A2E;padding:16px 20px;font:300 15px/1.65 'Newsreader',serif"><strong style="font-weight:600;color:#101B2E">Never</strong> gradient body text, small cards under ~300px, hairlines, or the page background itself. A gradient marks a <em>field</em> — a band, a hero, a large card, a pill.</div>
+        <div style="background:#F5F0E6;border-left:3px solid #E4A93C;padding:16px 20px;font:300 15px/1.65 'Newsreader',serif"><strong style="font-weight:600;color:#101B2E">Contrast is measured at the light end</strong> of every gradient, not the average. On the gold field that means <code style="font-size:13px">#3B2E12</code> body and <code style="font-size:13px">#3B2E12</code> eyebrows — white fails.</div>
+      </div>
+    </section>
+
+    <section id="editor" style="margin-bottom:72px">
+      <div style="font:800 12px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#B44A2E">06 · The editor</div>
+      <h2 style="margin:14px 0 0;font:800 40px/1.05 'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;color:#101B2E">How it should work</h2>
+      <p style="margin:18px 0 0;font:300 18px/1.6 'Newsreader',serif;max-width:42em">The chrome is unchanged from the shipped admin design — reuse it exactly. What is new is the canvas, the selection model, the per-block inspector, and half-width pairing.</p>
+
+      <figure style="margin:28px 0 0">
+        <img src="screens/_editor-news.png" alt="Editor on the news page" style="width:100%;display:block;border:1px solid #D8CFBB;border-radius:14px" />
+        <figcaption style="margin-top:10px;font:300 15px/1.6 'Newsreader',serif;color:#4A4636"><strong style="font-weight:600;color:#101B2E">Default state.</strong> 58px navy top bar (#1E2D4A): brand block, <code style="font-size:13px">Pages / &lt;page&gt;</code> breadcrumb, status pill (<code style="font-size:13px">DRAFT · 2 EDITS</code>), autosave label, Desktop/Tablet/Phone segmented control, Undo, “View live”, gold Publish. Below it the sand coach strip, the 216px #F7F3EC site rail, and the 322px inspector.</figcaption>
+      </figure>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:26px">
+        <figure style="margin:0">
+          <img src="screens/_editor-selected.png" alt="Block selected, inspector open" style="width:100%;display:block;border:1px solid #D8CFBB;border-radius:14px" />
+          <figcaption style="margin-top:10px;font:300 15px/1.6 'Newsreader',serif;color:#4A4636"><strong style="font-weight:600;color:#101B2E">Block selected.</strong> 2px #2E7EA6 inset outline on the block, a navy floating toolbar 13px above its top-left (block name in gold small caps, then ↑ ↓ ⧉ ◎ ✕), and the inspector switches to that block's fields with “Block 1 of 5” at the right of the header.</figcaption>
+        </figure>
+        <figure style="margin:0">
+          <img src="screens/_editor-palette.png" alt="Block palette open" style="width:100%;display:block;border:1px solid #D8CFBB;border-radius:14px" />
+          <figcaption style="margin-top:10px;font:300 15px/1.6 'Newsreader',serif;color:#4A4636"><strong style="font-weight:600;color:#101B2E">Add block.</strong> The navy bottom palette with group tabs (Content · Dates &amp; details · Structure · Sign up &amp; give). Clicking a chip appends that block below the selection and logs the change. “Hide”/“Show blocks” collapses the tray so the canvas is unobstructed.</figcaption>
+        </figure>
+      </div>
+
+      <h3 style="margin:44px 0 0;font:800 26px/1.1 'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;color:#101B2E">Canvas rules</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:16px">
+        <div style="background:#F5F0E6;border:1px solid #E7DFCD;border-radius:18px;padding:20px 22px;font:300 15px/1.6 'Newsreader',serif"><strong style="font-weight:600;color:#101B2E">Fit, do not squeeze.</strong> The canvas is a fixed 1080px design width scaled with <code style="font-size:13px">zoom: min(1, available / 1080)</code>, measured by a ResizeObserver on the scroll container. <code style="font-size:13px">max-width:100%</code> is the bug — it reflows 64px type and the editor then lies about the page.</div>
+        <div style="background:#F5F0E6;border:1px solid #E7DFCD;border-radius:18px;padding:20px 22px;font:300 15px/1.6 'Newsreader',serif"><strong style="font-weight:600;color:#101B2E">Chrome markers.</strong> Header and footer are not blocks — they appear on all 28 pages and stay admin-managed. The canvas labels them with an <code style="font-size:13px">rgba(30,45,74,.86)</code> chip: “Header · Menu, Appearance”, “Footer · Menu, Footer columns”.</div>
+        <div style="background:#F5F0E6;border:1px solid #E7DFCD;border-radius:18px;padding:20px 22px;font:300 15px/1.6 'Newsreader',serif"><strong style="font-weight:600;color:#101B2E">Hidden blocks stay visible.</strong> A hidden block renders as a dashed placeholder saying so, rather than vanishing — otherwise “hide” reads as “delete”.</div>
+        <div style="background:#F5F0E6;border:1px solid #E7DFCD;border-radius:18px;padding:20px 22px;font:300 15px/1.6 'Newsreader',serif"><strong style="font-weight:600;color:#101B2E">Half-width pairing.</strong> <code style="font-size:13px">Block width: Full / Half</code>. Two consecutive halves make one row, left then right; a third starts a new row; halves collapse to full below 640px. Mirrors the existing <code style="font-size:13px">.tlcb-pair</code> grid rule.</div>
+      </div>
+
+      <h3 style="margin:44px 0 0;font:800 26px/1.1 'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;color:#101B2E">Three flows, end to end</h3>
+      <div style="display:grid;gap:14px;margin-top:16px">
+        <div style="border:1px solid #D8CFBB;border-radius:18px;padding:22px 24px">
+          <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#B44A2E">Flow A</div>
+          <div style="margin-top:8px;font:700 20px/1.2 'Bricolage Grotesque',sans-serif;color:#101B2E">Andrew puts a photo on this Sunday's banner</div>
+          <p style="margin:10px 0 0;font:300 15px/1.7 'Newsreader',serif">Left rail, <em>News &amp; events</em>. Click the banner: toolbar and inspector appear. Either drag a JPEG straight onto the picture in the canvas, or use <em>Choose from photos…</em> in the inspector. The photo lands, the veil stays at Medium, and the change log gains “Replaced banner photo · 2:14 PM”. Publish turns the status pill from <code style="font-size:13px">DRAFT</code> to <code style="font-size:13px">LIVE</code> and toasts <code style="font-size:13px">Published to timothystl.org/news</code>.</p>
+        </div>
+        <div style="border:1px solid #D8CFBB;border-radius:18px;padding:22px 24px">
+          <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#B44A2E">Flow B</div>
+          <div style="margin-top:8px;font:700 20px/1.2 'Bricolage Grotesque',sans-serif;color:#101B2E">Pairing the sermon card and the news list on Home</div>
+          <p style="margin:10px 0 0;font:300 15px/1.7 'Newsreader',serif">Select the sermon block, then <em>Block width: Half</em>. It shrinks to the left column and the next block is pulled up beside it automatically. Setting the news list to Half too locks the pair. Moving either one with ↑ ↓ breaks and re-forms rows by the same left-to-right rule — no drag targets, no empty columns.</p>
+        </div>
+        <div style="border:1px solid #D8CFBB;border-radius:18px;padding:22px 24px">
+          <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#B44A2E">Flow C</div>
+          <div style="margin-top:8px;font:700 20px/1.2 'Bricolage Grotesque',sans-serif;color:#101B2E">Fixing a typo, then undoing it</div>
+          <p style="margin:10px 0 0;font:300 15px/1.7 'Newsreader',serif">Eyebrow, title, subtitle and body are contenteditable in the canvas; edits commit on blur, each committed edit appending one line to the change log (“Edited banner heading · 2:14 PM”). Undo pops a JSON snapshot of the whole page set — it is page-set-wide on purpose, so an undo after a page switch still does the expected thing.</p>
+        </div>
+      </div>
+
+      <h3 style="margin:44px 0 0;font:800 26px/1.1 'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;color:#101B2E">Editor state</h3>
+      <pre style="margin:14px 0 0;background:#101B2E;color:#F5F0E6;border-radius:18px;padding:22px 24px;overflow:auto;font:400 13.5px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace">{
+  pageId,                     // 'home' | 'worship' | 'ministries' | 'news'
+  pages: { id: { title, slug, glyph, menu, wide, draft, blocks[] } },
+  selected,                   // block id or null
+  tab,                        // 'block' | 'page'
+  viewport,                   // 'desktop' 1080 | 'tablet' 820 | 'phone' 420
+  paletteOpen, group,         // bottom tray
+  changes[],                  // human-readable log lines, newest first
+  history[],                  // JSON snapshots for Undo
+  toast, avail, countdown     // measured canvas width; ticking clock
+}</pre>
+    </section>
+
+    <section id="blocks" style="margin-bottom:72px">
+      <div style="font:800 12px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#B44A2E">07 · Block reference</div>
+      <h2 style="margin:14px 0 0;font:800 40px/1.05 'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;color:#101B2E">What to add to <code style="font:800 34px/1 ui-monospace,monospace">admin/blocks.js</code></h2>
+      <p style="margin:18px 0 0;font:300 18px/1.6 'Newsreader',serif;max-width:42em">One place turns a block into HTML — <code style="font-size:15px">renderInner()</code> — and both the public site and the editor canvas render through it, which is why they can never drift. Each type below needs a def, a renderer branch, <code style="font-size:15px">BLOCK_CSS</code>, and inspector fields.</p>
+      <div style="margin-top:22px;border:1px solid #D8CFBB;border-radius:18px;overflow:hidden">
+        <div style="display:grid;grid-template-columns:1.1fr 1.1fr 1fr 2.6fr;gap:0;background:#101B2E;color:#F5F0E6;font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.14em;text-transform:uppercase">
+          <div style="padding:12px 16px">Type</div><div style="padding:12px 16px">Label</div><div style="padding:12px 16px">Group</div><div style="padding:12px 16px">Fields</div>
+        </div>
+        <sc-for list="{{ blocks }}" as="b" hint-placeholder-count="13">
+          <div style="display:grid;grid-template-columns:1.1fr 1.1fr 1fr 2.6fr;border-top:1px solid #E7DFCD;font:300 14.5px/1.55 'Newsreader',serif;background:#FFFDF8">
+            <div style="padding:12px 16px;font:600 14px/1.5 ui-monospace,monospace;color:#101B2E">{{ b.type }}</div>
+            <div style="padding:12px 16px;color:#101B2E">{{ b.label }}</div>
+            <div style="padding:12px 16px;color:#8A8168">{{ b.group }}</div>
+            <div style="padding:12px 16px">{{ b.fields }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:20px">
+        <div style="background:#F5F0E6;border:1px solid #E7DFCD;border-radius:18px;padding:20px 22px;font:300 15px/1.6 'Newsreader',serif"><strong style="font-weight:600;color:#101B2E">Self-filling blocks read <code style="font-size:13px">ctx.data</code>.</strong> <code style="font-size:13px">newsfeed</code>, <code style="font-size:13px">chips</code>, <code style="font-size:13px">letter</code>, <code style="font-size:13px">sermon</code>, <code style="font-size:13px">servicetimes</code>, <code style="font-size:13px">values</code> and ministry <code style="font-size:13px">cards</code> must never store copies — that is what keeps a published page from going stale.</div>
+        <div style="background:#F5F0E6;border:1px solid #E7DFCD;border-radius:18px;padding:20px 22px;font:300 15px/1.6 'Newsreader',serif"><strong style="font-weight:600;color:#101B2E">Every new type</strong> needs <code style="font-size:13px">align: true</code> and the standard <code style="font-size:13px">spaceAbove</code>/<code style="font-size:13px">spaceBelow</code> defaults, and <code style="font-size:13px">sanitizeBlock</code> must gate the new fields exactly as it gates <code style="font-size:13px">url</code>. Spacing keeps the existing guardrail: 8px steps, 0–96.</div>
+      </div>
+    </section>
+
+    <section id="tokens" style="margin-bottom:72px">
+      <div style="font:800 12px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#B44A2E">08 · Tokens</div>
+      <h2 style="margin:14px 0 0;font:800 40px/1.05 'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;color:#101B2E">Palette, type, geometry, motion</h2>
+      <p style="margin:18px 0 0;font:300 18px/1.6 'Newsreader',serif;max-width:42em">These values were authored, not sampled — recreate them exactly. Add them as new custom properties in <code style="font-size:15px">public/styles.css</code>; existing tokens (<code style="font-size:15px">--steel</code>, <code style="font-size:15px">--amber</code>, <code style="font-size:15px">--warm</code>) stay for pages not yet converted.</p>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:24px">
+        <sc-for list="{{ colors }}" as="c" hint-placeholder-count="15">
+          <div style="border:1px solid #E7DFCD;border-radius:14px;overflow:hidden;background:#FFFDF8">
+            <div style="height:64px;background:{{ c.hex }}"></div>
+            <div style="padding:10px 12px 12px">
+              <div style="font:700 14px/1.2 'Bricolage Grotesque',sans-serif;color:#101B2E">{{ c.name }}</div>
+              <div style="margin-top:3px;font:400 12.5px/1.3 ui-monospace,monospace;color:#8A8168">{{ c.hex }}</div>
+              <div style="margin-top:6px;font:300 13px/1.45 'Newsreader',serif">{{ c.use }}</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:32px;align-items:start">
+        <div>
+          <h3 style="margin:0 0 12px;font:800 22px/1.1 'Bricolage Grotesque',sans-serif;color:#101B2E">Type scale</h3>
+          <div style="border:1px solid #D8CFBB;border-radius:18px;overflow:hidden">
+            <sc-for list="{{ type }}" as="t" hint-placeholder-count="12">
+              <div style="display:grid;grid-template-columns:.8fr 1.2fr;border-bottom:1px solid #E7DFCD;background:#FFFDF8">
+                <div style="padding:11px 16px;font:600 14px/1.45 'Newsreader',serif;color:#101B2E">{{ t.role }}</div>
+                <div style="padding:11px 16px;font:400 13px/1.45 ui-monospace,monospace;color:#4A4636">{{ t.spec }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <p style="margin:12px 0 0;font:300 15px/1.6 'Newsreader',serif">Two families, both Google Fonts: <strong style="font-weight:600">Bricolage Grotesque</strong> (display + UI, weights 600/700/800) and <strong style="font-weight:600">Newsreader</strong> (body + quotes, 300/400 italic/600). The admin chrome keeps Source Sans 3 + Lora; only the canvas uses the new pair.</p>
+        </div>
+        <div>
+          <h3 style="margin:0 0 12px;font:800 22px/1.1 'Bricolage Grotesque',sans-serif;color:#101B2E">Geometry &amp; motion</h3>
+          <div style="border:1px solid #D8CFBB;border-radius:18px;overflow:hidden">
+            <sc-for list="{{ geo }}" as="g" hint-placeholder-count="9">
+              <div style="display:grid;grid-template-columns:.8fr 1.2fr;border-bottom:1px solid #E7DFCD;background:#FFFDF8">
+                <div style="padding:11px 16px;font:600 14px/1.45 'Newsreader',serif;color:#101B2E">{{ g.role }}</div>
+                <div style="padding:11px 16px;font:400 13px/1.45 ui-monospace,monospace;color:#4A4636">{{ g.spec }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="margin-top:12px;background:#F5F0E6;border-left:3px solid #B44A2E;padding:14px 18px;font:300 15px/1.6 'Newsreader',serif">The mocks' page-card shadow (<code style="font-size:13px">0 24px 60px rgba(16,27,46,.18)</code>) is an artifact of showing a page inside a desk. Do not ship it.</div>
+        </div>
+      </div>
+    </section>
+
+    <section style="margin-bottom:72px">
+      <div style="font:800 12px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#B44A2E">09 · Behavior</div>
+      <h2 style="margin:14px 0 0;font:800 40px/1.05 'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;color:#101B2E">Motion, responsive, accessibility</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-top:22px">
+        <div style="border:1px solid #D8CFBB;border-radius:18px;padding:20px 22px">
+          <div style="font:700 19px/1.2 'Bricolage Grotesque',sans-serif;color:#101B2E">Live &amp; moving</div>
+          <ul style="margin:10px 0 0;padding-left:18px;font:300 15px/1.65 'Newsreader',serif">
+            <li>Countdown targets the next dated event and advances on its own when one passes. Format <code style="font-size:13px">Nd HHh MMm SSs</code>, tabular numerals, 1s tick. The row hides entirely when <code style="font-size:13px">countdown</code> is off.</li>
+            <li>Photo hover zoom: feed cards, banner, sermon card, ministry tiles.</li>
+            <li>Card lift: visit and ministry cards only.</li>
+            <li>Pulsing dot: banner “happening next”, Home news eyebrow.</li>
+          </ul>
+        </div>
+        <div style="border:1px solid #D8CFBB;border-radius:18px;padding:20px 22px">
+          <div style="font:700 19px/1.2 'Bricolage Grotesque',sans-serif;color:#101B2E">Below ~640px</div>
+          <ul style="margin:10px 0 0;padding-left:18px;font:300 15px/1.65 'Newsreader',serif">
+            <li>Banner heights drop to 300 / 360 / 420.</li>
+            <li>Hero headline drops to 36px; section headings to 28px.</li>
+            <li>All grids collapse to one column; half-width blocks go full.</li>
+            <li>The chip strip shows 3 chips and scrolls horizontally.</li>
+            <li>Keep the existing 44px minimum tap target — every pill already clears it.</li>
+          </ul>
+        </div>
+        <div style="border:1px solid #D8CFBB;border-radius:18px;padding:20px 22px">
+          <div style="font:700 19px/1.2 'Bricolage Grotesque',sans-serif;color:#101B2E">Accessibility</div>
+          <ul style="margin:10px 0 0;padding-left:18px;font:300 15px/1.65 'Newsreader',serif">
+            <li><code style="font-size:13px">prefers-reduced-motion</code> gates the pulse, hover zoom and card lift. Not implemented in the mocks — add it.</li>
+            <li>The veil exists for contrast, not mood: white headline on the darkest veil stop must clear 4.5:1. Heavy veil for busy photos.</li>
+            <li>Countdown needs an <code style="font-size:13px">aria-live="off"</code> and a static text alternative (“Starts Sunday, August 23”).</li>
+            <li>Every photo slot needs real alt text at content-entry time; the editor should prompt for it on drop.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="build" style="margin-bottom:56px">
+      <div style="font:800 12px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#B44A2E">10 · Build</div>
+      <h2 style="margin:14px 0 0;font:800 40px/1.05 'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;color:#101B2E">Order of work</h2>
+      <ol style="margin:20px 0 0;padding-left:22px;font:300 17px/1.75 'Newsreader',serif;max-width:44em">
+        <li>Tokens + font loading in <code style="font-size:14px">public/styles.css</code>.</li>
+        <li><code style="font-size:14px">photobanner</code>, <code style="font-size:14px">cta</code>, <code style="font-size:14px">signup</code>, <code style="font-size:14px">highlight</code> in <code style="font-size:14px">admin/blocks.js</code> — defs, <code style="font-size:14px">renderInner()</code> branches, <code style="font-size:14px">BLOCK_CSS</code>. All four are self-contained with no data dependency.</li>
+        <li><code style="font-size:14px">quote</code>, <code style="font-size:14px">chips</code>, <code style="font-size:14px">letter</code>, <code style="font-size:14px">values</code> — all four need Phase 0 findings first.</li>
+        <li><code style="font-size:14px">cards</code> — extends the existing <code style="font-size:14px">cardgrid</code> with <code style="font-size:14px">logos</code> and <code style="font-size:14px">feature</code>. Then extend <code style="font-size:14px">newsfeed</code>, <code style="font-size:14px">calendar</code>, <code style="font-size:14px">servicetimes</code>, <code style="font-size:14px">textphoto</code>.</li>
+        <li>Inspector controls for the new fields; half-width pairing; the canvas rules in <a href="#editor">§05</a>.</li>
+        <li>Reseed <code style="font-size:14px">/news</code> in <code style="font-size:14px">admin/site-pages.js</code>, publish, then delete the hardcoded <code style="font-size:14px">#page-news</code> markup from <code style="font-size:14px">public/index.html</code> — deletion lags publication by a few weeks, per the repo's rule.</li>
+        <li>Then <strong style="font-weight:600">Worship, Ministries, Our Values, Home</strong> — in that order of risk. Home last: most bespoke markup, most visitors, least room for a bad week. This matches <code style="font-size:14px">CLAUDE_CODE_BRIEF.md</code>; if the two ever disagree, the brief wins.</li>
+      </ol>
+
+      <h3 style="margin:40px 0 0;font:800 26px/1.1 'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;color:#101B2E">Done means</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px">
+        <sc-for list="{{ checks }}" as="c" hint-placeholder-count="8">
+          <div style="display:flex;gap:11px;align-items:flex-start;background:#F5F0E6;border:1px solid #E7DFCD;border-radius:14px;padding:14px 16px">
+            <span style="flex:none;width:18px;height:18px;border:1.5px solid #B37F1E;border-radius:5px;margin-top:2px"></span>
+            <span style="font:300 15px/1.55 'Newsreader',serif">{{ c }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <section style="border-top:1px solid #D8CFBB;padding-top:40px">
+      <h3 style="margin:0;font:800 26px/1.1 'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;color:#101B2E">What is in this folder</h3>
+      <div style="margin-top:16px;border:1px solid #D8CFBB;border-radius:18px;overflow:hidden">
+        <sc-for list="{{ files }}" as="f" hint-placeholder-count="8">
+          <div style="display:grid;grid-template-columns:.9fr 1.6fr;border-bottom:1px solid #E7DFCD;background:#FFFDF8">
+            <div style="padding:12px 16px;font:600 13.5px/1.5 ui-monospace,monospace;color:#101B2E">{{ f.name }}</div>
+            <div style="padding:12px 16px;font:300 15px/1.55 'Newsreader',serif">{{ f.what }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <p style="margin:16px 0 0;font:300 16px/1.65 'Newsreader',serif;max-width:44em">Open any <code style="font-size:14px">.dc.html</code> straight in a browser — no build, no server. Photo drops are local to the prototype. The prototypes are <em>design references</em>: do not port their React structure; build the specifications above into the repo's own patterns.</p>
+      <p style="margin:22px 0 0;font:300 15px/1.6 'Newsreader',serif;color:#8A8168">Photography still needed: Home — a Sunday morning, wide; Worship — the sanctuary mid-service; Ministries — hands at work; News — the coming event; plus the sermon still, the music photo, and one per feed card. Roughly eight to start.</p>
+    </section>
+
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  grad(css, name, where, dark, preview) {
+    return {
+      name, where, css,
+      swatchStyle: 'height:88px;display:flex;align-items:flex-end;padding:16px 20px;background:' + (preview || css),
+      nameStyle: "font:800 13px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.06em;color:" + (dark ? '#F5F0E6' : '#101B2E'),
+    };
+  }
+
+  renderVals() {
+    return {
+      values: [
+        { word: 'Welcome', sub: 'Acceptance', hex: '#2F6B3A · #3F7A38', partner: 'LASM · Lindenwood Area Senior Ministry', field: 'linear-gradient(150deg,#153A1E,#2F6B3A 58%,#3F7A38)' },
+        { word: 'Receive', sub: 'Worship', hex: '#1B4FA0 · #3266AE', partner: 'CSL · Concordia Seminary St. Louis', field: 'linear-gradient(150deg,#0E2B5B,#1B4FA0 58%,#3266AE)' },
+        { word: 'Grow', sub: 'Christian Education', hex: '#17636D · #1F7A86', partner: 'Word of Life Lutheran School', field: 'linear-gradient(150deg,#0C3F47,#17636D 58%,#1F7A86)' },
+        { word: 'Go', sub: 'Outreach', hex: '#E4A93C · #D89428', partner: 'CFNA · Christian Friends of New Americans', field: 'linear-gradient(140deg,#E4A93C,#F0C46B 52%,#D89428)', darkInk: true },
+      ].map((v) => ({
+        word: v.word, sub: v.sub, hex: v.hex, partner: v.partner,
+        cardStyle: 'border-radius:20px;padding:24px;background:' + v.field,
+        wordStyle: "font:italic 400 38px/1 'Newsreader',serif;letter-spacing:-.01em;color:" + (v.darkInk ? '#101B2E' : '#fff'),
+        subStyle: "margin-top:8px;font:800 10px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:" + (v.darkInk ? '#3B2E12' : 'rgba(255,255,255,.88)'),
+        hexStyle: 'margin-top:16px;font:400 12px/1.5 ui-monospace,monospace;color:' + (v.darkInk ? 'rgba(59,46,18,.8)' : 'rgba(255,255,255,.88)'),
+        partnerStyle: "margin-top:12px;padding-top:12px;border-top:1px solid " + (v.darkInk ? 'rgba(16,27,46,.22)' : 'rgba(255,255,255,.22)') + ";font:300 14px/1.45 'Newsreader',serif;color:" + (v.darkInk ? '#3B2E12' : 'rgba(255,255,255,.94)'),
+      })),
+      proto: [
+        { page: 'Home', does: 'Nav, info card, sermon card and news list all route', proves: 'The masthead sits transparent over the hero and turns solid on every other page; the info card is a banner slot, not a block.' },
+        { page: 'Our values', does: 'Four value cards; selecting one swaps the panel', proves: 'The four brand hues live inside the language without taking it over, and the printed one-sheet has a home beside the web version.' },
+        { page: 'About', does: 'Static — beliefs, staff, history rail', proves: 'The language holds for a page with no interaction at all: three paper cards, a photo grid, a navy-to-clay history band.' },
+        { page: 'Worship', does: '8:00 / 10:45 service switcher', proves: 'One block with two tones. The switcher is the model for any A/B content the office wants to keep in one place.' },
+        { page: 'Sermons', does: 'Series filter, row play, sticky player with progress', proves: 'A live element that persists across scroll, and a row state that reads clearly without leaving the list.' },
+        { page: 'Ministries', does: 'Category filter over nine ministries', proves: 'Real logo files at natural aspect, first card featured navy, and a grid that reflows to any result count.' },
+        { page: 'News', does: 'Ticking countdown, chips, category filter, letter archive, calendar', proves: 'The full 1b page as specified — the direction Andrew chose, working.' },
+        { page: 'Give', does: 'Frequency, amounts, custom entry, fund, submit, receipt', proves: 'A real form with a disabled state, a computed button label, and a success state that reads back the decision.' },
+        { page: 'Visit', does: 'RSVP with multi-select needs, FAQ accordion', proves: 'Personalised confirmation copy, and how long-form Q&A lives in this language without a wall of text.' },
+      ],
+      grads: [
+        this.grad('linear-gradient(180deg,#101B2E 0%,#16233C 100%)', 'Masthead navy', 'The sticky header, and the footer inverted (#101B2E to #0C1524).', true),
+        this.grad('linear-gradient(180deg,rgba(16,27,46,.72) 0%,rgba(16,27,46,.16) 42%,rgba(16,27,46,.9) 100%)', 'Hero veil', 'Every full-bleed photo banner. Three stops: legible at the top, open in the middle, dark under the headline.', true),
+        this.grad('radial-gradient(880px 400px at 14% 104%, rgba(180,74,46,.44), transparent 68%)', 'Hero glow', 'A second layer over the veil — clay from the bottom corner on News/Sermons/Visit, gold from the top corner on Worship/Ministries/About/Give. This is what stops the heroes reading grey. Shown here layered as it ships; the CSS beside it is the one declaration to copy.', true,
+          'radial-gradient(880px 400px at 14% 104%, rgba(180,74,46,.44), transparent 68%), linear-gradient(180deg,rgba(16,27,46,.72) 0%,rgba(16,27,46,.16) 42%,rgba(16,27,46,.9) 100%), #101B2E'),
+        this.grad('linear-gradient(135deg,#101B2E 0%,#1B2C4A 52%,#2A3E66 100%)', 'Navy field', 'Letter band, music band, sermon card, standout cards, featured ministry tile. On About the third stop swaps to #7A3F26 for the history band.', true),
+        this.grad('linear-gradient(120deg,#E4A93C 0%,#F0C46B 52%,#D89428 100%)', 'Gold field', 'The ministries CTA band, the 10:45 service tile, primary pills, and progress fills.', false),
+        this.grad('linear-gradient(180deg,#F5F0E6 0%,#EFE8D9 100%)', 'Paper field', 'Quote band, visit cards, ministry tiles, signup band, calendar tray, form cards. The workhorse — it is what keeps a page of cards from flattening.', false),
+      ],
+      blocks: [
+        { type: 'photobanner', label: 'Photo banner', group: 'Structure', fields: 'photo, eyebrow, title, sub, height (short 420 / mid 520 / tall 640), veil (0–2), card (off / services), countdown, pulse' },
+        { type: 'newsfeed', label: 'News feed', group: 'Content', fields: 'title, count 1–6, cols 1–2, photos — extends the existing type' },
+        { type: 'quote', label: 'Quote band', group: 'Content', fields: 'title (the quote), body, tone (navy / paper)' },
+        { type: 'chips', label: 'Coming-up strip', group: 'Dates & details', fields: 'count 1–6 — self-filling from the calendar' },
+        { type: 'cards', label: 'Card grid', group: 'Content', fields: 'title, body, count, cols 2–3, logos, feature (first card navy) — extends cardgrid' },
+        { type: 'servicetimes', label: 'Service times', group: 'Dates & details', fields: 'self-filling; renders as the two big tiles' },
+        { type: 'textphoto', label: 'Text + photo', group: 'Content', fields: 'eyebrow, title, body, photo, side (left / right), tone' },
+        { type: 'letter', label: 'Weekly letter', group: 'Sign up & give', fields: 'title, count 1–6, tone, signup — self-filling archive' },
+        { type: 'cta', label: 'Call-to-action band', group: 'Structure', fields: 'eyebrow, title, body, btn, tone (gold / navy)' },
+        { type: 'signup', label: 'Email signup', group: 'Sign up & give', fields: 'title, body, tone' },
+        { type: 'calendar', label: 'Calendar', group: 'Dates & details', fields: 'title, height (s 420 / m 560 / l 700), subscribe' },
+        { type: 'values', label: 'Core values', group: 'Content', fields: 'title, cols 2–4 — self-filling from the values record; the four cards, always in order' },
+        { type: 'highlight', label: 'Standout card', group: 'Structure', fields: 'eyebrow, big (56px display line), title, body, btn, tone (navy / gold / paper), width — the service-times tile made general' },
+      ],
+      colors: [
+        { name: 'Ink navy', hex: '#101B2E', use: 'Masthead, footer, dark bands, headlines on paper' },
+        { name: 'Navy 2', hex: '#1B2C4A', use: 'Secondary dark tiles' },
+        { name: 'Gold', hex: '#E4A93C', use: 'Eyebrows on dark, CTA fills, active nav rule' },
+        { name: 'Gold deep', hex: '#B37F1E', use: 'Link colour on paper' },
+        { name: 'Gold ink', hex: '#3B2E12', use: 'ALL text on a gold field — body, headings and eyebrows alike. #3B2E12 was specified for eyebrows and is withdrawn: it measures 2.78:1 on the field and fails at eyebrow sizes.' },
+        { name: 'Clay', hex: '#B44A2E', use: 'Second accent — eyebrows on paper' },
+        { name: 'Paper', hex: '#F5F0E6', use: 'Section bands, cards' },
+        { name: 'Card', hex: '#FFFDF8', use: 'Page surface' },
+        { name: 'Body ink', hex: '#453F30', use: 'Body copy on paper' },
+        { name: 'Muted ink', hex: '#4A4636', use: 'Secondary copy' },
+        { name: 'Sand line', hex: '#D8CFBB', use: 'Hairlines, chip borders' },
+        { name: 'Sand line 2', hex: '#E7DFCD', use: 'Softer rules inside cards' },
+        { name: 'Meta ink', hex: '#8A8168', use: 'Small caps meta on paper' },
+        { name: 'Cream on dark', hex: 'rgba(245,240,230,.78)', use: 'Body copy on navy' },
+        { name: 'Select blue', hex: '#2E7EA6', use: 'Editor selection outline only' },
+      ],
+      type: [
+        { role: 'Hero headline (no card)', spec: '800 64px/0.98, -.03em, max-width 19em, white' },
+        { role: 'Hero headline (+ card)', spec: '800 56px/1' },
+        { role: 'Home hero headline', spec: '800 58px/1, three authored <br> lines' },
+        { role: 'Page H1', spec: '800 66–72px/1' },
+        { role: 'Section heading', spec: '800 36–40px/1.05, -.02em, #101B2E' },
+        { role: 'Card heading', spec: '700 22–25px/1.15, -.01em' },
+        { role: 'Service numeral', spec: '800 52–56px/1, -.03em' },
+        { role: 'Eyebrow', spec: '800 11–12px/1, .16em (.18em page-level), uppercase' },
+        { role: 'Meta / date', spec: '600 11.5–13px/1, .06–.1em, uppercase' },
+        { role: 'Body', spec: '300 15–20px/1.6 Newsreader' },
+        { role: 'Quote', spec: 'italic 400 28–30px/1.35 Newsreader' },
+        { role: 'Countdown', spec: '700 34px/1, tabular-nums' },
+        { role: 'Nav item', spec: '600 14px Newsreader' },
+        { role: 'Button label', spec: '800 13–14px Bricolage' },
+      ],
+      geo: [
+        { role: 'Page gutter', spec: '44px (34px in canvas, 26px in a half block)' },
+        { role: 'Card radius', spec: '18px feed · 20px ministry/visit/media · 22px info, tiles, CTA' },
+        { role: 'Pill radius', spec: '999px — every button in this language' },
+        { role: 'Grid gap', spec: '18–22px' },
+        { role: 'Band padding', spec: '40–56px vertical' },
+        { role: 'Hero veil', spec: 'linear-gradient(180deg, rgba(16,27,46,V), rgba(16,27,46,.15–.18) 42%, rgba(16,27,46,.88–.9)); V = .5 / .72 / .88' },
+        { role: 'Photo hover zoom', spec: 'scale(1.04–1.05), .5s cubic-bezier(.2,.8,.2,1), wrapper overflow:hidden' },
+        { role: 'Card lift', spec: 'translateY(-4px) + 0 18px 40px rgba(16,27,46,.16), .3s' },
+        { role: 'Pulse dot', spec: '8px gold circle, opacity 1 to .35, 1.8s ease-in-out infinite' },
+        { role: 'Spacing steps', spec: '8px steps, 0–96 (SPACE_STEP, SPACE_MAX, snapSpace)' },
+      ],
+      checks: [
+        'The editor canvas and the live page render from the same renderInner() — no second template.',
+        'The canvas scales with zoom and never reflows 64px type at any window width.',
+        'The countdown rolls to the next event by itself and hides cleanly when switched off.',
+        'Two consecutive half blocks pair; a third starts a new row; all collapse below 640px.',
+        'Hidden blocks show as dashed placeholders; header and footer show as chrome chips.',
+        'Every self-filling block reads ctx.data at render — no stored copies.',
+        'prefers-reduced-motion switches off pulse, zoom and lift.',
+        'Every pill clears 44px tap height on a phone.',
+      ],
+      files: [
+        { name: 'KICKOFF_PROMPT.md', what: 'Paste-ready first message for Claude Code. It sends the agent to verify against the repo and report back before writing any code.' },
+        { name: 'CLAUDE_CODE_BRIEF.md', what: 'The build plan for an implementing agent — Phase 0 verification, phased tasks, acceptance criteria, known gaps. Start here to build.' },
+        { name: 'Handoff.dc.html', what: 'This document — the visual reference.' },
+        { name: 'Site Prototype - 1b.dc.html', what: 'The functional prototype — nine pages, working navigation, filters, forms, player, countdown. The behavioral reference.' },
+        { name: 'News Page - Current.dc.html', what: 'The live /news today, recreated from public/index.html + styles.css. The “before”.' },
+        { name: 'News Page - Directions.dc.html', what: 'Three directions side by side — 1a Broadsheet, 1b (chosen), 1c Bulletin board.' },
+        { name: 'Site Editor - 1b.dc.html', what: 'The block editor rebuilt around the language: four pages, new palette, per-block inspector, half-width pairing.' },
+        { name: 'README.md', what: 'The same specification in plain markdown, for pasting into an issue tracker.' },
+        { name: 'screens/', what: 'The screenshots used above, full resolution.' },
+        { name: 'support.js, image-slot.js, public/', what: 'Runtime and assets for the prototypes. Not part of the implementation.' },
+      ],
+    };
+  }
+}
+
+</script>
+</body>
+</html>

@@ -38,6 +38,24 @@
 export const VALUES = [
   {
     key: 'acceptance',
+    // The redesign's own field for this value — a gradient, its bright
+    // accent, and whether text on it is light or dark. Authored to a
+    // contrast budget: a field is measured at the END THAT HURTS (the
+    // light stop for white ink), which is why these are darker than the
+    // brand hues they came from.
+    field: 'linear-gradient(150deg,#153A1E 0%,#2F6B3A 58%,#3F7A38 100%)',
+    light: '#6FA84E',
+    darkInk: false,
+    tag: 'Welcoming all people with the love of Jesus.',
+    why: 'Nothing else on this list happens to a person who never felt welcome. Acceptance is not the warm-up; it is the first thing the gospel does.',
+    ways: [
+      { title: 'Worship with us', body: 'Join us for uplifting worship and receive God’s grace.' },
+      { title: 'For everyone', body: 'People of all ages and every stage of life are welcome.' },
+      { title: 'Connect & belong', body: 'Find meaningful relationships and grow in faith together.' },
+      { title: 'Learn & grow', body: 'Explore God’s Word and deepen your walk with Christ.' },
+      { title: 'Serve together', body: 'Use your gifts to make a difference in our community and beyond.' },
+      { title: 'Come as you are', body: 'You don’t have to have it all figured out. There’s a place for you.' },
+    ],
     short: 'Welcome',
     name: 'Acceptance',
     tint: '#D6E4BE',
@@ -47,6 +65,24 @@ export const VALUES = [
   },
   {
     key: 'worship',
+    // The redesign's own field for this value — a gradient, its bright
+    // accent, and whether text on it is light or dark. Authored to a
+    // contrast budget: a field is measured at the END THAT HURTS (the
+    // light stop for white ink), which is why these are darker than the
+    // brand hues they came from.
+    field: 'linear-gradient(150deg,#0E2B5B 0%,#1B4FA0 58%,#3266AE 100%)',
+    light: '#3E7BD1',
+    darkInk: false,
+    tag: 'Gathering as God’s people to celebrate His grace and receive His gifts through Word and Sacrament.',
+    why: 'Lutherans put receiving before doing. Sunday morning is not what we offer God; it is where He hands out what He has already won.',
+    ways: [
+      { title: 'Sermons', body: 'God speaks to us through His Word preached and taught.' },
+      { title: 'Communion', body: 'Receiving Christ’s true body and blood for the forgiveness of sins.' },
+      { title: 'Worship music', body: 'Using our voices and instruments to praise our Savior.' },
+      { title: 'Serving in worship', body: 'Many gifts, one body — serving together in worship.' },
+      { title: 'Choirs', body: 'Handbells, youth, adult and African choirs lifting our voices in praise.' },
+      { title: 'Livestream & media', body: 'Bringing worship to our homebound and beyond.' },
+    ],
     short: 'Receive',
     name: 'Worship',
     tint: '#CEDBF7',
@@ -56,6 +92,24 @@ export const VALUES = [
   },
   {
     key: 'education',
+    // The redesign's own field for this value — a gradient, its bright
+    // accent, and whether text on it is light or dark. Authored to a
+    // contrast budget: a field is measured at the END THAT HURTS (the
+    // light stop for white ink), which is why these are darker than the
+    // brand hues they came from.
+    field: 'linear-gradient(150deg,#0C3F47 0%,#17636D 58%,#1F7A86 100%)',
+    light: '#45AFB8',
+    darkInk: false,
+    tag: 'Growing together in Christ — equipping people to grow in a lifelong journey with Him.',
+    why: 'Faith that stopped learning stopped moving. Confirmation is not graduation, and neither is being sixty.',
+    ways: [
+      { title: 'Bible studies', body: 'Digging into Scripture together to know God more deeply.' },
+      { title: 'Youth ministry', body: 'Encouraging students to live and share their faith.' },
+      { title: 'Sunday School', body: 'Learning about God’s love at every age.' },
+      { title: 'Adult education', body: 'Equipping adults to grow in faith and live it out every day.' },
+      { title: 'Confirmation', body: 'Building a strong foundation in the Lutheran faith.' },
+      { title: 'Resources', body: 'You don’t have to know everything. Here is where to start.' },
+    ],
     short: 'Grow',
     name: 'Christian Education',
     tint: '#BAE8DE',
@@ -65,6 +119,24 @@ export const VALUES = [
   },
   {
     key: 'outreach',
+    // The redesign's own field for this value — a gradient, its bright
+    // accent, and whether text on it is light or dark. Authored to a
+    // contrast budget: a field is measured at the END THAT HURTS (the
+    // light stop for white ink), which is why these are darker than the
+    // brand hues they came from.
+    field: 'linear-gradient(140deg,#E4A93C 0%,#F0C46B 52%,#D89428 100%)',
+    light: '#E8A93C',
+    darkInk: true,
+    tag: 'Sharing Jesus with our neighbors and the nations — sharing the love of Jesus with those who do not yet know Him.',
+    why: 'From our neighborhood to the nations is not a slogan on the letterhead. It is the last line of the arc, and it points out the door.',
+    ways: [
+      { title: 'Vacation Bible School', body: 'Sharing God’s love and the joy of the Gospel with kids.' },
+      { title: 'Short-term missions', body: 'Answering God’s call to go and serve around the world.' },
+      { title: 'Local service', body: 'Meeting needs and showing Christ’s love in our community.' },
+      { title: 'Share the gospel', body: 'Telling others about Jesus and inviting them into His family.' },
+      { title: 'Food pantry', body: 'Providing food and caring for families in need.' },
+      { title: 'Neighborhood presence', body: 'The Christmas Market, the bees, the clean-ups — being here, visibly.' },
+    ],
     short: 'Go',
     name: 'Outreach',
     tint: '#E4CBEE',

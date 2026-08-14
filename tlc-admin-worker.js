@@ -74,6 +74,17 @@ const NEWS_PAGE_SEED = {
   seo_description: 'Announcements, upcoming events, and weekly newsletters from Timothy Lutheran Church.',
   blocks: REDESIGN_BLOCKS.news,
 };
+// /about/values, like /news, has no hardcoded markup for the extractor to lift
+// — it is a live view of the values record — so it needs a page row authored
+// here. See the note in admin/redesign-seeds.js on why it is a block page now
+// when admin/BLOCK-EDITOR-ROLLOUT.md said it should not be.
+const VALUES_PAGE_SEED = {
+  id: 'values', title: 'Our Values', menu_label: '', slug: '/about/values',
+  parent_id: 'about', sort: 20, template: 'standard', in_menu: 0,
+  seo_description: 'Welcome, Receive, Grow, Go — the four core values of Timothy Lutheran Church, and the partner ministries paired to each.',
+  blocks: REDESIGN_BLOCKS.values,
+};
+
 import { orderPages, filterPages, pageStatus, slugify, uniqueSlug, pageRename,
          withShortLinks, shortLinkFor, shortLinkRoutes, outboundUrl, canReseed } from './admin/pages.js';
 import { MENUS, menuTree, publicMenu, orphanPages, menuWarnings, renumber,
@@ -468,7 +479,7 @@ async function pageData(env, reqKey) {
       // the way the staff grid and the sermon block already are. A logo changed
       // on the Partners screen lands on every page showing it at once, and
       // nobody retypes a partner's name into a page for it to go stale there.
-      q('SELECT id, name, short_name, value, site_url, logo_url FROM partners ORDER BY sort_order, id'),
+      q('SELECT id, name, short_name, value, blurb, site_url, logo_url FROM partners ORDER BY sort_order, id'),
     ]);
     const s = {};
     for (const r of settingRows) s[r.key.replace(/^church_/, '')] = r.value;
@@ -480,6 +491,20 @@ async function pageData(env, reqKey) {
       appearance: publicAppearance(parseAppearance(chromeRow && chromeRow.value)),
       sermon: sermonRow || null,
       news, staff, newsletters,
+      // The four core values, composed here so the block is self-filling: the
+      // words and the ways in come from admin/values.js (the one place the
+      // four live), the partner ministry from the `partners` table. ⚠ VALUES
+      // order is the arc — Welcome, Receive, Grow, Go — and is never sorted.
+      values: VALUES.map((v) => {
+        const p = partners.find((x) => x.value === v.key);
+        return {
+          key: v.key, short: v.short, name: v.name, blurb: v.blurb,
+          tag: v.tag || v.blurb, why: v.why || '',
+          field: v.field || '', light: v.light || v.solid, darkInk: !!v.darkInk,
+          ways: v.ways || [],
+          partner: p ? { name: p.name, body: p.blurb || '' } : null,
+        };
+      }),
       partners: partners.map((p) => ({
         id: p.id, name: p.name, shortName: p.short_name || '',
         url: p.site_url || '', logo: p.logo_url || '',
@@ -1237,7 +1262,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-13-2'; // bumped: the four redesign page drafts (admin/redesign-seeds.js) — reaches a page only via canReseed(), so nothing anybody has edited or published is touched
+    const SCHEMA_VERSION = '2026-08-14-1'; // bumped: the Our Values page row, and the five redesign drafts (admin/redesign-seeds.js) — reaches a page only via canReseed(), so nothing anybody has edited or published is touched
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -1778,7 +1803,7 @@ export default {
       // presses Publish. On these four in particular that is not a formality —
       // they are the most visited pages on the site, the language is new, and
       // there are no photographs yet.
-      const ALL_SEEDED_PAGES = [...SITE_PAGES, NEWS_PAGE_SEED, GIVE_LANDING_PAGE]
+      const ALL_SEEDED_PAGES = [...SITE_PAGES, NEWS_PAGE_SEED, VALUES_PAGE_SEED, GIVE_LANDING_PAGE]
         .map((p) => (REDESIGN_BLOCKS[p.id] ? { ...p, blocks: REDESIGN_BLOCKS[p.id] } : p));
       for (const p of ALL_SEEDED_PAGES) {
         await env.DB.prepare(
