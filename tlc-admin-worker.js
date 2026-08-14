@@ -468,7 +468,7 @@ async function pageData(env, reqKey) {
       // the way the staff grid and the sermon block already are. A logo changed
       // on the Partners screen lands on every page showing it at once, and
       // nobody retypes a partner's name into a page for it to go stale there.
-      q('SELECT id, name, short_name, value, site_url, logo_url FROM partners ORDER BY sort_order, id'),
+      q('SELECT id, name, short_name, value, blurb, site_url, logo_url FROM partners ORDER BY sort_order, id'),
     ]);
     const s = {};
     for (const r of settingRows) s[r.key.replace(/^church_/, '')] = r.value;
@@ -480,6 +480,20 @@ async function pageData(env, reqKey) {
       appearance: publicAppearance(parseAppearance(chromeRow && chromeRow.value)),
       sermon: sermonRow || null,
       news, staff, newsletters,
+      // The four core values, composed here so the block is self-filling: the
+      // words and the ways in come from admin/values.js (the one place the
+      // four live), the partner ministry from the `partners` table. ⚠ VALUES
+      // order is the arc — Welcome, Receive, Grow, Go — and is never sorted.
+      values: VALUES.map((v) => {
+        const p = partners.find((x) => x.value === v.key);
+        return {
+          key: v.key, short: v.short, name: v.name, blurb: v.blurb,
+          tag: v.tag || v.blurb, why: v.why || '',
+          field: v.field || '', light: v.light || v.solid, darkInk: !!v.darkInk,
+          ways: v.ways || [],
+          partner: p ? { name: p.name, body: p.blurb || '' } : null,
+        };
+      }),
       partners: partners.map((p) => ({
         id: p.id, name: p.name, shortName: p.short_name || '',
         url: p.site_url || '', logo: p.logo_url || '',

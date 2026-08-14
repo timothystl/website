@@ -607,6 +607,31 @@ export const BLOCK_DEFS = {
     },
   },
 
+  // ── THE FOUR CORE VALUES ──────────────────────────────────────────────────
+  // Self-filling from the values record, and ⚠ THE ORDER IS FIXED — Welcome,
+  // Receive, Grow, Go. There is deliberately no reorder control, because the
+  // order IS the content: it is an arc that starts with being let in and ends
+  // pointing out of the door, and each card's "why this one is here" sentence
+  // only makes sense in that sequence. This is the one block in the library
+  // whose items cannot be dragged, and that is on purpose rather than missing.
+  values: {
+    label: 'Core values', glyph: '\u2726',
+    align: true,
+    defaults: { title: 'What we are for', cols: 4, spaceAbove: 24, spaceBelow: 24, bg: 5, ink: 5 },
+    auto: 'values',
+    autoNote: 'The four core values, always in this order, from the one record they live in. The wording, the partner ministry and the six ways in all come from there — nothing here to retype, and nothing that can go stale.',
+    autoCount: false,
+    choices: [
+      { key: 'cols', label: 'Cards per row', def: 4,
+        options: [{ key: 2, label: '2' }, { key: 4, label: '4' }],
+        note: 'Four across reads as one arc; two makes each card taller and gives the six ways in room to breathe. Both stack on a phone.' },
+    ],
+    switches: [
+      { key: 'ways', label: 'Show the ways in', def: false,
+        note: 'The six things each value looks like in practice. Off, a card is its word, its tagline and its partner ministry \u2014 which is the right length beside other blocks. On, the block becomes the page.' },
+    ],
+  },
+
   // ── THE REDESIGN'S OWN FOUR ───────────────────────────────────────────────
   // Four, not the handoff's six. Its `cta` and `signup` types are the Button
   // bar and the Newsletter block already in this file — the Button bar has
@@ -725,7 +750,7 @@ export const ALIGNABLE_TYPES = new Set(
 // of it — and Content is what they fill it with afterwards.
 export const GROUPS = [
   { name: 'Structure', types: ['alert', 'photobanner', 'hero', 'slideshow', 'highlight', 'cta', 'quicklinks', 'cardgrid', 'buttons', 'callout', 'partners', 'spacer'] },
-  { name: 'Content',   types: ['text', 'textphoto', 'quote', 'video', 'columns', 'gallery', 'faq', 'sermon', 'news', 'newsfeed', 'staff', 'posts'] },
+  { name: 'Content',   types: ['text', 'textphoto', 'quote', 'values', 'video', 'columns', 'gallery', 'faq', 'sermon', 'news', 'newsfeed', 'staff', 'posts'] },
   { name: 'Dates',     types: ['servicetimes', 'chips', 'map', 'events', 'times', 'download', 'calendar'] },
   // `giving` and `amounts` join the group that already holds `give` rather
   // than starting a fifth. They belong to one page, and a group of two that
@@ -1747,6 +1772,30 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
 .tlcb--center .tlcb-signup{align-items:center;}
 .tlcb-signup .tlcb-inline{margin-top:6px;}
 
+/* THE FOUR CORE VALUES. Each card is its own gradient field — the one place
+   in this language where a hue other than navy or gold is allowed. */
+.tlcb-vals{display:grid;grid-template-columns:var(--tlcb-cols,repeat(4,1fr));gap:20px;align-items:stretch;}
+.tlcb-val{display:flex;flex-direction:column;gap:6px;border-radius:22px;padding:30px 26px;
+  background:var(--v-field);color:var(--v-ink);box-shadow:0 18px 44px rgba(16,27,46,.16);}
+/* Newsreader italic at display size — the word is the thing on this card. */
+.tlcb-val-word{font-family:var(--tlcb-sans);font-style:italic;font-weight:400;font-size:44px;
+  line-height:1;letter-spacing:-.01em;color:var(--v-head);}
+.tlcb-val-sub{font:800 11px/1.4 var(--tlcb-ui);letter-spacing:.16em;text-transform:uppercase;color:var(--v-label);}
+/* The rule fades out of the accent rather than stopping — same gesture as the
+   info card's gold line. */
+.tlcb-val-rule{height:2px;margin:10px 0 4px;background:linear-gradient(90deg,var(--v-accent),transparent);}
+.tlcb-val-tag{font-family:var(--tlcb-sans);font-style:italic;font-weight:300;font-size:17px;line-height:1.45;color:var(--v-ink);}
+.tlcb-val-ways{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;margin-top:14px;}
+.tlcb-val-way{display:flex;flex-direction:column;gap:2px;}
+.tlcb-val-wt{font:800 10.5px/1.3 var(--tlcb-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--v-head);}
+.tlcb-val-wb{font-size:13.5px;font-weight:300;line-height:1.5;color:var(--v-ink);}
+/* ⚠ A DARK wash, never a white one. A white wash lightens the surface the
+   white text is sitting on, and white fails. The handoff is explicit. */
+.tlcb-val-partner{margin-top:auto;padding:14px 16px;border-radius:14px;background:rgba(16,27,46,.18);
+  display:flex;flex-direction:column;gap:3px;}
+.tlcb-val-pn{font:800 11px/1.35 var(--tlcb-ui);letter-spacing:.06em;color:var(--v-head);}
+.tlcb-val-pb{font-size:13px;font-weight:300;line-height:1.5;color:var(--v-ink);}
+
 /* QUOTE BAND. No box and no border — the opposite gesture from Callout. */
 .tlcb-quote{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;}
 .tlcb-quote-q{font-family:var(--tlcb-sans);font-style:italic;font-weight:400;font-size:30px;line-height:1.35;
@@ -1869,6 +1918,8 @@ function phoneRules(p) {
     `${p}.tlcb-pb-title,${p}.tlcb-pb--card .tlcb-pb-title{font-size:36px!important;}`,
     `${p}.tlcb-pb-foot{gap:18px!important;}`,
     `${p}.tlcb-quote,${p}.tlcb-lt{grid-template-columns:1fr!important;gap:26px!important;}`,
+    `${p}.tlcb-vals,${p}.tlcb-tiles2{grid-template-columns:1fr!important;}`,
+    `${p}.tlcb-val-ways{grid-template-columns:1fr!important;}`,
     `${p}.tlcb-quote-q{font-size:23px!important;}`,
     // The strip shows what fits and scrolls sideways for the rest rather than
     // wrapping to four lines and pushing the page down.
@@ -1974,6 +2025,7 @@ function wrapperVars(b) {
   if (b.type === 'textphoto' || b.type === 'map' || b.type === 'sermon') v.push('--tlcb-cols:' + cols);
   if (b.type === 'columns') v.push('--tlcb-cols:repeat(' + b.cols + ',1fr)');
   if (b.type === 'cardgrid') v.push('--tlcb-cols:repeat(' + b.cols + ',1fr)');
+  if (b.type === 'values') v.push('--tlcb-cols:repeat(' + b.cols + ',1fr)');
   if (b.type === 'hero' && b.photo) {
     v.push("--tlcb-hero-img:url('" + cssUrl(b.photo) + "')");
     v.push('--tlcb-hero-veil:1'); // the gradient that keeps white text legible over a photo
@@ -2388,6 +2440,44 @@ function renderInner(b, opts) {
         </form>`;
     return `<div class="tlcb-stack tlcb-signup">${renderHead(opts, b, 'The weekly letter')}
       ${renderBody(opts, b, def, 'What lands in their inbox, and how often')}${form}</div>`;
+  }
+
+  if (t === 'values') {
+    const vals = data.values || [];
+    if (!vals.length) {
+      return `<div class="tlcb-stack">${renderHead(opts, b)}<p class="tlcb-note">The core values record could not be read.</p></div>`;
+    }
+    const cards = vals.map((v) => {
+      // ⚠ Each card carries its OWN field, ink and accent inline. A block has
+      // one background and this needs four — and the four hues are the single
+      // departure from navy and gold in this whole language, allowed on the
+      // value card field and its rule and nowhere else. Not nav, not buttons,
+      // not links, not headings.
+      const ink = v.darkInk ? '#3B2E12' : 'rgba(255,255,255,.94)';
+      const head = v.darkInk ? '#101B2E' : '#FFFFFF';
+      const label = v.darkInk ? 'rgba(16,27,46,.72)' : 'rgba(255,255,255,.88)';
+      const ways = b.ways && (v.ways || []).length
+        ? `<div class="tlcb-val-ways">${v.ways.map((w) => `<div class="tlcb-val-way">
+             <span class="tlcb-val-wt">${esc(w.title || '')}</span>
+             <span class="tlcb-val-wb">${esc(w.body || '')}</span>
+           </div>`).join('')}</div>`
+        : '';
+      // The partner sits on a DARK wash, never a white one — a white wash
+      // lightens the surface the white text is sitting on, and white fails.
+      const partner = v.partner
+        ? `<div class="tlcb-val-partner"><span class="tlcb-val-pn">${esc(v.partner.name || '')}</span>
+             ${v.partner.body ? `<span class="tlcb-val-pb">${esc(v.partner.body)}</span>` : ''}</div>`
+        : '';
+      return `<div class="tlcb-val" style="--v-field:${v.field};--v-ink:${ink};--v-head:${head};--v-label:${label};--v-accent:${v.light}">
+        <span class="tlcb-val-word">${esc(v.short || '')}</span>
+        <span class="tlcb-val-sub">${esc(v.name || '')}</span>
+        <span class="tlcb-val-rule"></span>
+        <span class="tlcb-val-tag">${esc(v.tag || v.blurb || '')}</span>
+        ${ways}${partner}
+      </div>`;
+    }).join('');
+    return `<div class="tlcb-stack">${renderHead(opts, b, 'What we are for')}
+      <div class="tlcb-vals">${cards}</div></div>`;
   }
 
   if (t === 'quote') {
