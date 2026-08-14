@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Source+Sans+3:ital,wght@0,300..800;1,300..800&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#F7F3EC;}
+  a{color:#2E7EA6;text-decoration:none;}
+  a:hover{color:#1E2D4A;}
+</style>
+</helmet>
+<div style="font-family:'Source Sans 3',Arial,sans-serif;color:#1A1A2A;line-height:1.65;font-size:16px;background:#F7F3EC">
+
+  <nav style="position:sticky;top:0;z-index:100;background:#4A5E3A;border-bottom:3px solid #C9973A">
+    <div style="max-width:1080px;margin:0 auto;padding:0 28px;height:64px;display:flex;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:12px">
+        <img src="https://admin.timothystl.org/logo.png" alt="Timothy Lutheran Church" style="width:44px;height:44px;border-radius:50%;flex-shrink:0;object-fit:contain;background:white;padding:3px;display:block">
+        <div>
+          <span style="display:block;font-size:14px;font-weight:800;color:#fff">Timothy Lutheran Church</span>
+          <span style="display:block;font-size:10px;font-weight:600;color:#E8C070;letter-spacing:.04em">from our Neighborhood to the Nations</span>
+        </div>
+      </div>
+      <ul style="display:flex;align-items:center;gap:4px;list-style:none;margin:0;padding:0">
+        <li><a href="#" style="display:block;font-size:13px;font-weight:700;color:#fff;opacity:.85;padding:6px 10px;border-radius:8px">About</a></li>
+        <li><a href="#" style="display:block;font-size:13px;font-weight:700;color:#fff;opacity:.85;padding:6px 10px;border-radius:8px">Worship</a></li>
+        <li><a href="#" style="display:block;font-size:13px;font-weight:700;color:#fff;opacity:.85;padding:6px 10px;border-radius:8px">Learn</a></li>
+        <li><a href="#" style="display:block;font-size:13px;font-weight:700;color:#fff;opacity:.85;padding:6px 10px;border-radius:8px">Sermons</a></li>
+        <li><a href="#" style="display:block;font-size:13px;font-weight:700;color:#fff;opacity:.85;padding:6px 10px;border-radius:8px">Ministries</a></li>
+        <li><a href="#" style="display:block;font-size:13px;font-weight:700;color:#fff;opacity:1;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,.12)">News &amp; Events</a></li>
+        <li><a href="#" style="display:block;font-size:13px;font-weight:700;color:#fff;opacity:.85;padding:6px 10px;border-radius:8px">Calendar</a></li>
+        <li><a href="#" style="display:block;font-size:13px;font-weight:700;color:#fff;opacity:.85;padding:6px 10px;border-radius:8px">Contact</a></li>
+        <li><a href="#" style="display:block;background:#C9973A;color:#fff;padding:7px 16px;font-weight:800;font-size:13px;border-radius:8px">Give</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <div style="background:#1E2D4A;padding:56px 28px;text-align:center">
+    <span style="display:block;text-align:center;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#E8C070;margin-bottom:8px">What's happening at Timothy</span>
+    <h1 style="font-family:Lora,Georgia,serif;font-size:52px;font-weight:700;line-height:1.15;color:#fff;margin:0">News &amp; Events</h1>
+    <p style="font-size:17px;color:rgba(255,255,255,.72);max-width:600px;margin:12px auto 0;font-weight:300;line-height:1.75">Announcements, upcoming events, and weekly letters from our congregation.</p>
+  </div>
+
+  <section style="background:#EDE9E0;padding:88px 0">
+    <div style="max-width:760px;margin:0 auto;padding:0 28px">
+      <span style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#C9973A;margin-bottom:8px;display:block">Announcements</span>
+      <h2 style="font-family:Lora,Georgia,serif;font-size:36px;font-weight:700;line-height:1.2;color:#1E2D4A;margin:0 0 16px">Current news</h2>
+
+      <sc-for list="{{ items }}" as="item" hint-placeholder-count="3">
+        <div style="background:white;border:1px solid #DDE3ED;border-radius:14px;margin-bottom:12px;box-shadow:0 2px 12px rgba(30,45,74,.08);overflow:hidden">
+          <div style="width:100%;text-align:left;padding:18px 22px;display:flex;justify-content:space-between;align-items:center;gap:16px">
+            <div>
+              <sc-if value="{{ item.pinned }}">
+                <div style="font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#C9973A;margin-bottom:4px">Pinned</div>
+              </sc-if>
+              <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#4A4860;margin-bottom:4px">{{ item.date }}</div>
+              <div style="font-family:Lora,Georgia,serif;font-size:19px;color:#1E2D4A;line-height:1.3">{{ item.title }}</div>
+            </div>
+            <span style="font-size:14px;color:#2E7EA6;flex-shrink:0">↓</span>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="background:#EDE9E0;padding:88px 0">
+    <div style="max-width:760px;margin:0 auto;padding:0 28px">
+      <span style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#C9973A;margin-bottom:8px;display:block">From the pastor</span>
+      <h2 style="font-family:Lora,Georgia,serif;font-size:36px;font-weight:700;line-height:1.2;color:#1E2D4A;margin:0 0 16px">Weekly newsletters</h2>
+
+      <sc-for list="{{ letters }}" as="n" hint-placeholder-count="2">
+        <div style="background:white;border:1px solid #DDE3ED;border-radius:14px;padding:28px;margin-bottom:16px;box-shadow:0 2px 12px rgba(30,45,74,.08)">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#C9973A;margin-bottom:6px">{{ n.date }}</div>
+          <div style="font-family:Lora,Georgia,serif;font-size:22px;color:#1E2D4A;margin-bottom:12px">{{ n.subject }}</div>
+          <div style="font-size:15px;color:#1A1A2A;line-height:1.8;padding-bottom:12px;border-bottom:1px solid #DDE3ED">{{ n.note }}</div>
+          <div style="margin-top:12px"><span style="color:#2E7EA6;font-size:13px;font-weight:700">Read this letter</span></div>
+          <div style="margin-top:16px">
+            <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#C9973A;margin-bottom:10px">Upcoming Events</div>
+            <sc-for list="{{ n.events }}" as="e" hint-placeholder-count="2">
+              <div style="display:flex;align-items:center;gap:14px;padding:10px 0;border-top:1px solid #DDE3ED">
+                <div style="background:#1E2D4A;color:white;border-radius:6px;padding:5px 8px;text-align:center;min-width:44px;flex-shrink:0">
+                  <div style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.65">{{ e.mon }}</div>
+                  <div style="font-family:Lora,Georgia,serif;font-size:18px;line-height:1">{{ e.day }}</div>
+                </div>
+                <div>
+                  <div style="font-family:Lora,Georgia,serif;font-size:15px;color:#1E2D4A">{{ e.name }}</div>
+                  <div style="font-size:12px;color:#4A4860">{{ e.meta }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="background:#FBF8F3;padding:88px 0">
+    <div style="max-width:1080px;margin:0 auto;padding:0 28px">
+      <span style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#C9973A;margin-bottom:8px;display:block">On the calendar</span>
+      <h2 style="font-family:Lora,Georgia,serif;font-size:36px;font-weight:700;line-height:1.2;color:#1E2D4A;margin:0 0 16px">What's coming up</h2>
+      <div style="border-radius:12px;overflow:hidden;border:1px solid #DDE3ED;margin-top:18px">
+        <iframe src="https://calendar.google.com/calendar/embed?src=calendar%40timothystl.org&amp;ctz=America%2FChicago&amp;mode=MONTH&amp;showTitle=0&amp;showNav=1&amp;showDate=1&amp;showPrint=0&amp;showTabs=0&amp;showCalendars=0&amp;showTz=0" style="border:0;display:block;width:100%;height:600px" title="Timothy Lutheran Church calendar" loading="lazy"></iframe>
+      </div>
+      <div style="margin-top:12px"><a href="#" style="font-size:13px;color:#2E7EA6;font-weight:600">Open in Google Calendar</a></div>
+    </div>
+  </section>
+
+  <section style="background:#1E2D4A;padding:56px 28px">
+    <div style="max-width:640px;margin:0 auto;text-align:center">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#E8C070;margin-bottom:8px">Stay Connected</div>
+      <h2 style="font-family:Lora,Georgia,serif;font-size:36px;font-weight:700;line-height:1.2;color:white;margin:0 0 10px">Get our weekly newsletter</h2>
+      <p style="color:rgba(255,255,255,.72);font-size:16px;margin:0 0 32px">News, upcoming events, and a word from Pastor Dinger — delivered to your inbox each week.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
+        <span style="min-width:260px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:11px 14px;font-size:14px;color:rgba(255,255,255,.45);text-align:left">you@example.com</span>
+        <span style="display:inline-flex;align-items:center;background:#C9973A;color:#1E2D4A;font-size:14px;font-weight:700;padding:12px 26px;border-radius:8px">Subscribe</span>
+      </div>
+    </div>
+  </section>
+
+  <footer style="background:#111E32;padding:48px 28px 28px">
+    <div style="max-width:1080px;margin:0 auto;display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;gap:40px;margin-bottom:40px">
+      <div>
+        <div style="font-size:14px;font-weight:800;color:white;margin-bottom:4px">Timothy Lutheran Church</div>
+        <div style="font-family:Lora,Georgia,serif;font-size:13px;font-style:italic;color:#C9973A;margin-bottom:14px">from our Neighborhood to the Nations</div>
+        <div style="font-size:12px;color:rgba(255,255,255,.5);line-height:1.8">6704 Fyler Ave · St. Louis, MO 63139<br>Sunday worship · 8:00 &amp; 10:45 am<br>(314) 781-8673 · office@timothystl.org</div>
+        <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:700;color:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:5px 10px">Facebook</span>
+          <span style="font-size:11px;font-weight:700;color:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:5px 10px">Instagram</span>
+          <span style="font-size:11px;font-weight:700;color:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:5px 10px">YouTube</span>
+        </div>
+      </div>
+      <div>
+        <h4 style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#C9973A;margin:0 0 12px">Visit</h4>
+        <ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px">
+          <li style="font-size:12px;color:rgba(255,255,255,.55)">Plan your visit</li>
+          <li style="font-size:12px;color:rgba(255,255,255,.55)">Service times</li>
+          <li style="font-size:12px;color:rgba(255,255,255,.55)">Live stream</li>
+          <li style="font-size:12px;color:rgba(255,255,255,.55)">Sunday Worship</li>
+          <li style="font-size:12px;color:rgba(255,255,255,.55)">News &amp; Events</li>
+        </ul>
+      </div>
+      <div>
+        <h4 style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#C9973A;margin:0 0 12px">Connect</h4>
+        <ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px">
+          <li style="font-size:12px;color:rgba(255,255,255,.55)">About us</li>
+          <li style="font-size:12px;color:rgba(255,255,255,.55)">Ministries</li>
+          <li style="font-size:12px;color:rgba(255,255,255,.55)">Prayer request</li>
+          <li style="font-size:12px;color:rgba(255,255,255,.55)">Contact</li>
+          <li style="font-size:12px;color:rgba(255,255,255,.55)">Give online</li>
+        </ul>
+      </div>
+      <div>
+        <h4 style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#C9973A;margin:0 0 12px">Programs</h4>
+        <ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px">
+          <li style="font-size:12px;color:rgba(255,255,255,.55)">Mother's Day Out</li>
+          <li style="font-size:12px;color:rgba(255,255,255,.55)">News &amp; updates</li>
+        </ul>
+      </div>
+      <div>
+        <h4 style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#C9973A;margin:0 0 12px">Partners</h4>
+        <ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px">
+          <li style="font-size:12px;color:rgba(255,255,255,.55)">Lindenwood Area Senior Ministry</li>
+          <li style="font-size:12px;color:rgba(255,255,255,.55)">Concordia Seminary</li>
+          <li style="font-size:12px;color:rgba(255,255,255,.55)">Word of Life School</li>
+          <li style="font-size:12px;color:rgba(255,255,255,.55)">Christian Friends of New Americans</li>
+        </ul>
+      </div>
+    </div>
+    <div style="max-width:1080px;margin:0 auto;padding-top:24px;border-top:1px solid rgba(255,255,255,.08);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <p style="font-size:11px;color:rgba(255,255,255,.3);margin:0">© 2026 Timothy Lutheran Church · St. Louis, Missouri</p>
+      <p style="font-size:11px;margin:0"><a href="#" style="color:rgba(255,255,255,.4)">timothystl.org</a></p>
+    </div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      items: [
+        { pinned: true, date: 'August 23, 2026', title: 'Confirmation Kick-off August 23' },
+        { pinned: false, date: 'August 23, 2026', title: 'Installation of Isaac Taylor at Christ Memorial' },
+        { pinned: false, date: 'August 23, 2026', title: 'LCEF Preview Party' },
+      ],
+      letters: [
+        {
+          date: 'Sunday, August 9, 2026',
+          subject: 'This Week at Timothy',
+          note: 'Grace and peace to you. This Sunday we continue in Ephesians, and I want to prepare you for a hard and hopeful word about the household of God.',
+          events: [
+            { mon: 'Aug', day: '23', name: 'Confirmation Kick-off', meta: '9:30 am · Fellowship Hall' },
+            { mon: 'Aug', day: '30', name: 'LCEF Preview Party', meta: '6:00 pm' },
+          ],
+        },
+        {
+          date: 'Sunday, August 2, 2026',
+          subject: 'Back to School Blessing',
+          note: 'We will bless backpacks, students, and teachers at both services. Bring the whole family, and bring a neighbor.',
+          events: [
+            { mon: 'Aug', day: '10', name: 'Food Pantry distribution', meta: '9:00 am · Ivanhoe entrance' },
+          ],
+        },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -522,6 +522,104 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### The redesign, rebuilt from the FULL handoff (v5.3.0, 2026-08-14)
+
+Dinger, after publishing: *"still doesnt look right… i had a different design
+that wasnt just fonts, it was cards and shadow over lay effects"*, then *"here
+is teh file to follow"*.
+
+**The first bundle was half the specification.** The second contains four files
+it did not: `CLAUDE_CODE_BRIEF.md` (a phased build plan written for the
+implementing agent, with a Phase 0 verification list), `Handoff.dc.html` (the
+illustrated spec — per-page block stacks, the gradients, the editor flows),
+`KICKOFF_PROMPT.md`, and `Site Prototype - 1b.dc.html` (eight working pages),
+plus 26 screenshots and a revised README. **The whole bundle is committed now**
+— the same argument that put `design_handoff_admin_overhaul/` in the repo, and
+for a sharper reason: a session reading half a handoff builds half a design and
+cannot tell.
+
+**⚠ THE ONE SENTENCE THAT EXPLAINS EVERY REPORT** is in §04:
+
+> *"Flat navy and flat sand are a large part of why the old pages read as dead.
+> Every large field in this language now carries a shallow gradient — 6–10% of
+> value across the field, never a hue jump."*
+
+The first pass shipped **flat fills**. Every "it still doesn't look right"
+traces to that one line.
+
+- **The three authored gradients are in verbatim** — Paper, Ink navy, Gold — on
+  the `BG` entries. `c` stays the flat color because the ink-readability
+  guardrail and the inspector swatches need a color rather than an image;
+  `grad` is what is painted. ⚠ The four older surfaces stay flat: they are the
+  site as it stands on every unconverted page.
+- **The hero glow**, which the first pass did not build at all. The handoff:
+  *"This is what stops the heroes reading gray."* ⚠ It paints **over** the
+  veil — under it, the layer whose whole job is to stop the field reading gray
+  is itself grayed — and unlike the veil it is drawn **with or without a
+  photograph**, because the photo-less banner is the state the site ships in
+  and is the one that most needs the warmth.
+- **The info card was flattened three ways** and is fixed: a gradient rather
+  than flat white, `0 20px 50px rgba(16,27,46,.40)` rather than a flat box, and
+  a **fading** gold rule — 2px dissolving to nothing — rather than a 1px
+  divider. It sits on the Home banner and is the most looked-at element here.
+
+**Six block types the first pass missed**, now built: `highlight`, `cta`,
+`signup`, `values`, plus `servicetimes` tiles and the extended `newsfeed`.
+
+- **⚠ I argued against `cta` and `signup` and was wrong.** The reasoning was
+  that the Button bar already carries an eyebrow, heading and rich description,
+  so on a gold field it *is* a CTA. True of the markup, false of the job: a
+  Button bar is a row of choices that grew a heading; a CTA is one ask that
+  ends in a button. Asking somebody to reach for "Button bar" when they mean
+  "ask the congregation to do something" is the indirection this editor exists
+  to remove.
+- **⚠ The Standout card and the Service times tiles are ONE set of rules.** The
+  handoff calls the first "the service-times tile made general", so they share
+  `.tlcb-tile` by construction. Service times' tile layout alternates ink navy
+  and gold, and the second tile carries its colors inline because a block has
+  one background and that layout needs two.
+- **⚠ `big` is set only on the type that has it**, like `source`. A key on all
+  36 types is a key in all 25 generated seeds for a field 35 can never render —
+  which is what the first attempt did, and 25 suites failed.
+
+**The core values are the record that already existed.** The brief predicted it
+"almost certainly missing"; it was half right. `admin/values.js` is already the
+one place the four live and `partners` already carries one ministry per value —
+what was missing was the field gradient, the bright accent, the tagline, the
+six ways in, and the why-this-order sentence. Extended there rather than as a
+parallel table.
+
+- **⚠ THE ORDER IS FIXED AND THERE IS NO REORDER CONTROL.** The order *is* the
+  content: an arc from being let in to pointing out of the door, and each
+  value's "why this one is here" only reads in sequence. The block has no item
+  list, so there is nothing to drag out of order.
+- **⚠ The four hues are the single departure from navy and gold** in the whole
+  language, allowed on the value card field and its rule and nowhere else.
+- **⚠ The contrast budget is honored as authored**: a field is measured at the
+  end that HURTS, white ink is near-opaque rather than translucent, and the
+  partner panel sits on a **dark** wash — a white one lightens the surface the
+  white text sits on. A test asserts it is never white.
+
+**`/about/values` is a block page now**, reversing `admin/BLOCK-EDITOR-ROLLOUT.md`.
+That file's reason was that converting it "would freeze a list that currently
+updates itself" — true while the only way to put the values on a page was to
+type them into a card grid. The Core values block reads `ctx.data` at render
+time, exactly as the hardcoded page reads the API, so nothing freezes.
+
+**Phase 0, as the brief asks, before any code.** The canvas **already** scales
+with `zoom: min(1, avail/w)` — the brief's biggest worry was a non-issue,
+though widths are 900/620/390 rather than the spec's 1080/820/420. `.tlcb-pair`,
+`SPACE_STEP` 8 and `SPACE_MAX` 96 all as assumed; `ctx` is one `pageData()` at
+all eight call sites; ministry logos present; newsletter archive and partners
+real records.
+
+**Still open:** the photographs, and the interactive value selector/panel on
+Our Values (the block draws the four cards; the handoff's selector is a
+separate interaction).
+
+Run: `node admin/blocks.test.mjs` (2240), `node admin/values.test.mjs`, the
+integration suite.
+
 ### The redesign could not reach the pages it was written for (v5.2.0, 2026-08-13)
 
 Dinger, on `/news` a day after the redesign shipped: *"it doesnt look like you

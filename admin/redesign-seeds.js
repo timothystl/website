@@ -135,6 +135,15 @@ export const REDESIGN_BLOCKS = {
       body: '<p>Timothy Lutheran is rooted in Lindenwood Park. We are Lutheran, which means we lead with grace — not a reward for the righteous but a gift for the broken. Every person who walks through our doors carries something. The gospel is strong enough to carry it with them.</p>',
       bg: PAPER, ink: BODY_INK, spaceAbove: 0, spaceBelow: 0,
     },
+    // The core-values strip. Self-filling, so it is the same record the
+    // /about/values page reads — a value reworded once is reworded here.
+    // The six ways in are OFF: on the homepage this is a signpost, and the
+    // full arc belongs on its own page.
+    {
+      id: 'home-1b-2b', type: 'values',
+      title: 'What we are for', cols: 4, ways: false,
+      bg: WHITE, ink: BODY_INK, spaceAbove: 24, spaceBelow: 24,
+    },
     // Two halves, so the sermon card and the news list sit side by side. Both
     // fill themselves, so this pair is correct on the day it is published and
     // stays correct with nobody editing it.
@@ -247,6 +256,38 @@ export const REDESIGN_BLOCKS = {
       body: '<p>From Sunday setup to the pantry to the Christmas Market — there is always something, and it is never only one kind of person doing it.</p>',
       bg: GOLD, ink: GOLD_INK, spaceAbove: 24, spaceBelow: 24,
       items: [{ title: 'See what is open', url: 'https://serve.timothystl.org' }],
+    },
+  ],
+  // ── Our Values ────────────────────────────────────────────────────────────
+  // ⚠ THIS REVERSES A DECISION IN admin/BLOCK-EDITOR-ROLLOUT.md, and the
+  // reason it is safe to reverse is the whole point of the block. That file
+  // lists `values` among the three pages that deliberately are NOT block
+  // pages, because it "reads the four core values live from /api/values —
+  // converting it to blocks would freeze a list that currently updates
+  // itself."
+  //
+  // That was correct when the only way to put the values on a page was to
+  // type them into a card grid. The Core values block reads ctx.data at render
+  // time, exactly as the hardcoded page reads the API — so nothing freezes.
+  // The record stays the one source; this is a second view of it, not a copy.
+  values: [
+    {
+      id: 'val-1b-1', type: 'photobanner',
+      eyebrow: 'What we are for',
+      title: 'Welcome. Receive. Grow. Go.',
+      subtitle: 'Four things, in this order, and the order is the point — it starts with being let in and ends pointing out of the door.',
+      bannerHeight: 'short', veil: 'medium', countdown: false, pulse: false,
+      // Green here rather than clay or gold, per the handoff's note on this
+      // page specifically.
+      glow: 'green',
+      bg: INK, ink: CREAM, spaceAbove: 0, spaceBelow: 0,
+    },
+    // The full arc, with the six ways in switched ON — this is the one page
+    // where the block IS the page rather than a signpost on someone else's.
+    {
+      id: 'val-1b-2', type: 'values',
+      title: '', cols: 2, ways: true,
+      bg: WHITE, ink: BODY_INK, spaceAbove: 24, spaceBelow: 24,
     },
   ],
 };

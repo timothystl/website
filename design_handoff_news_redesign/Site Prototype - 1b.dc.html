@@ -1,0 +1,1169 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&display=swap" rel="stylesheet" />
+<script src="./image-slot.js"></script>
+<style>
+  body { margin:0; background:#FFFDF8; }
+  a { color:#B37F1E; text-decoration:none; }
+  a:hover { color:#101B2E; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+  @keyframes rise { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:none} }
+  .zw { overflow:hidden }
+  .zw image-slot { transition:transform .5s cubic-bezier(.2,.8,.2,1) }
+  .zw:hover image-slot { transform:scale(1.05) }
+  .lift { transition:transform .3s cubic-bezier(.2,.8,.2,1), box-shadow .3s }
+  .lift:hover { transform:translateY(-4px); box-shadow:0 18px 40px rgba(16,27,46,.16) }
+  .pg { animation:rise .45s cubic-bezier(.2,.8,.2,1) both }
+  input, button { font-family:'Newsreader',serif; }
+  input:focus { outline:2px solid #E4A93C; outline-offset:1px; }
+  @media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation:none !important; transition:none !important } }
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:#FFFDF8;font-family:'Bricolage Grotesque',sans-serif;color:#453F30">
+
+  <div style="position:sticky;top:0;z-index:40;background:linear-gradient(180deg,#101B2E 0%,#16233C 100%);box-shadow:0 1px 0 rgba(228,169,60,.22)">
+    <div style="max-width:1240px;margin:0 auto;padding:18px 40px;display:flex;align-items:center;justify-content:space-between;gap:24px">
+      <div onClick="{{ goHome }}" style="display:flex;align-items:center;gap:12px;cursor:pointer">
+        <img src="./public/logo.png" alt="Timothy Lutheran Church" style="width:38px;height:38px;border-radius:50%;object-fit:contain;background:#FFFDF8;padding:3px;display:block" />
+        <div>
+          <span style="display:block;font-weight:800;font-size:17px;color:#fff;letter-spacing:-.01em">Timothy Lutheran</span>
+          <span style="display:block;font:300 12px/1.4 'Newsreader',serif;color:#E4A93C">from our Neighborhood to the Nations</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:22px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+        <sc-for list="{{ nav }}" as="n" hint-placeholder-count="6">
+          <span onClick="{{ n.go }}" style="{{ n.style }}">{{ n.label }}</span>
+        </sc-for>
+        <span onClick="{{ goGive }}" style="background:linear-gradient(120deg,#E4A93C,#F0C46B);color:#101B2E;font:800 13px/1 'Bricolage Grotesque',sans-serif;padding:12px 20px;border-radius:999px;cursor:pointer">Give</span>
+      </div>
+    </div>
+  </div>
+
+  <div key="{{ page }}" class="pg">
+
+  <sc-if value="{{ isHome }}">
+    <div style="position:relative;height:660px">
+      <image-slot id="p-home-hero" shape="rect" placeholder="Full-bleed photo — a Sunday morning, wide" style="width:100%;height:100%"></image-slot>
+      <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(16,27,46,.72) 0%,rgba(16,27,46,.18) 42%,rgba(16,27,46,.92) 100%)"></div>
+      <div style="position:absolute;inset:0;background:radial-gradient(900px 420px at 12% 108%, rgba(180,74,46,.42), transparent 68%)"></div>
+      <div style="position:absolute;inset:0;display:flex;align-items:flex-end">
+        <div style="max-width:1240px;margin:0 auto;width:100%;padding:0 40px 48px;display:grid;grid-template-columns:1.7fr .8fr;gap:36px;align-items:end">
+          <div>
+            <div style="font:800 12px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#E4A93C;margin-bottom:18px">Lindenwood Park · St. Louis</div>
+            <h1 style="font-weight:800;font-size:58px;line-height:1;letter-spacing:-.03em;color:#fff;margin:0;text-wrap:pretty">Whoever you are,<br />wherever you've been —<br /><span style="background:linear-gradient(90deg,#E4A93C,#F0C46B);-webkit-background-clip:text;background-clip:text;color:transparent">you are welcome here.</span></h1>
+            <p style="font:300 20px/1.6 'Newsreader',serif;color:rgba(255,255,255,.84);margin:22px 0 0;max-width:30em">A congregation shaped by grace — not by what we have done for God, but by what God has done for us in Jesus Christ.</p>
+          </div>
+          <div style="background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);border-radius:22px;padding:28px;box-shadow:0 20px 50px rgba(16,27,46,.4)">
+            <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#B44A2E;margin-bottom:12px">Join us Sunday</div>
+            <div style="font-weight:800;font-size:34px;letter-spacing:-.02em;color:#101B2E;line-height:1.05">8:00 &amp;<br />10:45 am</div>
+            <div style="height:2px;background:linear-gradient(90deg,#E4A93C,rgba(228,169,60,0));margin:18px 0"></div>
+            <div style="font:300 15px/1.7 'Newsreader',serif;color:#453F30">6704 Fyler Ave<br />St. Louis, MO 63139<br />Corner of Fyler &amp; Ivanhoe</div>
+            <div style="margin-top:16px;display:flex;flex-direction:column;gap:8px">
+              <span onClick="{{ goVisit }}" style="background:#101B2E;color:#E4A93C;font:800 13px/1 'Bricolage Grotesque',sans-serif;padding:14px 16px;border-radius:999px;text-align:center;cursor:pointer">Plan your visit</span>
+              <span style="font:800 13px/1 'Bricolage Grotesque',sans-serif;color:#1B2C4A;text-align:center;padding:6px">(314) 781-8673</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="background:linear-gradient(180deg,#F5F0E6 0%,#EFE8D9 100%);padding:56px 0">
+      <div style="max-width:1240px;margin:0 auto;padding:0 40px;display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center">
+        <div style="font:italic 400 30px/1.35 'Newsreader',serif;color:#101B2E;border-left:3px solid #E4A93C;padding-left:26px">“A diverse city church serving as a bold witness to the saving grace of God through Jesus Christ.”</div>
+        <div style="font:300 18px/1.75 'Newsreader',serif;color:#453F30">Timothy Lutheran is rooted in Lindenwood Park. We are Lutheran, which means we lead with grace — not a reward for the righteous but a gift for the broken. Every person who walks through our doors carries something. The gospel is strong enough to carry it with them.
+          <div style="margin-top:16px"><span onClick="{{ goAbout }}" style="font:800 14px/1 'Bricolage Grotesque',sans-serif;color:#B37F1E;cursor:pointer">Learn more about who we are</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="max-width:1240px;margin:0 auto;padding:52px 40px 0">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap;margin-bottom:22px">
+        <div>
+          <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#B44A2E;margin-bottom:12px">What we are</div>
+          <h2 style="font-weight:800;font-size:38px;letter-spacing:-.02em;color:#101B2E;margin:0">Welcome. Receive. Grow. Go.</h2>
+        </div>
+        <span onClick="{{ goValues }}" style="background:#F5F0E6;color:#101B2E;font:800 13px/1 'Bricolage Grotesque',sans-serif;padding:14px 20px;border-radius:999px;cursor:pointer">Our four core values</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px">
+        <sc-for list="{{ valueStrip }}" as="v" hint-placeholder-count="4">
+          <div class="lift" onClick="{{ v.go }}" style="{{ v.style }}">
+            <div style="{{ v.wordStyle }}">{{ v.word }}</div>
+            <div style="{{ v.subStyle }}">{{ v.sub }}</div>
+            <p style="{{ v.tagStyle }}">{{ v.tag }}</p>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="max-width:1240px;margin:0 auto;padding:56px 40px;display:grid;grid-template-columns:1.15fr .85fr;gap:36px;align-items:start">
+      <div class="lift" style="background:linear-gradient(150deg,#101B2E 0%,#1B2C4A 60%,#2A3E66 100%);border-radius:22px;overflow:hidden">
+        <div class="zw" onClick="{{ goSermons }}" style="height:280px;position:relative;cursor:pointer">
+          <image-slot id="p-home-sermon" shape="rect" placeholder="Sermon still or sanctuary photo" style="width:100%;height:100%"></image-slot>
+          <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(16,27,46,.1),rgba(16,27,46,.55));display:flex;align-items:center;justify-content:center">
+            <span style="width:64px;height:64px;border-radius:50%;background:rgba(255,253,248,.94);color:#101B2E;display:flex;align-items:center;justify-content:center;font-size:20px">▶</span>
+          </div>
+        </div>
+        <div style="padding:28px">
+          <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#E4A93C;margin-bottom:12px">This week · Ephesians</div>
+          <div style="font-weight:800;font-size:32px;line-height:1.1;letter-spacing:-.02em;color:#fff;margin-bottom:10px">The household of God</div>
+          <p style="font:300 17px/1.6 'Newsreader',serif;color:rgba(245,240,230,.75);margin:0 0 18px">Pastor Dinger on Ephesians 2 — what it costs to be made one, and who pays it.</p>
+          <span onClick="{{ goSermons }}" style="font:800 13px/1 'Bricolage Grotesque',sans-serif;color:#E4A93C;cursor:pointer">Watch or listen</span>
+        </div>
+      </div>
+      <div>
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:18px">
+          <span style="width:8px;height:8px;border-radius:50%;background:#B44A2E;animation:pulse 1.8s ease-in-out infinite;display:inline-block"></span>
+          <span style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#B44A2E">What's happening</span>
+        </div>
+        <sc-for list="{{ homeNews }}" as="n" hint-placeholder-count="4">
+          <div onClick="{{ goNews }}" style="padding:16px 0;border-bottom:1px solid #E7DFCD;cursor:pointer">
+            <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#8A8168;margin-bottom:6px">{{ n.when }}</div>
+            <div style="font-weight:700;font-size:21px;line-height:1.2;letter-spacing:-.01em;color:#101B2E">{{ n.title }}</div>
+          </div>
+        </sc-for>
+        <div style="margin-top:18px"><span onClick="{{ goNews }}" style="background:#F5F0E6;color:#101B2E;font:800 13px/1 'Bricolage Grotesque',sans-serif;padding:14px 20px;border-radius:999px;display:inline-block;cursor:pointer">All news &amp; events</span></div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isAbout }}">
+    <div style="position:relative;height:460px">
+      <image-slot id="p-about-hero" shape="rect" placeholder="Photo — the congregation gathered, or the building on Fyler" style="width:100%;height:100%"></image-slot>
+      <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(16,27,46,.68) 0%,rgba(16,27,46,.28) 45%,rgba(16,27,46,.9) 100%)"></div>
+      <div style="position:absolute;inset:0;background:radial-gradient(760px 360px at 88% 0%, rgba(228,169,60,.28), transparent 65%)"></div>
+      <div style="position:absolute;inset:0;display:flex;align-items:flex-end">
+        <div style="max-width:1240px;margin:0 auto;width:100%;padding:0 40px 44px">
+          <div style="font:800 12px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#E4A93C;margin-bottom:14px">Who we are</div>
+          <h1 style="font-weight:800;font-size:66px;line-height:1;letter-spacing:-.03em;color:#fff;margin:0">Grace, in a neighborhood</h1>
+          <p style="font:300 20px/1.6 'Newsreader',serif;color:rgba(255,255,255,.84);margin:16px 0 0;max-width:32em">A city congregation of the Lutheran Church—Missouri Synod, on the corner of Fyler and Ivanhoe since 1927.</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="max-width:1240px;margin:0 auto;padding:56px 40px 20px;display:grid;grid-template-columns:repeat(3,1fr);gap:20px">
+      <sc-for list="{{ beliefs }}" as="b" hint-placeholder-count="3">
+        <div style="background:linear-gradient(180deg,#F5F0E6 0%,#EFE8D9 100%);border-radius:20px;padding:28px">
+          <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#B44A2E;margin-bottom:12px">{{ b.eyebrow }}</div>
+          <div style="font-weight:700;font-size:24px;line-height:1.15;letter-spacing:-.01em;color:#101B2E;margin-bottom:10px">{{ b.title }}</div>
+          <p style="font:300 16px/1.65 'Newsreader',serif;color:#453F30;margin:0">{{ b.body }}</p>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="max-width:1240px;margin:0 auto;padding:36px 40px 20px">
+      <h2 style="font-weight:800;font-size:40px;letter-spacing:-.02em;color:#101B2E;margin:0 0 8px">The people you'll meet</h2>
+      <p style="font:300 18px/1.6 'Newsreader',serif;color:#4A4636;margin:0 0 28px;max-width:36em">Staff and called workers who would rather know your name than your résumé.</p>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:20px">
+        <sc-for list="{{ staff }}" as="s" hint-placeholder-count="4">
+          <div class="lift" style="background:#FFFDF8;border:1px solid #E7DFCD;border-radius:20px;overflow:hidden">
+            <div class="zw" style="height:200px;background:linear-gradient(180deg,#EFE8D9,#E2D9C6)">
+              <image-slot id="{{ s.slot }}" shape="rect" placeholder="{{ s.placeholder }}" style="width:100%;height:100%"></image-slot>
+            </div>
+            <div style="padding:20px">
+              <div style="font-weight:700;font-size:20px;letter-spacing:-.01em;color:#101B2E">{{ s.name }}</div>
+              <div style="font:600 12px/1.4 'Bricolage Grotesque',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#8A8168;margin-top:5px">{{ s.role }}</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="max-width:1240px;margin:0 auto;padding:40px 40px 56px">
+      <div style="border-radius:22px;padding:44px;background:linear-gradient(135deg,#101B2E 0%,#1B2C4A 48%,#7A3F26 130%)">
+        <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#E4A93C;margin-bottom:14px">Our history</div>
+        <h2 style="font-weight:800;font-size:38px;line-height:1.05;letter-spacing:-.02em;color:#fff;margin:0 0 26px;max-width:18em">Ninety-nine years on the same corner, and never quite the same church twice.</h2>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:22px">
+          <sc-for list="{{ history }}" as="h" hint-placeholder-count="4">
+            <div style="border-top:2px solid rgba(228,169,60,.5);padding-top:14px">
+              <div style="font-weight:800;font-size:30px;letter-spacing:-.02em;color:#E4A93C">{{ h.year }}</div>
+              <p style="font:300 15px/1.6 'Newsreader',serif;color:rgba(245,240,230,.78);margin:8px 0 0">{{ h.what }}</p>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isValues }}">
+    <div style="position:relative;height:460px">
+      <image-slot id="p-val-hero" shape="rect" placeholder="Photo — the congregation, wide" style="width:100%;height:100%"></image-slot>
+      <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(16,27,46,.7) 0%,rgba(16,27,46,.24) 44%,rgba(16,27,46,.92) 100%)"></div>
+      <div style="position:absolute;inset:0;background:radial-gradient(820px 380px at 50% 108%, rgba(47,107,58,.4), transparent 70%)"></div>
+      <div style="position:absolute;inset:0;display:flex;align-items:flex-end">
+        <div style="max-width:1240px;margin:0 auto;width:100%;padding:0 40px 44px">
+          <div style="font:800 12px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#E4A93C;margin-bottom:14px">What we are</div>
+          <h1 style="font-weight:800;font-size:66px;line-height:1;letter-spacing:-.03em;color:#fff;margin:0">Welcome. Receive. Grow. Go.</h1>
+          <p style="font:300 20px/1.6 'Newsreader',serif;color:rgba(255,255,255,.84);margin:16px 0 0;max-width:34em">Four core values, in the order they happen: you are welcomed in, you receive God's gifts, you grow among people who know your name, and you are sent back out.</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="max-width:1240px;margin:0 auto;padding:44px 40px 0;display:grid;grid-template-columns:repeat(4,1fr);gap:14px">
+      <sc-for list="{{ valueNav }}" as="v" hint-placeholder-count="4">
+        <div onClick="{{ v.pick }}" style="{{ v.style }}">
+          <div style="{{ v.wordStyle }}">{{ v.word }}</div>
+          <div style="{{ v.subStyle }}">{{ v.sub }}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="max-width:1240px;margin:0 auto;padding:26px 40px 20px">
+      <div style="{{ valueCardStyle }}">
+        <div style="display:grid;grid-template-columns:.85fr 1.15fr;gap:44px;align-items:start">
+          <div>
+            <div style="{{ valueWordStyle }}">{{ valueWord }}</div>
+            <div style="{{ valueSubStyle }}">{{ valueSub }}</div>
+            <div style="{{ valueRuleStyle }}"></div>
+            <p style="{{ valueTagStyle }}">{{ valueTag }}</p>
+            <div style="{{ valuePartnerStyle }}">
+              <div style="{{ valuePartnerHeadStyle }}">Partner</div>
+              <div style="{{ valuePartnerNameStyle }}">{{ valuePartnerName }}</div>
+              <p style="{{ valuePartnerBodyStyle }}">{{ valuePartnerBody }}</p>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px 26px">
+            <sc-for list="{{ valueItems }}" as="i" hint-placeholder-count="6">
+              <div style="display:flex;gap:14px;align-items:flex-start">
+                <span style="{{ i.dotStyle }}"></span>
+                <div>
+                  <div style="{{ i.titleStyle }}">{{ i.title }}</div>
+                  <p style="{{ i.bodyStyle }}">{{ i.body }}</p>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="max-width:1240px;margin:0 auto;padding:20px 40px 60px;display:grid;grid-template-columns:1.25fr .75fr;gap:26px;align-items:start">
+      <div style="background:linear-gradient(180deg,#F5F0E6 0%,#EFE8D9 100%);border-radius:20px;padding:30px">
+        <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#B44A2E;margin-bottom:12px">The printed one-sheet</div>
+        <p style="font:300 17px/1.7 'Newsreader',serif;color:#453F30;margin:0 0 20px;max-width:38em">Each value has a designed card for the narthex rack, the school office and the visitor packet. The web treatment above and the printed card carry the same words on purpose — someone who reads one and then the other should recognise it.</p>
+        <div style="{{ sheetSlotStyle }}">
+          <image-slot id="{{ sheetSlot }}" shape="rounded" radius="14" placeholder="{{ sheetPlaceholder }}" style="width:100%;height:100%"></image-slot>
+        </div>
+      </div>
+      <div style="{{ valueQuoteStyle }}">
+        <div style="{{ valueQuoteEyebrowStyle }}">Why this order</div>
+        <p style="{{ valueQuoteBodyStyle }}">{{ valueQuoteBody }}</p>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isWorship }}">
+    <div style="position:relative;height:520px">
+      <image-slot id="p-wor-hero" shape="rect" placeholder="Photo — the sanctuary mid-service" style="width:100%;height:100%"></image-slot>
+      <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(16,27,46,.7) 0%,rgba(16,27,46,.22) 45%,rgba(16,27,46,.9) 100%)"></div>
+      <div style="position:absolute;inset:0;background:radial-gradient(820px 380px at 82% 4%, rgba(228,169,60,.3), transparent 66%)"></div>
+      <div style="position:absolute;inset:0;display:flex;align-items:flex-end">
+        <div style="max-width:1240px;margin:0 auto;width:100%;padding:0 40px 44px">
+          <div style="font:800 12px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#E4A93C;margin-bottom:16px">Sunday mornings</div>
+          <h1 style="font-weight:800;font-size:72px;line-height:1;letter-spacing:-.03em;color:#fff;margin:0">Worship at Timothy</h1>
+          <p style="font:300 21px/1.6 'Newsreader',serif;color:rgba(255,255,255,.84);margin:18px 0 0;max-width:28em">Two services every Sunday. Come as you are — we mean it.</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="max-width:1240px;margin:0 auto;padding:52px 40px 0">
+      <div style="display:flex;gap:10px;margin-bottom:22px;flex-wrap:wrap">
+        <sc-for list="{{ serviceTabs }}" as="t" hint-placeholder-count="2">
+          <span onClick="{{ t.pick }}" style="{{ t.style }}">{{ t.label }}</span>
+        </sc-for>
+      </div>
+      <div style="{{ serviceCardStyle }}">
+        <div style="display:grid;grid-template-columns:.9fr 1.1fr;gap:40px;align-items:center">
+          <div>
+            <div style="{{ serviceEyebrowStyle }}">{{ serviceEyebrow }}</div>
+            <div style="{{ serviceTimeStyle }}">{{ serviceTime }}</div>
+            <p style="{{ serviceBodyStyle }}">{{ serviceBody }}</p>
+          </div>
+          <div style="display:grid;gap:12px">
+            <sc-for list="{{ serviceFacts }}" as="f" hint-placeholder-count="3">
+              <div style="{{ f.rowStyle }}">
+                <span style="{{ f.keyStyle }}">{{ f.k }}</span>
+                <span style="{{ f.valStyle }}">{{ f.v }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="max-width:1240px;margin:0 auto;padding:44px 40px 56px">
+      <h2 style="font-weight:800;font-size:40px;letter-spacing:-.02em;color:#101B2E;margin:0 0 8px">First time visiting?</h2>
+      <p style="font:300 18px/1.6 'Newsreader',serif;color:#4A4636;margin:0 0 28px;max-width:36em">We want your first Sunday to be easy. Here is everything you need before you arrive.</p>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:20px">
+        <sc-for list="{{ visit }}" as="v" hint-placeholder-count="4">
+          <div class="lift" style="background:linear-gradient(180deg,#F5F0E6 0%,#EFE8D9 100%);border-radius:20px;padding:28px">
+            <div style="font-weight:700;font-size:24px;letter-spacing:-.01em;color:#101B2E;margin-bottom:10px">{{ v.title }}</div>
+            <p style="font:300 16px/1.65 'Newsreader',serif;color:#453F30;margin:0">{{ v.body }}</p>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="background:linear-gradient(135deg,#101B2E 0%,#1B2C4A 55%,#2A3E66 100%);padding:52px 0">
+      <div style="max-width:1240px;margin:0 auto;padding:0 40px;display:grid;grid-template-columns:1fr 1fr;gap:44px;align-items:center">
+        <div>
+          <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#E4A93C;margin-bottom:14px">Music &amp; sound</div>
+          <h2 style="font-weight:800;font-size:40px;line-height:1.05;letter-spacing:-.02em;color:#fff;margin:0 0 14px">A soundscape as wide as grace</h2>
+          <p style="font:300 19px/1.65 'Newsreader',serif;color:rgba(245,240,230,.78);margin:0 0 22px">Organ and handbells, guitar and drums, an African choir, a hammer dulcimer, steel drums. Sometimes all of it in one service — because the grace we celebrate is that wide.</p>
+          <div style="display:flex;gap:12px;flex-wrap:wrap">
+            <span onClick="{{ goSermons }}" style="background:linear-gradient(120deg,#E4A93C,#F0C46B);color:#101B2E;font:800 14px/1 'Bricolage Grotesque',sans-serif;padding:15px 22px;border-radius:999px;cursor:pointer">Watch the live stream</span>
+            <span onClick="{{ goMinistries }}" style="border:1px solid rgba(245,240,230,.35);color:#F5F0E6;font:800 14px/1 'Bricolage Grotesque',sans-serif;padding:15px 22px;border-radius:999px;cursor:pointer">Music ministry</span>
+          </div>
+        </div>
+        <div class="zw" style="height:320px;border-radius:20px">
+          <image-slot id="p-wor-music" shape="rounded" radius="20" placeholder="Photo — choir, bells or the organ" style="width:100%;height:100%"></image-slot>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isSermons }}">
+    <div style="position:relative;height:420px">
+      <image-slot id="p-ser-hero" shape="rect" placeholder="Photo — the pulpit, or Pastor Dinger preaching" style="width:100%;height:100%"></image-slot>
+      <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(16,27,46,.66) 0%,rgba(16,27,46,.3) 45%,rgba(16,27,46,.92) 100%)"></div>
+      <div style="position:absolute;inset:0;background:radial-gradient(760px 340px at 10% 100%, rgba(180,74,46,.4), transparent 66%)"></div>
+      <div style="position:absolute;inset:0;display:flex;align-items:flex-end">
+        <div style="max-width:1240px;margin:0 auto;width:100%;padding:0 40px 40px">
+          <div style="font:800 12px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#E4A93C;margin-bottom:14px">Preaching</div>
+          <h1 style="font-weight:800;font-size:66px;line-height:1;letter-spacing:-.03em;color:#fff;margin:0">Sermons</h1>
+          <p style="font:300 20px/1.6 'Newsreader',serif;color:rgba(255,255,255,.84);margin:16px 0 0;max-width:30em">Every Sunday, recorded and posted by Monday. Listen here or wherever you get podcasts.</p>
+        </div>
+      </div>
+    </div>
+
+    <sc-if value="{{ playing }}">
+      <div style="background:linear-gradient(120deg,#101B2E,#1B2C4A);border-bottom:1px solid rgba(228,169,60,.3)">
+        <div style="max-width:1240px;margin:0 auto;padding:18px 40px;display:flex;align-items:center;gap:18px">
+          <span onClick="{{ stopPlaying }}" style="flex:none;width:44px;height:44px;border-radius:50%;background:linear-gradient(120deg,#E4A93C,#F0C46B);color:#101B2E;display:flex;align-items:center;justify-content:center;font-size:15px;cursor:pointer">❚❚</span>
+          <div style="flex:1;min-width:0">
+            <div style="font:800 10px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#E4A93C;margin-bottom:6px">Now playing</div>
+            <div style="font-weight:700;font-size:18px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ playingTitle }}</div>
+            <div style="margin-top:9px;height:4px;border-radius:999px;background:rgba(245,240,230,.18);overflow:hidden">
+              <div style="{{ progressStyle }}"></div>
+            </div>
+          </div>
+          <span style="font:600 13px/1 'Newsreader',serif;color:rgba(245,240,230,.6);flex:none">{{ playingClock }}</span>
+          <span onClick="{{ stopPlaying }}" style="flex:none;font:800 12px/1 'Bricolage Grotesque',sans-serif;color:rgba(245,240,230,.6);cursor:pointer">Close</span>
+        </div>
+      </div>
+    </sc-if>
+
+    <div style="max-width:1240px;margin:0 auto;padding:44px 40px 56px">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:26px;align-items:center">
+        <span style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#8A8168;margin-right:6px">Series</span>
+        <sc-for list="{{ seriesTabs }}" as="s" hint-placeholder-count="4">
+          <span onClick="{{ s.pick }}" style="{{ s.style }}">{{ s.label }}</span>
+        </sc-for>
+      </div>
+      <div style="display:grid;gap:14px">
+        <sc-for list="{{ sermons }}" as="s" hint-placeholder-count="5">
+          <div onClick="{{ s.play }}" style="{{ s.rowStyle }}">
+            <div class="zw" style="flex:none;width:150px;height:96px;border-radius:14px;background:linear-gradient(140deg,#1B2C4A,#101B2E);position:relative;overflow:hidden">
+              <image-slot id="{{ s.slot }}" shape="rect" placeholder="Still" style="width:100%;height:100%"></image-slot>
+              <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,rgba(16,27,46,.15),rgba(16,27,46,.5));color:#FFFDF8;font-size:17px">▶</span>
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#B44A2E;margin-bottom:8px">{{ s.meta }}</div>
+              <div style="font-weight:700;font-size:25px;line-height:1.15;letter-spacing:-.01em;color:#101B2E;margin-bottom:7px">{{ s.title }}</div>
+              <p style="font:300 16px/1.55 'Newsreader',serif;color:#4A4636;margin:0">{{ s.body }}</p>
+            </div>
+            <div style="flex:none;display:flex;flex-direction:column;gap:8px;align-items:flex-end">
+              <span style="font:600 12px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#8A8168">{{ s.length }}</span>
+              <span style="{{ s.btnStyle }}">{{ s.btn }}</span>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <sc-if value="{{ noSermons }}" hint-placeholder-val="{{ false }}">
+        <div style="border:1px dashed #D8CFBB;border-radius:18px;padding:40px;text-align:center;font:300 17px/1.6 'Newsreader',serif;color:#8A8168">Nothing in this series yet.</div>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isMinistries }}">
+    <div style="position:relative;height:420px">
+      <image-slot id="p-min-hero" shape="rect" placeholder="Photo — hands at work, pantry or market" style="width:100%;height:100%"></image-slot>
+      <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(16,27,46,.66) 0%,rgba(16,27,46,.3) 45%,rgba(16,27,46,.9) 100%)"></div>
+      <div style="position:absolute;inset:0;background:radial-gradient(780px 340px at 86% 6%, rgba(228,169,60,.3), transparent 66%)"></div>
+      <div style="position:absolute;inset:0;display:flex;align-items:flex-end">
+        <div style="max-width:1240px;margin:0 auto;width:100%;padding:0 40px 40px">
+          <div style="font:800 12px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#E4A93C;margin-bottom:14px">Life at Timothy</div>
+          <h1 style="font-weight:800;font-size:66px;line-height:1;letter-spacing:-.03em;color:#fff;margin:0">Ministries</h1>
+          <p style="font:300 20px/1.6 'Newsreader',serif;color:rgba(255,255,255,.84);margin:16px 0 0;max-width:30em">Ways to connect, serve, grow and belong — nine of them, and room for one more.</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="max-width:1240px;margin:0 auto;padding:44px 40px 0;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <span style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#8A8168;margin-right:6px">Show</span>
+      <sc-for list="{{ minTabs }}" as="t" hint-placeholder-count="4">
+        <span onClick="{{ t.pick }}" style="{{ t.style }}">{{ t.label }}</span>
+      </sc-for>
+    </div>
+
+    <div style="max-width:1240px;margin:0 auto;padding:26px 40px 20px;display:grid;grid-template-columns:repeat(3,1fr);gap:20px">
+      <sc-for list="{{ ministries }}" as="m" hint-placeholder-count="6">
+        <div class="lift" style="{{ m.cardStyle }}">
+          <sc-if value="{{ m.hasLogo }}">
+            <div role="img" aria-label="{{ m.title }}" style="{{ m.logoStyle }}"></div>
+          </sc-if>
+          <div style="{{ m.titleStyle }}">{{ m.title }}</div>
+          <p style="{{ m.bodyStyle }}">{{ m.body }}</p>
+          <span style="{{ m.linkStyle }}">{{ m.link }}</span>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="max-width:1240px;margin:0 auto;padding:20px 40px 56px">
+      <div style="background:linear-gradient(120deg,#E4A93C 0%,#F0C46B 52%,#D89428 100%);border-radius:22px;padding:38px;display:flex;align-items:center;justify-content:space-between;gap:28px;flex-wrap:wrap">
+        <div>
+          <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#3B2E12;margin-bottom:12px">Get involved</div>
+          <h2 style="font-weight:800;font-size:38px;line-height:1.05;letter-spacing:-.02em;color:#101B2E;margin:0 0 10px">Ready to put your hands to work?</h2>
+          <p style="font:300 18px/1.6 'Newsreader',serif;color:#3B2E12;margin:0;max-width:34em">From Sunday setup to the pantry to the Christmas Market — there is always something, and it is never only one kind of person doing it.</p>
+        </div>
+        <span onClick="{{ goVisit }}" style="background:#101B2E;color:#E4A93C;font:800 14px/1 'Bricolage Grotesque',sans-serif;padding:17px 24px;border-radius:999px;white-space:nowrap;cursor:pointer">See what's open</span>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isNews }}">
+    <div style="position:relative;height:640px">
+      <image-slot id="p-news-hero" shape="rect" placeholder="Photo — the next event, or a full sanctuary" style="width:100%;height:100%"></image-slot>
+      <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(16,27,46,.72) 0%,rgba(16,27,46,.16) 42%,rgba(16,27,46,.9) 100%)"></div>
+      <div style="position:absolute;inset:0;background:radial-gradient(880px 400px at 14% 104%, rgba(180,74,46,.44), transparent 68%)"></div>
+      <div style="position:absolute;inset:0;display:flex;align-items:flex-end">
+        <div style="max-width:1240px;margin:0 auto;width:100%;padding:0 40px 44px">
+          <div style="display:flex;align-items:center;gap:9px;margin-bottom:16px">
+            <span style="width:8px;height:8px;border-radius:50%;background:#E4A93C;animation:pulse 1.8s ease-in-out infinite;display:inline-block"></span>
+            <span style="font:800 12px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#E4A93C">Happening next</span>
+          </div>
+          <h1 style="font-weight:800;font-size:64px;line-height:.98;letter-spacing:-.03em;color:#fff;margin:0;max-width:19em">Confirmation kicks off Sunday.</h1>
+          <div style="display:flex;align-items:flex-end;gap:44px;margin-top:24px;flex-wrap:wrap">
+            <div>
+              <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.6);margin-bottom:10px">Starts in</div>
+              <div style="font-weight:700;font-size:34px;line-height:1;color:#fff;font-variant-numeric:tabular-nums">{{ countdown }}</div>
+            </div>
+            <p style="font:300 18px/1.6 'Newsreader',serif;color:rgba(255,255,255,.84);margin:0;max-width:26em">Sixth through eighth graders and their parents, 9:30 in the fellowship hall. Bring a friend.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="background:linear-gradient(180deg,#F5F0E6 0%,#EFE8D9 100%);border-bottom:1px solid #D8CFBB">
+      <div style="max-width:1240px;margin:0 auto;padding:20px 40px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <span style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#8A8168;margin-right:4px">Coming up</span>
+        <sc-for list="{{ chips }}" as="c" hint-placeholder-count="5">
+          <span style="background:#FFFDF8;border:1px solid #D8CFBB;border-radius:999px;padding:9px 16px;font:600 13px/1 'Newsreader',serif;color:#101B2E;white-space:nowrap">{{ c }}</span>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="max-width:1240px;margin:0 auto;padding:52px 40px 20px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap;margin-bottom:26px">
+        <div>
+          <h2 style="font-weight:800;font-size:38px;letter-spacing:-.02em;color:#101B2E;margin:0 0 8px">News &amp; events</h2>
+          <p style="font:300 18px/1.6 'Newsreader',serif;color:#4A4636;margin:0">Everything happening at Timothy, soonest first.</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <sc-for list="{{ newsTabs }}" as="t" hint-placeholder-count="4">
+            <span onClick="{{ t.pick }}" style="{{ t.style }}">{{ t.label }}</span>
+          </sc-for>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px">
+        <sc-for list="{{ newsCards }}" as="n" hint-placeholder-count="4">
+          <div class="lift" style="background:#FFFDF8;border:1px solid #E7DFCD;border-radius:18px;overflow:hidden;display:flex;flex-direction:column">
+            <div class="zw" style="height:180px;background:linear-gradient(160deg,#EFE8D9,#E2D9C6)">
+              <image-slot id="{{ n.slot }}" shape="rect" placeholder="{{ n.placeholder }}" style="width:100%;height:100%"></image-slot>
+            </div>
+            <div style="padding:24px;display:flex;flex-direction:column;flex:1">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                <span style="{{ n.tagStyle }}">{{ n.tag }}</span>
+                <span style="font:600 12px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#8A8168">{{ n.when }}</span>
+              </div>
+              <div style="font-weight:700;font-size:22px;line-height:1.2;letter-spacing:-.01em;color:#101B2E;margin-bottom:9px">{{ n.title }}</div>
+              <p style="font:300 15px/1.6 'Newsreader',serif;color:#4A4636;margin:0">{{ n.body }}</p>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="max-width:1240px;margin:0 auto;padding:36px 40px 20px">
+      <div style="border-radius:22px;padding:44px;background:linear-gradient(135deg,#101B2E 0%,#1B2C4A 52%,#2A3E66 100%);display:grid;grid-template-columns:1fr 1fr;gap:44px">
+        <div>
+          <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#E4A93C;margin-bottom:14px">Every Thursday</div>
+          <h2 style="font-weight:800;font-size:36px;line-height:1.05;letter-spacing:-.02em;color:#fff;margin:0 0 14px">The weekly letter</h2>
+          <p style="font:300 18px/1.65 'Newsreader',serif;color:rgba(245,240,230,.78);margin:0 0 22px">What is coming up, what just happened, and a word from Pastor Dinger.</p>
+          <div style="display:flex;gap:12px;flex-wrap:wrap">
+            <span style="background:linear-gradient(120deg,#E4A93C,#F0C46B);color:#101B2E;font:800 14px/1 'Bricolage Grotesque',sans-serif;padding:15px 22px;border-radius:999px;cursor:pointer">Read this week</span>
+            <span onClick="{{ focusSignup }}" style="border:1px solid rgba(245,240,230,.35);color:#F5F0E6;font:800 14px/1 'Bricolage Grotesque',sans-serif;padding:15px 22px;border-radius:999px;cursor:pointer">Get it by email</span>
+          </div>
+        </div>
+        <div>
+          <sc-for list="{{ letters }}" as="l" hint-placeholder-count="4">
+            <div style="display:flex;justify-content:space-between;gap:18px;padding:14px 0;border-bottom:1px solid rgba(245,240,230,.14)">
+              <span style="font:300 16px/1.4 'Newsreader',serif;color:#F5F0E6">{{ l.subject }}</span>
+              <span style="font:600 12px/1.4 'Bricolage Grotesque',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:rgba(245,240,230,.5);white-space:nowrap">{{ l.date }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    <div style="max-width:1240px;margin:0 auto;padding:36px 40px 60px">
+      <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#B44A2E;margin-bottom:12px">The whole month</div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap;margin-bottom:22px">
+        <h2 style="font-weight:800;font-size:36px;letter-spacing:-.02em;color:#101B2E;margin:0">Church calendar</h2>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <span style="background:#101B2E;color:#E4A93C;font:800 13px/1 'Bricolage Grotesque',sans-serif;padding:14px 20px;border-radius:999px;cursor:pointer">Subscribe on your phone</span>
+          <span style="border:1px solid #D8CFBB;color:#101B2E;font:800 13px/1 'Bricolage Grotesque',sans-serif;padding:14px 20px;border-radius:999px;cursor:pointer">Open in Google Calendar</span>
+        </div>
+      </div>
+      <div style="background:linear-gradient(180deg,#F5F0E6,#EFE8D9);border-radius:18px;padding:11px">
+        <div style="background:#fff;border-radius:10px;height:560px;display:flex;align-items:center;justify-content:center;font:300 16px/1.6 'Newsreader',serif;color:#8A8168;text-align:center">Live Google Calendar month view<br />(embed renders here on the real site)</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isGive }}">
+    <div style="position:relative;height:400px">
+      <image-slot id="p-give-hero" shape="rect" placeholder="Photo — the offering, the pantry, or hands serving" style="width:100%;height:100%"></image-slot>
+      <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(16,27,46,.68) 0%,rgba(16,27,46,.3) 45%,rgba(16,27,46,.92) 100%)"></div>
+      <div style="position:absolute;inset:0;background:radial-gradient(720px 320px at 84% 8%, rgba(228,169,60,.32), transparent 66%)"></div>
+      <div style="position:absolute;inset:0;display:flex;align-items:flex-end">
+        <div style="max-width:1240px;margin:0 auto;width:100%;padding:0 40px 40px">
+          <div style="font:800 12px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#E4A93C;margin-bottom:14px">Generosity</div>
+          <h1 style="font-weight:800;font-size:62px;line-height:1;letter-spacing:-.03em;color:#fff;margin:0">Give</h1>
+          <p style="font:300 20px/1.6 'Newsreader',serif;color:rgba(255,255,255,.84);margin:16px 0 0;max-width:30em">Every gift funds the pantry, the school, the music, and the doors staying open on Fyler Avenue.</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="max-width:1240px;margin:0 auto;padding:52px 40px 60px;display:grid;grid-template-columns:1.05fr .95fr;gap:40px;align-items:start">
+      <div style="background:linear-gradient(180deg,#FFFDF8,#F5F0E6);border:1px solid #E7DFCD;border-radius:22px;padding:34px">
+        <sc-if value="{{ giveDone }}" hint-placeholder-val="{{ false }}">
+          <div style="text-align:center;padding:28px 8px">
+            <div style="width:64px;height:64px;border-radius:50%;margin:0 auto 20px;background:linear-gradient(120deg,#E4A93C,#F0C46B);color:#101B2E;display:flex;align-items:center;justify-content:center;font-size:26px">✓</div>
+            <div style="font-weight:800;font-size:30px;letter-spacing:-.02em;color:#101B2E;margin-bottom:10px">Thank you.</div>
+            <p style="font:300 17px/1.65 'Newsreader',serif;color:#4A4636;margin:0 auto 22px;max-width:26em">{{ giveSummary }}</p>
+            <span onClick="{{ giveReset }}" style="background:#101B2E;color:#E4A93C;font:800 13px/1 'Bricolage Grotesque',sans-serif;padding:14px 22px;border-radius:999px;display:inline-block;cursor:pointer">Make another gift</span>
+          </div>
+        </sc-if>
+        <sc-if value="{{ giveOpen }}" hint-placeholder-val="{{ true }}">
+          <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#B44A2E;margin-bottom:18px">Make a gift</div>
+          <div style="display:flex;gap:8px;margin-bottom:22px">
+            <sc-for list="{{ freqTabs }}" as="f" hint-placeholder-count="2">
+              <span onClick="{{ f.pick }}" style="{{ f.style }}">{{ f.label }}</span>
+            </sc-for>
+          </div>
+          <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#8A8168;margin-bottom:10px">Amount</div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px">
+            <sc-for list="{{ amounts }}" as="a" hint-placeholder-count="4">
+              <span onClick="{{ a.pick }}" style="{{ a.style }}">{{ a.label }}</span>
+            </sc-for>
+          </div>
+          <input type="text" inputmode="numeric" placeholder="Other amount" value="{{ custom }}" onInput="{{ onCustom }}" style="width:100%;box-sizing:border-box;background:#FFFDF8;border:1px solid #D8CFBB;border-radius:14px;padding:15px 18px;font:400 17px/1 'Newsreader',serif;color:#101B2E;margin-bottom:22px" />
+          <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#8A8168;margin-bottom:10px">Designation</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:26px">
+            <sc-for list="{{ funds }}" as="f" hint-placeholder-count="4">
+              <span onClick="{{ f.pick }}" style="{{ f.style }}">{{ f.label }}</span>
+            </sc-for>
+          </div>
+          <span onClick="{{ giveSubmit }}" style="{{ giveBtnStyle }}">{{ giveBtnLabel }}</span>
+          <p style="font:300 14px/1.6 'Newsreader',serif;color:#8A8168;margin:16px 0 0;text-align:center">Processed securely. A prototype — no payment is taken.</p>
+        </sc-if>
+      </div>
+      <div>
+        <h2 style="font-weight:800;font-size:34px;letter-spacing:-.02em;color:#101B2E;margin:0 0 10px">Where it goes</h2>
+        <p style="font:300 17px/1.65 'Newsreader',serif;color:#4A4636;margin:0 0 24px;max-width:32em">Timothy runs lean. Here is the shape of a typical year.</p>
+        <div style="display:grid;gap:12px">
+          <sc-for list="{{ allocation }}" as="a" hint-placeholder-count="4">
+            <div style="background:#FFFDF8;border:1px solid #E7DFCD;border-radius:16px;padding:18px 20px">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+                <span style="font-weight:700;font-size:18px;color:#101B2E">{{ a.label }}</span>
+                <span style="font:800 14px/1 'Bricolage Grotesque',sans-serif;color:#B37F1E">{{ a.pct }}</span>
+              </div>
+              <div style="height:8px;border-radius:999px;background:#EFE8D9;overflow:hidden">
+                <div style="{{ a.barStyle }}"></div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:24px;background:linear-gradient(135deg,#101B2E,#1B2C4A);border-radius:20px;padding:28px">
+          <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#E4A93C;margin-bottom:12px">Other ways</div>
+          <p style="font:300 16px/1.7 'Newsreader',serif;color:rgba(245,240,230,.8);margin:0">Mail a check to 6704 Fyler Ave, give in the plate on Sunday, or set up bank transfer through the church office. For gifts of stock or an estate plan, call (314) 781-8673.</p>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isVisit }}">
+    <div style="position:relative;height:420px">
+      <image-slot id="p-visit-hero" shape="rect" placeholder="Photo — the front doors, or greeters on a Sunday" style="width:100%;height:100%"></image-slot>
+      <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(16,27,46,.66) 0%,rgba(16,27,46,.3) 45%,rgba(16,27,46,.92) 100%)"></div>
+      <div style="position:absolute;inset:0;background:radial-gradient(760px 340px at 12% 100%, rgba(180,74,46,.4), transparent 66%)"></div>
+      <div style="position:absolute;inset:0;display:flex;align-items:flex-end">
+        <div style="max-width:1240px;margin:0 auto;width:100%;padding:0 40px 40px">
+          <div style="font:800 12px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#E4A93C;margin-bottom:14px">Plan your visit</div>
+          <h1 style="font-weight:800;font-size:62px;line-height:1;letter-spacing:-.03em;color:#fff;margin:0">We'll be looking for you</h1>
+          <p style="font:300 20px/1.6 'Newsreader',serif;color:rgba(255,255,255,.84);margin:16px 0 0;max-width:30em">Tell us you're coming and someone will meet you at the door with your name.</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="max-width:1240px;margin:0 auto;padding:52px 40px 60px;display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:start">
+      <div style="background:linear-gradient(180deg,#FFFDF8,#F5F0E6);border:1px solid #E7DFCD;border-radius:22px;padding:34px">
+        <sc-if value="{{ rsvpDone }}" hint-placeholder-val="{{ false }}">
+          <div style="text-align:center;padding:24px 8px">
+            <div style="width:64px;height:64px;border-radius:50%;margin:0 auto 20px;background:linear-gradient(120deg,#E4A93C,#F0C46B);color:#101B2E;display:flex;align-items:center;justify-content:center;font-size:26px">✓</div>
+            <div style="font-weight:800;font-size:28px;letter-spacing:-.02em;color:#101B2E;margin-bottom:10px">{{ rsvpHeading }}</div>
+            <p style="font:300 17px/1.65 'Newsreader',serif;color:#4A4636;margin:0 auto;max-width:24em">{{ rsvpNote }}</p>
+          </div>
+        </sc-if>
+        <sc-if value="{{ rsvpOpen }}" hint-placeholder-val="{{ true }}">
+          <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#B44A2E;margin-bottom:18px">Let us know you're coming</div>
+          <div style="display:grid;gap:12px;margin-bottom:18px">
+            <input type="text" placeholder="Your name" value="{{ rsvpName }}" onInput="{{ onRsvpName }}" style="width:100%;box-sizing:border-box;background:#FFFDF8;border:1px solid #D8CFBB;border-radius:14px;padding:15px 18px;font:400 16px/1 'Newsreader',serif;color:#101B2E" />
+            <input type="email" placeholder="Email" value="{{ rsvpEmail }}" onInput="{{ onRsvpEmail }}" style="width:100%;box-sizing:border-box;background:#FFFDF8;border:1px solid #D8CFBB;border-radius:14px;padding:15px 18px;font:400 16px/1 'Newsreader',serif;color:#101B2E" />
+          </div>
+          <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#8A8168;margin-bottom:10px">Which service?</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">
+            <sc-for list="{{ rsvpServices }}" as="s" hint-placeholder-count="2">
+              <span onClick="{{ s.pick }}" style="{{ s.style }}">{{ s.label }}</span>
+            </sc-for>
+          </div>
+          <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#8A8168;margin-bottom:10px">Anything we should know?</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px">
+            <sc-for list="{{ rsvpNeeds }}" as="n" hint-placeholder-count="4">
+              <span onClick="{{ n.pick }}" style="{{ n.style }}">{{ n.label }}</span>
+            </sc-for>
+          </div>
+          <span onClick="{{ rsvpSubmit }}" style="{{ rsvpBtnStyle }}">{{ rsvpBtnLabel }}</span>
+        </sc-if>
+      </div>
+      <div>
+        <h2 style="font-weight:800;font-size:34px;letter-spacing:-.02em;color:#101B2E;margin:0 0 18px">Questions people actually ask</h2>
+        <div style="display:grid;gap:10px">
+          <sc-for list="{{ faqs }}" as="f" hint-placeholder-count="5">
+            <div style="{{ f.wrapStyle }}">
+              <div onClick="{{ f.toggle }}" style="display:flex;justify-content:space-between;align-items:center;gap:16px;padding:18px 22px;cursor:pointer">
+                <span style="font-weight:700;font-size:18px;line-height:1.3;color:#101B2E">{{ f.q }}</span>
+                <span style="{{ f.signStyle }}">+</span>
+              </div>
+              <sc-if value="{{ f.open }}" hint-placeholder-val="{{ false }}">
+                <p style="font:300 16px/1.7 'Newsreader',serif;color:#453F30;margin:0;padding:0 22px 20px">{{ f.a }}</p>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:22px;background:linear-gradient(135deg,#101B2E,#1B2C4A);border-radius:20px;padding:28px">
+          <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#E4A93C;margin-bottom:12px">Find us</div>
+          <div style="font:300 17px/1.75 'Newsreader',serif;color:rgba(245,240,230,.82)">6704 Fyler Ave, St. Louis, MO 63139<br />Free lot on Ivanhoe, directly across from the office.<br />(314) 781-8673 · office@timothystl.org</div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  </div>
+
+  <div ref="{{ signupRef }}" style="background:linear-gradient(180deg,#F5F0E6 0%,#EFE8D9 100%);padding:52px 0;text-align:center">
+    <div style="max-width:1240px;margin:0 auto;padding:0 40px">
+      <div style="font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#B44A2E;margin-bottom:12px">Stay connected</div>
+      <h2 style="font-weight:800;font-size:36px;letter-spacing:-.02em;color:#101B2E;margin:0 0 10px">The weekly letter</h2>
+      <p style="font:300 18px/1.6 'Newsreader',serif;color:#4A4636;margin:0 auto 26px;max-width:34em">News, what is coming up, and a word from Pastor Dinger — in your inbox each week.</p>
+      <sc-if value="{{ subOpen }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+          <input type="email" placeholder="you@example.com" value="{{ email }}" onInput="{{ onEmail }}" style="min-width:300px;background:#FFFDF8;border:1px solid #D8CFBB;border-radius:999px;padding:16px 24px;font:400 16px/1 'Newsreader',serif;color:#101B2E" />
+          <span onClick="{{ subscribe }}" style="{{ subBtnStyle }}">Subscribe</span>
+        </div>
+        <sc-if value="{{ subError }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:14px;font:600 15px/1 'Newsreader',serif;color:#B44A2E">Enter an email address and we'll add you to Thursday's send.</div>
+        </sc-if>
+      </sc-if>
+      <sc-if value="{{ subDone }}" hint-placeholder-val="{{ false }}">
+        <div style="display:inline-flex;align-items:center;gap:14px;background:#FFFDF8;border:1px solid #D8CFBB;border-radius:999px;padding:16px 26px">
+          <span style="width:26px;height:26px;border-radius:50%;background:linear-gradient(120deg,#E4A93C,#F0C46B);color:#101B2E;display:flex;align-items:center;justify-content:center;font-size:13px">✓</span>
+          <span style="font:400 17px/1 'Newsreader',serif;color:#101B2E">{{ subMessage }}</span>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+
+  <div style="background:linear-gradient(180deg,#101B2E 0%,#0C1524 100%);padding:44px 0 28px">
+    <div style="max-width:1240px;margin:0 auto;padding:0 40px">
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:36px">
+        <div>
+          <div style="font-weight:800;font-size:15px;color:#fff;margin-bottom:6px">Timothy Lutheran Church</div>
+          <div style="font:italic 300 15px/1.5 'Newsreader',serif;color:#E4A93C;margin-bottom:14px">from our Neighborhood to the Nations</div>
+          <div style="font:300 14px/1.8 'Newsreader',serif;color:rgba(245,240,230,.55)">6704 Fyler Ave · St. Louis, MO 63139<br />Sunday worship · 8:00 &amp; 10:45 am<br />(314) 781-8673 · office@timothystl.org</div>
+        </div>
+        <sc-for list="{{ footer }}" as="f" hint-placeholder-count="3">
+          <div>
+            <div style="font:800 10px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#E4A93C;margin-bottom:14px">{{ f.head }}</div>
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <sc-for list="{{ f.items }}" as="i" hint-placeholder-count="4">
+                <span onClick="{{ i.go }}" style="font:300 14px/1.3 'Newsreader',serif;color:rgba(245,240,230,.6);cursor:pointer">{{ i.label }}</span>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="margin-top:34px;padding-top:20px;border-top:1px solid rgba(245,240,230,.1);font:300 13px/1 'Newsreader',serif;color:rgba(245,240,230,.35)">© 2026 Timothy Lutheran Church · St. Louis, Missouri</div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:900}}">
+const MINISTRIES = [
+  { title: 'Word of Life Lutheran School', cat: 'Learn', logo: './public/images/ministries/wol-logo.webp', body: 'A Christ-centered school for our neighborhood — a high-quality program in an environment where Christ prevails.', link: 'Learn more' },
+  { title: "Mother's Day Out", cat: 'Learn', logo: './public/images/ministries/mdo-thumb.webp', body: 'Twenty years of caring childcare from birth through preschool. Small rooms, flexible scheduling, real community.', link: 'Visit MDO' },
+  { title: 'Food Pantry', cat: 'Serve', logo: './public/images/ministries/food-pantry-thumb.webp', body: 'Open monthly for members and neighbors. Sixty-eight households last month, served with practical care.', link: 'Get details', feature: true },
+  { title: 'Stephen Ministry', cat: 'Care', logo: './public/images/ministries/ss-logo.webp', body: 'Trained caregivers who listen to the real pains of our members and community, and walk alongside people in hard seasons.', link: 'Learn more' },
+  { title: 'Urban Beekeepers', cat: 'Serve', logo: './public/images/ministries/Bees-thumb.webp', body: 'Neighbors learning the art of beekeeping in the city — a joyful reminder that creation care is part of the calling.', link: 'Learn more' },
+  { title: 'Christmas Market', cat: 'Serve', logo: './public/images/ministries/christmas-mkt-thumb.webp', body: 'An annual gift to Lindenwood Park every December: shopping, fellowship, and a neighborhood in one room.', link: 'Learn more' },
+  { title: 'Music Ministry', cat: 'Worship', logo: '', body: 'Organ, handbells, guitar, drums, African choir, hammer dulcimer, steel drums. Unique but familiar.', link: 'Learn more' },
+  { title: 'Youth & Family', cat: 'Learn', logo: '', body: 'Formation for children, confirmation for middle schoolers, community for parents at every stage.', link: 'Explore' },
+  { title: 'LWML', cat: 'Care', logo: './public/images/ministries/lwml.webp', body: "Lutheran Women's Missionary League — a community of women in mission for Christ. Rooted in Scripture, sent in service.", link: 'Visit LWML' },
+];
+
+const SERMONS = [
+  { title: 'The household of God', series: 'Ephesians', meta: 'Aug 9 · Ephesians 2:11–22', body: 'What it costs to be made one, and who pays it.', length: '24 min' },
+  { title: 'No longer strangers', series: 'Ephesians', meta: 'Aug 2 · Ephesians 2:1–10', body: 'Dead men do not raise themselves. Grace is not a nudge; it is a resurrection.', length: '27 min' },
+  { title: 'A bread that does not run out', series: 'Summer in John', meta: 'Jul 26 · John 6:35–51', body: 'The crowd wanted lunch. Jesus offered himself.', length: '22 min' },
+  { title: 'Hard sayings', series: 'Summer in John', meta: 'Jul 19 · John 6:60–69', body: 'When the teaching is hard and leaving looks reasonable.', length: '25 min' },
+  { title: 'The Lord is my shepherd, still', series: 'Psalms for the road', meta: 'Jul 12 · Psalm 23', body: 'A funeral psalm that was written for the living.', length: '21 min' },
+  { title: 'Out of the depths', series: 'Psalms for the road', meta: 'Jul 5 · Psalm 130', body: 'Waiting is not the absence of faith. It is most of it.', length: '23 min' },
+];
+
+const NEWS = [
+  { tag: 'Event', cat: 'Events', when: 'Sun Aug 23', title: 'Confirmation kick-off', body: 'Sixth through eighth graders and their parents meet at 9:30 in the fellowship hall to walk through the year ahead.' },
+  { tag: 'Event', cat: 'Events', when: 'Sat Aug 30', title: 'LCEF preview party', body: 'An evening to hear where the building project stands, with dinner, and honest questions welcome.' },
+  { tag: 'Announcement', cat: 'Announcements', when: 'Sun Sep 6', title: 'Installation of Isaac Taylor', body: 'We install our new Director of Christian Education at the 10:45 service, with a reception after.' },
+  { tag: 'Serve', cat: 'Serve', when: 'Sun Sep 14', title: 'Food pantry distribution', body: 'Sixty-eight households last month. Setup at 8:00, distribution at 10:00 — volunteers always needed.' },
+  { tag: 'Announcement', cat: 'Announcements', when: 'Ongoing', title: 'Fall Bible study: Ephesians', body: 'Sunday mornings at 9:30 in the library, running through November. Come for one week or all of them.' },
+  { tag: 'Serve', cat: 'Serve', when: 'Sat Oct 4', title: 'Neighborhood clean-up', body: 'Two hours on Fyler and Ivanhoe with gloves, bags, and coffee. Kids welcome with a parent.' },
+];
+
+const FAQS = [
+  { q: 'What time should I get there?', a: 'Ten minutes early is plenty. Greeters are at the Fyler doors before both services, and there is coffee in the narthex before the 10:45.' },
+  { q: 'Where do I park?', a: 'The free lot on Ivanhoe is directly across from the church office. Street parking on Fyler is unrestricted on Sundays.' },
+  { q: 'What do people wear?', a: 'Everything from suits to shorts. What matters is that you showed up.' },
+  { q: 'What do I do with my kids?', a: 'Children are welcome in worship at any age — noise included. Sunday School runs during the 10:45, and there is a nursery for infants.' },
+  { q: 'Am I expected to give?', a: 'No. The plate passes; you are welcome to pass it along. Guests are guests.' },
+  { q: 'Can I take communion?', a: 'We practice close communion as an LCMS congregation. If you are new, speak with Pastor Dinger before the service — he would rather talk with you than have you guess.' },
+];
+
+const VALUES = [
+  {
+    key: 'welcome', word: 'Welcome', sub: 'Acceptance',
+    tag: 'Welcoming all people with the love of Jesus.',
+    ink: '#2F6B3A', light: '#6FA84E',
+    field: 'linear-gradient(150deg,#153A1E 0%,#2F6B3A 58%,#3F7A38 100%)',
+    why: 'Nothing else on this list happens to a person who never felt welcome. Acceptance is not the warm-up; it is the first thing the gospel does.',
+    partner: { name: 'LASM · Lindenwood Area Senior Ministry', body: 'Encouraging fellowship, service and support for seniors in our community.' },
+    items: [
+      { title: 'Worship with us', body: 'Join us for uplifting worship and receive God’s grace.' },
+      { title: 'For everyone', body: 'People of all ages and every stage of life are welcome.' },
+      { title: 'Connect & belong', body: 'Find meaningful relationships and grow in faith together.' },
+      { title: 'Learn & grow', body: 'Explore God’s Word and deepen your walk with Christ.' },
+      { title: 'Serve together', body: 'Use your gifts to make a difference in our community and beyond.' },
+      { title: 'Come as you are', body: 'You don’t have to have it all figured out. There’s a place for you.' },
+    ],
+  },
+  {
+    key: 'receive', word: 'Receive', sub: 'Worship',
+    tag: 'Gathering as God’s people to celebrate His grace and receive His gifts through Word and Sacrament.',
+    ink: '#1B4FA0', light: '#3E7BD1',
+    field: 'linear-gradient(150deg,#0E2B5B 0%,#1B4FA0 58%,#3266AE 100%)',
+    why: 'Lutherans put receiving before doing. Sunday morning is not what we offer God; it is where He hands out what He has already won.',
+    partner: { name: 'CSL · Concordia Seminary St. Louis', body: 'Partnering to train pastors and deaconesses to lead and send God’s people.' },
+    items: [
+      { title: 'Sermons', body: 'God speaks to us through His Word preached and taught.' },
+      { title: 'Communion', body: 'Receiving Christ’s true body and blood for the forgiveness of sins.' },
+      { title: 'Worship music', body: 'Using our voices and instruments to praise our Savior.' },
+      { title: 'Serving in worship', body: 'Many gifts, one body — serving together in worship.' },
+      { title: 'Choirs', body: 'Handbells, youth, adult and African choirs lifting our voices in praise.' },
+      { title: 'Livestream & media', body: 'Bringing worship to our homebound and beyond.' },
+    ],
+  },
+  {
+    key: 'grow', word: 'Grow', sub: 'Christian Education',
+    tag: 'Growing together in Christ — equipping people to grow in a lifelong journey with Him.',
+    ink: '#1B7F8E', light: '#45AFB8',
+    field: 'linear-gradient(150deg,#0C3F47 0%,#17636D 58%,#1F7A86 100%)',
+    why: 'Faith that stopped learning stopped moving. Confirmation is not graduation, and neither is being sixty.',
+    partner: { name: 'Word of Life Lutheran School', body: 'Partnering with families to provide an excellent Christ-centered education from preschool through 8th grade.' },
+    items: [
+      { title: 'Bible studies', body: 'Digging into Scripture together to know God more deeply.' },
+      { title: 'Youth ministry', body: 'Encouraging students to live and share their faith.' },
+      { title: 'Sunday School', body: 'Learning about God’s love at every age.' },
+      { title: 'Adult education', body: 'Equipping adults to grow in faith and live it out every day.' },
+      { title: 'Confirmation', body: 'Building a strong foundation in the Lutheran faith.' },
+      { title: 'Resources', body: 'You don’t have to know everything. Here is where to start.' },
+    ],
+  },
+  {
+    key: 'go', word: 'Go', sub: 'Outreach',
+    tag: 'Sharing Jesus with our neighbors and the nations — sharing the love of Jesus with those who do not yet know Him.',
+    ink: '#B77A10', light: '#E8A93C', darkInk: true,
+    field: 'linear-gradient(140deg,#E4A93C 0%,#F0C46B 52%,#D89428 100%)',
+    why: 'From our neighborhood to the nations is not a slogan on the letterhead. It is the last line of the arc, and it points out the door.',
+    partner: { name: 'CFNA · Christian Friends of New Americans', body: 'Welcoming and walking alongside immigrants and refugees as they build new lives in our community.' },
+    items: [
+      { title: 'Vacation Bible School', body: 'Sharing God’s love and the joy of the Gospel with kids.' },
+      { title: 'Short-term missions', body: 'Answering God’s call to go and serve around the world.' },
+      { title: 'Local service', body: 'Meeting needs and showing Christ’s love in our community.' },
+      { title: 'Share the gospel', body: 'Telling others about Jesus and inviting them into His family.' },
+      { title: 'Food pantry', body: 'Providing food and caring for families in need.' },
+      { title: 'Neighborhood presence', body: 'The Christmas Market, the bees, the clean-ups — being here, visibly.' },
+    ],
+  },
+];
+
+class Component extends DCLogic {
+  state = {
+    page: 'home', service: 'late', series: 'All', playing: null, elapsed: 0,
+    minCat: 'All', newsCat: 'All', email: '', subDone: false, subError: false,
+    freq: 'One time', amount: 100, custom: '', fund: 'Where needed most', giveDone: false,
+    rsvpName: '', rsvpEmail: '', rsvpService: '10:45 am', rsvpNeeds: [], rsvpDone: false,
+    now: Date.now(), openFaq: 0, value: 'welcome',
+  };
+
+  componentDidMount() {
+    this.timer = setInterval(() => {
+      this.setState((s) => ({ now: Date.now(), elapsed: s.playing ? s.elapsed + 1 : 0 }));
+    }, 1000);
+  }
+  componentWillUnmount() { clearInterval(this.timer); }
+
+  go = (page) => () => {
+    this.setState({ page });
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  pill = (active, opts) => {
+    const o = opts || {};
+    return 'padding:' + (o.pad || '11px 18px') + ";border-radius:999px;font:800 13px/1 'Bricolage Grotesque',sans-serif;cursor:pointer;white-space:nowrap;transition:all .2s;"
+      + (active
+        ? 'background:linear-gradient(120deg,#101B2E,#1B2C4A);color:#E4A93C;border:1px solid transparent'
+        : 'background:#FFFDF8;color:#4A4636;border:1px solid #D8CFBB');
+  };
+
+  countdown() {
+    const target = new Date(2026, 7, 23, 9, 30, 0).getTime();
+    let d = Math.max(0, Math.floor((target - this.state.now) / 1000));
+    const days = Math.floor(d / 86400); d -= days * 86400;
+    const h = Math.floor(d / 3600); d -= h * 3600;
+    const m = Math.floor(d / 60); const s = d - m * 60;
+    const p = (n) => String(n).padStart(2, '0');
+    return days + 'd ' + p(h) + 'h ' + p(m) + 'm ' + p(s) + 's';
+  }
+
+  renderVals() {
+    const st = this.state;
+    const p = st.page;
+    const navItems = [
+      ['about', 'About'], ['values', 'Our values'], ['worship', 'Worship'], ['sermons', 'Sermons'],
+      ['ministries', 'Ministries'], ['news', 'News'], ['visit', 'Visit'],
+    ];
+    const val = VALUES.filter((x) => x.key === st.value)[0] || VALUES[0];
+
+    const svc = st.service === 'early'
+      ? { eyebrow: 'Early service', time: '8:00 am', body: 'Quieter, organ-led, out by nine. The same sermon and liturgy as the later service, with a smaller room and a slower pace.',
+          facts: [['Music', 'Organ and hymnal'], ['Length', 'About 60 minutes'], ['Sunday School', 'Not during this hour'], ['Communion', 'First and third Sundays']] }
+      : { eyebrow: 'Late service', time: '10:45 am', body: 'Fuller, with Sunday School running alongside it and coffee before and after. The service most families land in.',
+          facts: [['Music', 'Full range — bells to steel drums'], ['Length', 'About 70 minutes'], ['Sunday School', 'Runs concurrently, ages 3–12'], ['Communion', 'First and third Sundays']] };
+    const early = st.service === 'early';
+
+    const sermonList = SERMONS.filter((s) => st.series === 'All' || s.series === st.series);
+    const minList = MINISTRIES.filter((m) => st.minCat === 'All' || m.cat === st.minCat);
+    const newsList = NEWS.filter((n) => st.newsCat === 'All' || n.cat === st.newsCat);
+
+    const amt = st.custom ? Number(String(st.custom).replace(/[^0-9.]/g, '')) : st.amount;
+    const clock = (n) => Math.floor(n / 60) + ':' + String(n % 60).padStart(2, '0');
+
+    return {
+      page: p,
+      isHome: p === 'home', isAbout: p === 'about', isWorship: p === 'worship',
+      isSermons: p === 'sermons', isMinistries: p === 'ministries', isNews: p === 'news',
+      isGive: p === 'give', isVisit: p === 'visit', isValues: p === 'values',
+      goValues: this.go('values'),
+
+      valueNav: VALUES.map((v) => {
+        const on = v.key === val.key;
+        return {
+          word: v.word, sub: v.sub,
+          pick: () => this.setState({ value: v.key }),
+          style: 'cursor:pointer;border-radius:18px;padding:22px 24px;transition:all .25s;'
+            + (on ? 'background:' + v.field + ';box-shadow:0 14px 34px rgba(16,27,46,.18)'
+                  : 'background:linear-gradient(180deg,#F5F0E6,#EFE8D9);border-top:3px solid ' + v.light),
+          wordStyle: "font:italic 400 34px/1.05 'Newsreader',serif;letter-spacing:-.01em;color:" + (on ? (v.darkInk ? '#101B2E' : '#fff') : v.ink),
+          subStyle: "margin-top:7px;font:800 10.5px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:"
+            + (on ? (v.darkInk ? '#3B2E12' : 'rgba(255,255,255,.88)') : '#8A8168'),
+        };
+      }),
+      valueWord: val.word,
+      valueSub: val.sub,
+      valueTag: val.tag,
+      valueCardStyle: 'border-radius:22px;padding:44px;background:' + val.field,
+      valueWordStyle: "font:italic 400 68px/1 'Newsreader',serif;letter-spacing:-.02em;color:" + (val.darkInk ? '#101B2E' : '#fff'),
+      valueSubStyle: "margin-top:12px;font:800 12px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:" + (val.darkInk ? '#3B2E12' : 'rgba(255,255,255,.92)'),
+      valueRuleStyle: 'height:2px;width:76px;margin:20px 0;background:linear-gradient(90deg,' + (val.darkInk ? 'rgba(16,27,46,.55)' : 'rgba(255,255,255,.94)') + ',transparent)',
+      valueTagStyle: "font:italic 300 21px/1.5 'Newsreader',serif;margin:0;color:" + (val.darkInk ? '#3B2E12' : 'rgba(255,255,255,.92)'),
+      valuePartnerStyle: 'margin-top:30px;border-radius:16px;padding:22px;background:' + (val.darkInk ? 'rgba(16,27,46,.12)' : 'rgba(16,27,46,.18)'),
+      valuePartnerName: val.partner.name,
+      valuePartnerBody: val.partner.body,
+      valueQuoteBody: val.why,
+      valuePartnerHeadStyle: "font:800 10px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:" + (val.darkInk ? '#3B2E12' : 'rgba(255,255,255,.85)'),
+      valuePartnerNameStyle: "margin-top:9px;font:700 18px/1.25 'Bricolage Grotesque',sans-serif;color:" + (val.darkInk ? '#101B2E' : '#fff'),
+      valuePartnerBodyStyle: "margin:8px 0 0;font:300 15px/1.6 'Newsreader',serif;color:" + (val.darkInk ? '#3B2E12' : 'rgba(255,255,255,.9)'),
+      valueItems: val.items.map((i) => ({
+        title: i.title, body: i.body,
+        dotStyle: 'flex:none;width:12px;height:12px;border-radius:50%;margin-top:6px;background:' + (val.darkInk ? 'rgba(16,27,46,.8)' : 'rgba(255,255,255,.9)') + ';box-shadow:0 0 0 5px ' + (val.darkInk ? 'rgba(16,27,46,.14)' : 'rgba(255,255,255,.16)'),
+        titleStyle: "font:800 12.5px/1.3 'Bricolage Grotesque',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:" + (val.darkInk ? '#101B2E' : '#fff'),
+        bodyStyle: "margin:7px 0 0;font:300 15.5px/1.6 'Newsreader',serif;color:" + (val.darkInk ? '#3B2E12' : 'rgba(255,255,255,.92)'),
+      })),
+      sheetSlot: 'p-val-sheet-' + val.key,
+      sheetPlaceholder: 'The printed “' + val.word + ' + ' + val.sub + '” card',
+      sheetSlotStyle: 'height:300px;border-radius:14px;overflow:hidden;background:linear-gradient(160deg,#FFFDF8,#EFE8D9);border:1px solid #D8CFBB',
+      valueQuoteStyle: 'border-radius:20px;padding:30px;background:linear-gradient(135deg,#101B2E,#1B2C4A);border-top:3px solid ' + val.light,
+      valueQuoteEyebrowStyle: "font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;margin-bottom:14px;color:" + val.light,
+      valueQuoteBodyStyle: "font:italic 300 20px/1.55 'Newsreader',serif;color:rgba(245,240,230,.88);margin:0",
+
+      goHome: this.go('home'), goAbout: this.go('about'), goSermons: this.go('sermons'),
+      goMinistries: this.go('ministries'), goNews: this.go('news'), goGive: this.go('give'),
+      goVisit: this.go('visit'),
+      nav: navItems.map(([key, label]) => ({
+        label, go: this.go(key),
+        style: "font:600 14px/1 'Newsreader',serif;cursor:pointer;padding-bottom:4px;border-bottom:2px solid "
+          + (p === key ? '#E4A93C' : 'transparent') + ';color:' + (p === key ? '#fff' : 'rgba(255,255,255,.88)'),
+      })),
+
+      homeNews: NEWS.slice(0, 4).map((n) => ({ when: n.when, title: n.title })),
+
+      valueStrip: VALUES.map((v) => ({
+        word: v.word, sub: v.sub, tag: v.tag,
+        go: () => { this.setState({ page: 'values', value: v.key }); if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' }); },
+        style: 'cursor:pointer;border-radius:20px;padding:26px;background:' + v.field,
+        wordStyle: "font:italic 400 40px/1 'Newsreader',serif;letter-spacing:-.01em;color:" + (v.darkInk ? '#101B2E' : '#fff'),
+        subStyle: "margin-top:9px;font:800 10.5px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:" + (v.darkInk ? '#3B2E12' : 'rgba(255,255,255,.88)'),
+        tagStyle: "margin:14px 0 0;font:300 15px/1.55 'Newsreader',serif;color:" + (v.darkInk ? '#3B2E12' : 'rgba(255,255,255,.94)'),
+      })),
+
+      beliefs: [
+        { eyebrow: 'What we believe', title: 'Grace first, and grace last', body: 'Salvation is a gift, not a wage. Everything else we do follows from that and never earns it.' },
+        { eyebrow: 'Who belongs', title: 'A diverse city church', body: 'Lindenwood Park in one room — different ages, incomes, languages and histories, at the same rail.' },
+        { eyebrow: 'How we serve', title: 'Neighborhood to nations', body: 'A pantry, a school, a market, and partners abroad. The gospel goes out the door on Monday.' },
+      ],
+      staff: [
+        { name: 'Rev. Andrew Dinger', role: 'Lead Pastor', slot: 'p-staff-1', placeholder: 'Portrait' },
+        { name: 'Isaac Taylor', role: 'Director of Christian Education', slot: 'p-staff-2', placeholder: 'Portrait' },
+        { name: 'Church Office', role: 'Administration', slot: 'p-staff-3', placeholder: 'Portrait' },
+        { name: 'Music Staff', role: 'Worship & music', slot: 'p-staff-4', placeholder: 'Portrait' },
+      ],
+      history: [
+        { year: '1927', what: 'Founded on the corner of Fyler and Ivanhoe, in a neighborhood of new brick bungalows.' },
+        { year: '1958', what: 'The present sanctuary is built; the school opens its doors soon after.' },
+        { year: '2004', what: "Mother's Day Out begins — twenty years of childcare and counting." },
+        { year: 'Today', what: 'A food pantry, a Christmas Market, urban bees, and a Sunday that sounds like the city.' },
+      ],
+
+      serviceTabs: [
+        { label: '8:00 am · Early', pick: () => this.setState({ service: 'early' }), style: this.pill(early) },
+        { label: '10:45 am · Late', pick: () => this.setState({ service: 'late' }), style: this.pill(!early) },
+      ],
+      serviceCardStyle: 'border-radius:22px;padding:40px;background:'
+        + (early ? 'linear-gradient(135deg,#101B2E 0%,#1B2C4A 60%,#2A3E66 100%)' : 'linear-gradient(120deg,#E4A93C 0%,#F0C46B 52%,#D89428 100%)'),
+      serviceEyebrow: svc.eyebrow,
+      serviceEyebrowStyle: "font:800 11px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.16em;text-transform:uppercase;margin-bottom:14px;color:" + (early ? '#E4A93C' : '#3B2E12'),
+      serviceTime: svc.time,
+      serviceTimeStyle: 'font-weight:800;font-size:64px;letter-spacing:-.03em;line-height:1;color:' + (early ? '#fff' : '#101B2E'),
+      serviceBody: svc.body,
+      serviceBodyStyle: "font:300 18px/1.65 'Newsreader',serif;margin:16px 0 0;color:" + (early ? 'rgba(245,240,230,.78)' : '#3B2E12'),
+      serviceFacts: svc.facts.map(([k, v]) => ({
+        k, v,
+        rowStyle: 'display:flex;justify-content:space-between;gap:20px;padding:14px 18px;border-radius:14px;background:'
+          + (early ? 'rgba(245,240,230,.08)' : 'rgba(16,27,46,.09)'),
+        keyStyle: "font:800 11px/1.4 'Bricolage Grotesque',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:" + (early ? 'rgba(245,240,230,.6)' : '#3B2E12'),
+        valStyle: "font:400 16px/1.3 'Newsreader',serif;text-align:right;color:" + (early ? '#fff' : '#101B2E'),
+      })),
+      visit: [
+        { title: 'Parking', body: 'Free in the lot on Ivanhoe, directly across from the church office. Street parking on Fyler too.' },
+        { title: 'Kids & families', body: 'Children are welcome in worship at any age. Sunday School runs during the 10:45. Nursery for infants.' },
+        { title: 'What to wear', body: 'From suits to shorts. Come as you are — what matters is that you showed up.' },
+        { title: 'Questions first?', body: 'Greeters are at the door before every service, or reach us at office@timothystl.org · (314) 781-8673.' },
+      ],
+
+      seriesTabs: ['All', 'Ephesians', 'Summer in John', 'Psalms for the road'].map((label) => ({
+        label, pick: () => this.setState({ series: label }), style: this.pill(st.series === label, { pad: '10px 16px' }),
+      })),
+      sermons: sermonList.map((s, i) => {
+        const on = st.playing === s.title;
+        return {
+          title: s.title, meta: s.meta, body: s.body, length: s.length, slot: 'p-sermon-' + i,
+          play: () => this.setState({ playing: on ? null : s.title, elapsed: 0 }),
+          rowStyle: 'display:flex;gap:22px;align-items:center;padding:18px;border-radius:18px;cursor:pointer;transition:all .25s;border:1px solid '
+            + (on ? 'rgba(228,169,60,.6)' : '#E7DFCD') + ';background:' + (on ? 'linear-gradient(120deg,#FFFDF8,#F7EFDC)' : '#FFFDF8'),
+          btn: on ? 'Playing' : 'Listen',
+          btnStyle: "font:800 12px/1 'Bricolage Grotesque',sans-serif;padding:11px 16px;border-radius:999px;"
+            + (on ? 'background:linear-gradient(120deg,#E4A93C,#F0C46B);color:#101B2E' : 'background:#F5F0E6;color:#101B2E'),
+        };
+      }),
+      noSermons: sermonList.length === 0,
+      playing: !!st.playing,
+      playingTitle: st.playing || '',
+      playingClock: clock(st.elapsed),
+      progressStyle: 'height:100%;background:linear-gradient(90deg,#E4A93C,#F0C46B);width:'
+        + Math.min(100, (st.elapsed / 90) * 100) + '%;transition:width 1s linear',
+      stopPlaying: () => this.setState({ playing: null, elapsed: 0 }),
+
+      minTabs: ['All', 'Serve', 'Learn', 'Care', 'Worship'].map((label) => ({
+        label, pick: () => this.setState({ minCat: label }), style: this.pill(st.minCat === label, { pad: '10px 16px' }),
+      })),
+      ministries: minList.map((m) => ({
+        title: m.title, body: m.body, link: m.link, hasLogo: !!m.logo,
+        logoStyle: 'height:56px;width:100%;margin-bottom:18px;background-image:url("' + m.logo + '");background-size:contain;background-repeat:no-repeat;background-position:left center',
+        cardStyle: 'display:flex;flex-direction:column;border-radius:20px;padding:28px;background:'
+          + (m.feature ? 'linear-gradient(150deg,#101B2E 0%,#1B2C4A 70%,#2A3E66 100%)' : 'linear-gradient(180deg,#F5F0E6 0%,#EFE8D9 100%)'),
+        titleStyle: 'font-weight:700;font-size:23px;line-height:1.2;letter-spacing:-.01em;margin-bottom:9px;color:' + (m.feature ? '#fff' : '#101B2E'),
+        bodyStyle: "font:300 16px/1.6 'Newsreader',serif;margin:0 0 16px;flex:1;color:" + (m.feature ? 'rgba(245,240,230,.78)' : '#453F30'),
+        linkStyle: "font:800 13px/1 'Bricolage Grotesque',sans-serif;color:" + (m.feature ? '#E4A93C' : '#B37F1E'),
+      })),
+
+      countdown: this.countdown(),
+      chips: ['Aug 23 · Confirmation', 'Aug 30 · LCEF party', 'Sep 6 · Installation', 'Sep 14 · Food pantry', 'Oct 4 · Clean-up'],
+      newsTabs: ['All', 'Events', 'Announcements', 'Serve'].map((label) => ({
+        label, pick: () => this.setState({ newsCat: label }), style: this.pill(st.newsCat === label, { pad: '10px 16px' }),
+      })),
+      newsCards: newsList.map((n, i) => ({
+        tag: n.tag, when: n.when, title: n.title, body: n.body,
+        slot: 'p-news-' + n.title.slice(0, 8).replace(/\W/g, ''),
+        placeholder: 'Photo for “' + n.title + '”',
+        tagStyle: "font:800 10px/1 'Bricolage Grotesque',sans-serif;letter-spacing:.12em;text-transform:uppercase;padding:6px 11px;border-radius:999px;background:#101B2E;color:#E4A93C",
+      })),
+      letters: [
+        { subject: 'A word before Confirmation begins', date: 'Aug 7' },
+        { subject: 'What the pantry saw in July', date: 'Jul 31' },
+        { subject: 'Summer in John, and where it lands', date: 'Jul 24' },
+        { subject: 'Bees, bread and a full sanctuary', date: 'Jul 17' },
+      ],
+
+      freqTabs: ['One time', 'Monthly'].map((label) => ({
+        label, pick: () => this.setState({ freq: label }), style: this.pill(st.freq === label, { pad: '12px 22px' }),
+      })),
+      amounts: [50, 100, 250, 500].map((v) => ({
+        label: '$' + v,
+        pick: () => this.setState({ amount: v, custom: '' }),
+        style: 'text-align:center;padding:15px 0;border-radius:14px;cursor:pointer;'
+          + "font:800 17px/1 'Bricolage Grotesque',sans-serif;transition:all .2s;"
+          + (!st.custom && st.amount === v
+            ? 'background:linear-gradient(120deg,#101B2E,#1B2C4A);color:#E4A93C;border:1px solid transparent'
+            : 'background:#FFFDF8;color:#101B2E;border:1px solid #D8CFBB'),
+      })),
+      custom: st.custom,
+      onCustom: (e) => this.setState({ custom: e.target.value }),
+      funds: ['Where needed most', 'Food pantry', 'Building fund', 'Music'].map((label) => ({
+        label, pick: () => this.setState({ fund: label }), style: this.pill(st.fund === label, { pad: '10px 16px' }),
+      })),
+      giveBtnLabel: amt > 0 ? 'Give $' + amt + (st.freq === 'Monthly' ? ' monthly' : '') : 'Choose an amount',
+      giveBtnStyle: 'display:block;text-align:center;padding:18px;border-radius:999px;'
+        + "font:800 15px/1 'Bricolage Grotesque',sans-serif;cursor:pointer;"
+        + (amt > 0 ? 'background:linear-gradient(120deg,#101B2E,#1B2C4A);color:#E4A93C' : 'background:#E7DFCD;color:#8A8168'),
+      giveSubmit: () => { if (amt > 0) this.setState({ giveDone: true }); },
+      giveDone: st.giveDone,
+      giveOpen: !st.giveDone,
+      giveSummary: 'Your ' + (st.freq === 'Monthly' ? 'monthly ' : '') + 'gift of $' + amt + ' to ' + st.fund
+        + ' is on its way. A receipt is in your inbox, and the office will see it Monday morning.',
+      giveReset: () => this.setState({ giveDone: false, custom: '', amount: 100 }),
+      allocation: [
+        { label: 'Worship, preaching & pastoral care', pct: '38%', w: 38 },
+        { label: 'School & children', pct: '27%', w: 27 },
+        { label: 'Neighborhood ministry & pantry', pct: '21%', w: 21 },
+        { label: 'Building & operations', pct: '14%', w: 14 },
+      ].map((a) => ({ ...a, barStyle: 'height:100%;border-radius:999px;background:linear-gradient(90deg,#E4A93C,#B37F1E);width:' + a.w + '%' })),
+
+      rsvpName: st.rsvpName, rsvpEmail: st.rsvpEmail,
+      onRsvpName: (e) => this.setState({ rsvpName: e.target.value }),
+      onRsvpEmail: (e) => this.setState({ rsvpEmail: e.target.value }),
+      rsvpServices: ['8:00 am', '10:45 am'].map((label) => ({
+        label, pick: () => this.setState({ rsvpService: label }), style: this.pill(st.rsvpService === label, { pad: '11px 20px' }),
+      })),
+      rsvpNeeds: ['Bringing kids', 'First time in a church', 'Need accessible seating', 'Want to meet the pastor'].map((label) => {
+        const on = st.rsvpNeeds.indexOf(label) >= 0;
+        return {
+          label,
+          pick: () => this.setState((s) => ({
+            rsvpNeeds: on ? s.rsvpNeeds.filter((x) => x !== label) : s.rsvpNeeds.concat(label),
+          })),
+          style: this.pill(on, { pad: '10px 16px' }),
+        };
+      }),
+      rsvpBtnLabel: st.rsvpName ? 'Tell them I’m coming' : 'Add your name first',
+      rsvpBtnStyle: 'display:block;text-align:center;padding:18px;border-radius:999px;'
+        + "font:800 15px/1 'Bricolage Grotesque',sans-serif;cursor:pointer;"
+        + (st.rsvpName ? 'background:linear-gradient(120deg,#101B2E,#1B2C4A);color:#E4A93C' : 'background:#E7DFCD;color:#8A8168'),
+      rsvpSubmit: () => { if (st.rsvpName) this.setState({ rsvpDone: true }); },
+      rsvpDone: st.rsvpDone,
+      rsvpOpen: !st.rsvpDone,
+      rsvpHeading: 'See you Sunday, ' + (st.rsvpName.split(' ')[0] || 'friend') + '.',
+      rsvpNote: 'A greeter will be watching for you at the ' + st.rsvpService + ' service'
+        + (st.rsvpNeeds.length ? ', and we noted: ' + st.rsvpNeeds.join(', ').toLowerCase() + '.' : '.'),
+      faqs: FAQS.map((f, i) => {
+        const open = st.openFaq === i;
+        return {
+          q: f.q, a: f.a, open,
+          toggle: () => this.setState({ openFaq: open ? -1 : i }),
+          wrapStyle: 'border-radius:16px;border:1px solid ' + (open ? '#D8CFBB' : '#E7DFCD')
+            + ';background:' + (open ? 'linear-gradient(180deg,#F5F0E6,#EFE8D9)' : '#FFFDF8'),
+          signStyle: "flex:none;font:800 20px/1 'Bricolage Grotesque',sans-serif;color:#B37F1E;transition:transform .25s;transform:rotate("
+            + (open ? '45deg' : '0deg') + ')',
+        };
+      }),
+
+      signupRef: (n) => { this.signupNode = n; },
+      focusSignup: () => {
+        if (!this.signupNode || typeof window === 'undefined') return;
+        window.scrollTo({ top: this.signupNode.offsetTop - 80, behavior: 'smooth' });
+      },
+      email: st.email,
+      onEmail: (e) => this.setState({ email: e.target.value, subError: false }),
+      subscribe: () => {
+        if (st.email.indexOf('@') > 0) this.setState({ subDone: true, subError: false });
+        else this.setState({ subError: true });
+      },
+      subBtnStyle: 'background:linear-gradient(120deg,#101B2E,#1B2C4A);color:#E4A93C;'
+        + "font:800 14px/1 'Bricolage Grotesque',sans-serif;padding:18px 28px;border-radius:999px;cursor:pointer",
+      subOpen: !st.subDone,
+      subDone: st.subDone,
+      subError: st.subError,
+      subMessage: 'You’re on the list — first letter arrives Thursday.',
+
+      footer: [
+        { head: 'Visit', items: [['visit', 'Plan your visit'], ['worship', 'Service times'], ['sermons', 'Live stream'], ['news', 'News & events']] },
+        { head: 'Connect', items: [['values', 'Our core values'], ['about', 'About us'], ['ministries', 'Ministries'], ['visit', 'Prayer request'], ['visit', 'Contact']] },
+        { head: 'Programs', items: [['ministries', "Mother's Day Out"], ['ministries', 'Word of Life School'], ['ministries', 'Volunteer sign-up']] },
+      ].map((c) => ({ head: c.head, items: c.items.map(([key, label]) => ({ label, go: this.go(key) })) })),
+    };
+  }
+}
+
+</script>
+</body>
+</html>

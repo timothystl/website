@@ -74,6 +74,17 @@ const NEWS_PAGE_SEED = {
   seo_description: 'Announcements, upcoming events, and weekly newsletters from Timothy Lutheran Church.',
   blocks: REDESIGN_BLOCKS.news,
 };
+// /about/values, like /news, has no hardcoded markup for the extractor to lift
+// — it is a live view of the values record — so it needs a page row authored
+// here. See the note in admin/redesign-seeds.js on why it is a block page now
+// when admin/BLOCK-EDITOR-ROLLOUT.md said it should not be.
+const VALUES_PAGE_SEED = {
+  id: 'values', title: 'Our Values', menu_label: '', slug: '/about/values',
+  parent_id: 'about', sort: 20, template: 'standard', in_menu: 0,
+  seo_description: 'Welcome, Receive, Grow, Go — the four core values of Timothy Lutheran Church, and the partner ministries paired to each.',
+  blocks: REDESIGN_BLOCKS.values,
+};
+
 import { orderPages, filterPages, pageStatus, slugify, uniqueSlug, pageRename,
          withShortLinks, shortLinkFor, shortLinkRoutes, outboundUrl, canReseed } from './admin/pages.js';
 import { MENUS, menuTree, publicMenu, orphanPages, menuWarnings, renumber,
@@ -1251,7 +1262,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-13-2'; // bumped: the four redesign page drafts (admin/redesign-seeds.js) — reaches a page only via canReseed(), so nothing anybody has edited or published is touched
+    const SCHEMA_VERSION = '2026-08-14-1'; // bumped: the Our Values page row, and the five redesign drafts (admin/redesign-seeds.js) — reaches a page only via canReseed(), so nothing anybody has edited or published is touched
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -1792,7 +1803,7 @@ export default {
       // presses Publish. On these four in particular that is not a formality —
       // they are the most visited pages on the site, the language is new, and
       // there are no photographs yet.
-      const ALL_SEEDED_PAGES = [...SITE_PAGES, NEWS_PAGE_SEED, GIVE_LANDING_PAGE]
+      const ALL_SEEDED_PAGES = [...SITE_PAGES, NEWS_PAGE_SEED, VALUES_PAGE_SEED, GIVE_LANDING_PAGE]
         .map((p) => (REDESIGN_BLOCKS[p.id] ? { ...p, blocks: REDESIGN_BLOCKS[p.id] } : p));
       for (const p of ALL_SEEDED_PAGES) {
         await env.DB.prepare(
