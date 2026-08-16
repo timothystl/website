@@ -19,7 +19,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { sanitizeBlocks, newBlock, TEMPLATES } from '../admin/blocks.js';
+import { sanitizeBlocks, sanitizeBlock, newBlock, TEMPLATES } from '../admin/blocks.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const html = fs.readFileSync(path.join(HERE, '..', 'public', 'index.html'), 'utf8');
@@ -456,8 +456,26 @@ function foldHeadings(blocks) {
 // re-running this produces a diff only when the page's content actually
 // changed — and a seed keeps the same ids across runs, which is what makes
 // revision history and undo readable after a re-extract.
+// ⚠ SOME PAGES HAVE NO CONTENT TO EXTRACT, AND THAT IS NOT THE SAME AS BEING
+// EMPTY. /sermons' hardcoded markup is an empty container that loadSermons()
+// fills from the API at runtime, so the converter correctly finds nothing to
+// lift and produces `hero, buttons`. That was harmless while the page was
+// unpublished — and became "the sermons are gone" the moment somebody
+// published it, because the takeover hides the very section loadSermons()
+// fills. The page looked converted and had lost its whole reason to exist.
+//
+// The answer is not to invent content, which would freeze a live list. It is to
+// append the SELF-FILLING block that reads the same record the runtime loader
+// did, so the converted page shows exactly what the old one showed and keeps
+// doing so as sermons are added.
+const LIVE_BLOCKS = {
+  sermons: { type: 'sermonlist', title: 'Sermons' },
+};
+
 function blocksFor(slug) {
   const blocks = sanitizeBlocks(foldHeadings(convert(slug)));
+  const live = LIVE_BLOCKS[slug];
+  if (live) blocks.push(sanitizeBlock(Object.assign(newBlock(live.type), { title: live.title })));
   return blocks.map((b, i) => Object.assign({}, b, { id: `${slug}-${i + 1}` }));
 }
 

@@ -525,7 +525,7 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
-### The Christmas Market takes its own vendor applications (v5.7.0, 2026-08-16)
+### The Christmas Market takes its own vendor applications (v5.8.0, 2026-08-16)
 
 Built from `design_handoff_market_vendor_signup/`, committed whole for the same
 reason the other two handoffs are. It replaces the Google Form + spreadsheet the
@@ -651,6 +651,78 @@ Run: `node admin/market.test.mjs` (176), `node test/market-vendor.test.mjs`
 because an unreachable admin is a state a real visitor hits and the page has to
 keep quoting a working price through it), and the five market groups in
 `test/admin-redesign.test.mjs`.
+
+### /sermons had no block that could show a sermon (v5.7.0, 2026-08-16)
+
+Dinger, with the page published: *"for the sermon page, it is not loading the
+sermons that we have."* Twelve entries in the admin, an active series, and a
+live page showing a banner and a **Watch on YouTube** button.
+
+**⚠ THE CONVERTED PAGE WAS `hero, buttons` AND NOTHING ELSE, AND THE EXTRACTOR
+WAS RIGHT TO PRODUCE IT.** `/sermons`' hardcoded markup is an *empty container*
+that `loadSermons()` fills from the API at runtime. There was no content to
+lift, so nothing was lifted.
+
+That is harmless while a page is unpublished and it is the whole content of the
+page the moment somebody publishes it — because `tlcMaybeTakeOverSitePage()`
+hides every hardcoded section, including the one `loadSermons()` fills. The
+loader still runs and still fills it; the visitor just never sees it. **The page
+looked converted and had lost its reason to exist.**
+
+- **`sermonlist` — "Sermon library"** is the block that was missing. The
+  existing `sermon` block is the homepage's *latest* card; nothing could list
+  what the church has actually preached. Self-filling from `ctx.data`, so a
+  sermon added next week appears with nobody editing a page.
+- **`pageData()` now carries the library**, series with their sermons nested,
+  assembled in the Worker — `admin/blocks.js` is shared with the editor and the
+  tests and must not know how those two tables relate. ⚠ Bounded (24 series,
+  120 sermons): this is rendered into every `/api/pages` response, and a church
+  that keeps preaching would otherwise grow that payload forever.
+- **⚠ A sermon with no series is still a sermon.** The admin has a button for
+  exactly those, so they get an "Other sermons" group rather than being dropped.
+- **⚠ No recording, no link.** Most of this library is text only today, and a
+  "Watch" that goes nowhere is the dead-link rule broken again.
+- `<details>`, the same choice the newsletter archive made: no JavaScript, a
+  keyboard and screen-reader control for free, identical in the editor canvas
+  and on the live page. The active series opens; the rest fold away.
+- **⚠ `LIVE_BLOCKS` in `tools/extract-pages.mjs` is the general fix.** A page
+  whose content is filled at runtime gets the self-filling block appended. Not
+  invented content — that would freeze a live list, which is the reason the
+  extractor left these alone in the first place.
+
+**⚠ A SEED DOES NOT REACH A PUBLISHED PAGE.** `canReseed()` skips anything
+anybody has touched, so this does not repair `/sermons` on the live site. The
+office adds **Sermon library** from the Content group and presses Publish —
+one action, on their own page.
+
+**⚠ `/education` IS THE SAME SHAPE AND IS NOT FIXED.** Its class cards are
+`bible-classes-grid`, filled live from the Christian Ed tab, and there is no
+block that reads that record — so publishing it would empty it exactly as this
+emptied `/sermons`. It has no `LIVE_BLOCKS` entry because there is nothing yet
+to point at. **Do not publish `/education` until one exists.**
+
+### The auto-bump stops overwriting a version somebody chose (v5.7.0, 2026-08-16)
+
+Dinger: *"fix the version bump conflict so it stops happening."*
+
+The patch bump in `.github/workflows/deploy.yml` fired unconditionally, and the
+conflict was the smaller of its two costs:
+
+1. **It overwrote the release the moment it shipped.** Merge a PR cutting
+   v5.5.0 and the bump made it v5.5.1 within the minute — so the minor number a
+   release was cut under was never the number anyone read.
+2. **Every feature PR conflicted.** The bump lands on main, the branch already
+   changed the same line, and the next merge stops for a hand resolution that
+   always goes the same way.
+
+If the newest commit on main already set `VERSION`, a person set it and the job
+leaves it alone — the deploy jobs above have already shipped that number, so the
+live worker is correct and there is nothing to do. First-parent diff, so it
+reads the same under squash merges (what this repo takes) or true merges.
+
+⚠ The auto-bump still works for everything else: a merge that does not touch the
+version still gets its patch. Verified against real history — the three merges
+that set a version are skipped, a synthetic merge that does not is bumped.
 
 ### The page arrives already rendered (v5.6.0, 2026-08-16)
 
