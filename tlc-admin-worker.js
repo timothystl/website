@@ -40,6 +40,7 @@ import { migrateLegacyPage, starterBlocks, sanitizeBlocks, sanitizeBlock, parseB
          renderPage, renderBlock, BLOCK_DEFS, BLOCK_TYPE_KEYS, GROUPS, BG, INK, SIZES, SPLITS, TONES,
          STAMP_PRESETS, safeUrl, esc as escBlock, editorPhoneCss, blocksClientConfig, makeBlockId,
          TEMPLATES, templateOf, wrapTemplate, BLOCK_CSS, cleanText,
+         isSafeObjectPosition, safeZoomFactor,
          STARTERS, starterOf } from './admin/blocks.js';
 import PAYROLL_HTML from './admin/payroll.html';
 import SCHEDULER_HTML from './admin/scheduler.html';
@@ -523,7 +524,12 @@ async function pageData(env, reqKey) {
       // which a church that hires two more people would quietly cross with
       // nothing to see but a missing face. Still bounded — it is rendered into
       // every /api/pages response — just bounded well above the real number.
-      q('SELECT name, title, email, photo_url FROM staff_members ORDER BY display_order ASC, id ASC LIMIT 60'),
+      // ⚠ photo_position and photo_zoom are the per-person crop somebody set by
+      // eye on the Staff screen. They were not selected here, so the Staff grid
+      // block had no crop to honor even once it wanted to — a face framed in the
+      // admin came out framed differently on the published page.
+      q('SELECT name, title, email, photo_url, photo_position, photo_zoom ' +
+        'FROM staff_members ORDER BY display_order ASC, id ASC LIMIT 60'),
       // Same "published" filter /api/newsletters itself uses (status IS NULL
       // counts too — issues sent before the status column existed).
       q(`SELECT id, subject, published_at, pastor_note FROM newsletters
@@ -733,20 +739,11 @@ function isSafeCardUrl(value) {
   } catch { return false; }
 }
 
-// Staff photo crop position is written straight into a CSS object-position
-// value on the public site — restrict it to "NN% NN%" so it can't carry
-// anything else through.
-function isSafeObjectPosition(value) {
-  return typeof value === 'string' && /^\d{1,3}% \d{1,3}%$/.test(value);
-}
-
-// Clamps the staff photo zoom (a CSS transform: scale() factor) to a sane
-// range regardless of what's submitted — 1x (no zoom) to 2.5x.
-function safeZoomFactor(value) {
-  const n = parseFloat(value);
-  if (!Number.isFinite(n)) return 1;
-  return Math.min(2.5, Math.max(1, n));
-}
+// ⚠ The staff photo crop guards used to be defined here as well as in the
+// renderer, and a crop is exactly the kind of thing two copies come to disagree
+// about — one accepting a value the other rejects means the admin's preview and
+// the published page frame the same face differently. They live in
+// admin/blocks.js now and are imported above; do not add a local copy back.
 
 // Allowlists for file uploads. Extensions are derived from MIME type —
 // never from the client-supplied filename — so the stored file always

@@ -717,11 +717,42 @@ everybody, from an unlimited `/api/staff`. Publishing the page lost five people.
   It now renders **seven** people — deliberately more than the 1..6 the clamp
   allows — so a reintroduced slice cannot pass by coincidence.
 
-**Still open, noticed here and deliberately not fixed:** the block draws a
-staff photo as a plain `background-image` and ignores `photo_position` /
-`photo_zoom`, which the hardcoded page and every other staff photo on the site
-honor. A face cropped differently in the editor than on the live page is a
-real defect; it is not what was reported and it wants its own change.
+**And the crop it left open is fixed too (v5.10.1)** — see below.
+
+### A face was framed twice, differently (v5.10.1, 2026-08-16)
+
+The item the section above left open, on Dinger's say-so. The Staff screen has
+a picker that drags a face into place and zooms in; the block ignored it, so a
+portrait framed in the admin came out framed differently on the published page,
+with nothing on the page to explain why.
+
+**⚠ THE ROOT CAUSE WAS THE QUERY, NOT THE RENDERER.** `pageData()` selected
+`name, title, email, photo_url` and stopped. So the block had no crop to honor
+even once it wanted to, and fixing only the markup would have rendered every
+face at the default framing while looking correct in the diff.
+
+- **An `<img>`, not a `background-image`.** `object-position` plus a
+  `transform: scale()` is the exact mechanism the picker writes and every other
+  staff photo on the site reads. A background can be positioned but not zoomed
+  the same way, so a background would have meant approximating a framing
+  somebody chose by eye. `.tlcb-person-p` clips (`overflow:hidden`) or a zoomed
+  face spills over the name beside it.
+- **⚠ `isSafeObjectPosition` and `safeZoomFactor` moved to `admin/blocks.js`
+  and the Worker imports them.** They were defined in `tlc-admin-worker.js`,
+  and a crop is exactly what two copies come to disagree about — one accepting
+  a value the other rejects means the admin's own preview and the live page
+  frame the same face differently. Do not add a local copy back.
+- **Neither value is trusted**: both go straight into a style attribute, so a
+  position that is not exactly `NN% NN%` falls back to center and the zoom
+  clamps to the 1–2.5 the slider offers. A face uncropped is a cosmetic miss; a
+  value carried through is not.
+- **No photo means no `<img>`**, rather than an image element aimed at nothing
+  drawing a browser's broken-image mark on the church's About page.
+
+Run: the staff group in `node admin/blocks.test.mjs`, and the crop assertions
+in the staff group of `test/admin-redesign.test.mjs`. Verified in both
+directions — dropping the two columns from `pageData()` fails the end-to-end
+pair, and dropping the style attribute fails the renderer's four.
 
 ### /sermons had no block that could show a sermon (v5.7.0, 2026-08-16)
 

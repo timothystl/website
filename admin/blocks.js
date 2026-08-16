@@ -1969,7 +1969,11 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
 .tlcb-nl-mlist .tlcb-nl-row{border:0;padding:7px 0;border-top:1px solid #EFEBE1;border-radius:0;}
 .tlcb-people{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
 .tlcb-person{display:flex;flex-direction:column;gap:6px;}
-.tlcb-person-p{aspect-ratio:1/1;border-radius:9px;background:#DDE3ED center/cover no-repeat;}
+/* The tile clips, the photo fills it. overflow:hidden is what keeps a zoomed
+   face inside its own tile instead of spilling over the name beside it. */
+.tlcb-person-p{aspect-ratio:1/1;border-radius:9px;background:#DDE3ED;overflow:hidden;
+  position:relative;display:block;}
+.tlcb-person-p img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
 .tlcb-person-n{font:600 13.5px/1.3 var(--tlcb-ui);color:#1E2D4A;}
 .tlcb-person-r{font-size:12px;color:#8A8898;}
 .tlcb-map{min-height:230px;overflow:hidden;}
@@ -2319,6 +2323,28 @@ const splitOf = (b) => SPLITS.find((s) => s.key === b.split) || SPLITS[1];
 // both, strip every character that could close either one — a legitimate image
 // URL never contains them.
 const cssUrl = (u) => String(u || '').replace(/["'\\()\s<>;{}]/g, '');
+
+// ── A STAFF PHOTO'S CROP ─────────────────────────────────────────────────────
+// The Staff screen lets somebody drag a face into place and zoom in, and stores
+// the result as an `object-position` pair and a `transform: scale()` factor.
+// Every other staff photo on the site honors it; the Staff grid block did not,
+// so a face sat differently on a published page than in the admin that framed
+// it — a portrait cropped through the forehead, with no setting on the page to
+// explain why.
+//
+// ⚠ BOTH VALUES GO STRAIGHT INTO A STYLE ATTRIBUTE, so neither is trusted: the
+// position has to match the exact shape the picker writes, and the zoom is a
+// number clamped to the range the slider offers. Anything else is the default
+// framing rather than a guess. `tlc-admin-worker.js` imports these two rather
+// than keeping the copies it used to have — one definition, so the admin's own
+// preview and the public page cannot come to disagree about a crop.
+export const isSafeObjectPosition = (v) => typeof v === 'string' && /^\d{1,3}% \d{1,3}%$/.test(v);
+
+export function safeZoomFactor(v) {
+  const n = parseFloat(v);
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(2.5, Math.max(1, n));
+}
 
 // news_items/newsletters store plain ISO dates (no time). Reading it back at
 // noon local time, the same convention the rest of the site uses for these
@@ -3104,11 +3130,27 @@ function renderInner(b, opts) {
     // and every block carries a count of 3 by default whether or not its type
     // has a control for one — so slicing here silently dropped five of the
     // church's eight staff the moment /about was published from the editor.
-    const people = (data.staff || []).map((m) => `<div class="tlcb-person">
-        <span class="tlcb-person-p"${m.photo_url ? ` style="background-image:url('${cssUrl(m.photo_url)}')"` : ''}></span>
+    // ⚠ An <img>, not a background-image, and that is what makes the crop
+    // possible: object-position plus a scale() is the exact mechanism the Staff
+    // screen's picker writes and every other staff photo on the site reads. A
+    // background can be positioned but cannot be zoomed the same way, so the
+    // block would have had to approximate a framing somebody chose by eye.
+    const person = (m) => {
+      const pos = isSafeObjectPosition(m.photo_position) ? m.photo_position : '50% 50%';
+      const zoom = safeZoomFactor(m.photo_zoom);
+      // Somebody with no photo keeps the plain tile the block always drew,
+      // rather than an <img> pointing at nothing.
+      const photo = m.photo_url
+        ? `<img src="${esc(safeUrl(m.photo_url))}" alt="${esc(m.name || '')}" loading="lazy"
+             style="object-position:${pos};transform:scale(${zoom})">`
+        : '';
+      return `<div class="tlcb-person">
+        <span class="tlcb-person-p">${photo}</span>
         <span class="tlcb-person-n">${esc(m.name || '')}</span>
         <span class="tlcb-person-r">${esc(m.title || '')}</span>
-      </div>`).join('');
+      </div>`;
+    };
+    const people = (data.staff || []).map(person).join('');
     return `<div class="tlcb-stack">${renderHead(opts, b)}
       ${people ? `<div class="tlcb-people">${people}</div>` : `<p class="tlcb-note">The staff directory is empty.</p>`}</div>`;
   }
