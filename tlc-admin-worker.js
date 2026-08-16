@@ -441,7 +441,7 @@ async function pageData(env, reqKey) {
     const q = async (sql, ...binds) => {
       try { return (await env.DB.prepare(sql).bind(...binds).all()).results || []; } catch (_) { return []; }
     };
-    const [settingRows, chromeRow, sermonRow, news, staff, newsletters,
+    const [settingRows, chromeRow, sermonRow, sermonSeries, sermonNotes, news, staff, newsletters,
            giveTiers, giveFunds, giveUrlRow, partners] = await Promise.all([
       q("SELECT key, value FROM site_settings WHERE key LIKE 'church_%'"),
       // ⚠ The PUBLISHED row only. The draft exists so that somebody can try a
@@ -453,6 +453,16 @@ async function pageData(env, reqKey) {
         'FROM sermon_notes n LEFT JOIN sermon_series s ON s.id = n.series_id ' +
         'ORDER BY COALESCE(n.date, \'\') DESC, n.id DESC LIMIT 1'
       ).first().catch(() => null),
+      // The library itself, for the Sermon library block on /sermons. The row
+      // above is the single newest sermon and always has been — it is what the
+      // homepage's "Latest sermon" card shows, and it is the reason /sermons
+      // had nothing to render from: there was no block that could list what the
+      // church has actually preached.
+      // ⚠ Bounded. This is rendered into every /api/pages response, and a
+      // church that keeps preaching would otherwise grow that payload forever.
+      q('SELECT id, title, date_range, description, active, sort_order FROM sermon_series ORDER BY active DESC, sort_order ASC, id DESC LIMIT 24'),
+      q('SELECT id, series_id, title, date, scripture, youtube_url, audio_url ' +
+        'FROM sermon_notes ORDER BY COALESCE(date, \'\') DESC, id DESC LIMIT 120'),
       // Full fields, not just title+date — the "News feed" block (unlike the
       // older "News highlights" block, which only ever needed a title and a
       // date) shows the same expandable image/summary/body cards the /news
@@ -490,6 +500,18 @@ async function pageData(env, reqKey) {
       // never carries a copy of the palette and cannot drift from it.
       appearance: publicAppearance(parseAppearance(chromeRow && chromeRow.value)),
       sermon: sermonRow || null,
+      // Series with their own sermons nested, assembled here rather than in the
+      // renderer: admin/blocks.js is shared with the editor and the tests, and
+      // it must never know how these two tables relate.
+      sermonSeries: (sermonSeries || []).map((se) => ({
+        id: se.id, title: se.title, dates: se.date_range || '',
+        description: se.description || '', active: !!se.active,
+        sermons: (sermonNotes || []).filter((n) => n.series_id === se.id),
+      })),
+      // ⚠ A sermon with no series is still a sermon. The admin calls these
+      // "standalone" and offers a button for them, so a page that quietly
+      // dropped them would be hiding content somebody deliberately added.
+      sermonLoose: (sermonNotes || []).filter((n) => !n.series_id),
       news, staff, newsletters,
       // The four core values, composed here so the block is self-filling: the
       // words and the ways in come from admin/values.js (the one place the

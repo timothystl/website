@@ -323,6 +323,29 @@ export const BLOCK_DEFS = {
     richBody: true, auto: 'map', autoNote: 'The address, phone and email come from the church details in the admin.',
     autoCount: false, split: true,
   },
+  // ⚠ THE BLOCK /sermons COULD NOT BE BUILT WITHOUT. Its hardcoded markup was
+  // filled live by loadSermons(), so the extractor correctly found nothing to
+  // lift and produced a page of `hero, buttons` — which was harmless while the
+  // page was unpublished and became "the sermons are gone" the moment it was
+  // published, because the takeover hides the very section loadSermons() fills.
+  //
+  // Self-filling from ctx.data, like the sermon card and the staff grid: a
+  // sermon preached next week appears with nobody editing a page. There is
+  // nothing here to type and nothing to keep in step.
+  sermonlist: {
+    label: 'Sermon library', glyph: '≡',
+    align: true,
+    defaults: { title: 'Sermons', body: '', spaceAbove: 24, spaceBelow: 24 },
+    richBody: true,
+    auto: 'sermonlist',
+    autoNote: 'Every series and the sermons in it, read from the Sermons screen. Add a sermon there and it appears here.',
+    autoCount: false,
+    switches: [
+      { key: 'openFirst', label: 'Open the current series', def: true,
+        note: 'The active series starts expanded and the rest are folded away. A page that opens with everything expanded is a very long page.' },
+    ],
+  },
+
   // Everything the church has for reaching it, in one droppable block. The
   // info card can already show an address or a phone number, but only as a slot
   // on a banner — so a plain page had no way to say "here is how you reach us"
@@ -862,7 +885,7 @@ export const SHADOWABLE_TYPES = new Set(
 // of it — and Content is what they fill it with afterwards.
 export const GROUPS = [
   { name: 'Structure', types: ['alert', 'photobanner', 'hero', 'slideshow', 'highlight', 'cta', 'quicklinks', 'cardgrid', 'buttons', 'callout', 'partners', 'spacer'] },
-  { name: 'Content',   types: ['text', 'textphoto', 'quote', 'values', 'video', 'columns', 'gallery', 'faq', 'sermon', 'news', 'newsfeed', 'staff', 'posts'] },
+  { name: 'Content',   types: ['text', 'textphoto', 'quote', 'values', 'video', 'columns', 'gallery', 'faq', 'sermon', 'sermonlist', 'news', 'newsfeed', 'staff', 'posts'] },
   // Contact sits beside Map & address, which is where somebody looking for
   // "how do people reach us" already goes — the two answer the same question
   // and one of them draws a map.
@@ -1485,6 +1508,33 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-cg-card{display:flex;flex-direction:column;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:20px;padding:28px 26px;
   box-shadow:0 2px 6px rgba(11,22,44,.05),0 10px 24px rgba(11,22,44,.06);
   transition:box-shadow .3s cubic-bezier(.2,.8,.2,1),transform .3s cubic-bezier(.2,.8,.2,1);}
+/* The sermon library: series that fold open, and their sermons inside. */
+.tlcb-sl{display:flex;flex-direction:column;gap:10px;margin-top:6px;}
+.tlcb-sl-set{border:1px solid var(--tlcb-rule,#E7DFD1);border-radius:12px;background:rgba(255,255,255,.5);}
+.tlcb-sl-sum{display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap;
+  padding:14px 18px;cursor:pointer;list-style:none;}
+.tlcb-sl-sum::-webkit-details-marker{display:none;}
+/* The caret, drawn rather than shipped as a glyph so it turns with the state. */
+.tlcb-sl-sum::after{content:'';width:7px;height:7px;flex:none;margin-left:auto;
+  border-right:2px solid var(--tlcb-eyebrow-ink,#C9973A);border-bottom:2px solid var(--tlcb-eyebrow-ink,#C9973A);
+  transform:rotate(45deg);transition:transform .15s ease;}
+.tlcb-sl-set[open] > .tlcb-sl-sum::after{transform:rotate(-135deg);}
+.tlcb-sl-name{font-family:var(--tlcb-serif);font-weight:700;font-size:calc(var(--tlcb-head,22px) * .72);
+  line-height:1.2;color:var(--tlcb-head-ink,#1E2D4A);}
+.tlcb-sl-c{font:700 11.5px/1.4 var(--tlcb-ui);letter-spacing:.1em;text-transform:uppercase;
+  color:var(--tlcb-eyebrow-ink,#2E7EA6);}
+.tlcb-sl-d{margin:0 18px 4px;font-family:var(--tlcb-sans);font-size:calc(14px * var(--tlcb-scale, 1));
+  color:var(--tlcb-body,#4A4860);line-height:1.5;}
+.tlcb-sl-rows{display:flex;flex-direction:column;padding:0 18px 10px;}
+.tlcb-sl-row{display:flex;align-items:baseline;justify-content:space-between;gap:14px;
+  padding:10px 0;border-top:1px solid var(--tlcb-rule,#E7DFD1);}
+.tlcb-sl-b{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.tlcb-sl-t{font-family:var(--tlcb-sans);font-weight:600;font-size:calc(15px * var(--tlcb-scale, 1));
+  color:var(--tlcb-ink,#1A1A2A);}
+.tlcb-sl-m{font-family:var(--tlcb-ui);font-size:calc(12.5px * var(--tlcb-scale, 1));color:var(--tlcb-body,#8A8898);}
+.tlcb-sl-go{flex:none;font:800 12px/1 var(--tlcb-ui);letter-spacing:.08em;text-transform:uppercase;
+  color:var(--tlcb-link-ink,#2E7EA6);text-decoration:none;}
+a.tlcb-sl-go:hover{text-decoration:underline;}
 /* Contact details. A label column wide enough for "Instagram" and a value
    column that takes the rest, so the addresses line up under each other rather
    than starting at a different place on every row. */
@@ -3012,6 +3062,52 @@ function renderInner(b, opts) {
       </div>`).join('');
     return `<div class="tlcb-stack">${renderHead(opts, b)}
       ${people ? `<div class="tlcb-people">${people}</div>` : `<p class="tlcb-note">The staff directory is empty.</p>`}</div>`;
+  }
+
+  if (t === 'sermonlist') {
+    const series = Array.isArray(data.sermonSeries) ? data.sermonSeries : [];
+    const loose = Array.isArray(data.sermonLoose) ? data.sermonLoose : [];
+    // One sermon row, shared by a series and by the standalone list below, so
+    // the two cannot come to look different.
+    const row = (n) => {
+      const play = safeUrl(n.youtube_url) || safeUrl(n.audio_url);
+      const meta = [n.date, n.scripture].filter(Boolean).join(' · ');
+      const label = ytId(n.youtube_url) ? 'Watch' : (safeUrl(n.audio_url) ? 'Listen' : '');
+      // ⚠ Not a link when there is no recording. Most of this library is text
+      // only today, and a "Watch" that goes nowhere is the dead link this
+      // repo's own rule is about.
+      const go = play && !opts.editing
+        ? `<a class="tlcb-sl-go" href="${esc(play)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`
+        : (play ? `<span class="tlcb-sl-go">${esc(label)}</span>` : '');
+      return `<div class="tlcb-sl-row"><span class="tlcb-sl-b">` +
+        `<span class="tlcb-sl-t">${esc(n.title || '')}</span>` +
+        (meta ? `<span class="tlcb-sl-m">${esc(meta)}</span>` : '') +
+        `</span>${go}</div>`;
+    };
+    const groups = series.filter((se) => (se.sermons || []).length).map((se) => {
+      // ⚠ <details>, not a script — the same choice the newsletter archive
+      // made. It opens with no JavaScript at all, it is a keyboard and
+      // screen-reader control for free, and it behaves identically in the
+      // editor canvas and on the live page.
+      const open = (b.openFirst !== false && se.active) || opts.editing;
+      const count = (se.sermons || []).length;
+      return `<details class="tlcb-sl-set"${open ? ' open' : ''}>
+        <summary class="tlcb-sl-sum"><span class="tlcb-sl-name">${esc(se.title || '')}</span>` +
+        `<span class="tlcb-sl-c">${esc(se.dates || '')}${se.dates ? ' · ' : ''}${count} sermon${count === 1 ? '' : 's'}</span></summary>` +
+        (se.description ? `<p class="tlcb-sl-d">${esc(se.description)}</p>` : '') +
+        `<div class="tlcb-sl-rows">${(se.sermons || []).map(row).join('')}</div></details>`;
+    }).join('');
+    const singles = loose.length
+      ? `<details class="tlcb-sl-set"${opts.editing ? ' open' : ''}>
+          <summary class="tlcb-sl-sum"><span class="tlcb-sl-name">Other sermons</span>` +
+        `<span class="tlcb-sl-c">${loose.length} sermon${loose.length === 1 ? '' : 's'}</span></summary>` +
+        `<div class="tlcb-sl-rows">${loose.map(row).join('')}</div></details>`
+      : '';
+    const body = groups || singles
+      ? `<div class="tlcb-sl">${groups}${singles}</div>`
+      : `<p class="tlcb-note">Nothing in the sermon library yet — add a series and its sermons under Sermons in the admin.</p>`;
+    return `<div class="tlcb-stack" style="gap:9px">${renderHead(opts, b)}` +
+      `${renderBody(opts, b, def, 'One line about the preaching here, if it helps.')}${body}</div>`;
   }
 
   if (t === 'contact') {
