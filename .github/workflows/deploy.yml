@@ -104,6 +104,32 @@ jobs:
             # match main with the version baked in.
             git reset --quiet --hard origin/main
 
+            # ⚠ DO NOT BUMP OVER A NUMBER SOMEBODY CHOSE. The auto-bump used to
+            # fire unconditionally, which had two costs and the smaller one was
+            # the annoying one:
+            #
+            #  1. It OVERWROTE THE RELEASE THE MOMENT IT SHIPPED. Merge a PR
+            #     that cuts v5.5.0 and this turned it into v5.5.1 within the
+            #     minute, so the minor number a release was cut under was never
+            #     the number anyone read.
+            #  2. It made every feature PR conflict. The bump lands on main, the
+            #     branch already changed the same line, and the next merge stops
+            #     for a hand resolution that always went the same way.
+            #
+            # So: if the newest commit on main already set VERSION, a person set
+            # it deliberately and this leaves it alone. The deploy jobs above
+            # have already shipped that number, so the live worker is correct
+            # and there is nothing left to do.
+            #
+            # First-parent diff, so this reads the same whether main takes
+            # squash merges (it does) or true merge commits.
+            if git rev-parse --quiet --verify origin/main^ >/dev/null &&
+               git diff origin/main^ origin/main -- admin/helpers.js |
+                 grep -qE "^\+export const VERSION = "; then
+              echo "main's newest commit already set the version — leaving it alone."
+              exit 0
+            fi
+
             # Read the current version from helpers.js (e.g. 'v1.76.3').
             # Auto-bump is patch-only; major and minor are intentionally
             # manual so the version number means something. To cut a minor or
