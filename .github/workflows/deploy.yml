@@ -68,6 +68,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          # ⚠ NOT THE DEFAULT SHALLOW CLONE. actions/checkout fetches depth 1,
+          # so `origin/main^` does not exist in the runner — and the
+          # already-set-the-version guard below asks for exactly that. Its
+          # first condition then short-circuits, the guard never fires, and the
+          # bump lands on top of a version somebody chose. That is precisely
+          # what happened on the merge that ADDED the guard (v5.7.0 → v5.7.1):
+          # it was verified in a full clone, where the parent is present, and
+          # the one difference in CI is the depth.
+          #
+          # 0 rather than 2: this job also re-reads main on every retry, and a
+          # shallow repo makes each of those a special case for no gain on a
+          # repository this size.
+          fetch-depth: 0
 
       - name: Install wrangler
         run: npm install -g wrangler

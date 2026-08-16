@@ -594,6 +594,18 @@ reads the same under squash merges (what this repo takes) or true merges.
 version still gets its patch. Verified against real history — the three merges
 that set a version are skipped, a synthetic merge that does not is bumped.
 
+**⚠ AND IT NEEDED `fetch-depth: 0`, WHICH THE FIRST ATTEMPT MISSED.**
+`actions/checkout` fetches **depth 1**, so `origin/main^` does not exist in the
+runner — and the guard asks for exactly that. Its first condition
+short-circuited, the guard never fired, and the bump landed anyway. It happened
+on the very merge that added the guard: **v5.7.0 → v5.7.1**.
+
+The lesson is about *where* it was verified. The shell was proven correct in a
+full clone, which is the one thing CI is not. Reproduced afterwards by cloning
+this repo at `--depth 1` and at `--depth 2` and running the guard against both:
+the first bumps, the second skips. **A workflow that reads git history has to be
+tested against a shallow clone, because that is what it will get.**
+
 ### The page arrives already rendered (v5.6.0, 2026-08-16)
 
 Dinger: *"the old pages and content are always loading first and then current
