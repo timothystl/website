@@ -553,6 +553,19 @@ export const INITIAL_SETTINGS = [
   { key: 'church_address_near', value: 'Corner of Fyler & Ivanhoe',  label: 'Landmark',        hint: 'How somebody finds it from the road — shown under the address on the welcome card. Leave blank to omit.' },
   { key: 'church_phone',        value: '(314) 781-8673',            label: 'Church phone',    hint: 'Shown wherever the site lists a phone number.' },
   { key: 'church_email',        value: 'office@timothystl.org',     label: 'Church email',    hint: 'The public contact address for the church office.' },
+  // The three social accounts. They belong on this record and not in a screen
+  // of their own for the same reason the phone number does: they are how
+  // somebody reaches the church, and the Contact block, the footer and any
+  // future page that lists them should all read one copy. Seeded with the real
+  // handles, so the Contact block is right the first time somebody drops it on
+  // a page rather than showing three empty rows.
+  //
+  // ⚠ Blank means "we are not on it" and the block omits that row entirely —
+  // an icon linking nowhere is worse than no icon. That is also why there is no
+  // fourth row for a network the church does not use.
+  { key: 'church_facebook',     value: 'https://facebook.com/timothystl',  label: 'Facebook',  hint: 'Full address of the church page. Leave blank to leave Facebook off the site.' },
+  { key: 'church_instagram',    value: 'https://instagram.com/timothystl', label: 'Instagram', hint: 'Full address of the church account. Leave blank to leave Instagram off the site.' },
+  { key: 'church_youtube',      value: 'https://youtube.com/timothystl',   label: 'YouTube',   hint: 'Full address of the church channel. Leave blank to leave YouTube off the site.' },
   { key: 'church_service_times', label: 'Service times', hint: 'One line per service: Day | Time | Note. Shown by the Service times block and page sidebars.',
     // Two Sunday services, and no label on either. The welcome card groups by
     // label, so both blank means they read as one line — "8:00 & 10:45 am" —

@@ -37,6 +37,27 @@ export function withAmountAndFund(baseUrl, amountDollars, tithelyFundId) {
 
 export const withAmount = (baseUrl, amountDollars) => withAmountAndFund(baseUrl, amountDollars, '');
 
+// A fund and no amount — the Give button's case. It asks somebody to give to a
+// named fund and deliberately does not suggest how much; Tithe.ly's own form
+// asks that, and a button reading "Give now" that arrives with $25 already
+// filled in is a number nobody chose.
+//
+// ⚠ The fund REPLACES the base link's fundId rather than appending a second
+// one. Two fundId parameters is undefined behavior on Tithe.ly's side, and the
+// failure mode is a gift landing in the wrong fund while the link looks
+// perfect — which is the whole reason this arithmetic lives in one file.
+export function withFund(baseUrl, tithelyFundId) {
+  if (!tithelyFundId) return baseUrl;
+  try {
+    const u = new URL(baseUrl);
+    u.searchParams.set('fundId', tithelyFundId);
+    return u.toString();
+  } catch {
+    const sep = baseUrl.includes('?') ? '&' : '?';
+    return `${baseUrl}${sep}fundId=${encodeURIComponent(tithelyFundId)}`;
+  }
+}
+
 // An amount typed by staff into a block. Returns null for anything that is not
 // a positive number, and the caller renders the row WITHOUT a button rather
 // than with a broken one — "$ask the office /month" is a legitimate row to

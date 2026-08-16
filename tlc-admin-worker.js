@@ -1262,7 +1262,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-14-1'; // bumped: the Our Values page row, and the five redesign drafts (admin/redesign-seeds.js) — reaches a page only via canReseed(), so nothing anybody has edited or published is touched
+    const SCHEMA_VERSION = '2026-08-16-1'; // bumped: church_facebook / church_instagram / church_youtube on the church-details record, read by the new Contact block
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
