@@ -14,7 +14,15 @@ const ok = (c, m) => { if (c) pass++; else { fail++; console.error('  ✗ ' + m)
 const eq = (a, b, m) => ok(a === b, `${m} — expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`);
 const group = (n) => console.log('\n' + n);
 
-const seed = sanitizeBlocks([newBlock('hero'), newBlock('textphoto'), newBlock('video'), newBlock('gallery')]);
+// The card grid is here for the picture-field group at the bottom: one card
+// with a heading (which is the alt text a dropped photo borrows) and one
+// without, because the refusal is the half worth pinning.
+const grid = newBlock('cardgrid');
+grid.items = [
+  { img: '', eyebrow: '', title: 'Food Pantry', body: '<p>Open monthly.</p>', linkLabel: 'Learn more', url: '/foodpantry' },
+  { img: '', eyebrow: '', title: '', body: '<p>Not named yet.</p>', linkLabel: '', url: '' },
+];
+const seed = sanitizeBlocks([newBlock('hero'), newBlock('textphoto'), newBlock('video'), newBlock('gallery'), grid]);
 const harness = createEditorServer({ pages: [{ slug: 'music', title: 'Music Ministry', blocks: seed }] });
 await new Promise((r) => harness.server.listen(0, r));
 const base = 'http://localhost:' + harness.server.address().port;
@@ -147,6 +155,145 @@ await page.click('[data-k="photo"]');
 await page.waitForSelector('.ed-modal');
 ok(true, 'the inspector Photo row opens the library too');
 await page.keyboard.press('Escape');
+
+// ── a card's picture is dropped on, not typed into ──────────────────────────
+// The field used to be a bare text box holding /images/ministries/….webp, so
+// putting a photo on a card meant uploading it somewhere else first and then
+// copying the address across by hand.
+await resetPage();
+
+// Fires a real file drag at a zone. ⚠ `dragover` has to be fired too: the
+// handler proves it is a file drag from dataTransfer.types, which is the only
+// part of a DataTransfer a browser exposes before the drop lands.
+const dropFile = async (selector, name, mimeType, text) =>
+  page.evaluate(({ selector, name, mimeType, text }) => {
+    const zone = document.querySelector(selector);
+    if (!zone) throw new Error('no zone ' + selector);
+    const dt = new DataTransfer();
+    dt.items.add(new File([text], name, { type: mimeType }));
+    for (const kind of ['dragover', 'drop']) {
+      zone.dispatchEvent(new DragEvent(kind, { bubbles: true, cancelable: true, dataTransfer: dt }));
+    }
+  }, { selector, name, mimeType, text });
+
+group('a card grid has picture fields, not address boxes');
+await page.click('.ed-paper .tlcb--cardgrid');
+await page.waitForSelector('.ed-insp [data-rows="item"]');
+eq(await page.locator('.ed-img[data-imgdrop="item:0:img"]').count(), 1, 'card 1 gets a picture field');
+eq(await page.locator('.ed-img[data-imgdrop="item:1:img"]').count(), 1, 'card 2 gets one too');
+ok((await page.textContent('.ed-img[data-imgdrop="item:0:img"]')).includes('Drop a photo here'),
+  'and it says a photo can be dropped on it');
+eq(await page.locator('.ed-img[data-imgdrop="item:0:img"] input[data-in="item:0:img"]').count(), 1,
+  'the address box is still there — a partner logo is often hosted by the partner');
+// The two predicates must not collide: `img` is something an <img> points at,
+// `url` is somewhere a visitor is sent, and they get different controls.
+eq(await page.locator('.ed-img[data-imgdrop="item:0:url"]').count(), 0, "a card's link is not a picture field");
+eq(await page.locator('.ed-link input[data-in="item:0:url"]').count(), 1, 'it keeps the pick-a-page control');
+eq(await page.locator('.ed-img[data-imgdrop="photo"]').count(), 0, 'no block photo on a card grid');
+
+group('choosing a card picture from the library');
+await page.click('[data-k="pickimg:item:0:img"]');
+await page.waitForSelector('.ed-modal');
+ok((await page.textContent('.ed-modal-h')).includes('Photo library'), 'the same library opens');
+await page.click('.ed-tile:has-text("choir-loft.jpg")');
+await page.waitForSelector('.ed-modal', { state: 'detached' });
+await page.waitForTimeout(700);
+eq(await page.locator('.ed-paper .tlcb--cardgrid img[src*="choir-loft"]').count(), 1, 'it lands on that card');
+ok((await page.textContent('#edChanges')).includes('Changed picture · choir-loft.jpg'), 'and is logged');
+await page.waitForTimeout(1900);
+eq(saved().find((b) => b.type === 'cardgrid').items[0].img, '/images/choir-loft.jpg', 'saved to the draft');
+eq(saved().find((b) => b.type === 'cardgrid').items[1].img, '', 'and only that card changed');
+
+group('dropping a photo straight onto a card');
+const before = harness.media.length;
+// Card 2 has no heading, and the heading is the description the library needs.
+await dropFile('.ed-img[data-imgdrop="item:1:img"]', 'garden.jpg', 'image/jpeg', 'fake-jpeg-bytes');
+await page.waitForTimeout(500);
+eq(harness.media.length, before, 'a card with no heading is refused — there is no description to borrow');
+ok((await page.textContent('#edToast')).toLowerCase().includes('heading'), 'and it says to name the card first');
+
+// Card 1 is "Food Pantry", and already carries the library photo chosen above —
+// so this proves a drop replaces a picture as well as filling an empty field.
+await dropFile('.ed-img[data-imgdrop="item:0:img"]', 'pantry-shelves.jpg', 'image/jpeg', 'fake-jpeg-bytes');
+await page.waitForTimeout(1500);
+eq(harness.media.length, before + 1, 'a card that has one uploads');
+eq(harness.media[0].alt, 'Food Pantry', 'the library entry borrows the heading as its description');
+ok(await page.locator('.ed-paper .tlcb--cardgrid img[src*="uploaded-"]').count() > 0, 'and the photo is on the card');
+await page.waitForTimeout(1900);
+const grid0 = saved().find((b) => b.type === 'cardgrid');
+ok(/uploaded-/.test(grid0.items[0].img), 'saved to the draft, replacing the one that was there');
+eq(grid0.items[1].img, '', 'and the other card is untouched');
+
+group('what is not a photo, and what is not a field');
+const before2 = harness.media.length;
+await dropFile('.ed-img[data-imgdrop="item:0:img"]', 'budget.pdf', 'application/pdf', 'not-a-picture');
+await page.waitForTimeout(400);
+eq(harness.media.length, before2, 'a PDF is refused');
+ok((await page.textContent('#edToast')).includes('JPEG'), 'and it says what would work');
+// ⚠ Missing the thumbnail must not navigate the browser to the file, taking
+// the editor and anything not yet autosaved with it.
+const wentAway = await page.evaluate(() => {
+  const dt = new DataTransfer();
+  dt.items.add(new File(['x'], 'stray.jpg', { type: 'image/jpeg' }));
+  const ev = new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt });
+  document.body.dispatchEvent(ev);
+  return !ev.defaultPrevented;
+});
+ok(!wentAway, 'a file dropped anywhere else is swallowed rather than followed');
+
+group('a row being dragged is not swallowed by the picture field it passes over');
+// ⚠ The picture field sits INSIDE the row, so a card dragged by its grip travels
+// over other cards' thumbnails on the way to where it is going. If the drop
+// target claimed that, dragging a card past another card's picture would
+// silently stop working — and the picture fields are new, so it would read as
+// them having broken reordering.
+await page.click('.ed-paper .tlcb--cardgrid');
+await page.waitForSelector('.ed-insp [data-rows="item"]');
+const dragged = await page.evaluate(() => {
+  const rows = document.querySelector('.ed-insp [data-rows="item"]');
+  const grip = rows.querySelector('.ed-item[data-row="1"] .ed-grip');
+  const zone = rows.querySelector('.ed-item[data-row="0"] .ed-img');
+  const dt = new DataTransfer();
+  // ⚠ The pointer's Y decides which side of the row the drop lands on, and a
+  // DragEvent with no clientY reads as 0 — which is above the panel, not above
+  // the row, and lands the card back where it started.
+  const box = rows.querySelector('.ed-item[data-row="0"]').getBoundingClientRect();
+  const fire = (node, kind) => node.dispatchEvent(new DragEvent(kind,
+    { bubbles: true, cancelable: true, dataTransfer: dt, clientY: box.top + 2 }));
+  fire(grip, 'dragstart');
+  fire(zone, 'dragover');
+  const out = {
+    claimed: zone.classList.contains('is-over'),
+    marked: !!rows.querySelector('.ed-item.is-drop-before, .ed-item.is-drop-after'),
+  };
+  fire(zone, 'drop');
+  return out;
+});
+ok(!dragged.claimed, 'the picture field does not light up for a row that is being moved');
+ok(dragged.marked, 'the reorder indicator shows instead');
+await page.waitForTimeout(1900);
+eq(saved().find((b) => b.type === 'cardgrid').items[1].title, 'Food Pantry', 'and the card really moved');
+
+group('the arrows still move a row that has a picture field in it');
+await page.click('.ed-insp [data-rows="item"] .ed-item[data-row="1"] [data-a="item-up"]');
+await page.waitForTimeout(1900);
+eq(saved().find((b) => b.type === 'cardgrid').items[0].title, 'Food Pantry', 'moved back with the arrow');
+
+// ⚠ Found while building the picture fields, and older than them: a card's
+// heading identifies its item BY INDEX, and reordering moves the index out from
+// under a heading that still has focus. patch() reorders, renderInspector()
+// pulls focus into the panel, and the focusout that fires lands on a canvas the
+// Worker has not redrawn yet — so the old node's index wrote one card's words
+// over another's. The canvas came back right a moment later; only the SAVED
+// draft was wrong, which is why nobody caught it.
+group('reordering with the caret in a heading does not overwrite the other card');
+await page.click('.ed-paper .tlcb--cardgrid [data-item="0"][data-field="title"]');
+eq(await page.evaluate(() => document.activeElement.className), 'tlcb-cg-head', 'the caret is in a card heading');
+await page.evaluate(() => document.querySelector(
+  '.ed-insp [data-rows="item"] .ed-item[data-row="1"] [data-a="item-up"]').click());
+await page.waitForTimeout(2200);
+const after = saved().find((b) => b.type === 'cardgrid').items.map((i) => i.title);
+eq(JSON.stringify(after), JSON.stringify(['', 'Food Pantry']), 'both headings survive the move');
 
 eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
 

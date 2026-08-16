@@ -199,6 +199,10 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
 .ed-media-b{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
 .ed-media-n{font-size:13px;color:#1E2D4A;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .ed-media-c{font-size:12px;color:#2E7EA6;}
+.ed-img{display:flex;flex-direction:column;gap:6px;}
+.ed-img.is-over .ed-media{border-color:#2E7EA6;background:#F2F7FA;box-shadow:0 0 0 2px rgba(46,126,166,.2);}
+.ed-img.is-busy .ed-media{opacity:.55;}
+.ed-img.is-busy .ed-media-c{color:#8A8898;}
 .ed-track{width:40px;height:22px;border-radius:999px;position:relative;display:inline-block;background:#DDE3ED;flex:none;padding:0;}
 .ed-track[aria-pressed="true"]{background:#4A5E3A;}
 .ed-knob{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#FBF8F3;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:left .12s ease;}
@@ -388,6 +392,10 @@ var S = {
   // positions, pages and half-width pairs; sharing one field would let a
   // half-finished row drag be completed as a block drop.
   rowDrag: null,
+  // True from a structural change until the Worker's redraw lands: what is on
+  // the canvas describes the blocks as they were, so nothing may be committed
+  // from it. See commitField.
+  canvasStale: false,
   // Every address on this site that answers — pages, their short links, and
   // redirects. Filled from the editor's boot payload; an empty list simply
   // means no picker and no check, never a broken screen.
@@ -716,6 +724,9 @@ async function refreshCanvas() {
 function setCanvas(html) {
   if (window.tinymce) { try { window.tinymce.remove(); } catch (_) {} }
   el.edPaper.innerHTML = html;
+  // The screen describes the blocks again, so a field on it may be committed
+  // from once more.
+  S.canvasStale = false;
   // A page whose blocks lead with a hero owns the whole page on the public
   // site, and the canvas has to preview it the same way or the WYSIWYG lies.
   var pageDiv = el.edPaper.querySelector('.tlcb-page');
@@ -864,7 +875,9 @@ function patch(id, part, label, mode, keepInspector) {
   pushHistory();
   Object.keys(part).forEach(function (k) { b[k] = part[k]; });
   note(label);
-  if (mode === 'rerender') { rerender(); } else if (mode !== 'none') { restyle(b); }
+  // From here until the Worker's redraw lands, what is on screen describes the
+  // blocks as they WERE. See commitField, which must not write from it.
+  if (mode === 'rerender') { S.canvasStale = true; rerender(); } else if (mode !== 'none') { restyle(b); }
   renderTop(); renderRail(); renderChanges();
   if (!keepInspector) renderInspector();
   scheduleSave();
@@ -945,6 +958,11 @@ async function doRerender() {
     renderRail();
     renderInspector();
   } catch (err) {
+    // ⚠ Clear it even here. The canvas is left stale and the message says to
+    // reload — but leaving the flag set would silently stop every text edit on
+    // the page from saving, which is a worse failure than the one that just
+    // happened and looks like nothing at all.
+    S.canvasStale = false;
     if (String(err && err.message) !== 'auth') toast('Could not redraw the page — reload to be safe');
   }
 }
@@ -1160,6 +1178,21 @@ function commitField(node) {
   if (!node || node.getAttribute('contenteditable') !== 'true') return;
   if (!node.dataset.field) return;
   if (!el.edPaper.contains(node)) return;
+  // ⚠ A NODE IDENTIFIES ITS ITEM BY INDEX, AND A STRUCTURAL CHANGE MOVES THE
+  // INDEX OUT FROM UNDER IT. Reordering a card while a heading has focus used
+  // to overwrite a DIFFERENT card's heading: patch() reorders the array, then
+  // renderInspector() restores focus into the panel, which fires focusout on
+  // the heading — which is still on screen, because the canvas is redrawn by a
+  // round trip to the Worker and has not come back yet. So this ran with the
+  // old node's data-item="1" against a list where item 1 was now something
+  // else, and wrote the wrong card's words over it. Silently: the canvas came
+  // back correct a moment later, and only the SAVED draft was wrong.
+  //
+  // Nothing genuine is lost by dropping these. A person's own edit is already
+  // committed by the focusout the control's own mousedown fires, before the
+  // patch. Only a commit arriving AFTER the array moved reaches this, and that
+  // one is reading a stale index by definition.
+  if (S.canvasStale) return;
   var wrap = node.closest('.tlcb');
   if (!wrap) return;
   var b = findBlock(wrap.dataset.id);
@@ -1493,11 +1526,15 @@ function inspectorSections(b, d) {
 
   // 5. Photo
   if (d.photo) {
+    // Same drop target as a card's picture — one gesture, wherever a photo
+    // goes. It keeps its own description box below, which is the alt text the
+    // page actually renders for this one (a card borrows its heading instead).
     out += '<div class="ed-sec"><span class="ed-lab">Photo</span>' +
+      '<div class="ed-img" data-imgdrop="photo">' +
       '<button type="button" class="ed-media" data-a="photo" data-k="photo"><span class="ed-media-thumb"' +
         (b.photo ? ' style="background-image:url(' + esc(b.photo) + ')"' : '') + '>' + (b.photo ? '' : '▣') + '</span>' +
       '<span class="ed-media-b"><span class="ed-media-n">' + esc(b.photo ? b.photo.split('/').pop() : 'No photo yet') + '</span>' +
-      '<span class="ed-media-c">Choose from library</span></span></button>' +
+      '<span class="ed-media-c">Drop a photo here, or choose from the library</span></span></button></div>' +
       '<label class="ed-note" for="edAlt">Describe the photo for people using a screen reader</label>' +
       '<input class="ed-field" id="edAlt" data-in="photoAlt" data-k="alt" value="' + esc(b.photoAlt) + '" placeholder="e.g. The choir in the balcony">' +
       '</div>';
@@ -1669,6 +1706,34 @@ function isLinkField(d, field) {
   return field === 'url' && !d.gallery;
 }
 
+// The other half of the same rule. A picture field is declared on the type
+// (`itemImageFields` in admin/blocks.js), plus a gallery's own `url`, which is
+// an image address by construction. The two predicates are deliberately
+// exclusive: a field is somewhere a visitor is SENT, or it is something an
+// <img> points at, and the control it gets is not the same either way.
+function isImageField(d, field) {
+  if (d.gallery) return field === 'url';
+  return (d.itemImageFields || []).indexOf(field) > -1;
+}
+
+// A picture field: the thumbnail you can see, a place to drop a photograph off
+// the desktop, the library behind the same button, and the address box that was
+// always here. The box stays because not every picture on the site is one of
+// ours — a partner's logo is often hosted by the partner — and removing the one
+// way to type an address would be a capability lost to make a gesture prettier.
+function imageField(spec, value, placeholder, label) {
+  var name = value ? String(value).split('/').pop() : '';
+  return '<div class="ed-img" data-imgdrop="' + esc(spec) + '">' +
+    '<button type="button" class="ed-media" data-a="pickimg" data-v="' + esc(spec) + '" data-k="pickimg:' + esc(spec) + '">' +
+      '<span class="ed-media-thumb"' + (value ? ' style="background-image:url(' + esc(value) + ')"' : '') + '>' +
+        (value ? '' : '▣') + '</span>' +
+      '<span class="ed-media-b"><span class="ed-media-n">' + esc(name || 'No picture yet') + '</span>' +
+      '<span class="ed-media-c">Drop a photo here, or choose from the library</span></span></button>' +
+    '<input class="ed-field" data-in="' + esc(spec) + '" data-k="' + esc(spec) + '"' +
+      ' value="' + esc(value || '') + '" placeholder="' + esc(placeholder) + '" aria-label="' + esc(label) + '">' +
+    '</div>';
+}
+
 function linkPicker(spec) {
   var groups = tlcPickerGroups(S.linkTargets || []);
   if (!groups.length) return '';
@@ -1709,6 +1774,9 @@ function itemsSection(b, d) {
     var fields = inputFields.map(function (f) {
       var ph = d.itemPlaceholders[f] || (f === 'url' ? 'https://…' : f);
       if (isLinkField(d, f)) return linkField('item:' + i + ':' + f, it[f], ph);
+      if (isImageField(d, f)) {
+        return imageField('item:' + i + ':' + f, it[f], ph, d.itemLabel + ' ' + (i + 1) + ' picture');
+      }
       return '<input class="ed-field" data-in="item:' + i + ':' + f + '" data-k="item:' + i + ':' + f + '"' +
         ' value="' + esc(it[f] || '') + '" placeholder="' + esc(ph) + '" aria-label="' + esc(d.itemLabel + ' ' + (i + 1) + ' ' + f) + '">';
     }).join('');
@@ -1935,6 +2003,7 @@ function inspectorAction(action, value) {
       break;
     }
     case 'photo': openPicker(b.id, 'photo'); break;
+    case 'pickimg': openPicker(b.id, 'photo', value); break;
     case 'video': openPicker(b.id, 'video'); break;
     case 'gallery': openPicker(b.id, 'gallery'); break;
     default: break;
@@ -2450,6 +2519,55 @@ function bindDragAndDrop() {
     for (var i = 0; i < rows.length; i++) rows[i].classList.remove('is-drop-before', 'is-drop-after');
   });
 
+  // ⚠ A photograph dropped anywhere ELSE would make the browser navigate to
+  // the file — the editor replaced by a JPEG, and whatever was not yet
+  // autosaved gone with it. Missing a 44px thumbnail by half an inch must not
+  // cost somebody their afternoon, so a file drop that no field claimed is
+  // swallowed here and says where it should have gone.
+  ['dragover', 'drop'].forEach(function (type) {
+    document.addEventListener(type, function (e) {
+      // A picture field claims its own drop on the way up and prevents the
+      // default there; only what nothing claimed reaches this.
+      if (e.defaultPrevented || !draggingFiles(e)) return;
+      e.preventDefault();
+      // The cursor says no, so the invitation is not extended to the whole
+      // window just because the whole window has to listen.
+      if (type === 'dragover') { try { e.dataTransfer.dropEffect = 'none'; } catch (_) {} return; }
+      toast('Drop a photo onto a picture field to use it');
+    });
+  });
+
+  // Dropping a photograph onto a picture field. Delegated off the panel, which
+  // is rebuilt on every change — handlers bound to the fields themselves would
+  // be thrown away by the first edit, so the second drop would silently do
+  // nothing. Same trap the row grips are wired around above.
+  //
+  // A picture field sits INSIDE a row, so a card being dragged by its grip
+  // passes over other cards' thumbnails on the way. What keeps the two apart is
+  // that a row drag carries no files, so draggingFiles() is false — the
+  // S.rowDrag check below is belt and braces on top of that, said out loud
+  // because the two gestures share this element and a future change to either
+  // should have to notice.
+  ['dragover', 'dragleave', 'drop'].forEach(function (type) {
+    el.edInspBody.addEventListener(type, function (e) {
+      if (S.rowDrag) return;
+      var zone = e.target.closest ? e.target.closest('[data-imgdrop]') : null;
+      if (!zone || !draggingFiles(e)) return;
+      e.preventDefault();
+      if (type === 'dragleave') {
+        // Moving over a child fires dragleave on the parent. Only a pointer
+        // that has actually left the box should put the highlight out.
+        if (zone.contains(e.relatedTarget)) return;
+        zone.classList.remove('is-over');
+        return;
+      }
+      if (type === 'dragover') { zone.classList.add('is-over'); return; }
+      zone.classList.remove('is-over');
+      var file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file) dropImage(zone, file);
+    });
+  });
+
   // palette chips
   el.edPalChips.addEventListener('dragstart', function (e) {
     var c = e.target.closest('.ed-chip');
@@ -2666,9 +2784,12 @@ function bindPublish() {
 // ── media library ──────────────────────────────────────────────────────────
 var lastFocus = null;
 
-function openPicker(id, kind) {
+// `target` names the field the chosen photo lands in — a spec like
+// 'item:2:img', or 'photo' for the block's own. Absent means the block's photo
+// or video, which is what every caller before picture fields existed meant.
+function openPicker(id, kind, target) {
   lastFocus = document.activeElement;
-  S.picker = { id: id, kind: kind, chosen: [], staged: null, error: '' };
+  S.picker = { id: id, kind: kind, target: target || null, chosen: [], staged: null, error: '' };
   renderModal();
 }
 
@@ -2872,12 +2993,100 @@ async function uploadPhoto(file) {
   };
 }
 
+// Writes a picture address into whichever field asked for it. Its own path
+// rather than a share of inspectorInput(): that one is the debounced keystroke
+// handler, and choosing a photo is a finished decision — it saves and redraws
+// now rather than 700ms after the last thing somebody typed.
+function setImageSpec(id, spec, url, name) {
+  var b = findBlock(id);
+  if (!b) return;
+  if (spec === 'photo') {
+    patch(id, { photo: url }, 'Changed photo · ' + name, 'rerender');
+    return;
+  }
+  var parts = spec.split(':');
+  if (parts[0] !== 'item') return;
+  var i = Number(parts[1]);
+  var items = (b.items || []).map(function (it) { return Object.assign({}, it); });
+  if (!items[i]) return;
+  items[i][parts[2]] = url;
+  patch(id, { items: items }, 'Changed picture · ' + name, 'rerender');
+}
+
+// ⚠ ON dragover THE FILE LIST IS EMPTY. Every browser withholds the files
+// until the drop actually happens, so a handler that asks `dataTransfer.files`
+// whether this is a file drag says no every time and the field never lights up.
+// `types` is the one thing readable the whole way through.
+function draggingFiles(e) {
+  var t = e.dataTransfer && e.dataTransfer.types;
+  if (!t) return false;
+  return Array.prototype.indexOf.call(t, 'Files') > -1;
+}
+
+// The library refuses a photo with no description, and it is right to — an
+// undescribed picture on a church website is one a blind visitor is simply not
+// shown. So a drop borrows the description already on the row rather than
+// inventing one: for a card grid the heading IS the alt the page renders
+// (alt="the card's heading"), so there is nothing extra to type and no second
+// copy to fall out of step. With nothing to borrow it says so in a sentence,
+// rather than letting the server answer with a 400 nobody can act on.
+function altSourceFor(b, spec) {
+  if (spec === 'photo') {
+    return { text: (b.photoAlt || '').trim(),
+      asks: 'Describe the photo in the box below first — a screen reader reads that description in place of the picture.' };
+  }
+  var parts = spec.split(':');
+  var it = (b.items || [])[Number(parts[1])];
+  var label = (def(b.type).itemLabel || 'row').toLowerCase();
+  return { text: ((it && it.title) || '').trim(),
+    asks: 'Give this ' + label + ' a heading first — the heading is what a screen reader reads for the picture.' };
+}
+
+async function dropImage(zone, file) {
+  var spec = zone.dataset.imgdrop;
+  var id = S.selectedId;
+  var b = findBlock(id);
+  if (!b) return;
+  if (!/^image\//.test(file.type)) {
+    toast('That is not a picture — drop a JPEG, PNG, WebP or GIF');
+    return;
+  }
+  var alt = altSourceFor(b, spec);
+  if (!alt.text) { toast(alt.asks); return; }
+
+  var line = zone.querySelector('.ed-media-c');
+  var was = line ? line.textContent : '';
+  zone.classList.add('is-busy');
+  if (line) line.textContent = 'Adding ' + file.name + '…';
+  try {
+    var up = await uploadPhoto(file);
+    // It joins the library on the way past. A photo that exists only on one
+    // card is one nobody can reuse and one the Media screen cannot see to
+    // report on — which is where "used nowhere" and the size warnings live.
+    var item = await addMedia({
+      kind: 'photo', url: up.url, thumb_url: up.thumb_url, filename: up.filename,
+      alt: alt.text, meta: up.meta, bytes: up.bytes,
+    });
+    // ⚠ Re-read the block: the upload is a round trip, and the inspector may
+    // have been redrawn or another block selected while it was in flight.
+    if (!findBlock(id)) { toast('Photo added to the library'); return; }
+    setImageSpec(id, spec, item.url, item.filename);
+    toast('Photo added' + (up.saved ? ' · ' + up.saved : ''));
+  } catch (err) {
+    zone.classList.remove('is-busy');
+    if (line) line.textContent = was;
+    toast(String((err && err.message) || err) || 'Could not add that photo');
+  }
+}
+
 function applyMedia(url, alt, name) {
   var p = S.picker;
   if (!p) return;
   var b = findBlock(p.id);
   if (!b) return;
-  if (p.kind === 'video') {
+  if (p.target) {
+    setImageSpec(p.id, p.target, url, name);
+  } else if (p.kind === 'video') {
     patch(p.id, { video: url }, 'Changed video · ' + name, 'rerender');
   } else {
     patch(p.id, { photo: url, photoAlt: alt || b.photoAlt || '' }, 'Changed photo · ' + name, 'rerender');

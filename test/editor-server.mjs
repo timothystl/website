@@ -14,6 +14,7 @@ import {
   migrateLegacyPage, starterBlocks, newBlock, makeBlockId, templateOf, cleanText,
 } from '../admin/blocks.js';
 import { slugify, uniqueSlug, pageRename } from '../admin/pages.js';
+import { LINKS_JS } from '../admin/links.js';
 import { PAGE_SEEDS } from '../admin/page-seeds.js';
 export { PAGE_SEEDS };
 
@@ -113,7 +114,18 @@ export function createEditorServer(seed = {}) {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       // No TinyMCE in the harness (the container has no egress) — the editor
       // must degrade to plain contenteditable, which this exercises.
-      return res.end(EDITOR_HTML.replace('/*TLCB_EDITOR_CSS*/', editorPhoneCss()).replace('<!--TLCB_TINYMCE-->', ''));
+      //
+      // ⚠ LINKS_JS is NOT optional, and leaving it out was a real hole: the
+      // inspector calls tlcPickerGroups() to draw any link field, so without it
+      // renderInspector() threw ReferenceError for every block type that has
+      // one — card grid, button bar, link tiles, partners — and the panel read
+      // "Nothing selected" beside a plainly selected block. The Worker does
+      // this replacement (tlc-admin-worker.js); a harness that does not is a
+      // harness that cannot see those types at all.
+      return res.end(EDITOR_HTML
+        .replace('/*TLCB_EDITOR_CSS*/', editorPhoneCss())
+        .replace('/*TLCB_LINKS_JS*/', LINKS_JS)
+        .replace('<!--TLCB_TINYMCE-->', ''));
     }
 
     if (p.startsWith('/ministries/api/page/')) {
