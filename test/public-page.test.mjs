@@ -13,7 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { execSync } from 'node:child_process';
-import { renderPage, newBlock, migrateLegacyPage, sanitizeBlocks, BLOCK_DEFS, BLOCK_CSS } from '../admin/blocks.js';
+import { renderPage, newBlock, migrateLegacyPage, sanitizeBlocks, BLOCK_DEFS, BLOCK_CSS, BG } from '../admin/blocks.js';
 
 // Playwright is installed globally in the dev container, not as a project
 // dependency (the repo has no package.json on purpose). ESM ignores NODE_PATH,
@@ -324,6 +324,74 @@ console.log('\na block ships its own script, and both paths run it');
   const reads = (await page.textContent('[data-countdown]')).trim();
   ok(reads !== '—' && /\d+d /.test(reads),
     `the countdown is ticking rather than frozen — reads ${JSON.stringify(reads)}`);
+  await ctx.close();
+}
+
+console.log('\nthe Give button is legible on every field');
+{
+  // ⚠ THE BUG THIS GUARDS WAS REPORTED AS "the background of the box blends
+  // into the give button". .tlcb-chip was declared twice in BLOCK_CSS — once
+  // for this button and once, 385 lines later, for the Coming-up strip's pill.
+  // Equal specificity, so source order decided: the button lost its gold fill
+  // to the strip's chip-bg background and kept its near-black ink. On the Ink
+  // navy field that is #1B1608 on 8% cream over navy, about 1.3:1.
+  //
+  // Asserting the CONTRAST rather than the hex is what makes this worth
+  // having: it fails for any future rule that repaints the button, not only
+  // for a reintroduced duplicate of this one class name.
+  // ⚠ ALPHA IS PART OF THE ANSWER, NOT NOISE TO BE DROPPED. The first version
+  // of this helper read the first three numbers and ignored the fourth, which
+  // made the very wash it was written to catch — rgba(245,240,230,0.08) — look
+  // like opaque cream and score 14:1 against the near-black label. It would
+  // have passed on the bug. A translucent fill has no contrast that can be
+  // asserted at all, because what it composites over is a gradient, so the
+  // alpha is checked separately and a translucent button fails outright.
+  const parse = (c) => {
+    const n = c.match(/[\d.]+/g).map(Number);
+    return { r: n[0], g: n[1], b: n[2], a: n.length > 3 ? n[3] : 1 };
+  };
+  const lum = ({ r, g, b }) => {
+    const f = (v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4); };
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+  };
+  const ratio = (a, b) => {
+    const [x, y] = [lum(parse(a)), lum(parse(b))].sort((m, n) => n - m);
+    return (x + 0.05) / (y + 0.05);
+  };
+
+  const inkNavy = BG.findIndex((b) => b.name === 'Ink navy');
+  const navy = BG.findIndex((b) => b.name === 'Navy');
+  for (const [name, bg] of [['Ink navy', inkNavy], ['Navy', navy], ['Parchment', 0]]) {
+    const html = renderPage(sanitizeBlocks([Object.assign(newBlock('give'), { bg })]),
+      { slug: 'news', withCss: false });
+    const { page, ctx } = await visitEdged('news', html, { edged: false });
+    const seen = await page.evaluate(() => {
+      const el = document.querySelector('.tlcb-chip--go');
+      if (!el) return null;
+      const cs = getComputedStyle(el);
+      return { bg: cs.backgroundColor, ink: cs.color };
+    });
+    ok(seen, `the Give button renders on ${name}`);
+    if (seen) {
+      // Opaque first — this is the assertion that fails on the reported bug.
+      eq(parse(seen.bg).a, 1,
+        `the Give button has a fill of its own on ${name} rather than a wash over the field — got ${seen.bg}`);
+      const r = ratio(seen.bg, seen.ink);
+      ok(r >= 4.5, `and its label is legible on ${name} — ${r.toFixed(2)}:1 (needs 4.5)`);
+    }
+    await ctx.close();
+  }
+
+  // And the Coming-up strip keeps its own pill, which is the half that would
+  // go unnoticed if the fix were made by deleting a rule instead of scoping it.
+  const strip = renderPage(sanitizeBlocks([newBlock('chips')]), { slug: 'news', withCss: false,
+    data: { news: [{ id: 1, title: 'Christmas Market', event_date: '2099-12-06' }] } });
+  const { page, ctx } = await visitEdged('news', strip, { edged: false });
+  const pill = await page.evaluate(() => {
+    const el = document.querySelector('.tlcb-chip-row .tlcb-chip');
+    return el ? getComputedStyle(el).borderRadius : null;
+  });
+  eq(pill, '999px', 'the Coming-up strip still gets its rounded pill');
   await ctx.close();
 }
 

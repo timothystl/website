@@ -462,7 +462,11 @@ var S = {
   selectedId: null, device: 'desktop', group: null, paletteOpen: true,
   // Which surface the phone is showing. Ignored above the breakpoint.
   mobileView: 'canvas',
-  changes: [], history: [], saved: null, dirty: false,
+  // ⚠ TWO STACKS, AND `future` IS CLEARED BY EVERY NEW EDIT — see pushHistory.
+  // Without that, undoing three steps and then typing something leaves a redo
+  // stack describing a branch that was just abandoned, and pressing Redo
+  // assembles a page that never existed.
+  changes: [], history: [], future: [], saved: null, dirty: false,
   dragId: null, dragType: null, dragSection: null, dropIndex: null,
   // A drag INSIDE the inspector — one of a block's own rows moving within its
   // own array. Kept apart from dragId above, which moves a whole block between
@@ -529,6 +533,7 @@ function shellHtml() {
         '<button type="button" data-device="phone">Phone</button>' +
       '</div>' +
       '<button type="button" class="ed-undo" id="edUndo">↺ Undo</button>' +
+      '<button type="button" class="ed-undo" id="edRedo">↻ Redo</button>' +
       '<span style="display:flex;gap:1px">' +
         '<button type="button" class="ed-publish" id="edPublish">Publish</button>' +
         '<button type="button" class="ed-publish ed-publish-more" id="edMore" aria-haspopup="dialog" aria-expanded="false" aria-label="Publishing options">▾</button>' +
@@ -596,7 +601,7 @@ function shellHtml() {
 }
 
 function cacheEls() {
-  ['edTitle', 'edPill', 'edSaved', 'edView', 'edUndo', 'edPublish', 'edHint', 'edHintX', 'edRail',
+  ['edTitle', 'edPill', 'edSaved', 'edView', 'edUndo', 'edRedo', 'edPublish', 'edHint', 'edHintX', 'edRail',
    'edCanvas', 'edPaper', 'edPalTabs', 'edPalChips', 'edPalToggle', 'edInspHead', 'edInspBody',
    'edMTabs',
    'edChanges', 'edChangesHead', 'edModal', 'edToast', 'edMore', 'edPublishPanel',
@@ -677,6 +682,9 @@ function renderTop() {
     : (S.status === 'live' ? 'Published' : 'Draft');
   el.edSaved.textContent = S.saved ? 'Autosaved ' + S.saved : 'No changes yet';
   el.edUndo.disabled = S.history.length === 0;
+  // Disabled rather than hidden: a control that vanishes and reappears is
+  // one the eye has to re-find, and an empty redo stack is the normal state.
+  el.edRedo.disabled = S.future.length === 0;
   el.edPublish.disabled = false;
   el.edView.href = 'https://timothystl.org' + S.path;
 }
@@ -987,6 +995,11 @@ function renderAll() {
 function pushHistory() {
   S.history.push(JSON.stringify(S.blocks));
   if (S.history.length > 40) S.history.shift();
+  // ⚠ A NEW EDIT ABANDONS THE REDO BRANCH, and this line is the whole
+  // correctness of redo. Undo three steps, type something, press Redo: without
+  // this you get a page assembled from a branch that no longer exists, which
+  // looks like the editor inventing content.
+  S.future.length = 0;
 }
 function note(text) {
   if (!text) return;
@@ -1282,15 +1295,34 @@ async function resetBlock(id) {
   renderTop(); renderChanges(); scheduleSave();
 }
 
+// ⚠ NEITHER OF THESE MAY GO THROUGH pushHistory(), which clears the redo
+// branch — stepping along the history is not a new edit, and routing them
+// through it would make Undo destroy the thing Redo exists to reach.
 async function undo() {
   if (!S.history.length) return;
   var prev = JSON.parse(S.history.pop());
+  S.future.push(JSON.stringify(S.blocks));
+  if (S.future.length > 40) S.future.shift();
   S.blocks = prev;
+  // The block that was selected may not exist in the state being restored.
   S.selectedId = null;
   note('Undid last change');
   await rerender();
   renderTop(); renderChanges(); scheduleSave();
   say('Undid last change');
+}
+
+async function redo() {
+  if (!S.future.length) return;
+  var next = JSON.parse(S.future.pop());
+  S.history.push(JSON.stringify(S.blocks));
+  if (S.history.length > 40) S.history.shift();
+  S.blocks = next;
+  S.selectedId = null;
+  note('Redid last change');
+  await rerender();
+  renderTop(); renderChanges(); scheduleSave();
+  say('Redid last change');
 }
 
 // ── in-place text editing ──────────────────────────────────────────────────
@@ -2275,6 +2307,7 @@ function bindStatic() {
     if (tab) { S.group = tab.dataset.group; S.paletteOpen = true; renderPalette(); return; }
     if (e.target.closest('#edPalToggle')) { S.paletteOpen = !S.paletteOpen; renderPalette(); return; }
     if (e.target.closest('#edUndo')) { undo(); return; }
+    if (e.target.closest('#edRedo')) { redo(); return; }
   });
 
   // rail
@@ -2458,11 +2491,20 @@ function bindStatic() {
   document.addEventListener('keydown', function (e) {
     // Escape clears the selection so the whole page is visible again
     if (e.key === 'Escape' && !S.picker && S.selectedId) { select(null); return; }
-    // Undo. Typing inside a field is the browser's own undo, not the editor's,
-    // so leave that alone — taking it over would be worse than not having it.
-    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+    // Undo and redo. Typing inside a field is the browser's own undo, not the
+    // editor's, so leave that alone — taking it over would be worse than not
+    // having it. Both are checked against the same guard for that reason.
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z')) {
       var t = e.target;
       if (t && t.closest && (t.closest('[contenteditable="true"]') || t.closest('input, textarea, select'))) return;
+      // Shift is what tells them apart, which is why the undo branch has always
+      // tested for its absence rather than ignoring it.
+      if (e.shiftKey) {
+        if (!S.future.length) return;
+        e.preventDefault();
+        redo();
+        return;
+      }
       if (!S.history.length) return;
       e.preventDefault();
       undo();
