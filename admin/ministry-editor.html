@@ -908,9 +908,13 @@ function styleVars(b) {
     '--tlcb-link-ink:' + (bg.link || '#2E7EA6'),
     '--tlcb-rule:' + (bg.rule || (bg.dark ? 'rgba(245,240,230,.14)' : '#E7DFD1')),
     '--tlcb-chip-bg:' + (bg.chip || 'rgba(0,0,0,.04)'),
-    '--tlcb-body:' + sz.body + 'px',
-    '--tlcb-head:' + sz.head + 'px',
-    '--tlcb-hero:' + sz.hero + 'px',
+    // ⚠ Byte-identical to wrapperVars() in admin/blocks.js — test/editor.test.mjs
+    // asserts exactly that against a server render. The scale itself lives on
+    // the page wrapper, not here, so the canvas follows the Appearance screen
+    // the same way the public page does.
+    '--tlcb-body:calc(' + sz.body + 'px * var(--tlcb-scale, 1))',
+    '--tlcb-head:calc(' + sz.head + 'px * var(--tlcb-head-scale, 1))',
+    '--tlcb-hero:calc(' + sz.hero + 'px * var(--tlcb-head-scale, 1))',
     '--tlcb-gap:' + b.gap + 'px',
     '--tlcb-height:' + b.height + 'px',
     '--tlcb-media-order:' + (b.side === 'right' ? 2 : 0),
@@ -1493,6 +1497,61 @@ function inspectorSections(b, d) {
       '</div></div>';
   }
 
+  // 1c. How the block is set apart from the page behind it. Four chips, which
+  // is the "four options or fewer is chips, not a select" rule — a select would
+  // hide three of the four behind a click. The note follows the choice rather
+  // than listing all four, so the panel says what THIS block is doing.
+  if (d.shadow) {
+    var shNow = b.shadow || 'none';
+    var shDef = (C.SHADOWS || []).filter(function (s) { return s.key === shNow; })[0]
+      || (C.SHADOWS || [])[0] || { note: '' };
+    out += '<div class="ed-sec"><span class="ed-lab">Edge</span><div class="ed-chips">' +
+      (C.SHADOWS || []).map(function (s) {
+        return chip('shadow', s.key, s.label, shNow === s.key);
+      }).join('') +
+      '</div><span class="ed-note">' + esc(shDef.note || '') + '</span></div>';
+  }
+
+  // Which fund a Give button lands on. A select rather than chips because the
+  // list is however many funds the Giving screen holds, not a fixed short set.
+  if (d.giveFund) {
+    var funds = S.config.giveFunds || [];
+    if (!funds.length) {
+      out += '<div class="ed-sec"><span class="ed-lab">Fund</span>' +
+        '<span class="ed-note">No funds set up yet. Add them on the Giving screen and they will appear here.</span></div>';
+    } else {
+      var picked = funds.filter(function (f) { return Number(f.id) === Number(b.giveFund); })[0];
+      out += '<div class="ed-sec"><label class="ed-lab" for="edGiveFund">Fund</label>' +
+        '<select class="ed-field" id="edGiveFund" data-in="giveFund" data-k="giveFund">' +
+        '<option value=""' + (picked ? '' : ' selected') + '>Let the giving page ask</option>' +
+        funds.map(function (f) {
+          return '<option value="' + esc(String(f.id)) + '"' +
+            (picked && Number(picked.id) === Number(f.id) ? ' selected' : '') + '>' + esc(f.name) + '</option>';
+        }).join('') +
+        '</select><span class="ed-note">' + esc(picked
+          ? 'The button reads "Give to ' + picked.name + '" and opens Tithe.ly on that fund.'
+          : 'The button hands off to give.timothystl.org, where the giver picks the fund. Choose one here for an appeal to a particular fund.') +
+        '</span></div>';
+    }
+  }
+
+  // Who a contact block writes to. Blank is the normal case and the note says
+  // so — the point of the church-details record is that changing the address
+  // once changes it everywhere, and an address typed here opts this one block
+  // out of that.
+  if (d.contactEmail) {
+    var chEmail = S.config.churchEmail || '';
+    out += '<div class="ed-sec"><label class="ed-lab" for="edCtEmail">Send email to</label>' +
+      '<input class="ed-field" id="edCtEmail" type="email" data-in="contactEmail" data-k="contactEmail"' +
+      ' value="' + esc(b.contactEmail || '') + '" placeholder="' + esc(chEmail || 'office@timothystl.org') + '">' +
+      '<span class="ed-note">' + esc(b.contactEmail
+        ? 'This block writes to the address above. It will not follow when the church email changes under Church details — clear it to go back to doing that.'
+        : (chEmail
+            ? 'Using the church email, ' + chEmail + '. Leave it blank unless this block should reach somebody else.'
+            : 'Using the church email from Church details. Leave it blank unless this block should reach somebody else.')) +
+      '</span></div>';
+  }
+
   // 2 + 3. Photo position and column split
   if (b.type === 'textphoto') {
     out += '<div class="ed-sec"><span class="ed-lab">Photo position</span><div class="ed-chips">' +
@@ -1853,6 +1912,15 @@ function inspectorAction(action, value) {
         al === 'center' ? 'Centered' : al === 'right' ? 'Right-aligned' : 'Left-aligned', 'rerender');
       break;
     }
+    case 'shadow': {
+      var sh = (C.SHADOWS || []).filter(function (s) { return s.key === value; })[0];
+      if (!sh) return;
+      // Structural: the class lives on the wrapper the SERVER writes, so a
+      // style-mode patch would set a custom property nothing reads — the same
+      // ruling the width chip carries.
+      patch(b.id, { shadow: sh.key }, 'Edge → ' + sh.label, 'rerender');
+      break;
+    }
     // Both are structural: they change what the renderer emits, not just a
     // custom property on the node, so the Worker re-renders rather than the
     // editor patching a variable that nothing reads.
@@ -2040,7 +2108,15 @@ function inspectorInput(target) {
     patch(b.id, { partnerIds: next }, 'Changed which partners are shown', 'rerender');
     return;
   }
+  if (spec === 'giveFund') {
+    // Structural: the button's label and its address are both built from this
+    // at render time, so the Worker redraws rather than the editor patching a
+    // custom property nothing reads.
+    patch(b.id, { giveFund: Number(value) || 0 }, 'Changed the fund', 'rerender');
+    return;
+  }
   if (spec === 'url') b.url = value;
+  else if (spec === 'contactEmail') b.contactEmail = value;
   else if (spec === 'photoAlt') b.photoAlt = value;
   else if (spec === 'cardBody') b.cardBody = value;
   else if (spec.indexOf('cardlink:') === 0) {

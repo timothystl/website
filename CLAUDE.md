@@ -522,6 +522,130 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### Dinger's ten (v5.5.0, 2026-08-16)
+
+A list, answered one clarifying question at a time and then built. What follows
+is what each turned out to be, because several were not what the item said.
+
+**1. Text size is a multiplier, and there is one of them.** *"15 and 17pt is
+too small"*, and all three roles, body copy first. `TEXT_SIZES` in
+`admin/appearance.js`, beside the typeface selector and for the same reason: a
+site whose text size is decided a block at a time reads like several sites.
+- **⚠ A MULTIPLIER, NOT A SET OF SIZES.** Every size on the site was chosen in
+  proportion to the others; a control that replaced them would flatten that.
+- **⚠ Headings take a gentler curve than body copy.** A hero at 64px times the
+  body's 1.22 is 78px, which pushes the first paragraph off the screen. Two
+  numbers, `--tlc-text-scale` and `--tlc-head-scale`.
+- **⚠ Normal is exactly 1 on both, and the stylesheet declares 1.** Same rule
+  the typeface default carries: what `public/styles.css` says is what renders
+  before the appearance fetch lands and forever if the admin is unreachable. If
+  they disagreed, every page would visibly resize on every load.
+- **All 75 `font-size` declarations in `public/styles.css` go through one of
+  the two**, including the three `clamp()`s — scaling a clamp means scaling all
+  three arguments or the curve changes shape. A test asserts none is missed, so
+  the control is whole rather than reaching the rules somebody remembered.
+- Blocks scale from the page wrapper: `wrapperVars` emits `calc(17px *
+  var(--tlcb-scale, 1))` and `pageFontVars` writes the scale, because
+  `wrapperVars` cannot see the appearance record and a block that stored its own
+  copy would keep the old size. `styleVars()` in the editor mirrors it exactly.
+- **⚠ Still open: the 228 inline `font-size` values in `public/index.html`.**
+  Those are on the unconverted hardcoded pages and do not follow the setting.
+  They retire as pages are published from the editor — the same schedule
+  `--serif`/`--sans` are on.
+
+**2. The calendar was squished, and height was only half of it.** `/calendar`
+and the `/news` embed, one helper (`tlcLoadCalendar`) so they cannot drift.
+600px gave six week-rows under 90px each — one event and a "+2 more" on any busy
+week, so the thing the calendar exists to show was the thing it hid. Now 800px.
+- **⚠ A MONTH GRID IS THE WRONG VIEW ON A PHONE AT ANY HEIGHT.** Seven columns
+  across 390px is about 50px a day. Under 700px it loads Google's AGENDA view.
+- Decided once, when the frame gets its address — deliberately not on resize,
+  because reloading the embed under somebody who has navigated to March is
+  worse than a laptop window dragged narrow keeping the grid.
+
+**3. Contact details is a block now.** The info card could already show an
+address, but only as a slot on a banner, so a plain page had no way to say "here
+is how you reach us" without somebody typing it into a text block, where it goes
+stale. It reads the church-details record, so it joins the sermon block and the
+staff grid as self-filling. `church_facebook` / `church_instagram` /
+`church_youtube` join that record — the details screen is data-driven, so they
+appeared on it with no route change.
+- **⚠ A blank account is left off entirely.** An icon linking nowhere is worse
+  than no icon, which is also why there is no row for a network the church does
+  not use.
+- **⚠ `tel:` carries digits only.** A href with brackets and a space is one some
+  dialers refuse, and the failure is a phone that does nothing.
+
+**4. And it can write to somebody other than the office.** `contactEmail` on the
+block. **⚠ Blank is the normal case and means "read the record"** — that is what
+keeps change-it-once-everywhere-follows working for every block nobody
+overrode, and the inspector says plainly that a typed address will not follow.
+It is a plain address, never a URL: **the colon and slash are excluded, because
+without them `mailto:x@y.z` passes and the render emits `mailto:mailto:x@y.z`**,
+a link that silently opens nothing.
+
+**5. Edge: None · Soft · Lifted · Lined.** Four, not the three asked for —
+"lined" may have been "lifted" mistyped, and both are useful; Lined is a
+hairline, which is what actually separates a block on a pale field.
+- **⚠ None adds no class and no declaration**, so an untouched page renders the
+  CSS it always did, and it is **not even stored**: putting the default in the
+  base sanitize object adds the key to all 25 generated seeds, which the seed
+  suite catches immediately (it asserts each seed is already sanitized).
+- **⚠ An exclusion list, not a per-type flag** — deliberately unlike
+  `ALIGNABLE_TYPES`. Alignment is a real question per type; "can this be set
+  apart from the page" is not. Spacer has no surface; the three banners run edge
+  to edge, where a shadow draws a box around the browser window.
+
+**6. A Give button can land on a named fund** — the CCS appeal generalized,
+which until now was two buttons hand-wired in `public/index.html` and rewritten
+in the browser. **⚠ The block stores the fund's ID and nothing else.** A block's
+URL is frozen the moment it is published, so a stored Tithe.ly address would go
+on charging to the old form after the office changed the base link, and the page
+would still look perfect. `withFund()` joins `withAmountAndFund()` in
+`give-link.js` — one definition — and **replaces** the base `fundId` rather than
+appending a second. Every failure (fund deleted, no Tithe.ly id, base link
+unset, admin unreachable) ends in a button that still takes a gift.
+
+**7. The whole card is the link.** Only "Learn more" was clickable, so a click
+anywhere else on a card that visibly lifts did nothing.
+- **⚠ An `<a>` on the public page, a `<div>` in the editor.** The heading and
+  body inside are contenteditable, and clicking into them inside an anchor
+  navigates instead of putting the caret there.
+- **⚠ Never a nested anchor** — the label becomes a span.
+- **⚠ A card with no address loses the hover lift too.** Rising under the
+  pointer is a promise that clicking does something. It also stops emitting
+  `href="#"`, which is the dead link this repo's own rule is about.
+
+**8. The pages beneath a section, in the aside.** A fifth layout,
+`sectionside`. **⚠ CHOOSING THE LAYOUT IS THE PER-PAGE SWITCH** — *"can be
+automatic if the subpage view is turned on for that group, not every one might
+need it"*. A page-level flag would have meant a column, a control on the Page
+tab, and a second thing to keep in step with the layout it only makes sense
+alongside. **⚠ It must not also append `section`'s list below the content** —
+that is the same list twice on one page, and a test pins it.
+
+**9. The tile look, twice.** Meeting times gains Service times' `tiles` layout
+(`rows` stays the default, so every existing block is unchanged), and **Info
+tiles** is the new type: the same `.tlcb-tile` rules with the words typed on the
+page. A separate type rather than a source switch on Service times, because the
+two hold different things and a switch would silently discard one shape.
+- **⚠ `tileAlt()` is which tile is gold, in one place.** A block has one
+  background and this layout needs two, so the alternate carries its colors
+  inline. That was written inside the Service times branch; three copies is
+  three chances for one to drift into a different gold.
+- `.tlcb-tiles-n` is `auto-fit`, not the pair grid — three groups in a
+  two-column grid is a lone tile on a second row.
+
+**10. The hero was the one banner whose words did not line up with the page.**
+Its block padding is zeroed so the field runs edge to edge — right — and nothing
+put the content back on the content column, so the title sat 28px from the glass
+while every heading below it began at `(100% - 1100px)/2`. Photo banner never
+had this: it is not excluded, so it inherits the same inset. The hero now takes
+the **identical expression**, not a nudge that happens to agree today.
+
+Run: `node admin/blocks.test.mjs` (2493), `node admin/appearance.test.mjs`
+(106), the integration suite, and the browser suites.
+
 ### A card's picture is dropped on, not typed into (v5.4.0, 2026-08-16)
 
 Dinger, with the `/ministries` card grid open and Card 1's image field showing

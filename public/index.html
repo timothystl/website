@@ -881,7 +881,7 @@ if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
         <span class="eyebrow">On the calendar</span>
         <h2>What's coming up</h2>
         <div style="border-radius:var(--r-md);overflow:hidden;border:1px solid var(--border);margin-top:18px;">
-          <iframe id="gcal-frame-news" src="" data-src="https://calendar.google.com/calendar/embed?src=calendar%40timothystl.org&src=c_7f6d3db77b48c01af48592e21b2743d22fdf2b221d9d3c4e0c02680b73b89041%40group.calendar.google.com&ctz=America%2FChicago&mode=MONTH&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0" style="border:0;display:block;width:100%;height:600px;" frameborder="0" scrolling="no" title="Timothy Lutheran Church calendar" loading="lazy"></iframe>
+          <iframe id="gcal-frame-news" src="" data-src="https://calendar.google.com/calendar/embed?src=calendar%40timothystl.org&src=c_7f6d3db77b48c01af48592e21b2743d22fdf2b221d9d3c4e0c02680b73b89041%40group.calendar.google.com&ctz=America%2FChicago&mode=MONTH&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0" style="border:0;display:block;width:100%;height:800px;" frameborder="0" scrolling="no" title="Timothy Lutheran Church calendar" loading="lazy"></iframe>
         </div>
         <div style="margin-top:12px;">
           <a href="https://calendar.google.com/calendar/embed?src=calendar%40timothystl.org&ctz=America%2FChicago" target="_blank" rel="noopener" style="font-family:var(--sans);font-size:13px;color:var(--mid);font-weight:600;">Open in Google Calendar</a>
@@ -919,7 +919,7 @@ if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
   <section class="section section--white">
     <div class="wrap">
       <div style="border-radius:var(--r-md);overflow:hidden;border:1px solid var(--border);">
-        <iframe id="gcal-frame" src="" data-src="https://calendar.google.com/calendar/embed?src=calendar%40timothystl.org&src=c_7f6d3db77b48c01af48592e21b2743d22fdf2b221d9d3c4e0c02680b73b89041%40group.calendar.google.com&ctz=America%2FChicago&mode=MONTH&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0" style="border:0;display:block;width:100%;height:600px;" frameborder="0" scrolling="no" title="Timothy Lutheran Church calendar"></iframe>
+        <iframe id="gcal-frame" src="" data-src="https://calendar.google.com/calendar/embed?src=calendar%40timothystl.org&src=c_7f6d3db77b48c01af48592e21b2743d22fdf2b221d9d3c4e0c02680b73b89041%40group.calendar.google.com&ctz=America%2FChicago&mode=MONTH&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0" style="border:0;display:block;width:100%;height:800px;" frameborder="0" scrolling="no" title="Timothy Lutheran Church calendar"></iframe>
       </div>
       <div style="margin-top:12px;">
         <a href="https://calendar.google.com/calendar/embed?src=calendar%40timothystl.org&ctz=America%2FChicago" target="_blank" style="font-family:var(--sans);font-size:13px;color:var(--mid);font-weight:600;">Open in Google Calendar</a>
@@ -2799,6 +2799,14 @@ function applyAppearance(a) {
     if (a.fonts.body) root.setProperty('--font-body', a.fonts.body);
     if (a.fonts.ui) root.setProperty('--font-ui', a.fonts.ui);
   }
+  // Text size, the same way and for the same reasons — one decision about how
+  // the site reads, landing on two properties every font-size in styles.css
+  // already multiplies by. Both fall back to 1, so an unreachable admin renders
+  // the sizes the stylesheet itself declares.
+  if (a.textScale) {
+    if (a.textScale.body) root.setProperty('--tlc-text-scale', String(a.textScale.body));
+    if (a.textScale.head) root.setProperty('--tlc-head-scale', String(a.textScale.head));
+  }
   if (a.bar) root.setProperty('--nav-bar', a.bar);
   if (a.rule) root.setProperty('--nav-rule', a.rule);
   if (a.cta) root.setProperty('--nav-cta', a.cta);
@@ -3266,8 +3274,7 @@ window.showPage = function(id, addHistory) {
   }
   updatePageMeta(id);
   if (id === 'calendar') {
-    var gcalFrame = document.getElementById('gcal-frame');
-    if (gcalFrame && !gcalFrame.getAttribute('src')) { gcalFrame.src = gcalFrame.dataset.src; }
+    tlcLoadCalendar(document.getElementById('gcal-frame'));
   }
   if (id === 'wol') {
     var wolFrame = document.getElementById('wol-yt-frame');
@@ -3335,8 +3342,34 @@ function loadLegacyNewsPage() {
   loadNewsletters(); loadNewsItems();
   // The calendar iframe is only given its src when the page is actually
   // opened, so /news costs no more to load than it did before.
-  var newsCal = document.getElementById('gcal-frame-news');
-  if (newsCal && !newsCal.getAttribute('src')) { newsCal.src = newsCal.dataset.src; }
+  tlcLoadCalendar(document.getElementById('gcal-frame-news'));
+}
+
+// ── THE GOOGLE CALENDAR EMBED ───────────────────────────────────────────────
+// Dinger: the calendar is squished and you cannot see a full day. Two causes,
+// and only one of them is the height.
+//
+// 1. A month grid needs room. At 600px, six week-rows get under 90px each,
+//    which is one event and a "+2 more" link on any week the church is busy —
+//    so the thing the calendar exists to show is the thing it hides.
+// 2. ⚠ A MONTH GRID IS THE WRONG VIEW ON A PHONE, at any height. Seven columns
+//    across 390px is about 50px a day, which is not enough for a date and a
+//    word. Google's own AGENDA view is a list of days with their events spelled
+//    out, which is what somebody on a phone actually wants.
+//
+// The mode is decided once, when the frame is given its address. It deliberately
+// does NOT follow a resize: reloading the embed under somebody who is reading
+// it — losing the month they had navigated to — is worse than a laptop window
+// dragged narrow keeping the grid.
+var TLC_CAL_PHONE = 700;
+function tlcLoadCalendar(frame) {
+  if (!frame || frame.getAttribute('src')) return;
+  var src = frame.dataset.src || '';
+  var phone = window.innerWidth < TLC_CAL_PHONE;
+  if (phone) src = src.replace('mode=MONTH', 'mode=AGENDA');
+  // The grid needs the height; the agenda list scrolls itself and does not.
+  frame.style.height = (phone ? 520 : 800) + 'px';
+  frame.src = src;
 }
 // The footer is present on every page, so its Partners column is filled here
 // rather than from any single page's load.

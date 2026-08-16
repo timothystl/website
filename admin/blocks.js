@@ -22,7 +22,7 @@
 // The one definition of how an amount becomes a Tithe.ly link — shared with
 // give-landing.js so the block editor and the hardcoded fallback page can
 // never disagree about what a gift of $25 costs. See give-link.js.
-import { withAmountAndFund, parseAmount, fmtAmount, giftForPeriod, giveButtonLabel, GIVE_LINK_JS } from '../give-link.js';
+import { withAmountAndFund, withFund, parseAmount, fmtAmount, giftForPeriod, giveButtonLabel, GIVE_LINK_JS } from '../give-link.js';
 // The countdown needs a real instant, not a date somebody reads — see the note
 // on churchInstant() itself.
 import { churchInstant } from './when.js';
@@ -185,6 +185,28 @@ export const CARD_SIDES = [
   { key: 'left', label: 'Left' },
 ];
 
+// How a block is separated from the page behind it. A short list rather than a
+// free-form shadow, for the reason every other layout control here is: the
+// office should not be choosing blur radii, and a page of eight blocks each
+// with its own hand-tuned shadow is the patchwork this editor exists to
+// prevent.
+//
+// ⚠ `none` MUST add no class and no declaration. It is what every page on the
+// site renders today, so it has to stay byte-identical rather than becoming a
+// rule that happens to agree with the old one.
+//
+// `lined` is a hairline rather than a shadow, and it earns its place: on a
+// field that is already a soft cream, a shadow is nearly invisible and a rule
+// is what actually separates the block. Same control, because "how is this
+// block set apart" is one decision, not two.
+export const SHADOWS = [
+  { key: 'none', label: 'None', note: 'The block sits flat on the page. This is how every page looks today.' },
+  { key: 'soft', label: 'Soft', note: 'A close shadow. Enough to lift the block off the page without announcing itself.' },
+  { key: 'lifted', label: 'Lifted', note: 'A deeper shadow, as though the block were raised toward the reader. Right for one block on a page, not for six.' },
+  { key: 'lined', label: 'Lined', note: 'A hairline border instead of a shadow. Right on a pale field, where a shadow barely shows.' },
+];
+export const SHADOW_KEYS = SHADOWS.map((s) => s.key);
+
 // What the card holds is picked from a short list rather than left as a blank
 // canvas. The first two read the one church-details record, so changing the
 // service times once changes every card on the site — which is the reason to
@@ -301,6 +323,31 @@ export const BLOCK_DEFS = {
     richBody: true, auto: 'map', autoNote: 'The address, phone and email come from the church details in the admin.',
     autoCount: false, split: true,
   },
+  // Everything the church has for reaching it, in one droppable block. The
+  // info card can already show an address or a phone number, but only as a slot
+  // on a banner — so a plain page had no way to say "here is how you reach us"
+  // without somebody typing the address into a text block, where it goes stale
+  // the day the office moves.
+  //
+  // ⚠ IT READS THE RECORD, so it joins the sermon block and the staff grid as
+  // self-filling. The one thing it will store is an email override, and that is
+  // the exception described on `contactEmail` in sanitizeBlock.
+  contact: {
+    label: 'Contact details', glyph: '✆',
+    align: true,
+    defaults: { title: 'How to reach us', body: '', spaceAbove: 24, spaceBelow: 24 },
+    richBody: true,
+    auto: 'contact',
+    autoNote: 'The address, phone, email and social accounts all come from Church details in the admin — change them once and every Contact block on the site follows.',
+    autoCount: false,
+    contactEmail: true,
+    switches: [
+      { key: 'showAddress', label: 'Show the address', def: true,
+        note: 'The street address, with a link to directions. Off when the block is only there to give somebody a phone number.' },
+      { key: 'showSocial', label: 'Show social accounts', def: true,
+        note: 'Facebook, Instagram and YouTube, as named links. An account left blank under Church details is left off entirely — a link to nowhere is worse than no link.' },
+    ],
+  },
   hero: {
     label: 'Hero banner', glyph: '▣',
     defaults: { title: 'Ministry name', eyebrow: 'Ministry', subtitle: 'One line about this ministry.', spaceAbove: 0, spaceBelow: 0 },
@@ -409,10 +456,47 @@ export const BLOCK_DEFS = {
   times: {
     label: 'Meeting times', glyph: '◷',
     align: true,
-    defaults: { title: 'When we gather', spaceAbove: 24, spaceBelow: 24 },
+    defaults: { title: 'When we gather', spaceAbove: 24, spaceBelow: 24, layout: 'rows' },
     items: true, itemFields: ['title', 'body', 'meta'], itemLabel: 'Row',
     itemPlaceholders: { title: 'Who', body: 'When', meta: 'Where' },
     defaultItems: [{ title: 'Group name', body: 'Wednesdays, 7:00 pm', meta: 'Fellowship Hall' }],
+    // The same two layouts Service times has, drawn by the same .tlcb-tile
+    // rules — Dinger asked for the tile look here, and the alternative was a
+    // second set of tile CSS that agrees with the first until somebody
+    // improves one of them.
+    // ⚠ `rows` is the default, so every Meeting times block already on the
+    // site renders exactly as it did.
+    choices: [
+      { key: 'layout', label: 'Shown as', def: 'rows',
+        options: [{ key: 'rows', label: 'A list' }, { key: 'tiles', label: 'Big tiles' }],
+        note: 'Tiles give each group its own card, alternating ink navy and gold — right when the meetings are the reason somebody opened the page. A list is right when they are one detail among several.' },
+    ],
+  },
+
+  // ⚠ THE FREELY-EDITABLE TILES. Service times draws tiles from the one
+  // church-details record, which is what makes it correct everywhere at once
+  // and also what makes it useless for anything that is not a service. Dinger
+  // asked for "cards that drop on the boxes like the service times box but
+  // that I can edit freely", and this is that: the same .tlcb-tile rules, the
+  // same alternating pairing, with the words typed on the page.
+  //
+  // It is a separate type rather than a "source" switch on Service times
+  // because the two hold different things — one has a day and a time read from
+  // a record, the other has whatever somebody wants to put in a box — and a
+  // switch between them would silently discard one shape or the other.
+  tiles: {
+    label: 'Info tiles', glyph: '▤',
+    align: true,
+    defaults: { title: 'At a glance', spaceAbove: 24, spaceBelow: 24 },
+    items: true,
+    itemFields: ['big', 'title', 'body'],
+    richItemFields: ['body'],
+    itemLabel: 'Tile',
+    itemPlaceholders: { big: 'A number or a time', title: 'Tile heading', body: 'One short line.' },
+    defaultItems: [
+      { big: '', title: 'First tile', body: '<p>What this is.</p>' },
+      { big: '', title: 'Second tile', body: '<p>What this is.</p>' },
+    ],
   },
   calendar: {
     label: 'Calendar', glyph: '▩',
@@ -491,6 +575,9 @@ export const BLOCK_DEFS = {
     label: 'Give', glyph: '♡',
     defaults: { title: 'Support this ministry', body: 'Gifts go directly toward this work.', spaceAbove: 24, spaceBelow: 24, url: 'https://give.timothystl.org' },
     url: true, urlLabel: 'Giving link', richBody: true, align: true,
+    // Which fund the button lands on. The list comes from the Giving screen at
+    // render time; the block stores only the id. See the render branch.
+    giveFund: true,
   },
 
   // ── THE TWO GIVING-PAGE BLOCKS ────────────────────────────────────────────
@@ -754,13 +841,32 @@ export const ALIGNABLE_TYPES = new Set(
   Object.keys(BLOCK_DEFS).filter((k) => BLOCK_DEFS[k].align)
 );
 
+// ⚠ AN EXCLUSION LIST, NOT A PER-TYPE FLAG — deliberately unlike ALIGNABLE_TYPES
+// above. Alignment is a real question per type (centering a grid's cells and
+// centering the grid itself are different problems). "Can this block be set
+// apart from the page behind it" is not: anything that paints a surface can,
+// so the interesting information is the four that cannot, and writing those
+// four down beats writing `shadow: true` thirty-six times and missing one.
+//
+// Spacer has no surface — a shadow on a deliberate gap is a line across the
+// page nobody asked for. The three banner types run edge to edge in whole-page
+// mode, and a shadow around a full-bleed field draws a box around the browser
+// window.
+const NO_SHADOW = new Set(['spacer', 'hero', 'photobanner', 'slideshow']);
+export const SHADOWABLE_TYPES = new Set(
+  Object.keys(BLOCK_DEFS).filter((k) => !NO_SHADOW.has(k))
+);
+
 // The design's own four groups, in its order. Structure leads because that is
 // what somebody reaches for first on an empty page — the banner and the shape
 // of it — and Content is what they fill it with afterwards.
 export const GROUPS = [
   { name: 'Structure', types: ['alert', 'photobanner', 'hero', 'slideshow', 'highlight', 'cta', 'quicklinks', 'cardgrid', 'buttons', 'callout', 'partners', 'spacer'] },
   { name: 'Content',   types: ['text', 'textphoto', 'quote', 'values', 'video', 'columns', 'gallery', 'faq', 'sermon', 'news', 'newsfeed', 'staff', 'posts'] },
-  { name: 'Dates',     types: ['servicetimes', 'chips', 'map', 'events', 'times', 'download', 'calendar'] },
+  // Contact sits beside Map & address, which is where somebody looking for
+  // "how do people reach us" already goes — the two answer the same question
+  // and one of them draws a map.
+  { name: 'Dates',     types: ['servicetimes', 'tiles', 'chips', 'map', 'contact', 'events', 'times', 'download', 'calendar'] },
   // `giving` and `amounts` join the group that already holds `give` rather
   // than starting a fifth. They belong to one page, and a group of two that
   // only ever appears on the giving page would read on every other page as a
@@ -780,6 +886,15 @@ export const TEMPLATES = [
   { key: 'standard', label: 'Standard page',  hint: 'Banner, then your blocks in one column. Right for most pages.' },
   { key: 'section',  label: 'Section landing', hint: 'Banner plus an automatic list of the pages beneath this one.' },
   { key: 'sidebar',  label: 'With sidebar',   hint: 'Blocks on the left; service times and contact details on the right.' },
+  // ⚠ THE PER-PAGE SWITCH IS THE LAYOUT ITSELF. Dinger wants the pages beneath
+  // a section listed in a callout beside the content — "and can be automatic if
+  // the subpage view is turned on for that group, not every one might need it".
+  // A page-level flag would have meant a column, a control on the Page tab and
+  // a second thing to keep in step with the layout it only makes sense
+  // alongside; choosing this layout IS turning it on for that page, and
+  // choosing another is turning it off.
+  { key: 'sectionside', label: 'Section with sidebar',
+    hint: 'Banner, then blocks on the left with the pages beneath this one listed beside them, above the church details.' },
 ];
 
 export const templateOf = (key) => TEMPLATES.find((t) => t.key === key) || TEMPLATES[1];
@@ -1057,6 +1172,47 @@ export function sanitizeBlock(b) {
   // sentence at that size is not a display line, it is a broken page.
   if (def.bigLine) out.big = cleanText(b.big, 24);
 
+  // ⚠ AN OVERRIDE, AND BLANK IS THE NORMAL CASE. Dinger: every contact button
+  // on the site goes to office@timothystl.org, and some of them should go to a
+  // person. So the block may carry an address of its own — but it defaults to
+  // empty, and empty means "read the church-details record", which keeps the
+  // change-it-once-everywhere-follows behavior that record exists for.
+  //
+  // The cost is real and worth stating: an address typed here is a second copy,
+  // and it will not follow when the office's own address changes. That is the
+  // trade somebody makes by filling the field in, which is why it is a field
+  // somebody has to fill in rather than a value pre-loaded from the record.
+  // The fund a Give button lands on, by id. ⚠ Stored ONLY when set, like
+  // `shadow` above — putting a 0 on every give block would add the key to the
+  // generated seeds for a default that means "no fund chosen".
+  if (def.giveFund) {
+    const id = Math.floor(Number(b.giveFund));
+    if (Number.isFinite(id) && id > 0) out.giveFund = id;
+  }
+
+  if (def.contactEmail) {
+    const raw = cleanText(b.contactEmail, 120).trim();
+    // A plain address, not a URL. `mailto:` is built at render time, so a
+    // crafted `javascript:` never reaches an href — there is nowhere to put a
+    // scheme even deliberately.
+    // ⚠ The colon and the slash are excluded on purpose. Without them
+    // `mailto:x@y.z` passes, and the render would then emit
+    // `mailto:mailto:x@y.z` — a link that silently opens nothing. A bare
+    // address contains neither character.
+    out.contactEmail = /^[^\s@<>"':/\\]+@[^\s@<>"':/\\]+\.[^\s@<>"':/\\]+$/.test(raw) ? raw : '';
+  }
+
+  // ⚠ STORED ONLY WHEN IT IS NOT THE DEFAULT, unlike `align` which every block
+  // carries. Putting `shadow:'none'` in the base object adds the key to all 25
+  // generated page seeds — the exact trap recorded above `big` — and the seed
+  // suite says so immediately, because it asserts each seed is already
+  // sanitized. Absent means 'none', which is what every page renders today, so
+  // nothing on the site moves and nothing needs regenerating.
+  if (SHADOWABLE_TYPES.has(out.type)) {
+    const sh = SHADOW_KEYS.includes(b.shadow) ? b.shadow : 'none';
+    if (sh !== 'none') out.shadow = sh;
+  }
+
   if (def.partnerSource) {
     out.source = b.source === 'record' ? 'record' : 'manual';
   // Which partners, by id. Empty means all of them — so a partner added later
@@ -1226,7 +1382,19 @@ export const BLOCK_CSS = `<style id="tlcb-css">
   padding-left:max(var(--tlcb-pad), calc((100% - var(--tlcb-wrap)) / 2));
   padding-right:max(var(--tlcb-pad), calc((100% - var(--tlcb-wrap)) / 2));}
 .tlcb-page--full > .tlcb--hero{padding:0;}
-.tlcb-page--full > .tlcb--hero .tlcb-hero{border-radius:0;}
+/* ⚠ THE HERO WAS THE ONE BANNER WHOSE WORDS DID NOT LINE UP WITH THE PAGE.
+   The rule above zeroes the block's padding so the colored field runs edge to
+   edge — right — but nothing then put the CONTENT back on the content column,
+   so the title sat 28px from the viewport edge (the hero's own padding) while
+   every heading below it started at (100% - 1100px)/2. On a wide screen that
+   is the title hard against the glass and the page beginning a couple of
+   hundred pixels to its right.
+   Photo banner never had this: it is not excluded above, so it inherits the
+   same inset every other block gets. This gives the hero the identical
+   expression rather than a nudge, so the two cannot drift apart. */
+.tlcb-page--full > .tlcb--hero .tlcb-hero{border-radius:0;
+  padding-left:max(var(--tlcb-pad), calc((100% - var(--tlcb-wrap)) / 2));
+  padding-right:max(var(--tlcb-pad), calc((100% - var(--tlcb-wrap)) / 2));}
 /* A half run's WRAPPER needs the same centering — pair members are
    grandchildren, so the > .tlcb rule above never reaches them, and a run of
    halves on a hero-led page sat hard against the viewport edge while every
@@ -1317,8 +1485,44 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-cg-card{display:flex;flex-direction:column;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:20px;padding:28px 26px;
   box-shadow:0 2px 6px rgba(11,22,44,.05),0 10px 24px rgba(11,22,44,.06);
   transition:box-shadow .3s cubic-bezier(.2,.8,.2,1),transform .3s cubic-bezier(.2,.8,.2,1);}
-.tlcb-cg-card:hover{box-shadow:0 18px 40px rgba(16,27,46,.16);transform:translateY(-4px);}
-/* A soft lift, not a drop — the card rises toward the reader. */
+/* Contact details. A label column wide enough for "Instagram" and a value
+   column that takes the rest, so the addresses line up under each other rather
+   than starting at a different place on every row. */
+.tlcb-ct{display:flex;flex-direction:column;gap:2px;margin-top:6px;}
+.tlcb-ct-row{display:grid;grid-template-columns:96px 1fr;gap:12px;align-items:baseline;padding:7px 0;}
+.tlcb-ct-row--sub{padding-top:0;}
+.tlcb-ct-l{font:800 11.5px/1.5 var(--tlcb-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--tlcb-eyebrow-ink,#2E7EA6);}
+.tlcb-ct-v{font-family:var(--tlcb-sans);font-size:var(--tlcb-body,16px);color:var(--tlcb-ink,#1A1A2A);}
+.tlcb-ct-a{color:var(--tlcb-link-ink,#2E7EA6);text-decoration:none;}
+.tlcb-ct-a:hover{text-decoration:underline;}
+/* ⚠ The label column collapses on a phone. 96px of it beside a long address in
+   390px leaves the value about 200px, which wraps an email onto three lines. */
+/* How a block is set apart from the page — see SHADOWS. Only ever emitted when
+   somebody has chosen one, so a page that has never touched the control renders
+   from exactly the CSS it always did.
+   ⚠ The radius is on the block wrapper, which normally has none. Without it a
+   shadow traces a hard rectangle around a surface whose own corners are round,
+   and the two disagree by about 20px at each corner. */
+.tlcb--sh-soft{border-radius:14px;box-shadow:0 2px 6px rgba(11,22,44,.05),0 10px 24px rgba(11,22,44,.06);}
+.tlcb--sh-lifted{border-radius:14px;box-shadow:0 18px 44px rgba(16,27,46,.18);}
+.tlcb--sh-lined{border-radius:14px;border:1px solid var(--tlcb-rule,#E7DFD1);}
+/* ⚠ In whole-page mode a block is a full-bleed band, so a rounded, shadowed box
+   inside it would read as a card floating in a section rather than as the
+   section itself. The separation there is the band's own background — which is
+   why these are switched off rather than made subtler. */
+.tlcb-page--full > .tlcb--sh-soft,
+.tlcb-page--full > .tlcb--sh-lifted,
+.tlcb-page--full > .tlcb--sh-lined{border-radius:0;box-shadow:none;border:0;}
+/* A soft lift, not a drop — the card rises toward the reader.
+   The lift is on --link ONLY. A card that lifts under the pointer promises
+   that clicking it does something, and a card with no address cannot keep
+   that promise. */
+.tlcb-cg-card--link:hover{box-shadow:0 18px 40px rgba(16,27,46,.16);transform:translateY(-4px);}
+/* The card is an anchor on the public page, so every word inside it would
+   otherwise take the browser's link color and underline. The heading, body and
+   eyebrow keep their own; only the label at the foot reads as a link. */
+a.tlcb-cg-card{color:inherit;text-decoration:none;}
+a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
 .tlcb-cg-img{margin-bottom:14px;}
 .tlcb-cg-img img{display:block;max-width:100%;max-height:120px;width:auto;height:auto;object-fit:contain;}
 .tlcb-cg-eyebrow{font:800 11.5px/1.4 var(--tlcb-ui);letter-spacing:.16em;text-transform:uppercase;color:var(--tlcb-eyebrow-ink,#2E7EA6);margin-bottom:6px;}
@@ -1329,6 +1533,11 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-cg-foot:empty{display:none;}
 .tlcb-cg-link{font:800 13px/1.3 var(--tlcb-ui);color:var(--tlcb-link-ink,#2E7EA6);text-decoration:none;}
 .tlcb-cg-link:hover{text-decoration:underline;}
+/* A label the office typed on a card with no address. It is not a link, so it
+   does not get the link's color or its underline — otherwise it is a dead link
+   wearing a working one's clothes. */
+.tlcb-cg-link--off{color:var(--tlcb-body,#4A4860);opacity:.65;}
+.tlcb-cg-link--off:hover{text-decoration:none;}
 .tlcb-cg-intro{font-family:var(--tlcb-sans);max-width:56em;color:var(--tlcb-body,#4A4860);}
 .tlcb-cg-intro:empty{display:none;}
 /* The colored hairline across the card top on /ministries. It is switched on
@@ -1707,8 +1916,19 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
   color:#8A8898;margin:0;}
 .tlcb-side .tlcb-svc{padding:10px 12px;}
 .tlcb-side .tlcb-svc-t{font-size:18px;}
-.tlcb-side-lines{display:flex;flex-direction:column;gap:5px;font-size:13.5px;color:#4A4860;line-height:1.5;}
+.tlcb-side-lines{display:flex;flex-direction:column;gap:5px;font-size:calc(13.5px * var(--tlcb-scale, 1));color:#4A4860;line-height:1.5;}
 .tlcb-side-lines a{color:#2E7EA6;}
+/* The pages beneath a section, in the aside. Rows rather than a bulleted list:
+   these are destinations, and a row with its own hit area is easier to hit than
+   a line of text — the same reasoning the phone tap-target pass applied to the
+   footer. */
+.tlcb-side-kids{display:flex;flex-direction:column;}
+.tlcb-side-kids a,.tlcb-side-kids span{display:block;padding:9px 0;font-family:var(--tlcb-sans);
+  font-size:calc(14px * var(--tlcb-scale, 1));line-height:1.35;color:#2E7EA6;text-decoration:none;
+  border-bottom:1px solid var(--tlcb-rule,#E7DFD1);}
+.tlcb-side-kids a:last-child,.tlcb-side-kids span:last-child{border-bottom:0;padding-bottom:0;}
+.tlcb-side-kids a:hover{text-decoration:underline;}
+.tlcb-side-kids span{color:#4A4860;}
 .tlcb-kids{max-width:var(--tlcb-wrap,none);margin:0 auto;padding:8px var(--tlcb-pad) 32px;
   display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;}
 .tlcb-kid{display:flex;flex-direction:column;gap:5px;padding:16px 18px;border:1px solid #DDE3ED;
@@ -1769,6 +1989,14 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
 .tlcb-tile .tlcb-prose{margin-top:2px;}
 /* The two service tiles, side by side, using the same card. */
 .tlcb-tiles2{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:stretch;}
+/* ⚠ Meeting times and Info tiles hold HOWEVER MANY somebody types, not two, so
+   they cannot use the pair grid above — three groups in a two-column grid is a
+   lone tile on a second row. auto-fit fills the width and wraps on its own,
+   and 240px is the narrowest a tile reads at with 32px of padding inside it. */
+.tlcb-tiles-n{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px;align-items:stretch;}
+.tlcb-tile-m{font-family:var(--tlcb-ui);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--tlcb-eyebrow-ink,#C9973A);margin-top:auto;padding-top:10px;}
+.tlcb-tile-m:empty{display:none;}
 
 /* THE CALL-TO-ACTION BAND. One ask, ending in a button. */
 .tlcb-cta{display:flex;align-items:center;justify-content:space-between;gap:28px;flex-wrap:wrap;}
@@ -1858,7 +2086,7 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
   .tlcb-pulse{animation:none;}
   .tlcb-media img,.tlcb-cg-card{transition:none;}
   .tlcb-media:hover img{transform:none;}
-  .tlcb-cg-card:hover{transform:none;}
+  .tlcb-cg-card--link:hover{transform:none;}
 }
 @media(max-width:640px){
 PHONE_RULES_PLACEHOLDER
@@ -1920,6 +2148,11 @@ function phoneRules(p) {
     // The redesign's own shapes. ⚠ The banner heights come down as well as the
     // headline: 640px of photograph on a 390px phone is most of the screen
     // before a word is read, and the design's own responsive note says so.
+    // ⚠ The contact block's label column collapses. 96px beside a value in a
+    // 390px screen leaves about 200px, which wraps an email across three lines.
+    // Stacked, the label sits above its value and both get the full width.
+    `${p}.tlcb-ct-row{grid-template-columns:1fr!important;gap:1px!important;}`,
+    `${p}.tlcb-ct-row--sub .tlcb-ct-l{display:none!important;}`,
     `${p}.tlcb-pb{padding:26px 22px!important;}`,
     `${p}.tlcb-pb--short{--tlcb-pb-h:300px!important;}`,
     `${p}.tlcb-pb--mid{--tlcb-pb-h:360px!important;}`,
@@ -1960,14 +2193,24 @@ export function blocksClientConfig(data) {
       itemUrlFields: d.itemUrlFields || [], itemImageFields: d.itemImageFields || [],
       richBody: !!d.richBody, align: !!d.align,
       gallery: !!d.gallery, feed: d.feed || '', infoCard: !!d.infoCard,
+      shadow: SHADOWABLE_TYPES.has(key), contactEmail: !!d.contactEmail, giveFund: !!d.giveFund,
       partnerSource: !!d.partnerSource,
       choices: d.choices || [], switches: d.switches || [],
       defaults: d.defaults || {}, defaultItems: d.defaultItems || [],
     };
   }
-  return { types, groups: GROUPS, templates: TEMPLATES, BG, INK, SIZES, SPLITS, TONES,
+  return { types, groups: GROUPS, templates: TEMPLATES, BG, INK, SIZES, SPLITS, TONES, SHADOWS,
     bannerHeights: BANNER_HEIGHTS, veils: VEILS, glows: GLOWS, embedHeights: EMBED_HEIGHTS,
     partners: (data && data.partners) || [],
+    // Just the one field, so the Contact block's inspector can name the address
+    // it is falling back to rather than saying "the church email" and making
+    // somebody go and look. The rest of the record is not shipped — nothing in
+    // the inspector reads it, and the renderer gets it from ctx.data anyway.
+    churchEmail: (data && data.settings && data.settings.email) || '',
+    // Name and id only. The inspector offers these to pick from; the Tithe.ly
+    // id stays server-side, because nothing in the editor has any business
+    // holding one — see the Give block's render branch.
+    giveFunds: ((data && data.give && data.give.funds) || []).map((f) => ({ id: f.id, name: f.name })),
     cardSides: CARD_SIDES, cardShows: CARD_SHOWS, starters: STARTERS.map((s) => ({ key: s.key, label: s.label, note: s.note })),
     stamps: STAMP_PRESETS, step: SPACE_STEP, max: SPACE_MAX };
 }
@@ -2019,9 +2262,14 @@ function wrapperVars(b) {
     '--tlcb-link-ink:' + (bg.link || '#2E7EA6'),
     '--tlcb-rule:' + (bg.rule || (bg.dark ? 'rgba(245,240,230,.14)' : '#E7DFD1')),
     '--tlcb-chip-bg:' + (bg.chip || 'rgba(0,0,0,.04)'),
-    '--tlcb-body:' + sz.body + 'px',
-    '--tlcb-head:' + sz.head + 'px',
-    '--tlcb-hero:' + sz.hero + 'px',
+    // ⚠ calc() against the PAGE's scale, not a number baked in here. The scale
+    // lives on the page wrapper (see pageFontVars) because it comes from the
+    // appearance record, which wrapperVars has no access to — and because a
+    // block that stored its own copy would keep the old size after somebody
+    // changed it. Absent means 1, which is the size the block has always drawn.
+    '--tlcb-body:calc(' + sz.body + 'px * var(--tlcb-scale, 1))',
+    '--tlcb-head:calc(' + sz.head + 'px * var(--tlcb-head-scale, 1))',
+    '--tlcb-hero:calc(' + sz.hero + 'px * var(--tlcb-head-scale, 1))',
     '--tlcb-gap:' + b.gap + 'px',
     '--tlcb-height:' + b.height + 'px',
     '--tlcb-media-order:' + (b.side === 'right' ? 2 : 0),
@@ -2059,6 +2307,17 @@ function itemField(opts, idx, key, tag, cls, value, extra = '', rich = false) {
   const content = value == null ? '' : value;
   if (!opts.editing) return `<${tag} class="${cls}"${publicAttrs(extra)}>${content}</${tag}>`;
   return `<${tag} class="${cls}" data-item="${idx}" data-field="${key}"${rich ? ' data-rich="1"' : ''} contenteditable="true" spellcheck="true"${extra}>${content}</${tag}>`;
+}
+
+// ⚠ WHICH TILE IS GOLD, IN ONE PLACE. A block has ONE background, and this
+// layout needs two — so the alternate carries its colors inline. That was
+// written out inside the Service times branch; Meeting times and Info tiles
+// draw the same tiles, and three copies of the pairing is three chances for
+// one of them to drift into a different gold.
+function tileAlt(i) {
+  if (i % 2 !== 1) return '';
+  const gold = BG[7];
+  return ` style="--tlcb-bg:${gold.grad};--tlcb-head-ink:${gold.head};--tlcb-ink:#3B2E12;--tlcb-eyebrow-ink:${gold.eyebrow}"`;
 }
 
 const ytId = (u) => (String(u || '').match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/)([A-Za-z0-9_-]{11})/) || [])[1] || '';
@@ -2598,11 +2857,8 @@ function renderInner(b, opts) {
     // second tile carries its colors inline: the block's single bg cannot
     // express two surfaces.
     if (b.layout === 'tiles' && svc.length) {
-      const gold = BG[7];
       const tiles = svc.slice(0, 4).map((r, i) => {
-        const alt = i % 2 === 1
-          ? ` style="--tlcb-bg:${gold.grad};--tlcb-head-ink:${gold.head};--tlcb-ink:#3B2E12;--tlcb-eyebrow-ink:${gold.eyebrow}"`
-          : '';
+        const alt = tileAlt(i);
         return `<div class="tlcb-tile"${alt}>
           ${r.note ? `<div class="tlcb-eyebrow">${esc(r.note)}</div>` : ''}
           <div class="tlcb-tile-big">${esc(r.time || '')}</div>
@@ -2758,6 +3014,50 @@ function renderInner(b, opts) {
       ${people ? `<div class="tlcb-people">${people}</div>` : `<p class="tlcb-note">The staff directory is empty.</p>`}</div>`;
   }
 
+  if (t === 'contact') {
+    const st = data.settings || {};
+    const rows = [];
+    const line = (label, value, href) => {
+      if (!value) return;
+      rows.push(`<div class="tlcb-ct-row"><span class="tlcb-ct-l">${esc(label)}</span>` +
+        (href
+          ? `<a class="tlcb-ct-v tlcb-ct-a" href="${esc(href)}">${esc(value)}</a>`
+          : `<span class="tlcb-ct-v">${esc(value)}</span>`) + '</div>');
+    };
+    if (b.showAddress !== false) {
+      const addr = [st.address_line, st.address_city].filter(Boolean).join(' · ');
+      if (addr) {
+        const maps = `https://maps.google.com/?q=${encodeURIComponent([st.address_line, st.address_city].filter(Boolean).join(', '))}`;
+        line('Address', addr, maps);
+        // The landmark is how somebody finds the door from the road. It hangs
+        // under the address rather than taking a label of its own.
+        if (st.address_near) rows.push(`<div class="tlcb-ct-row tlcb-ct-row--sub"><span class="tlcb-ct-l"></span><span class="tlcb-ct-v">${esc(st.address_near)}</span></div>`);
+      }
+    }
+    // ⚠ tel: strips everything but the digits. "(314) 781-8673" is what a
+    // person should READ, and what a phone should DIAL is 3147818673 — a href
+    // carrying the brackets and the space is one some dialers refuse.
+    if (st.phone) line('Phone', st.phone, 'tel:' + String(st.phone).replace(/[^\d+]/g, ''));
+    // The block's own address when somebody has set one, the church's when not.
+    const email = b.contactEmail || st.email || '';
+    if (email) line('Email', email, 'mailto:' + email);
+    if (b.showSocial !== false) {
+      // Named links rather than icons: an icon needs a label for a screen
+      // reader anyway, and three words are clearer than three glyphs to the
+      // congregation this is written for.
+      for (const [label, url] of [['Facebook', st.facebook], ['Instagram', st.instagram], ['YouTube', st.youtube]]) {
+        const href = safeUrl(url);
+        // A blank account is left off entirely — see the seed note. A row
+        // reading "Instagram —" tells nobody anything.
+        if (href) line(label, label === 'YouTube' ? 'Watch on YouTube' : 'Follow on ' + label, href);
+      }
+    }
+    const body = rows.length
+      ? `<div class="tlcb-ct">${rows.join('')}</div>`
+      : `<p class="tlcb-note">Nothing to show yet — fill in the address, phone and email under Church details in the admin.</p>`;
+    return `<div class="tlcb-stack" style="gap:9px">${renderHead(opts, b)}${renderBody(opts, b, def, 'One line about when the office is open, if it helps.')}${body}</div>`;
+  }
+
   if (t === 'map') {
     const st = data.settings || {};
     const addr = [st.address_line, st.address_city].filter(Boolean).join(', ');
@@ -2848,14 +3148,39 @@ function renderInner(b, opts) {
       const eyebrow = itemField(opts, i, 'eyebrow', 'div', 'tlcb-cg-eyebrow', esc(it.eyebrow || ''), ' data-ph="SMALL LABEL"');
       const head = itemField(opts, i, 'title', 'div', 'tlcb-cg-head', esc(it.title || ''), ' data-ph="Card heading"');
       const body = itemField(opts, i, 'body', 'div', 'tlcb-prose tlcb-cg-body', it.body || '', ' data-ph="One short paragraph."', true);
+      // ⚠ THE WHOLE CARD IS THE LINK, not the words at the bottom of it. The
+      // card lifts on hover and reads as one clickable object, and only the
+      // "Learn more" was ever clickable — so a click anywhere else did nothing
+      // and the card looked broken. The label stays, because it says WHERE the
+      // card goes; it is just no longer the only target.
+      //
+      // ⚠ It is an <a> only on the public page. In the editor the card has to
+      // stay a <div>: the heading and body inside it are contenteditable, and
+      // clicking into them inside an anchor navigates instead of typing.
+      const href = safeUrl(it.url);
+      const linked = !!href && !opts.editing;
+      // ⚠ A card with nowhere to go LOSES THE HOVER. Lifting under the pointer
+      // is a promise that clicking does something, and the whole complaint here
+      // was a card that made that promise and broke it. The class follows the
+      // href rather than `linked`, so the editor shows the same lift the
+      // visitor will get.
+      const cls = 'tlcb-cg-card' + (href ? ' tlcb-cg-card--link' : '');
       // The arrow is part of the label the office types, so "Learn more",
       // "Visit MDO site" and "Watch video" all work with no setting for it.
+      // ⚠ Never a nested <a>. Inside a linked card the label is a span that
+      // merely looks like a link — the card around it is the real one.
       const link = it.linkLabel
         ? (opts.editing
             ? itemField(opts, i, 'linkLabel', 'div', 'tlcb-cg-link', esc(it.linkLabel), ' data-ph="Learn more"')
-            : `<a class="tlcb-cg-link" href="${esc(it.url || '#')}">${esc(it.linkLabel)}</a>`)
+            : linked
+              ? `<span class="tlcb-cg-link">${esc(it.linkLabel)}</span>`
+              // No href: still not a link. A dead link is worse than a missing
+              // one, and `href="#"` is exactly the dead link this repo's own
+              // rule is about.
+              : `<span class="tlcb-cg-link tlcb-cg-link--off">${esc(it.linkLabel)}</span>`)
         : '';
-      return `<div class="tlcb-cg-card">${img}${eyebrow}${head}${body}<div class="tlcb-cg-foot">${link}</div></div>`;
+      const open = linked ? `<a class="${cls}" href="${esc(href)}">` : `<div class="${cls}">`;
+      return `${open}${img}${eyebrow}${head}${body}<div class="tlcb-cg-foot">${link}</div>${linked ? '</a>' : '</div>'}`;
     }).join('');
     const intro = b.subtitle
       ? field(opts, b, 'subtitle', 'div', 'tlcb-cg-intro', esc(b.subtitle), ' data-ph="One short paragraph of introduction."')
@@ -2902,12 +3227,29 @@ function renderInner(b, opts) {
   }
 
   if (t === 'times') {
+    if (b.layout === 'tiles' && (b.items || []).length) {
+      const tiles = (b.items || []).map((it, i) => `<div class="tlcb-tile"${tileAlt(i)}>
+          ${itemField(opts, i, 'title', 'div', 'tlcb-tile-t', esc(it.title || ''), ' data-ph="Who"')}
+          ${itemField(opts, i, 'body', 'div', 'tlcb-prose', esc(it.body || ''), ' data-ph="When"')}
+          ${itemField(opts, i, 'meta', 'div', 'tlcb-tile-m', esc(it.meta || ''), ' data-ph="Where"')}
+        </div>`).join('');
+      return `<div class="tlcb-stack">${renderHead(opts, b)}<div class="tlcb-tiles-n">${tiles}</div></div>`;
+    }
     const rows = (b.items || []).map((it, i) => `<div class="tlcb-time">
         ${itemField(opts, i, 'title', 'b', '', esc(it.title || ''), ' data-ph="Who"')}
         ${itemField(opts, i, 'body', 'i', '', esc(it.body || ''), ' data-ph="When"')}
         ${itemField(opts, i, 'meta', 'u', '', esc(it.meta || ''), ' data-ph="Where"')}
       </div>`).join('');
     return `<div class="tlcb-stack">${renderHead(opts, b)}<div class="tlcb-times">${rows}</div></div>`;
+  }
+
+  if (t === 'tiles') {
+    const tiles = (b.items || []).map((it, i) => `<div class="tlcb-tile"${tileAlt(i)}>
+        ${itemField(opts, i, 'big', 'div', 'tlcb-tile-big', esc(it.big || ''), ' data-ph="8:00"')}
+        ${itemField(opts, i, 'title', 'div', 'tlcb-tile-t', esc(it.title || ''), ' data-ph="Tile heading"')}
+        ${itemField(opts, i, 'body', 'div', 'tlcb-prose', it.body || '', ' data-ph="One short line."', true)}
+      </div>`).join('');
+    return `<div class="tlcb-stack">${renderHead(opts, b)}<div class="tlcb-tiles-n">${tiles}</div></div>`;
   }
 
   if (t === 'faq') {
@@ -3024,13 +3366,32 @@ function renderInner(b, opts) {
   }
 
   if (t === 'give') {
-    const href = safeUrl(b.url) || 'https://give.timothystl.org';
+    // ⚠ A FUND IS AN ID HERE, NEVER A URL. Dinger asked for a Give button that
+    // lands on a named fund — the CCS appeal generalized, which until now was
+    // two buttons hand-wired in public/index.html and rewritten in the browser.
+    // Storing the fund's id and resolving it against the Giving screen's base
+    // link at render time is what keeps the settled rule intact: a block's URL
+    // is frozen the moment it is published, so a stored Tithe.ly address would
+    // go on charging to the old form after the office changed the base link,
+    // and the page would still look perfect.
+    const give = data.give || {};
+    const fund = b.giveFund
+      ? (Array.isArray(give.funds) ? give.funds : []).find((f) => Number(f.id) === Number(b.giveFund))
+      : null;
+    // Falls back to the plain hand-off when the fund has gone away, or has no
+    // Tithe.ly id, or the base link is unset — give.timothystl.org still takes
+    // the gift, it just asks which fund. A button that takes money is never
+    // traded for one that errors.
+    const fundHref = fund && fund.tithelyFundId && give.baseUrl
+      ? withFund(give.baseUrl, fund.tithelyFundId) : '';
+    const href = fundHref || safeUrl(b.url) || 'https://give.timothystl.org';
     // Just the one button — an amount is a choice give.timothystl.org's own
     // widget already asks for; suggesting one here duplicated that page
     // instead of just handing off to it.
+    const label = fund ? 'Give to ' + fund.name : 'Give now';
     const go = opts.editing
-      ? `<span class="tlcb-chip tlcb-chip--go">Give now</span>`
-      : `<a class="tlcb-chip tlcb-chip--go" href="${esc(href)}" target="_blank" rel="noopener noreferrer">Give now</a>`;
+      ? `<span class="tlcb-chip tlcb-chip--go">${esc(label)}</span>`
+      : `<a class="tlcb-chip tlcb-chip--go" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`;
     return `<div class="tlcb-give">${renderHead(opts, b)}
       ${field(opts, b, 'body', 'div', 'tlcb-give-note', b.body || '', ' data-ph="Why it matters"', true)}
       <div class="tlcb-inline">${go}</div>
@@ -3196,6 +3557,10 @@ export function renderBlock(b, opts = {}) {
   // classes from its own render branch — those handle the inside of a card,
   // which the generic rules deliberately do not reach.
   if (ALIGNABLE_TYPES.has(b.type) && b.align !== 'left') classes.push('tlcb--' + b.align);
+  // ⚠ Only when it is not 'none'. An untouched page renders from exactly the
+  // CSS it always did rather than from a new rule that happens to agree with
+  // it — the same rule left-alignment follows above.
+  if (SHADOWABLE_TYPES.has(b.type) && b.shadow && b.shadow !== 'none') classes.push('tlcb--sh-' + b.shadow);
   const attrs = opts.editing
     ? ` data-id="${esc(b.id)}" data-type="${esc(b.type)}" tabindex="0" role="group"` +
       ` aria-label="${esc(def.label)} block${opts.total ? ', position ' + (opts.index + 1) + ' of ' + opts.total : ''}"`
@@ -3227,6 +3592,29 @@ export function renderBlock(b, opts = {}) {
 
 // The sidebar template's right-hand column. Reads the one site-settings record,
 // never the page — staff fix the phone number once and every sidebar updates.
+// The pages beneath this one, as a card in the aside. Same source as the
+// section template's list below the content — derived from the page tree, never
+// stored — so it cannot go stale and needs nothing typed.
+function sidebarKids(ctx) {
+  const kids = ctx.children || [];
+  if (!kids.length) {
+    // In the editor an empty aside card is a question worth answering; on the
+    // live page a section with no children yet is just a page with no list.
+    return ctx.editing
+      ? `<div class="tlcb-side-card"><h2 class="tlcb-side-h">In this section</h2>
+      <p class="tlcb-note">Pages you file beneath this one are listed here automatically.</p></div>`
+      : '';
+  }
+  return `<div class="tlcb-side-card"><h2 class="tlcb-side-h">In this section</h2>
+    <div class="tlcb-side-kids">${kids.map((k) => {
+      const href = safeUrl(k.slug || '');
+      const t = esc(k.title || '');
+      // The editor renders them inert, like every other link in the canvas —
+      // clicking one there should select the block, not leave the page.
+      return ctx.editing || !href ? `<span>${t}</span>` : `<a href="${esc(href)}">${t}</a>`;
+    }).join('')}</div></div>`;
+}
+
 function sidebarAside(ctx) {
   const data = ctx.data || {};
   const st = data.settings || {};
@@ -3247,7 +3635,10 @@ function sidebarAside(ctx) {
   ].filter(Boolean).join('');
   const contact = lines ? `<div class="tlcb-side-card"><h2 class="tlcb-side-h">Visit us</h2>
       <div class="tlcb-side-lines">${lines}</div></div>` : '';
-  if (times || contact) return `<aside class="tlcb-side">${times}${contact}</aside>`;
+  // The child list leads when the layout asks for it — somebody on a section
+  // page is looking for the page beneath it, not for the office's phone number.
+  const kids = ctx.withKids ? sidebarKids(ctx) : '';
+  if (kids || times || contact) return `<aside class="tlcb-side">${kids}${times}${contact}</aside>`;
   // Empty in the editor is a question, so answer it there; on the live page an
   // unfilled sidebar is just nothing.
   return ctx.editing ? `<aside class="tlcb-side"><div class="tlcb-side-card">
@@ -3292,7 +3683,15 @@ function pageFontVars(ctx) {
   // it is being written into a style attribute, so the two characters that
   // could close it are dropped rather than reasoned about.
   const clean = (s) => String(s).replace(/["<>;{}\\]/g, '');
-  return ` style="--tlcb-serif:${clean(f.head)};--tlcb-sans:${clean(f.body)};--tlcb-ui:${clean(f.ui)}"`;
+  // Text size rides along with the typeface, from the same record and onto the
+  // same wrapper — one decision about how the site reads, landing in one place.
+  // A number, clamped rather than trusted: it is written into a style attribute,
+  // and the sizes below are calc()s that a non-number would silently break.
+  const ap = (ctx && ctx.data && ctx.data.appearance) || {};
+  const num = (v, def) => (Number.isFinite(Number(v)) && Number(v) > 0 && Number(v) <= 3 ? Number(v) : def);
+  const ts = ap.textScale || {};
+  const scale = `;--tlcb-scale:${num(ts.body, 1)};--tlcb-head-scale:${num(ts.head, 1)}`;
+  return ` style="--tlcb-serif:${clean(f.head)};--tlcb-sans:${clean(f.body)};--tlcb-ui:${clean(f.ui)}${scale}"`;
 }
 
 export function wrapTemplate(template, inner, ctx = {}) {
@@ -3306,13 +3705,17 @@ export function wrapTemplate(template, inner, ctx = {}) {
     (!list.length && Array.isArray(inner) && /^<div class="tlcb tlcb--(hero|slideshow)\b/.test(parts[0] || ''));
   const full = key === 'home' || leads;
   const cls = 'tlcb-page tlcb-page--' + key + (full ? ' tlcb-page--full' : '');
+  // ⚠ `sectionside` lists its children in the ASIDE, so it must not also append
+  // the section template's list below the content — that is the same list
+  // twice on one page.
   const tail = (ctx.empty || '') + (key === 'section' ? childList(ctx) : '');
   const fonts = pageFontVars(ctx);
 
-  if (key === 'sidebar') {
+  if (key === 'sidebar' || key === 'sectionside') {
     const banner = leads && Array.isArray(inner) ? parts.shift() : '';
+    const side = sidebarAside({ ...ctx, withKids: key === 'sectionside' });
     return `<div class="${cls}"${fonts}>${banner}<div class="tlcb-layout">` +
-      `<div class="tlcb-layout-main">${parts.join('')}</div>${sidebarAside(ctx)}</div>${tail}</div>`;
+      `<div class="tlcb-layout-main">${parts.join('')}</div>${side}</div>${tail}</div>`;
   }
   return `<div class="${cls}"${fonts}>${parts.join('')}${tail}</div>`;
 }

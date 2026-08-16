@@ -8,6 +8,7 @@ import {
   PALETTE, PALETTE_KEYS, BAR_KEYS, DEFAULTS, colorOf, safeLogoUrl, sanitizeAppearance,
   parseAppearance, appearanceFromForm, isDirty, changedFields, publicAppearance,
   TYPEFACES, TYPEFACE_KEYS, typefaceOf, renderHeaderPreview, renderNewsletterPreview,
+  TEXT_SIZES, TEXT_SIZE_KEYS, textSizeOf,
 } from './appearance.js';
 import { readFileSync } from 'node:fs';
 
@@ -236,6 +237,55 @@ group('The preview draws the site, including its type');
   ok(/--hp-head:[^"]*Bricolage/.test(head), 'the header preview carries the published pair');
   const band = renderNewsletterPreview({ typeface: 'classic' });
   ok(/--hp-head:[^"]*Lora/.test(band), 'and so does the newsletter band preview');
+}
+
+group('Text size is a multiplier, and Normal changes nothing');
+{
+  // ⚠ THE ONE THAT MATTERS. Normal has to be exactly 1 on both curves, because
+  // the stylesheet's fallback is 1 — if they disagreed, every page would resize
+  // the moment the appearance fetch landed, on every load.
+  const normal = textSizeOf('normal');
+  eq(normal.body, 1, 'Normal leaves body copy alone');
+  eq(normal.head, 1, 'and headings too');
+  eq(DEFAULTS.textSize, 'normal', 'and it is the default, so the record ships changing nothing');
+
+  // ⚠ Headings scale LESS than body copy at every step. A hero at 64px taken up
+  // by the body copy's multiplier pushes the first paragraph off the screen.
+  for (const t of TEXT_SIZES) {
+    ok(t.head <= t.body, t.key + ': headings scale no harder than body copy');
+    ok(t.body >= 1 && t.body <= 1.5, t.key + ': body multiplier is a sane number');
+    ok(!!t.label && !!t.note, t.key + ' says what it is and what it does');
+  }
+  // It goes up, and each step is a real difference rather than a rounding.
+  for (let i = 1; i < TEXT_SIZES.length; i++) {
+    ok(TEXT_SIZES[i].body > TEXT_SIZES[i - 1].body + 0.02,
+      TEXT_SIZES[i].key + ' is visibly larger than ' + TEXT_SIZES[i - 1].key);
+  }
+
+  // A crafted or stale value falls back rather than reaching a style attribute.
+  eq(sanitizeAppearance({ textSize: 'enormous' }).textSize, 'normal', 'a crafted size is refused');
+  eq(sanitizeAppearance({ textSize: '' }).textSize, 'normal', 'and so is an empty one');
+  eq(textSizeOf('nope').key, 'normal', 'and the lookup falls back too');
+
+  // What the site is actually sent: two numbers, never a key.
+  const pub = publicAppearance({ textSize: 'larger' });
+  eq(pub.textScale.body, textSizeOf('larger').body, 'the site is sent the body multiplier');
+  eq(pub.textScale.head, textSizeOf('larger').head, 'and the heading one');
+  eq(publicAppearance({}).textScale.body, 1, 'an empty record is Normal');
+
+  // ⚠ THE STYLESHEET HAS TO AGREE. Its declared fallback is what renders before
+  // the appearance fetch returns and forever if the admin is unreachable — the
+  // same argument the typeface default carries, and the same failure if it is
+  // wrong: every page painting one size and visibly reflowing to another.
+  const css = readFileSync(new URL('../public/styles.css', import.meta.url), 'utf8');
+  ok(/--tlc-text-scale:1;/.test(css), 'styles.css declares the body scale as 1');
+  ok(/--tlc-head-scale:1;/.test(css), 'and the heading scale as 1');
+  // Every size on the sheet goes through one of the two, so the control is
+  // whole rather than reaching the handful of rules somebody remembered.
+  const sizes = css.match(/font-size:[^;}]+/g) || [];
+  ok(sizes.length > 60, 'the sheet really does set a lot of sizes (' + sizes.length + ')');
+  const missed = sizes.filter((d) => !/var\(--tlc-(text|head)-scale, 1\)/.test(d));
+  eq(missed.length, 0, 'and every one of them scales: ' + missed.slice(0, 3).join(' | '));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
