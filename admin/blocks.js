@@ -346,6 +346,27 @@ export const BLOCK_DEFS = {
     ],
   },
 
+  // ⚠ THE SAME SHAPE AS THE SERMON LIBRARY, AND THE SAME TRAP. /education — the
+  // page the menu calls "Learn" — draws its class cards into a
+  // `bible-classes-grid` that loadBibleClasses() fills from the API at runtime.
+  // So the extractor correctly lifts the page's prose and nothing else, and
+  // publishing it would hide the very grid that loader fills. This is the block
+  // that keeps that from happening.
+  classes: {
+    label: 'Bible classes', glyph: '✦',
+    align: true,
+    defaults: { title: 'Classes and studies', body: '', spaceAbove: 24, spaceBelow: 24, cols: 3 },
+    richBody: true,
+    auto: 'classes',
+    autoNote: 'Every active class, read from the Christian Ed screen. Add one there, or pause one, and this follows.',
+    autoCount: false,
+    choices: [
+      { key: 'cols', label: 'Columns', def: 3,
+        options: [{ key: 2, label: 'Two' }, { key: 3, label: 'Three' }],
+        note: 'Three reads well with six or more classes; two gives each card more room when there are only a few.' },
+    ],
+  },
+
   // Everything the church has for reaching it, in one droppable block. The
   // info card can already show an address or a phone number, but only as a slot
   // on a banner — so a plain page had no way to say "here is how you reach us"
@@ -885,7 +906,7 @@ export const SHADOWABLE_TYPES = new Set(
 // of it — and Content is what they fill it with afterwards.
 export const GROUPS = [
   { name: 'Structure', types: ['alert', 'photobanner', 'hero', 'slideshow', 'highlight', 'cta', 'quicklinks', 'cardgrid', 'buttons', 'callout', 'partners', 'spacer'] },
-  { name: 'Content',   types: ['text', 'textphoto', 'quote', 'values', 'video', 'columns', 'gallery', 'faq', 'sermon', 'sermonlist', 'news', 'newsfeed', 'staff', 'posts'] },
+  { name: 'Content',   types: ['text', 'textphoto', 'quote', 'values', 'video', 'columns', 'gallery', 'faq', 'sermon', 'sermonlist', 'classes', 'news', 'newsfeed', 'staff', 'posts'] },
   // Contact sits beside Map & address, which is where somebody looking for
   // "how do people reach us" already goes — the two answer the same question
   // and one of them draws a map.
@@ -1508,6 +1529,20 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-cg-card{display:flex;flex-direction:column;background:#FFFDF9;border:1px solid #E7DFD1;border-radius:20px;padding:28px 26px;
   box-shadow:0 2px 6px rgba(11,22,44,.05),0 10px 24px rgba(11,22,44,.06);
   transition:box-shadow .3s cubic-bezier(.2,.8,.2,1),transform .3s cubic-bezier(.2,.8,.2,1);}
+/* Bible classes, read from the Christian Ed screen. auto-fit inside the chosen
+   column count so a row of two on a narrow page does not leave a lone card. */
+.tlcb-cl{display:grid;grid-template-columns:var(--tlcb-cols,repeat(3,1fr));gap:20px;align-items:stretch;margin-top:6px;}
+.tlcb-cl-card{display:flex;flex-direction:column;gap:6px;padding:24px 22px;border-radius:14px;
+  border:1px solid var(--tlcb-rule,#E7DFD1);background:rgba(255,255,255,.55);}
+.tlcb-cl-eyebrow{font:800 11px/1.4 var(--tlcb-ui);letter-spacing:.13em;text-transform:uppercase;}
+.tlcb-cl-t{font-family:var(--tlcb-serif);font-weight:700;font-size:calc(var(--tlcb-head,22px) * .7);
+  line-height:1.2;color:var(--tlcb-head-ink,#1E2D4A);}
+.tlcb-cl-d{margin:0;font-family:var(--tlcb-sans);font-size:calc(14px * var(--tlcb-scale, 1));
+  line-height:1.55;color:var(--tlcb-body,#4A4860);}
+.tlcb-cl-m{font-family:var(--tlcb-sans);font-size:calc(13px * var(--tlcb-scale, 1));color:var(--tlcb-body,#4A4860);}
+.tlcb-cl-w{margin-top:auto;padding-top:8px;font-family:var(--tlcb-ui);font-weight:700;
+  font-size:calc(13px * var(--tlcb-scale, 1));color:var(--tlcb-ink,#1A1A2A);display:flex;flex-direction:column;gap:2px;}
+.tlcb-cl-w span{font-weight:400;color:var(--tlcb-body,#8A8898);}
 /* The sermon library: series that fold open, and their sermons inside. */
 .tlcb-sl{display:flex;flex-direction:column;gap:10px;margin-top:6px;}
 .tlcb-sl-set{border:1px solid var(--tlcb-rule,#E7DFD1);border-radius:12px;background:rgba(255,255,255,.5);}
@@ -2334,6 +2369,7 @@ function wrapperVars(b) {
   if (b.type === 'columns') v.push('--tlcb-cols:repeat(' + b.cols + ',1fr)');
   if (b.type === 'cardgrid') v.push('--tlcb-cols:repeat(' + b.cols + ',1fr)');
   if (b.type === 'values') v.push('--tlcb-cols:repeat(' + b.cols + ',1fr)');
+  if (b.type === 'classes') v.push('--tlcb-cols:repeat(' + b.cols + ',1fr)');
   if (b.type === 'hero' && b.photo) {
     v.push("--tlcb-hero-img:url('" + cssUrl(b.photo) + "')");
     v.push('--tlcb-hero-veil:1'); // the gradient that keeps white text legible over a photo
@@ -3062,6 +3098,32 @@ function renderInner(b, opts) {
       </div>`).join('');
     return `<div class="tlcb-stack">${renderHead(opts, b)}
       ${people ? `<div class="tlcb-people">${people}</div>` : `<p class="tlcb-note">The staff directory is empty.</p>`}</div>`;
+  }
+
+  if (t === 'classes') {
+    const rows = Array.isArray(data.classes) ? data.classes : [];
+    // ⚠ The accent is a KEY from a short list, resolved here to one of the
+    // site's own colors. The Christian Ed screen stores 'teal' or 'sage', never
+    // a hex — so there is no way for a class to introduce a color the site does
+    // not use, and no way for a stored value to reach a style attribute.
+    const ACCENT = { mid: '#2E7EA6', teal: '#2E7EA6', steel: '#1E2D4A', sage: '#4A5E3A', amber: '#C9973A', plum: '#8A6A8A' };
+    const cards = rows.map((c) => {
+      const accent = ACCENT[c.accent] || 'var(--tlcb-eyebrow-ink,#2E7EA6)';
+      const when = [c.schedule, c.location].filter(Boolean);
+      return `<div class="tlcb-cl-card">` +
+        (c.label ? `<div class="tlcb-cl-eyebrow" style="color:${esc(accent)}">${esc(c.label)}</div>` : '') +
+        `<div class="tlcb-cl-t">${esc(c.title || '')}</div>` +
+        (c.description ? `<p class="tlcb-cl-d">${esc(c.description)}</p>` : '') +
+        (c.leader ? `<div class="tlcb-cl-m">Led by ${esc(c.leader)}</div>` : '') +
+        (when.length ? `<div class="tlcb-cl-w">${esc(when[0])}` +
+          (when[1] ? `<span>${esc(when[1])}</span>` : '') + `</div>` : '') +
+        `</div>`;
+    }).join('');
+    const body = cards
+      ? `<div class="tlcb-cl">${cards}</div>`
+      : `<p class="tlcb-note">No classes running yet — add them under Christian Ed in the admin.</p>`;
+    return `<div class="tlcb-stack" style="gap:9px">${renderHead(opts, b)}` +
+      `${renderBody(opts, b, def, 'One line about who these are for, if it helps.')}${body}</div>`;
   }
 
   if (t === 'sermonlist') {
