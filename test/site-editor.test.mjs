@@ -25,6 +25,11 @@ const harness = createEditorServer({
     { slug: 'about', title: 'About', path: '/about', blocks: [newBlock('hero', { title: 'About us' }), newBlock('text', { body: '<p>ABOUT COPY</p>' })] },
     { slug: 'beliefs', title: 'What We Believe', path: '/about/beliefs', parent_id: 'about', blocks: [newBlock('text', { body: '<p>Beliefs</p>' })] },
     { slug: 'secret', title: 'Thank You', path: '/thank-you', in_menu: 0, blocks: [newBlock('text', { body: '<p>Thanks</p>' })] },
+    // A page already on the section-with-sidebar layout, and one filed beneath
+    // it, so the aside and its section list can be checked without the test
+    // having to drive the layout control first.
+    { slug: 'grow', title: 'Grow', path: '/grow', template: 'sectionside', blocks: [newBlock('text', { body: '<p>GROW COPY</p>' })] },
+    { slug: 'classes', title: 'Bible Classes', path: '/grow/classes', parent_id: 'grow', blocks: [newBlock('text', { body: '<p>Classes</p>' })] },
   ],
 });
 await new Promise((r) => harness.server.listen(0, r));
@@ -88,7 +93,7 @@ await page.waitForTimeout(120);
 ok((await page.textContent('.ed-pages-list')).includes('No pages match'), 'an empty search says so');
 await page.fill('#edPagesSearch', '');
 await page.waitForTimeout(120);
-eq((await railTitles()).length, 4, 'clearing the search brings every page back');
+eq((await railTitles()).length, 6, 'clearing the search brings every page back');
 
 group('collapsing the rail');
 await page.click('#edPagesToggle');
@@ -209,6 +214,51 @@ group('changing the layout redraws the canvas');
   await page.selectOption('#edPageTemplate', 'home');
   await page.waitForFunction(() => !!document.querySelector('.ed-paper .tlcb-page--home'), null, { timeout: 8000 });
   eq(await page.locator('.ed-paper .tlcb').count(), 1, 'and switching back does not drop it either');
+}
+
+// ⚠ THE BUG THIS EXISTS FOR. Dinger: "the section with sidebar doesnt seem to
+// display a sidebar." Switching layout redrew correctly (the group above), and
+// so did a fresh load — both of those paths send the page's template. The
+// stateless /render the editor uses for every STRUCTURAL change sent only the
+// blocks and the slug, and renderPage() reads a missing template as "this is a
+// ministry page" and returns a bare column. So the sidebar appeared, and then
+// vanished at the first duplicated, deleted or reordered block and stayed gone
+// until a reload — which is what made it read as the sidebar not displaying.
+group('the layout survives a structural change');
+{
+  await open('grow');
+  eq(await page.locator('.ed-paper .tlcb-page--sectionside').count(), 1, 'the page opens on its own layout');
+  eq(await page.locator('.ed-paper .tlcb-side').count(), 1, 'so the sidebar is drawn');
+  ok((await page.textContent('.ed-paper .tlcb-side-kids')).includes('Bible Classes'),
+    'listing the page filed beneath this one');
+
+  const before = await page.locator('.ed-paper .tlcb').count();
+  await page.click('.ed-paper .tlcb--text');
+  await page.click('.ed-paper .tlcb.is-sel [data-act="dup"]');
+  await page.waitForFunction((n) => document.querySelectorAll('.ed-paper .tlcb').length === n + 1,
+    before, { timeout: 8000 });
+  eq(await page.locator('.ed-paper .tlcb-page--sectionside').count(), 1, 'duplicating a block keeps the layout');
+  eq(await page.locator('.ed-paper .tlcb-side').count(), 1, 'and the sidebar with it');
+  ok((await page.textContent('.ed-paper .tlcb-side-kids')).includes('Bible Classes'),
+    'section list included — it is derived from the page tree, so only the server can supply it');
+
+  await page.click('#edUndo');
+  await page.waitForFunction((n) => document.querySelectorAll('.ed-paper .tlcb').length === n,
+    before, { timeout: 8000 });
+  eq(await page.locator('.ed-paper .tlcb-side').count(), 1, 'undo keeps it too');
+
+  // ⚠ The other direction, which is what stops the fix becoming "always draw an
+  // aside": a page on a layout without one must redraw without one.
+  await open('about');
+  const n = await page.locator('.ed-paper .tlcb').count();
+  await page.click('.ed-paper .tlcb--text');
+  await page.click('.ed-paper .tlcb.is-sel [data-act="dup"]');
+  await page.waitForFunction((c) => document.querySelectorAll('.ed-paper .tlcb').length === c + 1,
+    n, { timeout: 8000 });
+  eq(await page.locator('.ed-paper .tlcb-side').count(), 0, 'a standard page grows no sidebar it never asked for');
+  await page.click('#edUndo');
+  await page.waitForFunction((c) => document.querySelectorAll('.ed-paper .tlcb').length === c,
+    n, { timeout: 8000 });
 }
 
 group('a self-filling block says where its content comes from');
