@@ -269,6 +269,58 @@ export const DB_INIT_FORM_SUBMISSIONS = `CREATE TABLE IF NOT EXISTS form_submiss
   released_by TEXT
 )`;
 
+// ── CHRISTMAS MARKET VENDOR APPLICATIONS ─────────────────────
+// One row per application, replacing the Google Form + spreadsheet the market
+// ran on through 2024. The first block is what the vendor typed; the second is
+// what the coordinator keeps — the columns Marla maintained by hand, which is
+// the half a Google Form never had anywhere to put.
+//
+// ⚠ MONEY IS INTEGER CENTS HERE, not REAL. `gym_invoices` stores floats and
+// that is exactly what AC-5 / GY-7 in the July 2026 review are about: a
+// subtotal summed from unrounded floats can disagree with the rows printed
+// above it. That is a defect being carried, not a convention to copy.
+//
+// ⚠ `amount_paid_cents` is NULLABLE and NULL means "nobody has checked yet",
+// which is a different fact from "they paid nothing". A default of 0 would put
+// every fresh application on the reconciled side of the ledger.
+//
+// ⚠ There is no `paid` boolean. `payment_status` has four states because the
+// market really has four — a fee waived for Timothy MDO or the Word of Life
+// 8th grade is not "unpaid", and a vendor who dropped out is not either.
+export const DB_INIT_MARKET_VENDORS = `CREATE TABLE IF NOT EXISTS market_vendors (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  participant_names   TEXT NOT NULL,
+  business_name       TEXT,
+  website_or_social   TEXT,
+  returning_vendor    TEXT,
+  email               TEXT NOT NULL,
+  phone               TEXT,
+  street              TEXT,
+  city                TEXT,
+  state               TEXT,
+  zip                 TEXT,
+  product_description TEXT,
+  sells_food          INTEGER NOT NULL DEFAULT 0,
+  appliances_power    TEXT,
+  special_requests    TEXT,
+  tables              INTEGER NOT NULL DEFAULT 1,
+  photos              TEXT,
+  signature_name      TEXT,
+  amount_due_cents    INTEGER NOT NULL DEFAULT 0,
+  table_number        TEXT,
+  payment_status      TEXT NOT NULL DEFAULT 'unpaid',
+  amount_paid_cents   INTEGER,
+  staff_notes         TEXT,
+  created_at          TEXT DEFAULT (datetime('now'))
+)`;
+
+// The list sorts unpaid-first and then by arrival, and the badge counts unpaid.
+// Both are the whole table on a market with seventy vendors, but the index is
+// what keeps the badge — which is computed on every admin request — from being
+// a scan once the second and third years' rows are sitting in there too.
+export const DB_INIT_MARKET_VENDORS_INDEX =
+  `CREATE INDEX IF NOT EXISTS idx_market_vendors_status ON market_vendors (payment_status, created_at)`;
+
 // One row per browser/device a staff member has said yes to notifications on
 // — not per user, since the same person can enable it on a desktop and a
 // phone and both should ring. `endpoint` (the push service URL the browser
@@ -533,6 +585,35 @@ export const INITIAL_SETTINGS = [
   { key: 'sermon_title_filter', value: '', label: 'Only show videos titled',
     hint: 'Leave blank to show the newest video. Fill it in (e.g. "worship") if the channel also carries concerts or other recordings that should not appear as the service.' },
   { key: 'give_url',          value: 'https://give.tithe.ly/?formId=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8',                                    label: 'Online giving URL',        hint: 'Used for the Give link in emails and invoices. Update when the giving platform changes.' },
+  // ── THE CHRISTMAS MARKET ──
+  // The market's numbers and dates are settings rather than code because the
+  // page prints each of them in several places and the market runs once a
+  // year — the old /christmasmarket markup carries an "UPDATE ANNUALLY" comment
+  // over a hardcoded mailto for exactly this reason, and an annual code edit is
+  // what that comment costs.
+  //
+  // ⚠ The percentage and the fixed charge are the processor's, and they are the
+  // ONLY two numbers that move if the church switches processors. Everything
+  // else — what the vendor is asked for, what the button says, what is recorded
+  // — is computed from them in admin/market.js. Nothing else needs editing.
+  { key: 'market_table_fee', value: '30', label: 'Christmas Market table fee ($)',
+    hint: 'What one 8-foot table costs a vendor. The vendor is asked for this plus the card fee, so the market receives this figure whole.' },
+  { key: 'market_fee_percent', value: '2.9', label: 'Card processing fee (%)',
+    hint: 'The percentage the card processor takes. Change this and the fixed charge below together if the church switches processors — nothing else needs editing.' },
+  { key: 'market_fee_fixed', value: '0.30', label: 'Card processing fee (fixed, $)',
+    hint: 'The per-transaction charge on top of the percentage. 2.9% + 30 cents is the Tithe.ly rate confirmed against a real 2024 payment.' },
+  { key: 'market_max_tables', value: '3', label: 'Most tables one vendor may take',
+    hint: 'The vendor page offers this many buttons, and refuses anything larger however it arrives.' },
+  { key: 'market_fund_id', value: '', label: 'Christmas Market fund',
+    hint: 'The Tithe.ly fund ID market payments should land in. Blank means whichever fund the base giving link already carries.' },
+  { key: 'market_coordinator_email', value: 'tlc.christmasmarket@gmail.com', label: 'Market coordinator email',
+    hint: 'Where a vendor application is sent, and the address printed on the vendor page for anything the form cannot handle.' },
+  { key: 'market_date_label', value: 'Saturday, Dec 5', label: 'Market day',
+    hint: 'Written the way it should read on the page — this is printed, not parsed.' },
+  { key: 'market_hours_label', value: '11:00 am – 6:00 pm', label: 'Market hours',
+    hint: 'Also printed as written.' },
+  { key: 'market_applications_open', value: '1', label: 'Taking vendor applications',
+    hint: '1 or 0. Switched off, the vendor page still explains the market but stops taking applications and stops asking for money. Change it from the Christmas Market screen.' },
   { key: 'gym_rate_per_hour', value: '25.00',                   label: 'Gym rental rate (per hour, $)',  hint: 'Hourly rate charged for gym rentals. Shown to groups when they confirm a booking.' },
   { key: 'gym_hold_hours',    value: '48',                      label: 'Gym hold duration (hours)',      hint: 'How many hours a tentative hold lasts before auto-expiring. Default: 48.' },
   { key: 'gcal_calendar_id',  value: '',                        label: 'Google Calendar ID (gym rentals)', hint: 'Calendar ID that confirmed gym bookings are automatically added to. Format: xxxxx@group.calendar.google.com or your Gmail address for a personal calendar. Also requires GCAL_SERVICE_ACCOUNT_EMAIL and GCAL_PRIVATE_KEY set as Cloudflare Worker secrets.' },

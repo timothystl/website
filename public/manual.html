@@ -117,6 +117,7 @@ li{margin-bottom:6px;}
     <a href="#giving-tab">Giving</a>
     <a href="#filtered-tab">Filtered Mail</a>
     <a href="#subscribers-tab">Subscribers</a>
+    <a href="#market-tab">Christmas Market</a>
     <a href="#gym-tab">Gym Rentals</a>
     <a href="#payroll-tab">Payroll</a>
     <a href="#users-tab">Users</a>
@@ -306,32 +307,27 @@ li{margin-bottom:6px;}
     <!-- ═══ CHRISTMAS MARKET ANNUAL ══════════════════════════════════════ -->
     <span class="toc-anchor" id="christmas-market-annual"></span>
     <h2>Christmas Market — Annual Update Checklist</h2>
-    <p>Do this each fall when the market details are confirmed, before registration opens.</p>
+    <p>Do this each fall when the market details are confirmed, before applications open. <strong>None of it is a code change any more</strong> — the vendor application used to be a Google Form whose address somebody had to paste into the page every year, and it is now a page on our own site that reads its dates and its prices from settings.</p>
 
     <div class="step">
       <div class="step-num">Step 1</div>
-      <p><strong>Update the date and time</strong> in the info box on the <code>/christmasmarket</code> page. Find the <code>id="xmas-details"</code> block and change the date text.</p>
+      <p><strong>Set this year's date, time and price.</strong> Admin &rarr; Settings, and search for <em>market</em>. Change <strong>Market day</strong> ("Saturday, Dec 5") and <strong>Market hours</strong> ("11:00 am – 6:00 pm"). They are printed exactly as you type them, so write them the way they should read.</p>
+      <p>If the table price has changed, that is <strong>Christmas Market table fee</strong> on the same screen. Leave the two card-processing settings alone unless the church changes payment processors — see the note below.</p>
     </div>
 
     <div class="step">
       <div class="step-num">Step 2</div>
-      <p><strong>Update the vendor application button</strong> with the new Google Form URL. Find the <code>CHRISTMAS MARKET PAGE — CTA BUTTON BAR</code> comment and change the <code>href</code> on Button 1 from the email address to the Google Form link.</p>
-      <p>It should go from: <code>href="mailto:office@..."</code><br>
-      To: <code>href="https://docs.google.com/forms/d/YOUR_FORM_ID/viewform"</code></p>
+      <p><strong>Open applications.</strong> Admin &rarr; Christmas Market, and switch <em>Taking vendor applications</em> to <strong>Open</strong>. That is what makes the form on <a href="https://timothystl.org/christmasmarket/vendors" target="_blank">timothystl.org/christmasmarket/vendors</a> appear.</p>
     </div>
 
     <div class="step">
-      <div class="step-num">Step 3</div>
-      <p><strong>Update the year</strong> in the info box. Find <code>2025 Market</code> and change it to the current year.</p>
-    </div>
-
-    <div class="step">
-      <div class="step-num">Step 4 (optional)</div>
-      <p><strong>Replace the header photo</strong> with a new one from this year's market. Upload the new photo to <code>/public/images/ministries/</code>, then update the <code>background-image</code> URL in the hero div. (See <a href="#header-photos">Adding a Header Photo</a> above.)</p>
+      <div class="step-num">Step 3 (optional)</div>
+      <p><strong>Replace the header photo</strong> with one from last year's market. Upload it to <code>/public/images/ministries/</code>, then update the <code>background-image</code> URL in the hero div. (See <a href="#header-photos">Adding a Header Photo</a> above.)</p>
     </div>
 
     <div class="callout">
-      <p><strong>After the market is over:</strong> Change Button 1 back to the email address so it doesn't link to an expired form. You can do this right away or wait until next fall.</p>
+      <p><strong>After the market is over:</strong> Admin &rarr; Christmas Market, switch <em>Taking vendor applications</em> to <strong>Closed</strong>. The vendor page keeps everything that explains the market and just stops taking applications and stops asking anyone for money — somebody who finds it in March is told when to come back and given Marla's address, instead of meeting a form that charges them for a market with no date. Nothing already submitted is affected, and the list stays exactly as it is.</p>
+      <p>Export the vendor list to a spreadsheet first if you want a copy to keep — the <strong>Export CSV</strong> button at the top of the Christmas Market screen.</p>
     </div>
 
 
@@ -586,6 +582,30 @@ li{margin-bottom:6px;}
     <span class="toc-anchor" id="subscribers-tab"></span>
     <h3>Subscribers tab</h3>
     <p><span class="badge badge--sage">Live</span> View the email newsletter subscriber list. Shows all subscribers, their status, and when they subscribed. You can search or export the list from here.</p>
+
+    <span class="toc-anchor" id="market-tab"></span>
+    <h3>Christmas Market tab</h3>
+    <p><span class="badge badge--sky">Requires Christmas Market permission</span> The vendor list. This is what replaced the Google Form and the spreadsheet the market used to run on — every application that comes in through <a href="https://timothystl.org/christmasmarket/vendors" target="_blank">timothystl.org/christmasmarket/vendors</a> lands here.</p>
+
+    <p>Four numbers across the top: how many have applied, how many tables they have asked for between them, how many have not paid, and how much you have recorded as paid.</p>
+
+    <p><strong>Opening a row</strong> shows everything the vendor typed — what they sell, whether they are selling food, what they plugged in last year, who they would like to be near, and any photos they sent — and lets you fill in the three things only you know:</p>
+    <ul>
+      <li><strong>Table number</strong> — free text, so a two-table vendor can be "19/20". It is written the way the floor plan is written.</li>
+      <li><strong>Payment</strong> — <em>Not paid yet</em>, <em>Paid</em>, <em>Fee waived</em> or <em>Dropped out</em>. Fee waived is for Timothy MDO, the Word of Life 8th grade and the youth group; marking those as unpaid would leave them on your chase list forever.</li>
+      <li><strong>Amount paid</strong> — leave it blank until you have actually checked. Blank means "not looked at yet", which is a different thing from "they paid nothing."</li>
+    </ul>
+
+    <div class="callout">
+      <p><strong>The website cannot tell you whether a card went through.</strong> It hands a vendor to the payment page and that is the last it sees of them — so the payment column is <em>your</em> record, kept against the church's own payment reports. Anything still reading "Not paid yet" is a space that is not held, and the row says so.</p>
+      <p>That is also why somebody who fills in the form and then closes the payment page still appears here. They used to vanish completely.</p>
+    </div>
+
+    <p><strong>Export CSV</strong> at the top gives you the whole list as a spreadsheet — the same columns plus your own — for sorting, printing, or handing to somebody else.</p>
+
+    <p><strong>What a vendor is charged.</strong> The table fee is $30 and the vendor pays a little more than that ($31.20 for one table) so that after the card processor takes its cut the market still receives the full $30. You do not have to work any of that out — it is computed from the table fee and the processor's rate in Settings. If the church ever changes payment processors, the only two things to change are <strong>Card processing fee (%)</strong> and <strong>Card processing fee (fixed)</strong>; every price on the vendor page follows.</p>
+
+    <p>Applications are switched on and off from the panel at the top of this screen — see the <a href="#christmas-market-annual">annual checklist</a> above.</p>
 
     <span class="toc-anchor" id="gym-tab"></span>
     <h3>Gym Rentals tab</h3>

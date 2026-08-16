@@ -3151,5 +3151,169 @@ group('⚠ A hand-edited page can still be given the redesigned layout');
   eq(none.status, 400, 'a page with no redesigned layout is refused, not silently no-opped');
 }
 
+// ── the Christmas Market vendor application ──────────────────────────────────
+// The public form and the coordinator's list, through the real Worker. What
+// these check is not that the screen renders — it is the ordering that makes
+// the whole thing safe: the application is SAVED before anybody is sent to
+// pay, and the amount is decided here rather than by whatever the browser
+// posted.
+async function applyAsVendor(env, over = {}) {
+  const fields = {
+    participant_names: 'Marla Kerr', email: 'marla@example.com', phone: '(314) 555-0123',
+    product_description: 'Handmade purses and crochet shawls', signature_name: 'Marla Kerr',
+    tables: '1', ...over,
+  };
+  const body = new URLSearchParams(fields).toString();
+  const headers = new Headers({ 'content-type': 'application/x-www-form-urlencoded' });
+  const req = new Request('https://admin.timothystl.org/api/market/apply', { method: 'POST', headers, body });
+  return worker.fetch(req, env, { waitUntil: () => {}, passThroughOnException: () => {} });
+}
+
+group('a vendor application is saved before anybody is sent to pay');
+{
+  const { db, env } = await boot();
+  db.prepare("INSERT INTO site_settings (key,value) VALUES ('give_url','https://give.tithe.ly/?formId=abc&fundId=general') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+  db.prepare("INSERT INTO site_settings (key,value) VALUES ('market_fund_id','market-fund') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+
+  const res = await applyAsVendor(env, { tables: '2' });
+  eq(res.status, 200, 'a complete application is accepted');
+  const d = await res.json();
+  ok(d.success, 'and reports success');
+
+  const saved = db.prepare('SELECT * FROM market_vendors').all();
+  eq(saved.length, 1, 'the application is in the coordinator’s list');
+  eq(saved[0].payment_status, 'unpaid', 'marked unpaid — the website cannot see whether the card went through');
+  eq(saved[0].tables, 2, 'with the number of tables asked for');
+  eq(saved[0].amount_due_cents, 6210, 'and what was asked for, in cents');
+  eq(saved[0].email, 'marla@example.com', 'and the address to confirm the table to');
+
+  // The link is built from give_url at request time and the market fund
+  // REPLACES the base link's fund rather than adding a second.
+  ok(d.payUrl.includes('amount=6210'), 'the payment link carries the amount in cents');
+  eq((d.payUrl.match(/fundId=/g) || []).length, 1, 'and exactly one fundId');
+  ok(d.payUrl.includes('fundId=market-fund'), 'which is the market’s');
+
+  // ⚠ The load-bearing one. A maker who closes the card page must still exist
+  // on the list — the Google Form this replaces lost them entirely.
+  db.prepare("DELETE FROM site_settings WHERE key='give_url'").run();
+  const noLink = await applyAsVendor(env, { email: 'sue@example.com' });
+  eq(noLink.status, 200, 'with no giving link set the application is still accepted');
+  const d2 = await noLink.json();
+  eq(d2.payUrl, '', 'there is simply no payment address to send them to');
+  eq(db.prepare('SELECT COUNT(*) AS n FROM market_vendors').get().n, 2,
+    'and the application is saved anyway — a payment problem must never lose it');
+}
+
+group('the price is decided by the server, never by the browser');
+{
+  const { db, env } = await boot();
+  // Everything the page could post about money, posted wrong.
+  const res = await applyAsVendor(env, { tables: '40', amount_due_cents: '1', total: '0.01', tableFee: '0' });
+  eq(res.status, 200, 'the application still goes through');
+  const saved = db.prepare('SELECT tables, amount_due_cents FROM market_vendors').get();
+  eq(saved.tables, 3, 'a posted table count above the maximum is clamped to it');
+  eq(saved.amount_due_cents, 9300, 'and the amount is recomputed here — three tables is $93.00');
+
+  const d = await res.json();
+  ok(!d.payUrl || d.payUrl.includes('amount=9300'), 'the payment link asks for the recomputed figure');
+}
+
+group('an application with a required field missing is refused with a sentence');
+{
+  const { db, env } = await boot();
+  const res = await applyAsVendor(env, { email: '' });
+  eq(res.status, 400, 'it is refused');
+  const d = await res.json();
+  ok(d.error && d.error.includes('email'), 'and says what is wrong in plain words');
+  ok(!d.error.includes('_'), 'without naming a database column');
+  eq(db.prepare('SELECT COUNT(*) AS n FROM market_vendors').get().n, 0, 'nothing is stored');
+}
+
+group('closing applications stops the page taking money');
+{
+  const { db, env } = await boot();
+  db.prepare("UPDATE site_settings SET value='0' WHERE key='market_applications_open'").run();
+  const res = await applyAsVendor(env);
+  eq(res.status, 403, 'an application posted while closed is refused');
+  const d = await res.json();
+  ok(d.error.includes('christmasmarket'), 'and points at the coordinator instead of just saying no');
+  eq(db.prepare('SELECT COUNT(*) AS n FROM market_vendors').get().n, 0, 'nothing is stored');
+
+  const cfg = await (await call(env, '/api/market-config', { fresh: true })).json();
+  eq(cfg.open, false, 'and the public page is told, so it hides the form rather than failing on submit');
+  // ⚠ The giving link must not be in this response. The browser is never
+  // handed a payment address it could edit before it is used.
+  ok(!JSON.stringify(cfg).includes('tithe.ly'), 'the config carries no payment address at all');
+}
+
+group('the coordinator’s list');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  const empty = await call(env, '/market', { cookie });
+  eq(empty.status, 200, '/market renders with nothing in the table');
+  const emptyBody = await empty.text();
+  lacks(emptyBody, 'D1_ERROR', 'with no database error on its face');
+  lacks(emptyBody, 'no such column', 'and no missing column');
+  has(emptyBody, 'Christmas Market vendors', 'titled from the section config');
+
+  await applyAsVendor(env, { product_description: 'Beeswax candles', tables: '2' });
+  const id = db.prepare('SELECT id FROM market_vendors').get().id;
+
+  const body = await (await call(env, '/market', { cookie })).text();
+  has(body, 'Marla Kerr', 'the vendor appears');
+  has(body, 'Beeswax candles', 'with what they sell');
+  has(body, 'Not paid yet', 'and their payment state');
+  has(body, 'their space is not held', 'an unpaid row grows a warning row saying what that costs');
+
+  // Recording a payment is what the screen is for.
+  const saveRes = await call(env, '/market/update', {
+    cookie, method: 'POST',
+    form: { id: String(id), table_number: '19/20', payment_status: 'paid', amount_paid: '62.10', staff_notes: 'Near the door' },
+  });
+  eq(saveRes.status, 302, 'saving redirects back to the list');
+  const after = db.prepare('SELECT * FROM market_vendors WHERE id = ?').get(id);
+  eq(after.table_number, '19/20', 'a table number can be a range, because a two-table vendor takes one');
+  eq(after.payment_status, 'paid', 'the payment state is stored');
+  eq(after.amount_paid_cents, 6210, 'and the amount as integer cents');
+
+  // ⚠ Blank is not zero. "Nobody has checked yet" and "they paid nothing" are
+  // different facts, and collapsing them puts every fresh row on the
+  // reconciled side of the ledger.
+  await call(env, '/market/update', { cookie, method: 'POST', form: { id: String(id), payment_status: 'unpaid', amount_paid: '' } });
+  eq(db.prepare('SELECT amount_paid_cents FROM market_vendors WHERE id = ?').get(id).amount_paid_cents, null,
+    'clearing the amount stores NULL, not 0');
+
+  // The spreadsheet this replaced — she still needs to be able to hand the
+  // list to somebody.
+  const csv = await call(env, '/market/export.csv', { cookie });
+  eq(csv.status, 200, 'the list exports');
+  eq(csv.headers.get('Content-Type').split(';')[0], 'text/csv', 'as a CSV');
+  const csvText = await csv.text();
+  has(csvText, 'Marla Kerr', 'with the vendor in it');
+  has(csvText, 'Table #', 'and the coordinator’s own columns');
+
+  // The badge and the list have to agree, like every other badge.
+  await applyAsVendor(env, { email: 'sue@example.com' });
+  const withUnpaid = await (await call(env, '/market', { cookie })).text();
+  has(withUnpaid, 'sidebar-badge', 'an unpaid application puts a badge on the sidebar');
+}
+
+group('the vendor list is gated on its own permission');
+{
+  const { db, env } = await boot();
+  // Somebody with the run of the website and no market permission.
+  const { cookie } = signIn(db, ['pages_edit', 'news_edit', 'giving_manage'], 'office');
+  eq((await call(env, '/market', { cookie })).status, 403, 'the list refuses somebody without market_manage');
+  eq((await call(env, '/market/export.csv', { cookie })).status, 403, 'and so does the export — seventy home addresses');
+
+  const { cookie: marla } = signIn(db, ['market_manage'], 'marla');
+  eq((await call(env, '/market', { cookie: marla })).status, 200, 'the coordinator gets in with market_manage alone');
+  const body = await (await call(env, '/market', { cookie: marla })).text();
+  lacks(body, '/payroll', 'and sees nothing else in the sidebar');
+  lacks(body, '/subscribers', 'including no list of everybody’s email addresses');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

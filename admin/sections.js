@@ -171,6 +171,25 @@ export const SECTIONS = {
     columns: [['Short link', '1.6fr'], ['Goes to', '2.4fr'], ['Kind', '1fr'], ['Status', '1fr']],
     note: 'Automatic rows are created when a page is renamed. Leave them — they are what keeps old bulletins and Google results working.'
   },
+  // Postdates the design handoff — it comes from
+  // design_handoff_market_vendor_signup/, which specifies the public vendor
+  // page in full and says only that the coordinator "needs a list view
+  // (paid / unpaid, table number assignment, placement requests) — the
+  // spreadsheet's real job". So the wording follows the rule for a list with
+  // no spec of its own: say what the screen is for in plain English.
+  //
+  // The action is an export rather than "+ New". Nothing on this screen is
+  // created by staff — every row arrives from the public page — and an Add
+  // button would be a form for typing in an application that has to come with
+  // a payment behind it.
+  market: {
+    label: 'Christmas Market', glyph: '❆', title: 'Christmas Market vendors',
+    purpose: 'Every vendor who has applied for a table, what they sell, and whether they have paid. Table numbers and placement notes live here too — this is the spreadsheet.',
+    action: 'Export CSV', search: 'Search vendors, products, table numbers',
+    filters: ['All', 'Not paid yet', 'Paid', 'Fee waived', 'Dropped out'],
+    columns: [['Vendor', '2.3fr'], ['Sells', '2fr'], ['Tables', '.9fr'], ['Payment', '1.1fr']],
+    note: 'A payment state is your record, not the processor’s — the website hands a vendor to the card page and cannot see what happens there. Anything still reading “not paid yet” is a space that is not held.'
+  },
   giving: { label: 'Giving', glyph: '♡', title: 'Giving', purpose: 'The giving page itself, the amounts and funds offered on it, and the single platform link every other screen reads.' },
   payroll: { label: 'Payroll', glyph: '▤', title: 'Payroll', purpose: 'Enter hours and exceptions, approve the period, then print the gross-pay report — church staff and Timothy MDO, with a combined total. Withholding, taxes, and bank details stay with the payroll service.' },
   media: {

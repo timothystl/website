@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#EDE9E0;color:#1A1A2A;font-family:'Newsreader',Georgia,serif;line-height:1.65;font-size:16px;}
+*,*::before,*::after{box-sizing:border-box;}
+a{color:#2E7EA6;text-decoration:none;}
+a:hover{color:#1E2D4A;}
+input,select,textarea{font-family:'Newsreader',Georgia,serif;}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#C9973A !important;box-shadow:0 0 0 3px rgba(201,151,58,.15);}
+@media(max-width:900px){
+  [data-row="split"]{grid-template-columns:1fr !important;gap:32px !important;}
+  [data-row="footer"]{grid-template-columns:1fr 1fr !important;}
+}
+@media(max-width:620px){
+  [data-row="pair"]{grid-template-columns:1fr !important;}
+  [data-row="footer"]{grid-template-columns:1fr !important;}
+  [data-row="nav"]{height:auto !important;padding:12px 16px !important;flex-wrap:wrap;gap:12px !important;}
+  [data-row="navlinks"]{gap:2px !important;}
+  [data-row="band"]{grid-template-columns:1fr 1fr !important;}
+  section{padding-left:16px;padding-right:16px;}
+}
+</style>
+</helmet>
+
+<div style="background:#EDE9E0">
+
+  <nav style="position:sticky;top:0;z-index:100;background:#4A5E3A;border-bottom:3px solid #C9973A">
+    <div style="max-width:1080px;margin:0 auto;padding:0 28px;height:64px;display:flex;align-items:center;justify-content:space-between;gap:20px" data-row="nav">
+      <a href="/" style="display:flex;align-items:center;gap:12px;text-decoration:none">
+        <img src="public/logo.png" alt="Timothy Lutheran Church" style="width:44px;height:44px;border-radius:50%;flex-shrink:0;object-fit:contain;background:#fff;padding:3px;display:block">
+        <span>
+          <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:17px;font-weight:800;letter-spacing:-.01em;color:#fff;display:block">Timothy Lutheran Church</span>
+          <span style="font-family:'Newsreader',Georgia,serif;font-size:12px;font-weight:300;color:#E8C070;display:block;letter-spacing:.01em">from our Neighborhood to the Nations</span>
+        </span>
+      </a>
+      <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap" data-row="navlinks">
+        <a href="/about" style="font-family:'Newsreader',Georgia,serif;font-size:14px;font-weight:600;color:#fff;opacity:.85;padding:6px 10px;border-radius:8px">About</a>
+        <a href="/worship" style="font-family:'Newsreader',Georgia,serif;font-size:14px;font-weight:600;color:#fff;opacity:.85;padding:6px 10px;border-radius:8px">Worship</a>
+        <a href="/education" style="font-family:'Newsreader',Georgia,serif;font-size:14px;font-weight:600;color:#fff;opacity:.85;padding:6px 10px;border-radius:8px">Learn</a>
+        <a href="/ministries" style="font-family:'Newsreader',Georgia,serif;font-size:14px;font-weight:600;color:#fff;opacity:.85;padding:6px 10px;border-radius:8px">Ministries</a>
+        <a href="/news" style="font-family:'Newsreader',Georgia,serif;font-size:14px;font-weight:600;color:#fff;opacity:.85;padding:6px 10px;border-radius:8px">News</a>
+        <a href="/contact" style="font-family:'Newsreader',Georgia,serif;font-size:14px;font-weight:600;color:#fff;opacity:.85;padding:6px 10px;border-radius:8px">Contact</a>
+        <a href="/give" style="background:#C9973A;color:#fff;font-family:'Bricolage Grotesque',sans-serif;font-size:13px;font-weight:800;padding:12px 19px;border-radius:999px;margin-left:6px">Give</a>
+      </div>
+    </div>
+  </nav>
+
+  <section style="background:#4A5E3A;padding:52px 28px 40px;text-align:center">
+    <span style="font-family:'Bricolage Grotesque',sans-serif;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#E8C070;margin-bottom:10px;display:block">Timothy Christmas Market · Vendor applications</span>
+    <h1 style="font-family:'Bricolage Grotesque',sans-serif;font-size:clamp(30px,4.5vw,48px);font-weight:700;line-height:1.15;color:#fff;margin:0 auto 14px;max-width:760px">Sell with us on <em style="font-style:italic;color:#E8C070">Saturday, December 5</em></h1>
+    <p style="font-size:17px;font-weight:300;color:rgba(255,255,255,.85);line-height:1.7;margin:0 auto;max-width:620px">Three short steps. Tables are $30, you pay by card at the end, and Marla emails your table number.</p>
+  </section>
+
+  <section style="background:#1E2D4A;padding:0 28px">
+    <div style="max-width:1080px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:rgba(255,255,255,.12)" data-row="band">
+      <div style="background:#1E2D4A;padding:22px 20px">
+        <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#C9973A;margin-bottom:6px">When</div>
+        <div style="font-family:'Newsreader',Georgia,serif;font-size:17px;color:#fff">Sat, Dec 5 · 11–6</div>
+      </div>
+      <div style="background:#1E2D4A;padding:22px 20px">
+        <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#C9973A;margin-bottom:6px">Where</div>
+        <div style="font-family:'Newsreader',Georgia,serif;font-size:17px;color:#fff">6704 Fyler Ave</div>
+      </div>
+      <div style="background:#1E2D4A;padding:22px 20px">
+        <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#C9973A;margin-bottom:6px">Table fee</div>
+        <div style="font-family:'Newsreader',Georgia,serif;font-size:17px;color:#fff">$30 · 8-ft table</div>
+      </div>
+      <div style="background:#1E2D4A;padding:22px 20px">
+        <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#C9973A;margin-bottom:6px">Setup</div>
+        <div style="font-family:'Newsreader',Georgia,serif;font-size:17px;color:#fff">Doors 8:30 am</div>
+      </div>
+    </div>
+  </section>
+
+  <section style="padding:56px 28px 72px">
+    <div style="max-width:760px;margin:0 auto;background:#FBF8F3;border:1px solid #DDE3ED;border-radius:20px;box-shadow:0 6px 32px rgba(30,45,74,.14);overflow:hidden">
+
+      <div style="display:flex;align-items:center;gap:0;border-bottom:1px solid #DDE3ED;background:#EDF2F7">
+        <button type="button" onClick="{{ goStep1 }}" style="flex:1;background:{{ s1Bg }};border:none;border-bottom:3px solid {{ s1Bar }};padding:18px 16px;text-align:left;cursor:pointer;font-family:'Bricolage Grotesque',sans-serif">
+          <span style="display:block;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8A8898">Step 1</span>
+          <span style="display:block;font-size:14px;font-weight:800;color:{{ s1Ink }}">You &amp; your booth</span>
+        </button>
+        <button type="button" onClick="{{ goStep2 }}" style="flex:1;background:{{ s2Bg }};border:none;border-bottom:3px solid {{ s2Bar }};padding:18px 16px;text-align:left;cursor:pointer;font-family:'Bricolage Grotesque',sans-serif">
+          <span style="display:block;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8A8898">Step 2</span>
+          <span style="display:block;font-size:14px;font-weight:800;color:{{ s2Ink }}">What you sell</span>
+        </button>
+        <button type="button" onClick="{{ goStep3 }}" style="flex:1;background:{{ s3Bg }};border:none;border-bottom:3px solid {{ s3Bar }};padding:18px 16px;text-align:left;cursor:pointer;font-family:'Bricolage Grotesque',sans-serif">
+          <span style="display:block;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8A8898">Step 3</span>
+          <span style="display:block;font-size:14px;font-weight:800;color:{{ s3Ink }}">Tables &amp; payment</span>
+        </button>
+      </div>
+
+      <div style="padding:34px 34px 30px">
+
+        <div style="display:{{ show1 }};gap:22px;grid-template-columns:1fr">
+          <p style="font-size:15px;color:#4A4860;line-height:1.7;margin:0 0 4px">Who's behind the table, and how we reach you.</p>
+          <div>
+            <label style="display:block;font-family:'Bricolage Grotesque',sans-serif;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#4A4860;margin-bottom:6px">Participant name(s) <span style="color:#C9973A">*</span></label>
+            <input type="text" placeholder="Everyone who will be at the table" style="width:100%;background:#FBF8F3;border:1px solid #DDE3ED;border-radius:8px;padding:12px 14px;font-size:15px;color:#1A1A2A;min-height:44px">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px" data-row="pair">
+            <div>
+              <label style="display:block;font-family:'Bricolage Grotesque',sans-serif;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#4A4860;margin-bottom:6px">Business name</label>
+              <input type="text" placeholder="If you have one" style="width:100%;background:#FBF8F3;border:1px solid #DDE3ED;border-radius:8px;padding:12px 14px;font-size:15px;color:#1A1A2A;min-height:44px">
+            </div>
+            <div>
+              <label style="display:block;font-family:'Bricolage Grotesque',sans-serif;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#4A4860;margin-bottom:6px">Website or Instagram</label>
+              <input type="text" placeholder="@yourshop" style="width:100%;background:#FBF8F3;border:1px solid #DDE3ED;border-radius:8px;padding:12px 14px;font-size:15px;color:#1A1A2A;min-height:44px">
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px" data-row="pair">
+            <div>
+              <label style="display:block;font-family:'Bricolage Grotesque',sans-serif;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#4A4860;margin-bottom:6px">Email <span style="color:#C9973A">*</span></label>
+              <input type="email" placeholder="you@example.com" style="width:100%;background:#FBF8F3;border:1px solid #DDE3ED;border-radius:8px;padding:12px 14px;font-size:15px;color:#1A1A2A;min-height:44px">
+            </div>
+            <div>
+              <label style="display:block;font-family:'Bricolage Grotesque',sans-serif;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#4A4860;margin-bottom:6px">Telephone <span style="color:#C9973A">*</span></label>
+              <input type="tel" placeholder="(314) 555-0123" style="width:100%;background:#FBF8F3;border:1px solid #DDE3ED;border-radius:8px;padding:12px 14px;font-size:15px;color:#1A1A2A;min-height:44px">
+            </div>
+          </div>
+          <div>
+            <label style="display:block;font-family:'Bricolage Grotesque',sans-serif;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#4A4860;margin-bottom:6px">Mailing address</label>
+            <input type="text" placeholder="Street" style="width:100%;background:#FBF8F3;border:1px solid #DDE3ED;border-radius:8px;padding:12px 14px;font-size:15px;color:#1A1A2A;min-height:44px;margin-bottom:12px">
+            <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px" data-row="pair">
+              <input type="text" placeholder="City" style="width:100%;background:#FBF8F3;border:1px solid #DDE3ED;border-radius:8px;padding:12px 14px;font-size:15px;color:#1A1A2A;min-height:44px">
+              <input type="text" placeholder="State" style="width:100%;background:#FBF8F3;border:1px solid #DDE3ED;border-radius:8px;padding:12px 14px;font-size:15px;color:#1A1A2A;min-height:44px">
+              <input type="text" placeholder="ZIP" style="width:100%;background:#FBF8F3;border:1px solid #DDE3ED;border-radius:8px;padding:12px 14px;font-size:15px;color:#1A1A2A;min-height:44px">
+            </div>
+          </div>
+          <div>
+            <label style="display:block;font-family:'Bricolage Grotesque',sans-serif;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#4A4860;margin-bottom:6px">Sold with us before?</label>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <button type="button" onClick="{{ pickReturning }}" data-val="yes" style="background:{{ yesBg }};border:1px solid {{ yesBd }};color:{{ yesInk }};border-radius:999px;padding:10px 18px;font-family:'Newsreader',Georgia,serif;font-size:14px;cursor:pointer;min-height:44px">Returning vendor</button>
+              <button type="button" onClick="{{ pickReturning }}" data-val="no" style="background:{{ noBg }};border:1px solid {{ noBd }};color:{{ noInk }};border-radius:999px;padding:10px 18px;font-family:'Newsreader',Georgia,serif;font-size:14px;cursor:pointer;min-height:44px">First year</button>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;padding-top:6px">
+            <button type="button" onClick="{{ goStep2 }}" style="font-family:'Bricolage Grotesque',sans-serif;font-size:14px;font-weight:800;padding:15px 28px;border-radius:999px;border:none;background:#1E2D4A;color:#fff;cursor:pointer;min-height:48px">Next: what you sell →</button>
+          </div>
+        </div>
+
+        <div style="display:{{ show2 }};gap:22px;grid-template-columns:1fr">
+          <p style="font-size:15px;color:#4A4860;line-height:1.7;margin:0 0 4px">The more specific you are, the better we can space out similar tables.</p>
+          <div>
+            <label style="display:block;font-family:'Bricolage Grotesque',sans-serif;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#4A4860;margin-bottom:6px">Description of product <span style="color:#C9973A">*</span></label>
+            <textarea placeholder="e.g. handmade purses, tote bags, wallets, crochet shawls" style="width:100%;background:#FBF8F3;border:1px solid #DDE3ED;border-radius:8px;padding:12px 14px;font-size:15px;color:#1A1A2A;min-height:112px;resize:vertical;line-height:1.6"></textarea>
+          </div>
+          <label style="display:flex;gap:12px;align-items:flex-start;background:#EDF2F7;border:1px solid #C4CEDF;border-radius:12px;padding:18px;cursor:pointer">
+            <input type="checkbox" style="width:20px;height:20px;margin-top:2px;accent-color:#4A5E3A;flex-shrink:0">
+            <span style="font-size:14px;color:#1A1A2A;line-height:1.6"><strong style="font-weight:600">I'll be selling food or drink.</strong> You're responsible for City of St. Louis health department requirements for what you sell — Marla will follow up with what that means for your table.</span>
+          </label>
+          <div>
+            <label style="display:block;font-family:'Bricolage Grotesque',sans-serif;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#4A4860;margin-bottom:6px">Appliances, wattage, amperage</label>
+            <input type="text" placeholder="None — or: popcorn popper, 1200W / 15A" style="width:100%;background:#FBF8F3;border:1px solid #DDE3ED;border-radius:8px;padding:12px 14px;font-size:15px;color:#1A1A2A;min-height:44px">
+          </div>
+          <div>
+            <label style="display:block;font-family:'Bricolage Grotesque',sans-serif;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#4A4860;margin-bottom:6px">Sample photos <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#8A8898;font-family:'Newsreader',Georgia,serif;font-size:13px">— optional, up to 5</span></label>
+            <div style="background:#EDF2F7;border:2px dashed #C4CEDF;border-radius:12px;padding:26px 22px;text-align:center">
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:14px;font-weight:700;color:#1E2D4A;margin-bottom:4px">Drop photos here or browse</div>
+              <div style="font-size:13px;color:#4A4860">We use these to promote the market and to place your table well.</div>
+            </div>
+          </div>
+          <div>
+            <label style="display:block;font-family:'Bricolage Grotesque',sans-serif;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#4A4860;margin-bottom:6px">Special requests</label>
+            <textarea placeholder="Booth placement, neighbors you'd like to be near, anything else" style="width:100%;background:#FBF8F3;border:1px solid #DDE3ED;border-radius:8px;padding:12px 14px;font-size:15px;color:#1A1A2A;min-height:84px;resize:vertical;line-height:1.6"></textarea>
+          </div>
+          <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-top:6px">
+            <button type="button" onClick="{{ goStep1 }}" style="font-family:'Bricolage Grotesque',sans-serif;font-size:14px;font-weight:800;padding:15px 24px;border-radius:999px;background:transparent;color:#1E2D4A;border:1.5px solid #1E2D4A;cursor:pointer;min-height:48px">← Back</button>
+            <button type="button" onClick="{{ goStep3 }}" style="font-family:'Bricolage Grotesque',sans-serif;font-size:14px;font-weight:800;padding:15px 28px;border-radius:999px;border:none;background:#1E2D4A;color:#fff;cursor:pointer;min-height:48px">Next: tables &amp; payment →</button>
+          </div>
+        </div>
+
+        <div style="display:{{ show3 }};gap:22px;grid-template-columns:1fr">
+          <div>
+            <label style="display:block;font-family:'Bricolage Grotesque',sans-serif;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#4A4860;margin-bottom:8px">How many tables? <span style="color:#C9973A">*</span></label>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+              <button type="button" onClick="{{ pickTables }}" data-n="1" style="font-family:'Bricolage Grotesque',sans-serif;font-size:15px;font-weight:800;padding:18px 12px;border-radius:12px;cursor:pointer;background:{{ t1Bg }};color:{{ t1Ink }};border:1px solid {{ t1Bd }}">1 table</button>
+              <button type="button" onClick="{{ pickTables }}" data-n="2" style="font-family:'Bricolage Grotesque',sans-serif;font-size:15px;font-weight:800;padding:18px 12px;border-radius:12px;cursor:pointer;background:{{ t2Bg }};color:{{ t2Ink }};border:1px solid {{ t2Bd }}">2 tables</button>
+              <button type="button" onClick="{{ pickTables }}" data-n="3" style="font-family:'Bricolage Grotesque',sans-serif;font-size:15px;font-weight:800;padding:18px 12px;border-radius:12px;cursor:pointer;background:{{ t3Bg }};color:{{ t3Ink }};border:1px solid {{ t3Bd }}">3 tables</button>
+            </div>
+          </div>
+
+          <div style="background:#1E2D4A;border-radius:16px;padding:24px">
+            <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#E8C070;margin-bottom:14px">Your total</div>
+            <div style="display:grid;gap:10px;font-size:15px;color:rgba(255,255,255,.85)">
+              <div style="display:flex;justify-content:space-between;gap:16px"><span>{{ tablesLabel }} × $30</span><span>{{ subtotal }}</span></div>
+              <div style="display:flex;justify-content:space-between;gap:16px"><span>Card processing fee (2.9% + 30¢)</span><span>{{ feeLine }}</span></div>
+              <hr style="border:none;border-top:1px solid rgba(255,255,255,.18);margin:4px 0">
+              <div style="display:flex;justify-content:space-between;gap:16px;font-family:'Bricolage Grotesque',sans-serif;font-size:20px;font-weight:800;color:#fff"><span>Due today</span><span>{{ total }}</span></div>
+            </div>
+            <p style="font-size:13px;color:rgba(255,255,255,.7);line-height:1.7;margin:14px 0 0">Vendors cover the processing fee so the full $30 per table goes to the market. Payment opens with this amount already filled in.</p>
+          </div>
+
+          <div style="background:#EDE9E0;border:1px solid #DDE3ED;border-radius:12px;padding:20px;max-height:200px;overflow:auto;font-size:14px;color:#4A4860;line-height:1.75">
+            <p style="margin:0 0 12px"><strong style="font-family:'Bricolage Grotesque',sans-serif;color:#1E2D4A">Vendor agreement.</strong> By applying I agree that:</p>
+            <p style="margin:0 0 10px">The table fee of $30 per table, plus the card processing fee, is due when I apply and is non-refundable. My space is held once payment is received.</p>
+            <p style="margin:0 0 10px">I supply my own table covering, signage, display, bags, and change, and keep my display within my assigned space.</p>
+            <p style="margin:0 0 10px">I will be set up by 10:30 am and keep my table staffed until the market closes at 6:00 pm.</p>
+            <p style="margin:0 0 10px">If I sell food or drink, I am responsible for complying with all City of St. Louis health department requirements and for safe handling of everything I serve.</p>
+            <p style="margin:0 0 10px">I am responsible for collecting and reporting any sales tax, and for the security of my own merchandise and cash.</p>
+            <p style="margin:0 0 10px">Timothy Lutheran Church is not liable for loss, theft, or damage to my property, or for injury arising from my participation. I will leave my space clean.</p>
+            <p style="margin:0">Timothy Lutheran Church may photograph the market and use those images to promote future markets.</p>
+          </div>
+          <div>
+            <label style="display:block;font-family:'Bricolage Grotesque',sans-serif;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#4A4860;margin-bottom:6px">Type your name to agree <span style="color:#C9973A">*</span></label>
+            <input type="text" placeholder="Your full name" style="width:100%;max-width:400px;background:#FBF8F3;border:1px solid #DDE3ED;border-radius:8px;padding:12px 14px;font-size:15px;color:#1A1A2A;min-height:44px">
+          </div>
+          <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;padding-top:6px">
+            <button type="button" onClick="{{ goStep2 }}" style="font-family:'Bricolage Grotesque',sans-serif;font-size:14px;font-weight:800;padding:15px 24px;border-radius:999px;background:transparent;color:#1E2D4A;border:1.5px solid #1E2D4A;cursor:pointer;min-height:48px">← Back</button>
+            <a href="{{ payUrl }}" style="display:inline-flex;align-items:center;justify-content:center;font-family:'Bricolage Grotesque',sans-serif;font-size:14px;font-weight:800;padding:16px 30px;border-radius:999px;background:#C9973A;color:#1E2D4A;min-height:48px">Submit and pay {{ total }} →</a>
+          </div>
+          <p style="font-size:13px;color:#8A8898;line-height:1.7;margin:0">Need to pay by check or cash instead? Email <a href="mailto:tlc.christmasmarket@gmail.com">tlc.christmasmarket@gmail.com</a> and Marla will hold your space.</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="max-width:760px;margin:24px auto 0;display:grid;grid-template-columns:1fr 1fr;gap:20px" data-row="split">
+      <div style="background:#FBF8F3;border:1px solid #DDE3ED;border-left:3px solid #C9973A;border-radius:12px;padding:20px">
+        <h4 style="font-family:'Bricolage Grotesque',sans-serif;font-size:15px;font-weight:700;color:#1E2D4A;margin:0 0 6px">Questions first?</h4>
+        <p style="font-size:13px;color:#4A4860;margin:0">Marla is the market coordinator — <a href="mailto:tlc.christmasmarket@gmail.com">tlc.christmasmarket@gmail.com</a>. She'd rather hear from you before you apply than after.</p>
+      </div>
+      <div style="background:#FBF8F3;border:1px solid #DDE3ED;border-left:3px solid #4A5E3A;border-radius:12px;padding:20px">
+        <h4 style="font-family:'Bricolage Grotesque',sans-serif;font-size:15px;font-weight:700;color:#1E2D4A;margin:0 0 6px">Just want to shop?</h4>
+        <p style="font-size:13px;color:#4A4860;margin:0">The market is free and open to the public, 11 am – 6 pm. <a href="/christmasmarket">See the market page →</a></p>
+      </div>
+    </div>
+  </section>
+
+  <footer style="background:#111E32;padding:48px 28px 28px">
+    <div style="max-width:1080px;margin:0 auto;display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:40px;margin-bottom:40px" data-row="footer">
+      <div>
+        <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:15px;font-weight:800;letter-spacing:-.01em;color:#fff;margin-bottom:4px">Timothy Lutheran Church</div>
+        <div style="font-family:'Newsreader',Georgia,serif;font-size:15px;font-weight:300;font-style:italic;color:#C9973A;margin-bottom:14px">from our Neighborhood to the Nations</div>
+        <div style="font-family:'Newsreader',Georgia,serif;font-size:14px;font-weight:300;color:rgba(255,255,255,.55);line-height:1.8">6704 Fyler Ave · St. Louis, MO 63139<br>Sunday worship · 8:00 &amp; 10:45 am<br>(314) 781-8673 · office@timothystl.org</div>
+      </div>
+      <div>
+        <h4 style="font-family:'Bricolage Grotesque',sans-serif;font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#C9973A;margin:0 0 12px">Visit</h4>
+        <div style="display:grid;gap:8px">
+          <a href="/worship" style="font-family:'Newsreader',Georgia,serif;font-size:14px;font-weight:300;color:rgba(255,255,255,.6)">Worship</a>
+          <a href="/calendar" style="font-family:'Newsreader',Georgia,serif;font-size:14px;font-weight:300;color:rgba(255,255,255,.6)">Calendar</a>
+          <a href="/contact" style="font-family:'Newsreader',Georgia,serif;font-size:14px;font-weight:300;color:rgba(255,255,255,.6)">Contact</a>
+        </div>
+      </div>
+      <div>
+        <h4 style="font-family:'Bricolage Grotesque',sans-serif;font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#C9973A;margin:0 0 12px">Ministries</h4>
+        <div style="display:grid;gap:8px">
+          <a href="/christmasmarket" style="font-family:'Newsreader',Georgia,serif;font-size:14px;font-weight:300;color:rgba(255,255,255,.6)">Christmas Market</a>
+          <a href="/foodpantry" style="font-family:'Newsreader',Georgia,serif;font-size:14px;font-weight:300;color:rgba(255,255,255,.6)">Food Pantry</a>
+          <a href="/ministries" style="font-family:'Newsreader',Georgia,serif;font-size:14px;font-weight:300;color:rgba(255,255,255,.6)">All ministries</a>
+        </div>
+      </div>
+      <div>
+        <h4 style="font-family:'Bricolage Grotesque',sans-serif;font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#C9973A;margin:0 0 12px">Connect</h4>
+        <div style="display:grid;gap:8px">
+          <a href="/news" style="font-family:'Newsreader',Georgia,serif;font-size:14px;font-weight:300;color:rgba(255,255,255,.6)">News</a>
+          <a href="/give" style="font-family:'Newsreader',Georgia,serif;font-size:14px;font-weight:300;color:rgba(255,255,255,.6)">Give</a>
+          <a href="mailto:tlc.christmasmarket@gmail.com" style="font-family:'Newsreader',Georgia,serif;font-size:14px;font-weight:300;color:rgba(255,255,255,.6)">Market coordinator</a>
+        </div>
+      </div>
+    </div>
+    <div style="max-width:1080px;margin:0 auto;padding-top:24px;border-top:1px solid rgba(255,255,255,.08)">
+      <p style="font-family:'Bricolage Grotesque',sans-serif;font-size:11px;color:rgba(255,255,255,.3);margin:0">© Timothy Lutheran Church · Lutheran Church — Missouri Synod</p>
+    </div>
+  </footer>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;tableFee&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:30,&quot;tsType&quot;:&quot;number&quot;,&quot;min&quot;:0,&quot;max&quot;:200,&quot;step&quot;:5,&quot;unit&quot;:&quot;$&quot;,&quot;section&quot;:&quot;Market&quot;},&quot;feePercent&quot;:{&quot;editor&quot;:&quot;float&quot;,&quot;default&quot;:2.9,&quot;tsType&quot;:&quot;number&quot;,&quot;min&quot;:0,&quot;max&quot;:6,&quot;step&quot;:0.1,&quot;unit&quot;:&quot;%&quot;,&quot;section&quot;:&quot;Payment&quot;},&quot;feeFixed&quot;:{&quot;editor&quot;:&quot;float&quot;,&quot;default&quot;:0.3,&quot;tsType&quot;:&quot;number&quot;,&quot;min&quot;:0,&quot;max&quot;:1,&quot;step&quot;:0.05,&quot;unit&quot;:&quot;$&quot;,&quot;section&quot;:&quot;Payment&quot;},&quot;payBaseUrl&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;https://give.timothystl.org&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Payment&quot;}}">
+class Component extends DCLogic {
+  state = { step: 1, tables: 1, returning: null };
+
+  renderVals() {
+    const fee = this.props.tableFee ?? 30;
+    const pct = (this.props.feePercent ?? 2.9) / 100;
+    const fixed = this.props.feeFixed ?? 0.30;
+    const t = this.state.tables;
+    const r = this.state.returning;
+    const step = this.state.step;
+    const sub = t * fee;
+    const gross = Math.round(((sub + fixed) / (1 - pct)) * 100) / 100;
+    const money = (n) => '$' + n.toFixed(2).replace(/\.00$/, '');
+    const base = this.props.payBaseUrl ?? 'https://give.timothystl.org';
+    let payUrl;
+    try {
+      const u = new URL(base);
+      u.searchParams.set('amount', String(Math.round(gross * 100)));
+      payUrl = u.toString();
+    } catch (e) {
+      payUrl = base + (base.indexOf('?') === -1 ? '?' : '&') + 'amount=' + Math.round(gross * 100);
+    }
+    const on = (s) => s ? '#1E2D4A' : '#FBF8F3';
+    const ink = (s) => s ? '#ffffff' : '#1A1A2A';
+    const bd = (s) => s ? '#1E2D4A' : '#DDE3ED';
+    const tabBg = (n) => step === n ? '#FBF8F3' : '#EDF2F7';
+    const tabBar = (n) => step === n ? '#C9973A' : 'transparent';
+    const tabInk = (n) => step === n ? '#1E2D4A' : '#8A8898';
+    return {
+      subtotal: money(sub), feeLine: money(Math.round((gross - sub) * 100) / 100),
+      total: money(gross), payUrl: payUrl,
+      tablesLabel: t === 1 ? '1 table' : t + ' tables',
+      show1: step === 1 ? 'grid' : 'none',
+      show2: step === 2 ? 'grid' : 'none',
+      show3: step === 3 ? 'grid' : 'none',
+      goStep1: () => this.setState({ step: 1 }),
+      goStep2: () => this.setState({ step: 2 }),
+      goStep3: () => this.setState({ step: 3 }),
+      s1Bg: tabBg(1), s1Bar: tabBar(1), s1Ink: tabInk(1),
+      s2Bg: tabBg(2), s2Bar: tabBar(2), s2Ink: tabInk(2),
+      s3Bg: tabBg(3), s3Bar: tabBar(3), s3Ink: tabInk(3),
+      pickTables: (e) => this.setState({ tables: parseInt(e.currentTarget.dataset.n, 10) }),
+      pickReturning: (e) => this.setState({ returning: e.currentTarget.dataset.val }),
+      t1Bg: on(t === 1), t1Ink: ink(t === 1), t1Bd: bd(t === 1),
+      t2Bg: on(t === 2), t2Ink: ink(t === 2), t2Bd: bd(t === 2),
+      t3Bg: on(t === 3), t3Ink: ink(t === 3), t3Bd: bd(t === 3),
+      yesBg: on(r === 'yes'), yesInk: ink(r === 'yes'), yesBd: bd(r === 'yes'),
+      noBg: on(r === 'no'), noInk: ink(r === 'no'), noBd: bd(r === 'no'),
+    };
+  }
+}
+
+</script>
+</body>
+</html>
