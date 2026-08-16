@@ -885,6 +885,57 @@ this repo at `--depth 1` and at `--depth 2` and running the guard against both:
 the first bumps, the second skips. **A workflow that reads git history has to be
 tested against a shallow clone, because that is what it will get.**
 
+### And so does the chrome (v5.10.0, 2026-08-16)
+
+Dinger, with every page published and the block markup already arriving at the
+edge: *"I have published all pages and still the echo version of pages loads
+first."*
+
+**Right again, and the earlier fix was half of one.** Measured against the live
+site rather than reasoned about:
+
+| | |
+|---|---|
+| `public/styles.css` paints the bar | `var(--sage)` — moss |
+| the stored appearance says | `#3A4E5C` — slate |
+
+So every page painted a **moss header** and snapped to **slate** when
+`/api/pages` returned. The logo is a custom upload, so it swapped too, and the
+newsletter band is slate as well. v5.6.0 put the page BODY into the first paint
+and left the chrome to `applyAppearance()` — which runs after a cross-origin
+fetch, which is the thing that fix existed to remove.
+
+`appearanceStyle()` in `site-worker.js` writes the same custom properties
+`applyAppearance()` sets into a `<style>` in the head as the document is served,
+and the same pass rewrites the logo's `src`, the brand name, the tagline and the
+band's background.
+
+- **⚠ The properties are the ones `applyAppearance()` sets, exactly.** If the
+  edge set one name and the client set another, the flash would simply move
+  rather than go away. The client still runs and still sets all of it — it just
+  has nothing left to change, because both read one record.
+- **⚠ NOT gated on the page having blocks.** The chrome is on all 28 pages and
+  flashed on all 28; an unconverted page needs this as much as a converted one.
+  This is a separate branch from the block injection for that reason.
+- **⚠ Additive, like the blocks.** No record, or a field absent from one, writes
+  nothing and the stylesheet's own fallbacks apply exactly as today.
+- Values are clamped on the way out — a color into a stylesheet, a scale into
+  every `calc()` on the site. They come from a fixed list in
+  `admin/appearance.js` rather than from anything a visitor types, but the
+  characters that could close a declaration are dropped rather than reasoned
+  about, and a non-numeric scale is dropped rather than emitted.
+- **⚠ A blank logo is a real choice** — the church name on its own — so it hides
+  the image rather than leaving the markup's `/logo.png` in place.
+
+**The general lesson, and it is the same one twice:** the first fix removed the
+round trip for the half of the page somebody had complained about, and left the
+other half on the old path. When the symptom is "it changes after it loads", the
+question is *everything* that changes after it loads, not the part that was
+mentioned.
+
+Run: `node test/site-edge-render.test.mjs` (65). Verified against the bug —
+reverting the chrome branch fails eleven assertions naming what goes missing.
+
 ### The page arrives already rendered (v5.6.0, 2026-08-16)
 
 Dinger: *"the old pages and content are always loading first and then current
