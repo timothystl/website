@@ -86,6 +86,14 @@ jobs:
       - name: Site worker
         run: node test/site-taps.test.mjs
 
+      # The edge render — the published blocks put into the HTML as it is
+      # served. Also browserless: HTMLRewriter is a Workers API that does not
+      # exist in Node either, so the suite drives rewriteDocument() through a
+      # recording stand-in and pins which selectors are asked for and what is
+      # done to the elements they match.
+      - name: Site edge render
+        run: node test/site-edge-render.test.mjs
+
       # The links page, same shape: drives tlc-links-worker.js directly with
       # the admin API stubbed. Covers which cards each tap shows, and the
       # sign-up card that has no address to check.
