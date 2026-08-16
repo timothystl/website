@@ -102,6 +102,32 @@ export const TYPEFACES = [
     note: 'The site as it read before the redesign. Picking this puts every page back.',
   },
 ];
+// How big the site's text is. Dinger, looking at the site: "15 and 17pt is too
+// small" — so this is one lever over the whole thing rather than a size on each
+// block, which is the same argument the typeface selector settled: a site whose
+// text size is decided a block at a time is a site that reads like several.
+//
+// ⚠ A MULTIPLIER, NOT A SET OF SIZES. Every size on the site is already chosen
+// in proportion to the others — an eyebrow against a heading against body copy
+// — and a control that set absolute sizes would flatten that. Scaling keeps the
+// relationships and moves them together.
+//
+// ⚠ Headings scale LESS than body copy, and that is the whole design of it.
+// Dinger asked for all three and said body copy matters most; a heading is
+// already 38-64px, and multiplying that by the same 1.2 that takes body copy
+// from a comfortable 16 to 19 takes a hero title from 64 to 77 and pushes the
+// first paragraph off the screen. `head` is the gentler curve.
+export const TEXT_SIZES = [
+  { key: 'normal', label: 'Normal', body: 1, head: 1,
+    note: 'The site as it reads today.' },
+  { key: 'large', label: 'Large', body: 1.1, head: 1.05,
+    note: 'About a point larger through the body copy. The usual answer when the site reads small on a laptop.' },
+  { key: 'larger', label: 'Larger', body: 1.22, head: 1.1,
+    note: 'Noticeably larger. Right when the congregation is reading it on phones and tablets more than on desks.' },
+];
+export const TEXT_SIZE_KEYS = TEXT_SIZES.map((t) => t.key);
+export const textSizeOf = (key) => TEXT_SIZES.find((t) => t.key === key) || TEXT_SIZES[0];
+
 export const TYPEFACE_KEYS = TYPEFACES.map((t) => t.key);
 export const typefaceOf = (key) => TYPEFACES.find((t) => t.key === key) || TYPEFACES[0];
 
@@ -131,6 +157,10 @@ export const DEFAULTS = {
   // static markup is all there is. A default of 'classic' would mean the site
   // silently reverted to the old typefaces during an admin outage.
   typeface: 'redesign',
+  // Normal is the site exactly as it reads today, so the record ships changing
+  // nothing — unlike `typeface` above, this is a preference rather than a look
+  // somebody has already asked for.
+  textSize: 'normal',
   // Header
   // ⚠ Also changed for the redesign, and with a caveat worth knowing: a
   // default only decides what an UNSET field is. If somebody has already saved
@@ -208,6 +238,7 @@ export function sanitizeAppearance(raw) {
   // POST, and the answer to both is the default rather than a third state the
   // site has no fonts loaded for.
   if (TYPEFACE_KEYS.includes(src.typeface)) out.typeface = src.typeface;
+  if (TEXT_SIZE_KEYS.includes(src.textSize)) out.textSize = src.textSize;
 
   // A header with no name and no logo is a bar with nothing in it, and the
   // brand block is also the way back to the homepage. Emptying both is
@@ -240,6 +271,7 @@ export function appearanceFromForm(form) {
   for (const f of [...TEXT_FIELDS, ...COLOR_FIELDS]) raw[f] = form.get(f);
   raw.logo_shape = form.get('logo_shape');
   raw.typeface = form.get('typeface');
+  raw.textSize = form.get('textSize');
   for (const f of FLAG_FIELDS) raw[f] = form.getAll(f).includes('1');
   return sanitizeAppearance(raw);
 }
@@ -257,6 +289,7 @@ export function isDirty(draft, published) {
 // rather than the unhelpfully vague "you have unpublished changes".
 export const FIELD_LABELS = {
   typeface: 'Typeface',
+  textSize: 'Text size',
   bar: 'Bar color', rule: 'Bottom rule', cta: 'Give button', logo_url: 'Logo',
   logo_shape: 'Logo shape', brand_name: 'Church name', tagline: 'Tagline',
   show_tagline: 'Tagline shown', nl_show: 'Newsletter band', nl_bg: 'Newsletter color',
@@ -380,6 +413,7 @@ export const APPEARANCE_CSS = `
 export function publicAppearance(a) {
   const s = sanitizeAppearance(a);
   const tf = typefaceOf(s.typeface);
+  const ts = textSizeOf(s.textSize);
   return {
     // Real font stacks, not the key — same argument as the colors. The site
     // never carries a copy of what "redesign" means, so renaming or re-cutting
@@ -387,6 +421,9 @@ export function publicAppearance(a) {
     // in step. These land on --font-heading / --font-body / --font-ui, which
     // public/styles.css already declares and every block already reads.
     fonts: { head: tf.head, body: tf.body, ui: tf.ui },
+    // Two multipliers, not one — see TEXT_SIZES. They land on --tlc-text-scale
+    // and --tlc-head-scale, which public/styles.css and every block read.
+    textScale: { body: ts.body, head: ts.head },
     bar: colorOf(s.bar).value,
     rule: colorOf(s.rule, 'gold').value,
     cta: colorOf(s.cta, 'gold').value,

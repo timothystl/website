@@ -113,7 +113,13 @@ for (const variant of [
 group('text size + split + side');
 await page.click('[data-k="size:l"]');
 await settle(80);
-eq(await page.evaluate(() => document.querySelector('.tlcb--textphoto').style.getPropertyValue('--tlcb-body').trim()), '17px', 'large text applied');
+// ⚠ A calc(), not a bare px. The size a block chooses is multiplied by the
+// page's text scale, which lives on the page wrapper because it comes from the
+// Appearance record. The fallback is 1, so this still RENDERS at 17px — what
+// changed is the expression, and the client's copy has to match the server's
+// byte for byte, which the loop above asserts.
+eq(await page.evaluate(() => document.querySelector('.tlcb--textphoto').style.getPropertyValue('--tlcb-body').trim()),
+  'calc(17px * var(--tlcb-scale, 1))', 'large text applied');
 await page.click('[data-k="split:70"]');
 await settle(80);
 eq(await page.evaluate(() => document.querySelector('.tlcb--textphoto').style.getPropertyValue('--tlcb-cols').trim()), '7fr 3fr', 'split applied');
@@ -229,7 +235,7 @@ const afterReset = await page.evaluate(() => {
   return { bg: n.style.getPropertyValue('--tlcb-bg').trim(), body: n.style.getPropertyValue('--tlcb-body').trim() };
 });
 eq(afterReset.bg, '#FBF8F3', 'reset restores the default background');
-eq(afterReset.body, '15px', 'reset restores the default text size');
+eq(afterReset.body, 'calc(15px * var(--tlcb-scale, 1))', 'reset restores the default text size');
 ok((await page.textContent('#edChanges')).includes('Reset text + photo'), 'reset is logged');
 
 group('repeating rows');

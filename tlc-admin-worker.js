@@ -104,7 +104,7 @@ import { normalizeChannelInput, channelPageUrl, channelIdFrom, feedUrl,
 import { PALETTE as CHROME_PALETTE, BAR_KEYS, DEFAULTS as CHROME_DEFAULTS,
          parseAppearance, appearanceFromForm, sanitizeAppearance, publicAppearance,
          isDirty as chromeDirty, changedFields as chromeChanged, FIELD_LABELS as CHROME_LABELS,
-         renderHeaderPreview, renderNewsletterPreview, TYPEFACES } from './admin/appearance.js';
+         renderHeaderPreview, renderNewsletterPreview, TYPEFACES, TEXT_SIZES } from './admin/appearance.js';
 
 // ── THE CHROME RECORD, DRAFT AND LIVE ────────────────────────
 // Two settings rows, the same split a page has between `blocks` and
@@ -3828,6 +3828,11 @@ ${renderFormSection({
       options: TYPEFACES.map((t) => ({ value: t.key, label: t.label })) },
     { kind: 'html', html: '<p class="tlc-hint" style="margin-top:-10px;">'
       + escapeHtml(TYPEFACES.map((t) => t.label + ' — ' + t.note).join('  ')) + '</p>' },
+    { kind: 'chips', name: 'textSize', label: 'Text size', value: a.textSize,
+      options: TEXT_SIZES.map((t) => ({ value: t.key, label: t.label })) },
+    { kind: 'html', html: '<p class="tlc-hint" style="margin-top:-10px;">'
+      + escapeHtml(TEXT_SIZES.map((t) => t.label + ' — ' + t.note).join('  ')) + '</p>' },
+    { kind: 'html', html: '<p class="tlc-hint" style="margin-top:-4px;">Text size multiplies every size on the site rather than replacing them, so the proportions stay as they were designed. Headings move less than body copy on purpose \u2014 a hero title scaled as hard as a paragraph pushes the first line of the page off the screen.</p>' },
     { kind: 'html', html: '<p class="tlc-hint" style="margin-top:-4px;">This is the one setting here that is not just the header. It changes every heading and every paragraph on every page, and every block in the page editor — there is deliberately no way to set a font on one page or one block, because that is how a site ends up reading like two sites. Like everything else on this screen it is a draft until you publish.</p>' },
 
     { kind: 'html', html: '<div class="tlc-field" style="margin-top:26px;"><span class="tlc-label">The header</span></div>' },

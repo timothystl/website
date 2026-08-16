@@ -456,10 +456,47 @@ export const BLOCK_DEFS = {
   times: {
     label: 'Meeting times', glyph: '◷',
     align: true,
-    defaults: { title: 'When we gather', spaceAbove: 24, spaceBelow: 24 },
+    defaults: { title: 'When we gather', spaceAbove: 24, spaceBelow: 24, layout: 'rows' },
     items: true, itemFields: ['title', 'body', 'meta'], itemLabel: 'Row',
     itemPlaceholders: { title: 'Who', body: 'When', meta: 'Where' },
     defaultItems: [{ title: 'Group name', body: 'Wednesdays, 7:00 pm', meta: 'Fellowship Hall' }],
+    // The same two layouts Service times has, drawn by the same .tlcb-tile
+    // rules — Dinger asked for the tile look here, and the alternative was a
+    // second set of tile CSS that agrees with the first until somebody
+    // improves one of them.
+    // ⚠ `rows` is the default, so every Meeting times block already on the
+    // site renders exactly as it did.
+    choices: [
+      { key: 'layout', label: 'Shown as', def: 'rows',
+        options: [{ key: 'rows', label: 'A list' }, { key: 'tiles', label: 'Big tiles' }],
+        note: 'Tiles give each group its own card, alternating ink navy and gold — right when the meetings are the reason somebody opened the page. A list is right when they are one detail among several.' },
+    ],
+  },
+
+  // ⚠ THE FREELY-EDITABLE TILES. Service times draws tiles from the one
+  // church-details record, which is what makes it correct everywhere at once
+  // and also what makes it useless for anything that is not a service. Dinger
+  // asked for "cards that drop on the boxes like the service times box but
+  // that I can edit freely", and this is that: the same .tlcb-tile rules, the
+  // same alternating pairing, with the words typed on the page.
+  //
+  // It is a separate type rather than a "source" switch on Service times
+  // because the two hold different things — one has a day and a time read from
+  // a record, the other has whatever somebody wants to put in a box — and a
+  // switch between them would silently discard one shape or the other.
+  tiles: {
+    label: 'Info tiles', glyph: '▤',
+    align: true,
+    defaults: { title: 'At a glance', spaceAbove: 24, spaceBelow: 24 },
+    items: true,
+    itemFields: ['big', 'title', 'body'],
+    richItemFields: ['body'],
+    itemLabel: 'Tile',
+    itemPlaceholders: { big: 'A number or a time', title: 'Tile heading', body: 'One short line.' },
+    defaultItems: [
+      { big: '', title: 'First tile', body: '<p>What this is.</p>' },
+      { big: '', title: 'Second tile', body: '<p>What this is.</p>' },
+    ],
   },
   calendar: {
     label: 'Calendar', glyph: '▩',
@@ -829,7 +866,7 @@ export const GROUPS = [
   // Contact sits beside Map & address, which is where somebody looking for
   // "how do people reach us" already goes — the two answer the same question
   // and one of them draws a map.
-  { name: 'Dates',     types: ['servicetimes', 'chips', 'map', 'contact', 'events', 'times', 'download', 'calendar'] },
+  { name: 'Dates',     types: ['servicetimes', 'tiles', 'chips', 'map', 'contact', 'events', 'times', 'download', 'calendar'] },
   // `giving` and `amounts` join the group that already holds `give` rather
   // than starting a fifth. They belong to one page, and a group of two that
   // only ever appears on the giving page would read on every other page as a
@@ -849,6 +886,15 @@ export const TEMPLATES = [
   { key: 'standard', label: 'Standard page',  hint: 'Banner, then your blocks in one column. Right for most pages.' },
   { key: 'section',  label: 'Section landing', hint: 'Banner plus an automatic list of the pages beneath this one.' },
   { key: 'sidebar',  label: 'With sidebar',   hint: 'Blocks on the left; service times and contact details on the right.' },
+  // ⚠ THE PER-PAGE SWITCH IS THE LAYOUT ITSELF. Dinger wants the pages beneath
+  // a section listed in a callout beside the content — "and can be automatic if
+  // the subpage view is turned on for that group, not every one might need it".
+  // A page-level flag would have meant a column, a control on the Page tab and
+  // a second thing to keep in step with the layout it only makes sense
+  // alongside; choosing this layout IS turning it on for that page, and
+  // choosing another is turning it off.
+  { key: 'sectionside', label: 'Section with sidebar',
+    hint: 'Banner, then blocks on the left with the pages beneath this one listed beside them, above the church details.' },
 ];
 
 export const templateOf = (key) => TEMPLATES.find((t) => t.key === key) || TEMPLATES[1];
@@ -1870,8 +1916,19 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
   color:#8A8898;margin:0;}
 .tlcb-side .tlcb-svc{padding:10px 12px;}
 .tlcb-side .tlcb-svc-t{font-size:18px;}
-.tlcb-side-lines{display:flex;flex-direction:column;gap:5px;font-size:13.5px;color:#4A4860;line-height:1.5;}
+.tlcb-side-lines{display:flex;flex-direction:column;gap:5px;font-size:calc(13.5px * var(--tlcb-scale, 1));color:#4A4860;line-height:1.5;}
 .tlcb-side-lines a{color:#2E7EA6;}
+/* The pages beneath a section, in the aside. Rows rather than a bulleted list:
+   these are destinations, and a row with its own hit area is easier to hit than
+   a line of text — the same reasoning the phone tap-target pass applied to the
+   footer. */
+.tlcb-side-kids{display:flex;flex-direction:column;}
+.tlcb-side-kids a,.tlcb-side-kids span{display:block;padding:9px 0;font-family:var(--tlcb-sans);
+  font-size:calc(14px * var(--tlcb-scale, 1));line-height:1.35;color:#2E7EA6;text-decoration:none;
+  border-bottom:1px solid var(--tlcb-rule,#E7DFD1);}
+.tlcb-side-kids a:last-child,.tlcb-side-kids span:last-child{border-bottom:0;padding-bottom:0;}
+.tlcb-side-kids a:hover{text-decoration:underline;}
+.tlcb-side-kids span{color:#4A4860;}
 .tlcb-kids{max-width:var(--tlcb-wrap,none);margin:0 auto;padding:8px var(--tlcb-pad) 32px;
   display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;}
 .tlcb-kid{display:flex;flex-direction:column;gap:5px;padding:16px 18px;border:1px solid #DDE3ED;
@@ -1932,6 +1989,14 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
 .tlcb-tile .tlcb-prose{margin-top:2px;}
 /* The two service tiles, side by side, using the same card. */
 .tlcb-tiles2{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:stretch;}
+/* ⚠ Meeting times and Info tiles hold HOWEVER MANY somebody types, not two, so
+   they cannot use the pair grid above — three groups in a two-column grid is a
+   lone tile on a second row. auto-fit fills the width and wraps on its own,
+   and 240px is the narrowest a tile reads at with 32px of padding inside it. */
+.tlcb-tiles-n{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px;align-items:stretch;}
+.tlcb-tile-m{font-family:var(--tlcb-ui);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--tlcb-eyebrow-ink,#C9973A);margin-top:auto;padding-top:10px;}
+.tlcb-tile-m:empty{display:none;}
 
 /* THE CALL-TO-ACTION BAND. One ask, ending in a button. */
 .tlcb-cta{display:flex;align-items:center;justify-content:space-between;gap:28px;flex-wrap:wrap;}
@@ -2197,9 +2262,14 @@ function wrapperVars(b) {
     '--tlcb-link-ink:' + (bg.link || '#2E7EA6'),
     '--tlcb-rule:' + (bg.rule || (bg.dark ? 'rgba(245,240,230,.14)' : '#E7DFD1')),
     '--tlcb-chip-bg:' + (bg.chip || 'rgba(0,0,0,.04)'),
-    '--tlcb-body:' + sz.body + 'px',
-    '--tlcb-head:' + sz.head + 'px',
-    '--tlcb-hero:' + sz.hero + 'px',
+    // ⚠ calc() against the PAGE's scale, not a number baked in here. The scale
+    // lives on the page wrapper (see pageFontVars) because it comes from the
+    // appearance record, which wrapperVars has no access to — and because a
+    // block that stored its own copy would keep the old size after somebody
+    // changed it. Absent means 1, which is the size the block has always drawn.
+    '--tlcb-body:calc(' + sz.body + 'px * var(--tlcb-scale, 1))',
+    '--tlcb-head:calc(' + sz.head + 'px * var(--tlcb-head-scale, 1))',
+    '--tlcb-hero:calc(' + sz.hero + 'px * var(--tlcb-head-scale, 1))',
     '--tlcb-gap:' + b.gap + 'px',
     '--tlcb-height:' + b.height + 'px',
     '--tlcb-media-order:' + (b.side === 'right' ? 2 : 0),
@@ -2237,6 +2307,17 @@ function itemField(opts, idx, key, tag, cls, value, extra = '', rich = false) {
   const content = value == null ? '' : value;
   if (!opts.editing) return `<${tag} class="${cls}"${publicAttrs(extra)}>${content}</${tag}>`;
   return `<${tag} class="${cls}" data-item="${idx}" data-field="${key}"${rich ? ' data-rich="1"' : ''} contenteditable="true" spellcheck="true"${extra}>${content}</${tag}>`;
+}
+
+// ⚠ WHICH TILE IS GOLD, IN ONE PLACE. A block has ONE background, and this
+// layout needs two — so the alternate carries its colors inline. That was
+// written out inside the Service times branch; Meeting times and Info tiles
+// draw the same tiles, and three copies of the pairing is three chances for
+// one of them to drift into a different gold.
+function tileAlt(i) {
+  if (i % 2 !== 1) return '';
+  const gold = BG[7];
+  return ` style="--tlcb-bg:${gold.grad};--tlcb-head-ink:${gold.head};--tlcb-ink:#3B2E12;--tlcb-eyebrow-ink:${gold.eyebrow}"`;
 }
 
 const ytId = (u) => (String(u || '').match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/)([A-Za-z0-9_-]{11})/) || [])[1] || '';
@@ -2776,11 +2857,8 @@ function renderInner(b, opts) {
     // second tile carries its colors inline: the block's single bg cannot
     // express two surfaces.
     if (b.layout === 'tiles' && svc.length) {
-      const gold = BG[7];
       const tiles = svc.slice(0, 4).map((r, i) => {
-        const alt = i % 2 === 1
-          ? ` style="--tlcb-bg:${gold.grad};--tlcb-head-ink:${gold.head};--tlcb-ink:#3B2E12;--tlcb-eyebrow-ink:${gold.eyebrow}"`
-          : '';
+        const alt = tileAlt(i);
         return `<div class="tlcb-tile"${alt}>
           ${r.note ? `<div class="tlcb-eyebrow">${esc(r.note)}</div>` : ''}
           <div class="tlcb-tile-big">${esc(r.time || '')}</div>
@@ -3149,12 +3227,29 @@ function renderInner(b, opts) {
   }
 
   if (t === 'times') {
+    if (b.layout === 'tiles' && (b.items || []).length) {
+      const tiles = (b.items || []).map((it, i) => `<div class="tlcb-tile"${tileAlt(i)}>
+          ${itemField(opts, i, 'title', 'div', 'tlcb-tile-t', esc(it.title || ''), ' data-ph="Who"')}
+          ${itemField(opts, i, 'body', 'div', 'tlcb-prose', esc(it.body || ''), ' data-ph="When"')}
+          ${itemField(opts, i, 'meta', 'div', 'tlcb-tile-m', esc(it.meta || ''), ' data-ph="Where"')}
+        </div>`).join('');
+      return `<div class="tlcb-stack">${renderHead(opts, b)}<div class="tlcb-tiles-n">${tiles}</div></div>`;
+    }
     const rows = (b.items || []).map((it, i) => `<div class="tlcb-time">
         ${itemField(opts, i, 'title', 'b', '', esc(it.title || ''), ' data-ph="Who"')}
         ${itemField(opts, i, 'body', 'i', '', esc(it.body || ''), ' data-ph="When"')}
         ${itemField(opts, i, 'meta', 'u', '', esc(it.meta || ''), ' data-ph="Where"')}
       </div>`).join('');
     return `<div class="tlcb-stack">${renderHead(opts, b)}<div class="tlcb-times">${rows}</div></div>`;
+  }
+
+  if (t === 'tiles') {
+    const tiles = (b.items || []).map((it, i) => `<div class="tlcb-tile"${tileAlt(i)}>
+        ${itemField(opts, i, 'big', 'div', 'tlcb-tile-big', esc(it.big || ''), ' data-ph="8:00"')}
+        ${itemField(opts, i, 'title', 'div', 'tlcb-tile-t', esc(it.title || ''), ' data-ph="Tile heading"')}
+        ${itemField(opts, i, 'body', 'div', 'tlcb-prose', it.body || '', ' data-ph="One short line."', true)}
+      </div>`).join('');
+    return `<div class="tlcb-stack">${renderHead(opts, b)}<div class="tlcb-tiles-n">${tiles}</div></div>`;
   }
 
   if (t === 'faq') {
@@ -3497,6 +3592,29 @@ export function renderBlock(b, opts = {}) {
 
 // The sidebar template's right-hand column. Reads the one site-settings record,
 // never the page — staff fix the phone number once and every sidebar updates.
+// The pages beneath this one, as a card in the aside. Same source as the
+// section template's list below the content — derived from the page tree, never
+// stored — so it cannot go stale and needs nothing typed.
+function sidebarKids(ctx) {
+  const kids = ctx.children || [];
+  if (!kids.length) {
+    // In the editor an empty aside card is a question worth answering; on the
+    // live page a section with no children yet is just a page with no list.
+    return ctx.editing
+      ? `<div class="tlcb-side-card"><h2 class="tlcb-side-h">In this section</h2>
+      <p class="tlcb-note">Pages you file beneath this one are listed here automatically.</p></div>`
+      : '';
+  }
+  return `<div class="tlcb-side-card"><h2 class="tlcb-side-h">In this section</h2>
+    <div class="tlcb-side-kids">${kids.map((k) => {
+      const href = safeUrl(k.slug || '');
+      const t = esc(k.title || '');
+      // The editor renders them inert, like every other link in the canvas —
+      // clicking one there should select the block, not leave the page.
+      return ctx.editing || !href ? `<span>${t}</span>` : `<a href="${esc(href)}">${t}</a>`;
+    }).join('')}</div></div>`;
+}
+
 function sidebarAside(ctx) {
   const data = ctx.data || {};
   const st = data.settings || {};
@@ -3517,7 +3635,10 @@ function sidebarAside(ctx) {
   ].filter(Boolean).join('');
   const contact = lines ? `<div class="tlcb-side-card"><h2 class="tlcb-side-h">Visit us</h2>
       <div class="tlcb-side-lines">${lines}</div></div>` : '';
-  if (times || contact) return `<aside class="tlcb-side">${times}${contact}</aside>`;
+  // The child list leads when the layout asks for it — somebody on a section
+  // page is looking for the page beneath it, not for the office's phone number.
+  const kids = ctx.withKids ? sidebarKids(ctx) : '';
+  if (kids || times || contact) return `<aside class="tlcb-side">${kids}${times}${contact}</aside>`;
   // Empty in the editor is a question, so answer it there; on the live page an
   // unfilled sidebar is just nothing.
   return ctx.editing ? `<aside class="tlcb-side"><div class="tlcb-side-card">
@@ -3562,7 +3683,15 @@ function pageFontVars(ctx) {
   // it is being written into a style attribute, so the two characters that
   // could close it are dropped rather than reasoned about.
   const clean = (s) => String(s).replace(/["<>;{}\\]/g, '');
-  return ` style="--tlcb-serif:${clean(f.head)};--tlcb-sans:${clean(f.body)};--tlcb-ui:${clean(f.ui)}"`;
+  // Text size rides along with the typeface, from the same record and onto the
+  // same wrapper — one decision about how the site reads, landing in one place.
+  // A number, clamped rather than trusted: it is written into a style attribute,
+  // and the sizes below are calc()s that a non-number would silently break.
+  const ap = (ctx && ctx.data && ctx.data.appearance) || {};
+  const num = (v, def) => (Number.isFinite(Number(v)) && Number(v) > 0 && Number(v) <= 3 ? Number(v) : def);
+  const ts = ap.textScale || {};
+  const scale = `;--tlcb-scale:${num(ts.body, 1)};--tlcb-head-scale:${num(ts.head, 1)}`;
+  return ` style="--tlcb-serif:${clean(f.head)};--tlcb-sans:${clean(f.body)};--tlcb-ui:${clean(f.ui)}${scale}"`;
 }
 
 export function wrapTemplate(template, inner, ctx = {}) {
@@ -3576,13 +3705,17 @@ export function wrapTemplate(template, inner, ctx = {}) {
     (!list.length && Array.isArray(inner) && /^<div class="tlcb tlcb--(hero|slideshow)\b/.test(parts[0] || ''));
   const full = key === 'home' || leads;
   const cls = 'tlcb-page tlcb-page--' + key + (full ? ' tlcb-page--full' : '');
+  // ⚠ `sectionside` lists its children in the ASIDE, so it must not also append
+  // the section template's list below the content — that is the same list
+  // twice on one page.
   const tail = (ctx.empty || '') + (key === 'section' ? childList(ctx) : '');
   const fonts = pageFontVars(ctx);
 
-  if (key === 'sidebar') {
+  if (key === 'sidebar' || key === 'sectionside') {
     const banner = leads && Array.isArray(inner) ? parts.shift() : '';
+    const side = sidebarAside({ ...ctx, withKids: key === 'sectionside' });
     return `<div class="${cls}"${fonts}>${banner}<div class="tlcb-layout">` +
-      `<div class="tlcb-layout-main">${parts.join('')}</div>${sidebarAside(ctx)}</div>${tail}</div>`;
+      `<div class="tlcb-layout-main">${parts.join('')}</div>${side}</div>${tail}</div>`;
   }
   return `<div class="${cls}"${fonts}>${parts.join('')}${tail}</div>`;
 }

@@ -908,9 +908,13 @@ function styleVars(b) {
     '--tlcb-link-ink:' + (bg.link || '#2E7EA6'),
     '--tlcb-rule:' + (bg.rule || (bg.dark ? 'rgba(245,240,230,.14)' : '#E7DFD1')),
     '--tlcb-chip-bg:' + (bg.chip || 'rgba(0,0,0,.04)'),
-    '--tlcb-body:' + sz.body + 'px',
-    '--tlcb-head:' + sz.head + 'px',
-    '--tlcb-hero:' + sz.hero + 'px',
+    // ⚠ Byte-identical to wrapperVars() in admin/blocks.js — test/editor.test.mjs
+    // asserts exactly that against a server render. The scale itself lives on
+    // the page wrapper, not here, so the canvas follows the Appearance screen
+    // the same way the public page does.
+    '--tlcb-body:calc(' + sz.body + 'px * var(--tlcb-scale, 1))',
+    '--tlcb-head:calc(' + sz.head + 'px * var(--tlcb-head-scale, 1))',
+    '--tlcb-hero:calc(' + sz.hero + 'px * var(--tlcb-head-scale, 1))',
     '--tlcb-gap:' + b.gap + 'px',
     '--tlcb-height:' + b.height + 'px',
     '--tlcb-media-order:' + (b.side === 'right' ? 2 : 0),
