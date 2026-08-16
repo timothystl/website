@@ -522,6 +522,72 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### The page arrives already rendered (v5.6.0, 2026-08-16)
+
+Dinger: *"the old pages and content are always loading first and then current
+content and layout display even on hard refresh"* — and, when told to finish
+publishing, *"i have publsihed many of the pages, only 5 show not published yet.
+and i still see it."*
+
+**He was right, and the advice he was given first was wrong.** Publishing more
+pages could never have fixed this, and the code says so plainly:
+
+- `public/index.html` ships the **hardcoded markup for all 28 pages**. That is
+  what paints, on every load, because it is in the document.
+- Only afterwards does `tlcMaybeTakeOverSitePage()` fetch `/api/pages` **from
+  another origin**, hide the hardcoded sections and drop the published blocks
+  in.
+
+So publishing changes *what replaces* the markup. It cannot change *that the
+markup is painted first*, because the replacement waits on a cross-origin round
+trip. **A hard refresh makes it worse**, not better — nothing is cached, so the
+trip is at its longest. Twenty published pages behaved exactly as the code
+predicts.
+
+**The blocks are now put into the HTML as it is served.** `site-worker.js`
+already runs on every request and already rewrites the document with
+HTMLRewriter for `og:image`; the same door, for a related reason — that one
+because crawlers do not run the page's JavaScript, this one because the
+visitor's eyes do not wait for it.
+
+- **⚠ PURELY ADDITIVE.** Admin unreachable, page not published, a path that
+  resolves to nothing — all inject nothing, and the page then renders its
+  hardcoded markup and waits for the client exactly as before. The fallback is
+  not a second code path bolted on; it is what happens when this does nothing.
+- **⚠ THE CLIENT MUST NOT DO IT AGAIN.** The edge sets `data-tlcb-edge` on the
+  page div and `tlcMaybeTakeOverSitePage()` skips the *injection* while still
+  hydrating the feeds — the edge ships the block markup, not the posts inside
+  it. Without the guard: every block twice, one copy under the other. The test
+  was verified against exactly that.
+- **⚠ `pathForPageId()` IS A MIRROR OF `tlcPathFor()` AND HAS TO STAY ONE.** The
+  SPA routes by page **id** and its divs are `id="page-<id>"`; the address is
+  derived from the id, **not** from `pages.slug`. Using the slug at the edge
+  would let the worker inject into a page the router does not agree it is
+  showing. There is no module both files can import, so this is the same
+  arrangement `styleVars()`/`wrapperVars()` live under: two copies, and a test
+  that reads both and asserts they agree.
+- **⚠ Content added with `prepend()` is NOT re-parsed by HTMLRewriter**, which
+  is the whole reason `#page-<id> > *` can be used to hide the hardcoded
+  sections — the selector matches only the original children, never the block
+  markup just placed in front of them.
+- **Hidden, never removed**, exactly as `tlcTakeOverPage()` does it: they are
+  the fallback, and a page re-rendered client-side later expects them present.
+  An existing `style` attribute is appended to rather than replaced.
+- **One rewriter pass**, shared with the social image — two `.transform()` calls
+  would be two passes over 220KB. `rewriteSocialImage()` is gone, folded in.
+- **One page per request, not all 28.** The payload is keyed by id; only the one
+  matching the request path is injected.
+
+**Still true and worth knowing:** this removes the flash, it does not finish the
+conversion. A page with nothing published still renders its hardcoded markup —
+correctly, and now without a second version arriving on top of it.
+
+Run: `node test/site-edge-render.test.mjs` (42 — it drives `rewriteDocument`
+through a recording stand-in, because HTMLRewriter is a Workers API and does not
+exist in Node; what is worth pinning is which selectors are asked for and what
+is done to the elements, not Cloudflare's parser) and the `the edge already
+rendered the page` group in `node test/public-page.test.mjs`.
+
 ### Dinger's ten (v5.5.0, 2026-08-16)
 
 A list, answered one clarifying question at a time and then built. What follows

@@ -2953,10 +2953,21 @@ var sitePageTakeover = {};
 async function tlcMaybeTakeOverSitePage(id) {
   if (sitePageTakeover[id] !== undefined) return sitePageTakeover[id];
   sitePageTakeover[id] = false;
+  // ⚠ THE EDGE MAY HAVE ALREADY DONE THIS. site-worker.js puts the published
+  // blocks into the HTML as it serves the page somebody typed the address for,
+  // so there is no flash of the hardcoded markup — see the long note there.
+  // When it has, the marker is on the page div and the injection must NOT
+  // happen twice: a second copy of every block, below the first.
+  //
+  // The feeds below still need filling, so this returns true through the
+  // normal path rather than short-circuiting out of the function — the edge
+  // ships the block markup, not the posts inside it.
+  var pre = document.getElementById('page-' + id);
+  var already = !!(pre && pre.getAttribute('data-tlcb-edge'));
   var d = await loadSitePages();
   var html = d && d.rendered && d.rendered[id];
   if (!html) return false;
-  if (!tlcTakeOverPage(id, html)) return false;
+  if (!already && !tlcTakeOverPage(id, html)) return false;
   sitePageTakeover[id] = true;
   if (tlcHas(html, 'posts') || tlcHas(html, 'events')) {
     try {

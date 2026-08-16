@@ -122,6 +122,108 @@ function isSafeRedirectUrl(value) {
   } catch { return false; }
 }
 
+// ── THE PUBLISHED PAGES, RENDERED AT THE EDGE ───────────────────────────────
+// Dinger: "the old pages and content are always loading first and then current
+// content and layout display even on hard refresh."
+//
+// He was right and publishing more pages could never have fixed it.
+// public/index.html ships the HARDCODED markup for all 28 pages — that is what
+// paints. Only afterwards does tlcMaybeTakeOverSitePage() fetch /api/pages from
+// admin.timothystl.org, hide the hardcoded sections and drop the published
+// blocks in. Publishing changes WHAT replaces the markup; it cannot change that
+// the markup is painted first, because the replacement waits on a request to
+// another origin. A hard refresh makes it worse: nothing is cached, so the round
+// trip is at its longest.
+//
+// So the blocks are put into the HTML here, as it is served. Same door the
+// social preview image already goes through, and for a related reason — that
+// one because crawlers do not run the page's JavaScript, this one because the
+// visitor's eyes do not wait for it.
+//
+// ⚠ THIS IS PURELY ADDITIVE. Anything that goes wrong — the admin unreachable,
+// a page not published, a path that maps to nothing — injects nothing, and the
+// page then behaves exactly as it did before this existed: hardcoded markup,
+// then the client-side takeover. The fallback is not a second code path bolted
+// on; it is simply what happens when this does nothing.
+let pagesCache = null;
+let pagesCacheTime = 0;
+
+async function getPublishedPages() {
+  const now = Date.now();
+  if (pagesCache && now - pagesCacheTime < CACHE_TTL) return pagesCache;
+  try {
+    const res = await fetch('https://admin.timothystl.org/api/pages');
+    if (res.ok) {
+      pagesCache = await res.json();
+      pagesCacheTime = now;
+    }
+  } catch (_) { /* the client-side takeover is the fallback */ }
+  return pagesCache;
+}
+
+// ⚠ A MIRROR OF tlcPathFor() IN public/index.html, AND IT HAS TO STAY ONE.
+// The SPA routes by page ID and its divs are id="page-<id>"; the address is
+// derived from the id, not from pages.slug — so using the slug here would let
+// the edge inject into a page the router does not agree it is showing. There is
+// no module both files can import (index.html is plain HTML), so this is the
+// same arrangement styleVars()/wrapperVars() already live under: two copies and
+// a test that reads both and asserts they agree.
+const NESTED_PATHS = { values: '/about/values' };
+export function pathForPageId(id) {
+  return id === 'home' ? '/' : (NESTED_PATHS[id] || '/' + id);
+}
+
+export function pageIdForPath(data, pathname) {
+  const want = (pathname.replace(/\/+$/, '') || '/').toLowerCase();
+  for (const p of (data && data.pages) || []) {
+    if (pathForPageId(p.id).toLowerCase() === want) return p.id;
+  }
+  return '';
+}
+
+// One rewriter pass over the document: the social image, and the page's own
+// blocks. Two .transform() calls would be two passes over 220KB.
+//
+// ⚠ Content added with prepend()/append() is NOT re-parsed by HTMLRewriter, so
+// the `> *` selector below matches only the page's ORIGINAL children and never
+// the block markup just put in front of them. That is what makes hiding the old
+// sections expressible at all in a streaming rewriter.
+export function rewriteDocument(res, { socialImage, pageId, blocksHtml, blockCss }) {
+  let rw = new HTMLRewriter();
+  if (socialImage) {
+    rw = rw
+      .on('meta[property="og:image"]', { element(el) { el.setAttribute('content', socialImage); } })
+      .on('meta[name="twitter:image"]', { element(el) { el.setAttribute('content', socialImage); } });
+  }
+  if (pageId && blocksHtml) {
+    const sel = '#page-' + pageId;
+    rw = rw
+      .on('head', { element(el) { if (blockCss) el.append(blockCss, { html: true }); } })
+      .on(sel, {
+        element(el) {
+          // The same host element and id the client-side takeover creates, so
+          // everything that later looks for it — feed hydration, a second
+          // takeover on SPA navigation — finds what it expects.
+          el.prepend('<div id="' + pageId + '-blocks">' + blocksHtml + '</div>', { html: true });
+          // How the client knows not to do this again. It still hydrates the
+          // feeds; it just does not re-inject what is already here.
+          el.setAttribute('data-tlcb-edge', '1');
+        },
+      })
+      // Exactly what tlcTakeOverPage() does to them, and for the same reason:
+      // the hardcoded sections are the fallback, not content to show alongside.
+      // ⚠ Hidden rather than removed — the client's own takeover hides them too,
+      // and a page that is later re-rendered client-side expects them present.
+      .on(sel + ' > *', {
+        element(el) {
+          const prev = el.getAttribute('style') || '';
+          el.setAttribute('style', prev ? prev + ';display:none' : 'display:none');
+        },
+      });
+  }
+  return rw.transform(res);
+}
+
 async function getRedirects() {
   const now = Date.now();
   if (redirectCache && now - redirectCacheTime < CACHE_TTL) return redirectCache;
@@ -180,17 +282,13 @@ function isHtmlResponse(res) {
   return (res.headers.get('content-type') || '').includes('text/html');
 }
 
-// HTMLRewriter is a Workers streaming parser — it edits the attribute as the
-// bytes go past rather than buffering the whole 220KB page to run a regex over
-// it. Both the Open Graph and Twitter tags are set, because the two are read
-// by different crawlers and one without the other means half of them show the
-// old picture.
-function rewriteSocialImage(res, imageUrl) {
-  return new HTMLRewriter()
-    .on('meta[property="og:image"]', { element(el) { el.setAttribute('content', imageUrl); } })
-    .on('meta[name="twitter:image"]', { element(el) { el.setAttribute('content', imageUrl); } })
-    .transform(res);
-}
+// HTMLRewriter is a Workers streaming parser — it edits as the bytes go past
+// rather than buffering the whole 220KB page to run a regex over it. The social
+// image lives in rewriteDocument() below with the page's blocks, because two
+// .transform() calls would be two passes over that 220KB for one document.
+// Both the Open Graph and Twitter tags are set, since the two are read by
+// different crawlers and one without the other means half of them show the old
+// picture.
 
 async function getSettingUrl(key, fallback) {
   const now = Date.now();
@@ -371,8 +469,33 @@ export default {
     // to put it in when there is one.
     if (isHtmlResponse(assetRes)) {
       const social = await getSettingUrl('social_image_url', '');
-      if (/^https:\/\/\S+$/.test(social)) {
-        return withAssetCaching(rewriteSocialImage(assetRes, social), url.pathname);
+      const socialImage = /^https:\/\/\S+$/.test(social) ? social : '';
+
+      // ── THE PAGE'S OWN BLOCKS, IN THE FIRST PAINT ────────────────
+      // See getPublishedPages above for why this is here rather than in the
+      // browser. Everything is optional: no payload, no match, or nothing
+      // published for this page all mean "inject nothing", and the page then
+      // renders its hardcoded markup and waits for the client exactly as it
+      // always has.
+      let pageId = '';
+      let blocksHtml = '';
+      let blockCss = '';
+      try {
+        const pageData = await getPublishedPages();
+        if (pageData) {
+          pageId = pageIdForPath(pageData, url.pathname);
+          blocksHtml = (pageData.rendered && pageData.rendered[pageId]) || '';
+          // Shipped once for the whole payload, so it is fetched from the same
+          // place the client would have taken it from.
+          if (blocksHtml) blockCss = pageData.css || '';
+        }
+      } catch (_) { /* fall through to the client-side takeover */ }
+
+      if (socialImage || blocksHtml) {
+        return withAssetCaching(
+          rewriteDocument(assetRes, { socialImage, pageId, blocksHtml, blockCss }),
+          url.pathname,
+        );
       }
     }
     return withAssetCaching(assetRes, url.pathname);
