@@ -692,6 +692,86 @@ Both verified against the bug; the browser one seeds a page already on
 `sectionside` rather than driving the layout dropdown, so what it exercises is
 the redraw and not the Page tab.
 
+### A block's own script ran on one path out of two (v5.11.0, 2026-08-16)
+
+Found while scoping a photo viewer, which wanted to ship the same way. Not
+reported by anybody — it is the kind of fault that never generates a complaint,
+because the person checking it always checks it the way that works.
+
+**⚠ A `<script>` INSERTED WITH `innerHTML` NEVER EXECUTES.** That is the HTML
+spec, not a browser quirk. And two blocks ship their browser half inside their
+own markup on purpose — `COUNTDOWN_SCRIPT` and `GIVING_WIDGET_SCRIPT` in
+`admin/blocks.js` — so that a block works wherever it is rendered rather than
+only on a page whose shell remembered to load a script. That reasoning is
+sound; it just had a hole under it.
+
+| Path | What happens | The script |
+|---|---|---|
+| Edge (v5.6.0) | `site-worker.js` prepends the markup as the document is served | the parser sees it, it runs |
+| Client | `tlcTakeOverPage()` sets `host.innerHTML` | **silently dropped** |
+
+So a countdown on a photo banner ticked on a direct visit to its page and sat
+frozen on an em dash forever if the same page was reached from anywhere else on
+the site. **The direct visit is the one anybody testing would try**, because
+checking a page means loading that page.
+
+- **`tlcRunBlockScripts()` re-parents a copy of each one**, which is what makes
+  the browser treat it as a new script and run it. Every block script is
+  already guarded by its own `window.__tlc*` flag, so one the edge has already
+  run is a no-op here rather than a second interval.
+- **⚠ Verified in a real browser before it was fixed, and the test reproduces
+  it with the real symptom** — the countdown reading `—`. Both paths were driven
+  against the actual `public/index.html`: the script tag was present in the DOM
+  on both and only ever ran on one.
+- **⚠ Anything new that ships a script inside block markup depends on this.**
+  The photo viewer below is the first thing built on top of it, and reverting
+  this fix fails its tests too, which is the honest signal that they are one
+  mechanism rather than two.
+
+### A photograph opens (v5.11.0, 2026-08-16)
+
+Gallery thumbnails were dead ends — a small picture of the Christmas Market
+with nothing to click. `LIGHTBOX_SCRIPT` ships inside the gallery block, the
+same arrangement the countdown uses and for the same reason.
+
+- **⚠ It reads the gallery out of the DOM** rather than being handed a list of
+  photographs. There is then exactly one description of what is in a gallery —
+  the markup the visitor is already looking at — so the viewer cannot come to
+  disagree with the grid behind it, and changing a gallery's photos needs
+  nothing regenerated.
+- **⚠ A real `<button>` on the public page, a plain `<img>` in the editor** —
+  the same split the card grid makes with its anchor, and for the same reason:
+  on the canvas a click has to select the block, and a button would swallow it.
+  It is a button rather than an image with a click handler because a handler on
+  an image is not reachable by keyboard **at all** — the exact fault the
+  accessibility pass found on the header logo.
+- **⚠ Focus returns to the thumbnail it was opened from.** Without that a
+  keyboard visitor is dropped at the top of the document every time they close
+  a photograph, and has to tab all the way back down to reach the next one. A
+  test asserts it, verified by removing the line.
+- **Tab is trapped inside the viewer.** A modal that lets focus wander onto the
+  page behind it is one a screen reader user cannot tell they are still in.
+- **Clicking the backdrop closes; clicking the photograph does not** — reaching
+  for the picture should not dismiss it.
+- **⚠ The fade is gated POSITIVELY**, inside
+  `@media (prefers-reduced-motion: no-preference)`, rather than being granted
+  and then taken away by an override further down. This repo has shipped a
+  correct rule defeated by a later declaration at equal specificity four
+  separate times; a rule that is never granted cannot lose that argument.
+- **⚠ `--font-ui`, not `--tlcb-ui`.** The viewer is appended to the body so it
+  cannot be clipped by anything the page does with overflow — which also puts
+  it outside `.tlcb-page`, where no `--tlcb-*` property reaches. Writing the
+  family out as a literal instead pins the caption to one typeface while the
+  rest of the site follows the Appearance setting; `admin/blocks.test.mjs`
+  catches exactly that, and did.
+- **An empty gallery ships no script**, and neither does the editor.
+- **⚠ Still open: the tile and the opened photo are the same file.** The grid
+  scales a full-size image into a 4:3 thumbnail, and opening it large is free
+  only because it was already paying that cost. The crop-and-thumbnail work is
+  the next phase; this makes the need more visible, it does not meet it.
+
+Run: `node test/public-page.test.mjs` (Chromium, 58).
+
 ### The staff grid was showing three of eight (v5.9.1, 2026-08-16)
 
 Dinger, straight after: *"we are still not showing all staff members in the
