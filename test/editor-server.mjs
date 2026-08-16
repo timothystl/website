@@ -83,6 +83,25 @@ export function createEditorServer(seed = {}) {
     id: r.slug, title: r.title, menu_label: '', slug: r.path || ('/' + r.slug),
     parent_id: r.parent_id || null,
   });
+  // What goes AROUND the blocks: the page's stored layout, and the pages
+  // beneath it that the section layouts list. Mirrors pageLayoutContext() in
+  // tlc-admin-worker.js — the Worker reads both from the database on every
+  // render path, and a harness that skipped either would let the editor's own
+  // canvas drift from the live page without any test noticing.
+  //
+  // A ministry page has no layout of its own, which is what `{}` says here.
+  const layoutFor = (slug, isSitePage) => {
+    const row = isSitePage ? pages.get(slug) : null;
+    if (!row) return {};
+    return {
+      template: row.template || 'standard',
+      children: Array.from(pages.values())
+        .filter((r) => r.parent_id === slug)
+        .map((r) => ({ id: r.slug, title: r.title, slug: r.path || ('/' + r.slug),
+                       parent_id: r.parent_id || null, seo_description: r.seo_description || '' })),
+    };
+  };
+
   const asRailPage = (r) => ({
     id: r.slug, title: r.title, slug: r.path || ('/' + r.slug), parent_id: r.parent_id || null,
     in_menu: r.in_menu === undefined ? true : !!r.in_menu,
@@ -150,8 +169,8 @@ export function createEditorServer(seed = {}) {
           editors: ROLE === 'office' ? EDITORS : [],
           config: blocksClientConfig(),
           media,
-          html: renderPage(blocks, { editing: true, slug, withCss: true, data: DATA,
-            template: isSitePage ? (row.template || 'standard') : undefined }),
+          html: renderPage(blocks, Object.assign(
+            { editing: true, slug, withCss: true, data: DATA }, layoutFor(slug, isSitePage))),
         });
       }
 
@@ -201,7 +220,8 @@ export function createEditorServer(seed = {}) {
           pages: Array.from(pages.values()).map(asRailPage),
           redirected,
           rerender,
-          html: rerender ? renderPage(blocks, { editing: true, slug, withCss: true, data: DATA, template: row.template }) : '',
+          html: rerender ? renderPage(blocks, Object.assign(
+            { editing: true, slug, withCss: true, data: DATA }, layoutFor(slug, isSitePage))) : '',
         });
       }
 
@@ -283,7 +303,17 @@ export function createEditorServer(seed = {}) {
     if (p === '/ministries/api/render' && req.method === 'POST') {
       const body = await readBody(req);
       const blocks = sanitizeBlocks(body.blocks);
-      return json(res, { html: renderPage(blocks, { editing: true, slug: String(body.slug || ''), withCss: true, data: DATA }), blocks });
+      const slug = String(body.slug || '');
+      // ⚠ The layout comes from the stored page, never from the request — same
+      // rule as the Worker's own /render. Leaving it out here is what let the
+      // real bug through unnoticed: a redraw with no template renders as a bare
+      // column, so every structural change silently took the sidebar off a page
+      // that has one. A harness that shares the bug cannot catch it.
+      return json(res, {
+        html: renderPage(blocks, Object.assign(
+          { editing: true, slug, withCss: true, data: DATA }, layoutFor(slug, isSitePage))),
+        blocks,
+      });
     }
 
     // Mirrors promoteScheduledPages() in tlc-admin-worker.js, which the cron

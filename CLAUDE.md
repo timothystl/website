@@ -652,6 +652,77 @@ because an unreachable admin is a state a real visitor hits and the page has to
 keep quoting a working price through it), and the five market groups in
 `test/admin-redesign.test.mjs`.
 
+### A redraw threw away the page's layout (v5.8.1, 2026-08-16)
+
+Dinger: *"the section with sidebar doesnt seem to display a sidebar."*
+
+**The layout was right on first paint and right when he chose it, and wrong
+from the next click onwards.** Three render paths in the editor pass the page's
+`template`: the GET that loads it, the settings POST that switches layout, and
+the two restore routes. The fourth — the stateless `POST /pages/api/render`,
+which is what runs on **every structural change** (add, delete, duplicate,
+reorder, undo, reset) — took the blocks and the slug and nothing else.
+
+**⚠ AND A MISSING TEMPLATE IS NOT "USE THE DEFAULT".** `renderPage()` reads it
+as *this is a ministry page* and returns a bare `<div class="tlcb-page">` with
+no wrapper at all — so the redraw lost the aside, the section child list and
+even the `tlcb-page--standard` class. A reload brought it back, which is
+exactly what made it read as the sidebar not displaying rather than as an
+editor fault: the thing was visibly there a moment ago.
+
+- **`pageLayoutContext(env, P, id)` reads both from the database**, and neither
+  can come from the request: the template is a stored property of the page, and
+  the child list is derived from the page tree rather than typed anywhere. It
+  returns `{}` for the ministries mount, which is how "a ministry page has no
+  layout of its own" is said in one place instead of at four call sites.
+- **⚠ Every child, not only the ones the signed-in person may open.** The aside
+  and the section list are what a *visitor* will see; the editor's rail is
+  scoped by ownership and is a different question, which is why the GET already
+  queried them separately.
+- **⚠ `test/editor-server.mjs` SHARED THE BUG**, which is why no browser suite
+  caught it in the months this was live. The stand-in's own `/render` dropped
+  the template too, and it passed `children` on no path at all. It has
+  `layoutFor()` now, mirroring the Worker — a harness that reproduces the
+  defect can only ever agree with it.
+
+Run: the `redraws a sidebar page WITH its sidebar` group in
+`test/admin-redesign.test.mjs` (through the real Worker) and `the layout
+survives a structural change` in `node test/site-editor.test.mjs` (Chromium).
+Both verified against the bug; the browser one seeds a page already on
+`sectionside` rather than driving the layout dropdown, so what it exercises is
+the redraw and not the Page tab.
+
+### The staff grid was showing three of eight (v5.8.1, 2026-08-16)
+
+Dinger, straight after: *"we are still not showing all staff members in the
+staff layout cards."*
+
+**⚠ `sanitizeBlock` GIVES EVERY BLOCK A `count`, WHETHER OR NOT ITS TYPE HAS A
+CONTROL FOR ONE** — clamped to 1..6, defaulting to 3. The staff block sliced by
+it. So the church's eight staff could never render more than six and rendered
+three, while the hardcoded `/about` that block replaces has always shown
+everybody, from an unlimited `/api/staff`. Publishing the page lost five people.
+
+- **A staff grid is the DIRECTORY, not a feed.** "The three most recent people"
+  is not a thing anybody wants on an About page, so the answer is not a bigger
+  clamp — it is no slice and `autoCount: false`, the same as Service times.
+  Who appears and in what order is decided on the Staff screen, which is where
+  somebody would go to change it.
+- **The second cap was the query.** `pageData()` read `LIMIT 12`, invisible
+  behind the smaller one; with the slice gone it becomes the only thing that
+  can cut somebody off the page. 60 now — still bounded, because this is
+  rendered into every `/api/pages` response, just bounded well above the real
+  number.
+- **⚠ The old test asserted the bug**: `eq(people.length, newBlock('staff').count)`.
+  It now renders **seven** people — deliberately more than the 1..6 the clamp
+  allows — so a reintroduced slice cannot pass by coincidence.
+
+**Still open, noticed here and deliberately not fixed:** the block draws a
+staff photo as a plain `background-image` and ignores `photo_position` /
+`photo_zoom`, which the hardcoded page and every other staff photo on the site
+honor. A face cropped differently in the editor than on the live page is a
+real defect; it is not what was reported and it wants its own change.
+
 ### /sermons had no block that could show a sermon (v5.7.0, 2026-08-16)
 
 Dinger, with the page published: *"for the sermon page, it is not loading the

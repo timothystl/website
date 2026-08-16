@@ -3151,6 +3151,103 @@ group('⚠ A hand-edited page can still be given the redesigned layout');
   eq(none.status, 400, 'a page with no redesigned layout is refused, not silently no-opped');
 }
 
+// ── a redraw keeps the page's layout ─────────────────────────────────────────
+group('⚠ The editor redraws a sidebar page WITH its sidebar');
+{
+  // THE BUG THIS EXISTS FOR. Dinger: "the section with sidebar doesnt seem to
+  // display a sidebar." The stateless /render endpoint took only the blocks and
+  // the slug, so it rendered every page as `standard` — which has no aside. The
+  // canvas was right on first paint and right the moment somebody switched
+  // layout (both of those paths pass the template), so the sidebar appeared and
+  // then vanished at the first added, deleted or reordered block, for the rest
+  // of the session. A reload brought it back, which is what made it read as the
+  // sidebar not displaying rather than as an editor fault.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  const body = [{ id: 'r1', type: 'text', body: '<p>Words on the page.</p>' }];
+  // ⚠ The render ships the whole stylesheet, which names every class this group
+  // is looking for. Assert against the markup alone or `lacks` can never fail.
+  const render = async (mount, slug) => {
+    const res = await worker.fetch(new Request('https://admin.timothystl.org' + mount + '/render', {
+      method: 'POST',
+      headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/json' },
+      body: JSON.stringify({ slug, blocks: body }),
+    }), env, ctx);
+    const out = await res.json();
+    return String(out.html || '').replace(/<style[\s\S]*?<\/style>/g, '');
+  };
+
+  // /ministries is seeded as a section landing with seven pages beneath it.
+  db.prepare("UPDATE pages SET template='sectionside' WHERE id='ministries'").run();
+  const kids = db.prepare("SELECT title FROM pages WHERE parent_id='ministries' ORDER BY sort, title").all();
+  ok(kids.length > 1, 'the page really does have pages beneath it');
+
+  const side = await render('/pages/api', 'ministries');
+  has(side, 'tlcb-page--sectionside', 'the redraw keeps the layout the page is actually set to');
+  has(side, '<div class="tlcb-layout">', 'so the two columns are there');
+  has(side, '<aside class="tlcb-side">', 'and the sidebar itself');
+  // The child list is derived from the page tree, so it can only come from the
+  // server — the browser posts blocks and a slug and nothing else.
+  has(side, '<div class="tlcb-side-kids">', 'with the pages beneath this one listed in it');
+  has(side, kids[0].title, 'by name');
+
+  // Plain `sidebar` gets the aside without the child list — the aside is the
+  // shared part, the kids are what the section layout adds.
+  db.prepare("UPDATE pages SET template='sidebar' WHERE id='worship'").run();
+  const plain = await render('/pages/api', 'worship');
+  has(plain, 'tlcb-page--sidebar', 'a plain sidebar page redraws as one too');
+  has(plain, '<aside class="tlcb-side">', 'with its aside');
+  lacks(plain, 'tlcb-side-kids', 'and no section list, which belongs to the other layout');
+
+  // ⚠ The other direction, which is what stops this becoming "always draw an
+  // aside": a standard page must come back with none. It was not even getting
+  // its own wrapper class before — renderPage() reads a missing template as
+  // "this is a ministry page" and returns a bare column.
+  const flat = await render('/pages/api', 'about');
+  has(flat, 'tlcb-page--standard', 'a standard page is still standard');
+  lacks(flat, 'tlcb-side', 'and grows no sidebar it never asked for');
+
+  // A ministry page has no layout of its own, and the shared endpoint must not
+  // go looking for one in the site pages table under the same name.
+  const min = await render('/ministries/api', 'music');
+  has(min, '<div class="tlcb-page"', 'a ministry page redraws as the bare column it always was');
+  lacks(min, 'tlcb-page--', 'with no site layout applied to it');
+}
+
+// ── the whole staff directory reaches the page ───────────────────────────────
+group('⚠ The staff grid shows every member of staff');
+{
+  // THE BUG THIS EXISTS FOR. Dinger: "we are still not showing all staff
+  // members in the staff layout cards." sanitizeBlock gives EVERY block a
+  // `count`, clamped to 1..6 and defaulting to 3, whether or not its type has a
+  // control for one — and the staff block sliced by it. So a directory of eight
+  // could never show more than six and showed three, while the hardcoded /about
+  // it replaces has always shown everybody. The other cap was the query itself.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  db.prepare('DELETE FROM staff_members').run();
+  const roster = ['Dinger', 'Pastor Matt', 'Jinah', 'Pastor Rall', 'Pastor Vo', 'Noah', 'Marla', 'Katie'];
+  roster.forEach((name, i) => db.prepare(
+    'INSERT INTO staff_members (name, title, email, photo_url, display_order) VALUES (?,?,?,?,?)'
+  ).run(name, 'Staff', name.toLowerCase().replace(/\W/g, '') + '@timothystl.org', '', (i + 1) * 10));
+
+  const blocks = JSON.stringify([{ id: 's1', type: 'staff', title: 'Our staff' }]);
+  db.prepare("UPDATE pages SET blocks = ?, published_blocks = ?, status = 'published' WHERE id = 'about'")
+    .run(blocks, blocks);
+
+  const stored = JSON.parse(db.prepare("SELECT published_blocks FROM pages WHERE id='about'").get().published_blocks);
+  eq(stored[0].count, undefined, 'the block itself carries no count — nothing here is asking for three');
+
+  const api = await (await call(env, '/api/pages', { fresh: true })).json();
+  const about = api.rendered.about;
+  eq((about.match(/class="tlcb-person"/g) || []).length, roster.length,
+    'every person in the directory is on the published page');
+  for (const name of roster) has(about, name, name + ' is on it');
+}
+
+
 // ── the Christmas Market vendor application ──────────────────────────────────
 // The public form and the coordinator's list, through the real Worker. What
 // these check is not that the screen renders — it is the ordering that makes

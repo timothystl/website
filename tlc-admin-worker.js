@@ -271,6 +271,37 @@ async function oversizeImage(env, url, request) {
 // and the stateless renderer. The ministry editor and the site editor mount
 // them under their own prefix and share one implementation, so a fix to either
 // lands in both. Returns null when `path` is none of them.
+// ── THE LAYOUT HAS TO COME BACK WITH EVERY REDRAW ────────────────────────────
+// A page's template decides what goes AROUND its blocks — whether there is a
+// sidebar at all, and whether the pages beneath this one are listed. Neither
+// can come from the request: the template is a stored property of the page, and
+// the child list is derived from the page tree rather than typed anywhere.
+//
+// ⚠ THIS IS THE BUG IT EXISTS FOR. The stateless /render below took only the
+// blocks and the slug, so every redraw rendered the page as `standard` — and
+// `standard` has no aside. The canvas was right on first paint (the GET passes
+// both) and right the moment somebody switched layout (the settings POST passes
+// both), so a page with a sidebar showed one until the first structural change
+// — an added block, a delete, a reorder, an undo — and then silently lost it
+// for the rest of the session. Reloading brought it back, which is exactly what
+// made it read as "the sidebar doesn't display" rather than as an editor fault.
+//
+// Ministry pages have no layout of their own, so this reads nothing for them.
+async function pageLayoutContext(env, P, id) {
+  if (P !== '/pages/api' || !id) return {};
+  const row = await env.DB.prepare('SELECT id, template FROM pages WHERE id = ?')
+    .bind(id).first().catch(() => null);
+  if (!row) return {};
+  // Every child, not only the ones this person may open — the aside and the
+  // section list are what a VISITOR will see, and the editor's own GET scopes
+  // its rail separately for exactly that reason.
+  const kids = await env.DB.prepare(
+    'SELECT id, title, menu_label, slug, parent_id, sort, status, in_menu, seo_description ' +
+    'FROM pages WHERE parent_id = ? ORDER BY sort ASC, title ASC'
+  ).bind(row.id).all().catch(() => ({ results: [] }));
+  return { template: row.template, children: kids.results || [] };
+}
+
 async function sharedEditorApi(path, method, request, env, ctx, currentUser, P) {
   if (!path.startsWith(P + '/')) return null;
   const rest = path.slice(P.length);            // '/media', '/sections/12/delete', …
@@ -364,15 +395,18 @@ async function sharedEditorApi(path, method, request, env, ctx, currentUser, P) 
       return jsonResponse({ block });
     }
 
-    // Stateless render — the editor's single source of block markup. It
-    // stores nothing; the only reads are the self-filling blocks' data
-    // bundle, so what staff arrange on the canvas is what visitors get.
+    // Stateless render — the editor's single source of block markup. It writes
+    // nothing; the only reads are the self-filling blocks' data bundle and the
+    // page's own layout, so what staff arrange on the canvas is what visitors
+    // get.
     if (path === P + '/render' && method === 'POST') {
       const body = await request.json().catch(() => ({}));
       const blocks = sanitizeBlocks(body.blocks);
       const slug = cleanSlug(body.slug);
       return jsonResponse({
-        html: renderPage(blocks, { editing: true, slug, withCss: true, data: await pageData(env, ctx) }),
+        html: renderPage(blocks, Object.assign({
+          editing: true, slug, withCss: true, data: await pageData(env, ctx),
+        }, await pageLayoutContext(env, P, slug))),
         blocks,
       });
     }
@@ -484,7 +518,12 @@ async function pageData(env, reqKey) {
          WHERE (expire_date IS NULL OR expire_date >= date('now'))
            AND (event_date IS NULL OR event_date >= date('now'))
          ${NEWS_ORDER_SQL} LIMIT 30`),
-      q('SELECT name, title, email, photo_url FROM staff_members ORDER BY display_order ASC, id ASC LIMIT 12'),
+      // ⚠ The Staff grid block shows EVERY row this returns, so this limit is
+      // the only thing that can cut somebody off the About page. It was 12,
+      // which a church that hires two more people would quietly cross with
+      // nothing to see but a missing face. Still bounded — it is rendered into
+      // every /api/pages response — just bounded well above the real number.
+      q('SELECT name, title, email, photo_url FROM staff_members ORDER BY display_order ASC, id ASC LIMIT 60'),
       // Same "published" filter /api/newsletters itself uses (status IS NULL
       // counts too — issues sent before the status column existed).
       q(`SELECT id, subject, published_at, pastor_note FROM newsletters
@@ -7683,7 +7722,9 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
             .bind(JSON.stringify(blocks), new Date().toISOString(), pageId).run();
           return jsonResponse({
             ok: true, blocks,
-            html: renderPage(blocks, { editing: true, slug: row.id, template: row.template, withCss: true, data: await pageData(env, ctx) }),
+            html: renderPage(blocks, Object.assign({
+              editing: true, slug: row.id, withCss: true, data: await pageData(env, ctx),
+            }, await pageLayoutContext(env, '/pages/api', row.id))),
           });
         }
 
@@ -7728,9 +7769,9 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
             { blocks: blocks.length + ' blocks', layout: 'the redesigned layout' });
           return jsonResponse({
             ok: true, blocks,
-            html: renderPage(blocks, {
-              editing: true, slug: row.id, template: row.template, withCss: true, data: await pageData(env, ctx),
-            }),
+            html: renderPage(blocks, Object.assign({
+              editing: true, slug: row.id, withCss: true, data: await pageData(env, ctx),
+            }, await pageLayoutContext(env, '/pages/api', row.id))),
           });
         }
 

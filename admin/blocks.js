@@ -303,7 +303,16 @@ export const BLOCK_DEFS = {
     label: 'Staff grid', glyph: '☺',
     align: true,
     defaults: { title: 'People to know', spaceAbove: 24, spaceBelow: 24 },
-    auto: 'staff', autoNote: 'Pulls from the staff directory.',
+    // ⚠ NO COUNT CONTROL, AND THE BLOCK NO LONGER SLICES. A staff grid is the
+    // DIRECTORY, not a feed — "the three most recent people" is not a thing
+    // anybody wants on an About page, and the count was silently cutting the
+    // church's own staff off the bottom of it. `count` is clamped to 1..6 for
+    // every block type, so a directory of eight could never show more than six
+    // and showed three by default, while the hardcoded /about it replaces has
+    // always shown everybody. Who appears, and in what order, is decided on the
+    // Staff screen — which is where somebody looking to change it would go.
+    auto: 'staff', autoCount: false,
+    autoNote: 'Everybody in the staff directory, in the order set on the Staff screen.',
   },
   servicetimes: {
     label: 'Service times', glyph: '◷',
@@ -3091,7 +3100,11 @@ function renderInner(b, opts) {
   }
 
   if (t === 'staff') {
-    const people = (data.staff || []).slice(0, b.count).map((m) => `<div class="tlcb-person">
+    // ⚠ NOT sliced to b.count. See the note on the type: this is the directory,
+    // and every block carries a count of 3 by default whether or not its type
+    // has a control for one — so slicing here silently dropped five of the
+    // church's eight staff the moment /about was published from the editor.
+    const people = (data.staff || []).map((m) => `<div class="tlcb-person">
         <span class="tlcb-person-p"${m.photo_url ? ` style="background-image:url('${cssUrl(m.photo_url)}')"` : ''}></span>
         <span class="tlcb-person-n">${esc(m.name || '')}</span>
         <span class="tlcb-person-r">${esc(m.title || '')}</span>
