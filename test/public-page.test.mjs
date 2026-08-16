@@ -35,8 +35,21 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
   let file = path.join(ROOT, decodeURIComponent(url.pathname));
   if (!file.startsWith(ROOT) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(ROOT, 'index.html');
+  let body = fs.readFileSync(file);
+  // ?edge=<id> stands in for site-worker.js having already put that page's
+  // published blocks into the HTML. It does the same three things the real
+  // rewriter does — prepend the host, mark the page, hide the original
+  // children — so the SPA sees exactly what a real visitor's first paint has.
+  const edge = url.searchParams.get('edge');
+  if (edge && file.endsWith('index.html')) {
+    const open = new RegExp('<div id="page-' + edge + '"([^>]*)>');
+    body = Buffer.from(String(body).replace(open,
+      (m, attrs) => '<div id="page-' + edge + '"' + attrs + ' data-tlcb-edge="1">' +
+        '<div id="' + edge + '-blocks"><div class="tlcb-page"><div class="tlcb tlcb--text">' +
+        'EDGE RENDERED</div></div></div>'));
+  }
   res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
-  res.end(fs.readFileSync(file));
+  res.end(body);
 });
 await new Promise((r) => server.listen(0, r));
 const base = 'http://localhost:' + server.address().port;
@@ -65,6 +78,28 @@ async function visit(slug, apiPage, posts = []) {
   await page.route('https://**', (route) => route.fulfill({ status: 200, body: '' }));
   await page.goto(base + '/' + slug, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(600);
+  return { page, ctx, errors };
+}
+
+// Same harness, but /api/pages answers with a real `rendered` entry and the
+// document arrives with the edge injection already applied.
+async function visitEdged(slug, renderedHtml, { edged = true } = {}) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.route('https://admin.timothystl.org/**', (route) => {
+    const u = route.request().url();
+    if (u.includes('/api/pages')) {
+      return route.fulfill({ status: 200, contentType: 'application/json',
+        body: JSON.stringify({ pages: [{ id: slug, slug: '/' + slug }], menu: null,
+          rendered: { [slug]: renderedHtml }, redirects: {}, css: BLOCK_CSS }) });
+    }
+    return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  });
+  await page.route('https://**', (route) => route.fulfill({ status: 200, body: '' }));
+  await page.goto(base + '/' + slug + (edged ? '?edge=' + slug : ''), { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(900);
   return { page, ctx, errors };
 }
 
@@ -234,6 +269,36 @@ console.log('\nthe homepage is frugal with its fetches');
   ok(!hits.some((u) => u.includes('/api/ministry/christmasmarket/posts')),
     'the market posts wait for their page to be opened');
   await ctx.close();
+}
+
+console.log('\nthe edge already rendered the page');
+{
+  // ⚠ THE FAILURE THIS GUARDS IS A VISIBLE ONE: every block on the page twice,
+  // one copy under the other. The edge injects the blocks into the HTML so
+  // there is no flash of the hardcoded markup; the client then loads
+  // /api/pages for the menu and the church details, sees the same `rendered`
+  // entry, and must not put it in again.
+  const html = renderPage(sanitizeBlocks([newBlock('text', { body: '<p>PUBLISHED BODY</p>' })]),
+    { slug: 'news', withCss: false });
+  const { page, ctx, errors } = await visitEdged('news', html);
+  eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
+  eq(await page.locator('#news-blocks').count(), 1, 'the block host appears exactly once');
+  ok((await page.textContent('#page-news')).includes('EDGE RENDERED'),
+    'and it is the copy the edge put there');
+  ok(!(await page.textContent('#page-news')).includes('PUBLISHED BODY'),
+    'the client did not inject a second copy on top of it');
+  await ctx.close();
+
+  // ⚠ AND THE FALLBACK STILL WORKS. With no edge injection — an unreachable
+  // admin at request time, or a page the worker could not resolve — the client
+  // must do exactly what it always did. This is the half that makes the whole
+  // change additive rather than a swap.
+  const plain = await visitEdged('news', html, { edged: false });
+  eq(plain.errors.length, 0, 'no page errors: ' + plain.errors.join(' | '));
+  eq(await plain.page.locator('#news-blocks').count(), 1, 'the client injects it once');
+  ok((await plain.page.textContent('#page-news')).includes('PUBLISHED BODY'),
+    'and the published blocks are on the page');
+  await plain.ctx.close();
 }
 
 await browser.close();
