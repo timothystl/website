@@ -154,6 +154,81 @@ group('the blocks go in, and the hardcoded markup is stood down');
   ok(head.added[0].html.includes('tlcb-css'), 'and it is the one the client would have added');
 }
 
+group('the chrome is in the first paint too');
+{
+  // ⚠ MEASURED AGAINST THE LIVE SITE, which is where this came from: the
+  // stylesheet paints the bar `var(--sage)` (moss) and the stored appearance is
+  // slate, so every page painted a moss header and snapped to slate when
+  // /api/pages returned. The page BODY was already arriving rendered; the
+  // chrome was not.
+  const appearance = {
+    fonts: { head: 'Bricolage', body: 'Newsreader', ui: 'Bricolage' },
+    textScale: { body: 1.1, head: 1.05 },
+    bar: '#3A4E5C', rule: '#C9973A', cta: '#C9973A', ink: '#FFFFFF', ctaInk: '#FFFFFF',
+    logo: 'https://admin.timothystl.org/images/logo.png', logoShape: 'round',
+    name: 'Timothy Lutheran Church', tagline: 'from our Neighborhood to the Nations',
+    newsletter: { bg: '#3A4E5C', eyebrow: 'Stay Connected', heading: 'Get our weekly newsletter' },
+  };
+  const r = runRewrite({ socialImage: '', pageId: '', blocksHtml: '', blockCss: '', appearance });
+
+  const head = r.fire('head');
+  // ⚠ Reported, not thrown. Without the chrome the head handler is never
+  // registered and `head` is null — a crash here would say "TypeError" where it
+  // should say which property went missing.
+  ok(!!head, 'the head is rewritten at all');
+  const css = head ? head.added.map((a) => a.html).join('') : '';
+  ok(css.includes('--nav-bar:#3A4E5C'), 'the header color is written into the document');
+  ok(css.includes('--tlc-text-scale:1.1'), 'and the text size');
+  ok(css.includes('--font-body:Newsreader'), 'and the reading face');
+  // ⚠ These are the exact properties applyAppearance() sets. If the edge set
+  // one name and the client set another the flash would simply move.
+  for (const k of ['--nav-rule', '--nav-cta', '--nav-ink', '--nav-cta-ink', '--font-heading', '--font-ui', '--tlc-head-scale']) {
+    ok(css.includes(k + ':'), k + ' is set at the edge');
+  }
+
+  const logo = r.fire('img.nav-logo-img');
+  eq(logo.getAttribute('src'), appearance.logo, 'the real logo is served, not the markup default');
+  const band = r.fire('#newsletter-band');
+  ok(/background:#3A4E5C/.test(band.getAttribute('style')), 'the newsletter band arrives its own color');
+
+  // ⚠ CHROME IS ON EVERY PAGE, published or not. An unconverted page flashes
+  // its header exactly the same way a converted one does, so this must not be
+  // gated on there being blocks.
+  ok(r.selectors.includes('head'), 'with no published blocks at all');
+  ok(!r.selectors.includes('#page-news'), 'and no page injection alongside it');
+}
+
+group('an appearance that says nothing changes nothing');
+{
+  // The whole change is additive: a missing record, or a field absent from it,
+  // leaves the stylesheet's own fallbacks exactly as they are today.
+  eq(runRewrite({ socialImage: '', pageId: '', blocksHtml: '', appearance: null }).selectors.length, 0,
+    'no record, no rewriting');
+  const bare = runRewrite({ socialImage: '', pageId: '', blocksHtml: '', appearance: {} });
+  const head = bare.fire('head');
+  ok(!head || head.added.length === 0, 'an empty record writes no stylesheet');
+  const logo = bare.fire('img.nav-logo-img');
+  ok(logo && logo.getAttribute('src') === null, 'and leaves the markup logo alone');
+
+  // ⚠ A blank logo is a real choice — the church name on its own — so it hides
+  // the image rather than leaving the default one in place.
+  const noLogo = runRewrite({ socialImage: '', pageId: '', blocksHtml: '', appearance: { logo: '', bar: '#111' } });
+  ok(/display:none/.test(noLogo.fire('img.nav-logo-img').getAttribute('style')), 'an empty logo is hidden');
+  // And a band switched off is not drawn.
+  ok(/display:none/.test(noLogo.fire('#newsletter-band').getAttribute('style')), 'a band switched off is hidden');
+
+  // ⚠ These land in a stylesheet and an attribute. The values come from a fixed
+  // list in admin/appearance.js rather than from anything a visitor types, but
+  // the characters that could end a declaration or the block are dropped rather
+  // than reasoned about.
+  const nasty = runRewrite({ socialImage: '', pageId: '', blocksHtml: '',
+    appearance: { bar: 'red;}body{display:none', textScale: { body: 'NaN', head: 99 } } });
+  const out = nasty.fire('head').added.map((a) => a.html).join('');
+  ok(!out.includes('}body{'), 'a crafted color cannot close the rule');
+  ok(!/--tlc-text-scale:/.test(out), 'a non-number scale is dropped');
+  ok(!/--tlc-head-scale:/.test(out), 'and so is one outside a sane range');
+}
+
 group('nothing published means nothing touched');
 {
   const r = runRewrite({ socialImage: '', pageId: '', blocksHtml: '', blockCss: '' });

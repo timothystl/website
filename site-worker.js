@@ -188,17 +188,125 @@ export function pageIdForPath(data, pathname) {
 // the `> *` selector below matches only the page's ORIGINAL children and never
 // the block markup just put in front of them. That is what makes hiding the old
 // sections expressible at all in a streaming rewriter.
-export function rewriteDocument(res, { socialImage, pageId, blocksHtml, blockCss }) {
+// ── THE CHROME, ALSO IN THE FIRST PAINT ─────────────────────────────────────
+// Dinger, after every page was published and the block markup was already
+// arriving at the edge: "I have published all pages and still the echo version
+// of pages loads first."
+//
+// He was right again, and the earlier fix was half of one. The page BODY comes
+// down rendered now — but the header, the logo and the newsletter band are
+// still swapped in by applyAppearance() AFTER a cross-origin fetch to
+// /api/pages. Measured against the live site: the stylesheet paints the bar
+// `var(--sage)` (moss) and the stored appearance is `#3A4E5C` (slate), so every
+// page paints a moss header and snaps to slate a moment later. The logo is a
+// custom upload, so it swaps too, and the newsletter band is slate as well.
+//
+// So the same door: the payload is already fetched, and everything below is
+// already in it. These are the exact properties applyAppearance() sets, which
+// is what keeps the two from disagreeing — if the edge sets one and the client
+// sets another, the flash simply moves.
+//
+// ⚠ ADDITIVE, LIKE THE BLOCKS. No appearance in the payload, or a field absent
+// from it, means nothing is written and the stylesheet's own fallbacks apply
+// exactly as they do today. The client still runs and still sets all of this;
+// it just has nothing left to change.
+export function appearanceStyle(a) {
+  if (!a) return '';
+  // Custom properties only, and each one guarded — a value is a color or a font
+  // stack from a fixed list in admin/appearance.js, never anything a visitor
+  // types, but it is being written into a stylesheet, so the characters that
+  // could end the declaration or the block are dropped rather than reasoned
+  // about.
+  const clean = (v) => String(v == null ? '' : v).replace(/["'<>;{}\\]/g, '').slice(0, 200);
+  const rows = [];
+  const put = (name, v) => { if (v) rows.push(name + ':' + clean(v)); };
+  if (a.fonts) {
+    put('--font-heading', a.fonts.head);
+    put('--font-body', a.fonts.body);
+    put('--font-ui', a.fonts.ui);
+  }
+  if (a.textScale) {
+    // Numbers, clamped rather than trusted: these multiply every font-size on
+    // the site, and a non-number would break every calc() at once.
+    const num = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 && Number(v) <= 3 ? Number(v) : null);
+    const b = num(a.textScale.body);
+    const h = num(a.textScale.head);
+    if (b) rows.push('--tlc-text-scale:' + b);
+    if (h) rows.push('--tlc-head-scale:' + h);
+  }
+  put('--nav-bar', a.bar);
+  put('--nav-rule', a.rule);
+  put('--nav-cta', a.cta);
+  put('--nav-ink', a.ink);
+  put('--nav-cta-ink', a.ctaInk);
+  return rows.length ? '<style id="tlc-appearance">:root{' + rows.join(';') + '}</style>' : '';
+}
+
+export function rewriteDocument(res, { socialImage, pageId, blocksHtml, blockCss, appearance }) {
   let rw = new HTMLRewriter();
   if (socialImage) {
     rw = rw
       .on('meta[property="og:image"]', { element(el) { el.setAttribute('content', socialImage); } })
       .on('meta[name="twitter:image"]', { element(el) { el.setAttribute('content', socialImage); } });
   }
+  // The chrome is on every page, published or not, so this is NOT inside the
+  // `blocksHtml` branch below — an unconverted page flashes its header exactly
+  // the same way a converted one does.
+  const chromeCss = appearanceStyle(appearance);
+  if (chromeCss || (pageId && blocksHtml && blockCss)) {
+    rw = rw.on('head', {
+      element(el) {
+        if (chromeCss) el.append(chromeCss, { html: true });
+        if (pageId && blocksHtml && blockCss) el.append(blockCss, { html: true });
+      },
+    });
+  }
+  if (appearance) {
+    rw = rw
+      // The logo is an upload, so the markup's own /logo.png is the wrong
+      // picture on a site that has set one — it swaps visibly on every load.
+      // ⚠ An empty logo is a real choice (the church name on its own), which is
+      // why this hides the image rather than leaving the default in place.
+      .on('img.nav-logo-img', {
+        element(el) {
+          if (appearance.logo) {
+            el.setAttribute('src', appearance.logo);
+            if (appearance.logoShape === 'square') el.setAttribute('class', 'nav-logo-img is-square');
+          } else {
+            el.setAttribute('style', 'display:none');
+          }
+        },
+      })
+      // ⚠ setInnerContent's default is TEXT, not html — the church name is
+      // office-entered and must not become markup on the way through.
+      .on('.nav-brand-name', {
+        element(el) {
+          if (appearance.name != null) {
+            el.setInnerContent(String(appearance.name));
+            if (!appearance.name) el.setAttribute('style', 'display:none');
+          }
+        },
+      })
+      .on('.nav-brand-sub', {
+        element(el) {
+          el.setInnerContent(String(appearance.tagline || ''));
+          if (!appearance.tagline) el.setAttribute('style', 'display:none');
+        },
+      })
+      // The band is chrome too, and it is on all 28 pages. Switched off it is
+      // not rendered at all, which is what the client does with it.
+      .on('#newsletter-band', {
+        element(el) {
+          const n = appearance.newsletter;
+          if (!n) { el.setAttribute('style', 'display:none'); return; }
+          const bg = String(n.bg || '').replace(/["'<>;{}\\]/g, '').slice(0, 60);
+          if (bg) el.setAttribute('style', 'background:' + bg + ';padding:56px 28px;');
+        },
+      });
+  }
   if (pageId && blocksHtml) {
     const sel = '#page-' + pageId;
     rw = rw
-      .on('head', { element(el) { if (blockCss) el.append(blockCss, { html: true }); } })
       .on(sel, {
         element(el) {
           // The same host element and id the client-side takeover creates, so
@@ -480,6 +588,7 @@ export default {
       let pageId = '';
       let blocksHtml = '';
       let blockCss = '';
+      let appearance = null;
       try {
         const pageData = await getPublishedPages();
         if (pageData) {
@@ -488,12 +597,16 @@ export default {
           // Shipped once for the whole payload, so it is fetched from the same
           // place the client would have taken it from.
           if (blocksHtml) blockCss = pageData.css || '';
+          // The header, logo and newsletter band — see appearanceStyle. This is
+          // read for EVERY page, not just a published one: the chrome is on all
+          // 28 of them and flashes on all 28.
+          appearance = (pageData.details && pageData.details.appearance) || null;
         }
       } catch (_) { /* fall through to the client-side takeover */ }
 
-      if (socialImage || blocksHtml) {
+      if (socialImage || blocksHtml || appearance) {
         return withAssetCaching(
-          rewriteDocument(assetRes, { socialImage, pageId, blocksHtml, blockCss }),
+          rewriteDocument(assetRes, { socialImage, pageId, blocksHtml, blockCss, appearance }),
           url.pathname,
         );
       }
