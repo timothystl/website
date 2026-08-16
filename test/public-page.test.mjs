@@ -133,9 +133,22 @@ console.log('\npublic ministry page — every block type renders without error')
   const all = ['hero', ...Object.keys(BLOCK_DEFS).filter((t) => t !== 'hero')].map((t) => newBlock(t));
   const { page, ctx, errors } = await visit('vbs', apiFor('vbs', all, { title: 'VBS' }));
   eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
+  // ⚠ `chips` — the Coming-up strip — renders NOTHING when nothing is coming
+  // up, and that is deliberate: it is a one-line aside between two real
+  // sections, and a strip announcing its own emptiness is worse than the gap.
+  // This block has no feed behind it here, so it is correctly absent.
+  //
+  // Named rather than subtracted from the count. `all.length - 1` would pass
+  // just as well if a SECOND type quietly stopped rendering, which is the
+  // failure this assertion exists to catch.
+  const drawn = await page.$$eval('#page-vbs .tlcb', (ns) => ns.map((n) =>
+    (n.className.match(/tlcb--([a-z]+)/) || [])[1]).filter(Boolean));
+  const absent = all.map((b) => b.type).filter((t) => !drawn.includes(t));
+  eq(JSON.stringify(absent), JSON.stringify(['chips']),
+    'every block type is on the page except the one that draws nothing when empty');
   // this list leads with a hero, so the page renders in whole-page mode and the
   // blocks live in the page itself rather than the old content region
-  eq(await page.locator('#page-vbs .tlcb').count(), all.length, 'all block types present on the page');
+  eq(await page.locator('#page-vbs .tlcb').count(), all.length - 1, 'and nothing else is missing');
   // nothing overflows the page horizontally — the classic phone-layout failure
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   ok(overflow <= 1, 'no horizontal overflow at 1280px (got ' + overflow + ')');
