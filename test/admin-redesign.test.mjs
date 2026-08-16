@@ -3240,11 +3240,19 @@ group('⚠ The staff grid shows every member of staff');
   const stored = JSON.parse(db.prepare("SELECT published_blocks FROM pages WHERE id='about'").get().published_blocks);
   eq(stored[0].count, undefined, 'the block itself carries no count — nothing here is asking for three');
 
+  // ⚠ AND THE CROP TRAVELS WITH THEM. The Staff screen stores a per-person
+  // object-position and zoom, and pageData() did not select either column — so
+  // the block had no crop to honor even once it wanted to, and a face framed in
+  // the admin came out framed differently on the published page.
+  db.prepare("UPDATE staff_members SET photo_url='/images/dinger.webp', photo_position='40% 22%', photo_zoom=1.6 WHERE name='Dinger'").run();
+
   const api = await (await call(env, '/api/pages', { fresh: true })).json();
   const about = api.rendered.about;
   eq((about.match(/class="tlcb-person"/g) || []).length, roster.length,
     'every person in the directory is on the published page');
   for (const name of roster) has(about, name, name + ' is on it');
+  has(about, 'object-position:40% 22%', 'with the crop the office set on the Staff screen');
+  has(about, 'transform:scale(1.6)', 'and the zoom that goes with it');
 }
 
 
