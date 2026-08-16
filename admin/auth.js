@@ -25,6 +25,12 @@ export const PERMISSIONS = {
   gym_manage:         'Gym rentals',
   giving_manage:      'Giving',
   payroll_manage:     'Payroll',
+  // The Christmas Market vendor list. Its own key rather than a share of
+  // giving_manage or news_edit, for the same reason payroll and giving each
+  // got one: the coordinator is a volunteer who runs one event a year, and the
+  // list holds seventy people's home addresses and phone numbers. She should
+  // be able to have exactly that and nothing else.
+  market_manage:      'Christmas Market vendors',
   users_manage:       'User management',
   audit_view:         'Audit log & rollback',
 };
@@ -82,6 +88,11 @@ export const PERMISSION_PRESETS = {
   'Office staff': ['newsletter_edit', 'news_edit', 'ministries_edit', 'sermons_edit', 'pages_edit', 'notices_edit', 'staff_edit', 'links_edit', 'settings_manage'],
   'Ministry leader': ['pages_edit_own', 'ministries_edit', 'news_edit'],
   'Bookkeeper': ['gym_manage', 'giving_manage', 'payroll_manage'],
+  // One event, once a year, and nothing else in the admin. Deliberately not
+  // folded into Office staff: the market coordinator is a different person
+  // from whoever writes the newsletter, and each of them being able to do the
+  // other's job is not the point of a preset.
+  'Market coordinator': ['market_manage'],
   'Full access': ALL_PERMISSIONS,
 };
 

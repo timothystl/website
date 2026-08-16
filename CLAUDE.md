@@ -46,7 +46,7 @@ ChMS", changed 2026-07-20 from separate "Scheduler"/"Volunteer Admin" links)
 points staff there.
 
 ### Databases (Cloudflare D1)
-- `tlc-newsletter-db` — tables: `newsletters`, `events`, `news_items`, `youth_pages`, `ministry_posts`, `sermon_series`, `sermon_notes`, `notices`, `staff_members`, `bible_classes`, `link_cards`, `gym_*`, `users`, `sessions`, `audit_log`, `redirects` (`category`='giving' rows are vendor/market payment links, managed under the Giving tab), `give_amount_tiers` (admin-editable amount chips + per-tier Tithe.ly links for give.timothystl.org), and more — see the `DB_INIT_*` constants in `admin/db.js` for the full current schema
+- `tlc-newsletter-db` — tables: `newsletters`, `events`, `news_items`, `youth_pages`, `ministry_posts`, `sermon_series`, `sermon_notes`, `notices`, `staff_members`, `bible_classes`, `link_cards`, `gym_*`, `market_vendors`, `users`, `sessions`, `audit_log`, `redirects` (`category`='giving' rows are vendor/market payment links, managed under the Giving tab), `give_amount_tiers` (admin-editable amount chips + per-tier Tithe.ly links for give.timothystl.org), and more — see the `DB_INIT_*` constants in `admin/db.js` for the full current schema
 - `tlc-volunteer-db` — tables: `serve_events`, `serve_roles`, `signups`, `signup_slots`
 - `RSVP_STORE` — Cloudflare KV namespace
 
@@ -85,6 +85,7 @@ points staff there.
 | page-prayer | /prayer | Exists |
 | page-news | /news | Exists — fetches live from admin API + newsletter archive, with the Google Calendar embedded below the posts (2026-08-01) |
 | page-values | /about/values | Exists (2026-08-01) — the four core values and the partner ministry paired to each, from `/api/values`. Nested under About via `NESTED_PATHS` in `public/index.html` |
+| page-marketvendors | /christmasmarket/vendors | Exists (v5.6.0) — the Christmas Market vendor application. Nested under the market page via `NESTED_PATHS` |
 | page-404 | (any unknown path) | Exists — shown for unrecognized URLs |
 
 ---
@@ -107,7 +108,8 @@ points staff there.
 
 ### Ministry Landing Pages (flyer-friendly short URLs, static)
 ```
-/christmasmarket  Admin-managed: dates, photos, Google Form link for vendors
+/christmasmarket  Admin-managed: dates, photos; links to the vendor application
+/christmasmarket/vendors  Vendor application — three steps, takes card payment
 /foodpantry       Food Pantry info, hours, how to donate/volunteer
 /music            Music Ministry
 /stephen          Stephen Ministry
@@ -157,6 +159,7 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Subscribers | Office staff | **DONE** — newsletter subscriber list |
 | Redirects | Office staff | **DONE** — admin-managed URL redirects at `/redirects`, all four kinds in one list (hand-made, automatic 301s from renames, derived short links, giving) · **on the shared pattern** with a drawer |
 | Settings | Office staff — requires `settings_manage` | **DONE** (v3.1.0) — the `site_settings` keys the rest of the site reads, each with what reads it; anything with a screen of its own links there rather than duplicating the field |
+| Christmas Market | Market coordinator — requires `market_manage` | **DONE** (v5.6.0) — the vendor list that replaces the 2024 spreadsheet: who applied, what they sell, table numbers, and a payment state the coordinator keeps by hand because the website cannot see whether a card cleared. Fed by the public application at `/christmasmarket/vendors`; see "The Christmas Market takes its own vendor applications" below |
 | Giving | Office staff — requires `giving_manage` permission | **DONE** (2026-07-27) — base Tithe.ly link, give.timothystl.org's amount tiers + per-tier links, and vendor/market one-off payment links (Tithe.ly or Square); see below |
 | Payroll | Office staff (Dinger) — requires `payroll_manage` permission | **DONE** (v3.2.0) — combined biweekly payroll (church staff + MDO preschool staff), rebuilt onto the shared shell with the design's period picker, Enter & approve / Report and three report layouts; see "Gym and Payroll, to the mockups" and "Payroll & Supabase" below |
 | Audit Log | Admins | **DONE** — change history + rollback, requires `audit_view` |
@@ -520,6 +523,133 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
   fills it a moment later.
 
 Run: `node admin/menu.test.mjs`, plus two groups in
+`test/admin-redesign.test.mjs`.
+
+### The Christmas Market takes its own vendor applications (v5.8.0, 2026-08-16)
+
+Built from `design_handoff_market_vendor_signup/`, committed whole for the same
+reason the other two handoffs are. It replaces the Google Form + spreadsheet the
+market ran on through 2024 (`Weihnachtsmarkt Registration`, 68 vendors, ~69
+tables) with `/christmasmarket/vendors` and an admin screen.
+
+**⚠ THE HANDOFF'S THIRD PRICE IS WRONG, AND THIS DELIBERATELY DISAGREES WITH
+IT.** A vendor pays a grossed-up amount so the church nets the whole table fee:
+`total = round((tables × 30 + 0.30) / (1 − 0.029))`. README.md gives the
+results as **$31.20 / $62.10 / $92.99**. The first two are exactly what that
+formula produces; the third is the formula **truncated**, where the other two
+happened to need no rounding at all. Follow it and the church nets **$89.99** on
+a three-table vendor — a penny short of the $90 the gross-up exists to protect.
+$31.20 is the anchor worth trusting: it is what a one-table vendor really paid
+in 2024, which is how the 2.9% + 30¢ rate was identified. Three tables is
+**$93.00**. `admin/market.test.mjs` asserts the *property* — that the market
+nets the full fee at every table count, computed against what a processor
+actually keeps — rather than pinning three literals, because a literal goes
+green forever the moment somebody copies the wrong one in.
+
+- **⚠ THE APPLICATION IS SAVED BEFORE ANYBODY IS SENT TO PAY.** A maker who
+  fills in five minutes of form and then closes the card page — the phone rang,
+  they wanted to check with somebody — has to still exist on the coordinator's
+  list, marked unpaid, so she can chase them. **The Google Form lost them
+  completely**, and that is the single thing this build is for. Every failure
+  past the INSERT is best-effort: no giving link set, Brevo down, push refused
+  — the vendor is told their application is in and how to pay instead, never
+  that something broke. The one failure they ARE told about is the INSERT
+  itself, because sending somebody to pay for a table nobody has a record of is
+  worse than asking them to try again.
+- **⚠ THE AMOUNT IS COMPUTED SERVER-SIDE AND A POSTED ONE IS NEVER READ.** The
+  page shows a running total so the vendor knows what they are agreeing to;
+  what is charged and what is recorded both come from `priceBreakdown()` on the
+  Worker. A test posts `tables=40, amount_due_cents=1, total=0.01` and asserts
+  three tables at $93.00 is what lands in the table.
+- **⚠ NO PAYMENT ADDRESS IS EVER ON THE PAGE OR IN `/api/market-config`.** The
+  Tithe.ly link has exactly one owner — the Giving tab — and `marketPayUrl()`
+  builds it from `give_url` at request time through `withAmountAndFund()` in
+  `give-link.js`, so the market's fund **replaces** the base link's rather than
+  appending a second. Same rule as every give button: a stored address goes on
+  charging to the old form after the office changes the link, and the page
+  still looks perfect.
+- **⚠ The arithmetic exists twice and a test runs both.** `MARKET_PRICING_JS`
+  is the browser's copy, because the total has to move the instant somebody
+  picks a second table and a round trip cannot do that. `market.test.mjs`
+  evaluates that string and runs it against the exported functions over five
+  fee configurations × eleven inputs — the same thing `give-link.js` and
+  `admin/links.js` do, and for the same reason: that is what makes a mirror
+  safe rather than a second chance to be wrong.
+- **⚠ `clampTables` keeps the minus sign in its strip.** Without it `-4` reads
+  as **four** — the sign is discarded and the absolute value clamps to the
+  maximum — so posting a negative quietly buys the largest booth the market
+  sells. Caught by the test, not by reading it.
+- **Money is integer cents, end to end.** `gym_invoices` stores floats and that
+  is precisely what AC-5 / GY-7 in the July 2026 review are about. A defect
+  being carried is not a convention to copy.
+- **⚠ `amount_paid_cents` is NULLABLE and NULL means "nobody has checked yet"**,
+  which is a different fact from "they paid nothing". A default of 0 would put
+  every fresh application on the reconciled side of the ledger.
+- **There are four payment states because the market has four.** Timothy MDO,
+  the Word of Life 8th grade and the youth group take tables at no charge —
+  recording those as unpaid leaves three rows on a chase list forever — and a
+  vendor who dropped out is not unpaid either. **⚠ `waived` is toned `auto`,
+  not `good`:** it is a decision the office made, not money that arrived, and
+  the same green as Paid would make a reconciliation read balanced when it is
+  short by three fees.
+- **Only five fields are required**, and a test pins that. Every extra required
+  field is a maker who gives up halfway and emails Marla instead — which is the
+  workflow this page exists to replace. No business name, no address and no
+  appliance list is a perfectly good application.
+- **⚠ Photos ride inside the application POST; there is no public upload
+  endpoint.** `/api/upload-image` is behind the session gate, and a public
+  sibling would let anyone host arbitrary files on the church's domain forever
+  with no application attached. They are read only *after* the fields pass and
+  the screener runs, so a bot cannot make the Worker buffer 40MB for nothing,
+  and **nothing in that path throws** — a file too large, the wrong type, or
+  one R2 refuses is simply not among those stored. The design is explicit that
+  photos must never block a submission. They go through the same EXIF strip as
+  every other upload (B6), which matters more here than anywhere: these come
+  off a maker's phone and the GPS in them is their home address.
+- **A held application gets no payment link.** `screenSubmission()` scores it
+  like every other public form and a held one is stored and answered with
+  success — a bot that learns which of its submissions were caught learns how
+  to get past the filter. The difference is that taking money for a table
+  nobody has read the application for would be the worse mistake by far.
+- **`market_manage` is its own permission**, with a `Market coordinator` preset
+  that grants it and nothing else. Marla is a volunteer who runs one event a
+  year, and the list holds seventy people's home addresses and phone numbers;
+  she should be able to have exactly that. A test asserts somebody holding it
+  alone sees no Payroll and no Subscribers.
+- **⚠ THE CLIENT SCRIPT HAS TO SIT ABOVE THE ROUTER IN `public/index.html`.**
+  The router runs at parse time and calls `showPage()` synchronously, which
+  calls `tlcMarketInit()` — and `var tlcMarketCfg` declared after it is hoisted
+  but **undefined**. The symptom is a vendor page whose table buttons never
+  appear, **on a direct visit only**: arriving from a link works, because by
+  then the whole script has run. Found by the browser suite; it would have
+  shipped otherwise, because every hand-check goes through the link.
+- **⚠ The arrows are gone.** The mocks put one on the end of five links —
+  "Apply for a table →", "Submit and pay $31.20 →". The repo rule wins, as it
+  did when the v5.0.0 designer asked; `admin/link-style.test.mjs` runs in CI
+  and `admin/market.js` is in its file list.
+- **Nine `market_*` settings**, so the annual update is not a code edit. The old
+  `/christmasmarket` markup carried an "UPDATE ANNUALLY — paste in the Google
+  Form URL" comment over a hardcoded mailto; that comment and the mailto are
+  both gone. **⚠ Only two numbers move if the church changes processors** —
+  the percentage and the fixed charge.
+- **Applications default to OPEN.** A market page that ships switched off looks
+  broken to whoever opens it first, and the only way in is a link from
+  `/christmasmarket` — nobody stumbles onto it out of season. Switched off, the
+  page keeps every word explaining the market and loses only the form.
+- **⚠ The vendor agreement is drafted, not approved.** The handoff says so and
+  the markup says so: it was written for the design, not supplied by the
+  church, and a vendor types their name under it. It wants Andrew's reading
+  before the first market runs on it.
+
+**Still open, and deliberately:** two of the three "past markets" photographs
+(`christmas-mkt.webp` is the only real one the repo has), and the market's
+Tithe.ly `fundId` — blank means gifts land in whatever fund the base giving
+link already carries, which works, but market money is worth its own fund.
+
+Run: `node admin/market.test.mjs` (176), `node test/market-vendor.test.mjs`
+(Chromium, 58 — it stubs the admin and one group makes the stub **fail**,
+because an unreachable admin is a state a real visitor hits and the page has to
+keep quoting a working price through it), and the five market groups in
 `test/admin-redesign.test.mjs`.
 
 ### /sermons had no block that could show a sermon (v5.7.0, 2026-08-16)
@@ -4556,6 +4686,7 @@ many words.
 - Youth content editing now lives under the **Ministries** tab (`ministries_edit` permission), not a separate "Youth Pages" tab
 - **Payroll** requires the dedicated `payroll_manage` permission — not bundled into `settings_manage` (see "Payroll & Supabase" above)
 - **Giving** requires the dedicated `giving_manage` permission — not bundled into `settings_manage` (see "Giving Tab" above)
+- **Christmas Market** requires the dedicated `market_manage` permission, with a `Market coordinator` preset that grants it and nothing else — the coordinator is a volunteer running one event a year, and the list holds seventy people's home addresses
 - Youth director password: scope to `ministries_edit` only (separate password so it can be changed independently of office staff accounts)
 
 ---
@@ -4592,7 +4723,7 @@ initialize, recognize, and so on — `-ize` / `-or` / `-er`.
 | `aria-labelledby` | An HTML attribute name. Renaming it silently unlabels the drawer and the block rail for a screen reader, with nothing to see in a browser. |
 | `'cancelled'` | A stored `gym_bookings.status` value. Changing the spelling in code without a migration orphans every cancelled booking in the live table. |
 | `/licen[cs]e/i` in `test/tinymce-selfhost.test.mjs` | Deliberately matches both, because it is grepping TinyMCE's *own* console output for a licence complaint, not ours. |
-| `admin/vendor/tinymce/**` and `design_handoff_admin_overhaul/**` | Third-party code and an archived designer deliverable. Neither is ours to rewrite, and editing the vendored library breaks the checksum the asset test relies on. |
+| `admin/vendor/tinymce/**` and every `design_handoff_*/` | Third-party code and archived designer deliverables. Neither is ours to rewrite, and editing the vendored library breaks the checksum the asset test relies on. ⚠ This was written as `design_handoff_admin_overhaul/` alone, which meant the documented grep started failing the moment a second handoff was committed — `design_handoff_news_redesign/` has ten hits in it, none of them ours. Widened to the prefix so the check stays runnable. |
 
 Also unchanged: `fulfilled` (a Promise term, and standard American anyway) and
 `enrolling`, which is spelled the same either way.
@@ -4601,7 +4732,7 @@ Also unchanged: `fulfilled` (a Promise term, and standard American anyway) and
 excluded trees:
 
 ```
-git ls-files | grep -vE '^(admin/vendor|design_handoff_admin_overhaul)/|^CLAUDE\.md$' \
+git ls-files | grep -vE '^(admin/vendor|design_handoff_[a-z_]+)/|^CLAUDE\.md$' \
   | xargs grep -rniE '\w*(colour|neighbour|centre|centred|behaviour|organis[eai]|recognis|initialis|sanitis|normalis|serialis|summaris|optimis|licenc|labelled|grey|honour)\w*' \
   | grep -vE 'labelledby|licen\[cs\]e'
 ```
@@ -4730,7 +4861,7 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 - **`/volunteer` short-URL redirect does not actually exist** — confirmed live 2026-07-20 while chasing the 2026-07-20 volunteer→serve rebrand: the Redirects tab in `admin.timothystl.org` has no `/volunteer` entry at all. This table's earlier documentation of `/volunteer → volunteer.timothystl.org` as an existing "Utility Redirect" was aspirational/planned, not a live row — `site-worker.js` has no hardcoded fallback either (confirmed by grep), so `timothystl.org/volunteer` simply falls through to the normal 404 page today, not to a dead external host. Nothing broke as part of the volunteer.timothystl.org→serve.timothystl.org cutover (see the chms repo's own CLAUDE.md). If a short link is wanted, an admin can add one via the Redirects tab: path `/volunteer` (or `/serve`), target `https://serve.timothystl.org` — optional, not a fix for anything broken.
 - ~~**links.timothystl.org "Volunteer" card still points at the old host**~~ — **not true, checked 2026-08-01.** Andrew looked and the live card already reads `serve.timothystl.org`; the seed constant says the same. This entry was written as a prediction about a row nobody had looked at, and it stayed on the list long enough to waste his time. Nothing to do.
 - **`/confirmation`, `/sundayschool`, `/vbs`, `/egghunt`, `/family`** — Youth sub-pages. Admin portal has the youth_pages table, but these slugs need content entered by the youth director.
-- **Christmas Market annual content** — Page structure is built. Needs dates, description, photos, and Google Form link for vendors entered via the admin Ministries tab each year.
+- **Christmas Market annual content** — Page structure is built, and as of v5.6.0 the annual update is **not a code edit**: the date, the hours, the table fee and whether applications are open at all are `market_*` settings, and the vendor application is `/christmasmarket/vendors` rather than a Google Form link somebody pastes in each autumn. What is still wanted each year is the description and this year's photos (admin Ministries tab), plus two market photographs for the vendor page — see "The Christmas Market takes its own vendor applications" above. The checklist in `public/manual.html` was rewritten to match.
 - **Ministry page editor rollout** — every ministry page now has a full-page block draft waiting in the editor (banner and all sections). The office reviews each one and presses Publish; until then the live page renders from its hardcoded markup exactly as before. Once a page is published from the editor, its hardcoded section markup in `public/index.html` is dead and can be deleted.
 - **Music page video strip** — the three fallback video cards on `/music` were not converted (they need real YouTube URLs). Add Video blocks in the editor, or drop them.
 - ~~**Sermons page**~~ — **done v4.24.0, 2026-08-05.** Andrew: the channel is `youtube.com/timothystl`, one general worship service a week, and *"I dont knwo how we can make it pull the most current one every time"*. It does now — `/sermons` embeds the newest video from the channel's own Atom feed, no API key, nothing to post weekly. `sermon_youtube_channel` and `sermon_title_filter` are the two settings. See "The backlog pass" above.
@@ -4825,7 +4956,7 @@ This section used to restate the site's status in full; it drifted for months (l
 
 ### What's actually next
 - Youth director content entry for `/confirmation`, `/sundayschool`, `/vbs`, `/egghunt`, `/family` — the `youth_pages` rows exist, waiting on real content.
-- Christmas Market content update each year (via the admin Ministries tab).
+- Christmas Market content update each year — now three settings and a switch rather than a code change; see the checklist in `public/manual.html`.
 - The seven report-only items from the 2026-08-02 review, under "Pending / Deferred Items" below — all seven are Andrew's call, none urgent.
 - Everything else still listed under "Pending / Deferred Items" below.
 

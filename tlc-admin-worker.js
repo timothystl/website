@@ -5,7 +5,7 @@
 // Last modified: 2026-03-27
 
 
-import { TINYMCE_HEAD, TINYMCE_VERSION, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_BOOKING_SLOT_INDEX, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, DB_INIT_FOOTER_COLUMNS, FOOTER_COLUMN_SEED, FOOTER_ITEM_COLUMNS, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS, DB_INIT_PAYROLL_READY_NOTIFIED } from './admin/db.js';
+import { TINYMCE_HEAD, TINYMCE_VERSION, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_BOOKING_SLOT_INDEX, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, DB_INIT_FOOTER_COLUMNS, FOOTER_COLUMN_SEED, FOOTER_ITEM_COLUMNS, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS, DB_INIT_PAYROLL_READY_NOTIFIED, DB_INIT_MARKET_VENDORS, DB_INIT_MARKET_VENDORS_INDEX } from './admin/db.js';
 import { pushToAllSubscribers } from './admin/webpush.js';
 
 // Static pages that can carry self-serve notices (matches the SPA's page ids in public/index.html)
@@ -99,6 +99,8 @@ import { BLOCKS as NL_BLOCKS, parseBlocks as parseNlBlocks, serializeBlocks as s
 import { screenSubmission, formConfig, forwardToChms, officeEmailHtml, officeSubject,
          handleFilteredRoutes, heldCount, OFFICE_EMAIL } from './admin/forms.js';
 import { stripImageMetadata } from './admin/exif.js';
+import { handleMarketRoutes, marketSettings, marketConfig, marketPayUrl, priceBreakdown, money as marketMoney,
+         sanitizeApplication, screenableText, coordinatorEmailHtml, vendorEmailHtml } from './admin/market.js';
 import { normalizeChannelInput, channelPageUrl, channelIdFrom, feedUrl,
          parseFeed, pickLatest, isChannelId } from './admin/sermons-feed.js';
 import { PALETTE as CHROME_PALETTE, BAR_KEYS, DEFAULTS as CHROME_DEFAULTS,
@@ -406,15 +408,20 @@ async function badgeCounts(env, user) {
   const canGym = hasPermission(user, 'gym_manage');
   const canPages = hasPermission(user, 'pages_edit') || hasPermission(user, 'pages_edit_own');
   const canApprove = hasPermission(user, 'newsletter_approve');
-  const [gym, pages, newsletter] = await Promise.all([
+  const canMarket = hasPermission(user, 'market_manage');
+  const [gym, pages, newsletter, market] = await Promise.all([
     canGym ? n("SELECT COUNT(*) AS n FROM gym_bookings WHERE status='hold'") : 0,
     // A page counts as needing attention when its draft differs from what is
     // live, or when it has never been published at all. Same rule as the Pages
     // list's own Draft pill (admin/pages.js), so the two always agree.
     canPages ? n("SELECT COUNT(*) AS n FROM pages WHERE status='draft' OR COALESCE(blocks,'') <> COALESCE(published_blocks,'')") : 0,
     canApprove ? n("SELECT COUNT(*) AS n FROM newsletters WHERE approval_status='pending'") : 0,
+    // A vendor who applied and never finished at the card page. The old Google
+    // Form could not show this at all — an abandoned submission left no row
+    // anywhere — so it is the one number this screen exists to surface.
+    canMarket ? n("SELECT COUNT(*) AS n FROM market_vendors WHERE payment_status='unpaid'") : 0,
   ]);
-  return { gym, pages, newsletter };
+  return { gym, pages, newsletter, market };
 }
 
 // One sort rule, shared by /api/news and pageData()'s self-filling news
@@ -618,7 +625,7 @@ async function portalOrigin(env) {
 }
 // `/api/tap-hit` is called server-to-server by site-worker.js when it resolves
 // one of the /tapN short addresses, so it has no Origin to check against.
-const PUBLIC_CROSS_ORIGIN_POSTS = new Set(['/api/contact', '/api/prayer', '/api/subscribe', '/api/tap-hit', '/api/push/notify']);
+const PUBLIC_CROSS_ORIGIN_POSTS = new Set(['/api/contact', '/api/prayer', '/api/subscribe', '/api/tap-hit', '/api/push/notify', '/api/market/apply']);
 
 // Real ChMS fund names — read-only, cross-Worker call — shown as suggestions in the
 // Giving tab's Funds card so staff can pick a real fund name instead of retyping one from
@@ -708,6 +715,47 @@ const ALLOWED_IMAGE_TYPES = new Map([
 const ALLOWED_DOC_TYPES = new Map([
   ['application/pdf', 'pdf'],
 ]);
+
+// ── SAMPLE PHOTOS ON A VENDOR APPLICATION ────────────────────
+// Up to five, from a public form, stored straight to R2 alongside every other
+// uploaded image.
+//
+// ⚠ THERE IS NO PUBLIC UPLOAD ENDPOINT, AND THAT IS THE DESIGN. /api/upload-image
+// is behind the session gate; opening a public sibling would be a way for
+// anyone on the internet to host arbitrary files on the church's domain
+// forever, with no application attached. The files ride along inside the
+// application POST instead, so a photo can only be stored by somebody who also
+// filled in a screened, saved application.
+//
+// ⚠ NOTHING HERE THROWS. Photos are optional and encouraged, and the design is
+// explicit that they must never block a submission — so a file that is too
+// large, the wrong type, or that R2 refuses is simply not among the ones
+// returned. A maker whose phone produced a 12MB HEIC still gets their table.
+const MARKET_MAX_PHOTOS = 5;
+const MARKET_MAX_PHOTO_BYTES = 8 * 1024 * 1024;
+async function storeMarketPhotos(env, request, form) {
+  const urls = [];
+  let files = [];
+  try { files = form.getAll('photos').filter((f) => f && typeof f !== 'string' && f.size > 0); } catch (_) { return urls; }
+  for (const file of files.slice(0, MARKET_MAX_PHOTOS)) {
+    try {
+      if (file.size > MARKET_MAX_PHOTO_BYTES) continue;
+      const mime = (file.type || '').split(';')[0].trim().toLowerCase();
+      if (!ALLOWED_IMAGE_TYPES.has(mime)) continue;
+      const key = `market-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ALLOWED_IMAGE_TYPES.get(mime)}`;
+      // Same EXIF strip every other upload goes through (B6). It matters more
+      // here than anywhere else on the site: these come off a maker's phone,
+      // in their kitchen or workshop, and the GPS in them is their home
+      // address — which would then sit on a public URL forever.
+      const clean = stripImageMetadata(new Uint8Array(await file.arrayBuffer()));
+      await env.IMAGES.put(key, clean, { httpMetadata: { contentType: mime } });
+      urls.push(`${new URL(request.url).origin}/images/${key}`);
+    } catch (e) {
+      console.error('Market photo upload skipped:', e?.message);
+    }
+  }
+  return urls;
+}
 
 // Wires the news-item "Header image" file input to /api/upload-image and
 // fills the hidden image_url field with the resulting R2 URL. Replaces the
@@ -1284,7 +1332,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-16-1'; // bumped: church_facebook / church_instagram / church_youtube on the church-details record, read by the new Contact block
+    const SCHEMA_VERSION = '2026-08-16-2'; // bumped: market_vendors (+ its index) and the nine market_* settings, for the Christmas Market vendor application
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -1981,6 +2029,13 @@ export default {
     }
 
     try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_news_items_value ON news_items(value)').run(); } catch (_) {}
+
+    // The Christmas Market vendor list, replacing the Google Form the market
+    // ran on. See admin/market.js for the money, and admin/db.js for why this
+    // table stores integer cents rather than the float the gym invoices use.
+    try { await env.DB.prepare(DB_INIT_MARKET_VENDORS).run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_MARKET_VENDORS_INDEX).run(); } catch (_) {}
+
     for (const p of PARTNER_SEED) {
       try {
         await env.DB.prepare(
@@ -2799,6 +2854,161 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
         return new Response(JSON.stringify({ success: true }), { headers: corsH });
       } catch(e) {
         return new Response(JSON.stringify({ error: 'Something went wrong. Please try again or contact us directly.' }), { status: 500, headers: corsH });
+      }
+    }
+
+    // ── PUBLIC: what the Christmas Market vendor page needs to quote a price ──
+    // The page ships with the same defaults hardcoded, so an unreachable admin
+    // shows a working page at the right price and only the submit button stops
+    // working. The giving link is deliberately NOT in this response — the
+    // amount and the address are settled server-side on submit, so a browser
+    // never holds a payment URL it could edit before it is used.
+    if (path === '/api/market-config' && method === 'GET') {
+      return new Response(JSON.stringify(await marketConfig(env)), {
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          // Short, but long enough that a vendor moving around the page is not
+          // paying for it repeatedly. Closing applications reaches the site
+          // within the minute.
+          'Cache-Control': 'public, max-age=60',
+        }
+      });
+    }
+
+    // ── PUBLIC: a Christmas Market vendor application ──
+    //
+    // ⚠ THE APPLICATION IS SAVED BEFORE THE VENDOR IS SENT TO PAY, and that
+    // ordering is the whole point. A maker who fills in five minutes of form
+    // and then closes the card page — because the phone rang, because they
+    // wanted to check with somebody — has to still exist on the coordinator's
+    // list, marked unpaid, so she can chase them. The Google Form this
+    // replaces lost them completely.
+    //
+    // ⚠ THE AMOUNT IS COMPUTED HERE AND NOWHERE ELSE. The page shows a running
+    // total so the vendor knows what they are agreeing to, but what is charged
+    // and what is recorded both come from priceBreakdown() on this side of the
+    // request. A posted total is never read.
+    if (path === '/api/market/apply' && method === 'POST') {
+      const corsH = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
+      if (request.method === 'OPTIONS') return new Response('', { headers: corsH });
+      try {
+        const form = await request.formData();
+        const settings = await marketSettings(env);
+        if (!settings.open) {
+          return new Response(JSON.stringify({
+            error: `Vendor applications are closed right now. Please email ${settings.coordinatorEmail} — Marla can tell you when they reopen.`
+          }), { status: 403, headers: corsH });
+        }
+
+        const fields = {};
+        for (const k of ['participant_names', 'business_name', 'website_or_social', 'returning_vendor',
+          'email', 'phone', 'street', 'city', 'state', 'zip', 'product_description', 'sells_food',
+          'appliances_power', 'special_requests', 'tables', 'signature_name']) {
+          fields[k] = form.get(k);
+        }
+        const { ok: valid, errors, value } = sanitizeApplication(fields, settings);
+        if (!valid) return new Response(JSON.stringify({ error: errors[0], errors }), { status: 400, headers: corsH });
+
+        // Screened like every other public form. ⚠ A held application is
+        // stored and answered with success, exactly as a held prayer request
+        // is — a bot that learns which of its submissions were caught learns
+        // how to get past the filter. The difference here is that a held one
+        // is NOT given a payment link: taking money for a table nobody has
+        // read the application for would be the worse mistake by far.
+        const screen = await screenSubmission(env, request, {
+          kind: 'market-vendor',
+          name: value.participant_names,
+          email: value.email,
+          message: screenableText(value),
+          honeypot: form.get('website'),
+          token: form.get('form_token'),
+          turnstileToken: form.get('cf-turnstile-response'),
+        });
+
+        const price = priceBreakdown(value.tables, settings);
+
+        // Photos — optional, never a reason to fail. They are read only after
+        // the fields have passed and the screener has run, so a bot cannot
+        // make this Worker buffer 40MB by posting files with no application
+        // behind them.
+        const photos = screen.held ? [] : await storeMarketPhotos(env, request, form);
+
+        let id = null;
+        try {
+          const ins = await env.DB.prepare(
+            `INSERT INTO market_vendors (participant_names, business_name, website_or_social, returning_vendor,
+               email, phone, street, city, state, zip, product_description, sells_food, appliances_power,
+               special_requests, tables, photos, signature_name, amount_due_cents, payment_status)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+          ).bind(
+            value.participant_names, value.business_name || null, value.website_or_social || null,
+            value.returning_vendor || null, value.email, value.phone || null,
+            value.street || null, value.city || null, value.state || null, value.zip || null,
+            value.product_description || null, value.sells_food, value.appliances_power || null,
+            value.special_requests || null, value.tables, photos.length ? JSON.stringify(photos) : null,
+            value.signature_name || null, price.totalCents, 'unpaid'
+          ).run();
+          id = ins?.meta?.last_row_id ?? null;
+        } catch (e) {
+          // ⚠ The one failure a vendor must be told about. Everything else here
+          // fails quietly on purpose, but if the row did not save then the
+          // coordinator will never know they applied — sending them to a
+          // payment page at that point takes money for a table nobody has a
+          // record of.
+          console.error('Market application insert failed:', e?.message);
+          return new Response(JSON.stringify({
+            error: `We could not save your application. Please try again, or email ${settings.coordinatorEmail} and Marla will take it by hand.`
+          }), { status: 500, headers: corsH });
+        }
+
+        if (screen.held) {
+          ctx.waitUntil(pushToAllSubscribers(env, {
+            title: 'Filtered Mail', body: 'A Christmas Market vendor application was held for review.',
+            tag: 'held-mail', url: '/filtered',
+          }));
+          // It is on the coordinator's list, unpaid, with no payment link —
+          // and the sender is told it arrived, because it did.
+          return new Response(JSON.stringify({ success: true, held: true }), { headers: corsH });
+        }
+
+        const payUrl = marketPayUrl(settings, price.totalCents);
+
+        // Both emails are best-effort and neither is awaited into the vendor's
+        // answer. The application is already saved; a Brevo outage must not
+        // read to a maker as "your application failed".
+        ctx.waitUntil((async () => {
+          await sendTransactionalEmail(env, {
+            subject: `${screen.suspect ? '[likely spam] ' : ''}Christmas Market vendor — ${value.business_name || value.participant_names}`,
+            htmlContent: coordinatorEmailHtml(value, { totalCents: price.totalCents, photos, suspect: screen.suspect }),
+            toEmails: [settings.coordinatorEmail],
+            replyTo: { email: value.email, name: value.participant_names },
+          });
+          // Suppressed for a suspect application, same rule as the contact and
+          // prayer forms: the address is supplied by whoever submitted it, so
+          // auto-replying to it turns this form into a way to mail somebody
+          // else's inbox (AW-5).
+          if (!screen.suspect) {
+            await sendTransactionalEmail(env, {
+              subject: 'Your Christmas Market table — Timothy Lutheran Church',
+              htmlContent: vendorEmailHtml(value, { totalCents: price.totalCents, payUrl, settings }),
+              toEmails: [value.email],
+            });
+          }
+        })());
+
+        ctx.waitUntil(pushToAllSubscribers(env, {
+          title: 'Christmas Market vendor application',
+          body: `${value.business_name || value.participant_names} — ${value.tables} table${value.tables === 1 ? '' : 's'}, ${marketMoney(price.totalCents)}`,
+          tag: 'market-vendor', url: '/market',
+        }));
+
+        return new Response(JSON.stringify({
+          success: true, id, payUrl, total: marketMoney(price.totalCents), totalCents: price.totalCents,
+        }), { headers: corsH });
+      } catch (e) {
+        console.error('Market application failed:', e?.message);
+        return new Response(JSON.stringify({ error: 'Something went wrong. Please try again or email the market coordinator.' }), { status: 500, headers: corsH });
       }
     }
 
@@ -4689,6 +4899,14 @@ ${PAYROLL_HTML}`, 'Payroll');
         return new Response('Access denied.', { status: 403 });
       }
       const r = await handleGymRoutes(path, method, url, request, env, currentUser, ctx, await portalOrigin(env), await pageBadges());
+      if (r) return r;
+    }
+
+    // ── CHRISTMAS MARKET VENDORS (auth + market_manage) ────────
+    // The coordinator's list — what the 2024 spreadsheet was for.
+    {
+      const r = await handleMarketRoutes(request, env, path, method, currentUser, url,
+        path === '/market' ? await pageBadges() : {});
       if (r) return r;
     }
 

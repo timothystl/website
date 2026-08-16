@@ -20,7 +20,8 @@ const group = (n) => console.log('\n' + n);
 // ── the key set ──────────────────────────────────────────────────────────────
 group('permission keys');
 {
-  eq(ALL_PERMISSIONS.length, 16, 'sixteen keys: the spec’s fourteen plus notices and own-pages');
+  eq(ALL_PERMISSIONS.length, 17,
+    'seventeen keys: the spec’s fourteen, plus notices and own-pages, plus the market coordinator');
 
   // The fourteen names the design handoff calls "the real permission names".
   const spec = [
@@ -35,6 +36,12 @@ group('permission keys');
   // enforces server-side, so they are deliberately kept.
   ok('notices_edit' in PERMISSIONS, 'notices_edit exists — Notices must stay gated');
   ok('pages_edit_own' in PERMISSIONS, 'pages_edit_own exists — the ministry-leader role survives');
+
+  // Added after the handoff, with the Christmas Market vendor list. Its own key
+  // rather than a share of giving_manage or news_edit for the same reason
+  // payroll and giving each got one: the market coordinator is a volunteer who
+  // runs one event a year, and the list holds seventy people's home addresses.
+  ok('market_manage' in PERMISSIONS, 'market_manage exists — the vendor list is gated on its own');
 
   // The old names must be gone, or a stale route gating on one would silently
   // pass for nobody and no one would notice.
@@ -101,14 +108,21 @@ group('migrating stored permissions');
     'ministries_edit', 'sermons_edit', 'pages_edit', 'site_pages', 'site_pages_own',
     'staff_edit', 'settings_manage', 'gym_manage', 'users_manage', 'audit_view',
     'links_edit', 'payroll_manage', 'giving_manage']);
-  eq(full.length, 16, 'an account holding every old key holds every new key');
-  for (const k of ALL_PERMISSIONS) ok(full.includes(k), `full access retains ${k}`);
+  // ⚠ Measured against the sixteen keys that EXISTED when the rename ran, not
+  // against ALL_PERMISSIONS. The property is "the migration loses nothing" —
+  // it cannot conjure a permission added long afterwards, and asserting that
+  // it does would fail every future time somebody adds one, for a reason that
+  // has nothing to do with the migration.
+  const AT_RENAME = ALL_PERMISSIONS.filter((k) => k !== 'market_manage');
+  eq(AT_RENAME.length, 16, 'sixteen keys existed at the rename');
+  eq(full.length, 16, 'an account holding every old key holds every renamed key');
+  for (const k of AT_RENAME) ok(full.includes(k), `full access retains ${k}`);
 }
 
 // ── presets ──────────────────────────────────────────────────────────────────
 group('presets');
 {
-  eq(Object.keys(PERMISSION_PRESETS).length, 4, 'four presets');
+  eq(Object.keys(PERMISSION_PRESETS).length, 5, 'five presets');
   same(PERMISSION_PRESETS['Full access'], ALL_PERMISSIONS, 'Full access is literally everything');
 
   // A preset that names a key which no longer exists would tick a box the
@@ -122,6 +136,10 @@ group('presets');
   ok(!PERMISSION_PRESETS['Ministry leader'].includes('pages_edit'), 'and not the whole site');
   ok(!PERMISSION_PRESETS['Bookkeeper'].includes('users_manage'), 'the bookkeeper cannot make users');
   ok(!PERMISSION_PRESETS['Office staff'].includes('payroll_manage'), 'office staff do not get payroll');
+  // One event, once a year, and nothing else — deliberately not folded into
+  // Office staff. A preset that grants more than the job is not a shortcut.
+  same(PERMISSION_PRESETS['Market coordinator'], ['market_manage'],
+    'the market coordinator gets the vendor list and nothing else');
 }
 
 // ── the rename table itself ──────────────────────────────────────────────────

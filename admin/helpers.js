@@ -10,7 +10,7 @@ import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, SIDEBAR_JS, TOGGLE_WORD_JS, LOCKED_FIELD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 import { APPEARANCE_CSS } from './appearance.js';
 
-export const VERSION = 'v5.7.2'; // minor: the Sermon library block — /sermons had no block that could show a sermon — and the auto-bump stops overwriting a version somebody chose
+export const VERSION = 'v5.8.0'; // minor: the Christmas Market vendor application — a public three-step form that takes payment, and the coordinator's list that replaces the spreadsheet
 
 // ── THE SHARED SHELL CSS/JS, EXTERNALISED ───────────────────────
 // This used to be inlined into every admin response inside <style>/<script>
@@ -782,6 +782,10 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}, crum
   // ── MONEY & BUILDING ──
   const moneyItems = [
     hp('giving_manage')   ? navItem('/giving', 'Giving', activeTab === 'giving') : '',
+    // Money & Building rather than Website: the screen is a payment ledger with
+    // a vendor list attached, and what the coordinator opens it to answer is
+    // "who still owes for their table".
+    hp('market_manage')   ? navItem('/market', 'Christmas Market', activeTab === 'market', badge(b.market, hp('market_manage'), `${b.market} vendor application(s) with no payment recorded`)) : '',
     hp('gym_manage')      ? navItem('/gym-rentals', 'Gym Rentals', activeTab === 'gym', badge(b.gym, hp('gym_manage'), `${b.gym} gym request(s) waiting for review`)) : '',
     hp('payroll_manage')  ? navItem('/payroll', 'Payroll', activeTab === 'payroll') : '',
   ].filter(Boolean).join('');
@@ -879,6 +883,7 @@ const TRAIL = {
   subscribers: { group: GROUPS.email, section: 'Subscribers' },
   filtered: { group: GROUPS.email, section: 'Filtered mail' },
   giving: { group: GROUPS.money, section: 'Giving' },
+  market: { group: GROUPS.money, section: 'Christmas Market vendors', waits: 'market' },
   gym: { group: GROUPS.money, section: 'Gym rentals', waits: 'gym' },
   payroll: { group: GROUPS.money, section: 'Payroll' },
   staff: { group: GROUPS.people, section: 'Staff directory' },
