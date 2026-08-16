@@ -3356,6 +3356,7 @@ function tlcTakeOverPage(slug, blocksHtml) {
   for (var i = 0; i < pageEl.children.length; i++) pageEl.children[i].style.display = 'none';
   pageEl.insertBefore(host, pageEl.firstChild);
   host.innerHTML = fixImgUrls(markup);
+  tlcRunBlockScripts(host);
   var pageDiv = host.querySelector('.tlcb-page');
   // A page rendered through a layout has already decided whether it runs full
   // width — forcing it here would put a sidebar page edge to edge. Only the
@@ -3364,6 +3365,38 @@ function tlcTakeOverPage(slug, blocksHtml) {
     pageDiv.classList.add('tlcb-page--full');
   }
   return true;
+}
+
+// ⚠ A SCRIPT INSERTED WITH innerHTML NEVER EXECUTES. That is the HTML spec, not
+// a browser quirk, and it is why this function has to exist at all.
+//
+// Two blocks ship their browser half inside their own markup on purpose — the
+// countdown and the giving widget — so that they work wherever they are
+// rendered rather than only on a page whose shell remembered to load a script.
+// site-worker.js prepends that markup as the document is served, so the parser
+// sees those scripts normally and they run.
+//
+// This path did not. So a countdown ticked on a direct visit to its page and
+// sat frozen on an em dash forever if you reached the same page from anywhere
+// else on the site. Invisible in testing, because the page you are checking is
+// the page you hard-refreshed. Verified in a browser before it was fixed: the
+// script tag was present in the DOM on both paths and only ever ran on one.
+//
+// Re-parenting a copy is what makes the browser treat it as a new script and
+// run it. Each block script is already guarded by its own window flag, so one
+// the edge has run is a no-op here rather than a second interval.
+function tlcRunBlockScripts(host) {
+  // querySelectorAll is static, so replacing nodes while walking it is safe.
+  var olds = host.querySelectorAll('script');
+  for (var i = 0; i < olds.length; i++) {
+    var old = olds[i];
+    var s = document.createElement('script');
+    for (var j = 0; j < old.attributes.length; j++) {
+      s.setAttribute(old.attributes[j].name, old.attributes[j].value);
+    }
+    s.text = old.textContent;
+    old.parentNode.replaceChild(s, old);
+  }
 }
 
 // Fills every posts/events block on a block-managed page from the ministry's

@@ -301,6 +301,73 @@ console.log('\nthe edge already rendered the page');
   await plain.ctx.close();
 }
 
+console.log('\na block ships its own script, and both paths run it');
+{
+  // ⚠ THE BUG THIS GUARDS WAS LIVE AND SILENT. A <script> inserted with
+  // innerHTML never executes — the HTML spec, not a browser quirk — so the
+  // countdown ticked on a direct visit (the edge parses the markup normally)
+  // and sat frozen on an em dash if the same page was reached from anywhere
+  // else on the site. Verified in a browser before it was fixed.
+  //
+  // The countdown is the block that proves it, because it is the one whose
+  // browser half changes something a visitor can see.
+  const blocks = sanitizeBlocks([Object.assign(newBlock('photobanner'),
+    { title: 'Christmas Market', countdown: true })]);
+  const data = { news: [{ id: 1, title: 'Christmas Market', event_date: '2099-12-06' }] };
+  const html = renderPage(blocks, { slug: 'news', withCss: false, data });
+  ok(/<script/.test(html), 'the countdown block really does ship a script');
+
+  const { page, ctx, errors } = await visitEdged('news', html, { edged: false });
+  eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
+  eq(await page.evaluate(() => !!window.__tlcCountdown), true,
+    'the block script ran after a client-side takeover');
+  const reads = (await page.textContent('[data-countdown]')).trim();
+  ok(reads !== '—' && /\d+d /.test(reads),
+    `the countdown is ticking rather than frozen — reads ${JSON.stringify(reads)}`);
+  await ctx.close();
+}
+
+console.log('\nthe photo gallery opens a viewer');
+{
+  const blocks = sanitizeBlocks([Object.assign(newBlock('gallery'), {
+    items: [{ url: '/images/logo.png', title: 'The choir' },
+      { url: '/images/logo.png', title: 'Handbells' }],
+  })]);
+  const html = renderPage(blocks, { slug: 'news', withCss: false });
+  const { page, ctx, errors } = await visitEdged('news', html, { edged: false });
+  eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
+
+  // A real button, so it is reachable without a pointer at all.
+  eq(await page.locator('.tlcb-gal-open').count(), 2, 'each photo is a button');
+  eq(await page.locator('.tlcb-lb').count(), 0, 'no viewer is built until one is opened');
+
+  await page.locator('.tlcb-gal-open').first().click();
+  eq(await page.locator('.tlcb-lb').isVisible(), true, 'clicking a photo opens the viewer');
+  eq(await page.locator('.tlcb-lb-cap').textContent(), 'The choir', 'the caption is the photo description');
+  eq(await page.locator('.tlcb-lb-of').textContent(), '1 of 2', 'and it says which one of how many');
+
+  await page.keyboard.press('ArrowRight');
+  eq(await page.locator('.tlcb-lb-cap').textContent(), 'Handbells', 'the right arrow moves to the next photo');
+  await page.keyboard.press('ArrowRight');
+  eq(await page.locator('.tlcb-lb-cap').textContent(), 'The choir', 'and it wraps round');
+
+  // ⚠ Focus has to come back to the thumbnail it was opened from, or a
+  // keyboard visitor is dropped at the top of the document every time they
+  // close a photograph.
+  await page.keyboard.press('Escape');
+  eq(await page.locator('.tlcb-lb').isVisible(), false, 'Escape closes it');
+  eq(await page.evaluate(() => document.activeElement &&
+    document.activeElement.classList.contains('tlcb-gal-open')), true,
+  'and focus returns to the photo it was opened from');
+  await ctx.close();
+
+  // The editor renders the same block as plain images: on the canvas a click
+  // has to select the block, not open a viewer over the page being edited.
+  const edit = renderPage(blocks, { slug: 'news', withCss: false, editing: true });
+  ok(!/tlcb-gal-open/.test(edit), 'no viewer buttons in the editor');
+  ok(!/__tlcLightbox/.test(edit), 'and no viewer script in the editor');
+}
+
 await browser.close();
 server.close();
 console.log(`\n${pass} passed, ${fail} failed`);

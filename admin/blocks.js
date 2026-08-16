@@ -1721,6 +1721,51 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
 .tlcb-embed-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#FBF8F3;font-size:30px;}
 .tlcb-gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
 .tlcb-gallery span,.tlcb-gallery img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:7px;background:#DDE3ED;}
+/* The tile is a button on the public page so a photograph can be opened from
+   the keyboard. It has to give up every default a button carries or the grid
+   grows borders and padding it never had. */
+.tlcb-gal-open{display:block;width:100%;padding:0;border:0;background:none;cursor:zoom-in;border-radius:7px;}
+.tlcb-gal-open:focus-visible{outline:3px solid #C9973A;outline-offset:2px;}
+
+/* ── The photo viewer ─────────────────────────────────────────────────────
+   Appended to the body rather than drawn inside the block, so it is not
+   clipped by anything the page does with overflow. That also puts it outside
+   .tlcb-page, so none of the --tlcb-* properties reach it and every color
+   here is written out. */
+.tlcb-lb{position:fixed;inset:0;z-index:9999;background:rgba(11,18,32,.92);
+  display:flex;align-items:center;justify-content:center;gap:8px;padding:24px;}
+.tlcb-lb[hidden]{display:none;}
+.tlcb-lb-fig{margin:0;display:flex;flex-direction:column;align-items:center;gap:12px;max-width:min(1100px,100%);max-height:100%;}
+.tlcb-lb-fig img{max-width:100%;max-height:78vh;width:auto;height:auto;border-radius:10px;
+  box-shadow:0 24px 70px rgba(0,0,0,.5);background:#1E2D4A;}
+/* ⚠ --font-ui, not --tlcb-ui. The viewer is appended to the body, so it sits
+   outside .tlcb-page and none of the --tlcb-* properties reach it — but
+   --font-ui is declared on :root in styles.css and re-pointed by the
+   appearance record, so it does. Writing the family out as a literal here
+   would pin the caption to one typeface while the rest of the site followed
+   the setting, which is what the 1b test catches. */
+.tlcb-lb-fig figcaption{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;justify-content:center;
+  font-family:var(--font-ui);font-size:14px;font-weight:400;line-height:1.5;
+  color:rgba(247,243,236,.86);text-align:center;}
+.tlcb-lb-of{color:rgba(247,243,236,.55);font-size:13px;}
+.tlcb-lb-x{position:absolute;top:16px;right:16px;width:44px;height:44px;border:0;border-radius:50%;
+  background:rgba(247,243,236,.12);color:#F7F3EC;font-size:26px;line-height:1;cursor:pointer;}
+.tlcb-lb-nav{width:44px;height:44px;flex:none;border:0;border-radius:50%;background:rgba(247,243,236,.12);
+  color:#F7F3EC;font-size:28px;line-height:1;cursor:pointer;}
+.tlcb-lb-nav[hidden]{display:none;}
+.tlcb-lb-x:hover,.tlcb-lb-nav:hover{background:rgba(247,243,236,.22);}
+.tlcb-lb-x:focus-visible,.tlcb-lb-nav:focus-visible{outline:3px solid #C9973A;outline-offset:2px;}
+/* ⚠ GATED POSITIVELY, never by an override further down. A reduced-motion
+   visitor is not given the animation to begin with, so there is no later
+   declaration that has to win a cascade argument to take it away. */
+@media (prefers-reduced-motion: no-preference){
+  .tlcb-lb{animation:tlcb-lb-in .16s ease-out;}
+  @keyframes tlcb-lb-in{from{opacity:0;}to{opacity:1;}}
+}
+@media (max-width:640px){
+  .tlcb-lb{padding:12px;gap:4px;}
+  .tlcb-lb-fig img{max-height:66vh;}
+}
 .tlcb-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
 .tlcb-cards .tlcb-card{border:1px solid #DDE3ED;border-radius:8px;background:#F7F3EC;padding:11px;display:flex;flex-direction:column;gap:6px;}
 .tlcb-card-t{font:600 12.5px/1.3 var(--tlcb-ui);color:#1E2D4A;}
@@ -2721,6 +2766,135 @@ const COUNTDOWN_SCRIPT = '<script>' + `
   })();
 ` + '<\/script>';
 
+// ── THE PHOTO GALLERY'S BROWSER HALF ─────────────────────────────────────────
+// Shipped inside the block for the same reason the countdown's is: the block
+// works wherever it is rendered rather than only on a page whose shell
+// remembered a script. Guarded, so N galleries on one page share one copy and
+// a second copy of this string does nothing.
+//
+// ⚠ IT READS THE GALLERY OUT OF THE DOM rather than being handed a list of
+// photographs. There is then exactly one description of what is in a gallery —
+// the markup the visitor is already looking at — so the viewer cannot come to
+// disagree with the grid behind it, and a gallery whose photos were changed
+// needs nothing regenerated.
+//
+// ⚠ Nothing here runs in the editor: the gallery renders plain images there, so
+// there is no button to delegate from. Clicking a photo on the canvas has to
+// select the block, which is what somebody in an editor means by it.
+//
+// ⚠ No backticks anywhere in this string. It lives inside a template literal
+// and one would end it, breaking the module while still passing node --check.
+const LIGHTBOX_SCRIPT = '<script>' + `
+  (function () {
+    if (window.__tlcLightbox) return;
+    window.__tlcLightbox = 1;
+    var box = null, img = null, cap = null, count = null;
+    var shots = [], at = 0, opener = null;
+
+    function build() {
+      if (box) return;
+      box = document.createElement('div');
+      box.className = 'tlcb-lb';
+      box.setAttribute('role', 'dialog');
+      box.setAttribute('aria-modal', 'true');
+      box.setAttribute('aria-label', 'Photo viewer');
+      box.hidden = true;
+      box.innerHTML =
+        '<button type="button" class="tlcb-lb-x" aria-label="Close photo viewer">&#215;</button>' +
+        '<button type="button" class="tlcb-lb-nav tlcb-lb-prev" aria-label="Previous photo">&#8249;</button>' +
+        '<figure class="tlcb-lb-fig"><img alt=""><figcaption><span class="tlcb-lb-cap"></span>' +
+        '<span class="tlcb-lb-of"></span></figcaption></figure>' +
+        '<button type="button" class="tlcb-lb-nav tlcb-lb-next" aria-label="Next photo">&#8250;</button>';
+      document.body.appendChild(box);
+      img = box.querySelector('img');
+      cap = box.querySelector('.tlcb-lb-cap');
+      count = box.querySelector('.tlcb-lb-of');
+      box.querySelector('.tlcb-lb-x').addEventListener('click', close);
+      box.querySelector('.tlcb-lb-prev').addEventListener('click', function () { step(-1); });
+      box.querySelector('.tlcb-lb-next').addEventListener('click', function () { step(1); });
+      // Clicking the backdrop closes; clicking the photograph itself does not,
+      // or reaching for the picture would dismiss it.
+      box.addEventListener('click', function (e) { if (e.target === box) close(); });
+      box.addEventListener('keydown', onKey);
+    }
+
+    function paint() {
+      var s = shots[at];
+      if (!s) return;
+      img.src = s.src;
+      img.alt = s.alt;
+      cap.textContent = s.alt;
+      // One of a set is worth saying; one on its own is not.
+      count.textContent = shots.length > 1 ? (at + 1) + ' of ' + shots.length : '';
+      var many = shots.length > 1;
+      box.querySelector('.tlcb-lb-prev').hidden = !many;
+      box.querySelector('.tlcb-lb-next').hidden = !many;
+    }
+
+    function step(d) {
+      if (shots.length < 2) return;
+      at = (at + d + shots.length) % shots.length;
+      paint();
+    }
+
+    function open(grid, i, from) {
+      build();
+      var btns = grid.querySelectorAll('.tlcb-gal-open');
+      shots = [];
+      for (var n = 0; n < btns.length; n++) {
+        var p = btns[n].querySelector('img');
+        if (p) shots.push({ src: p.getAttribute('src'), alt: p.getAttribute('alt') || '' });
+      }
+      if (!shots.length) return;
+      at = Math.max(0, Math.min(i, shots.length - 1));
+      opener = from;
+      paint();
+      box.hidden = false;
+      document.documentElement.style.overflow = 'hidden';
+      box.querySelector('.tlcb-lb-x').focus();
+    }
+
+    function close() {
+      if (!box || box.hidden) return;
+      box.hidden = true;
+      document.documentElement.style.overflow = '';
+      // ⚠ Focus goes back to the thumbnail it was opened from. Without this a
+      // keyboard visitor is returned to the top of the document and has to tab
+      // all the way down again to reach the next photograph.
+      if (opener && document.contains(opener)) opener.focus();
+      opener = null;
+    }
+
+    function onKey(e) {
+      if (e.key === 'Escape') { e.preventDefault(); close(); return; }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); step(-1); return; }
+      if (e.key === 'ArrowRight') { e.preventDefault(); step(1); return; }
+      if (e.key !== 'Tab') return;
+      // A modal that lets Tab wander back onto the page behind it is a modal a
+      // screen reader user cannot tell they are still inside.
+      var stops = [];
+      var all = box.querySelectorAll('button');
+      for (var i = 0; i < all.length; i++) if (!all[i].hidden) stops.push(all[i]);
+      if (!stops.length) return;
+      var first = stops[0], last = stops[stops.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest ? e.target.closest('.tlcb-gal-open') : null;
+      if (!btn) return;
+      var grid = btn.closest('.tlcb-gallery');
+      if (!grid) return;
+      e.preventDefault();
+      var btns = grid.querySelectorAll('.tlcb-gal-open');
+      var i = 0;
+      for (var n = 0; n < btns.length; n++) if (btns[n] === btn) i = n;
+      open(grid, i, btn);
+    });
+  })();
+` + '<\/script>';
+
 function renderInner(b, opts) {
   const def = BLOCK_DEFS[b.type];
   const t = b.type;
@@ -3417,13 +3591,24 @@ function renderInner(b, opts) {
   }
 
   if (t === 'gallery') {
+    // ⚠ A BUTTON ON THE PUBLIC PAGE, A PLAIN IMAGE IN THE EDITOR — the same
+    // split the card grid makes with its anchor, and for the same reason:
+    // inside the editor a click on a photograph has to select the block, and a
+    // button would swallow it. It is a real button rather than an image with a
+    // click handler because a handler on an image is not reachable by keyboard
+    // at all — the fault the accessibility pass found on the header logo.
     const tiles = (b.items || []).length
-      ? b.items.map((it) => it.url
-        ? `<img src="${esc(it.url)}" alt="${esc(it.title || '')}" loading="lazy">`
-        : `<span></span>`).join('')
+      ? b.items.map((it) => {
+        if (!it.url) return `<span></span>`;
+        const photo = `<img src="${esc(it.url)}" alt="${esc(it.title || '')}" loading="lazy">`;
+        return opts.editing ? photo
+          : `<button type="button" class="tlcb-gal-open" aria-label="${esc(it.title ? 'View photo: ' + it.title : 'View photo')}">${photo}</button>`;
+      }).join('')
       : `<span></span><span></span><span></span>`;
     const pick = opts.editing ? `<button type="button" class="tlcb-pick tlcb-pick--inline" data-act="gallery">Manage photos</button>` : '';
-    return `<div class="tlcb-stack">${renderHead(opts, b)}<div class="tlcb-gallery">${tiles}</div>${pick}</div>`;
+    // Only where there is something to open. An empty gallery ships no script.
+    const lb = !opts.editing && (b.items || []).some((it) => it.url) ? LIGHTBOX_SCRIPT : '';
+    return `<div class="tlcb-stack">${renderHead(opts, b)}<div class="tlcb-gallery">${tiles}</div>${pick}${lb}</div>`;
   }
 
   if (t === 'posts' || t === 'events') {
