@@ -860,6 +860,44 @@ export const SITE_PAGES = [
         "cardEyebrow": "",
         "cardBody": "",
         "cardLinks": []
+      },
+      {
+        "id": "education-4",
+        "type": "classes",
+        "title": "Classes and studies",
+        "subtitle": "",
+        "eyebrow": "",
+        "body": "",
+        "url": "",
+        "spaceAbove": 24,
+        "spaceBelow": 24,
+        "gap": 32,
+        "height": 48,
+        "split": "40",
+        "side": "left",
+        "cols": 3,
+        "align": "left",
+        "width": "full",
+        "topRule": false,
+        "count": 3,
+        "locked": false,
+        "bg": 0,
+        "ink": 0,
+        "size": "m",
+        "photo": "",
+        "photoAlt": "",
+        "video": "",
+        "stamp": "",
+        "tone": 0,
+        "corner": "tr",
+        "hidden": false,
+        "items": [],
+        "links": [],
+        "card": "off",
+        "cardShows": "services",
+        "cardEyebrow": "",
+        "cardBody": "",
+        "cardLinks": []
       }
     ]
   },
@@ -3059,7 +3097,7 @@ export const SITE_PAGES = [
         "title": "",
         "subtitle": "",
         "eyebrow": "Vendors",
-        "body": "<h2>Apply to be a vendor</h2>\n<p>Are you a local artisan, crafter, or small business? We'd love to have you at the market. Vendor applications open in the fall — check back here for the application link or contact the office to be notified when registration opens.</p>\n<p>Vendor registration is handled via Google Form — link posted here when open.</p>",
+        "body": "<h2>Apply to be a vendor</h2>\n<p>Are you a local artisan, crafter, or small business? We'd love to have you at the market. Tables are $30 each, the application takes about five minutes, and you pay by card at the end.</p>\n<p>Marla is the market coordinator — she'd rather hear from you before you apply than after.</p>",
         "url": "",
         "spaceAbove": 88,
         "spaceBelow": 24,
@@ -3123,12 +3161,12 @@ export const SITE_PAGES = [
         "hidden": false,
         "items": [
           {
-            "title": "Express vendor interest",
-            "url": "mailto:dinger@timothystl.org?subject=ChristmasMarketVendorInterest"
+            "title": "Apply for a table",
+            "url": "/christmasmarket/vendors"
           },
           {
-            "title": "Contact the office",
-            "url": "mailto:dinger@timothystl.org"
+            "title": "Email the coordinator",
+            "url": "mailto:tlc.christmasmarket@gmail.com"
           }
         ],
         "links": [],

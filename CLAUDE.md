@@ -695,11 +695,39 @@ anybody has touched, so this does not repair `/sermons` on the live site. The
 office adds **Sermon library** from the Content group and presses Publish —
 one action, on their own page.
 
-**⚠ `/education` IS THE SAME SHAPE AND IS NOT FIXED.** Its class cards are
-`bible-classes-grid`, filled live from the Christian Ed tab, and there is no
-block that reads that record — so publishing it would empty it exactly as this
-emptied `/sermons`. It has no `LIVE_BLOCKS` entry because there is nothing yet
-to point at. **Do not publish `/education` until one exists.**
+**⚠ `/education` WAS THE SAME SHAPE — now fixed, see below.**
+
+### And /education is the page the menu calls "Learn" (v5.8.0, 2026-08-16)
+
+Dinger: *"For education isn't it supposed to be learn? If not build the block
+for it."* He is right, and it is one page: id `education`, title *Christian
+Education*, **menu label `Learn`**, address `/education`. Worth writing down,
+because a search for "Learn" finds nothing and the warning above named the page
+by an address the menu never shows.
+
+`classes` — **"Bible classes"** — is the block, the same shape as the sermon
+library and for the same reason: the page's class cards are a
+`bible-classes-grid` that `loadBibleClasses()` fills from the API at runtime, so
+the extractor lifts the page's prose and nothing else, and publishing would hide
+the grid that loader fills.
+
+- **Self-filling from `ctx.data.classes`**, the same rows in the same order with
+  the same `active = 1` filter `/api/bible-classes` uses — so the converted page
+  shows exactly what the old one showed, and pausing a class on the Christian Ed
+  screen still removes it.
+- **⚠ The accent is a KEY, resolved in the renderer.** The Christian Ed screen
+  stores `teal` or `sage`, never a hex, so a class cannot introduce a color the
+  site does not use and a stored value never reaches a style attribute
+  unchecked. An unknown key falls back rather than being written out.
+- Leader, description and location are all optional on that screen, so a sparse
+  class renders rather than leaving holes.
+
+**⚠ Still true, and it is the general rule now: a seed does not reach a
+published page.** Both `/sermons` and `/education` need the office to add the
+block and press Publish. `LIVE_BLOCKS` in `tools/extract-pages.mjs` has an entry
+for each; **any third page whose content arrives from the API needs one too**,
+and the symptom is always the same — the page looks right unpublished and empties
+on publish.
 
 ### The auto-bump stops overwriting a version somebody chose (v5.7.0, 2026-08-16)
 

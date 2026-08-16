@@ -448,7 +448,7 @@ async function pageData(env, reqKey) {
     const q = async (sql, ...binds) => {
       try { return (await env.DB.prepare(sql).bind(...binds).all()).results || []; } catch (_) { return []; }
     };
-    const [settingRows, chromeRow, sermonRow, sermonSeries, sermonNotes, news, staff, newsletters,
+    const [settingRows, chromeRow, sermonRow, sermonSeries, sermonNotes, bibleClasses, news, staff, newsletters,
            giveTiers, giveFunds, giveUrlRow, partners] = await Promise.all([
       q("SELECT key, value FROM site_settings WHERE key LIKE 'church_%'"),
       // ⚠ The PUBLISHED row only. The draft exists so that somebody can try a
@@ -470,6 +470,12 @@ async function pageData(env, reqKey) {
       q('SELECT id, title, date_range, description, active, sort_order FROM sermon_series ORDER BY active DESC, sort_order ASC, id DESC LIMIT 24'),
       q('SELECT id, series_id, title, date, scripture, youtube_url, audio_url ' +
         'FROM sermon_notes ORDER BY COALESCE(date, \'\') DESC, id DESC LIMIT 120'),
+      // The Bible classes, for the Bible classes block on /education (the page
+      // the menu calls "Learn"). Same rows, same order and the same active
+      // filter as /api/bible-classes, which is what the hardcoded page fetches
+      // at runtime — so the converted page shows exactly what the old one did.
+      q('SELECT id, title, label, description, leader, location, schedule, accent ' +
+        'FROM bible_classes WHERE active = 1 ORDER BY sort_order, id LIMIT 40'),
       // Full fields, not just title+date — the "News feed" block (unlike the
       // older "News highlights" block, which only ever needed a title and a
       // date) shows the same expandable image/summary/body cards the /news
@@ -519,6 +525,7 @@ async function pageData(env, reqKey) {
       // "standalone" and offers a button for them, so a page that quietly
       // dropped them would be hiding content somebody deliberately added.
       sermonLoose: (sermonNotes || []).filter((n) => !n.series_id),
+      classes: bibleClasses || [],
       news, staff, newsletters,
       // The four core values, composed here so the block is self-filling: the
       // words and the ways in come from admin/values.js (the one place the

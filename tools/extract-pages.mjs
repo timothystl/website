@@ -470,6 +470,10 @@ function foldHeadings(blocks) {
 // doing so as sermons are added.
 const LIVE_BLOCKS = {
   sermons: { type: 'sermonlist', title: 'Sermons' },
+  // /education is the page the menu calls "Learn". Its class cards are a
+  // `bible-classes-grid` that loadBibleClasses() fills at runtime — same shape,
+  // same trap.
+  education: { type: 'classes', title: 'Classes and studies' },
 };
 
 function blocksFor(slug) {

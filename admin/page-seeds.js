@@ -788,7 +788,7 @@ export const PAGE_SEEDS = {
       "title": "",
       "subtitle": "",
       "eyebrow": "Vendors",
-      "body": "<h2>Apply to be a vendor</h2>\n<p>Are you a local artisan, crafter, or small business? We'd love to have you at the market. Vendor applications open in the fall — check back here for the application link or contact the office to be notified when registration opens.</p>\n<p>Vendor registration is handled via Google Form — link posted here when open.</p>",
+      "body": "<h2>Apply to be a vendor</h2>\n<p>Are you a local artisan, crafter, or small business? We'd love to have you at the market. Tables are $30 each, the application takes about five minutes, and you pay by card at the end.</p>\n<p>Marla is the market coordinator — she'd rather hear from you before you apply than after.</p>",
       "url": "",
       "spaceAbove": 88,
       "spaceBelow": 24,
@@ -852,12 +852,12 @@ export const PAGE_SEEDS = {
       "hidden": false,
       "items": [
         {
-          "title": "Express vendor interest",
-          "url": "mailto:dinger@timothystl.org?subject=ChristmasMarketVendorInterest"
+          "title": "Apply for a table",
+          "url": "/christmasmarket/vendors"
         },
         {
-          "title": "Contact the office",
-          "url": "mailto:dinger@timothystl.org"
+          "title": "Email the coordinator",
+          "url": "mailto:tlc.christmasmarket@gmail.com"
         }
       ],
       "links": [],
