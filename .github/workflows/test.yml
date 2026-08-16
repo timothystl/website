@@ -123,6 +123,7 @@ jobs:
 #                                        # device it is actually opened on
 #   node test/list-section.test.mjs      # the shared list pattern
 #   node test/editor.test.mjs            # the block editor shell
+#   node test/editor-phone.test.mjs      # the editor at 390px, by tap
 #   node test/site-editor.test.mjs       # the pages rail and Page tab
 #   node test/public-page.test.mjs       # the live site
 #   node test/public-phone.test.mjs      # [B8] tap targets at 390px, MEASURED
