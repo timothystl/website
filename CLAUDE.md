@@ -522,6 +522,87 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### A card's picture is dropped on, not typed into (v5.4.0, 2026-08-16)
+
+Dinger, with the `/ministries` card grid open and Card 1's image field showing
+`/images/ministries/food-pantry-thu…`: *"here can we make it a drag and drop for
+the card images?"*
+
+**A card's picture was the one image on the site with no way to put an image
+there.** The block's own photo had a thumbnail and the library behind it; a
+card's had a text box, so adding a photo to a card meant uploading it somewhere
+else first and copying the address across by hand.
+
+- **⚠ `itemUrlFields` COULD NOT ANSWER "IS THIS A PICTURE?"** — it only ever
+  meant "put this through `safeUrl`". A card's `img` and a card's `url` both sat
+  in it, so the editor could not tell an address a visitor is **sent** to from
+  one an `<img>` is **pointed at**. Getting them the wrong way round offers to
+  point a photograph at `/worship`, and warns that a perfectly good picture is a
+  dead link. `itemImageFields` is the second, narrower declaration —
+  `['img']` on Card grid, `['meta']` on Partner logos — and `isImageField()` is
+  its `isLinkField()`. A new type with a picture gets the right control for
+  free; one with a link never gets it by accident.
+- **A gallery declares nothing**, because `gallery: true` already says every
+  item is a photograph. A second list would be a second way to say it.
+- **The address box stays under the thumbnail.** Not every picture on the site
+  is one of ours — a partner's logo is often hosted by the partner — and
+  deleting the one way to type an address to make a gesture prettier is a
+  capability lost.
+- **⚠ ON `dragover` THE FILE LIST IS EMPTY.** Every browser withholds the files
+  until the drop lands, so a handler asking `dataTransfer.files` whether this is
+  a file drag says no every time and the field never lights up. `types` is the
+  one thing readable the whole way through.
+- **⚠ The alt text is BORROWED, never invented.** The library refuses a photo
+  with no description and is right to. For a card grid the heading *is* the alt
+  the page renders (`alt="the card's heading"`), so the drop takes that — one
+  copy, nothing to fall out of step. A card with no heading yet is told to name
+  it first, rather than being handed the server's 400.
+- **The photo joins the library on the way past.** One that exists only on one
+  card cannot be reused and cannot be seen by the Media screen, which is where
+  "used nowhere" and the size warnings live.
+- **⚠ A file dropped ANYWHERE ELSE is swallowed.** Without that, missing a 44px
+  thumbnail by half an inch makes the browser navigate to the JPEG — the editor
+  replaced by a photograph. The cursor still says no outside a real field, so
+  the invitation is not extended to the whole window just because the whole
+  window has to listen.
+- The handlers are delegated off the inspector panel, which is rebuilt on every
+  change — the same trap the row grips are wired around.
+- The block's own photo control got the same drop target, so the gesture is one
+  gesture. It keeps its own description box, because there is no heading to
+  borrow from.
+
+**⚠ Two bugs found on the way past, both older than this work and both
+invisible.**
+
+- **`test/editor-server.mjs` never injected `LINKS_JS`.** The Worker does; the
+  harness did not. So `renderInspector()` threw `ReferenceError:
+  tlcPickerGroups is not defined` for **every block type with a link field** —
+  Card grid, Button bar, Link tiles, Partners — and the panel read "Nothing
+  selected" beside a plainly selected block. No browser test had ever opened
+  one of those inspectors, which is why the next one went unnoticed for months.
+- **⚠ REORDERING A CARD OVERWROTE ANOTHER CARD'S HEADING.** A canvas field
+  identifies its item **by index**, and a structural change moves the index out
+  from under it. `patch()` reorders the array, `renderInspector()` pulls focus
+  into the panel, and the `focusout` that fires lands on a canvas the Worker
+  has **not redrawn yet** — the redraw is a round trip. So `commitField()` ran
+  with the old node's `data-item="1"` against a list where item 1 was now
+  something else, and wrote one card's words over another's. **Silently: the
+  canvas came back correct a moment later and only the SAVED DRAFT was wrong.**
+  `S.canvasStale` is set from a structural patch until `setCanvas()` lands, and
+  `commitField` refuses to write from a screen that describes the blocks as
+  they were. Nothing genuine is dropped — a person's own edit is already
+  committed by the `focusout` the control's own `mousedown` fires, before the
+  patch. ⚠ It is cleared in `doRerender`'s **catch** as well: leaving it set
+  would silently stop every text edit on the page from saving, which is a worse
+  failure than the one that just happened and looks like nothing at all.
+
+Run: `node test/editor-media.test.mjs` (Chromium — it fires real `DragEvent`s
+with a real `DataTransfer`; ⚠ a `DragEvent` with no `clientY` reads as 0, which
+is above the panel rather than above the row, and lands a dragged card back
+where it started). Both reversions were verified: dropping the guard fails the
+reorder group with the real symptom, two headings reading the same words.
+Also `node admin/blocks.test.mjs`.
+
 ### The redesign, rebuilt from the FULL handoff (v5.3.0, 2026-08-14)
 
 Dinger, after publishing: *"still doesnt look right… i had a different design

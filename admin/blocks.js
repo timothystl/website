@@ -355,6 +355,14 @@ export const BLOCK_DEFS = {
     itemFields: ['img', 'eyebrow', 'title', 'body', 'linkLabel', 'url'],
     richItemFields: ['body'],
     itemUrlFields: ['img', 'url'],
+    // ⚠ A picture, not a destination. `itemUrlFields` only says "put this
+    // through safeUrl"; it cannot tell an address a visitor is SENT to from one
+    // an <img> is pointed at, and the editor has to know the difference — one
+    // gets the pick-a-page control and the dead-link warning, the other gets a
+    // thumbnail and a place to drop a photograph. Declared on the type so a new
+    // block with a picture field gets the right control for free, and one with
+    // a link field never gets it by accident.
+    itemImageFields: ['img'],
     itemLabel: 'Card',
     itemPlaceholders: {
       img: 'Logo or photo (optional)', eyebrow: 'SMALL LABEL', title: 'Card heading',
@@ -465,6 +473,7 @@ export const BLOCK_DEFS = {
     partnerSource: true,
     defaults: { title: 'With thanks to', spaceAbove: 24, spaceBelow: 24, source: 'record', partnerIds: [] },
     items: true, itemFields: ['title', 'url', 'meta'], itemUrlFields: ['url', 'meta'], itemLabel: 'Partner',
+    itemImageFields: ['meta'],
     itemPlaceholders: { title: 'Partner name', url: 'Link (optional)', meta: 'Logo image URL' },
     defaultItems: [{ title: 'Partner name', url: '', meta: '' }],
   },
@@ -1948,7 +1957,8 @@ export function blocksClientConfig(data) {
       items: !!d.items, itemFields: d.itemFields || [], itemLabel: d.itemLabel || 'Row',
       auto: d.auto || '', autoNote: d.autoNote || '', autoCount: d.auto ? d.autoCount !== false : false,
       itemPlaceholders: d.itemPlaceholders || {}, richItemFields: d.richItemFields || [],
-      itemUrlFields: d.itemUrlFields || [], richBody: !!d.richBody, align: !!d.align,
+      itemUrlFields: d.itemUrlFields || [], itemImageFields: d.itemImageFields || [],
+      richBody: !!d.richBody, align: !!d.align,
       gallery: !!d.gallery, feed: d.feed || '', infoCard: !!d.infoCard,
       partnerSource: !!d.partnerSource,
       choices: d.choices || [], switches: d.switches || [],
