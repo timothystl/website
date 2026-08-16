@@ -337,6 +337,81 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
   .ed-pages--shut{position:static;box-shadow:none;}
   .ed-body{position:relative;}
 }
+
+/* The bottom bar itself. Hidden above the breakpoint, so it costs a desktop
+   nothing but the markup.
+   ⚠ DECLARED BEFORE THE MEDIA QUERY THAT TURNS IT ON. A media query outranks
+   nothing — at equal specificity source order decides — so this block sitting
+   after it meant `display:none` won at every width and the bar never appeared.
+   That is the same cascade defect the post-redesign review catalogued four
+   times over; it is easy to write and invisible until something is measured. */
+.ed-mtabs{display:none;flex:none;border-top:1px solid #DDE3ED;background:#1E2D4A;}
+.ed-mtabs button{flex:1;min-height:52px;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:2px;font:600 11.5px/1.2 'Source Sans 3';color:#C4CEDF;
+  border-top:3px solid transparent;}
+.ed-mtabs button[aria-selected="true"]{color:#FBF8F3;border-top-color:#C9973A;background:rgba(255,255,255,.06);}
+.ed-mtabs i{font-style:normal;font-size:15px;line-height:1;}
+
+/* ── THE PHONE ────────────────────────────────────────────────────────────────
+   Below 900px the four columns cannot be columns: 224 + 266 + canvas + 318 into
+   390px is not a layout, it is four things fighting. So exactly ONE surface is
+   on screen at a time and a bar along the bottom switches between them — the
+   only new interaction in the whole change.
+
+   ⚠ NOTHING ELSE ABOUT THE EDITOR CHANGES, and that is the point. Every drag in
+   here already has a tap equivalent, because they were built as keyboard
+   equivalents: a palette chip ADDS on click, a block moves with the arrows in
+   its toolbar, a row moves with the arrows beside it, a picture is chosen from
+   the library. Touch inherits all of it. What was missing was somewhere to
+   stand. */
+@media(max-width:900px){
+  /* The bar is the one piece of chrome that appears rather than moves. */
+  .ed-mtabs{display:flex;}
+  .ed-body{padding-bottom:0;}
+
+  /* Every surface becomes the whole body, and only the chosen one is drawn.
+     ⚠ `.ed-pages` has to come back OUT of the absolute positioning the 1240px
+     rule gives it, or the page list would float over whatever is showing. */
+  .ed-pages,.ed-rail,.ed-mid,.ed-insp{
+    display:none;position:static;width:auto;flex:1 1 auto;min-width:0;
+    border-left:0;border-right:0;box-shadow:none;}
+  .ed--m-pages  .ed-pages{display:flex;}
+  .ed--m-blocks .ed-rail{display:flex;}
+  .ed--m-canvas .ed-mid{display:flex;}
+  .ed--m-insp   .ed-insp{display:flex;}
+
+  /* ⚠ A collapsed rail is a 26px spine, which as a whole surface is a blank
+     column with nothing in it. The collapse is a desktop idea — there is no
+     canvas beside it here to make room for — so it is switched off rather than
+     honored, and the stored choice is left alone for when they are back at a
+     desk. The toggles go with it: they now hide the only thing on screen. */
+  .ed-pages--shut,.ed-rail--shut{width:auto;}
+  .ed-pages--shut .ed-pages-search,.ed-pages--shut .ed-pages-list,.ed-pages--shut .ed-pages-f,
+  .ed-rail--shut .ed-rail-list,.ed-rail--shut .ed-rail-f{display:flex;}
+  #edPagesToggle,#edRailToggle{display:none;}
+
+  /* The paper is the phone. See fitPaper(): no fixed width and no zoom, so the
+     canvas is 1:1 and the caret lands where it is tapped. */
+  .ed-canvas{padding:10px 10px 18px;}
+  .ed-paper{border-radius:0;box-shadow:none;padding:0;}
+
+  /* Choosing a preview width on a phone is choosing between 390 and 390. */
+  .ed-devices{display:none;}
+  .ed-crumb,.ed-saved{display:none;}
+  .ed-top{gap:8px;padding:0 10px;}
+
+  /* Tap targets. 44px on everything somebody aims at — the same rule the public
+     site was measured against, applied to the editor at last.
+     ⚠ The rail row keeps its own height rather than a min-height: it is a flex
+     row and a min-height would leave the label floating at the top of it. */
+  .ed-rail-list [data-index],.ed-pages-list a,.ed-pages-list button{min-height:44px;}
+  .ed-move,.ed-item-h button,.ed-pal-toggle,.ed-tabs button,.ed-add{min-height:44px;min-width:44px;}
+  .ed-grip{padding:12px 8px;margin:-12px -8px;}
+  .ed-chip{min-height:44px;}
+  /* The palette is half the screen if it keeps its desktop height. */
+  .ed-pal-chips{max-height:38vh;overflow:auto;}
+}
+
 </style>
 <!--TLCB_TINYMCE-->
 </head>
@@ -385,6 +460,8 @@ var S = {
   // written here — a hardcoded 'Content' silently outlived a reorder of
   // GROUPS, and the palette opened on the second group.
   selectedId: null, device: 'desktop', group: null, paletteOpen: true,
+  // Which surface the phone is showing. Ignored above the breakpoint.
+  mobileView: 'canvas',
   changes: [], history: [], saved: null, dirty: false,
   dragId: null, dragType: null, dragSection: null, dropIndex: null,
   // A drag INSIDE the inspector — one of a block's own rows moving within its
@@ -503,6 +580,15 @@ function shellHtml() {
         '</div>' +
       '</aside>' +
     '</div>' +
+    // The phone's whole navigation. Rendered always and shown only below the
+    // breakpoint, because a bar that appears on resize is one that has to be
+    // built twice — once here and once in a resize handler.
+    '<nav class="ed-mtabs" id="edMTabs" role="tablist" aria-label="Editor sections">' +
+      (IS_SITE_PAGE ? '<button type="button" role="tab" data-m="pages" aria-selected="false"><i aria-hidden="true">\u2630</i>Pages</button>' : '') +
+      '<button type="button" role="tab" data-m="blocks" aria-selected="false"><i aria-hidden="true">\u2637</i>Blocks</button>' +
+      '<button type="button" role="tab" data-m="canvas" aria-selected="true"><i aria-hidden="true">\u25A4</i>Page</button>' +
+      '<button type="button" role="tab" data-m="insp" aria-selected="false"><i aria-hidden="true">\u2699</i>Settings</button>' +
+    '</nav>' +
   '</div>' +
   '<div id="edPublishPanel"></div>' +
   '<div id="edModal"></div>' +
@@ -512,6 +598,7 @@ function shellHtml() {
 function cacheEls() {
   ['edTitle', 'edPill', 'edSaved', 'edView', 'edUndo', 'edPublish', 'edHint', 'edHintX', 'edRail',
    'edCanvas', 'edPaper', 'edPalTabs', 'edPalChips', 'edPalToggle', 'edInspHead', 'edInspBody',
+   'edMTabs',
    'edChanges', 'edChangesHead', 'edModal', 'edToast', 'edMore', 'edPublishPanel',
    'edPages', 'edPagesList', 'edPagesSearch', 'edPagesToggle', 'edPagesNew',
    'edBlockRail', 'edRailToggle',
@@ -524,12 +611,50 @@ function cacheEls() {
 // `transform: scale()` is wrong here: it does not affect the layout box, so a
 // centered scaled paper drifts out of view. The paper must not flex-shrink
 // either, or the device switcher looks like it does nothing.
+// The breakpoint, in one place, so the CSS and the script cannot disagree about
+// what counts as a phone.
+var NARROW = 900;
+function isNarrow() { return window.innerWidth <= NARROW; }
+
 function fitPaper() {
+  // ⚠ ON A PHONE THE PAPER IS THE PHONE. Fixed at 390 inside a ~370px canvas,
+  // fitPaper's own arithmetic would scale it to about 0.8 — and `zoom` and
+  // caret hit-testing do not agree in every engine, so text would land where it
+  // was not tapped. Fluid width with no zoom means the canvas is 1:1 and it is
+  // rendering at the real device width, which is also exactly what the visitor
+  // will see. The class still goes on, so the block phone rules apply.
+  if (isNarrow()) {
+    el.edPaper.style.width = '';
+    el.edPaper.style.zoom = '';
+    el.edPaper.classList.add('ed-paper--phone');
+    return;
+  }
   var w = WIDTHS[S.device] || WIDTHS.desktop;
   el.edPaper.style.width = w + 'px';
   el.edPaper.classList.toggle('ed-paper--phone', S.device === 'phone');
   var avail = el.edCanvas.clientWidth - 56;
   el.edPaper.style.zoom = avail > 0 ? Math.min(1, avail / w) : 1;
+}
+
+// Which of the four surfaces the phone is showing. One class on the root and
+// the CSS does the rest — nothing is moved in the DOM, so a resize back to a
+// desktop restores the four columns with no rebuild and nothing lost.
+var MOBILE_VIEWS = ['pages', 'blocks', 'canvas', 'insp'];
+function setMobileView(key) {
+  if (MOBILE_VIEWS.indexOf(key) === -1) key = 'canvas';
+  S.mobileView = key;
+  var root = document.querySelector('.ed');
+  if (root) {
+    MOBILE_VIEWS.forEach(function (k) { root.classList.toggle('ed--m-' + k, k === key); });
+  }
+  if (el.edMTabs) {
+    var btns = el.edMTabs.querySelectorAll('[data-m]');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].setAttribute('aria-selected', String(btns[i].dataset.m === key));
+    }
+  }
+  // The canvas has a different width in each of these, and the paper follows it.
+  fitPaper();
 }
 
 function setDevice(d) {
@@ -2155,7 +2280,13 @@ function bindStatic() {
   // rail
   el.edRail.addEventListener('click', function (e) {
     var row = e.target.closest('.ed-row');
-    if (row) select(row.dataset.id);
+    if (!row) return;
+    select(row.dataset.id);
+    // ⚠ On a phone the outline and the page are different surfaces, so picking
+    // a block in a list and being left looking at the list reads as nothing
+    // having happened. On a desktop the canvas is already beside you and this
+    // does nothing at all.
+    if (isNarrow()) setMobileView('canvas');
   });
 
   // ── THE TWO LEFT RAILS ───────────────────────────────────────
@@ -2359,6 +2490,18 @@ function bindStatic() {
 
   window.addEventListener('resize', fitPaper);
   if (window.ResizeObserver) new ResizeObserver(fitPaper).observe(el.edCanvas);
+
+  // ── THE PHONE'S BOTTOM BAR ───────────────────────────────────
+  if (el.edMTabs) {
+    el.edMTabs.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-m]');
+      if (b) setMobileView(b.dataset.m);
+    });
+  }
+  // A rotate changes which layout applies, and the paper's width with it. The
+  // view itself is deliberately NOT reset — somebody who turned the phone to
+  // read the page should still be on the page.
+  window.addEventListener('orientationchange', fitPaper);
 }
 
 // ── reordering and adding ──────────────────────────────────────────────────
@@ -3270,6 +3413,21 @@ async function boot() {
   root.innerHTML = shellHtml();
   cacheEls();
   try { if (localStorage.getItem(HINT_KEY)) { S.hint = false; el.edHint.style.display = 'none'; } } catch (_) {}
+  // The root class the phone layout keys off. Applied always — above the
+  // breakpoint the CSS ignores it — so there is one starting state rather than
+  // one that depends on the width at boot.
+  setMobileView('canvas');
+  // ⚠ The tip is four instructions and on a phone all four are wrong: there is
+  // no left rail beside the page, the panel is not at the bottom, and nothing
+  // drags. It is the first thing anybody reads, so it says what is true here.
+  if (isNarrow() && el.edHint) {
+    var span = el.edHint.querySelector('span');
+    if (span) {
+      span.textContent = 'use the bar at the bottom to move between the page, its blocks and their settings'
+        + ' \u00b7 tap any text to type \u00b7 tap a block in Add block to put it on the page'
+        + ' \u00b7 the arrows on a block move it';
+    }
+  }
   bindStatic();
   try {
     var data = await api(API + '/page/' + encodeURIComponent(S.slug));
