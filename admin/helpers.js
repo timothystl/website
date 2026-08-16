@@ -10,7 +10,7 @@ import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, SIDEBAR_JS, TOGGLE_WORD_JS, LOCKED_FIELD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 import { APPEARANCE_CSS } from './appearance.js';
 
-export const VERSION = 'v5.8.0'; // minor: the Bible classes block — /education, the page the menu calls Learn, was the other page whose content is filled at runtime
+export const VERSION = 'v5.9.0'; // minor: the page editor works on a phone — one surface at a time, and the tap paths that were already there
 
 // ── THE SHARED SHELL CSS/JS, EXTERNALISED ───────────────────────
 // This used to be inlined into every admin response inside <style>/<script>

@@ -697,6 +697,56 @@ one action, on their own page.
 
 **⚠ `/education` WAS THE SAME SHAPE — now fixed, see below.**
 
+### The editor on a phone (v5.9.0, 2026-08-16)
+
+Dinger asked whether it could be done at all. It mostly already was.
+
+**⚠ EVERY DRAG IN THIS EDITOR ALREADY HAS A TAP EQUIVALENT, AND NOBODY BUILT
+THEM FOR TOUCH.** They are keyboard equivalents — a palette chip **adds** on
+click, a block moves by the arrows in its toolbar, a row moves by the arrows
+beside it (v5.1.0, written because "drag on its own is a keyboard dead end"), a
+picture is chosen from the library. Touch inherits all of it. HTML5
+drag-and-drop does not fire on touch, and it did not need to.
+
+So the blocker was never the gestures. **It was that the breakpoints stopped at
+1100px** and 224 + 266 + canvas + 318 does not go into 390. The editor is a
+full-viewport takeover rather than `sidebarShell`, so it also inherited none of
+the admin's own mobile work from v4.6.0.
+
+- **One surface at a time, and a bar along the bottom** — Pages · Blocks · Page
+  · Settings. One class on the root; nothing moves in the DOM, so a resize back
+  to a desk restores the four columns with nothing lost and nothing rebuilt.
+- **⚠ THE PAPER IS THE PHONE.** Fixed at 390 inside a ~370px canvas,
+  `fitPaper()` would scale it to about 0.8 — and **`zoom` and caret hit-testing
+  disagree in some engines**, so text lands where it was not tapped. Fluid width
+  and no zoom means 1:1, and the canvas is rendering at the real device width,
+  which is also what the visitor gets.
+- **⚠ A collapsed rail is switched off, not honored.** The collapse exists to
+  give the canvas room and there is no canvas beside it here; a stored "shut"
+  from a desk session would make Blocks a blank 26px spine. The stored choice is
+  left alone for when they are back at that desk.
+- **Picking a block in the outline moves to the page.** On a desktop the canvas
+  is already beside you and this does nothing; on a phone, being left looking at
+  the list reads as nothing having happened.
+- **The tip is rewritten on a narrow screen**, because its four instructions are
+  four things that are not true here — and it is the first thing anybody reads.
+- 44px on everything aimed at, which is the rule `public-phone.test.mjs` has
+  held the public site to and which had never been applied to the editor.
+
+**⚠ THE FIRST ATTEMPT SHIPPED THE BAR INVISIBLE**, by declaring
+`.ed-mtabs{display:none}` *after* the media query that turns it on. A media
+query outranks nothing — at equal specificity source order decides. That is the
+same cascade defect the post-redesign review catalogued four separate times, it
+is easy to write, and it is invisible until something measures it.
+
+**Not done, and deliberately: touch drag.** Replacing HTML5 DnD with pointer
+events would touch four separate drag systems, and the arrows make it a
+convenience rather than a capability. The keyboard work already paid for the
+phone.
+
+Run: `node test/editor-phone.test.mjs` (32, Chromium at 390px with `hasTouch` —
+every path driven by `tap()`, and there is no drag anywhere in the file).
+
 ### And /education is the page the menu calls "Learn" (v5.8.0, 2026-08-16)
 
 Dinger: *"For education isn't it supposed to be learn? If not build the block
