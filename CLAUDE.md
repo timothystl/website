@@ -692,6 +692,68 @@ Both verified against the bug; the browser one seeds a page already on
 `sectionside` rather than driving the layout dropdown, so what it exercises is
 the redraw and not the Page tab.
 
+### The Give button had no fill of its own (v5.12.0, 2026-08-16)
+
+Dinger, with a screenshot of a navy Give block: *"the background of the box
+blends into the give button"*. It did, and on every other field too.
+
+**⚠ `.tlcb-chip` WAS DECLARED TWICE, 385 LINES APART, FOR TWO DIFFERENT
+COMPONENTS** — the Give block's button, and the Coming-up strip's pill added
+with the rest of the 1b language in v5.0.0. One class name, equal specificity,
+so source order decided and the later one won. The button lost its gold to the
+strip's `chip-bg` background and kept its near-black ink:
+
+| Field | The button's fill was | Contrast |
+|---|---|---|
+| Ink navy | `rgba(245,240,230,.08)` | about 1.3:1 |
+| Navy | `rgba(0,0,0,.04)` | 1.16:1 |
+| Parchment | `rgba(0,0,0,.04)` | 1.16:1 |
+
+**This is the same defect as the two `.tlcb-card` declarations fixed in
+v4.5.0**, which is why that entry says two rules for one class name is worth
+grepping for. Both selectors are qualified now — `.tlcb-give .tlcb-chip` and
+`.tlcb-chip-row .tlcb-chip` — so neither can reach the other's markup.
+
+- **⚠ THE TEST ASSERTS THE ALPHA BEFORE THE CONTRAST, and the first version of
+  it would have passed on the bug.** `getComputedStyle` returns
+  `rgba(245,240,230,.08)`; a luminance helper that reads the first three
+  numbers and drops the fourth scores that near-transparent wash as opaque
+  cream — about 14:1 against a near-black label. A translucent fill has no
+  contrast that can be asserted at all, because what it composites over is a
+  gradient. So the button must be opaque, and only then is the ratio computed.
+- **It measures the property, not the hex.** Any future rule that repaints the
+  button fails it, not only a reintroduced duplicate of this one class name.
+- **The strip's own pill is asserted too** — the half that would go unnoticed
+  if somebody fixed this by deleting a rule rather than scoping it.
+
+Run: the Give-button group in `node test/public-page.test.mjs`, verified
+against the bug (five assertions fail, naming all three fields).
+
+### Redo (v5.12.0, 2026-08-16)
+
+Undo has been there since the editor shipped and there was no way back.
+
+- **`S.future` is the second stack**, and **⚠ `pushHistory()` clearing it is the
+  whole correctness of this.** Step back three times, type something, press
+  Redo: without that line you get a page assembled from a branch that was
+  abandoned, which reads as the editor inventing content out of nothing.
+- **⚠ Neither `undo()` nor `redo()` may go through `pushHistory()`.** Stepping
+  along the history is not a new edit; routing them through it would make Undo
+  destroy the thing Redo exists to reach.
+- **Both clear the selection**, because the block that was selected may not
+  exist in the state being restored.
+- **`Cmd/Ctrl+Shift+Z`.** The undo handler has always tested for the *absence*
+  of shift, so the shifted key was already reserved rather than needing to be
+  taken from something.
+- **Disabled, not hidden.** An empty redo stack is the normal state, and a
+  control that vanishes and reappears is one the eye has to re-find.
+- **Nothing resets either stack, and nothing needs to**: switching pages in the
+  rail is a full navigation (`location.href`), so both start empty.
+
+Run: the `redo` group in `node test/editor-edit.test.mjs`, verified against the
+bug — removing the branch-clear fails exactly one assertion, the one that says
+a new edit abandons the redo branch.
+
 ### A block's own script ran on one path out of two (v5.11.0, 2026-08-16)
 
 Found while scoping a photo viewer, which wanted to ship the same way. Not

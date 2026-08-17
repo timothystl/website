@@ -1804,9 +1804,19 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
 .tlcb-give{display:flex;flex-direction:column;gap:11px;padding:20px;border-radius:10px;background:#1E2D4A;}
 .tlcb-give .tlcb-head{color:#F3EDE1;}
 .tlcb-give-note{font-size:14px;line-height:1.7;color:#C4CEDF;}
-.tlcb-chip{padding:8px 14px;border:1px solid rgba(245,228,192,.4);border-radius:7px;color:#F3EDE1;
+/* ⚠ QUALIFIED, AND IT HAS TO STAY QUALIFIED. This selector was bare, and so was
+   the Coming-up strip's own chip 385 lines below — two components, one class
+   name, equal specificity, so source order decided and the later one won. The
+   Give button lost its gold fill to that rule's chip-bg background and kept
+   its near-black ink, which on the Ink navy field is #1B1608 on 8% cream over
+   navy: about 1.3:1, and reported as "the background of the box blends into
+   the give button".
+
+   This is the same defect as the two duplicate card declarations fixed in
+   v4.5.0. Two rules for one class name is worth grepping for. */
+.tlcb-give .tlcb-chip{padding:8px 14px;border:1px solid rgba(245,228,192,.4);border-radius:7px;color:#F3EDE1;
   font:600 13px/1 var(--tlcb-ui);text-decoration:none;}
-.tlcb-chip--go{background:#C9973A;color:#1B1608;border-color:#C9973A;padding:10px 18px;font-weight:700;}
+.tlcb-give .tlcb-chip--go{background:#C9973A;color:#1B1608;border-color:#C9973A;padding:10px 18px;font-weight:700;}
 /* ── The giving widget ── the one block that takes money. Its colors are
    fixed rather than following the block's Theme colors palette: this is the
    most-clicked control on the church website and a staff member trying a
@@ -2189,7 +2199,11 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
 .tlcb-chips-l{font:800 11px/1 var(--tlcb-ui);letter-spacing:.16em;text-transform:uppercase;
   color:var(--tlcb-meta,#8A8168);flex:none;}
 .tlcb-chip-row{display:flex;gap:10px;flex-wrap:wrap;}
-.tlcb-chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--tlcb-rule,#D8CFBB);
+/* ⚠ Qualified for the same reason as the Give button's chip above — see the
+   note there. This one is the Coming-up strip's pill and lives inside
+   .tlcb-chip-row; that one lives inside .tlcb-give. Neither selector can now
+   reach the other's markup. */
+.tlcb-chip-row .tlcb-chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--tlcb-rule,#D8CFBB);
   border-radius:999px;padding:9px 16px;background:var(--tlcb-chip-bg,#F5F0E6);white-space:nowrap;}
 .tlcb-chip-d{font:800 12px/1 var(--tlcb-ui);letter-spacing:.06em;text-transform:uppercase;color:var(--tlcb-eyebrow-ink,#B44A2E);}
 .tlcb-chip-t{font:600 14px/1 var(--tlcb-ui);color:var(--tlcb-head-ink,#1B2C4A);}
