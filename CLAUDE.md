@@ -525,6 +525,60 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### A block can be given a jump-to name (v5.20.0, 2026-08-17)
+
+Dinger: "how do i add a button on the page that will quick link it to further
+down the page." There was no way — `safeUrl()` had always accepted a leading
+`#` on any URL field (a button's link, a card's link, a link typed into a
+paragraph), but nothing on a page ever carried an `id` for one to land on, so
+typing `#anything` into a link was a dead end that looked like it should work.
+
+**Jump-to name** is a new field on every block's inspector, right below
+Spacing — deliberately not gated behind a `def` flag the way most per-type
+fields are, the same as `width`/`spaceAbove` above it: any block can be the
+destination of a jump, not just the ones a particular type declares.
+
+- `cleanAnchorId()` in `admin/blocks.js` collapses whatever is typed to
+  letters, digits and hyphens — the same shape `slugify()` gives a page
+  address, right down to reading `&` as "and" — so a name typed here and a
+  name typed as a page title produce the same kind of slug. Sanitized on the
+  way in like every other field; nothing but that character set can ever
+  reach the page.
+- **⚠ The box shows the SANITIZED value, not what was typed, and that is
+  deliberate rather than a rough edge.** `anchorId` goes through the same
+  debounced `rerender()` round trip `url`/`contactEmail`/`photoAlt` already
+  use — 700ms after typing stops, the server's cleaned value comes back and
+  replaces what's in the box. Once it settles, what's in the box IS what a
+  button's link field needs typed into it: `#` plus exactly that. No second,
+  client-side slug preview to keep in sync with the server's — the real
+  round trip already tells the truth a beat later.
+- **The `id` itself is prefixed** (`id="jump-<name>"`, not the bare name) —
+  a block's own id is one more thing sharing the page's ID namespace with
+  the SPA's own `id="page-<id>"` divs, the router's anchors, and whatever
+  else. A collision there is a much stranger bug than a slightly longer
+  fragment.
+- **⚠ `.tlcb` picked up `scroll-margin-top:88px`, on every block, not only
+  named ones.** The site's nav is `position:sticky`, 64px tall plus its 3px
+  rule — without this, jumping to a block tucks its top edge, headline and
+  all, behind the bar. Universal because any block can end up on the
+  receiving end of a fragment link, the same reasoning `anchorId` itself
+  is universal.
+- **No collision detection.** Two blocks on one page sharing a name is a
+  typo, not a case worth a warning UI for — the browser resolves duplicate
+  ids to whichever comes first in the DOM, which is a page authoring mistake
+  and not the kind of silent damage this editor's guardrails exist to catch.
+  Left for the office to simply not reuse a name, same as it already relies
+  on nobody typing the same page title twice.
+- **The dead-link checker needed no change.** `linkKind()` in `admin/links.js`
+  already special-cased anything starting with `#` as `kind: 'anchor'`,
+  passing it through with no warning — it could never validate whether the
+  anchor existed, so it simply didn't try. That stays true; a `#name` still
+  isn't checked against the blocks that actually carry it, only accepted as
+  a shape of address the sanitizer will not strip.
+
+Run: the `A block can be given a jump-to name` group in
+`node admin/blocks.test.mjs`.
+
 ### Every Christmas Market setting moved onto the Christmas Market screen (v5.19.0, 2026-08-17)
 
 Dinger, after being pointed at "Most tables one vendor may take" tucked into

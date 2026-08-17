@@ -1293,6 +1293,15 @@ export function sanitizeRich(input) {
 
 export const cleanText = (s, max = 200) => String(s == null ? '' : s).replace(/[\u0000-\u001F\u007F]/g, ' ').trim().slice(0, max);
 
+// A block's optional jump-to name — becomes the `id` a same-page link can
+// target with `#name`. Lowercased and collapsed to letters/digits/hyphens,
+// the same shape slugify() gives a page address, so what somebody types is
+// what they type into a button's link field: no separate display form to
+// keep in sync, because the sanitized value IS what is shown back to them
+// after the inspector's own re-render round-trip.
+export const cleanAnchorId = (s) => String(s == null ? '' : s).toLowerCase()
+  .replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+
 const clampIndex = (v, n) => {
   const i = Math.floor(Number(v));
   return Number.isFinite(i) && i >= 0 && i < n ? i : 0;
@@ -1417,6 +1426,10 @@ export function sanitizeBlock(b) {
     tone: clampIndex(b.tone, TONES.length),
     corner: b.corner === 'tl' ? 'tl' : 'tr',
     hidden: !!b.hidden,
+    // On every block, like width/spaceAbove above — not gated on the type,
+    // because any block can be a jump target and the sanitizer is the one
+    // place that turns whatever was typed into a safe DOM id.
+    anchorId: cleanAnchorId(b.anchorId),
     items: [],
     links: [],
   };
@@ -1772,7 +1785,11 @@ export const BLOCK_CSS = `<style id="tlcb-css">
   font-family:var(--tlcb-sans);}
 .tlcb{position:relative;border-radius:10px;background:var(--tlcb-bg,#FBF8F3);color:var(--tlcb-ink,#3A3A4A);
   padding:14px var(--tlcb-pad);border:2px solid transparent;
-  margin-top:var(--tlcb-space-above,0px);margin-bottom:var(--tlcb-space-below,0px);}
+  margin-top:var(--tlcb-space-above,0px);margin-bottom:var(--tlcb-space-below,0px);
+  /* On every block, not just ones with a jump-to name — the nav is 64px plus
+     its 3px rule on every page, and a fragment jump has to clear it whichever
+     block ends up on the receiving end. */
+  scroll-margin-top:88px;}
 /* Two consecutive Halves make one row, left then right, in the order they
    were dropped — a THIRD starts a new row rather than joining a three-up.
 
@@ -4938,6 +4955,13 @@ export function renderBlock(b, opts = {}) {
   if (!opts.editing && APPEARABLE_TYPES.has(b.type) && b.appear && b.appear !== 'none') {
     classes.push('tlcb--ap-' + b.appear);
   }
+  // A button elsewhere on the page (or a link inside a paragraph) can jump
+  // straight here with `#name` — safeUrl() already accepts a leading `#` on
+  // every URL field, so the only missing half was something on the page for
+  // it to land on. Present in the editor too, harmlessly: nothing there ever
+  // scrolls by fragment, and it is one less thing that can differ from the
+  // published markup.
+  const idAttr = b.anchorId ? ` id="jump-${esc(b.anchorId)}"` : '';
   const attrs = opts.editing
     ? ` data-id="${esc(b.id)}" data-type="${esc(b.type)}" tabindex="0" role="group"` +
       ` aria-label="${esc(def.label)} block${opts.total ? ', position ' + (opts.index + 1) + ' of ' + opts.total : ''}"`
@@ -4964,7 +4988,7 @@ export function renderBlock(b, opts = {}) {
   // every block in the rail — a block you cannot select is a block you cannot
   // delete.
   if (!inner && !opts.editing) return '';
-  return `<div class="${classes.join(' ')}" style="${wrapperVars(b)}"${attrs}>${tools}${renderStamp(opts, b)}${inner}</div>`;
+  return `<div class="${classes.join(' ')}"${idAttr} style="${wrapperVars(b)}"${attrs}>${tools}${renderStamp(opts, b)}${inner}</div>`;
 }
 
 // The sidebar template's right-hand column. Reads the one site-settings record,

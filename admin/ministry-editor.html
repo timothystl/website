@@ -1939,6 +1939,19 @@ function inspectorSections(b, d) {
     (b.type === 'spacer' ? stepper(b, 'height', 'Height') : '') +
     '<span class="ed-note">Steps of ' + C.step + 'px, capped at ' + C.max + ' — blocks always line up with the rest of the site.</span></div>';
 
+  // 4b. Jump-to name — on EVERY block, so a button (or a link typed into a
+  // paragraph) elsewhere on the page can scroll straight down to this one.
+  // Blank is the normal case; nothing points at a block that has no name.
+  // What is shown back here is the SANITIZED value, the same trick photoAlt
+  // and contactEmail use — after the 700ms save round-trip, this box is
+  // showing exactly what a button's link field needs typed into it.
+  out += '<div class="ed-sec"><label class="ed-lab" for="edAnchor">Jump-to name</label>' +
+    '<input class="ed-field" id="edAnchor" data-in="anchorId" data-k="anchorId" value="' + esc(b.anchorId || '') + '" placeholder="e.g. giving">' +
+    '<span class="ed-note">' + (b.anchorId
+      ? 'A button, or a link typed into a paragraph, can jump straight here by linking to #' + esc(b.anchorId) + '.'
+      : 'Optional. Name this block and a button elsewhere on the page can jump straight down to it — letters, numbers and hyphens only.') +
+    '</span></div>';
+
   // 5. Photo
   if (d.photo) {
     // Same drop target as a card's picture — one gesture, wherever a photo
@@ -2495,6 +2508,7 @@ function inspectorInput(target) {
   }
   if (spec === 'url') b.url = value;
   else if (spec === 'contactEmail') b.contactEmail = value;
+  else if (spec === 'anchorId') b.anchorId = value;
   else if (spec === 'photoAlt') b.photoAlt = value;
   else if (spec === 'cardBody') b.cardBody = value;
   else if (spec.indexOf('cardlink:') === 0) {
