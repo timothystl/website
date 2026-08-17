@@ -1248,6 +1248,18 @@ function pageTabClick(e) {
   var opt = e.target.closest('[data-a="parent"]');
   if (opt) { schedulePageSave({ parent_id: opt.dataset.v || null }, true); return; }
   if (e.target.closest('#edPageDelete')) return deletePage();
+  var lessBtn = e.target.closest('#edAsideTopLess');
+  var moreBtn = e.target.closest('#edAsideTopMore');
+  if (lessBtn || moreBtn) {
+    var cur = Math.max(0, Math.min(ASIDE_TOP_MAX, Number((S.pageMeta || {}).aside_top) || 0));
+    var next = Math.max(0, Math.min(ASIDE_TOP_MAX, cur + (moreBtn ? ASIDE_TOP_STEP : -ASIDE_TOP_STEP)));
+    if (next === cur) return;
+    schedulePageSave({ aside_top: next }, true);
+    // Optimistic: schedulePageSave already assigned S.pageMeta.aside_top, so
+    // the output can update now rather than waiting on the round trip.
+    var out = document.getElementById('edAsideTopVal');
+    if (out) out.textContent = next + 'px';
+  }
 }
 
 function pageTabInput(e) {
@@ -1500,6 +1512,10 @@ function pageTabHtml() {
       }).join('') + '</select>' +
       '<span class="ed-note" id="edPageTemplateHint">' + esc((layouts.find(function (t) { return t.key === m.template; }) || {}).hint || '') + '</span>' +
     '</div>' +
+    // Only meaningful on the two layouts with an aside beside the content —
+    // shown only there, not disabled-and-visible, so a page with no sidebar
+    // never shows a control for one it doesn't have.
+    (m.template === 'sidebar' || m.template === 'sectionside' ? pageAsideStepper(m) : '') +
     '<div class="ed-sec ed-field ed-sec--rule">' +
       '<div class="ed-lab-row"><span class="ed-lab">Search summary</span>' +
         '<span class="ed-count' + (over ? ' is-over' : '') + '" id="edSeoCount">' + desc.length + ' / ' + SEO_MAX + '</span></div>' +
@@ -1581,6 +1597,23 @@ function stepper(b, key, label) {
       '<output>' + b[key] + 'px</output>' +
       '<button type="button" data-a="step" data-v="' + key + ':1" data-k="step:' + key + ':1" aria-label="More ' + esc(label.toLowerCase()) + '">+</button>' +
     '</span></div>';
+}
+
+// A page-level counterpart to stepper() above — same look, but it saves
+// through schedulePageSave rather than patching a block, because the aside
+// is chrome the page wraps around its blocks, not a block of its own.
+var ASIDE_TOP_STEP = 8, ASIDE_TOP_MAX = 96;
+function pageAsideStepper(m) {
+  var v = Math.max(0, Math.min(ASIDE_TOP_MAX, Number(m.aside_top) || 0));
+  return '<div class="ed-sec ed-field ed-sec--rule">' +
+    '<span class="ed-lab">Sidebar top spacing</span>' +
+    '<div class="ed-step-row"><span>Push the sidebar down</span><span class="ed-step">' +
+      '<button type="button" id="edAsideTopLess" aria-label="Less">−</button>' +
+      '<output id="edAsideTopVal">' + v + 'px</output>' +
+      '<button type="button" id="edAsideTopMore" aria-label="More">+</button>' +
+    '</span></div>' +
+    '<span class="ed-note">Lines the sidebar up with a content block that has its own space above it — it does not move on its own.</span>' +
+  '</div>';
 }
 
 function inspectorSections(b, d) {

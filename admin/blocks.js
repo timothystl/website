@@ -4398,12 +4398,21 @@ function sidebarAside(ctx) {
   // The child list leads when the layout asks for it — somebody on a section
   // page is looking for the page beneath it, not for the office's phone number.
   const kids = ctx.withKids ? sidebarKids(ctx) : '';
-  if (kids || times || contact) return `<aside class="tlcb-side">${kids}${times}${contact}</aside>`;
+  // ⚠ THE ASIDE HAS NO SPACING OF ITS OWN OTHERWISE. A block's own spaceAbove
+  // can push the content column down without moving the aside beside it,
+  // which is exactly the "sidebar starts too high" complaint this exists to
+  // fix — one page-level number, not a block property, because the aside is
+  // not a block. Same 8px step and 0..96 cap a block's own spacing carries,
+  // snapped again here rather than trusted from the caller: this is written
+  // straight into a style attribute.
+  const top = snapSpace(ctx.asideTop || 0);
+  const style = top ? ` style="margin-top:${top}px"` : '';
+  if (kids || times || contact) return `<aside class="tlcb-side"${style}>${kids}${times}${contact}</aside>`;
   // Empty in the editor is a question, so answer it there; on the live page an
   // unfilled sidebar is just nothing.
-  return ctx.editing ? `<aside class="tlcb-side"><div class="tlcb-side-card">
+  return ctx.editing ? `<aside class="tlcb-side"${style}><div class="tlcb-side-card">
       <p class="tlcb-note">Service times and contact details appear here. Fill them in under Church details in the admin.</p>
-    </div></aside>` : '<aside class="tlcb-side"></aside>';
+    </div></aside>` : `<aside class="tlcb-side"${style}></aside>`;
 }
 
 // The section template's automatic child list. Never stored on the page — it is

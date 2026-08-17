@@ -525,6 +525,45 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### The sidebar aside gets its own spacing control (v5.15.2, 2026-08-17)
+
+Dinger, on a `sidebar`/`sectionside` page whose first content block carried
+its own space above it: the content column started lower than the aside
+beside it, and there was no way to fix that except taking the spacing back
+off the block. The reply at the time — *"that isn't adjustable today, it'd
+need a spacing control on the aside itself, which doesn't exist"* — got a
+*"yes i want one."*
+
+- **A page-level number, not a block property.** The aside is chrome the
+  `sidebar`/`sectionside` layouts wrap around a page's blocks — it is not a
+  block itself, so it cannot carry a `spaceAbove`. `pages.aside_top` is the
+  new column, `0` by default, so every existing page keeps rendering flush,
+  exactly as before this shipped.
+- **Same 8px step and 0–96 cap a block's own spacing already carries**
+  (`snapSpace()`), not a new range invented for this. The whole point is
+  compensating for what a single block's `spaceAbove` can introduce, so
+  anything past that ceiling could never be lining up with real content.
+- **Shown only on the two layouts that have an aside at all** — `standard`
+  and `home` pages never render the control, rather than showing it disabled.
+- **`pageLayoutContext()` carries it now, alongside `template` and
+  `children`** — the same function the "redraw keeps the page's layout" fix
+  (v5.9.1) built, and for the identical reason: the stateless `/render`
+  endpoint only ever gets a slug and blocks from the browser, so anything the
+  canvas needs to draw correctly has to come from the database on every one
+  of the render paths, not just first paint and a template switch.
+  `pageLayoutContext()` already existed to answer exactly this question for
+  one field; this is the same fix shape for a second one, not a new
+  mechanism.
+- **⚠ `rerender` now fires on this too, not only a template change.** A
+  settings save that only moves the aside's spacing still changes what the
+  canvas looks like, so the stateless render has to run again — the same
+  reasoning that made a template switch redraw in the first place.
+- **Zero is genuinely absent, not stored-and-styled-at-zero.** `sidebarAside()`
+  only emits a `style="margin-top:…"` attribute when the value is non-zero, so
+  an untouched page's aside markup is byte-identical to what it always was.
+
+Run: the `sidebar can be pushed down` group in `test/admin-redesign.test.mjs`.
+
 ### The nine market settings had nowhere to be set (v5.14.0, 2026-08-16)
 
 Dinger, after the vendor application shipped: *"i set the market fund id in
