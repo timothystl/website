@@ -101,7 +101,7 @@ import { screenSubmission, formConfig, forwardToChms, officeEmailHtml, officeSub
          handleFilteredRoutes, heldCount, OFFICE_EMAIL } from './admin/forms.js';
 import { stripImageMetadata } from './admin/exif.js';
 import { handleMarketRoutes, marketSettings, marketConfig, marketPayUrl, priceBreakdown, money as marketMoney,
-         sanitizeApplication, screenableText, coordinatorEmailHtml, vendorEmailHtml } from './admin/market.js';
+         sanitizeApplication, screenableText, coordinatorEmailHtml, vendorEmailHtml, clampTables } from './admin/market.js';
 import { normalizeChannelInput, channelPageUrl, channelIdFrom, feedUrl,
          parseFeed, pickLatest, isChannelId } from './admin/sermons-feed.js';
 import { PALETTE as CHROME_PALETTE, BAR_KEYS, DEFAULTS as CHROME_DEFAULTS,
@@ -1483,7 +1483,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-17-2'; // bumped: core_values, the office-editable words and photo for the four core values
+    const SCHEMA_VERSION = '2026-08-17-3'; // bumped: market_payment_provider / market_square_links settings, for a Square-based market checkout
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -3146,7 +3146,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
           return new Response(JSON.stringify({ success: true, held: true }), { headers: corsH });
         }
 
-        const payUrl = marketPayUrl(settings, price.totalCents);
+        const payUrl = marketPayUrl(settings, price.totalCents, value.tables);
 
         // Both emails are best-effort and neither is awaited into the vendor's
         // answer. The application is already saved; a Brevo outage must not
@@ -10082,6 +10082,42 @@ ${sidebarShell('settings', currentUser, '', await pageBadges())}
       return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-saved' } });
     }
 
+    // Which processor the market uses, and — when it is Square — the one
+    // payment link per table count the office pasted in. Both save together:
+    // switching to Square with no links yet is a valid, if incomplete, state
+    // (the coordinator card above says so), and there is nothing this form
+    // could refuse without also refusing "switch providers, fill the links
+    // in afterward," which is the normal order somebody would actually do it.
+    if (path === '/giving/market-payment' && method === 'POST') {
+      const form = await request.formData();
+      const provider = form.get('market_payment_provider') === 'square' ? 'square' : 'tithely';
+      const maxTables = clampTables(String(form.get('max_tables') || ''), 9);
+      const links = {};
+      for (let n = 1; n <= maxTables; n++) {
+        const raw = String(form.get(`square_link_${n}`) || '').trim();
+        if (!raw) continue;
+        let proto = '';
+        try { proto = new URL(raw).protocol; } catch (_) {}
+        if (proto !== 'http:' && proto !== 'https:') {
+          return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-error' } });
+        }
+        links[String(n)] = raw.slice(0, 500);
+      }
+      const linksJson = JSON.stringify(links);
+      const beforeProvider = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'market_payment_provider'").first();
+      const beforeLinks = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'market_square_links'").first();
+      await env.DB.prepare(
+        "INSERT INTO site_settings (key, value) VALUES ('market_payment_provider', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+      ).bind(provider).run();
+      await env.DB.prepare(
+        "INSERT INTO site_settings (key, value) VALUES ('market_square_links', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+      ).bind(linksJson).run();
+      await logAudit(env.DB, currentUser, 'update', 'settings', 'market_payment_provider', 'Christmas Market payment method',
+        { provider: beforeProvider?.value ?? null, square_links: beforeLinks?.value ?? null },
+        { provider, square_links: linksJson });
+      return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-saved' } });
+    }
+
     if (path === '/giving-tiers/add' && method === 'POST') {
       const form = await request.formData();
       const amount = parseInt(form.get('amount'), 10);
@@ -10275,6 +10311,7 @@ ${sidebarShell('settings', currentUser, '', await pageBadges())}
     if (path === '/giving' && method === 'GET') {
       const baseUrlRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'give_url'").first();
       const marketFundRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'market_fund_id'").first();
+      const marketPayment = await marketSettings(env);
       const tiers = await env.DB.prepare('SELECT * FROM give_amount_tiers ORDER BY sort_order').all();
       const funds = await env.DB.prepare('SELECT * FROM give_funds ORDER BY sort_order').all();
       const givingLinks = await env.DB.prepare("SELECT path, url, label, category, active, give_kind FROM redirects WHERE category = 'giving' ORDER BY path").all();
@@ -10540,6 +10577,33 @@ ${sidebarShell('giving', currentUser, '', await pageBadges())}
     </div>
   </form>
   <p class="tlc-note" style="margin:10px 0 0;"><span class="tlc-note-mark">◆</span><span>The rest of the market — the date, the table fee, the card processing rate, and whether applications are open — is on the <a href="/market" style="color:var(--tlc-blue);">Christmas Market screen</a> and in <a href="/settings" style="color:var(--tlc-blue);">Settings</a>.</span></p>
+
+  <form method="POST" action="/giving/market-payment" style="margin-top:20px;">
+    <div class="card">
+      <div class="card-title">Christmas Market payment method</div>
+      <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">The market runs on its own, separate Square account rather than Tithe.ly. Unlike the fund above, Square has no way to put an amount in a link — a vendor only ever picks 1 to ${escapeHtml(String(marketPayment.maxTables))} table${marketPayment.maxTables === 1 ? '' : 's'}, so paste one Square Payment Link per table count below, each set to the exact grossed-up price shown. <a href="/market" style="color:var(--tlc-blue);">The Christmas Market screen</a> shows those prices.</div>
+      <input type="hidden" name="max_tables" value="${escapeHtml(String(marketPayment.maxTables))}">
+      <div class="form-group">
+        <label>Payment provider</label>
+        <div style="display:flex;gap:16px;margin-top:4px;">
+          <label style="display:flex;align-items:center;gap:6px;font-weight:normal;">
+            <input type="radio" name="market_payment_provider" value="tithely"${marketPayment.paymentProvider === 'tithely' ? ' checked' : ''}> Tithe.ly (uses the Christmas Market fund above)
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-weight:normal;">
+            <input type="radio" name="market_payment_provider" value="square"${marketPayment.paymentProvider === 'square' ? ' checked' : ''}> Square
+          </label>
+        </div>
+      </div>
+      ${Array.from({ length: marketPayment.maxTables }, (_, i) => i + 1).map((n) => `
+      <div class="form-group">
+        <label>Square link — ${n} table${n === 1 ? '' : 's'} (${escapeHtml(marketMoney(priceBreakdown(n, marketPayment).totalCents))})</label>
+        <input type="url" name="square_link_${n}" value="${escapeHtml((marketPayment.squareLinks || {})[String(n)] || '')}" style="font-family:var(--mono,monospace);font-size:13px;" placeholder="https://square.link/u/…">
+      </div>`).join('')}
+      <div class="btn-row" style="margin-top:4px;">
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </div>
+  </form>
 
   <div class="tlc-give-cols" style="margin-top:20px;">
     ${panel('Funds', fundListHtml + defaultWarning('fund', funds.results, '/giving?fund=' + (defaultFund?.id || (funds.results[0]?.id ?? 'new'))), {
