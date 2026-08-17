@@ -294,6 +294,69 @@ group('one partner per value');
   eq(stillWol.name, 'Word of Life Lutheran School', 'the incumbent partner is not overwritten');
 }
 
+// ── the four core values, edited from the admin ──────────────────────────────
+group('The core values are office-editable, four fixed rows and nothing to add');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  // The migration seeds one blank row per key — nothing to add, and nothing
+  // yet customized.
+  const seeded = db.prepare('SELECT key FROM core_values ORDER BY key').all();
+  eq(seeded.length, 4, 'exactly four rows, seeded once by the schema migration');
+
+  // The list shows all four, defaulted, with no add action — there is
+  // genuinely nothing to add or delete here.
+  const list = await (await call(env, '/values', { cookie })).text();
+  has(list, 'Acceptance', 'the list shows a value by its default name');
+  has(list, 'Default wording', 'and says plainly that nothing has been customized yet');
+  lacks(list, '+ Add', 'no add action — there are always exactly four');
+
+  // Editing one value does not touch the other three, and a blank field is
+  // stored as NULL (the request for the default back), not as an empty
+  // string that would read differently from "never touched" to a human
+  // looking at the row.
+  const form = new URLSearchParams({ short: 'Belong', name: '', blurb: '', tag: '', why: '' });
+  const res = await worker.fetch(new Request('https://admin.timothystl.org/values/update/acceptance', {
+    method: 'POST',
+    headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
+    body: form.toString(),
+  }), env, ctx);
+  eq(res.status, 302, 'the route matches and redirects');
+  has(res.headers.get('location'), 'msg=saved', 'and says it saved');
+  const row = db.prepare('SELECT * FROM core_values WHERE key = ?').get('acceptance');
+  eq(row.short, 'Belong', 'the typed field is stored');
+  eq(row.name, null, 'a blank field is stored as NULL, the request for the default back');
+  const worship = db.prepare('SELECT short FROM core_values WHERE key = ?').get('worship');
+  eq(worship.short, null, 'a different value is untouched');
+
+  // The public API — and so every self-filling Core values block on the site
+  // — reflects the override immediately.
+  const api = await (await call(env, '/api/values', { fresh: true })).json();
+  const acceptance = api.find((v) => v.key === 'acceptance');
+  eq(acceptance.short, 'Belong', 'the public values API carries the override');
+  eq(acceptance.name, 'Acceptance', 'and falls back to the default for the field left blank');
+
+  // Editing changes what a published page renders without any page being
+  // touched, so it has to join the /api/pages cache chokepoint the same way
+  // Partners and Pages already do.
+  const before = await call(env, '/values/update/acceptance', { cookie, method: 'POST',
+    form: { short: 'Welcome Again', name: '', blurb: '', tag: '', why: '' } });
+  eq(before.status, 302, 'the settings POST is what busts the /api/pages edge cache');
+
+  // Resetting clears every column back to NULL and the list says so again.
+  const resetRes = await worker.fetch(new Request('https://admin.timothystl.org/values/reset/acceptance', {
+    method: 'POST',
+    headers: { cookie, origin: 'https://admin.timothystl.org' },
+  }), env, ctx);
+  eq(resetRes.status, 302, 'reset redirects');
+  has(resetRes.headers.get('location'), 'msg=reset', 'and says it reset');
+  const afterReset = db.prepare('SELECT short, name FROM core_values WHERE key = ?').get('acceptance');
+  eq(afterReset.short, null, 'the reset field is NULL again');
+  const listAfter = await (await call(env, '/values', { cookie, fresh: true })).text();
+  has(listAfter, 'Default wording', 'and the list shows it as default again');
+}
+
 // ── permissions are enforced in the route, not just the UI ───────────────────
 group('access control');
 {
@@ -304,6 +367,7 @@ group('access control');
   eq((await call(env, '/ministries', { cookie })).status, 200, 'a ministry leader reaches Ministries');
   eq((await call(env, '/notices', { cookie })).status, 403, 'but not Notices');
   eq((await call(env, '/partners', { cookie })).status, 403, 'and not Partners');
+  eq((await call(env, '/values', { cookie })).status, 403, 'and not Values, gated the same way as Partners');
   eq((await call(env, '/payroll', { cookie })).status, 403, 'and certainly not Payroll');
 
   // The sidebar must not advertise what the routes will refuse.

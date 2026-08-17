@@ -10,7 +10,7 @@
 // it lives in neither and reads both.
 
 import assert from 'node:assert/strict';
-import { VALUES, VALUE_KEYS, normalizeValue, valueByKey } from './values.js';
+import { VALUES, VALUE_KEYS, normalizeValue, valueByKey, mergedValues, VALUE_TEXT_FIELDS } from './values.js';
 import { TONES, PALETTE } from './ui.js';
 
 let pass = 0;
@@ -162,6 +162,66 @@ test('normalizeValue refuses anything that is not one of the four', () => {
 test('valueBy finds a value by its stored key', () => {
   assert.equal(valueByKey('outreach').short, 'Go');
   assert.equal(valueByKey('nope'), null);
+});
+
+// ── the office-editable overlay ──────────────────────────────
+
+test('mergedValues with no rows matches the hardcoded record, field for field', () => {
+  // The seed inserts one empty row per key, but a database that has not
+  // migrated yet — or a test that never seeds it — must render exactly what
+  // the site has always shown, not a broken card. The one addition is
+  // photo_url itself: not a hardcoded field, so it defaults to '' rather
+  // than being absent, which is what lets every consumer just check it.
+  for (const v of mergedValues([])) {
+    const orig = VALUES.find((x) => x.key === v.key);
+    for (const k of Object.keys(orig)) assert.deepEqual(v[k], orig[k], `${v.key}.${k}`);
+    assert.equal(v.photo_url, '', `${v.key}.photo_url`);
+  }
+  assert.deepEqual(mergedValues(null).map((v) => v.short), VALUES.map((v) => v.short));
+});
+
+test('a row with every column blank renders identically to no row at all', () => {
+  // This is the actual shape the seed produces: a row exists per key, but
+  // every column is NULL. NULL must read the same as "no row at all", or the
+  // seed's very first day would render differently from a database that
+  // never migrated.
+  const rows = VALUE_KEYS.map((key) => ({ key, short: null, name: null, blurb: null, tag: null, why: null, photo_url: null }));
+  assert.deepEqual(mergedValues(rows), mergedValues([]));
+});
+
+test('a filled column overrides its default; the rest of the record is untouched', () => {
+  const out = mergedValues([{ key: 'acceptance', short: 'Belong' }]);
+  const acceptance = out.find((v) => v.key === 'acceptance');
+  assert.equal(acceptance.short, 'Belong', 'the overridden field changed');
+  assert.equal(acceptance.name, 'Acceptance', 'an untouched text field keeps its default');
+  // ⚠ The design tokens are never touched by an override, on any field.
+  const original = VALUES.find((v) => v.key === 'acceptance');
+  for (const tokenField of ['field', 'light', 'darkInk', 'tint', 'ink', 'solid', 'ways']) {
+    assert.deepEqual(acceptance[tokenField], original[tokenField], `${tokenField} is a design token, not editable text`);
+  }
+  // The other three values are entirely unaffected.
+  const baseline = mergedValues([]);
+  for (const key of ['worship', 'education', 'outreach']) {
+    assert.deepEqual(out.find((v) => v.key === key), baseline.find((v) => v.key === key));
+  }
+});
+
+test('a photo_url is carried through, and empty (not absent) when unset', () => {
+  const withPhoto = mergedValues([{ key: 'outreach', photo_url: 'https://example.org/x.webp' }]);
+  assert.equal(withPhoto.find((v) => v.key === 'outreach').photo_url, 'https://example.org/x.webp');
+  const withoutRow = mergedValues([]);
+  assert.equal(withoutRow.find((v) => v.key === 'outreach').photo_url, '');
+});
+
+test('VALUE_TEXT_FIELDS matches the fields mergedValues actually overrides', () => {
+  // Deliberately overlapping coverage with the test above — this one exists so
+  // adding a new editable field to VALUE_TEXT_FIELDS without ALSO handling it
+  // wherever the admin form's inputs are read fails loudly, rather than the
+  // field quietly never reaching the render.
+  for (const f of VALUE_TEXT_FIELDS) {
+    const out = mergedValues([{ key: 'worship', [f]: 'Overridden' }]);
+    assert.equal(out.find((v) => v.key === 'worship')[f], 'Overridden', `${f} is overridable`);
+  }
 });
 
 console.log(`values.test.mjs: ${pass} passed`);

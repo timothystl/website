@@ -5,7 +5,7 @@
 // Last modified: 2026-03-27
 
 
-import { TINYMCE_HEAD, TINYMCE_VERSION, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_BOOKING_SLOT_INDEX, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, DB_INIT_FOOTER_COLUMNS, FOOTER_COLUMN_SEED, FOOTER_ITEM_COLUMNS, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS, DB_INIT_PAYROLL_READY_NOTIFIED, DB_INIT_MARKET_VENDORS, DB_INIT_MARKET_VENDORS_INDEX } from './admin/db.js';
+import { TINYMCE_HEAD, TINYMCE_VERSION, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_BOOKING_SLOT_INDEX, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, DB_INIT_FOOTER_COLUMNS, FOOTER_COLUMN_SEED, FOOTER_ITEM_COLUMNS, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS, DB_INIT_PAYROLL_READY_NOTIFIED, DB_INIT_MARKET_VENDORS, DB_INIT_MARKET_VENDORS_INDEX, DB_INIT_CORE_VALUES } from './admin/db.js';
 import { pushToAllSubscribers } from './admin/webpush.js';
 
 // Static pages that can carry self-serve notices (matches the SPA's page ids in public/index.html)
@@ -32,7 +32,7 @@ import { renderListSection, renderDrawer, renderFormSection, primaryCell, status
          rowActions, toggleCell, panelList, paginationWindow } from './admin/ui.js';
 import { SECTIONS, section as sectionCfg, columnsOf, filtersOf } from './admin/sections.js';
 import { dayKey, pruneBefore, countInMonth, tapCountLabel, everCounted, validTapId } from './admin/taps.js';
-import { VALUES, valueByKey, normalizeValue } from './admin/values.js';
+import { VALUES, valueByKey, normalizeValue, mergedValues, VALUE_TEXT_FIELDS } from './admin/values.js';
 import { hashPassword, verifyPassword, createSession, getSession, deleteSession, sessionCookieHeader, clearSessionCookieHeader, logAudit, hasPermission, ALL_PERMISSIONS, PERMISSIONS, PERMISSION_PRESETS, migratePermissionKeys } from './admin/auth.js';
 import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHtml, cancelBrevoCampaign, getBrevoListCount } from './admin/email.js';
 import { handleGymRoutes, sweepExpiredItems, extractImageKeys } from './admin/gym.js';
@@ -488,7 +488,7 @@ async function pageData(env, reqKey) {
       try { return (await env.DB.prepare(sql).bind(...binds).all()).results || []; } catch (_) { return []; }
     };
     const [settingRows, chromeRow, sermonRow, sermonSeries, sermonNotes, bibleClasses, news, staff, newsletters,
-           giveTiers, giveFunds, giveUrlRow, partners] = await Promise.all([
+           giveTiers, giveFunds, giveUrlRow, partners, coreValueRows] = await Promise.all([
       q("SELECT key, value FROM site_settings WHERE key LIKE 'church_%'"),
       // ⚠ The PUBLISHED row only. The draft exists so that somebody can try a
       // color without it being on the front of the church website, and
@@ -552,6 +552,10 @@ async function pageData(env, reqKey) {
       // on the Partners screen lands on every page showing it at once, and
       // nobody retypes a partner's name into a page for it to go stale there.
       q('SELECT id, name, short_name, value, blurb, site_url, logo_url FROM partners ORDER BY sort_order, id'),
+      // The office-editable words and photo for each of the four values — see
+      // the note on core_values in admin/db.js for why only these columns and
+      // not the design tokens.
+      q('SELECT key, short, name, blurb, tag, why, photo_url FROM core_values'),
     ]);
     const s = {};
     for (const r of settingRows) s[r.key.replace(/^church_/, '')] = r.value;
@@ -577,16 +581,23 @@ async function pageData(env, reqKey) {
       classes: bibleClasses || [],
       news, staff, newsletters,
       // The four core values, composed here so the block is self-filling: the
-      // words and the ways in come from admin/values.js (the one place the
-      // four live), the partner ministry from the `partners` table. ⚠ VALUES
-      // order is the arc — Welcome, Receive, Grow, Go — and is never sorted.
-      values: VALUES.map((v) => {
+      // words come from admin/values.js, office-edited words layered on top
+      // from the core_values table (mergedValues — blank column means "still
+      // the hardcoded default"), the partner ministry from the `partners`
+      // table. ⚠ VALUES order is the arc — Welcome, Receive, Grow, Go — and
+      // is never sorted.
+      values: mergedValues(coreValueRows).map((v) => {
         const p = partners.find((x) => x.value === v.key);
         return {
           key: v.key, short: v.short, name: v.name, blurb: v.blurb,
           tag: v.tag || v.blurb, why: v.why || '',
           field: v.field || '', light: v.light || v.solid, darkInk: !!v.darkInk,
           ways: v.ways || [],
+          // A photo replaces the flat gradient field with a photograph under a
+          // fixed dark veil — see renderBlock's 'values' branch. Never the
+          // reverse: the veil exists only when there is a photo to keep
+          // legible, so an untouched value renders byte-identical to before.
+          photoUrl: v.photo_url || '',
           partner: p ? { name: p.name, body: p.blurb || '' } : null,
         };
       }),
@@ -991,6 +1002,97 @@ function staffPhotoUploadScript() {
 <\/script>`;
 }
 
+// A value's photo, on the Values edit form. Deliberately simpler than the
+// staff picture picker just above — a landscape card field has no face to
+// recenter, so this is upload + preview + remove, nothing to drag.
+function valuePhotoFieldHtml(existingUrl = '') {
+  const safe = escapeHtml(existingUrl || '');
+  return `<div class="form-group">
+        <label>Photo</label>
+        <input type="hidden" name="photo_url" id="value_photo_url_val" value="${safe}">
+        <div id="value-photo-preview" style="${existingUrl ? '' : 'display:none;'}margin-bottom:8px;width:220px;height:130px;border-radius:10px;overflow:hidden;background:#EDF2F6;">
+          ${existingUrl ? `<img src="${safe}" style="width:100%;height:100%;object-fit:cover;">` : ''}
+        </div>
+        <input type="file" id="value_photo_file" accept="image/jpeg,image/png,image/webp" style="font-size:13px;">
+        <div id="value-photo-status" style="font-size:12px;color:var(--gray);margin-top:4px;"></div>
+        <button type="button" id="value-photo-remove" style="${existingUrl ? '' : 'display:none;'}margin-top:6px;font-size:12px;background:none;border:none;color:#B85C3A;cursor:pointer;padding:0;">Remove photo</button>
+      </div>
+      ${valuePhotoUploadScript()}`;
+}
+
+function valuePhotoUploadScript() {
+  return `<script>
+(function() {
+  function compressToWebp(file) {
+    return new Promise(function(resolve) {
+      var img = new Image();
+      var url = URL.createObjectURL(file);
+      img.onload = function() {
+        URL.revokeObjectURL(url);
+        // A card field is drawn wide, not a headshot — 1600px keeps it sharp
+        // full-bleed on a desktop without shipping an untouched phone photo.
+        var maxDim = 1600;
+        var scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+        var w = Math.max(1, Math.round(img.naturalWidth * scale));
+        var h = Math.max(1, Math.round(img.naturalHeight * scale));
+        var canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        var ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        canvas.toBlob(function(blob) {
+          if (blob && blob.type === 'image/webp' && blob.size > 0) {
+            resolve(new File([blob], 'value-photo.webp', { type: 'image/webp' }));
+          } else {
+            resolve(file);
+          }
+        }, 'image/webp', 0.85);
+      };
+      img.onerror = function() { URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
+  }
+
+  document.getElementById('value_photo_file').addEventListener('change', async function() {
+    var rawFile = this.files[0];
+    if (!rawFile) return;
+    var status = document.getElementById('value-photo-status');
+    status.textContent = 'Uploading…';
+    var file = await compressToWebp(rawFile);
+    var fd = new FormData();
+    fd.append('file', file);
+    try {
+      var r = await fetch('/api/upload-image', { method: 'POST', body: fd });
+      var j = await r.json();
+      if (j.url) {
+        document.getElementById('value_photo_url_val').value = j.url;
+        var prev = document.getElementById('value-photo-preview');
+        prev.innerHTML = '<img src="' + j.url + '" style="width:100%;height:100%;object-fit:cover;">';
+        prev.style.display = '';
+        document.getElementById('value-photo-remove').style.display = '';
+        status.textContent = 'Uploaded';
+        status.style.color = '';
+      } else {
+        status.textContent = j.error || 'Upload failed';
+        status.style.color = '#B85C3A';
+      }
+    } catch (e) {
+      status.textContent = 'Upload failed — try again';
+      status.style.color = '#B85C3A';
+    }
+  });
+
+  document.getElementById('value-photo-remove').addEventListener('click', function() {
+    document.getElementById('value_photo_url_val').value = '';
+    document.getElementById('value-photo-preview').style.display = 'none';
+    document.getElementById('value-photo-preview').innerHTML = '';
+    document.getElementById('value_photo_file').value = '';
+    document.getElementById('value-photo-status').textContent = '';
+    this.style.display = 'none';
+  });
+})();
+<\/script>`;
+}
+
 // ── MAIN HANDLER ─────────────────────────────────────────────
 // Promotes ministry pages whose scheduled publish time has come. Run from the
 // cron trigger in wrangler.toml, and again whenever staff open the Ministries
@@ -1288,8 +1390,10 @@ export default {
     // `/partners` joined the list once a Partner logos block started reading
     // that record: uploading a logo changes what a published page renders
     // without any page itself being touched, so without this the new logo
-    // would sit behind the edge copy until it aged out on its own.
-    if (method === 'POST' && (path.startsWith('/pages') || path.startsWith('/menu') || path.startsWith('/partners'))) {
+    // would sit behind the edge copy until it aged out on its own. `/values`
+    // is the identical case — editing a value's wording or photo changes the
+    // self-filling Core values block on every page carrying one.
+    if (method === 'POST' && (path.startsWith('/pages') || path.startsWith('/menu') || path.startsWith('/partners') || path.startsWith('/values'))) {
       bustPagesCache(ctx);
     }
 
@@ -1379,7 +1483,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-17-1'; // bumped: pages.aside_top, the sidebar/sectionside aside's own spacing control
+    const SCHEMA_VERSION = '2026-08-17-2'; // bumped: core_values, the office-editable words and photo for the four core values
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -2003,6 +2107,18 @@ export default {
     // existing page reads as "flush", which is what every one of them already
     // renders as today.
     try { await env.DB.prepare('ALTER TABLE pages ADD COLUMN aside_top INTEGER NOT NULL DEFAULT 0').run(); } catch (_) {}
+    // The four core values' office-editable words and photo — see the note on
+    // core_values in admin/db.js for why the design tokens are not columns
+    // here. Seeded EMPTY, deliberately: every column is NULL until an office
+    // account fills one in, and mergedValues() reads a NULL column as "use
+    // the hardcoded default", so this migration changes nothing about how the
+    // site looks the day it runs.
+    try { await env.DB.prepare(DB_INIT_CORE_VALUES).run(); } catch (_) {}
+    try {
+      for (const v of VALUES) {
+        await env.DB.prepare('INSERT OR IGNORE INTO core_values (key) VALUES (?)').bind(v.key).run();
+      }
+    } catch (_) {}
     // The navigation (phase 4). One row per appearance in a menu — see the note
     // at the top of admin/menu.js for why this is a join table rather than more
     // columns on `pages`. Seeded from the nav as it stands today, with explicit
@@ -2484,16 +2600,20 @@ export default {
     // the values page can say so plainly instead of quietly showing three.
     if (path === '/api/values' && method === 'GET') {
       const q = async (sql) => { try { return (await env.DB.prepare(sql).all()).results || []; } catch (_) { return []; } };
-      const [partners, counts] = await Promise.all([
+      const [partners, counts, coreValueRows] = await Promise.all([
         q('SELECT name, short_name, value, blurb, site_url, also_note, sort_order FROM partners'),
         q("SELECT value, slug, title FROM youth_pages WHERE value IS NOT NULL AND value <> '' AND COALESCE(in_menu,1) = 1"),
+        q('SELECT key, short, name, blurb, tag, why, photo_url FROM core_values'),
       ]);
       const byValue = Object.fromEntries(partners.map((p) => [p.value, p]));
-      const payload = VALUES.map((v) => ({
+      const payload = mergedValues(coreValueRows).map((v) => ({
         key: v.key,
         short: v.short,
         name: v.name,
         blurb: v.blurb,
+        tag: v.tag || v.blurb,
+        why: v.why || '',
+        photoUrl: v.photo_url || '',
         ink: v.ink,
         tint: v.tint,
         partner: byValue[v.key] || null,
@@ -4754,6 +4874,149 @@ ${sidebarShell('partners', currentUser, `<a href="/partners">← All partners</a
         return new Response('', { status: 302, headers: { Location: '/partners?msg=deleted' } });
       }
     }
+
+    // ── VALUES ─────────────────────────────────────────────────
+    // The four core values' office-editable words and photo. Unlike Partners,
+    // there is nothing here to add or delete — the four rows are seeded once
+    // by the schema migration and always exist, one per key in admin/values.js.
+    if (path === '/values' || path.startsWith('/values/')) {
+      if (!hasPermission(currentUser, 'pages_edit')) {
+        return new Response('Access denied.', { status: 403 });
+      }
+
+      if (path === '/values' && method === 'GET') {
+        const rows = (await env.DB.prepare('SELECT * FROM core_values').all()).results || [];
+        const byKey = Object.fromEntries(rows.map((r) => [r.key, r]));
+        const msg = url.searchParams.get('msg');
+        const alertHtml = msg === 'saved' ? `<div class="alert alert-success">✓ Value saved.</div>`
+          : msg === 'reset' ? `<div class="alert alert-info">Back to the default wording.</div>` : '';
+
+        // One row per value, in the church's own order — the arc, never
+        // sorted, same rule the block itself follows.
+        const listRows = VALUES.map((v) => {
+          const row = byKey[v.key] || {};
+          const customized = VALUE_TEXT_FIELDS.some((f) => row[f]);
+          const hasPhoto = !!row.photo_url;
+          return {
+            href: `/values/edit/${v.key}`,
+            filter: customized ? 'customized' : 'default-wording',
+            search: `${v.short} ${v.name}`.toLowerCase(),
+            cells: [
+              primaryCell(row.name || v.name, `${row.short || v.short} · ${v.key}`),
+              customized ? statusPill('good', 'Customized') : statusPill('auto', 'Default wording'),
+              hasPhoto ? statusPill('good', 'Photo set') : statusPill('auto', 'Using color field'),
+            ],
+          };
+        });
+
+        return html(`
+${sidebarShell('values', currentUser, `<a href="https://timothystl.org/about/values" target="_blank">View values page</a>`, await pageBadges())}
+<div class="tlc-wrap">
+  ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
+  ${renderListSection({
+    key: 'values',
+    title: sectionCfg('values').title,
+    purpose: sectionCfg('values').purpose,
+    search: sectionCfg('values').search,
+    filters: filtersOf('values'),
+    columns: columnsOf('values'),
+    rows: listRows,
+    noun: 'value',
+    note: sectionCfg('values').note,
+  })}
+</div>`, 'Values');
+      }
+
+      if (path.startsWith('/values/edit/') && method === 'GET') {
+        const key = path.slice('/values/edit/'.length);
+        const v = valueByKey(key);
+        if (!v) return new Response('Not found', { status: 404 });
+        const row = (await env.DB.prepare('SELECT * FROM core_values WHERE key = ?').bind(key).first()) || {};
+        const hasOverride = VALUE_TEXT_FIELDS.some((f) => row[f]) || row.photo_url;
+        return html(`
+${sidebarShell('values', currentUser, `<a href="/values">← All values</a>`, await pageBadges())}
+<div class="tlc-wrap">
+  <div class="page-title">${escapeHtml(v.name)}</div>
+  <div class="page-sub">One of the church's four core values — ${escapeHtml(v.key)} is fixed and cannot be renamed as a key, since it is what the rest of the site tags ministries, posts and classes with.</div>
+  <div class="card">
+    <form method="POST" action="/values/update/${escapeHtml(v.key)}">
+      <div class="form-group">
+        <label>Short word <span style="color:#B85C3A;">*</span></label>
+        <input type="text" name="short" required maxlength="24" value="${escapeHtml(row.short || v.short)}" placeholder="${escapeHtml(v.short)}">
+        <div style="font-size:12px;color:var(--gray);margin-top:4px;">The word on the card itself — "${escapeHtml(v.short)}" by default.</div>
+      </div>
+      <div class="form-group">
+        <label>Full name <span style="color:#B85C3A;">*</span></label>
+        <input type="text" name="name" required maxlength="60" value="${escapeHtml(row.name || v.name)}" placeholder="${escapeHtml(v.name)}">
+        <div style="font-size:12px;color:var(--gray);margin-top:4px;">The church's own name for it — this is what tags a ministry, a post, or a class as this value.</div>
+      </div>
+      <div class="form-group">
+        <label>Official statement</label>
+        <textarea name="blurb" rows="2" maxlength="300" placeholder="${escapeHtml(v.blurb)}">${escapeHtml(row.blurb || '')}</textarea>
+        <div style="font-size:12px;color:var(--gray);margin-top:4px;">The one-sentence value as the church states it. Shown on /about when the card tagline below is blank.</div>
+      </div>
+      <div class="form-group">
+        <label>Card tagline</label>
+        <textarea name="tag" rows="2" maxlength="300" placeholder="${escapeHtml(v.tag || v.blurb)}">${escapeHtml(row.tag || '')}</textarea>
+        <div style="font-size:12px;color:var(--gray);margin-top:4px;">A warmer, second-person version for the card on the values page. Leave blank to show the official statement instead.</div>
+      </div>
+      <div class="form-group">
+        <label>Why this is here</label>
+        <textarea name="why" rows="3" maxlength="500" placeholder="${escapeHtml(v.why || '')}">${escapeHtml(row.why || '')}</textarea>
+        <div style="font-size:12px;color:var(--gray);margin-top:4px;">One sentence on why this value sits where it does in the order. Not shown on the site yet, but carried through for when it is.</div>
+      </div>
+      ${valuePhotoFieldHtml(row.photo_url || '')}
+      <div class="page-sub" style="margin:16px 0 0;">A photo replaces the color field behind the word and tagline, under the same dark veil every photo banner on the site uses so the text stays readable. Leave it blank to keep the color field.</div>
+      <div style="margin-top:20px;display:flex;gap:10px;align-items:center;">
+        <button type="submit" class="btn btn-primary">Save</button>
+        ${hasOverride ? `<button type="submit" formaction="/values/reset/${escapeHtml(v.key)}" formnovalidate onclick="return confirm('Reset ${escapeHtml(v.name)} back to its default wording and remove its photo?')" class="btn" style="background:#F7E4DE;color:#8C3A28;">Reset to default</button>` : ''}
+      </div>
+    </form>
+  </div>
+</div>`, escapeHtml(v.name));
+      }
+
+      if (path.startsWith('/values/update/') && method === 'POST') {
+        const key = path.slice('/values/update/'.length);
+        const v = valueByKey(key);
+        if (!v) return new Response('Not found', { status: 404 });
+        const form = await request.formData();
+        const before = await env.DB.prepare('SELECT * FROM core_values WHERE key = ?').bind(key).first();
+
+        // A blank field is not an edit — it is asking for the default back —
+        // so it is stored as NULL rather than as an empty string that would
+        // otherwise read identically to mergedValues() but mean something
+        // different to a human looking at the row.
+        const short = cleanText(form.get('short'), 24).trim() || null;
+        const name = cleanText(form.get('name'), 60).trim() || null;
+        const blurb = cleanText(form.get('blurb'), 300).trim() || null;
+        const tag = cleanText(form.get('tag'), 300).trim() || null;
+        const why = cleanText(form.get('why'), 500).trim() || null;
+        // The file itself already went to /api/upload-image client-side, the
+        // same flow the Staff photo field uses — this form only ever carries
+        // back the URL that came from it, in a hidden field.
+        const photoUrl = safeUrl(form.get('photo_url') || '').slice(0, 600) || null;
+
+        await env.DB.prepare(
+          'UPDATE core_values SET short = ?, name = ?, blurb = ?, tag = ?, why = ?, photo_url = ?, updated_at = ?, updated_by = ? WHERE key = ?'
+        ).bind(short, name, blurb, tag, why, photoUrl, new Date().toISOString(), currentUser?.username || '', key).run();
+        await logAudit(env.DB, currentUser, 'update', 'core_value', key, name || v.name, before, { short, name, blurb, tag, why, photo_url: photoUrl });
+        return new Response('', { status: 302, headers: { Location: '/values?msg=saved' } });
+      }
+
+      if (path.startsWith('/values/reset/') && method === 'POST') {
+        const key = path.slice('/values/reset/'.length);
+        const v = valueByKey(key);
+        if (!v) return new Response('Not found', { status: 404 });
+        const before = await env.DB.prepare('SELECT * FROM core_values WHERE key = ?').bind(key).first();
+        await env.DB.prepare(
+          'UPDATE core_values SET short = NULL, name = NULL, blurb = NULL, tag = NULL, why = NULL, photo_url = NULL, updated_at = ?, updated_by = ? WHERE key = ?'
+        ).bind(new Date().toISOString(), currentUser?.username || '', key).run();
+        await logAudit(env.DB, currentUser, 'update', 'core_value', key, v.name, before, { reset: true });
+        return new Response('', { status: 302, headers: { Location: '/values?msg=reset' } });
+      }
+    }
+
     // ── PAYROLL PAGE (auth-gated, no secondary login needed) ──
     // ── WORSHIP SCHEDULE BUILDER (legacy) ──────────────────────
     // VS-2: this lived in public/ and was served by the site worker to anybody
