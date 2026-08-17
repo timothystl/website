@@ -200,7 +200,7 @@ export const SECTIONS = {
   },
   settings: {
     label: 'Settings', glyph: '⚙', title: 'Settings', purpose: 'The handful of values the rest of the site reads. Change one here and every page, email, and invoice follows.',
-    search: 'Search settings', filters: ['All', 'Church details', 'Links', 'Gym rentals', 'Notifications'],
+    search: 'Search settings', filters: ['All', 'Church details', 'Links', 'Gym rentals', 'Christmas Market', 'Notifications'],
     columns: [['Setting', '1.5fr'], ['Value', '2.5fr']],
     note: 'These are the real keys in site_settings. Anything not listed here is theme-owned and lives in code on purpose.'
   },
