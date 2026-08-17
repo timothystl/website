@@ -3545,93 +3545,157 @@ group('the coordinator’s list');
   has(withUnpaid, 'sidebar-badge', 'an unpaid application puts a badge on the sidebar');
 }
 
+// ── /market is one screen now, reachable by three different permissions ─────
+// Dinger, after learning "Most tables one vendor may take" was on Settings
+// with no link from the Christmas Market screen pointing at it: "if all
+// christmas market settings ... can move to the christmas market tab that
+// would be helpful." All nine did — but the screen was already scoped so the
+// coordinator (market_manage alone) never sees the church's payment-account
+// details, and 'Office staff' (settings_manage) and 'Bookkeeper'
+// (giving_manage) are real presets that hold neither market_manage nor each
+// other. Consolidating onto one address could not mean gating the whole page
+// on market_manage — that would have quietly taken settings/payment editing
+// away from both presets. So the PAGE is reachable by any of the three, and
+// each PANEL — and each mutating route — still checks its own.
 group('the vendor list is gated on its own permission');
 {
   const { db, env } = await boot();
-  // Somebody with the run of the website and no market permission.
-  const { cookie } = signIn(db, ['pages_edit', 'news_edit', 'giving_manage'], 'office');
-  eq((await call(env, '/market', { cookie })).status, 403, 'the list refuses somebody without market_manage');
-  eq((await call(env, '/market/export.csv', { cookie })).status, 403, 'and so does the export — seventy home addresses');
+  // Nobody's permission at all.
+  const { cookie: nobody } = signIn(db, ['pages_edit', 'news_edit'], 'nobody');
+  eq((await call(env, '/market', { cookie: nobody })).status, 403, 'refused with none of the three permissions');
 
   const { cookie: marla } = signIn(db, ['market_manage'], 'marla');
   eq((await call(env, '/market', { cookie: marla })).status, 200, 'the coordinator gets in with market_manage alone');
   const body = await (await call(env, '/market', { cookie: marla })).text();
   lacks(body, '/payroll', 'and sees nothing else in the sidebar');
   lacks(body, '/subscribers', 'including no list of everybody’s email addresses');
+  // ⚠ "Market settings"/"Payment" are also words that appear elsewhere on
+  // this page regardless of who is looking (the bare header's own purpose
+  // line, the vendor list's own "Payment" column) — so the marker for each
+  // panel is a field unique to it, not the panel's own title.
+  lacks(body, 'Most tables one vendor may take', 'and no settings panel — that needs settings_manage, which she does not hold');
+  lacks(body, 'Tithe.ly fund ID', 'and no payment panel either — that needs giving_manage');
+  eq((await call(env, '/market/export.csv', { cookie: marla })).status, 200, 'the coordinator can still export the list');
+
+  // Office staff: settings_manage, no market_manage, no giving_manage.
+  const { cookie: office } = signIn(db, ['pages_edit', 'settings_manage'], 'office');
+  eq((await call(env, '/market', { cookie: office })).status, 200, 'settings_manage alone still gets in');
+  const officeBody = await (await call(env, '/market', { cookie: office })).text();
+  has(officeBody, 'Most tables one vendor may take', 'and sees the settings panel');
+  lacks(officeBody, 'Tithe.ly fund ID', 'but not the payment panel');
+  lacks(officeBody, 'tlc-tile-num', 'and no vendor tiles/list — that PII is market_manage-only');
+  eq((await call(env, '/market/export.csv', { cookie: office })).status, 403, 'the export refuses settings_manage alone — seventy home addresses');
+  eq((await call(env, '/market/applications', { cookie: office, method: 'POST', form: { open: '1' } })).status, 403,
+    'and so does the coordinator’s own toggle — that stays market_manage regardless of who else can reach the page');
+
+  // Bookkeeper: giving_manage, no market_manage, no settings_manage.
+  const { cookie: bookkeeper } = signIn(db, ['gym_manage', 'giving_manage', 'payroll_manage'], 'bookkeeper');
+  const bkBody = await (await call(env, '/market', { cookie: bookkeeper })).text();
+  has(bkBody, 'Tithe.ly fund ID', 'the bookkeeper sees the payment panel');
+  lacks(bkBody, 'Most tables one vendor may take', 'but not the settings panel');
+  lacks(bkBody, 'tlc-tile-num', 'and no vendor list');
 }
 
 // ── the nine market settings, none of which had anywhere to be set ──────────
 // Dinger: "i set the market fund id in the giving tab. confirm where vendor
 // signups go" — and there was no field to set it in. Checked, not assumed:
 // none of the nine market_* settings were reachable from any screen before
-// this. The fund ID belongs with Giving (it needs a real Tithe.ly fund ID,
-// same as every other fund on that screen); the rest are plain Settings rows.
-group('the Christmas Market fund ID is set from the Giving tab');
+// v5.14.0. All nine now live on the Christmas Market screen (v5.19.0),
+// gated the same way editing them always was — a field moving screens never
+// widened who could change it.
+group('the Christmas Market fund ID is set from the Christmas Market screen');
 {
   const { db, env } = await boot();
   const { cookie } = signIn(db);
 
   const giving = await (await call(env, '/giving', { cookie })).text();
-  has(giving, 'Christmas Market fund', 'the field is on the Giving screen');
+  lacks(giving, 'Christmas Market fund', 'the field is gone from the Giving screen');
+  has(giving, '/market', 'which points to where it actually lives now');
 
-  const save = await call(env, '/giving/market-fund', { cookie, method: 'POST', form: { market_fund_id: 'mkt-fund-123' } });
-  eq(save.status, 302, 'saving redirects back to Giving');
+  const market = await (await call(env, '/market', { cookie })).text();
+  has(market, 'Tithe.ly fund ID', 'the field is on the Christmas Market screen instead');
+
+  const save = await call(env, '/market/fund', { cookie, method: 'POST', form: { market_fund_id: 'mkt-fund-123' } });
+  eq(save.status, 302, 'saving redirects back to the Christmas Market screen');
+  eq(save.headers.get('Location').startsWith('/market'), true, 'specifically to /market, not /giving');
   eq(db.prepare("SELECT value FROM site_settings WHERE key='market_fund_id'").get().value, 'mkt-fund-123',
     'and the fund ID is stored');
 
-  const after = await (await call(env, '/giving', { cookie })).text();
+  const after = await (await call(env, '/market', { cookie })).text();
   has(after, 'mkt-fund-123', 'the saved value is shown back on the screen');
 
   // Blank is a real, valid value — it means "use the base link's own fund" —
   // so it must not be refused the way a malformed give_url is.
-  const clear = await call(env, '/giving/market-fund', { cookie, method: 'POST', form: { market_fund_id: '' } });
+  const clear = await call(env, '/market/fund', { cookie, method: 'POST', form: { market_fund_id: '' } });
   eq(clear.status, 302, 'clearing it is not an error');
   eq(db.prepare("SELECT value FROM site_settings WHERE key='market_fund_id'").get().value, '', 'and it is really cleared');
 
   // A vendor's payment link has to actually use it.
-  const apply = await applyAsVendor(env, { email: 'fundtest@example.com' });
-  const fundBack = await call(env, '/giving/market-fund', { cookie, method: 'POST', form: { market_fund_id: 'holiday-market' } });
+  const fundBack = await call(env, '/market/fund', { cookie, method: 'POST', form: { market_fund_id: 'holiday-market' } });
   eq(fundBack.status, 302, 'set up for the next check');
   const withFund = await applyAsVendor(env, { email: 'withfund@example.com' });
   const d = await withFund.json();
   ok(d.payUrl.includes('fundId=holiday-market'), 'a vendor applying after the fund is set gets a link carrying it');
 
-  // Somebody without giving_manage cannot set it, same as every other giving
-  // field.
-  const { cookie: office } = signIn(db, ['market_manage', 'pages_edit'], 'office2');
-  eq((await call(env, '/giving/market-fund', { cookie: office, method: 'POST', form: { market_fund_id: 'x' } })).status, 403,
-    'refused without giving_manage');
+  // Somebody without giving_manage cannot set it, even holding market_manage —
+  // the coordinator must never be able to reach the church's payment account.
+  const { cookie: marla } = signIn(db, ['market_manage'], 'marla2');
+  eq((await call(env, '/market/fund', { cookie: marla, method: 'POST', form: { market_fund_id: 'x' } })).status, 403,
+    'refused without giving_manage, market_manage notwithstanding');
 }
 
-group('the other seven market settings are Settings rows');
+group('the other seven market settings moved to the Christmas Market screen too');
 {
   const { db, env } = await boot();
   const { cookie } = signIn(db);
 
-  const settings = await (await call(env, '/settings', { cookie })).text();
-  has(settings, 'Christmas Market table fee', 'the table fee is listed');
-  has(settings, 'Christmas Market day', 'so is the market day');
-  has(settings, 'Christmas Market coordinator email', 'and the coordinator email');
-  lacks(settings, 'market_fund_id', 'but not the fund ID — that stays on Giving, never duplicated here');
+  // They still appear on Settings — so searching there for "market" still
+  // finds something — but as a pointer, not an inline editor.
+  const settingsList = await (await call(env, '/settings', { cookie })).text();
+  has(settingsList, 'Christmas Market table fee', 'the table fee is still listed on Settings, for discoverability');
+  has(settingsList, 'Christmas Market day', 'so is the market day');
+  has(settingsList, 'Christmas Market coordinator email', 'and the coordinator email');
 
-  const save = await call(env, '/settings/update', { cookie, method: 'POST', form: { key: 'market_table_fee', value: '35' } });
-  eq(save.status, 302, 'a market setting can be saved from the generic editor');
-  eq(db.prepare("SELECT value FROM site_settings WHERE key='market_table_fee'").get().value, '35', 'and is stored');
-
-  // ⚠ market_applications_open must stay off this screen's writable set — it
-  // already has its own toggle and route on /market. A second form writing it
-  // is exactly the "two places to disagree" trap this file warns about.
-  const before = db.prepare("SELECT value FROM site_settings WHERE key='market_applications_open'").get().value;
-  const hijack = await call(env, '/settings/update', { cookie, method: 'POST', form: { key: 'market_applications_open', value: '0' } });
+  // ⚠ The generic editor no longer accepts these keys — a POST here is
+  // exactly the "two forms writing one key" trap this file warns about.
+  const hijack = await call(env, '/settings/update', { cookie, method: 'POST', form: { key: 'market_table_fee', value: '99' } });
   eq(hijack.status, 302, 'the request is not an error');
-  const hijackBody = await hijack.text();
-  ok(hijack.headers.get('Location').includes('settings-error'), 'but it is refused as an unknown key');
+  ok(hijack.headers.get('Location').includes('settings-error'), 'but it is refused as an unknown key on this screen');
+  eq(db.prepare("SELECT value FROM site_settings WHERE key='market_table_fee'").get().value, '30',
+    'and the default is untouched — nothing was written');
+
+  // ⚠ market_applications_open must stay unreachable here too — it already
+  // has its own toggle and route on /market.
+  const before = db.prepare("SELECT value FROM site_settings WHERE key='market_applications_open'").get().value;
+  const openHijack = await call(env, '/settings/update', { cookie, method: 'POST', form: { key: 'market_applications_open', value: '0' } });
+  ok(openHijack.headers.get('Location').includes('settings-error'), 'refused as an unknown key');
   eq(db.prepare("SELECT value FROM site_settings WHERE key='market_applications_open'").get().value, before,
     'and the switch on /market is untouched');
+
+  // The real save path is now /market/settings, gated settings_manage.
+  const market = await (await call(env, '/market', { cookie })).text();
+  has(market, 'Most tables one vendor may take', 'the field is on the Christmas Market screen');
+
+  const save = await call(env, '/market/settings', { cookie, method: 'POST', form: {
+    market_date_label: 'Saturday, Dec 12', market_hours_label: '10:00 am – 5:00 pm',
+    market_table_fee: '35', market_max_tables: '5', market_fee_percent: '2.9', market_fee_fixed: '0.30',
+    market_coordinator_email: 'newcoordinator@example.com',
+  } });
+  eq(save.status, 302, 'saved from the new screen');
+  eq(save.headers.get('Location').startsWith('/market'), true, 'and redirects back to it, not to Settings');
+  eq(db.prepare("SELECT value FROM site_settings WHERE key='market_table_fee'").get().value, '35', 'the fee is stored');
+  eq(db.prepare("SELECT value FROM site_settings WHERE key='market_max_tables'").get().value, '5', 'so is the table limit — the whole reason this moved');
+
+  // Somebody with only market_manage cannot reach this route — the seven
+  // settings stay an office/pastor decision, not the coordinator's.
+  const { cookie: marla } = signIn(db, ['market_manage'], 'marla3');
+  eq((await call(env, '/market/settings', { cookie: marla, method: 'POST', form: { market_table_fee: '1' } })).status, 403,
+    'refused without settings_manage');
 
   // A price change actually reaches the vendor page.
   const cfg = await (await call(env, '/api/market-config', { fresh: true })).json();
   eq(cfg.tableFee, 35, 'the vendor page reads the new table fee');
+  eq(cfg.maxTables, 5, 'and the new table limit');
 }
 
 // ── /christmasmarket/vendors is a real Pages row now ─────────────────────────
