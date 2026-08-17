@@ -2032,8 +2032,8 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
    a different scale — two versions of the same field, visibly disagreeing.
    The rule follows the block too: a hardcoded #DDE3ED hairline is invisible on
    a pale field and glaring on a dark one, and --tlcb-rule already carries the
-   right answer for both. `tlcb-panel--form`'s separate cream override is gone
-   with it — the block's own background is the one true answer now, so a
+   right answer for both. The panel--form variant's separate cream override is
+   gone with it — the block's own background is the one true answer now, so a
    second hardcoded fill for one block type would just be the same bug with a
    narrower blast radius. */
 .tlcb-panel{display:flex;flex-direction:column;gap:10px;padding:18px 20px;
