@@ -1863,22 +1863,34 @@ group('Taps & links');
   has(body, 'Taps &amp; links', 'titled from the design config');
   has(body, '/tap1', 'each tap shows its short address');
   has(body, '/tap4', 'all four of them');
-  has(body, 'Re-point', 'and offers to re-point');
-  has(body, 'only ever holds its short address', 'the note explains why re-pointing works');
+  has(body, '/link-cards/tap/1">Edit<', 'and offers to edit a tap, per tap');
+  has(body, 'only ever holds its short address', 'the note explains why editing works');
+  has(body, 'Link Tree', 'the card list below is labeled plainly, not per-tap');
+  ok(!body.includes('Show its cards'), 'the admin-only per-tap card filter is gone');
 
-  // Re-pointing changes where the tag lands without touching the tag.
+  // Editing changes where the tag lands without touching the tag. And the
+  // "in use" checkbox has to actually persist: it posts behind a hidden
+  // active=0, so a real browser submit sends active=0 (unchecked) or
+  // active=0&active=1 (checked, hidden field first) — never active=1 alone.
   const res = await worker.fetch(new Request('https://admin.timothystl.org/link-cards/tap/3', {
     method: 'POST',
     headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
-    body: 'name=Giving+plate&placement=Offering+plates&destination=https%3A%2F%2Fgive.timothystl.org%2Feaster&active=1',
+    body: 'name=Giving+plate&placement=Offering+plates&destination=https%3A%2F%2Fgive.timothystl.org%2Feaster&active=0&active=1',
   }), env, ctx);
-  eq(res.status, 302, 're-pointing redirects');
-  has(db.prepare('SELECT destination FROM taps WHERE id=3').get().destination, '/easter',
-    'and the tap now lands somewhere new');
+  eq(res.status, 302, 'editing redirects');
+  const tap3 = db.prepare('SELECT destination, active FROM taps WHERE id=3').get();
+  has(tap3.destination, '/easter', 'and the tap now lands somewhere new');
+  eq(tap3.active, 1, 'and the checked "in use" box actually saves as on — reading only the first' +
+    ' active= value (the hidden 0) would silently keep every tap off no matter what was ticked');
 
-  // Filtering to one tap shows only its cards.
-  const one = await (await call(env, '/link-cards?tap=2', { cookie })).text();
-  has(one, 'Cards on /tap2', 'filtering to a tap says so');
+  // And unticking it really does turn it back off.
+  const res2 = await worker.fetch(new Request('https://admin.timothystl.org/link-cards/tap/3', {
+    method: 'POST',
+    headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
+    body: 'name=Giving+plate&placement=Offering+plates&destination=https%3A%2F%2Fgive.timothystl.org%2Feaster&active=0',
+  }), env, ctx);
+  eq(res2.status, 302, 'editing redirects');
+  eq(db.prepare('SELECT active FROM taps WHERE id=3').get().active, 0, 'and unticking it saves as off');
 }
 
 group('screens say what the design says');
@@ -2839,12 +2851,12 @@ group('each tap serves its own cards');
   // "I moved it and nothing happened" being a mystery.
   db.prepare("UPDATE link_cards SET tap=3 WHERE id=(SELECT MIN(id) FROM link_cards)").run();
   const screen = await (await call(env, '/link-cards', { cookie })).text();
-  has(screen, 'lands somewhere other than the links page', 'the screen flags a tap that cannot show cards');
+  has(screen, 'lands somewhere other than the Link Tree', 'the screen flags a tap that cannot show cards');
   has(screen, 'not visible to anybody', 'and says the cards on it are going unseen');
 
-  // A tap that does land on the links page carries no such warning.
+  // A tap that does land on the Link Tree carries no such warning.
   const firstTap = screen.slice(0, screen.indexOf('/tap2'));
-  ok(!firstTap.includes('lands somewhere other than'), 'a tap on the links page is not flagged');
+  ok(!firstTap.includes('lands somewhere other than'), 'a tap on the Link Tree is not flagged');
 }
 
 group('a newsletter can carry a fourth and fifth note');
