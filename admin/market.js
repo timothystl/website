@@ -14,7 +14,7 @@
 
 import { html, sidebarShell, escapeHtml } from './helpers.js';
 import { hasPermission, logAudit } from './auth.js';
-import { renderListSection, renderDrawer, primaryCell, statusPill, rowActions, panel } from './ui.js';
+import { renderListSection, renderDrawer, primaryCell, statusPill, rowActions, panel, renderField } from './ui.js';
 import { section as sectionCfg, columnsOf, filtersOf } from './sections.js';
 import { churchDate } from './when.js';
 import { withAmountAndFund } from '../give-link.js';
@@ -247,7 +247,22 @@ ${payUrl ? `<p><strong>Your space is held once payment arrives.</strong> If you 
 // use.
 export async function handleMarketRoutes(request, env, path, method, currentUser, url, badges = {}) {
   if (path !== '/market' && !path.startsWith('/market/')) return null;
-  if (!hasPermission(currentUser, 'market_manage')) {
+
+  // ⚠ THREE PERMISSIONS CAN REACH THIS SCREEN NOW, NOT JUST ONE. Every setting
+  // that touches the market used to be scattered — the vendor list here, the
+  // date/fee/etc. on Settings, the fund and payment method on Giving — because
+  // each needed a different permission: the coordinator (market_manage) must
+  // never see the church's financial account internals, and 'Office staff'
+  // (settings_manage) and 'Bookkeeper' (giving_manage) are real presets that
+  // hold neither of the other two. Consolidating everything onto one screen
+  // cannot mean gating the whole screen on market_manage alone — that would
+  // quietly take settings/payment editing away from anyone who has it today
+  // but isn't the coordinator. So the PAGE is reachable by any of the three,
+  // and each PANEL — and each mutating route below — checks its own.
+  const canMarket = hasPermission(currentUser, 'market_manage');
+  const canSettings = hasPermission(currentUser, 'settings_manage');
+  const canGiving = hasPermission(currentUser, 'giving_manage');
+  if (!canMarket && !canSettings && !canGiving) {
     return new Response('Access denied.', { status: 403 });
   }
 
@@ -258,6 +273,11 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
   // total or hand to somebody else is a step backwards from that however good
   // the screen is.
   if (path === '/market/export.csv' && method === 'GET') {
+    // Seventy vendors' home addresses and phone numbers, in one file — the
+    // same PII the coordinator's own permission exists to scope down to.
+    // Reaching the page via settings_manage or giving_manage must not be a
+    // back door to it.
+    if (!canMarket) return new Response('Access denied.', { status: 403 });
     const rows = await allApplications(env);
     // ⚠ A cell that starts = + - @ is a FORMULA to a spreadsheet, and this
     // file is opened in one by definition. Same guard as the payroll export
@@ -291,6 +311,7 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
   }
 
   if (path === '/market/update' && method === 'POST') {
+    if (!canMarket) return new Response('Access denied.', { status: 403 });
     const form = await request.formData();
     const id = Number(form.get('id') || 0);
     if (!id) return new Response('', { status: 302, headers: { Location: '/market' } });
@@ -315,6 +336,7 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
   }
 
   if (path === '/market/delete' && method === 'POST') {
+    if (!canMarket) return new Response('Access denied.', { status: 403 });
     const form = await request.formData();
     const id = Number(form.get('id') || 0);
     const before = await env.DB.prepare('SELECT * FROM market_vendors WHERE id = ?').bind(id).first().catch(() => null);
@@ -326,6 +348,10 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
   }
 
   if (path === '/market/applications' && method === 'POST') {
+    // The coordinator's own toggle — deliberately still market_manage only,
+    // not settings_manage. Whether the market is taking money is the one
+    // decision that belongs to whoever runs the event day to day.
+    if (!canMarket) return new Response('Access denied.', { status: 403 });
     const form = await request.formData();
     // A toggle posts a hidden 0 ahead of its checkbox, so `get` always returns
     // the 0 and reads as on. See the note on the giving handlers.
@@ -339,146 +365,319 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     });
   }
 
-  if (path === '/market' && method === 'GET') {
-    const rows = await allApplications(env);
-    const editId = Number(url.searchParams.get('edit') || 0);
-    const editing = editId ? rows.find((r) => r.id === editId) : null;
-    const msg = url.searchParams.get('msg');
-
-    const cfg = sectionCfg('market');
-    const counts = {
-      tables: rows.filter((r) => r.payment_status !== 'dropped').reduce((a, r) => a + (r.tables || 0), 0),
-      unpaid: rows.filter((r) => r.payment_status === 'unpaid').length,
-      collectedCents: rows.reduce((a, r) => a + (r.amount_paid_cents || 0), 0),
+  // The seven plain settings — day, hours, table fee, the two processor
+  // figures, the coordinator's address — that used to live on the generic
+  // Settings screen. Moved here so the coordinator's whole day-to-day picture
+  // is one screen, gated `settings_manage` because they are still an
+  // office/pastor decision, not the coordinator's — a stale bookmark to the
+  // old /settings?edit=market_table_fee address still works (see the
+  // Settings screen's SETTINGS_VIEW, which now points here instead of
+  // opening its own drawer for these seven keys).
+  if (path === '/market/settings' && method === 'POST') {
+    if (!canSettings) return new Response('Access denied.', { status: 403 });
+    const form = await request.formData();
+    const fields = {
+      market_date_label: cap(form.get('market_date_label'), 80),
+      market_hours_label: cap(form.get('market_hours_label'), 80),
+      market_table_fee: cap(form.get('market_table_fee'), 20),
+      market_max_tables: cap(form.get('market_max_tables'), 4),
+      market_fee_percent: cap(form.get('market_fee_percent'), 20),
+      market_fee_fixed: cap(form.get('market_fee_fixed'), 20),
+      market_coordinator_email: cap(form.get('market_coordinator_email'), 200),
     };
+    const before = {};
+    for (const k of Object.keys(fields)) {
+      const row = await env.DB.prepare('SELECT value FROM site_settings WHERE key = ?').bind(k).first().catch(() => null);
+      before[k] = row?.value ?? null;
+    }
+    for (const [k, v] of Object.entries(fields)) {
+      await env.DB.prepare(
+        'INSERT INTO site_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
+      ).bind(k, v).run();
+    }
+    await logAudit(env.DB, currentUser, 'update', 'settings', 'market_settings', 'Christmas Market settings', before, fields);
+    return new Response('', { status: 302, headers: { Location: '/market?toast=' + encodeURIComponent('Saved · written to the audit log') } });
+  }
 
-    const listRows = rows.map((r) => {
-      const st = paymentState(r.payment_status);
-      const sells = String(r.product_description || '').replace(/\s+/g, ' ').trim();
-      return {
-        href: `/market?edit=${r.id}`,
-        filter: st.value,
-        search: `${r.participant_names || ''} ${r.business_name || ''} ${r.email || ''} ${r.product_description || ''} ${r.table_number || ''}`.toLowerCase(),
-        cells: [
-          primaryCell(r.business_name || r.participant_names,
-            [r.business_name ? r.participant_names : '', r.email].filter(Boolean).join(' · ')),
-          `<span title="${escapeHtml(sells)}">${escapeHtml(sells.length > 80 ? sells.slice(0, 79) + '…' : sells)}</span>`
-            + (r.sells_food ? ' <strong>· food</strong>' : ''),
-          `${r.tables}${r.table_number ? ` <span style="color:var(--tlc-muted);">· #${escapeHtml(r.table_number)}</span>` : ''}`,
-          statusPill(st.tone, st.label),
-        ],
-        actions: rowActions({ label: 'Open', href: `/market?edit=${r.id}` }),
-        // Somebody who applied and never finished at the card page is the one
-        // thing this screen exists to surface — the old workflow could not see
-        // them at all, because an abandoned Google Form left no row anywhere.
-        warn: r.payment_status === 'unpaid'
-          ? `No payment recorded. They were asked for ${money(r.amount_due_cents)} — their space is not held until it arrives.`
-          : '',
-        warnCta: r.payment_status === 'unpaid' ? { label: 'Record it', href: `/market?edit=${r.id}` } : null,
+  // ⚠ MOVED HERE FROM /giving/market-fund, verbatim in logic — only the
+  // permission check and the redirect target changed. The fund still
+  // REPLACES the base link's fund rather than adding a second (see
+  // marketPayUrl()), it still takes knowing Tithe.ly's own account
+  // internals, and it is still gated `giving_manage` rather than
+  // `market_manage` for exactly that reason — the coordinator must never
+  // need or be able to see the church's payment-account details. It moved
+  // OFF the Giving screen and onto this one because that is where every
+  // other market setting already lives, not because the permission changed.
+  if (path === '/market/fund' && method === 'POST') {
+    if (!canGiving) return new Response('Access denied.', { status: 403 });
+    const form = await request.formData();
+    const val = String(form.get('market_fund_id') || '').trim().slice(0, 200);
+    const before = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'market_fund_id'").first();
+    await env.DB.prepare(
+      "INSERT INTO site_settings (key, value) VALUES ('market_fund_id', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+    ).bind(val).run();
+    await logAudit(env.DB, currentUser, 'update', 'settings', 'market_fund_id', 'Christmas Market fund',
+      { value: before?.value ?? null }, { value: val });
+    return new Response('', { status: 302, headers: { Location: '/market?toast=' + encodeURIComponent('Saved · written to the audit log') } });
+  }
+
+  // ⚠ MOVED HERE FROM /giving/market-payment, same reasoning as the fund
+  // route above — still `giving_manage`, still the office's own Square
+  // account, just addressed under /market now.
+  if (path === '/market/payment' && method === 'POST') {
+    if (!canGiving) return new Response('Access denied.', { status: 403 });
+    const form = await request.formData();
+    const provider = form.get('market_payment_provider') === 'square' ? 'square' : 'tithely';
+    const maxTables = clampTables(String(form.get('max_tables') || ''), 9);
+    const links = {};
+    for (let n = 1; n <= maxTables; n++) {
+      const raw = String(form.get(`square_link_${n}`) || '').trim();
+      if (!raw) continue;
+      let proto = '';
+      try { proto = new URL(raw).protocol; } catch (_) {}
+      if (proto !== 'http:' && proto !== 'https:') {
+        return new Response('', { status: 302, headers: { Location: '/market?msg=payment-error' } });
+      }
+      links[String(n)] = raw.slice(0, 500);
+    }
+    const linksJson = JSON.stringify(links);
+    const beforeProvider = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'market_payment_provider'").first();
+    const beforeLinks = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'market_square_links'").first();
+    await env.DB.prepare(
+      "INSERT INTO site_settings (key, value) VALUES ('market_payment_provider', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+    ).bind(provider).run();
+    await env.DB.prepare(
+      "INSERT INTO site_settings (key, value) VALUES ('market_square_links', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+    ).bind(linksJson).run();
+    await logAudit(env.DB, currentUser, 'update', 'settings', 'market_payment_provider', 'Christmas Market payment method',
+      { provider: beforeProvider?.value ?? null, square_links: beforeLinks?.value ?? null },
+      { provider, square_links: linksJson });
+    return new Response('', { status: 302, headers: { Location: '/market?toast=' + encodeURIComponent('Saved · written to the audit log') } });
+  }
+
+  if (path === '/market' && method === 'GET') {
+    const msg = url.searchParams.get('msg');
+    const cfg = sectionCfg('market');
+
+    // ── EVERYTHING BELOW IS canMarket ONLY. Somebody who reached this page on
+    // settings_manage or giving_manage alone gets none of it — not the
+    // vendor list, not the applications toggle, not even the counts, all of
+    // which are the coordinator's own PII-adjacent view of the event. The
+    // ⚠ above the permission gate is the reasoning; this is where it is
+    // actually enforced for the read side.
+    let vendorSection = '';
+    let vendorDrawer = '';
+    let alertHtml = '';
+    if (canMarket) {
+      const rows = await allApplications(env);
+      const editId = Number(url.searchParams.get('edit') || 0);
+      const editing = editId ? rows.find((r) => r.id === editId) : null;
+
+      const counts = {
+        tables: rows.filter((r) => r.payment_status !== 'dropped').reduce((a, r) => a + (r.tables || 0), 0),
+        unpaid: rows.filter((r) => r.payment_status === 'unpaid').length,
+        collectedCents: rows.reduce((a, r) => a + (r.amount_paid_cents || 0), 0),
       };
-    });
 
-    const openPanel = panel('Applications', `
-      <form method="POST" action="/market/applications" style="margin:0;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
-        <input type="hidden" name="open" value="0">
-        <label class="tlc-toggle">
-          <input type="checkbox" name="open" value="1"${settings.open ? ' checked' : ''}>
-          <span class="tlc-toggle-track"><span class="tlc-toggle-knob"></span></span>
-          <span class="tlc-toggle-label">Taking vendor applications</span>
-          <span class="tlc-toggle-state" data-on="Open" data-off="Closed">${settings.open ? 'Open' : 'Closed'}</span>
-        </label>
-        <button type="submit" class="tlc-btn-primary">Save</button>
+      const listRows = rows.map((r) => {
+        const st = paymentState(r.payment_status);
+        const sells = String(r.product_description || '').replace(/\s+/g, ' ').trim();
+        return {
+          href: `/market?edit=${r.id}`,
+          filter: st.value,
+          search: `${r.participant_names || ''} ${r.business_name || ''} ${r.email || ''} ${r.product_description || ''} ${r.table_number || ''}`.toLowerCase(),
+          cells: [
+            primaryCell(r.business_name || r.participant_names,
+              [r.business_name ? r.participant_names : '', r.email].filter(Boolean).join(' · ')),
+            `<span title="${escapeHtml(sells)}">${escapeHtml(sells.length > 80 ? sells.slice(0, 79) + '…' : sells)}</span>`
+              + (r.sells_food ? ' <strong>· food</strong>' : ''),
+            `${r.tables}${r.table_number ? ` <span style="color:var(--tlc-muted);">· #${escapeHtml(r.table_number)}</span>` : ''}`,
+            statusPill(st.tone, st.label),
+          ],
+          actions: rowActions({ label: 'Open', href: `/market?edit=${r.id}` }),
+          // Somebody who applied and never finished at the card page is the
+          // one thing this screen exists to surface — the old workflow could
+          // not see them at all, because an abandoned Google Form left no row
+          // anywhere.
+          warn: r.payment_status === 'unpaid'
+            ? `No payment recorded. They were asked for ${money(r.amount_due_cents)} — their space is not held until it arrives.`
+            : '',
+          warnCta: r.payment_status === 'unpaid' ? { label: 'Record it', href: `/market?edit=${r.id}` } : null,
+        };
+      });
+
+      const openPanel = panel('Applications', `
+        <form method="POST" action="/market/applications" style="margin:0;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+          <input type="hidden" name="open" value="0">
+          <label class="tlc-toggle">
+            <input type="checkbox" name="open" value="1"${settings.open ? ' checked' : ''}>
+            <span class="tlc-toggle-track"><span class="tlc-toggle-knob"></span></span>
+            <span class="tlc-toggle-label">Taking vendor applications</span>
+            <span class="tlc-toggle-state" data-on="Open" data-off="Closed">${settings.open ? 'Open' : 'Closed'}</span>
+          </label>
+          <button type="submit" class="tlc-btn-primary">Save</button>
+        </form>
+        <p class="tlc-hint" style="margin-top:12px;">Switched off, the vendor page still explains the market and still lists the coordinator's address — it just stops taking applications and stops asking anybody for money. Nothing already submitted is affected.</p>
+        <p class="tlc-hint" style="margin-top:8px;">${(() => {
+          const priced = `${escapeHtml(money(priceBreakdown(1, settings).totalCents))} for one table, ${escapeHtml(money(priceBreakdown(settings.maxTables, settings).totalCents))} for ${settings.maxTables}.`;
+          if (settings.paymentProvider === 'square') {
+            const have = Array.from({ length: settings.maxTables }, (_, i) => i + 1)
+              .filter((n) => (settings.squareLinks || {})[String(n)]).length;
+            return have >= settings.maxTables
+              ? `Payments go through Square. ${priced}`
+              : `Payments go through Square, but only ${have} of ${settings.maxTables} table counts have a link set — see Payment below.`;
+          }
+          return settings.giveUrl
+            ? `Payments open at the church's own giving link with the amount filled in. ${priced}`
+            : 'No giving link is set, so the page will take applications but cannot open a payment. Set it below, under Payment.';
+        })()}</p>
+      `, canSettings || canGiving ? { right: '<a class="tlc-action-quiet" href="#market-config">Fees, dates &amp; payment</a>' } : {});
+
+      const tile = (label, n, note) =>
+        `<div class="tlc-tile"><div class="tlc-tile-label">${escapeHtml(label)}</div>`
+        + `<div class="tlc-tile-num">${escapeHtml(String(n))}</div>`
+        + `<div class="tlc-tile-note">${escapeHtml(note)}</div></div>`;
+      const headerExtra = `<div class="tlc-tiles">
+        ${tile('Applications', rows.length, 'Every vendor who has applied')}
+        ${tile('Tables asked for', counts.tables, 'Dropped-out vendors excluded')}
+        ${tile('Not paid yet', counts.unpaid, 'Spaces that are not held')}
+        ${tile('Recorded as paid', money(counts.collectedCents), 'What you have marked, not what the processor says')}
+      </div>${openPanel}`;
+
+      alertHtml = msg === 'gone' ? `<div class="alert alert-warn">That application is no longer there — somebody may have deleted it.</div>` : '';
+
+      vendorSection = renderListSection({
+        key: 'market',
+        title: cfg.title,
+        purpose: cfg.purpose,
+        action: { label: cfg.action, href: '/market/export.csv' },
+        search: cfg.search,
+        filters: filtersOf('market'),
+        columns: columnsOf('market'),
+        rows: listRows,
+        headerExtra,
+        noun: 'application',
+        empty: 'No vendor applications yet.',
+        emptyHelp: settings.open
+          ? 'The vendor page is open and waiting — applications land here as they arrive.'
+          : 'Applications are switched off, so the page is not taking any. Turn them on above.',
+        note: cfg.note,
+      });
+
+      vendorDrawer = editing ? renderDrawer({
+        key: 'market-vendor',
+        title: editing.business_name || editing.participant_names,
+        sub: `Applied ${escapeHtml(String(editing.created_at || '').slice(0, 10))} · asked for ${escapeHtml(money(editing.amount_due_cents))}`,
+        action: '/market/update',
+        cancelHref: '/market',
+        deleteAction: '/market/delete',
+        deleteConfirm: 'Delete this application? The vendor is not told, and nothing is refunded.',
+        fields: [
+          { kind: 'html', html: `<input type="hidden" name="id" value="${editing.id}">` },
+          { name: 'table_number', label: 'Table number', value: editing.table_number || '',
+            placeholder: 'e.g. 19 or 19/20',
+            hint: 'Free text on purpose — a two-table vendor takes a range, and that is how the floor plan is written.' },
+          { kind: 'choice', name: 'payment_status', label: 'Payment', value: editing.payment_status || 'unpaid',
+            options: PAYMENT_STATES.map((s) => ({ value: s.value, label: s.label })),
+            hint: 'The website cannot see whether a card actually went through — this is your record, not the processor’s.' },
+          { name: 'amount_paid', label: 'Amount paid', type: 'text',
+            value: editing.amount_paid_cents == null ? '' : (editing.amount_paid_cents / 100).toFixed(2),
+            placeholder: (editing.amount_due_cents / 100).toFixed(2),
+            hint: 'Leave blank if you have not checked yet. Blank is not the same as zero.' },
+          { kind: 'textarea', name: 'staff_notes', label: 'Your notes', value: editing.staff_notes || '', rows: 3,
+            hint: 'Only ever seen here. The vendor is not shown this.' },
+          { kind: 'static', label: 'What they sell', html: `<span style="white-space:pre-wrap">${escapeHtml(editing.product_description || '')}</span>` },
+          ...(editing.sells_food ? [{ kind: 'static', label: 'Food or drink', html: 'Yes — health department requirements are theirs, and they are expecting to hear from you.' }] : []),
+          ...(editing.appliances_power ? [{ kind: 'static', label: 'Appliances / power', value: editing.appliances_power }] : []),
+          ...(editing.special_requests ? [{ kind: 'static', label: 'Special requests', html: `<span style="white-space:pre-wrap">${escapeHtml(editing.special_requests)}</span>` }] : []),
+          { kind: 'static', label: 'Contact', html:
+            `${escapeHtml(editing.participant_names)}<br>`
+            + `<a href="mailto:${escapeHtml(editing.email)}">${escapeHtml(editing.email)}</a><br>`
+            + `${escapeHtml(editing.phone || '')}`
+            + (editing.website_or_social ? `<br>${escapeHtml(editing.website_or_social)}` : '')
+            + ([editing.street, [editing.city, editing.state].filter(Boolean).join(', '), editing.zip].filter(Boolean).length
+                ? `<br>${escapeHtml([editing.street, [editing.city, editing.state].filter(Boolean).join(', '), editing.zip].filter(Boolean).join(' · '))}` : '') },
+          { kind: 'static', label: 'Sold with us before',
+            value: editing.returning_vendor === 'yes' ? 'Returning vendor' : editing.returning_vendor === 'no' ? 'First year' : 'Did not say' },
+          ...(photosOf(editing).length ? [{ kind: 'static', label: 'Sample photos', html: photosOf(editing)
+            .map((u) => `<a href="${escapeHtml(u)}" target="_blank" rel="noopener"><img src="${escapeHtml(u)}" alt="" style="height:72px;width:auto;border-radius:8px;margin:0 8px 8px 0;"></a>`).join('') }] : []),
+          { kind: 'static', label: 'Agreed to the vendor terms as', value: editing.signature_name || '' },
+        ],
+      }) : '';
+    }
+
+    // ── MARKET SETTINGS — the seven plain fields, settings_manage only.
+    // Consolidated here at Andrew's own request, after finding "Most tables
+    // one vendor may take" tucked into the generic Settings screen with no
+    // link from here pointing at it.
+    const settingsPanel = canSettings ? panel('Market settings', `
+      <form method="POST" action="/market/settings">
+        ${renderField({ name: 'market_date_label', label: 'Market day', value: settings.dateLabel,
+          hint: 'Written the way it should read on the page — this is printed, not parsed.' })}
+        ${renderField({ name: 'market_hours_label', label: 'Market hours', value: settings.hoursLabel,
+          hint: 'Also printed as written.' })}
+        ${renderField({ kind: 'number', name: 'market_table_fee', label: 'Table fee ($)', value: settings.tableFee, min: 0, step: 1,
+          hint: 'What one 8-foot table costs a vendor. The vendor is asked for this plus the card fee, so the market receives this figure whole.' })}
+        ${renderField({ kind: 'number', name: 'market_max_tables', label: 'Most tables one vendor may take', value: settings.maxTables, min: 1, max: 9, step: 1,
+          hint: 'The vendor page offers this many buttons, and refuses anything larger however it arrives.' })}
+        ${renderField({ kind: 'number', name: 'market_fee_percent', label: 'Card processing fee (%)', value: settings.feePercent, min: 0, step: 0.1,
+          hint: 'The percentage the card processor takes. Change this and the fixed charge below together if the church switches processors — nothing else needs editing.' })}
+        ${renderField({ kind: 'number', name: 'market_fee_fixed', label: 'Card processing fee (fixed, $)', value: settings.feeFixed, min: 0, step: 0.01,
+          hint: 'The per-transaction charge on top of the percentage.' })}
+        ${renderField({ name: 'market_coordinator_email', label: 'Coordinator email', value: settings.coordinatorEmail,
+          hint: 'Where a vendor application is sent, and the address printed on the vendor page for anything the form cannot handle.' })}
+        <div class="btn-row" style="margin-top:4px;"><button type="submit" class="tlc-btn-primary">Save</button></div>
       </form>
-      <p class="tlc-hint" style="margin-top:12px;">Switched off, the vendor page still explains the market and still lists Marla's address — it just stops taking applications and stops asking anybody for money. Nothing already submitted is affected.</p>
-      <p class="tlc-hint" style="margin-top:8px;">${(() => {
-        const priced = `${escapeHtml(money(priceBreakdown(1, settings).totalCents))} for one table, ${escapeHtml(money(priceBreakdown(settings.maxTables, settings).totalCents))} for ${settings.maxTables}.`;
-        if (settings.paymentProvider === 'square') {
-          const have = Array.from({ length: settings.maxTables }, (_, i) => i + 1)
-            .filter((n) => (settings.squareLinks || {})[String(n)]).length;
-          return have >= settings.maxTables
-            ? `Payments go through Square. ${priced}`
-            : `Payments go through Square, but only ${have} of ${settings.maxTables} table counts have a link set. Set the rest under Giving.`;
-        }
-        return settings.giveUrl
-          ? `Payments open at the church's own giving link with the amount filled in. ${priced}`
-          : 'No giving link is set, so the page will take applications but cannot open a payment. Set it under Giving.';
-      })()}</p>
-    `, { right: `<a class="tlc-action-quiet" href="/settings?edit=market_table_fee">Fees &amp; dates</a>` });
+    `) : '';
 
-    const tile = (label, n, note) =>
-      `<div class="tlc-tile"><div class="tlc-tile-label">${escapeHtml(label)}</div>`
-      + `<div class="tlc-tile-num">${escapeHtml(String(n))}</div>`
-      + `<div class="tlc-tile-note">${escapeHtml(note)}</div></div>`;
-    const headerExtra = `<div class="tlc-tiles">
-      ${tile('Applications', rows.length, 'Every vendor who has applied')}
-      ${tile('Tables asked for', counts.tables, 'Dropped-out vendors excluded')}
-      ${tile('Not paid yet', counts.unpaid, 'Spaces that are not held')}
-      ${tile('Recorded as paid', money(counts.collectedCents), 'What you have marked, not what the processor says')}
-    </div>${openPanel}`;
+    // ── PAYMENT — the fund and the processor choice, giving_manage only.
+    // Moved here verbatim from the Giving screen (see /market/fund and
+    // /market/payment above) — same forms, same fields, addressed under
+    // /market now because that is where the rest of the market already is.
+    const paymentPanel = canGiving ? panel('Payment', `
+      <form method="POST" action="/market/fund">
+        ${renderField({ name: 'market_fund_id', label: 'Tithe.ly fund ID', value: settings.fundId,
+          placeholder: "Blank uses the base link's fund",
+          hint: "Which fund a vendor's table payment lands in when the market runs on Tithe.ly. It REPLACES the base giving link's fund rather than adding a second — get it the same way as any fund's ID: generate a link for that fund from Tithe.ly and copy the fundId value out of it. Leave it blank and market payments use whatever fund the Base Tithe.ly Link already carries." })}
+        <div class="btn-row" style="margin-top:4px;"><button type="submit" class="tlc-btn-primary">Save</button></div>
+      </form>
+      <form method="POST" action="/market/payment" style="margin-top:20px;">
+        <input type="hidden" name="max_tables" value="${escapeHtml(String(settings.maxTables))}">
+        ${renderField({ kind: 'chips', name: 'market_payment_provider', label: 'Payment provider', value: settings.paymentProvider,
+          options: [{ value: 'tithely', label: 'Tithe.ly (uses the fund above)' }, { value: 'square', label: 'Square' }],
+          hint: "The market runs on its own, separate Square account rather than Tithe.ly. Unlike the fund above, Square has no way to put an amount in a link — a vendor only ever picks 1 to " + settings.maxTables + " table" + (settings.maxTables === 1 ? '' : 's') + ", so paste one Square Payment Link per table count below, each set to the exact grossed-up price shown." })}
+        ${Array.from({ length: settings.maxTables }, (_, i) => i + 1).map((n) => renderField({
+          name: `square_link_${n}`, label: `Square link — ${n} table${n === 1 ? '' : 's'} (${escapeHtml(money(priceBreakdown(n, settings).totalCents))})`,
+          value: (settings.squareLinks || {})[String(n)] || '', placeholder: 'https://square.link/u/…',
+        })).join('')}
+        <div class="btn-row" style="margin-top:4px;"><button type="submit" class="tlc-btn-primary">Save</button></div>
+      </form>
+    `) : '';
 
-    const alertHtml = msg === 'gone' ? `<div class="alert alert-warn">That application is no longer there — somebody may have deleted it.</div>` : '';
+    const configSection = (settingsPanel || paymentPanel)
+      ? `<div id="market-config" style="margin-top:24px;display:grid;grid-template-columns:${settingsPanel && paymentPanel ? '1fr 1fr' : '1fr'};gap:20px;">
+          ${settingsPanel}${paymentPanel}
+        </div>`
+      : '';
+
+    // A visitor with no market_manage sees no vendor list at all — the
+    // config panels need SOME header, since renderListSection normally
+    // supplies it, so a bare one stands in for exactly that case.
+    const bareHeader = !canMarket ? `<header class="tlc-section-head">
+        <div class="tlc-section-headings">
+          <h1 class="tlc-title">${escapeHtml(cfg.title)}</h1>
+          <p class="tlc-purpose">Christmas Market settings and payment — the vendor list itself needs the Christmas Market vendors permission.</p>
+        </div>
+      </header>` : '';
 
     return html(`
 ${sidebarShell('market', currentUser, `<a href="https://timothystl.org/christmasmarket/vendors" target="_blank">View the vendor page</a>`, badges)}
 <div class="tlc-wrap">
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
-  ${renderListSection({
-    key: 'market',
-    title: cfg.title,
-    purpose: cfg.purpose,
-    action: { label: cfg.action, href: '/market/export.csv' },
-    search: cfg.search,
-    filters: filtersOf('market'),
-    columns: columnsOf('market'),
-    rows: listRows,
-    headerExtra,
-    noun: 'application',
-    empty: 'No vendor applications yet.',
-    emptyHelp: settings.open
-      ? 'The vendor page is open and waiting — applications land here as they arrive.'
-      : 'Applications are switched off, so the page is not taking any. Turn them on above.',
-    note: cfg.note,
-  })}
-  ${editing ? renderDrawer({
-    key: 'market-vendor',
-    title: editing.business_name || editing.participant_names,
-    sub: `Applied ${escapeHtml(String(editing.created_at || '').slice(0, 10))} · asked for ${escapeHtml(money(editing.amount_due_cents))}`,
-    action: '/market/update',
-    cancelHref: '/market',
-    deleteAction: '/market/delete',
-    deleteConfirm: 'Delete this application? The vendor is not told, and nothing is refunded.',
-    fields: [
-      { kind: 'html', html: `<input type="hidden" name="id" value="${editing.id}">` },
-      { name: 'table_number', label: 'Table number', value: editing.table_number || '',
-        placeholder: 'e.g. 19 or 19/20',
-        hint: 'Free text on purpose — a two-table vendor takes a range, and that is how the floor plan is written.' },
-      { kind: 'choice', name: 'payment_status', label: 'Payment', value: editing.payment_status || 'unpaid',
-        options: PAYMENT_STATES.map((s) => ({ value: s.value, label: s.label })),
-        hint: 'The website cannot see whether a card actually went through — this is your record, not the processor’s.' },
-      { name: 'amount_paid', label: 'Amount paid', type: 'text',
-        value: editing.amount_paid_cents == null ? '' : (editing.amount_paid_cents / 100).toFixed(2),
-        placeholder: (editing.amount_due_cents / 100).toFixed(2),
-        hint: 'Leave blank if you have not checked yet. Blank is not the same as zero.' },
-      { kind: 'textarea', name: 'staff_notes', label: 'Your notes', value: editing.staff_notes || '', rows: 3,
-        hint: 'Only ever seen here. The vendor is not shown this.' },
-      { kind: 'static', label: 'What they sell', html: `<span style="white-space:pre-wrap">${escapeHtml(editing.product_description || '')}</span>` },
-      ...(editing.sells_food ? [{ kind: 'static', label: 'Food or drink', html: 'Yes — health department requirements are theirs, and they are expecting to hear from you.' }] : []),
-      ...(editing.appliances_power ? [{ kind: 'static', label: 'Appliances / power', value: editing.appliances_power }] : []),
-      ...(editing.special_requests ? [{ kind: 'static', label: 'Special requests', html: `<span style="white-space:pre-wrap">${escapeHtml(editing.special_requests)}</span>` }] : []),
-      { kind: 'static', label: 'Contact', html:
-        `${escapeHtml(editing.participant_names)}<br>`
-        + `<a href="mailto:${escapeHtml(editing.email)}">${escapeHtml(editing.email)}</a><br>`
-        + `${escapeHtml(editing.phone || '')}`
-        + (editing.website_or_social ? `<br>${escapeHtml(editing.website_or_social)}` : '')
-        + ([editing.street, [editing.city, editing.state].filter(Boolean).join(', '), editing.zip].filter(Boolean).length
-            ? `<br>${escapeHtml([editing.street, [editing.city, editing.state].filter(Boolean).join(', '), editing.zip].filter(Boolean).join(' · '))}` : '') },
-      { kind: 'static', label: 'Sold with us before',
-        value: editing.returning_vendor === 'yes' ? 'Returning vendor' : editing.returning_vendor === 'no' ? 'First year' : 'Did not say' },
-      ...(photosOf(editing).length ? [{ kind: 'static', label: 'Sample photos', html: photosOf(editing)
-        .map((u) => `<a href="${escapeHtml(u)}" target="_blank" rel="noopener"><img src="${escapeHtml(u)}" alt="" style="height:72px;width:auto;border-radius:8px;margin:0 8px 8px 0;"></a>`).join('') }] : []),
-      { kind: 'static', label: 'Agreed to the vendor terms as', value: editing.signature_name || '' },
-    ],
-  }) : ''}
+  ${bareHeader}
+  ${vendorSection}
+  ${vendorDrawer}
+  ${configSection}
 </div>`, 'Christmas Market');
   }
 

@@ -525,6 +525,81 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### Every Christmas Market setting moved onto the Christmas Market screen (v5.19.0, 2026-08-17)
+
+Dinger, after being pointed at "Most tables one vendor may take" tucked into
+the generic Settings screen with nothing on the Christmas Market screen
+linking to it: *"that section seems locked in"* — then, once shown it was
+just hard to find: *"if all christmas market settings ... can move to the
+christmas market tab that would be helpful."*
+
+**All nine `market_*` settings were three-way scattered on purpose, and that
+purpose still had to survive the move.** The date/hours/fee/table-limit/
+coordinator-email seven needed `settings_manage` (an office/pastor decision);
+the Tithe.ly fund and the Square-vs-Tithe.ly choice needed `giving_manage`
+(the church's payment-account internals); the vendor list and the
+applications toggle needed `market_manage` — and the whole point of
+`market_manage` being its own permission, since v5.8.0, is that Marla the
+coordinator can hold it **alone** and never see the other two. Gating the
+consolidated screen on `market_manage` the way the vendor list always was
+would have quietly taken settings/payment editing away from **two real
+presets that already have it** — 'Office staff' holds `settings_manage`
+without `market_manage`, 'Bookkeeper' holds `giving_manage` without it.
+
+- **`/market` is reachable by any of the three permissions now, not just
+  `market_manage`.** Each *panel* — and each *mutating route* — still checks
+  its own: `/market/export.csv`, `/market/update`, `/market/delete` and
+  `/market/applications` all require `market_manage` specifically, whoever
+  else can open the page. A test signs in as each of the three presets and
+  asserts what they do and do not see — including that `settings_manage`
+  alone gets a 403 from the CSV export, which is seventy vendors' home
+  addresses and phone numbers.
+- **Two new routes, `/market/settings` and `/market/fund` +
+  `/market/payment`, replace `/settings/update`'s old market keys and
+  `/giving/market-fund` / `/giving/market-payment` outright** — not
+  alongside them. The seven settings came out of `/settings/update`'s
+  `SETTABLE` allowlist entirely; posting one there now 302s to
+  `settings-error`, the same refusal an unknown key gets. Two routes writing
+  one key is the exact "two forms disagree about what a key means" trap this
+  repo has warned about since the Foundations pass — the fix is one route,
+  not a second one that happens to agree with the first today.
+- **The seven Settings rows stay listed, but as pointers.** `give_url`'s own
+  pattern — `href: '/market'` instead of the generic `/settings?edit=<key>`
+  drawer — because someone searching Settings for "market" should still find
+  something, even though the field opens somewhere else now. `market_fund_id`
+  and `market_payment_provider` joined that list too, for the same
+  searchability, though they were never on Settings before.
+- **`admin/ui.js`'s `renderField()` is exported now.** `renderFormSection()`
+  wants to own the whole page — its own `<h1>`, its own cancel link — which
+  is wrong for a form that has to sit as a PANEL beside the vendor list
+  rather than as its own address. Exporting the one field-builder both
+  already share means the new panels use the same field vocabulary
+  (`number`, `chips`, the plain-text default) instead of hand-rolled markup
+  that would drift from it.
+- **⚠ `>Payment<` and `Market settings` are both bad test markers, and the
+  first attempt at this used them.** The vendor list's own fourth column is
+  literally labeled "Payment" (`admin/sections.js`'s market columns), and the
+  no-`market_manage` bare header's own purpose line says "Christmas Market
+  settings and payment" — so an *absence* check against either string passes
+  or fails for the wrong reason depending on who is looking. The tests key on
+  a field unique to each panel instead — "Tithe.ly fund ID" for Payment,
+  "Most tables one vendor may take" for Market settings.
+- **The coordinator's toggle (`market_applications_open`) did not move, and
+  is not on the Settings allowlist either** — same rule as before this
+  release, restated because it would have been easy to fold it into the new
+  `/market/settings` route while everything else was moving. It already has
+  its own route and its own reason to stay `market_manage`-only: whether the
+  market is taking money today is the one decision that belongs to whoever
+  runs the event, not to whoever manages the office's settings generally.
+- `public/manual.html`'s annual checklist rewritten to match — "Admin →
+  Christmas Market" for all of it now, not "Admin → Settings, search for
+  market" plus a separate trip to the Giving tab.
+
+Run: the `the vendor list is gated on its own permission`, `the Christmas
+Market fund ID is set from the Christmas Market screen` and `the other seven
+market settings moved to the Christmas Market screen too` groups in
+`test/admin-redesign.test.mjs`.
+
 ### /christmasmarket/vendors is on the block editor now, with its own application block (v5.18.0, 2026-08-17)
 
 Dinger, after the copy correction above landed: *"and how do i edit this page

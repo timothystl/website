@@ -634,7 +634,15 @@ export function renderFormSection(cfg) {
 </div>`;
 }
 
-function renderField(f) {
+// ⚠ Exported so a screen that embeds a form as a PANEL — alongside other
+// content on the same page, rather than as its own address — can build one
+// field at a time from the same vocabulary renderFormSection() and
+// renderDrawer() already use, instead of hand-rolling markup that drifts
+// from theirs. The Christmas Market screen's settings/payment panels are the
+// first caller: renderFormSection() wants to own the whole page (its own
+// <h1>, its own cancel link), which is wrong for a panel sitting next to a
+// vendor list.
+export function renderField(f) {
   const id = `fld-${esc(f.name || f.key || Math.random().toString(36).slice(2))}`;
   const label = f.label ? `<label class="tlc-label" for="${id}">${esc(f.label)}</label>` : '';
   const hint = f.hint ? `<p class="tlc-hint">${esc(f.hint)}</p>` : '';
