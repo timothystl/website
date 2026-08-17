@@ -9651,6 +9651,20 @@ ${sidebarShell('redirects', currentUser, '', await pageBadges())}
         { key: 'gym_payment_link', label: 'Gym payment link', group: 'gym-rentals', used: 'Invoices · confirmation emails', href: '/gym-rentals' },
         { key: 'gcal_calendar_id', label: 'Gym calendar ID', group: 'gym-rentals', used: 'Confirmed bookings → Google Calendar', href: '/gym-rentals' },
         { key: 'gym_admin_email', label: 'Gym booking notifications', group: 'notifications', used: 'Holds, confirmations, recurring requests', href: '/gym-rentals' },
+        // No `href` on any of these seven — there is no dedicated screen for
+        // them, so they use the generic /settings?edit=<key> editor like
+        // zoom_url and social_image_url do. The Tithe.ly fund ID is the one
+        // market_* setting NOT listed here: it lives on the Giving tab, next
+        // to the Base Tithe.ly Link and every other fund, because it takes
+        // knowing Tithe.ly's own account internals — the same reasoning that
+        // keeps `give_url` off this screen too.
+        { key: 'market_date_label', label: 'Christmas Market day', group: 'christmas-market', used: 'The vendor application page' },
+        { key: 'market_hours_label', label: 'Christmas Market hours', group: 'christmas-market', used: 'The vendor application page' },
+        { key: 'market_table_fee', label: 'Christmas Market table fee ($)', group: 'christmas-market', used: 'Every price on the vendor page' },
+        { key: 'market_max_tables', label: 'Most tables one vendor may take', group: 'christmas-market', used: 'The vendor application page' },
+        { key: 'market_fee_percent', label: 'Card processing fee (%)', group: 'christmas-market', used: 'What a vendor is charged, alongside the fixed charge below' },
+        { key: 'market_fee_fixed', label: 'Card processing fee (fixed, $)', group: 'christmas-market', used: 'What a vendor is charged, alongside the percentage above' },
+        { key: 'market_coordinator_email', label: 'Christmas Market coordinator email', group: 'christmas-market', used: 'Where an application is sent, and the fallback address on the page' },
         { key: 'turnstile_site_key', label: 'Spam check site key', group: 'notifications', used: 'Contact, prayer and signup forms', href: '/filtered' },
         { key: 'payroll_bookkeeper_email', label: 'Bookkeeper email', group: 'notifications', used: 'Where Payroll’s Email report sends to' },
       ];
@@ -9726,7 +9740,13 @@ ${sidebarShell('settings', currentUser, '', await pageBadges())}
       const SETTABLE = new Set(['church_address_line', 'church_address_city', 'church_phone', 'church_email',
         'church_service_times', 'give_url', 'zoom_url', 'councilfiles_url', 'gym_rate_per_hour', 'gym_hold_hours',
         'gym_payment_link', 'gcal_calendar_id', 'gym_admin_email', 'turnstile_site_key',
-        'payroll_bookkeeper_email']);
+        'payroll_bookkeeper_email',
+        // ⚠ market_applications_open is deliberately NOT here — it already has
+        // its own toggle and its own route on the Christmas Market screen
+        // (POST /market/applications). Two forms writing one key is how they
+        // end up disagreeing about what "off" means.
+        'market_date_label', 'market_hours_label', 'market_table_fee', 'market_max_tables',
+        'market_fee_percent', 'market_fee_fixed', 'market_coordinator_email']);
       const form = await request.formData();
       const key = String(form.get('key') || '');
       if (!SETTABLE.has(key)) {
@@ -9764,6 +9784,22 @@ ${sidebarShell('settings', currentUser, '', await pageBadges())}
         return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-error' } });
       }
       await env.DB.prepare("UPDATE site_settings SET value = ? WHERE key = 'give_url'").bind(val).run();
+      return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-saved' } });
+    }
+
+    // A plain string, not a URL — Tithe.ly fund IDs are opaque identifiers,
+    // not links, and requiring http(s) here would refuse the one thing this
+    // field is actually for. Blank is a real, valid value: it means "use
+    // whichever fund the base link already carries".
+    if (path === '/giving/market-fund' && method === 'POST') {
+      const form = await request.formData();
+      const val = String(form.get('market_fund_id') || '').trim().slice(0, 200);
+      const before = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'market_fund_id'").first();
+      await env.DB.prepare(
+        "INSERT INTO site_settings (key, value) VALUES ('market_fund_id', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+      ).bind(val).run();
+      await logAudit(env.DB, currentUser, 'update', 'settings', 'market_fund_id', 'Christmas Market fund',
+        { value: before?.value ?? null }, { value: val });
       return new Response('', { status: 302, headers: { Location: '/giving?msg=giving-saved' } });
     }
 
@@ -9959,6 +9995,7 @@ ${sidebarShell('settings', currentUser, '', await pageBadges())}
 
     if (path === '/giving' && method === 'GET') {
       const baseUrlRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'give_url'").first();
+      const marketFundRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'market_fund_id'").first();
       const tiers = await env.DB.prepare('SELECT * FROM give_amount_tiers ORDER BY sort_order').all();
       const funds = await env.DB.prepare('SELECT * FROM give_funds ORDER BY sort_order').all();
       const givingLinks = await env.DB.prepare("SELECT path, url, label, category, active, give_kind FROM redirects WHERE category = 'giving' ORDER BY path").all();
@@ -10209,6 +10246,21 @@ ${sidebarShell('giving', currentUser, '', await pageBadges())}
       </div>
     </div>
   </form>
+
+  <form method="POST" action="/giving/market-fund" style="margin-top:20px;">
+    <div class="card">
+      <div class="card-title">Christmas Market fund</div>
+      <div style="font-size:13px;color:var(--gray);margin-bottom:16px;">Which fund a vendor's table payment lands in. It <strong>replaces</strong> the base link's fund above rather than adding a second — get it the same way as any fund's ID: generate a link for that fund from Tithe.ly and copy the <code>fundId</code> value out of it. Leave it blank and market payments use whatever fund the Base Tithe.ly Link already carries, which works but is not its own line on a giving report.</div>
+      <div class="form-group">
+        <label>Tithe.ly fund ID</label>
+        <input type="text" name="market_fund_id" value="${escapeHtml(marketFundRow?.value || '')}" style="font-family:var(--mono,monospace);font-size:13px;" placeholder="Blank uses the base link's fund">
+      </div>
+      <div class="btn-row" style="margin-top:4px;">
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </div>
+  </form>
+  <p class="tlc-note" style="margin:10px 0 0;"><span class="tlc-note-mark">◆</span><span>The rest of the market — the date, the table fee, the card processing rate, and whether applications are open — is on the <a href="/market" style="color:var(--tlc-blue);">Christmas Market screen</a> and in <a href="/settings" style="color:var(--tlc-blue);">Settings</a>.</span></p>
 
   <div class="tlc-give-cols" style="margin-top:20px;">
     ${panel('Funds', fundListHtml + defaultWarning('fund', funds.results, '/giving?fund=' + (defaultFund?.id || (funds.results[0]?.id ?? 'new'))), {

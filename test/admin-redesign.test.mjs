@@ -3420,5 +3420,79 @@ group('the vendor list is gated on its own permission');
   lacks(body, '/subscribers', 'including no list of everybody’s email addresses');
 }
 
+// ── the nine market settings, none of which had anywhere to be set ──────────
+// Dinger: "i set the market fund id in the giving tab. confirm where vendor
+// signups go" — and there was no field to set it in. Checked, not assumed:
+// none of the nine market_* settings were reachable from any screen before
+// this. The fund ID belongs with Giving (it needs a real Tithe.ly fund ID,
+// same as every other fund on that screen); the rest are plain Settings rows.
+group('the Christmas Market fund ID is set from the Giving tab');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  const giving = await (await call(env, '/giving', { cookie })).text();
+  has(giving, 'Christmas Market fund', 'the field is on the Giving screen');
+
+  const save = await call(env, '/giving/market-fund', { cookie, method: 'POST', form: { market_fund_id: 'mkt-fund-123' } });
+  eq(save.status, 302, 'saving redirects back to Giving');
+  eq(db.prepare("SELECT value FROM site_settings WHERE key='market_fund_id'").get().value, 'mkt-fund-123',
+    'and the fund ID is stored');
+
+  const after = await (await call(env, '/giving', { cookie })).text();
+  has(after, 'mkt-fund-123', 'the saved value is shown back on the screen');
+
+  // Blank is a real, valid value — it means "use the base link's own fund" —
+  // so it must not be refused the way a malformed give_url is.
+  const clear = await call(env, '/giving/market-fund', { cookie, method: 'POST', form: { market_fund_id: '' } });
+  eq(clear.status, 302, 'clearing it is not an error');
+  eq(db.prepare("SELECT value FROM site_settings WHERE key='market_fund_id'").get().value, '', 'and it is really cleared');
+
+  // A vendor's payment link has to actually use it.
+  const apply = await applyAsVendor(env, { email: 'fundtest@example.com' });
+  const fundBack = await call(env, '/giving/market-fund', { cookie, method: 'POST', form: { market_fund_id: 'holiday-market' } });
+  eq(fundBack.status, 302, 'set up for the next check');
+  const withFund = await applyAsVendor(env, { email: 'withfund@example.com' });
+  const d = await withFund.json();
+  ok(d.payUrl.includes('fundId=holiday-market'), 'a vendor applying after the fund is set gets a link carrying it');
+
+  // Somebody without giving_manage cannot set it, same as every other giving
+  // field.
+  const { cookie: office } = signIn(db, ['market_manage', 'pages_edit'], 'office2');
+  eq((await call(env, '/giving/market-fund', { cookie: office, method: 'POST', form: { market_fund_id: 'x' } })).status, 403,
+    'refused without giving_manage');
+}
+
+group('the other seven market settings are Settings rows');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+
+  const settings = await (await call(env, '/settings', { cookie })).text();
+  has(settings, 'Christmas Market table fee', 'the table fee is listed');
+  has(settings, 'Christmas Market day', 'so is the market day');
+  has(settings, 'Christmas Market coordinator email', 'and the coordinator email');
+  lacks(settings, 'market_fund_id', 'but not the fund ID — that stays on Giving, never duplicated here');
+
+  const save = await call(env, '/settings/update', { cookie, method: 'POST', form: { key: 'market_table_fee', value: '35' } });
+  eq(save.status, 302, 'a market setting can be saved from the generic editor');
+  eq(db.prepare("SELECT value FROM site_settings WHERE key='market_table_fee'").get().value, '35', 'and is stored');
+
+  // ⚠ market_applications_open must stay off this screen's writable set — it
+  // already has its own toggle and route on /market. A second form writing it
+  // is exactly the "two places to disagree" trap this file warns about.
+  const before = db.prepare("SELECT value FROM site_settings WHERE key='market_applications_open'").get().value;
+  const hijack = await call(env, '/settings/update', { cookie, method: 'POST', form: { key: 'market_applications_open', value: '0' } });
+  eq(hijack.status, 302, 'the request is not an error');
+  const hijackBody = await hijack.text();
+  ok(hijack.headers.get('Location').includes('settings-error'), 'but it is refused as an unknown key');
+  eq(db.prepare("SELECT value FROM site_settings WHERE key='market_applications_open'").get().value, before,
+    'and the switch on /market is untouched');
+
+  // A price change actually reaches the vendor page.
+  const cfg = await (await call(env, '/api/market-config', { fresh: true })).json();
+  eq(cfg.tableFee, 35, 'the vendor page reads the new table fee');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
