@@ -10,7 +10,7 @@ import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, SIDEBAR_JS, TOGGLE_WORD_JS, LOCKED_FIELD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 import { APPEARANCE_CSS } from './appearance.js';
 
-export const VERSION = 'v5.16.0'; // minor: the Give button can carry its own color and words, and the four core values are office-editable
+export const VERSION = 'v5.17.0'; // minor: the hero photo gets a shading and position control, and a rich field actually closes
 
 // ── THE SHARED SHELL CSS/JS, EXTERNALISED ───────────────────────
 // This used to be inlined into every admin response inside <style>/<script>

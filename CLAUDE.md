@@ -525,6 +525,101 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### The hero photo gets a shading and position control, and a rich field actually closes (v5.17.0, 2026-08-17)
+
+Dinger, in one message: the Hero banner's photo "is too dim… It looks like the
+image is overlaid with a color," with no way to move it — "right now it is
+like it is maxed and centered"; a text field's floating formatting toolbar
+stayed on screen after clicking away from it; and whether ministry-card
+photos, which read as left-justified, could be centered.
+
+**The dark wash over a hero photo was never a mistake — it just had no
+control.** `.tlcb-hero::before`'s gradient exists so white headline text
+stays readable over an arbitrary photograph, the same job Photo banner's own
+veil does — and Photo banner has had a "Photo shading" choice (Light / Medium
+/ Heavy) since the redesign. The hero never got one; its top stop was a
+single hardcoded `.82`, between Photo banner's own Medium (`.72`) and Heavy
+(`.88`), which is why it read dark even to somebody who had never touched the
+block. **Photo shading** is a `choices` entry now, reusing the same `VEILS`
+table Photo banner reads, and the default moved to Medium — so an untouched
+hero reads lighter than before with no edit required, and Light or Heavy are
+there for a photograph that needs it.
+
+- **Photo position** (Top / Center / Bottom) is the second half, and it is a
+  genuinely new control — the hero had no crop point at all, so a photo whose
+  subject sat high or low in frame was always cropped to its exact center.
+  `IMG_POSITIONS`, beside `VEILS`, maps each choice to a plain
+  `object-position`-shaped CSS value (`center top` / `center center` /
+  `center bottom`) written into `--tlcb-hero-pos` alongside the existing
+  `--tlcb-hero-img`.
+- **Both are `choices`, the same generic mechanism `photobanner` already
+  uses** — declaring them on `BLOCK_DEFS.hero` is what produces the
+  sanitizer's validation and default, the inspector's chip row, and the
+  patch-handling, with nothing hand-wired three times over. A bad stored
+  value for either clamps to its default rather than reaching a style
+  attribute unchecked.
+- **⚠ Neither does anything without a photo, and the inspector note says so
+  in as many words.** A hero with no photo renders the flat ink-navy field
+  the redesign ships everywhere a photograph is missing (v5.0.0); shading and
+  cropping a field with nothing in it would be a control that looks live and
+  changes nothing, which is worse than not offering it.
+- **⚠ `wrapperVars()` in `admin/blocks.js` and `styleVars()` in
+  `admin/ministry-editor.html` have to stay in step, as always** — and
+  writing this surfaced that `styleVars()`'s hero branch had never emitted
+  `--tlcb-hero-veil` at all, only `--tlcb-hero-img`, a gap that predates this
+  work. Fixed in the same pass: without it, the editor canvas would show a
+  hero with no veil at all — full-strength color straight off the photo —
+  while the published page (rendered server-side, where the bug did not
+  exist) showed the real, veiled result. Nobody would have noticed from the
+  canvas alone, because a too-bright preview does not read as wrong the way a
+  too-dark one does.
+- **Regenerated `admin/page-seeds.js` and `admin/site-pages.js`** via
+  `node tools/extract-pages.mjs` — adding a `choices` field to a block's
+  `defaults` means every already-generated hero block seed needs it too, or
+  the "seeds are already sanitized" test fails on every hero-carrying page.
+  Purely additive: `"veil": "medium", "imgPos": "center"` on each one: no page
+  changed how it renders.
+
+**The rich-field toolbar staying open was a TinyMCE internals gap, not a
+missed handler.** `openRichField()` in `admin/ministry-editor.html` tore a
+field's editor down on `ed.on('blur', …)` — and, measured directly against
+the real vendored library (a stub cannot reproduce this; it lives entirely
+inside TinyMCE 7's own focus tracking), **that event never fires at all in
+this embedding**: inline mode, more than one editor alive on the same canvas
+at once. Nothing ever told an opened editor its turn was over, so its
+floating toolbar sat on screen for the rest of the session — one more added
+per field anybody clicked into.
+
+- **⚠ The fix is a native `focusout` listener on the editor's own element,
+  not a different TinyMCE event.** Confirmed the other direction too: native
+  `blur`/`focusout` fire reliably in every case tried, including moving focus
+  straight from one inline editor into a second one on the same canvas — the
+  exact case where TinyMCE's own tracking stays silent.
+- **⚠ Not every `focusout` means leaving.** Opening the Link dialog moves
+  focus into `.tox-dialog`'s own address field, outside the contenteditable —
+  which fires a `focusout` too. Tearing the editor down there would delete it
+  out from under a dialog that still references it, so the handler checks
+  whether focus landed inside `.tox-dialog` or `.tox-tinymce-inline` first
+  and does nothing if so. A toolbar button needs no such guard: TinyMCE
+  already keeps its own buttons from taking focus, so clicking Bold never
+  fires `focusout` in the first place — verified directly rather than assumed.
+- **Deferred one macrotask** before checking where focus landed, because a
+  dialog's own focus trap can settle a beat after the dialog itself appears —
+  checking synchronously would sometimes catch focus mid-transition and tear
+  the editor down anyway.
+
+**The card images were not left-justified by a bug.** `cardgrid`'s Alignment
+control (Left / Center / Right, on the inspector like every alignable block)
+already centers a card's photo along with its heading and body when set to
+Center — verified by rendering a centered card grid and reading the actual
+markup, which carries `tlcb-cg--center` exactly as designed. Nothing to fix;
+the answer was pointing at the existing control rather than writing one.
+
+Run: the `hero photo can be shaded lighter and repositioned` group in
+`node admin/blocks.test.mjs`, and `test/editor-richfield-close.test.mjs`
+(Chromium, driven against the real vendored TinyMCE rather than a stub, which
+is the only way this bug reproduces at all).
+
 ### The Give button gets a color and its own words, and the four values are office-editable (v5.16.0, 2026-08-17)
 
 Dinger, in one message: he still could not recolor a Give button, and the

@@ -146,6 +146,19 @@ export const VEILS = [
   { key: 'heavy', label: 'Heavy', top: 0.88 },
 ];
 
+// Where a banner photo's crop is centered. Three, not a free-form pixel or
+// percentage field — the pastor's own constraint for this editor is that it
+// must not be possible to break the page, and a typed-in coordinate is
+// exactly the kind of thing that can. The common real problem this answers
+// is a face or a subject sitting at the top of the frame getting cut off by
+// a wide, short crop; left/right matter far less on a banner that is always
+// wider than it is tall, so this is one axis, not nine positions.
+export const IMG_POSITIONS = [
+  { key: 'top', label: 'Top', css: 'center top' },
+  { key: 'center', label: 'Center', css: 'center center' },
+  { key: 'bottom', label: 'Bottom', css: 'center bottom' },
+];
+
 // ── THE SECOND LAYER OVER A HERO ─────────────────────────────────────────────
 // The handoff's own words: "This is what stops the heroes reading gray." A veil
 // on its own is neutral dark over a photograph, and over a photograph that does
@@ -463,8 +476,14 @@ export const BLOCK_DEFS = {
   },
   hero: {
     label: 'Hero banner', glyph: '▣',
-    defaults: { title: 'Ministry name', eyebrow: 'Ministry', subtitle: 'One line about this ministry.', spaceAbove: 0, spaceBelow: 0 },
+    defaults: { title: 'Ministry name', eyebrow: 'Ministry', subtitle: 'One line about this ministry.', spaceAbove: 0, spaceBelow: 0, veil: 'medium', imgPos: 'center' },
     photo: true, subtitle: true, richSubtitle: true, banner: true, infoCard: true, align: true,
+    choices: [
+      { key: 'veil', label: 'Photo shading', def: 'medium', options: VEILS,
+        note: 'How much dark is laid over the photograph so the white headline stays readable. Lighter if the photograph is already dark. With no photo there is nothing to shade and this does nothing.' },
+      { key: 'imgPos', label: 'Photo position', def: 'center', options: IMG_POSITIONS,
+        note: 'Which part of the photo stays in frame once it is cropped to fit the banner — Top if the subject sits high in the picture, Bottom if it sits low. With no photo this does nothing.' },
+    ],
   },
   text: {
     label: 'Rich text', glyph: '¶',
@@ -1929,9 +1948,15 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
 /* Matches .page-hero in public/styles.css — this is the page banner, so it has
    to be the same thing whether the page draws it or a block does. */
 .tlcb-hero{border-radius:8px;padding:56px 28px;position:relative;
-  background:#1E2D4A var(--tlcb-hero-img,none) center/cover;}
+  background:#1E2D4A var(--tlcb-hero-img,none) var(--tlcb-hero-pos,center)/cover;}
+/* ⚠ THE TOP STOP IS THE ONLY THING "Photo shading" MOVES. The bottom stop
+   stays fixed at .92 regardless — that is what keeps the headline legible on
+   any photograph, and is not somebody's decision to weaken, the same rule
+   Photo banner's own veil follows. Default landed here at .82, between
+   Photo banner's Medium (.72) and Heavy (.88) — reported as reading too
+   dark, which "Light" (.5) or "Medium" now answer without a code change. */
 .tlcb-hero::before{content:'';position:absolute;inset:0;border-radius:inherit;
-  background:linear-gradient(135deg,rgba(30,45,74,.82),rgba(17,30,50,.92));opacity:var(--tlcb-hero-veil,0);}
+  background:linear-gradient(135deg,rgba(30,45,74,var(--tlcb-hero-veil-top,.82)),rgba(17,30,50,.92));opacity:var(--tlcb-hero-veil,0);}
 .tlcb-hero > *{position:relative;z-index:1;}
 .tlcb-hero-eyebrow{font:800 12px/1 var(--tlcb-ui);letter-spacing:.18em;text-transform:uppercase;color:#E8C070;margin-bottom:8px;}
 .tlcb-hero-title{font-family:var(--tlcb-serif);font-weight:800;font-size:var(--tlcb-hero,38px);line-height:1;letter-spacing:-.03em;color:#fff;margin:0;}
@@ -2659,7 +2684,7 @@ export function blocksClientConfig(data) {
     };
   }
   return { types, groups: GROUPS, templates: TEMPLATES, BG, INK, SIZES, SPLITS, TONES, SHADOWS, SHADES, APPEARS, BTNS,
-    bannerHeights: BANNER_HEIGHTS, veils: VEILS, glows: GLOWS, embedHeights: EMBED_HEIGHTS,
+    bannerHeights: BANNER_HEIGHTS, veils: VEILS, glows: GLOWS, imgPositions: IMG_POSITIONS, embedHeights: EMBED_HEIGHTS,
     partners: (data && data.partners) || [],
     // Just the one field, so the Contact block's inspector can name the address
     // it is falling back to rather than saying "the church email" and making
@@ -2800,6 +2825,8 @@ function wrapperVars(b) {
   if (b.type === 'hero' && b.photo) {
     v.push("--tlcb-hero-img:url('" + cssUrl(b.photo) + "')");
     v.push('--tlcb-hero-veil:1'); // the gradient that keeps white text legible over a photo
+    v.push('--tlcb-hero-veil-top:' + (VEILS.find((x) => x.key === b.veil) || VEILS[1]).top);
+    v.push('--tlcb-hero-pos:' + (IMG_POSITIONS.find((x) => x.key === b.imgPos) || IMG_POSITIONS[1]).css);
   }
   return v.join(';');
 }
