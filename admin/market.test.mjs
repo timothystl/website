@@ -197,6 +197,26 @@ group('the payment link is built, never kept');
   ok(!noFund.includes('fundId='), 'and adds no fund at all, so the base link’s own is used');
 }
 
+group('a Square market looks the link up by table count instead of computing it');
+{
+  const squareSettings = {
+    paymentProvider: 'square',
+    giveUrl: 'https://give.tithe.ly/?formId=abc', // present but must be ignored on this provider
+    fundId: 'market-fund',
+    squareLinks: { '1': 'https://square.link/u/one', '2': 'https://square.link/u/two' },
+  };
+  eq(marketPayUrl(squareSettings, 3120, 1), 'https://square.link/u/one',
+    'the link for the exact table count is returned, whatever the amount happens to be');
+  eq(marketPayUrl(squareSettings, 6210, 2), 'https://square.link/u/two');
+  eq(marketPayUrl(squareSettings, 9300, 3), '',
+    'a table count with no link set gets no address, never a wrong or Tithe.ly one');
+  eq(marketPayUrl(squareSettings, 3120), '',
+    'no table count at all also gets nothing, rather than guessing');
+
+  eq(marketPayUrl({ paymentProvider: 'tithely', giveUrl: 'https://give.tithe.ly/?formId=abc', fundId: '', squareLinks: { '1': 'https://square.link/u/one' } }, 3120, 1).includes('amount=3120'), true,
+    'a Tithe.ly market ignores any Square links even if some are set — the provider flag is what decides');
+}
+
 group('what the coordinator tracks');
 {
   eq(PAYMENT_STATES.length, 4, 'four payment states, because the market really has four');

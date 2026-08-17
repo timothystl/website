@@ -83,6 +83,18 @@ export const BG = [
   // between handoff revisions; this is the later value.
   { name: 'Gold',      c: '#E4A93C', dark: false, lang: '1b', head: '#101B2E', eyebrow: '#3B2E12', link: '#101B2E', rule: 'rgba(16,27,46,.18)', chip: '#FFFDF8',
     grad: 'linear-gradient(120deg,#E4A93C 0%,#F0C46B 52%,#D89428 100%)' },
+  // Three more, added 2026-08-17 at Dinger's ask for wider background choice
+  // on ordinary boxes (the Give/Newsletter/Signup panels). Plain, like Navy —
+  // no 1b fields, because these are not a second design language, just three
+  // more colors to paint an existing panel with. All three are colors the
+  // site already uses elsewhere (Design System → Colors in CLAUDE.md) rather
+  // than new ones invented for this palette: Teal for links/Beekeepers/
+  // Christmas Market, Moss for the nav header/Stephen Ministry, Slate for
+  // Food Pantry. Each is dark enough that the ink guardrail forces Cream or
+  // Gold ink, never a dark one, the same as Navy already does.
+  { name: 'Teal',  c: '#2E7EA6', dark: true },
+  { name: 'Moss',  c: '#4A5E3A', dark: true },
+  { name: 'Slate', c: '#3A4E5C', dark: true },
 ];
 
 // ⚠ APPEND ONLY, for the same reason as BG.
@@ -752,7 +764,11 @@ export const BLOCK_DEFS = {
   },
   give: {
     label: 'Give', glyph: '♡',
-    defaults: { title: 'Support this ministry', body: 'Gifts go directly toward this work.', spaceAbove: 24, spaceBelow: 24, url: 'https://give.timothystl.org' },
+    // ⚠ bg:3/ink:3 is Navy + Cream — the exact pair `.tlcb-give` used to
+    // hardcode in CSS. A new block still opens looking like it always has;
+    // what changed is that the Background/Text swatches now actually reach
+    // it, instead of being cosmetically disconnected from a fixed color.
+    defaults: { title: 'Support this ministry', body: 'Gifts go directly toward this work.', spaceAbove: 24, spaceBelow: 24, url: 'https://give.timothystl.org', bg: 3, ink: 3 },
     url: true, urlLabel: 'Giving link', richBody: true, align: true,
     // Which fund the button lands on. The list comes from the Giving screen at
     // render time; the block stores only the id. See the render branch.
@@ -2168,9 +2184,19 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
 .tlcb-field{height:38px;border:1px solid #C7CEDA;border-radius:7px;background:#fff;padding:0 12px;font-size:13px;width:100%;}
 .tlcb-inline{display:flex;gap:9px;align-items:center;flex-wrap:wrap;}
 .tlcb-inline .tlcb-field{flex:1;min-width:180px;}
-.tlcb-give{display:flex;flex-direction:column;gap:11px;padding:20px;border-radius:10px;background:#1E2D4A;}
-.tlcb-give .tlcb-head{color:#F3EDE1;}
-.tlcb-give-note{font-size:14px;line-height:1.7;color:#C4CEDF;}
+/* ⚠ FOLLOWS THE BLOCK'S OWN BACKGROUND NOW, the same fix the Newsletter/
+   Signup form panel got above — this used to hardcode navy regardless of
+   the Theme colors swatch, so picking a background did nothing but the
+   border/rule ever moved. --tlcb-bg-flat, not --tlcb-bg, for the same
+   reason .tlcb-panel uses it: the latter is a gradient on the redesign
+   surfaces and would repeat its own ramp inside a smaller box. The head
+   and note read the wrapper's own --tlcb-head-ink/--tlcb-ink now instead of
+   a hardcoded cream, which is what actually kept the box unreadable if a
+   background were ever picked — see the .give type's bg:3/ink:3 default
+   above for why an untouched block still opens looking exactly as before. */
+.tlcb-give{display:flex;flex-direction:column;gap:11px;padding:20px;border-radius:10px;
+  border:1px solid var(--tlcb-rule,rgba(245,240,230,.14));background:var(--tlcb-bg-flat,#1E2D4A);}
+.tlcb-give-note{font-size:14px;line-height:1.7;color:var(--tlcb-ink,#C4CEDF);}
 /* ⚠ QUALIFIED, AND IT HAS TO STAY QUALIFIED. This selector was bare, and so was
    the Coming-up strip's own chip 385 lines below — two components, one class
    name, equal specificity, so source order decided and the later one won. The

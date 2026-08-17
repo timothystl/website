@@ -139,6 +139,22 @@ export function marketConfigFromRows(rows) {
     // on the coordinator's own screen, where she will see it.
     open: get('market_applications_open', '1') !== '0',
     giveUrl: get('give_url', ''),
+    // 'tithely' (the default — every existing church payment link) or
+    // 'square', for the market's own separate Square account.
+    paymentProvider: get('market_payment_provider', 'tithely') === 'square' ? 'square' : 'tithely',
+    // One Square Payment Link per table count, keyed by the table count as a
+    // string ("1", "2", "3", …). ⚠ Square has no way to put an amount in a
+    // link the way Tithe.ly does, so unlike `fundId`+`giveUrl` this cannot be
+    // computed from one base link — the office pastes one link per price
+    // point, which is small and fixed because `maxTables` bounds it (3 by
+    // default, 9 at most). Malformed JSON reads as "no links yet" rather than
+    // throwing, same as every other best-effort read in this file.
+    squareLinks: (() => {
+      try {
+        const parsed = JSON.parse(get('market_square_links', '{}'));
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+      } catch (_) { return {}; }
+    })(),
   };
 }
 
@@ -151,7 +167,8 @@ export async function marketSettings(env) {
 }
 
 // The payment address, built at request time from `give_url` and the market's
-// own fund.
+// own fund — or, when the market is running on Square, looked up from the
+// office's own pasted links.
 //
 // ⚠ NEVER STORED. The whole reason a block cannot hold a Tithe.ly address (see
 // give-link.js, and "The two giving pages have separate jobs" in CLAUDE.md) is
@@ -159,7 +176,18 @@ export async function marketSettings(env) {
 // the base link, and the page still looks perfect. The same rule holds here:
 // the application row records what was ASKED FOR in cents, and the address is
 // recomputed every time it is needed.
-export function marketPayUrl(settings, totalCents) {
+//
+// ⚠ `tables` is required for Square and ignored for Tithe.ly. Square Payment
+// Links cannot take an amount as a URL parameter the way Tithe.ly can, so
+// there is no formula here — only a lookup against what the office pasted in
+// for that exact table count. A count with no matching link returns '',
+// exactly like a blank base link does for Tithe.ly: a missing address, never
+// a wrong one.
+export function marketPayUrl(settings, totalCents, tables) {
+  if (settings.paymentProvider === 'square') {
+    const url = (settings.squareLinks || {})[String(tables)];
+    return typeof url === 'string' ? url.trim() : '';
+  }
   const base = settings.giveUrl || '';
   if (!base) return '';
   return withAmountAndFund(base, totalCents / 100, settings.fundId);
@@ -362,9 +390,19 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
         <button type="submit" class="tlc-btn-primary">Save</button>
       </form>
       <p class="tlc-hint" style="margin-top:12px;">Switched off, the vendor page still explains the market and still lists Marla's address — it just stops taking applications and stops asking anybody for money. Nothing already submitted is affected.</p>
-      <p class="tlc-hint" style="margin-top:8px;">${settings.giveUrl
-        ? `Payments open at the church's own giving link with the amount filled in. ${escapeHtml(money(priceBreakdown(1, settings).totalCents))} for one table, ${escapeHtml(money(priceBreakdown(settings.maxTables, settings).totalCents))} for ${settings.maxTables}.`
-        : 'No giving link is set, so the page will take applications but cannot open a payment. Set it under Giving.'}</p>
+      <p class="tlc-hint" style="margin-top:8px;">${(() => {
+        const priced = `${escapeHtml(money(priceBreakdown(1, settings).totalCents))} for one table, ${escapeHtml(money(priceBreakdown(settings.maxTables, settings).totalCents))} for ${settings.maxTables}.`;
+        if (settings.paymentProvider === 'square') {
+          const have = Array.from({ length: settings.maxTables }, (_, i) => i + 1)
+            .filter((n) => (settings.squareLinks || {})[String(n)]).length;
+          return have >= settings.maxTables
+            ? `Payments go through Square. ${priced}`
+            : `Payments go through Square, but only ${have} of ${settings.maxTables} table counts have a link set. Set the rest under Giving.`;
+        }
+        return settings.giveUrl
+          ? `Payments open at the church's own giving link with the amount filled in. ${priced}`
+          : 'No giving link is set, so the page will take applications but cannot open a payment. Set it under Giving.';
+      })()}</p>
     `, { right: `<a class="tlc-action-quiet" href="/settings?edit=market_table_fee">Fees &amp; dates</a>` });
 
     const tile = (label, n, note) =>
