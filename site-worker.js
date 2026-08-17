@@ -168,7 +168,7 @@ async function getPublishedPages() {
 // no module both files can import (index.html is plain HTML), so this is the
 // same arrangement styleVars()/wrapperVars() already live under: two copies and
 // a test that reads both and asserts they agree.
-const NESTED_PATHS = { values: '/about/values' };
+const NESTED_PATHS = { values: '/about/values', marketvendors: '/christmasmarket/vendors' };
 export function pathForPageId(id) {
   return id === 'home' ? '/' : (NESTED_PATHS[id] || '/' + id);
 }

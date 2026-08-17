@@ -18,129 +18,18 @@ import { renderListSection, renderDrawer, primaryCell, statusPill, rowActions, p
 import { section as sectionCfg, columnsOf, filtersOf } from './sections.js';
 import { churchDate } from './when.js';
 import { withAmountAndFund } from '../give-link.js';
-
-// ── WHAT THE MARKET COSTS ────────────────────────────────────────────────────
-// Every one of these is a `site_settings` row, read at request time. They are
-// settings and not constants because the church changes processors, and when
-// it does the only two numbers that move are the percentage and the fixed
-// charge — nothing about the page or this file should need editing for that.
-export const MARKET_DEFAULTS = {
-  tableFee: 30,
-  feePercent: 2.9,
-  feeFixed: 0.30,
-  maxTables: 3,
-};
+// The pricing itself moved to a leaf module with no admin/ imports, so
+// admin/blocks.js — which admin/helpers.js already has a one-way dependency
+// on — can import the same arithmetic without completing a circular import.
+// Re-exported here so every existing caller of admin/market.js (including its
+// own test file) keeps working unchanged. See market-price.js.
+import { MARKET_DEFAULTS, clampTables, priceBreakdown, money, MARKET_PRICING_JS } from '../market-price.js';
+export { MARKET_DEFAULTS, clampTables, priceBreakdown, money, MARKET_PRICING_JS };
 
 const num = (v, fallback) => {
   const n = Number(String(v == null ? '' : v).replace(/[^0-9.]/g, ''));
   return Number.isFinite(n) ? n : fallback;
 };
-
-// Tables asked for, clamped to what the market actually offers. Anything
-// unreadable becomes one table rather than zero — a vendor who reached the
-// payment step wants at least one, and a zero-dollar application is a row
-// somebody has to chase.
-// ⚠ The minus sign is kept in the strip on purpose. Without it "-4" reads as
-// FOUR — the sign is discarded and the absolute value clamps to the maximum —
-// so posting a negative would quietly buy somebody the largest booth the
-// market sells. It has to survive long enough to fail the `< 1` test below.
-export function clampTables(v, maxTables = MARKET_DEFAULTS.maxTables) {
-  const n = Math.floor(Number(String(v == null ? '' : v).replace(/[^0-9.-]/g, '')));
-  if (!Number.isFinite(n) || n < 1) return 1;
-  return Math.min(n, Math.max(1, Math.floor(maxTables)));
-}
-
-/**
- * What a vendor is asked to pay, in integer cents.
- *
- *   total = round( (tables × fee + fixed) / (1 − percent) )
- *
- * ⚠ CENTS, INTEGER, END TO END. Money on this site has been a float since the
- * gym invoices (AC-5 / GY-7 in the July 2026 review, both still open there),
- * and the failure it produces is a printed subtotal that disagrees with the
- * rows above it. Nothing new should be built that way, so the amount is cents
- * from the moment it is computed to the moment it is stored, and only ever
- * becomes dollars to be printed or handed to Tithe.ly.
- *
- * ⚠ THE HANDOFF'S THIRD FIGURE IS WRONG AND THIS DELIBERATELY DISAGREES WITH
- * IT. README.md gives "1 table $31.20, 2 tables $62.10, 3 tables $92.99". The
- * first two are exactly what this formula produces; the third is the formula
- * TRUNCATED where the other two happened to need no rounding at all. Follow it
- * and the church nets $89.99 on a three-table vendor — a penny short of the
- * $90 the gross-up exists to protect. $31.20 is the anchor worth trusting: it
- * is what a one-table vendor really paid in 2024, which is how the 2.9% + 30¢
- * rate was confirmed in the first place, and rounding (rather than truncating,
- * or rounding up) is what reproduces it. Three tables is $93.00.
- * market.test.mjs asserts the church nets the full fee at all three counts,
- * which is the property, rather than pinning the three numbers alone.
- */
-export function priceBreakdown(tables, cfg = {}) {
-  const fee = num(cfg.tableFee, MARKET_DEFAULTS.tableFee);
-  const pct = num(cfg.feePercent, MARKET_DEFAULTS.feePercent) / 100;
-  const fixed = num(cfg.feeFixed, MARKET_DEFAULTS.feeFixed);
-  const n = clampTables(tables, cfg.maxTables ?? MARKET_DEFAULTS.maxTables);
-
-  const subtotalCents = Math.round(n * fee * 100);
-  // A percentage at or above 100 would divide by zero or go negative. It can
-  // only get here by somebody typing it into Settings, and the honest answer
-  // to "the processor takes everything" is to charge the fee itself rather
-  // than to ask for an infinite amount.
-  const denom = 1 - pct;
-  const totalCents = denom > 0.01
-    ? Math.round(((n * fee + fixed) / denom) * 100)
-    : subtotalCents;
-  return {
-    tables: n,
-    subtotalCents,
-    feeCents: totalCents - subtotalCents,
-    totalCents,
-  };
-}
-
-// "$30", "$31.20". Whole dollars lose their trailing zeros, the way the design
-// writes them — a ladder of $30 / $60 / $90 reads worse with .00 on every row.
-export function money(cents) {
-  const v = (Number(cents) || 0) / 100;
-  return '$' + v.toFixed(2).replace(/\.00$/, '');
-}
-
-// ── THE BROWSER'S COPY ───────────────────────────────────────────────────────
-// The three-step card recomputes the subtotal, the fee, the total and the
-// submit button's label the instant somebody picks a different number of
-// tables. That has to happen without a round trip, so the arithmetic exists
-// twice — and `market.test.mjs` evaluates this string and runs it against the
-// exported functions over the same table of inputs, so the two cannot drift.
-// That is what makes a mirror safe rather than a second chance to be wrong.
-//
-// ⚠ No backticks and no template literals in here. This string sits inside a
-// template literal wherever it is shipped, and a stray backtick terminates
-// that literal and breaks the whole module while still passing `node --check`
-// — see the note in .github/workflows/test.yml.
-export const MARKET_PRICING_JS = `
-  function tlcMktClampTables(v, maxTables) {
-    var n = Math.floor(Number(String(v == null ? '' : v).replace(/[^0-9.-]/g, '')));
-    if (!isFinite(n) || n < 1) return 1;
-    return Math.min(n, Math.max(1, Math.floor(maxTables || 3)));
-  }
-  function tlcMktPrice(tables, cfg) {
-    cfg = cfg || {};
-    var fee = Number(cfg.tableFee); if (!isFinite(fee)) fee = 30;
-    var pct = Number(cfg.feePercent); if (!isFinite(pct)) pct = 2.9;
-    pct = pct / 100;
-    var fixed = Number(cfg.feeFixed); if (!isFinite(fixed)) fixed = 0.30;
-    var n = tlcMktClampTables(tables, cfg.maxTables);
-    var subtotalCents = Math.round(n * fee * 100);
-    var denom = 1 - pct;
-    var totalCents = denom > 0.01
-      ? Math.round(((n * fee + fixed) / denom) * 100)
-      : subtotalCents;
-    return { tables: n, subtotalCents: subtotalCents, feeCents: totalCents - subtotalCents, totalCents: totalCents };
-  }
-  function tlcMktMoney(cents) {
-    var v = (Number(cents) || 0) / 100;
-    return '$' + v.toFixed(2).replace(/\\.00$/, '');
-  }
-`;
 
 // ── WHAT THE COORDINATOR TRACKS ──────────────────────────────────────────────
 // The four states Marla kept by hand in the 2024 spreadsheet's payment column.
@@ -223,13 +112,15 @@ export const screenableText = (v) =>
 // One read, shaped for both the public page and this admin screen. Every value
 // falls back to the design's own figures, so a market page rendered against an
 // unreachable or unseeded database still quotes the right price.
-export async function marketSettings(env) {
-  let rows = [];
-  try {
-    rows = (await env.DB.prepare("SELECT key, value FROM site_settings WHERE key LIKE 'market_%' OR key = 'give_url'").all()).results || [];
-  } catch (_) { /* fall through to the defaults below */ }
+// Pure — takes the `site_settings` rows however they were fetched, and
+// composes the shape every caller wants. Split out so `pageData()` in the
+// Worker (which already fetches every page's settings in one batched
+// Promise.all, precisely to avoid a query per block) can compose `data.market`
+// from rows it already has, rather than this module making its own second
+// round trip on every single page render.
+export function marketConfigFromRows(rows) {
   const get = (k, d) => {
-    const row = rows.find((r) => r.key === k);
+    const row = (rows || []).find((r) => r.key === k);
     const v = row && row.value != null ? String(row.value).trim() : '';
     return v === '' ? d : v;
   };
@@ -249,6 +140,14 @@ export async function marketSettings(env) {
     open: get('market_applications_open', '1') !== '0',
     giveUrl: get('give_url', ''),
   };
+}
+
+export async function marketSettings(env) {
+  let rows = [];
+  try {
+    rows = (await env.DB.prepare("SELECT key, value FROM site_settings WHERE key LIKE 'market_%' OR key = 'give_url'").all()).results || [];
+  } catch (_) { /* fall through to the defaults below */ }
+  return marketConfigFromRows(rows);
 }
 
 // The payment address, built at request time from `give_url` and the market's

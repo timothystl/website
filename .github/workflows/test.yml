@@ -39,6 +39,7 @@ jobs:
           node --check tlc-links-worker.js
           node --check give-landing.js
           node --check give-link.js
+          node --check market-price.js
           for f in admin/*.js; do node --check "$f"; done
 
       # ⚠ `node --check` is NOT enough on its own, and believing it was cost
