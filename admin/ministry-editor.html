@@ -964,7 +964,37 @@ function openRichField(node) {
         valid_classes: { p: 'tlcb-lead' },
         link_default_target: '_blank',
         setup: function (ed) {
-          ed.on('blur', function () { commitField(ed.getElement()); });
+          // ⚠ TEAR DOWN WHEN FOCUS GENUINELY LEAVES, NOT ON TINYMCE'S OWN
+          // 'blur' EVENT — which never fires at all in this embedding.
+          // Measured directly: clicking away, including into a second inline
+          // editor on the same canvas, produces a real native `focusout` on
+          // this element every time, but TinyMCE's internal blur tracking
+          // (`ed.on('blur', …)`) does not fire once, in either case. Without
+          // an explicit close, nothing ever tells an opened editor its turn
+          // is over, so its floating toolbar stayed on screen for the rest of
+          // the session — one more added per field clicked into.
+          //
+          // ⚠ NOT EVERY focusout MEANS LEAVING. Opening the Link dialog also
+          // fires one, moving focus into `.tox-dialog`'s own address field —
+          // torn down there, the editor is deleted out from under a dialog
+          // that still references it. Toolbar buttons are the opposite case
+          // and need no guard at all: TinyMCE already prevents them from
+          // taking focus in the first place, so clicking Bold never fires
+          // focusout to begin with.
+          //
+          // Deferred a macrotask so a dialog's own focus-trap — which can
+          // settle a beat after the dialog appears — has already landed by
+          // the time this checks where focus actually ended up.
+          function inEditorChrome(node) {
+            return !!(node && node.closest && (node === ed.getElement() || node.closest('.tox-dialog, .tox-tinymce-inline')));
+          }
+          ed.getElement().addEventListener('focusout', function () {
+            setTimeout(function () {
+              if (ed.removed || inEditorChrome(document.activeElement)) return;
+              commitField(ed.getElement());
+              ed.remove();
+            }, 0);
+          });
         },
         init_instance_callback: function (ed) {
           ed.focus();
@@ -1114,7 +1144,14 @@ function styleVars(b) {
   if (b.type === 'textphoto') v.push('--tlcb-cols:' + cols);
   if (b.type === 'columns') v.push('--tlcb-cols:repeat(' + b.cols + ',1fr)');
   if (b.type === 'cardgrid') v.push('--tlcb-cols:repeat(' + b.cols + ',1fr)');
-  if (b.type === 'hero' && b.photo) v.push("--tlcb-hero-img:url('" + String(b.photo).replace(/["'\\()\s<>;{}]/g, '') + "')");
+  if (b.type === 'hero' && b.photo) {
+    v.push("--tlcb-hero-img:url('" + String(b.photo).replace(/["'\\()\s<>;{}]/g, '') + "')");
+    v.push('--tlcb-hero-veil:1');
+    var vl = (C.veils || []).filter(function (x) { return x.key === b.veil; })[0] || (C.veils || [])[1] || { top: .82 };
+    v.push('--tlcb-hero-veil-top:' + vl.top);
+    var ip = (C.imgPositions || []).filter(function (x) { return x.key === b.imgPos; })[0] || (C.imgPositions || [])[1] || { css: 'center' };
+    v.push('--tlcb-hero-pos:' + ip.css);
+  }
   return v.join(';');
 }
 
