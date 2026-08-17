@@ -433,7 +433,12 @@ group('spacing steppers on a half block re-render the pair');
 group('server rejects what the client would never send');
 const bad = await (await fetch(base + '/ministries/api/render', {
   method: 'POST', headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ blocks: [{ type: 'text', spaceAbove: 900, bg: 9, ink: 9, body: '<script>alert(1)</script><p>hi</p>' }] }),
+  // ⚠ Not 9 — the palette has grown past that index since this was written
+  // (Teal/Moss/Slate landed at indices 8-10), which is exactly how a sentinel
+  // like this goes stale silently: a value that means "out of range" today
+  // can become a real, valid choice the next time the palette grows. 999 is
+  // out of range no matter how many more colors are ever added.
+  body: JSON.stringify({ blocks: [{ type: 'text', spaceAbove: 900, bg: 999, ink: 999, body: '<script>alert(1)</script><p>hi</p>' }] }),
 })).json();
 eq(bad.blocks[0].spaceAbove, 96, 'a stale tab cannot write spaceAbove:900');
 eq(bad.blocks[0].bg, 0, 'a stale tab cannot write an out-of-range color');
