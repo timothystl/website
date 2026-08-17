@@ -2021,8 +2021,23 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
    and lose the distinction the variant exists for. It follows the chosen INK
    only, so the two still read as a set. */
 .tlcb-btn--ghost{background:transparent;color:var(--tlcb-btn-bd,#1E2D4A);border:1px solid var(--tlcb-btn-bd,#C4CEDF);}
-.tlcb-panel{display:flex;flex-direction:column;gap:10px;padding:18px 20px;border:1px solid #DDE3ED;border-radius:9px;background:#EDF2F7;}
-.tlcb-panel--form{background:#F7F3EC;}
+/* ⚠ THE PANEL FOLLOWS THE BLOCK'S OWN BACKGROUND. It used to carry two
+   hardcoded colors — mist for the Newsletter block, cream for the Signup form —
+   so a block had TWO surfaces and the inspector's Background swatch reached
+   only one of them. Dinger, with a Signup form on a Mist field: "i can change
+   the blue, but not the color of the box with the text on it." He was right;
+   there was no control, because the box was painted here.
+   ⚠ --tlcb-bg-flat, not --tlcb-bg. The latter is a GRADIENT on the redesign
+   surfaces, and a gradient drawn again inside a smaller box repeats the ramp at
+   a different scale — two versions of the same field, visibly disagreeing.
+   The rule follows the block too: a hardcoded #DDE3ED hairline is invisible on
+   a pale field and glaring on a dark one, and --tlcb-rule already carries the
+   right answer for both. The panel--form variant's separate cream override is
+   gone with it — the block's own background is the one true answer now, so a
+   second hardcoded fill for one block type would just be the same bug with a
+   narrower blast radius. */
+.tlcb-panel{display:flex;flex-direction:column;gap:10px;padding:18px 20px;
+  border:1px solid var(--tlcb-rule,#DDE3ED);border-radius:9px;background:var(--tlcb-bg-flat,#EDF2F7);}
 .tlcb-field{height:38px;border:1px solid #C7CEDA;border-radius:7px;background:#fff;padding:0 12px;font-size:13px;width:100%;}
 .tlcb-inline{display:flex;gap:9px;align-items:center;flex-wrap:wrap;}
 .tlcb-inline .tlcb-field{flex:1;min-width:180px;}
@@ -4038,7 +4053,7 @@ function renderInner(b, opts) {
       : `<div class="tlcb-stack" style="gap:9px"><span class="tlcb-field"></span><span class="tlcb-field"></span>
           <span class="tlcb-btn" style="align-self:flex-start;background:#2E7EA6;border-color:#2E7EA6;color:#fff">Sign up</span>
           <span class="tlcb-note">${src ? 'Form embed' : 'Paste a Google Form URL in the panel on the right.'}</span></div>`;
-    return `<div class="tlcb-panel tlcb-panel--form">${renderHead(opts, b)}${renderBody(opts, b, def)}${inner}</div>`;
+    return `<div class="tlcb-panel">${renderHead(opts, b)}${renderBody(opts, b, def)}${inner}</div>`;
   }
 
   if (t === 'newsletter') {
