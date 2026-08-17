@@ -193,6 +193,9 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
 .ed-sw{width:30px;height:30px;border-radius:7px;border:1px solid #DDE3ED;padding:0;}
 .ed-sw[aria-pressed="true"]{border:2px solid #2E7EA6;box-shadow:0 0 0 2px rgba(46,126,166,.2);}
 .ed-sw[aria-disabled="true"]{border:1px dashed #DDE3ED;opacity:.3;cursor:not-allowed;}
+/* A button-color swatch shows a letter in the ink it pairs with, so the chip
+   previews the actual pairing rather than only the fill. */
+.ed-sw--btn{width:38px;font:800 13px/1 'Source Sans 3';}
 .ed-media{display:flex;gap:10px;align-items:center;padding:10px;border:1px solid #DDE3ED;border-radius:9px;background:#F7F3EC;width:100%;text-align:left;}
 .ed-media:hover{border-color:#2E7EA6;}
 .ed-media-thumb{width:44px;height:44px;border-radius:6px;flex:none;background:#E4EAF2 center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:#8A8898;}
@@ -462,7 +465,11 @@ var S = {
   selectedId: null, device: 'desktop', group: null, paletteOpen: true,
   // Which surface the phone is showing. Ignored above the breakpoint.
   mobileView: 'canvas',
-  changes: [], history: [], saved: null, dirty: false,
+  // ⚠ TWO STACKS, AND `future` IS CLEARED BY EVERY NEW EDIT — see pushHistory.
+  // Without that, undoing three steps and then typing something leaves a redo
+  // stack describing a branch that was just abandoned, and pressing Redo
+  // assembles a page that never existed.
+  changes: [], history: [], future: [], saved: null, dirty: false,
   dragId: null, dragType: null, dragSection: null, dropIndex: null,
   // A drag INSIDE the inspector — one of a block's own rows moving within its
   // own array. Kept apart from dragId above, which moves a whole block between
@@ -529,6 +536,7 @@ function shellHtml() {
         '<button type="button" data-device="phone">Phone</button>' +
       '</div>' +
       '<button type="button" class="ed-undo" id="edUndo">↺ Undo</button>' +
+      '<button type="button" class="ed-undo" id="edRedo">↻ Redo</button>' +
       '<span style="display:flex;gap:1px">' +
         '<button type="button" class="ed-publish" id="edPublish">Publish</button>' +
         '<button type="button" class="ed-publish ed-publish-more" id="edMore" aria-haspopup="dialog" aria-expanded="false" aria-label="Publishing options">▾</button>' +
@@ -596,7 +604,7 @@ function shellHtml() {
 }
 
 function cacheEls() {
-  ['edTitle', 'edPill', 'edSaved', 'edView', 'edUndo', 'edPublish', 'edHint', 'edHintX', 'edRail',
+  ['edTitle', 'edPill', 'edSaved', 'edView', 'edUndo', 'edRedo', 'edPublish', 'edHint', 'edHintX', 'edRail',
    'edCanvas', 'edPaper', 'edPalTabs', 'edPalChips', 'edPalToggle', 'edInspHead', 'edInspBody',
    'edMTabs',
    'edChanges', 'edChangesHead', 'edModal', 'edToast', 'edMore', 'edPublishPanel',
@@ -677,6 +685,9 @@ function renderTop() {
     : (S.status === 'live' ? 'Published' : 'Draft');
   el.edSaved.textContent = S.saved ? 'Autosaved ' + S.saved : 'No changes yet';
   el.edUndo.disabled = S.history.length === 0;
+  // Disabled rather than hidden: a control that vanishes and reappears is
+  // one the eye has to re-find, and an empty redo stack is the normal state.
+  el.edRedo.disabled = S.future.length === 0;
   el.edPublish.disabled = false;
   el.edView.href = 'https://timothystl.org' + S.path;
 }
@@ -918,9 +929,20 @@ function openRichField(node) {
         // A block already draws its own title as the page's heading, so a rich
         // field's h2 is a heading WITHIN that section — offering H1 would put a
         // second page title in the middle of a page.
-        toolbar: 'blocks | bold italic underline | bullist numlist | link',
-        block_formats: 'Text=p;Heading=h2;Subheading=h3;Small heading=h4',
-        valid_elements: 'p,br,strong/b,em/i,u,s,ul,ol,li,a[href|target|rel],h2,h3,h4,blockquote',
+        //
+        // ⚠ Lead paragraph is a REGISTERED FORMAT, not a block_formats entry
+        // naming a bare tag — it is a <p> carrying a class, which the tag list
+        // alone cannot express. sanitizeRich allows that class and only that
+        // class; see RICH_CLASSES in admin/blocks.js.
+        //
+        // hr, sup, sub and blockquote needed no sanitizer work at all: they
+        // have been in RICH_TAGS since the allowlist was written and only ever
+        // lacked a way to type them. blockquote already had its styling too.
+        toolbar: 'blocks | bold italic underline | superscript subscript | bullist numlist | hr | link',
+        block_formats: 'Text=p;Lead paragraph=lead;Heading=h2;Subheading=h3;Small heading=h4;Quote=blockquote',
+        formats: { lead: { block: 'p', classes: 'tlcb-lead' } },
+        valid_elements: 'p[class],br,strong/b,em/i,u,s,ul,ol,li,a[href|target|rel],h2,h3,h4,blockquote,hr,sup,sub',
+        valid_classes: { p: 'tlcb-lead' },
         link_default_target: '_blank',
         setup: function (ed) {
           ed.on('blur', function () { commitField(ed.getElement()); });
@@ -987,6 +1009,11 @@ function renderAll() {
 function pushHistory() {
   S.history.push(JSON.stringify(S.blocks));
   if (S.history.length > 40) S.history.shift();
+  // ⚠ A NEW EDIT ABANDONS THE REDO BRANCH, and this line is the whole
+  // correctness of redo. Undo three steps, type something, press Redo: without
+  // this you get a page assembled from a branch that no longer exists, which
+  // looks like the editor inventing content.
+  S.future.length = 0;
 }
 function note(text) {
   if (!text) return;
@@ -1013,6 +1040,19 @@ function patch(id, part, label, mode, keepInspector) {
 // It must produce byte-identical output to wrapperVars() there — test/
 // editor.test.mjs asserts exactly that against a server render, so drift is
 // caught rather than shipped.
+// Mirrors shadeOf()/btnOf() in admin/blocks.js. Same reason styleVars mirrors
+// wrapperVars: the editor patches these onto the node instead of re-rendering,
+// so a difference here is a canvas that disagrees with the published page.
+function edShade(b) {
+  var C = S.config;
+  var m = (C.SHADES || []).filter(function (s) { return s.key === b.shade; })[0];
+  return (m && m.css) || '';
+}
+function edBtn(b) {
+  var C = S.config;
+  return (C.BTNS || []).filter(function (x) { return x.key === b.btn && x.key !== 'default'; })[0];
+}
+
 function styleVars(b) {
   var C = S.config;
   var sz = C.SIZES.filter(function (x) { return x.key === b.size; })[0] || C.SIZES[1];
@@ -1021,7 +1061,7 @@ function styleVars(b) {
   var ink = C.INK[b.ink] || C.INK[0];
   var cols = b.side === 'above' ? '1fr' : (b.side === 'right' ? sp.b + ' ' + sp.a : sp.a + ' ' + sp.b);
   var v = [
-    '--tlcb-bg:' + (bg.grad || bg.c),
+    '--tlcb-bg:' + (edShade(b) ? edShade(b) + ',' + (bg.grad || bg.c) : (bg.grad || bg.c)),
     '--tlcb-bg-flat:' + bg.c,
     '--tlcb-ink:' + ink.c,
     // ⚠ Must stay byte-identical to wrapperVars() in admin/blocks.js — the
@@ -1046,6 +1086,12 @@ function styleVars(b) {
     '--tlcb-space-above:' + b.spaceAbove + 'px',
     '--tlcb-space-below:' + b.spaceBelow + 'px',
   ];
+  var eb = edBtn(b);
+  if (eb) {
+    v.push('--tlcb-btn-bg:' + eb.bg);
+    v.push('--tlcb-btn-ink:' + eb.ink);
+    v.push('--tlcb-btn-bd:' + eb.bd);
+  }
   if (b.type === 'textphoto') v.push('--tlcb-cols:' + cols);
   if (b.type === 'columns') v.push('--tlcb-cols:repeat(' + b.cols + ',1fr)');
   if (b.type === 'cardgrid') v.push('--tlcb-cols:repeat(' + b.cols + ',1fr)');
@@ -1282,15 +1328,34 @@ async function resetBlock(id) {
   renderTop(); renderChanges(); scheduleSave();
 }
 
+// ⚠ NEITHER OF THESE MAY GO THROUGH pushHistory(), which clears the redo
+// branch — stepping along the history is not a new edit, and routing them
+// through it would make Undo destroy the thing Redo exists to reach.
 async function undo() {
   if (!S.history.length) return;
   var prev = JSON.parse(S.history.pop());
+  S.future.push(JSON.stringify(S.blocks));
+  if (S.future.length > 40) S.future.shift();
   S.blocks = prev;
+  // The block that was selected may not exist in the state being restored.
   S.selectedId = null;
   note('Undid last change');
   await rerender();
   renderTop(); renderChanges(); scheduleSave();
   say('Undid last change');
+}
+
+async function redo() {
+  if (!S.future.length) return;
+  var next = JSON.parse(S.future.pop());
+  S.history.push(JSON.stringify(S.blocks));
+  if (S.history.length > 40) S.history.shift();
+  S.blocks = next;
+  S.selectedId = null;
+  note('Redid last change');
+  await rerender();
+  renderTop(); renderChanges(); scheduleSave();
+  say('Redid last change');
 }
 
 // ── in-place text editing ──────────────────────────────────────────────────
@@ -1637,13 +1702,64 @@ function inspectorSections(b, d) {
       '</div><span class="ed-note">' + esc(shDef.note || '') + '</span></div>';
   }
 
+  // 1d. Shading — a wash across the block's own field. Three chips, same rule
+  // as Edge above. The note follows the choice rather than listing all three.
+  if (d.shade) {
+    var sdNow = b.shade || 'none';
+    var sdDef = (C.SHADES || []).filter(function (x) { return x.key === sdNow; })[0]
+      || (C.SHADES || [])[0] || { note: '' };
+    out += '<div class="ed-sec"><span class="ed-lab">Shading</span><div class="ed-chips">' +
+      (C.SHADES || []).map(function (x) {
+        return chip('shade', x.key, x.label, sdNow === x.key);
+      }).join('') +
+      '</div><span class="ed-note">' + esc(sdDef.note || '') + '</span></div>';
+  }
+
+  // 1e. How the block arrives as the reader scrolls to it.
+  if (d.appear) {
+    var apNow = b.appear || 'none';
+    var apDef = (C.APPEARS || []).filter(function (x) { return x.key === apNow; })[0]
+      || (C.APPEARS || [])[0] || { note: '' };
+    out += '<div class="ed-sec"><span class="ed-lab">Appear</span><div class="ed-chips">' +
+      (C.APPEARS || []).map(function (x) {
+        return chip('appear', x.key, x.label, apNow === x.key);
+      }).join('') +
+      '</div><span class="ed-note">' + esc(apDef.note || '') + '</span></div>';
+  }
+
+  // 1f. Button color. ⚠ Only on the types that actually render a button, so
+  // this is never a control that visibly does nothing. Background and ink are
+  // one choice, never two — see BTNS in admin/blocks.js for why.
+  if (d.btn) {
+    var btNow = b.btn || 'default';
+    var btDef = (C.BTNS || []).filter(function (x) { return x.key === btNow; })[0]
+      || (C.BTNS || [])[0] || { note: '' };
+    // ⚠ Swatches, not worded chips, and the same .ed-sw the background colors
+    // already use — a color is the one choice somebody makes by eye. Each is
+    // painted in the pairing it actually applies, ink on fill, so the chip is
+    // a preview of the button rather than a label for one. Default carries the
+    // values .tlcb-btn falls back to, so it previews honestly too.
+    out += '<div class="ed-sec"><span class="ed-lab">Button color</span><div class="ed-chips">' +
+      (C.BTNS || []).map(function (x) {
+        var fill = x.bg && x.bg !== 'transparent' ? x.bg : (x.key === 'default' ? '#1E2D4A' : 'transparent');
+        var word = x.ink && x.ink !== 'currentColor' ? x.ink : (x.key === 'default' ? '#F5E4C0' : '#1E2D4A');
+        var edge = x.bd && x.bd !== 'currentColor' ? x.bd : (x.key === 'default' ? '#1E2D4A' : '#C4CEDF');
+        return '<button type="button" class="ed-sw ed-sw--btn" data-a="btn" data-v="' + esc(x.key) + '"' +
+          ' data-k="btn:' + esc(x.key) + '" title="' + esc(x.label) + '"' +
+          ' aria-label="Button color ' + esc(x.label) + '"' +
+          ' aria-pressed="' + (btNow === x.key ? 'true' : 'false') + '"' +
+          ' style="background:' + esc(fill) + ';color:' + esc(word) + ';border-color:' + esc(edge) + '">A</button>';
+      }).join('') +
+      '</div><span class="ed-note">' + esc(btDef.note || '') + '</span></div>';
+  }
+
   // Which fund a Give button lands on. A select rather than chips because the
   // list is however many funds the Giving screen holds, not a fixed short set.
   if (d.giveFund) {
     var funds = S.config.giveFunds || [];
     if (!funds.length) {
       out += '<div class="ed-sec"><span class="ed-lab">Fund</span>' +
-        '<span class="ed-note">No funds set up yet. Add them on the Giving screen and they will appear here.</span></div>';
+        '<span class="ed-note">No funds set up yet. <a href="/giving" target="_blank" rel="noopener">Add them on the Giving screen</a> and they will appear here.</span></div>';
     } else {
       var picked = funds.filter(function (f) { return Number(f.id) === Number(b.giveFund); })[0];
       out += '<div class="ed-sec"><label class="ed-lab" for="edGiveFund">Fund</label>' +
@@ -1656,6 +1772,11 @@ function inspectorSections(b, d) {
         '</select><span class="ed-note">' + esc(picked
           ? 'The button reads "Give to ' + picked.name + '" and opens Tithe.ly on that fund.'
           : 'The button hands off to give.timothystl.org, where the giver picks the fund. Choose one here for an appeal to a particular fund.') +
+        // ⚠ WHERE THE LIST COMES FROM, said on the screen. Without this the
+        // dropdown reads as a fixed short list somebody built into the editor,
+        // which is exactly how it was reported — the funds are editable and
+        // there was nothing here to say so.
+        ' <a href="/giving" target="_blank" rel="noopener">Add or edit funds</a>' +
         '</span></div>';
     }
   }
@@ -2046,6 +2167,28 @@ function inspectorAction(action, value) {
       patch(b.id, { shadow: sh.key }, 'Edge → ' + sh.label, 'rerender');
       break;
     }
+    case 'shade': {
+      var sd = (C.SHADES || []).filter(function (x) { return x.key === value; })[0];
+      if (!sd) return;
+      // A custom property, so the node is patched in place — no round trip.
+      patch(b.id, { shade: sd.key }, 'Shading → ' + sd.label);
+      break;
+    }
+    case 'btn': {
+      var bt = (C.BTNS || []).filter(function (x) { return x.key === value; })[0];
+      if (!bt) return;
+      patch(b.id, { btn: bt.key }, 'Button color → ' + bt.label);
+      break;
+    }
+    case 'appear': {
+      var ap = (C.APPEARS || []).filter(function (x) { return x.key === value; })[0];
+      if (!ap) return;
+      // ⚠ Structural: the class lives on the wrapper the SERVER writes, and it
+      // is deliberately not written at all in editing mode — a style-mode patch
+      // would set a property nothing reads.
+      patch(b.id, { appear: ap.key }, 'Appear → ' + ap.label, 'rerender');
+      break;
+    }
     // Both are structural: they change what the renderer emits, not just a
     // custom property on the node, so the Worker re-renders rather than the
     // editor patching a variable that nothing reads.
@@ -2275,6 +2418,7 @@ function bindStatic() {
     if (tab) { S.group = tab.dataset.group; S.paletteOpen = true; renderPalette(); return; }
     if (e.target.closest('#edPalToggle')) { S.paletteOpen = !S.paletteOpen; renderPalette(); return; }
     if (e.target.closest('#edUndo')) { undo(); return; }
+    if (e.target.closest('#edRedo')) { redo(); return; }
   });
 
   // rail
@@ -2458,11 +2602,20 @@ function bindStatic() {
   document.addEventListener('keydown', function (e) {
     // Escape clears the selection so the whole page is visible again
     if (e.key === 'Escape' && !S.picker && S.selectedId) { select(null); return; }
-    // Undo. Typing inside a field is the browser's own undo, not the editor's,
-    // so leave that alone — taking it over would be worse than not having it.
-    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+    // Undo and redo. Typing inside a field is the browser's own undo, not the
+    // editor's, so leave that alone — taking it over would be worse than not
+    // having it. Both are checked against the same guard for that reason.
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z')) {
       var t = e.target;
       if (t && t.closest && (t.closest('[contenteditable="true"]') || t.closest('input, textarea, select'))) return;
+      // Shift is what tells them apart, which is why the undo branch has always
+      // tested for its absence rather than ignoring it.
+      if (e.shiftKey) {
+        if (!S.future.length) return;
+        e.preventDefault();
+        redo();
+        return;
+      }
       if (!S.history.length) return;
       e.preventDefault();
       undo();

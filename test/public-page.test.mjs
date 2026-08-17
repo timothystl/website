@@ -13,7 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { execSync } from 'node:child_process';
-import { renderPage, newBlock, migrateLegacyPage, sanitizeBlocks, BLOCK_DEFS, BLOCK_CSS } from '../admin/blocks.js';
+import { renderPage, newBlock, migrateLegacyPage, sanitizeBlocks, BLOCK_DEFS, BLOCK_CSS, BG } from '../admin/blocks.js';
 
 // Playwright is installed globally in the dev container, not as a project
 // dependency (the repo has no package.json on purpose). ESM ignores NODE_PATH,
@@ -299,6 +299,141 @@ console.log('\nthe edge already rendered the page');
   ok((await plain.page.textContent('#page-news')).includes('PUBLISHED BODY'),
     'and the published blocks are on the page');
   await plain.ctx.close();
+}
+
+console.log('\na block ships its own script, and both paths run it');
+{
+  // ⚠ THE BUG THIS GUARDS WAS LIVE AND SILENT. A <script> inserted with
+  // innerHTML never executes — the HTML spec, not a browser quirk — so the
+  // countdown ticked on a direct visit (the edge parses the markup normally)
+  // and sat frozen on an em dash if the same page was reached from anywhere
+  // else on the site. Verified in a browser before it was fixed.
+  //
+  // The countdown is the block that proves it, because it is the one whose
+  // browser half changes something a visitor can see.
+  const blocks = sanitizeBlocks([Object.assign(newBlock('photobanner'),
+    { title: 'Christmas Market', countdown: true })]);
+  const data = { news: [{ id: 1, title: 'Christmas Market', event_date: '2099-12-06' }] };
+  const html = renderPage(blocks, { slug: 'news', withCss: false, data });
+  ok(/<script/.test(html), 'the countdown block really does ship a script');
+
+  const { page, ctx, errors } = await visitEdged('news', html, { edged: false });
+  eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
+  eq(await page.evaluate(() => !!window.__tlcCountdown), true,
+    'the block script ran after a client-side takeover');
+  const reads = (await page.textContent('[data-countdown]')).trim();
+  ok(reads !== '—' && /\d+d /.test(reads),
+    `the countdown is ticking rather than frozen — reads ${JSON.stringify(reads)}`);
+  await ctx.close();
+}
+
+console.log('\nthe Give button is legible on every field');
+{
+  // ⚠ THE BUG THIS GUARDS WAS REPORTED AS "the background of the box blends
+  // into the give button". .tlcb-chip was declared twice in BLOCK_CSS — once
+  // for this button and once, 385 lines later, for the Coming-up strip's pill.
+  // Equal specificity, so source order decided: the button lost its gold fill
+  // to the strip's chip-bg background and kept its near-black ink. On the Ink
+  // navy field that is #1B1608 on 8% cream over navy, about 1.3:1.
+  //
+  // Asserting the CONTRAST rather than the hex is what makes this worth
+  // having: it fails for any future rule that repaints the button, not only
+  // for a reintroduced duplicate of this one class name.
+  // ⚠ ALPHA IS PART OF THE ANSWER, NOT NOISE TO BE DROPPED. The first version
+  // of this helper read the first three numbers and ignored the fourth, which
+  // made the very wash it was written to catch — rgba(245,240,230,0.08) — look
+  // like opaque cream and score 14:1 against the near-black label. It would
+  // have passed on the bug. A translucent fill has no contrast that can be
+  // asserted at all, because what it composites over is a gradient, so the
+  // alpha is checked separately and a translucent button fails outright.
+  const parse = (c) => {
+    const n = c.match(/[\d.]+/g).map(Number);
+    return { r: n[0], g: n[1], b: n[2], a: n.length > 3 ? n[3] : 1 };
+  };
+  const lum = ({ r, g, b }) => {
+    const f = (v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4); };
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+  };
+  const ratio = (a, b) => {
+    const [x, y] = [lum(parse(a)), lum(parse(b))].sort((m, n) => n - m);
+    return (x + 0.05) / (y + 0.05);
+  };
+
+  const inkNavy = BG.findIndex((b) => b.name === 'Ink navy');
+  const navy = BG.findIndex((b) => b.name === 'Navy');
+  for (const [name, bg] of [['Ink navy', inkNavy], ['Navy', navy], ['Parchment', 0]]) {
+    const html = renderPage(sanitizeBlocks([Object.assign(newBlock('give'), { bg })]),
+      { slug: 'news', withCss: false });
+    const { page, ctx } = await visitEdged('news', html, { edged: false });
+    const seen = await page.evaluate(() => {
+      const el = document.querySelector('.tlcb-chip--go');
+      if (!el) return null;
+      const cs = getComputedStyle(el);
+      return { bg: cs.backgroundColor, ink: cs.color };
+    });
+    ok(seen, `the Give button renders on ${name}`);
+    if (seen) {
+      // Opaque first — this is the assertion that fails on the reported bug.
+      eq(parse(seen.bg).a, 1,
+        `the Give button has a fill of its own on ${name} rather than a wash over the field — got ${seen.bg}`);
+      const r = ratio(seen.bg, seen.ink);
+      ok(r >= 4.5, `and its label is legible on ${name} — ${r.toFixed(2)}:1 (needs 4.5)`);
+    }
+    await ctx.close();
+  }
+
+  // And the Coming-up strip keeps its own pill, which is the half that would
+  // go unnoticed if the fix were made by deleting a rule instead of scoping it.
+  const strip = renderPage(sanitizeBlocks([newBlock('chips')]), { slug: 'news', withCss: false,
+    data: { news: [{ id: 1, title: 'Christmas Market', event_date: '2099-12-06' }] } });
+  const { page, ctx } = await visitEdged('news', strip, { edged: false });
+  const pill = await page.evaluate(() => {
+    const el = document.querySelector('.tlcb-chip-row .tlcb-chip');
+    return el ? getComputedStyle(el).borderRadius : null;
+  });
+  eq(pill, '999px', 'the Coming-up strip still gets its rounded pill');
+  await ctx.close();
+}
+
+console.log('\nthe photo gallery opens a viewer');
+{
+  const blocks = sanitizeBlocks([Object.assign(newBlock('gallery'), {
+    items: [{ url: '/images/logo.png', title: 'The choir' },
+      { url: '/images/logo.png', title: 'Handbells' }],
+  })]);
+  const html = renderPage(blocks, { slug: 'news', withCss: false });
+  const { page, ctx, errors } = await visitEdged('news', html, { edged: false });
+  eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
+
+  // A real button, so it is reachable without a pointer at all.
+  eq(await page.locator('.tlcb-gal-open').count(), 2, 'each photo is a button');
+  eq(await page.locator('.tlcb-lb').count(), 0, 'no viewer is built until one is opened');
+
+  await page.locator('.tlcb-gal-open').first().click();
+  eq(await page.locator('.tlcb-lb').isVisible(), true, 'clicking a photo opens the viewer');
+  eq(await page.locator('.tlcb-lb-cap').textContent(), 'The choir', 'the caption is the photo description');
+  eq(await page.locator('.tlcb-lb-of').textContent(), '1 of 2', 'and it says which one of how many');
+
+  await page.keyboard.press('ArrowRight');
+  eq(await page.locator('.tlcb-lb-cap').textContent(), 'Handbells', 'the right arrow moves to the next photo');
+  await page.keyboard.press('ArrowRight');
+  eq(await page.locator('.tlcb-lb-cap').textContent(), 'The choir', 'and it wraps round');
+
+  // ⚠ Focus has to come back to the thumbnail it was opened from, or a
+  // keyboard visitor is dropped at the top of the document every time they
+  // close a photograph.
+  await page.keyboard.press('Escape');
+  eq(await page.locator('.tlcb-lb').isVisible(), false, 'Escape closes it');
+  eq(await page.evaluate(() => document.activeElement &&
+    document.activeElement.classList.contains('tlcb-gal-open')), true,
+  'and focus returns to the photo it was opened from');
+  await ctx.close();
+
+  // The editor renders the same block as plain images: on the canvas a click
+  // has to select the block, not open a viewer over the page being edited.
+  const edit = renderPage(blocks, { slug: 'news', withCss: false, editing: true });
+  ok(!/tlcb-gal-open/.test(edit), 'no viewer buttons in the editor');
+  ok(!/__tlcLightbox/.test(edit), 'and no viewer script in the editor');
 }
 
 await browser.close();

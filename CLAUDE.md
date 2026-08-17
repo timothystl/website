@@ -525,6 +525,52 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### The nine market settings had nowhere to be set (v5.14.0, 2026-08-16)
+
+Dinger, after the vendor application shipped: *"i set the market fund id in
+the giving tab. confirm where vendor signups go"* — except there was no fund
+ID field in the Giving tab, or anywhere else. Checked, not assumed: none of
+the nine `market_*` settings were reachable from any screen. `admin/market.js`
+seeds them and reads them, and its own "Fees & dates" quick-link pointed at
+`/settings?edit=market_table_fee` — but `market_table_fee` was never added to
+the Settings screen's `SETTINGS_VIEW`/`SETTABLE`, so that link led nowhere a
+form could save to. The manual and this file both described the workflow
+("Admin → Settings, and search for market") for a screen that had never
+actually been built.
+
+- **The Tithe.ly fund ID is on the Giving tab now** (`/giving/market-fund`),
+  beside the Base Tithe.ly Link and the Funds panel — it takes knowing
+  Tithe.ly's own account internals, the same reasoning that keeps `give_url`
+  off the generic Settings screen too. It **replaces** the base link's fund
+  rather than appending a second, same as every other fund override on the
+  site; blank means market payments use whatever fund the base link already
+  carries.
+- **The other seven — day, hours, table fee, max tables, the two card-fee
+  numbers, coordinator email — are on the Settings screen**, under a new
+  **Christmas Market** filter chip. None of them has a dedicated `href`; they
+  use the generic `/settings?edit=<key>` editor the same way `zoom_url` and
+  `social_image_url` do, because there is no reason yet to build a bespoke
+  screen for seven plain fields.
+- **⚠ `market_applications_open` is deliberately NOT in Settings' `SETTABLE`.**
+  It already has its own toggle and its own route on the Christmas Market
+  screen (`POST /market/applications`, gated `market_manage`). Adding it here
+  too would be two forms writing one key — the exact anti-pattern this file
+  warns about for `site_appearance` and `church_name` — and the two could
+  disagree about what "off" means.
+- **This does reopen a permission question worth naming.** The Christmas
+  Market screen's whole design point was that Marla, holding only
+  `market_manage`, can run the coordinator's list without touching anything
+  else. These seven settings need `settings_manage` instead, so she cannot
+  change the table fee or the market day herself — only somebody with full
+  access (Andrew, in practice) can. That is consistent with how the annual
+  checklist in `public/manual.html` was already written (an office/pastor
+  task, not a coordinator one), so it was left as is rather than building a
+  second settings surface on `/market` to avoid a permission mismatch that
+  was already there in the design, just never reachable.
+
+Run: the market groups in `test/admin-redesign.test.mjs`, and
+`node admin/sections.test.mjs`.
+
 ### The Christmas Market takes its own vendor applications (v5.8.0, 2026-08-16)
 
 Built from `design_handoff_market_vendor_signup/`, committed whole for the same
@@ -642,9 +688,7 @@ green forever the moment somebody copies the wrong one in.
   before the first market runs on it.
 
 **Still open, and deliberately:** two of the three "past markets" photographs
-(`christmas-mkt.webp` is the only real one the repo has), and the market's
-Tithe.ly `fundId` — blank means gifts land in whatever fund the base giving
-link already carries, which works, but market money is worth its own fund.
+— `christmas-mkt.webp` is the only real one the repo has.
 
 Run: `node admin/market.test.mjs` (176), `node test/market-vendor.test.mjs`
 (Chromium, 58 — it stubs the admin and one group makes the stub **fail**,
@@ -691,6 +735,230 @@ survives a structural change` in `node test/site-editor.test.mjs` (Chromium).
 Both verified against the bug; the browser one seeds a page already on
 `sectionside` rather than driving the layout dropdown, so what it exercises is
 the redraw and not the Page tab.
+
+### Phase 1 of the editor-tools plan (v5.13.0, 2026-08-17)
+
+Dinger picked from a shortlist and added his own. What shipped in this pass:
+three universal controls, four text formats, and two block types. Redo, the
+photo viewer and the Give-button fix are their own entries below.
+
+**Shading — a wash across a block's field.**
+- **⚠ AN OVERLAY, NOT COLOR ARITHMETIC.** A white-to-black gradient over
+  whatever the surface already is. That produces the handoff's "6–10% of value
+  across the field, never a hue jump" and it is hue-safe **by construction** —
+  an overlay with no hue in it cannot introduce one. It needs to know nothing
+  about the color underneath, so it works on all ten palette entries, layers
+  over the four authored gradients rather than replacing them, and will work on
+  any entry added later.
+- **⚠ Unlike shadow, the banners are NOT excluded.** A wash across a tall
+  full-bleed band is where it earns its place.
+
+**Appear — None / Fade in / Rise in.**
+- **CSS only, via `animation-timeline: view()`.** No JavaScript, no observer.
+- **⚠ GATED POSITIVELY AND TWICE, AND THE NESTING ORDER IS THE SAFETY.** The
+  initial `opacity:0` exists only inside `@supports` **and** inside
+  `prefers-reduced-motion: no-preference`. Firefox has no `animation-timeline`
+  today and gets a normal page; put that initial state outside either gate and
+  it gets a permanently invisible block instead. Both failure directions land
+  on *visible, unanimated*.
+- **⚠ The class is not emitted in the editor at all.** A block that fades itself
+  in every time it scrolls past is one nobody can work on. The inspector note
+  says so rather than leaving somebody to wonder.
+- The three banners are excluded: the first thing on a page fading in is a page
+  that looks like it failed to load.
+
+**Button color.**
+- **⚠ THE FILL AND THE INK ARE ONE CHOICE, NEVER TWO.** Offering them
+  separately is exactly what produces white on gold at 2.6:1 — which the site's
+  own header Give button still does, and which is recorded here as known. Pair
+  them and an unreadable button is not expressible, so there is no warning to
+  write and nothing for anybody to click past. A test computes the ratio of
+  every pairing.
+- **⚠ `default` stores nothing and emits nothing**, so `.tlcb-btn` falls through
+  to the literals it has always carried. A deploy must not repaint the
+  most-clicked control on a church website.
+- **⚠ THE TYPE SET IS DERIVED FROM WHAT THE RENDERER EMITS**, not hand-listed:
+  the test renders every type and asserts `BTN_TYPES` is exactly the set whose
+  markup contains a `.tlcb-btn`. It caught the new Member portal block within
+  the same commit, which is the whole point of writing it that way.
+- The ghost variant keeps its transparent fill and follows only the chosen ink,
+  because it is the quiet button beside a loud one and taking the fill would
+  collapse the distinction it exists for.
+
+**Four text formats**, and three of them needed no sanitizer work: `hr`, `sup`,
+`sub` and `blockquote` have been in `RICH_TAGS` since the allowlist was written
+and only ever lacked a way to type them.
+- **Lead paragraph is the exception** — a `<p>` carrying a class, which the tag
+  list alone cannot express. **⚠ `RICH_CLASSES` allowlists the VALUE, not just
+  the attribute**: an arbitrary class would let saved content borrow any rule in
+  our stylesheet, and `style` is not allowed at all and must not be — a free
+  style attribute is arbitrary CSS running in another admin's authenticated
+  session, which is what AW-2 is about. One unrecognized class drops the whole
+  attribute and keeps the words.
+- **Text color and highlight were deliberately deferred** — Dinger's call.
+
+**Two new block types.**
+- **Lessons.** For confirmation, and the requirement is narrower than it sounds:
+  *"the youth director wants to post everything even though no one will look at
+  it, so if he is compelled to, have a good way to organize it so it's not just
+  one long page of text."* So the folding **is** the feature. `<details>`, the
+  same choice the FAQ, the sermon library and the newsletter archive make.
+  Closed on the page, open in the editor — somebody arranging a lesson cannot
+  type into a body they cannot see. A lesson with no handout address gets no
+  Handout link, the dead-link rule again.
+- **Member portal.** A way into `connect.timothystl.org` that says what is
+  behind the sign-in. This was already possible with a button block; a link in
+  a row of buttons just says nothing about what it opens.
+
+**And the fund dropdown says where its list comes from.** It was reported as a
+fixed short list, which is what it looked like — the funds have been editable on
+the Giving screen since 2026-07-27 and nothing on this screen said so. It links
+there now, in both the populated and the empty state.
+
+Run: `node admin/blocks.test.mjs` (2828), plus the editor and public browser
+suites.
+
+### The Give button had no fill of its own (v5.12.0, 2026-08-16)
+
+Dinger, with a screenshot of a navy Give block: *"the background of the box
+blends into the give button"*. It did, and on every other field too.
+
+**⚠ `.tlcb-chip` WAS DECLARED TWICE, 385 LINES APART, FOR TWO DIFFERENT
+COMPONENTS** — the Give block's button, and the Coming-up strip's pill added
+with the rest of the 1b language in v5.0.0. One class name, equal specificity,
+so source order decided and the later one won. The button lost its gold to the
+strip's `chip-bg` background and kept its near-black ink:
+
+| Field | The button's fill was | Contrast |
+|---|---|---|
+| Ink navy | `rgba(245,240,230,.08)` | about 1.3:1 |
+| Navy | `rgba(0,0,0,.04)` | 1.16:1 |
+| Parchment | `rgba(0,0,0,.04)` | 1.16:1 |
+
+**This is the same defect as the two `.tlcb-card` declarations fixed in
+v4.5.0**, which is why that entry says two rules for one class name is worth
+grepping for. Both selectors are qualified now — `.tlcb-give .tlcb-chip` and
+`.tlcb-chip-row .tlcb-chip` — so neither can reach the other's markup.
+
+- **⚠ THE TEST ASSERTS THE ALPHA BEFORE THE CONTRAST, and the first version of
+  it would have passed on the bug.** `getComputedStyle` returns
+  `rgba(245,240,230,.08)`; a luminance helper that reads the first three
+  numbers and drops the fourth scores that near-transparent wash as opaque
+  cream — about 14:1 against a near-black label. A translucent fill has no
+  contrast that can be asserted at all, because what it composites over is a
+  gradient. So the button must be opaque, and only then is the ratio computed.
+- **It measures the property, not the hex.** Any future rule that repaints the
+  button fails it, not only a reintroduced duplicate of this one class name.
+- **The strip's own pill is asserted too** — the half that would go unnoticed
+  if somebody fixed this by deleting a rule rather than scoping it.
+
+Run: the Give-button group in `node test/public-page.test.mjs`, verified
+against the bug (five assertions fail, naming all three fields).
+
+### Redo (v5.12.0, 2026-08-16)
+
+Undo has been there since the editor shipped and there was no way back.
+
+- **`S.future` is the second stack**, and **⚠ `pushHistory()` clearing it is the
+  whole correctness of this.** Step back three times, type something, press
+  Redo: without that line you get a page assembled from a branch that was
+  abandoned, which reads as the editor inventing content out of nothing.
+- **⚠ Neither `undo()` nor `redo()` may go through `pushHistory()`.** Stepping
+  along the history is not a new edit; routing them through it would make Undo
+  destroy the thing Redo exists to reach.
+- **Both clear the selection**, because the block that was selected may not
+  exist in the state being restored.
+- **`Cmd/Ctrl+Shift+Z`.** The undo handler has always tested for the *absence*
+  of shift, so the shifted key was already reserved rather than needing to be
+  taken from something.
+- **Disabled, not hidden.** An empty redo stack is the normal state, and a
+  control that vanishes and reappears is one the eye has to re-find.
+- **Nothing resets either stack, and nothing needs to**: switching pages in the
+  rail is a full navigation (`location.href`), so both start empty.
+
+Run: the `redo` group in `node test/editor-edit.test.mjs`, verified against the
+bug — removing the branch-clear fails exactly one assertion, the one that says
+a new edit abandons the redo branch.
+
+### A block's own script ran on one path out of two (v5.11.0, 2026-08-16)
+
+Found while scoping a photo viewer, which wanted to ship the same way. Not
+reported by anybody — it is the kind of fault that never generates a complaint,
+because the person checking it always checks it the way that works.
+
+**⚠ A `<script>` INSERTED WITH `innerHTML` NEVER EXECUTES.** That is the HTML
+spec, not a browser quirk. And two blocks ship their browser half inside their
+own markup on purpose — `COUNTDOWN_SCRIPT` and `GIVING_WIDGET_SCRIPT` in
+`admin/blocks.js` — so that a block works wherever it is rendered rather than
+only on a page whose shell remembered to load a script. That reasoning is
+sound; it just had a hole under it.
+
+| Path | What happens | The script |
+|---|---|---|
+| Edge (v5.6.0) | `site-worker.js` prepends the markup as the document is served | the parser sees it, it runs |
+| Client | `tlcTakeOverPage()` sets `host.innerHTML` | **silently dropped** |
+
+So a countdown on a photo banner ticked on a direct visit to its page and sat
+frozen on an em dash forever if the same page was reached from anywhere else on
+the site. **The direct visit is the one anybody testing would try**, because
+checking a page means loading that page.
+
+- **`tlcRunBlockScripts()` re-parents a copy of each one**, which is what makes
+  the browser treat it as a new script and run it. Every block script is
+  already guarded by its own `window.__tlc*` flag, so one the edge has already
+  run is a no-op here rather than a second interval.
+- **⚠ Verified in a real browser before it was fixed, and the test reproduces
+  it with the real symptom** — the countdown reading `—`. Both paths were driven
+  against the actual `public/index.html`: the script tag was present in the DOM
+  on both and only ever ran on one.
+- **⚠ Anything new that ships a script inside block markup depends on this.**
+  The photo viewer below is the first thing built on top of it, and reverting
+  this fix fails its tests too, which is the honest signal that they are one
+  mechanism rather than two.
+
+### A photograph opens (v5.11.0, 2026-08-16)
+
+Gallery thumbnails were dead ends — a small picture of the Christmas Market
+with nothing to click. `LIGHTBOX_SCRIPT` ships inside the gallery block, the
+same arrangement the countdown uses and for the same reason.
+
+- **⚠ It reads the gallery out of the DOM** rather than being handed a list of
+  photographs. There is then exactly one description of what is in a gallery —
+  the markup the visitor is already looking at — so the viewer cannot come to
+  disagree with the grid behind it, and changing a gallery's photos needs
+  nothing regenerated.
+- **⚠ A real `<button>` on the public page, a plain `<img>` in the editor** —
+  the same split the card grid makes with its anchor, and for the same reason:
+  on the canvas a click has to select the block, and a button would swallow it.
+  It is a button rather than an image with a click handler because a handler on
+  an image is not reachable by keyboard **at all** — the exact fault the
+  accessibility pass found on the header logo.
+- **⚠ Focus returns to the thumbnail it was opened from.** Without that a
+  keyboard visitor is dropped at the top of the document every time they close
+  a photograph, and has to tab all the way back down to reach the next one. A
+  test asserts it, verified by removing the line.
+- **Tab is trapped inside the viewer.** A modal that lets focus wander onto the
+  page behind it is one a screen reader user cannot tell they are still in.
+- **Clicking the backdrop closes; clicking the photograph does not** — reaching
+  for the picture should not dismiss it.
+- **⚠ The fade is gated POSITIVELY**, inside
+  `@media (prefers-reduced-motion: no-preference)`, rather than being granted
+  and then taken away by an override further down. This repo has shipped a
+  correct rule defeated by a later declaration at equal specificity four
+  separate times; a rule that is never granted cannot lose that argument.
+- **⚠ `--font-ui`, not `--tlcb-ui`.** The viewer is appended to the body so it
+  cannot be clipped by anything the page does with overflow — which also puts
+  it outside `.tlcb-page`, where no `--tlcb-*` property reaches. Writing the
+  family out as a literal instead pins the caption to one typeface while the
+  rest of the site follows the Appearance setting; `admin/blocks.test.mjs`
+  catches exactly that, and did.
+- **An empty gallery ships no script**, and neither does the editor.
+- **⚠ Still open: the tile and the opened photo are the same file.** The grid
+  scales a full-size image into a 4:3 thumbnail, and opening it large is free
+  only because it was already paying that cost. The crop-and-thumbnail work is
+  the next phase; this makes the need more visible, it does not meet it.
+
+Run: `node test/public-page.test.mjs` (Chromium, 58).
 
 ### The staff grid was showing three of eight (v5.9.1, 2026-08-16)
 

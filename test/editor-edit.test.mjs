@@ -223,6 +223,53 @@ await page.click('#edUndo');
 await settle(400);
 eq(await page.locator('.ed-paper .tlcb--spacer').count(), 1, 'undo brings the block back');
 
+group('redo');
+await reload();
+// Redo is only ever reachable after an undo, so it starts unavailable rather
+// than looking like a control somebody has failed to find a use for.
+eq(await page.locator('#edRedo').isDisabled(), true, 'redo starts disabled');
+await page.click('.ed-paper .tlcb--faq');
+await page.click('.ed-paper .tlcb.is-sel [data-act="dup"]');
+await settle(400);
+eq(await page.locator('.ed-paper .tlcb').count(), 5, 'duplicate adds a block');
+eq(await page.locator('#edRedo').isDisabled(), true, 'and a fresh edit leaves nothing to redo');
+
+await page.click('#edUndo');
+await settle(400);
+eq(await page.locator('.ed-paper .tlcb').count(), 4, 'undo removes the copy');
+eq(await page.locator('#edRedo').isDisabled(), false, 'now there is something to redo');
+
+await page.click('#edRedo');
+await settle(400);
+eq(await page.locator('.ed-paper .tlcb').count(), 5, 'redo puts it back');
+eq(await page.locator('.ed-paper .tlcb--faq').count(), 2, 'and it is the same type');
+ok((await page.textContent('#edChanges')).includes('Redid last change'), 'redo is logged');
+eq(await page.locator('#edRedo').isDisabled(), true, 'the redo stack is spent');
+
+// ⚠ THE ASSERTION THIS GROUP EXISTS FOR. Stepping back and then making a new
+// edit abandons the branch that was undone. Without pushHistory() clearing the
+// stack, Redo would assemble a page from that dead branch — content the editor
+// appears to invent out of nothing.
+await page.click('#edUndo');
+await settle(400);
+eq(await page.locator('.ed-paper .tlcb').count(), 4, 'stepped back again');
+eq(await page.locator('#edRedo').isDisabled(), false, 'with a redo waiting');
+await page.click('.ed-paper .tlcb--spacer');
+await page.click('.ed-paper .tlcb.is-sel [data-act="del"]');
+await settle(400);
+eq(await page.locator('#edRedo').isDisabled(), true,
+  'a new edit abandons the redo branch rather than leaving it reachable');
+
+// Cmd/Ctrl+Shift+Z is the other half of the shortcut the undo handler already
+// reserved by testing for the absence of shift.
+await page.click('#edUndo');
+await settle(400);
+const beforeKey = await page.locator('.ed-paper .tlcb').count();
+await page.keyboard.press('Control+Shift+z');
+await settle(400);
+eq(await page.locator('.ed-paper .tlcb').count(), beforeKey - 1,
+  'Ctrl+Shift+Z redoes the delete');
+
 group('reset block');
 await page.click('.ed-paper .tlcb--textphoto');
 await page.click('[data-k="bg:3"]');
