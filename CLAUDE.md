@@ -525,6 +525,81 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### The Give button gets a color and its own words, and the four values are office-editable (v5.16.0, 2026-08-17)
+
+Dinger, in one message: he still could not recolor a Give button, and the
+Give block always said "Give" when a market fee or a registration needed
+"Pay" instead; the four core values had no admin screen at all, text or
+photos.
+
+**The Give block's button was never a `.tlcb-btn`.** Its CTA has always been
+`.tlcb-chip.tlcb-chip--go` — the class the v5.12.0 legibility fix gave it its
+own gold fill under — and `BTN_TYPES` (the set the "Button color" control is
+offered on) is *derived from what a type's markup actually contains*, so a
+type whose button never carried the marker class was never offered the
+control at all. `give` is in `BTN_TYPES` now; the marker class is added
+first in the attribute (the same convention every other multi-class button
+on the site already follows, and what the derivation test's substring match
+depends on), and `.tlcb-give .tlcb-chip--go`'s three colors now read the same
+`--tlcb-btn-*` variables every other button does, with the original gold as
+the fallback — an untouched Give block repaints by not one pixel.
+
+- **A typed `buttonText` replaces the computed wording outright**, the same
+  override shape `contactEmail` already uses: blank means "Give now" / "Give
+  to [fund]" as before, and it is editable by clicking the button itself in
+  the canvas — the editing-mode span is never inside an anchor, so unlike the
+  card grid's link label there is no nested-anchor problem to route around.
+- **The fund picker's own note had to stop assuming the wording.** It used to
+  say "The button reads 'Give to X'" unconditionally; that becomes a lie the
+  moment somebody types over it, so the note now reads whatever the button
+  will actually say.
+
+**The four core values had no admin screen, and the record itself had no
+photo field.** `admin/values.js`'s `VALUES` is hardcoded — the field
+gradient, the chip tint/ink/solid, the order — and stays that way, on
+purpose: a free hex on these four cards is one paste away from an unreadable
+card, and no one asked to repaint the palette, only the words.
+
+- **`core_values`** is a new table, one row per key, seeded blank by the
+  migration. `mergedValues(rows)` in `admin/values.js` layers whatever is
+  filled in onto the hardcoded record; a missing row and a row that exists
+  but is entirely NULL have to render identically, since that is the actual
+  shape the seed produces — the day the migration runs, nothing on the site
+  moves.
+- **Only the words and a photo are editable** — `short`, `name`, `blurb`
+  (the official one-sentence statement), `tag` (a warmer card-display
+  version, falling back to `blurb` when blank), `why`, and `photo_url`.
+  Everything else — the gradient, the accent, the chip colors, the six "ways
+  in," the order itself — passes through untouched.
+- **A photo REPLACES the field, never adds to it** — the identical mechanism
+  Hero's `--tlcb-hero-img`/`--tlcb-hero-veil` already uses, reused rather
+  than invented twice. ⚠ The veil is a **fixed** dark wash, not a translucent
+  version of each value's own hue: deriving one from four different brand
+  colors is a second design decision nobody asked for, and a flat dark veil
+  reads under any of the four regardless of what the photo itself contains.
+  ⚠ A photographed card takes light ink unconditionally — Outreach's
+  `darkInk:true` exists for its light gold *flat* field, and is exactly wrong
+  once a dark veil sits over whatever the photo is.
+- **`/values`** is nested under Pages beside Partners, gated on the same
+  `pages_edit` permission. Unlike every other list screen there is no add
+  action and no delete — the four rows always exist, one per key, so the
+  screen's only actions are Edit and, once a value has been touched, Reset.
+- **A blank field is stored as NULL, not `''`.** They mean different things
+  to `mergedValues()` — NULL is "still the default," an empty string would
+  read as "customized to nothing" — and to a human looking at the row later,
+  where NULL is legible as "never touched."
+- **Joins the `/api/pages` cache chokepoint**, the same reasoning Partners'
+  logo already established: editing a value changes what a published page's
+  self-filling Core values block renders without any page itself being
+  touched.
+- **The photo picker is the Staff photo field's shape, simplified** — upload,
+  preview, remove — with no crop/zoom sliders, since a landscape card field
+  has no face to recenter the way a circular headshot does.
+
+Run: `node admin/values.test.mjs` (mergedValues), the photo/veil group in
+`node admin/blocks.test.mjs`, and the Give button and Values groups in
+`test/admin-redesign.test.mjs`.
+
 ### The sidebar aside gets its own spacing control (v5.15.2, 2026-08-17)
 
 Dinger, on a `sidebar`/`sectionside` page whose first content block carried

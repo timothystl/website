@@ -668,6 +668,31 @@ export const INITIAL_SETTINGS = [
 // `value` is UNIQUE so the one-per-value rule is the database's job, not a
 // convention somebody has to remember. A value with no partner is a real state
 // — the values page says so plainly rather than quietly showing three.
+// One row per core value, `key` matching admin/values.js's VALUES exactly —
+// the same UNIQUE-by-key rule Partners follows below, for the same reason:
+// there is exactly one of each, and a second row for 'acceptance' is not a
+// second acceptance, it is a bug.
+//
+// ⚠ ONLY THE WORDS AND THE PHOTO LIVE HERE. The design tokens — the field
+// gradient, its bright accent, whether the card takes light or dark ink, the
+// chip tint/ink/solid — stay in admin/values.js, a fixed palette rather than
+// a picker, the same rule the Appearance screen's bar color follows: a free
+// hex on these four cards is one paste away from an unreadable card, and
+// nothing here asked for that control. A NULL/empty column means "use the
+// hardcoded default from admin/values.js", not "blank" — nothing on the site
+// changes until an office account fills a field in.
+export const DB_INIT_CORE_VALUES = `CREATE TABLE IF NOT EXISTS core_values (
+  key TEXT PRIMARY KEY,
+  short TEXT,
+  name TEXT,
+  blurb TEXT,
+  tag TEXT,
+  why TEXT,
+  photo_url TEXT,
+  updated_at TEXT,
+  updated_by TEXT
+)`;
+
 export const DB_INIT_PARTNERS = `CREATE TABLE IF NOT EXISTS partners (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,

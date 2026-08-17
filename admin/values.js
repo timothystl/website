@@ -148,6 +148,31 @@ export const VALUES = [
 
 export const VALUE_KEYS = VALUES.map((v) => v.key);
 
+// The office-editable fields, layered onto the hardcoded record. `rows` is
+// whatever `core_values` holds — one row per key, any subset of columns
+// filled in. A blank or missing column is not an edit; it is "still the
+// hardcoded default", which is what lets the table be seeded empty and
+// change nothing on the site until somebody actually fills a field in.
+//
+// ⚠ EVERY OTHER FIELD ON THE RECORD — field, light, darkInk, tint, ink, solid,
+// ways — passes through untouched. Those are the design tokens; this only
+// ever widens what a value SAYS, never what it looks like structurally.
+export const VALUE_TEXT_FIELDS = ['short', 'name', 'blurb', 'tag', 'why'];
+
+export function mergedValues(rows) {
+  const byKey = new Map((rows || []).map((r) => [r.key, r]));
+  return VALUES.map((v) => {
+    // ⚠ `|| {}`, NOT a special case for "no row". A missing row and a row
+    // whose every column is NULL (the shape the seed actually produces) have
+    // to read identically, or the seed's very first day would render
+    // differently from a database that never migrated at all.
+    const row = byKey.get(v.key) || {};
+    const out = { ...v, photo_url: row.photo_url || '' };
+    for (const f of VALUE_TEXT_FIELDS) if (row[f]) out[f] = row[f];
+    return out;
+  });
+}
+
 const BY_KEY = new Map(VALUES.map((v) => [v.key, v]));
 
 // Unknown / unset reads as null rather than throwing — `value` is nullable on

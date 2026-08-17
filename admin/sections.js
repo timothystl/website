@@ -31,6 +31,13 @@ export const SECTIONS = {
     openMode: 'editor',
     note: 'One partner per value keeps the page honest — if a value has no partner, the page says so rather than quietly showing three.'
   },
+  values: {
+    label: 'Values', glyph: '✦', title: 'Core values', purpose: 'The four core values as they read on the site — name, tagline, wording, and a photo for the field behind them. There are always exactly four, in the church’s own order, so there is nothing here to add or delete.',
+    search: 'Search values', filters: ['All', 'Customized', 'Default wording'],
+    columns: [['Value', '2.3fr'], ['Wording', '1.2fr'], ['Field', '1.1fr']],
+    openMode: 'editor',
+    note: 'Editing here is the only place the words change — the order, the gradient and the accent color are fixed to the church’s own palette and are not editable.'
+  },
   menu: {
     label: 'Menu', glyph: '☰', title: 'Menu', purpose: 'The order and shape of the header and footer. Items can point at a page, an outside site, or a short link — and the label in the bar can be shorter than the page name.',
     action: '+ Add item'

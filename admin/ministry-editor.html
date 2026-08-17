@@ -1814,6 +1814,13 @@ function inspectorSections(b, d) {
         '<span class="ed-note">No funds set up yet. <a href="/giving" target="_blank" rel="noopener">Add them on the Giving screen</a> and they will appear here.</span></div>';
     } else {
       var picked = funds.filter(function (f) { return Number(f.id) === Number(b.giveFund); })[0];
+      // ⚠ THIS HAS TO STAY TRUE ONCE THE BUTTON'S WORDS CAN BE TYPED OVER. A
+      // typed buttonText replaces "Give to X" outright, so a note that always
+      // quotes the computed wording would start lying the moment somebody
+      // clicked the button in the canvas and retyped it.
+      var whatItReads = (b.buttonText && b.buttonText.trim())
+        ? 'The button reads "' + b.buttonText.trim() + '"'
+        : (picked ? 'The button reads "Give to ' + picked.name + '"' : 'The button reads "Give now"');
       out += '<div class="ed-sec"><label class="ed-lab" for="edGiveFund">Fund</label>' +
         '<select class="ed-field" id="edGiveFund" data-in="giveFund" data-k="giveFund">' +
         '<option value=""' + (picked ? '' : ' selected') + '>Let the giving page ask</option>' +
@@ -1821,9 +1828,9 @@ function inspectorSections(b, d) {
           return '<option value="' + esc(String(f.id)) + '"' +
             (picked && Number(picked.id) === Number(f.id) ? ' selected' : '') + '>' + esc(f.name) + '</option>';
         }).join('') +
-        '</select><span class="ed-note">' + esc(picked
-          ? 'The button reads "Give to ' + picked.name + '" and opens Tithe.ly on that fund.'
-          : 'The button hands off to give.timothystl.org, where the giver picks the fund. Choose one here for an appeal to a particular fund.') +
+        '</select><span class="ed-note">' + esc(whatItReads + (picked
+          ? ' and opens Tithe.ly on that fund. Click the button itself to change its words — for a fee or a registration, "Pay now" reads truer than "Give now".'
+          : ', handing off to give.timothystl.org, where the giver picks the fund. Choose one above for an appeal to a particular fund, or click the button to change its words.')) +
         // ⚠ WHERE THE LIST COMES FROM, said on the screen. Without this the
         // dropdown reads as a fixed short list somebody built into the editor,
         // which is exactly how it was reported — the funds are editable and

@@ -725,6 +725,11 @@ export const BLOCK_DEFS = {
     // Which fund the button lands on. The list comes from the Giving screen at
     // render time; the block stores only the id. See the render branch.
     giveFund: true,
+    // Not every use of this block is a donation ask — a table fee, an event
+    // registration, a deposit. Blank keeps the computed "Give now" / "Give to
+    // X" wording; typing anything replaces it outright, same rule contactEmail
+    // follows for the same reason: the common case needs no field filled in.
+    buttonText: true,
   },
 
   // ── THE TWO GIVING-PAGE BLOCKS ────────────────────────────────────────────
@@ -1027,7 +1032,7 @@ export const APPEARABLE_TYPES = new Set(
 // test walks every type, renders it, and asserts this set is exactly the set
 // whose markup contains a .tlcb-btn, so adding a button to a type without
 // adding it here fails rather than shipping a dead control.
-export const BTN_TYPES = new Set(['slideshow', 'download', 'buttons', 'form', 'newsletter', 'cta', 'signup', 'letter', 'portal']);
+export const BTN_TYPES = new Set(['slideshow', 'download', 'buttons', 'form', 'newsletter', 'cta', 'signup', 'letter', 'portal', 'give']);
 
 // The design's own four groups, in its order. Structure leads because that is
 // what somebody reaches for first on an empty page — the banner and the shape
@@ -1417,6 +1422,12 @@ export function sanitizeBlock(b) {
     // address contains neither character.
     out.contactEmail = /^[^\s@<>"':/\\]+@[^\s@<>"':/\\]+\.[^\s@<>"':/\\]+$/.test(raw) ? raw : '';
   }
+
+  // Blank means "read the computed default" — the same rule contactEmail
+  // follows above, for the same reason: the common case (an actual gift)
+  // needs nobody to type anything, and only the exception (a fee, a deposit,
+  // a registration) has to fill the field in.
+  if (def.buttonText) out.buttonText = cleanText(b.buttonText, 60).trim();
 
   // ⚠ STORED ONLY WHEN IT IS NOT THE DEFAULT, unlike `align` which every block
   // carries. Putting `shadow:'none'` in the base object adds the key to all 25
@@ -2087,7 +2098,13 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
    v4.5.0. Two rules for one class name is worth grepping for. */
 .tlcb-give .tlcb-chip{padding:8px 14px;border:1px solid rgba(245,228,192,.4);border-radius:7px;color:#F3EDE1;
   font:600 13px/1 var(--tlcb-ui);text-decoration:none;}
-.tlcb-give .tlcb-chip--go{background:#C9973A;color:#1B1608;border-color:#C9973A;padding:10px 18px;font-weight:700;}
+/* ⚠ THE SAME PAIRED --tlcb-btn-* VARIABLES EVERY OTHER BUTTON READS, with the
+   original gold as the fallback so an untouched Give block repaints by not one
+   pixel. This selector stays more specific than the generic .tlcb-btn rule on
+   purpose — the chip's own padding/radius/weight are its own geometry, not the
+   pill every other button draws — only the three colors are shared. */
+.tlcb-give .tlcb-chip--go{background:var(--tlcb-btn-bg,#C9973A);color:var(--tlcb-btn-ink,#1B1608);
+  border-color:var(--tlcb-btn-bd,#C9973A);padding:10px 18px;font-weight:700;}
 /* ── The giving widget ── the one block that takes money. Its colors are
    fixed rather than following the block's Theme colors palette: this is the
    most-clicked control on the church website and a staff member trying a
@@ -2434,10 +2451,23 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
 .tlcb-signup .tlcb-inline{margin-top:6px;}
 
 /* THE FOUR CORE VALUES. Each card is its own gradient field — the one place
-   in this language where a hue other than navy or gold is allowed. */
+   in this language where a hue other than navy or gold is allowed.
+   ⚠ A PHOTO REPLACES THE FIELD, NOT ADDS TO IT — exactly the Hero block's own
+   mechanism (--tlcb-hero-img / --tlcb-hero-veil), reused rather than invented
+   twice. The photo variable is only ever emitted by the renderer when a value
+   has an uploaded photo; absent, the fallback falls through to the gradient
+   exactly as it always rendered. The veil is a FIXED dark wash, not a
+   translucent version of each value's own hue — deriving one from four
+   different brand colors is a second design decision nobody asked for, and a
+   flat dark veil is legible under any of the four regardless of what a photo
+   itself contains. */
 .tlcb-vals{display:grid;grid-template-columns:var(--tlcb-cols,repeat(4,1fr));gap:20px;align-items:stretch;}
-.tlcb-val{display:flex;flex-direction:column;gap:6px;border-radius:22px;padding:30px 26px;
-  background:var(--v-field);color:var(--v-ink);box-shadow:0 18px 44px rgba(16,27,46,.16);}
+.tlcb-val{position:relative;display:flex;flex-direction:column;gap:6px;border-radius:22px;padding:30px 26px;
+  background:var(--v-photo,var(--v-field)) center/cover;color:var(--v-ink);box-shadow:0 18px 44px rgba(16,27,46,.16);
+  overflow:hidden;}
+.tlcb-val::before{content:'';position:absolute;inset:0;
+  background:linear-gradient(165deg,rgba(8,12,22,.34),rgba(8,12,22,.64));opacity:var(--v-veil,0);}
+.tlcb-val > *{position:relative;z-index:1;}
 /* Newsreader italic at display size — the word is the thing on this card. */
 .tlcb-val-word{font-family:var(--tlcb-sans);font-style:italic;font-weight:400;font-size:44px;
   line-height:1;letter-spacing:-.01em;color:var(--v-head);}
@@ -3334,9 +3364,16 @@ function renderInner(b, opts) {
       // departure from navy and gold in this whole language, allowed on the
       // value card field and its rule and nowhere else. Not nav, not buttons,
       // not links, not headings.
-      const ink = v.darkInk ? '#3B2E12' : 'rgba(255,255,255,.94)';
-      const head = v.darkInk ? '#101B2E' : '#FFFFFF';
-      const label = v.darkInk ? 'rgba(16,27,46,.72)' : 'rgba(255,255,255,.88)';
+      // ⚠ A PHOTO ALWAYS TAKES LIGHT INK, regardless of the value's own
+      // darkInk flag. darkInk exists to keep text readable on a light flat
+      // gradient (Outreach's gold); the photo veil is a fixed dark wash, so
+      // the ink that would be right for the gradient is exactly wrong once a
+      // photo replaces it.
+      const hasPhoto = !!v.photoUrl;
+      const ink = (!hasPhoto && v.darkInk) ? '#3B2E12' : 'rgba(255,255,255,.94)';
+      const head = (!hasPhoto && v.darkInk) ? '#101B2E' : '#FFFFFF';
+      const label = (!hasPhoto && v.darkInk) ? 'rgba(16,27,46,.72)' : 'rgba(255,255,255,.88)';
+      const photoVars = hasPhoto ? `--v-photo:url('${cssUrl(v.photoUrl)}');--v-veil:1;` : '';
       const ways = b.ways && (v.ways || []).length
         ? `<div class="tlcb-val-ways">${v.ways.map((w) => `<div class="tlcb-val-way">
              <span class="tlcb-val-wt">${esc(w.title || '')}</span>
@@ -3349,7 +3386,7 @@ function renderInner(b, opts) {
         ? `<div class="tlcb-val-partner"><span class="tlcb-val-pn">${esc(v.partner.name || '')}</span>
              ${v.partner.body ? `<span class="tlcb-val-pb">${esc(v.partner.body)}</span>` : ''}</div>`
         : '';
-      return `<div class="tlcb-val" style="--v-field:${v.field};--v-ink:${ink};--v-head:${head};--v-label:${label};--v-accent:${v.light}">
+      return `<div class="tlcb-val" style="--v-field:${v.field};${photoVars}--v-ink:${ink};--v-head:${head};--v-label:${label};--v-accent:${v.light}">
         <span class="tlcb-val-word">${esc(v.short || '')}</span>
         <span class="tlcb-val-sub">${esc(v.name || '')}</span>
         <span class="tlcb-val-rule"></span>
@@ -4141,10 +4178,27 @@ function renderInner(b, opts) {
     // Just the one button — an amount is a choice give.timothystl.org's own
     // widget already asks for; suggesting one here duplicated that page
     // instead of just handing off to it.
-    const label = fund ? 'Give to ' + fund.name : 'Give now';
+    // ⚠ NOT EVERY USE OF THIS BUTTON IS A GIFT. A market table fee, a VBS
+    // registration, a gym deposit are all payments this block can be aimed
+    // at, and "Give now" is the wrong word on every one of them — a typed
+    // buttonText replaces the computed wording outright rather than being
+    // appended to it, the same override shape contactEmail uses.
+    const autoLabel = fund ? 'Give to ' + fund.name : 'Give now';
+    const label = (b.buttonText && b.buttonText.trim()) || autoLabel;
+    // ⚠ `tlcb-btn` is a MARKER, not a style source — every color it could set
+    // is already declared by the more specific `.tlcb-give .tlcb-chip--go`
+    // rule above, so nothing repaints from this class alone. ⚠ IT HAS TO COME
+    // FIRST IN THE ATTRIBUTE. The derivation test finds every type offering a
+    // color control with `/class="tlcb-btn/` — an anchored match against the
+    // start of the attribute, the same convention every other multi-class
+    // button on the site already follows (`tlcb-btn tlcb-btn--ghost`, etc.).
+    // Reordering costs nothing: class order has no effect on CSS specificity.
     const go = opts.editing
-      ? `<span class="tlcb-chip tlcb-chip--go">${esc(label)}</span>`
-      : `<a class="tlcb-chip tlcb-chip--go" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`;
+      // The editing-mode span is never inside an anchor, so it can be typed
+      // into directly — unlike the card grid's link label, there is no
+      // nested-anchor problem to route around here.
+      ? field(opts, b, 'buttonText', 'span', 'tlcb-btn tlcb-chip tlcb-chip--go', esc(b.buttonText || ''), ` data-ph="${esc(autoLabel)}"`)
+      : `<a class="tlcb-btn tlcb-chip tlcb-chip--go" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`;
     return `<div class="tlcb-give">${renderHead(opts, b)}
       ${field(opts, b, 'body', 'div', 'tlcb-give-note', b.body || '', ' data-ph="Why it matters"', true)}
       <div class="tlcb-inline">${go}</div>
