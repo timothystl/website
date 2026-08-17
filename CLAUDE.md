@@ -525,6 +525,52 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### The nine market settings had nowhere to be set (v5.14.0, 2026-08-16)
+
+Dinger, after the vendor application shipped: *"i set the market fund id in
+the giving tab. confirm where vendor signups go"* — except there was no fund
+ID field in the Giving tab, or anywhere else. Checked, not assumed: none of
+the nine `market_*` settings were reachable from any screen. `admin/market.js`
+seeds them and reads them, and its own "Fees & dates" quick-link pointed at
+`/settings?edit=market_table_fee` — but `market_table_fee` was never added to
+the Settings screen's `SETTINGS_VIEW`/`SETTABLE`, so that link led nowhere a
+form could save to. The manual and this file both described the workflow
+("Admin → Settings, and search for market") for a screen that had never
+actually been built.
+
+- **The Tithe.ly fund ID is on the Giving tab now** (`/giving/market-fund`),
+  beside the Base Tithe.ly Link and the Funds panel — it takes knowing
+  Tithe.ly's own account internals, the same reasoning that keeps `give_url`
+  off the generic Settings screen too. It **replaces** the base link's fund
+  rather than appending a second, same as every other fund override on the
+  site; blank means market payments use whatever fund the base link already
+  carries.
+- **The other seven — day, hours, table fee, max tables, the two card-fee
+  numbers, coordinator email — are on the Settings screen**, under a new
+  **Christmas Market** filter chip. None of them has a dedicated `href`; they
+  use the generic `/settings?edit=<key>` editor the same way `zoom_url` and
+  `social_image_url` do, because there is no reason yet to build a bespoke
+  screen for seven plain fields.
+- **⚠ `market_applications_open` is deliberately NOT in Settings' `SETTABLE`.**
+  It already has its own toggle and its own route on the Christmas Market
+  screen (`POST /market/applications`, gated `market_manage`). Adding it here
+  too would be two forms writing one key — the exact anti-pattern this file
+  warns about for `site_appearance` and `church_name` — and the two could
+  disagree about what "off" means.
+- **This does reopen a permission question worth naming.** The Christmas
+  Market screen's whole design point was that Marla, holding only
+  `market_manage`, can run the coordinator's list without touching anything
+  else. These seven settings need `settings_manage` instead, so she cannot
+  change the table fee or the market day herself — only somebody with full
+  access (Andrew, in practice) can. That is consistent with how the annual
+  checklist in `public/manual.html` was already written (an office/pastor
+  task, not a coordinator one), so it was left as is rather than building a
+  second settings surface on `/market` to avoid a permission mismatch that
+  was already there in the design, just never reachable.
+
+Run: the market groups in `test/admin-redesign.test.mjs`, and
+`node admin/sections.test.mjs`.
+
 ### The Christmas Market takes its own vendor applications (v5.8.0, 2026-08-16)
 
 Built from `design_handoff_market_vendor_signup/`, committed whole for the same
@@ -642,9 +688,7 @@ green forever the moment somebody copies the wrong one in.
   before the first market runs on it.
 
 **Still open, and deliberately:** two of the three "past markets" photographs
-(`christmas-mkt.webp` is the only real one the repo has), and the market's
-Tithe.ly `fundId` — blank means gifts land in whatever fund the base giving
-link already carries, which works, but market money is worth its own fund.
+— `christmas-mkt.webp` is the only real one the repo has.
 
 Run: `node admin/market.test.mjs` (176), `node test/market-vendor.test.mjs`
 (Chromium, 58 — it stubs the admin and one group makes the stub **fail**,
@@ -692,7 +736,7 @@ Both verified against the bug; the browser one seeds a page already on
 `sectionside` rather than driving the layout dropdown, so what it exercises is
 the redraw and not the Page tab.
 
-### The iframe got taller and the calendar did not (v5.14.0, 2026-08-17)
+### The iframe got taller and the calendar did not (v5.15.0, 2026-08-17)
 
 Dinger, with a screenshot of August: *"the calendar is still not showing the
 full days."* Every Wednesday read **10am Bible Class** and then **4 more**,
@@ -738,7 +782,7 @@ Run: the `the calendar is as tall as it says it is` group in
 `node admin/blocks.test.mjs`, verified against the bug — restoring the
 hardcoded height fails five assertions.
 
-### A banner had no formatting at all (v5.14.0, 2026-08-17)
+### A banner had no formatting at all (v5.15.0, 2026-08-17)
 
 Dinger, with the hero's sentence selected and no toolbar: *"in the hero i can't
 change the text parameters like is it a paragraph, heading, etc."*
