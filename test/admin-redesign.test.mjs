@@ -3215,6 +3215,69 @@ group('⚠ The editor redraws a sidebar page WITH its sidebar');
   lacks(min, 'tlcb-page--', 'with no site layout applied to it');
 }
 
+// ── the aside has its own spacing control ────────────────────────────────────
+group('The sidebar can be pushed down to line up with the content beside it');
+{
+  // Dinger: "if you'd rather the sidebar started lower instead, that isn't
+  // adjustable today". The aside has no block of its own to carry a spaceAbove,
+  // so it is a page-level number instead — same 8px step, same 0..96 cap a
+  // block's own spacing carries.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  db.prepare("UPDATE pages SET template='sidebar' WHERE id='worship'").run();
+
+  const jsonPost = async (path, body) => worker.fetch(new Request('https://admin.timothystl.org' + path, {
+    method: 'POST',
+    headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }), env, ctx);
+
+  // A value between two steps snaps to the nearer one, the same rule a
+  // block's own spacing follows — not rejected, since a mistyped value is
+  // still a person trying to move something 40-odd pixels.
+  // ⚠ withCss ships the WHOLE stylesheet, which is full of its own unrelated
+  // margin-top declarations — assert against the <aside> tag itself, not the
+  // bare string, or a passing test proves nothing.
+  let res = await jsonPost('/pages/api/page/worship/settings', { aside_top: 37 });
+  eq(res.status, 200, 'the route matches');
+  let out = await res.json();
+  eq(out.page.aside_top, 40, 'snapped to the nearest 8px step');
+  ok(out.rerender, 'and the canvas is told to redraw, since this changes what it looks like');
+  has(out.html, '<aside class="tlcb-side" style="margin-top:40px">', 'the aside carries the new offset');
+
+  // ⚠ Clamped to what a single block's own spaceAbove could introduce — the
+  // whole reason this exists is to compensate for that, so anything past it
+  // could never be lining up with real content.
+  res = await jsonPost('/pages/api/page/worship/settings', { aside_top: 9000 });
+  out = await res.json();
+  eq(out.page.aside_top, 96, 'clamped to the same ceiling a block’s own spacing carries');
+
+  // Zero is the ordinary case — flush, exactly as every page rendered before
+  // this control existed — and it must not still carry a style attribute a
+  // human would have to notice is doing nothing.
+  res = await jsonPost('/pages/api/page/worship/settings', { aside_top: 0 });
+  out = await res.json();
+  eq(out.page.aside_top, 0, 'back to flush');
+  has(out.html, '<aside class="tlcb-side">', 'and the style attribute is gone with it, not just zeroed');
+  lacks(out.html.split('</style>').pop(), 'margin-top', 'nothing left on the aside itself, outside the shared stylesheet');
+
+  // A rename alone must not touch it, and must not redraw the canvas either —
+  // only the two settings that change what the canvas looks like should.
+  res = await jsonPost('/pages/api/page/worship/settings', { aside_top: 24 });
+  out = await res.json();
+  eq(out.page.aside_top, 24, 'set for the next check');
+  res = await jsonPost('/pages/api/page/worship/settings', { title: 'Worship & Music' });
+  out = await res.json();
+  eq(out.page.aside_top, 24, 'an unrelated save leaves it exactly where it was');
+  eq(out.rerender, false, 'and does not redraw the canvas over a title change alone');
+
+  // The public render carries it too — this is chrome around the page, not an
+  // editor-only affordance.
+  db.prepare('UPDATE pages SET published_blocks = blocks, status = \'published\' WHERE id = \'worship\'').run();
+  const pub = await (await call(env, '/api/pages')).json();
+  has(pub.rendered.worship, '<aside class="tlcb-side" style="margin-top:24px">', 'and the published page carries the same offset');
+}
+
 // ── the whole staff directory reaches the page ───────────────────────────────
 group('⚠ The staff grid shows every member of staff');
 {

@@ -40,7 +40,7 @@ import { migrateLegacyPage, starterBlocks, sanitizeBlocks, sanitizeBlock, parseB
          renderPage, renderBlock, BLOCK_DEFS, BLOCK_TYPE_KEYS, GROUPS, BG, INK, SIZES, SPLITS, TONES,
          STAMP_PRESETS, safeUrl, esc as escBlock, editorPhoneCss, blocksClientConfig, makeBlockId,
          TEMPLATES, templateOf, wrapTemplate, BLOCK_CSS, cleanText,
-         isSafeObjectPosition, safeZoomFactor,
+         isSafeObjectPosition, safeZoomFactor, snapSpace,
          STARTERS, starterOf } from './admin/blocks.js';
 import PAYROLL_HTML from './admin/payroll.html';
 import SCHEDULER_HTML from './admin/scheduler.html';
@@ -225,6 +225,10 @@ function pageSettings(row) {
     in_menu: row.in_menu ? 1 : 0, template: templateOf(row.template).key,
     seo_description: row.seo_description || '', locked: row.locked ? 1 : 0,
     owner_username: row.owner_username || '',
+    // Only meaningful on the two layouts with an aside; sent for every page
+    // regardless so a template switch never needs a second round trip to
+    // discover a value already sitting on the row.
+    aside_top: snapSpace(row.aside_top || 0),
   };
 }
 
@@ -290,7 +294,7 @@ async function oversizeImage(env, url, request) {
 // Ministry pages have no layout of their own, so this reads nothing for them.
 async function pageLayoutContext(env, P, id) {
   if (P !== '/pages/api' || !id) return {};
-  const row = await env.DB.prepare('SELECT id, template FROM pages WHERE id = ?')
+  const row = await env.DB.prepare('SELECT id, template, aside_top FROM pages WHERE id = ?')
     .bind(id).first().catch(() => null);
   if (!row) return {};
   // Every child, not only the ones this person may open — the aside and the
@@ -300,7 +304,7 @@ async function pageLayoutContext(env, P, id) {
     'SELECT id, title, menu_label, slug, parent_id, sort, status, in_menu, seo_description ' +
     'FROM pages WHERE parent_id = ? ORDER BY sort ASC, title ASC'
   ).bind(row.id).all().catch(() => ({ results: [] }));
-  return { template: row.template, children: kids.results || [] };
+  return { template: row.template, asideTop: row.aside_top || 0, children: kids.results || [] };
 }
 
 async function sharedEditorApi(path, method, request, env, ctx, currentUser, P) {
@@ -1375,7 +1379,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-16-2'; // bumped: market_vendors (+ its index) and the nine market_* settings, for the Christmas Market vendor application
+    const SCHEMA_VERSION = '2026-08-17-1'; // bumped: pages.aside_top, the sidebar/sectionside aside's own spacing control
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -1992,6 +1996,13 @@ export default {
     // rather than as a loose redirect so the menu can point at it by page id
     // and a rename needs nothing else changed.
     try { await env.DB.prepare('ALTER TABLE pages ADD COLUMN external_url TEXT').run(); } catch (_) {}
+    // How far the sidebar/sectionside aside starts below the top of the two
+    // columns — 0..96 in 8px steps, the same range a block's own spaceAbove
+    // carries, so the aside can be pushed down to line up with a content
+    // column whose first block has spacing of its own. NOT NULL DEFAULT 0: an
+    // existing page reads as "flush", which is what every one of them already
+    // renders as today.
+    try { await env.DB.prepare('ALTER TABLE pages ADD COLUMN aside_top INTEGER NOT NULL DEFAULT 0').run(); } catch (_) {}
     // The navigation (phase 4). One row per appearance in a menu — see the note
     // at the top of admin/menu.js for why this is a join table rather than more
     // columns on `pages`. Seeded from the nav as it stands today, with explicit
@@ -2291,7 +2302,7 @@ export default {
         seo_description: r.seo_description || '',
       });
       const rows = await env.DB.prepare(
-        "SELECT id, title, menu_label, slug, parent_id, sort, template, status, in_menu, short_link, external_url, seo_description, published_blocks " +
+        "SELECT id, title, menu_label, slug, parent_id, sort, template, status, in_menu, short_link, external_url, seo_description, aside_top, published_blocks " +
         "FROM pages WHERE status = 'published' ORDER BY sort ASC, title ASC"
       ).all().catch(() => ({ results: [] }));
       // ⚠ give.timothystl.org is a page row so that it gets the editor, the
@@ -2313,7 +2324,7 @@ export default {
         if (!blocks.length) continue;
         const children = list.filter((c) => c.parent_id === r.id).map(publicPage);
         // The stylesheet ships once for the whole response, not once per page.
-        rendered[r.id] = fixUrl(renderPage(blocks, { slug: r.id, template: r.template, data, children, withCss: false }));
+        rendered[r.id] = fixUrl(renderPage(blocks, { slug: r.id, template: r.template, data, children, asideTop: r.aside_top || 0, withCss: false }));
       }
       const redirects = await env.DB.prepare('SELECT from_slug, to_slug FROM page_redirects').all().catch(() => ({ results: [] }));
       // The navigation, resolved server-side so the site never has to work out
@@ -7494,7 +7505,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
         if (!pageId) return jsonResponse({ error: 'Not found' }, 404);
 
         const COLS = 'id, title, menu_label, slug, parent_id, sort, template, status, in_menu, locked, seo_description, ' +
-          'owner_username, blocks, published_blocks, publish_at, change_log, updated_at, updated_by';
+          'owner_username, aside_top, blocks, published_blocks, publish_at, change_log, updated_at, updated_by';
         const row = await env.DB.prepare(`SELECT ${COLS} FROM pages WHERE id = ?`).bind(pageId).first();
         if (!row) return jsonResponse({ error: 'Not found' }, 404);
         if (!owns(row)) return jsonResponse({ error: 'This page is not yours to edit.' }, 403);
@@ -7545,7 +7556,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
             media: media.results || [],
             html: renderPage(blocks, {
               editing: true, slug: row.id, template: row.template, withCss: true,
-              data: await pageData(env, ctx), children,
+              data: await pageData(env, ctx), children, asideTop: row.aside_top || 0,
             }),
           });
         }
@@ -7588,11 +7599,15 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
           const template = body.template === undefined ? row.template : templateOf(body.template).key;
           const inMenu = body.in_menu === undefined ? row.in_menu : (body.in_menu ? 1 : 0);
           const seo = cleanText(body.seo_description, 300);
+          // Only meaningful on sidebar/sectionside, but stored regardless of the
+          // template in force at the moment — switching layout must not lose a
+          // value chosen under the other one.
+          const asideTop = body.aside_top === undefined ? (row.aside_top || 0) : snapSpace(body.aside_top);
           const nowIso = new Date().toISOString();
 
           await env.DB.prepare(
-            'UPDATE pages SET title = ?, slug = ?, parent_id = ?, template = ?, in_menu = ?, seo_description = ?, owner_username = ?, updated_at = ?, updated_by = ? WHERE id = ?'
-          ).bind(title, slug, parentId, template, inMenu, seo, owner || null, nowIso, currentUser?.username || '', pageId).run();
+            'UPDATE pages SET title = ?, slug = ?, parent_id = ?, template = ?, in_menu = ?, seo_description = ?, owner_username = ?, aside_top = ?, updated_at = ?, updated_by = ? WHERE id = ?'
+          ).bind(title, slug, parentId, template, inMenu, seo, owner || null, asideTop, nowIso, currentUser?.username || '', pageId).run();
 
           for (const r of redirects) {
             if (r.id) await env.DB.prepare('UPDATE pages SET slug = ? WHERE id = ?').bind(r.to, r.id).run();
@@ -7611,9 +7626,10 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
             .all().catch(() => ({ results: [] }))).results || [];
           await logAudit(env.DB, currentUser, 'update', 'page', pageId, title, before, pageSettings(after));
 
-          // Only the layout changes what the canvas looks like; a rename does
-          // not, and redrawing on every keystroke would fight the caret.
-          const rerender = after.template !== row.template;
+          // The layout and the aside's own spacing are the only two settings
+          // that change what the canvas looks like; a rename does not, and
+          // redrawing on every keystroke would fight the caret.
+          const rerender = after.template !== row.template || after.aside_top !== row.aside_top;
           const blocks = sanitizeBlocks(parseBlocks(after.blocks));
           return jsonResponse({
             ok: true,
@@ -7626,6 +7642,7 @@ ${sidebarShell('pages', currentUser, `<a href="/pages">← All pages</a>`, await
             rerender,
             html: rerender ? renderPage(blocks, {
               editing: true, slug: after.id, template: after.template, withCss: true,
+              asideTop: after.aside_top || 0,
               data: await pageData(env, ctx),
               children: orderPages(siblings).filter((c) => c.parent_id === after.id),
             }) : '',

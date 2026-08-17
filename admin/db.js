@@ -517,6 +517,7 @@ export const DB_INIT_PAGES = `CREATE TABLE IF NOT EXISTS pages (
   seo_description TEXT,
   owner_username TEXT,
   external_url TEXT,
+  aside_top INTEGER NOT NULL DEFAULT 0,
   blocks TEXT,
   published_blocks TEXT,
   publish_at TEXT,
