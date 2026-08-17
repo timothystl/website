@@ -525,7 +525,7 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
-### The sidebar aside gets its own spacing control (v5.15.0, 2026-08-17)
+### The sidebar aside gets its own spacing control (v5.15.2, 2026-08-17)
 
 Dinger, on a `sidebar`/`sectionside` page whose first content block carried
 its own space above it: the content column started lower than the aside
@@ -774,6 +774,85 @@ survives a structural change` in `node test/site-editor.test.mjs` (Chromium).
 Both verified against the bug; the browser one seeds a page already on
 `sectionside` rather than driving the layout dropdown, so what it exercises is
 the redraw and not the Page tab.
+
+### The iframe got taller and the calendar did not (v5.15.0, 2026-08-17)
+
+Dinger, with a screenshot of August: *"the calendar is still not showing the
+full days."* Every Wednesday read **10am Bible Class** and then **4 more**,
+with visible empty space underneath.
+
+**⚠ GOOGLE LAYS THE MONTH GRID OUT TO THE `height` IN THE URL, NOT TO THE BOX
+IT IS PUT IN.** v5.5.0 raised the iframe's CSS height from 600 to 800 and
+stopped there, so what got taller was the white space around a grid that
+stayed exactly the same size. That is the empty area under "4 more" in the
+screenshot, and it is why the earlier fix read as having done nothing.
+
+The address had no `height` parameter at all. It does now, on both paths, and
+the two copies — `tlcCalSrc()` in `public/index.html` for the hardcoded pages
+and `calendarSrc()` in `admin/blocks.js` for the block — are checked against
+each other by a test that reads the browser copy out of the page and runs both
+over the same inputs, the same arrangement `give-link.js` and `admin/links.js`
+already live under.
+
+- **⚠ Only a Google Calendar address.** The same field takes a Google Form and
+  other embeds, and appending a height to one of those invents a parameter it
+  never asked for.
+- **⚠ AND THE BLOCK'S OWN CONTROL WAS DEAD.** "How tall" — Short / Medium /
+  Tall — has been on the Calendar block's inspector since it shipped, stored on
+  every save, and **read by nothing**: the renderer hardcoded `520px`. Somebody
+  choosing Tall watched nothing happen, which is worse than not offering the
+  choice, because they believe it worked and stop looking.
+- **⚠ 520 was also SHORTER than the 800 the hardcoded page already used**, so
+  publishing `/calendar` or `/news` from the editor made the calendar smaller
+  than the page it replaced. That is the second reason this looked unfixed.
+- **The scale is re-based** — 520 / 800 / 1100 rather than 420 / 560 / 700.
+  Since the control was never read, no stored value has ever meant anything and
+  re-pointing it breaks nothing; honoring the old numbers would have shipped a
+  regression.
+
+**⚠ Not verified against the real calendar, and the reason is worth recording:
+`calendar.google.com` is blocked by the sandbox proxy (403), so the height at
+which Google stops folding a day into "N more" could not be measured here.**
+The missing URL parameter is certain from reading the code; the number 1100 is
+a judgement. If a busy Wednesday still collapses, the next move is to raise it
+rather than to look for a different cause.
+
+Run: the `the calendar is as tall as it says it is` group in
+`node admin/blocks.test.mjs`, verified against the bug — restoring the
+hardcoded height fails five assertions.
+
+### A banner had no formatting at all (v5.15.0, 2026-08-17)
+
+Dinger, with the hero's sentence selected and no toolbar: *"in the hero i can't
+change the text parameters like is it a paragraph, heading, etc."*
+
+Twenty-one block types carry `richBody`. **The three banners carried none**, so
+their subtitle was a plain contenteditable — no toolbar, and nothing on the
+screen to say why this field differed from the one in the block below it.
+
+- **The subtitle is rich now on Hero, Photo banner and Welcome banner.** The
+  eyebrow and the title stay plain, as every block's title does.
+- **⚠ A SENTENCE GETS A SENTENCE'S ALLOWLIST.** `sanitizeLineRich` keeps
+  emphasis, links and footnote marks and drops headings, lists and rules — a
+  heading inside a banner subtitle is a second block's worth of structure
+  inside a banner. Same shape as `sanitizeCardRich`, and a separate set for the
+  same reason: widening the page editor's allowlist later must not quietly
+  widen this one.
+- **⚠ The toolbar is narrowed to match**, keyed off `data-rich-line`. Offering
+  a Heading control whose result is silently discarded on save is worse than
+  not offering it — that is the dead-control rule again, one section above.
+- **⚠ The three renders had to stop escaping.** `esc(b.subtitle)` on a field
+  that now holds markup renders the tags as words. Same trap the v4.32.0 pass
+  hit on three hand-rolled `esc(b.body)` branches.
+- **⚠ `fieldIsRich()` is one test with three callers.** The expression was
+  written out in `commitField` and again in the Enter guard; adding the
+  subtitle to one and not the other would have saved it as `textContent`,
+  throwing away the bold somebody had just applied while the canvas went on
+  showing it until the next redraw.
+- **What is NOT offered, deliberately: choosing whether the subtitle is a
+  paragraph or a heading.** A banner's three fields are fixed roles — eyebrow,
+  title, sentence — and which one you type into *is* that choice. Letting the
+  subtitle become a heading puts two headings in one banner.
 
 ### Phase 1 of the editor-tools plan (v5.13.0, 2026-08-17)
 

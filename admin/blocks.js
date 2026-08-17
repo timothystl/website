@@ -166,10 +166,18 @@ export const GLOWS = [
 ];
 
 // The calendar tray. Same reasoning as the banner: three heights, not a number.
+// ⚠ RE-BASED FOR A MONTH GRID. These were 420/560/700, and the Calendar block
+// never read them at all — it hardcoded 520px — so no stored value has ever
+// meant anything and re-pointing the scale breaks nothing. 700 was below the
+// 800 the hardcoded /calendar page already used, so honoring the old numbers
+// would have made a published page SHORTER than the one it replaced.
+//
+// Tall is what a month with several things on a weekday actually needs before
+// Google stops folding the day into "N more".
 export const EMBED_HEIGHTS = [
-  { key: 's', label: 'Short', px: 420 },
-  { key: 'm', label: 'Medium', px: 560 },
-  { key: 'l', label: 'Tall', px: 700 },
+  { key: 's', label: 'Short', px: 520 },
+  { key: 'm', label: 'Medium', px: 800 },
+  { key: 'l', label: 'Tall', px: 1100 },
 ];
 
 // ── THE INFO CARD ────────────────────────────────────────────────────────────
@@ -294,7 +302,7 @@ export const BLOCK_DEFS = {
     label: 'Welcome banner', glyph: '❏',
     align: true,
     defaults: { title: 'A line that says who you are', subtitle: 'A sentence underneath it.', spaceAbove: 0, spaceBelow: 24 },
-    photo: true, subtitle: true, banner: true, infoCard: true,
+    photo: true, subtitle: true, richSubtitle: true, banner: true, infoCard: true,
     links: true, defaultLinks: [{ title: 'Plan your visit', url: '/visit' }, { title: 'Watch a service', url: '/worship' }],
     items: true, itemFields: ['url', 'title'], itemUrlFields: ['url'], itemLabel: 'Slide', gallery: true, defaultItems: [],
   },
@@ -456,7 +464,7 @@ export const BLOCK_DEFS = {
   hero: {
     label: 'Hero banner', glyph: '▣',
     defaults: { title: 'Ministry name', eyebrow: 'Ministry', subtitle: 'One line about this ministry.', spaceAbove: 0, spaceBelow: 0 },
-    photo: true, subtitle: true, banner: true, infoCard: true, align: true,
+    photo: true, subtitle: true, richSubtitle: true, banner: true, infoCard: true, align: true,
   },
   text: {
     label: 'Rich text', glyph: '¶',
@@ -884,7 +892,7 @@ export const BLOCK_DEFS = {
   // at a real height, its shading is a choice, and it can count down.
   photobanner: {
     label: 'Photo banner', glyph: '◧',
-    align: true, photo: true, subtitle: true, banner: true, infoCard: true,
+    align: true, photo: true, subtitle: true, richSubtitle: true, banner: true, infoCard: true,
     defaults: {
       eyebrow: 'Happening next', title: 'The thing everyone should know about.',
       subtitle: 'Where it is, when it starts, and who it is for.',
@@ -1121,6 +1129,23 @@ export function sanitizeCardRich(input) {
   return full.replace(/<\/?([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>/g, (m, tag) =>
     (CARD_RICH_TAGS.has(tag.toLowerCase()) ? m : '')).slice(0, 1200);
 }
+// ── A SENTENCE'S OWN, NARROWER ALLOWLIST ─────────────────────────────────────
+// A banner subtitle is one line under a title. It wants emphasis and the
+// occasional link; it does not want a heading, a list or a rule, any of which
+// would put a second block's worth of structure inside a banner. Same shape as
+// CARD_RICH_TAGS above and for the same reason: widening the page editor's
+// allowlist later must not quietly widen this one too.
+//
+// ⚠ The toolbar offered on these fields is narrowed to match — see
+// openRichField() in admin/ministry-editor.html. A control that appears and is
+// then silently dropped on save is worse than one that was never offered.
+const LINE_RICH_TAGS = new Set(['p', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'a', 'sup', 'sub']);
+export function sanitizeLineRich(input) {
+  const full = sanitizeRich(input);
+  return full.replace(/<\/?([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>/g, (m, tag) =>
+    (LINE_RICH_TAGS.has(tag.toLowerCase()) ? m : '')).slice(0, 1200);
+}
+
 const RICH_DROP_WITH_CONTENT = /<(script|style|iframe|object|embed|form|link|meta|base|svg|math)\b[\s\S]*?(<\/\1\s*>|$)/gi;
 
 // TinyMCE output is user input. Only staff can reach the editor, but a stored
@@ -1236,7 +1261,13 @@ export function sanitizeBlock(b) {
     id: cleanText(b.id, 32) || makeBlockId(),
     type: b.type,
     title: cleanText(b.title, 200),
-    subtitle: cleanText(b.subtitle, 300),
+    // ⚠ A RICH SUBTITLE IS SANITIZED, NOT FLATTENED. The three banners carry a
+    // sentence under the title and had no rich field at all, so selecting the
+    // words offered no toolbar and there was nothing on screen to say why.
+    // Everywhere else the subtitle is a label or an eyebrow and stays plain —
+    // running those through the markup allowlist would let a heading into a
+    // one-line label.
+    subtitle: def.richSubtitle ? sanitizeLineRich(b.subtitle) : cleanText(b.subtitle, 300),
     eyebrow: cleanText(b.eyebrow, 80),
     body: richBody ? sanitizeRich(b.body) : cleanText(b.body, 600),
     // ⚠ Gated on the DEFINITION, the same way `card` is below. It used to be
@@ -2615,6 +2646,22 @@ export function blocksClientConfig(data) {
 
 // ── RENDERING ────────────────────────────────────────────────────────────────
 
+// ⚠ GOOGLE LAYS THE MONTH GRID OUT TO THE `height` IN THE URL, not to the box
+// it is dropped into. An iframe made taller on its own just gains white space
+// under a day that still reads "N more" — which is exactly what raising only
+// the CSS height in v5.5.0 produced. Only touches a Google Calendar address;
+// this field also takes a Google Form and other embeds, and appending a height
+// to one of those would be inventing a parameter it never asked for.
+//
+// ⚠ Mirrored by tlcCalSrc() in public/index.html for the hardcoded pages.
+export function calendarSrc(src, px) {
+  if (!/^https?:\/\/calendar\.google\.com\//i.test(src)) return src;
+  const n = Math.max(200, Math.min(2000, Math.round(Number(px) || 0)));
+  if (!n) return src;
+  const out = src.replace(/([?&])height=\d+/, '$1height=' + n);
+  return out === src ? out + (src.includes('?') ? '&' : '?') + 'height=' + n : out;
+}
+
 const sizeOf = (b) => SIZES.find((s) => s.key === b.size) || SIZES[1];
 const shadeOf = (b) => (SHADES.find((s) => s.key === b.shade) || SHADES[0]).css;
 const btnOf = (b) => BTNS.find((x) => x.key === b.btn && x.key !== 'default');
@@ -3217,7 +3264,7 @@ function renderInner(b, opts) {
            <span class="tlcb-pb-count-v" data-countdown="${esc(target)}">\u2014</span></div>`
       : '';
     const sub = (b.subtitle || opts.editing)
-      ? field(opts, b, 'subtitle', 'p', 'tlcb-pb-sub', esc(b.subtitle || ''), ' data-ph="Where it is, when it starts, who it is for"')
+      ? field(opts, b, 'subtitle', 'p', 'tlcb-pb-sub', b.subtitle || '', ' data-ph="Where it is, when it starts, who it is for" data-rich-line="1"', true)
       : '';
     const foot = clock || sub ? `<div class="tlcb-pb-foot">${clock}${sub}</div>` : '';
     return `<div class="tlcb-pb tlcb-pb--${esc(h.key)}${cardClass(b)}"${b.photo ? ` style="--tlcb-pb-img:url('${cssUrl(b.photo)}')"` : ''}>${pick}${veil}${glow}
@@ -3398,7 +3445,7 @@ function renderInner(b, opts) {
     return `<div class="tlcb-slide${cardClass(b)}"${bg ? ` style="--tlcb-slide-img:url('${cssUrl(bg)}')"` : ''}>${pick}
       <div class="tlcb-band-text">
       ${field(opts, b, 'title', 'h1', 'tlcb-slide-title', esc(b.title || ''), ' data-ph="A line that says who you are"')}
-      ${field(opts, b, 'subtitle', 'p', 'tlcb-slide-sub', esc(b.subtitle || ''), ' data-ph="A sentence underneath it"')}
+      ${field(opts, b, 'subtitle', 'p', 'tlcb-slide-sub', b.subtitle || '', ' data-ph="A sentence underneath it" data-rich-line="1"', true)}
       <div class="tlcb-btns">${btns}</div>${dots}</div>${renderInfoCard(b, opts)}</div>`;
   }
 
@@ -3768,7 +3815,7 @@ function renderInner(b, opts) {
       <div class="tlcb-band-text">
       ${field(opts, b, 'eyebrow', 'div', 'tlcb-hero-eyebrow', esc(b.eyebrow || ''), ' data-ph="Ministry"')}
       ${field(opts, b, 'title', 'h1', 'tlcb-hero-title', esc(b.title || ''), ' data-ph="Page title"')}
-      ${field(opts, b, 'subtitle', 'p', 'tlcb-hero-sub', esc(b.subtitle || ''), ' data-ph="One line about this ministry"')}
+      ${field(opts, b, 'subtitle', 'p', 'tlcb-hero-sub', b.subtitle || '', ' data-ph="One line about this ministry" data-rich-line="1"', true)}
       </div>${renderInfoCard(b, opts)}
     </div>`;
   }
@@ -4040,8 +4087,14 @@ function renderInner(b, opts) {
 
   if (t === 'calendar') {
     const src = safeUrl(b.url);
+    // ⚠ THE CONTROL WAS DEAD. "How tall" has been on this block's inspector
+    // since it shipped, stored on every save, and read by nothing — the height
+    // was hardcoded at 520px. Somebody choosing Tall watched nothing happen,
+    // which is worse than not offering the choice: they believe it worked and
+    // stop looking.
+    const px = (EMBED_HEIGHTS.find((h) => h.key === b.embedHeight) || EMBED_HEIGHTS[1]).px;
     const inner = src && !opts.editing
-      ? `<iframe src="${esc(src)}" title="${esc(b.title || 'Calendar')}" loading="lazy" style="width:100%;height:520px;border:0;border-radius:9px"></iframe>`
+      ? `<iframe src="${esc(calendarSrc(src, px))}" title="${esc(b.title || 'Calendar')}" loading="lazy" style="width:100%;height:${px}px;border:0;border-radius:9px"></iframe>`
       : `<div style="border:1px solid #DDE3ED;border-radius:9px;padding:26px;text-align:center;background:#F7F3EC;color:#8A8898;font-size:13px">${src ? 'Calendar embed' : 'Paste a Google Calendar embed URL in the panel on the right.'}</div>`;
     return `<div class="tlcb-stack">${renderHead(opts, b)}${inner}</div>`;
   }

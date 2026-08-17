@@ -927,7 +927,6 @@ export const ADMIN_UI_CSS = `
 /* ── NFC taps ── */
 .tlc-taps{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px;margin-bottom:18px;}
 .tlc-tap{border:1px solid var(--tlc-edge);border-radius:12px;background:var(--tlc-parchment);padding:13px 15px;display:flex;flex-direction:column;gap:4px;}
-.tlc-tap.is-on{border-color:var(--tlc-blue);box-shadow:inset 0 0 0 1px var(--tlc-blue);background:#fff;}
 .tlc-tap-head{display:flex;align-items:center;justify-content:space-between;gap:8px;}
 .tlc-tap-n{font:700 13px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--tlc-navy);}
 .tlc-tap-name{font:600 13.5px var(--tlc-sans);color:var(--tlc-ink);}

@@ -886,6 +886,18 @@ function setCanvas(html) {
 // BILLED editor loads; self-hosted it is merely fourteen editors' worth of work
 // on every nudge, which is still the wrong thing to do. Now the only thing that
 // creates an editor is somebody putting the caret in a field.
+// ⚠ ONE TEST, THREE CALLERS. This expression used to be written out in
+// commitField and in the Enter guard, and adding the banners' rich subtitle to
+// one and not the other would have saved a subtitle as textContent — silently
+// throwing away the bold somebody had just applied, with the canvas still
+// showing it until the next redraw.
+function fieldIsRich(d, field, itemIdx) {
+  if (!d) return false;
+  if (itemIdx != null) return (d.richItemFields || []).indexOf(field) > -1;
+  if (d.richBody && field === 'body') return true;
+  return !!(d.richSubtitle && field === 'subtitle');
+}
+
 function openRichField(node) {
   if (!node || !node.dataset || node.dataset.rich !== '1') return;
   // TinyMCE marks the element it has taken over. Re-initializing a live editor
@@ -938,7 +950,14 @@ function openRichField(node) {
         // hr, sup, sub and blockquote needed no sanitizer work at all: they
         // have been in RICH_TAGS since the allowlist was written and only ever
         // lacked a way to type them. blockquote already had its styling too.
-        toolbar: 'blocks | bold italic underline | superscript subscript | bullist numlist | hr | link',
+        // ⚠ A SENTENCE GETS A SENTENCE'S TOOLBAR. A banner subtitle is one line
+        // under a title; a heading or a list inside it would put a second
+        // block's worth of structure into a banner, and sanitizeLineRich drops
+        // both on save. Offering a control whose result is silently discarded
+        // is worse than not offering it, so the two lists agree.
+        toolbar: node.dataset.richLine === '1'
+          ? 'bold italic underline | superscript subscript | link'
+          : 'blocks | bold italic underline | superscript subscript | bullist numlist | hr | link',
         block_formats: 'Text=p;Lead paragraph=lead;Heading=h2;Subheading=h3;Small heading=h4;Quote=blockquote',
         formats: { lead: { block: 'p', classes: 'tlcb-lead' } },
         valid_elements: 'p[class],br,strong/b,em/i,u,s,ul,ol,li,a[href|target|rel],h2,h3,h4,blockquote,hr,sup,sub',
@@ -1406,7 +1425,7 @@ function commitField(node) {
   var field = node.dataset.field;
   var itemIdx = node.dataset.item;
   var d = def(b.type);
-  var isRich = itemIdx != null ? d.richItemFields.indexOf(field) > -1 : (d.richBody && field === 'body');
+  var isRich = fieldIsRich(d, field, itemIdx);
   var value = isRich ? node.innerHTML.trim() : node.textContent.trim();
   if (itemIdx != null) {
     var it = b.items[Number(itemIdx)];
@@ -2563,8 +2582,7 @@ function bindStatic() {
     var wrap = node.closest('.tlcb');
     var b = wrap && findBlock(wrap.dataset.id);
     var d = b && def(b.type);
-    var rich = d && ((d.richBody && node.dataset.field === 'body' && node.dataset.item == null) ||
-      (node.dataset.item != null && d.richItemFields.indexOf(node.dataset.field) > -1));
+    var rich = d && fieldIsRich(d, node.dataset.field, node.dataset.item);
     if (!rich) { e.preventDefault(); node.blur(); }
   });
 

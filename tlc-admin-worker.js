@@ -8911,7 +8911,7 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
         let alertHtml = '';
         if (msg === 'saved')   alertHtml = `<div class="alert alert-success">✓ Card saved.</div>`;
         if (msg === 'deleted') alertHtml = `<div class="alert alert-info">Card deleted.</div>`;
-        if (msg === 'repointed') alertHtml = `<div class="alert alert-success">✓ Tap re-pointed. The physical tag is unchanged — it already only holds its short address.</div>`;
+        if (msg === 'updated')  alertHtml = `<div class="alert alert-success">✓ Tap updated. The physical tag is unchanged — it already only holds its short address.</div>`;
 
         const nowForTaps = new Date();
         // Old buckets are cleared here rather than on a schedule: this runs
@@ -8931,20 +8931,17 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
         const cards = cardRows.results || [];
         const taps = tapRows.results || [];
         const hits = hitRows.results || [];
-        const which = parseInt(url.searchParams.get('tap') || '0', 10);
-
         // The whole mechanic of this screen: the tag holds nothing but /tapN.
-        // Re-pointing it here changes where a tag handed out a year ago lands,
+        // Editing it here changes where a tag handed out a year ago lands,
         // with nobody touching the tag.
         const tapPanel = taps.length === 0 ? '' : `<div class="tlc-taps">${taps.map((t) => {
           const count = cards.filter((c) => c.tap === t.id).length;
-          const on = which === t.id;
-          // Cards are shown by the links page, which only exists at one
+          // Cards are shown by the Link Tree page, which only exists at one
           // address. A tap landing anywhere else — the giving page, say — is a
           // perfectly good tag, but assigning cards to it does nothing, and
           // that is worth saying here rather than leaving to be discovered.
           const showsCards = LINKS_HOST_RE.test(String(t.destination || ''));
-          return `<div class="tlc-tap${on ? ' is-on' : ''}">
+          return `<div class="tlc-tap">
     <div class="tlc-tap-head">
       <span class="tlc-tap-n">/tap${t.id}</span>
       ${t.active ? statusPill('good', 'Live') : statusPill('plain', 'Off')}
@@ -8957,16 +8954,14 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
       everCounted: everCounted(t),
     }))}</span>
     <span class="tlc-tap-count">${pluralise(count, 'card')}</span>
-    ${showsCards ? '' : `<span class="tlc-tap-warn">This tap lands somewhere other than the links page, so it shows no cards${count ? ` — the ${pluralise(count, 'card')} here ${count === 1 ? 'is' : 'are'} not visible to anybody` : ''}. Re-point it at links.timothystl.org to use cards.</span>`}
+    ${showsCards ? '' : `<span class="tlc-tap-warn">This tap lands somewhere other than the Link Tree, so it shows no cards${count ? ` — the ${pluralise(count, 'card')} here ${count === 1 ? 'is' : 'are'} not visible to anybody` : ''}. Point it at links.timothystl.org to use cards.</span>`}
     <div class="tlc-tap-actions">
-      <a class="tlc-tap-btn" href="/link-cards?tap=${on ? '' : t.id}">${on ? 'Show all cards' : 'Show its cards'}</a>
-      <a class="tlc-tap-btn" href="/link-cards/tap/${t.id}">Re-point</a>
+      <a class="tlc-tap-btn" href="/link-cards/tap/${t.id}">Edit</a>
     </div>
   </div>`;
         }).join('')}</div>`;
 
         const listRows = cards
-          .filter((c) => !which || c.tap === which)
           .map((c) => ({
             href: `/link-cards/edit/${c.id}`,
             filter: c.active ? 'showing' : 'hidden',
@@ -8997,7 +8992,6 @@ ${staffPhotoUploadScript()}`, `Edit — ${m.name}`);
           }));
 
         const cfg = sectionCfg('links');
-        const activeTap = taps.find((t) => t.id === which);
         return html(`
 ${sidebarShell('link-cards', currentUser, `<a href="https://links.timothystl.org" target="_blank">View link page</a>`, await pageBadges())}
 <div class="tlc-wrap">
@@ -9013,23 +9007,21 @@ ${sidebarShell('link-cards', currentUser, `<a href="https://links.timothystl.org
   </div>
   ${renderListSection({
     key: 'links',
-    title: activeTap ? `Cards on /tap${activeTap.id}` : 'All cards',
-    purpose: activeTap
-      ? `${escapeHtml(activeTap.name)} — ${escapeHtml(activeTap.placement || 'placement not recorded')}.`
-      : 'Every card, across all four taps. A card with no tap of its own shows on all of them.',
+    title: 'Link Tree',
+    purpose: 'Every card that can appear on links.timothystl.org. A card shows for every tap that lands there unless you move it to one tap only, below.',
     action: { label: cfg.action, href: '/link-cards/new' },
     search: cfg.search,
     filters: filtersOf('links'),
     columns: columnsOf('links'),
     rows: listRows,
     noun: 'card',
-    empty: activeTap ? 'No cards on this tap yet.' : 'No link cards yet.',
+    empty: 'No link cards yet.',
     note: cfg.note,
   })}
 </div>`, 'Taps & links — TLC Admin');
       }
 
-      // Re-point a tap (GET form)
+      // Edit a tap (GET form)
       if (path.startsWith('/link-cards/tap/') && method === 'GET') {
         const id = parseInt(path.slice('/link-cards/tap/'.length), 10);
         const t = await env.DB.prepare('SELECT * FROM taps WHERE id = ?').bind(id).first();
@@ -9037,7 +9029,7 @@ ${sidebarShell('link-cards', currentUser, `<a href="https://links.timothystl.org
         return html(`
 ${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; links</a>`, await pageBadges())}
 <div class="tlc-wrap">
-  <div class="page-title">Re-point /tap${t.id}</div>
+  <div class="page-title">Edit /tap${t.id}</div>
   <div class="page-sub">${escapeHtml(t.name)} — ${escapeHtml(t.placement || 'placement not recorded')}</div>
   <div class="alert alert-info">The physical tag holds nothing but <code>/tap${t.id}</code>. Changing where that lands is this form — the tag itself is never reprogrammed, so anything already handed out keeps working.</div>
   <div class="card">
@@ -9053,7 +9045,7 @@ ${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; 
       <div class="form-group">
         <label>Lands on <span style="color:#B85C3A;">*</span></label>
         <input type="text" name="destination" value="${escapeHtml(t.destination || '')}" required placeholder="https://links.timothystl.org">
-        <p class="tlc-hint" style="margin-top:6px;">This is also how the links page knows which tap it is: an address under links.timothystl.org shows this tap's cards, plus every card set to show on all taps. Point it anywhere else and the tag still works — it just carries no cards.</p>
+        <p class="tlc-hint" style="margin-top:6px;">This is also how the Link Tree page knows which tap it is: an address under links.timothystl.org shows this tap's cards, plus every card set to show on all taps. Point it anywhere else and the tag still works — it just carries no cards.</p>
       </div>
       <div class="form-group">
         <input type="hidden" name="active" value="0">
@@ -9068,19 +9060,26 @@ ${sidebarShell('link-cards', currentUser, `<a href="/link-cards">← Taps &amp; 
       </div>
     </form>
   </div>
-</div>`, 'Re-point tap');
+</div>`, 'Edit tap');
       }
 
       if (path.startsWith('/link-cards/tap/') && method === 'POST') {
         const id = parseInt(path.slice('/link-cards/tap/'.length), 10);
         const form = await request.formData();
         const before = await env.DB.prepare('SELECT * FROM taps WHERE id = ?').bind(id).first();
+        // ⚠ The checkbox posts behind a hidden `active=0`, so an unchecked
+        // box still submits a value for that name. form.get() returns only
+        // the FIRST value for a repeated name — always that hidden 0,
+        // whatever the box was set to — so the box could never actually save
+        // as on. getAll(...).includes('1') is the fix used everywhere else a
+        // toggle shares its name with a hidden fallback.
+        const active = form.getAll('active').includes('1') ? 1 : 0;
         await env.DB.prepare('UPDATE taps SET name = ?, placement = ?, destination = ?, active = ? WHERE id = ?')
           .bind(String(form.get('name') || '').slice(0, 80), String(form.get('placement') || '').slice(0, 120),
-                String(form.get('destination') || '').slice(0, 400), form.get('active') === '1' ? 1 : 0, id).run();
+                String(form.get('destination') || '').slice(0, 400), active, id).run();
         await logAudit(env.DB, currentUser, 'update', 'tap', String(id), before?.name || `tap${id}`, before,
           { destination: form.get('destination') });
-        return new Response('', { status: 302, headers: { Location: '/link-cards?msg=repointed' } });
+        return new Response('', { status: 302, headers: { Location: '/link-cards?msg=updated' } });
       }
 
       // Move a card between taps
