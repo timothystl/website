@@ -190,12 +190,22 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
 .ed-step button:last-child{border-left:1px solid #DDE3ED;}
 .ed-step button:hover{background:#EDF2F7;}
 .ed-step output{padding:4px 10px;font:600 12.5px/1.4 'Source Sans 3';min-width:38px;text-align:center;}
-.ed-sw{width:30px;height:30px;border-radius:7px;border:1px solid #DDE3ED;padding:0;}
+.ed-sw{display:inline-block;width:30px;height:30px;border-radius:7px;border:1px solid #DDE3ED;padding:0;box-sizing:border-box;}
 .ed-sw[aria-pressed="true"]{border:2px solid #2E7EA6;box-shadow:0 0 0 2px rgba(46,126,166,.2);}
 .ed-sw[aria-disabled="true"]{border:1px dashed #DDE3ED;opacity:.3;cursor:not-allowed;}
 /* A button-color swatch shows a letter in the ink it pairs with, so the chip
    previews the actual pairing rather than only the fill. */
-.ed-sw--btn{width:38px;font:800 13px/1 'Source Sans 3';}
+.ed-sw--btn{width:38px;font:800 13px/1 'Source Sans 3';flex:none;}
+/* The button-color list: swatch beside its own name, not a bare row of
+   chips. A transparent fill (Outline) with nothing but a hover tooltip reads
+   as an empty or disabled slot next to Gold/Teal/Cream — the name beside it
+   is what says otherwise without waiting on a hover. */
+.ed-sw-list{display:flex;flex-direction:column;gap:4px;}
+.ed-swrow{display:flex;align-items:center;gap:10px;padding:5px 8px 5px 5px;border-radius:7px;
+  border:1px solid transparent;background:none;text-align:left;width:100%;}
+.ed-swrow:hover{background:#F7F3EC;}
+.ed-swrow[aria-pressed="true"]{border-color:#2E7EA6;background:#E4EEF4;}
+.ed-swrow-label{font:600 13px/1.2 'Source Sans 3';color:#1E2D4A;}
 .ed-media{display:flex;gap:10px;align-items:center;padding:10px;border:1px solid #DDE3ED;border-radius:9px;background:#F7F3EC;width:100%;text-align:left;}
 .ed-media:hover{border-color:#2E7EA6;}
 .ed-media-thumb{width:44px;height:44px;border-radius:6px;flex:none;background:#E4EAF2 center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:#8A8898;}
@@ -1823,21 +1833,25 @@ function inspectorSections(b, d) {
     var btNow = b.btn || 'default';
     var btDef = (C.BTNS || []).filter(function (x) { return x.key === btNow; })[0]
       || (C.BTNS || [])[0] || { note: '' };
-    // ⚠ Swatches, not worded chips, and the same .ed-sw the background colors
-    // already use — a color is the one choice somebody makes by eye. Each is
-    // painted in the pairing it actually applies, ink on fill, so the chip is
-    // a preview of the button rather than a label for one. Default carries the
-    // values .tlcb-btn falls back to, so it previews honestly too.
-    out += '<div class="ed-sec"><span class="ed-lab">Button color</span><div class="ed-chips">' +
+    // ⚠ Swatches, still — the color pairing is still the one choice somebody
+    // makes by eye, painted honestly (ink on fill) rather than only named.
+    // But a bare swatch with a letter in it is easy to mistake for a blank or
+    // disabled slot, Outline especially (a transparent fill on the panel's
+    // own near-white background). Dinger: "the button color/text presets are
+    // not very visable." Each swatch now carries its own name beside it,
+    // rather than only on hover — the same reason the Foundations pass ruled
+    // "a switch's state word is not optional" for the on/off toggles.
+    out += '<div class="ed-sec"><span class="ed-lab">Button color</span><div class="ed-sw-list">' +
       (C.BTNS || []).map(function (x) {
         var fill = x.bg && x.bg !== 'transparent' ? x.bg : (x.key === 'default' ? '#1E2D4A' : 'transparent');
         var word = x.ink && x.ink !== 'currentColor' ? x.ink : (x.key === 'default' ? '#F5E4C0' : '#1E2D4A');
         var edge = x.bd && x.bd !== 'currentColor' ? x.bd : (x.key === 'default' ? '#1E2D4A' : '#C4CEDF');
-        return '<button type="button" class="ed-sw ed-sw--btn" data-a="btn" data-v="' + esc(x.key) + '"' +
+        return '<button type="button" class="ed-swrow" data-a="btn" data-v="' + esc(x.key) + '"' +
           ' data-k="btn:' + esc(x.key) + '" title="' + esc(x.label) + '"' +
           ' aria-label="Button color ' + esc(x.label) + '"' +
-          ' aria-pressed="' + (btNow === x.key ? 'true' : 'false') + '"' +
-          ' style="background:' + esc(fill) + ';color:' + esc(word) + ';border-color:' + esc(edge) + '">A</button>';
+          ' aria-pressed="' + (btNow === x.key ? 'true' : 'false') + '">' +
+          '<span class="ed-sw ed-sw--btn" aria-hidden="true" style="background:' + esc(fill) + ';color:' + esc(word) + ';border-color:' + esc(edge) + '">A</span>' +
+          '<span class="ed-swrow-label">' + esc(x.label) + '</span></button>';
       }).join('') +
       '</div><span class="ed-note">' + esc(btDef.note || '') + '</span></div>';
   }
