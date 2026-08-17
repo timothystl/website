@@ -22,6 +22,7 @@ import { ALL_PERMISSIONS } from '../admin/auth.js';
 // to triage. The color is not what is being asserted; the agreement is.
 import { DEFAULTS as CHROME_DEFAULTS, colorOf } from '../admin/appearance.js';
 const CHROME_BAR = colorOf(CHROME_DEFAULTS.bar).value;
+import { priceBreakdown, money as marketMoney } from '../market-price.js';
 
 let pass = 0, fail = 0;
 const { readFileSync } = await import('node:fs');
@@ -3631,6 +3632,76 @@ group('the other seven market settings are Settings rows');
   // A price change actually reaches the vendor page.
   const cfg = await (await call(env, '/api/market-config', { fresh: true })).json();
   eq(cfg.tableFee, 35, 'the vendor page reads the new table fee');
+}
+
+// ── /christmasmarket/vendors is a real Pages row now ─────────────────────────
+// The vendor application moved onto the block editor (admin/market-page-seed.js)
+// so office staff can edit its rules, its FAQ and its vendor-detail cards
+// without a developer touching public/index.html. What matters here is not
+// that the page renders — admin/blocks.test.mjs already covers the block and
+// the seed in isolation — it is that the real seed-and-publish pipeline this
+// Worker runs on every deploy actually reaches it, the same way it already
+// does for give-landing and /about/values.
+group('the vendor application page is seeded, and stays a draft until published');
+{
+  const { db, env } = await boot();
+
+  const row = db.prepare('SELECT * FROM pages WHERE id = ?').get('marketvendors');
+  ok(row, 'the page is seeded on first boot, like every other seeded page');
+  eq(row.slug, '/christmasmarket/vendors', 'at the address the SPA router already knows');
+  eq(row.parent_id, 'christmasmarket', 'nested under the Christmas Market page');
+  eq(row.in_menu, 0, 'not in the header/footer nav — same as the hardcoded page today');
+  ok(!row.published_blocks, 'and unpublished — the draft only, same rule as every other seed');
+
+  // ⚠ UNLIKE give-landing, this page must be an ordinary member of /api/pages.
+  // give.timothystl.org is excluded because it is a different hostname's page
+  // living in the `pages` table only to get the editor for free; this one is
+  // a normal SPA page and visitors reach it at /christmasmarket/vendors.
+  const api = await (await call(env, '/api/pages', { fresh: true })).json();
+  const listed = api.pages.find((p) => p.id === 'marketvendors');
+  ok(listed, 'the page is in the public page list');
+  eq(listed.slug, '/christmasmarket/vendors', 'at its real address');
+  ok(!api.pages.some((p) => p.id === 'give-landing'), 'sanity: give-landing is still excluded, unlike this page');
+  ok(!api.rendered.marketvendors, 'nothing is rendered for it yet — the draft has not been published');
+}
+
+group('once published, the application reads live settings — never a stored price or address');
+{
+  const { db, env } = await boot();
+  db.prepare("INSERT INTO site_settings (key,value) VALUES ('give_url','https://give.tithe.ly/?formId=abc&locationId=loc&fundId=general') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+  db.prepare("INSERT INTO site_settings (key,value) VALUES ('market_fund_id','market-fund') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+  db.prepare("INSERT INTO site_settings (key,value) VALUES ('market_table_fee','40') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+  db.prepare("INSERT INTO site_settings (key,value) VALUES ('market_date_label','Saturday, Dec 12') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+  db.prepare("INSERT INTO site_settings (key,value) VALUES ('market_hours_label','10:00 am – 5:00 pm') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+  db.prepare("INSERT INTO site_settings (key,value) VALUES ('market_coordinator_email','newcoordinator@example.com') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+
+  // Publish: the same one action a human takes in the editor — copy the
+  // draft across whole. Nothing else about the seeding pipeline changes.
+  db.prepare("UPDATE pages SET published_blocks = blocks WHERE id='marketvendors'").run();
+
+  const api = await (await call(env, '/api/pages', { fresh: true })).json();
+  const html = api.rendered.marketvendors;
+  ok(html, 'the published page now renders');
+  has(html, 'Bring your table to the Christmas Market', 'the hero is there');
+  has(html, 'Saturday, Dec 12', 'the live market date, not whatever was on the page when it was drafted');
+  has(html, '10:00 am – 5:00 pm', 'and the live hours');
+  has(html, 'mailto:newcoordinator@example.com', 'the coordinator email is read live, never typed into the page');
+  lacks(html, 'give.tithe.ly', 'no block on the page carries the Tithe.ly link itself — see the "no url field" rule');
+  lacks(html, 'undefined', 'nothing on the page renders the literal word "undefined"');
+
+  // ⚠ THE SAME PRICE THE ADMIN'S OWN /api/market-config REPORTS. Computed by
+  // the one shared function in market-price.js — a literal here would pass
+  // even if the block and the settings screen quietly drifted apart.
+  const price = priceBreakdown(1, { tableFee: 40 });
+  has(html, marketMoney(price.totalCents), 'the block’s one-table total agrees with the shared pricing function');
+
+  // Changing the fee later changes what the PUBLISHED page shows on its next
+  // read — nothing about the block was frozen when it was published, because
+  // there was never a price stored on it to freeze.
+  db.prepare("UPDATE site_settings SET value = '55' WHERE key = 'market_table_fee'").run();
+  const api2 = await (await call(env, '/api/pages', { fresh: true })).json();
+  const price2 = priceBreakdown(1, { tableFee: 55 });
+  has(api2.rendered.marketvendors, marketMoney(price2.totalCents), 'a fee changed after publishing still reaches the live page');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

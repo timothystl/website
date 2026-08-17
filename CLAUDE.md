@@ -85,7 +85,7 @@ points staff there.
 | page-prayer | /prayer | Exists |
 | page-news | /news | Exists — fetches live from admin API + newsletter archive, with the Google Calendar embedded below the posts (2026-08-01) |
 | page-values | /about/values | Exists (2026-08-01) — the four core values and the partner ministry paired to each, from `/api/values`. Nested under About via `NESTED_PATHS` in `public/index.html` |
-| page-marketvendors | /christmasmarket/vendors | Exists (v5.6.0) — the Christmas Market vendor application. Nested under the market page via `NESTED_PATHS` |
+| page-marketvendors | /christmasmarket/vendors | Exists (v5.6.0) — the Christmas Market vendor application. Nested under the market page via `NESTED_PATHS`. On the block editor as of v5.18.0 (`admin/market-page-seed.js`, draft only until Published — see "/christmasmarket/vendors is on the block editor now" below) |
 | page-404 | (any unknown path) | Exists — shown for unrecognized URLs |
 
 ---
@@ -524,6 +524,126 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
+
+### /christmasmarket/vendors is on the block editor now, with its own application block (v5.18.0, 2026-08-17)
+
+Dinger, after the copy correction above landed: *"and how do i edit this page
+in the future? can you add to the pages? or make it subset of
+christmasmarket"* — offered three ways to get there (a quick admin-editable
+text field for just the rules copy, folding it under the Christmas Market
+tab as a sub-screen, or the full Pages editor with a custom block built for
+the application), and picked the full editor.
+
+**The page was never a candidate for the generic extractor**, which is what
+turned every other page on the site into blocks. `tools/extract-pages.mjs`'s
+own `PAGES` list — the map of every SPA page id to its address, written when
+the extractor shipped — was never updated to include `marketvendors`, because
+the page did not exist yet: it was built directly in `public/index.html` in
+v5.6.0/v5.8.0, after that list had already been settled. Even if it had been
+in the list, the extractor could not have produced anything useful from it —
+this is the same shape of problem `give.timothystl.org` is, a live
+three-step form with a running total, not prose to lift.
+
+**So this is `admin/give-landing-seed.js`'s pattern a second time**:
+`admin/market-page-seed.js` is a hand-authored block list, inserted into
+`ALL_SEEDED_PAGES` in `tlc-admin-worker.js` alongside the generated
+`SITE_PAGES`. It lands in the **draft only** — `published_blocks` stays NULL,
+so `/christmasmarket/vendors` keeps rendering the hardcoded markup in
+`public/index.html`, `tlcMarketInit()` and all, until somebody opens the
+editor, reads the draft against the live page and presses Publish.
+
+**⚠ UNLIKE give-landing, this page is not excluded from `/api/pages`.**
+give.timothystl.org only has a `pages` row so it can borrow the editor,
+publishing and revisions machinery — it is a different hostname's page and
+would make a third giving surface if the SPA ever served it too. This page
+*is* an ordinary SPA page; visitors reach it at its own address inside
+`timothystl.org`, so it goes through the same `/api/pages` list, the same
+`children`/menu resolution and the same edge-render injection every other
+converted page does. A test asserts both directions — the seed is a normal
+member of `api.pages`, and `give-landing` is still the one page that is not.
+
+**A new block type, `marketapp` — "Market application" — because the payment
+widget cannot be prose, and it needs the same guarantee `giving` and
+`amounts` already carry.**
+
+- **⚠ NO url FIELD, AND IT CANNOT HAVE ONE.** Same rule as the two
+  giving-page blocks, for the same reason: what a vendor is charged and where
+  the payment goes both come from `priceBreakdown()`/`marketConfigFromRows()`
+  (`market-price.js`, `admin/market.js`) at the instant they submit, resolved
+  through the Giving tab's base link exactly as the market's Square/Tithe.ly
+  payment link already was before this — never stored on the block, because a
+  block's value is frozen the moment the page is published and a stored
+  address would go on charging to the old form after the office changed it.
+  `sanitizeBlock` gates `url` on the type declaring one; this type simply
+  never does, so a crafted POST carrying an address is dropped regardless.
+- **The pure pricing math moved to `market-price.js`, a new top-level leaf
+  file with no `admin/`-internal imports — mirroring `give-link.js` beside
+  it, and for the identical reason.** `admin/blocks.js` needed the same
+  `priceBreakdown()`/`money()`/`MARKET_PRICING_JS` that `admin/market.js`
+  already exported, but `admin/helpers.js` imports FROM `admin/blocks.js`
+  (for `sanitizeRich`), so `admin/blocks.js` importing `admin/market.js` —
+  which imports `admin/helpers.js` — would complete a circular import. Node
+  tolerates that in simple cases; Cloudflare Workers' module loader is not
+  guaranteed to, so the cycle is avoided outright. `admin/market.js`
+  re-exports everything from `market-price.js` so every existing caller,
+  including its own test file, is unchanged.
+- **What IS editable: the intro above the form, and the vendor agreement's
+  nine clauses — as an item list, the same shape the FAQ block already
+  uses.** A clause can be added, removed, reordered or reworded without a
+  developer. Everything else — the fields, the pricing math, the payment
+  hand-off — is fixed, because it is the one thing on this page that
+  actually takes money and it has already been tested end to end (PR #438).
+- **⚠ A clause with no words is dropped, ON THE PUBLIC PAGE ONLY.** In the
+  editor every item stays, even a freshly-added blank one — that empty box is
+  the only thing there is to click into and type, the same reason a block
+  that renders nothing still renders something while somebody is arranging
+  it. The array index a clause's `itemField` writes back to is the same
+  either way: nothing is filtered while editing, and public rendering never
+  reads that index at all.
+- **⚠ Every numeric field the block reads directly falls back to
+  `MARKET_DEFAULTS`, not just the ones `priceBreakdown()` touches
+  internally.** The facts line and the fee-percent label read `market.X`
+  straight, and the first version of this did that with no fallback of its
+  own — so a genuinely empty `data.market` (the admin unreachable, the query
+  failed) rendered the literal word "undefined" into the page instead of the
+  $30/2.9%/30¢ a visitor would actually be charged. Caught by a test that
+  renders the block against an empty market object.
+- **The nine clauses are not retyped in the page seed.** `AGREEMENT_ITEMS` in
+  `admin/market-page-seed.js` is a cloned copy of
+  `BLOCK_DEFS.marketapp.defaultItems` — the same array a brand-new block
+  starts with when dragged onto any other page — so there is exactly one
+  place Andrew's legal wording lives rather than two copies that could drift.
+  A test asserts the seed's clauses are byte-identical to the block's own
+  defaults.
+- **⚠ Nowhere in the surrounding page's editorial prose — the vendor-detail
+  cards, the rules tiles, the FAQ — is the table fee typed in dollars or the
+  coordinator named by hand.** Both are already live settings the
+  `marketapp` block itself reads (`market_table_fee`,
+  `market_coordinator_email`) and both change with the market: the fee by a
+  processor change, the coordinator by whoever volunteers next. Writing
+  either into ordinary prose blocks would create a second copy that goes
+  stale the day the setting changes — the exact failure this whole editor
+  exists to prevent. A test greps the seed's non-application blocks for a
+  dollar sign and for the name "Marla" and expects neither.
+- **`marketvendors` joined `site-worker.js`'s `NESTED_PATHS`, mirroring
+  `public/index.html`'s `tlcPathFor()`.** Missed on the first pass: the two
+  copies have to agree on a nested page's address or the edge-render
+  injection looks for this page's blocks at the wrong path
+  (`/marketvendors` instead of `/christmasmarket/vendors`) and never finds
+  them — purely additive, so nothing breaks, but the flash-prevention this
+  repo built in v5.6.0 would silently not apply to this one page. The mirror
+  test in `test/site-edge-render.test.mjs` now checks this id too.
+- **`SCHEMA_VERSION` bumped.** Adding a page to `ALL_SEEDED_PAGES` is a
+  migration-block change like any other — without the bump, the new
+  `INSERT OR IGNORE` for this page never runs against a database that has
+  already seen the previous schema version.
+
+Run: three new groups in `admin/blocks.test.mjs` (the block's own
+sanitizing/rendering rules, the closed-and-blank-clause behavior, and the
+seed itself), two new groups in `test/admin-redesign.test.mjs` (seeded as a
+draft and left unpublished; once published, reads live settings and a later
+setting change still reaches the already-published page), and the widened
+`marketvendors` case in `test/site-edge-render.test.mjs`.
 
 ### The hero photo gets a shading and position control, and a rich field actually closes (v5.17.0, 2026-08-17)
 

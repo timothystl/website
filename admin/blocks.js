@@ -23,6 +23,19 @@
 // give-landing.js so the block editor and the hardcoded fallback page can
 // never disagree about what a gift of $25 costs. See give-link.js.
 import { withAmountAndFund, withFund, parseAmount, fmtAmount, giftForPeriod, giveButtonLabel, GIVE_LINK_JS } from '../give-link.js';
+
+// The Christmas Market's own pricing — one definition, shared with the public
+// /api/market/apply route and its test suite, for the same reason as above:
+// three copies of a rule about somebody's money is three chances for one of
+// them to be wrong in a way nobody notices, because a wrong price still LOOKS
+// like a working price.
+//
+// ⚠ FROM ../market-price.js, NOT ./market.js. admin/market.js imports from
+// admin/helpers.js, which itself imports FROM this file (for sanitizeRich) —
+// so importing admin/market.js here would complete a circular import. Node
+// tolerates that in simple cases; Cloudflare Workers' module loader is not
+// guaranteed to, so the cycle is avoided outright rather than relied upon.
+import { priceBreakdown, money as marketMoney, MARKET_PRICING_JS, MARKET_DEFAULTS } from '../market-price.js';
 // The countdown needs a real instant, not a date somebody reads — see the note
 // on churchInstant() itself.
 import { churchInstant } from './when.js';
@@ -827,6 +840,53 @@ export const BLOCK_DEFS = {
     ],
   },
 
+  // ── THE CHRISTMAS MARKET APPLICATION ──────────────────────────────────────
+  // The three-step vendor application from /christmasmarket/vendors, folded
+  // into the editor at Andrew's own request, after he supplied the market's
+  // real 2026 rules and there was nowhere on the site to put them without a
+  // developer editing public/index.html by hand.
+  //
+  // ⚠ THE SAME RULE AS THE TWO GIVING-PAGE BLOCKS, FOR THE SAME REASON: this
+  // type has no url field and cannot have one. What a vendor is charged and
+  // what is recorded against them both come from admin/market.js's
+  // priceBreakdown() at the moment they submit — a block's own value is the
+  // RUNNING TOTAL shown on screen, never the address the money is sent to. See
+  // the 'marketapp' branch in renderBlock() and `data.market` in pageData().
+  //
+  // What IS editable here: the intro above the form (this block's own `body`),
+  // and the vendor agreement's clauses — as an item list, the same shape the
+  // FAQ block uses, so a clause can be added, removed, reordered or reworded
+  // without a developer. Everything else — the fields themselves, the pricing
+  // math, the payment hand-off — is fixed, because it is the one thing on this
+  // page that actually takes money and it has already been tested end to end.
+  marketapp: {
+    label: 'Market application', glyph: '⚑',
+    align: true, richBody: true,
+    defaults: {
+      eyebrow: 'The application', title: 'Vendor application',
+      body: '<p>Three short steps, about five minutes. You pay by card at the end and the coordinator confirms your table number by email.</p>',
+      spaceAbove: 24, spaceBelow: 24,
+    },
+    auto: 'market',
+    autoNote: 'The fee, the dates, the table maximum and whether applications are open all come from Settings and the Christmas Market screen — change one there and this follows. Nothing here can hold a payment address; that is resolved from the Giving screen the instant somebody submits.',
+    autoCount: false,
+    items: true, itemFields: ['body'], richItemFields: ['body'], itemLabel: 'Agreement clause',
+    // The nine real clauses, as Andrew sent them (2026-08). A clause with no
+    // words is dropped at render rather than shown blank, the same rule every
+    // item list on the site follows.
+    defaultItems: [
+      { body: '<p>The fee for my table(s), plus the card processing fee, is due when I apply. It is refunded only if my application or products are declined as inappropriate; otherwise there is no refund for a withdrawal within three weeks of the market, or for a no-show.</p>' },
+      { body: '<p>Timothy Lutheran Church provides one 6-foot table and weather coverage for each 8×10 ft space. I supply my own chairs, a table covering that reaches the ground, signage, display, bags, and change, and I keep my display within my assigned space.</p>' },
+      { body: '<p>My merchandise reflects handmade, Christmas, and gift themes. I will not sell secondhand items, and I will not sell alcohol or other beverages.</p>' },
+      { body: '<p>I will enter from Ivanhoe at the north lot entrance by 8:30 am and be set up before vehicle access closes at 10:30. I will keep my table staffed until the market closes at 6:00 pm, and move my vehicle back to the lot to load out only once vehicles are allowed back in at 6:15 pm.</p>' },
+      { body: '<p>All my electrical needs and appliances are declared on my application and approved by Marla Steenbock in advance. I will not bring a heater or a heated blanket.</p>' },
+      { body: '<p>If I sell food or drink, I am responsible for complying with all City of St. Louis health department requirements and for safe handling of everything I serve.</p>' },
+      { body: '<p>I am responsible for collecting and reporting any sales tax, and for the security of my own merchandise and cash.</p>' },
+      { body: '<p>Timothy Lutheran Church is not liable for loss, theft, or damage to my property, or for injury arising from my participation. I will leave my space clean.</p>' },
+      { body: '<p>Timothy Lutheran Church may photograph the market and use those images to promote future markets.</p>' },
+    ],
+  },
+
   // ── THE STANDOUT CARD ─────────────────────────────────────────────────────
   // The handoff calls it "the service-times tile made general", and that is
   // exactly how it is built: it shares its CSS with the Service times block's
@@ -1083,7 +1143,7 @@ export const GROUPS = [
   // than starting a fifth. They belong to one page, and a group of two that
   // only ever appears on the giving page would read on every other page as a
   // section of the library that is broken.
-  { name: 'Sign up',   types: ['form', 'signup', 'newsletter', 'letter', 'newsletterarchive', 'portal', 'give', 'giving', 'amounts'] },
+  { name: 'Sign up',   types: ['form', 'signup', 'newsletter', 'letter', 'newsletterarchive', 'portal', 'give', 'giving', 'amounts', 'marketapp'] },
 ];
 
 export const BLOCK_TYPE_KEYS = Object.keys(BLOCK_DEFS);
@@ -2179,6 +2239,86 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
   font:800 21px/1 var(--tlcb-ui);padding:20px;border-radius:10px;text-decoration:none;}
 .tlcb-gv-trust{margin-top:16px;font-size:12.5px;line-height:1.55;color:#6B6A5F;}
 .tlcb-gv-trust p{margin:0;}
+
+/* ── THE MARKET APPLICATION ───────────────────────────────────────────────
+   Ported from the standalone fallback page's .mkt-* rules in public/styles.css
+   into this block system's own namespace — hardcoded hex matching the same
+   site palette, var(--tlcb-serif)/--tlcb-ui for type, since this block also
+   has to render correctly inside the editor canvas, which never loads
+   public/styles.css at all. */
+.tlcb-mktapp-facts{font:600 13.5px/1 var(--tlcb-ui);color:#6B6A5F;margin:6px 0 22px;}
+.tlcb-mktapp-closed{padding:20px 22px;border:1px solid #DDE3ED;border-left:3px solid #C9973A;border-radius:10px;background:#FBF8F3;}
+.tlcb-mktapp-closed p{margin:0;font-size:14.5px;line-height:1.6;color:#4A4860;}
+.tlcb-mktapp-card{max-width:760px;background:#FBF8F3;border:1px solid #DDE3ED;border-radius:16px;
+  box-shadow:0 6px 32px rgba(30,45,74,.14);overflow:hidden;}
+.tlcb-mktapp-steps{display:flex;border-bottom:1px solid #DDE3ED;background:#EDF2F7;}
+.tlcb-mktapp-step{flex:1;background:#EDF2F7;border:none;border-bottom:3px solid transparent;padding:16px 14px;
+  text-align:left;cursor:pointer;font-family:var(--tlcb-ui);min-height:44px;}
+.tlcb-mktapp-step span{display:block;font:700 10px/1 var(--tlcb-ui);letter-spacing:.1em;text-transform:uppercase;color:#8A8898;}
+.tlcb-mktapp-step b{display:block;font:800 13.5px/1.3 var(--tlcb-ui);color:#8A8898;margin-top:2px;}
+.tlcb-mktapp-step[aria-selected="true"]{background:#FBF8F3;border-bottom-color:#C9973A;}
+.tlcb-mktapp-step[aria-selected="true"] b{color:#1E2D4A;}
+.tlcb-mktapp-form{padding:30px 30px 26px;}
+.tlcb-mktapp-panel{display:none;flex-direction:column;gap:20px;}
+.tlcb-mktapp-panel.is-on{display:flex;}
+/* ⚠ In the editor every panel is shown at once (see the --editing rule below),
+   so somebody arranging the page can reach the agreement clauses in step 3
+   without a script that will not run on the canvas to switch steps for them. */
+.tlcb-mktapp--editing .tlcb-mktapp-panel{display:flex;}
+.tlcb-mktapp-lead{font-size:14.5px;color:#4A4860;line-height:1.65;margin:0;}
+.tlcb-mktapp-field{display:flex;flex-direction:column;gap:6px;}
+.tlcb-mktapp-field>label,.tlcb-mktapp-field>span{font:700 10.5px/1 var(--tlcb-ui);letter-spacing:.06em;text-transform:uppercase;color:#4A4860;}
+.tlcb-mktapp-field input,.tlcb-mktapp-field textarea{width:100%;background:#fff;border:1px solid #DDE3ED;border-radius:8px;
+  padding:11px 13px;font:400 14.5px/1.5 var(--tlcb-serif);color:#1A1A2A;min-height:44px;}
+.tlcb-mktapp-field textarea{min-height:96px;resize:vertical;font-family:var(--tlcb-serif);}
+.tlcb-mktapp-field input:focus,.tlcb-mktapp-field textarea:focus{outline:none;border-color:#C9973A;box-shadow:0 0 0 3px rgba(201,151,58,.15);}
+.tlcb-mktapp-req{color:#C9973A;}
+.tlcb-mktapp-opt{font-weight:400;text-transform:none;letter-spacing:0;color:#8A8898;font-family:var(--tlcb-serif);}
+.tlcb-mktapp-pair{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.tlcb-mktapp-csz{display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;margin-top:8px;}
+.tlcb-mktapp-choice{display:flex;gap:8px;flex-wrap:wrap;}
+.tlcb-mktapp-pill,.tlcb-mktapp-tbtn{background:#fff;border:1px solid #DDE3ED;color:#1A1A2A;cursor:pointer;min-height:44px;
+  font-family:var(--tlcb-serif);transition:background .15s,border-color .15s,color .15s;}
+.tlcb-mktapp-pill{border-radius:999px;padding:9px 16px;font-size:13.5px;}
+.tlcb-mktapp-tbtn{border-radius:10px;padding:14px 10px;font:800 14px/1 var(--tlcb-ui);}
+.tlcb-mktapp-pill[aria-pressed="true"],.tlcb-mktapp-tbtn[aria-pressed="true"]{background:#1E2D4A;border-color:#1E2D4A;color:#fff;}
+.tlcb-mktapp-tables{display:grid;grid-template-columns:repeat(auto-fit,minmax(80px,1fr));gap:10px;}
+.tlcb-mktapp-check{display:flex;gap:10px;align-items:flex-start;background:#EDF2F7;border:1px solid #C4CEDF;border-radius:10px;padding:14px;cursor:pointer;}
+.tlcb-mktapp-check input{width:18px;height:18px;margin-top:2px;accent-color:#4A5E3A;flex-shrink:0;}
+.tlcb-mktapp-check span{font-size:13.5px;line-height:1.55;color:#1A1A2A;}
+.tlcb-mktapp-drop{background:#EDF2F7;border:2px dashed #C4CEDF;border-radius:10px;padding:22px 18px;text-align:center;
+  cursor:pointer;display:block;}
+.tlcb-mktapp-drop b{display:block;font:700 13.5px/1 var(--tlcb-ui);color:#1E2D4A;margin-bottom:4px;}
+.tlcb-mktapp-drop span{font-size:12.5px;color:#4A4860;}
+.tlcb-mktapp-thumbs{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
+.tlcb-mktapp-thumbs img{width:60px;height:60px;object-fit:cover;border-radius:6px;border:1px solid #DDE3ED;cursor:pointer;}
+.tlcb-mktapp-total{background:#1E2D4A;border-radius:14px;padding:20px;}
+.tlcb-mktapp-total-lab{font:700 10px/1 var(--tlcb-ui);letter-spacing:.1em;text-transform:uppercase;color:#E8C070;margin-bottom:12px;}
+.tlcb-mktapp-total-rows{display:grid;gap:9px;font:400 14px/1.4 var(--tlcb-serif);color:rgba(255,255,255,.85);}
+.tlcb-mktapp-total-rows>div{display:flex;justify-content:space-between;gap:14px;}
+.tlcb-mktapp-total-rows hr{border:none;border-top:1px solid rgba(255,255,255,.18);margin:3px 0;}
+.tlcb-mktapp-total-due{font:800 18px/1 var(--tlcb-ui);color:#fff;}
+.tlcb-mktapp-total p{font-size:12.5px;color:rgba(255,255,255,.7);line-height:1.6;margin:12px 0 0;}
+.tlcb-mktapp-agree{background:#EDE9E0;border:1px solid #DDE3ED;border-radius:10px;padding:18px;max-height:190px;overflow:auto;
+  font-size:13.5px;color:#4A4860;line-height:1.7;}
+.tlcb-mktapp-agree p{margin:0 0 9px;}
+.tlcb-mktapp-agree p:last-child{margin-bottom:0;}
+.tlcb-mktapp-agree strong{font-family:var(--tlcb-ui);color:#1E2D4A;}
+.tlcb-mktapp-clause{margin:0 0 9px;}
+.tlcb-mktapp-clause:last-child{margin-bottom:0;}
+.tlcb-mktapp-fine{font-size:12.5px;color:#8A8898;line-height:1.6;margin:0;}
+.tlcb-mktapp-foot{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;}
+.tlcb-mktapp-foot--end{justify-content:flex-end;}
+.tlcb-mktapp-alert{display:none;padding:11px 14px;border-radius:8px;font-size:13.5px;line-height:1.5;}
+.tlcb-mktapp-alert--err{display:block;background:#fce8e8;border-left:3px solid #B85C3A;color:#7a1f1f;}
+.tlcb-mktapp-alert--ok{display:block;background:#e8f5e9;border-left:3px solid #4A5E3A;color:#1a3d1f;}
+@media(max-width:640px){
+  .tlcb-mktapp-pair,.tlcb-mktapp-csz{grid-template-columns:1fr;}
+  .tlcb-mktapp-steps{flex-direction:column;}
+  .tlcb-mktapp-step{border-bottom-width:1px;border-left:3px solid transparent;}
+  .tlcb-mktapp-step[aria-selected="true"]{border-bottom-color:#DDE3ED;border-left-color:#C9973A;}
+  .tlcb-mktapp-form{padding:20px 18px;}
+}
 
 /* ── The amount ladder ── one row per "$X /period does Y". Follows the
    block's own Theme colors, which is how the same type renders as the pale
@@ -3295,6 +3435,202 @@ const LIGHTBOX_SCRIPT = '<script>' + `
   })();
 ` + '<\/script>';
 
+// ── THE MARKET APPLICATION'S BROWSER HALF ────────────────────────────────────
+// Shipped inside the block for the same reason as the three above: the block
+// works wherever it is rendered — the edge-rendered first paint, or the
+// client takeover after — rather than only on a page whose shell remembered a
+// script. Guarded, so more than one instance on a page still wires once.
+//
+// ⚠ The pricing config is read off `data-market-cfg`, SERVER-RENDERED — there
+// is no fetch here at all. The standalone fallback page (public/index.html)
+// fetches /api/market-config after paint because it has to; this block does
+// not, because pageData() already computed the same thing before this markup
+// left the Worker.
+//
+// ⚠ No backticks anywhere in this string (or in MARKET_PRICING_JS, prepended
+// below). It lives inside a template literal and one would end it, breaking
+// the module while still passing `node --check`.
+const MARKET_APP_SCRIPT = '<script>' + MARKET_PRICING_JS + `
+  (function () {
+    if (window.__tlcMktAppWired) return;
+    window.__tlcMktAppWired = 1;
+
+    function cfgOf(w) { try { return JSON.parse(w.getAttribute('data-market-cfg') || '{}'); } catch (e) { return {}; } }
+
+    function paint(w) {
+      var cfg = cfgOf(w);
+      var chosen = w.querySelector('[data-tables][aria-pressed="true"]');
+      var n = chosen ? Number(chosen.getAttribute('data-tables')) : 1;
+      var p = tlcMktPrice(n, cfg);
+      var set = function (sel, text) { var el = w.querySelector(sel); if (el) el.textContent = text; };
+      set('[data-row="sub-label"]', n + (n === 1 ? ' table × ' : ' tables × ') + tlcMktMoney(Math.round((Number(cfg.tableFee) || 0) * 100)));
+      set('[data-row="sub"]', tlcMktMoney(p.subtotalCents));
+      set('[data-row="fee"]', tlcMktMoney(p.feeCents));
+      set('[data-row="due"]', tlcMktMoney(p.totalCents));
+      var submit = w.querySelector('[data-submit-label]');
+      if (submit) submit.textContent = 'Submit and pay ' + tlcMktMoney(p.totalCents);
+      var hidden = w.querySelector('[name="tables"]');
+      if (hidden) hidden.value = String(n);
+    }
+
+    function go(w, step) {
+      var n = Math.min(3, Math.max(1, Number(step) || 1));
+      var steps = w.querySelectorAll('.tlcb-mktapp-step');
+      for (var i = 0; i < steps.length; i++) steps[i].setAttribute('aria-selected', String(Number(steps[i].getAttribute('data-step')) === n));
+      var panels = w.querySelectorAll('.tlcb-mktapp-panel');
+      for (var j = 0; j < panels.length; j++) panels[j].classList.toggle('is-on', Number(panels[j].getAttribute('data-panel')) === n);
+    }
+
+    function say(w, message, kind) {
+      var el = w.querySelector('.tlcb-mktapp-alert');
+      if (!el) return;
+      el.textContent = message || '';
+      el.className = 'tlcb-mktapp-alert' + (message ? ' tlcb-mktapp-alert--' + (kind === 'ok' ? 'ok' : 'err') : '');
+    }
+
+    // Which step needs to be complete before somebody may move PAST it. Moving
+    // BACK never validates — trapping somebody on step 2 when they wanted to
+    // fix a typo on step 1 is the classic wizard failure.
+    function check(w, step) {
+      var v = function (name) { var el = w.querySelector('[name="' + name + '"]'); return el ? (el.value || '').trim() : ''; };
+      var problems = [];
+      if (step === 1) {
+        if (!v('participant_names')) problems.push(['participant_names', 'Please say who will be at the table.']);
+        if (!v('email')) problems.push(['email', 'Please give us an email address so we can confirm your table.']);
+        else if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(v('email'))) problems.push(['email', 'That email address does not look right — please check it.']);
+        if (!v('phone')) problems.push(['phone', 'Please give us a phone number.']);
+      }
+      if (step === 2 && !v('product_description')) problems.push(['product_description', 'Please describe what you plan to sell.']);
+      if (step === 3 && !v('signature_name')) problems.push(['signature_name', 'Please type your name at the bottom to agree to the vendor terms.']);
+      if (!problems.length) { say(w, ''); return true; }
+      say(w, problems[0][1], 'err');
+      var field = w.querySelector('[name="' + problems[0][0] + '"]');
+      if (field) { field.focus(); field.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+      return false;
+    }
+
+    var photos = [];
+    function paintThumbs(w) {
+      var wrap = w.querySelector('.tlcb-mktapp-thumbs');
+      if (!wrap) return;
+      wrap.innerHTML = '';
+      photos.forEach(function (f, idx) {
+        var img = document.createElement('img');
+        img.alt = f.name || 'Sample photo';
+        img.src = URL.createObjectURL(f);
+        img.title = 'Click to remove';
+        img.addEventListener('click', function () { photos.splice(idx, 1); paintThumbs(w); });
+        wrap.appendChild(img);
+      });
+    }
+    function addPhotos(w, files) {
+      if (!files) return;
+      for (var i = 0; i < files.length && photos.length < 5; i++) {
+        if (/^image\\//.test(files[i].type)) photos.push(files[i]);
+      }
+      paintThumbs(w);
+    }
+
+    document.addEventListener('click', function (e) {
+      var w = e.target.closest && e.target.closest('.tlcb-mktapp');
+      if (!w) return;
+
+      var tab = e.target.closest('.tlcb-mktapp-step');
+      if (tab) { go(w, tab.getAttribute('data-step')); return; }
+
+      var next = e.target.closest('[data-goto]');
+      if (next) {
+        var to = Number(next.getAttribute('data-goto'));
+        var active = w.querySelector('.tlcb-mktapp-step[aria-selected="true"]');
+        var from = active ? Number(active.getAttribute('data-step')) : 1;
+        if (to > from && !check(w, from)) return;
+        go(w, to);
+        return;
+      }
+
+      var pill = e.target.closest('[data-returning]');
+      if (pill) {
+        var val = pill.getAttribute('data-returning');
+        var already = pill.getAttribute('aria-pressed') === 'true';
+        var pills = w.querySelectorAll('[data-returning]');
+        for (var k = 0; k < pills.length; k++) pills[k].setAttribute('aria-pressed', 'false');
+        if (!already) pill.setAttribute('aria-pressed', 'true');
+        var hid = w.querySelector('[name="returning_vendor"]');
+        if (hid) hid.value = already ? '' : val;
+        return;
+      }
+
+      var tbtn = e.target.closest('[data-tables]');
+      if (tbtn) {
+        var all = w.querySelectorAll('[data-tables]');
+        for (var m = 0; m < all.length; m++) all[m].setAttribute('aria-pressed', 'false');
+        tbtn.setAttribute('aria-pressed', 'true');
+        paint(w);
+        return;
+      }
+    });
+
+    // Drag-and-drop photos, and — the important half — swallow a drop
+    // ANYWHERE else on the block. Missing the drop zone by half an inch would
+    // otherwise make the browser navigate to the photograph, replacing a
+    // half-filled application with a JPEG and no way back to it.
+    document.addEventListener('dragover', function (e) {
+      if (e.target.closest && e.target.closest('.tlcb-mktapp')) e.preventDefault();
+    });
+    document.addEventListener('drop', function (e) {
+      var w = e.target.closest && e.target.closest('.tlcb-mktapp');
+      if (!w) return;
+      e.preventDefault();
+      var drop = e.target.closest('.tlcb-mktapp-drop');
+      if (drop) addPhotos(w, e.dataTransfer && e.dataTransfer.files);
+    });
+    document.addEventListener('change', function (e) {
+      var input = e.target.closest && e.target.closest('.tlcb-mktapp-drop input[type="file"]');
+      if (!input) return;
+      addPhotos(input.closest('.tlcb-mktapp'), input.files);
+      input.value = '';
+    });
+
+    document.addEventListener('submit', function (e) {
+      var form = e.target.closest && e.target.closest('.tlcb-mktapp-form');
+      if (!form) return;
+      e.preventDefault();
+      var w = form.closest('.tlcb-mktapp');
+      var cfg = cfgOf(w);
+      if (form.querySelector('[name="website"]').value) { form.reset(); return; }
+      for (var s = 1; s <= 3; s++) { if (!check(w, s)) { go(w, s); return; } }
+
+      var btn = w.querySelector('[data-submit-label]');
+      var label = btn ? btn.textContent : '';
+      if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+      say(w, '');
+
+      var fd = new FormData(form);
+      fd.delete('photos');
+      photos.forEach(function (f) { fd.append('photos', f, f.name); });
+      if (window.tlcFormToken) fd.append('form_token', window.tlcFormToken);
+
+      fetch('https://admin.timothystl.org/api/market/apply', { method: 'POST', body: fd })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (res) {
+          if (!res.ok || res.d.error) throw new Error(res.d.error || 'Server error');
+          if (res.d.payUrl) { say(w, 'Application received — taking you to payment…', 'ok'); window.location.href = res.d.payUrl; return; }
+          say(w, 'Your application is in. We could not open the payment page from here — email '
+            + (cfg.coordinatorEmail || 'the coordinator') + ' and they will take payment and hold your space.', 'ok');
+          if (btn) { btn.disabled = true; btn.textContent = 'Application received'; }
+        })
+        .catch(function (err) {
+          say(w, (err && err.message) || ('Something went wrong. Please try again, or email '
+            + (cfg.coordinatorEmail || 'the coordinator') + ' and they will take your application by hand.'), 'err');
+          if (btn) { btn.disabled = false; btn.textContent = label; }
+        });
+    });
+
+    var apps = document.querySelectorAll('.tlcb-mktapp:not(.tlcb-mktapp--editing)');
+    for (var q = 0; q < apps.length; q++) paint(apps[q]);
+  })();
+` + '<\/script>';
+
 function renderInner(b, opts) {
   const def = BLOCK_DEFS[b.type];
   const t = b.type;
@@ -4400,6 +4736,180 @@ function renderInner(b, opts) {
       ${(b.body || opts.editing) ? renderBody(opts, b, def) : ''}
       ${rows ? `${listHead}<div class="tlcb-am-list">${rows}</div>${monthlyNote}`
         : `<p class="tlcb-note">No amounts yet — add one in the panel on the right.</p>`}</div>`;
+  }
+
+  // ── THE CHRISTMAS MARKET APPLICATION ──────────────────────────────────────
+  if (t === 'marketapp') {
+    const raw = data.market || {};
+    const editing = !!opts.editing;
+    const dis = editing ? ' disabled' : '';
+
+    const head = `${renderHead(opts, b, 'Vendor application')}${renderBody(opts, b, def)}`;
+
+    // Applications closed is decided HERE, at render time, from the same
+    // setting the Christmas Market screen's toggle writes — never client-side.
+    // A page rendered while applications are closed simply never ships the
+    // form at all, so there is no state for a script to get wrong.
+    //
+    // ⚠ Missing data.market entirely reads as CLOSED, same as an explicit
+    // off. There is no numeric fallback that makes it safe to open a payment
+    // form when the settings that decide its price could not be read.
+    if (!raw.open) {
+      return `<div class="tlcb-mktapp">${head}
+        <div class="tlcb-mktapp-closed">
+          <p><strong>Applications are closed right now.</strong> Email <a href="mailto:${esc(raw.coordinatorEmail || '')}">${esc(raw.coordinatorEmail || '')}</a> and the coordinator will tell you when they open for the next market.</p>
+        </div>
+      </div>`;
+    }
+
+    // ⚠ FALLS BACK TO THE SAME DEFAULTS priceBreakdown() ALREADY APPLIES
+    // INTERNALLY. This branch reads several of these fields directly — the
+    // facts line, the fee-percent label — rather than only through
+    // priceBreakdown(), so without its own defaulting a genuinely incomplete
+    // data.market renders the literal word "undefined" into the page instead
+    // of the $30 / 2.9% / 30¢ a visitor would actually be charged.
+    const numOr = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
+    const market = {
+      tableFee: numOr(raw.tableFee, MARKET_DEFAULTS.tableFee),
+      feePercent: numOr(raw.feePercent, MARKET_DEFAULTS.feePercent),
+      feeFixed: numOr(raw.feeFixed, MARKET_DEFAULTS.feeFixed),
+      maxTables: numOr(raw.maxTables, MARKET_DEFAULTS.maxTables),
+      coordinatorEmail: raw.coordinatorEmail || '',
+      dateLabel: raw.dateLabel || '',
+      hoursLabel: raw.hoursLabel || '',
+    };
+
+    const fee = marketMoney(Math.round((Number(market.tableFee) || 0) * 100));
+    const facts = `<p class="tlcb-mktapp-facts">${esc(market.dateLabel || '')} · ${esc(market.hoursLabel || '')} · ${esc(fee)} per table</p>`;
+
+    const tableBtns = Array.from({ length: Math.max(1, Math.min(9, Number(market.maxTables) || 3)) }, (_, i) => i + 1)
+      .map((n) => `<button type="button" class="tlcb-mktapp-tbtn"${n === 1 ? ' aria-pressed="true"' : ' aria-pressed="false"'} data-tables="${n}"${dis}>${n} table${n === 1 ? '' : 's'}</button>`)
+      .join('');
+
+    const price = priceBreakdown(1, market);
+    // ⚠ A clause with no words is dropped, ON THE PUBLIC PAGE ONLY. In the
+    // editor every item stays, even a freshly-added blank one — that is what
+    // gives it a contenteditable div to type into at all, the same reason a
+    // block that renders nothing still renders something while it is being
+    // worked on. `i` is the ORIGINAL array index either way: nothing is
+    // filtered while editing, so the index itemField writes data-item="i"
+    // from still lines up with sanitizeBlock's own b.items[i] — and public
+    // rendering never reads data-item at all, so an index into the filtered
+    // list would be meaningless there regardless.
+    const agreeItems = (b.items || [])
+      .filter((it) => opts.editing || it.body)
+      .map((it, i) => itemField(opts, i, 'body', 'div', 'tlcb-mktapp-clause', it.body || '', ' data-ph="A clause of the agreement"', true))
+      .join('');
+
+    // The config a vendor's browser needs to retotal live and to know what it
+    // is quoting — computed here, server-side, so nothing has to fetch it
+    // after paint the way the standalone fallback page does. ⚠ No payment
+    // address in it: the giving link and the market's fund are resolved by
+    // /api/market/apply at the moment of submission, never by the browser.
+    const cfg = esc(JSON.stringify({
+      tableFee: market.tableFee, feePercent: market.feePercent, feeFixed: market.feeFixed,
+      maxTables: market.maxTables, coordinatorEmail: market.coordinatorEmail || '',
+    }));
+
+    const field3 = (id, name, label, type, ph, required, auto) =>
+      `<div class="tlcb-mktapp-field"><label for="${id}">${esc(label)}${required ? ' <span class="tlcb-mktapp-req">*</span>' : ''}</label>
+        <input type="${type}" id="${id}" name="${name}" placeholder="${esc(ph || '')}"${auto ? ` autocomplete="${auto}"` : ''}${dis}></div>`;
+
+    return `<div class="tlcb-mktapp${editing ? ' tlcb-mktapp--editing' : ''}" data-market-cfg="${cfg}">
+      ${head}
+      ${facts}
+      <div class="tlcb-mktapp-card">
+        <div class="tlcb-mktapp-steps" role="tablist" aria-label="Vendor application steps">
+          <button type="button" class="tlcb-mktapp-step" role="tab" aria-selected="true" data-step="1"${dis}><span>Step 1</span><b>You &amp; your booth</b></button>
+          <button type="button" class="tlcb-mktapp-step" role="tab" aria-selected="false" data-step="2"${dis}><span>Step 2</span><b>What you sell</b></button>
+          <button type="button" class="tlcb-mktapp-step" role="tab" aria-selected="false" data-step="3"${dis}><span>Step 3</span><b>Tables &amp; payment</b></button>
+        </div>
+
+        <form class="tlcb-mktapp-form" novalidate>
+        <div style="position:absolute;left:-9999px;" aria-hidden="true">
+          <label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"${dis}></label>
+        </div>
+
+        <div class="tlcb-mktapp-panel is-on" data-panel="1">
+          <p class="tlcb-mktapp-lead">Who's behind the table, and how we reach you.</p>
+          ${field3('mkt-b-names', 'participant_names', 'Participant name(s)', 'text', 'Everyone who will be at the table', true, 'name')}
+          <div class="tlcb-mktapp-pair">
+            ${field3('mkt-b-biz', 'business_name', 'Business name', 'text', 'If you have one', false, 'organization')}
+            ${field3('mkt-b-web', 'website_or_social', 'Website or Instagram', 'text', '@yourshop', false)}
+          </div>
+          <div class="tlcb-mktapp-pair">
+            ${field3('mkt-b-email', 'email', 'Email', 'email', 'you@example.com', true, 'email')}
+            ${field3('mkt-b-phone', 'phone', 'Telephone', 'tel', '(314) 555-0123', true, 'tel')}
+          </div>
+          <div class="tlcb-mktapp-field"><label for="mkt-b-street">Mailing address</label>
+            <input type="text" id="mkt-b-street" name="street" placeholder="Street" autocomplete="street-address"${dis}>
+            <div class="tlcb-mktapp-csz">
+              <input type="text" name="city" placeholder="City" aria-label="City" autocomplete="address-level2"${dis}>
+              <input type="text" name="state" placeholder="State" aria-label="State" autocomplete="address-level1"${dis}>
+              <input type="text" name="zip" placeholder="ZIP" aria-label="ZIP" autocomplete="postal-code"${dis}>
+            </div>
+          </div>
+          <div class="tlcb-mktapp-field"><span>Sold with us before?</span>
+            <div class="tlcb-mktapp-choice" role="group">
+              <button type="button" class="tlcb-mktapp-pill" data-returning="yes" aria-pressed="false"${dis}>Returning vendor</button>
+              <button type="button" class="tlcb-mktapp-pill" data-returning="no" aria-pressed="false"${dis}>First year</button>
+            </div>
+            <input type="hidden" name="returning_vendor" value="">
+          </div>
+          <div class="tlcb-mktapp-foot tlcb-mktapp-foot--end"><button type="button" class="tlcb-btn" data-goto="2"${dis}>Next: what you sell</button></div>
+        </div>
+
+        <div class="tlcb-mktapp-panel" data-panel="2">
+          <p class="tlcb-mktapp-lead">The more specific you are, the better we can space out similar tables.</p>
+          <div class="tlcb-mktapp-field"><label for="mkt-b-product">Description of product <span class="tlcb-mktapp-req">*</span></label>
+            <textarea id="mkt-b-product" name="product_description" placeholder="e.g. handmade purses, tote bags, wallets, crochet shawls"${dis}></textarea></div>
+          <label class="tlcb-mktapp-check"><input type="checkbox" name="sells_food" value="1"${dis}>
+            <span><strong>I'll be selling food or drink.</strong> You're responsible for City of St. Louis health department requirements for what you sell — the coordinator will follow up with what that means for your table.</span></label>
+          ${field3('mkt-b-power', 'appliances_power', 'Appliances, wattage, amperage', 'text', 'None — or: popcorn popper, 1200W / 15A', false)}
+          <div class="tlcb-mktapp-field"><label>Sample photos <span class="tlcb-mktapp-opt">— optional, up to five</span></label>
+            <label class="tlcb-mktapp-drop">
+              <input type="file" name="photos" accept="image/*" multiple style="position:absolute;left:-9999px;"${dis}>
+              <b>Drop photos here or browse</b><span>We use these to promote the market and to place your table well.</span>
+            </label>
+            <div class="tlcb-mktapp-thumbs"></div>
+          </div>
+          <div class="tlcb-mktapp-field"><label for="mkt-b-req">Special requests</label>
+            <textarea id="mkt-b-req" name="special_requests" placeholder="Booth placement, neighbors you'd like to be near, anything else"${dis}></textarea></div>
+          <div class="tlcb-mktapp-foot"><button type="button" class="tlcb-btn tlcb-btn--ghost" data-goto="1"${dis}>Back</button><button type="button" class="tlcb-btn" data-goto="3"${dis}>Next: tables &amp; payment</button></div>
+        </div>
+
+        <div class="tlcb-mktapp-panel" data-panel="3">
+          <div class="tlcb-mktapp-field"><span>How many tables? <span class="tlcb-mktapp-req">*</span></span>
+            <div class="tlcb-mktapp-tables">${tableBtns}</div>
+            <input type="hidden" name="tables" value="1"></div>
+          <div class="tlcb-mktapp-total">
+            <div class="tlcb-mktapp-total-lab">Your total</div>
+            <div class="tlcb-mktapp-total-rows">
+              <div><span data-row="sub-label">1 table × ${esc(fee)}</span><span data-row="sub">${esc(marketMoney(price.subtotalCents))}</span></div>
+              <div><span data-row="fee-label">Card processing fee (${esc(String(market.feePercent))}% + ${esc(String(Math.round((Number(market.feeFixed) || 0) * 100)))}¢)</span><span data-row="fee">${esc(marketMoney(price.feeCents))}</span></div>
+              <hr>
+              <div class="tlcb-mktapp-total-due"><span>Due today</span><span data-row="due">${esc(marketMoney(price.totalCents))}</span></div>
+            </div>
+            <p>Vendors cover the processing fee so the full ${esc(fee)} per table goes to the market. Payment opens with this amount already filled in.</p>
+          </div>
+          <div class="tlcb-mktapp-agree" tabindex="0" role="region" aria-label="Vendor agreement">
+            <p><strong>Vendor agreement.</strong> By applying I agree that:</p>
+            ${agreeItems || '<p class="tlcb-note">No clauses yet — add one in the panel on the right.</p>'}
+          </div>
+          <p class="tlcb-mktapp-fine">When you pay, please use the same name you entered above — it's how we match your payment to your table.</p>
+          <div class="tlcb-mktapp-field"><label for="mkt-b-sign">Type your name to agree <span class="tlcb-mktapp-req">*</span></label>
+            <input type="text" id="mkt-b-sign" name="signature_name" placeholder="Your full name"${dis}></div>
+          <div class="tlcb-mktapp-alert" role="alert"></div>
+          <div class="tlcb-mktapp-foot">
+            <button type="button" class="tlcb-btn tlcb-btn--ghost" data-goto="2"${dis}>Back</button>
+            ${editing ? `<span class="tlcb-btn" data-submit-label>Submit and pay ${esc(marketMoney(price.totalCents))}</span>`
+              : `<button type="submit" class="tlcb-btn" data-submit-label${dis}>Submit and pay ${esc(marketMoney(price.totalCents))}</button>`}
+          </div>
+          <p class="tlcb-mktapp-fine">Need to pay by check or cash instead? Email <a href="mailto:${esc(market.coordinatorEmail || '')}">${esc(market.coordinatorEmail || '')}</a> and the coordinator will hold your space.</p>
+        </div>
+        </form>
+      </div>
+    </div>${editing ? '' : MARKET_APP_SCRIPT}`;
   }
 
   return `<div class="tlcb-note">Unknown block</div>`;

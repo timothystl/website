@@ -54,6 +54,12 @@ import { LINKS_JS } from './admin/links.js';
 // the top of that file.
 import { REDESIGN_BLOCKS } from './admin/redesign-seeds.js';
 import { GIVE_LANDING_PAGE, GIVE_LANDING_PAGE_ID } from './admin/give-landing-seed.js';
+// /christmasmarket/vendors, same shape as give-landing-seed.js and for the
+// same reason — a live payment application the generic extractor never had a
+// chance to convert, because it never had a tools/extract-pages.mjs PAGES
+// entry in the first place. UNLIKE give-landing, this page is an ordinary SPA
+// page and is not excluded anywhere below — see admin/market-page-seed.js.
+import { MARKET_VENDORS_PAGE } from './admin/market-page-seed.js';
 import { giftForPeriod, giveButtonLabel, parseAmount as parseGiveAmount, fmtAmount as fmtGiveAmount,
          GIVE_PERIOD_JS } from './give-link.js';
 
@@ -100,7 +106,7 @@ import { BLOCKS as NL_BLOCKS, parseBlocks as parseNlBlocks, serializeBlocks as s
 import { screenSubmission, formConfig, forwardToChms, officeEmailHtml, officeSubject,
          handleFilteredRoutes, heldCount, OFFICE_EMAIL } from './admin/forms.js';
 import { stripImageMetadata } from './admin/exif.js';
-import { handleMarketRoutes, marketSettings, marketConfig, marketPayUrl, priceBreakdown, money as marketMoney,
+import { handleMarketRoutes, marketSettings, marketConfig, marketConfigFromRows, marketPayUrl, priceBreakdown, money as marketMoney,
          sanitizeApplication, screenableText, coordinatorEmailHtml, vendorEmailHtml, clampTables } from './admin/market.js';
 import { normalizeChannelInput, channelPageUrl, channelIdFrom, feedUrl,
          parseFeed, pickLatest, isChannelId } from './admin/sermons-feed.js';
@@ -488,7 +494,7 @@ async function pageData(env, reqKey) {
       try { return (await env.DB.prepare(sql).bind(...binds).all()).results || []; } catch (_) { return []; }
     };
     const [settingRows, chromeRow, sermonRow, sermonSeries, sermonNotes, bibleClasses, news, staff, newsletters,
-           giveTiers, giveFunds, giveUrlRow, partners, coreValueRows] = await Promise.all([
+           giveTiers, giveFunds, giveUrlRow, partners, coreValueRows, marketRows] = await Promise.all([
       q("SELECT key, value FROM site_settings WHERE key LIKE 'church_%'"),
       // ⚠ The PUBLISHED row only. The draft exists so that somebody can try a
       // color without it being on the front of the church website, and
@@ -556,6 +562,11 @@ async function pageData(env, reqKey) {
       // the note on core_values in admin/db.js for why only these columns and
       // not the design tokens.
       q('SELECT key, short, name, blurb, tag, why, photo_url FROM core_values'),
+      // The Christmas Market's nine settings, for the self-filling application
+      // block — see admin/market.js. Batched here with everything else rather
+      // than a second round trip per page render, the same reasoning as give
+      // above.
+      q("SELECT key, value FROM site_settings WHERE key LIKE 'market_%'"),
     ]);
     const s = {};
     for (const r of settingRows) s[r.key.replace(/^church_/, '')] = r.value;
@@ -612,6 +623,11 @@ async function pageData(env, reqKey) {
         tiers: giveTiers.map((r) => ({ amount: r.amount, url: r.url || '', isDefault: !!r.is_default })),
         funds: giveFunds.map((r) => ({ id: r.id, name: r.name, tithelyFundId: r.tithely_fund_id || '', isDefault: !!r.is_default })),
       },
+      // The market application block reads this — see admin/market.js and the
+      // 'marketapp' branch in renderBlock(). No payment address is in it: the
+      // fund and the base link are resolved from `give` above, at the moment
+      // an application is actually submitted, never stored in a block.
+      market: marketConfigFromRows([...marketRows, { key: 'give_url', value: (giveUrlRow && giveUrlRow.value) || '' }]),
     };
   })();
   if (reqKey) PAGE_DATA_CACHE.set(reqKey, p);
@@ -1483,7 +1499,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-17-3'; // bumped: market_payment_provider / market_square_links settings, for a Square-based market checkout
+    const SCHEMA_VERSION = '2026-08-17-4'; // bumped: /christmasmarket/vendors seeded as a real `pages` row (admin/market-page-seed.js)
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -2024,7 +2040,7 @@ export default {
       // presses Publish. On these four in particular that is not a formality —
       // they are the most visited pages on the site, the language is new, and
       // there are no photographs yet.
-      const ALL_SEEDED_PAGES = [...SITE_PAGES, NEWS_PAGE_SEED, VALUES_PAGE_SEED, GIVE_LANDING_PAGE]
+      const ALL_SEEDED_PAGES = [...SITE_PAGES, NEWS_PAGE_SEED, VALUES_PAGE_SEED, GIVE_LANDING_PAGE, MARKET_VENDORS_PAGE]
         .map((p) => (REDESIGN_BLOCKS[p.id] ? { ...p, blocks: REDESIGN_BLOCKS[p.id] } : p));
       for (const p of ALL_SEEDED_PAGES) {
         await env.DB.prepare(

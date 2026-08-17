@@ -30,7 +30,7 @@ const FILES = [
   'public/index.html', 'public/manual.html', 'public/how-to-give.html',
   'admin/blocks.js', 'admin/db.js', 'admin/gym.js', 'admin/email.js',
   'admin/helpers.js', 'admin/ui.js', 'admin/sections.js', 'admin/market.js',
-  'admin/site-pages.js', 'admin/page-seeds.js',
+  'admin/site-pages.js', 'admin/page-seeds.js', 'admin/market-page-seed.js',
   'admin/ministry-editor.html',
   'tlc-admin-worker.js', 'tlc-links-worker.js', 'give-landing.js', 'site-worker.js',
 ];
