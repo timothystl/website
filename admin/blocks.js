@@ -207,6 +207,58 @@ export const SHADOWS = [
 ];
 export const SHADOW_KEYS = SHADOWS.map((s) => s.key);
 
+// ── Shading ──────────────────────────────────────────────────────────────────
+// ⚠ AN OVERLAY, NOT COLOR ARITHMETIC. A white-to-black wash over whatever the
+// surface already is produces the handoff's "6–10% of value across the field,
+// never a hue jump" — and it is hue-safe BY CONSTRUCTION, because an overlay
+// with no hue in it cannot introduce one. It needs to know nothing about the
+// color underneath, so it works on all ten palette entries, on the four that
+// carry an authored gradient as well as the six that are flat, and on any
+// entry added later without a second thought.
+//
+// A free two-color gradient picker would be the same mistake the hex field
+// would have been on the Appearance screen: one paste away from an unreadable
+// band, on a control whose whole point is that it cannot break the page.
+export const SHADES = [
+  { key: 'none', label: 'None', css: '', note: 'The block is painted in its color flat, which is how every page looks today.' },
+  { key: 'soft', label: 'Soft', css: 'linear-gradient(180deg,rgba(255,255,255,.05),rgba(0,0,0,.06))',
+    note: 'A shallow wash, lighter at the top. Enough to stop a large field reading dead without anybody noticing a gradient.' },
+  { key: 'strong', label: 'Strong', css: 'linear-gradient(180deg,rgba(255,255,255,.09),rgba(0,0,0,.11))',
+    note: 'The same wash, roughly twice as deep. Right for a tall band; heavy on a small box.' },
+];
+export const SHADE_KEYS = SHADES.map((s) => s.key);
+
+// ── Appear ───────────────────────────────────────────────────────────────────
+// One movement, one duration, no timeline and no delay. The gap between this
+// and an animation editor is the whole reason it can exist here at all.
+export const APPEARS = [
+  { key: 'none', label: 'None', note: 'The block is simply there. This is how every page behaves today.' },
+  { key: 'fade', label: 'Fade in', note: 'The block fades up as it comes into view. Shown on the live page only — the editor draws it in place so it is not moving while you work.' },
+  { key: 'rise', label: 'Rise in', note: 'The block fades and lifts slightly as it comes into view. Live page only, and skipped entirely for anyone who has asked their device to reduce motion.' },
+];
+export const APPEAR_KEYS = APPEARS.map((a) => a.key);
+
+// ── Button color ─────────────────────────────────────────────────────────────
+// ⚠ THE BACKGROUND AND THE INK ARE ONE CHOICE, NEVER TWO. Offering them
+// separately is what produces white on gold at 2.6:1 — which is what the site's
+// own header Give button does today and is recorded here as known. Pairing them
+// means an unreadable button is not expressible, so there is no warning to
+// write and nothing for anybody to click past.
+//
+// ⚠ `default` stores nothing and emits nothing, so every button already on the
+// site renders from exactly the CSS it always did. A deploy must not repaint
+// the most-clicked control on a church website; picking a color here is how
+// that changes, and it is somebody's decision rather than a side effect.
+export const BTNS = [
+  { key: 'default', label: 'Default', note: 'Navy with cream lettering, the site’s own button. Nothing is stored, so this is exactly what the page renders today.' },
+  { key: 'gold', label: 'Gold', bg: '#C9973A', ink: '#1B1608', bd: '#C9973A', note: 'Gold with near-black lettering, about 7:1. The gold used everywhere else on the site, with ink dark enough to read on it.' },
+  { key: 'ink', label: 'Ink navy', bg: '#101B2E', ink: '#F5E4C0', bd: '#101B2E', note: 'The deepest navy with cream lettering. Right on a pale field where the standard navy is not quite separate enough.' },
+  { key: 'teal', label: 'Teal', bg: '#2E7EA6', ink: '#FFFFFF', bd: '#2E7EA6', note: 'The site’s teal with white lettering, about 4.6:1. Reads as a second action beside a navy or gold one.' },
+  { key: 'cream', label: 'Cream', bg: '#F5E4C0', ink: '#1B1608', bd: '#F5E4C0', note: 'Cream with near-black lettering. For a dark field, where a pale button is the one that stands out.' },
+  { key: 'outline', label: 'Outline', bg: 'transparent', ink: 'currentColor', bd: 'currentColor', note: 'No fill — a hairline and the surrounding text color. Right for the quieter of two buttons side by side.' },
+];
+export const BTN_KEYS = BTNS.map((b) => b.key);
+
 // What the card holds is picked from a short list rather than left as a blank
 // canvas. The first two read the one church-details record, so changing the
 // service times once changes every card on the site — which is the reason to
@@ -499,6 +551,40 @@ export const BLOCK_DEFS = {
     defaults: { title: 'Questions people ask', spaceAbove: 24, spaceBelow: 24 },
     items: true, itemFields: ['title', 'body'], richItemFields: ['body'], itemLabel: 'Question',
     defaultItems: [{ title: 'A question people ask', body: '<p>The answer.</p>' }],
+  },
+  // ⚠ THIS EXISTS TO STOP A PAGE BECOMING ONE LONG WALL OF TEXT. Dinger, on
+  // confirmation: the youth director will post everything whether or not
+  // anybody reads it, so the job is to give him somewhere to put it that stays
+  // legible. Folding is the whole feature — every lesson closed, so the page
+  // reads as a syllabus rather than a transcript.
+  //
+  // <details>, the same choice the FAQ, the sermon library and the newsletter
+  // archive all make: no JavaScript, a keyboard and screen-reader control for
+  // free, and identical in the editor canvas and on the live page.
+  lessons: {
+    label: 'Lessons', glyph: '⋮',
+    align: true,
+    defaults: { title: 'Lessons in this study', spaceAbove: 24, spaceBelow: 24 },
+    items: true, itemFields: ['meta', 'title', 'body', 'url'], richItemFields: ['body'],
+    itemUrlFields: ['url'], itemLabel: 'Lesson',
+    itemPlaceholders: { meta: 'Week 1', title: 'What this one is about', body: 'The notes', url: 'A handout to download (optional)' },
+    defaultItems: [
+      { meta: 'Week 1', title: 'The first lesson', body: '<p>What this week covers.</p>', url: '' },
+      { meta: 'Week 2', title: 'The second lesson', body: '<p>What this week covers.</p>', url: '' },
+    ],
+  },
+  // A way into the member site. This was possible already — any button block
+  // can point at it — but a link in a row of buttons says nothing about what is
+  // behind it, and "log in" is exactly the thing somebody needs told.
+  portal: {
+    label: 'Member portal', glyph: '⌸',
+    align: true,
+    defaults: {
+      title: 'Members', subtitle: 'Timothy Connect',
+      body: '<p>Your directory, giving history and sign-ups, in one place.</p>',
+      url: 'https://connect.timothystl.org', spaceAbove: 24, spaceBelow: 24,
+    },
+    subtitle: true, richBody: true, url: true, urlLabel: 'Where the button goes',
   },
   events: {
     label: 'Upcoming events', glyph: '▤',
@@ -910,12 +996,37 @@ export const SHADOWABLE_TYPES = new Set(
   Object.keys(BLOCK_DEFS).filter((k) => !NO_SHADOW.has(k))
 );
 
+// Shading paints the block's own field, so the only type it means nothing to is
+// the one with no field to paint. ⚠ Unlike shadow this does NOT exclude the
+// banners — a wash across a tall full-bleed band is exactly where it earns its
+// place, and the three authored gradients already prove the idea there.
+const NO_SHADE = new Set(['spacer']);
+export const SHADEABLE_TYPES = new Set(
+  Object.keys(BLOCK_DEFS).filter((k) => !NO_SHADE.has(k))
+);
+
+// ⚠ The banners are excluded from Appear, and that is not a taste call: the
+// first thing on a page fading in is a page that looks like it failed to load.
+// Spacer has nothing to animate.
+const NO_APPEAR = new Set(['spacer', 'hero', 'photobanner', 'slideshow']);
+export const APPEARABLE_TYPES = new Set(
+  Object.keys(BLOCK_DEFS).filter((k) => !NO_APPEAR.has(k))
+);
+
+// ⚠ A POSITIVE LIST, unlike the three above, because most types render no
+// button at all and offering a button color on them would be a control that
+// visibly does nothing. Derived from what the renderer actually emits — the
+// test walks every type, renders it, and asserts this set is exactly the set
+// whose markup contains a .tlcb-btn, so adding a button to a type without
+// adding it here fails rather than shipping a dead control.
+export const BTN_TYPES = new Set(['slideshow', 'download', 'buttons', 'form', 'newsletter', 'cta', 'signup', 'letter', 'portal']);
+
 // The design's own four groups, in its order. Structure leads because that is
 // what somebody reaches for first on an empty page — the banner and the shape
 // of it — and Content is what they fill it with afterwards.
 export const GROUPS = [
   { name: 'Structure', types: ['alert', 'photobanner', 'hero', 'slideshow', 'highlight', 'cta', 'quicklinks', 'cardgrid', 'buttons', 'callout', 'partners', 'spacer'] },
-  { name: 'Content',   types: ['text', 'textphoto', 'quote', 'values', 'video', 'columns', 'gallery', 'faq', 'sermon', 'sermonlist', 'classes', 'news', 'newsfeed', 'staff', 'posts'] },
+  { name: 'Content',   types: ['text', 'textphoto', 'quote', 'values', 'video', 'columns', 'gallery', 'faq', 'lessons', 'sermon', 'sermonlist', 'classes', 'news', 'newsfeed', 'staff', 'posts'] },
   // Contact sits beside Map & address, which is where somebody looking for
   // "how do people reach us" already goes — the two answer the same question
   // and one of them draws a map.
@@ -924,7 +1035,7 @@ export const GROUPS = [
   // than starting a fifth. They belong to one page, and a group of two that
   // only ever appears on the giving page would read on every other page as a
   // section of the library that is broken.
-  { name: 'Sign up',   types: ['form', 'signup', 'newsletter', 'letter', 'newsletterarchive', 'give', 'giving', 'amounts'] },
+  { name: 'Sign up',   types: ['form', 'signup', 'newsletter', 'letter', 'newsletterarchive', 'portal', 'give', 'giving', 'amounts'] },
 ];
 
 export const BLOCK_TYPE_KEYS = Object.keys(BLOCK_DEFS);
@@ -980,8 +1091,20 @@ const RICH_TAGS = new Set(['p', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'ul', 
   'a', 'h2', 'h3', 'h4', 'blockquote', 'span', 'div', 'img', 'hr', 'sup', 'sub']);
 // `rel` is deliberately NOT allowed through: it is re-added below, once. Letting
 // the incoming one survive as well made every sanitize pass append another copy.
-const RICH_ATTRS = { a: ['href', 'target'], img: ['src', 'alt', 'width', 'height'] };
+const RICH_ATTRS = { a: ['href', 'target'], img: ['src', 'alt', 'width', 'height'], p: ['class'] };
 const RICH_VOID = new Set(['br', 'img', 'hr']);
+
+// ⚠ AN ALLOWLIST OF CLASS VALUES, NOT JUST OF THE ATTRIBUTE. `class` is the
+// one attribute here that names a rule in our own stylesheet, so letting an
+// arbitrary value through would let saved content borrow any class on the
+// site — a banner's veil, a card's shadow, the giving widget's chrome — and
+// apply it to a paragraph. `style` is not allowed at all and must not be: a
+// free style attribute is arbitrary CSS injected into a page that other staff
+// open inside their own authenticated session, which is what AW-2 is about.
+//
+// A class that is not on this list is dropped and the element is kept, so
+// pasting from somewhere else loses the styling rather than the words.
+const RICH_CLASSES = new Set(['tlcb-lead']);
 
 // ── THE CARD'S OWN, NARROWER ALLOWLIST (Task 13b) ────────────────────────────
 // Free text is the deliberate exception among the five card kinds — the other
@@ -1023,6 +1146,15 @@ export function sanitizeRich(input) {
       if (name === 'href' || name === 'src') {
         val = safeUrl(val);
         if (!val) continue;
+      }
+      // Every class on the element has to be one we recognize. A single
+      // unknown one drops the whole attribute rather than being filtered out
+      // of it — the words survive either way, and a half-honored class list is
+      // harder to reason about than none.
+      if (name === 'class') {
+        const cls = val.split(/\s+/).filter(Boolean);
+        if (!cls.length || !cls.every((c) => RICH_CLASSES.has(c))) continue;
+        val = cls.join(' ');
       }
       if ((name === 'width' || name === 'height') && !/^\d{1,4}$/.test(val)) continue;
       if (name === 'target') val = '_blank';
@@ -1264,6 +1396,22 @@ export function sanitizeBlock(b) {
   if (SHADOWABLE_TYPES.has(out.type)) {
     const sh = SHADOW_KEYS.includes(b.shadow) ? b.shadow : 'none';
     if (sh !== 'none') out.shadow = sh;
+  }
+
+  // All three follow the shadow rule above: stored only when it is not the
+  // default, so none of them lands in the 25 generated page seeds and no
+  // existing page changes by a pixel until somebody picks something.
+  if (SHADEABLE_TYPES.has(out.type)) {
+    const sd = SHADE_KEYS.includes(b.shade) ? b.shade : 'none';
+    if (sd !== 'none') out.shade = sd;
+  }
+  if (APPEARABLE_TYPES.has(out.type)) {
+    const ap = APPEAR_KEYS.includes(b.appear) ? b.appear : 'none';
+    if (ap !== 'none') out.appear = ap;
+  }
+  if (BTN_TYPES.has(out.type)) {
+    const bt = BTN_KEYS.includes(b.btn) ? b.btn : 'default';
+    if (bt !== 'default') out.btn = bt;
   }
 
   if (def.partnerSource) {
@@ -1526,6 +1674,20 @@ export const BLOCK_CSS = `<style id="tlcb-css">
 .tlcb-prose a{color:#2E7EA6;}
 .tlcb-prose ul,.tlcb-prose ol{margin:0 0 .8em;padding-left:1.3em;}
 .tlcb-prose img{max-width:100%;height:auto;border-radius:8px;}
+/* A lead paragraph — the opening line, set larger and a shade darker than the
+   copy under it. Scales off the body size like everything else, so it follows
+   the site's text-size setting rather than pinning a number. */
+.tlcb-prose p.tlcb-lead{font-size:calc(var(--tlcb-body,15px) * 1.22);line-height:1.5;font-weight:400;
+  color:var(--tlcb-head-ink,#1E2D4A);margin:0 0 .7em;}
+/* A rule between passages. It takes the surface's own hairline, so it is
+   visible on a pale field and on a dark one without a second declaration. */
+.tlcb-prose hr{border:0;border-top:1px solid var(--tlcb-rule,#E7DFD1);margin:1.4em 0;}
+/* Footnote marks. Without the reduced line-height a superscript pushes its own
+   line taller than the ones around it, which shows up as uneven leading in a
+   paragraph that has one. */
+.tlcb-prose sup,.tlcb-prose sub{font-size:.72em;line-height:0;position:relative;vertical-align:baseline;}
+.tlcb-prose sup{top:-.5em;}
+.tlcb-prose sub{bottom:-.25em;}
 .tlcb-stack{display:flex;flex-direction:column;gap:12px;}
 .tlcb-grid{display:grid;grid-template-columns:var(--tlcb-cols,1fr 1fr);gap:var(--tlcb-gap,32px);align-items:center;}
 .tlcb-cols{display:grid;grid-template-columns:var(--tlcb-cols,1fr 1fr);gap:var(--tlcb-gap,32px);align-items:start;}
@@ -1599,6 +1761,27 @@ a.tlcb-sl-go:hover{text-decoration:underline;}
    and the two disagree by about 20px at each corner. */
 .tlcb--sh-soft{border-radius:14px;box-shadow:0 2px 6px rgba(11,22,44,.05),0 10px 24px rgba(11,22,44,.06);}
 .tlcb--sh-lifted{border-radius:14px;box-shadow:0 18px 44px rgba(16,27,46,.18);}
+
+/* ── Appear ───────────────────────────────────────────────────────────────
+   ⚠ GATED POSITIVELY, TWICE OVER, AND THE NESTING ORDER IS THE WHOLE SAFETY
+   OF IT. The initial opacity:0 exists ONLY inside both gates, so a browser
+   without scroll-driven animations and a visitor who has asked for reduced
+   motion are never handed a hidden block with nothing to un-hide it. Firefox
+   has no animation-timeline yet and simply gets a normal page.
+
+   This repo has shipped a correct rule defeated by a later declaration at
+   equal specificity four separate times. A rule that is never granted cannot
+   lose that argument, which is why nothing here is granted and then revoked
+   further down. */
+@supports (animation-timeline: view()){
+  @media (prefers-reduced-motion: no-preference){
+    .tlcb--ap-fade,.tlcb--ap-rise{animation:tlcb-ap-fade .5s ease-out both;
+      animation-timeline:view();animation-range:entry 0% entry 60%;}
+    .tlcb--ap-rise{animation-name:tlcb-ap-rise;}
+    @keyframes tlcb-ap-fade{from{opacity:0;}to{opacity:1;}}
+    @keyframes tlcb-ap-rise{from{opacity:0;transform:translateY(18px);}to{opacity:1;transform:none;}}
+  }
+}
 .tlcb--sh-lined{border-radius:14px;border:1px solid var(--tlcb-rule,#E7DFD1);}
 /* ⚠ In whole-page mode a block is a full-bleed band, so a rounded, shadowed box
    inside it would read as a card floating in a section rather than as the
@@ -1788,14 +1971,56 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
 .tlcb-faq summary::after{content:'⌄';color:#8A8898;font-size:13px;}
 .tlcb-faq[open] summary::after{content:'⌃';}
 .tlcb-faq .tlcb-prose{margin-top:6px;font-size:13px;}
+
+/* ── Lessons ──────────────────────────────────────────────────────────────
+   Closed on the page, so a study with fourteen weeks in it reads as fourteen
+   lines rather than fourteen essays. The week marker sits before the title
+   because that is what somebody scans for when they are looking for the one
+   they missed. */
+.tlcb-lesson{border:1px solid var(--tlcb-rule,#DDE3ED);border-radius:8px;padding:12px 14px;background:var(--tlcb-chip-bg,rgba(0,0,0,.02));}
+.tlcb-lesson + .tlcb-lesson{margin-top:8px;}
+.tlcb-lesson > summary{cursor:pointer;display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;
+  font:600 15px/1.4 var(--tlcb-ui);color:var(--tlcb-head-ink,#1E2D4A);list-style:none;}
+.tlcb-lesson > summary::-webkit-details-marker{display:none;}
+/* The caret is drawn rather than left to the browser, so it is the same mark
+   on every engine and turns with the disclosure. */
+.tlcb-lesson > summary::before{content:'';flex:none;width:7px;height:7px;margin-right:2px;
+  border-right:2px solid var(--tlcb-eyebrow-ink,#C9973A);border-bottom:2px solid var(--tlcb-eyebrow-ink,#C9973A);
+  transform:rotate(-45deg);transition:transform .12s ease;}
+.tlcb-lesson[open] > summary::before{transform:rotate(45deg);}
+.tlcb-lesson-w{font:800 11px/1.4 var(--tlcb-ui);letter-spacing:.14em;text-transform:uppercase;
+  color:var(--tlcb-eyebrow-ink,#C9973A);flex:none;}
+.tlcb-lesson-t{flex:1;min-width:0;}
+.tlcb-lesson .tlcb-prose{margin-top:10px;}
+.tlcb-lesson-dl{display:inline-block;margin-top:10px;font:700 12.5px/1 var(--tlcb-ui);
+  color:var(--tlcb-link-ink,#2E7EA6);}
+/* A reduced-motion visitor gets the caret without the turn. Granted only where
+   motion is welcome, rather than granted and then taken away. */
+@media (prefers-reduced-motion: reduce){
+  .tlcb-lesson > summary::before{transition:none;}
+}
+
+/* ── Member portal ────────────────────────────────────────────────────── */
+.tlcb-portal{display:flex;flex-direction:column;gap:10px;align-items:flex-start;
+  padding:22px 24px;border:1px solid var(--tlcb-rule,#DDE3ED);border-radius:12px;
+  background:var(--tlcb-chip-bg,rgba(0,0,0,.02));}
+.tlcb-portal .tlcb-btns{margin-top:4px;}
 .tlcb-callout{padding:18px 20px;border-radius:10px;background:#FDF8EC;border:1px solid #F0DCB0;display:flex;flex-direction:column;gap:7px;}
 .tlcb-callout-tag{align-self:flex-start;padding:2px 8px;border-radius:5px;background:#C9973A;color:#1B1608;
   font:700 10px/1.6 var(--tlcb-ui);letter-spacing:.1em;text-transform:uppercase;}
 .tlcb-callout-t{font:600 16px/1.35 var(--tlcb-ui);color:#1E2D4A;}
 .tlcb-btns{display:flex;gap:10px;flex-wrap:wrap;}
+/* ⚠ THE FALLBACKS ARE THE SITE AS IT ALWAYS LOOKED. A block with no button
+   color chosen emits none of these properties, so each var() falls through to
+   the literal that has been here since the button existed. Nothing repaints
+   until somebody picks a color on a particular block. */
 .tlcb-btn{display:inline-block;padding:15px 22px;border-radius:999px;font:800 14px/1 var(--tlcb-ui);text-decoration:none;
-  background:#1E2D4A;color:#F5E4C0;border:1px solid #1E2D4A;}
-.tlcb-btn--ghost{background:transparent;color:#1E2D4A;border:1px solid #C4CEDF;}
+  background:var(--tlcb-btn-bg,#1E2D4A);color:var(--tlcb-btn-ink,#F5E4C0);border:1px solid var(--tlcb-btn-bd,#1E2D4A);}
+/* The ghost variant keeps its own transparent fill — it is the quiet button
+   beside a loud one, so taking the chosen color would make the pair identical
+   and lose the distinction the variant exists for. It follows the chosen INK
+   only, so the two still read as a set. */
+.tlcb-btn--ghost{background:transparent;color:var(--tlcb-btn-bd,#1E2D4A);border:1px solid var(--tlcb-btn-bd,#C4CEDF);}
 .tlcb-panel{display:flex;flex-direction:column;gap:10px;padding:18px 20px;border:1px solid #DDE3ED;border-radius:9px;background:#EDF2F7;}
 .tlcb-panel--form{background:#F7F3EC;}
 .tlcb-field{height:38px;border:1px solid #C7CEDA;border-radius:7px;background:#fff;padding:0 12px;font-size:13px;width:100%;}
@@ -2351,12 +2576,13 @@ export function blocksClientConfig(data) {
       richBody: !!d.richBody, align: !!d.align,
       gallery: !!d.gallery, feed: d.feed || '', infoCard: !!d.infoCard,
       shadow: SHADOWABLE_TYPES.has(key), contactEmail: !!d.contactEmail, giveFund: !!d.giveFund,
+      shade: SHADEABLE_TYPES.has(key), appear: APPEARABLE_TYPES.has(key), btn: BTN_TYPES.has(key),
       partnerSource: !!d.partnerSource,
       choices: d.choices || [], switches: d.switches || [],
       defaults: d.defaults || {}, defaultItems: d.defaultItems || [],
     };
   }
-  return { types, groups: GROUPS, templates: TEMPLATES, BG, INK, SIZES, SPLITS, TONES, SHADOWS,
+  return { types, groups: GROUPS, templates: TEMPLATES, BG, INK, SIZES, SPLITS, TONES, SHADOWS, SHADES, APPEARS, BTNS,
     bannerHeights: BANNER_HEIGHTS, veils: VEILS, glows: GLOWS, embedHeights: EMBED_HEIGHTS,
     partners: (data && data.partners) || [],
     // Just the one field, so the Contact block's inspector can name the address
@@ -2375,6 +2601,8 @@ export function blocksClientConfig(data) {
 // ── RENDERING ────────────────────────────────────────────────────────────────
 
 const sizeOf = (b) => SIZES.find((s) => s.key === b.size) || SIZES[1];
+const shadeOf = (b) => (SHADES.find((s) => s.key === b.shade) || SHADES[0]).css;
+const btnOf = (b) => BTNS.find((x) => x.key === b.btn && x.key !== 'default');
 const splitOf = (b) => SPLITS.find((s) => s.key === b.split) || SPLITS[1];
 
 // A URL going into a CSS url() inside a style="" attribute has two escape
@@ -2428,7 +2656,11 @@ function wrapperVars(b) {
     // The gradient when the surface has one, the flat color otherwise. Both
     // land on --tlcb-bg because every rule that paints a block already says
     // `background:`, which takes an image as happily as a color.
-    '--tlcb-bg:' + (bg.grad || bg.c),
+    // ⚠ SHADING LAYERS OVER WHATEVER IS ALREADY THERE rather than replacing
+    // it, so the four authored gradients keep their own shape and the six flat
+    // surfaces gain one. An image may be listed before a color in `background`,
+    // which is why this composes cleanly in both cases.
+    '--tlcb-bg:' + (shadeOf(b) ? shadeOf(b) + ',' + (bg.grad || bg.c) : (bg.grad || bg.c)),
     '--tlcb-bg-flat:' + bg.c,
     '--tlcb-ink:' + ink.c,
     // The composed half of a background. The four redesign surfaces carry
@@ -2459,6 +2691,15 @@ function wrapperVars(b) {
     '--tlcb-space-above:' + b.spaceAbove + 'px',
     '--tlcb-space-below:' + b.spaceBelow + 'px',
   ];
+  // Button color, when one has been chosen. ⚠ Absent emits nothing at all, so
+  // .tlcb-btn falls through to the values it has always carried — a deploy
+  // never repaints a button somebody did not ask it to.
+  const btn = btnOf(b);
+  if (btn) {
+    v.push('--tlcb-btn-bg:' + btn.bg);
+    v.push('--tlcb-btn-ink:' + btn.ink);
+    v.push('--tlcb-btn-bd:' + btn.bd);
+  }
   if (b.type === 'textphoto' || b.type === 'map' || b.type === 'sermon') v.push('--tlcb-cols:' + cols);
   if (b.type === 'columns') v.push('--tlcb-cols:repeat(' + b.cols + ',1fr)');
   if (b.type === 'cardgrid') v.push('--tlcb-cols:repeat(' + b.cols + ',1fr)');
@@ -3672,6 +3913,38 @@ function renderInner(b, opts) {
     return `<div class="tlcb-stack">${renderHead(opts, b)}<div class="tlcb-rows">${rows}</div></div>`;
   }
 
+  if (t === 'lessons') {
+    // ⚠ Open in the editor, closed on the page. Somebody arranging a lesson
+    // cannot type into a body they cannot see; a visitor wants the list.
+    const rows = (b.items || []).map((it, i) => {
+      const href = safeUrl(it.url);
+      // ⚠ No address, no link — rather than a Handout that goes nowhere. The
+      // dead-link rule, same as the sermon library's missing recording.
+      const sheet = href && !opts.editing
+        ? `<a class="tlcb-lesson-dl" href="${esc(href)}">Handout</a>` : '';
+      return `<details class="tlcb-lesson"${opts.editing ? ' open' : ''}>
+        <summary><span class="tlcb-lesson-w">${itemField(opts, i, 'meta', 'span', '', esc(it.meta || ''), ' data-ph="Week 1"')}</span>` +
+        `<span class="tlcb-lesson-t">${itemField(opts, i, 'title', 'span', '', esc(it.title || ''), ' data-ph="What this one is about"')}</span></summary>
+        ${itemField(opts, i, 'body', 'div', 'tlcb-prose', it.body || '', ' data-ph="The notes"', true)}
+        ${sheet}
+      </details>`;
+    }).join('');
+    return `<div class="tlcb-stack">${renderHead(opts, b)}<div class="tlcb-rows">${rows}</div></div>`;
+  }
+
+  if (t === 'portal') {
+    const href = safeUrl(b.url) || 'https://connect.timothystl.org';
+    const go = opts.editing
+      ? `<span class="tlcb-btn">Sign in</span>`
+      : `<a class="tlcb-btn" href="${esc(href)}">Sign in</a>`;
+    return `<div class="tlcb-portal">
+      ${b.subtitle || opts.editing ? field(opts, b, 'subtitle', 'span', 'tlcb-eyebrow', esc(b.subtitle || ''), ' data-ph="Timothy Connect"') : ''}
+      ${renderHead(opts, b)}
+      ${renderBody(opts, b, def, 'What somebody finds behind the sign-in')}
+      <div class="tlcb-btns">${go}</div>
+    </div>`;
+  }
+
   if (t === 'callout') {
     return `<div class="tlcb-callout${cardClass(b)}">
       <div class="tlcb-band-text">
@@ -3973,6 +4246,13 @@ export function renderBlock(b, opts = {}) {
   // CSS it always did rather than from a new rule that happens to agree with
   // it — the same rule left-alignment follows above.
   if (SHADOWABLE_TYPES.has(b.type) && b.shadow && b.shadow !== 'none') classes.push('tlcb--sh-' + b.shadow);
+  // ⚠ THE LIVE PAGE ONLY. On the canvas the block is something being worked on,
+  // and one that fades itself in every time it scrolls past is one nobody can
+  // edit. The inspector's note says so, rather than leaving somebody to wonder
+  // why the control appears to do nothing.
+  if (!opts.editing && APPEARABLE_TYPES.has(b.type) && b.appear && b.appear !== 'none') {
+    classes.push('tlcb--ap-' + b.appear);
+  }
   const attrs = opts.editing
     ? ` data-id="${esc(b.id)}" data-type="${esc(b.type)}" tabindex="0" role="group"` +
       ` aria-label="${esc(def.label)} block${opts.total ? ', position ' + (opts.index + 1) + ' of ' + opts.total : ''}"`

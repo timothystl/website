@@ -692,6 +692,88 @@ Both verified against the bug; the browser one seeds a page already on
 `sectionside` rather than driving the layout dropdown, so what it exercises is
 the redraw and not the Page tab.
 
+### Phase 1 of the editor-tools plan (v5.13.0, 2026-08-17)
+
+Dinger picked from a shortlist and added his own. What shipped in this pass:
+three universal controls, four text formats, and two block types. Redo, the
+photo viewer and the Give-button fix are their own entries below.
+
+**Shading — a wash across a block's field.**
+- **⚠ AN OVERLAY, NOT COLOR ARITHMETIC.** A white-to-black gradient over
+  whatever the surface already is. That produces the handoff's "6–10% of value
+  across the field, never a hue jump" and it is hue-safe **by construction** —
+  an overlay with no hue in it cannot introduce one. It needs to know nothing
+  about the color underneath, so it works on all ten palette entries, layers
+  over the four authored gradients rather than replacing them, and will work on
+  any entry added later.
+- **⚠ Unlike shadow, the banners are NOT excluded.** A wash across a tall
+  full-bleed band is where it earns its place.
+
+**Appear — None / Fade in / Rise in.**
+- **CSS only, via `animation-timeline: view()`.** No JavaScript, no observer.
+- **⚠ GATED POSITIVELY AND TWICE, AND THE NESTING ORDER IS THE SAFETY.** The
+  initial `opacity:0` exists only inside `@supports` **and** inside
+  `prefers-reduced-motion: no-preference`. Firefox has no `animation-timeline`
+  today and gets a normal page; put that initial state outside either gate and
+  it gets a permanently invisible block instead. Both failure directions land
+  on *visible, unanimated*.
+- **⚠ The class is not emitted in the editor at all.** A block that fades itself
+  in every time it scrolls past is one nobody can work on. The inspector note
+  says so rather than leaving somebody to wonder.
+- The three banners are excluded: the first thing on a page fading in is a page
+  that looks like it failed to load.
+
+**Button color.**
+- **⚠ THE FILL AND THE INK ARE ONE CHOICE, NEVER TWO.** Offering them
+  separately is exactly what produces white on gold at 2.6:1 — which the site's
+  own header Give button still does, and which is recorded here as known. Pair
+  them and an unreadable button is not expressible, so there is no warning to
+  write and nothing for anybody to click past. A test computes the ratio of
+  every pairing.
+- **⚠ `default` stores nothing and emits nothing**, so `.tlcb-btn` falls through
+  to the literals it has always carried. A deploy must not repaint the
+  most-clicked control on a church website.
+- **⚠ THE TYPE SET IS DERIVED FROM WHAT THE RENDERER EMITS**, not hand-listed:
+  the test renders every type and asserts `BTN_TYPES` is exactly the set whose
+  markup contains a `.tlcb-btn`. It caught the new Member portal block within
+  the same commit, which is the whole point of writing it that way.
+- The ghost variant keeps its transparent fill and follows only the chosen ink,
+  because it is the quiet button beside a loud one and taking the fill would
+  collapse the distinction it exists for.
+
+**Four text formats**, and three of them needed no sanitizer work: `hr`, `sup`,
+`sub` and `blockquote` have been in `RICH_TAGS` since the allowlist was written
+and only ever lacked a way to type them.
+- **Lead paragraph is the exception** — a `<p>` carrying a class, which the tag
+  list alone cannot express. **⚠ `RICH_CLASSES` allowlists the VALUE, not just
+  the attribute**: an arbitrary class would let saved content borrow any rule in
+  our stylesheet, and `style` is not allowed at all and must not be — a free
+  style attribute is arbitrary CSS running in another admin's authenticated
+  session, which is what AW-2 is about. One unrecognized class drops the whole
+  attribute and keeps the words.
+- **Text color and highlight were deliberately deferred** — Dinger's call.
+
+**Two new block types.**
+- **Lessons.** For confirmation, and the requirement is narrower than it sounds:
+  *"the youth director wants to post everything even though no one will look at
+  it, so if he is compelled to, have a good way to organize it so it's not just
+  one long page of text."* So the folding **is** the feature. `<details>`, the
+  same choice the FAQ, the sermon library and the newsletter archive make.
+  Closed on the page, open in the editor — somebody arranging a lesson cannot
+  type into a body they cannot see. A lesson with no handout address gets no
+  Handout link, the dead-link rule again.
+- **Member portal.** A way into `connect.timothystl.org` that says what is
+  behind the sign-in. This was already possible with a button block; a link in
+  a row of buttons just says nothing about what it opens.
+
+**And the fund dropdown says where its list comes from.** It was reported as a
+fixed short list, which is what it looked like — the funds have been editable on
+the Giving screen since 2026-07-27 and nothing on this screen said so. It links
+there now, in both the populated and the empty state.
+
+Run: `node admin/blocks.test.mjs` (2828), plus the editor and public browser
+suites.
+
 ### The Give button had no fill of its own (v5.12.0, 2026-08-16)
 
 Dinger, with a screenshot of a navy Give block: *"the background of the box
