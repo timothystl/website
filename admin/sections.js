@@ -72,7 +72,7 @@ export const SECTIONS = {
     note: 'A notice is deliberately not a page block: it can be switched off in one click without touching the page it sits on.'
   },
   links: {
-    label: 'NFC Taps', glyph: '⛓', title: 'Taps & links', purpose: 'Four NFC taps, each with its own set of link cards. Re-point a tap here and the physical tag keeps working — nothing is reprogrammed.',
+    label: 'NFC Taps', glyph: '⛓', title: 'Taps & links', purpose: 'Four NFC taps land on the Link Tree page at links.timothystl.org. Edit a tap here and the physical tag keeps working — nothing is reprogrammed.',
     action: '+ New card', search: 'Search cards', filters: ['All', 'Showing', 'Hidden'],
     columns: [['Card', '2.4fr'], ['Goes to', '2fr'], ['Order', '.7fr'], ['Status', '1fr']],
     note: 'The tag itself only ever holds its short address — /tap1 through /tap4. Everything a visitor sees is these cards, so a tap printed a year ago can point somewhere new today.'
