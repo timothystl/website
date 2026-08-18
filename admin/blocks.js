@@ -1366,19 +1366,24 @@ export const cleanText = (s, max = 200) => String(s == null ? '' : s).replace(/[
 // what they type into a button's link field: no separate display form to
 // keep in sync, because the sanitized value IS what is shown back to them
 // after the inspector's own re-render round-trip.
-// A block's own DOM id. A typed jump-to name wins and keeps its `jump-`
-// prefix — that prefix exists because a name somebody typed is competing for
-// the same id namespace as the SPA's own `page-<id>` divs, and a collision
-// there is a strange bug to chase. A block's own id needs no prefix: it is
-// already unique within the page by construction, and it is what the Jump
-// links block writes into its own hrefs.
+// A block's own DOM id, decided in ONE place so the markup, the Jump links
+// block's hrefs and the inspector's own note cannot come to disagree about
+// what a fragment has to say.
+//
+// ⚠ A typed jump-to name is used BARE. It was prefixed at first, on real
+// namespace grounds — a name is competing for the same id space as the SPA's
+// `page-<id>` divs — and that shipped as a bug: the box on screen said one
+// thing and the page answered to another, so a button linking to the name
+// somebody was shown matched nothing. What is in the box has to BE the
+// address. A block's own id is the fallback, and needs no prefix either: it
+// is unique within the page by construction.
 //
 // ⚠ Put through the same character strip as a typed name. `cleanText` allows
 // spaces and punctuation, so a hand-written seed id could otherwise reach an
 // id attribute as something no fragment could ever target.
 export function blockDomId(b) {
   if (!b) return '';
-  if (b.anchorId) return 'jump-' + b.anchorId;
+  if (b.anchorId) return String(b.anchorId);
   return cleanAnchorId(b.id);
 }
 
@@ -5192,11 +5197,21 @@ export function renderBlock(b, opts = {}) {
   // scrolls by fragment, and it is one less thing that can differ from the
   // published markup.
   //
-  // ⚠ EVERY BLOCK CARRIES AN id NOW, not only the ones somebody has given a
-  // jump-to name. That is what makes the Jump links block's automatic mode
-  // possible at all: it derives its chips from the page's own sections, so
-  // every section has to be addressable without anybody having named it
-  // first. A typed name still wins — see blockDomId().
+  // ⚠ THE BARE NAME, NOT A PREFIXED ONE. This was `jump-${b.anchorId}` at
+  // first, on genuine namespace-collision grounds — a block's id sharing the
+  // page's own id space with `id="page-<id>"` and the router's anchors. But
+  // the inspector's own on-screen note, and every word said about this
+  // feature, promised "link to #<exactly this>" — a prefix nobody was told
+  // about is indistinguishable from the feature simply not working: a button
+  // linking to the name shown on screen matches nothing, the browser has
+  // nowhere to send it, and Dinger reported it landing on the home page.
+  // What's shown in the box has to BE the address, not a value close to it.
+  //
+  // ⚠ AND EVERY BLOCK CARRIES ONE NOW, not only the ones somebody has named.
+  // That is what makes the Jump links block's automatic mode possible at all:
+  // it derives its chips from the page's own sections, so every section has to
+  // be addressable without anybody having named it first. A typed name still
+  // wins — see blockDomId(), which is the one place both halves are decided.
   const domId = blockDomId(b);
   const idAttr = domId ? ` id="${esc(domId)}"` : '';
   const attrs = opts.editing
