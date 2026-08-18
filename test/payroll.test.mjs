@@ -55,49 +55,60 @@ let mdoDown = false;
 // POST would not notice the page sending a delete that never matched anything.
 let APPROVALS = [];
 
+// Every read and write now goes through a Postgres RPC function
+// (payroll_get_staff, payroll_save_hours, …) instead of a direct table
+// query — see "the payroll_* RPC functions" in tlc-admin-worker.js and the
+// matching comment in admin/payroll.html. This stub plays both the Worker's
+// `/sb/` proxy and Supabase itself, so it answers the RPC shape the real
+// client sends: one POST per call, body = the named params as JSON, no
+// query string. It does not check the shared secret the real proxy would
+// inject — that injection is the Worker's own job, tested separately, and
+// is out of scope for a test that's only exercising the page.
+const MDO_RPC = new Set(['payroll_get_mdo_staff', 'payroll_get_mdo_hours', 'payroll_get_mdo_clock_events', 'payroll_get_mdo_pto']);
+
 const srv = http.createServer((q, r) => {
   const u = new URL(q.url, 'http://x');
-  if (u.pathname.startsWith('/sb/rest/v1/')) {
-    const table = u.pathname.slice('/sb/rest/v1/'.length);
+  if (u.pathname.startsWith('/sb/rest/v1/rpc/')) {
+    const fn = u.pathname.slice('/sb/rest/v1/rpc/'.length);
+    let raw = '';
+    q.on('data', (c) => { raw += c; });
+    return q.on('end', () => {
+      let params = {};
+      try { params = raw ? JSON.parse(raw) : {}; } catch (_) { /* the page sent nothing usable */ }
 
-    if (table === 'payroll_periods') {
-      if (q.method === 'GET') {
-        r.writeHead(200, { 'Content-Type': 'application/json' });
-        return r.end(JSON.stringify(APPROVALS));
+      if (mdoDown && MDO_RPC.has(fn)) {
+        r.writeHead(500, { 'Content-Type': 'application/json' });
+        return r.end(JSON.stringify({ message: 'childcare app unreachable' }));
       }
-      if (q.method === 'DELETE') {
-        APPROVALS = [];
-        r.writeHead(200, { 'Content-Type': 'application/json' });
-        return r.end('[]');
-      }
-      let raw = '';
-      q.on('data', (c) => { raw += c; });
-      return q.on('end', () => {
-        try {
-          const rec = JSON.parse(raw);
-          APPROVALS = [{ ...rec, approved_at: '2026-08-01T10:00:00Z' }];
-        } catch (_) { /* the page sent nothing usable */ }
-        r.writeHead(200, { 'Content-Type': 'application/json' });
-        r.end('[]');
-      });
-    }
-    if (table === 'x-email') { /* unreachable; keeps the shape obvious */ }
 
-    if (q.method !== 'GET') { r.writeHead(200, { 'Content-Type': 'application/json' }); return r.end('[]'); }
-    if (mdoDown && ['staff', 'staff_hours', 'staff_clock_events', 'staff_pto_entries'].includes(table)) {
-      r.writeHead(500, { 'Content-Type': 'application/json' });
-      return r.end(JSON.stringify({ message: 'childcare app unreachable' }));
-    }
-    const body = {
-      church_staff: CHURCH_STAFF,
-      church_staff_period_entries: u.search.includes('lt.') ? [] : ENTRIES,
-      staff: MDO_STAFF,
-      staff_hours: MDO_HOURS,
-      staff_clock_events: [],
-      staff_pto_entries: [],
-    }[table] || [];
-    r.writeHead(200, { 'Content-Type': 'application/json' });
-    return r.end(JSON.stringify(body));
+      const json = (status, body) => {
+        r.writeHead(status, { 'Content-Type': 'application/json' });
+        r.end(JSON.stringify(body));
+      };
+
+      switch (fn) {
+        case 'payroll_get_staff': return json(200, CHURCH_STAFF);
+        case 'payroll_get_period_entries': return json(200, ENTRIES);
+        case 'payroll_get_prior_pto': return json(200, []);
+        case 'payroll_get_period_approval': return json(200, APPROVALS);
+        case 'payroll_get_mdo_staff': return json(200, MDO_STAFF);
+        case 'payroll_get_mdo_hours': return json(200, MDO_HOURS);
+        case 'payroll_get_mdo_clock_events': return json(200, []);
+        case 'payroll_get_mdo_pto': return json(200, []);
+        case 'payroll_approve_period':
+          APPROVALS = [{ period_start: params.p_period_start, approved_by: params.p_approved_by, approved_at: '2026-08-01T10:00:00Z' }];
+          return json(200, null);
+        case 'payroll_unapprove_period':
+          APPROVALS = [];
+          return json(200, null);
+        case 'payroll_save_hours':
+        case 'payroll_save_staff':
+        case 'payroll_deactivate_staff':
+          return json(200, null);
+        default:
+          return json(404, { message: 'unknown rpc: ' + fn });
+      }
+    });
   }
   r.writeHead(200, { 'Content-Type': 'text/html' });
   r.end(`<!doctype html><html><head><meta charset="utf-8"><style>${ADMIN_UI_CSS}${PANEL_LIST_CSS}</style></head>`

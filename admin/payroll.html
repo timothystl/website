@@ -296,71 +296,58 @@
 // which does not allow a third-party script host — and widening the CSP for
 // every screen to suit one page would be the wrong trade.
 //
-// Only eleven queries are made, all of them plain PostgREST. This is that
-// subset, with the same shape as the SDK so the call sites read the same:
-// await sb.from('x').select('*').eq('a', 1).order('name') → { data, error }.
-const SB_BASE = window.location.origin + '/sb/rest/v1/';
+// ⚠ Every read and write on this screen goes through a Postgres RPC
+// function now (`payroll_get_staff`, `payroll_save_hours`, …), not a
+// direct table query. A 2026-08-12 Supabase security migration closed a
+// real hole — the public anon key this page has always used could read
+// and rewrite everyone's payroll — by revoking `anon`'s grants on
+// church_staff / church_staff_period_entries / payroll_periods /
+// staff_pto_entries outright, with nothing put in their place for this
+// proxy. The thirteen `payroll_*` functions (Supabase migration
+// `payroll_proxy_rpc`) are that replacement: narrow, one job each, gated
+// by a shared secret the Worker injects server-side — this page never
+// holds it, the same rule CHMS_INTAKE_API_KEY and ADMIN_PUSH_API_KEY
+// already follow elsewhere in this app. `anon` still has no direct grant
+// on any of the four tables, only EXECUTE on these functions.
+const SB_BASE = window.location.origin + '/sb/rest/v1/rpc/';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRhaGRzdG9wc3VteG5xdmRjbG15Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxMzM3NDYsImV4cCI6MjA4NzcwOTc0Nn0.PGuSZcnwGaG0Tes6li04JeNBAKDP4oJ6eGwhuYYXO_E';
 
-function sbQuery(table) {
-  const params = [];
-  let method = 'GET', body = null, prefer = '';
-  const api = {
-    select(cols) { params.push('select=' + encodeURIComponent(cols || '*')); return api; },
-    eq(c, v) { params.push(encodeURIComponent(c) + '=eq.' + encodeURIComponent(v)); return api; },
-    lt(c, v) { params.push(encodeURIComponent(c) + '=lt.' + encodeURIComponent(v)); return api; },
-    gte(c, v) { params.push(encodeURIComponent(c) + '=gte.' + encodeURIComponent(v)); return api; },
-    lte(c, v) { params.push(encodeURIComponent(c) + '=lte.' + encodeURIComponent(v)); return api; },
-    order(c) { params.push('order=' + encodeURIComponent(c) + '.asc'); return api; },
-    insert(rec) { method = 'POST'; body = rec; return api; },
-    update(rec) { method = 'PATCH'; body = rec; return api; },
-    remove() { method = 'DELETE'; return api; },
-    upsert(rec, opts) {
-      method = 'POST'; body = rec;
-      prefer = 'resolution=merge-duplicates';
-      if (opts && opts.onConflict) params.push('on_conflict=' + encodeURIComponent(opts.onConflict));
-      return api;
-    },
-    then(resolve, reject) { return run().then(resolve, reject); },
-  };
-  async function run() {
-    const url = SB_BASE + table + (params.length ? '?' + params.join('&') : '');
-    const headers = { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY };
-    if (body) { headers['Content-Type'] = 'application/json'; headers.Prefer = prefer ? prefer + ',return=representation' : 'return=representation'; }
-    let res;
-    try {
-      res = await Promise.race([
-        fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined, credentials: 'same-origin' }),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('Supabase did not answer within 15 seconds.')), 15000)),
-      ]);
-    } catch (e) {
-      return { data: null, error: { message: e.message } };
-    }
-    const text = await res.text();
-    let json = null;
-    try { json = text ? JSON.parse(text) : null; } catch (_) { json = null; }
-    // ⚠ A 401 does NOT always mean the admin session lapsed. This proxy's
-    // own auth gate (tlc-admin-worker.js) answers a 401 shaped exactly like
-    // this — {code:'UNAUTHENTICATED'} — when there is no valid session or
-    // it lacks payroll_manage. But a 401 also arrives here, byte-for-byte
-    // from Supabase, whenever Supabase itself refuses the request (a
-    // rotated/revoked apikey, a paused project, an RLS policy) — the proxy
-    // passes that status and body straight through. Blaming "your session
-    // expired" for that reads as fixed by signing back in and never is;
-    // the real Supabase error is on `json`, so it's shown instead. Only
-    // OUR OWN sentinel gets the reassuring, actionable message.
-    if (res.status === 401 && json && json.code === 'UNAUTHENTICATED') {
-      return { data: null, error: { message: 'Your session has expired. Sign in again.', code: 'UNAUTHENTICATED' } };
-    }
-    if (!res.ok) {
-      const detail = (json && (json.message || json.hint || json.error_description || json.error)) || text.slice(0, 300) || ('Supabase returned ' + res.status);
-      return { data: null, error: { message: 'Supabase answered ' + res.status + ': ' + detail, code: json && json.code } };
-    }
-    return { data: json, error: null };
+async function sbRpc(fn, params) {
+  const url = SB_BASE + fn;
+  const headers = { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' };
+  let res;
+  try {
+    res = await Promise.race([
+      fetch(url, { method: 'POST', headers, body: JSON.stringify(params || {}), credentials: 'same-origin' }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('Supabase did not answer within 15 seconds.')), 15000)),
+    ]);
+  } catch (e) {
+    return { data: null, error: { message: e.message } };
   }
-  return api;
+  const text = await res.text();
+  let json = null;
+  try { json = text ? JSON.parse(text) : null; } catch (_) { json = null; }
+  // ⚠ A 401 does NOT always mean the admin session lapsed. This proxy's
+  // own auth gate (tlc-admin-worker.js) answers a 401 shaped exactly like
+  // this — {code:'UNAUTHENTICATED'} — when there is no valid session or
+  // it lacks payroll_manage. But a 401 also arrives here, byte-for-byte
+  // from Supabase, whenever Supabase itself refuses the request (a bad
+  // shared secret, a rotated/revoked apikey, a paused project) — the
+  // proxy passes that status and body straight through. Blaming "your
+  // session expired" for that reads as fixed by signing back in and
+  // never is; the real Supabase error is on `json`, so it's shown
+  // instead. Only OUR OWN sentinel gets the reassuring, actionable
+  // message.
+  if (res.status === 401 && json && json.code === 'UNAUTHENTICATED') {
+    return { data: null, error: { message: 'Your session has expired. Sign in again.', code: 'UNAUTHENTICATED' } };
+  }
+  if (!res.ok) {
+    const detail = (json && (json.message || json.hint || json.error_description || json.error)) || text.slice(0, 300) || ('Supabase returned ' + res.status);
+    return { data: null, error: { message: 'Supabase answered ' + res.status + ': ' + detail, code: json && json.code } };
+  }
+  return { data: json, error: null };
 }
-const sb = { from: sbQuery };
+const sb = { rpc: sbRpc };
 
 // ════════════════════════════════════════════════════════════
 // CONSTANTS & STATE
@@ -524,7 +511,7 @@ function showError(msg) {
 }
 
 async function loadStaff() {
-  const { data, error } = await sb.from('church_staff').select('*').eq('active', true).order('name');
+  const { data, error } = await sb.rpc('payroll_get_staff', {});
   if (error) {
     showError('Church staff could not be read: ' + error.message);
     return;
@@ -540,8 +527,8 @@ async function onPeriodChange(value) {
   $('entryPays').textContent = paysOnLabel(periodEnd);
 
   const [entriesRes, approvalRes] = await Promise.all([
-    sb.from('church_staff_period_entries').select('*').eq('period_start', periodStart),
-    sb.from('payroll_periods').select('period_start,approved_at,approved_by').eq('period_start', periodStart),
+    sb.rpc('payroll_get_period_entries', { p_period_start: periodStart }),
+    sb.rpc('payroll_get_period_approval', { p_period_start: periodStart }),
     loadMdoData(periodStart, periodEnd),
   ]);
   if (entriesRes.error) showError('This period’s hours could not be read: ' + entriesRes.error.message);
@@ -554,8 +541,7 @@ async function onPeriodChange(value) {
   periodEntries = {};
   (entriesRes.data || []).forEach((e) => { periodEntries[e.staff_id] = e; });
 
-  const { data: priorEntries } = await sb.from('church_staff_period_entries')
-    .select('staff_id,pto_hours_earned,pto_hours_used').lt('period_start', periodStart);
+  const { data: priorEntries } = await sb.rpc('payroll_get_prior_pto', { p_period_start: periodStart });
   ptoCumulative = {};
   (priorEntries || []).forEach((e) => {
     if (!ptoCumulative[e.staff_id]) ptoCumulative[e.staff_id] = { earned: 0, used: 0 };
@@ -570,10 +556,10 @@ async function onPeriodChange(value) {
 async function loadMdoData(periodStart, periodEnd) {
   mdoError = '';
   const [staffRes, hoursRes, clockRes, ptoRes] = await Promise.all([
-    sb.from('staff').select('id,name,role,pay_type,hourly_rate,salary_biweekly,room_id,active').eq('active', true).order('name'),
-    sb.from('staff_hours').select('staff_id,work_date,hours_worked').gte('work_date', periodStart).lte('work_date', periodEnd),
-    sb.from('staff_clock_events').select('staff_id,clock_in,clock_out,work_date').gte('work_date', periodStart).lte('work_date', periodEnd),
-    sb.from('staff_pto_entries').select('staff_id,pto_hours_used').eq('period_start', periodStart),
+    sb.rpc('payroll_get_mdo_staff', {}),
+    sb.rpc('payroll_get_mdo_hours', { p_start: periodStart, p_end: periodEnd }),
+    sb.rpc('payroll_get_mdo_clock_events', { p_start: periodStart, p_end: periodEnd }),
+    sb.rpc('payroll_get_mdo_pto', { p_period_start: periodStart }),
   ]);
 
   // A failed MDO query used to be swallowed by `|| []`, so a payroll run would
@@ -807,9 +793,8 @@ $('approvePeriodBtn').addEventListener('click', async () => {
 
   btn.disabled = true;
   const { error } = periodApproval
-    ? await sb.from('payroll_periods').remove().eq('period_start', periodStart)
-    : await sb.from('payroll_periods')
-      .upsert({ period_start: periodStart, approved_by: WHO }, { onConflict: 'period_start' });
+    ? await sb.rpc('payroll_unapprove_period', { p_period_start: periodStart })
+    : await sb.rpc('payroll_approve_period', { p_period_start: periodStart, p_approved_by: WHO });
   btn.disabled = false;
 
   // Only touch the local record once the write has landed. Flipping it first
@@ -843,9 +828,10 @@ async function doHoursSave(staffId, periodStart) {
   const existing = periodEntries[staffId] || {};
   const pe = Number(existing.pto_hours_earned || 0);
 
-  const { error } = await sb.from('church_staff_period_entries')
-    .upsert({ staff_id: staffId, period_start: periodStart, hours_worked: hw, pto_hours_used: pu, pto_hours_earned: pe },
-      { onConflict: 'staff_id,period_start' });
+  const { error } = await sb.rpc('payroll_save_hours', {
+    p_staff_id: staffId, p_period_start: periodStart,
+    p_hours_worked: hw, p_pto_used: pu, p_pto_earned: pe,
+  });
   if (error) { showError('That did not save: ' + error.message); return; }
 
   showError('');
@@ -1422,9 +1408,20 @@ $('staffSaveBtn').addEventListener('click', async () => {
   };
   const btn = $('staffSaveBtn');
   btn.disabled = true; btn.textContent = 'Saving…';
-  const { error } = editingStaffId
-    ? await sb.from('church_staff').update(record).eq('id', editingStaffId)
-    : await sb.from('church_staff').insert(record);
+  const { error } = await sb.rpc('payroll_save_staff', {
+    p_id: editingStaffId || null,
+    p_name: record.name,
+    p_role: record.role,
+    p_pay_type: record.pay_type,
+    p_hourly_rate: record.hourly_rate,
+    p_base_salary_biweekly: record.base_salary_biweekly,
+    p_housing_allowance_biweekly: record.housing_allowance_biweekly,
+    p_insurance_opt_out_biweekly: record.insurance_opt_out_biweekly,
+    p_hsa_contribution_biweekly: record.hsa_contribution_biweekly,
+    p_mileage_biweekly: record.mileage_biweekly,
+    p_retirement_403b_type: record.retirement_403b_type,
+    p_retirement_403b_amount: record.retirement_403b_amount,
+  });
   btn.disabled = false; btn.textContent = 'Save';
   if (error) { showError('That did not save: ' + error.message); return; }
   closeDrawer();
@@ -1436,7 +1433,7 @@ $('staffRemoveBtn').addEventListener('click', async () => {
   if (!editingStaffId) return;
   const s = churchStaff.find((x) => x.id === editingStaffId);
   if (!confirm('Remove ' + (s ? s.name : 'this person') + ' from the church staff list? Their past periods stay in the record.')) return;
-  const { error } = await sb.from('church_staff').update({ active: false }).eq('id', editingStaffId);
+  const { error } = await sb.rpc('payroll_deactivate_staff', { p_id: editingStaffId });
   if (error) { showError('That did not save: ' + error.message); return; }
   closeDrawer();
   await loadStaff();

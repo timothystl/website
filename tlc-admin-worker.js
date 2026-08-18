@@ -693,7 +693,14 @@ async function pageData(env, reqKey) {
 // It reuses the caller's own `apikey`/`Authorization`, because this Worker
 // holds no Supabase credentials of its own — see "Payroll & Supabase" in
 // CLAUDE.md. Same credentials, same authority, one extra read.
-async function payrollPeriodLocked(baseUrl, period, headers) {
+//
+// ⚠ Reads through the `payroll_get_period_approval` RPC, not a direct
+// `payroll_periods` REST call — since the 2026-08-12 Supabase migration
+// closed `anon`'s table grants, a direct read here would 401 exactly the
+// same way the browser's own reads did. See "the payroll_* RPC functions"
+// below; the shared secret comes from this Worker's own env, never the
+// browser.
+async function payrollPeriodLocked(baseUrl, period, headers, secret) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(period || ''))) {
     return 'That save could not be checked against the period’s approval, so it was not written. Reload the page and try again.';
   }
@@ -702,11 +709,13 @@ async function payrollPeriodLocked(baseUrl, period, headers) {
     const v = headers.get(h);
     if (v) check.set(h, v);
   }
+  check.set('content-type', 'application/json');
   try {
-    const res = await fetch(
-      `${baseUrl}/rest/v1/payroll_periods?select=period_start&period_start=eq.${encodeURIComponent(period)}`,
-      { headers: check },
-    );
+    const res = await fetch(`${baseUrl}/rest/v1/rpc/payroll_get_period_approval`, {
+      method: 'POST',
+      headers: check,
+      body: JSON.stringify({ p_period_start: period, p_secret: secret || '' }),
+    });
     if (!res.ok) return 'The period’s approval could not be read, so nothing was saved. Try again in a moment.';
     const rows = await res.json();
     if (Array.isArray(rows) && rows.length > 0) {
@@ -1277,36 +1286,56 @@ export default {
         if (v) outHeaders.set(h, v);
       }
 
+      // ── the payroll_* RPC functions, and the shared secret that gates them ──
+      // The 2026-08-12 Supabase migration (closing a real hole — the public
+      // anon key could read and rewrite everyone's payroll) revoked `anon`'s
+      // direct grants on church_staff, church_staff_period_entries,
+      // payroll_periods and staff_pto_entries, with no replacement for the
+      // one thing that legitimately needs anon-key access to them: this
+      // proxy. `admin/payroll.html` now calls thirteen narrow
+      // `SECURITY DEFINER` Postgres functions instead of those tables
+      // directly (`payroll_get_staff`, `payroll_save_hours`, etc.) — same
+      // shape as CHMS_INTAKE_API_KEY/ADMIN_PUSH_API_KEY: a shared secret
+      // held only on this Worker's side, injected into the RPC body here,
+      // never sent to or held by the browser. `anon` still has zero direct
+      // grant on any of the four tables; only EXECUTE on these functions.
+      let forwardBody = ['GET', 'HEAD'].includes(method) ? undefined : request.body;
+      const isPayrollRpc = method === 'POST' && /^\/sb\/rest\/v1\/rpc\/payroll_/.test(path);
+      let periodForLock = '';
+      if (isPayrollRpc) {
+        // Buffered rather than streamed — every payroll RPC call carries one
+        // small JSON object of named params, and every one needs the secret
+        // added before it leaves this Worker.
+        const raw = await request.text();
+        let parsed = {};
+        try { parsed = raw ? JSON.parse(raw) : {}; } catch (_) { parsed = {}; }
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          parsed.p_secret = env.PAYROLL_PROXY_SECRET || '';
+        }
+        forwardBody = JSON.stringify(parsed);
+        if (path === '/sb/rest/v1/rpc/payroll_save_hours') {
+          periodForLock = String((parsed && parsed.p_period_start) || '');
+        }
+      }
+
       // ── THE PERIOD LOCK ──
       // Approving a payroll run is somebody signing off a set of figures. If
       // the hours can still change afterwards, the signature is on nothing.
       // The fix list is explicit that this is enforced HERE and not by hiding
       // the button — the screen grays the inputs as a courtesy, but a stale
       // tab, a second window, or a crafted POST all arrive at this line.
+      // (The RPC function itself refuses the same write a second time, so a
+      // caller that reaches Supabase by some other path still can't slip an
+      // edit past an approval — belt and suspenders, not either/or.)
       //
       // Scoped to the period's own entries. Rates live on `church_staff` and
       // are not period-scoped, so locking those would stop the office fixing
       // a rate for a period they have not run yet.
-      let forwardBody = ['GET', 'HEAD'].includes(method) ? undefined : request.body;
-      if (!['GET', 'HEAD'].includes(method) && path.includes('/church_staff_period_entries')) {
-        let period = '';
-        const q = url.searchParams.get('period_start') || '';
-        if (q.startsWith('eq.')) period = q.slice(3);
-        if (!period) {
-          // Buffered rather than streamed, so the period can be read out of it
-          // — payroll bodies are one small row. Everything else still streams.
-          const raw = await request.text();
-          forwardBody = raw;
-          try {
-            const parsed = JSON.parse(raw);
-            const rows = Array.isArray(parsed) ? parsed : [parsed];
-            period = String(rows.find((r) => r && r.period_start)?.period_start || '');
-          } catch (_) { /* not JSON we can read; the check below fails closed */ }
-        }
+      if (path === '/sb/rest/v1/rpc/payroll_save_hours') {
         // ⚠ Fails CLOSED. If we cannot tell whether the run was signed off, a
         // refusal costs a retry and says so; the other way round silently
         // rewrites approved figures. The message names the way out.
-        const locked = await payrollPeriodLocked(MDO_SUPABASE_URL, period, outHeaders);
+        const locked = await payrollPeriodLocked(MDO_SUPABASE_URL, periodForLock, outHeaders, env.PAYROLL_PROXY_SECRET || '');
         if (locked) {
           return new Response(JSON.stringify({ message: locked }), {
             status: 409,
