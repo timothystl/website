@@ -1397,358 +1397,24 @@ if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
     </div>
   </div>
 </div>
-
 <!-- ═══════════════════════════════════════════════════════════════════
-     CHRISTMAS MARKET — VENDOR APPLICATION  (/christmasmarket/vendors)
-     Built from design_handoff_market_vendor_signup/. It replaces the Google
-     Form + spreadsheet the market ran on through 2024.
+     CHRISTMAS MARKET — VENDOR PAGES  (/christmasmarket/vendors and, from
+     Phase 2, /christmasmarket/vendors/apply)
 
-     Two things worth knowing before editing this page:
+     ⚠ THESE PAGES HAVE NO MARKUP HERE ANY MORE, AND THAT IS THE POINT. Every
+     word on them is a block record, edited in the Pages editor and rendered
+     by admin/blocks.js — the seed is admin/market-page-seed.js. The div below
+     is the mount point the router and site-worker.js's edge injection fill;
+     leaving it empty is what stops a second, hardcoded copy of the market's
+     rules drifting away from the one the office can actually edit.
 
-     ⚠ THE DATES, THE FEE AND THE FEE MATH ARE SETTINGS, not markup. What is
-     written below is the FALLBACK — what shows before /api/market-config
-     answers, and forever if the admin is unreachable. Every one of those spots
-     is marked data-mkt-* and is filled in by tlcMarketInit(). Change the market
-     day in the admin (Settings, or the Christmas Market screen), not here; the
-     old markup two sections up carries an "UPDATE ANNUALLY" comment over a
-     hardcoded mailto, and an annual code edit is what that comment costs.
-
-     ⚠ NO PAYMENT ADDRESS APPEARS ON THIS PAGE, and that is deliberate. The
-     amount and the Tithe.ly link are both settled server-side when the
-     application is submitted, so the browser never holds a payment URL it
-     could edit first, and the link cannot go stale when the office changes
-     the giving link. Same rule as every give button on the site.
+     ⚠ NO PAYMENT ADDRESS APPEARS ON THE PAGE, unchanged by the move to
+     blocks. The amount and the Tithe.ly link are both settled server-side
+     when the application is submitted, so the browser never holds a payment
+     URL it could edit first, and the link cannot go stale when the office
+     changes the giving link. Same rule as every give button on the site.
      ═══════════════════════════════════════════════════════════════════ -->
-<div id="page-marketvendors" class="page">
-  <section class="mkt-hero">
-    <div class="mkt-hero-inner">
-      <div>
-        <span class="eyebrow">Vendor applications · Weihnachtsmarkt, Timothy's Christmas Market</span>
-        <h1>Bring your table to the <em>Christmas Market</em></h1>
-        <p class="mkt-hero-sub">Sixty-plus makers, bakers, and neighbors set up outdoors in our parking lot the first Saturday of December, under weather coverage we provide. Tables are <span data-mkt-fee>$30</span> each, and we place returning vendors near their friends whenever we can.</p>
-        <div class="btn-row">
-          <a href="#mkt-apply" class="btn btn-secondary">Apply for a table</a>
-          <a href="#mkt-details" class="btn btn-ghost">Vendor details</a>
-        </div>
-      </div>
-      <div class="hero-card">
-        <div class="hero-card-label">Market day</div>
-        <div class="hero-card-time" data-mkt-date>Saturday, Dec 5</div>
-        <div class="hero-card-day" data-mkt-hours>11:00 am – 6:00 pm</div>
-        <hr>
-        <div class="hero-card-addr">
-          Timothy Lutheran Church<br>6704 Fyler Ave<br>St. Louis, MO 63139
-          <a href="#mkt-apply">Tables are <span data-mkt-fee>$30</span> each</a>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="section section--linen" id="mkt-details">
-    <div class="wrap">
-      <span class="eyebrow">Before you apply</span>
-      <h2>Vendor details</h2>
-      <div class="mkt-cards">
-        <div class="min-card">
-          <h3><span data-mkt-fee>$30</span> per table</h3>
-          <p>Each table gets an 8×10 ft space with weather coverage and one 6-foot table. Bring your own chairs and a table covering that reaches the ground. Most vendors take one table; <span data-mkt-max>three</span> is our maximum.</p>
-        </div>
-        <div class="min-card">
-          <h3>Setup &amp; teardown</h3>
-          <p>Enter from Ivanhoe at the north lot entrance starting at 8:30 am. Vehicle access closes at 10:30 — move yours to street parking at least 3 blocks away once you're unloaded, and stay set up until 6:00.</p>
-        </div>
-        <div class="min-card">
-          <h3>Handmade &amp; local first</h3>
-          <p>Artisans, bakers, small businesses, and youth groups — handmade, Christmas, and gift items. Secondhand goods aren't permitted, and direct sales reps are encouraged to offer a gift basket.</p>
-        </div>
-        <div class="min-card">
-          <h3>Pay when you apply</h3>
-          <p>Submitting takes you to secure card payment with your amount filled in. Vendors cover the small processing fee — <span data-mkt-total-1>$31.20</span> for one table.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="section section--white">
-    <div class="wrap two-col" style="gap:64px;align-items:start;">
-      <div>
-        <span class="eyebrow eyebrow--sage">The short version</span>
-        <h2>Rules at a glance</h2>
-        <p style="font-size:15px;color:var(--gray);line-height:1.8;">Nothing here is a surprise if you have done a market before. The full agreement is at the bottom of the application.</p>
-      </div>
-      <div class="mkt-rules">
-        <div class="value-card">
-          <h4>You bring the chairs</h4>
-          <p>We supply your 6-foot table and weather coverage. You bring chairs, a table covering that reaches the ground, signage, display, change, and your own bags.</p>
-        </div>
-        <div class="value-card">
-          <h4>No alcohol at vendor booths</h4>
-          <p>Vendors may not sell alcohol or other beverages. Only a booth owned and operated by Timothy Lutheran Church may sell drinks.</p>
-        </div>
-        <div class="value-card">
-          <h4>Food vendors</h4>
-          <p>Prepared and packaged food is welcome. You are responsible for meeting City of St. Louis health department requirements for what you sell.</p>
-        </div>
-        <div class="value-card">
-          <h4>Electricity is limited</h4>
-          <p>Tell us your appliances, wattage, and amperage on the application — Marla approves every electrical request before the market. Heaters and heated blankets aren't permitted; bring your own cord and surge protector.</p>
-        </div>
-        <div class="value-card">
-          <h4>Refunds are limited</h4>
-          <p>Your fee is refunded only if we decline your application or products. Otherwise there are no refunds for a withdrawal within three weeks of the market, or for a no-show.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="section section--mist">
-    <div class="wrap">
-      <span class="eyebrow">Past markets</span>
-      <h2>What the day looks like</h2>
-      <p style="font-size:15px;color:var(--gray);line-height:1.8;margin:0 0 28px;max-width:620px;">Aisles of handmade goods, the smell of something baking, and most of Lindenwood Park through the doors before noon.</p>
-      <!-- The handoff ships these as empty drop targets and says so: it needs
-           three wide shots of full aisles and busy tables, and the repo has
-           none. christmas-mkt.webp is the one real market photograph we have,
-           so it leads; the other two say plainly what is wanted rather than
-           pretending to be pictures. Replace all three with real photos at
-           public/images/ministries/*.webp when they exist. -->
-      <div class="mkt-photos">
-        <img src="/images/ministries/christmas-mkt.webp" alt="Shoppers at the Timothy Christmas Market" loading="lazy" width="980" height="784">
-        <div class="img-placeholder">Photo — a vendor with shoppers</div>
-        <div class="img-placeholder">Photo — baked goods or crafts up close</div>
-      </div>
-    </div>
-  </section>
-
-  <section class="section section--white" id="mkt-apply">
-    <div class="wrap" style="max-width:760px;margin-bottom:32px;">
-      <span class="eyebrow">The application</span>
-      <h2>Vendor application</h2>
-      <p style="font-size:15px;color:var(--gray);line-height:1.8;">Three short steps, about five minutes. You pay by card at the end and Marla confirms your table number by email.</p>
-    </div>
-
-    <!-- Shown instead of the card when the office has closed applications for
-         the year. The page still explains the market and still names Marla —
-         a maker who finds it out of season should learn when to come back,
-         not meet a form that takes their money for a market with no date. -->
-    <div id="mkt-closed" class="wrap" style="max-width:760px;display:none;">
-      <div class="value-card">
-        <h4>Applications are closed right now</h4>
-        <p>We are not taking vendor applications at the moment. Email <a href="mailto:tlc.christmasmarket@gmail.com" data-mkt-coordinator-link>tlc.christmasmarket@gmail.com</a> and Marla will tell you when they open for the next market.</p>
-      </div>
-    </div>
-
-    <form id="mkt-form" class="mkt-apply" novalidate>
-      <div class="mkt-steps" role="tablist" aria-label="Vendor application steps">
-        <button type="button" class="mkt-step" role="tab" aria-selected="true" aria-controls="mkt-p1" data-step="1">
-          <span class="mkt-step-n">Step 1</span><span class="mkt-step-l">You &amp; your booth</span>
-        </button>
-        <button type="button" class="mkt-step" role="tab" aria-selected="false" aria-controls="mkt-p2" data-step="2">
-          <span class="mkt-step-n">Step 2</span><span class="mkt-step-l">What you sell</span>
-        </button>
-        <button type="button" class="mkt-step" role="tab" aria-selected="false" aria-controls="mkt-p3" data-step="3">
-          <span class="mkt-step-n">Step 3</span><span class="mkt-step-l">Tables &amp; payment</span>
-        </button>
-      </div>
-
-      <!-- Honeypot. Hidden from people, irresistible to a bot; a filled one is
-           silently treated as a success so nothing is learned by trying. -->
-      <div style="position:absolute;left:-9999px;" aria-hidden="true">
-        <label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label>
-      </div>
-
-      <div class="mkt-panel is-on" id="mkt-p1" role="tabpanel">
-        <p class="mkt-lead">Who's behind the table, and how we reach you.</p>
-        <div class="form-group">
-          <label class="form-label" for="mkt-names">Participant name(s) <span class="mkt-req">*</span></label>
-          <input class="form-input" type="text" id="mkt-names" name="participant_names" placeholder="Everyone who will be at the table" autocomplete="name">
-        </div>
-        <div class="mkt-pair">
-          <div class="form-group">
-            <label class="form-label" for="mkt-biz">Business name</label>
-            <input class="form-input" type="text" id="mkt-biz" name="business_name" placeholder="If you have one" autocomplete="organization">
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="mkt-web">Website or Instagram</label>
-            <input class="form-input" type="text" id="mkt-web" name="website_or_social" placeholder="@yourshop">
-          </div>
-        </div>
-        <div class="mkt-pair">
-          <div class="form-group">
-            <label class="form-label" for="mkt-email">Email <span class="mkt-req">*</span></label>
-            <input class="form-input" type="email" id="mkt-email" name="email" placeholder="you@example.com" autocomplete="email">
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="mkt-phone">Telephone <span class="mkt-req">*</span></label>
-            <input class="form-input" type="tel" id="mkt-phone" name="phone" placeholder="(314) 555-0123" autocomplete="tel">
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="mkt-street">Mailing address</label>
-          <input class="form-input" type="text" id="mkt-street" name="street" placeholder="Street" autocomplete="street-address" style="margin-bottom:12px;">
-          <div class="mkt-csz">
-            <input class="form-input" type="text" name="city" placeholder="City" aria-label="City" autocomplete="address-level2">
-            <input class="form-input" type="text" name="state" placeholder="State" aria-label="State" autocomplete="address-level1">
-            <input class="form-input" type="text" name="zip" placeholder="ZIP" aria-label="ZIP" autocomplete="postal-code">
-          </div>
-        </div>
-        <div class="form-group">
-          <span class="form-label" id="mkt-returning-label">Sold with us before?</span>
-          <div class="mkt-choice" role="group" aria-labelledby="mkt-returning-label">
-            <button type="button" class="mkt-pill" data-returning="yes" aria-pressed="false">Returning vendor</button>
-            <button type="button" class="mkt-pill" data-returning="no" aria-pressed="false">First year</button>
-          </div>
-          <input type="hidden" name="returning_vendor" value="">
-        </div>
-        <div class="mkt-foot mkt-foot--end">
-          <button type="button" class="btn btn-primary" data-goto="2">Next: what you sell</button>
-        </div>
-      </div>
-
-      <div class="mkt-panel" id="mkt-p2" role="tabpanel">
-        <p class="mkt-lead">The more specific you are, the better we can space out similar tables.</p>
-        <div class="form-group">
-          <label class="form-label" for="mkt-product">Description of product <span class="mkt-req">*</span></label>
-          <textarea class="form-input" id="mkt-product" name="product_description" style="min-height:112px;" placeholder="e.g. handmade purses, tote bags, wallets, crochet shawls"></textarea>
-        </div>
-        <label class="mkt-check">
-          <input type="checkbox" name="sells_food" value="1">
-          <span><strong>I'll be selling food or drink.</strong> You're responsible for City of St. Louis health department requirements for what you sell — Marla will follow up with what that means for your table.</span>
-        </label>
-        <div class="form-group">
-          <label class="form-label" for="mkt-power">Appliances, wattage, amperage</label>
-          <input class="form-input" type="text" id="mkt-power" name="appliances_power" placeholder="None — or: popcorn popper, 1200W / 15A">
-        </div>
-        <div class="form-group">
-          <span class="form-label">Sample photos <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);font-family:var(--font-body);">— optional, up to five</span></span>
-          <label class="mkt-drop" id="mkt-drop">
-            <input type="file" id="mkt-photos" name="photos" accept="image/*" multiple style="position:absolute;left:-9999px;">
-            <span class="mkt-drop-t">Drop photos here or browse</span>
-            <span class="mkt-drop-s">We use these to promote the market and to place your table well.</span>
-          </label>
-          <div class="mkt-thumbs" id="mkt-thumbs"></div>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="mkt-requests">Special requests</label>
-          <textarea class="form-input" id="mkt-requests" name="special_requests" style="min-height:84px;" placeholder="Booth placement, neighbors you'd like to be near, anything else"></textarea>
-        </div>
-        <div class="mkt-foot">
-          <button type="button" class="btn btn-outline" data-goto="1">Back</button>
-          <button type="button" class="btn btn-primary" data-goto="3">Next: tables &amp; payment</button>
-        </div>
-      </div>
-
-      <div class="mkt-panel" id="mkt-p3" role="tabpanel">
-        <div class="form-group">
-          <span class="form-label" id="mkt-tables-label">How many tables? <span class="mkt-req">*</span></span>
-          <div class="mkt-tables" id="mkt-tables" role="group" aria-labelledby="mkt-tables-label"></div>
-          <input type="hidden" name="tables" value="1">
-        </div>
-
-        <div class="mkt-total">
-          <div class="mkt-total-label">Your total</div>
-          <div class="mkt-total-rows">
-            <div><span id="mkt-sub-label">1 table × $30</span><span id="mkt-sub">$30</span></div>
-            <div><span id="mkt-fee-label">Card processing fee (2.9% + 30¢)</span><span id="mkt-fee">$1.20</span></div>
-            <hr>
-            <div class="mkt-total-due"><span>Due today</span><span id="mkt-due">$31.20</span></div>
-          </div>
-          <p class="mkt-total-note">Vendors cover the processing fee so the full <span data-mkt-fee>$30</span> per table goes to the market. Payment opens with this amount already filled in.</p>
-        </div>
-
-        <!-- This is Andrew's own wording — the vendor rules he sent directly,
-             not a draft awaiting his sign-off (see the earlier note in this
-             file's history: the first version was drafted for the design
-             handoff and explicitly needed his review before the first market
-             ran on it). Change the RULES here only from what he sends; this is
-             the one thing on the page a vendor is legally agreeing to. -->
-        <div class="mkt-agree" tabindex="0" role="region" aria-label="Vendor agreement">
-          <p><strong>Vendor agreement.</strong> By applying I agree that:</p>
-          <p>The fee for my table(s), plus the card processing fee, is due when I apply. It is refunded only if my application or products are declined as inappropriate; otherwise there is no refund for a withdrawal within three weeks of the market, or for a no-show.</p>
-          <p>Timothy Lutheran Church provides one 6-foot table and weather coverage for each 8×10 ft space. I supply my own chairs, a table covering that reaches the ground, signage, display, bags, and change, and I keep my display within my assigned space.</p>
-          <p>My merchandise reflects handmade, Christmas, and gift themes. I will not sell secondhand items, and I will not sell alcohol or other beverages.</p>
-          <p>I will enter from Ivanhoe at the north lot entrance by 8:30 am and be set up before vehicle access closes at 10:30. I will keep my table staffed until the market closes at 6:00 pm, and move my vehicle back to the lot to load out only once vehicles are allowed back in at 6:15 pm.</p>
-          <p>All my electrical needs and appliances are declared on my application and approved by Marla Steenbock in advance. I will not bring a heater or a heated blanket.</p>
-          <p>If I sell food or drink, I am responsible for complying with all City of St. Louis health department requirements and for safe handling of everything I serve.</p>
-          <p>I am responsible for collecting and reporting any sales tax, and for the security of my own merchandise and cash.</p>
-          <p>Timothy Lutheran Church is not liable for loss, theft, or damage to my property, or for injury arising from my participation. I will leave my space clean.</p>
-          <p>Timothy Lutheran Church may photograph the market and use those images to promote future markets.</p>
-        </div>
-        <p class="mkt-fineprint">When you pay, please use the same name you entered above — it's how we match your payment to your table.</p>
-        <div class="form-group">
-          <label class="form-label" for="mkt-sign">Type your name to agree <span class="mkt-req">*</span></label>
-          <input class="form-input" type="text" id="mkt-sign" name="signature_name" placeholder="Your full name" style="max-width:400px;">
-        </div>
-        <div class="tlc-turnstile"></div>
-        <div class="mkt-alert" id="mkt-alert" role="alert"></div>
-        <div class="mkt-foot">
-          <button type="button" class="btn btn-outline" data-goto="2">Back</button>
-          <button type="submit" class="btn btn-secondary" id="mkt-submit">Submit and pay $31.20</button>
-        </div>
-        <p class="mkt-fineprint">Need to pay by check or cash instead? Email <a href="mailto:tlc.christmasmarket@gmail.com" data-mkt-coordinator-link>tlc.christmasmarket@gmail.com</a> and Marla will hold your space.</p>
-      </div>
-    </form>
-
-    <div class="mkt-notes">
-      <div class="value-card">
-        <h4>Questions first?</h4>
-        <p>Marla Steenbock is the market coordinator — <a href="mailto:tlc.christmasmarket@gmail.com" data-mkt-coordinator-link>tlc.christmasmarket@gmail.com</a>. She'd rather hear from you before you apply than after.</p>
-      </div>
-      <div class="value-card">
-        <h4>Just want to shop?</h4>
-        <p>The market is free and open to the public, <span data-mkt-hours>11:00 am – 6:00 pm</span>. <a href="/christmasmarket" onclick="event.preventDefault();showPage('christmasmarket')">See the market page</a></p>
-      </div>
-    </div>
-  </section>
-
-  <section class="section section--linen">
-    <div class="wrap">
-      <span class="eyebrow eyebrow--sage">Good to know</span>
-      <h2>Questions vendors ask</h2>
-      <div class="mkt-faq" style="margin-top:28px;">
-        <div>
-          <h3>Can I request to be next to a friend?</h3>
-          <p>Yes — put it in special requests. We honor placement requests whenever the floor plan allows, and returning vendors usually keep their spot.</p>
-        </div>
-        <div>
-          <h3>What if I don't have photos yet?</h3>
-          <p>Apply anyway. Photos are optional — last year's inventory or works in progress is plenty, and you can email them to Marla later.</p>
-        </div>
-        <div>
-          <h3>Is there a commission on sales?</h3>
-          <p>No. The <span data-mkt-fee>$30</span> table fee is all we take. What you sell is yours.</p>
-        </div>
-        <div>
-          <h3>Do church groups pay the fee?</h3>
-          <p>Timothy and Word of Life youth groups and ministries can apply with the fee waived — note it in special requests and Marla will sort it out.</p>
-        </div>
-        <div>
-          <h3>Is the market outdoors?</h3>
-          <p>Yes — Weihnachtsmarkt sets up in our parking lot, and every space has weather coverage we provide. Enter from Ivanhoe at the north lot entrance.</p>
-        </div>
-        <div>
-          <h3>Can I share a table with someone?</h3>
-          <p>Sure — list both names under participants and apply once. One fee covers the table however many of you are behind it.</p>
-        </div>
-        <div>
-          <h3>What if I need to cancel?</h3>
-          <p>Email Marla as soon as you know. Your fee is refunded if we decline your application or products — otherwise there are no refunds within three weeks of the market, or for a no-show.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <div class="mdo-strip">
-    <div class="wrap" style="display:flex;align-items:center;gap:28px;flex-wrap:wrap;padding:0;">
-      <div style="flex:1;min-width:240px;">
-        <div class="hero-card-label">Not a vendor?</div>
-        <div style="font-family:var(--font-body);font-size:20px;color:var(--steel);margin-bottom:6px;">Come shop the market — <span data-mkt-date>Saturday, Dec 5</span>, <span data-mkt-hours>11:00 am – 6:00 pm</span></div>
-        <div style="font-family:var(--font-ui);font-size:13px;font-weight:300;color:var(--gray);line-height:1.65;">Free admission, free parking on Ivanhoe, and a lot full of handmade gifts and food.</div>
-      </div>
-      <a href="/christmasmarket" onclick="event.preventDefault();showPage('christmasmarket')" class="btn btn-outline">Market details</a>
-    </div>
-  </div>
-</div>
+<div id="page-marketvendors" class="page"></div>
 
 <!-- CONCORDIA CHILDREN'S SERVICES -->
 <div id="page-ccs" class="page">
@@ -3797,7 +3463,19 @@ function tlcLoadCalendar(frame) {
 // whole script has run. Function declarations hoist; the object they read
 // does not.
 // ── CHRISTMAS MARKET VENDOR APPLICATION ───────────────────────
-// The three-step card on /christmasmarket/vendors.
+// The three-step card on the vendor application page.
+//
+// ⚠ THIS IS A FALLBACK WITH NOTHING LEFT TO FALL BACK ONTO, AND IT IS KEPT
+// DELIBERATELY. The application is a `marketapp` block now (admin/blocks.js),
+// which ships its own delegated script inside its own markup — so it works
+// wherever it is rendered, and needs none of this. Everything below hangs off
+// `#mkt-form`, which only the deleted hardcoded markup ever carried, so
+// tlcMarketInit() finds nothing and returns immediately. It is left in place
+// rather than deleted because it is the one copy of this flow that does not
+// depend on the admin being reachable, and because deleting ~200 lines of a
+// payment path is a change worth making on its own rather than folded into a
+// page conversion. Do not "wire it back up" to the block's markup — the block
+// has its own script and two of them would fight.
 //
 // ⚠ THE ARITHMETIC HERE IS A MIRROR OF admin/market.js, NOT THE AUTHORITY.
 // What the vendor is actually charged, and what is recorded against their

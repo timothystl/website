@@ -3706,7 +3706,7 @@ group('the other seven market settings moved to the Christmas Market screen too'
 // the seed in isolation — it is that the real seed-and-publish pipeline this
 // Worker runs on every deploy actually reaches it, the same way it already
 // does for give-landing and /about/values.
-group('the vendor application page is seeded, and stays a draft until published');
+group('the vendor application page is seeded and PUBLISHED from its seed');
 {
   const { db, env } = await boot();
 
@@ -3715,7 +3715,13 @@ group('the vendor application page is seeded, and stays a draft until published'
   eq(row.slug, '/christmasmarket/vendors', 'at the address the SPA router already knows');
   eq(row.parent_id, 'christmasmarket', 'nested under the Christmas Market page');
   eq(row.in_menu, 0, 'not in the header/footer nav — same as the hardcoded page today');
-  ok(!row.published_blocks, 'and unpublished — the draft only, same rule as every other seed');
+  // ⚠ PUBLISHED, unlike every other seeded page — and it has to be. The
+  // hardcoded markup this page used to render is deleted from
+  // public/index.html, so an unpublished draft would leave the address
+  // blank. The one-time MARKET_PUBLISH_MARKER in tlc-admin-worker.js is
+  // what does it, and only ever to a page nobody has edited by hand.
+  ok(row.published_blocks, 'and published — the seed IS the live page now');
+  eq(row.published_blocks, row.blocks, 'draft and live are the same blocks on the day it ships');
 
   // ⚠ UNLIKE give-landing, this page must be an ordinary member of /api/pages.
   // give.timothystl.org is excluded because it is a different hostname's page
@@ -3726,7 +3732,7 @@ group('the vendor application page is seeded, and stays a draft until published'
   ok(listed, 'the page is in the public page list');
   eq(listed.slug, '/christmasmarket/vendors', 'at its real address');
   ok(!api.pages.some((p) => p.id === 'give-landing'), 'sanity: give-landing is still excluded, unlike this page');
-  ok(!api.rendered.marketvendors, 'nothing is rendered for it yet — the draft has not been published');
+  ok(api.rendered.marketvendors, 'and it renders — there is no hardcoded fallback left behind it');
 }
 
 group('once published, the application reads live settings — never a stored price or address');
@@ -3739,8 +3745,8 @@ group('once published, the application reads live settings — never a stored pr
   db.prepare("INSERT INTO site_settings (key,value) VALUES ('market_hours_label','10:00 am – 5:00 pm') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
   db.prepare("INSERT INTO site_settings (key,value) VALUES ('market_coordinator_email','newcoordinator@example.com') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
 
-  // Publish: the same one action a human takes in the editor — copy the
-  // draft across whole. Nothing else about the seeding pipeline changes.
+  // Already published by the migration; this line is belt and braces so the
+  // group still reads as "once published" whatever the seeding pipeline does.
   db.prepare("UPDATE pages SET published_blocks = blocks WHERE id='marketvendors'").run();
 
   const api = await (await call(env, '/api/pages', { fresh: true })).json();

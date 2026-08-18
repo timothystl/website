@@ -14,12 +14,22 @@
 // forward, picked the Pages editor over the two lighter options offered —
 // this is that.
 //
-// ⚠ THIS SEEDS THE DRAFT ONLY. `published_blocks` stays empty, so
-// /christmasmarket/vendors keeps rendering the hardcoded markup in
-// public/index.html — tlcMarketInit() and all — until somebody opens the
-// editor, reads this against the live page and presses Publish. Unlike
-// give.timothystl.org this page is NOT excluded from /api/pages: it is an
-// ordinary SPA page like any other, just not yet published from the editor.
+// ⚠ THIS IS PUBLISHED NOW (2026-08-18). It used to seed the draft only, with
+// the hardcoded markup in public/index.html rendering the live page until
+// somebody pressed Publish. That markup is deleted: this file IS the page.
+// The one-time, marker-gated publish lives in tlc-admin-worker.js beside the
+// one that put /give on the editor, and it only ever touches a page nobody
+// has edited by hand (`updated_by = 'migration'`). Unlike give.timothystl.org
+// this page is NOT excluded from /api/pages: it is an ordinary SPA page like
+// any other.
+//
+// ⚠ TWO SENTENCES FROM THE HARDCODED PAGE ARE CARRIED AS `text` BLOCKS
+// (mv-rules-lead, mv-photos-lead) rather than as an intro on the block they
+// belong to. `tiles` and `gallery` render no body or subtitle field, so the
+// alternative was either losing Andrew's own copy or widening two shared
+// block types for one page. A text block above each is what the live page
+// actually was — a lead paragraph in its own right — and it is what the
+// office can edit.
 //
 // ⚠ THE ONE BLOCK THAT TAKES MONEY HAS NO url FIELD AT ALL, and cannot: see
 // the 'marketapp' entry in admin/blocks.js's BLOCK_DEFS and its renderer
@@ -97,9 +107,14 @@ export const MARKET_VENDORS_BLOCKS = [
     ],
   },
   {
+    id: 'mv-rules-lead', type: 'text',
+    body: '<p>Nothing here is a surprise if you have done a market before. The full agreement is at the bottom of the application.</p>',
+    spaceAbove: 48, spaceBelow: 0,
+  },
+  {
     id: 'mv-rules', type: 'tiles',
     eyebrow: 'The short version', title: 'Rules at a glance',
-    spaceAbove: 48, spaceBelow: 48,
+    spaceAbove: 16, spaceBelow: 48,
     items: [
       { title: 'You bring the chairs', body: '<p>We supply your 6-foot table and weather coverage. You bring chairs, a table covering that reaches '
         + 'the ground, signage, display, change, and your own bags.</p>' },
@@ -114,9 +129,14 @@ export const MARKET_VENDORS_BLOCKS = [
     ],
   },
   {
+    id: 'mv-photos-lead', type: 'text',
+    body: '<p>Aisles of handmade goods, the smell of something baking, and most of Lindenwood Park through the doors before noon.</p>',
+    spaceAbove: 40, spaceBelow: 0,
+  },
+  {
     id: 'mv-photos', type: 'gallery',
     eyebrow: 'Past markets', title: 'What the day looks like',
-    spaceAbove: 40, spaceBelow: 40,
+    spaceAbove: 16, spaceBelow: 40,
     // ⚠ ONE REAL PHOTOGRAPH. The old hardcoded page shipped two more slots as
     // explicit placeholders saying what was wanted; a gallery block has no
     // such placeholder state — an item with no url renders as an empty

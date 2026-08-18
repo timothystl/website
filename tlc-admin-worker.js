@@ -115,6 +115,10 @@ import { PALETTE as CHROME_PALETTE, BAR_KEYS, DEFAULTS as CHROME_DEFAULTS,
          isDirty as chromeDirty, changedFields as chromeChanged, FIELD_LABELS as CHROME_LABELS,
          renderHeaderPreview, renderNewsletterPreview, TYPEFACES, TEXT_SIZES } from './admin/appearance.js';
 
+// The market's own pages, published from their seeds by the one-time marker
+// below rather than left as drafts — see MARKET_PUBLISH_MARKER.
+const MARKET_SEEDED_PAGES = [MARKET_VENDORS_PAGE];
+
 // ── THE CHROME RECORD, DRAFT AND LIVE ────────────────────────
 // Two settings rows, the same split a page has between `blocks` and
 // `published_blocks`. The draft is what the admin screen draws; the published
@@ -1499,7 +1503,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-17-4'; // bumped: /christmasmarket/vendors seeded as a real `pages` row (admin/market-page-seed.js)
+    const SCHEMA_VERSION = '2026-08-18-1'; // bumped: /christmasmarket/vendors published from its seed (admin/market-page-seed.js)
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -2313,6 +2317,44 @@ export default {
         }
         await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run();
         await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, 'done')").bind(GIVE_PUBLISH_MARKER).run();
+      } catch (_) { /* retried on the next request */ }
+    }
+
+    // ── ONE-TIME: THE MARKET PAGES ARE PUBLISHED FROM THEIR SEEDS (2026-08-18) ──
+    // /christmasmarket/vendors used to render the hardcoded markup in
+    // public/index.html while its block draft sat unpublished; that markup is
+    // deleted, so the seed has to be the live page rather than a draft waiting
+    // for somebody to press Publish.
+    //
+    // ⚠ IT WRITES THE SEED BOTH SIDES, DRAFT AND LIVE, and that is what makes
+    // it usable more than once. `canReseed()` refuses a page that has ever
+    // been published, which is right for the generic re-seed loop above — but
+    // it also means a page published by an earlier version of this marker
+    // could never receive a corrected seed. So the guard here is the OTHER
+    // half of canReseed() on its own: `updated_by = 'migration'`, i.e. nobody
+    // has opened this page in the editor and saved it. The moment a person
+    // touches it, what they typed is what they meant and this stops reaching
+    // it entirely.
+    //
+    // ⚠ The marker's VALUE is bumped whenever the seed changes, not a second
+    // marker added — one row, one question: which version of these pages has
+    // been published.
+    const MARKET_PUBLISH_MARKER = 'market_pages_published';
+    const MARKET_PUBLISH_VERSION = 'v1';
+    const marketPublished = markersOk || markers.get(MARKET_PUBLISH_MARKER) === MARKET_PUBLISH_VERSION;
+    if (!marketPublished) {
+      try {
+        for (const page of MARKET_SEEDED_PAGES) {
+          const row = await env.DB.prepare('SELECT id, updated_by FROM pages WHERE id = ?').bind(page.id).first().catch(() => null);
+          if (!row || (row.updated_by || '') !== 'migration') continue;
+          const blocks = JSON.stringify(sanitizeBlocks(page.blocks));
+          await env.DB.prepare(
+            "UPDATE pages SET blocks = ?, published_blocks = ?, status = 'published', updated_at = datetime('now'), updated_by = 'migration' WHERE id = ?"
+          ).bind(blocks, blocks, page.id).run();
+        }
+        await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run();
+        await env.DB.prepare('INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, ?)')
+          .bind(MARKET_PUBLISH_MARKER, MARKET_PUBLISH_VERSION).run();
       } catch (_) { /* retried on the next request */ }
     }
 
