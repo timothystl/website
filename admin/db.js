@@ -321,6 +321,145 @@ export const DB_INIT_MARKET_VENDORS = `CREATE TABLE IF NOT EXISTS market_vendors
 export const DB_INIT_MARKET_VENDORS_INDEX =
   `CREATE INDEX IF NOT EXISTS idx_market_vendors_status ON market_vendors (payment_status, created_at)`;
 
+// ── EVENTS, GENERALIZED FROM THE CHRISTMAS MARKET ────────────────────────────
+// The Christmas Market was the first event this admin ran end to end —
+// registration, payment, volunteers, photos, its own pages. `site_events` is
+// that shape made general, so a second event (VBS, the Egg Hunt, a concert)
+// needs a row, not a deploy.
+//
+// ⚠ NAMED `site_events`, NOT `events`. `events` already exists (DB_INIT_EVENTS
+// above) and means something else entirely — one row per date/time printed
+// inside a single newsletter issue, keyed to `newsletter_id`. Reusing that name
+// here would have silently unioned two unrelated tables the moment a migration
+// ran; `site_events` reads alongside `site_settings` and `site_appearance`,
+// which is the same "site-wide record" register this belongs in.
+//
+// Every column here is either read verbatim by a capability flag (has_*) or
+// falls back to a sane default when the flag is off — a raffle-free sign-up
+// page has no business carrying a fee_amount, and nothing reads one unless
+// has_payment is set.
+export const DB_INIT_SITE_EVENTS = `CREATE TABLE IF NOT EXISTS site_events (
+  id                      TEXT PRIMARY KEY,
+  name                    TEXT NOT NULL,
+  status                  TEXT NOT NULL DEFAULT 'draft',
+  date_label              TEXT,
+  hours_label             TEXT,
+  coordinator_email       TEXT,
+  -- The permission key that gates this event's Registrations/Volunteers/Photos
+  -- tabs — 'market_manage' for the migrated Christmas Market, verbatim; a
+  -- freshly generated 'event_<id>_manage' for every event created afterward.
+  -- See admin/events.js's eventCoordinatorPermissionKey().
+  coordinator_permission  TEXT NOT NULL DEFAULT '',
+  has_registration        INTEGER NOT NULL DEFAULT 0,
+  has_payment             INTEGER NOT NULL DEFAULT 0,
+  has_volunteers          INTEGER NOT NULL DEFAULT 0,
+  has_photos              INTEGER NOT NULL DEFAULT 0,
+  -- Money, in the same shape market-price.js has always taken: dollars in
+  -- (fee_amount, fee_fixed), a percentage (fee_percent), cents out.
+  fee_amount              REAL,
+  fee_percent             REAL,
+  fee_fixed               REAL,
+  max_qty                 INTEGER,
+  fund_id                 TEXT,
+  payment_provider        TEXT NOT NULL DEFAULT 'tithely',
+  square_links            TEXT,
+  registration_open       INTEGER NOT NULL DEFAULT 1,
+  registration_cap        INTEGER,
+  waitlist_enabled        INTEGER NOT NULL DEFAULT 0,
+  -- Passed to GET /api/signups/<slug>/summary on Serve. NULL means this event
+  -- has no roster there yet — the Volunteers tab says so rather than guessing.
+  volunteer_slug          TEXT,
+  photo_folder            TEXT,
+  page_landing_id         TEXT,
+  page_registration_id    TEXT,
+  -- 'market' for the one event whose public form is the bespoke three-step
+  -- marketapp block rather than the generic event_fields-driven one. Every
+  -- event created from here on is NULL — see admin/events.js.
+  legacy_kind             TEXT,
+  sort_order              INTEGER NOT NULL DEFAULT 0,
+  archived_at             TEXT,
+  created_at              TEXT DEFAULT (datetime('now')),
+  updated_at              TEXT,
+  updated_by              TEXT
+)`;
+
+// One field per row so a coordinator can add, remove, reorder or reword what
+// a registration asks for with no developer — the same reasoning the market's
+// own nine agreement clauses were given as an item list rather than a fixed
+// form. `sensitive` is the whole reason this is a separate table rather than
+// a JSON blob on `site_events`: a field has to be flagged sensitive (medical
+// notes, an allergy, a pickup name) BEFORE the first registration is ever
+// read back, or there is no reliable line between "shown to the coordinator
+// only" and "shown wherever a registration's other fields are shown".
+export const DB_INIT_SITE_EVENT_FIELDS = `CREATE TABLE IF NOT EXISTS site_event_fields (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id     TEXT NOT NULL,
+  key          TEXT NOT NULL,
+  label        TEXT NOT NULL,
+  kind         TEXT NOT NULL DEFAULT 'text',
+  options      TEXT,
+  required     INTEGER NOT NULL DEFAULT 0,
+  sensitive    INTEGER NOT NULL DEFAULT 0,
+  sort_order   INTEGER NOT NULL DEFAULT 0,
+  placeholder  TEXT,
+  hint         TEXT
+)`;
+export const DB_INIT_SITE_EVENT_FIELDS_INDEX =
+  `CREATE INDEX IF NOT EXISTS idx_site_event_fields_event ON site_event_fields (event_id, sort_order)`;
+
+// One row per participant/family/vendor who has signed up for an event.
+//
+// ⚠ `fields_json` HOLDS EVERY NON-SENSITIVE FIELD, `sensitive_json` HOLDS
+// EVERY SENSITIVE ONE, AND THAT SPLIT IS THE WHOLE POINT OF TWO COLUMNS
+// RATHER THAN ONE. A CSV export, a search index, or a generic "show this
+// registration" view can read `fields_json` and never even touch
+// `sensitive_json` — the allergy a parent typed in cannot leak into a
+// screen or an export that was never built with it in mind, because it is
+// not in the column that screen reads.
+//
+// `qty`/`payment_status`/`amount_due_cents`/`amount_paid_cents`/
+// `table_number`/`staff_notes` are the Christmas Market's own vendor columns,
+// generalized — a vendor's table count is a registration's `qty`, a table
+// number is a `table_number` any event can use for a seat/spot assignment.
+export const DB_INIT_SITE_EVENT_REGISTRATIONS = `CREATE TABLE IF NOT EXISTS site_event_registrations (
+  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id           TEXT NOT NULL,
+  qty                INTEGER NOT NULL DEFAULT 1,
+  payment_status     TEXT NOT NULL DEFAULT 'unpaid',
+  amount_due_cents   INTEGER NOT NULL DEFAULT 0,
+  amount_paid_cents  INTEGER,
+  waitlisted         INTEGER NOT NULL DEFAULT 0,
+  contact_name       TEXT,
+  contact_email      TEXT,
+  contact_phone      TEXT,
+  table_number       TEXT,
+  fields_json        TEXT NOT NULL DEFAULT '{}',
+  sensitive_json      TEXT,
+  staff_notes        TEXT,
+  created_at         TEXT DEFAULT (datetime('now'))
+)`;
+export const DB_INIT_SITE_EVENT_REGISTRATIONS_INDEX =
+  `CREATE INDEX IF NOT EXISTS idx_site_event_registrations_event ON site_event_registrations (event_id, payment_status, created_at)`;
+
+// The eleven `market_*` figures the Christmas Market used to keep in
+// `site_settings`, kept here ONLY as the fallback a one-time migration reads
+// when a fresh install has never seeded them at all (INITIAL_SETTINGS below
+// no longer carries them — see the note there). Not read anywhere else.
+export const MARKET_LEGACY_SETTINGS_DEFAULTS = {
+  market_table_fee: '30',
+  market_fee_percent: '2.9',
+  market_fee_fixed: '0.30',
+  market_max_tables: '3',
+  market_fund_id: '',
+  market_coordinator_email: 'tlc.christmasmarket@gmail.com',
+  market_date_label: 'Saturday, Dec 5',
+  market_hours_label: '11:00 am – 6:00 pm',
+  market_applications_open: '1',
+  market_payment_provider: 'tithely',
+  market_square_links: '{}',
+};
+export const MARKET_LEGACY_SETTINGS_KEYS = Object.keys(MARKET_LEGACY_SETTINGS_DEFAULTS);
+
 // One row per browser/device a staff member has said yes to notifications on
 // — not per user, since the same person can enable it on a desktop and a
 // phone and both should ring. `endpoint` (the push service URL the browser
@@ -586,39 +725,16 @@ export const INITIAL_SETTINGS = [
   { key: 'sermon_title_filter', value: '', label: 'Only show videos titled',
     hint: 'Leave blank to show the newest video. Fill it in (e.g. "worship") if the channel also carries concerts or other recordings that should not appear as the service.' },
   { key: 'give_url',          value: 'https://give.tithe.ly/?formId=e1769a0f-65b3-455f-933d-bfcf6a6ed6a8',                                    label: 'Online giving URL',        hint: 'Used for the Give link in emails and invoices. Update when the giving platform changes.' },
-  // ── THE CHRISTMAS MARKET ──
-  // The market's numbers and dates are settings rather than code because the
-  // page prints each of them in several places and the market runs once a
-  // year — the old /christmasmarket markup carries an "UPDATE ANNUALLY" comment
-  // over a hardcoded mailto for exactly this reason, and an annual code edit is
-  // what that comment costs.
-  //
-  // ⚠ The percentage and the fixed charge are the processor's, and they are the
-  // ONLY two numbers that move if the church switches processors. Everything
-  // else — what the vendor is asked for, what the button says, what is recorded
-  // — is computed from them in admin/market.js. Nothing else needs editing.
-  { key: 'market_table_fee', value: '30', label: 'Christmas Market table fee ($)',
-    hint: 'What one 8-foot table costs a vendor. The vendor is asked for this plus the card fee, so the market receives this figure whole.' },
-  { key: 'market_fee_percent', value: '2.9', label: 'Card processing fee (%)',
-    hint: 'The percentage the card processor takes. Change this and the fixed charge below together if the church switches processors — nothing else needs editing.' },
-  { key: 'market_fee_fixed', value: '0.30', label: 'Card processing fee (fixed, $)',
-    hint: 'The per-transaction charge on top of the percentage. 2.9% + 30 cents is the Tithe.ly rate confirmed against a real 2024 payment.' },
-  { key: 'market_max_tables', value: '3', label: 'Most tables one vendor may take',
-    hint: 'The vendor page offers this many buttons, and refuses anything larger however it arrives.' },
-  { key: 'market_fund_id', value: '', label: 'Christmas Market fund',
-    hint: 'The Tithe.ly fund ID market payments should land in. Blank means whichever fund the base giving link already carries.' },
-  { key: 'market_coordinator_email', value: 'tlc.christmasmarket@gmail.com', label: 'Market coordinator email',
-    hint: 'Where a vendor application is sent, and the address printed on the vendor page for anything the form cannot handle.' },
-  { key: 'market_date_label', value: 'Saturday, Dec 5', label: 'Market day',
-    hint: 'Written the way it should read on the page — this is printed, not parsed.' },
-  { key: 'market_hours_label', value: '11:00 am – 6:00 pm', label: 'Market hours',
-    hint: 'Also printed as written.' },
-  { key: 'market_applications_open', value: '1', label: 'Taking vendor applications',
-    hint: '1 or 0. Switched off, the vendor page still explains the market but stops taking applications and stops asking for money. Change it from the Christmas Market screen.' },
-  { key: 'market_payment_provider', value: 'tithely', label: 'Christmas Market payment provider',
-    hint: "'tithely' or 'square'. The market can run on its own separate Square account instead of Tithe.ly. Change it from the Giving tab." },
-  { key: 'market_square_links', value: '{}', label: 'Christmas Market Square links',
-    hint: 'JSON, one Square Payment Link per table count (e.g. {"1":"https://square.link/u/…"}), since Square has no way to put an amount in a link the way Tithe.ly does. Set from the Giving tab.' },
+  // ── THE CHRISTMAS MARKET'S ELEVEN FIGURES MOVED OFF THIS LIST ──
+  // They used to seed here as plain site_settings rows; they are columns on
+  // the market's own `site_events` row now (see admin/events.js and the
+  // one-time EVENTS_MARKET_MIGRATION_MARKER migration in
+  // tlc-admin-worker.js), which is what makes them ONE record instead of a
+  // site_settings row plus an events row saying the same thing twice.
+  // ⚠ DO NOT ADD THEM BACK HERE. `INSERT OR IGNORE` re-seeding a key the
+  // migration has already deleted would silently resurrect it on every
+  // future SCHEMA_VERSION bump, forever — site_settings would fill back up
+  // with figures nothing reads.
   { key: 'gym_rate_per_hour', value: '25.00',                   label: 'Gym rental rate (per hour, $)',  hint: 'Hourly rate charged for gym rentals. Shown to groups when they confirm a booking.' },
   { key: 'gym_hold_hours',    value: '48',                      label: 'Gym hold duration (hours)',      hint: 'How many hours a tentative hold lasts before auto-expiring. Default: 48.' },
   { key: 'gcal_calendar_id',  value: '',                        label: 'Google Calendar ID (gym rentals)', hint: 'Calendar ID that confirmed gym bookings are automatically added to. Format: xxxxx@group.calendar.google.com or your Gmail address for a personal calendar. Also requires GCAL_SERVICE_ACCOUNT_EMAIL and GCAL_PRIVATE_KEY set as Cloudflare Worker secrets.' },

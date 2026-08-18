@@ -20,8 +20,8 @@ const group = (n) => console.log('\n' + n);
 // ── the key set ──────────────────────────────────────────────────────────────
 group('permission keys');
 {
-  eq(ALL_PERMISSIONS.length, 17,
-    'seventeen keys: the spec’s fourteen, plus notices and own-pages, plus the market coordinator');
+  eq(ALL_PERMISSIONS.length, 18,
+    'eighteen keys: the spec’s fourteen, plus notices and own-pages, plus the market coordinator and the events index');
 
   // The fourteen names the design handoff calls "the real permission names".
   const spec = [
@@ -42,6 +42,10 @@ group('permission keys');
   // payroll and giving each got one: the market coordinator is a volunteer who
   // runs one event a year, and the list holds seventy people's home addresses.
   ok('market_manage' in PERMISSIONS, 'market_manage exists — the vendor list is gated on its own');
+
+  // Added with the generalized events section — the /events index and
+  // /events/new, distinct from any one event's own dynamic coordinator key.
+  ok('events_manage' in PERMISSIONS, 'events_manage exists — the events index is gated on its own');
 
   // The old names must be gone, or a stale route gating on one would silently
   // pass for nobody and no one would notice.
@@ -113,7 +117,7 @@ group('migrating stored permissions');
   // it cannot conjure a permission added long afterwards, and asserting that
   // it does would fail every future time somebody adds one, for a reason that
   // has nothing to do with the migration.
-  const AT_RENAME = ALL_PERMISSIONS.filter((k) => k !== 'market_manage');
+  const AT_RENAME = ALL_PERMISSIONS.filter((k) => k !== 'market_manage' && k !== 'events_manage');
   eq(AT_RENAME.length, 16, 'sixteen keys existed at the rename');
   eq(full.length, 16, 'an account holding every old key holds every renamed key');
   for (const k of AT_RENAME) ok(full.includes(k), `full access retains ${k}`);

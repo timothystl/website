@@ -5,7 +5,10 @@
 // Last modified: 2026-03-27
 
 
-import { TINYMCE_HEAD, TINYMCE_VERSION, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_BOOKING_SLOT_INDEX, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, DB_INIT_FOOTER_COLUMNS, FOOTER_COLUMN_SEED, FOOTER_ITEM_COLUMNS, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS, DB_INIT_PAYROLL_READY_NOTIFIED, DB_INIT_MARKET_VENDORS, DB_INIT_MARKET_VENDORS_INDEX, DB_INIT_CORE_VALUES } from './admin/db.js';
+import { TINYMCE_HEAD, TINYMCE_VERSION, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_BOOKING_SLOT_INDEX, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, DB_INIT_FOOTER_COLUMNS, FOOTER_COLUMN_SEED, FOOTER_ITEM_COLUMNS, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS, DB_INIT_PAYROLL_READY_NOTIFIED, DB_INIT_MARKET_VENDORS, DB_INIT_MARKET_VENDORS_INDEX, DB_INIT_CORE_VALUES,
+         DB_INIT_SITE_EVENTS, DB_INIT_SITE_EVENT_FIELDS, DB_INIT_SITE_EVENT_FIELDS_INDEX,
+         DB_INIT_SITE_EVENT_REGISTRATIONS, DB_INIT_SITE_EVENT_REGISTRATIONS_INDEX,
+         MARKET_LEGACY_SETTINGS_DEFAULTS, MARKET_LEGACY_SETTINGS_KEYS } from './admin/db.js';
 import { pushToAllSubscribers } from './admin/webpush.js';
 
 // Static pages that can carry self-serve notices (matches the SPA's page ids in public/index.html)
@@ -107,8 +110,11 @@ import { BLOCKS as NL_BLOCKS, parseBlocks as parseNlBlocks, serializeBlocks as s
 import { screenSubmission, formConfig, forwardToChms, officeEmailHtml, officeSubject,
          handleFilteredRoutes, heldCount, OFFICE_EMAIL } from './admin/forms.js';
 import { stripImageMetadata } from './admin/exif.js';
-import { handleMarketRoutes, marketSettings, marketConfig, marketConfigFromRows, marketPayUrl, priceBreakdown, money as marketMoney,
-         sanitizeApplication, screenableText, coordinatorEmailHtml, vendorEmailHtml } from './admin/market.js';
+import { handleMarketRoutes, marketSettings, marketConfig, marketPayUrl, priceBreakdown, money as marketMoney,
+         sanitizeApplication, screenableText, coordinatorEmailHtml, vendorEmailHtml, marketInsertArgs } from './admin/market.js';
+import { getEvent, listEvents, eventFeeConfig, insertRegistration, eventCoordinatorPermissions,
+         eventCoordinatorPermissionKey, slugifyEventId, handleEventsRoutes, eventFields,
+         sanitizeRegistration, registrationScreenableText, splitRegistrationFields, capacityDecision } from './admin/events.js';
 import { normalizeChannelInput, channelPageUrl, channelIdFrom, feedUrl,
          parseFeed, pickLatest, isChannelId } from './admin/sermons-feed.js';
 import { PALETTE as CHROME_PALETTE, BAR_KEYS, DEFAULTS as CHROME_DEFAULTS,
@@ -459,7 +465,7 @@ async function badgeCounts(env, user) {
   const canPages = hasPermission(user, 'pages_edit') || hasPermission(user, 'pages_edit_own');
   const canApprove = hasPermission(user, 'newsletter_approve');
   const canMarket = hasPermission(user, 'market_manage');
-  const [gym, pages, newsletter, market] = await Promise.all([
+  const [gym, pages, newsletter, market, eventPerms] = await Promise.all([
     canGym ? n("SELECT COUNT(*) AS n FROM gym_bookings WHERE status='hold'") : 0,
     // A page counts as needing attention when its draft differs from what is
     // live, or when it has never been published at all. Same rule as the Pages
@@ -469,9 +475,13 @@ async function badgeCounts(env, user) {
     // A vendor who applied and never finished at the card page. The old Google
     // Form could not show this at all — an abandoned submission left no row
     // anywhere — so it is the one number this screen exists to surface.
-    canMarket ? n("SELECT COUNT(*) AS n FROM market_vendors WHERE payment_status='unpaid'") : 0,
+    canMarket ? n("SELECT COUNT(*) AS n FROM site_event_registrations WHERE event_id='christmasmarket' AND payment_status='unpaid'") : 0,
+    // Every event's own coordinator key, so the sidebar can show the Events
+    // row to a coordinator holding one of them without also holding
+    // events_manage — see the eventItems row in sidebarShell().
+    eventCoordinatorPermissions(env).catch(() => ({})),
   ]);
-  return { gym, pages, newsletter, market };
+  return { gym, pages, newsletter, market, eventPerms };
 }
 
 // One sort rule, shared by /api/news and pageData()'s self-filling news
@@ -499,7 +509,7 @@ async function pageData(env, reqKey) {
       try { return (await env.DB.prepare(sql).bind(...binds).all()).results || []; } catch (_) { return []; }
     };
     const [settingRows, chromeRow, sermonRow, sermonSeries, sermonNotes, bibleClasses, news, staff, newsletters,
-           giveTiers, giveFunds, giveUrlRow, partners, coreValueRows, marketRows] = await Promise.all([
+           giveTiers, giveFunds, giveUrlRow, partners, coreValueRows, marketEventRow, allEventRows, allEventFieldRows] = await Promise.all([
       q("SELECT key, value FROM site_settings WHERE key LIKE 'church_%'"),
       // ⚠ The PUBLISHED row only. The draft exists so that somebody can try a
       // color without it being on the front of the church website, and
@@ -567,11 +577,19 @@ async function pageData(env, reqKey) {
       // the note on core_values in admin/db.js for why only these columns and
       // not the design tokens.
       q('SELECT key, short, name, blurb, tag, why, photo_url FROM core_values'),
-      // The Christmas Market's nine settings, for the self-filling application
-      // block — see admin/market.js. Batched here with everything else rather
-      // than a second round trip per page render, the same reasoning as give
-      // above.
-      q("SELECT key, value FROM site_settings WHERE key LIKE 'market_%'"),
+      // The Christmas Market's own event row, for the self-filling application
+      // block — see admin/market.js and admin/events.js's eventFeeConfig().
+      // Batched here with everything else rather than a second round trip per
+      // page render, the same reasoning as give above.
+      env.DB.prepare("SELECT * FROM site_events WHERE id = 'christmasmarket'").first().catch(() => null),
+      // Every event (the market included, so the `registration` block's
+      // event picker can name it even though it never actually uses it),
+      // for the generic `registration` block — see admin/events.js. A
+      // handful of rows at most; unbounded, unlike the news/staff/sermon
+      // lists above, on purpose — there is no reasonable number of events a
+      // church runs that would make this worth capping.
+      q('SELECT * FROM site_events ORDER BY sort_order, id'),
+      q('SELECT * FROM site_event_fields ORDER BY event_id, sort_order, id'),
     ]);
     const s = {};
     for (const r of settingRows) s[r.key.replace(/^church_/, '')] = r.value;
@@ -632,7 +650,29 @@ async function pageData(env, reqKey) {
       // 'marketapp' branch in renderBlock(). No payment address is in it: the
       // fund and the base link are resolved from `give` above, at the moment
       // an application is actually submitted, never stored in a block.
-      market: marketConfigFromRows([...marketRows, { key: 'give_url', value: (giveUrlRow && giveUrlRow.value) || '' }]),
+      market: eventFeeConfig(marketEventRow, (giveUrlRow && giveUrlRow.value) || ''),
+      // Every event, shaped for the generic `registration` block — see
+      // admin/events.js and the 'registration' branch in renderBlock().
+      // Keyed by event id so a block's own `eventId` field is a direct
+      // lookup. The market is included (its `hasRegistration` reads true on
+      // the row, but it never actually gets a `registration` block — it
+      // keeps `marketapp` — so this only matters for the event picker
+      // listing it by name).
+      eventsById: Object.fromEntries((allEventRows || []).map((ev) => [ev.id, {
+        id: ev.id, name: ev.name,
+        hasRegistration: !!Number(ev.has_registration), hasPayment: !!Number(ev.has_payment),
+        registrationOpen: !!Number(ev.registration_open ?? 1),
+        dateLabel: ev.date_label || '', coordinatorEmail: ev.coordinator_email || '',
+        feeConfig: Number(ev.has_payment) ? eventFeeConfig(ev, (giveUrlRow && giveUrlRow.value) || '') : null,
+      }])),
+      eventFieldsById: (allEventRows || []).reduce((acc, ev) => {
+        acc[ev.id] = (allEventFieldRows || []).filter((f) => f.event_id === ev.id).map((f) => ({
+          key: f.key, label: f.label, kind: f.kind, required: !!Number(f.required),
+          placeholder: f.placeholder || '', hint: f.hint || '',
+          options: (() => { try { const o = JSON.parse(f.options || '[]'); return Array.isArray(o) ? o : []; } catch (_) { return []; } })(),
+        }));
+        return acc;
+      }, {}),
     };
   })();
   if (reqKey) PAGE_DATA_CACHE.set(reqKey, p);
@@ -713,7 +753,7 @@ async function portalOrigin(env) {
 }
 // `/api/tap-hit` is called server-to-server by site-worker.js when it resolves
 // one of the /tapN short addresses, so it has no Origin to check against.
-const PUBLIC_CROSS_ORIGIN_POSTS = new Set(['/api/contact', '/api/prayer', '/api/subscribe', '/api/tap-hit', '/api/push/notify', '/api/market/apply']);
+const PUBLIC_CROSS_ORIGIN_POSTS = new Set(['/api/contact', '/api/prayer', '/api/subscribe', '/api/tap-hit', '/api/push/notify', '/api/market/apply', '/api/events/register']);
 
 // Real ChMS fund names — read-only, cross-Worker call — shown as suggestions in the
 // Giving tab's Funds card so staff can pick a real fund name instead of retyping one from
@@ -1504,7 +1544,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-18-4'; // bumped: force-republish the vendor page over stale hand-typed content, and splice the /christmasmarket jump bar in without touching anything else
+    const SCHEMA_VERSION = '2026-08-19-1'; // bumped: site_events/site_event_fields/site_event_registrations (admin/events.js), on top of the force-republish + jump-bar migrations below
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -2227,6 +2267,18 @@ export default {
     try { await env.DB.prepare(DB_INIT_MARKET_VENDORS).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_MARKET_VENDORS_INDEX).run(); } catch (_) {}
 
+    // ── EVENTS, GENERALIZED FROM THE CHRISTMAS MARKET ──
+    // See admin/events.js and admin/db.js for the full design. The tables are
+    // created here, in the repeatable block, so a fresh install has them
+    // immediately; the market's OWN row is seeded and its eleven legacy
+    // site_settings keys are retired by the one-time migration below, which
+    // must run only once.
+    try { await env.DB.prepare(DB_INIT_SITE_EVENTS).run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_SITE_EVENT_FIELDS).run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_SITE_EVENT_FIELDS_INDEX).run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_SITE_EVENT_REGISTRATIONS).run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_SITE_EVENT_REGISTRATIONS_INDEX).run(); } catch (_) {}
+
     for (const p of PARTNER_SEED) {
       try {
         await env.DB.prepare(
@@ -2463,6 +2515,102 @@ export default {
         }
         await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run();
         await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, 'done')").bind(CHRISTMASMARKET_JUMPBAR_MARKER).run();
+      } catch (_) { /* retried on the next request */ }
+    }
+
+    // ── ONE-TIME: THE CHRISTMAS MARKET BECOMES ONE EVENT ROW (2026-08-18) ──
+    // The eleven `market_*` site_settings keys become the market's own
+    // `site_events` row, and every `market_vendors` row becomes a
+    // `site_event_registrations` row — one record instead of a site_settings
+    // row and an events row saying the same thing twice. Outside the
+    // repeatable schema block above for the same reason the market-publish
+    // step above it is: this reads and TRANSFORMS existing data, and must run
+    // exactly once, ever, not on every SCHEMA_VERSION bump.
+    //
+    // ⚠ ORDER MATTERS. The 'christmasmarket' row is seeded FIRST — reading
+    // whatever is in site_settings today, falling back to
+    // MARKET_LEGACY_SETTINGS_DEFAULTS for a fresh install that never had
+    // those keys seeded at all (INITIAL_SETTINGS no longer carries them) —
+    // and only once that row exists are the market_vendors rows migrated and
+    // the eleven legacy keys deleted. A crash between the two steps leaves
+    // the legacy keys in place, which is harmless: the marker is unset, so
+    // the whole thing retries on the next request, INSERT OR IGNORE-safe on
+    // the events row and re-checking each vendor row's presence before
+    // re-inserting it.
+    const EVENTS_MARKET_MIGRATION_MARKER = 'events_market_migration_v1';
+    const eventsMarketMigrated = markersOk || markers.get(EVENTS_MARKET_MIGRATION_MARKER) === 'done';
+    if (!eventsMarketMigrated) {
+      try {
+        const legacyRows = await env.DB.prepare(
+          `SELECT key, value FROM site_settings WHERE key IN (${MARKET_LEGACY_SETTINGS_KEYS.map(() => '?').join(',')})`
+        ).bind(...MARKET_LEGACY_SETTINGS_KEYS).all().catch(() => ({ results: [] }));
+        const legacy = { ...MARKET_LEGACY_SETTINGS_DEFAULTS };
+        for (const r of (legacyRows.results || [])) {
+          if (r.value != null && String(r.value).trim() !== '') legacy[r.key] = r.value;
+        }
+
+        await env.DB.prepare(
+          `INSERT OR IGNORE INTO site_events
+             (id, name, status, date_label, hours_label, coordinator_email, coordinator_permission,
+              has_registration, has_payment, has_volunteers, has_photos,
+              fee_amount, fee_percent, fee_fixed, max_qty, fund_id, payment_provider, square_links,
+              registration_open, volunteer_slug, photo_folder, page_landing_id, page_registration_id,
+              legacy_kind, sort_order, created_at, updated_at, updated_by)
+           VALUES ('christmasmarket','Christmas Market','live',?,?,?, 'market_manage',
+                   1,1,1,1, ?,?,?,?, ?, ?, ?,
+                   ?, 'christmasmarket', 'images/events/christmasmarket/', 'christmasmarket', 'marketvendorsapply',
+                   'market', 0, datetime('now'), datetime('now'), 'migration')`
+        ).bind(
+          legacy.market_date_label, legacy.market_hours_label, legacy.market_coordinator_email,
+          Number(legacy.market_table_fee), Number(legacy.market_fee_percent), Number(legacy.market_fee_fixed),
+          Math.max(1, Math.floor(Number(legacy.market_max_tables) || 3)), legacy.market_fund_id,
+          legacy.market_payment_provider, legacy.market_square_links,
+          legacy.market_applications_open === '0' ? 0 : 1
+        ).run();
+
+        // Vendors: only if this event has none yet, so a retry after a
+        // partial run — or a re-run with the marker somehow cleared — can
+        // never duplicate a vendor already carried across.
+        const already = await env.DB.prepare(
+          "SELECT COUNT(*) AS n FROM site_event_registrations WHERE event_id = 'christmasmarket'"
+        ).first().catch(() => ({ n: 0 }));
+        if (!already || !already.n) {
+          const vendors = await env.DB.prepare('SELECT * FROM market_vendors ORDER BY id').all().catch(() => ({ results: [] }));
+          for (const v of (vendors.results || [])) {
+            let photos = [];
+            try { const p = JSON.parse(v.photos || '[]'); if (Array.isArray(p)) photos = p; } catch (_) {}
+            const fields = {
+              business_name: v.business_name || '', website_or_social: v.website_or_social || '',
+              returning_vendor: v.returning_vendor || '', street: v.street || '', city: v.city || '',
+              state: v.state || '', zip: v.zip || '', product_description: v.product_description || '',
+              sells_food: v.sells_food ? 1 : 0, appliances_power: v.appliances_power || '',
+              special_requests: v.special_requests || '', signature_name: v.signature_name || '',
+            };
+            if (photos.length) fields.photos = photos;
+            await env.DB.prepare(
+              `INSERT INTO site_event_registrations
+                 (id, event_id, qty, payment_status, amount_due_cents, amount_paid_cents, waitlisted,
+                  contact_name, contact_email, contact_phone, table_number, fields_json, staff_notes, created_at)
+               VALUES (?,'christmasmarket',?,?,?,?,0,?,?,?,?,?,?,?)`
+            ).bind(
+              v.id, v.tables || 1, v.payment_status || 'unpaid', v.amount_due_cents || 0,
+              v.amount_paid_cents == null ? null : v.amount_paid_cents,
+              v.participant_names || '', v.email || '', v.phone || null, v.table_number || null,
+              JSON.stringify(fields), v.staff_notes || null, v.created_at
+            ).run();
+          }
+        }
+
+        // The eleven legacy keys are deleted, never left "just in case" —
+        // leaving them would mean two places to look for the same figure,
+        // which is the exact duplication this migration exists to end.
+        for (const key of MARKET_LEGACY_SETTINGS_KEYS) {
+          await env.DB.prepare('DELETE FROM site_settings WHERE key = ?').bind(key).run();
+        }
+
+        await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run();
+        await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, 'done')")
+          .bind(EVENTS_MARKET_MIGRATION_MARKER).run();
       } catch (_) { /* retried on the next request */ }
     }
 
@@ -3276,20 +3424,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
 
         let id = null;
         try {
-          const ins = await env.DB.prepare(
-            `INSERT INTO market_vendors (participant_names, business_name, website_or_social, returning_vendor,
-               email, phone, street, city, state, zip, product_description, sells_food, appliances_power,
-               special_requests, tables, photos, signature_name, amount_due_cents, payment_status)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-          ).bind(
-            value.participant_names, value.business_name || null, value.website_or_social || null,
-            value.returning_vendor || null, value.email, value.phone || null,
-            value.street || null, value.city || null, value.state || null, value.zip || null,
-            value.product_description || null, value.sells_food, value.appliances_power || null,
-            value.special_requests || null, value.tables, photos.length ? JSON.stringify(photos) : null,
-            value.signature_name || null, price.totalCents, 'unpaid'
-          ).run();
-          id = ins?.meta?.last_row_id ?? null;
+          id = await insertRegistration(env, marketInsertArgs(value, price, photos));
         } catch (e) {
           // ⚠ The one failure a vendor must be told about. Everything else here
           // fails quietly on purpose, but if the row did not save then the
@@ -3349,6 +3484,154 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
       } catch (e) {
         console.error('Market application failed:', e?.message);
         return new Response(JSON.stringify({ error: 'Something went wrong. Please try again or email the market coordinator.' }), { status: 500, headers: corsH });
+      }
+    }
+
+    // ── PUBLIC: generic event registration ── the same shape /api/market/apply
+    // is, generalized: which event, which fields, whether it takes money and
+    // whether it has a cap all come from the site_events/site_event_fields
+    // rows rather than being hardcoded, so a second event needs no route of
+    // its own. A FIXED path, not /api/events/:slug/register — the CSRF
+    // Origin gate's PUBLIC_CROSS_ORIGIN_POSTS is an exact-match set and
+    // cannot match a dynamic segment, and the market's own single fixed
+    // endpoint is the precedent this follows rather than widening that gate.
+    if (path === '/api/events/register' && method === 'POST') {
+      const corsH = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
+      if (request.method === 'OPTIONS') return new Response('', { headers: corsH });
+      try {
+        const fd = await request.formData();
+        const eventId = String(fd.get('event_id') || '').trim();
+        const ev = eventId ? await getEvent(env, eventId) : null;
+        if (!ev || !Number(ev.has_registration)) {
+          return new Response(JSON.stringify({ error: 'This form is not accepting sign-ups.' }), { status: 404, headers: corsH });
+        }
+        if (!Number(ev.registration_open ?? 1)) {
+          return new Response(JSON.stringify({
+            error: `Sign-ups are closed right now.${ev.coordinator_email ? ` Please email ${ev.coordinator_email}.` : ''}`
+          }), { status: 403, headers: corsH });
+        }
+
+        const fields = await eventFields(env, eventId);
+        const giveRow = Number(ev.has_payment)
+          ? await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'give_url'").first().catch(() => null)
+          : null;
+        const cfg = eventFeeConfig(ev, (giveRow && giveRow.value) || '');
+
+        // sanitizeRegistration reads `field_<key>` off a plain object, not a
+        // FormData — marshaled here rather than in events.js, which stays
+        // pure and DB-free.
+        const formObj = { qty: fd.get('qty') };
+        for (const f of fields) formObj[`field_${f.key}`] = fd.get(`field_${f.key}`);
+        const { ok: valid, errors, value } = sanitizeRegistration(formObj, fields, cfg);
+        if (!valid) return new Response(JSON.stringify({ error: errors[0], errors }), { status: 400, headers: corsH });
+
+        const screen = await screenSubmission(env, request, {
+          kind: `event-${eventId}`,
+          name: value.contact_name,
+          email: value.contact_email,
+          message: registrationScreenableText(value, fields),
+          honeypot: fd.get('website'),
+          token: fd.get('form_token'),
+          turnstileToken: fd.get('cf-turnstile-response'),
+        });
+
+        // A held submission is stored and answered with success, same rule
+        // as every other public form — and, same as the market, given no
+        // capacity/waitlist decision and no payment link, since a bot that
+        // learns which of its submissions were caught learns how to get
+        // past the filter, and taking a spot or money for one nobody has
+        // reviewed would be the worse mistake either way.
+        let waitlisted = false;
+        if (!screen.held && ev.registration_cap) {
+          const cur = await env.DB.prepare(
+            "SELECT COALESCE(SUM(qty),0) AS n FROM site_event_registrations WHERE event_id = ? AND payment_status != 'dropped' AND waitlisted = 0"
+          ).bind(eventId).first().catch(() => ({ n: 0 }));
+          const decision = capacityDecision(ev, (cur && cur.n) || 0, value.qty || 1);
+          if (decision.refused) {
+            return new Response(JSON.stringify({
+              error: `This is full.${ev.coordinator_email ? ` Please email ${ev.coordinator_email} to ask about a waitlist.` : ''}`
+            }), { status: 409, headers: corsH });
+          }
+          waitlisted = decision.waitlisted;
+        }
+
+        const price = Number(ev.has_payment) ? priceBreakdown(value.qty || 1, cfg) : null;
+        const { nonSensitive, sensitive } = splitRegistrationFields(value, fields);
+
+        let id = null;
+        try {
+          id = await insertRegistration(env, {
+            event_id: eventId,
+            qty: value.qty || 1,
+            payment_status: 'unpaid',
+            amount_due_cents: price ? price.totalCents : 0,
+            waitlisted,
+            contact_name: value.contact_name,
+            contact_email: value.contact_email,
+            contact_phone: value.contact_phone,
+            fields: nonSensitive,
+            sensitive,
+          });
+        } catch (e) {
+          console.error('Event registration insert failed:', e?.message);
+          return new Response(JSON.stringify({
+            error: `We could not save that. Please try again${ev.coordinator_email ? `, or email ${ev.coordinator_email}` : ''}.`
+          }), { status: 500, headers: corsH });
+        }
+
+        if (screen.held) {
+          ctx.waitUntil(pushToAllSubscribers(env, {
+            title: 'Filtered Mail', body: `A ${ev.name || eventId} sign-up was held for review.`,
+            tag: 'held-mail', url: '/filtered',
+          }));
+          return new Response(JSON.stringify({ success: true, held: true }), { headers: corsH });
+        }
+
+        // ⚠ NEVER STORED — recomputed at request time from the fee config,
+        // same reasoning as the market's own marketPayUrl(), which this
+        // reuses verbatim: eventFeeConfig() already shapes an event row into
+        // exactly the object it expects.
+        const payUrl = price ? marketPayUrl(cfg, price.totalCents, value.qty || 1) : '';
+        const allValues = { ...nonSensitive, ...sensitive };
+
+        // Both emails are best-effort and neither is awaited into the
+        // registrant's answer — the row is already saved.
+        if (ev.coordinator_email) {
+          ctx.waitUntil((async () => {
+            const rows = fields.map((f) => `<p style="margin:0 0 6px"><strong>${escapeHtml(f.label)}:</strong> ${escapeHtml(String(allValues[f.key] == null ? '' : allValues[f.key]))}</p>`).join('');
+            await sendTransactionalEmail(env, {
+              subject: `${screen.suspect ? '[likely spam] ' : ''}${ev.name || 'Event'} sign-up — ${value.contact_name || value.contact_email || 'new'}`,
+              htmlContent: `${screen.suspect ? '<p style="margin:0 0 12px;padding:10px 12px;background:#FAF0DC;border-left:3px solid #C9973A;"><strong>The spam filter scored this one as doubtful.</strong> It is almost certainly real — this note is just so you read it twice.</p>' : ''}${rows}${waitlisted ? '<p style="margin:12px 0 0;"><strong>Waitlisted</strong> — capacity was already reached.</p>' : ''}`,
+              toEmails: [ev.coordinator_email],
+              replyTo: value.contact_email ? { email: value.contact_email, name: value.contact_name || '' } : undefined,
+            });
+            // Suppressed for a suspect submission, same rule as the contact
+            // and prayer forms (AW-5) — the address is attacker-supplied.
+            if (!screen.suspect && value.contact_email) {
+              await sendTransactionalEmail(env, {
+                subject: `${ev.name || 'Event'} — you're signed up`,
+                htmlContent: `<p>Thanks for signing up${value.contact_name ? `, ${escapeHtml(value.contact_name)}` : ''}!</p>${waitlisted ? '<p>Capacity is full right now, so you are on the waitlist — we will reach out if a spot opens.</p>' : ''}${payUrl ? `<p><a href="${escapeHtml(payUrl)}">Pay online</a></p>` : ''}`,
+                toEmails: [value.contact_email],
+              });
+            }
+          })());
+        }
+
+        ctx.waitUntil(pushToAllSubscribers(env, {
+          title: `${ev.name || 'Event'} sign-up`,
+          body: `${value.contact_name || value.contact_email || 'Someone'}${waitlisted ? ' (waitlisted)' : ''}`,
+          tag: `event-${eventId}`, url: '/events',
+        }));
+
+        return new Response(JSON.stringify({
+          success: true, id, waitlisted,
+          payUrl: payUrl || undefined,
+          total: price ? marketMoney(price.totalCents) : undefined,
+          totalCents: price ? price.totalCents : undefined,
+        }), { headers: corsH });
+      } catch (e) {
+        console.error('Event registration failed:', e?.message);
+        return new Response(JSON.stringify({ error: 'Something went wrong. Please try again.' }), { status: 500, headers: corsH });
       }
     }
 
@@ -5386,10 +5669,25 @@ ${PAYROLL_HTML}`, 'Payroll');
     }
 
     // ── CHRISTMAS MARKET VENDORS (auth + market_manage) ────────
-    // The coordinator's list — what the 2024 spreadsheet was for.
+    // The coordinator's list — what the 2024 spreadsheet was for. Unchanged
+    // and unmoved: the market keeps its own screen, its own permission, and
+    // its own three-step application — see admin/events.js's header comment
+    // on why the market's own form was not rebuilt onto site_event_fields.
     {
       const r = await handleMarketRoutes(request, env, path, method, currentUser, url,
         path === '/market' ? await pageBadges() : {});
+      if (r) return r;
+    }
+
+    // ── EVENTS, GENERALIZED (auth; each screen checks its own permission) ──
+    // A second event onward — VBS, the Egg Hunt, a concert — is a row here,
+    // not a deploy. Each event's own permission gate lives inside
+    // handleEventsRoutes itself, the same shape handleMarketRoutes already
+    // is, because /events/:id has to check a DIFFERENT permission per row
+    // (market_manage for the market, event_<id>_manage for everything else).
+    {
+      const r = await handleEventsRoutes(request, env, path, method, currentUser, url,
+        (path === '/events' || path.startsWith('/events/')) ? await pageBadges() : {});
       if (r) return r;
     }
 
@@ -10105,15 +10403,23 @@ ${sidebarShell('redirects', currentUser, '', await pageBadges())}
         // depends on holding settings_manage or giving_manage, exactly as
         // editing here always did — moving the field did not widen who can
         // change it.
-        { key: 'market_date_label', label: 'Christmas Market day', group: 'christmas-market', used: 'The vendor application page', href: '/market' },
-        { key: 'market_hours_label', label: 'Christmas Market hours', group: 'christmas-market', used: 'The vendor application page', href: '/market' },
-        { key: 'market_table_fee', label: 'Christmas Market table fee ($)', group: 'christmas-market', used: 'Every price on the vendor page', href: '/market' },
-        { key: 'market_max_tables', label: 'Most tables one vendor may take', group: 'christmas-market', used: 'The vendor application page', href: '/market' },
-        { key: 'market_fee_percent', label: 'Card processing fee (%)', group: 'christmas-market', used: 'What a vendor is charged, alongside the fixed charge below', href: '/market' },
-        { key: 'market_fee_fixed', label: 'Card processing fee (fixed, $)', group: 'christmas-market', used: 'What a vendor is charged, alongside the percentage above', href: '/market' },
-        { key: 'market_coordinator_email', label: 'Christmas Market coordinator email', group: 'christmas-market', used: 'Where an application is sent, and the fallback address on the page', href: '/market' },
-        { key: 'market_fund_id', label: 'Christmas Market fund', group: 'christmas-market', used: 'Which fund a Tithe.ly market payment lands in', href: '/market' },
-        { key: 'market_payment_provider', label: 'Christmas Market payment provider', group: 'christmas-market', used: "Tithe.ly or the market's own Square account", href: '/market' },
+        //
+        // ⚠ `movedAway: true` because these eight are no longer site_settings
+        // rows AT ALL (2026-08-18) — they are columns on the market's own
+        // `site_events` row. Reading `byKey.get(s.key)` for one of these
+        // would always find nothing and print "Not set" beside a warning
+        // that the vendor page is running on a hardcoded fallback, which
+        // would be false: the real value is set, just on the Christmas
+        // Market screen instead of here.
+        { key: 'market_date_label', label: 'Christmas Market day', group: 'christmas-market', used: 'The vendor application page', href: '/market', movedAway: true },
+        { key: 'market_hours_label', label: 'Christmas Market hours', group: 'christmas-market', used: 'The vendor application page', href: '/market', movedAway: true },
+        { key: 'market_table_fee', label: 'Christmas Market table fee ($)', group: 'christmas-market', used: 'Every price on the vendor page', href: '/market', movedAway: true },
+        { key: 'market_max_tables', label: 'Most tables one vendor may take', group: 'christmas-market', used: 'The vendor application page', href: '/market', movedAway: true },
+        { key: 'market_fee_percent', label: 'Card processing fee (%)', group: 'christmas-market', used: 'What a vendor is charged, alongside the fixed charge below', href: '/market', movedAway: true },
+        { key: 'market_fee_fixed', label: 'Card processing fee (fixed, $)', group: 'christmas-market', used: 'What a vendor is charged, alongside the percentage above', href: '/market', movedAway: true },
+        { key: 'market_coordinator_email', label: 'Christmas Market coordinator email', group: 'christmas-market', used: 'Where an application is sent, and the fallback address on the page', href: '/market', movedAway: true },
+        { key: 'market_fund_id', label: 'Christmas Market fund', group: 'christmas-market', used: 'Which fund a Tithe.ly market payment lands in', href: '/market', movedAway: true },
+        { key: 'market_payment_provider', label: 'Christmas Market payment provider', group: 'christmas-market', used: "Tithe.ly or the market's own Square account", href: '/market', movedAway: true },
         { key: 'turnstile_site_key', label: 'Spam check site key', group: 'notifications', used: 'Contact, prayer and signup forms', href: '/filtered' },
         { key: 'payroll_bookkeeper_email', label: 'Bookkeeper email', group: 'notifications', used: 'Where Payroll’s Email report sends to' },
       ];
@@ -10140,12 +10446,14 @@ ${sidebarShell('redirects', currentUser, '', await pageBadges())}
           search: `${s.label} ${s.key} ${value}`.toLowerCase(),
           cells: [
             primaryCell(s.label, s.used),
-            value
-              ? `<code style="font-size:12.5px;word-break:break-all;">${escapeHtml(value.length > 70 ? value.slice(0, 69) + '…' : value)}</code>`
-              : `<span style="color:var(--tlc-muted);">Not set</span>`,
+            s.movedAway
+              ? `<span style="color:var(--tlc-muted);">Set on the Christmas Market screen</span>`
+              : (value
+                ? `<code style="font-size:12.5px;word-break:break-all;">${escapeHtml(value.length > 70 ? value.slice(0, 69) + '…' : value)}</code>`
+                : `<span style="color:var(--tlc-muted);">Not set</span>`),
           ],
           actions: rowActions({ label: s.href ? 'Open' : 'Edit', href: editHref }),
-          warn: value ? '' : `Nothing is set, so ${s.used.split(' · ')[0].toLowerCase()} falls back to whatever is hardcoded.`,
+          warn: (s.movedAway || value) ? '' : `Nothing is set, so ${s.used.split(' · ')[0].toLowerCase()} falls back to whatever is hardcoded.`,
           warnCta: { label: s.href ? 'Open' : 'Set it', href: editHref },
         };
       });
@@ -10965,7 +11273,7 @@ ${sidebarShell('users', currentUser, '', await pageBadges())}
       <div class="form-group"><label>Email <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— used for password reset</span></label><input type="email" name="email" autocomplete="email" placeholder="user@timothystl.org"></div>
       <div class="form-group"><label>Password <span style="color:#B85C3A;">*</span></label><input type="password" name="password" autocomplete="new-password" placeholder="Min 8 characters"></div>
       <div class="form-group"><label>Confirm password</label><input type="password" name="password2" autocomplete="new-password"></div>
-      <div class="form-group"><label>Permissions</label>${permissionCheckboxes([])}</div>
+      <div class="form-group"><label>Permissions</label>${permissionCheckboxes([], await eventCoordinatorPermissions(env))}</div>
     </div>
     <div class="btn-row">
       <button type="submit" class="btn btn-primary">Create user</button>
@@ -10987,7 +11295,11 @@ ${sidebarShell('users', currentUser, '', await pageBadges())}
       if (password.length < 8) return new Response('Password must be at least 8 characters.', { status: 400 });
       const existing = await env.DB.prepare('SELECT id FROM users WHERE username = ?').bind(username).first();
       if (existing) return new Response('Username already taken.', { status: 400 });
-      const perms = Object.keys(PERMISSIONS).filter(k => form.get('perm_' + k) === '1');
+      // Dynamic per-event keys (event_<id>_manage) never live in the static
+      // PERMISSIONS object, so they are read off the event list itself —
+      // the same list permissionCheckboxes() was handed to draw their boxes.
+      const dynamicPermKeys = Object.keys(await eventCoordinatorPermissions(env));
+      const perms = [...Object.keys(PERMISSIONS), ...dynamicPermKeys].filter(k => form.get('perm_' + k) === '1');
       const hash = await hashPassword(password);
       await env.DB.prepare('INSERT INTO users (username, password_hash, permissions, created_at, active, email) VALUES (?, ?, ?, ?, 1, ?)')
         .bind(username, hash, JSON.stringify(perms), new Date().toISOString(), email).run();
@@ -11134,7 +11446,7 @@ ${sidebarShell('users', currentUser, '', await pageBadges())}
         <label>Password</label>
         <div class="tlc-static">Changed on its own screen, so nothing here can change it by mistake. <a href="/users/edit/${u.id}/password">Set a new password</a></div>
       </div>
-      <div class="form-group"><label>Permissions</label>${permissionCheckboxes(selectedPerms)}</div>
+      <div class="form-group"><label>Permissions</label>${permissionCheckboxes(selectedPerms, await eventCoordinatorPermissions(env))}</div>
       <div class="form-group">
         <label>Status</label>
         <div class="radio-row">
@@ -11166,7 +11478,11 @@ ${sidebarShell('users', currentUser, '', await pageBadges())}
       // was never a person in the first place, it was a password manager.
       const email = (form.get('email') || '').trim().toLowerCase() || null;
       const active = form.get('active') === '1' ? 1 : 0;
-      const perms = Object.keys(PERMISSIONS).filter(k => form.get('perm_' + k) === '1');
+      // Dynamic per-event keys (event_<id>_manage) never live in the static
+      // PERMISSIONS object, so they are read off the event list itself —
+      // the same list permissionCheckboxes() was handed to draw their boxes.
+      const dynamicPermKeys = Object.keys(await eventCoordinatorPermissions(env));
+      const perms = [...Object.keys(PERMISSIONS), ...dynamicPermKeys].filter(k => form.get('perm_' + k) === '1');
       // Fetch existing user to detect permission changes
       const existingUser = await env.DB.prepare('SELECT permissions, active FROM users WHERE id = ?').bind(uid).first();
       const oldPerms = existingUser ? existingUser.permissions : '[]';

@@ -10,7 +10,7 @@ import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, TABS_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, SIDEBAR_JS, TOGGLE_WORD_JS, LOCKED_FIELD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 import { APPEARANCE_CSS } from './appearance.js';
 
-export const VERSION = 'v5.24.1'; // minor: the jump-to-name button works on nested addresses too, and a fragment survives a reload
+export const VERSION = 'v5.25.0'; // minor: the Christmas Market generalizes into a real Events section — any number of events, each with optional registration/payment/volunteers/photos
 
 // ── THE SHARED SHELL CSS/JS, EXTERNALISED ───────────────────────
 // This used to be inlined into every admin response inside <style>/<script>
@@ -795,6 +795,12 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}, crum
   // its pages with no way to get to them. The badge still needs market_manage,
   // because an unpaid-application count is the coordinator's own business.
   const eventItems = [
+    // The index — every event the church runs, not only the market. Gated on
+    // events_manage (creating/administering the section) OR any one event's
+    // own coordinator key, so a VBS coordinator holding only that key can
+    // still reach the list to open their own row — they just see one.
+    (hp('events_manage') || Object.keys(b.eventPerms || {}).some((k) => hp(k)))
+      ? navItem('/events', 'Events', activeTab === 'events') : '',
     (hp('market_manage') || hp('settings_manage') || hp('giving_manage') || hp('pages_edit') || hp('ministries_edit'))
       ? navItem('/market', 'Christmas Market', activeTab === 'market', badge(b.market, hp('market_manage'), `${b.market} vendor application(s) with no payment recorded`)) : '',
     hp('gym_manage')      ? navItem('/gym-rentals', 'Gym Rentals', activeTab === 'gym', badge(b.gym, hp('gym_manage'), `${b.gym} gym request(s) waiting for review`)) : '',
@@ -1025,20 +1031,29 @@ export function setupPage(error = '') {
 // a set of them. Each row prints its permission key in monospace so this screen
 // and the code that gates on it are using the same word — which is the point of
 // having renamed them all in v3.0.0.
-export function permissionCheckboxes(selectedPerms = []) {
+// `extraPerms` is a {key: label} map of DYNAMIC permission keys that do not
+// live in the static PERMISSIONS object above — one per event created from
+// /events/new (see eventCoordinatorPermissionKey() in admin/events.js). They
+// print in their own row set, below the static ones, for the same reason a
+// dynamic list is not folded into a hand-typed object: a fifth event must
+// not need a code change here to be grantable.
+export function permissionCheckboxes(selectedPerms = [], extraPerms = {}) {
   const selected = Array.isArray(selectedPerms) ? selectedPerms : JSON.parse(selectedPerms || '[]');
   const presets = Object.entries(PERMISSION_PRESETS).map(([name, keys]) =>
     `<button type="button" class="tlc-preset" data-perms="${escapeHtml(JSON.stringify(keys))}">${escapeHtml(name)}</button>`
   ).join('');
-  const rows = Object.entries(PERMISSIONS).map(([key, label]) =>
-    `<label class="tlc-perm">
+  const rowOf = (key, label) => `<label class="tlc-perm">
       <input type="checkbox" id="perm_${key}" name="perm_${key}" value="1"${selected.includes(key) ? ' checked' : ''}>
       <span class="tlc-perm-name">${escapeHtml(label)}</span>
       <code class="tlc-perm-key">${escapeHtml(key)}</code>
-    </label>`
-  ).join('');
+    </label>`;
+  const rows = Object.entries(PERMISSIONS).map(([key, label]) => rowOf(key, label)).join('');
+  const extraEntries = Object.entries(extraPerms || {});
+  const extraRows = extraEntries.map(([key, label]) => rowOf(key, label)).join('');
   return `<div class="tlc-presets" id="perm-presets">${presets}</div>
 <div class="tlc-perms" id="perm-list">${rows}</div>
+${extraEntries.length ? `<p class="tlc-hint" style="margin:14px 0 6px;">Per-event access — granted here rather than by a preset, since each event's own coordinator is a different decision.</p>
+<div class="tlc-perms" id="perm-list-events">${extraRows}</div>` : ''}
 <script>(function(){
   var wrap = document.getElementById('perm-presets');
   var list = document.getElementById('perm-list');

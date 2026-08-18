@@ -31,6 +31,14 @@ export const PERMISSIONS = {
   // list holds seventy people's home addresses and phone numbers. She should
   // be able to have exactly that and nothing else.
   market_manage:      'Christmas Market vendors',
+  // The /events index and /events/new — creating an event, and everything
+  // about it that is not one specific event's own registrations. A single
+  // event's coordinator is gated separately, on that event's own dynamic
+  // 'event_<id>_manage' key (see eventCoordinatorPermissionKey() in
+  // admin/events.js) — holding this does not itself open any one event's
+  // roster, the same separation market_manage already keeps from the market
+  // being merely reachable.
+  events_manage:      'Events (create & manage)',
   users_manage:       'User management',
   audit_view:         'Audit log & rollback',
 };
@@ -85,7 +93,7 @@ export function migratePermissionKeys(perms) {
 // shortcuts that tick a set of boxes — the checkboxes remain the truth, and a
 // preset never grants anything the boxes do not then show.
 export const PERMISSION_PRESETS = {
-  'Office staff': ['newsletter_edit', 'news_edit', 'ministries_edit', 'sermons_edit', 'pages_edit', 'notices_edit', 'staff_edit', 'links_edit', 'settings_manage'],
+  'Office staff': ['newsletter_edit', 'news_edit', 'ministries_edit', 'sermons_edit', 'pages_edit', 'notices_edit', 'staff_edit', 'links_edit', 'settings_manage', 'events_manage'],
   'Ministry leader': ['pages_edit_own', 'ministries_edit', 'news_edit'],
   'Bookkeeper': ['gym_manage', 'giving_manage', 'payroll_manage'],
   // One event, once a year, and nothing else in the admin. Deliberately not
