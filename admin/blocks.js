@@ -130,7 +130,16 @@ export const TONES = [
   { name: 'Green', bg: '#4A5E3A', fg: '#F0F5EC' },
 ];
 
-export const STAMP_PRESETS = ['New', 'Upcoming', 'Take note', 'Registration open'];
+export const STAMP_PRESETS = ['New', 'Upcoming', 'Take note', 'Registration open', 'Registration closed', 'Cancelled'];
+
+// How big the stamp reads. `m` is the size the stamp has always rendered at —
+// so it has to stay byte-identical to the base `.tlcb-stamp` rule, the same
+// "the default adds no class" rule every other layout control here follows —
+// and `l` is the "make it bigger" ask, a second, larger rule layered on top.
+export const STAMP_SIZES = [
+  { key: 'm', label: 'Normal' },
+  { key: 'l', label: 'Large' },
+];
 
 // ── THE 1b LANGUAGE ──────────────────────────────────────────────────────────
 // Andrew's brief was one sentence: "it just feels dead, and so do all the pages
@@ -1465,6 +1474,7 @@ export function newBlock(type, over = {}) {
     photoAlt: '',
     video: '',
     stamp: '',
+    stampSize: 'm',
     tone: 0,
     corner: 'tr',
     hidden: false,
@@ -1543,6 +1553,7 @@ export function sanitizeBlock(b) {
     photoAlt: cleanText(b.photoAlt, 200),
     video: safeUrl(b.video).slice(0, 600),
     stamp: cleanText(b.stamp, 40),
+    stampSize: STAMP_SIZES.some((s) => s.key === b.stampSize) ? b.stampSize : 'm',
     tone: clampIndex(b.tone, TONES.length),
     corner: b.corner === 'tl' ? 'tl' : 'tr',
     hidden: !!b.hidden,
@@ -2768,6 +2779,7 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
   box-shadow:0 5px 16px rgba(30,45,74,.3);white-space:nowrap;}
 .tlcb-stamp--tl{left:10px;right:auto;transform:rotate(-8deg);}
 .tlcb-stamp--tr{right:10px;left:auto;transform:rotate(8deg);}
+.tlcb-stamp--lg{font-size:19px;padding:12px 24px;border-radius:9px;}
 .tlcb-empty{margin:40px;padding:52px 28px;border:2px dashed #C4CEDF;border-radius:12px;text-align:center;
   display:flex;flex-direction:column;gap:8px;}
 .tlcb-empty b{font:500 22px/1.2 Lora,Georgia,serif;color:#1E2D4A;font-weight:500;}
@@ -3103,7 +3115,7 @@ export function blocksClientConfig(data) {
     // render time, never here.
     events: ((data && data.eventsById) ? Object.values(data.eventsById) : []).map((e) => ({ id: e.id, name: e.name })),
     cardSides: CARD_SIDES, cardShows: CARD_SHOWS, starters: STARTERS.map((s) => ({ key: s.key, label: s.label, note: s.note })),
-    stamps: STAMP_PRESETS, step: SPACE_STEP, max: SPACE_MAX };
+    stamps: STAMP_PRESETS, stampSizes: STAMP_SIZES, step: SPACE_STEP, max: SPACE_MAX };
 }
 
 // ── RENDERING ────────────────────────────────────────────────────────────────
@@ -3292,7 +3304,12 @@ function renderStamp(opts, b) {
   const t = TONES[b.tone] || TONES[0];
   const style = `background:${t.bg};color:${t.fg}`;
   const editable = opts.editing ? ' data-field="stamp" contenteditable="true"' : '';
-  return `<span class="tlcb-stamp tlcb-stamp--${b.corner === 'tl' ? 'tl' : 'tr'}" style="${style}"${editable}>${esc(b.stamp)}</span>`;
+  // ⚠ 'm' adds no class, same rule as SHADOWS' `none` and every other
+  // layout control here — the size the stamp has always rendered at must
+  // stay exactly what `.tlcb-stamp` alone produces, not a class that
+  // happens to agree with it.
+  const sizeClass = b.stampSize === 'l' ? ' tlcb-stamp--lg' : '';
+  return `<span class="tlcb-stamp tlcb-stamp--${b.corner === 'tl' ? 'tl' : 'tr'}${sizeClass}" style="${style}"${editable}>${esc(b.stamp)}</span>`;
 }
 
 // A banner carrying a card lays out as two columns rather than one. The side
