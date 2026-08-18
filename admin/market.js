@@ -816,25 +816,36 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     }
 
     // ── VOLUNTEERS ───────────────────────────────────────────────────────
-    // ⚠ READ-ONLY, AND THERE IS NO SIGN-IN. Shifts live in Serve
-    // (serve.timothystl.org), which is a different application with its own
-    // accounts; this is one unauthenticated GET of a summary it publishes, so
-    // the coordinator can see who is covering the market without a second
+    // ⚠ NOT UNAUTHENTICATED — this reads names AND email addresses, so ChMS
+    // requires the same shared secret every other cross-Worker call to it
+    // already uses (see `getChmsFundSuggestions` in the Giving tab). Shifts
+    // live in Serve (serve.timothystl.org), a different application with its
+    // own accounts; this is a server-to-server GET of a summary it publishes,
+    // so the coordinator can see who is covering the market without a second
     // login. Nothing here writes back, and nothing should: two places editing
     // one roster is two rosters.
     let volunteersSection = '';
     if (active === 'volunteers' && canMarket) {
       let vol = null;
       let volError = '';
-      try {
-        // ⚠ A TIMEOUT, because this is another application on another host and
-        // an admin screen must not sit waiting on one. Four seconds and the
-        // tab renders its own honest empty state instead.
-        const res = await fetch('https://serve.timothystl.org/api/signups/christmasmarket/summary',
-          { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(4000) });
-        if (res.ok) vol = await res.json();
-        else volError = `Serve answered ${res.status}.`;
-      } catch (e) { volError = 'Serve could not be reached.'; }
+      const intakeKey = env.CHMS_INTAKE_API_KEY || '';
+      if (!intakeKey) {
+        // A request Serve would only 401 anyway is not worth making — and
+        // "CHMS_INTAKE_API_KEY is not set" is a clearer thing to tell whoever
+        // opens this screen than a bare "Serve answered 401."
+        volError = 'CHMS_INTAKE_API_KEY is not set on this Worker.';
+      } else {
+        try {
+          // ⚠ A TIMEOUT, because this is another application on another host
+          // and an admin screen must not sit waiting on one. Four seconds and
+          // the tab renders its own honest empty state instead.
+          const res = await fetch('https://serve.timothystl.org/api/signups/christmasmarket/summary',
+            { headers: { Accept: 'application/json', 'X-Intake-Key': intakeKey },
+              signal: AbortSignal.timeout(4000) });
+          if (res.ok) vol = await res.json();
+          else volError = `Serve answered ${res.status}.`;
+        } catch (e) { volError = 'Serve could not be reached.'; }
+      }
       // ⚠ And an answer that is not the shape this expects is not an answer.
       // Something else on that host answering 200 with a page, or a proxy
       // returning its own JSON, would otherwise draw four tiles of zeros and

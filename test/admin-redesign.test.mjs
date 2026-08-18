@@ -3643,16 +3643,28 @@ group('the Christmas Market screen is five tabs, and each one is somebody’s');
   // fail on whether that host happened to be up, which is exactly the thing
   // this tab is supposed to survive rather than be measured by.
   const realFetch = globalThis.fetch;
+  env.CHMS_INTAKE_API_KEY = 'test-intake-key';
   try {
-    globalThis.fetch = async () => new Response(JSON.stringify({
-      open: true, signedUp: 7, openShifts: 4,
-      roles: [
-        { name: 'Setup crew', shifts: [{ label: 'Friday 4–8pm', needed: 6, filled: 2, people: [{ name: 'Ann Poe', email: 'ann@example.com' }, { name: 'Bo Rice', email: 'bo@example.com' }] }] },
-        { name: 'Welcome table', shifts: [{ label: 'Saturday 10–1', needed: 2, filled: 2, people: [{ name: 'Cy Dean', email: 'cy@example.com' }, { name: 'Di Ely', email: 'di@example.com' }] }] },
-        { name: 'Cleanup', shifts: [{ label: 'Saturday 5–7pm', needed: 3, filled: 0, people: [] }] },
-      ],
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    // ⚠ THE CALL MUST CARRY THE SHARED SECRET. ChMS's own endpoint answers
+    // 401 without it (it returns names and email addresses, so it is never
+    // unauthenticated) — a stub that ignores headers would pass this test
+    // whether or not the key was ever sent, which is exactly how the missing
+    // header shipped unnoticed the first time. Verified against the bug:
+    // reverting the header on the request side fails this assertion.
+    let sentKey = null;
+    globalThis.fetch = async (u, init) => {
+      sentKey = init && init.headers && init.headers['X-Intake-Key'];
+      return new Response(JSON.stringify({
+        open: true, signedUp: 7, openShifts: 4,
+        roles: [
+          { name: 'Setup crew', shifts: [{ label: 'Friday 4–8pm', needed: 6, filled: 2, people: [{ name: 'Ann Poe', email: 'ann@example.com' }, { name: 'Bo Rice', email: 'bo@example.com' }] }] },
+          { name: 'Welcome table', shifts: [{ label: 'Saturday 10–1', needed: 2, filled: 2, people: [{ name: 'Cy Dean', email: 'cy@example.com' }, { name: 'Di Ely', email: 'di@example.com' }] }] },
+          { name: 'Cleanup', shifts: [{ label: 'Saturday 5–7pm', needed: 3, filled: 0, people: [] }] },
+        ],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
     const vol = await (await call(env, '/market?tab=volunteers', { cookie: marla })).text();
+    eq(sentKey, 'test-intake-key', 'the request to Serve carries the shared X-Intake-Key');
     has(vol, 'Setup crew', 'the roster is read from Serve');
     has(vol, 'mailto:ann@example.com', 'and a volunteer is somebody you can write to');
     has(vol, 'Nobody yet', 'an entirely open shift says so in words, not as a blank cell');
@@ -3676,7 +3688,15 @@ group('the Christmas Market screen is five tabs, and each one is somebody’s');
     globalThis.fetch = async () => new Response(JSON.stringify({ ok: true, message: 'not the roster' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     const junkVol = await (await call(env, '/market?tab=volunteers', { cookie: marla })).text();
     has(junkVol, 'Counts are not available right now', 'a reply this screen cannot read is treated as no reply');
-  } finally { globalThis.fetch = realFetch; }
+
+    // ⚠ Nobody has set CHMS_INTAKE_API_KEY on this Worker — a real, expected
+    // state before the manual step in G24/CLAUDE.md is done. It has to say
+    // so rather than blaming Serve for a 401 this Worker itself caused.
+    delete env.CHMS_INTAKE_API_KEY;
+    globalThis.fetch = async () => { throw new Error('should not be called with no key configured to send'); };
+    const noKey = await (await call(env, '/market?tab=volunteers', { cookie: marla })).text();
+    has(noKey, 'CHMS_INTAKE_API_KEY is not set on this Worker', 'an unset key says so, rather than a generic failure');
+  } finally { globalThis.fetch = realFetch; delete env.CHMS_INTAKE_API_KEY; }
 }
 
 group('the vendor list is gated on its own permission');
