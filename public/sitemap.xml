@@ -24,6 +24,7 @@
        priority: "christmas market vendor st louis" is a search a maker really
        makes in the autumn, and this is the page that answers it. -->
   <url><loc>https://timothystl.org/christmasmarket/vendors</loc><changefreq>yearly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://timothystl.org/christmasmarket/vendors/apply</loc><changefreq>yearly</changefreq><priority>0.6</priority></url>
   <url><loc>https://timothystl.org/wol</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
   <url><loc>https://timothystl.org/ccs</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
 

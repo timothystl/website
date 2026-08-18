@@ -887,6 +887,29 @@ export const BLOCK_DEFS = {
     ],
   },
 
+  // ── THE MARKET'S FACTS, READ LIVE ─────────────────────────────────────────
+  // The band across the top of /christmasmarket/vendors/apply: market day,
+  // hours, table fee and the coordinator's address.
+  //
+  // ⚠ NOT ONE OF THOSE FOUR VALUES IS TYPED, AND THERE IS NO FIELD TO TYPE
+  // ONE INTO. They are the same `market_*` settings the application block
+  // itself reads (marketConfigFromRows(), fed in as `data.market`), resolved
+  // at render time. That is the whole reason this is a block type rather than
+  // four lines somebody writes into a text block: the split page means the
+  // date and the fee now appear on TWO public pages, and two typed copies is
+  // two things to remember every December. Change the setting once and both
+  // pages follow.
+  //
+  // ⚠ NO url FIELD, for the same reason `marketapp` has none — nothing here
+  // may carry a payment address.
+  marketfacts: {
+    label: 'Market facts', glyph: '⌗',
+    align: true,
+    defaults: { title: '', spaceAbove: 0, spaceBelow: 0 },
+    auto: 'market', autoCount: false,
+    autoNote: 'The market day, the hours, the table fee and the coordinator’s address, read from the Christmas Market screen. Nothing here is typed, so this band and the application below it can never quote different figures.',
+  },
+
   // ── THE STANDOUT CARD ─────────────────────────────────────────────────────
   // The handoff calls it "the service-times tile made general", and that is
   // exactly how it is built: it shares its CSS with the Service times block's
@@ -1143,7 +1166,7 @@ export const GROUPS = [
   // than starting a fifth. They belong to one page, and a group of two that
   // only ever appears on the giving page would read on every other page as a
   // section of the library that is broken.
-  { name: 'Sign up',   types: ['form', 'signup', 'newsletter', 'letter', 'newsletterarchive', 'portal', 'give', 'giving', 'amounts', 'marketapp'] },
+  { name: 'Sign up',   types: ['form', 'signup', 'newsletter', 'letter', 'newsletterarchive', 'portal', 'give', 'giving', 'amounts', 'marketapp', 'marketfacts'] },
 ];
 
 export const BLOCK_TYPE_KEYS = Object.keys(BLOCK_DEFS);
@@ -2264,6 +2287,14 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
    has to render correctly inside the editor canvas, which never loads
    public/styles.css at all. */
 .tlcb-mktapp-facts{font:600 13.5px/1 var(--tlcb-ui);color:#6B6A5F;margin:6px 0 22px;}
+/* The facts band on the apply page. Four label/value pairs, every value read
+   from the market settings — see the marketfacts branch in renderInner. */
+.tlcb-mktfacts{display:flex;flex-wrap:wrap;gap:30px 44px;padding:16px 0;border-bottom:1px solid #DDE3ED;}
+.tlcb-mktfacts-cell{display:flex;flex-direction:column;gap:5px;}
+.tlcb-mktfacts-l{font:700 10px/1 var(--tlcb-ui);letter-spacing:.1em;text-transform:uppercase;color:#6B6A5F;}
+.tlcb-mktfacts-v{font:800 15px/1.2 var(--tlcb-ui);color:#1E2D4A;}
+.tlcb-mktfacts-v--mail a{color:#2E7EA6;text-decoration:none;}
+.tlcb-mktfacts-v--mail a:hover{text-decoration:underline;}
 .tlcb-mktapp-closed{padding:20px 22px;border:1px solid #DDE3ED;border-left:3px solid #C9973A;border-radius:10px;background:#FBF8F3;}
 .tlcb-mktapp-closed p{margin:0;font-size:14.5px;line-height:1.6;color:#4A4860;}
 .tlcb-mktapp-card{max-width:760px;background:#FBF8F3;border:1px solid #DDE3ED;border-radius:16px;
@@ -4756,6 +4787,36 @@ function renderInner(b, opts) {
   }
 
   // ── THE CHRISTMAS MARKET APPLICATION ──────────────────────────────────────
+  if (t === 'marketfacts') {
+    const raw = data.market || {};
+    // Same defaulting rule the application block applies to itself: a
+    // genuinely empty data.market must print the figures a visitor would
+    // really be charged, never the word "undefined".
+    const numOr = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
+    const feeCents = Math.round(numOr(raw.tableFee, MARKET_DEFAULTS.tableFee) * 100);
+    const maxTables = numOr(raw.maxTables, MARKET_DEFAULTS.maxTables);
+    const email = raw.coordinatorEmail || '';
+    const pairs = [
+      ['Market day', esc(raw.dateLabel || ''), false],
+      ['Hours', esc(raw.hoursLabel || ''), false],
+      ['Table fee', `${esc(marketMoney(feeCents))} · ${esc(String(maxTables))} max`, false],
+      ['Coordinator', email
+        ? (opts.editing ? esc(email) : `<a href="mailto:${esc(email)}">${esc(email)}</a>`)
+        : '', true],
+    ];
+    const cells = pairs.filter(([, v]) => v).map(([label, value, mail]) =>
+      `<div class="tlcb-mktfacts-cell"><span class="tlcb-mktfacts-l">${esc(label)}</span>`
+      + `<span class="tlcb-mktfacts-v${mail ? ' tlcb-mktfacts-v--mail' : ''}">${value}</span></div>`).join('');
+    // A band with nothing in it is a band that reads as broken. In the editor
+    // it says why instead, the same rule the Coming-up strip follows.
+    if (!cells) {
+      return opts.editing
+        ? `<div class="tlcb-mktfacts"><span class="tlcb-note">The market day, hours, fee and coordinator all come from the Christmas Market screen. None is set yet, so this band will not appear on the page.</span></div>`
+        : '';
+    }
+    return `<div class="tlcb-mktfacts">${cells}</div>`;
+  }
+
   if (t === 'marketapp') {
     const raw = data.market || {};
     const editing = !!opts.editing;

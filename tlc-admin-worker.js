@@ -60,6 +60,7 @@ import { GIVE_LANDING_PAGE, GIVE_LANDING_PAGE_ID } from './admin/give-landing-se
 // entry in the first place. UNLIKE give-landing, this page is an ordinary SPA
 // page and is not excluded anywhere below — see admin/market-page-seed.js.
 import { MARKET_VENDORS_PAGE } from './admin/market-page-seed.js';
+import { MARKET_APPLY_PAGE } from './admin/market-vendors-apply-seed.js';
 import { giftForPeriod, giveButtonLabel, parseAmount as parseGiveAmount, fmtAmount as fmtGiveAmount,
          GIVE_PERIOD_JS } from './give-link.js';
 
@@ -117,7 +118,7 @@ import { PALETTE as CHROME_PALETTE, BAR_KEYS, DEFAULTS as CHROME_DEFAULTS,
 
 // The market's own pages, published from their seeds by the one-time marker
 // below rather than left as drafts — see MARKET_PUBLISH_MARKER.
-const MARKET_SEEDED_PAGES = [MARKET_VENDORS_PAGE];
+const MARKET_SEEDED_PAGES = [MARKET_VENDORS_PAGE, MARKET_APPLY_PAGE];
 
 // ── THE CHROME RECORD, DRAFT AND LIVE ────────────────────────
 // Two settings rows, the same split a page has between `blocks` and
@@ -1503,7 +1504,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-18-1'; // bumped: /christmasmarket/vendors published from its seed (admin/market-page-seed.js)
+    const SCHEMA_VERSION = '2026-08-18-2'; // bumped: /christmasmarket/vendors/apply is a page (admin/market-vendors-apply-seed.js)
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -2044,7 +2045,7 @@ export default {
       // presses Publish. On these four in particular that is not a formality —
       // they are the most visited pages on the site, the language is new, and
       // there are no photographs yet.
-      const ALL_SEEDED_PAGES = [...SITE_PAGES, NEWS_PAGE_SEED, VALUES_PAGE_SEED, GIVE_LANDING_PAGE, MARKET_VENDORS_PAGE]
+      const ALL_SEEDED_PAGES = [...SITE_PAGES, NEWS_PAGE_SEED, VALUES_PAGE_SEED, GIVE_LANDING_PAGE, ...MARKET_SEEDED_PAGES]
         .map((p) => (REDESIGN_BLOCKS[p.id] ? { ...p, blocks: REDESIGN_BLOCKS[p.id] } : p));
       for (const p of ALL_SEEDED_PAGES) {
         await env.DB.prepare(
@@ -2340,7 +2341,7 @@ export default {
     // marker added — one row, one question: which version of these pages has
     // been published.
     const MARKET_PUBLISH_MARKER = 'market_pages_published';
-    const MARKET_PUBLISH_VERSION = 'v1';
+    const MARKET_PUBLISH_VERSION = 'v2';
     const marketPublished = markersOk || markers.get(MARKET_PUBLISH_MARKER) === MARKET_PUBLISH_VERSION;
     if (!marketPublished) {
       try {

@@ -1415,6 +1415,7 @@ if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
      changes the giving link. Same rule as every give button on the site.
      ═══════════════════════════════════════════════════════════════════ -->
 <div id="page-marketvendors" class="page"></div>
+<div id="page-marketvendorsapply" class="page"></div>
 
 <!-- CONCORDIA CHILDREN'S SERVICES -->
 <div id="page-ccs" class="page">
@@ -3279,6 +3280,7 @@ var PAGE_META = {
   'bees':         { title: 'Urban Beekeepers — Timothy Lutheran Church',                                  desc: 'Creation care in the city. Join Timothy\'s Urban Beekeepers ministry in Lindenwood Park.' },
   'christmasmarket': { title: 'Christmas Market — Timothy Lutheran Church',                               desc: 'Timothy\'s annual Christmas Market in Lindenwood Park, St. Louis — vendors, community, and holiday cheer.' },
   'marketvendors': { title: 'Become a Vendor — Timothy Christmas Market',                                  desc: 'Apply for a table at Timothy\'s outdoor Weihnachtsmarkt in Lindenwood Park, St. Louis. Handmade, local, and one Saturday in December.' },
+  'marketvendorsapply': { title: 'Vendor Application — Timothy Christmas Market',                           desc: 'The vendor application for Timothy\'s Christmas Market — three steps, about five minutes, one payment.' },
   'ccs':             { title: 'Concordia Children\'s Services — Timothy Lutheran Church',                 desc: 'Supporting Concordia Children\'s Services in the Philippines — a Christian home caring for vulnerable children.' },
   'youthfamily':  { title: 'Youth & Family — Timothy Lutheran Church',                                    desc: 'Youth ministry, Sunday School, Confirmation, VBS, Easter Egg Hunt, and Family Ministry at Timothy Lutheran Church.' },
   'youth':        { title: 'Youth Ministry — Timothy Lutheran Church',                                    desc: 'Faith formation, community, and service for students in grades 7–12 at Timothy Lutheran Church.' },
@@ -3296,7 +3298,8 @@ var PAGE_META = {
 // Pages that sit beneath another in the address bar without being a separate
 // page div. showPage(), the router and the canonical/OG tags all read this, so
 // an address is described once and cannot drift between them.
-var NESTED_PATHS = { values: '/about/values', marketvendors: '/christmasmarket/vendors' };
+var NESTED_PATHS = { values: '/about/values', marketvendors: '/christmasmarket/vendors',
+  marketvendorsapply: '/christmasmarket/vendors/apply' };
 function tlcPathFor(id) { return id === 'home' ? '/' : (NESTED_PATHS[id] || '/' + id); }
 
 function updatePageMeta(id) {
@@ -3346,7 +3349,10 @@ window.showPage = function(id, addHistory) {
   }
   if (id === 'sermons') { loadSermons(); loadLatestSermon(); }
   if (id === 'christmasmarket') { loadChristmasMarketPosts(); }
-  if (id === 'marketvendors') { tlcMarketInit(); }
+  // The application moved to its own page in the split; this call moved with
+  // it. See the note above tlcMarketInit() — it is a fallback with nothing
+  // left to fall back onto, kept rather than deleted.
+  if (id === 'marketvendorsapply') { tlcMarketInit(); }
   if (id === 'voters') { loadVotersPage(); }
   if (id === 'home') { loadNotices('home'); }
   if (id === 'worship') { loadNotices('worship'); }
@@ -3824,6 +3830,7 @@ renderFooterPartners();
   // The vendor application. /vendors on its own is deliberately NOT an alias:
   // it would be the shortest address on the site for the one page that takes
   // money, and it says nothing about which market it belongs to.
+  if (path === 'christmasmarket/vendors/apply') { window.showPage('marketvendorsapply', false); return; }
   if (path === 'christmasmarket/vendors') { window.showPage('marketvendors', false); return; }
   // /events has never been a page of its own; news, events and the calendar
   // are one page. Send it there rather than to the 404, so the address is safe

@@ -59,22 +59,24 @@
 // dynamic mailto link is safe: it is read from the setting at render time,
 // never typed.
 
-import { BLOCK_DEFS } from './blocks.js';
-
+// ⚠ THE APPLICATION ITSELF IS NOT ON THIS PAGE ANY MORE. It moved to
+// /christmasmarket/vendors/apply (admin/market-vendors-apply-seed.js) so a
+// first-time visitor can read what a table costs and what the rules are
+// without meeting a form. This page ends in a call to action pointing there;
+// the `marketapp` block is REMOVED rather than hidden, because a hidden block
+// is one somebody switches back on by accident and then there are two.
 export const MARKET_VENDORS_PAGE_ID = 'marketvendors';
 
 // Palette indices into BG/INK in admin/blocks.js — see give-landing-seed.js
 // for why these are named rather than inlined as bare numbers.
 const BG_PARCHMENT = 0;
 const BG_NAVY = 3;
+// --steel, the site's own navy band. Same index as BG_NAVY — named twice on
+// purpose, because the two uses are different decisions and one of them may
+// move.
+const BG_STEEL = 3;
 const INK_INK = 0;
 const INK_CREAM = 3;
-
-// The nine clauses a vendor agrees to, read from the block's own definition
-// rather than retyped — see the file header. Cloned per block (JSON round
-// trip) so nothing here could ever share a reference with BLOCK_DEFS and let
-// a later mutation of one silently reach the other.
-const AGREEMENT_ITEMS = JSON.parse(JSON.stringify(BLOCK_DEFS.marketapp.defaultItems));
 
 // Block ids are written out rather than generated, so re-running the seed
 // (tools/extract-pages.mjs does not touch this page, but a future hand-edit
@@ -86,9 +88,30 @@ export const MARKET_VENDORS_BLOCKS = [
     eyebrow: 'Vendor applications · Weihnachtsmarkt, Timothy’s Christmas Market',
     title: 'Bring your table to the Christmas Market',
     subtitle: 'Sixty-plus makers, bakers and neighbors set up outdoors in our parking lot on market day, '
-      + 'under weather coverage we provide. See the current date, hours and table fee in the application below.',
+      + 'under weather coverage we provide. Read the four things that matter, then apply — the form is its own page, '
+      + 'about five minutes, one payment.',
     bg: BG_NAVY, ink: INK_CREAM, size: 'l',
     spaceAbove: 0, spaceBelow: 0,
+  },
+  // The hero block carries no links of its own, so the two buttons under it
+  // are their own block. The first is the whole reason this page was split;
+  // the second is an in-page jump to the details below, which works because
+  // every block renders its own id as a DOM id (see renderBlock).
+  {
+    id: 'mv-hero-cta', type: 'buttons',
+    spaceAbove: 24, spaceBelow: 8,
+    items: [
+      { title: 'Start the application', url: '/christmasmarket/vendors/apply' },
+      { title: 'Vendor details', url: '#mv-details' },
+    ],
+  },
+  // ⚠ THE SAME BLOCK TYPE THE APPLY PAGE USES, and that is the point. The
+  // split put the date, the hours and the fee on two public addresses; both
+  // read them from the one setting rather than either page carrying a typed
+  // copy that goes stale in December.
+  {
+    id: 'mv-facts', type: 'marketfacts',
+    spaceAbove: 8, spaceBelow: 0,
   },
   {
     id: 'mv-details', type: 'cardgrid',
@@ -148,21 +171,14 @@ export const MARKET_VENDORS_BLOCKS = [
     ],
   },
   {
-    id: 'mv-application', type: 'marketapp',
-    eyebrow: 'The application', title: 'Vendor application',
-    body: '<p>Three short steps, about five minutes. You pay by card at the end and the coordinator confirms your table number by email.</p>',
-    spaceAbove: 40, spaceBelow: 24,
-    items: AGREEMENT_ITEMS,
-  },
-  {
     id: 'mv-notes', type: 'cardgrid',
     title: 'Questions, or just shopping?', cols: 2,
     bg: BG_PARCHMENT, ink: INK_INK, spaceAbove: 0, spaceBelow: 48,
     items: [
-      { title: 'Questions first?', body: '<p>The market coordinator would rather hear from you before you apply than after — their email is in the '
-        + 'application above.</p>' },
-      { title: 'Just want to shop?', body: '<p>The market is free and open to the public. Come by on market day — the date and hours are on the '
-        + 'application above.</p>', linkLabel: 'Market details', url: '/christmasmarket' },
+      { title: 'Questions first?', body: '<p>The market coordinator would rather hear from you before you apply than after — their address is at the '
+        + 'top of this page and on the application itself.</p>' },
+      { title: 'Just want to shop?', body: '<p>The market is free and open to the public. Come by on market day — the date and hours are at the top of '
+        + 'this page.</p>', linkLabel: 'Market details', url: '/christmasmarket' },
     ],
   },
   {
@@ -184,6 +200,17 @@ export const MARKET_VENDORS_BLOCKS = [
       { title: 'What if I need to cancel?', body: '<p>Email the coordinator as soon as you know. Your fee is refunded if we decline your application or '
         + 'products — otherwise there are no refunds within three weeks of the market, or for a no-show.</p>' },
     ],
+  },
+  // The closing ask. Somebody who has read the rules, the photos and the FAQ
+  // has reached the bottom of a long page — this is the second and last time
+  // the apply page is offered, and it is the reason they are here.
+  {
+    id: 'mv-apply-cta', type: 'cta',
+    eyebrow: 'Ready?', title: 'The application takes about five minutes.',
+    body: '<p>You will need what you sell, your power needs, and a card.</p>',
+    bg: BG_STEEL, ink: INK_CREAM,
+    spaceAbove: 0, spaceBelow: 0,
+    items: [{ title: 'Apply for a table', url: '/christmasmarket/vendors/apply' }],
   },
   {
     id: 'mv-shop-cta', type: 'cta',
