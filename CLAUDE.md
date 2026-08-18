@@ -716,6 +716,55 @@ and the `a jump-to-name button actually jumps, instead of bouncing to home`
 group in `node test/public-page.test.mjs` — driven against the real
 `public/index.html` and a real popstate sequence, not a stand-in.
 
+**And it still wasn't the whole story (v5.24.0, 2026-08-17).** Dinger, after
+the fix above: *"still going to home page. also refresh isnt reloading the
+page."* Right on both counts, and the reason the first fix's own test passed
+is exactly why it missed this: it used `/give`, a page whose id and address
+are the same string. The page Dinger was actually testing on — the Christmas
+Market vendor application — is `id: 'marketvendors'` at address
+`/christmasmarket/vendors`, a `NESTED_PATHS` entry precisely *because* the
+two differ.
+
+- **The popstate fix's own fallback re-derived the page id from
+  `location.pathname`** with a plain `document.getElementById('page-' +
+  path)` lookup — so on `/give` it happened to find `page-give` and looked
+  correct, and on `/christmasmarket/vendors` it looked for
+  `page-christmasmarket/vendors`, found nothing, and fell back to `'home'`,
+  identically to the bug it was meant to fix. **The fix was never "resolve
+  the right id" — it only needed to answer "did the path change at all,"**
+  which a `#fragment` click never does. `lastKnownPath`, set to
+  `location.pathname` everywhere `showPage()` itself sets the address bar,
+  turns the popstate handler's question into a plain string comparison: an
+  unchanged path can only mean this is the in-page jump case, whatever the
+  page's id happens to be. No path-resolution logic to keep in step with
+  `NESTED_PATHS` at all, in either direction.
+- **"Refresh isn't reloading the page" was real too, and separate: a full
+  load or reload with a jump-to-name fragment still in the address bar
+  always landed at the top.** `showPage()` unconditionally called
+  `window.scrollTo(0,0)`; a fragment was never consulted at all. Fixed with
+  `tlcScrollToHash()`, tried once synchronously and — because the block
+  content a fragment might target is almost always still loading at that
+  point, arriving only once the `/api/pages` fetch resolves — tried again
+  after that promise chain settles.
+- **⚠ THE RETRY HAS TO BE HANDED THE HASH, NOT READ IT FRESH.** By the time
+  the retry runs, `showPage()`'s own `history.replaceState` — built from
+  `tlcPathFor(id)`, which never carries a fragment — has already erased it
+  from the address bar. `location.hash` at retry time reads empty every
+  time, which is exactly the moment this needs to still know what was
+  asked for. `showPage()` captures `hash = location.hash` in its own first
+  line, before anything can touch the address bar, and both the immediate
+  attempt and the retry are handed that same captured value.
+
+**Verified against the real gap, not the one already fixed**: the browser
+test now visits `/christmasmarket/vendors` — the real nested address — not
+`/marketvendors`, and a version of this fix that only had the `lastKnownPath`
+half (no captured-hash retry) still fails the reload assertion; a version
+with only the retry half still fails the click assertion. Both are needed.
+
+Run: the same `a jump-to-name button actually jumps, instead of bouncing to
+home` group, rewritten in `node test/public-page.test.mjs` against the
+nested address, with a `page.reload()` case added.
+
 ### A block can be given a jump-to name (v5.20.0, 2026-08-17)
 
 Dinger: "how do i add a button on the page that will quick link it to further

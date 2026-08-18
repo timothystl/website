@@ -83,7 +83,13 @@ async function visit(slug, apiPage, posts = []) {
 
 // Same harness, but /api/pages answers with a real `rendered` entry and the
 // document arrives with the edge injection already applied.
-async function visitEdged(slug, renderedHtml, { edged = true } = {}) {
+//
+// `path` defaults to `/slug` — true for most pages, but not for a nested
+// address like the Christmas Market vendor application, whose id
+// ("marketvendors") and real address ("/christmasmarket/vendors") are two
+// different strings on purpose (`NESTED_PATHS` in public/index.html). A
+// harness that only ever visited `/slug` could never exercise that gap.
+async function visitEdged(slug, renderedHtml, { edged = true, path = null } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
   const errors = [];
@@ -98,7 +104,7 @@ async function visitEdged(slug, renderedHtml, { edged = true } = {}) {
     return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });
   await page.route('https://**', (route) => route.fulfill({ status: 200, body: '' }));
-  await page.goto(base + '/' + slug + (edged ? '?edge=' + slug : ''), { waitUntil: 'domcontentloaded' });
+  await page.goto(base + (path || '/' + slug) + (edged ? '?edge=' + slug : ''), { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(900);
   return { page, ctx, errors };
 }
@@ -440,32 +446,60 @@ console.log('\na jump-to-name button actually jumps, instead of bouncing to home
 {
   // Dinger: "i created a #application jump to, created a button that would
   // go there, and when i publish it and click on that button it takes me to
-  // the home page." Two separate bugs, both real, both fixed together:
+  // the home page." — then, after a first fix, still: "still going to home
+  // page. also refresh isnt reloading the page." Three bugs stacked here,
+  // and the reported page (the Christmas Market vendor application) is what
+  // caught the second and third: its id ("marketvendors") and its real
+  // address ("/christmasmarket/vendors") are two different strings, and a
+  // test that only ever visits `/marketvendors` — page id == path — can
+  // never catch a bug that only shows up when they differ.
+  //
   // (1) the target block's id carried a "jump-" prefix nothing on screen
-  // ever told anybody about, so the button's #application never matched
-  // anything; (2) even with a matching id, Chrome fires a native popstate
-  // event for a plain same-page #fragment click — with e.state null, same
-  // as the "nothing left in history" case — and the site's own popstate
-  // handler defaulted that straight to showPage('home'). Every #fragment
-  // link on the site was affected, not just this new feature; it never
-  // showed up before because every other internal link on the site calls
-  // event.preventDefault() before the browser can fire the sequence at all.
+  // ever mentioned, so #application never matched anything.
+  // (2) even with a matching id, a same-page #fragment click fires a native
+  // popstate event with e.state null — indistinguishable, to a naive
+  // handler, from "nothing left in history" — and the first fix attempt
+  // re-derived the page id from location.pathname to tell the two apart,
+  // which is exactly what breaks on this page: 'christmasmarket/vendors' is
+  // not 'marketvendors', so that lookup failed and fell back to home, same
+  // as before. Comparing the PATH itself (which a #fragment click never
+  // changes) rather than trying to re-resolve an id fixes both the common
+  // case and this one, without needing to know about NESTED_PATHS at all.
+  // (3) separately, "refresh isn't reloading the page": a full load or
+  // reload with a jump-to-name fragment still in the address bar always
+  // scrolled to the top, because the block content a fragment might target
+  // arrives asynchronously (the /api/pages fetch), well after showPage()'s
+  // own synchronous scroll-to-hash attempt already came up empty-handed —
+  // and by the time a retry could run, history.replaceState (built from
+  // the page's plain address, never a fragment) had already erased the
+  // hash from the address bar, so a second attempt reading location.hash
+  // fresh would find nothing either. Fixed by capturing the hash once, up
+  // front, and handing that same value to both attempts.
   const blocks = sanitizeBlocks([
     Object.assign(newBlock('buttons'), { items: [{ title: 'Jump to application', url: '#application' }] }),
     Object.assign(newBlock('spacer'), { height: 96 }),
     Object.assign(newBlock('text', { body: '<p>The application section.</p>' }), { anchorId: 'application' }),
   ]);
-  const html = renderPage(blocks, { slug: 'give', withCss: false });
-  const { page, ctx, errors } = await visitEdged('give', html, { edged: false });
+  const html = renderPage(blocks, { slug: 'marketvendors', withCss: false });
+  const { page, ctx, errors } = await visitEdged('marketvendors', html, { edged: false, path: '/christmasmarket/vendors' });
   eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
 
   ok(/id="application"/.test(await page.content()), 'the target block carries the exact name shown in the inspector, no hidden prefix');
+  eq(await page.evaluate(() => (document.querySelector('.page.active') || {}).id), 'page-marketvendors',
+    'sanity check: the nested address really did resolve to the vendor page, not somewhere else');
 
   await page.locator('a.tlcb-btn', { hasText: 'Jump to application' }).click();
-  await page.waitForTimeout(300);
-  eq(await page.evaluate(() => (document.querySelector('.page.active') || {}).id), 'page-give',
-    'the click stays on the same page — it does not bounce to home');
+  await page.waitForTimeout(400);
+  eq(await page.evaluate(() => (document.querySelector('.page.active') || {}).id), 'page-marketvendors',
+    'the click stays on the same page — it does not bounce to home, even on a nested address');
   ok(await page.evaluate(() => window.scrollY > 0), 'and the page actually scrolled down to the target');
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(900);
+  eq(await page.evaluate(() => (document.querySelector('.page.active') || {}).id), 'page-marketvendors',
+    'a hard reload while sitting at the fragment stays on the same page too');
+  ok(await page.evaluate(() => window.scrollY > 0),
+    'and lands back at the target instead of resetting to the top — "refresh isn\'t reloading the page"');
   await ctx.close();
 }
 
