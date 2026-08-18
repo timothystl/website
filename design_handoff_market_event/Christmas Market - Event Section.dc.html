@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Newsreader:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Lora:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #E4E0D6; font-family: 'Newsreader', Georgia, serif; }
+  a { color: #2E7EA6; }
+  a:hover { color: #1E2D4A; }
+</style>
+</helmet>
+
+<section style="padding: 56px 48px 24px; display: flex; flex-direction: column; gap: 28px">
+  <div style="display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap">
+    <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #C9973A">Turn 1 · proposals</span>
+    <h1 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 30px; font-weight: 700; color: #1E2D4A; margin: 0">Christmas Market — one event, one home</h1>
+    <p style="font-family: 'Newsreader', serif; font-size: 15px; color: #4A4860; margin: 0; max-width: 620px; line-height: 1.7">Two shapes for <strong>/christmasmarket/vendors</strong> (<a href="#1a">1a</a> long page + jump nav, <a href="#1b">1b</a> split), the admin event screen <a href="#1c">1c</a>, and the backend map <a href="#1d">1d</a>. Public addresses are unchanged. Everything below the fold is today's code, recreated for comparison.</p>
+  </div>
+
+  <div style="display: flex; gap: 40px; flex-wrap: wrap; align-items: flex-start">
+
+    <div id="1a" style="display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 13px; font-weight: 800; color: #FBF8F3; background: #1E2D4A; border-radius: 999px; padding: 6px 14px">1a</span>
+        <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #1E2D4A">Vendor page — today's long page, plus a jump bar</span>
+        <span style="font-family: 'Source Sans 3', sans-serif; font-size: 12px; color: #6A6858">every section a named block you can edit, reorder or delete</span>
+      </div>
+
+      <div style="width: 1080px; background: #F7F3EC; border: 1px solid #DDE3ED; border-radius: 14px; overflow: hidden; box-shadow: 0 6px 32px rgba(30,45,74,.14)">
+        <div style="display: flex; align-items: center; gap: 12px; background: #111E32; padding: 12px 20px">
+          <div style="display: flex; flex-direction: column">
+            <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 13px; font-weight: 800; color: #fff">Timothy Lutheran Church</span>
+            <span style="font-family: 'Newsreader', serif; font-size: 11px; font-style: italic; color: #C9973A">from our Neighborhood to the Nations</span>
+          </div>
+          <div style="margin-left: auto; display: flex; gap: 14px; align-items: center">
+            <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; color: rgba(255,255,255,.55)">site nav — inherited, unchanged</span>
+            <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 800; color: #1E2D4A; background: #C9973A; border-radius: 999px; padding: 6px 14px">Give</span>
+          </div>
+        </div>
+
+        <div style="background: #1E2D4A; padding: 64px 28px 72px; position: relative; overflow: hidden">
+          <div style="position: absolute; top: -100px; right: -100px; width: 500px; height: 500px; background: radial-gradient(circle, rgba(201,151,58,.10) 0%, transparent 65%); pointer-events: none"></div>
+          <div style="max-width: 1080px; margin: 0 auto; position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0,1fr) 300px; gap: 40px; align-items: center">
+            <div>
+              <span style="display: block; font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #C9973A; margin-bottom: 14px">Vendor applications · Weihnachtsmarkt, Timothy's Christmas Market</span>
+              <h1 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 46px; font-weight: 700; line-height: 1.15; color: #fff; margin: 0 0 20px">Bring your table to the <em style="color: #E8C070; font-family: 'Newsreader', serif; font-weight: 300">Christmas Market</em></h1>
+              <p style="font-size: 17px; font-weight: 300; color: rgba(255,255,255,.88); line-height: 1.8; margin: 0 0 32px; max-width: 520px">Sixty-plus makers, bakers, and neighbors set up outdoors in our parking lot the first Saturday of December, under weather coverage we provide. Tables are $30 each, and we place returning vendors near their friends whenever we can.</p>
+              <div style="display: flex; gap: 12px; flex-wrap: wrap">
+                <a href="#1a" style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 14px; font-weight: 700; text-decoration: none; background: #C9973A; color: #1E2D4A; border-radius: 999px; padding: 14px 26px">Apply for a table</a>
+                <a href="#1a" style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 14px; font-weight: 700; text-decoration: none; background: transparent; color: #fff; border: 1.5px solid rgba(255,255,255,.35); border-radius: 999px; padding: 13px 25px">Vendor details</a>
+              </div>
+            </div>
+            <div style="background: #fff; border-radius: 20px; padding: 28px; box-shadow: 0 8px 40px rgba(0,0,0,.35)">
+              <div style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #C9973A; margin-bottom: 10px">Market day</div>
+              <div style="font-family: 'Newsreader', serif; font-size: 26px; color: #1E2D4A">Saturday, Dec 5</div>
+              <div style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 12px; color: #4A4860; margin-top: 4px">11:00 am – 6:00 pm</div>
+              <hr style="border: none; border-top: 1px solid #DDE3ED; margin: 18px 0">
+              <div style="font-size: 12px; color: #4A4860; line-height: 1.9">Timothy Lutheran Church<br>6704 Fyler Ave<br>St. Louis, MO 63139
+                <a href="#1a" style="display: block; margin-top: 8px; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; color: #2E7EA6; text-decoration: none">Tables are $30 each →</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="position: sticky; top: 0; z-index: 5; background: #FBF8F3; border-top: 3px solid #C9973A; border-bottom: 1px solid #DDE3ED; box-shadow: 0 2px 12px rgba(30,45,74,.08)">
+          <div style="max-width: 1080px; margin: 0 auto; padding: 12px 28px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+            <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #8A8898; margin-right: 4px">Jump to</span>
+            <a href="#1a" style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 12.5px; font-weight: 700; text-decoration: none; color: #1E2D4A; background: #fff; border: 1px solid #DDE3ED; border-radius: 999px; padding: 9px 16px">Vendor details</a>
+            <a href="#1a" style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 12.5px; font-weight: 700; text-decoration: none; color: #1E2D4A; background: #fff; border: 1px solid #DDE3ED; border-radius: 999px; padding: 9px 16px">Rules</a>
+            <a href="#1a" style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 12.5px; font-weight: 700; text-decoration: none; color: #1E2D4A; background: #fff; border: 1px solid #DDE3ED; border-radius: 999px; padding: 9px 16px">Past markets</a>
+            <a href="#1a" style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 12.5px; font-weight: 700; text-decoration: none; color: #1E2D4A; background: #fff; border: 1px solid #DDE3ED; border-radius: 999px; padding: 9px 16px">Questions</a>
+            <a href="#1a" style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 12.5px; font-weight: 800; text-decoration: none; color: #1E2D4A; background: #C9973A; border: 1px solid #C9973A; border-radius: 999px; padding: 9px 18px; margin-left: auto">Apply for a table</a>
+          </div>
+        </div>
+
+        <div style="max-width: 1080px; margin: 0 auto; padding: 10px 28px 0">
+          <div style="display: flex; align-items: center; gap: 8px; background: #EDF2F7; border: 1px dashed #C4CEDF; border-radius: 8px; padding: 8px 12px; font-family: 'Source Sans 3', sans-serif; font-size: 11.5px; color: #3E5C76">
+            <strong style="font-weight: 700">New block: “Jump links”.</strong> The bar is built from whatever sections are on the page — add a section in the editor and its link appears here. Nothing to type twice.
+          </div>
+        </div>
+
+        <div style="background: #EDE9E0; padding: 60px 0 66px">
+          <div style="max-width: 1080px; margin: 0 auto; padding: 0 28px">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px">
+              <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #C9973A">Before you apply</span>
+              <span style="font-family: 'Source Sans 3', sans-serif; font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #6A6858; background: #FAF7F1; border: 1px solid #E7DFD1; border-radius: 999px; padding: 4px 9px">block · card grid</span>
+            </div>
+            <h2 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 34px; font-weight: 700; color: #1E2D4A; margin: 0">Vendor details</h2>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-top: 32px">
+              <div style="background: #FBF8F3; border: 1px solid #DDE3ED; border-top: 3px solid #C9973A; border-radius: 12px; padding: 24px; box-shadow: 0 2px 12px rgba(30,45,74,.08)">
+                <h3 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 17px; font-weight: 700; color: #1E2D4A; margin: 0 0 10px">$30 per table</h3>
+                <p style="font-size: 14px; color: #4A4860; line-height: 1.7; margin: 0">Each table gets an 8×10 ft space with weather coverage and one 6-foot table. Bring your own chairs and a covering that reaches the ground. Three tables is our maximum.</p>
+              </div>
+              <div style="background: #FBF8F3; border: 1px solid #DDE3ED; border-top: 3px solid #2E7EA6; border-radius: 12px; padding: 24px; box-shadow: 0 2px 12px rgba(30,45,74,.08)">
+                <h3 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 17px; font-weight: 700; color: #1E2D4A; margin: 0 0 10px">Setup &amp; teardown</h3>
+                <p style="font-size: 14px; color: #4A4860; line-height: 1.7; margin: 0">Enter from Ivanhoe at the north lot entrance starting at 8:30 am. Vehicle access closes at 10:30, and stay set up until 6:00.</p>
+              </div>
+              <div style="background: #FBF8F3; border: 1px solid #DDE3ED; border-top: 3px solid #4A5E3A; border-radius: 12px; padding: 24px; box-shadow: 0 2px 12px rgba(30,45,74,.08)">
+                <h3 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 17px; font-weight: 700; color: #1E2D4A; margin: 0 0 10px">Handmade &amp; local first</h3>
+                <p style="font-size: 14px; color: #4A4860; line-height: 1.7; margin: 0">Artisans, bakers, small businesses, and youth groups. Secondhand goods aren't permitted, and direct sales reps are encouraged to offer a gift basket.</p>
+              </div>
+              <div style="background: #FBF8F3; border: 1px solid #DDE3ED; border-top: 3px solid #3A4E5C; border-radius: 12px; padding: 24px; box-shadow: 0 2px 12px rgba(30,45,74,.08)">
+                <h3 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 17px; font-weight: 700; color: #1E2D4A; margin: 0 0 10px">Pay when you apply</h3>
+                <p style="font-size: 14px; color: #4A4860; line-height: 1.7; margin: 0">Submitting takes you to secure card payment with your amount filled in. Vendors cover the small processing fee — $31.20 for one table.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="background: #FBF8F3; padding: 60px 0 66px">
+          <div style="max-width: 1080px; margin: 0 auto; padding: 0 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: start">
+            <div>
+              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px">
+                <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #4A5E3A">The short version</span>
+                <span style="font-family: 'Source Sans 3', sans-serif; font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #6A6858; background: #FAF7F1; border: 1px solid #E7DFD1; border-radius: 999px; padding: 4px 9px">block · tiles</span>
+              </div>
+              <h2 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 34px; font-weight: 700; color: #1E2D4A; margin: 0 0 16px">Rules at a glance</h2>
+              <p style="font-size: 15px; color: #4A4860; line-height: 1.8; margin: 0">Nothing here is a surprise if you have done a market before. The full agreement is at the bottom of the application.</p>
+            </div>
+            <div style="display: grid; gap: 16px">
+              <div style="background: #FBF8F3; border: 1px solid #DDE3ED; border-left: 3px solid #C9973A; border-radius: 12px; padding: 20px">
+                <h4 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #1E2D4A; margin: 0 0 6px">You bring the chairs</h4>
+                <p style="font-size: 14px; color: #4A4860; line-height: 1.7; margin: 0">We supply your 6-foot table and weather coverage. You bring chairs, a covering that reaches the ground, signage, display, change, and your own bags.</p>
+              </div>
+              <div style="background: #FBF8F3; border: 1px solid #DDE3ED; border-left: 3px solid #4A5E3A; border-radius: 12px; padding: 20px">
+                <h4 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #1E2D4A; margin: 0 0 6px">No alcohol at vendor booths</h4>
+                <p style="font-size: 14px; color: #4A4860; line-height: 1.7; margin: 0">Vendors may not sell alcohol or other beverages. Only a booth owned and operated by Timothy Lutheran Church may sell drinks.</p>
+              </div>
+              <div style="background: #FBF8F3; border: 1px solid #DDE3ED; border-left: 3px solid #2E7EA6; border-radius: 12px; padding: 20px">
+                <h4 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #1E2D4A; margin: 0 0 6px">Electricity is limited</h4>
+                <p style="font-size: 14px; color: #4A4860; line-height: 1.7; margin: 0">Tell us your appliances, wattage, and amperage on the application — the coordinator approves every electrical request. Heaters and heated blankets aren't permitted.</p>
+              </div>
+              <div style="background: #FBF8F3; border: 1px solid #DDE3ED; border-left: 3px solid #3A4E5C; border-radius: 12px; padding: 20px">
+                <h4 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #1E2D4A; margin: 0 0 6px">Refunds are limited</h4>
+                <p style="font-size: 14px; color: #4A4860; line-height: 1.7; margin: 0">Your fee is refunded only if we decline your application or products. Otherwise there are no refunds within three weeks of the market, or for a no-show.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="background: #EDF2F7; padding: 60px 0 66px">
+          <div style="max-width: 1080px; margin: 0 auto; padding: 0 28px">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px">
+              <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #C9973A">Past markets</span>
+              <span style="font-family: 'Source Sans 3', sans-serif; font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #6A6858; background: #FAF7F1; border: 1px solid #E7DFD1; border-radius: 999px; padding: 4px 9px">block · gallery — “Manage photos”</span>
+            </div>
+            <h2 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 34px; font-weight: 700; color: #1E2D4A; margin: 0 0 12px">What the day looks like</h2>
+            <p style="font-size: 15px; color: #4A4860; line-height: 1.8; margin: 0 0 28px; max-width: 620px">Aisles of handmade goods, the smell of something baking, and most of Lindenwood Park through the doors before noon.</p>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px">
+              <div style="aspect-ratio: 4/3; border-radius: 12px; background: #DCE5EE; border: 1px solid #C4CEDF; display: flex; align-items: center; justify-content: center; font-family: 'Source Sans 3', sans-serif; font-size: 12px; color: #6A6858">christmas-mkt.webp</div>
+              <div style="aspect-ratio: 4/3; border-radius: 12px; border: 2px dashed #C4CEDF; display: flex; align-items: center; justify-content: center; font-family: 'Source Sans 3', sans-serif; font-size: 12px; color: #8A8898">Photo — a vendor with shoppers</div>
+              <div style="aspect-ratio: 4/3; border-radius: 12px; border: 2px dashed #C4CEDF; display: flex; align-items: center; justify-content: center; font-family: 'Source Sans 3', sans-serif; font-size: 12px; color: #8A8898">Photo — baked goods up close</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="background: #FBF8F3; padding: 60px 0 70px">
+          <div style="max-width: 760px; margin: 0 auto 32px; padding: 0 28px">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px">
+              <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #C9973A">The application</span>
+              <span style="font-family: 'Source Sans 3', sans-serif; font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #7A5B18; background: #FBF1DC; border: 1px solid #EBD5A6; border-radius: 999px; padding: 4px 9px">block · application — fee &amp; dates come from settings</span>
+            </div>
+            <h2 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 34px; font-weight: 700; color: #1E2D4A; margin: 0 0 10px">Vendor application</h2>
+            <p style="font-size: 15px; color: #4A4860; line-height: 1.8; margin: 0">Three short steps, about five minutes. You pay by card at the end and the coordinator confirms your table number by email.</p>
+          </div>
+
+          <div style="max-width: 760px; margin: 0 auto; background: #FBF8F3; border: 1px solid #DDE3ED; border-radius: 20px; box-shadow: 0 6px 32px rgba(30,45,74,.14); overflow: hidden">
+            <div style="display: flex; border-bottom: 1px solid #DDE3ED; background: #EDF2F7">
+              <button type="button" onClick="{{ goStep1 }}" style="{{ tab1 }}">
+                <span style="display: block; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #8A8898">Step 1</span>
+                <span style="display: block; font-size: 14px; font-weight: 800; color: {{ tab1Ink }}">You &amp; your booth</span>
+              </button>
+              <button type="button" onClick="{{ goStep2 }}" style="{{ tab2 }}">
+                <span style="display: block; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #8A8898">Step 2</span>
+                <span style="display: block; font-size: 14px; font-weight: 800; color: {{ tab2Ink }}">What you sell</span>
+              </button>
+              <button type="button" onClick="{{ goStep3 }}" style="{{ tab3 }}">
+                <span style="display: block; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #8A8898">Step 3</span>
+                <span style="display: block; font-size: 14px; font-weight: 800; color: {{ tab3Ink }}">Tables &amp; payment</span>
+              </button>
+            </div>
+
+            <sc-if value="{{ isStep1 }}" hint-placeholder-val="{{ true }}">
+              <div style="padding: 34px 34px 30px; display: grid; gap: 22px">
+                <p style="font-size: 15px; color: #4A4860; line-height: 1.7; margin: 0">Who's behind the table, and how we reach you.</p>
+                <div>
+                  <label style="display: block; font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #1E2D4A; margin-bottom: 8px">Participant name(s) <span style="color: #C9973A">*</span></label>
+                  <input type="text" placeholder="Everyone who will be at the table" style="width: 100%; font-family: 'Newsreader', serif; font-size: 15px; color: #1A1A2A; background: #fff; border: 1px solid #DDE3ED; border-radius: 8px; padding: 12px 14px; min-height: 44px">
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px">
+                  <div>
+                    <label style="display: block; font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #1E2D4A; margin-bottom: 8px">Business name</label>
+                    <input type="text" placeholder="If you have one" style="width: 100%; font-family: 'Newsreader', serif; font-size: 15px; background: #fff; border: 1px solid #DDE3ED; border-radius: 8px; padding: 12px 14px; min-height: 44px">
+                  </div>
+                  <div>
+                    <label style="display: block; font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #1E2D4A; margin-bottom: 8px">Website or Instagram</label>
+                    <input type="text" placeholder="@yourshop" style="width: 100%; font-family: 'Newsreader', serif; font-size: 15px; background: #fff; border: 1px solid #DDE3ED; border-radius: 8px; padding: 12px 14px; min-height: 44px">
+                  </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px">
+                  <div>
+                    <label style="display: block; font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #1E2D4A; margin-bottom: 8px">Email <span style="color: #C9973A">*</span></label>
+                    <input type="email" placeholder="you@example.com" style="width: 100%; font-family: 'Newsreader', serif; font-size: 15px; background: #fff; border: 1px solid #DDE3ED; border-radius: 8px; padding: 12px 14px; min-height: 44px">
+                  </div>
+                  <div>
+                    <label style="display: block; font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #1E2D4A; margin-bottom: 8px">Telephone <span style="color: #C9973A">*</span></label>
+                    <input type="tel" placeholder="(314) 555-0123" style="width: 100%; font-family: 'Newsreader', serif; font-size: 15px; background: #fff; border: 1px solid #DDE3ED; border-radius: 8px; padding: 12px 14px; min-height: 44px">
+                  </div>
+                </div>
+                <div style="display: flex; justify-content: flex-end; padding-top: 6px">
+                  <button type="button" onClick="{{ goStep2 }}" style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 14px; font-weight: 700; background: #1E2D4A; color: #F5E4C0; border: 0; border-radius: 999px; padding: 14px 26px; min-height: 44px; cursor: pointer">Next: what you sell →</button>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ isStep2 }}" hint-placeholder-val="{{ false }}">
+              <div style="padding: 34px 34px 30px; display: grid; gap: 22px">
+                <p style="font-size: 15px; color: #4A4860; line-height: 1.7; margin: 0">The more specific you are, the better we can space out similar tables.</p>
+                <div>
+                  <label style="display: block; font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #1E2D4A; margin-bottom: 8px">Description of product <span style="color: #C9973A">*</span></label>
+                  <textarea placeholder="e.g. handmade purses, tote bags, wallets, crochet shawls" style="width: 100%; min-height: 112px; font-family: 'Newsreader', serif; font-size: 15px; line-height: 1.6; background: #fff; border: 1px solid #DDE3ED; border-radius: 8px; padding: 12px 14px; resize: vertical"></textarea>
+                </div>
+                <label style="display: flex; gap: 12px; align-items: flex-start; background: #EDF2F7; border: 1px solid #C4CEDF; border-radius: 12px; padding: 18px; cursor: pointer">
+                  <input type="checkbox" style="width: 20px; height: 20px; margin-top: 2px; accent-color: #4A5E3A; flex-shrink: 0">
+                  <span style="font-size: 14px; line-height: 1.6; color: #1A1A2A"><strong style="font-family: 'Bricolage Grotesque', sans-serif">I'll be selling food or drink.</strong> You're responsible for City of St. Louis health department requirements for what you sell — the coordinator will follow up.</span>
+                </label>
+                <div>
+                  <label style="display: block; font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #1E2D4A; margin-bottom: 8px">Appliances, wattage, amperage</label>
+                  <input type="text" placeholder="None — or: popcorn popper, 1200W / 15A" style="width: 100%; font-family: 'Newsreader', serif; font-size: 15px; background: #fff; border: 1px solid #DDE3ED; border-radius: 8px; padding: 12px 14px; min-height: 44px">
+                </div>
+                <div style="background: #EDF2F7; border: 2px dashed #C4CEDF; border-radius: 12px; padding: 26px 22px; text-align: center">
+                  <div style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 14px; font-weight: 700; color: #1E2D4A; margin-bottom: 4px">Drop photos here or browse</div>
+                  <div style="font-size: 13px; color: #4A4860">Optional, up to five. We use these to promote the market and place your table well.</div>
+                </div>
+                <div style="display: flex; justify-content: space-between; gap: 12px; padding-top: 6px">
+                  <button type="button" onClick="{{ goStep1 }}" style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 14px; font-weight: 700; background: #fff; color: #1E2D4A; border: 1.5px solid #DDE3ED; border-radius: 999px; padding: 13px 25px; min-height: 44px; cursor: pointer">← Back</button>
+                  <button type="button" onClick="{{ goStep3 }}" style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 14px; font-weight: 700; background: #1E2D4A; color: #F5E4C0; border: 0; border-radius: 999px; padding: 14px 26px; min-height: 44px; cursor: pointer">Next: tables &amp; payment →</button>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ isStep3 }}" hint-placeholder-val="{{ false }}">
+              <div style="padding: 34px 34px 30px; display: grid; gap: 22px">
+                <div>
+                  <span style="display: block; font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #1E2D4A; margin-bottom: 10px">How many tables? <span style="color: #C9973A">*</span></span>
+                  <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px">
+                    <button type="button" onClick="{{ pick1 }}" style="{{ t1btn }}">1 table</button>
+                    <button type="button" onClick="{{ pick2 }}" style="{{ t2btn }}">2 tables</button>
+                    <button type="button" onClick="{{ pick3 }}" style="{{ t3btn }}">3 tables</button>
+                  </div>
+                </div>
+                <div style="background: #1E2D4A; border-radius: 16px; padding: 24px">
+                  <div style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #E8C070; margin-bottom: 14px">Your total</div>
+                  <div style="display: grid; gap: 10px; font-size: 15px; color: rgba(255,255,255,.85)">
+                    <div style="display: flex; justify-content: space-between; gap: 16px"><span>{{ subLabel }}</span><span>{{ subAmount }}</span></div>
+                    <div style="display: flex; justify-content: space-between; gap: 16px"><span>Card processing fee (2.9% + 30¢)</span><span>{{ feeAmount }}</span></div>
+                    <hr style="border: none; border-top: 1px solid rgba(255,255,255,.18); margin: 4px 0">
+                    <div style="display: flex; justify-content: space-between; gap: 16px; font-family: 'Bricolage Grotesque', sans-serif; font-size: 20px; font-weight: 800; color: #fff"><span>Due today</span><span>{{ dueAmount }}</span></div>
+                  </div>
+                  <p style="font-size: 13px; color: rgba(255,255,255,.7); line-height: 1.7; margin: 14px 0 0">Vendors cover the processing fee so the full $30 per table goes to the market. Payment opens with this amount already filled in.</p>
+                </div>
+                <div style="background: #EDE9E0; border: 1px solid #DDE3ED; border-radius: 12px; padding: 20px; max-height: 200px; overflow: auto; font-size: 14px; color: #4A4860; line-height: 1.75">
+                  <p style="margin: 0 0 10px"><strong style="font-family: 'Bricolage Grotesque', sans-serif; color: #1E2D4A">Vendor agreement.</strong> By applying I agree that:</p>
+                  <p style="margin: 0 0 10px">The fee for my table(s), plus the card processing fee, is due when I apply. It is refunded only if my application or products are declined as inappropriate.</p>
+                  <p style="margin: 0 0 10px">Timothy Lutheran Church provides one 6-foot table and weather coverage for each 8×10 ft space. I supply my own chairs, covering, signage, display, bags, and change.</p>
+                  <p style="margin: 0">…nine clauses, edited as a list in the editor — one clause per row, add or remove without touching code.</p>
+                </div>
+                <div>
+                  <label style="display: block; font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #1E2D4A; margin-bottom: 8px">Type your name to agree <span style="color: #C9973A">*</span></label>
+                  <input type="text" placeholder="Your full name" style="max-width: 400px; width: 100%; font-family: 'Newsreader', serif; font-size: 15px; background: #fff; border: 1px solid #DDE3ED; border-radius: 8px; padding: 12px 14px; min-height: 44px">
+                </div>
+                <div style="display: flex; justify-content: space-between; gap: 12px; padding-top: 6px; align-items: center; flex-wrap: wrap">
+                  <button type="button" onClick="{{ goStep2 }}" style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 14px; font-weight: 700; background: #fff; color: #1E2D4A; border: 1.5px solid #DDE3ED; border-radius: 999px; padding: 13px 25px; min-height: 44px; cursor: pointer">← Back</button>
+                  <button type="button" style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 14px; font-weight: 800; background: #C9973A; color: #1E2D4A; border: 0; border-radius: 999px; padding: 14px 26px; min-height: 44px; cursor: pointer">{{ submitLabel }}</button>
+                </div>
+                <p style="font-size: 13px; color: #8A8898; line-height: 1.7; margin: 0">Need to pay by check or cash instead? Email <a href="mailto:tlc.christmasmarket@gmail.com">tlc.christmasmarket@gmail.com</a> and the coordinator will hold your space.</p>
+              </div>
+            </sc-if>
+          </div>
+
+          <div style="max-width: 760px; margin: 24px auto 0; padding: 0 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px">
+            <div style="background: #FBF8F3; border: 1px solid #DDE3ED; border-left: 3px solid #C9973A; border-radius: 12px; padding: 20px">
+              <h4 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #1E2D4A; margin: 0 0 6px">Questions first?</h4>
+              <p style="font-size: 14px; color: #4A4860; line-height: 1.7; margin: 0">The market coordinator would rather hear from you before you apply than after — <a href="mailto:tlc.christmasmarket@gmail.com">tlc.christmasmarket@gmail.com</a>.</p>
+            </div>
+            <div style="background: #FBF8F3; border: 1px solid #DDE3ED; border-left: 3px solid #4A5E3A; border-radius: 12px; padding: 20px">
+              <h4 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #1E2D4A; margin: 0 0 6px">Want to help instead?</h4>
+              <p style="font-size: 14px; color: #4A4860; line-height: 1.7; margin: 0">Volunteers run parking, setup, and the church booth. <a href="https://serve.timothystl.org/christmasmarket">Sign up to serve →</a></p>
+            </div>
+          </div>
+        </div>
+
+        <div style="background: #EDE9E0; padding: 60px 0 66px">
+          <div style="max-width: 1080px; margin: 0 auto; padding: 0 28px">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px">
+              <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #4A5E3A">Good to know</span>
+              <span style="font-family: 'Source Sans 3', sans-serif; font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #6A6858; background: #FAF7F1; border: 1px solid #E7DFD1; border-radius: 999px; padding: 4px 9px">block · FAQ</span>
+            </div>
+            <h2 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 34px; font-weight: 700; color: #1E2D4A; margin: 0 0 28px">Questions vendors ask</h2>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 32px 48px">
+              <div>
+                <h3 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 17px; font-weight: 700; color: #1E2D4A; margin: 0 0 8px">Can I request to be next to a friend?</h3>
+                <p style="font-size: 14px; color: #4A4860; line-height: 1.75; margin: 0">Yes — put it in special requests. We honor placement requests whenever the floor plan allows, and returning vendors usually keep their spot.</p>
+              </div>
+              <div>
+                <h3 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 17px; font-weight: 700; color: #1E2D4A; margin: 0 0 8px">Is there a commission on sales?</h3>
+                <p style="font-size: 14px; color: #4A4860; line-height: 1.75; margin: 0">No. The $30 table fee is all we take. What you sell is yours.</p>
+              </div>
+              <div>
+                <h3 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 17px; font-weight: 700; color: #1E2D4A; margin: 0 0 8px">Do church groups pay the fee?</h3>
+                <p style="font-size: 14px; color: #4A4860; line-height: 1.75; margin: 0">Timothy and Word of Life youth groups and ministries can apply with the fee waived — note it in special requests.</p>
+              </div>
+              <div>
+                <h3 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 17px; font-weight: 700; color: #1E2D4A; margin: 0 0 8px">Is the market outdoors?</h3>
+                <p style="font-size: 14px; color: #4A4860; line-height: 1.75; margin: 0">Yes — Weihnachtsmarkt sets up in our parking lot, and every space has weather coverage we provide.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="background: #F7F3EC; border-top: 3px solid #C9973A; padding: 36px 28px; display: flex; align-items: center; gap: 24px; flex-wrap: wrap">
+          <div style="flex: 1; min-width: 320px">
+            <span style="display: block; font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #C9973A; margin-bottom: 8px">Not a vendor?</span>
+            <div style="font-family: 'Newsreader', serif; font-size: 20px; color: #1E2D4A; margin-bottom: 6px">Come shop the market, or come work it.</div>
+            <p style="font-size: 13px; color: #4A4860; margin: 0">Free admission, free parking on Ivanhoe, and a lot full of handmade gifts and food.</p>
+          </div>
+          <div style="display: flex; gap: 12px; flex-wrap: wrap">
+            <a href="#1a" style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 14px; font-weight: 700; text-decoration: none; color: #1E2D4A; background: #fff; border: 1.5px solid #DDE3ED; border-radius: 999px; padding: 13px 24px">Market details</a>
+            <a href="https://serve.timothystl.org/christmasmarket" style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 14px; font-weight: 700; text-decoration: none; color: #1E2D4A; background: #fff; border: 1.5px solid #DDE3ED; border-radius: 999px; padding: 13px 24px">Volunteer</a>
+          </div>
+        </div>
+      </div>
+
+      <div style="width: 1080px; background: #FAF7F1; border: 1px solid #E7DFD1; border-radius: 12px; padding: 16px 18px; font-family: 'Source Sans 3', sans-serif; font-size: 12.5px; color: #4A4860; line-height: 1.6">
+        <strong style="color: #1D3557">What changes in code:</strong> the page stops being hardcoded markup in <code>public/index.html</code> and renders from the block records already drafted in <code>admin/market-page-seed.js</code> — so every heading, card and clause above is a field in the Pages editor. Two blocks are new: <strong>Jump links</strong> (built from the page's own sections) and the <strong>volunteer cross-link</strong>. The application block keeps reading fee, dates, max tables and open/closed from settings, exactly as it does today.
+      </div>
+    </div>
+
+    <div id="1b" style="display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 13px; font-weight: 800; color: #FBF8F3; background: #1E2D4A; border-radius: 999px; padding: 6px 14px">1b</span>
+        <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #1E2D4A">Vendor page — split: read first, then apply</span>
+        <span style="font-family: 'Source Sans 3', sans-serif; font-size: 12px; color: #6A6858">same address; the form moves to /christmasmarket/vendors/apply</span>
+      </div>
+
+      <div style="width: 1080px; background: #F7F3EC; border: 1px solid #DDE3ED; border-radius: 14px; overflow: hidden; box-shadow: 0 6px 32px rgba(30,45,74,.14)">
+        <div style="display: flex; align-items: center; gap: 10px; background: #111E32; padding: 10px 20px">
+          <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 11.5px; font-weight: 700; color: rgba(255,255,255,.75)">timothystl.org/christmasmarket/vendors</span>
+          <span style="margin-left: auto; font-family: 'Bricolage Grotesque', sans-serif; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: #C9973A">page 1 of 2 — the pitch</span>
+        </div>
+
+        <div style="background: #1E2D4A; padding: 56px 28px 60px; position: relative; overflow: hidden">
+          <div style="position: absolute; top: -100px; right: -100px; width: 500px; height: 500px; background: radial-gradient(circle, rgba(201,151,58,.10) 0%, transparent 65%)"></div>
+          <div style="max-width: 1080px; margin: 0 auto; position: relative; display: grid; grid-template-columns: minmax(0,1fr) 300px; gap: 40px; align-items: center">
+            <div>
+              <span style="display: block; font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #C9973A; margin-bottom: 14px">Vendor applications · Weihnachtsmarkt</span>
+              <h1 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 44px; font-weight: 700; line-height: 1.15; color: #fff; margin: 0 0 18px">Bring your table to the <em style="color: #E8C070; font-family: 'Newsreader', serif; font-weight: 300">Christmas Market</em></h1>
+              <p style="font-size: 17px; font-weight: 300; color: rgba(255,255,255,.88); line-height: 1.8; margin: 0 0 28px; max-width: 520px">Sixty-plus makers, bakers, and neighbors, outdoors in our parking lot under coverage we provide. Read the four things that matter, then apply — the form is its own page, five minutes, one payment.</p>
+              <div style="display: flex; gap: 12px; flex-wrap: wrap">
+                <a href="#1b" style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 14px; font-weight: 800; text-decoration: none; background: #C9973A; color: #1E2D4A; border-radius: 999px; padding: 14px 26px">Start the application →</a>
+                <a href="#1b" style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 14px; font-weight: 700; text-decoration: none; color: #fff; border: 1.5px solid rgba(255,255,255,.35); border-radius: 999px; padding: 13px 25px">Rules &amp; details</a>
+              </div>
+            </div>
+            <div style="background: #fff; border-radius: 20px; padding: 26px; box-shadow: 0 8px 40px rgba(0,0,0,.35)">
+              <div style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #C9973A; margin-bottom: 10px">Market day</div>
+              <div style="font-family: 'Newsreader', serif; font-size: 26px; color: #1E2D4A">Saturday, Dec 5</div>
+              <div style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 12px; color: #4A4860; margin-top: 4px">11:00 am – 6:00 pm</div>
+              <hr style="border: none; border-top: 1px solid #DDE3ED; margin: 16px 0">
+              <div style="font-size: 12px; color: #4A4860; line-height: 1.9">$30 a table · 3 max<br>Applications open now</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="background: #FBF8F3; border-top: 3px solid #C9973A; border-bottom: 1px solid #DDE3ED">
+          <div style="max-width: 1080px; margin: 0 auto; padding: 12px 28px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+            <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #8A8898">Jump to</span>
+            <a href="#1b" style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 12.5px; font-weight: 700; text-decoration: none; color: #1E2D4A; background: #fff; border: 1px solid #DDE3ED; border-radius: 999px; padding: 9px 16px">Details</a>
+            <a href="#1b" style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 12.5px; font-weight: 700; text-decoration: none; color: #1E2D4A; background: #fff; border: 1px solid #DDE3ED; border-radius: 999px; padding: 9px 16px">Rules</a>
+            <a href="#1b" style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 12.5px; font-weight: 700; text-decoration: none; color: #1E2D4A; background: #fff; border: 1px solid #DDE3ED; border-radius: 999px; padding: 9px 16px">Photos</a>
+            <a href="#1b" style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 12.5px; font-weight: 700; text-decoration: none; color: #1E2D4A; background: #fff; border: 1px solid #DDE3ED; border-radius: 999px; padding: 9px 16px">FAQ</a>
+            <a href="#1b" style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 12.5px; font-weight: 800; text-decoration: none; color: #1E2D4A; background: #C9973A; border-radius: 999px; padding: 9px 18px; margin-left: auto">Apply →</a>
+          </div>
+        </div>
+
+        <div style="background: #EDE9E0; padding: 48px 28px">
+          <div style="max-width: 1080px; margin: 0 auto">
+            <h2 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 30px; font-weight: 700; color: #1E2D4A; margin: 0 0 24px">Vendor details, rules, photos, FAQ</h2>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px">
+              <div style="background: #FBF8F3; border: 1px solid #DDE3ED; border-top: 3px solid #C9973A; border-radius: 12px; padding: 18px"><div style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #1E2D4A">$30 per table</div><p style="font-size: 13px; color: #4A4860; line-height: 1.6; margin: 6px 0 0">8×10 space, one 6-ft table, coverage provided.</p></div>
+              <div style="background: #FBF8F3; border: 1px solid #DDE3ED; border-top: 3px solid #2E7EA6; border-radius: 12px; padding: 18px"><div style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #1E2D4A">Setup 8:30</div><p style="font-size: 13px; color: #4A4860; line-height: 1.6; margin: 6px 0 0">Vehicles out by 10:30, stay until 6:00.</p></div>
+              <div style="background: #FBF8F3; border: 1px solid #DDE3ED; border-top: 3px solid #4A5E3A; border-radius: 12px; padding: 18px"><div style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #1E2D4A">Handmade first</div><p style="font-size: 13px; color: #4A4860; line-height: 1.6; margin: 6px 0 0">No secondhand goods; church booth sells drinks.</p></div>
+              <div style="background: #FBF8F3; border: 1px solid #DDE3ED; border-top: 3px solid #3A4E5C; border-radius: 12px; padding: 18px"><div style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #1E2D4A">Pay when you apply</div><p style="font-size: 13px; color: #4A4860; line-height: 1.6; margin: 6px 0 0">$31.20 for one table, fee included.</p></div>
+            </div>
+            <p style="font-family: 'Source Sans 3', sans-serif; font-size: 12px; color: #6A6858; margin: 18px 0 0">Rules, past-market photos and the FAQ follow here exactly as in <a href="#1a">1a</a> — same blocks, same copy, nothing removed. The only difference is where the form lives.</p>
+          </div>
+        </div>
+
+        <div style="background: #1E2D4A; padding: 40px 28px; display: flex; align-items: center; gap: 24px; flex-wrap: wrap">
+          <div style="flex: 1; min-width: 340px">
+            <div style="font-family: 'Newsreader', serif; font-size: 24px; color: #fff; margin-bottom: 6px">Ready? The application takes about five minutes.</div>
+            <p style="font-size: 14px; color: rgba(255,255,255,.75); margin: 0">You'll need what you sell, your power needs, and a card.</p>
+          </div>
+          <a href="#1b" style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 15px; font-weight: 800; text-decoration: none; background: #C9973A; color: #1E2D4A; border-radius: 999px; padding: 16px 30px">Apply for a table →</a>
+        </div>
+      </div>
+
+      <div style="width: 1080px; background: #F7F3EC; border: 1px solid #DDE3ED; border-radius: 14px; overflow: hidden; box-shadow: 0 6px 32px rgba(30,45,74,.14)">
+        <div style="display: flex; align-items: center; gap: 10px; background: #111E32; padding: 10px 20px">
+          <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 11.5px; font-weight: 700; color: rgba(255,255,255,.75)">timothystl.org/christmasmarket/vendors/apply</span>
+          <span style="margin-left: auto; font-family: 'Bricolage Grotesque', sans-serif; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: #C9973A">page 2 of 2 — nothing but the form</span>
+        </div>
+
+        <div style="background: #4A5E3A; padding: 30px 28px">
+          <div style="max-width: 760px; margin: 0 auto; display: flex; align-items: center; gap: 20px; flex-wrap: wrap">
+            <div style="flex: 1; min-width: 300px">
+              <span style="display: block; font-family: 'Bricolage Grotesque', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #E8C070; margin-bottom: 6px">Vendor application</span>
+              <div style="font-family: 'Newsreader', serif; font-size: 24px; color: #fff">Timothy Christmas Market</div>
+            </div>
+            <a href="#1b" style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 12.5px; font-weight: 700; text-decoration: none; color: #fff; border: 1.5px solid rgba(255,255,255,.4); border-radius: 999px; padding: 10px 18px">← Rules &amp; details</a>
+          </div>
+        </div>
+
+        <div style="background: #FBF8F3; border-bottom: 1px solid #DDE3ED; padding: 16px 28px">
+          <div style="max-width: 760px; margin: 0 auto; display: flex; gap: 32px; flex-wrap: wrap">
+            <div><div style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #8A8898">Market day</div><div style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 15px; font-weight: 800; color: #1E2D4A">Saturday, Dec 5</div></div>
+            <div><div style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #8A8898">Hours</div><div style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 15px; font-weight: 800; color: #1E2D4A">11:00 am – 6:00 pm</div></div>
+            <div><div style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #8A8898">Table fee</div><div style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 15px; font-weight: 800; color: #1E2D4A">$30 · 3 max</div></div>
+            <div><div style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #8A8898">Coordinator</div><div style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 15px; font-weight: 800; color: #2E7EA6">tlc.christmasmarket@gmail.com</div></div>
+          </div>
+          <p style="max-width: 760px; margin: 12px auto 0; font-family: 'Source Sans 3', sans-serif; font-size: 11.5px; color: #6A6858">Every figure in this band is the live setting — one place to change it, and both pages follow.</p>
+        </div>
+
+        <div style="background: #FBF8F3; padding: 44px 28px 56px">
+          <div style="max-width: 760px; margin: 0 auto; background: #FBF8F3; border: 1px solid #DDE3ED; border-radius: 20px; box-shadow: 0 6px 32px rgba(30,45,74,.14); overflow: hidden">
+            <div style="display: flex; border-bottom: 1px solid #DDE3ED; background: #EDF2F7">
+              <div style="flex: 1; padding: 18px 16px; background: #FBF8F3; border-bottom: 3px solid #C9973A"><span style="display: block; font-family: 'Bricolage Grotesque', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #8A8898">Step 1</span><span style="display: block; font-family: 'Bricolage Grotesque', sans-serif; font-size: 14px; font-weight: 800; color: #1E2D4A">You &amp; your booth</span></div>
+              <div style="flex: 1; padding: 18px 16px; border-bottom: 3px solid transparent"><span style="display: block; font-family: 'Bricolage Grotesque', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #8A8898">Step 2</span><span style="display: block; font-family: 'Bricolage Grotesque', sans-serif; font-size: 14px; font-weight: 800; color: #8A8898">What you sell</span></div>
+              <div style="flex: 1; padding: 18px 16px; border-bottom: 3px solid transparent"><span style="display: block; font-family: 'Bricolage Grotesque', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #8A8898">Step 3</span><span style="display: block; font-family: 'Bricolage Grotesque', sans-serif; font-size: 14px; font-weight: 800; color: #8A8898">Tables &amp; payment</span></div>
+            </div>
+            <div style="padding: 34px 34px 30px; display: grid; gap: 22px">
+              <p style="font-size: 15px; color: #4A4860; line-height: 1.7; margin: 0">Who's behind the table, and how we reach you. The card behaves exactly as in <a href="#1a">1a</a> — three steps, running total, one payment.</p>
+              <div>
+                <label style="display: block; font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #1E2D4A; margin-bottom: 8px">Participant name(s) <span style="color: #C9973A">*</span></label>
+                <input type="text" placeholder="Everyone who will be at the table" style="width: 100%; font-family: 'Newsreader', serif; font-size: 15px; background: #fff; border: 1px solid #DDE3ED; border-radius: 8px; padding: 12px 14px; min-height: 44px">
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px">
+                <div>
+                  <label style="display: block; font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #1E2D4A; margin-bottom: 8px">Email <span style="color: #C9973A">*</span></label>
+                  <input type="email" placeholder="you@example.com" style="width: 100%; font-family: 'Newsreader', serif; font-size: 15px; background: #fff; border: 1px solid #DDE3ED; border-radius: 8px; padding: 12px 14px; min-height: 44px">
+                </div>
+                <div>
+                  <label style="display: block; font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #1E2D4A; margin-bottom: 8px">Telephone <span style="color: #C9973A">*</span></label>
+                  <input type="tel" placeholder="(314) 555-0123" style="width: 100%; font-family: 'Newsreader', serif; font-size: 15px; background: #fff; border: 1px solid #DDE3ED; border-radius: 8px; padding: 12px 14px; min-height: 44px">
+                </div>
+              </div>
+              <div style="display: flex; justify-content: flex-end">
+                <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 14px; font-weight: 700; background: #1E2D4A; color: #F5E4C0; border-radius: 999px; padding: 14px 26px">Next: what you sell →</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="width: 1080px; background: #FAF7F1; border: 1px solid #E7DFD1; border-radius: 12px; padding: 16px 18px; font-family: 'Source Sans 3', sans-serif; font-size: 12.5px; color: #4A4860; line-height: 1.6">
+        <strong style="color: #1D3557">Trade-off.</strong> The split page converts better for someone who already knows they want a table, and it makes the form page trivially editable because it holds almost no prose. It costs you a second published address and one more click for a first-timer — and the two pages' facts must come from settings (they do) or they drift. <strong>1a</strong> is the smaller change: same page, same URL, new jump bar.
+      </div>
+    </div>
+
+    <div id="1c" style="display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 13px; font-weight: 800; color: #FBF8F3; background: #1E2D4A; border-radius: 999px; padding: 6px 14px">1c</span>
+        <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #1E2D4A">Admin — one event screen, five tabs</span>
+        <span style="font-family: 'Source Sans 3', sans-serif; font-size: 12px; color: #6A6858">tabs are clickable</span>
+      </div>
+
+      <div style="width: 1240px; background: #FAF7F1; border: 1px solid #E7DFD1; border-radius: 14px; overflow: hidden; box-shadow: 0 6px 32px rgba(30,45,74,.14); display: flex; min-height: 760px">
+        <div style="flex: 0 0 216px; background: #1D3557; display: flex; flex-direction: column">
+          <div style="padding: 16px 18px 14px; border-bottom: 1px solid rgba(237,242,247,.12)">
+            <div style="font-family: 'Source Sans 3', sans-serif; font-size: 16px; font-weight: 600; color: #FAF7F1">Timothy Lutheran</div>
+            <div style="font-family: 'Source Sans 3', sans-serif; font-size: 11.5px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #C9973A; margin-top: 5px">Admin</div>
+          </div>
+          <div style="padding: 10px 18px; font-family: 'Source Sans 3', sans-serif; font-size: 12.5px; color: #8598B0; border-bottom: 1px solid rgba(237,242,247,.12)">andrew</div>
+          <div style="padding: 8px 0 4px">
+            <div style="font-family: 'Source Sans 3', sans-serif; font-size: 10.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #D9A445; padding: 8px 18px 8px 20px">Website</div>
+            <div style="display: flex; flex-direction: column; gap: 2px">
+              <div style="display: flex; align-items: center; gap: 11px; margin: 0 8px; padding: 9px 12px; border-radius: 9px; font-family: 'Source Sans 3', sans-serif; font-size: 13.5px; color: #C6D0DC"><span style="width: 6px; height: 6px; border-radius: 50%; background: #5A7191"></span>Pages</div>
+              <div style="display: flex; align-items: center; gap: 11px; margin: 0 8px; padding: 9px 12px; border-radius: 9px; font-family: 'Source Sans 3', sans-serif; font-size: 13.5px; color: #C6D0DC"><span style="width: 6px; height: 6px; border-radius: 50%; background: #5A7191"></span>Notices</div>
+            </div>
+            <div style="font-family: 'Source Sans 3', sans-serif; font-size: 10.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #D9A445; padding: 14px 18px 8px 20px">Events</div>
+            <div style="display: flex; flex-direction: column; gap: 2px">
+              <div style="display: flex; align-items: center; gap: 11px; margin: 0 8px; padding: 9px 12px; border-radius: 9px; background: #27496E; box-shadow: inset 0 0 0 1px rgba(255,255,255,.16); font-family: 'Source Sans 3', sans-serif; font-size: 13.5px; font-weight: 600; color: #fff"><span style="width: 6px; height: 6px; border-radius: 50%; background: #E0A82E"></span><span style="flex: 1">Christmas Market</span><span style="font-family: 'Source Sans 3', sans-serif; font-size: 11px; font-weight: 700; color: #1B1608; background: #E0A82E; border-radius: 999px; padding: 2px 7px">4</span></div>
+              <div style="display: flex; align-items: center; gap: 11px; margin: 0 8px; padding: 9px 12px; border-radius: 9px; font-family: 'Source Sans 3', sans-serif; font-size: 13.5px; color: rgba(198,208,220,.55)"><span style="width: 6px; height: 6px; border-radius: 50%; background: #5A7191"></span>Gym Rentals</div>
+              <div style="display: flex; align-items: center; gap: 11px; margin: 0 8px; padding: 9px 12px; border-radius: 9px; font-family: 'Source Sans 3', sans-serif; font-size: 12.5px; font-style: italic; color: rgba(198,208,220,.4)"><span style="width: 6px; height: 6px; border-radius: 50%; background: #3E5773"></span>+ VBS, Egg Hunt later</div>
+            </div>
+            <div style="font-family: 'Source Sans 3', sans-serif; font-size: 10.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #D9A445; padding: 14px 18px 8px 20px">Money &amp; Building</div>
+            <div style="display: flex; align-items: center; gap: 11px; margin: 0 8px; padding: 9px 12px; border-radius: 9px; font-family: 'Source Sans 3', sans-serif; font-size: 13.5px; color: #C6D0DC"><span style="width: 6px; height: 6px; border-radius: 50%; background: #5A7191"></span>Giving</div>
+          </div>
+          <div style="margin-top: auto; padding: 14px 18px; font-family: 'Source Sans 3', sans-serif; font-size: 12px; color: #8598B0">Sign out</div>
+        </div>
+
+        <div style="flex: 1; min-width: 0; background: #FAF7F1; padding: 20px 26px 34px; font-family: 'Source Sans 3', sans-serif">
+          <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 16px">
+            <div>
+              <h1 style="font-family: 'Lora', Georgia, serif; font-size: 25px; font-weight: 500; color: #1D3557; margin: 0">Christmas Market</h1>
+              <p style="margin: 6px 0 0; font-size: 13.5px; line-height: 1.5; color: #6A6858; max-width: 56em">Everything for one event in one place — the vendor list, the words on both public pages, the money, the volunteers, the photos.</p>
+            </div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap">
+              <a href="#1c" style="font-family: 'Source Sans 3', sans-serif; font-size: 13px; font-weight: 600; text-decoration: none; color: #1D3557; background: #fff; border: 1px solid #E7DFD1; border-radius: 8px; padding: 9px 15px">View vendor page ↗</a>
+              <a href="#1c" style="font-family: 'Source Sans 3', sans-serif; font-size: 13.5px; font-weight: 600; text-decoration: none; color: #F5E4C0; background: #1E2D4A; border-radius: 8px; padding: 10px 17px">Export CSV</a>
+            </div>
+          </div>
+
+          <div style="display: inline-flex; background: #F4EFE5; border: 1px solid #E7DFD1; border-radius: 9px; padding: 3px; gap: 3px; margin-bottom: 18px; flex-wrap: wrap">
+            <button type="button" onClick="{{ openVendors }}" style="{{ styVendors }}">Vendors <span style="opacity:.6">68</span></button>
+            <button type="button" onClick="{{ openCopy }}" style="{{ styCopy }}">Page &amp; copy</button>
+            <button type="button" onClick="{{ openMoney }}" style="{{ styMoney }}">Money &amp; dates</button>
+            <button type="button" onClick="{{ openVols }}" style="{{ styVols }}">Volunteers</button>
+            <button type="button" onClick="{{ openPhotos }}" style="{{ styPhotos }}">Photos</button>
+          </div>
+
+          <sc-if value="{{ showVendors }}" hint-placeholder-val="{{ true }}">
+            <div>
+              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 18px">
+                <div style="border: 1px solid #E7DFD1; border-radius: 11px; background: #FAF7F1; padding: 15px 17px"><div style="font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #8A8271">Applications</div><div style="font-family: 'Lora', serif; font-size: 30px; color: #1D3557; margin: 5px 0">68</div><div style="font-size: 12px; color: #8A8271">Every vendor who has applied</div></div>
+                <div style="border: 1px solid #E7DFD1; border-radius: 11px; background: #FAF7F1; padding: 15px 17px"><div style="font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #8A8271">Tables asked for</div><div style="font-family: 'Lora', serif; font-size: 30px; color: #1D3557; margin: 5px 0">69</div><div style="font-size: 12px; color: #8A8271">Dropped-out vendors excluded</div></div>
+                <div style="border: 1px solid #E7DFD1; border-radius: 11px; background: #FAF7F1; padding: 15px 17px"><div style="font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #8A8271">Not paid yet</div><div style="font-family: 'Lora', serif; font-size: 30px; color: #1D3557; margin: 5px 0">4</div><div style="font-size: 12px; color: #8A8271">Spaces that are not held</div></div>
+                <div style="border: 1px solid #E7DFD1; border-radius: 11px; background: #FAF7F1; padding: 15px 17px"><div style="font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #8A8271">Recorded as paid</div><div style="font-family: 'Lora', serif; font-size: 30px; color: #1D3557; margin: 5px 0">$1,996.80</div><div style="font-size: 12px; color: #8A8271">What you marked, not the processor</div></div>
+              </div>
+
+              <div style="border: 1px solid #E7DFD1; border-radius: 12px; background: #FAF7F1; overflow: hidden; margin-bottom: 18px">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 16px; background: #F4EFE5; border-bottom: 1px solid #E7DFD1">
+                  <span style="font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #8A8271">Applications</span>
+                  <span style="font-size: 12.5px; color: #8A8271">Fees, dates &amp; payment are on the Money tab</span>
+                </div>
+                <div style="padding: 14px 16px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap">
+                  <label style="display: flex; align-items: center; gap: 10px; cursor: pointer">
+                    <span style="width: 40px; height: 22px; border-radius: 999px; background: #4A5E3A; position: relative; display: inline-block"><span style="position: absolute; top: 3px; left: 21px; width: 16px; height: 16px; border-radius: 50%; background: #FAF7F1; box-shadow: 0 1px 3px rgba(0,0,0,.2)"></span></span>
+                    <span style="font-size: 13.5px; color: #1A1A2A">Taking vendor applications</span>
+                    <span style="font-size: 12.5px; font-weight: 600; color: #6A6858">Open</span>
+                  </label>
+                  <span style="font-size: 12.5px; color: #6A6858">Payments open at the church's giving link with the amount filled in. $31.20 for one table, $93 for three.</span>
+                </div>
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px">
+                <label style="flex: 1; min-width: 200px; max-width: 340px; display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid #E7DFD1; border-radius: 8px; padding: 0 12px"><span style="color: #8A8271; font-size: 14px">⌕</span><input type="search" placeholder="Search vendors, products, table numbers" style="flex: 1; border: 0; outline: 0; background: transparent; padding: 9px 0; font-family: 'Source Sans 3', sans-serif; font-size: 13.5px; color: #1A1A2A"></label>
+                <div style="display: flex; gap: 7px; flex-wrap: wrap">
+                  <span style="font-size: 11.5px; font-weight: 600; color: #1E2D4A; background: #E7EEF7; border: 2px solid #1E2D4A; border-radius: 8px; padding: 6px 11px">All</span>
+                  <span style="font-size: 11.5px; font-weight: 600; color: #4A4860; background: #FAF7F1; border: 1px solid #E7DFD1; border-radius: 8px; padding: 7px 12px">Not paid yet</span>
+                  <span style="font-size: 11.5px; font-weight: 600; color: #4A4860; background: #FAF7F1; border: 1px solid #E7DFD1; border-radius: 8px; padding: 7px 12px">Paid</span>
+                  <span style="font-size: 11.5px; font-weight: 600; color: #4A4860; background: #FAF7F1; border: 1px solid #E7DFD1; border-radius: 8px; padding: 7px 12px">Fee waived</span>
+                  <span style="font-size: 11.5px; font-weight: 600; color: #4A4860; background: #FAF7F1; border: 1px solid #E7DFD1; border-radius: 8px; padding: 7px 12px">Dropped out</span>
+                </div>
+                <span style="margin-left: auto; font-size: 12.5px; color: #8A8271">68 applications</span>
+              </div>
+
+              <div style="border: 1px solid #E7DFD1; border-radius: 12px; background: #FFFDF9; overflow: hidden">
+                <div style="display: grid; grid-template-columns: 1.6fr 2fr .8fr minmax(126px,1fr) 118px; gap: 14px; padding: 11px 18px; background: #F4EFE5; border-bottom: 1px solid #E7DFD1">
+                  <span style="font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #8A8271">Vendor</span>
+                  <span style="font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #8A8271">What they sell</span>
+                  <span style="font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #8A8271">Tables</span>
+                  <span style="font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #8A8271">Payment</span>
+                  <span></span>
+                </div>
+                <div style="border-bottom: 1px solid #EFE7D9">
+                  <div style="display: flex; align-items: center; gap: 9px; padding: 9px 18px 11px; background: #FBF1DC; border-bottom: 1px solid #EBD5A6; font-size: 12.5px; color: #7A5B18"><span style="font-size: 10px; color: #8C3A28">▲</span><span style="flex: 1">No payment recorded. They were asked for $62.10 — their space is not held until it arrives.</span><a href="#1c" style="font-weight: 700; color: #7A5B18">Record it</a></div>
+                  <div style="display: grid; grid-template-columns: 1.6fr 2fr .8fr minmax(126px,1fr) 118px; gap: 14px; align-items: center; padding: 12px 18px; min-height: 56px">
+                    <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13.5px; font-weight: 600; color: #1A1A2A">Prairie Thread Goods</span><span style="font-size: 11.5px; color: #8A8271">Kate Ruhl · kate@prairiethread.com</span></span>
+                    <span style="font-size: 13px; color: #4A4860">handmade purses, tote bags, wallets, crochet shawls</span>
+                    <span style="font-size: 13px; color: #4A4860">2 <span style="color: #8A8271">· #19/20</span></span>
+                    <span><span style="font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; background: #FAF0DC; color: #7A5B18; border: 1px solid #EBD5A6; border-radius: 999px; padding: 5px 10px">Not paid yet</span></span>
+                    <span style="text-align: right; font-size: 13px; font-weight: 600; color: #1D3557">Open</span>
+                  </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1.6fr 2fr .8fr minmax(126px,1fr) 118px; gap: 14px; align-items: center; padding: 12px 18px; min-height: 56px; border-bottom: 1px solid #EFE7D9">
+                  <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13.5px; font-weight: 600; color: #1A1A2A">Hollyhock Bakes</span><span style="font-size: 11.5px; color: #8A8271">Dana Vogel · dana@hollyhock.co</span></span>
+                  <span style="font-size: 13px; color: #4A4860">cookie boxes, stollen, cinnamon bread <strong>· food</strong></span>
+                  <span style="font-size: 13px; color: #4A4860">1 <span style="color: #8A8271">· #7</span></span>
+                  <span><span style="font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; background: #EDF0E4; color: #3F5424; border: 1px solid #D3DCC2; border-radius: 999px; padding: 5px 10px">Paid</span></span>
+                  <span style="text-align: right; font-size: 13px; font-weight: 600; color: #1D3557">Open</span>
+                </div>
+                <div style="display: grid; grid-template-columns: 1.6fr 2fr .8fr minmax(126px,1fr) 118px; gap: 14px; align-items: center; padding: 12px 18px; min-height: 56px; border-bottom: 1px solid #EFE7D9">
+                  <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13.5px; font-weight: 600; color: #1A1A2A">Word of Life 8th Grade</span><span style="font-size: 11.5px; color: #8A8271">Mrs. Behnke · office@wordoflifeschool.net</span></span>
+                  <span style="font-size: 13px; color: #4A4860">hot chocolate bar, ornaments made in class</span>
+                  <span style="font-size: 13px; color: #4A4860">1 <span style="color: #8A8271">· #31</span></span>
+                  <span><span style="font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; background: #EDF2F6; color: #3E5C76; border: 1px solid #CFDCE6; border-radius: 999px; padding: 5px 10px">Fee waived</span></span>
+                  <span style="text-align: right; font-size: 13px; font-weight: 600; color: #1D3557">Open</span>
+                </div>
+                <div style="display: grid; grid-template-columns: 1.6fr 2fr .8fr minmax(126px,1fr) 118px; gap: 14px; align-items: center; padding: 12px 18px; min-height: 56px">
+                  <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13.5px; font-weight: 600; color: #1A1A2A">Ivanhoe Woodshop</span><span style="font-size: 11.5px; color: #8A8271">Ray Stoltz · (314) 555-0148</span></span>
+                  <span style="font-size: 13px; color: #4A4860">cutting boards, nativity sets, toy trucks</span>
+                  <span style="font-size: 13px; color: #4A4860">3 <span style="color: #8A8271">· #44–46</span></span>
+                  <span><span style="font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; background: #EDF0E4; color: #3F5424; border: 1px solid #D3DCC2; border-radius: 999px; padding: 5px 10px">Paid</span></span>
+                  <span style="text-align: right; font-size: 13px; font-weight: 600; color: #1D3557">Open</span>
+                </div>
+              </div>
+              <p style="display: flex; gap: 9px; align-items: baseline; margin: 14px 0 0; font-size: 13px; line-height: 1.65; color: #4A4860"><span style="color: #C9973A; font-size: 11px">◆</span><span>Unchanged from today: the list, the drawer, the four payment states, the CSV. The only difference is that it is now the first of five tabs rather than a screen with settings bolted underneath it.</span></p>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showCopy }}" hint-placeholder-val="{{ false }}">
+            <div style="display: grid; gap: 16px">
+              <div style="border: 1px solid #E7DFD1; border-radius: 12px; background: #FAF7F1; overflow: hidden">
+                <div style="padding: 11px 16px; background: #F4EFE5; border-bottom: 1px solid #E7DFD1; display: flex; justify-content: space-between; gap: 12px"><span style="font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #8A8271">The two public pages</span><span style="font-size: 12.5px; color: #8A8271">Addresses never change</span></div>
+                <div style="padding: 14px 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px">
+                  <div style="border: 1px solid #E7DFD1; border-radius: 11px; background: #fff; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px">
+                    <span style="align-self: flex-start; font-size: 9.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #8A8271; background: #F4EFE5; border-radius: 999px; padding: 4px 9px">Ministry page</span>
+                    <span style="font-size: 15px; font-weight: 600; color: #1D3557">/christmasmarket</span>
+                    <p style="margin: 0; font-size: 12.5px; line-height: 1.55; color: #4A4860">What the market is, this year's dates, photos, announcements, and the two doors out: apply as a vendor, sign up to serve.</p>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px"><a href="#1c" style="font-size: 12.5px; font-weight: 600; text-decoration: none; color: #F5E4C0; background: #1E2D4A; border-radius: 8px; padding: 8px 14px">Edit page</a><a href="#1c" style="font-size: 12.5px; font-weight: 600; text-decoration: none; color: #1D3557; background: #fff; border: 1px solid #E7DFD1; border-radius: 8px; padding: 8px 14px">View ↗</a></div>
+                  </div>
+                  <div style="border: 1px solid #E7DFD1; border-radius: 11px; background: #fff; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px">
+                    <span style="align-self: flex-start; font-size: 9.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #8A8271; background: #F4EFE5; border-radius: 999px; padding: 4px 9px">Vendor page</span>
+                    <span style="font-size: 15px; font-weight: 600; color: #1D3557">/christmasmarket/vendors</span>
+                    <p style="margin: 0; font-size: 12.5px; line-height: 1.55; color: #4A4860">Hero, details cards, rules, photos, the application, the nine agreement clauses, FAQ — each one a block you can edit, reorder or delete.</p>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px"><a href="#1c" style="font-size: 12.5px; font-weight: 600; text-decoration: none; color: #F5E4C0; background: #1E2D4A; border-radius: 8px; padding: 8px 14px">Edit page</a><a href="#1c" style="font-size: 12.5px; font-weight: 600; text-decoration: none; color: #1D3557; background: #fff; border: 1px solid #E7DFD1; border-radius: 8px; padding: 8px 14px">View ↗</a></div>
+                  </div>
+                </div>
+                <div style="margin: 0 16px 16px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 11px 14px; border: 1px solid #E7DFD1; border-radius: 12px; background: #FAF7F1; font-size: 13px; color: #4A4860">
+                  <span><strong style="color: #1D3557">The vendor page has unpublished edits.</strong> Its blocks are drafted and ready; press Publish and the hardcoded version is retired for good.</span>
+                  <a href="#1c" style="flex: none; font-size: 12.5px; font-weight: 600; text-decoration: none; color: #F5E4C0; background: #1E2D4A; border-radius: 8px; padding: 8px 14px">Compare &amp; publish</a>
+                </div>
+              </div>
+
+              <div style="border: 1px solid #E7DFD1; border-radius: 12px; background: #FAF7F1; overflow: hidden">
+                <div style="padding: 11px 16px; background: #F4EFE5; border-bottom: 1px solid #E7DFD1"><span style="font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #8A8271">Sections on the vendor page — drag to reorder</span></div>
+                <div style="padding: 8px 16px 16px">
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid #EFE7D9"><span style="color: #8A8271; font-size: 13px">⣿</span><span style="flex: 1; font-size: 13.5px; font-weight: 600; color: #1A1A2A">Hero — “Bring your table to the Christmas Market”</span><span style="font-size: 11.5px; color: #8A8271">hero</span><a href="#1c" style="font-size: 12.5px; font-weight: 600">Edit</a></div>
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid #EFE7D9"><span style="color: #8A8271; font-size: 13px">⣿</span><span style="flex: 1; font-size: 13.5px; font-weight: 600; color: #1A1A2A">Jump links</span><span style="font-size: 11.5px; color: #8A8271">auto from sections</span><a href="#1c" style="font-size: 12.5px; font-weight: 600">Edit</a></div>
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid #EFE7D9"><span style="color: #8A8271; font-size: 13px">⣿</span><span style="flex: 1; font-size: 13.5px; font-weight: 600; color: #1A1A2A">Vendor details — four cards</span><span style="font-size: 11.5px; color: #8A8271">card grid</span><a href="#1c" style="font-size: 12.5px; font-weight: 600">Edit</a></div>
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid #EFE7D9"><span style="color: #8A8271; font-size: 13px">⣿</span><span style="flex: 1; font-size: 13.5px; font-weight: 600; color: #1A1A2A">Rules at a glance — five tiles</span><span style="font-size: 11.5px; color: #8A8271">tiles</span><a href="#1c" style="font-size: 12.5px; font-weight: 600">Edit</a></div>
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid #EFE7D9"><span style="color: #8A8271; font-size: 13px">⣿</span><span style="flex: 1; font-size: 13.5px; font-weight: 600; color: #1A1A2A">Past markets — photo gallery</span><span style="font-size: 11.5px; color: #8A8271">gallery</span><a href="#1c" style="font-size: 12.5px; font-weight: 600">Edit</a></div>
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid #EFE7D9; background: #FBF1DC"><span style="color: #8A8271; font-size: 13px">⣿</span><span style="flex: 1; font-size: 13.5px; font-weight: 600; color: #1A1A2A">Vendor application <span style="font-weight: 400; color: #7A5B18">— fee, dates, open/closed and the nine clauses live here</span></span><span style="font-size: 11.5px; color: #7A5B18">application</span><a href="#1c" style="font-size: 12.5px; font-weight: 600">Edit</a></div>
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 11px 0"><span style="color: #8A8271; font-size: 13px">⣿</span><span style="flex: 1; font-size: 13.5px; font-weight: 600; color: #1A1A2A">Questions vendors ask</span><span style="font-size: 11.5px; color: #8A8271">FAQ</span><a href="#1c" style="font-size: 12.5px; font-weight: 600">Edit</a></div>
+                  <a href="#1c" style="display: inline-block; margin-top: 14px; font-size: 12.5px; font-weight: 600; text-decoration: none; color: #1D3557; background: #fff; border: 1px solid #E7DFD1; border-radius: 8px; padding: 9px 15px">+ Add a section</a>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showMoney }}" hint-placeholder-val="{{ false }}">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start">
+              <div style="border: 1px solid #E7DFD1; border-radius: 12px; background: #FAF7F1; overflow: hidden">
+                <div style="padding: 11px 16px; background: #F4EFE5; border-bottom: 1px solid #E7DFD1"><span style="font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #8A8271">This year's market</span></div>
+                <div style="padding: 14px 16px; display: grid; gap: 14px">
+                  <div><label style="display: block; font-size: 12px; font-weight: 600; color: #4A4860; margin-bottom: 5px">Market day</label><input type="text" value="Saturday, Dec 5" style="width: 100%; font-family: 'Source Sans 3', sans-serif; font-size: 13.5px; color: #1A1A2A; background: #fff; border: 1px solid #E7DFD1; border-radius: 8px; padding: 9px 11px"><p style="margin: 5px 0 0; font-size: 11.5px; color: #8A8271">Written the way it should read on the page — printed, not parsed.</p></div>
+                  <div><label style="display: block; font-size: 12px; font-weight: 600; color: #4A4860; margin-bottom: 5px">Market hours</label><input type="text" value="11:00 am – 6:00 pm" style="width: 100%; font-family: 'Source Sans 3', sans-serif; font-size: 13.5px; background: #fff; border: 1px solid #E7DFD1; border-radius: 8px; padding: 9px 11px"></div>
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+                    <div><label style="display: block; font-size: 12px; font-weight: 600; color: #4A4860; margin-bottom: 5px">Table fee ($)</label><input type="text" value="30" style="width: 100%; font-family: 'Source Sans 3', sans-serif; font-size: 13.5px; background: #fff; border: 1px solid #E7DFD1; border-radius: 8px; padding: 9px 11px"></div>
+                    <div><label style="display: block; font-size: 12px; font-weight: 600; color: #4A4860; margin-bottom: 5px">Max tables per vendor</label><input type="text" value="3" style="width: 100%; font-family: 'Source Sans 3', sans-serif; font-size: 13.5px; background: #fff; border: 1px solid #E7DFD1; border-radius: 8px; padding: 9px 11px"></div>
+                  </div>
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+                    <div><label style="display: block; font-size: 12px; font-weight: 600; color: #4A4860; margin-bottom: 5px">Card fee (%)</label><input type="text" value="2.9" style="width: 100%; font-family: 'Source Sans 3', sans-serif; font-size: 13.5px; background: #fff; border: 1px solid #E7DFD1; border-radius: 8px; padding: 9px 11px"></div>
+                    <div><label style="display: block; font-size: 12px; font-weight: 600; color: #4A4860; margin-bottom: 5px">Card fee (fixed $)</label><input type="text" value="0.30" style="width: 100%; font-family: 'Source Sans 3', sans-serif; font-size: 13.5px; background: #fff; border: 1px solid #E7DFD1; border-radius: 8px; padding: 9px 11px"></div>
+                  </div>
+                  <div><label style="display: block; font-size: 12px; font-weight: 600; color: #4A4860; margin-bottom: 5px">Coordinator email</label><input type="text" value="tlc.christmasmarket@gmail.com" style="width: 100%; font-family: 'Source Sans 3', sans-serif; font-size: 13.5px; background: #fff; border: 1px solid #E7DFD1; border-radius: 8px; padding: 9px 11px"></div>
+                  <div style="background: #EDF2F6; border: 1px solid #CFDCE6; border-radius: 8px; padding: 10px 12px; font-size: 12.5px; color: #3E5C76">A vendor will be asked <strong>$31.20</strong> for one table, <strong>$93</strong> for three. Both public pages quote these figures from here.</div>
+                  <div><button type="button" style="font-family: 'Source Sans 3', sans-serif; font-size: 13px; font-weight: 600; background: #1D3557; color: #fff; border: 0; border-radius: 8px; padding: 10px 18px; cursor: pointer">Save</button></div>
+                </div>
+              </div>
+              <div style="border: 1px solid #E7DFD1; border-radius: 12px; background: #FAF7F1; overflow: hidden">
+                <div style="padding: 11px 16px; background: #F4EFE5; border-bottom: 1px solid #E7DFD1"><span style="font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #8A8271">Where the money goes</span></div>
+                <div style="padding: 14px 16px; display: grid; gap: 14px">
+                  <div><label style="display: block; font-size: 12px; font-weight: 600; color: #4A4860; margin-bottom: 5px">Payment provider</label><div style="display: flex; gap: 8px; flex-wrap: wrap"><span style="font-size: 12.5px; font-weight: 600; color: #fff; background: #1D3557; border-radius: 999px; padding: 8px 14px">Tithe.ly</span><span style="font-size: 12.5px; font-weight: 600; color: #4A4860; background: #fff; border: 1px solid #E7DFD1; border-radius: 999px; padding: 8px 14px">Square</span></div></div>
+                  <div><label style="display: block; font-size: 12px; font-weight: 600; color: #4A4860; margin-bottom: 5px">Tithe.ly fund ID</label><input type="text" placeholder="Blank uses the base link's fund" style="width: 100%; font-family: 'Source Sans 3', sans-serif; font-size: 13.5px; background: #fff; border: 1px solid #E7DFD1; border-radius: 8px; padding: 9px 11px"></div>
+                  <div style="background: #FBF1DC; border: 1px solid #EBD5A6; border-radius: 8px; padding: 10px 12px; font-size: 12.5px; color: #7A5B18">Needs the Giving permission — a market coordinator sees this panel greyed out, exactly as today.</div>
+                  <div style="border-top: 1px solid #EFE7D9; padding-top: 12px; font-size: 12.5px; color: #4A4860"><strong style="color: #1D3557">Square links</strong> — one per table count, priced at the grossed-up total. Shown only when Square is the provider.</div>
+                  <div><button type="button" style="font-family: 'Source Sans 3', sans-serif; font-size: 13px; font-weight: 600; background: #1D3557; color: #fff; border: 0; border-radius: 8px; padding: 10px 18px; cursor: pointer">Save</button></div>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showVols }}" hint-placeholder-val="{{ false }}">
+            <div style="display: grid; gap: 16px">
+              <div style="border: 1px solid #E7DFD1; border-radius: 12px; background: #FAF7F1; overflow: hidden">
+                <div style="display: flex; justify-content: space-between; gap: 12px; padding: 11px 16px; background: #F4EFE5; border-bottom: 1px solid #E7DFD1"><span style="font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #8A8271">Volunteer sign-up · serve.timothystl.org/christmasmarket</span><span style="font-size: 12.5px; color: #8A8271">read-only here — the roster stays where it is</span></div>
+                <div style="padding: 14px 16px">
+                  <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 14px">
+                    <div style="border: 1px solid #E7DFD1; border-radius: 11px; background: #fff; padding: 15px 17px"><div style="font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #8A8271">Signed up</div><div style="font-family: 'Lora', serif; font-size: 30px; color: #1D3557; margin: 5px 0">34</div><div style="font-size: 12px; color: #8A8271">People, all shifts</div></div>
+                    <div style="border: 1px solid #E7DFD1; border-radius: 11px; background: #fff; padding: 15px 17px"><div style="font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #8A8271">Shifts still open</div><div style="font-family: 'Lora', serif; font-size: 30px; color: #1D3557; margin: 5px 0">9</div><div style="font-size: 12px; color: #8A8271">Parking and teardown mostly</div></div>
+                    <div style="border: 1px solid #E7DFD1; border-radius: 11px; background: #fff; padding: 15px 17px"><div style="font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #8A8271">Roles</div><div style="font-family: 'Lora', serif; font-size: 30px; color: #1D3557; margin: 5px 0">6</div><div style="font-size: 12px; color: #8A8271">Setup, parking, booth, bake, teardown, greeters</div></div>
+                    <div style="border: 1px solid #E7DFD1; border-radius: 11px; background: #fff; padding: 15px 17px"><div style="font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #8A8271">Sign-up page</div><div style="font-family: 'Lora', serif; font-size: 22px; color: #3F5424; margin: 5px 0">Open</div><div style="font-size: 12px; color: #8A8271">Linked from both market pages</div></div>
+                  </div>
+                  <div style="display: grid; gap: 12px">
+                    <div style="border: 1px solid #E7DFD1; border-radius: 12px; background: #FFFDF9; overflow: hidden">
+                      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 16px; background: #F4EFE5; border-bottom: 1px solid #E7DFD1">
+                        <span style="font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #8A8271">Parking · 2 of 8 filled</span>
+                        <a href="https://serve.timothystl.org/christmasmarket" style="font-size: 12px; font-weight: 600; text-decoration: none; color: #1D3557">Manage shifts in Serve ↗</a>
+                      </div>
+                      <div style="display: grid; grid-template-columns: 150px 90px 120px 1fr; gap: 14px; align-items: center; padding: 11px 16px; border-bottom: 1px solid #EFE7D9">
+                        <span style="font-size: 13px; font-weight: 600; color: #1A1A2A">8:30–11:00 am</span>
+                        <span style="font-size: 13px; color: #4A4860">2 of 4</span>
+                        <span><span style="font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; background: #FAF0DC; color: #7A5B18; border: 1px solid #EBD5A6; border-radius: 999px; padding: 5px 10px">2 short</span></span>
+                        <span style="font-size: 13px; color: #4A4860"><a href="#1c">Ray Stoltz</a> · <a href="#1c">Dan Meyer</a></span>
+                      </div>
+                      <div style="display: grid; grid-template-columns: 150px 90px 120px 1fr; gap: 14px; align-items: center; padding: 11px 16px">
+                        <span style="font-size: 13px; font-weight: 600; color: #1A1A2A">11:00 am–2:30 pm</span>
+                        <span style="font-size: 13px; color: #4A4860">0 of 4</span>
+                        <span><span style="font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; background: #F7E4DE; color: #8C3A28; border: 1px solid #E4C8C8; border-radius: 999px; padding: 5px 10px">Nobody yet</span></span>
+                        <span style="font-size: 13px; color: #8A8271">No one is signed up for this shift.</span>
+                      </div>
+                    </div>
+                    <div style="border: 1px solid #E7DFD1; border-radius: 12px; background: #FFFDF9; overflow: hidden">
+                      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 16px; background: #F4EFE5; border-bottom: 1px solid #E7DFD1">
+                        <span style="font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #8A8271">Church booth · 6 of 6 filled</span>
+                        <a href="https://serve.timothystl.org/christmasmarket" style="font-size: 12px; font-weight: 600; text-decoration: none; color: #1D3557">Manage shifts in Serve ↗</a>
+                      </div>
+                      <div style="display: grid; grid-template-columns: 150px 90px 120px 1fr; gap: 14px; align-items: center; padding: 11px 16px; border-bottom: 1px solid #EFE7D9">
+                        <span style="font-size: 13px; font-weight: 600; color: #1A1A2A">10:30 am–2:00 pm</span>
+                        <span style="font-size: 13px; color: #4A4860">3 of 3</span>
+                        <span><span style="font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; background: #EDF0E4; color: #3F5424; border: 1px solid #D3DCC2; border-radius: 999px; padding: 5px 10px">Full</span></span>
+                        <span style="font-size: 13px; color: #4A4860"><a href="#1c">Marla Steenbock</a> · <a href="#1c">Jean Krueger</a> · <a href="#1c">Tim Bauer</a></span>
+                      </div>
+                      <div style="display: grid; grid-template-columns: 150px 90px 120px 1fr; gap: 14px; align-items: center; padding: 11px 16px">
+                        <span style="font-size: 13px; font-weight: 600; color: #1A1A2A">2:00–6:00 pm</span>
+                        <span style="font-size: 13px; color: #4A4860">3 of 3</span>
+                        <span><span style="font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; background: #EDF0E4; color: #3F5424; border: 1px solid #D3DCC2; border-radius: 999px; padding: 5px 10px">Full</span></span>
+                        <span style="font-size: 13px; color: #4A4860"><a href="#1c">Ellen Hoff</a> · <a href="#1c">Paul Wenzel</a> · <a href="#1c">Grace Lin</a></span>
+                      </div>
+                    </div>
+                    <div style="border: 1px solid #E7DFD1; border-radius: 12px; background: #FAF7F1; padding: 12px 16px; font-size: 12.5px; color: #6A6858">Setup, Bake table, Teardown and Greeters follow in the same shape — most short-handed role first.</div>
+                  </div>
+                  <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px">
+                    <a href="https://serve.timothystl.org/christmasmarket" style="font-size: 12.5px; font-weight: 600; text-decoration: none; color: #F5E4C0; background: #1E2D4A; border-radius: 8px; padding: 9px 15px">Open the sign-up system ↗</a>
+                    <a href="#1c" style="font-size: 12.5px; font-weight: 600; text-decoration: none; color: #1D3557; background: #fff; border: 1px solid #E7DFD1; border-radius: 8px; padding: 9px 15px">Copy the link for a bulletin</a>
+                  </div>
+                  <p style="display: flex; gap: 9px; align-items: baseline; margin: 14px 0 0; font-size: 13px; line-height: 1.65; color: #4A4860"><span style="color: #C9973A; font-size: 11px">◆</span><span>Read-only: every name, role and shift is pulled from the volunteer system so you can see the whole day here. Changing a shift still happens in Serve.</span></p>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showPhotos }}" hint-placeholder-val="{{ false }}">
+            <div style="border: 1px solid #E7DFD1; border-radius: 12px; background: #FAF7F1; overflow: hidden">
+              <div style="display: flex; justify-content: space-between; gap: 12px; padding: 11px 16px; background: #F4EFE5; border-bottom: 1px solid #E7DFD1"><span style="font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #8A8271">This year's photos</span><span style="font-size: 12.5px; color: #8A8271">used on both pages</span></div>
+              <div style="padding: 14px 16px">
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px">
+                  <div style="border: 1px solid #E7DFD1; border-radius: 11px; overflow: hidden; background: #fff"><div style="aspect-ratio: 4/3; background: #DCE5EE; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #6A6858">christmas-mkt.webp</div><div style="padding: 9px 11px; font-size: 12px; color: #4A4860">Shoppers at the market</div></div>
+                  <div style="border: 2px dashed #E7DFD1; border-radius: 11px; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 12px; color: #8A8271; padding: 12px">Drop a photo — a vendor with shoppers</div>
+                  <div style="border: 2px dashed #E7DFD1; border-radius: 11px; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 12px; color: #8A8271; padding: 12px">Drop a photo — baked goods up close</div>
+                  <div style="border: 2px dashed #E7DFD1; border-radius: 11px; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 12px; color: #8A8271; padding: 12px">+ Add</div>
+                </div>
+                <p style="display: flex; gap: 9px; align-items: baseline; margin: 14px 0 0; font-size: 13px; line-height: 1.65; color: #4A4860"><span style="color: #C9973A; font-size: 11px">◆</span><span>Uploads land in Media at <code>images/events/christmasmarket/</code> and are offered to the gallery blocks on both pages — no filename to remember, no code edit.</span></p>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+
+      <div style="width: 1240px; background: #FAF7F1; border: 1px solid #E7DFD1; border-radius: 12px; padding: 16px 18px; font-family: 'Source Sans 3', sans-serif; font-size: 12.5px; color: #4A4860; line-height: 1.6">
+        <strong style="color: #1D3557">Why tabs.</strong> Today <code>/market</code> is a vendor list with a settings block and a payment block stacked underneath, and everything else about the market lives somewhere else — the page copy in Pages, the photos in Media, the volunteers off-site. The five tabs are the five things you actually come here to do, and the sidebar group is renamed <strong>Events</strong> so next year's VBS or Egg Hunt is a sibling, not a rewrite.
+      </div>
+    </div>
+
+    <div id="1d" style="display: flex; flex-direction: column; gap: 12px; width: 1240px">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 13px; font-weight: 800; color: #FBF8F3; background: #1E2D4A; border-radius: 999px; padding: 6px 14px">1d</span>
+        <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #1E2D4A">The backend map — what moves, what stays</span>
+      </div>
+
+      <div style="background: #FBF8F3; border: 1px solid #DDE3ED; border-radius: 14px; padding: 28px 30px; display: grid; gap: 26px">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px">
+          <div style="background: #F7F3EC; border: 1px solid #DDE3ED; border-radius: 12px; padding: 20px 22px">
+            <div style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #8C3A28; margin-bottom: 12px">Today — six places, one event</div>
+            <div style="display: grid; gap: 9px; font-family: 'Source Sans 3', sans-serif; font-size: 13px; color: #4A4860; line-height: 1.55">
+              <div><strong style="color: #1E2D4A">public/index.html</strong> — the whole vendor page, hardcoded. <em>Every word is a code edit.</em></div>
+              <div><strong style="color: #1E2D4A">public/index.html</strong> — the ministry page, also hardcoded, with two admin-managed holes.</div>
+              <div><strong style="color: #1E2D4A">admin/market-page-seed.js</strong> — a block draft of the vendor page that has never been published.</div>
+              <div><strong style="color: #1E2D4A">admin/market.js</strong> — vendor list, seven settings, fund, provider, Square links.</div>
+              <div><strong style="color: #1E2D4A">market-price.js</strong> — the grossed-up price. Correct, and the one thing not to touch.</div>
+              <div><strong style="color: #1E2D4A">serve.timothystl.org</strong> — volunteers, unlinked from any of the above except one button.</div>
+            </div>
+          </div>
+          <div style="background: #F7F3EC; border: 1px solid #DDE3ED; border-radius: 12px; padding: 20px 22px">
+            <div style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #3F5424; margin-bottom: 12px">After — one event record, three surfaces</div>
+            <div style="display: grid; gap: 9px; font-family: 'Source Sans 3', sans-serif; font-size: 13px; color: #4A4860; line-height: 1.55">
+              <div><strong style="color: #1E2D4A">Words</strong> → block records for both pages, edited in the Pages editor. No prose in code.</div>
+              <div><strong style="color: #1E2D4A">Figures</strong> → the existing <code>market_*</code> settings, edited on the event's Money tab. Quoted, never retyped.</div>
+              <div><strong style="color: #1E2D4A">People</strong> → the vendor list stays exactly as it is; volunteers stay in the serve system, surfaced as counts.</div>
+              <div><strong style="color: #1E2D4A">Photos</strong> → Media, under <code>images/events/christmasmarket/</code>, offered to both galleries.</div>
+              <div><strong style="color: #1E2D4A">Money</strong> → unchanged: <code>market-price.js</code>, resolved server-side at submit.</div>
+              <div><strong style="color: #1E2D4A">Addresses</strong> → unchanged: <code>/christmasmarket</code>, <code>/christmasmarket/vendors</code>, <code>serve…/christmasmarket</code>.</div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #1E2D4A; margin-bottom: 12px">What you can do without Claude Code, after this</div>
+          <div style="display: grid; gap: 0; border: 1px solid #DDE3ED; border-radius: 12px; overflow: hidden; font-family: 'Source Sans 3', sans-serif; font-size: 13px">
+            <div style="display: grid; grid-template-columns: 2fr 1.4fr 1fr; gap: 14px; padding: 10px 16px; background: #F4EFE5; font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #8A8271"><span>The job</span><span>Where</span><span>Today</span></div>
+            <div style="display: grid; grid-template-columns: 2fr 1.4fr 1fr; gap: 14px; padding: 11px 16px; border-top: 1px solid #EFE7D9; color: #4A4860"><span>Change any sentence on either public page</span><span>Event → Page &amp; copy → Edit page</span><span style="color: #8C3A28">code edit</span></div>
+            <div style="display: grid; grid-template-columns: 2fr 1.4fr 1fr; gap: 14px; padding: 11px 16px; border-top: 1px solid #EFE7D9; color: #4A4860"><span>Add, remove or reorder a section</span><span>Event → Page &amp; copy → drag</span><span style="color: #8C3A28">code edit</span></div>
+            <div style="display: grid; grid-template-columns: 2fr 1.4fr 1fr; gap: 14px; padding: 11px 16px; border-top: 1px solid #EFE7D9; color: #4A4860"><span>Edit the nine agreement clauses</span><span>Event → Page &amp; copy → Application block</span><span style="color: #8C3A28">code edit</span></div>
+            <div style="display: grid; grid-template-columns: 2fr 1.4fr 1fr; gap: 14px; padding: 11px 16px; border-top: 1px solid #EFE7D9; color: #4A4860"><span>Date, hours, fee, max tables, coordinator</span><span>Event → Money &amp; dates</span><span style="color: #3F5424">already yours</span></div>
+            <div style="display: grid; grid-template-columns: 2fr 1.4fr 1fr; gap: 14px; padding: 11px 16px; border-top: 1px solid #EFE7D9; color: #4A4860"><span>Open or close applications</span><span>Event → Vendors → toggle</span><span style="color: #3F5424">already yours</span></div>
+            <div style="display: grid; grid-template-columns: 2fr 1.4fr 1fr; gap: 14px; padding: 11px 16px; border-top: 1px solid #EFE7D9; color: #4A4860"><span>Table numbers, payment states, CSV</span><span>Event → Vendors</span><span style="color: #3F5424">already yours</span></div>
+            <div style="display: grid; grid-template-columns: 2fr 1.4fr 1fr; gap: 14px; padding: 11px 16px; border-top: 1px solid #EFE7D9; color: #4A4860"><span>Upload this year's photos</span><span>Event → Photos</span><span style="color: #7A5B18">Media, unlinked</span></div>
+            <div style="display: grid; grid-template-columns: 2fr 1.4fr 1fr; gap: 14px; padding: 11px 16px; border-top: 1px solid #EFE7D9; color: #4A4860"><span>Publish a page live</span><span>Event → Page &amp; copy → Publish</span><span style="color: #3F5424">already yours</span></div>
+            <div style="display: grid; grid-template-columns: 2fr 1.4fr 1fr; gap: 14px; padding: 11px 16px; border-top: 1px solid #EFE7D9; color: #4A4860"><span>Stand up a new event next year</span><span>Events → New event (from the market as template)</span><span style="color: #8C3A28">code edit</span></div>
+          </div>
+        </div>
+
+        <div style="background: #EDF2F7; border: 1px solid #C4CEDF; border-radius: 12px; padding: 18px 20px">
+          <div style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 13px; font-weight: 700; color: #1E2D4A; margin-bottom: 8px">Sketched, not built: the Events section</div>
+          <p style="font-family: 'Source Sans 3', sans-serif; font-size: 13px; color: #3E5C76; line-height: 1.6; margin: 0">One <strong>event record</strong> — name, slug, dates, open/closed, a fee if it charges, a coordinator, a volunteer link, a photo folder — with the market as instance one. VBS, the Egg Hunt and concerts then need a page and a record, not a codebase. The market's own screen is the template: five tabs, and events that take no money simply hide the Money tab. Nothing about this changes the market's URLs, its price math, or the vendor table. Say the word and I'll design it as turn 2.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section style="padding: 24px 48px 72px; display: flex; flex-direction: column; gap: 24px">
+  <div style="display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; border-top: 1px solid rgba(30,45,74,.18); padding-top: 40px">
+    <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #6A6858">Reference · as built today</span>
+    <h2 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 24px; font-weight: 700; color: #1E2D4A; margin: 0">Recreated from the current source</h2>
+    <p style="font-family: 'Newsreader', serif; font-size: 14px; color: #4A4860; margin: 0; max-width: 560px; line-height: 1.7">The ministry page and the admin screen exactly as they render now, for comparison. The vendor page as it stands today is <a href="#1a">1a</a> minus the jump bar and the volunteer card.</p>
+  </div>
+
+  <div style="display: flex; gap: 40px; flex-wrap: wrap; align-items: flex-start">
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 14px; font-weight: 700; color: #1E2D4A">/christmasmarket — today</span>
+      <div style="width: 1080px; background: #F7F3EC; border: 1px solid #DDE3ED; border-radius: 14px; overflow: hidden">
+        <div style="height: 340px; background: linear-gradient(rgba(30,45,74,.55), rgba(30,45,74,.55)), #6E7A6A; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 28px">
+          <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #E8C070; margin-bottom: 14px">Annual Community Event</span>
+          <h1 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 46px; font-weight: 700; color: #fff; margin: 0 0 14px">Timothy Christmas Market</h1>
+          <p style="font-size: 18px; font-weight: 300; color: rgba(255,255,255,.9); margin: 0; max-width: 620px">Shopping, fellowship, and celebration — a gift to Lindenwood Park every December.</p>
+          <span style="margin-top: 18px; font-family: 'Source Sans 3', sans-serif; font-size: 11px; color: rgba(255,255,255,.6)">hero photo: christmas-mkt.webp</span>
+        </div>
+        <div style="background: #FBF8F3; padding: 60px 28px">
+          <div style="max-width: 1080px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: start">
+            <div>
+              <span style="display: block; font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #C9973A; margin-bottom: 8px">About the market</span>
+              <h2 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 32px; font-weight: 700; color: #1E2D4A; margin: 0 0 16px">A neighborhood tradition</h2>
+              <p style="font-size: 15px; color: #4A4860; line-height: 1.8; margin: 0 0 14px">The Timothy Christmas Market is an annual outdoor market bringing the Lindenwood Park community together each December. Local artisans and vendors set up in the church grounds — offering handmade goods, food, and festive fun for families and neighbors of all kinds.</p>
+              <p style="font-size: 15px; color: #4A4860; line-height: 1.8; margin: 0">The market is free and open to the public. It's one of our favorite ways to be a blessing to the neighborhood God has planted us in.</p>
+              <div style="margin-top: 18px; border: 1px dashed #C4CEDF; border-radius: 8px; padding: 10px 12px; font-family: 'Source Sans 3', sans-serif; font-size: 11.5px; color: #6A6858">#xmas-posts-wrap — admin-managed market info posts load here</div>
+            </div>
+            <div style="aspect-ratio: 5/4; border-radius: 12px; background: #DCE5EE; border: 1px solid #C4CEDF; display: flex; align-items: center; justify-content: center; font-family: 'Source Sans 3', sans-serif; font-size: 12px; color: #6A6858; box-shadow: 0 2px 12px rgba(30,45,74,.08)">christmas-mkt.webp</div>
+          </div>
+        </div>
+        <div style="background: #EDE9E0; padding: 56px 28px">
+          <div style="max-width: 720px; margin: 0 auto">
+            <span style="display: block; font-family: 'Bricolage Grotesque', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #C9973A; margin-bottom: 8px">Vendors</span>
+            <h2 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 32px; font-weight: 700; color: #1E2D4A; margin: 0 0 14px">Apply to be a vendor</h2>
+            <p style="font-size: 15px; color: #4A4860; line-height: 1.8; margin: 0; max-width: 600px">Are you a local artisan, crafter, or small business? We'd love to have you at the market. Tables are $30 each, the application takes about five minutes, and you pay by card at the end.</p>
+            <div style="display: flex; gap: 12px; margin-top: 28px; flex-wrap: wrap">
+              <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 14px; font-weight: 700; background: #1E2D4A; color: #F5E4C0; border-radius: 999px; padding: 14px 26px">Apply for a table</span>
+              <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 14px; font-weight: 700; background: transparent; color: #1E2D4A; border: 1.5px solid #DDE3ED; border-radius: 999px; padding: 13px 25px">Email the coordinator</span>
+            </div>
+            <p style="font-size: 13px; color: #4A4860; margin: 16px 0 0">Marla is the market coordinator — she'd rather hear from you before you apply than after.</p>
+          </div>
+        </div>
+        <div style="background: #F7F3EC; border-top: 3px solid #C9973A; padding: 40px 28px; text-align: center">
+          <h3 style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 24px; font-weight: 700; color: #1E2D4A; margin: 0 0 8px">Join us at the market.</h3>
+          <p style="font-size: 14px; color: #4A4860; margin: 0 0 20px">Free and open to the public — vendors, volunteers, and neighbors all welcome.</p>
+          <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap">
+            <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 14px; font-weight: 700; background: #1E2D4A; color: #F5E4C0; border-radius: 999px; padding: 14px 26px">Apply to be a vendor</span>
+            <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 14px; font-weight: 700; color: #1E2D4A; border: 1.5px solid #DDE3ED; border-radius: 999px; padding: 13px 25px">Volunteer at the market</span>
+            <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 14px; font-weight: 700; color: #1E2D4A; border: 1.5px solid #DDE3ED; border-radius: 999px; padding: 13px 25px">Email the office</span>
+          </div>
+        </div>
+      </div>
+      <div style="width: 1080px; background: #FAF7F1; border: 1px solid #E7DFD1; border-radius: 12px; padding: 14px 18px; font-family: 'Source Sans 3', sans-serif; font-size: 12.5px; color: #4A4860; line-height: 1.6">
+        Hardcoded in <code>public/index.html</code> apart from two holes: the info posts and one admin body/CTA block. The volunteer button points at <code>serve.timothystl.org</code> generally, not at the market sign-up.
+      </div>
+    </div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1400,&quot;height&quot;:1000}}">
+class Component extends DCLogic {
+  state = { step: 1, tables: 1, adminTab: 'vendors' };
+
+  // Mirrors market-price.js priceBreakdown()/money() exactly — integer cents,
+  // Math.round (not truncation), so 3 tables is $93.00 and the church nets $90.
+  price(n) {
+    const fee = 30, pct = 2.9 / 100, fixed = 0.30;
+    const subtotalCents = Math.round(n * fee * 100);
+    const totalCents = Math.round(((n * fee + fixed) / (1 - pct)) * 100);
+    return { subtotalCents, totalCents, feeCents: totalCents - subtotalCents };
+  }
+  money(cents) {
+    const v = (Number(cents) || 0) / 100;
+    return '$' + v.toFixed(2).replace(/\.00$/, '');
+  }
+
+  tabStyle(on) {
+    return 'flex:1;text-align:left;cursor:pointer;border:none;padding:18px 16px;min-height:44px;'
+      + "font-family:'Bricolage Grotesque',sans-serif;"
+      + (on ? 'background:#FBF8F3;border-bottom:3px solid #C9973A;' : 'background:#EDF2F7;border-bottom:3px solid transparent;');
+  }
+  tableBtn(on) {
+    return "font-family:'Bricolage Grotesque',sans-serif;font-size:15px;font-weight:800;border-radius:12px;padding:18px 12px;min-height:44px;cursor:pointer;"
+      + (on ? 'background:#1E2D4A;border:1px solid #1E2D4A;color:#fff;' : 'background:#FBF8F3;border:1px solid #DDE3ED;color:#1A1A2A;');
+  }
+
+  segStyle(on) {
+    return "font-family:'Source Sans 3',sans-serif;font-size:13px;font-weight:600;border:0;border-radius:8px;padding:7px 16px;cursor:pointer;"
+      + (on ? 'background:#fff;color:#1D3557;box-shadow:0 1px 2px rgba(18,36,61,.10);' : 'background:transparent;color:#4A4860;');
+  }
+
+  renderVals() {
+    const s = this.state.step, n = this.state.tables, p = this.price(n), t = this.state.adminTab;
+    return {
+      isStep1: s === 1, isStep2: s === 2, isStep3: s === 3,
+      goStep1: () => this.setState({ step: 1 }),
+      goStep2: () => this.setState({ step: 2 }),
+      goStep3: () => this.setState({ step: 3 }),
+      tab1: this.tabStyle(s === 1), tab2: this.tabStyle(s === 2), tab3: this.tabStyle(s === 3),
+      tab1Ink: s === 1 ? '#1E2D4A' : '#8A8898',
+      tab2Ink: s === 2 ? '#1E2D4A' : '#8A8898',
+      tab3Ink: s === 3 ? '#1E2D4A' : '#8A8898',
+      pick1: () => this.setState({ tables: 1 }),
+      pick2: () => this.setState({ tables: 2 }),
+      pick3: () => this.setState({ tables: 3 }),
+      t1btn: this.tableBtn(n === 1), t2btn: this.tableBtn(n === 2), t3btn: this.tableBtn(n === 3),
+      subLabel: n + (n === 1 ? ' table × $30' : ' tables × $30'),
+      subAmount: this.money(p.subtotalCents), feeAmount: this.money(p.feeCents), dueAmount: this.money(p.totalCents),
+      submitLabel: 'Submit and pay ' + this.money(p.totalCents) + ' →',
+      showVendors: t === 'vendors', showCopy: t === 'copy', showMoney: t === 'money',
+      showVols: t === 'vols', showPhotos: t === 'photos',
+      openVendors: () => this.setState({ adminTab: 'vendors' }),
+      openCopy: () => this.setState({ adminTab: 'copy' }),
+      openMoney: () => this.setState({ adminTab: 'money' }),
+      openVols: () => this.setState({ adminTab: 'vols' }),
+      openPhotos: () => this.setState({ adminTab: 'photos' }),
+      styVendors: this.segStyle(t === 'vendors'), styCopy: this.segStyle(t === 'copy'),
+      styMoney: this.segStyle(t === 'money'), styVols: this.segStyle(t === 'vols'),
+      styPhotos: this.segStyle(t === 'photos'),
+    };
+  }
+}
+</script>
+</body>
+</html>
