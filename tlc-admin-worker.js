@@ -38,6 +38,8 @@ import { dayKey, pruneBefore, countInMonth, tapCountLabel, everCounted, validTap
 import { VALUES, valueByKey, normalizeValue, mergedValues, VALUE_TEXT_FIELDS } from './admin/values.js';
 import { hashPassword, verifyPassword, createSession, getSession, deleteSession, sessionCookieHeader, clearSessionCookieHeader, logAudit, hasPermission, ALL_PERMISSIONS, PERMISSIONS, PERMISSION_PRESETS, migratePermissionKeys } from './admin/auth.js';
 import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHtml, cancelBrevoCampaign, getBrevoListCount } from './admin/email.js';
+import { buildPayrollCsv, buildPayrollPdfLines } from './admin/payroll-report.js';
+import { buildMonospacePdf } from './admin/pdf.js';
 import { handleGymRoutes, sweepExpiredItems, extractImageKeys } from './admin/gym.js';
 import { migrateLegacyPage, starterBlocks, sanitizeBlocks, sanitizeBlock, parseBlocks, newBlock,
          renderPage, renderBlock, BLOCK_DEFS, BLOCK_TYPE_KEYS, GROUPS, BG, INK, SIZES, SPLITS, TONES,
@@ -5809,12 +5811,46 @@ ${PAYROLL_HTML}`, 'Payroll');
       const recipients = Array.from(new Set(
         [...to.split(','), 'dinger@timothystl.org'].map((x) => x.trim().toLowerCase()).filter(Boolean)
       ));
+
+      // The CSV and PDF attachments are built from the same posted figures
+      // the HTML table above already read — one report, three shapes, never
+      // a fourth copy that could quietly disagree with what's on screen.
+      // Brevo's attachment field wants base64; bytesToBase64 goes through
+      // TextEncoder so a name with a real accented character round-trips
+      // correctly in the CSV (the PDF's own text is ASCII-only by
+      // construction — see admin/pdf.js — so the same helper is exact for
+      // both, not just close enough).
+      function bytesToBase64(bytes) {
+        let binary = '';
+        const chunk = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunk) {
+          binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+        }
+        return btoa(binary);
+      }
+      const toBase64 = (str) => bytesToBase64(new TextEncoder().encode(str));
+      let attachments = [];
+      try {
+        const safeName = label.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || String(body.periodStart || 'period');
+        attachments = [
+          { name: `payroll-${safeName}.csv`, content: toBase64(buildPayrollCsv(body)) },
+          { name: `payroll-${safeName}.pdf`, content: toBase64(buildMonospacePdf(buildPayrollPdfLines(body))) },
+        ];
+      } catch (e) {
+        // A malformed attachment must not silently swallow the whole
+        // report — the bookkeeper still gets the HTML table in the body
+        // either way, and the reference is logged for the office to chase.
+        console.error('payroll report attachment build failed:', e.message);
+        attachments = [];
+      }
+
       let sent;
       try {
         sent = await sendTransactionalEmail(env, {
           toEmails: recipients,
           subject: `Payroll — ${label}`,
           htmlContent: emailHtml,
+          attachments,
         });
       } catch (e) {
         sent = { error: e.message };
