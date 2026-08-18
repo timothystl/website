@@ -7,10 +7,10 @@ import { TINYMCE_HEAD, TINYMCE_BASE } from './db.js';
 // editor's canvas uses. Preview only — nothing here touches what is stored.
 import { sanitizeRich } from './blocks.js';
 import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
-import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, SIDEBAR_JS, TOGGLE_WORD_JS, LOCKED_FIELD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
+import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, TABS_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, SIDEBAR_JS, TOGGLE_WORD_JS, LOCKED_FIELD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 import { APPEARANCE_CSS } from './appearance.js';
 
-export const VERSION = 'v5.21.0'; // minor: a link field says #name is a real option, not just a page or a URL
+export const VERSION = 'v5.22.0'; // minor: the Christmas Market is an event section — two public pages, a jump-links block, and five admin tabs
 
 // ── THE SHARED SHELL CSS/JS, EXTERNALISED ───────────────────────
 // This used to be inlined into every admin response inside <style>/<script>
@@ -366,6 +366,7 @@ ${MENU_CSS}
 ${PRESET_CSS}
 ${GYM_CAL_CSS}
 ${PANEL_LIST_CSS}
+${TABS_CSS}
 ${APPEARANCE_CSS}
 ${NEWSLETTER_CSS}
 ${TOAST_CSS}
@@ -688,9 +689,16 @@ ${extraHead}
 // through escapeHtml while the sidebar had `&amp;` typed into its markup — one
 // constant holding the entity would have printed "Money &amp;amp; Building"
 // in the context bar.
+//
+// ⚠ `events` is a SIXTH group, added when the Christmas Market became an event
+// section rather than a vendor list. It holds the two screens that are a thing
+// the church PUTS ON — the market and the gym, both of which are a date, a
+// room and people turning up. Giving and Payroll stay under Money & Building,
+// because those are the church's own money rather than an event's.
 export const GROUPS = {
   website: 'Website',
   email: 'Communication',
+  events: 'Events',
   money: 'Money & Building',
   people: 'People & Access',
   setup: 'Setup',
@@ -780,14 +788,21 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}, crum
     hp('settings_manage') ? navItem('/filtered', 'Filtered Mail', activeTab === 'filtered') : '',
   ].filter(Boolean).join('');
 
+  // ── EVENTS ──
+  // ⚠ The market screen is reachable on any of five permissions now (it is the
+  // whole event section, not just the vendor list), so the ROW has to be too —
+  // gating it on market_manage alone would leave the office person who writes
+  // its pages with no way to get to them. The badge still needs market_manage,
+  // because an unpaid-application count is the coordinator's own business.
+  const eventItems = [
+    (hp('market_manage') || hp('settings_manage') || hp('giving_manage') || hp('pages_edit') || hp('ministries_edit'))
+      ? navItem('/market', 'Christmas Market', activeTab === 'market', badge(b.market, hp('market_manage'), `${b.market} vendor application(s) with no payment recorded`)) : '',
+    hp('gym_manage')      ? navItem('/gym-rentals', 'Gym Rentals', activeTab === 'gym', badge(b.gym, hp('gym_manage'), `${b.gym} gym request(s) waiting for review`)) : '',
+  ].filter(Boolean).join('');
+
   // ── MONEY & BUILDING ──
   const moneyItems = [
     hp('giving_manage')   ? navItem('/giving', 'Giving', activeTab === 'giving') : '',
-    // Money & Building rather than Website: the screen is a payment ledger with
-    // a vendor list attached, and what the coordinator opens it to answer is
-    // "who still owes for their table".
-    hp('market_manage')   ? navItem('/market', 'Christmas Market', activeTab === 'market', badge(b.market, hp('market_manage'), `${b.market} vendor application(s) with no payment recorded`)) : '',
-    hp('gym_manage')      ? navItem('/gym-rentals', 'Gym Rentals', activeTab === 'gym', badge(b.gym, hp('gym_manage'), `${b.gym} gym request(s) waiting for review`)) : '',
     hp('payroll_manage')  ? navItem('/payroll', 'Payroll', activeTab === 'payroll') : '',
   ].filter(Boolean).join('');
 
@@ -817,6 +832,7 @@ export function sidebarShell(activeTab, user, extraLinks = '', badges = {}, crum
   </div>
   ${websiteItems ? `<div class="sidebar-group"><div class="sidebar-group-label">${escapeHtml(GROUPS.website)}</div>${websiteItems}</div>` : ''}
   ${emailItems ? `<div class="sidebar-group"><div class="sidebar-group-label">${escapeHtml(GROUPS.email)}</div>${emailItems}</div>` : ''}
+  ${eventItems ? `<div class="sidebar-group"><div class="sidebar-group-label">${escapeHtml(GROUPS.events)}</div>${eventItems}</div>` : ''}
   ${moneyItems ? `<div class="sidebar-group"><div class="sidebar-group-label">${escapeHtml(GROUPS.money)}</div>${moneyItems}</div>` : ''}
   ${peopleItems ? `<div class="sidebar-group"><div class="sidebar-group-label">${escapeHtml(GROUPS.people)}</div>${peopleItems}</div>` : ''}
   ${setupItems ? `<div class="sidebar-group"><div class="sidebar-group-label">${escapeHtml(GROUPS.setup)}</div>${setupItems}</div>` : ''}
@@ -885,8 +901,8 @@ const TRAIL = {
   subscribers: { group: GROUPS.email, section: 'Subscribers' },
   filtered: { group: GROUPS.email, section: 'Filtered mail' },
   giving: { group: GROUPS.money, section: 'Giving' },
-  market: { group: GROUPS.money, section: 'Christmas Market vendors', waits: 'market' },
-  gym: { group: GROUPS.money, section: 'Gym rentals', waits: 'gym' },
+  market: { group: GROUPS.events, section: 'Christmas Market vendors', waits: 'market' },
+  gym: { group: GROUPS.events, section: 'Gym rentals', waits: 'gym' },
   payroll: { group: GROUPS.money, section: 'Payroll' },
   staff: { group: GROUPS.people, section: 'Staff directory' },
   users: { group: GROUPS.people, section: 'Users' },

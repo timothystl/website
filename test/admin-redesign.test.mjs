@@ -2565,7 +2565,7 @@ group('the shell is the sidebar plus a context bar');
   // was never the sidebar — it was hiding it behind a hamburger. Twenty-one
   // sections in five groups is more than a horizontal bar holds honestly.
   has(body, 'class="sidebar"', 'the sidebar is there');
-  for (const g of ['Website', 'Communication', 'Money &amp; Building', 'People &amp; Access', 'Setup']) {
+  for (const g of ['Website', 'Communication', 'Events', 'Money &amp; Building', 'People &amp; Access', 'Setup']) {
     has(body, `>${g}</div>`, `${g} is a group`);
   }
   // ⚠ The heading and the trail read the same constant. They were two typed
@@ -2623,7 +2623,7 @@ group('the shell is the sidebar plus a context bar');
 
   // The trail follows the screen.
   const gym = await (await call(env, '/gym-rentals', { cookie })).text();
-  has(gym, 'class="tlc-ctx-group">Money &amp; Building<', 'a gym screen names its group');
+  has(gym, 'class="tlc-ctx-group">Events<', 'a gym screen names its group');
   has(gym, 'class="tlc-ctx-section">Gym rentals<', 'and its section');
 }
 
@@ -3557,12 +3557,128 @@ group('the coordinator’s list');
 // on market_manage — that would have quietly taken settings/payment editing
 // away from both presets. So the PAGE is reachable by any of the three, and
 // each PANEL — and each mutating route — still checks its own.
+// ── the market is an event section, in five tabs ────────────────────────────
+// README §4 of design_handoff_market_event. The screen answers five different
+// questions now, and the rule that makes that safe is the same one the three
+// permissions have always had: a tab a reader cannot use is ABSENT, and every
+// mutating route still checks its own permission whoever else can see the tab.
+group('the Christmas Market screen is five tabs, and each one is somebody’s');
+{
+  const { db, env } = await boot();
+
+  db.prepare("INSERT INTO ministry_media (filename, kind, url, thumb_url, alt, meta, bytes, created_by, created_at) VALUES ('christmasmarket-2024.webp','photo','/images/events/christmasmarket/christmasmarket-2024.webp','','','',0,'x','2026-01-01')").run();
+  const mediaId = db.prepare("SELECT id FROM ministry_media WHERE filename='christmasmarket-2024.webp'").get().id;
+
+  const { cookie: full } = signIn(db);
+  const all = await (await call(env, '/market', { cookie: full })).text();
+  for (const t of ['Vendors', 'Page &amp; copy', 'Money &amp; dates', 'Volunteers', 'Photos']) {
+    has(all, `>${t}</a>`, `full access sees the ${t} tab`);
+  }
+  has(all, 'tlc-tile-num', 'and lands on Vendors, which is the first tab');
+
+  // ⚠ Only the ACTIVE tab is built. The vendor list is seventy people's home
+  // addresses; it must not be in the markup of a tab somebody opened to fix a
+  // photograph's description.
+  const photos = await (await call(env, '/market?tab=photos', { cookie: full })).text();
+  lacks(photos, 'tlc-tile-num', 'the vendor tiles are not rendered on another tab');
+  has(photos, 'What is in the photo', 'and the photos tab is');
+
+  const pages = await (await call(env, '/market?tab=pages', { cookie: full })).text();
+  has(pages, '/pages/marketvendors/edit', 'the pages tab links into the real editor');
+  has(pages, '/pages/marketvendorsapply/edit', 'for the apply page too');
+  has(pages, '/christmasmarket/vendors', 'and out to the live page');
+
+  // A tab nobody asked for by name falls back rather than showing nothing.
+  const junk = await (await call(env, '/market?tab=nonsense', { cookie: full })).text();
+  has(junk, 'tlc-tile-num', 'an unknown tab name lands on the first real one');
+
+  // The coordinator: market_manage alone.
+  const { cookie: marla } = signIn(db, ['market_manage'], 'marla');
+  const mb = await (await call(env, '/market', { cookie: marla })).text();
+  has(mb, '>Vendors</a>', 'the coordinator gets Vendors');
+  has(mb, '>Volunteers</a>', 'and Volunteers, which is her own roster');
+  lacks(mb, 'Money &amp; dates</a>', 'and no Money & dates tab at all — not disabled, absent');
+  lacks(mb, 'Page &amp; copy</a>', 'and no Page & copy');
+  lacks(mb, 'Photos</a>', 'and no Photos');
+  // ⚠ Asking for a tab she cannot see must not hand it over.
+  const sneak = await (await call(env, '/market?tab=money', { cookie: marla })).text();
+  lacks(sneak, 'Tithe.ly fund ID', 'and typing the address of one gets her the tab she can open instead');
+  lacks(sneak, 'Most tables one vendor may take', 'for the settings panel too');
+
+  // The page writer: pages_edit alone, no market_manage.
+  const { cookie: writer } = signIn(db, ['pages_edit'], 'writer');
+  eq((await call(env, '/market', { cookie: writer })).status, 200, 'pages_edit alone opens the screen');
+  const wb = await (await call(env, '/market', { cookie: writer })).text();
+  has(wb, 'Page &amp; copy', 'and lands on the tab they came for');
+  has(wb, 'Photos</a>', 'photos too — pages_edit covers those');
+  lacks(wb, '>Vendors</a>', 'but never the vendor list');
+  lacks(wb, '>Volunteers</a>', 'nor the volunteer roster');
+  eq((await call(env, '/market/export.csv', { cookie: writer })).status, 403,
+    'and the export still refuses them — reaching the page is not reaching the PII');
+  eq((await call(env, '/market/settings', { cookie: writer, method: 'POST', form: { market_table_fee: '99' } })).status, 403,
+    'and so does the settings route');
+
+  // Photos: the alt text really saves, and only for somebody who may.
+  const shown = await (await call(env, '/market?tab=photos', { cookie: writer })).text();
+  has(shown, 'christmasmarket-2024.webp', 'a market photograph is listed on the photos tab');
+  const saved = await call(env, '/market/photo-alt', { cookie: writer, method: 'POST', form: { id: String(mediaId), alt: 'Vendors and shoppers in the gym' } });
+  eq(saved.status, 302, 'saving a description redirects');
+  eq(db.prepare('SELECT alt FROM ministry_media WHERE id = ?').get(mediaId).alt, 'Vendors and shoppers in the gym',
+    'and the description is stored');
+  eq((await call(env, '/market/photo-alt', { cookie: marla, method: 'POST', form: { id: String(mediaId), alt: 'x' } })).status, 403,
+    'the coordinator cannot write it — she has no photos tab to write it from');
+
+  // ── the volunteers tab, both ways ────────────────────────────────────
+  // ⚠ STUBBED, deliberately, in both directions. Serve is a different
+  // application on another host; a test that really called it would pass or
+  // fail on whether that host happened to be up, which is exactly the thing
+  // this tab is supposed to survive rather than be measured by.
+  const realFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => new Response(JSON.stringify({
+      open: true, signedUp: 7, openShifts: 4,
+      roles: [
+        { name: 'Setup crew', shifts: [{ label: 'Friday 4–8pm', needed: 6, filled: 2, people: [{ name: 'Ann Poe', email: 'ann@example.com' }, { name: 'Bo Rice', email: 'bo@example.com' }] }] },
+        { name: 'Welcome table', shifts: [{ label: 'Saturday 10–1', needed: 2, filled: 2, people: [{ name: 'Cy Dean', email: 'cy@example.com' }, { name: 'Di Ely', email: 'di@example.com' }] }] },
+        { name: 'Cleanup', shifts: [{ label: 'Saturday 5–7pm', needed: 3, filled: 0, people: [] }] },
+      ],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    const vol = await (await call(env, '/market?tab=volunteers', { cookie: marla })).text();
+    has(vol, 'Setup crew', 'the roster is read from Serve');
+    has(vol, 'mailto:ann@example.com', 'and a volunteer is somebody you can write to');
+    has(vol, 'Nobody yet', 'an entirely open shift says so in words, not as a blank cell');
+    has(vol, 'Full', 'a covered role reads as covered');
+    // ⚠ Most short-handed first. Sorted by name this is a list; sorted by what
+    // is missing it is a worklist, which is the only reason it gets opened.
+    ok(vol.indexOf('Setup crew') < vol.indexOf('Cleanup')
+      && vol.indexOf('Cleanup') < vol.indexOf('Welcome table'),
+      'roles are ordered by how short-handed they are');
+    has(vol, 'serve.timothystl.org/christmasmarket', 'with the way into Serve on every role');
+
+    // A dead Serve must not take the tab with it.
+    globalThis.fetch = async () => { throw new Error('nope'); };
+    const down = await (await call(env, '/market?tab=volunteers', { cookie: marla })).text();
+    has(down, 'Counts are not available right now', 'an unreachable Serve degrades rather than failing');
+    has(down, 'Manage shifts in Serve', 'and still offers the one thing that always works');
+
+    // ⚠ And an answer of the wrong shape is not an answer. A proxy or a
+    // stray page answering 200 would otherwise draw four tiles of zeros and
+    // present them as the roster.
+    globalThis.fetch = async () => new Response(JSON.stringify({ ok: true, message: 'not the roster' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    const junkVol = await (await call(env, '/market?tab=volunteers', { cookie: marla })).text();
+    has(junkVol, 'Counts are not available right now', 'a reply this screen cannot read is treated as no reply');
+  } finally { globalThis.fetch = realFetch; }
+}
+
 group('the vendor list is gated on its own permission');
 {
   const { db, env } = await boot();
-  // Nobody's permission at all.
-  const { cookie: nobody } = signIn(db, ['pages_edit', 'news_edit'], 'nobody');
-  eq((await call(env, '/market', { cookie: nobody })).status, 403, 'refused with none of the three permissions');
+  // ⚠ FIVE permissions reach this page now, not three — pages_edit and
+  // ministries_edit joined when it became the event section, because its own
+  // pages and its own photographs are managed here. So "nobody" has to mean
+  // none of the five.
+  const { cookie: nobody } = signIn(db, ['news_edit'], 'nobody');
+  eq((await call(env, '/market', { cookie: nobody })).status, 403, 'refused with none of the five permissions');
 
   const { cookie: marla } = signIn(db, ['market_manage'], 'marla');
   eq((await call(env, '/market', { cookie: marla })).status, 200, 'the coordinator gets in with market_manage alone');
@@ -3580,7 +3696,12 @@ group('the vendor list is gated on its own permission');
   // Office staff: settings_manage, no market_manage, no giving_manage.
   const { cookie: office } = signIn(db, ['pages_edit', 'settings_manage'], 'office');
   eq((await call(env, '/market', { cookie: office })).status, 200, 'settings_manage alone still gets in');
-  const officeBody = await (await call(env, '/market', { cookie: office })).text();
+  // ⚠ Money & dates is a TAB now, and office staff also holds pages_edit, so
+  // the tab they land on by default is Page & copy — the first one they can
+  // open, deliberately, rather than a hardcoded Vendors they would find empty.
+  const officeLanding = await (await call(env, '/market', { cookie: office })).text();
+  has(officeLanding, 'Page &amp; copy', 'a bare /market lands on the first tab they can open');
+  const officeBody = await (await call(env, '/market?tab=money', { cookie: office })).text();
   has(officeBody, 'Most tables one vendor may take', 'and sees the settings panel');
   lacks(officeBody, 'Tithe.ly fund ID', 'but not the payment panel');
   lacks(officeBody, 'tlc-tile-num', 'and no vendor tiles/list — that PII is market_manage-only');
@@ -3592,6 +3713,7 @@ group('the vendor list is gated on its own permission');
   const { cookie: bookkeeper } = signIn(db, ['gym_manage', 'giving_manage', 'payroll_manage'], 'bookkeeper');
   const bkBody = await (await call(env, '/market', { cookie: bookkeeper })).text();
   has(bkBody, 'Tithe.ly fund ID', 'the bookkeeper sees the payment panel');
+  lacks(bkBody, 'Volunteers</a>', 'and no Volunteers tab — that roster is the coordinator’s');
   lacks(bkBody, 'Most tables one vendor may take', 'but not the settings panel');
   lacks(bkBody, 'tlc-tile-num', 'and no vendor list');
 }
@@ -3612,7 +3734,7 @@ group('the Christmas Market fund ID is set from the Christmas Market screen');
   lacks(giving, 'Christmas Market fund', 'the field is gone from the Giving screen');
   has(giving, '/market', 'which points to where it actually lives now');
 
-  const market = await (await call(env, '/market', { cookie })).text();
+  const market = await (await call(env, '/market?tab=money', { cookie })).text();
   has(market, 'Tithe.ly fund ID', 'the field is on the Christmas Market screen instead');
 
   const save = await call(env, '/market/fund', { cookie, method: 'POST', form: { market_fund_id: 'mkt-fund-123' } });
@@ -3621,7 +3743,7 @@ group('the Christmas Market fund ID is set from the Christmas Market screen');
   eq(db.prepare("SELECT value FROM site_settings WHERE key='market_fund_id'").get().value, 'mkt-fund-123',
     'and the fund ID is stored');
 
-  const after = await (await call(env, '/market', { cookie })).text();
+  const after = await (await call(env, '/market?tab=money', { cookie })).text();
   has(after, 'mkt-fund-123', 'the saved value is shown back on the screen');
 
   // Blank is a real, valid value — it means "use the base link's own fund" —
@@ -3673,7 +3795,7 @@ group('the other seven market settings moved to the Christmas Market screen too'
     'and the switch on /market is untouched');
 
   // The real save path is now /market/settings, gated settings_manage.
-  const market = await (await call(env, '/market', { cookie })).text();
+  const market = await (await call(env, '/market?tab=money', { cookie })).text();
   has(market, 'Most tables one vendor may take', 'the field is on the Christmas Market screen');
 
   const save = await call(env, '/market/settings', { cookie, method: 'POST', form: {

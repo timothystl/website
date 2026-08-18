@@ -259,10 +259,17 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
   // quietly take settings/payment editing away from anyone who has it today
   // but isn't the coordinator. So the PAGE is reachable by any of the three,
   // and each PANEL — and each mutating route below — checks its own.
+//
+  // ⚠ TWO MORE JOINED THEM when the screen became the event section: the
+  // office person who writes the market's own pages (pages_edit) and whoever
+  // keeps its photographs (ministries_edit). Same rule as the first three —
+  // holding one of them opens the page and exactly one tab, never the others.
   const canMarket = hasPermission(currentUser, 'market_manage');
   const canSettings = hasPermission(currentUser, 'settings_manage');
   const canGiving = hasPermission(currentUser, 'giving_manage');
-  if (!canMarket && !canSettings && !canGiving) {
+  const canPages = hasPermission(currentUser, 'pages_edit');
+  const canPhotos = canPages || hasPermission(currentUser, 'ministries_edit');
+  if (!canMarket && !canSettings && !canGiving && !canPages && !canPhotos) {
     return new Response('Access denied.', { status: 403 });
   }
 
@@ -455,9 +462,48 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     return new Response('', { status: 302, headers: { Location: '/market?toast=' + encodeURIComponent('Saved · written to the audit log') } });
   }
 
+  // The one thing the Photos tab writes. Uploading is deliberately NOT here —
+  // see the tab itself for why there is one uploader on this site and not two.
+  if (path === '/market/photo-alt' && method === 'POST') {
+    if (!canPhotos) return new Response('Access denied.', { status: 403 });
+    const form = await request.formData();
+    const id = Number(form.get('id') || 0);
+    const alt = cap(form.get('alt'), 300);
+    const before = await env.DB.prepare('SELECT filename, alt FROM ministry_media WHERE id = ?').bind(id).first().catch(() => null);
+    if (before) {
+      await env.DB.prepare('UPDATE ministry_media SET alt = ? WHERE id = ?').bind(alt, id).run();
+      await logAudit(env.DB, currentUser, 'update', 'media', String(id), before.filename || '', { alt: before.alt }, { alt });
+    }
+    return new Response('', { status: 302, headers: { Location: '/market?tab=photos&toast=' + encodeURIComponent('Saved \u00b7 written to the audit log') } });
+  }
+
   if (path === '/market' && method === 'GET') {
     const msg = url.searchParams.get('msg');
     const cfg = sectionCfg('market');
+
+    // ── FIVE TABS, ONE SCREEN ────────────────────────────────────────────
+    // ⚠ A tab a reader cannot use is ABSENT, not disabled. A disabled tab
+    // tells somebody the church has a screen they are not trusted with, which
+    // is a worse thing to say than nothing — and the coordinator holding
+    // market_manage alone genuinely has no business knowing the Tithe.ly fund
+    // exists. Every tab still checks its own permission when it renders, and
+    // every mutating route checks its own again: this list decides what is
+    // DRAWN, never what is allowed.
+    const TABS = [
+      { key: 'vendors', label: 'Vendors', on: canMarket },
+      { key: 'pages', label: 'Page & copy', on: canPages },
+      { key: 'money', label: 'Money & dates', on: canSettings || canGiving },
+      { key: 'volunteers', label: 'Volunteers', on: canMarket },
+      { key: 'photos', label: 'Photos', on: canPhotos },
+    ].filter((t) => t.on);
+    // ⚠ The default is the first tab this reader can actually open, not a
+    // hardcoded 'vendors' — otherwise the office person who only holds
+    // pages_edit lands on an empty screen and concludes the tab is broken.
+    const wanted = String(url.searchParams.get('tab') || '');
+    const active = (TABS.find((t) => t.key === wanted) || TABS[0] || { key: '' }).key;
+    const tabNav = TABS.length > 1 ? `<nav class="tlc-tabs" aria-label="Christmas Market">${TABS.map((t) =>
+      `<a class="tlc-tab${t.key === active ? ' is-on' : ''}" href="/market?tab=${t.key}"${t.key === active ? ' aria-current="page"' : ''}>${escapeHtml(t.label)}</a>`
+    ).join('')}</nav>` : '';
 
     // ── EVERYTHING BELOW IS canMarket ONLY. Somebody who reached this page on
     // settings_manage or giving_manage alone gets none of it — not the
@@ -468,7 +514,12 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     let vendorSection = '';
     let vendorDrawer = '';
     let alertHtml = '';
-    if (canMarket) {
+    // ⚠ Only the ACTIVE tab is built. Rendering all five and hiding four would
+    // read every vendor's home address, every page's blocks and the volunteer
+    // roster on every single view of this screen, to throw four fifths of it
+    // away — and it would put PII in the markup of a tab somebody opened for
+    // photographs.
+    if (active === 'vendors' && canMarket) {
       const rows = await allApplications(env);
       const editId = Number(url.searchParams.get('edit') || 0);
       const editing = editId ? rows.find((r) => r.id === editId) : null;
@@ -531,7 +582,7 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
             ? `Payments open at the church's own giving link with the amount filled in. ${priced}`
             : 'No giving link is set, so the page will take applications but cannot open a payment. Set it below, under Payment.';
         })()}</p>
-      `, canSettings || canGiving ? { right: '<a class="tlc-action-quiet" href="#market-config">Fees, dates &amp; payment</a>' } : {});
+      `, canSettings || canGiving ? { right: '<a class="tlc-action-quiet" href="/market?tab=money">Fees, dates &amp; payment</a>' } : {});
 
       const tile = (label, n, note) =>
         `<div class="tlc-tile"><div class="tlc-tile-label">${escapeHtml(label)}</div>`
@@ -610,7 +661,7 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     // Consolidated here at Andrew's own request, after finding "Most tables
     // one vendor may take" tucked into the generic Settings screen with no
     // link from here pointing at it.
-    const settingsPanel = canSettings ? panel('Market settings', `
+    const settingsPanel = (active === 'money' && canSettings) ? panel('Market settings', `
       <form method="POST" action="/market/settings">
         ${renderField({ name: 'market_date_label', label: 'Market day', value: settings.dateLabel,
           hint: 'Written the way it should read on the page — this is printed, not parsed.' })}
@@ -634,7 +685,7 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     // Moved here verbatim from the Giving screen (see /market/fund and
     // /market/payment above) — same forms, same fields, addressed under
     // /market now because that is where the rest of the market already is.
-    const paymentPanel = canGiving ? panel('Payment', `
+    const paymentPanel = (active === 'money' && canGiving) ? panel('Payment', `
       <form method="POST" action="/market/fund">
         ${renderField({ name: 'market_fund_id', label: 'Tithe.ly fund ID', value: settings.fundId,
           placeholder: "Blank uses the base link's fund",
@@ -654,6 +705,203 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
       </form>
     `) : '';
 
+    // ── PAGE & COPY ──────────────────────────────────────────────────────
+    // Everything a visitor reads on the market's pages is a block field, so
+    // this tab's job is to get somebody INTO the page editor with the state of
+    // each page already answered — not to be a second editor.
+    //
+    // ⚠ NO REORDERING HERE, and that is a deliberate departure from the
+    // handoff's "drag-to-reorder section list". Blocks are arranged in one
+    // place, the page editor, where the canvas shows what the arrangement
+    // actually looks like. A second surface that writes the same `blocks`
+    // column is the exact trap this repo has warned about since the
+    // Foundations pass — two forms disagreeing about one record. The list
+    // below is a read-only table of contents, which is the half that answers
+    // "what is on this page" without inviting somebody to rearrange it blind.
+    let pagesSection = '';
+    if (active === 'pages' && canPages) {
+      const ids = ['christmasmarket', 'marketvendors', 'marketvendorsapply'];
+      const rows = [];
+      for (const id of ids) {
+        const r = await env.DB.prepare(
+          'SELECT id, title, slug, status, blocks, published_blocks, updated_at, updated_by FROM pages WHERE id = ?'
+        ).bind(id).first().catch(() => null);
+        if (r) rows.push(r);
+      }
+      const cards = rows.map((r) => {
+        const draft = String(r.blocks || '');
+        const live = String(r.published_blocks || '');
+        const published = !!live;
+        const pending = published && draft !== live;
+        const state = !published
+          ? statusPill('warn', 'Never published')
+          : pending ? statusPill('warn', 'Unpublished edits') : statusPill('good', 'Live');
+        let sections = [];
+        try {
+          sections = (JSON.parse(draft) || []).filter((b) => b && (b.title || b.eyebrow))
+            .map((b) => String(b.title || b.eyebrow));
+        } catch (_) { sections = []; }
+        const banner = pending
+          ? `<div class="alert alert-warn" style="margin:0 0 14px;">This page has edits that nobody has published. A visitor is still seeing the version before them — open the editor, read the draft against the live page, and press Publish.</div>`
+          : (!published
+            ? `<div class="alert alert-warn" style="margin:0 0 14px;">Nothing has ever been published from this page's blocks, so what a visitor sees is not what is in the editor.</div>`
+            : '');
+        return panel(r.title || r.id, `
+          ${banner}
+          <p class="tlc-hint" style="margin:0 0 12px;"><code>${escapeHtml(r.slug || '')}</code>${
+            r.updated_at ? ` · last saved ${escapeHtml(String(r.updated_at).slice(0, 10))}${r.updated_by ? ' by ' + escapeHtml(r.updated_by) : ''}` : ''}</p>
+          <div class="btn-row" style="margin:0 0 14px;">
+            <a class="tlc-btn-primary" href="/pages/${escapeHtml(r.id)}/edit">Edit the page</a>
+            <a class="tlc-action-quiet" href="https://timothystl.org${escapeHtml(r.slug || '')}" target="_blank" rel="noopener">View it live</a>
+            ${published ? `<a class="tlc-action-quiet" href="/pages/${escapeHtml(r.id)}/edit#publish">Compare &amp; publish</a>` : ''}
+          </div>
+          <p class="tlc-hint" style="margin:0 0 6px;"><strong>What is on it</strong> — in page order. Rearranging happens in the editor, where you can see it.</p>
+          ${sections.length
+            ? `<ol class="tlc-hint" style="margin:0;padding-left:20px;">${sections.map((t) => `<li>${escapeHtml(t)}</li>`).join('')}</ol>`
+            : `<p class="tlc-hint" style="margin:0;">Nothing on this page carries a heading yet.</p>`}
+        `, { right: state });
+      }).join('');
+      pagesSection = `<header class="tlc-section-head">
+          <div class="tlc-section-headings">
+            <h1 class="tlc-title">Page &amp; copy</h1>
+            <p class="tlc-purpose">The market's own pages. Every word a visitor reads on them is a field in the page editor — nothing about the market is typed into code.</p>
+          </div>
+        </header>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;">${cards}</div>`
+        + (rows.length ? '' : `<p class="tlc-hint">The market's pages are not in the database yet — they arrive with the next deploy's migration.</p>`);
+    }
+
+    // ── VOLUNTEERS ───────────────────────────────────────────────────────
+    // ⚠ READ-ONLY, AND THERE IS NO SIGN-IN. Shifts live in Serve
+    // (serve.timothystl.org), which is a different application with its own
+    // accounts; this is one unauthenticated GET of a summary it publishes, so
+    // the coordinator can see who is covering the market without a second
+    // login. Nothing here writes back, and nothing should: two places editing
+    // one roster is two rosters.
+    let volunteersSection = '';
+    if (active === 'volunteers' && canMarket) {
+      let vol = null;
+      let volError = '';
+      try {
+        // ⚠ A TIMEOUT, because this is another application on another host and
+        // an admin screen must not sit waiting on one. Four seconds and the
+        // tab renders its own honest empty state instead.
+        const res = await fetch('https://serve.timothystl.org/api/signups/christmasmarket/summary',
+          { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(4000) });
+        if (res.ok) vol = await res.json();
+        else volError = `Serve answered ${res.status}.`;
+      } catch (e) { volError = 'Serve could not be reached.'; }
+      // ⚠ And an answer that is not the shape this expects is not an answer.
+      // Something else on that host answering 200 with a page, or a proxy
+      // returning its own JSON, would otherwise draw four tiles of zeros and
+      // call them the roster.
+      if (vol && !Array.isArray(vol.roles)) { vol = null; volError = volError || 'Serve answered with something this screen could not read.'; }
+
+      const roles = Array.isArray(vol?.roles) ? vol.roles : [];
+      // ⚠ Most short-handed first. A roster sorted by name is a list; sorted by
+      // what is missing, it is a worklist — which is the only reason the
+      // coordinator opens it.
+      const shortOf = (r) => (r.shifts || []).reduce((a, sh) =>
+        a + Math.max(0, (Number(sh.needed) || 0) - (Number(sh.filled) || 0)), 0);
+      const sorted = roles.slice().sort((a, b) => shortOf(b) - shortOf(a));
+
+      const tile = (label, n, note) =>
+        `<div class="tlc-tile"><div class="tlc-tile-label">${escapeHtml(label)}</div>`
+        + `<div class="tlc-tile-num">${escapeHtml(String(n))}</div>`
+        + `<div class="tlc-tile-note">${escapeHtml(note)}</div></div>`;
+
+      const rolePanels = sorted.map((r) => {
+        const shifts = Array.isArray(r.shifts) ? r.shifts : [];
+        const rows = shifts.map((sh) => {
+          const needed = Number(sh.needed) || 0;
+          const filled = Number(sh.filled) || 0;
+          const people = Array.isArray(sh.people) ? sh.people : [];
+          const who = people.length
+            ? people.map((pp) => pp && pp.email
+              ? `<a href="mailto:${escapeHtml(pp.email)}">${escapeHtml(pp.name || pp.email)}</a>`
+              : escapeHtml((pp && pp.name) || '')).filter(Boolean).join(', ')
+            // ⚠ An empty shift says so in words. A blank cell reads as data
+            // that failed to load, which is the one thing it must not be
+            // confused with on a screen that can also fail to load.
+            : '<span class="tlc-hint">Nobody yet — this shift is entirely open.</span>';
+          return `<tr><td style="padding:6px 12px 6px 0;">${escapeHtml(sh.label || '')}</td>`
+            + `<td style="padding:6px 12px 6px 0;white-space:nowrap;">${filled} of ${needed}</td>`
+            + `<td style="padding:6px 0;">${who}</td></tr>`;
+        }).join('');
+        const short = shortOf(r);
+        return panel(r.name || 'Role', `
+          <table style="width:100%;border-collapse:collapse;font-size:14px;">${rows
+            || '<tr><td class="tlc-hint">No shifts are set up for this role yet.</td></tr>'}</table>
+        `, {
+          right: (short > 0 ? statusPill('warn', short + ' still needed') : statusPill('good', 'Full'))
+            + ` <a class="tlc-action-quiet" href="https://serve.timothystl.org/christmasmarket" target="_blank" rel="noopener">Manage shifts in Serve</a>`,
+        });
+      }).join('');
+
+      // ⚠ A failure here is NOT an error state for this screen. Serve being
+      // down, or this endpoint not existing yet, must not stop the coordinator
+      // opening the tab — so it degrades to the one thing that always
+      // works, a link to the app that owns the roster.
+      volunteersSection = `<header class="tlc-section-head">
+          <div class="tlc-section-headings">
+            <h1 class="tlc-title">Volunteers</h1>
+            <p class="tlc-purpose">Who is covering the market, read from Serve. Shifts are set up and changed there — this is a window on them, not a second copy.</p>
+          </div>
+          <div class="tlc-section-actions"><a class="tlc-btn-primary" href="https://serve.timothystl.org/christmasmarket" target="_blank" rel="noopener">Manage shifts in Serve</a></div>
+        </header>`
+        + (vol
+          ? `<div class="tlc-tiles">
+              ${tile('Signed up', vol.signedUp ?? 0, 'People who have taken a shift')}
+              ${tile('Open shifts', vol.openShifts ?? 0, 'Still to be covered')}
+              ${tile('Roles', roles.length, 'Jobs the market needs')}
+              ${tile('Sign-ups', vol.open ? 'Open' : 'Closed', vol.open ? 'Serve is taking volunteers' : 'Serve is not taking volunteers')}
+            </div>
+            ${rolePanels || `<p class="tlc-hint">Serve has no roles for the market yet. Set them up there and they appear here.</p>`}`
+          : `<div class="alert alert-warn">Counts are not available right now — ${escapeHtml(volError || 'Serve did not answer.')} Nothing is wrong with the market itself; the roster lives in Serve and is still there, behind the button above.</div>`);
+    }
+
+    // ── PHOTOS ───────────────────────────────────────────────────────────
+    // ⚠ NO SECOND UPLOADER. Every image on this site arrives through one path
+    // (/api/upload-image, from the page editor's own picker) and is catalogd
+    // in one table, which is what makes "used nowhere" and the size warnings
+    // on the Media screen true. A second upload form here would be a second
+    // record of the same photograph. What this tab adds is the one thing the
+    // library cannot do — show only the market's photographs, and let the
+    // description be fixed without hunting for them among two hundred others.
+    let photosSection = '';
+    if (active === 'photos' && canPhotos) {
+      const all = (await env.DB.prepare(
+        "SELECT id, filename, kind, url, thumb_url, alt FROM ministry_media ORDER BY id DESC LIMIT 400"
+      ).all().catch(() => ({ results: [] }))).results || [];
+      const isMarket = (m) => /christmasmarket|christmas-m|weihnacht|market/i.test(`${m.url || ''} ${m.filename || ''}`);
+      const mine = all.filter(isMarket);
+      const cards = mine.map((m) => `
+        <div class="tlc-card" style="padding:14px;">
+          ${m.kind === 'video'
+            ? `<p class="tlc-hint" style="margin:0 0 8px;">Video</p>`
+            : `<img src="${escapeHtml(m.thumb_url || m.url)}" alt="${escapeHtml(m.alt || '')}" style="width:100%;height:150px;object-fit:cover;border-radius:8px;background:var(--tlc-linen);">`}
+          <p class="tlc-hint" style="margin:8px 0;word-break:break-all;">${escapeHtml(m.filename || '')}</p>
+          <form method="POST" action="/market/photo-alt" style="margin:0;">
+            <input type="hidden" name="id" value="${m.id}">
+            ${renderField({ name: 'alt', label: 'What is in the photo', value: m.alt || '',
+              placeholder: 'Somebody reading this instead of seeing it',
+              hint: m.alt ? '' : 'This one has no description, so a visitor using a screen reader is told nothing about it.' })}
+            <div class="btn-row" style="margin-top:4px;"><button type="submit" class="tlc-btn-primary">Save</button></div>
+          </form>
+        </div>`).join('');
+      photosSection = `<header class="tlc-section-head">
+          <div class="tlc-section-headings">
+            <h1 class="tlc-title">Photos</h1>
+            <p class="tlc-purpose">The market's photographs, and what each one says to somebody who cannot see it.</p>
+          </div>
+        </header>
+        <p class="tlc-hint" style="margin:0 0 16px;">Photographs are added in the page editor, by dropping one onto a gallery or a banner — they land in the library and appear here. Store them under <code>/images/events/christmasmarket/</code> so they stay together.</p>
+        ${mine.length
+          ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;">${cards}</div>`
+          : `<p class="tlc-hint">No market photographs in the library yet. Add one from the <a href="/pages/christmasmarket/edit">market page editor</a> and it shows up here.</p>`}
+        <p class="tlc-hint" style="margin-top:20px;">Every photograph on the site, market or not, is on the <a href="/media">Media screen</a>.</p>`;
+    }
+
     const configSection = (settingsPanel || paymentPanel)
       ? `<div id="market-config" style="margin-top:24px;display:grid;grid-template-columns:${settingsPanel && paymentPanel ? '1fr 1fr' : '1fr'};gap:20px;">
           ${settingsPanel}${paymentPanel}
@@ -663,21 +911,25 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     // A visitor with no market_manage sees no vendor list at all — the
     // config panels need SOME header, since renderListSection normally
     // supplies it, so a bare one stands in for exactly that case.
-    const bareHeader = !canMarket ? `<header class="tlc-section-head">
+    const bareHeader = active === 'money' ? `<header class="tlc-section-head">
         <div class="tlc-section-headings">
-          <h1 class="tlc-title">${escapeHtml(cfg.title)}</h1>
-          <p class="tlc-purpose">Christmas Market settings and payment — the vendor list itself needs the Christmas Market vendors permission.</p>
+          <h1 class="tlc-title">Money &amp; dates</h1>
+          <p class="tlc-purpose">What the market costs a vendor, when it runs, and where the money lands. Changed here once a year, and every page reads it from here.</p>
         </div>
       </header>` : '';
 
     return html(`
 ${sidebarShell('market', currentUser, `<a href="https://timothystl.org/christmasmarket/vendors" target="_blank">View the vendor page</a>`, badges)}
 <div class="tlc-wrap">
+  ${tabNav}
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${bareHeader}
   ${vendorSection}
   ${vendorDrawer}
   ${configSection}
+  ${pagesSection}
+  ${volunteersSection}
+  ${photosSection}
 </div>`, 'Christmas Market');
   }
 
