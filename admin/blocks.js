@@ -887,6 +887,50 @@ export const BLOCK_DEFS = {
     ],
   },
 
+  // ── THE JUMP BAR ──────────────────────────────────────────────────────────
+  // A row of chips that jump to the sections further down the page, with an
+  // optional filled button on the right.
+  //
+  // ⚠ IT IS A SITE-WIDE CAPABILITY, NOT A MARKET FEATURE. It was asked for by
+  // a handoff about the Christmas Market and it is built once, here, so any
+  // long page can carry one — a `/give` that has grown six sections, a
+  // ministry page with a rules section somebody keeps being asked to find.
+  //
+  // ⚠ `auto` IS THE DEFAULT AND IS THE WHOLE POINT. The links are derived from
+  // the page's own blocks at render time, so adding, removing or reordering a
+  // section moves the bar with it and there is nothing to keep in step by
+  // hand. `manual` exists for the one thing derivation cannot do — link OUT
+  // (the market points at the volunteer sign-up on another host).
+  //
+  // ⚠ IT IS SERVER-RENDERED. No client-side derivation, because the bar has to
+  // be in the HTML a crawler and a reader with no JavaScript get — a
+  // navigation aid that needs a script to exist is one the people most likely
+  // to need it never see.
+  jumplinks: {
+    label: 'Jump links', glyph: '⇥',
+    align: true,
+    defaults: { title: 'Jump to', mode: 'auto', sticky: true, url: '', buttonText: '', spaceAbove: 0, spaceBelow: 0 },
+    // The bar's own micro-label is the block's `title`; blank hides it.
+    // The right-hand button is the block's `url` + `buttonText` rather than a
+    // nested `cta` object, because those are fields sanitizeBlock and the
+    // inspector already have — a nested object would be a new shape in the
+    // sanitizer for one block type.
+    url: true, urlLabel: 'Where the button on the right goes (optional)', buttonText: true,
+    items: true, itemFields: ['title', 'url'], itemUrlFields: ['url'], itemLabel: 'Link',
+    itemPlaceholders: { title: 'What it is called', url: '#block-id, or a full address' },
+    defaultItems: [],
+    choices: [
+      { key: 'mode', label: 'Links come from', def: 'auto',
+        options: [{ key: 'auto', label: 'The page itself' }, { key: 'manual', label: 'The list below' }],
+        note: 'The links are built from the sections on this page. Add, remove or reorder a section and this bar follows — there is nothing here to keep in step by hand.' },
+    ],
+    switches: [
+      { key: 'sticky', label: 'Stick to the top while reading', def: true,
+        note: 'The bar stays in view under the site header as somebody scrolls past it. Switch it off and it simply sits where it was put.' },
+    ],
+    autoNote: 'In "The page itself" mode every section with a heading or an eyebrow becomes a chip, in page order. A block with neither is skipped, because there would be nothing to call it.',
+  },
+
   // ── THE MARKET'S FACTS, READ LIVE ─────────────────────────────────────────
   // The band across the top of /christmasmarket/vendors/apply: market day,
   // hours, table fee and the coordinator's address.
@@ -1156,7 +1200,7 @@ export const BTN_TYPES = new Set(['slideshow', 'download', 'buttons', 'form', 'n
 // what somebody reaches for first on an empty page — the banner and the shape
 // of it — and Content is what they fill it with afterwards.
 export const GROUPS = [
-  { name: 'Structure', types: ['alert', 'photobanner', 'hero', 'slideshow', 'highlight', 'cta', 'quicklinks', 'cardgrid', 'buttons', 'callout', 'partners', 'spacer'] },
+  { name: 'Structure', types: ['alert', 'photobanner', 'hero', 'slideshow', 'highlight', 'cta', 'quicklinks', 'cardgrid', 'buttons', 'callout', 'partners', 'jumplinks', 'spacer'] },
   { name: 'Content',   types: ['text', 'textphoto', 'quote', 'values', 'video', 'columns', 'gallery', 'faq', 'lessons', 'sermon', 'sermonlist', 'classes', 'news', 'newsfeed', 'staff', 'posts'] },
   // Contact sits beside Map & address, which is where somebody looking for
   // "how do people reach us" already goes — the two answer the same question
@@ -1322,6 +1366,22 @@ export const cleanText = (s, max = 200) => String(s == null ? '' : s).replace(/[
 // what they type into a button's link field: no separate display form to
 // keep in sync, because the sanitized value IS what is shown back to them
 // after the inspector's own re-render round-trip.
+// A block's own DOM id. A typed jump-to name wins and keeps its `jump-`
+// prefix — that prefix exists because a name somebody typed is competing for
+// the same id namespace as the SPA's own `page-<id>` divs, and a collision
+// there is a strange bug to chase. A block's own id needs no prefix: it is
+// already unique within the page by construction, and it is what the Jump
+// links block writes into its own hrefs.
+//
+// ⚠ Put through the same character strip as a typed name. `cleanText` allows
+// spaces and punctuation, so a hand-written seed id could otherwise reach an
+// id attribute as something no fragment could ever target.
+export function blockDomId(b) {
+  if (!b) return '';
+  if (b.anchorId) return 'jump-' + b.anchorId;
+  return cleanAnchorId(b.id);
+}
+
 export const cleanAnchorId = (s) => String(s == null ? '' : s).toLowerCase()
   .replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
 
@@ -2287,6 +2347,54 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
    has to render correctly inside the editor canvas, which never loads
    public/styles.css at all. */
 .tlcb-mktapp-facts{font:600 13.5px/1 var(--tlcb-ui);color:#6B6A5F;margin:6px 0 22px;}
+/* ── THE JUMP BAR ─────────────────────────────────────────────────────────
+   ⚠ THESE RULES LIVE HERE, NOT IN public/styles.css, and the handoff asks for
+   the other file. The reason is the same one the whole .tlcb-* namespace is in
+   this file: the editor canvas never loads public/styles.css, so a bar styled
+   there would be correct on the live page and unstyled in the editor — a
+   preview that disagrees with the site, which is exactly what this repo has
+   spent releases removing. BLOCK_CSS is served to the public site with every
+   /api/pages response, so the public page gets these rules either way.
+
+   Literal hex for the same reason every rule around it uses literal hex —
+   --amber #C9973A, --white #FBF8F3, --border #DDE3ED, --steel #1E2D4A,
+   --text-muted #8A8898, --shadow — none of which is defined inside the canvas. */
+.jump-bar{background:#FBF8F3;border-top:3px solid #C9973A;border-bottom:1px solid #DDE3ED;
+  box-shadow:0 2px 12px rgba(30,45,74,.08);}
+/* ⚠ top is the site nav's own height (64px plus its 3px rule), NOT 0. The nav
+   is sticky at z-index 100, so a bar stuck at 0 slides underneath it and
+   disappears. Below the nav, never over it. */
+.jump-bar--stuck{position:sticky;top:67px;z-index:5;}
+.jump-inner{max-width:1080px;margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.jump-label{font:700 10px/1 var(--tlcb-ui);letter-spacing:.12em;text-transform:uppercase;color:#8A8898;flex:none;}
+.jump-scroll{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0;}
+.jump-link{display:inline-flex;align-items:center;font:700 12.5px/1 var(--tlcb-ui);color:#1E2D4A;
+  background:#fff;border:1px solid #DDE3ED;border-radius:999px;padding:9px 16px;min-height:44px;
+  text-decoration:none;white-space:nowrap;}
+.jump-link:hover{border-color:#C9973A;}
+.jump-cta{margin-left:auto;background:#C9973A;border-color:#C9973A;font-weight:800;flex:none;}
+/* ⚠ Alignment has to move the flex row, not the text inside it. The generic
+   .tlcb--center rule is text-align, which a flex container ignores — a
+   control that looks live and does nothing is worse than no control. */
+.tlcb--center .jump-inner,.tlcb--center .tlcb-mktfacts{justify-content:center;}
+.tlcb--right .jump-inner,.tlcb--right .tlcb-mktfacts{justify-content:flex-end;}
+/* ⚠ A jump has to clear the nav AND the bar, or the heading it lands on is
+   tucked behind both. The sibling combinator is what keeps this off every
+   other page on the site: only blocks that actually follow a jump bar get the
+   taller margin, and the 88px default above stays exactly as it was. */
+.tlcb--jumplinks ~ .tlcb,
+.tlcb--jumplinks ~ .tlcb-pair .tlcb{scroll-margin-top:148px;}
+@media print{.jump-bar{display:none;}}
+/* ⚠ On a phone the row SCROLLS rather than wrapping to three lines, and the
+   button stays pinned outside the scroller — a bar that grows to half the
+   screen is one nobody scrolls past. Every chip keeps its 44px. */
+@media (max-width:620px){
+  .jump-inner{flex-wrap:nowrap;padding:10px 16px;}
+  .jump-scroll{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;
+    scrollbar-width:none;flex:1;}
+  .jump-scroll::-webkit-scrollbar{display:none;}
+  .jump-label{display:none;}
+}
 /* The facts band on the apply page. Four label/value pairs, every value read
    from the market settings — see the marketfacts branch in renderInner. */
 .tlcb-mktfacts{display:flex;flex-wrap:wrap;gap:30px 44px;padding:16px 0;border-bottom:1px solid #DDE3ED;}
@@ -4787,6 +4895,67 @@ function renderInner(b, opts) {
   }
 
   // ── THE CHRISTMAS MARKET APPLICATION ──────────────────────────────────────
+  if (t === 'jumplinks') {
+    // ⚠ ONE PER PAGE. Two sticky bars stack on top of each other and the
+    // second one's links land under the first — so the first is rendered and
+    // any others are not. In the editor the extra one says why rather than
+    // vanishing, because a block that disappears from the canvas is a block
+    // somebody thinks they broke.
+    const siblings = opts.siblings || [];
+    const first = siblings.find((s) => s && s.type === 'jumplinks');
+    if (first && first.id !== b.id) {
+      return opts.editing
+        ? `<div class="jump-bar"><span class="tlcb-note">There is already a jump bar on this page, and one is all a page can have — two of them stack on top of each other. This one will not appear on the live page. Delete it, or delete the other.</span></div>`
+        : '';
+    }
+
+    // In `auto` the links ARE the page: every block with something to call it,
+    // in page order, skipping this block and anything unnamed. `manual` reads
+    // the typed list, which is the only way to point off the page.
+    const auto = b.mode !== 'manual';
+    const links = auto
+      ? siblings
+        .filter((s) => s && s.type !== 'jumplinks' && (s.title || s.eyebrow))
+        .map((s) => ({ title: cleanText(s.title || s.eyebrow, 40), url: '#' + blockDomId(s) }))
+        .filter((l) => l.title && l.url !== '#')
+      : (b.items || []).filter((it) => it.title && it.url);
+
+    const label = b.title
+      ? `<span class="jump-label">${esc(b.title)}</span>`
+      : (opts.editing ? field(opts, b, 'title', 'span', 'jump-label', '', ' data-ph="Jump to"') : '');
+
+    // A button with no address is a dead link, so it is not drawn at all —
+    // and its label is edited on the canvas, the same way the Give block's is.
+    const ctaText = b.buttonText || (opts.editing ? '' : '');
+    const cta = b.url
+      ? (opts.editing
+        ? `<span class="jump-link jump-cta">${field(opts, b, 'buttonText', 'span', '', esc(ctaText), ' data-ph="Button label"')}</span>`
+        : (ctaText ? `<a class="jump-link jump-cta" href="${esc(b.url)}">${esc(ctaText)}</a>` : ''))
+      : (opts.editing ? `<span class="jump-link jump-cta tlcb-note">Add an address in the panel to draw a button here</span>` : '');
+
+    // ⚠ The editor's "add an address" hint is a placeholder, not a button, so
+    // it must not count as content here — otherwise a brand-new bar with
+    // nothing to link to would show that hint instead of saying, plainly,
+    // that nothing on the page has a heading yet.
+    if (!links.length && !b.url) {
+      return opts.editing
+        ? `<div class="jump-bar"><span class="tlcb-note">${auto
+          ? 'Nothing on this page has a heading or an eyebrow yet, so there is nothing to jump to. Give a section below a heading and it appears here.'
+          : 'No links yet — add one in the panel on the right.'}</span></div>`
+        : '';
+    }
+
+    const chips = links.map((l) => opts.editing
+      ? `<span class="jump-link">${esc(l.title)}</span>`
+      : `<a class="jump-link" href="${esc(safeUrl(l.url))}">${esc(l.title)}</a>`).join('');
+
+    // ⚠ Sticky is not applied in the editor. A bar that detaches and follows
+    // the canvas while somebody is arranging blocks is one they cannot get
+    // hold of, and it would cover the block above it.
+    const stuck = b.sticky && !opts.editing ? ' jump-bar--stuck' : '';
+    return `<div class="jump-bar${stuck}"><div class="jump-inner">${label}<div class="jump-scroll">${chips}</div>${cta}</div></div>`;
+  }
+
   if (t === 'marketfacts') {
     const raw = data.market || {};
     // Same defaulting rule the application block applies to itself: a
@@ -5022,7 +5191,14 @@ export function renderBlock(b, opts = {}) {
   // it to land on. Present in the editor too, harmlessly: nothing there ever
   // scrolls by fragment, and it is one less thing that can differ from the
   // published markup.
-  const idAttr = b.anchorId ? ` id="jump-${esc(b.anchorId)}"` : '';
+  //
+  // ⚠ EVERY BLOCK CARRIES AN id NOW, not only the ones somebody has given a
+  // jump-to name. That is what makes the Jump links block's automatic mode
+  // possible at all: it derives its chips from the page's own sections, so
+  // every section has to be addressable without anybody having named it
+  // first. A typed name still wins — see blockDomId().
+  const domId = blockDomId(b);
+  const idAttr = domId ? ` id="${esc(domId)}"` : '';
   const attrs = opts.editing
     ? ` data-id="${esc(b.id)}" data-type="${esc(b.type)}" tabindex="0" role="group"` +
       ` aria-label="${esc(def.label)} block${opts.total ? ', position ' + (opts.index + 1) + ' of ' + opts.total : ''}"`
@@ -5238,7 +5414,11 @@ export function pairHalves(list, opts = {}) {
 export function renderPage(blocks, opts = {}) {
   const list = Array.isArray(blocks) ? blocks : [];
   const total = list.length;
-  const parts = pairHalves(list, opts);
+  // ⚠ The blocks are handed to every block's own render. Only the Jump links
+  // block reads them today — its automatic mode IS the page's own section
+  // list — but the alternative was a second, parallel pass over the list that
+  // could disagree with the one that renders it.
+  const parts = pairHalves(list, Object.assign({}, opts, { siblings: list }));
   const empty = !total && opts.editing
     ? `<div class="tlcb-empty"><b>This page is empty</b><span>Drag a block up from the panel below to begin.</span></div>`
     : '';

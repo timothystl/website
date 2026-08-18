@@ -476,10 +476,38 @@ const LIVE_BLOCKS = {
   education: { type: 'classes', title: 'Classes and studies' },
 };
 
+// A block the extractor cannot find in the markup because it is not content —
+// it is navigation over the content. Inserted at a fixed position (1 = straight
+// under the page's banner) rather than appended, since a jump bar at the foot
+// of the page is a jump bar nobody sees.
+//
+// Deliberately only the market page this release. The type is in the palette,
+// so any other page gets one by somebody dropping it on, not by a seed deciding
+// for them.
+const INSERT_BLOCKS = {
+  christmasmarket: {
+    at: 1,
+    block: {
+      type: 'jumplinks', title: 'Jump to', mode: 'auto', sticky: true,
+      url: '/christmasmarket/vendors', buttonText: 'Apply for a table',
+      // ⚠ Manual would freeze the section list the moment somebody renamed a
+      // heading, so the page's own sections come from auto — but auto cannot
+      // reach off the page, and the volunteer sign-up is on another host
+      // entirely. That one link is typed, and it is the only one.
+      items: [{ title: 'Volunteer at the market', url: 'https://serve.timothystl.org/christmasmarket' }],
+    },
+  },
+};
+
 function blocksFor(slug) {
   const blocks = sanitizeBlocks(foldHeadings(convert(slug)));
   const live = LIVE_BLOCKS[slug];
   if (live) blocks.push(sanitizeBlock(Object.assign(newBlock(live.type), { title: live.title })));
+  const ins = INSERT_BLOCKS[slug];
+  if (ins && blocks.length) {
+    blocks.splice(Math.min(ins.at, blocks.length), 0,
+      sanitizeBlock(Object.assign(newBlock(ins.block.type), ins.block)));
+  }
   return blocks.map((b, i) => Object.assign({}, b, { id: `${slug}-${i + 1}` }));
 }
 

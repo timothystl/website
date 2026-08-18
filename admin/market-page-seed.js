@@ -113,6 +113,15 @@ export const MARKET_VENDORS_BLOCKS = [
     id: 'mv-facts', type: 'marketfacts',
     spaceAbove: 8, spaceBelow: 0,
   },
+  // ⚠ AUTO MODE, so the bar follows the page rather than a typed list somebody
+  // has to remember to update. Reordering, renaming or adding a section below
+  // moves the chips with it; there is nothing here to fall out of step.
+  {
+    id: 'mv-jump', type: 'jumplinks',
+    title: 'Jump to', mode: 'auto', sticky: true,
+    url: '/christmasmarket/vendors/apply', buttonText: 'Apply for a table',
+    spaceAbove: 0, spaceBelow: 0,
+  },
   {
     id: 'mv-details', type: 'cardgrid',
     eyebrow: 'Before you apply', title: 'Vendor details',

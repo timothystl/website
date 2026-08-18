@@ -1504,7 +1504,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-18-2'; // bumped: /christmasmarket/vendors/apply is a page (admin/market-vendors-apply-seed.js)
+    const SCHEMA_VERSION = '2026-08-18-3'; // bumped: the market pages carry a jump bar (admin/market-page-seed.js, tools/extract-pages.mjs)
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -2341,7 +2341,7 @@ export default {
     // marker added — one row, one question: which version of these pages has
     // been published.
     const MARKET_PUBLISH_MARKER = 'market_pages_published';
-    const MARKET_PUBLISH_VERSION = 'v2';
+    const MARKET_PUBLISH_VERSION = 'v3';
     const marketPublished = markersOk || markers.get(MARKET_PUBLISH_MARKER) === MARKET_PUBLISH_VERSION;
     if (!marketPublished) {
       try {

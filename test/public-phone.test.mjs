@@ -150,6 +150,52 @@ group('the newsletter form can be filled in on a phone');
     `every field and its button is at least ${MIN}px tall — short: ${small.map((s) => `${s.label} ${s.h}px`).join(', ')}`);
 }
 
+// ⚠ The jump bar is a BLOCK, so it is not in public/index.html and cannot be
+// measured by loading a page. Its markup and its stylesheet are rendered here
+// by the same renderer the site uses, injected into the real page, and then
+// measured at the same 390px — which is what makes this a measurement of the
+// shipping CSS rather than a restatement of it.
+group('the jump bar on a phone');
+{
+  const { renderPage, sanitizeBlocks, BLOCK_CSS } = await import('../admin/blocks.js');
+  const blocks = sanitizeBlocks([
+    { id: 'jl', type: 'jumplinks', title: 'Jump to', mode: 'auto', sticky: true,
+      url: '/christmasmarket/vendors/apply', buttonText: 'Apply for a table' },
+    { id: 'a', type: 'text', title: 'Vendor details' },
+    { id: 'b', type: 'text', title: 'The rules of the market' },
+    { id: 'c', type: 'text', title: 'Photographs from past markets' },
+    { id: 'd', type: 'text', title: 'A note on power and heat' },
+    { id: 'e', type: 'text', title: 'Questions vendors ask' },
+  ]);
+  const html = renderPage(blocks, { data: {}, withCss: false, template: 'standard' });
+  await page.evaluate(([css, markup]) => {
+    const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
+    const host = document.createElement('div'); host.id = 'jump-probe';
+    host.innerHTML = markup; document.body.appendChild(host);
+  }, [BLOCK_CSS, html]);
+
+  const chips = await targets('#jump-probe .jump-link');
+  ok(chips.length >= 6, `the bar drew its chips and its button (${chips.length})`);
+  const short = chips.filter((c) => c.h < MIN);
+  ok(short.length === 0,
+    `every jump chip is at least ${MIN}px tall — short: ${short.map((s) => `${s.label} ${s.h}px`).join(', ')}`);
+
+  // ⚠ Scroll, never wrap. Six chips wrapped at 390px is a three-line bar that
+  // pushes the page down and, being sticky, keeps doing it the whole way down.
+  const m = await page.evaluate(() => {
+    const el = document.querySelector('#jump-probe .jump-scroll');
+    const cs = getComputedStyle(el);
+    return { overflowX: cs.overflowX, wrap: cs.flexWrap, w: el.clientWidth, sw: el.scrollWidth,
+      docW: document.documentElement.scrollWidth, winW: window.innerWidth };
+  });
+  ok(m.overflowX === 'auto' || m.overflowX === 'scroll', `the chip row scrolls sideways (got ${m.overflowX})`);
+  ok(m.wrap === 'nowrap', `and does not wrap (got ${m.wrap})`);
+  ok(m.sw > m.w, 'there is genuinely more to scroll to than fits, so this is being measured for real');
+  ok(m.docW <= m.winW + 1, `and the page itself still does not scroll sideways (${m.docW} vs ${m.winW})`);
+
+  await page.evaluate(() => { document.getElementById('jump-probe').remove(); });
+}
+
 group('no script errors at phone width');
 {
   ok(errors.length === 0, `no page errors — got: ${errors.slice(0, 3).join(' | ')}`);
