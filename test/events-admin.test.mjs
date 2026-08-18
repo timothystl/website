@@ -144,7 +144,9 @@ group('creating a new event');
 
   const formRes = await call(env, '/events/new', { cookie });
   eq(formRes.status, 200, 'the new-event form opens');
-  has(await formRes.text(), 'Start the page from', 'the clone-from question is on the form');
+  const formHtml = await formRes.text();
+  has(formHtml, 'Or start a new page from', 'the clone-from question is on the form');
+  has(formHtml, 'Create a new page', 'the "its page" picker defaults to creating a new page');
 
   has(await (await call(env, '/events/new', { cookie: '' })).text(), 'Sign In',
     'signed out entirely, /events/new is the sign-in page, not the form');
@@ -193,6 +195,115 @@ group('cloning a page as the starting point');
   const regBlock = cloneBlocks.find((b) => b.type === 'registration');
   ok(!!regBlock, 'the cloned page still has a registration block');
   eq(regBlock.eventId, cloneId, 'the cloned registration block was repointed at the NEW event, not the source');
+}
+
+// A synthetic page not already claimed by the site's own seed — for the
+// cases that need a page nobody has any prior stake in, distinct from the
+// VBS scenario below, which deliberately uses the REAL seeded `/vbs` row
+// (`admin/site-pages.js`), not a stand-in, since that row existing already
+// is the exact situation being fixed.
+function insertTestPage(db, { id, slug, title = 'A Page', locked = 0, externalUrl = null } = {}) {
+  const blocks = JSON.stringify([{ id: 'hero-1', type: 'hero', title }]);
+  db.prepare(
+    "INSERT INTO pages (id, title, menu_label, slug, parent_id, sort, template, status, in_menu, locked, external_url, seo_description, blocks, published_blocks, updated_at, updated_by) " +
+    "VALUES (?, ?, ?, ?, NULL, 999, 'standard', 'draft', 0, ?, ?, '', ?, NULL, ?, ?)"
+  ).run(id, title, title, slug, locked, externalUrl, blocks, new Date().toISOString(), 'test');
+  return id;
+}
+
+group('adopting an existing page instead of creating a second one');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ['events_manage']);
+
+  // `/vbs` is not a stand-in — it is the real seeded youth-family page
+  // (admin/site-pages.js) already sitting in the table before the event
+  // ever exists, the exact shape VBS is in on the live site.
+  const before = db.prepare('SELECT COUNT(*) AS n FROM pages').get().n;
+  const beforeVbs = db.prepare('SELECT blocks, published_blocks FROM pages WHERE id = ?').get('vbs');
+  ok(!!beforeVbs, 'the real /vbs page is already seeded, before this event is created');
+
+  const id = await createEventViaForm(env, cookie, { name: 'Vacation Bible School', existing_page_id: 'vbs' });
+  const after = db.prepare('SELECT COUNT(*) AS n FROM pages').get().n;
+  eq(after, before, 'no second page was created — the row count is unchanged');
+
+  const row = db.prepare('SELECT * FROM site_events WHERE id = ?').get(id);
+  eq(row.page_landing_id, 'vbs', 'the event links to the REAL existing page, not a fresh id');
+  eq(row.page_registration_id, 'vbs', 'both page fields point at the same real page');
+
+  const page = db.prepare('SELECT * FROM pages WHERE id = ?').get('vbs');
+  const blocks = JSON.parse(page.blocks || '[]');
+  const beforeBlocks = JSON.parse(beforeVbs.blocks || '[]');
+  for (const b of beforeBlocks) ok(blocks.some((x) => x.id === b.id), `the page's existing block "${b.type}" is untouched`);
+  const reg = blocks.find((b) => b.type === 'registration');
+  ok(!!reg, 'a registration block was ADDED, not the page replaced');
+  eq(reg.eventId, id, 'the added registration block points at the new event');
+  eq(page.published_blocks, beforeVbs.published_blocks, 'the LIVE published copy is untouched — the sign-up form is a draft edit, same as any other page change');
+
+  // Adopting a page that takes no registration links it with no block added.
+  const noRegId = await createEventViaForm(env, cookie, {
+    name: 'Family Ministry Night', existing_page_id: 'family', has_registration: '0', has_payment: '0',
+  });
+  const familyBlocks = JSON.parse(db.prepare('SELECT blocks FROM pages WHERE id = ?').get('family').blocks || '[]');
+  ok(!familyBlocks.some((b) => b.type === 'registration'), 'no registration block added when the event does not take sign-ups');
+  eq(db.prepare('SELECT page_landing_id FROM site_events WHERE id = ?').get(noRegId).page_landing_id, 'family',
+    'the page is still linked even though the event takes no registration');
+}
+
+group('connecting an already-created event to an existing page, and disconnecting');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ['events_manage']);
+
+  // Created before anyone thought to pick /vbs off the list — got its own,
+  // wrong, throwaway page, exactly the "two pages" report this fix answers.
+  const id = await createEventViaForm(env, cookie, { name: 'VBS (duplicate)' });
+  const strayPageId = db.prepare('SELECT page_landing_id FROM site_events WHERE id = ?').get(id).page_landing_id;
+  ok(!!strayPageId, 'the event got its own page when it was first created');
+
+  const denied = await callForm(env, `/events/${id}/connect-page`, { cookie: signIn(db, [], 'nobody').cookie, formData: new URLSearchParams({ page_id: 'vbs' }) });
+  eq(denied.status, 403, 'connecting is refused to someone with neither the coordinator key nor pages_edit');
+
+  const connectRes = await callForm(env, `/events/${id}/connect-page`, { cookie, formData: new URLSearchParams({ page_id: 'vbs' }) });
+  eq(connectRes.status, 302, 'connecting redirects back to the tab');
+  const linked = db.prepare('SELECT page_landing_id, page_registration_id FROM site_events WHERE id = ?').get(id);
+  eq(linked.page_landing_id, 'vbs', 'the event now links to the real page');
+  eq(linked.page_registration_id, 'vbs', 'both fields moved together');
+  ok(!!db.prepare('SELECT id FROM pages WHERE id = ?').get(strayPageId), 'the stray page from the original mistake still exists — connecting never deletes anything');
+
+  const pageTab = await call(env, `/events/${id}?tab=page`, { cookie });
+  const pageTabBody = await pageTab.text();
+  has(pageTabBody, '/vbs', 'the connected page shows on the Page & copy tab');
+  lacks(pageTabBody, 'value="vbs"', 'the now-connected page is not offered again as a "connect a different page" candidate');
+
+  const disconnectRes = await callForm(env, `/events/${id}/disconnect-page`, { cookie, formData: new URLSearchParams() });
+  eq(disconnectRes.status, 302, 'disconnecting redirects back to the tab');
+  const unlinked = db.prepare('SELECT page_landing_id, page_registration_id FROM site_events WHERE id = ?').get(id);
+  eq(unlinked.page_landing_id, null, 'disconnected — the event no longer claims a page');
+  ok(!!db.prepare('SELECT id FROM pages WHERE id = ?').get('vbs'), 'disconnecting never deletes the page itself');
+}
+
+group('a page already claimed by another live event is not offered twice');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ['events_manage']);
+  insertTestPage(db, { id: 'test-locked', slug: '/test-locked', title: 'Locked Page', locked: 1 });
+  insertTestPage(db, { id: 'test-outbound', slug: '/test-outbound', title: 'Outbound Page', externalUrl: 'https://example.org' });
+  insertTestPage(db, { id: 'test-unclaimed', slug: '/test-unclaimed', title: 'Not Yet an Event' });
+
+  const newForm = await (await call(env, '/events/new', { cookie })).text();
+  has(newForm, 'Not Yet an Event', 'an unclaimed, unlocked, non-outbound page is offered');
+  lacks(newForm, 'Locked Page', 'a locked page is never offered');
+  lacks(newForm, 'Outbound Page', 'an outbound-redirect page is never offered');
+
+  await createEventViaForm(env, cookie, { name: 'Claims It First', existing_page_id: 'test-unclaimed' });
+  const secondForm = await (await call(env, '/events/new', { cookie })).text();
+  // Scoped to the "Its page" select specifically — the SAME page is still
+  // correctly offered as a clone SOURCE ("Or start a new page from"), a
+  // different field with a different job, so a bare page-wide check would
+  // false-fail on that legitimate second appearance.
+  const existingPagePicker = secondForm.slice(secondForm.indexOf('name="existing_page_id"'), secondForm.indexOf('</select>', secondForm.indexOf('name="existing_page_id"')));
+  lacks(existingPagePicker, 'value="test-unclaimed"', 'once claimed by a live event, the page drops off the "Its page" list for a second one');
 }
 
 // ── Phase D — one event's own screen ─────────────────────────────────────────
