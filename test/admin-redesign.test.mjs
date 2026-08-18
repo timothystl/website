@@ -22,7 +22,8 @@ import { ALL_PERMISSIONS } from '../admin/auth.js';
 // to triage. The color is not what is being asserted; the agreement is.
 import { DEFAULTS as CHROME_DEFAULTS, colorOf } from '../admin/appearance.js';
 const CHROME_BAR = colorOf(CHROME_DEFAULTS.bar).value;
-import { priceBreakdown, money as marketMoney } from '../market-price.js';
+import { priceBreakdown, money as marketMoney, MARKET_DEFAULTS as MARKET_PRICE_DEFAULTS } from '../market-price.js';
+import crypto from 'node:crypto';
 
 let pass = 0, fail = 0;
 const { readFileSync } = await import('node:fs');
@@ -3923,6 +3924,172 @@ group('once published, the application reads live settings — never a stored pr
   const api2 = await (await call(env, '/api/pages', { fresh: true })).json();
   const price2 = priceBreakdown(1, { tableFee: 55 });
   has(api2.rendered.marketvendors, marketMoney(price2.totalCents), 'a fee changed after publishing still reaches the live page');
+}
+
+// ── Square reconciles itself, and a vendor can pay by check ─────────────────
+// Every group below runs against a market whose fee is the plain $30/2.9%/30¢
+// default (nobody has touched site_events for these), so the grossed-up total
+// for one table is the anchor figure this whole file already trusts: $31.20.
+
+group('paying by check owes the flat fee, never the grossed-up card total');
+{
+  const { db, env } = await boot();
+  const res = await applyAsVendor(env, { tables: '2', payment_method: 'check' });
+  eq(res.status, 200, 'a check application is accepted like any other');
+  const d = await res.json();
+  ok(d.success, 'and saved');
+  ok(d.checkPay, 'the response says this one is paying by check, so the confirmation screen can read differently');
+  eq(d.payUrl, '', 'no payment link at all — there is nothing to redirect a check-paying vendor to');
+
+  const saved = db.prepare("SELECT * FROM site_event_registrations WHERE event_id='christmasmarket'").get();
+  const flat = priceBreakdown(2, MARKET_PRICE_DEFAULTS).subtotalCents; // 2 × $30 = $60.00, no card fee
+  eq(saved.amount_due_cents, flat, 'the row owes the flat table fee, not the grossed-up card total');
+  eq(saved.payment_status, 'unpaid', 'still unpaid — a check has not arrived yet, the same fact as any other unpaid row');
+  ok(JSON.parse(saved.fields_json).payment_method === 'check', 'and the choice itself is on the row, for the coordinator to see');
+  eq(d.totalCents, flat, 'the figure in the response is the same flat fee, not the card total');
+}
+
+group('a card application still owes the grossed-up total, and defaults to card with no field posted');
+{
+  const { db, env } = await boot();
+  // No payment_method field at all — the shape every application before
+  // this feature existed already posted.
+  const res = await applyAsVendor(env, { tables: '2' });
+  const d = await res.json();
+  ok(!d.checkPay, 'defaults to card when nothing is posted');
+
+  const saved = db.prepare("SELECT * FROM site_event_registrations WHERE event_id='christmasmarket'").get();
+  const grossed = priceBreakdown(2, MARKET_PRICE_DEFAULTS).totalCents; // includes the 2.9% + 30¢ card fee
+  eq(saved.amount_due_cents, grossed, 'a card application still owes the grossed-up total');
+  ok(grossed > priceBreakdown(2, MARKET_PRICE_DEFAULTS).subtotalCents, 'sanity: the grossed-up figure really is larger than the flat one');
+  eq(JSON.parse(saved.fields_json).payment_method, 'card', 'and the row records the method explicitly, not just by omission');
+}
+
+function stubSquareFetch(handler) {
+  const real = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (String(url).includes('online-checkout/payment-links')) return handler(url, opts);
+    // Anything else in flight during this request (a Brevo send, a push
+    // notification) is fired inside ctx.waitUntil and never awaited by this
+    // test — it gets a harmless empty response rather than a real network
+    // call the sandbox has no route to anyway.
+    return new Response('{}', { status: 200 });
+  };
+  return () => { globalThis.fetch = real; };
+}
+
+group('Square: a link is created per application, and its order id is captured immediately');
+{
+  const { db, env } = await boot();
+  db.prepare("UPDATE site_events SET payment_provider = 'square' WHERE id = 'christmasmarket'").run();
+  env.SQUARE_ACCESS_TOKEN = 'sq0atp-test';
+  env.SQUARE_LOCATION_ID = 'L1';
+
+  const restore = stubSquareFetch(async () => new Response(JSON.stringify({
+    payment_link: { id: 'link_1', url: 'https://square.link/u/abc123', order_id: 'order_abc123' },
+  }), { status: 200 }));
+  let res;
+  try { res = await applyAsVendor(env, { tables: '1' }); } finally { restore(); }
+
+  const d = await res.json();
+  eq(d.payUrl, 'https://square.link/u/abc123', 'the vendor is sent to the link Square just created for them');
+
+  const saved = db.prepare("SELECT square_order_id FROM site_event_registrations WHERE event_id='christmasmarket'").get();
+  eq(saved.square_order_id, 'order_abc123',
+    'captured straight from the CREATE response — never a later lookup that could fail independently');
+}
+
+group('Square: an unreachable API falls back to the static per-table link, silently');
+{
+  const { db, env } = await boot();
+  // ⚠ NO SQUARE_ACCESS_TOKEN / SQUARE_LOCATION_ID set at all — the exact state
+  // this Worker is in the moment this feature ships, before anybody has run
+  // the wrangler secret commands. createSquarePaymentLink() throws before it
+  // ever calls fetch, so no stub is even needed to prove the fallback works.
+  db.prepare(`UPDATE site_events SET payment_provider = 'square', square_links = '${JSON.stringify({ 1: 'https://square.link/u/one' })}' WHERE id = 'christmasmarket'`).run();
+
+  const res = await applyAsVendor(env, { tables: '1' });
+  eq(res.status, 200, 'the vendor is never told anything went wrong');
+  const d = await res.json();
+  eq(d.payUrl, 'https://square.link/u/one', 'and still gets a working link — the office’s own static one');
+
+  const saved = db.prepare("SELECT square_order_id, payment_status FROM site_event_registrations WHERE event_id='christmasmarket'").get();
+  eq(saved.square_order_id, null, 'no order id was ever created, so there is nothing to store');
+  eq(saved.payment_status, 'unpaid', 'and the application is on the coordinator’s list regardless');
+}
+
+// A real HMAC, computed the same way admin/square.test.mjs verifies against —
+// an independent implementation is what makes this check mean something.
+async function squareWebhook(env, payload, { badSignature = false } = {}) {
+  const url = 'https://admin.timothystl.org/api/square/webhook';
+  const rawBody = JSON.stringify(payload);
+  const sig = badSignature
+    ? 'not-the-right-signature=='
+    : crypto.createHmac('sha256', env.SQUARE_WEBHOOK_SIGNATURE_KEY).update(url + rawBody).digest('base64');
+  const headers = new Headers({ 'content-type': 'application/json', 'x-square-hmacsha256-signature': sig });
+  const req = new Request(url, { method: 'POST', headers, body: rawBody });
+  return worker.fetch(req, env, { waitUntil: () => {}, passThroughOnException: () => {} });
+}
+
+group('the Square webhook marks the matching application paid, by order id alone');
+{
+  const { db, env } = await boot();
+  db.prepare("UPDATE site_events SET payment_provider = 'square' WHERE id = 'christmasmarket'").run();
+  env.SQUARE_ACCESS_TOKEN = 'sq0atp-test';
+  env.SQUARE_LOCATION_ID = 'L1';
+  env.SQUARE_WEBHOOK_SIGNATURE_KEY = 'test-signing-key';
+
+  const restore = stubSquareFetch(async () => new Response(JSON.stringify({
+    payment_link: { id: 'link_2', url: 'https://square.link/u/xyz', order_id: 'order_xyz' },
+  }), { status: 200 }));
+  try { await applyAsVendor(env, { tables: '1' }); } finally { restore(); }
+
+  const before = db.prepare("SELECT id, payment_status, amount_paid_cents FROM site_event_registrations WHERE square_order_id = 'order_xyz'").get();
+  ok(before, 'the row created above is findable by the order id Square gave us');
+  eq(before.payment_status, 'unpaid', 'and starts unpaid, same as any other fresh application');
+
+  const res = await squareWebhook(env, {
+    type: 'payment.updated',
+    data: { object: { payment: { order_id: 'order_xyz', status: 'COMPLETED', amount_money: { amount: 3120, currency: 'USD' } } } },
+  });
+  eq(res.status, 200, 'Square gets a 200');
+
+  const after = db.prepare('SELECT payment_status, amount_paid_cents FROM site_event_registrations WHERE id = ?').get(before.id);
+  eq(after.payment_status, 'paid', 'the exact matching row is marked paid — no human had to check anything');
+  eq(after.amount_paid_cents, 3120, 'and the amount Square actually reports is what is recorded');
+
+  const audit = db.prepare("SELECT username FROM audit_log WHERE entity_type = 'market_vendor' AND entity_id = ?").all(String(before.id));
+  eq(audit.length, 1, 'the automatic mark-paid is written to the audit log like any other change');
+  eq(audit[0].username, 'square-webhook', 'attributed to the webhook, not to a person who never touched it');
+
+  // ⚠ Square redelivers events. The same payment landing twice must not
+  // double-log or otherwise behave as if it happened twice.
+  await squareWebhook(env, {
+    type: 'payment.updated',
+    data: { object: { payment: { order_id: 'order_xyz', status: 'COMPLETED', amount_money: { amount: 3120, currency: 'USD' } } } },
+  });
+  const auditAfterRedelivery = db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE entity_type = 'market_vendor' AND entity_id = ?").get(String(before.id));
+  eq(auditAfterRedelivery.n, 1, 'a redelivered event for an already-paid row is a silent no-op, not a second entry');
+}
+
+group('the Square webhook refuses a bad signature, and quietly ignores a payment that is not ours');
+{
+  const { db, env } = await boot();
+  env.SQUARE_WEBHOOK_SIGNATURE_KEY = 'test-signing-key';
+
+  const bad = await squareWebhook(env, {
+    type: 'payment.updated',
+    data: { object: { payment: { order_id: 'order_anything', status: 'COMPLETED' } } },
+  }, { badSignature: true });
+  eq(bad.status, 401, 'a signature that does not verify is refused outright');
+
+  const unrelated = await squareWebhook(env, {
+    type: 'payment.updated',
+    data: { object: { payment: { order_id: 'order_never_seen', status: 'COMPLETED', amount_money: { amount: 100 } } } },
+  });
+  eq(unrelated.status, 200, 'a correctly signed event for an order id nobody applied under is still answered 200');
+  const rows = db.prepare("SELECT COUNT(*) AS n FROM site_event_registrations WHERE payment_status = 'paid'").get();
+  eq(rows.n, 0, 'and nothing on the coordinator’s list was touched by it');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

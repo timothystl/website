@@ -93,6 +93,10 @@ export function sanitizeApplication(form, cfg = {}) {
     special_requests: cap(form.special_requests, 2000),
     tables: clampTables(form.tables, cfg.maxTables ?? MARKET_DEFAULTS.maxTables),
     signature_name: cap(form.signature_name, 200),
+    // 'card' is the only value every application before this carried, so it
+    // is the default for anything else too — a stale form, a hand-typed
+    // POST, a missing field all land on the path that already existed.
+    payment_method: trim(form.payment_method) === 'check' ? 'check' : 'card',
   };
 
   const errors = [];
@@ -156,6 +160,7 @@ function marketFieldsFromValue(value) {
     appliances_power: value.appliances_power || '',
     special_requests: value.special_requests || '',
     signature_name: value.signature_name || '',
+    payment_method: value.payment_method === 'check' ? 'check' : 'card',
   };
 }
 
@@ -183,10 +188,14 @@ export function marketRowFromRegistration(reg) {
     // than changed there, so photosOf() itself needed no edit.
     photos: Array.isArray(f.photos) && f.photos.length ? JSON.stringify(f.photos) : null,
     signature_name: f.signature_name || '',
+    // Absent on every application saved before this shipped — 'card' is the
+    // one path that already existed, so it is the read-side default too.
+    payment_method: f.payment_method === 'check' ? 'check' : 'card',
     amount_due_cents: reg.amount_due_cents || 0,
     table_number: reg.table_number || '',
     payment_status: reg.payment_status || 'unpaid',
     amount_paid_cents: reg.amount_paid_cents,
+    square_order_id: reg.square_order_id || '',
     staff_notes: reg.staff_notes || '',
     created_at: reg.created_at,
   };
@@ -196,17 +205,40 @@ export function marketRowFromRegistration(reg) {
 // sanitizeApplication() has run, to build the arguments insertRegistration()
 // (admin/events.js) needs. Kept here, not there, because it is the one place
 // that knows the market's own field names.
+//
+// ⚠ A CHECK/CASH APPLICATION OWES THE FLAT FEE, NEVER THE GROSSED-UP ONE.
+// The gross-up exists to cover a card processor's cut; a vendor paying by
+// check or cash never touches a processor, so charging them the marked-up
+// total would be asking for money the church has no fee to cover. `price`
+// already carries both figures — `subtotalCents` is exactly `tables ×
+// tableFee`, the same number the "1 table × $X" line already shows — so
+// this needs no second pricing function, only the right field of the one
+// that already exists.
 export function marketInsertArgs(value, price, photos) {
   return {
     event_id: 'christmasmarket',
     qty: value.tables,
     payment_status: 'unpaid',
-    amount_due_cents: price.totalCents,
+    amount_due_cents: value.payment_method === 'check' ? price.subtotalCents : price.totalCents,
     contact_name: value.participant_names,
     contact_email: value.email,
     contact_phone: value.phone,
     fields: { ...marketFieldsFromValue(value), photos: photos && photos.length ? photos : undefined },
   };
+}
+
+// A purely presentational relabeling for the coordinator's list, the CSV
+// export and the vendor drawer — it does NOT introduce a fifth
+// `payment_status`. Every filter, every CSV column and every existing test
+// keys off the four states `PAYMENT_STATES` already declares; a vendor who
+// chose to pay by check is still, factually, unpaid until the coordinator
+// marks the check received. This only changes what she is TOLD about why.
+export function paymentLabel(row) {
+  const st = paymentState(row.payment_status);
+  if (row.payment_method === 'check' && row.payment_status === 'unpaid') {
+    return { value: st.value, tone: st.tone, label: 'Awaiting check' };
+  }
+  return st;
 }
 
 // The payment address, built at request time from `give_url` and the market's
@@ -270,16 +302,19 @@ ${row('Appliances / power', v.appliances_power)}
 ${v.special_requests ? `<p style="margin:12px 0 6px"><strong>Special requests:</strong></p><p style="margin:0 0 12px;white-space:pre-wrap">${escapeHtml(v.special_requests)}</p>` : ''}
 ${photos.length ? `<p style="margin:12px 0 6px"><strong>Sample photos:</strong></p><p style="margin:0 0 12px">${photos.map((u, i) => `<a href="${escapeHtml(u)}">Photo ${i + 1}</a>`).join(' · ')}</p>` : ''}
 ${row('Agreed as', v.signature_name)}
-<p style="margin:12px 0 0"><strong>Asked to pay:</strong> ${escapeHtml(money(totalCents))}</p>
+<p style="margin:12px 0 0"><strong>Asked to pay:</strong> ${escapeHtml(money(totalCents))}${v.payment_method === 'check' ? ' — by check or cash, no card processing fee' : ''}</p>
 <p style="margin:12px 0 0;font-size:13px;color:#4A4860">Whether they actually paid is not something the website can see — mark it on the vendor list in the admin.</p>`;
 }
 
 export function vendorEmailHtml(v, { totalCents, payUrl, settings }) {
+  const byCheck = v.payment_method === 'check';
   return `<p>Hi ${escapeHtml(v.participant_names)},</p>
 <p>Thank you for applying for a table at the Timothy Christmas Market on ${escapeHtml(settings.dateLabel)}, ${escapeHtml(settings.hoursLabel)}.</p>
-<p>You asked for <strong>${v.tables} table${v.tables === 1 ? '' : 's'}</strong>, which comes to <strong>${escapeHtml(money(totalCents))}</strong> including the card processing fee.</p>
-${payUrl ? `<p><strong>Your space is held once payment arrives.</strong> If you closed the payment page before finishing, you can pay here: <a href="${escapeHtml(payUrl)}">${escapeHtml(money(totalCents))} for your table${v.tables === 1 ? '' : 's'}</a>.</p>` : ''}
-<p>Marla, our market coordinator, will confirm your table number by email. If you would rather pay by check or cash, or you need to change anything, reply to this message or write to <a href="mailto:${escapeHtml(settings.coordinatorEmail)}">${escapeHtml(settings.coordinatorEmail)}</a>.</p>
+<p>You asked for <strong>${v.tables} table${v.tables === 1 ? '' : 's'}</strong>, which comes to <strong>${escapeHtml(money(totalCents))}</strong>${byCheck ? '' : ' including the card processing fee'}.</p>
+${byCheck
+  ? `<p><strong>Please bring a check made out to Timothy Lutheran Church, or exact cash, on the day</strong> — Marla, our market coordinator, marks your table paid when it arrives.</p>`
+  : (payUrl ? `<p><strong>Your space is held once payment arrives.</strong> If you closed the payment page before finishing, you can pay here: <a href="${escapeHtml(payUrl)}">${escapeHtml(money(totalCents))} for your table${v.tables === 1 ? '' : 's'}</a>.</p>` : '')}
+<p>Marla will confirm your table number by email. ${byCheck ? 'If' : 'If you would rather pay by check or cash, or if'} you need to change anything, reply to this message or write to <a href="mailto:${escapeHtml(settings.coordinatorEmail)}">${escapeHtml(settings.coordinatorEmail)}</a>.</p>
 <p>Doors open to vendors at 8:30 am. Please be set up by 10:30 and stay until the market closes at 6:00.</p>
 <p>We are glad you are coming,<br>Timothy Lutheran Church</p>`;
 }
@@ -340,11 +375,12 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
       return `"${safe.replace(/"/g, '""')}"`;
     };
     const n = (v) => String(v == null ? '' : v);
-    const head = ['Table #', 'Payment', 'Participants', 'Business', 'Tables', 'Amount asked', 'Amount paid',
+    const head = ['Table #', 'Payment', 'Pay by', 'Participants', 'Business', 'Tables', 'Amount asked', 'Amount paid',
       'Email', 'Phone', 'Street', 'City', 'State', 'ZIP', 'Website or social', 'Returning',
       'What they sell', 'Food', 'Appliances / power', 'Special requests', 'Agreed as', 'Applied', 'Staff notes'];
     const body = rows.map((r) => [
-      t(r.table_number), t(paymentState(r.payment_status).label), t(r.participant_names), t(r.business_name),
+      t(r.table_number), t(paymentLabel(r).label), t(r.payment_method === 'check' ? 'Check or cash' : 'Card, online'),
+      t(r.participant_names), t(r.business_name),
       n(r.tables), n(((r.amount_due_cents || 0) / 100).toFixed(2)),
       r.amount_paid_cents == null ? '' : n((r.amount_paid_cents / 100).toFixed(2)),
       t(r.email), t(r.phone), t(r.street), t(r.city), t(r.state), t(r.zip),
@@ -587,7 +623,11 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
             `<span title="${escapeHtml(sells)}">${escapeHtml(sells.length > 80 ? sells.slice(0, 79) + '…' : sells)}</span>`
               + (r.sells_food ? ' <strong>· food</strong>' : ''),
             `${r.tables}${r.table_number ? ` <span style="color:var(--tlc-muted);">· #${escapeHtml(r.table_number)}</span>` : ''}`,
-            statusPill(st.tone, st.label),
+            // ⚠ The FILTER above still keys on the real four-state value —
+            // only the label shown here is relabeled for a check-paying
+            // vendor. Filtering by the display label would need a fifth
+            // filter pill for a state that does not actually exist.
+            statusPill(paymentLabel(r).tone, paymentLabel(r).label),
           ],
           actions: rowActions({ label: 'Open', href: `/market?edit=${r.id}` }),
           // Somebody who applied and never finished at the card page is the
@@ -672,6 +712,11 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
           { name: 'table_number', label: 'Table number', value: editing.table_number || '',
             placeholder: 'e.g. 19 or 19/20',
             hint: 'Free text on purpose — a two-table vendor takes a range, and that is how the floor plan is written.' },
+          { kind: 'static', label: 'Paying by',
+            value: editing.payment_method === 'check' ? 'Check or cash' : 'Card, online',
+            hint: editing.payment_method === 'check'
+              ? 'They asked for the flat table fee — no card processing fee is included.'
+              : (editing.square_order_id ? 'Marked paid automatically once Square confirms this exact order.' : '') },
           { kind: 'choice', name: 'payment_status', label: 'Payment', value: editing.payment_status || 'unpaid',
             options: PAYMENT_STATES.map((s) => ({ value: s.value, label: s.label })),
             hint: 'The website cannot see whether a card actually went through — this is your record, not the processor’s.' },
@@ -843,8 +888,26 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
             { headers: { Accept: 'application/json', 'X-Intake-Key': intakeKey },
               signal: AbortSignal.timeout(4000) });
           if (res.ok) vol = await res.json();
-          else volError = `Serve answered ${res.status}.`;
-        } catch (e) { volError = 'Serve could not be reached.'; }
+          else {
+            // Live diagnostic: the status alone hasn't been enough to explain
+            // a persistent "404" here that no external reproduction (same
+            // key, same URL) has matched — capture what Serve actually sent
+            // back, since this screen is already gated on canMarket and
+            // nothing here is shown to a visitor.
+            let bodySnippet = '';
+            let ct = '';
+            try {
+              ct = res.headers.get('content-type') || '';
+              const cfRay = res.headers.get('cf-ray') || '';
+              const text = await res.text();
+              bodySnippet = (text || '').slice(0, 300);
+              volError = `Serve answered ${res.status} (${ct || 'no content-type'}` +
+                (cfRay ? `, cf-ray ${cfRay}` : '') + `): ${bodySnippet || '(empty body)'}`;
+            } catch (readErr) {
+              volError = `Serve answered ${res.status}, and the body could not be read: ${readErr.message || readErr}`;
+            }
+          }
+        } catch (e) { volError = `Serve could not be reached: ${e.message || e}`; }
       }
       // ⚠ And an answer that is not the shape this expects is not an answer.
       // Something else on that host answering 200 with a page, or a proxy

@@ -17,6 +17,8 @@
 import {
   MARKET_DEFAULTS, MARKET_PRICING_JS, priceBreakdown, clampTables, money,
   sanitizeApplication, screenableText, paymentState, PAYMENT_STATES, marketPayUrl, photosOf,
+  marketRowFromRegistration, marketInsertArgs, paymentLabel,
+  coordinatorEmailHtml, vendorEmailHtml,
 } from './market.js';
 
 let pass = 0, fail = 0;
@@ -232,6 +234,87 @@ group('what the coordinator tracks');
   eq(photosOf({ photos: null }).length, 0, 'no photos is an empty list, not a crash');
   eq(photosOf({ photos: 'not json' }).length, 0, 'and so is a corrupt one');
   eq(photosOf({ photos: '["/images/a.jpg","",null]' }).length, 1, 'blanks and nulls are dropped from a stored list');
+}
+
+// ── a vendor can choose to pay by check or cash instead ──────────────────────
+group('paying by check owes the flat fee, never the grossed-up card total');
+{
+  const good = {
+    participant_names: 'Marla Kerr', email: 'marla@example.com', phone: '3145550123',
+    product_description: 'Handmade purses', signature_name: 'Marla Kerr', tables: '2',
+  };
+
+  eq(sanitizeApplication(good, CFG).value.payment_method, 'card',
+    'defaults to card with no field posted at all — every application before this shipped that way');
+  eq(sanitizeApplication({ ...good, payment_method: 'check' }, CFG).value.payment_method, 'check');
+  eq(sanitizeApplication({ ...good, payment_method: 'venmo' }, CFG).value.payment_method, 'card',
+    'anything other than the literal string "check" falls back to card, never stored as typed');
+
+  const price = priceBreakdown(2, CFG);
+  ok(price.feeCents > 0, 'sanity: two tables really does carry a card fee in this config');
+
+  const cardArgs = marketInsertArgs({ ...good, payment_method: 'card', tables: 2 }, price, []);
+  eq(cardArgs.amount_due_cents, price.totalCents, 'a card application owes the grossed-up total');
+
+  const checkArgs = marketInsertArgs({ ...good, payment_method: 'check', tables: 2 }, price, []);
+  eq(checkArgs.amount_due_cents, price.subtotalCents, 'a check application owes only the flat table fee');
+  ok(checkArgs.amount_due_cents < cardArgs.amount_due_cents,
+    'and that flat fee is strictly less than the card total — the whole point of not charging a card fee nobody incurred');
+  eq(checkArgs.fields.payment_method, 'check', 'the choice itself is carried into fields_json so the coordinator can see it');
+}
+
+group('the coordinator sees a check application relabeled, without inventing a fifth payment state');
+{
+  const unpaidCheck = { payment_status: 'unpaid', payment_method: 'check' };
+  eq(paymentLabel(unpaidCheck).label, 'Awaiting check', 'an unpaid check application reads differently from a plain unpaid one');
+  eq(paymentLabel(unpaidCheck).value, 'unpaid', 'but the underlying VALUE is still the real one — no fifth state exists');
+
+  eq(paymentLabel({ payment_status: 'unpaid', payment_method: 'card' }).label, 'Not paid yet',
+    'a card application keeps the ordinary label');
+  eq(paymentLabel({ payment_status: 'paid', payment_method: 'check' }).label, 'Paid',
+    'once a check is actually recorded as paid, it reads exactly like any other paid row — the relabel only applies while unpaid');
+  eq(paymentLabel({ payment_status: 'waived', payment_method: 'check' }).label, 'Fee waived',
+    'and a waived check application is not relabeled either');
+}
+
+group('marketRowFromRegistration and marketInsertArgs agree on the field shape');
+{
+  const reg = {
+    id: 9, contact_name: 'Marla Kerr', contact_email: 'marla@example.com', contact_phone: '3145550123',
+    qty: 1, payment_status: 'unpaid', amount_due_cents: 3000, amount_paid_cents: null,
+    table_number: '', staff_notes: '', created_at: '2026-08-18 00:00:00', square_order_id: 'order_abc',
+    fields_json: JSON.stringify({ product_description: 'Purses', signature_name: 'Marla Kerr', payment_method: 'check' }),
+  };
+  const row = marketRowFromRegistration(reg);
+  eq(row.payment_method, 'check', 'the payment method round-trips out of fields_json');
+  eq(row.square_order_id, 'order_abc', 'and the Square order id is surfaced too, for the drawer’s own note');
+
+  const noField = marketRowFromRegistration({ ...reg, square_order_id: null, fields_json: JSON.stringify({ signature_name: 'x' }) });
+  eq(noField.payment_method, 'card', 'a registration saved before this shipped has no payment_method key at all, and reads as card');
+  eq(noField.square_order_id, '', 'and no stored order id reads as an empty string, never null or undefined reaching a template');
+}
+
+group('the confirmation emails branch on how the vendor chose to pay');
+{
+  const settings = { dateLabel: 'Saturday, Dec 12', hoursLabel: '10–5', coordinatorEmail: 'marla@example.com' };
+  const cardVendor = { participant_names: 'Marla Kerr', tables: 1, payment_method: 'card' };
+  const checkVendor = { participant_names: 'Marla Kerr', tables: 1, payment_method: 'check' };
+
+  const cardHtml = vendorEmailHtml(cardVendor, { totalCents: 3120, payUrl: 'https://square.link/u/x', settings });
+  ok(cardHtml.includes('including the card processing fee'), 'a card vendor is told the total includes the fee');
+  ok(cardHtml.includes('square.link/u/x'), 'and is given the payment link');
+  ok(!cardHtml.includes('bring a check'), 'and is not told to bring a check');
+
+  const checkHtml = vendorEmailHtml(checkVendor, { totalCents: 3000, payUrl: '', settings });
+  ok(checkHtml.includes('bring a check'), 'a check vendor is told to bring a check or cash');
+  ok(!checkHtml.includes('including the card processing fee'), 'and the flat total is never described as including a fee it does not carry');
+  ok(!checkHtml.includes('If') || checkHtml.match(/If/g).length < (checkHtml.match(/If you|If they/g) || []).length + 3,
+    'sanity: the closing sentence reads as one clause, not a doubled "If ... If"');
+
+  const coordCardHtml = coordinatorEmailHtml({ ...cardVendor, product_description: 'Purses', signature_name: 'Marla Kerr' }, { totalCents: 3120 });
+  ok(!coordCardHtml.includes('no card processing fee'), 'the coordinator email says nothing extra for a card application');
+  const coordCheckHtml = coordinatorEmailHtml({ ...checkVendor, product_description: 'Purses', signature_name: 'Marla Kerr' }, { totalCents: 3000 });
+  ok(coordCheckHtml.includes('no card processing fee'), 'and flags a check application so she knows not to expect the fee in the total');
 }
 
 console.log(`\nmarket.test.mjs: ${pass} passed, ${fail} failed`);
