@@ -189,6 +189,13 @@ eq(await page.locator('.ed-img[data-imgdrop="item:0:img"] input[data-in="item:0:
 // `url` is somewhere a visitor is sent, and they get different controls.
 eq(await page.locator('.ed-img[data-imgdrop="item:0:url"]').count(), 0, "a card's link is not a picture field");
 eq(await page.locator('.ed-link input[data-in="item:0:url"]').count(), 1, 'it keeps the pick-a-page control');
+// Dinger read the "https://…" placeholder as documentation and asked why the
+// field "only allows a full website url or page names" — the placeholder
+// vanishes on typing and the picker beside it only ever lists real pages, so
+// #name (a same-page jump) had no visible mention anywhere. This line is
+// always on screen, whether or not the box has been touched yet.
+ok((await page.locator('.ed-link .ed-note').first().textContent()).includes('#name'),
+  'the box says a #name jump is a real option, not just a page or a URL');
 eq(await page.locator('.ed-img[data-imgdrop="photo"]').count(), 0, 'no block photo on a card grid');
 
 group('choosing a card picture from the library');
