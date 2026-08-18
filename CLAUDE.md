@@ -6294,6 +6294,66 @@ read and write nothing, with the real Supabase error now visible instead of
 a misleading "session expired." This is the one step this session could not
 perform itself.
 
+#### The emailed report carries a real CSV and PDF now, not just an HTML table (2026-08-18)
+
+Dinger: the email report should send a PDF matching the print option, and a
+CSV. It sent neither before this — `/payroll/email` built one HTML email
+with the figures in inline tables and nothing attached.
+
+**No PDF library exists anywhere in this repo, and Cloudflare Workers has
+no headless browser to render one with** — so `admin/pdf.js` is a small,
+dependency-free PDF writer, the same shape as `admin/exif.js` reading image
+bytes by hand instead of pulling in a package. It lays out plain monospace
+text (Courier, one of the 14 standard PDF fonts — nothing to embed) rather
+than trying to reproduce the HTML email's styled tables, because alignment
+is what a bookkeeper's reconciliation copy actually needs, not typography.
+
+- **⚠ Text is ASCII-only, by construction, not by accident.** A simple
+  (non-embedded) PDF font reads single-byte character codes through
+  WinAnsiEncoding; a Unicode codepoint written into a content stream
+  literally is not a rendering quirk, it is a corrupt file. `asciiSafe()`
+  substitutes the punctuation this codebase actually emits (em dash, curly
+  quotes, the minus sign in `−$136.00`) and drops anything else to `?`
+  rather than risk it. A name with a genuinely non-Latin character survives
+  in the CSV (real UTF-8, via `TextEncoder`) but degrades in the PDF — a
+  real gap, recorded rather than hidden, and the one a future session would
+  need to fix with an embedded CID font if it ever matters.
+- **`admin/payroll-report.js` builds the CSV and the PDF's lines from the
+  identical `body` the HTML email already read** — `mdo.rows` /
+  `church.rows` / both subtotals / the total, the exact shape
+  `exportReport()` on the page already posts. Three renderings of one set
+  of figures, not three separate ideas of what "the report" is; the CSV
+  columns and the PDF's own money/hours/dash formatting are copied
+  verbatim from the client's `exportReport()`/`renderPrintTable()`, down to
+  the CSV-formula-injection guard (PY-5) and the 403(b) keeping its minus
+  sign through that guard.
+- **⚠ `sendTransactionalEmail()` now takes an `attachments` array
+  (`[{name, content}]`, content already base64)** — a thin pass-through to
+  Brevo's own `attachment` field, not a function that knows how to build a
+  file. The route base64-encodes through `TextEncoder`, not a bare `btoa()`
+  on the raw string, so a CSV with a real accented name in it round-trips
+  correctly — `btoa()` alone throws on anything outside Latin-1.
+- **A failed attachment build never blocks the email.** The HTML table in
+  the body is still the report of record if `buildPayrollCsv`/
+  `buildMonospacePdf` throws for any reason — logged, not swallowed
+  silently, but the bookkeeper still gets the figures either way.
+- **Verified structurally, not just "the file exists".** A hand-rolled PDF
+  needs its own xref table pointing at exact byte offsets for every
+  object, and `admin/payroll-report.test.mjs` walks that table by hand and
+  confirms every offset lands on the `N 0 obj` it claims to — the same
+  check style `admin/exif.test.mjs` uses (search the real bytes, don't
+  trust the writer's own logic to have been right). Verified non-vacuous:
+  a corrupted offset is deliberately injected and the check is confirmed
+  to fail on it. Also covers a 90-row roster spanning multiple pages and a
+  name carrying accented/curly characters, both checked for a still-valid
+  PDF. No PDF-parsing library was available in this environment to also
+  confirm the file opens in a real reader (Acrobat/Preview/browser) — the
+  xref-integrity check is what stands in for that here.
+
+Run: `node admin/payroll-report.test.mjs` (27), plus the existing
+`node test/payroll.test.mjs` (93, unchanged — the client screen itself was
+not touched, only the Worker route it already posts to).
+
 ### Access Control
 - Staff admin password: full access (all tabs) — permissions are granted per-account, per-tab via the Users tab's checkboxes (see `PERMISSIONS` in `admin/auth.js`)
 - **v3.0.0 renamed three keys** — `pages_edit`→`notices_edit`, `site_pages`→`pages_edit`, `site_pages_own`→`pages_edit_own`. See "The v3.0.0 Admin Overhaul" above; the migration must never run twice.

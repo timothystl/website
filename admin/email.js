@@ -84,7 +84,11 @@ export async function cancelBrevoCampaign(env, campaignId) {
 }
 
 // ── BREVO TRANSACTIONAL EMAIL ─────────────────────────────────
-export async function sendTransactionalEmail(env, { subject, htmlContent, toEmails, replyTo }) {
+// attachments: [{ name, content }] — content is already base64. Brevo's
+// SMTP API takes exactly that shape under `attachment`, so callers build
+// the file (CSV text, PDF bytes) and base64-encode it themselves; this
+// function stays a thin wrapper rather than knowing how to make a file.
+export async function sendTransactionalEmail(env, { subject, htmlContent, toEmails, replyTo, attachments }) {
   const apiKey = env.BREVO_API_KEY;
   if (!apiKey) return { error: 'BREVO_API_KEY not configured' };
   const resp = await fetch('https://api.brevo.com/v3/smtp/email', {
@@ -95,7 +99,8 @@ export async function sendTransactionalEmail(env, { subject, htmlContent, toEmai
       replyTo: replyTo || { email: env.BREVO_REPLY_TO || env.BREVO_SENDER_EMAIL || 'dinger@timothystl.org' },
       to: toEmails.map(e => ({ email: e })),
       subject,
-      htmlContent
+      htmlContent,
+      ...(Array.isArray(attachments) && attachments.length ? { attachment: attachments } : {}),
     })
   });
   if (!resp.ok) return { error: `Brevo error: ${await resp.text()}` };
