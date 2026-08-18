@@ -2174,13 +2174,24 @@ function linkPicker(spec) {
     '<option value="">Pick a page on this site…</option>' + opts + '</select>';
 }
 
-// The whole control: the box, the picker, and the sentence.
+// The whole control: the box, the picker, a standing hint, and the sentence.
+//
+// ⚠ THE HINT IS ALWAYS ON SCREEN, NOT ONLY IN THE PLACEHOLDER. A placeholder
+// disappears the moment somebody starts typing and every item placeholder
+// here says something like "https://…" — which reads as documentation of
+// what the box takes, not an example. Dinger read it exactly that way and
+// asked why the field "only allows a full website url or page names." The
+// picker beside it makes that worse: it lists real pages and nothing else,
+// because it can't know about a jump-to name, so the one visible menu of
+// options is the wrong menu. This line is the third option stated in words,
+// every time the box is open, whether or not anybody has typed into it yet.
 function linkField(spec, value, placeholder, id) {
   return '<div class="ed-link">' +
     '<input class="ed-field"' + (id ? ' id="' + id + '"' : '') + ' data-in="' + esc(spec) + '"' +
       ' data-link="1" data-k="' + esc(spec) + '" value="' + esc(value || '') + '"' +
       ' placeholder="' + esc(placeholder) + '">' +
     linkPicker(spec) +
+    '<span class="ed-note">A page address, a full https:// link, or #name to jump to a block on this page that has that Jump-to name.</span>' +
     '<span class="ed-linkwarn" data-warn="' + esc(spec) + '">' + esc(tlcLinkWarning(value || '', S.linkTargets || [])) + '</span>' +
     '</div>';
 }

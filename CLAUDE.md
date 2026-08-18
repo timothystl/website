@@ -579,6 +579,39 @@ destination of a jump, not just the ones a particular type declares.
 Run: the `A block can be given a jump-to name` group in
 `node admin/blocks.test.mjs`.
 
+**And the field pointing AT a jump-to name had no way to say so (v5.21.0,
+2026-08-17).** Told how to set a Jump-to name, Dinger came back with: *"in the
+button I want to have jump to it only is allowing for full website url or
+page names."* Nothing was actually refusing `#name` — `linkField()` has
+always been a free-text box, and `safeUrl()` has always accepted a leading
+`#` — but the box gave no reason to believe that. Its placeholder is
+`https://…` (or similar, per type), which reads as documentation of what the
+field takes rather than an example, and the "Pick a page on this site…"
+picker beside it is a real menu with real items in it, none of which is ever
+a jump-to name — it cannot list one, because a name lives on a block, not in
+`linkTargets()`. Between a placeholder that only shows a URL and a picker
+that only shows pages, `#name` had no visible home anywhere on the screen.
+
+- **A standing line under the box, not a smarter placeholder.** A
+  placeholder disappears the instant somebody starts typing, and it would
+  have needed rewriting in every one of the half-dozen `itemPlaceholders`
+  that give a `url` field its own wording ("Where it goes", "A handout to
+  download (optional)", "Link (optional)" …) — some of which are not really
+  navigational, and forcing "or #name" into all of them would be true of a
+  few and noise on the rest. One line added to `linkField()` itself reaches
+  every `url` field on any block, whichever placeholder it carries, and is
+  visible before anyone types a character.
+- **⚠ Not the `.ed-linkwarn` line right below it.** That element is styled in
+  the "Problem" ink (`#8C3A28`) and is empty until something is actually
+  wrong — using it to state a normal, always-true fact would either put a
+  brick-red sentence under every link field on the site, or require
+  overloading its color logic for a state that isn't a problem at all. The
+  new line is a plain `.ed-note`, the same neutral gray every other helper
+  sentence in this inspector already uses.
+
+Run: the new assertion in the `a card grid has picture fields, not address
+boxes` group of `test/editor-media.test.mjs`.
+
 ### Every Christmas Market setting moved onto the Christmas Market screen (v5.19.0, 2026-08-17)
 
 Dinger, after being pointed at "Most tables one vendor may take" tucked into
