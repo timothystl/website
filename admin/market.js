@@ -884,8 +884,18 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
           // ⚠ A TIMEOUT, because this is another application on another host
           // and an admin screen must not sit waiting on one. Four seconds and
           // the tab renders its own honest empty state instead.
+          // cache: 'no-store' is load-bearing, not defensive boilerplate. An external
+          // curl to this exact URL with this exact key returned 200 with real data
+          // while this live subrequest kept getting Serve's own generic 404 fallback —
+          // the two requests land at different Cloudflare colos, and Serve's route for
+          // this endpoint had no explicit Cache-Control on any of its responses (fixed
+          // on that side too), so a colo that saw a 404 before the route existed could
+          // keep serving that cached 404 indefinitely for callers routed through it.
+          // no-store tells the runtime to skip Cloudflare's edge cache for this
+          // subrequest entirely rather than trusting whatever is already cached there.
           const res = await fetch('https://serve.timothystl.org/api/signups/christmasmarket/summary',
             { headers: { Accept: 'application/json', 'X-Intake-Key': intakeKey },
+              cache: 'no-store',
               signal: AbortSignal.timeout(4000) });
           if (res.ok) vol = await res.json();
           else {
