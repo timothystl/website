@@ -527,6 +527,63 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### The Christmas Market generalized into `/events`, and a new event can adopt a page instead of getting a second one (v5.27.0, 2026-08-18)
+
+Built from `design_handoff_events/`, the follow-on to the market handoff below —
+turns the market's own five-tab screen into a general shape any number of
+events share: `site_events` / `site_event_fields` / `site_event_registrations`,
+seeded from the market's own row so nothing about the market moved. `admin/events.js`
+is the whole thing — `/events` (a list, `renderListSection`), `/events/new` (six
+questions plus four capability toggles that decide which tabs an event gets),
+`/events/:id` (Registrations · Page & copy · Money & dates · Volunteers · Photos,
+present only per capability, every mutating route re-checking that ONE event's
+own permission). `market-price.js` was never touched; `admin/market.js` now reads
+and writes through `admin/events.js`'s generic functions via an adapter, so its
+own screen, CSV export and public application are byte-for-byte unchanged.
+`⚠ THIS FILE HAD NO ENTRY FOR ANY OF IT` until this pass wrote one — the section
+below stayed the record of the market's own build; this is the record of the
+system it became part of. See PR #467 for the six-phase breakdown.
+
+**⚠ Creating a new event always minted a brand-new page, even for an event whose
+page already exists.** Reported directly: *"if there is a page connected to it
+already how do we fix that like VBS. so there arent two pages"* — VBS is a real
+`pages` row already (`admin/site-pages.js`'s youth-family seed, `/vbs`), and
+`createEvent()` had no way to know that. `pageSlugify('Vacation Bible School')`
+would have landed on `/vacation-bible-school` (or, worse, on a `uniqueSlug()`
+collision fallback like `/vbs-2` if a title happened to slugify to `vbs`) — a
+second live address for the same event, with the real `/vbs` sitting there
+unconnected.
+
+- **"Its page" is a new question on `/events/new`**, a `choice` field (per this
+  repo's own ≤4-options-is-chips rule — the candidate list is every unlocked,
+  non-outbound page not already claimed by another live event, easily more than
+  four) offered ABOVE "Or start a new page from," which only fires when "Its
+  page" is left on "Create a new page." Picking an existing page skips page
+  creation entirely: `addRegistrationBlockToPage()` — one function, shared with
+  the Page & copy route below so both paths behave identically — appends a
+  `registration` block to the page's DRAFT `blocks` only, never `published_blocks`,
+  the same draft-only rule every other write in this admin follows. Everything
+  already on the page — words, photos, layout — is untouched; a page that takes
+  no registration is still linked with no block added at all.
+- **`/events/:id/connect-page` and `/events/:id/disconnect-page`** on the Page &
+  copy tab retrofit this for an event created before the picker existed, or one
+  whose auto-created page was the mistake in the first place — connecting never
+  deletes the stray page (an office person can delete it from the Pages screen
+  once they've confirmed it's really unwanted; this file deliberately does not
+  duplicate that screen's own delete guardrails — locked pages, orphaned
+  children, redirect cleanup — here), and disconnecting never deletes the real
+  one. Gated on `canEvent || canPages`, the same pair the tab's own visibility
+  already checks.
+- **The candidate list excludes `locked` pages and outbound (`external_url`)
+  ones** — a redirect page like `/mdo` has no blocks to add a form to, and a
+  locked page belongs to the site's own chrome, not to any one event.
+- Verified against the real seeded `/vbs` row, not a stand-in for it — the test
+  boots the actual Worker, confirms `/vbs` is already present before the event
+  exists, and asserts the page count doesn't move.
+
+Run: `node --experimental-loader ./test/html-loader.mjs test/events-admin.test.mjs`
+(140 assertions).
+
 ### A Square payment reconciles itself, and a vendor can pay by check (2026-08-18)
 
 Dinger: *"i made a payment through the site for a vendor, but it does not

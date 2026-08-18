@@ -465,6 +465,26 @@ ${sidebarShell('events', currentUser, '', badges)}
 </div>`, 'Events');
 }
 
+// Pages this admin could reasonably connect an event to: real content pages
+// (not the ones locked into the site's own chrome, not an outbound redirect
+// like /mdo, which has no blocks at all) that no OTHER active event has
+// already claimed. VBS, Sunday School, Confirmation and the rest of the
+// Youth & Family group are already real `pages` rows — a plain page nobody
+// has turned into an event yet — so this is what lets a new or existing
+// event ADOPT one of those instead of `createEvent()` minting a second page
+// at a second address for the same thing.
+async function candidateExistingPages(env) {
+  const claimed = await env.DB.prepare(
+    "SELECT page_landing_id AS id FROM site_events WHERE page_landing_id IS NOT NULL AND status != 'archived' " +
+    "UNION SELECT page_registration_id AS id FROM site_events WHERE page_registration_id IS NOT NULL AND status != 'archived'"
+  ).all().catch(() => ({ results: [] }));
+  const claimedIds = new Set((claimed.results || []).map((r) => r.id));
+  const pages = await env.DB.prepare(
+    "SELECT id, title, slug FROM pages WHERE locked = 0 AND external_url IS NULL ORDER BY title"
+  ).all().catch(() => ({ results: [] }));
+  return (pages.results || []).filter((p) => !claimedIds.has(p.id));
+}
+
 // ── PHASE C — creating one ────────────────────────────────────────────────────
 async function renderNewEventForm(env, currentUser, badges) {
   // "Start the page from" — every OTHER event that already has a
@@ -474,6 +494,7 @@ async function renderNewEventForm(env, currentUser, badges) {
   const sources = await env.DB.prepare(
     "SELECT id, name, page_registration_id FROM site_events WHERE page_registration_id IS NOT NULL AND status != 'archived' ORDER BY sort_order, id"
   ).all().catch(() => ({ results: [] }));
+  const existingPages = await candidateExistingPages(env);
 
   return html(`
 ${sidebarShell('events', currentUser, '', badges)}
@@ -494,9 +515,14 @@ ${sidebarShell('events', currentUser, '', badges)}
       { kind: 'toggle', name: 'has_volunteers', label: 'Has a volunteer roster', value: 0, on: 'Yes', off: 'No', hint: 'Read from Serve (serve.timothystl.org) — see the Volunteers tab once the event exists.' },
       { kind: 'toggle', name: 'has_photos', label: 'Has its own photographs', value: 0, on: 'Yes', off: 'No' },
       {
-        kind: 'chips', name: 'clone_from', label: 'Start the page from', value: '',
+        kind: 'choice', name: 'existing_page_id', label: 'Its page', value: '',
+        options: [{ value: '', label: 'Create a new page' }, ...existingPages.map((p) => ({ value: p.id, label: `Use the existing page — ${p.title || p.id} (${p.slug || p.id})` }))],
+        hint: 'VBS, Sunday School, and the rest of Youth & Family already have a page. Pick it here instead of creating a second one at a second address — a sign-up form is added to it, not built beside it.',
+      },
+      {
+        kind: 'chips', name: 'clone_from', label: 'Or start a new page from', value: '',
         options: [{ value: '', label: 'A blank page' }, ...(sources.results || []).map((s) => ({ value: s.page_registration_id, label: `A copy of ${s.name || s.id}’s page` }))],
-        hint: 'A copy carries over everything on that page — its own words included — as a starting point to edit down, not a finished page.',
+        hint: 'Only used when "Its page" above is left as Create a new page. A copy carries over everything on that page — its own words included — as a starting point to edit down, not a finished page.',
       },
     ],
   })}
@@ -540,8 +566,23 @@ async function createEvent(env, currentUser, form) {
   // A page is only created for an event that has something to put on one —
   // the same reasoning a payments-only or volunteers-only event does not get
   // an unused page it would just have to delete.
+  //
+  // ⚠ "Its page" (existing_page_id) is checked FIRST and, when set, skips
+  // page creation entirely — VBS already has a page (`/vbs`, from the
+  // youth-page seed); creating a fresh one here would leave two live
+  // addresses for one event, the market's own address duplicated by a
+  // second party nobody asked for. Adopting the real page instead means a
+  // registration block is ADDED to it, never a new page minted beside it.
   let pageId = null;
-  if (hasRegistration || hasPayment) {
+  const existingPageId = cap(form.get('existing_page_id'), 60);
+  if (existingPageId) {
+    const existing = await env.DB.prepare('SELECT id, blocks FROM pages WHERE id = ?').bind(existingPageId).first().catch(() => null);
+    if (existing) {
+      pageId = existing.id;
+      if (hasRegistration) await addRegistrationBlockToPage(env, pageId, id, existing.blocks, now, currentUser);
+    }
+  }
+  if (!pageId && (hasRegistration || hasPayment)) {
     const cloneFromPageId = cap(form.get('clone_from'), 60);
     let blocks;
     if (cloneFromPageId) {
@@ -569,13 +610,32 @@ async function createEvent(env, currentUser, form) {
       "INSERT INTO pages (id, title, menu_label, slug, parent_id, sort, template, status, in_menu, seo_description, blocks, updated_at, updated_by) " +
       "VALUES (?, ?, '', ?, NULL, 999, 'standard', 'draft', 0, '', ?, ?, ?)"
     ).bind(pageId, name, slug, JSON.stringify(blocks), now, currentUser?.username || '').run();
+  }
+  if (pageId) {
     await env.DB.prepare('UPDATE site_events SET page_landing_id = ?, page_registration_id = ? WHERE id = ?')
       .bind(pageId, pageId, id).run();
   }
 
   await logAudit(env.DB, currentUser, 'create', 'event', id, name, null,
-    { name, has_registration: hasRegistration, has_payment: hasPayment, has_volunteers: hasVolunteers, has_photos: hasPhotos, page_id: pageId });
+    { name, has_registration: hasRegistration, has_payment: hasPayment, has_volunteers: hasVolunteers, has_photos: hasPhotos, page_id: pageId, existing_page: !!existingPageId });
   return id;
+}
+
+// Adds a `registration` block for `eventId` to a page's DRAFT blocks —
+// never `published_blocks`, the same rule every other draft-only write in
+// this admin follows — unless one for this event is already there. Shared
+// by createEvent()'s "Its page" picker and the Page & copy tab's "Connect a
+// different page" action below, so adopting an existing page behaves
+// identically whichever screen it's done from.
+async function addRegistrationBlockToPage(env, pageId, eventId, rawBlocks, now, currentUser) {
+  let parsed = [];
+  try { parsed = JSON.parse(rawBlocks || '[]'); } catch (_) { parsed = []; }
+  const list = Array.isArray(parsed) ? parsed : [];
+  if (list.some((b) => b && b.type === 'registration' && b.eventId === eventId)) return false;
+  const next = sanitizeBlocks([...list, newBlock('registration', { eventId })]);
+  await env.DB.prepare('UPDATE pages SET blocks = ?, updated_at = ?, updated_by = ? WHERE id = ?')
+    .bind(JSON.stringify(next), now, currentUser?.username || '', pageId).run();
+  return true;
 }
 
 // ── PHASE D — one event's own screen ─────────────────────────────────────────
@@ -688,9 +748,25 @@ async function renderEventScreen(env, currentUser, url, badges, id) {
         <div class="btn-row" style="margin:0;">
           <a class="tlc-btn-primary" href="/pages/${escapeHtml(r.id)}/edit">Edit the page</a>
           <a class="tlc-action-quiet" href="https://timothystl.org${escapeHtml(r.slug || '')}" target="_blank" rel="noopener">View it live</a>
+          <form method="POST" action="/events/${id}/disconnect-page" style="margin:0;" onsubmit="return confirm('Disconnect ${escapeHtml((r.title || r.id).replace(/'/g, '')).replace(/"/g, '&quot;')} from this event? The page itself is not deleted — it just stops being this event’s page, so you can connect the real one instead.')">
+            <button type="submit" class="tlc-action-quiet">Disconnect</button>
+          </form>
         </div>
       `, { right: state });
     }).join('');
+    // Every page not already spoken for by another live event — so an
+    // event created before this picker existed (or one whose page was
+    // built by mistake, a second `/vbs` beside the real one) can still be
+    // pointed at the page that was always the right one.
+    const candidates = await candidateExistingPages(env);
+    const connectPanel = candidates.length ? panel('Connect a different page', `
+      <p class="tlc-hint" style="margin:0 0 12px;">If this event already has a page somewhere else on the site — VBS almost certainly does — connect it here instead of leaving two.${Number(ev.has_registration) ? ' A sign-up form is added to it; nothing already on the page is touched.' : ''}</p>
+      <form method="POST" action="/events/${id}/connect-page" style="margin:0;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+        ${renderField({ kind: 'choice', name: 'page_id', label: 'Page', value: '',
+          options: [{ value: '', label: 'Choose a page…' }, ...candidates.map((p) => ({ value: p.id, label: `${p.title || p.id} (${p.slug || p.id})` }))] })}
+        <button type="submit" class="tlc-btn-primary">Connect</button>
+      </form>
+    `) : '';
     body = `<header class="tlc-section-head">
         <div class="tlc-section-headings">
           <h1 class="tlc-title">Page &amp; copy</h1>
@@ -698,7 +774,8 @@ async function renderEventScreen(env, currentUser, url, badges, id) {
         </div>
       </header>
       ${cards ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;">${cards}</div>`
-        : `<p class="tlc-hint">This event has no page of its own yet. Add a Registration block (or a page) from the Pages screen and it will show up here once linked.</p>`}`;
+        : `<p class="tlc-hint">This event has no page of its own yet. Connect an existing one below, or add a Registration block (or a page) from the Pages screen and it will show up here once linked.</p>`}
+      ${connectPanel ? `<div style="margin-top:20px;">${connectPanel}</div>` : ''}`;
   }
 
   // ── MONEY & DATES ───────────────────────────────────────────────────────
@@ -898,6 +975,37 @@ export async function handleEventsRoutes(request, env, path, method, currentUser
   const ev = await getEvent(env, id);
   if (!ev) return new Response('', { status: 302, headers: { Location: '/events' } });
   const canEvent = hasPermission(currentUser, ev.coordinator_permission) || hasPermission(currentUser, 'events_manage');
+  // The Page & copy tab is reachable by either key (its own tab-visibility
+  // rule, above) — connecting or disconnecting a page is content work, not
+  // money or a roster, so its two routes below check the same pair.
+  const canPages = hasPermission(currentUser, 'pages_edit');
+
+  if (action === '/connect-page' && method === 'POST') {
+    if (!(canEvent || canPages)) return new Response('Access denied.', { status: 403 });
+    const form = await request.formData();
+    const pageId = cap(form.get('page_id'), 60);
+    if (pageId) {
+      const page = await env.DB.prepare('SELECT id, blocks FROM pages WHERE id = ?').bind(pageId).first().catch(() => null);
+      if (page) {
+        const now = new Date().toISOString();
+        if (Number(ev.has_registration)) await addRegistrationBlockToPage(env, pageId, id, page.blocks, now, currentUser);
+        const before = { page_landing_id: ev.page_landing_id, page_registration_id: ev.page_registration_id };
+        await updateEventRow(env, id, { page_landing_id: pageId, page_registration_id: pageId, updated_at: now, updated_by: currentUser?.username || '' });
+        await logAudit(env.DB, currentUser, 'update', 'event', id, ev.name, before, { page_landing_id: pageId, page_registration_id: pageId });
+      }
+    }
+    return new Response('', { status: 302, headers: { Location: `/events/${id}?tab=page&toast=${encodeURIComponent('Connected · written to the audit log')}` } });
+  }
+
+  if (action === '/disconnect-page' && method === 'POST') {
+    if (!(canEvent || canPages)) return new Response('Access denied.', { status: 403 });
+    const before = { page_landing_id: ev.page_landing_id, page_registration_id: ev.page_registration_id };
+    if (before.page_landing_id || before.page_registration_id) {
+      await updateEventRow(env, id, { page_landing_id: null, page_registration_id: null, updated_at: new Date().toISOString(), updated_by: currentUser?.username || '' });
+      await logAudit(env.DB, currentUser, 'update', 'event', id, ev.name, before, { page_landing_id: null, page_registration_id: null });
+    }
+    return new Response('', { status: 302, headers: { Location: `/events/${id}?tab=page&toast=${encodeURIComponent('Disconnected · the page itself is untouched')}` } });
+  }
 
   if (action === '/export.csv' && method === 'GET') {
     if (!canEvent) return new Response('Access denied.', { status: 403 });
