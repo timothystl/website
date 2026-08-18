@@ -2481,6 +2481,14 @@ group('an approved payroll period is locked server-side');
   // still change afterwards the signature is on nothing — and the fix list is
   // explicit that this is enforced at the proxy, not by hiding the button. A
   // stale tab, a second window and a crafted POST all arrive at the same line.
+  //
+  // ⚠ Payroll stopped talking to Supabase's REST table endpoints directly —
+  // every call now goes through a gated `payroll_*` RPC function (see
+  // "Payroll reads and writes through thirteen RPC functions" in CLAUDE.md),
+  // so the period is in the POST BODY (`p_period_start`), not a
+  // `period_start=eq.X` query string, and the path is always
+  // `/sb/rest/v1/rpc/payroll_<fn>`. The stub below reads the body, not the
+  // href, for exactly that reason.
   const { db, env } = await boot();
   const { cookie } = signIn(db);
   const realFetch = globalThis.fetch;
@@ -2488,22 +2496,27 @@ group('an approved payroll period is locked server-side');
   let approved = [];
   let supabaseUp = true;
   let reached = 0;               // did the write get through to Supabase?
-  globalThis.fetch = async (u) => {
-    const href = typeof u === 'string' ? u : u.url;
+  globalThis.fetch = async (input, init) => {
+    const href = typeof input === 'string' ? input : input.url;
     if (!supabaseUp) throw new Error('supabase unreachable');
-    if (href.includes('/payroll_periods')) {
+    let raw = '';
+    if (init && init.body != null) raw = typeof init.body === 'string' ? init.body : '';
+    else if (input && typeof input.clone === 'function') { try { raw = await input.clone().text(); } catch (_) { raw = ''; } }
+    let parsed = {};
+    try { parsed = raw ? JSON.parse(raw) : {}; } catch (_) { parsed = {}; }
+    if (href.includes('/rpc/payroll_get_period_approval')) {
       // Honor the filter, or the stub answers "approved" for every period and
       // the per-period scoping below would pass without being true.
-      const want = decodeURIComponent((href.match(/period_start=eq\.([^&]+)/) || [])[1] || '');
+      const want = String(parsed.p_period_start || '');
       return new Response(JSON.stringify(approved.filter((r) => r.period_start === want)), { status: 200 });
     }
-    if (href.includes('/church_staff_period_entries')) { reached++; return new Response('[]', { status: 200 }); }
-    return new Response('{}', { status: 200 });
+    if (href.includes('/rpc/payroll_save_hours')) { reached++; return new Response('null', { status: 200 }); }
+    return new Response('null', { status: 200 });
   };
   const saveHours = (period = '2026-07-20') => worker.fetch(new Request(
-    'https://admin.timothystl.org/sb/rest/v1/church_staff_period_entries?on_conflict=staff_id,period_start',
+    'https://admin.timothystl.org/sb/rest/v1/rpc/payroll_save_hours',
     { method: 'POST', headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/json', apikey: 'k' },
-      body: JSON.stringify({ staff_id: 'a', period_start: period, hours_worked: 40 }) }), env, ctx);
+      body: JSON.stringify({ p_staff_id: 'a', p_period_start: period, p_hours_worked: 40, p_pto_used: 0, p_pto_earned: 0 }) }), env, ctx);
 
   reached = 0;
   eq((await saveHours()).status, 200, 'an unapproved period saves as before');
@@ -2533,16 +2546,17 @@ group('an approved payroll period is locked server-side');
   // ⚠ Rates are NOT period-scoped, so locking them would stop the office
   // fixing a rate for a run they have not done yet.
   reached = 0;
-  const rate = await worker.fetch(new Request('https://admin.timothystl.org/sb/rest/v1/church_staff', {
+  const rate = await worker.fetch(new Request('https://admin.timothystl.org/sb/rest/v1/rpc/payroll_save_staff', {
     method: 'POST', headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/json', apikey: 'k' },
-    body: JSON.stringify({ id: 'a', hourly_rate: 21 }),
+    body: JSON.stringify({ p_id: 'a', p_hourly_rate: 21 }),
   }), env, ctx);
   eq(rate.status, 200, 'a staff record still saves while a period is approved');
 
   // And taking the approval back has to stay possible, or the lock is a trap.
   const unapprove = await worker.fetch(new Request(
-    'https://admin.timothystl.org/sb/rest/v1/payroll_periods?period_start=eq.2026-07-20',
-    { method: 'DELETE', headers: { cookie, origin: 'https://admin.timothystl.org', apikey: 'k' } }), env, ctx);
+    'https://admin.timothystl.org/sb/rest/v1/rpc/payroll_unapprove_period',
+    { method: 'POST', headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/json', apikey: 'k' },
+      body: JSON.stringify({ p_period_start: '2026-07-20' }) }), env, ctx);
   eq(unapprove.status, 200, 'the approval itself can still be removed');
 
   globalThis.fetch = realFetch;
