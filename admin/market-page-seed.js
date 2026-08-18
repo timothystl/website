@@ -34,9 +34,10 @@
 // ⚠ THE ONE BLOCK THAT TAKES MONEY HAS NO url FIELD AT ALL, and cannot: see
 // the 'marketapp' entry in admin/blocks.js's BLOCK_DEFS and its renderer
 // branch. What a vendor is charged and where the payment goes are both
-// resolved from live settings (admin/market.js's marketConfigFromRows(),
-// fed into pageData() as `data.market`) at the moment they submit — never
-// stored on the block, never frozen at publish time.
+// resolved from live settings (admin/events.js's eventFeeConfig(), reading
+// the market's own `site_events` row, fed into pageData() as `data.market`)
+// at the moment they submit — never stored on the block, never frozen at
+// publish time.
 //
 // ⚠ THE NINE AGREEMENT CLAUSES ARE NOT RETYPED HERE. They are Andrew's own
 // wording (2026-08, sent directly — see CLAUDE.md, "Copy correction"), and

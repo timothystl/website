@@ -936,9 +936,10 @@ export const BLOCK_DEFS = {
   // hours, table fee and the coordinator's address.
   //
   // ⚠ NOT ONE OF THOSE FOUR VALUES IS TYPED, AND THERE IS NO FIELD TO TYPE
-  // ONE INTO. They are the same `market_*` settings the application block
-  // itself reads (marketConfigFromRows(), fed in as `data.market`), resolved
-  // at render time. That is the whole reason this is a block type rather than
+  // ONE INTO. They are the market's own `site_events` row, read through the
+  // same eventFeeConfig() (admin/events.js) the application block itself
+  // reads, fed in as `data.market`, resolved at render time. That is the
+  // whole reason this is a block type rather than
   // four lines somebody writes into a text block: the split page means the
   // date and the fee now appear on TWO public pages, and two typed copies is
   // two things to remember every December. Change the setting once and both

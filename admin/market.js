@@ -25,6 +25,21 @@ import { withAmountAndFund } from '../give-link.js';
 // own test file) keeps working unchanged. See market-price.js.
 import { MARKET_DEFAULTS, clampTables, priceBreakdown, money, MARKET_PRICING_JS } from '../market-price.js';
 export { MARKET_DEFAULTS, clampTables, priceBreakdown, money, MARKET_PRICING_JS };
+// ── THE MARKET IS ONE EVENT NOW, NOT ELEVEN site_settings ROWS ──────────────
+// admin/events.js is the generalized event record and registration table —
+// see its own header comment for why it exists and why the import runs only
+// this direction. `marketConfigFromRows(rows)` (site_settings rows in, a fee
+// config out) is gone; `marketSettings(env)` below now reads the market's own
+// `site_events` row through `eventFeeConfig()`, which is the SAME shaped
+// object the old function returned, so admin/blocks.js's `marketapp` and
+// `marketfacts` branches — and everything else that reads `data.market` —
+// needed no change at all.
+import {
+  PAYMENT_STATES, paymentState, getEvent, eventFeeConfig, listRegistrations, getRegistration,
+  insertRegistration, updateRegistration, deleteRegistration, registrationFields, countUnpaid,
+  csvCell,
+} from './events.js';
+export { PAYMENT_STATES, paymentState };
 
 const num = (v, fallback) => {
   const n = Number(String(v == null ? '' : v).replace(/[^0-9.]/g, ''));
@@ -32,20 +47,10 @@ const num = (v, fallback) => {
 };
 
 // ── WHAT THE COORDINATOR TRACKS ──────────────────────────────────────────────
-// The four states Marla kept by hand in the 2024 spreadsheet's payment column.
-// `waived` is a real one, not a courtesy: Timothy MDO, the Word of Life 8th
-// grade and the youth group take tables at no charge, and recording that as
-// "unpaid" would leave three rows on a chase list forever.
-export const PAYMENT_STATES = [
-  { value: 'unpaid', label: 'Not paid yet', tone: 'warn' },
-  { value: 'paid', label: 'Paid', tone: 'good' },
-  // `auto` rather than `good`: a waived fee is a decision the office made, not
-  // money that arrived, and coloring it the same green as Paid would make a
-  // reconciliation read right when it does not balance.
-  { value: 'waived', label: 'Fee waived', tone: 'auto' },
-  { value: 'dropped', label: 'Dropped out', tone: 'plain' },
-];
-export const paymentState = (v) => PAYMENT_STATES.find((s) => s.value === v) || PAYMENT_STATES[0];
+// `PAYMENT_STATES`/`paymentState` moved to admin/events.js, generalized for
+// any event that takes money — imported and re-exported above so every
+// existing caller of admin/market.js (including its own test file) is
+// unchanged.
 
 // ── READING THE APPLICATION ──────────────────────────────────────────────────
 // Pure, so the rules can be tested without a database or a request. Returns
@@ -112,58 +117,96 @@ export const screenableText = (v) =>
 // One read, shaped for both the public page and this admin screen. Every value
 // falls back to the design's own figures, so a market page rendered against an
 // unreachable or unseeded database still quotes the right price.
-// Pure — takes the `site_settings` rows however they were fetched, and
-// composes the shape every caller wants. Split out so `pageData()` in the
-// Worker (which already fetches every page's settings in one batched
-// Promise.all, precisely to avoid a query per block) can compose `data.market`
-// from rows it already has, rather than this module making its own second
-// round trip on every single page render.
-export function marketConfigFromRows(rows) {
-  const get = (k, d) => {
-    const row = (rows || []).find((r) => r.key === k);
-    const v = row && row.value != null ? String(row.value).trim() : '';
-    return v === '' ? d : v;
-  };
+//
+// ⚠ THE ELEVEN market_* site_settings ROWS ARE GONE. The market is one row on
+// `site_events` now (id 'christmasmarket'), and `eventFeeConfig()` in
+// admin/events.js shapes it into exactly this object — so nothing downstream
+// of `marketSettings()`/`marketConfig()` had to change at all. `pageData()` in
+// tlc-admin-worker.js builds `data.market` the identical way, from the row it
+// already fetches in its own batched Promise.all.
+export async function marketSettings(env) {
+  const [ev, giveRow] = await Promise.all([
+    getEvent(env, 'christmasmarket'),
+    env.DB.prepare("SELECT value FROM site_settings WHERE key = 'give_url'").first().catch(() => null),
+  ]);
+  return eventFeeConfig(ev, (giveRow && giveRow.value) || '');
+}
+
+// ── THE MARKET'S OWN FIELD SHAPE, ON THE GENERIC REGISTRATION TABLE ─────────
+// The market's nine fields keep the exact names they have always had as
+// `market_vendors` columns — `marketFieldsFromValue()` carries a
+// `sanitizeApplication()` result over into `site_event_registrations`'s
+// `fields_json`, and `marketRowFromRegistration()` reconstructs a row shaped
+// exactly like the old `market_vendors` row, so every renderer, the CSV
+// export and the coordinator's drawer below did not need to change — they
+// still read `editing.business_name`, `editing.product_description`, and so
+// on, on an object built fresh from the new table instead of read straight
+// off the old one.
+function marketFieldsFromValue(value) {
   return {
-    tableFee: num(get('market_table_fee', ''), MARKET_DEFAULTS.tableFee),
-    feePercent: num(get('market_fee_percent', ''), MARKET_DEFAULTS.feePercent),
-    feeFixed: num(get('market_fee_fixed', ''), MARKET_DEFAULTS.feeFixed),
-    maxTables: clampTables(get('market_max_tables', String(MARKET_DEFAULTS.maxTables)), 9),
-    fundId: get('market_fund_id', ''),
-    coordinatorEmail: get('market_coordinator_email', 'tlc.christmasmarket@gmail.com'),
-    dateLabel: get('market_date_label', 'Saturday, Dec 5'),
-    hoursLabel: get('market_hours_label', '11:00 am – 6:00 pm'),
-    // ⚠ Open by default. A market page that ships switched off looks broken to
-    // whoever opens it first, and the only way in is a link from
-    // /christmasmarket — nobody stumbles onto it out of season. The switch is
-    // on the coordinator's own screen, where she will see it.
-    open: get('market_applications_open', '1') !== '0',
-    giveUrl: get('give_url', ''),
-    // 'tithely' (the default — every existing church payment link) or
-    // 'square', for the market's own separate Square account.
-    paymentProvider: get('market_payment_provider', 'tithely') === 'square' ? 'square' : 'tithely',
-    // One Square Payment Link per table count, keyed by the table count as a
-    // string ("1", "2", "3", …). ⚠ Square has no way to put an amount in a
-    // link the way Tithe.ly does, so unlike `fundId`+`giveUrl` this cannot be
-    // computed from one base link — the office pastes one link per price
-    // point, which is small and fixed because `maxTables` bounds it (3 by
-    // default, 9 at most). Malformed JSON reads as "no links yet" rather than
-    // throwing, same as every other best-effort read in this file.
-    squareLinks: (() => {
-      try {
-        const parsed = JSON.parse(get('market_square_links', '{}'));
-        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-      } catch (_) { return {}; }
-    })(),
+    business_name: value.business_name || '',
+    website_or_social: value.website_or_social || '',
+    returning_vendor: value.returning_vendor || '',
+    street: value.street || '',
+    city: value.city || '',
+    state: value.state || '',
+    zip: value.zip || '',
+    product_description: value.product_description || '',
+    sells_food: value.sells_food ? 1 : 0,
+    appliances_power: value.appliances_power || '',
+    special_requests: value.special_requests || '',
+    signature_name: value.signature_name || '',
   };
 }
 
-export async function marketSettings(env) {
-  let rows = [];
-  try {
-    rows = (await env.DB.prepare("SELECT key, value FROM site_settings WHERE key LIKE 'market_%' OR key = 'give_url'").all()).results || [];
-  } catch (_) { /* fall through to the defaults below */ }
-  return marketConfigFromRows(rows);
+export function marketRowFromRegistration(reg) {
+  const f = registrationFields(reg);
+  return {
+    id: reg.id,
+    participant_names: reg.contact_name || '',
+    business_name: f.business_name || '',
+    website_or_social: f.website_or_social || '',
+    returning_vendor: f.returning_vendor || '',
+    email: reg.contact_email || '',
+    phone: reg.contact_phone || '',
+    street: f.street || '',
+    city: f.city || '',
+    state: f.state || '',
+    zip: f.zip || '',
+    product_description: f.product_description || '',
+    sells_food: f.sells_food ? 1 : 0,
+    appliances_power: f.appliances_power || '',
+    special_requests: f.special_requests || '',
+    tables: reg.qty || 1,
+    // photosOf() below still expects a JSON-encoded STRING, same as the
+    // market_vendors.photos column used to hold — reconstructed here rather
+    // than changed there, so photosOf() itself needed no edit.
+    photos: Array.isArray(f.photos) && f.photos.length ? JSON.stringify(f.photos) : null,
+    signature_name: f.signature_name || '',
+    amount_due_cents: reg.amount_due_cents || 0,
+    table_number: reg.table_number || '',
+    payment_status: reg.payment_status || 'unpaid',
+    amount_paid_cents: reg.amount_paid_cents,
+    staff_notes: reg.staff_notes || '',
+    created_at: reg.created_at,
+  };
+}
+
+// Called by the /api/market/apply route in tlc-admin-worker.js after
+// sanitizeApplication() has run, to build the arguments insertRegistration()
+// (admin/events.js) needs. Kept here, not there, because it is the one place
+// that knows the market's own field names.
+export function marketInsertArgs(value, price, photos) {
+  return {
+    event_id: 'christmasmarket',
+    qty: value.tables,
+    payment_status: 'unpaid',
+    amount_due_cents: price.totalCents,
+    contact_name: value.participant_names,
+    contact_email: value.email,
+    contact_phone: value.phone,
+    fields: { ...marketFieldsFromValue(value), photos: photos && photos.length ? photos : undefined },
+  };
 }
 
 // The payment address, built at request time from `give_url` and the market's
@@ -322,8 +365,8 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     const form = await request.formData();
     const id = Number(form.get('id') || 0);
     if (!id) return new Response('', { status: 302, headers: { Location: '/market' } });
-    const before = await env.DB.prepare('SELECT * FROM market_vendors WHERE id = ?').bind(id).first().catch(() => null);
-    if (!before) return new Response('', { status: 302, headers: { Location: '/market?msg=gone' } });
+    const before = await getRegistration(env, id);
+    if (!before || before.event_id !== 'christmasmarket') return new Response('', { status: 302, headers: { Location: '/market?msg=gone' } });
 
     const status = paymentState(String(form.get('payment_status') || '')).value;
     const tableNumber = cap(form.get('table_number'), 40);
@@ -333,10 +376,10 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     const paidRaw = trim(form.get('amount_paid'));
     const paidCents = paidRaw === '' ? null : Math.round(num(paidRaw, 0) * 100);
 
-    await env.DB.prepare(
-      'UPDATE market_vendors SET table_number = ?, payment_status = ?, amount_paid_cents = ?, staff_notes = ? WHERE id = ?'
-    ).bind(tableNumber || null, status, paidCents, notes || null, id).run();
-    await logAudit(env.DB, currentUser, 'update', 'market_vendor', String(id), before.participant_names,
+    await updateRegistration(env, id, {
+      table_number: tableNumber || null, payment_status: status, amount_paid_cents: paidCents, staff_notes: notes || null,
+    });
+    await logAudit(env.DB, currentUser, 'update', 'market_vendor', String(id), before.contact_name,
       { table_number: before.table_number, payment_status: before.payment_status, amount_paid_cents: before.amount_paid_cents },
       { table_number: tableNumber || null, payment_status: status, amount_paid_cents: paidCents });
     return new Response('', { status: 302, headers: { Location: '/market?toast=' + encodeURIComponent('Saved · written to the audit log') } });
@@ -346,10 +389,10 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     if (!canMarket) return new Response('Access denied.', { status: 403 });
     const form = await request.formData();
     const id = Number(form.get('id') || 0);
-    const before = await env.DB.prepare('SELECT * FROM market_vendors WHERE id = ?').bind(id).first().catch(() => null);
-    if (before) {
-      await env.DB.prepare('DELETE FROM market_vendors WHERE id = ?').bind(id).run();
-      await logAudit(env.DB, currentUser, 'delete', 'market_vendor', String(id), before.participant_names, before, null);
+    const before = await getRegistration(env, id);
+    if (before && before.event_id === 'christmasmarket') {
+      await deleteRegistration(env, id);
+      await logAudit(env.DB, currentUser, 'delete', 'market_vendor', String(id), before.contact_name, before, null);
     }
     return new Response('', { status: 302, headers: { Location: '/market?toast=' + encodeURIComponent('Application deleted · it is in the audit log if you need it back') } });
   }
@@ -362,13 +405,13 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     const form = await request.formData();
     // A toggle posts a hidden 0 ahead of its checkbox, so `get` always returns
     // the 0 and reads as on. See the note on the giving handlers.
-    const open = form.getAll('open').includes('1') ? '1' : '0';
-    await env.DB.prepare("INSERT INTO site_settings (key, value) VALUES ('market_applications_open', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(open).run();
+    const open = form.getAll('open').includes('1') ? 1 : 0;
+    await env.DB.prepare("UPDATE site_events SET registration_open = ?, updated_at = datetime('now') WHERE id = 'christmasmarket'").bind(open).run();
     await logAudit(env.DB, currentUser, 'update', 'settings', 'market_applications_open', 'Vendor applications',
-      { value: settings.open ? '1' : '0' }, { value: open });
+      { value: settings.open ? '1' : '0' }, { value: String(open) });
     return new Response('', {
       status: 302,
-      headers: { Location: '/market?toast=' + encodeURIComponent(open === '1' ? 'Applications are open · the page can take payments' : 'Applications are closed · the page says so and takes nothing') },
+      headers: { Location: '/market?toast=' + encodeURIComponent(open === 1 ? 'Applications are open · the page can take payments' : 'Applications are closed · the page says so and takes nothing') },
     });
   }
 
@@ -380,29 +423,38 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
   // old /settings?edit=market_table_fee address still works (see the
   // Settings screen's SETTINGS_VIEW, which now points here instead of
   // opening its own drawer for these seven keys).
+  // ⚠ ALL SEVEN NOW WRITE `site_events`, THE MARKET'S OWN ROW — not eleven
+  // separate site_settings keys. Same fields, same permission, same address;
+  // only the storage moved.
   if (path === '/market/settings' && method === 'POST') {
     if (!canSettings) return new Response('Access denied.', { status: 403 });
     const form = await request.formData();
-    const fields = {
-      market_date_label: cap(form.get('market_date_label'), 80),
-      market_hours_label: cap(form.get('market_hours_label'), 80),
-      market_table_fee: cap(form.get('market_table_fee'), 20),
-      market_max_tables: cap(form.get('market_max_tables'), 4),
-      market_fee_percent: cap(form.get('market_fee_percent'), 20),
-      market_fee_fixed: cap(form.get('market_fee_fixed'), 20),
-      market_coordinator_email: cap(form.get('market_coordinator_email'), 200),
+    const dateLabel = cap(form.get('market_date_label'), 80);
+    const hoursLabel = cap(form.get('market_hours_label'), 80);
+    const tableFee = num(form.get('market_table_fee'), settings.tableFee);
+    const maxTables = clampTables(form.get('market_max_tables'), 9);
+    const feePercent = num(form.get('market_fee_percent'), settings.feePercent);
+    const feeFixed = num(form.get('market_fee_fixed'), settings.feeFixed);
+    const coordinatorEmail = cap(form.get('market_coordinator_email'), 200);
+
+    const before = {
+      market_date_label: settings.dateLabel, market_hours_label: settings.hoursLabel,
+      market_table_fee: String(settings.tableFee), market_max_tables: String(settings.maxTables),
+      market_fee_percent: String(settings.feePercent), market_fee_fixed: String(settings.feeFixed),
+      market_coordinator_email: settings.coordinatorEmail,
     };
-    const before = {};
-    for (const k of Object.keys(fields)) {
-      const row = await env.DB.prepare('SELECT value FROM site_settings WHERE key = ?').bind(k).first().catch(() => null);
-      before[k] = row?.value ?? null;
-    }
-    for (const [k, v] of Object.entries(fields)) {
-      await env.DB.prepare(
-        'INSERT INTO site_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
-      ).bind(k, v).run();
-    }
-    await logAudit(env.DB, currentUser, 'update', 'settings', 'market_settings', 'Christmas Market settings', before, fields);
+    const after = {
+      market_date_label: dateLabel, market_hours_label: hoursLabel,
+      market_table_fee: String(tableFee), market_max_tables: String(maxTables),
+      market_fee_percent: String(feePercent), market_fee_fixed: String(feeFixed),
+      market_coordinator_email: coordinatorEmail,
+    };
+    await env.DB.prepare(
+      `UPDATE site_events SET date_label = ?, hours_label = ?, fee_amount = ?, max_qty = ?,
+         fee_percent = ?, fee_fixed = ?, coordinator_email = ?, updated_at = datetime('now'), updated_by = ?
+       WHERE id = 'christmasmarket'`
+    ).bind(dateLabel, hoursLabel, tableFee, maxTables, feePercent, feeFixed, coordinatorEmail, currentUser?.username || null).run();
+    await logAudit(env.DB, currentUser, 'update', 'settings', 'market_settings', 'Christmas Market settings', before, after);
     return new Response('', { status: 302, headers: { Location: '/market?toast=' + encodeURIComponent('Saved · written to the audit log') } });
   }
 
@@ -419,12 +471,9 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     if (!canGiving) return new Response('Access denied.', { status: 403 });
     const form = await request.formData();
     const val = String(form.get('market_fund_id') || '').trim().slice(0, 200);
-    const before = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'market_fund_id'").first();
-    await env.DB.prepare(
-      "INSERT INTO site_settings (key, value) VALUES ('market_fund_id', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
-    ).bind(val).run();
+    await env.DB.prepare("UPDATE site_events SET fund_id = ?, updated_at = datetime('now') WHERE id = 'christmasmarket'").bind(val).run();
     await logAudit(env.DB, currentUser, 'update', 'settings', 'market_fund_id', 'Christmas Market fund',
-      { value: before?.value ?? null }, { value: val });
+      { value: settings.fundId }, { value: val });
     return new Response('', { status: 302, headers: { Location: '/market?toast=' + encodeURIComponent('Saved · written to the audit log') } });
   }
 
@@ -448,16 +497,11 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
       links[String(n)] = raw.slice(0, 500);
     }
     const linksJson = JSON.stringify(links);
-    const beforeProvider = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'market_payment_provider'").first();
-    const beforeLinks = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'market_square_links'").first();
     await env.DB.prepare(
-      "INSERT INTO site_settings (key, value) VALUES ('market_payment_provider', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
-    ).bind(provider).run();
-    await env.DB.prepare(
-      "INSERT INTO site_settings (key, value) VALUES ('market_square_links', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
-    ).bind(linksJson).run();
+      "UPDATE site_events SET payment_provider = ?, square_links = ?, updated_at = datetime('now') WHERE id = 'christmasmarket'"
+    ).bind(provider, linksJson).run();
     await logAudit(env.DB, currentUser, 'update', 'settings', 'market_payment_provider', 'Christmas Market payment method',
-      { provider: beforeProvider?.value ?? null, square_links: beforeLinks?.value ?? null },
+      { provider: settings.paymentProvider, square_links: JSON.stringify(settings.squareLinks || {}) },
       { provider, square_links: linksJson });
     return new Response('', { status: 302, headers: { Location: '/market?toast=' + encodeURIComponent('Saved · written to the audit log') } });
   }
@@ -938,10 +982,7 @@ ${sidebarShell('market', currentUser, `<a href="https://timothystl.org/christmas
 
 async function allApplications(env) {
   try {
-    return (await env.DB.prepare(
-      `SELECT * FROM market_vendors
-       ORDER BY CASE payment_status WHEN 'unpaid' THEN 0 ELSE 1 END, created_at DESC, id DESC`
-    ).all()).results || [];
+    return (await listRegistrations(env, 'christmasmarket')).map(marketRowFromRegistration);
   } catch (_) { return []; }
 }
 

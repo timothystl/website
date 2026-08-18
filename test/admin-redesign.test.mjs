@@ -3414,23 +3414,32 @@ async function applyAsVendor(env, over = {}) {
   return worker.fetch(req, env, { waitUntil: () => {}, passThroughOnException: () => {} });
 }
 
+// ⚠ THE MARKET IS ONE `site_events` ROW NOW, NOT ELEVEN site_settings KEYS,
+// AND ITS APPLICATIONS ARE `site_event_registrations` ROWS, NOT
+// `market_vendors` ONES — see admin/events.js and the ONE-TIME migration in
+// tlc-admin-worker.js. Every group below still asserts the identical
+// user-facing behaviour (the routes, the forms, the redirects, the numbers a
+// vendor is shown); only the SQL a test reads the result back with changed,
+// because the storage genuinely moved.
+const marketEvent = (db) => db.prepare("SELECT * FROM site_events WHERE id='christmasmarket'").get();
+
 group('a vendor application is saved before anybody is sent to pay');
 {
   const { db, env } = await boot();
   db.prepare("INSERT INTO site_settings (key,value) VALUES ('give_url','https://give.tithe.ly/?formId=abc&fundId=general') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
-  db.prepare("INSERT INTO site_settings (key,value) VALUES ('market_fund_id','market-fund') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+  db.prepare("UPDATE site_events SET fund_id = 'market-fund' WHERE id = 'christmasmarket'").run();
 
   const res = await applyAsVendor(env, { tables: '2' });
   eq(res.status, 200, 'a complete application is accepted');
   const d = await res.json();
   ok(d.success, 'and reports success');
 
-  const saved = db.prepare('SELECT * FROM market_vendors').all();
+  const saved = db.prepare("SELECT * FROM site_event_registrations WHERE event_id='christmasmarket'").all();
   eq(saved.length, 1, 'the application is in the coordinator’s list');
   eq(saved[0].payment_status, 'unpaid', 'marked unpaid — the website cannot see whether the card went through');
-  eq(saved[0].tables, 2, 'with the number of tables asked for');
+  eq(saved[0].qty, 2, 'with the number of tables asked for');
   eq(saved[0].amount_due_cents, 6210, 'and what was asked for, in cents');
-  eq(saved[0].email, 'marla@example.com', 'and the address to confirm the table to');
+  eq(saved[0].contact_email, 'marla@example.com', 'and the address to confirm the table to');
 
   // The link is built from give_url at request time and the market fund
   // REPLACES the base link's fund rather than adding a second.
@@ -3445,7 +3454,7 @@ group('a vendor application is saved before anybody is sent to pay');
   eq(noLink.status, 200, 'with no giving link set the application is still accepted');
   const d2 = await noLink.json();
   eq(d2.payUrl, '', 'there is simply no payment address to send them to');
-  eq(db.prepare('SELECT COUNT(*) AS n FROM market_vendors').get().n, 2,
+  eq(db.prepare("SELECT COUNT(*) AS n FROM site_event_registrations WHERE event_id='christmasmarket'").get().n, 2,
     'and the application is saved anyway — a payment problem must never lose it');
 }
 
@@ -3455,7 +3464,7 @@ group('the price is decided by the server, never by the browser');
   // Everything the page could post about money, posted wrong.
   const res = await applyAsVendor(env, { tables: '40', amount_due_cents: '1', total: '0.01', tableFee: '0' });
   eq(res.status, 200, 'the application still goes through');
-  const saved = db.prepare('SELECT tables, amount_due_cents FROM market_vendors').get();
+  const saved = db.prepare("SELECT qty AS tables, amount_due_cents FROM site_event_registrations WHERE event_id='christmasmarket'").get();
   eq(saved.tables, 3, 'a posted table count above the maximum is clamped to it');
   eq(saved.amount_due_cents, 9300, 'and the amount is recomputed here — three tables is $93.00');
 
@@ -3471,18 +3480,18 @@ group('an application with a required field missing is refused with a sentence')
   const d = await res.json();
   ok(d.error && d.error.includes('email'), 'and says what is wrong in plain words');
   ok(!d.error.includes('_'), 'without naming a database column');
-  eq(db.prepare('SELECT COUNT(*) AS n FROM market_vendors').get().n, 0, 'nothing is stored');
+  eq(db.prepare("SELECT COUNT(*) AS n FROM site_event_registrations WHERE event_id='christmasmarket'").get().n, 0, 'nothing is stored');
 }
 
 group('closing applications stops the page taking money');
 {
   const { db, env } = await boot();
-  db.prepare("UPDATE site_settings SET value='0' WHERE key='market_applications_open'").run();
+  db.prepare("UPDATE site_events SET registration_open = 0 WHERE id = 'christmasmarket'").run();
   const res = await applyAsVendor(env);
   eq(res.status, 403, 'an application posted while closed is refused');
   const d = await res.json();
   ok(d.error.includes('christmasmarket'), 'and points at the coordinator instead of just saying no');
-  eq(db.prepare('SELECT COUNT(*) AS n FROM market_vendors').get().n, 0, 'nothing is stored');
+  eq(db.prepare("SELECT COUNT(*) AS n FROM site_event_registrations WHERE event_id='christmasmarket'").get().n, 0, 'nothing is stored');
 
   const cfg = await (await call(env, '/api/market-config', { fresh: true })).json();
   eq(cfg.open, false, 'and the public page is told, so it hides the form rather than failing on submit');
@@ -3504,7 +3513,7 @@ group('the coordinator’s list');
   has(emptyBody, 'Christmas Market vendors', 'titled from the section config');
 
   await applyAsVendor(env, { product_description: 'Beeswax candles', tables: '2' });
-  const id = db.prepare('SELECT id FROM market_vendors').get().id;
+  const id = db.prepare("SELECT id FROM site_event_registrations WHERE event_id='christmasmarket'").get().id;
 
   const body = await (await call(env, '/market', { cookie })).text();
   has(body, 'Marla Kerr', 'the vendor appears');
@@ -3518,7 +3527,7 @@ group('the coordinator’s list');
     form: { id: String(id), table_number: '19/20', payment_status: 'paid', amount_paid: '62.10', staff_notes: 'Near the door' },
   });
   eq(saveRes.status, 302, 'saving redirects back to the list');
-  const after = db.prepare('SELECT * FROM market_vendors WHERE id = ?').get(id);
+  const after = db.prepare('SELECT * FROM site_event_registrations WHERE id = ?').get(id);
   eq(after.table_number, '19/20', 'a table number can be a range, because a two-table vendor takes one');
   eq(after.payment_status, 'paid', 'the payment state is stored');
   eq(after.amount_paid_cents, 6210, 'and the amount as integer cents');
@@ -3527,7 +3536,7 @@ group('the coordinator’s list');
   // different facts, and collapsing them puts every fresh row on the
   // reconciled side of the ledger.
   await call(env, '/market/update', { cookie, method: 'POST', form: { id: String(id), payment_status: 'unpaid', amount_paid: '' } });
-  eq(db.prepare('SELECT amount_paid_cents FROM market_vendors WHERE id = ?').get(id).amount_paid_cents, null,
+  eq(db.prepare('SELECT amount_paid_cents FROM site_event_registrations WHERE id = ?').get(id).amount_paid_cents, null,
     'clearing the amount stores NULL, not 0');
 
   // The spreadsheet this replaced — she still needs to be able to hand the
@@ -3740,8 +3749,7 @@ group('the Christmas Market fund ID is set from the Christmas Market screen');
   const save = await call(env, '/market/fund', { cookie, method: 'POST', form: { market_fund_id: 'mkt-fund-123' } });
   eq(save.status, 302, 'saving redirects back to the Christmas Market screen');
   eq(save.headers.get('Location').startsWith('/market'), true, 'specifically to /market, not /giving');
-  eq(db.prepare("SELECT value FROM site_settings WHERE key='market_fund_id'").get().value, 'mkt-fund-123',
-    'and the fund ID is stored');
+  eq(marketEvent(db).fund_id, 'mkt-fund-123', 'and the fund ID is stored');
 
   const after = await (await call(env, '/market?tab=money', { cookie })).text();
   has(after, 'mkt-fund-123', 'the saved value is shown back on the screen');
@@ -3750,7 +3758,7 @@ group('the Christmas Market fund ID is set from the Christmas Market screen');
   // so it must not be refused the way a malformed give_url is.
   const clear = await call(env, '/market/fund', { cookie, method: 'POST', form: { market_fund_id: '' } });
   eq(clear.status, 302, 'clearing it is not an error');
-  eq(db.prepare("SELECT value FROM site_settings WHERE key='market_fund_id'").get().value, '', 'and it is really cleared');
+  eq(marketEvent(db).fund_id, '', 'and it is really cleared');
 
   // A vendor's payment link has to actually use it.
   const fundBack = await call(env, '/market/fund', { cookie, method: 'POST', form: { market_fund_id: 'holiday-market' } });
@@ -3779,20 +3787,22 @@ group('the other seven market settings moved to the Christmas Market screen too'
   has(settingsList, 'Christmas Market coordinator email', 'and the coordinator email');
 
   // ⚠ The generic editor no longer accepts these keys — a POST here is
-  // exactly the "two forms writing one key" trap this file warns about.
+  // exactly the "two forms writing one key" trap this file warns about. And
+  // there is no site_settings row for either key any more at all — they are
+  // `site_events` columns now — so "nothing was written" is checked there.
   const hijack = await call(env, '/settings/update', { cookie, method: 'POST', form: { key: 'market_table_fee', value: '99' } });
   eq(hijack.status, 302, 'the request is not an error');
   ok(hijack.headers.get('Location').includes('settings-error'), 'but it is refused as an unknown key on this screen');
-  eq(db.prepare("SELECT value FROM site_settings WHERE key='market_table_fee'").get().value, '30',
-    'and the default is untouched — nothing was written');
+  ok(!db.prepare("SELECT value FROM site_settings WHERE key='market_table_fee'").get(),
+    'and it never lands in site_settings at all — the key does not exist there any more');
+  eq(marketEvent(db).fee_amount, 30, 'and the market’s own default table fee is untouched — nothing was written');
 
   // ⚠ market_applications_open must stay unreachable here too — it already
   // has its own toggle and route on /market.
-  const before = db.prepare("SELECT value FROM site_settings WHERE key='market_applications_open'").get().value;
+  const before = marketEvent(db).registration_open;
   const openHijack = await call(env, '/settings/update', { cookie, method: 'POST', form: { key: 'market_applications_open', value: '0' } });
   ok(openHijack.headers.get('Location').includes('settings-error'), 'refused as an unknown key');
-  eq(db.prepare("SELECT value FROM site_settings WHERE key='market_applications_open'").get().value, before,
-    'and the switch on /market is untouched');
+  eq(marketEvent(db).registration_open, before, 'and the switch on /market is untouched');
 
   // The real save path is now /market/settings, gated settings_manage.
   const market = await (await call(env, '/market?tab=money', { cookie })).text();
@@ -3805,8 +3815,8 @@ group('the other seven market settings moved to the Christmas Market screen too'
   } });
   eq(save.status, 302, 'saved from the new screen');
   eq(save.headers.get('Location').startsWith('/market'), true, 'and redirects back to it, not to Settings');
-  eq(db.prepare("SELECT value FROM site_settings WHERE key='market_table_fee'").get().value, '35', 'the fee is stored');
-  eq(db.prepare("SELECT value FROM site_settings WHERE key='market_max_tables'").get().value, '5', 'so is the table limit — the whole reason this moved');
+  eq(marketEvent(db).fee_amount, 35, 'the fee is stored');
+  eq(marketEvent(db).max_qty, 5, 'so is the table limit — the whole reason this moved');
 
   // Somebody with only market_manage cannot reach this route — the seven
   // settings stay an office/pastor decision, not the coordinator's.
@@ -3861,11 +3871,10 @@ group('once published, the application reads live settings — never a stored pr
 {
   const { db, env } = await boot();
   db.prepare("INSERT INTO site_settings (key,value) VALUES ('give_url','https://give.tithe.ly/?formId=abc&locationId=loc&fundId=general') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
-  db.prepare("INSERT INTO site_settings (key,value) VALUES ('market_fund_id','market-fund') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
-  db.prepare("INSERT INTO site_settings (key,value) VALUES ('market_table_fee','40') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
-  db.prepare("INSERT INTO site_settings (key,value) VALUES ('market_date_label','Saturday, Dec 12') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
-  db.prepare("INSERT INTO site_settings (key,value) VALUES ('market_hours_label','10:00 am – 5:00 pm') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
-  db.prepare("INSERT INTO site_settings (key,value) VALUES ('market_coordinator_email','newcoordinator@example.com') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+  db.prepare(
+    "UPDATE site_events SET fund_id = 'market-fund', fee_amount = 40, date_label = 'Saturday, Dec 12', " +
+    "hours_label = '10:00 am – 5:00 pm', coordinator_email = 'newcoordinator@example.com' WHERE id = 'christmasmarket'"
+  ).run();
 
   // Already published by the migration; this line is belt and braces so the
   // group still reads as "once published" whatever the seeding pipeline does.
@@ -3890,7 +3899,7 @@ group('once published, the application reads live settings — never a stored pr
   // Changing the fee later changes what the PUBLISHED page shows on its next
   // read — nothing about the block was frozen when it was published, because
   // there was never a price stored on it to freeze.
-  db.prepare("UPDATE site_settings SET value = '55' WHERE key = 'market_table_fee'").run();
+  db.prepare("UPDATE site_events SET fee_amount = 55 WHERE id = 'christmasmarket'").run();
   const api2 = await (await call(env, '/api/pages', { fresh: true })).json();
   const price2 = priceBreakdown(1, { tableFee: 55 });
   has(api2.rendered.marketvendors, marketMoney(price2.totalCents), 'a fee changed after publishing still reaches the live page');
