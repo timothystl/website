@@ -507,10 +507,17 @@ async function createEvent(env, currentUser, form) {
   const name = cap(form.get('name'), 200) || 'New event';
   const id = await generateEventId(env, name);
   const key = eventCoordinatorPermissionKey(id);
-  const hasRegistration = form.get('has_registration') === '1' ? 1 : 0;
-  const hasPayment = form.get('has_payment') === '1' ? 1 : 0;
-  const hasVolunteers = form.get('has_volunteers') === '1' ? 1 : 0;
-  const hasPhotos = form.get('has_photos') === '1' ? 1 : 0;
+  // ⚠ getAll(...).includes('1'), not get() === '1' — a toggle field posts a
+  // hidden 0 BEFORE its checkbox (renderField's 'toggle' kind, admin/ui.js),
+  // so a real browser submission's form.get(name) returns that hidden '0'
+  // first regardless of whether the box is checked. get() === '1' here would
+  // read every toggle as permanently off. Same rule this repo's toggle
+  // fields have always needed elsewhere; caught by giving the test its own
+  // hidden-then-checkbox pair instead of a single bare value.
+  const hasRegistration = form.getAll('has_registration').includes('1') ? 1 : 0;
+  const hasPayment = form.getAll('has_payment').includes('1') ? 1 : 0;
+  const hasVolunteers = form.getAll('has_volunteers').includes('1') ? 1 : 0;
+  const hasPhotos = form.getAll('has_photos').includes('1') ? 1 : 0;
   const now = new Date().toISOString();
 
   await env.DB.prepare(

@@ -81,14 +81,30 @@ function signIn(db, permissions = ALL_PERMISSIONS, username = 'dinger') {
   return { cookie: `tlc_session=${token}` };
 }
 
+// ⚠ Toggle fields (has_registration etc.) post a HIDDEN 0 ahead of their
+// checkbox (renderField's 'toggle' kind, admin/ui.js) — a real browser
+// submits BOTH values, in that order, whenever the box is checked. A test
+// that instead sends one bare '1' never exercises the real pairing at all,
+// which is exactly the shape of bug this repo's toggle fields have always
+// needed guarding against (form.get(name) returns the first value — the
+// hidden 0 — regardless of the checkbox). Build the body the way a real
+// form actually would.
+const TOGGLE_FIELDS = ['has_registration', 'has_payment', 'has_volunteers', 'has_photos'];
+
 async function createEventViaForm(env, cookie, over = {}) {
-  const body = new URLSearchParams({
+  const plain = {
     name: 'Vacation Bible School', date_label: 'June 9–13', hours_label: '9am–noon',
-    coordinator_email: 'vbs@timothystl.org', has_registration: '1', has_payment: '1',
-    has_volunteers: '1', has_photos: '1', clone_from: '', ...over,
-  }).toString();
+    coordinator_email: 'vbs@timothystl.org', clone_from: '',
+  };
+  const toggles = Object.fromEntries(TOGGLE_FIELDS.map((k) => [k, '1'])); // every capability on by default
+  for (const [k, v] of Object.entries(over)) (TOGGLE_FIELDS.includes(k) ? toggles : plain)[k] = v;
+
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(plain)) p.append(k, v);
+  for (const [k, v] of Object.entries(toggles)) { p.append(k, '0'); if (v === '1') p.append(k, '1'); }
+
   const headers = new Headers({ cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' });
-  const res = await worker.fetch(new Request('https://admin.timothystl.org/events/new', { method: 'POST', headers, body }), env, ctx);
+  const res = await worker.fetch(new Request('https://admin.timothystl.org/events/new', { method: 'POST', headers, body: p.toString() }), env, ctx);
   eq(res.status, 302, 'creating an event redirects');
   const loc = res.headers.get('Location') || '';
   const idMatch = loc.match(/\/events\/([^/?]+)/);
