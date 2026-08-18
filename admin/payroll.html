@@ -336,12 +336,26 @@ function sbQuery(table) {
     } catch (e) {
       return { data: null, error: { message: e.message } };
     }
-    // A 401 here means the admin session lapsed, not that payroll is broken.
-    if (res.status === 401) return { data: null, error: { message: 'Your session has expired. Sign in again.', code: 'UNAUTHENTICATED' } };
     const text = await res.text();
     let json = null;
     try { json = text ? JSON.parse(text) : null; } catch (_) { json = null; }
-    if (!res.ok) return { data: null, error: { message: (json && (json.message || json.hint)) || ('Supabase returned ' + res.status), code: json && json.code } };
+    // ⚠ A 401 does NOT always mean the admin session lapsed. This proxy's
+    // own auth gate (tlc-admin-worker.js) answers a 401 shaped exactly like
+    // this — {code:'UNAUTHENTICATED'} — when there is no valid session or
+    // it lacks payroll_manage. But a 401 also arrives here, byte-for-byte
+    // from Supabase, whenever Supabase itself refuses the request (a
+    // rotated/revoked apikey, a paused project, an RLS policy) — the proxy
+    // passes that status and body straight through. Blaming "your session
+    // expired" for that reads as fixed by signing back in and never is;
+    // the real Supabase error is on `json`, so it's shown instead. Only
+    // OUR OWN sentinel gets the reassuring, actionable message.
+    if (res.status === 401 && json && json.code === 'UNAUTHENTICATED') {
+      return { data: null, error: { message: 'Your session has expired. Sign in again.', code: 'UNAUTHENTICATED' } };
+    }
+    if (!res.ok) {
+      const detail = (json && (json.message || json.hint || json.error_description || json.error)) || text.slice(0, 300) || ('Supabase returned ' + res.status);
+      return { data: null, error: { message: 'Supabase answered ' + res.status + ': ' + detail, code: json && json.code } };
+    }
     return { data: json, error: null };
   }
   return api;
