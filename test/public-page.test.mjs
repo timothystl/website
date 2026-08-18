@@ -436,6 +436,39 @@ console.log('\nthe photo gallery opens a viewer');
   ok(!/__tlcLightbox/.test(edit), 'and no viewer script in the editor');
 }
 
+console.log('\na jump-to-name button actually jumps, instead of bouncing to home');
+{
+  // Dinger: "i created a #application jump to, created a button that would
+  // go there, and when i publish it and click on that button it takes me to
+  // the home page." Two separate bugs, both real, both fixed together:
+  // (1) the target block's id carried a "jump-" prefix nothing on screen
+  // ever told anybody about, so the button's #application never matched
+  // anything; (2) even with a matching id, Chrome fires a native popstate
+  // event for a plain same-page #fragment click — with e.state null, same
+  // as the "nothing left in history" case — and the site's own popstate
+  // handler defaulted that straight to showPage('home'). Every #fragment
+  // link on the site was affected, not just this new feature; it never
+  // showed up before because every other internal link on the site calls
+  // event.preventDefault() before the browser can fire the sequence at all.
+  const blocks = sanitizeBlocks([
+    Object.assign(newBlock('buttons'), { items: [{ title: 'Jump to application', url: '#application' }] }),
+    Object.assign(newBlock('spacer'), { height: 96 }),
+    Object.assign(newBlock('text', { body: '<p>The application section.</p>' }), { anchorId: 'application' }),
+  ]);
+  const html = renderPage(blocks, { slug: 'give', withCss: false });
+  const { page, ctx, errors } = await visitEdged('give', html, { edged: false });
+  eq(errors.length, 0, 'no page errors: ' + errors.join(' | '));
+
+  ok(/id="application"/.test(await page.content()), 'the target block carries the exact name shown in the inspector, no hidden prefix');
+
+  await page.locator('a.tlcb-btn', { hasText: 'Jump to application' }).click();
+  await page.waitForTimeout(300);
+  eq(await page.evaluate(() => (document.querySelector('.page.active') || {}).id), 'page-give',
+    'the click stays on the same page — it does not bounce to home');
+  ok(await page.evaluate(() => window.scrollY > 0), 'and the page actually scrolled down to the target');
+  await ctx.close();
+}
+
 await browser.close();
 server.close();
 console.log(`\n${pass} passed, ${fail} failed`);

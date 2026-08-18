@@ -4961,7 +4961,17 @@ export function renderBlock(b, opts = {}) {
   // it to land on. Present in the editor too, harmlessly: nothing there ever
   // scrolls by fragment, and it is one less thing that can differ from the
   // published markup.
-  const idAttr = b.anchorId ? ` id="jump-${esc(b.anchorId)}"` : '';
+  //
+  // ⚠ THE BARE NAME, NOT A PREFIXED ONE. This was `jump-${b.anchorId}` at
+  // first, on genuine namespace-collision grounds — a block's id sharing the
+  // page's own id space with `id="page-<id>"` and the router's anchors. But
+  // the inspector's own on-screen note, and every word said about this
+  // feature, promised "link to #<exactly this>" — a prefix nobody was told
+  // about is indistinguishable from the feature simply not working: a button
+  // linking to the name shown on screen matches nothing, the browser has
+  // nowhere to send it, and Dinger reported it landing on the home page.
+  // What's shown in the box has to BE the address, not a value close to it.
+  const idAttr = b.anchorId ? ` id="${esc(b.anchorId)}"` : '';
   const attrs = opts.editing
     ? ` data-id="${esc(b.id)}" data-type="${esc(b.type)}" tabindex="0" role="group"` +
       ` aria-label="${esc(def.label)} block${opts.total ? ', position ' + (opts.index + 1) + ' of ' + opts.total : ''}"`

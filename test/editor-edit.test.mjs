@@ -19,6 +19,7 @@ const seedBlocks = sanitizeBlocks([
   newBlock('textphoto', { title: 'Sing with the Choir', body: '<p>Rehearsals are Wednesdays.</p>' }),
   newBlock('faq'),
   newBlock('spacer'),
+  newBlock('download'),
 ]);
 const harness = createEditorServer({ pages: [{ slug: 'music', title: 'Music Ministry', blocks: seedBlocks }] });
 await new Promise((r) => harness.server.listen(0, r));
@@ -47,7 +48,7 @@ group('selection');
 await page.click('.ed-paper .tlcb--textphoto');
 eq(await page.locator('.ed-paper .tlcb.is-sel').count(), 1, 'exactly one block selected');
 ok((await page.textContent('#edInspHead')).includes('Text + photo'), 'inspector titles the selected block');
-ok((await page.textContent('#edInspHead')).includes('Block 2 of 4'), 'inspector shows the position');
+ok((await page.textContent('#edInspHead')).includes('Block 2 of 5'), 'inspector shows the position');
 eq(await page.locator('.ed-row[aria-selected="true"]').first().textContent().then((t) => t.includes('Text + photo')), true, 'rail row marked selected');
 eq(await page.locator('.ed-paper .tlcb.is-sel .tlcb-tools').isVisible(), true, 'block toolbar appears on selection');
 eq(await page.locator('.ed-paper .tlcb.is-sel .tlcb-badge').isVisible(), true, 'type badge appears on selection');
@@ -152,6 +153,31 @@ ok((await page.textContent('#edSaved')).startsWith('Autosaved'), 'autosave label
 // rail label follows the block's own heading
 ok((await page.locator('.ed-row').nth(1).textContent()).includes('Sing with us'), 'rail row shows the new heading');
 
+group('a paused edit does not scramble what comes after it');
+await reload();
+// Dinger: "In button fields to go to websites the typing doesn't work. I
+// will type and it will go crazy." The debounced round trip that saves a
+// free-text field replaces the whole inspector panel and refocuses the
+// input, and a plain .focus() on a fresh node lands the caret at position
+// 0 — so pausing mid-address (long enough for the 700ms debounce to fire)
+// and then continuing pushed the new characters ahead of what was already
+// there instead of after it: "https://www." + "timothystl.org" became
+// "timothystl.orghttps://www.".
+await page.click('.ed-paper .tlcb--download');
+await page.click('#edUrl');
+await page.keyboard.type('https://www.', { delay: 15 });
+await settle(900); // longer than the 700ms debounce — the panel rebuilds mid-edit
+eq(await page.evaluate(() => { var el = document.querySelector('#edUrl'); return el.selectionStart === el.value.length && el.selectionEnd === el.value.length; }),
+  true, 'the caret comes back to the end of what was already typed, not the start');
+await page.keyboard.type('timothystl.org', { delay: 15 });
+eq(await page.locator('#edUrl').inputValue(), 'https://www.timothystl.org', 'typing after the pause appends instead of scrambling the address');
+// Wait for the real signal rather than guessing at the two debounces stacked
+// here (the 700ms typing-pause timer that turns this edit into a save, THEN
+// the 1500ms autosave timer that follows it) — #edSaved is what the office
+// actually watches to know an edit landed.
+await page.waitForFunction(() => (document.getElementById('edSaved') || {}).textContent.indexOf('Autosaved') === 0, null, { timeout: 8000 });
+eq(savedBlocks()[4].url, 'https://www.timothystl.org', 'and the correct address is what actually saves, not the scrambled one');
+
 group('single-line fields do not take newlines');
 await page.click('.ed-paper .tlcb--textphoto [data-field="title"]');
 await page.keyboard.press('End');
@@ -205,13 +231,13 @@ await reload();
 await page.click('.ed-paper .tlcb--faq');
 await page.click('.ed-paper .tlcb.is-sel [data-act="dup"]');
 await settle(400);
-eq(await page.locator('.ed-paper .tlcb').count(), 5, 'duplicate adds a block');
+eq(await page.locator('.ed-paper .tlcb').count(), 6, 'duplicate adds a block');
 eq(await page.locator('.ed-paper .tlcb--faq').count(), 2, 'the copy is the same type');
-eq(await page.locator('.ed-row').count(), 5, 'rail follows');
+eq(await page.locator('.ed-row').count(), 6, 'rail follows');
 ok((await page.textContent('#edChanges')).includes('Duplicated faq'), 'change log records the duplicate');
 await page.click('#edUndo');
 await settle(400);
-eq(await page.locator('.ed-paper .tlcb').count(), 4, 'undo removes the copy');
+eq(await page.locator('.ed-paper .tlcb').count(), 5, 'undo removes the copy');
 ok((await page.textContent('#edChanges')).includes('Undid last change'), 'undo is logged');
 
 await page.click('.ed-paper .tlcb--spacer');
@@ -231,17 +257,17 @@ eq(await page.locator('#edRedo').isDisabled(), true, 'redo starts disabled');
 await page.click('.ed-paper .tlcb--faq');
 await page.click('.ed-paper .tlcb.is-sel [data-act="dup"]');
 await settle(400);
-eq(await page.locator('.ed-paper .tlcb').count(), 5, 'duplicate adds a block');
+eq(await page.locator('.ed-paper .tlcb').count(), 6, 'duplicate adds a block');
 eq(await page.locator('#edRedo').isDisabled(), true, 'and a fresh edit leaves nothing to redo');
 
 await page.click('#edUndo');
 await settle(400);
-eq(await page.locator('.ed-paper .tlcb').count(), 4, 'undo removes the copy');
+eq(await page.locator('.ed-paper .tlcb').count(), 5, 'undo removes the copy');
 eq(await page.locator('#edRedo').isDisabled(), false, 'now there is something to redo');
 
 await page.click('#edRedo');
 await settle(400);
-eq(await page.locator('.ed-paper .tlcb').count(), 5, 'redo puts it back');
+eq(await page.locator('.ed-paper .tlcb').count(), 6, 'redo puts it back');
 eq(await page.locator('.ed-paper .tlcb--faq').count(), 2, 'and it is the same type');
 ok((await page.textContent('#edChanges')).includes('Redid last change'), 'redo is logged');
 eq(await page.locator('#edRedo').isDisabled(), true, 'the redo stack is spent');
@@ -252,7 +278,7 @@ eq(await page.locator('#edRedo').isDisabled(), true, 'the redo stack is spent');
 // appears to invent out of nothing.
 await page.click('#edUndo');
 await settle(400);
-eq(await page.locator('.ed-paper .tlcb').count(), 4, 'stepped back again');
+eq(await page.locator('.ed-paper .tlcb').count(), 5, 'stepped back again');
 eq(await page.locator('#edRedo').isDisabled(), false, 'with a redo waiting');
 await page.click('.ed-paper .tlcb--spacer');
 await page.click('.ed-paper .tlcb.is-sel [data-act="del"]');
