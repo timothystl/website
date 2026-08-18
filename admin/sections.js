@@ -17,6 +17,18 @@
 
 export const SECTIONS = {
   dashboard: { label: 'Dashboard', glyph: '◧', title: 'Thursday morning', purpose: 'What needs you today, what happens Sunday, and what changed since yesterday.', variants: [['a', 'Needs you'], ['b', 'Overview']] },
+  // The generalized Events list — one row per event, whatever it takes:
+  // registration, payment, volunteers read from Serve, its own pages. The
+  // Christmas Market is the first row, and the template every event created
+  // from here on follows; see admin/events.js.
+  events: {
+    label: 'Events', glyph: '☆', title: 'Events',
+    purpose: 'Every event the church runs that takes sign-ups, a fee, or both — the Christmas Market, and whatever comes after it. Opening a row goes to that event’s own screen.',
+    action: '+ New event', search: 'Search events',
+    filters: ['All', 'Live', 'Draft', 'Archived'],
+    columns: [['Event', '2fr'], ['When', '1.2fr'], ['Public pages', '1.4fr'], ['People', '1fr'], ['Status', '1.1fr']],
+    note: 'Registration, payment, volunteers and photos are each optional per event — a tab a coordinator cannot use is absent from that event’s screen, not shown and disabled.'
+  },
   pages: {
     label: 'Pages', glyph: '▤', title: 'Pages', purpose: 'Every page on the site except the ministry pages, which have their own tab. Opening a row goes straight to the page editor.',
     action: '+ New page', search: 'Search pages', filters: ['All', 'Live', 'Draft edits', 'Not in menu'],

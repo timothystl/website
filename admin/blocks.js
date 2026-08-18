@@ -887,6 +887,37 @@ export const BLOCK_DEFS = {
     ],
   },
 
+  // ── A GENERIC EVENT'S REGISTRATION FORM ───────────────────────────────────
+  // `marketapp` above is the Christmas Market's own three-step, nine-field
+  // wizard, kept exactly as it is (ground rule: the market must not regress).
+  // This is the general case that lets ANY event — VBS, the Egg Hunt, a
+  // concert — take sign-ups with no developer, driven entirely by that
+  // event's own `site_event_fields` rows (see admin/events.js).
+  //
+  // ⚠ SAME RULE AS marketapp: NO url FIELD, AND IT CANNOT HAVE ONE. What a
+  // registrant is charged and where the payment goes are both resolved from
+  // that event's own `site_events` row at the moment they submit — see the
+  // 'registration' branch in renderBlock() and `data.eventsById` in
+  // pageData(). A block's URL is frozen the instant the page is published;
+  // storing a payment address here would go on charging to the old form
+  // after the office changed it, and the page would still look perfect.
+  //
+  // ⚠ `eventId` IS AN ID REFERENCE, NOT A LINK — the same shape the `give`
+  // block's own `fundId` already is. It says WHICH event this form belongs
+  // to; it is never itself a URL and safeUrl() never touches it.
+  registration: {
+    label: 'Event registration', glyph: '✎',
+    align: true, richBody: true,
+    defaults: {
+      eyebrow: 'Register', title: 'Sign up',
+      body: '<p>Fill this in to reserve your spot.</p>',
+      eventId: '', spaceAbove: 24, spaceBelow: 24,
+    },
+    eventRef: true,
+    auto: 'events', autoCount: false,
+    autoNote: 'Which event this is, and every field it asks for, come from that event’s own Registrations tab — pick the event on the right, then add fields there. Nothing about capacity, price or whether sign-ups are open is typed here.',
+  },
+
   // ── THE JUMP BAR ──────────────────────────────────────────────────────────
   // A row of chips that jump to the sections further down the page, with an
   // optional filled button on the right.
@@ -1211,7 +1242,7 @@ export const GROUPS = [
   // than starting a fifth. They belong to one page, and a group of two that
   // only ever appears on the giving page would read on every other page as a
   // section of the library that is broken.
-  { name: 'Sign up',   types: ['form', 'signup', 'newsletter', 'letter', 'newsletterarchive', 'portal', 'give', 'giving', 'amounts', 'marketapp', 'marketfacts'] },
+  { name: 'Sign up',   types: ['form', 'signup', 'newsletter', 'letter', 'newsletterarchive', 'portal', 'give', 'giving', 'amounts', 'marketapp', 'marketfacts', 'registration'] },
 ];
 
 export const BLOCK_TYPE_KEYS = Object.keys(BLOCK_DEFS);
@@ -1606,6 +1637,14 @@ export function sanitizeBlock(b) {
   if (def.giveFund) {
     const id = Math.floor(Number(b.giveFund));
     if (Number.isFinite(id) && id > 0) out.giveFund = id;
+  }
+
+  // Which event a `registration` block belongs to — an ID reference into
+  // `site_events`, the identical shape `giveFund` above is for
+  // `give_funds`. Never a URL: safeUrl() never sees it, and there is no
+  // itemUrlFields/url declaration for this type at all.
+  if (def.eventRef) {
+    out.eventId = cleanText(b.eventId, 60);
   }
 
   if (def.contactEmail) {
@@ -2482,6 +2521,41 @@ a.tlcb-cg-card:hover .tlcb-cg-link{text-decoration:underline;}
   .tlcb-mktapp-form{padding:20px 18px;}
 }
 
+/* ── A generic event's registration form ── the single-page counterpart of
+   .tlcb-mktapp above, sharing every token but none of the three-step
+   markup. Deliberately its own class prefix rather than reusing
+   .tlcb-mktapp-* — the market's own bespoke form must never pick up a rule
+   meant for this one, or the reverse, just because a selector happened to
+   match both. */
+.tlcb-reg-facts{font:400 13.5px/1.5 var(--tlcb-serif);color:#4A4860;margin:0 0 18px;}
+.tlcb-reg-closed{padding:20px 22px;border:1px solid #DDE3ED;border-left:3px solid #C9973A;border-radius:10px;background:#FBF8F3;}
+.tlcb-reg-closed p{margin:0;font-size:14.5px;line-height:1.6;color:#4A4860;}
+.tlcb-reg-form{display:flex;flex-direction:column;gap:18px;max-width:560px;
+  background:#FBF8F3;border:1px solid #DDE3ED;border-radius:16px;padding:28px;
+  box-shadow:0 6px 32px rgba(30,45,74,.14);}
+.tlcb-reg-field{display:flex;flex-direction:column;gap:6px;}
+.tlcb-reg-field>label{font:700 10.5px/1 var(--tlcb-ui);letter-spacing:.06em;text-transform:uppercase;color:#4A4860;}
+.tlcb-reg-field input,.tlcb-reg-field textarea,.tlcb-reg-field select{width:100%;background:#fff;
+  border:1px solid #DDE3ED;border-radius:8px;padding:11px 13px;font:400 14.5px/1.5 var(--tlcb-serif);
+  color:#1A1A2A;min-height:44px;}
+.tlcb-reg-field textarea{min-height:96px;resize:vertical;font-family:var(--tlcb-serif);}
+.tlcb-reg-field input:focus,.tlcb-reg-field textarea:focus,.tlcb-reg-field select:focus{
+  outline:none;border-color:#C9973A;box-shadow:0 0 0 3px rgba(201,151,58,.15);}
+.tlcb-reg-req{color:#C9973A;}
+.tlcb-reg-hint{margin:0;font-size:12px;color:#8A8898;line-height:1.5;}
+.tlcb-reg-check{display:flex;gap:10px;align-items:flex-start;background:#EDF2F7;border:1px solid #C4CEDF;
+  border-radius:10px;padding:14px;cursor:pointer;}
+.tlcb-reg-check input{width:18px;height:18px;margin-top:2px;accent-color:#4A5E3A;flex-shrink:0;}
+.tlcb-reg-check span{font-size:13.5px;line-height:1.55;color:#1A1A2A;font-family:var(--tlcb-serif);
+  text-transform:none;letter-spacing:0;font-weight:400;}
+.tlcb-reg-total{background:#1E2D4A;border-radius:14px;padding:18px 20px;}
+.tlcb-reg-total-due{display:flex;justify-content:space-between;gap:14px;font:800 18px/1 var(--tlcb-ui);color:#fff;}
+.tlcb-reg-foot{display:flex;justify-content:flex-end;}
+.tlcb-reg-alert{display:none;padding:11px 14px;border-radius:8px;font-size:13.5px;line-height:1.5;}
+.tlcb-reg-alert--err{display:block;background:#fce8e8;border-left:3px solid #B85C3A;color:#7a1f1f;}
+.tlcb-reg-alert--ok{display:block;background:#e8f5e9;border-left:3px solid #4A5E3A;color:#1a3d1f;}
+@media(max-width:640px){.tlcb-reg-form{padding:20px 18px;}}
+
 /* ── The amount ladder ── one row per "$X /period does Y". Follows the
    block's own Theme colors, which is how the same type renders as the pale
    ministry ladder and as the navy leadership section. */
@@ -3004,7 +3078,7 @@ export function blocksClientConfig(data) {
       itemUrlFields: d.itemUrlFields || [], itemImageFields: d.itemImageFields || [],
       richBody: !!d.richBody, align: !!d.align,
       gallery: !!d.gallery, feed: d.feed || '', infoCard: !!d.infoCard,
-      shadow: SHADOWABLE_TYPES.has(key), contactEmail: !!d.contactEmail, giveFund: !!d.giveFund,
+      shadow: SHADOWABLE_TYPES.has(key), contactEmail: !!d.contactEmail, giveFund: !!d.giveFund, eventRef: !!d.eventRef,
       shade: SHADEABLE_TYPES.has(key), appear: APPEARABLE_TYPES.has(key), btn: BTN_TYPES.has(key),
       partnerSource: !!d.partnerSource,
       choices: d.choices || [], switches: d.switches || [],
@@ -3023,6 +3097,11 @@ export function blocksClientConfig(data) {
     // id stays server-side, because nothing in the editor has any business
     // holding one — see the Give block's render branch.
     giveFunds: ((data && data.give && data.give.funds) || []).map((f) => ({ id: f.id, name: f.name })),
+    // Name and id only, same reasoning as giveFunds above — the inspector
+    // offers these to pick a `registration` block's event from; everything
+    // that event actually costs or asks for is resolved server-side at
+    // render time, never here.
+    events: ((data && data.eventsById) ? Object.values(data.eventsById) : []).map((e) => ({ id: e.id, name: e.name })),
     cardSides: CARD_SIDES, cardShows: CARD_SHOWS, starters: STARTERS.map((s) => ({ key: s.key, label: s.label, note: s.note })),
     stamps: STAMP_PRESETS, step: SPACE_STEP, max: SPACE_MAX };
 }
@@ -3790,6 +3869,84 @@ const MARKET_APP_SCRIPT = '<script>' + MARKET_PRICING_JS + `
 
     var apps = document.querySelectorAll('.tlcb-mktapp:not(.tlcb-mktapp--editing)');
     for (var q = 0; q < apps.length; q++) paint(apps[q]);
+  })();
+` + '<\/script>';
+
+// ── A GENERIC EVENT'S REGISTRATION SCRIPT ─────────────────────────────────
+// The single-page counterpart to MARKET_APP_SCRIPT above — no three-step
+// wizard (this form asks whatever `site_event_fields` says, not nine fixed
+// fields), no photo upload. Reuses MARKET_PRICING_JS for the live total the
+// same way the market's own block does; the two scripts can both be on one
+// page (they never are, today, but nothing stops a future page from doing
+// it) because redefining the same functions twice is harmless.
+//
+// ⚠ No backticks anywhere in this string, for the identical reason
+// MARKET_APP_SCRIPT's own comment gives.
+const REGISTRATION_SCRIPT = '<script>' + MARKET_PRICING_JS + `
+  (function () {
+    if (window.__tlcRegAppWired) return;
+    window.__tlcRegAppWired = 1;
+
+    function cfgOf(w) { try { return JSON.parse(w.getAttribute('data-reg-cfg') || '{}'); } catch (e) { return {}; } }
+
+    function paint(w) {
+      var cfg = cfgOf(w);
+      if (!cfg.feeConfig) return;
+      var qtyEl = w.querySelector('[name="qty"]');
+      var n = qtyEl ? (Number(qtyEl.value) || 1) : 1;
+      var p = tlcMktPrice(n, cfg.feeConfig);
+      var set = function (sel, text) { var el = w.querySelector(sel); if (el) el.textContent = text; };
+      set('[data-row="due"]', tlcMktMoney(p.totalCents));
+      var submit = w.querySelector('[data-submit-label]');
+      if (submit && submit.getAttribute('data-pay-label') !== '0') submit.textContent = 'Continue to payment — ' + tlcMktMoney(p.totalCents);
+    }
+
+    function say(w, message, kind) {
+      var el = w.querySelector('.tlcb-reg-alert');
+      if (!el) return;
+      el.textContent = message || '';
+      el.className = 'tlcb-reg-alert' + (message ? ' tlcb-reg-alert--' + (kind === 'ok' ? 'ok' : 'err') : '');
+    }
+
+    document.addEventListener('input', function (e) {
+      var w = e.target.closest && e.target.closest('.tlcb-reg');
+      if (w && e.target.name === 'qty') paint(w);
+    });
+
+    document.addEventListener('submit', function (e) {
+      var form = e.target.closest && e.target.closest('.tlcb-reg-form');
+      if (!form) return;
+      e.preventDefault();
+      var w = form.closest('.tlcb-reg');
+      var cfg = cfgOf(w);
+      if (form.querySelector('[name="website"]').value) { form.reset(); return; }
+      say(w, '');
+
+      var btn = w.querySelector('[data-submit-label]');
+      var label = btn ? btn.textContent : '';
+      if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+
+      var fd = new FormData(form);
+      fd.append('event_id', cfg.eventId || '');
+      if (window.tlcFormToken) fd.append('form_token', window.tlcFormToken);
+
+      fetch('https://admin.timothystl.org/api/events/register', { method: 'POST', body: fd })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (res) {
+          if (!res.ok || res.d.error) throw new Error(res.d.error || 'Server error');
+          if (res.d.payUrl) { say(w, 'You are signed up — taking you to payment…', 'ok'); window.location.href = res.d.payUrl; return; }
+          say(w, res.d.waitlisted ? 'You are on the waitlist — we will be in touch if a spot opens up.' : 'You are signed up. We will be in touch.', 'ok');
+          if (btn) { btn.disabled = true; btn.textContent = 'Signed up'; }
+          form.reset();
+        })
+        .catch(function (err) {
+          say(w, (err && err.message) || 'Something went wrong. Please try again.', 'err');
+          if (btn) { btn.disabled = false; btn.textContent = label; }
+        });
+    });
+
+    var forms = document.querySelectorAll('.tlcb-reg:not(.tlcb-reg--editing)');
+    for (var q = 0; q < forms.length; q++) paint(forms[q]);
   })();
 ` + '<\/script>';
 
@@ -5163,6 +5320,90 @@ function renderInner(b, opts) {
         </form>
       </div>
     </div>${editing ? '' : MARKET_APP_SCRIPT}`;
+  }
+
+  // ── A GENERIC EVENT'S REGISTRATION FORM ───────────────────────────────────
+  // The `marketapp` block above is the Christmas Market's own bespoke nine
+  // fields; this is any other event's — driven entirely by `data.eventsById`
+  // and `data.eventFieldsById`, both assembled in pageData() from that
+  // event's `site_events` row and its `site_event_fields` rows.
+  if (t === 'registration') {
+    const editing = !!opts.editing;
+    const dis = editing ? ' disabled' : '';
+    const head = `${renderHead(opts, b, 'Sign up')}${renderBody(opts, b, def)}`;
+
+    const ev = b.eventId ? (data.eventsById || {})[b.eventId] : null;
+
+    // ⚠ NO EVENT PICKED, OR THE PICKED ONE HAS REGISTRATION TURNED OFF: say
+    // so in the editor and render nothing at all on the live page — a form
+    // to nowhere is worse than no form.
+    if (!ev || !ev.hasRegistration) {
+      return editing
+        ? `<div class="tlcb-reg">${head}<p class="tlcb-note">${!b.eventId ? 'Pick an event in the panel on the right.'
+            : !ev ? 'That event could not be found — pick another in the panel on the right.'
+            : `“${esc(ev.name)}” does not have registration turned on. Turn it on from that event's own screen.`}</p></div>`
+        : '';
+    }
+
+    if (!ev.registrationOpen) {
+      return `<div class="tlcb-reg">${head}
+        <div class="tlcb-reg-closed">
+          <p><strong>Sign-ups are closed right now.</strong>${ev.coordinatorEmail ? ` Email <a href="mailto:${esc(ev.coordinatorEmail)}">${esc(ev.coordinatorEmail)}</a> with any questions.` : ''}</p>
+        </div>
+      </div>`;
+    }
+
+    const fields = (data.eventFieldsById && data.eventFieldsById[b.eventId]) || [];
+    const fee = ev.hasPayment ? marketMoney(Math.round((Number(ev.feeConfig.tableFee) || 0) * 100)) : '';
+    const facts = [ev.dateLabel, ev.hasPayment ? `${fee} each` : ''].filter(Boolean).join(' · ');
+
+    const fieldHtml = (f) => {
+      const id = 'reg-f-' + esc(f.key);
+      const req = f.required ? ' <span class="tlcb-reg-req">*</span>' : '';
+      if (f.kind === 'checkbox') {
+        return `<div class="tlcb-reg-field"><label class="tlcb-reg-check"><input type="checkbox" id="${id}" name="field_${esc(f.key)}" value="1"${dis}> <span>${esc(f.label)}${req}</span></label>${f.hint ? `<p class="tlcb-reg-hint">${esc(f.hint)}</p>` : ''}</div>`;
+      }
+      let input;
+      if (f.kind === 'textarea') {
+        input = `<textarea id="${id}" name="field_${esc(f.key)}" placeholder="${esc(f.placeholder || '')}"${dis}></textarea>`;
+      } else if (f.kind === 'select') {
+        const opts_ = (Array.isArray(f.options) ? f.options : []).map((o) => `<option value="${esc(o)}">${esc(o)}</option>`).join('');
+        input = `<select id="${id}" name="field_${esc(f.key)}"${dis}><option value="">Choose…</option>${opts_}</select>`;
+      } else {
+        const type = ['email', 'tel', 'number', 'date'].includes(f.kind) ? f.kind : 'text';
+        input = `<input type="${type}" id="${id}" name="field_${esc(f.key)}" placeholder="${esc(f.placeholder || '')}"${dis}>`;
+      }
+      return `<div class="tlcb-reg-field"><label for="${id}">${esc(f.label)}${req}</label>${input}${f.hint ? `<p class="tlcb-reg-hint">${esc(f.hint)}</p>` : ''}</div>`;
+    };
+
+    const qtyRow = ev.hasPayment
+      ? `<div class="tlcb-reg-field"><label for="reg-qty">How many?</label>
+          <input type="number" id="reg-qty" name="qty" min="1" max="${esc(String(ev.feeConfig.maxTables))}" value="1"${dis}></div>`
+      : '';
+    const totalBlock = ev.hasPayment
+      ? `<div class="tlcb-reg-total"><div class="tlcb-reg-total-due"><span>Due today</span><span data-row="due">${esc(marketMoney(priceBreakdown(1, ev.feeConfig).totalCents))}</span></div></div>`
+      : '';
+    const submitLabel = ev.hasPayment ? `Continue to payment — ${marketMoney(priceBreakdown(1, ev.feeConfig).totalCents)}` : 'Sign up';
+
+    const cfg = esc(JSON.stringify({ eventId: b.eventId, feeConfig: ev.hasPayment ? ev.feeConfig : null }));
+
+    return `<div class="tlcb-reg${editing ? ' tlcb-reg--editing' : ''}" data-reg-cfg="${cfg}">
+      ${head}
+      ${facts ? `<p class="tlcb-reg-facts">${esc(facts)}</p>` : ''}
+      <form class="tlcb-reg-form" novalidate>
+        <div style="position:absolute;left:-9999px;" aria-hidden="true">
+          <label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"${dis}></label>
+        </div>
+        ${fields.map(fieldHtml).join('') || (editing ? '<p class="tlcb-note">No fields yet — add one on this event\'s Registrations tab.</p>' : '')}
+        ${qtyRow}
+        ${totalBlock}
+        <div class="tlcb-reg-alert" role="alert"></div>
+        <div class="tlcb-reg-foot">
+          ${editing ? `<span class="tlcb-btn" data-submit-label>${esc(submitLabel)}</span>`
+            : `<button type="submit" class="tlcb-btn" data-submit-label${dis}>${esc(submitLabel)}</button>`}
+        </div>
+      </form>
+    </div>${editing ? '' : REGISTRATION_SCRIPT}`;
   }
 
   return `<div class="tlcb-note">Unknown block</div>`;

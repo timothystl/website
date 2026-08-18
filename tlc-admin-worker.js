@@ -113,7 +113,8 @@ import { stripImageMetadata } from './admin/exif.js';
 import { handleMarketRoutes, marketSettings, marketConfig, marketPayUrl, priceBreakdown, money as marketMoney,
          sanitizeApplication, screenableText, coordinatorEmailHtml, vendorEmailHtml, marketInsertArgs } from './admin/market.js';
 import { getEvent, listEvents, eventFeeConfig, insertRegistration, eventCoordinatorPermissions,
-         eventCoordinatorPermissionKey, slugifyEventId, handleEventsRoutes } from './admin/events.js';
+         eventCoordinatorPermissionKey, slugifyEventId, handleEventsRoutes, eventFields,
+         sanitizeRegistration, registrationScreenableText, splitRegistrationFields, capacityDecision } from './admin/events.js';
 import { normalizeChannelInput, channelPageUrl, channelIdFrom, feedUrl,
          parseFeed, pickLatest, isChannelId } from './admin/sermons-feed.js';
 import { PALETTE as CHROME_PALETTE, BAR_KEYS, DEFAULTS as CHROME_DEFAULTS,
@@ -504,7 +505,7 @@ async function pageData(env, reqKey) {
       try { return (await env.DB.prepare(sql).bind(...binds).all()).results || []; } catch (_) { return []; }
     };
     const [settingRows, chromeRow, sermonRow, sermonSeries, sermonNotes, bibleClasses, news, staff, newsletters,
-           giveTiers, giveFunds, giveUrlRow, partners, coreValueRows, marketEventRow] = await Promise.all([
+           giveTiers, giveFunds, giveUrlRow, partners, coreValueRows, marketEventRow, allEventRows, allEventFieldRows] = await Promise.all([
       q("SELECT key, value FROM site_settings WHERE key LIKE 'church_%'"),
       // ⚠ The PUBLISHED row only. The draft exists so that somebody can try a
       // color without it being on the front of the church website, and
@@ -577,6 +578,14 @@ async function pageData(env, reqKey) {
       // Batched here with everything else rather than a second round trip per
       // page render, the same reasoning as give above.
       env.DB.prepare("SELECT * FROM site_events WHERE id = 'christmasmarket'").first().catch(() => null),
+      // Every event (the market included, so the `registration` block's
+      // event picker can name it even though it never actually uses it),
+      // for the generic `registration` block — see admin/events.js. A
+      // handful of rows at most; unbounded, unlike the news/staff/sermon
+      // lists above, on purpose — there is no reasonable number of events a
+      // church runs that would make this worth capping.
+      q('SELECT * FROM site_events ORDER BY sort_order, id'),
+      q('SELECT * FROM site_event_fields ORDER BY event_id, sort_order, id'),
     ]);
     const s = {};
     for (const r of settingRows) s[r.key.replace(/^church_/, '')] = r.value;
@@ -638,6 +647,28 @@ async function pageData(env, reqKey) {
       // fund and the base link are resolved from `give` above, at the moment
       // an application is actually submitted, never stored in a block.
       market: eventFeeConfig(marketEventRow, (giveUrlRow && giveUrlRow.value) || ''),
+      // Every event, shaped for the generic `registration` block — see
+      // admin/events.js and the 'registration' branch in renderBlock().
+      // Keyed by event id so a block's own `eventId` field is a direct
+      // lookup. The market is included (its `hasRegistration` reads true on
+      // the row, but it never actually gets a `registration` block — it
+      // keeps `marketapp` — so this only matters for the event picker
+      // listing it by name).
+      eventsById: Object.fromEntries((allEventRows || []).map((ev) => [ev.id, {
+        id: ev.id, name: ev.name,
+        hasRegistration: !!Number(ev.has_registration), hasPayment: !!Number(ev.has_payment),
+        registrationOpen: !!Number(ev.registration_open ?? 1),
+        dateLabel: ev.date_label || '', coordinatorEmail: ev.coordinator_email || '',
+        feeConfig: Number(ev.has_payment) ? eventFeeConfig(ev, (giveUrlRow && giveUrlRow.value) || '') : null,
+      }])),
+      eventFieldsById: (allEventRows || []).reduce((acc, ev) => {
+        acc[ev.id] = (allEventFieldRows || []).filter((f) => f.event_id === ev.id).map((f) => ({
+          key: f.key, label: f.label, kind: f.kind, required: !!Number(f.required),
+          placeholder: f.placeholder || '', hint: f.hint || '',
+          options: (() => { try { const o = JSON.parse(f.options || '[]'); return Array.isArray(o) ? o : []; } catch (_) { return []; } })(),
+        }));
+        return acc;
+      }, {}),
     };
   })();
   if (reqKey) PAGE_DATA_CACHE.set(reqKey, p);
@@ -718,7 +749,7 @@ async function portalOrigin(env) {
 }
 // `/api/tap-hit` is called server-to-server by site-worker.js when it resolves
 // one of the /tapN short addresses, so it has no Origin to check against.
-const PUBLIC_CROSS_ORIGIN_POSTS = new Set(['/api/contact', '/api/prayer', '/api/subscribe', '/api/tap-hit', '/api/push/notify', '/api/market/apply']);
+const PUBLIC_CROSS_ORIGIN_POSTS = new Set(['/api/contact', '/api/prayer', '/api/subscribe', '/api/tap-hit', '/api/push/notify', '/api/market/apply', '/api/events/register']);
 
 // Real ChMS fund names — read-only, cross-Worker call — shown as suggestions in the
 // Giving tab's Funds card so staff can pick a real fund name instead of retyping one from
@@ -3345,6 +3376,154 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
       }
     }
 
+    // ── PUBLIC: generic event registration ── the same shape /api/market/apply
+    // is, generalized: which event, which fields, whether it takes money and
+    // whether it has a cap all come from the site_events/site_event_fields
+    // rows rather than being hardcoded, so a second event needs no route of
+    // its own. A FIXED path, not /api/events/:slug/register — the CSRF
+    // Origin gate's PUBLIC_CROSS_ORIGIN_POSTS is an exact-match set and
+    // cannot match a dynamic segment, and the market's own single fixed
+    // endpoint is the precedent this follows rather than widening that gate.
+    if (path === '/api/events/register' && method === 'POST') {
+      const corsH = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
+      if (request.method === 'OPTIONS') return new Response('', { headers: corsH });
+      try {
+        const fd = await request.formData();
+        const eventId = String(fd.get('event_id') || '').trim();
+        const ev = eventId ? await getEvent(env, eventId) : null;
+        if (!ev || !Number(ev.has_registration)) {
+          return new Response(JSON.stringify({ error: 'This form is not accepting sign-ups.' }), { status: 404, headers: corsH });
+        }
+        if (!Number(ev.registration_open ?? 1)) {
+          return new Response(JSON.stringify({
+            error: `Sign-ups are closed right now.${ev.coordinator_email ? ` Please email ${ev.coordinator_email}.` : ''}`
+          }), { status: 403, headers: corsH });
+        }
+
+        const fields = await eventFields(env, eventId);
+        const giveRow = Number(ev.has_payment)
+          ? await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'give_url'").first().catch(() => null)
+          : null;
+        const cfg = eventFeeConfig(ev, (giveRow && giveRow.value) || '');
+
+        // sanitizeRegistration reads `field_<key>` off a plain object, not a
+        // FormData — marshaled here rather than in events.js, which stays
+        // pure and DB-free.
+        const formObj = { qty: fd.get('qty') };
+        for (const f of fields) formObj[`field_${f.key}`] = fd.get(`field_${f.key}`);
+        const { ok: valid, errors, value } = sanitizeRegistration(formObj, fields, cfg);
+        if (!valid) return new Response(JSON.stringify({ error: errors[0], errors }), { status: 400, headers: corsH });
+
+        const screen = await screenSubmission(env, request, {
+          kind: `event-${eventId}`,
+          name: value.contact_name,
+          email: value.contact_email,
+          message: registrationScreenableText(value, fields),
+          honeypot: fd.get('website'),
+          token: fd.get('form_token'),
+          turnstileToken: fd.get('cf-turnstile-response'),
+        });
+
+        // A held submission is stored and answered with success, same rule
+        // as every other public form — and, same as the market, given no
+        // capacity/waitlist decision and no payment link, since a bot that
+        // learns which of its submissions were caught learns how to get
+        // past the filter, and taking a spot or money for one nobody has
+        // reviewed would be the worse mistake either way.
+        let waitlisted = false;
+        if (!screen.held && ev.registration_cap) {
+          const cur = await env.DB.prepare(
+            "SELECT COALESCE(SUM(qty),0) AS n FROM site_event_registrations WHERE event_id = ? AND payment_status != 'dropped' AND waitlisted = 0"
+          ).bind(eventId).first().catch(() => ({ n: 0 }));
+          const decision = capacityDecision(ev, (cur && cur.n) || 0, value.qty || 1);
+          if (decision.refused) {
+            return new Response(JSON.stringify({
+              error: `This is full.${ev.coordinator_email ? ` Please email ${ev.coordinator_email} to ask about a waitlist.` : ''}`
+            }), { status: 409, headers: corsH });
+          }
+          waitlisted = decision.waitlisted;
+        }
+
+        const price = Number(ev.has_payment) ? priceBreakdown(value.qty || 1, cfg) : null;
+        const { nonSensitive, sensitive } = splitRegistrationFields(value, fields);
+
+        let id = null;
+        try {
+          id = await insertRegistration(env, {
+            event_id: eventId,
+            qty: value.qty || 1,
+            payment_status: 'unpaid',
+            amount_due_cents: price ? price.totalCents : 0,
+            waitlisted,
+            contact_name: value.contact_name,
+            contact_email: value.contact_email,
+            contact_phone: value.contact_phone,
+            fields: nonSensitive,
+            sensitive,
+          });
+        } catch (e) {
+          console.error('Event registration insert failed:', e?.message);
+          return new Response(JSON.stringify({
+            error: `We could not save that. Please try again${ev.coordinator_email ? `, or email ${ev.coordinator_email}` : ''}.`
+          }), { status: 500, headers: corsH });
+        }
+
+        if (screen.held) {
+          ctx.waitUntil(pushToAllSubscribers(env, {
+            title: 'Filtered Mail', body: `A ${ev.name || eventId} sign-up was held for review.`,
+            tag: 'held-mail', url: '/filtered',
+          }));
+          return new Response(JSON.stringify({ success: true, held: true }), { headers: corsH });
+        }
+
+        // ⚠ NEVER STORED — recomputed at request time from the fee config,
+        // same reasoning as the market's own marketPayUrl(), which this
+        // reuses verbatim: eventFeeConfig() already shapes an event row into
+        // exactly the object it expects.
+        const payUrl = price ? marketPayUrl(cfg, price.totalCents, value.qty || 1) : '';
+        const allValues = { ...nonSensitive, ...sensitive };
+
+        // Both emails are best-effort and neither is awaited into the
+        // registrant's answer — the row is already saved.
+        if (ev.coordinator_email) {
+          ctx.waitUntil((async () => {
+            const rows = fields.map((f) => `<p style="margin:0 0 6px"><strong>${escapeHtml(f.label)}:</strong> ${escapeHtml(String(allValues[f.key] == null ? '' : allValues[f.key]))}</p>`).join('');
+            await sendTransactionalEmail(env, {
+              subject: `${screen.suspect ? '[likely spam] ' : ''}${ev.name || 'Event'} sign-up — ${value.contact_name || value.contact_email || 'new'}`,
+              htmlContent: `${screen.suspect ? '<p style="margin:0 0 12px;padding:10px 12px;background:#FAF0DC;border-left:3px solid #C9973A;"><strong>The spam filter scored this one as doubtful.</strong> It is almost certainly real — this note is just so you read it twice.</p>' : ''}${rows}${waitlisted ? '<p style="margin:12px 0 0;"><strong>Waitlisted</strong> — capacity was already reached.</p>' : ''}`,
+              toEmails: [ev.coordinator_email],
+              replyTo: value.contact_email ? { email: value.contact_email, name: value.contact_name || '' } : undefined,
+            });
+            // Suppressed for a suspect submission, same rule as the contact
+            // and prayer forms (AW-5) — the address is attacker-supplied.
+            if (!screen.suspect && value.contact_email) {
+              await sendTransactionalEmail(env, {
+                subject: `${ev.name || 'Event'} — you're signed up`,
+                htmlContent: `<p>Thanks for signing up${value.contact_name ? `, ${escapeHtml(value.contact_name)}` : ''}!</p>${waitlisted ? '<p>Capacity is full right now, so you are on the waitlist — we will reach out if a spot opens.</p>' : ''}${payUrl ? `<p><a href="${escapeHtml(payUrl)}">Pay online</a></p>` : ''}`,
+                toEmails: [value.contact_email],
+              });
+            }
+          })());
+        }
+
+        ctx.waitUntil(pushToAllSubscribers(env, {
+          title: `${ev.name || 'Event'} sign-up`,
+          body: `${value.contact_name || value.contact_email || 'Someone'}${waitlisted ? ' (waitlisted)' : ''}`,
+          tag: `event-${eventId}`, url: '/events',
+        }));
+
+        return new Response(JSON.stringify({
+          success: true, id, waitlisted,
+          payUrl: payUrl || undefined,
+          total: price ? marketMoney(price.totalCents) : undefined,
+          totalCents: price ? price.totalCents : undefined,
+        }), { headers: corsH });
+      } catch (e) {
+        console.error('Event registration failed:', e?.message);
+        return new Response(JSON.stringify({ error: 'Something went wrong. Please try again.' }), { status: 500, headers: corsH });
+      }
+    }
+
     // ── PUBLIC: voters page data ──
     if (path === '/api/voters' && method === 'GET') {
       const row = await env.DB.prepare('SELECT * FROM voters_page WHERE id = 1').first();
@@ -5379,10 +5558,25 @@ ${PAYROLL_HTML}`, 'Payroll');
     }
 
     // ── CHRISTMAS MARKET VENDORS (auth + market_manage) ────────
-    // The coordinator's list — what the 2024 spreadsheet was for.
+    // The coordinator's list — what the 2024 spreadsheet was for. Unchanged
+    // and unmoved: the market keeps its own screen, its own permission, and
+    // its own three-step application — see admin/events.js's header comment
+    // on why the market's own form was not rebuilt onto site_event_fields.
     {
       const r = await handleMarketRoutes(request, env, path, method, currentUser, url,
         path === '/market' ? await pageBadges() : {});
+      if (r) return r;
+    }
+
+    // ── EVENTS, GENERALIZED (auth; each screen checks its own permission) ──
+    // A second event onward — VBS, the Egg Hunt, a concert — is a row here,
+    // not a deploy. Each event's own permission gate lives inside
+    // handleEventsRoutes itself, the same shape handleMarketRoutes already
+    // is, because /events/:id has to check a DIFFERENT permission per row
+    // (market_manage for the market, event_<id>_manage for everything else).
+    {
+      const r = await handleEventsRoutes(request, env, path, method, currentUser, url,
+        (path === '/events' || path.startsWith('/events/')) ? await pageBadges() : {});
       if (r) return r;
     }
 

@@ -32,7 +32,7 @@
 // by contrast, IS `site_event_fields`-driven — see the `registration` block
 // in admin/blocks.js.
 
-import { MARKET_DEFAULTS, priceBreakdown, money } from '../market-price.js';
+import { MARKET_DEFAULTS, clampTables, priceBreakdown, money } from '../market-price.js';
 
 // ── PAYMENT STATES ───────────────────────────────────────────────────────────
 // The four states the Christmas Market coordinator kept by hand in the 2024
@@ -290,6 +290,94 @@ export function registrationsCsv(event, fields, rows) {
     ]);
   }).join('\r\n');
   return [csvRow(head), body].filter(Boolean).join('\r\n');
+}
+
+// ── READING A PUBLIC REGISTRATION ────────────────────────────────────────────
+// Pure, so the rules can be tested with no database — the same shape
+// admin/market.js's sanitizeApplication() is, and for the same reason: the
+// errors it returns are plain sentences a visitor can act on, never a field
+// name.
+//
+// ⚠ THERE IS NO FIXED "NAME / EMAIL / PHONE" SECTION, unlike the market's own
+// form — a generic event's fields ARE its whole form, coordinator-defined.
+// Confirmation and the coordinator's own notification still need SOME
+// address to reach somebody at, so it is inferred from field KIND: the
+// first `email`-kind field is the contact email, the first `text`-kind
+// field is the contact name, the first `tel`-kind field is the phone. A
+// coordinator who wants a reliable confirmation email should give their
+// form exactly one field of kind Email — which is also, not coincidentally,
+// what every real form does anyway.
+export function sanitizeRegistration(form, fields, cfg = {}) {
+  const values = {};
+  for (const f of fields) {
+    const raw = form[`field_${f.key}`];
+    values[f.key] = f.kind === 'checkbox' ? (String(raw || '') === '1' ? 1 : 0)
+      : cap(raw, f.kind === 'textarea' ? 4000 : 400);
+  }
+  const errors = [];
+  for (const f of fields) {
+    const empty = f.kind === 'checkbox' ? !values[f.key] : !trim(values[f.key]);
+    if (f.required && empty) errors.push(`Please fill in “${f.label}.”`);
+  }
+  const emailField = fields.find((f) => f.kind === 'email');
+  const email = emailField ? trim(values[emailField.key]).toLowerCase() : '';
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errors.push('That email address does not look right — please check it.');
+  }
+  const nameField = fields.find((f) => f.kind === 'text');
+  const phoneField = fields.find((f) => f.kind === 'tel');
+  const qty = clampTables(form.qty, cfg.maxTables || 9);
+
+  return {
+    ok: errors.length === 0,
+    errors,
+    value: {
+      fields: values,
+      contact_name: nameField ? trim(values[nameField.key]) : '',
+      contact_email: email,
+      contact_phone: phoneField ? trim(values[phoneField.key]) : '',
+      qty,
+    },
+  };
+}
+
+// Every text-shaped field's value, joined for the spam screener — the same
+// idea as admin/market.js's screenableText(), generalized: whichever fields
+// a coordinator actually built the form with, not a fixed list.
+export function registrationScreenableText(value, fields) {
+  return fields
+    .filter((f) => f.kind === 'text' || f.kind === 'textarea')
+    .map((f) => value.fields[f.key])
+    .filter(Boolean).join('\n\n');
+}
+
+// Splits a submitted registration's field values into the non-sensitive and
+// sensitive halves, per that event's own `site_event_fields.sensitive`
+// flags — the one place that split is decided, so a CSV export or a search
+// index built later can trust `fields_json` alone and never even touch
+// `sensitive_json`.
+export function splitRegistrationFields(value, fields) {
+  const nonSensitive = {};
+  const sensitive = {};
+  for (const f of fields) {
+    const v = value.fields[f.key];
+    if (v === '' || v == null) continue;
+    (f.sensitive ? sensitive : nonSensitive)[f.key] = v;
+  }
+  return { nonSensitive, sensitive };
+}
+
+// Whether adding `qty` more registrants would exceed the event's cap, and if
+// so whether the waitlist absorbs them. `currentQty` is the sum of `qty`
+// across every registration that is not dropped and not already
+// waitlisted — the same "counts against capacity" set a coordinator would
+// expect. A cap of null/0 means uncapped.
+export function capacityDecision(ev, currentQty, addingQty) {
+  const cap_ = Number(ev.registration_cap);
+  if (!Number.isFinite(cap_) || cap_ <= 0) return { waitlisted: false, refused: false };
+  if (currentQty + addingQty <= cap_) return { waitlisted: false, refused: false };
+  if (Number(ev.waitlist_enabled)) return { waitlisted: true, refused: false };
+  return { waitlisted: false, refused: true };
 }
 
 // ── THE GENERIC EVENTS ADMIN (/events, /events/new, /events/:id) ────────────
