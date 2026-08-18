@@ -1368,6 +1368,34 @@ export default {
       const resHeaders = new Headers(supabaseRes.headers);
       resHeaders.set('Access-Control-Allow-Origin', ADMIN_ORIGIN);
       resHeaders.set('Cache-Control', 'no-store');
+
+      // ── "invalid secret" with no way to compare the two sides ──
+      // A Worker secret is write-only, by design, from every tool that can
+      // reach this repo — nothing here can read back what
+      // PAYROLL_PROXY_SECRET actually holds to compare it against Supabase's
+      // copy. So when the mismatch is exactly this error, the response is
+      // widened with a masked fingerprint of what THIS Worker is sending —
+      // length, first 6, last 6 — never the value itself. Visible only to a
+      // signed-in admin with payroll_manage, the same audience that already
+      // sees every figure on this screen and the hardcoded anon key in the
+      // page source (PY-4). Enough to see "it's empty" or "it's 71 chars,
+      // not 64" without ever putting the real secret in a response body.
+      if (isPayrollRpc && supabaseRes.status === 403) {
+        const bodyText = await supabaseRes.text();
+        if (/invalid secret/i.test(bodyText)) {
+          const sv = env.PAYROLL_PROXY_SECRET;
+          const fp = !sv ? 'PAYROLL_PROXY_SECRET is not set on this Worker at all'
+            : `as this Worker holds it: ${sv.length} chars, starts "${sv.slice(0, 6)}", ends "${sv.slice(-6)}"`;
+          let widened = bodyText;
+          try {
+            const parsed = JSON.parse(bodyText);
+            parsed.message = (parsed.message || '') + ` [${fp}]`;
+            widened = JSON.stringify(parsed);
+          } catch (_) { widened = bodyText + ` [${fp}]`; }
+          return new Response(widened, { status: supabaseRes.status, headers: resHeaders });
+        }
+        return new Response(bodyText, { status: supabaseRes.status, headers: resHeaders });
+      }
       return new Response(supabaseRes.body, { status: supabaseRes.status, headers: resHeaders });
     }
 
