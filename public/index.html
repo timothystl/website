@@ -2007,23 +2007,32 @@ function toggleBio(id, btn){
 // `e.state` reads null exactly like the "no history left" case this
 // defaulted to 'home' for. Every #fragment link on the site was silently
 // bouncing to the homepage until this told the two apart.
+//
+// ⚠ THE FIRST ATTEMPT AT THIS RE-DERIVED THE PAGE ID FROM location.pathname
+// AND GOT IT WRONG FOR EVERY NESTED ADDRESS. A page like the Christmas
+// Market vendor application answers at /christmasmarket/vendors but its real
+// id is 'marketvendors' — that mapping is a special case in the router IIFE
+// further down, and re-implementing it here (badly, with a plain
+// document.getElementById('page-' + path) lookup) missed it, so the bug
+// reproduced on exactly the page it was reported on. Comparing the PATH
+// itself — which a #fragment click never changes, only the hash does —
+// sidesteps needing to resolve an id at all: `lastKnownPath` is set
+// wherever showPage() last actually put the address bar, so an unchanged
+// path can only mean this is the in-page jump case.
+var lastKnownPath = location.pathname;
 window.addEventListener('popstate', function(e){
   if (e.state && e.state.page) {
     // call via window.showPage so the lazy-load overrides in the second script run too
     window.showPage(e.state.page, false);
     return;
   }
-  // No state. Re-derive from the address bar instead of assuming 'home' —
-  // a #fragment click never changes the PATH, only the hash, so this reads
-  // the same page a real "back past everything" case would also want.
-  var path = location.pathname.replace(/^\//, '').replace(/\/$/, '');
-  var id = (path && document.getElementById('page-' + path)) ? path : 'home';
-  var current = document.querySelector('.page.active');
-  // Already on that page — this IS the in-page jump case. Do nothing and let
-  // the browser's own fragment scroll stand; calling showPage() here would
-  // scroll straight back to the top of the page it just landed the visitor on.
-  if (current && current.id === 'page-' + id) return;
-  window.showPage(id, false);
+  // No state, and the path hasn't moved — a #fragment click. Do nothing and
+  // let the browser's own fragment scroll stand; calling showPage() here
+  // would scroll straight back to the top of the page it just landed on.
+  if (location.pathname === lastKnownPath) return;
+  // No state AND the path changed too — the genuine "nothing left in
+  // history" case this always defaulted to 'home' for.
+  window.showPage('home', false);
 });
 </script>
 
@@ -3352,16 +3361,50 @@ function updatePageMeta(id) {
 }
 
 // Load when news page is shown; also handles pushState history
+// Scrolls to whatever `hash` names (a leading-# string, same shape
+// location.hash already has), if it names anything that exists yet. Returns
+// whether it found something, so a caller can fall back to scrolling to the
+// top only when there was truly nothing to land on.
+//
+// ⚠ TAKES THE HASH AS AN ARGUMENT, NEVER READS location.hash ITSELF. The
+// retry below runs after an async fetch, by which point showPage()'s own
+// history.replaceState — built from tlcPathFor(id), which never carries a
+// fragment — has already erased it from the address bar. A second read at
+// that point would always come back empty, exactly the moment this needs
+// to still know what was asked for.
+function tlcScrollToHash(hash) {
+  var target = hash ? document.getElementById(hash.slice(1)) : null;
+  if (!target) return false;
+  target.scrollIntoView();
+  return true;
+}
+
 window.showPage = function(id, addHistory) {
+  // Captured before anything below can touch the address bar.
+  var hash = location.hash;
   document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
   var page = document.getElementById('page-'+id);
-  if(page){page.classList.add('active');window.scrollTo(0,0);}
+  if(page){
+    page.classList.add('active');
+    // ⚠ NOT ALWAYS THE TOP. A hard refresh on a page whose address still
+    // carries a jump-to-name fragment (or a link straight to one, opened
+    // fresh) is a real visit, not a same-page click — the whole point was
+    // to land on that block, and an unconditional scrollTo(0,0) here undid
+    // it every time, on first load same as on refresh. Only reset to the
+    // top when there is nothing on the page for the fragment to mean.
+    if (!tlcScrollToHash(hash)) window.scrollTo(0,0);
+  }
   var url = tlcPathFor(id);
   if(addHistory === false){
     history.replaceState({page:id},'',url);
   } else {
     history.pushState({page:id},'',url);
   }
+  // The popstate handler's own record of "where a real navigation last put
+  // us" — see the note beside it. Set from location.pathname itself, not
+  // from url/id, so it is exactly what a later comparison will see, path
+  // segments and all.
+  lastKnownPath = location.pathname;
   updatePageMeta(id);
   if (id === 'calendar') {
     tlcLoadCalendar(document.getElementById('gcal-frame'));
@@ -3413,6 +3456,12 @@ window.showPage = function(id, addHistory) {
       if (id === 'christmasmarket') { loadMinistryCta(id); return; }
       loadMinistryPage(id);
     });
+  }).then(function () {
+    // The FIRST scroll-to-hash attempt, back at the top of this function,
+    // almost always finds nothing: on a fresh load the block content a
+    // jump-to-name target lives in hasn't been injected yet at that point —
+    // it arrives here, after this fetch. Try again now that it has.
+    tlcScrollToHash(hash);
   });
 };
 
