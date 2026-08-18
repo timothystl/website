@@ -843,8 +843,26 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
             { headers: { Accept: 'application/json', 'X-Intake-Key': intakeKey },
               signal: AbortSignal.timeout(4000) });
           if (res.ok) vol = await res.json();
-          else volError = `Serve answered ${res.status}.`;
-        } catch (e) { volError = 'Serve could not be reached.'; }
+          else {
+            // Live diagnostic: the status alone hasn't been enough to explain
+            // a persistent "404" here that no external reproduction (same
+            // key, same URL) has matched — capture what Serve actually sent
+            // back, since this screen is already gated on canMarket and
+            // nothing here is shown to a visitor.
+            let bodySnippet = '';
+            let ct = '';
+            try {
+              ct = res.headers.get('content-type') || '';
+              const cfRay = res.headers.get('cf-ray') || '';
+              const text = await res.text();
+              bodySnippet = (text || '').slice(0, 300);
+              volError = `Serve answered ${res.status} (${ct || 'no content-type'}` +
+                (cfRay ? `, cf-ray ${cfRay}` : '') + `): ${bodySnippet || '(empty body)'}`;
+            } catch (readErr) {
+              volError = `Serve answered ${res.status}, and the body could not be read: ${readErr.message || readErr}`;
+            }
+          }
+        } catch (e) { volError = `Serve could not be reached: ${e.message || e}`; }
       }
       // ⚠ And an answer that is not the shape this expects is not an answer.
       // Something else on that host answering 200 with a page, or a proxy
