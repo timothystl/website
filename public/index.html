@@ -2329,10 +2329,33 @@ function toggleBio(id, btn){
   var open = el.classList.toggle('expanded');
   btn.textContent = open ? 'Read less ↑' : 'Read more ↓';
 }
-// Handle browser back/forward
+// Handle browser back/forward.
+//
+// ⚠ THIS ALSO FIRES FOR A PLAIN #fragment CLICK, WITH e.state NULL — not just
+// for Back/Forward, which is the only case this was written for. Clicking a
+// same-page jump link (a block's own "Jump-to name", or any other bare
+// #anchor href) makes the browser push a fresh history entry for the new
+// hash, and Chrome fires popstate for that too, same as a real back/forward
+// step — except nothing of ours ever attached a {page:...} state to it, so
+// `e.state` reads null exactly like the "no history left" case this
+// defaulted to 'home' for. Every #fragment link on the site was silently
+// bouncing to the homepage until this told the two apart.
 window.addEventListener('popstate', function(e){
-  var id = (e.state && e.state.page) ? e.state.page : 'home';
-  // call via window.showPage so the lazy-load overrides in the second script run too
+  if (e.state && e.state.page) {
+    // call via window.showPage so the lazy-load overrides in the second script run too
+    window.showPage(e.state.page, false);
+    return;
+  }
+  // No state. Re-derive from the address bar instead of assuming 'home' —
+  // a #fragment click never changes the PATH, only the hash, so this reads
+  // the same page a real "back past everything" case would also want.
+  var path = location.pathname.replace(/^\//, '').replace(/\/$/, '');
+  var id = (path && document.getElementById('page-' + path)) ? path : 'home';
+  var current = document.querySelector('.page.active');
+  // Already on that page — this IS the in-page jump case. Do nothing and let
+  // the browser's own fragment scroll stand; calling showPage() here would
+  // scroll straight back to the top of the page it just landed the visitor on.
+  if (current && current.id === 'page-' + id) return;
   window.showPage(id, false);
 });
 </script>

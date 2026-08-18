@@ -525,6 +525,69 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### Two more bugs in the jump-to-name feature, one of them site-wide (v5.22.0, 2026-08-17)
+
+Two follow-up reports, both real, both traced to the ground.
+
+**"In button fields to go to websites the typing doesn't work. I will type
+and it will go crazy."** The debounced round trip that saves a free-text
+field (`url`, `contactEmail`, `photoAlt`, `cardBody`, item fields, and now
+`anchorId`) rebuilds the whole inspector panel and refocuses the field it
+came from — but a plain `.focus()` on a freshly built `<input>` puts the
+caret at position 0, not wherever it was. Pause mid-address for the 700ms
+debounce to land — which typing a URL naturally invites, more than a short
+field like an email address does — and the next keystrokes land at the
+START of what's already there instead of the end: `"https://www."` +
+`"timothystl.org"` became `"timothystl.orghttps://www."`. Fixed in
+`renderInspector()` (`admin/ministry-editor.html`): the caret's
+`selectionStart`/`selectionEnd` are captured before the rebuild and restored,
+clamped to the new value's length, after focus is put back. Every field on
+this debounced path shares the one fix, not a `url`-only patch.
+
+**"i created a #application jump to, created a button that would go there,
+and when i publish it and click on that button it takes me to the home
+page."** Two separate bugs stacked here, and only fixing the first would
+still have left the button broken:
+
+- **The target block's own `id` didn't match what the screen promised.**
+  `id="jump-<name>"` was chosen for namespace safety when this shipped, but
+  the inspector's own note — and everything said about this feature —
+  promised "link to `#<exactly this>`," with no mention of a hidden prefix.
+  A button linking to `#application` was never going to find an element
+  whose real id was `jump-application`. Fixed by dropping the prefix
+  (`admin/blocks.js`): the id is now the bare, sanitized name, so what's
+  shown on screen IS the address, not a value close to it.
+- **⚠ Even with a matching id, the click still went to the homepage — a
+  site-wide bug this feature was simply the first thing to actually
+  exercise.** Clicking a plain same-page `<a href="#name">` makes the
+  browser push a fresh history entry for the new hash, and Chrome fires a
+  `popstate` event for that — not just `hashchange` — the same event
+  Back/Forward fires, and with `e.state` null, exactly like the "nothing
+  left in history" case. The site's own `popstate` handler
+  (`public/index.html`) read a null state as "go home," which is right for
+  a real Back-past-everything but wrong for a same-page jump, and it had
+  been wrong for **every** bare `#fragment` link on the site since the SPA
+  router was written — nothing had ever surfaced it, because every other
+  internal link calls `event.preventDefault()` before the browser can even
+  begin that sequence, and this feature's whole reason to exist is a link
+  that does *not* do that. Fixed by having the handler fall back to
+  `location.pathname` instead of a hardcoded `'home'` when `e.state` is
+  null, and — critically — doing **nothing** if that resolves to the page
+  already showing, rather than calling `showPage()` again: a same-page call
+  would `scrollTo(0,0)` and undo the very jump the click was for.
+
+Verified end to end against the real click sequence, not reasoned about:
+BOTH the old id-mismatch shape and a correctly-matching id were driven
+through a real browser with the *old* popstate handler first — both
+bounced to home identically, which is what proved the id mismatch was never
+the whole story. Only after both fixes landed together did the button
+actually scroll to its target and stay on the page.
+
+Run: the caret-restoration assertions in `node test/editor-edit.test.mjs`,
+and the `a jump-to-name button actually jumps, instead of bouncing to home`
+group in `node test/public-page.test.mjs` — driven against the real
+`public/index.html` and a real popstate sequence, not a stand-in.
+
 ### A block can be given a jump-to name (v5.20.0, 2026-08-17)
 
 Dinger: "how do i add a button on the page that will quick link it to further

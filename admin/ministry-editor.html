@@ -1600,6 +1600,18 @@ function renderInspector() {
   // keyboard path through a stepper or a swatch row survives a re-render.
   var active = document.activeElement;
   var focusKey = active && active.closest && active.closest('#edInspBody') ? active.getAttribute('data-k') : null;
+  // ⚠ AND THE CARET HAS TO GO BACK TO WHERE IT WAS, NOT JUST THE FOCUS.
+  // `.focus()` alone lands a fresh input's caret at position 0 — so typing a
+  // URL, pausing mid-address for the debounced rerender to land, and typing
+  // on picks the new characters up at the START and pushes what was already
+  // there to the right of them. A few keystrokes later the box reads
+  // "orgtimothystl.https://www." instead of "https://www.timothystl.org" —
+  // which is exactly what "I will type and it will go crazy" describes.
+  // Every free-text field that goes through this debounced round trip
+  // (url, contactEmail, photoAlt, cardBody, item fields, anchorId) shares
+  // this code path, so this is one fix for all of them, not a url-only one.
+  var selStart = active && typeof active.selectionStart === 'number' ? active.selectionStart : null;
+  var selEnd = active && typeof active.selectionEnd === 'number' ? active.selectionEnd : null;
 
   if (el.edTabBlock) {
     el.edTabBlock.setAttribute('aria-selected', String(S.tab === 'block'));
@@ -1627,7 +1639,17 @@ function renderInspector() {
 
   if (focusKey) {
     var back = el.edInspBody.querySelector('[data-k="' + focusKey.replace(/"/g, '') + '"]');
-    if (back) back.focus();
+    if (back) {
+      back.focus();
+      // Clamped to the new value's length: the server may have trimmed or
+      // sanitized a character or two, and a caret past the end of the text
+      // is where a browser puts it anyway — this just makes that explicit
+      // rather than leaving it to land at the START instead.
+      if (selStart != null && typeof back.setSelectionRange === 'function') {
+        var len = back.value == null ? 0 : back.value.length;
+        try { back.setSelectionRange(Math.min(selStart, len), Math.min(selEnd == null ? selStart : selEnd, len)); } catch (e) {}
+      }
+    }
   }
 }
 
