@@ -470,7 +470,12 @@ self.addEventListener('notificationclick', function(event){
   var url = (event.notification.data && event.notification.data.url) || '/dashboard';
   event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(list){
     for (var i = 0; i < list.length; i++) {
-      if (list[i].url.indexOf(url) !== -1 && 'focus' in list[i]) return list[i].focus();
+      var client = list[i];
+      if ('focus' in client) {
+        var focused = client.focus();
+        if ('navigate' in client) return focused.then(function(c){ return c.navigate(url); });
+        return focused;
+      }
     }
     if (self.clients.openWindow) return self.clients.openWindow(url);
   }));
