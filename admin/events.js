@@ -33,6 +33,14 @@
 // in admin/blocks.js.
 
 import { MARKET_DEFAULTS, clampTables, priceBreakdown, money } from '../market-price.js';
+import { hasPermission, logAudit } from './auth.js';
+import { html, sidebarShell, escapeHtml, formatDate } from './helpers.js';
+import { renderListSection, renderDrawer, renderFormSection, renderField, primaryCell,
+         statusPill, rowActions, panel, panelList } from './ui.js';
+import { section as sectionCfg, columnsOf, filtersOf } from './sections.js';
+import { churchDate } from './when.js';
+import { slugify as pageSlugify, uniqueSlug } from './pages.js';
+import { newBlock, sanitizeBlocks, starterBlocks } from './blocks.js';
 
 // ── PAYMENT STATES ───────────────────────────────────────────────────────────
 // The four states the Christmas Market coordinator kept by hand in the 2024
@@ -381,11 +389,663 @@ export function capacityDecision(ev, currentQty, addingQty) {
 }
 
 // ── THE GENERIC EVENTS ADMIN (/events, /events/new, /events/:id) ────────────
-// Built out below this line, phase by phase — see PHASE_B/C/D/E/F markers
-// further down this file as they land. Returns null for anything it does not
-// own, the same contract handleMarketRoutes and handleFilteredRoutes already
-// use, so it can sit in the same route chain.
+// Returns null for anything it does not own, the same contract
+// handleMarketRoutes and handleFilteredRoutes already use, so it can sit in
+// the same route chain.
+
+// Reserved so a slugified event name can never collide with a real route —
+// /events/new especially, which would otherwise swallow an event literally
+// named "New".
+const RESERVED_EVENT_IDS = new Set(['new']);
+
+async function generateEventId(env, name) {
+  const base = slugifyEventId(name);
+  const existing = await env.DB.prepare('SELECT id FROM site_events').all().catch(() => ({ results: [] }));
+  const taken = new Set([...(existing.results || []).map((r) => r.id), ...RESERVED_EVENT_IDS]);
+  if (!taken.has(base)) return base;
+  for (let i = 2; i < 100; i++) {
+    const next = `${base}-${i}`;
+    if (!taken.has(next)) return next;
+  }
+  return `${base}-${Date.now().toString(36)}`;
+}
+
+const STATUS_PILL = { live: ['good', 'Live'], draft: ['warn', 'Draft'], archived: ['plain', 'Archived'] };
+
+// ── PHASE B — the /events list ───────────────────────────────────────────────
+async function renderEventsList(env, currentUser, badges) {
+  const [events, regRows, pages] = await Promise.all([
+    listEvents(env, { includeArchived: true }),
+    env.DB.prepare(
+      "SELECT event_id, COUNT(*) AS n, SUM(CASE WHEN payment_status='unpaid' THEN 1 ELSE 0 END) AS unpaid FROM site_event_registrations GROUP BY event_id"
+    ).all().catch(() => ({ results: [] })),
+    env.DB.prepare('SELECT id, slug, status, published_blocks FROM pages').all().catch(() => ({ results: [] })),
+  ]);
+  const countsById = Object.fromEntries((regRows.results || []).map((r) => [r.event_id, r]));
+  const pagesById = Object.fromEntries((pages.results || []).map((p) => [p.id, p]));
+
+  const rows = events.map((ev) => {
+    const [tone, label] = STATUS_PILL[ev.status] || STATUS_PILL.draft;
+    const counts = countsById[ev.id];
+    const pageIds = [ev.page_landing_id, ev.page_registration_id].filter(Boolean);
+    const pageLinks = pageIds.map((id) => pagesById[id]).filter(Boolean)
+      .map((p) => `<a href="/pages/${escapeHtml(p.id)}/edit">${escapeHtml(p.slug || p.id)}</a>${p.published_blocks ? '' : ' <span class="tlc-hint">(unpublished)</span>'}`);
+    return {
+      href: `/events/${ev.id}`,
+      filter: ev.status,
+      search: `${ev.name || ''} ${ev.id}`.toLowerCase(),
+      cells: [
+        primaryCell(ev.name || ev.id, ev.id),
+        [ev.date_label, ev.hours_label].filter(Boolean).join(' · ') || '<span class="tlc-hint">Not set</span>',
+        pageLinks.length ? pageLinks.join(', ') : '<span class="tlc-hint">No page yet</span>',
+        Number(ev.has_registration)
+          ? `${(counts && counts.n) || 0} signed up${counts && counts.unpaid ? ` · ${counts.unpaid} unpaid` : ''}`
+          : '<span class="tlc-hint">No registrations</span>',
+        statusPill(tone, label),
+      ],
+    };
+  });
+
+  return html(`
+${sidebarShell('events', currentUser, '', badges)}
+<div class="tlc-wrap">
+  ${renderListSection({
+    key: 'events',
+    title: sectionCfg('events').title,
+    purpose: sectionCfg('events').purpose,
+    action: { label: sectionCfg('events').action, href: '/events/new' },
+    search: sectionCfg('events').search,
+    filters: filtersOf('events'),
+    columns: columnsOf('events'),
+    rows,
+    noun: 'event',
+    empty: 'No events yet.',
+    note: sectionCfg('events').note,
+  })}
+</div>`, 'Events');
+}
+
+// ── PHASE C — creating one ────────────────────────────────────────────────────
+async function renderNewEventForm(env, currentUser, badges) {
+  // "Start the page from" — every OTHER event that already has a
+  // registration page, so a new one can begin as a working copy rather than
+  // a blank canvas. Blank is still the default: cloning is an offer, not an
+  // assumption about what the new event needs.
+  const sources = await env.DB.prepare(
+    "SELECT id, name, page_registration_id FROM site_events WHERE page_registration_id IS NOT NULL AND status != 'archived' ORDER BY sort_order, id"
+  ).all().catch(() => ({ results: [] }));
+
+  return html(`
+${sidebarShell('events', currentUser, '', badges)}
+<div class="tlc-wrap">
+  ${renderFormSection({
+    title: 'New event',
+    purpose: 'Six questions. Everything past this — the registration form’s own fields, the price, whether it takes payment — is set on the event’s own screen afterward.',
+    action: '/events/new',
+    cancelHref: '/events',
+    saveLabel: 'Create event',
+    fields: [
+      { name: 'name', label: 'What is it called?', required: true, placeholder: 'Vacation Bible School' },
+      { name: 'date_label', label: 'When (in words)', placeholder: 'June 9–13, 2027', hint: 'Printed exactly as written — this is not parsed into a real date.' },
+      { name: 'hours_label', label: 'Hours (in words)', placeholder: '9am–noon' },
+      { name: 'coordinator_email', label: 'Coordinator email', type: 'email', hint: 'Where a sign-up is sent, and the address shown if something goes wrong.' },
+      { kind: 'toggle', name: 'has_registration', label: 'Takes sign-ups', value: 1, on: 'Yes', off: 'No', hint: 'A public form, with fields the coordinator decides on the next screen.' },
+      { kind: 'toggle', name: 'has_payment', label: 'Takes a payment', value: 0, on: 'Yes', off: 'No', hint: 'A card fee gets added on top, the same way the Christmas Market’s does.' },
+      { kind: 'toggle', name: 'has_volunteers', label: 'Has a volunteer roster', value: 0, on: 'Yes', off: 'No', hint: 'Read from Serve (serve.timothystl.org) — see the Volunteers tab once the event exists.' },
+      { kind: 'toggle', name: 'has_photos', label: 'Has its own photographs', value: 0, on: 'Yes', off: 'No' },
+      {
+        kind: 'chips', name: 'clone_from', label: 'Start the page from', value: '',
+        options: [{ value: '', label: 'A blank page' }, ...(sources.results || []).map((s) => ({ value: s.page_registration_id, label: `A copy of ${s.name || s.id}’s page` }))],
+        hint: 'A copy carries over everything on that page — its own words included — as a starting point to edit down, not a finished page.',
+      },
+    ],
+  })}
+</div>`, 'New event');
+}
+
+async function createEvent(env, currentUser, form) {
+  const name = cap(form.get('name'), 200) || 'New event';
+  const id = await generateEventId(env, name);
+  const key = eventCoordinatorPermissionKey(id);
+  const hasRegistration = form.get('has_registration') === '1' ? 1 : 0;
+  const hasPayment = form.get('has_payment') === '1' ? 1 : 0;
+  const hasVolunteers = form.get('has_volunteers') === '1' ? 1 : 0;
+  const hasPhotos = form.get('has_photos') === '1' ? 1 : 0;
+  const now = new Date().toISOString();
+
+  await env.DB.prepare(
+    `INSERT INTO site_events
+       (id, name, status, date_label, hours_label, coordinator_email, coordinator_permission,
+        has_registration, has_payment, has_volunteers, has_photos,
+        fee_amount, fee_percent, fee_fixed, max_qty, payment_provider,
+        registration_open, waitlist_enabled, volunteer_slug, photo_folder,
+        sort_order, created_at, updated_at, updated_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+  ).bind(
+    id, name, 'draft', cap(form.get('date_label'), 200), cap(form.get('hours_label'), 200),
+    cap(form.get('coordinator_email'), 200), key,
+    hasRegistration, hasPayment, hasVolunteers, hasPhotos,
+    MARKET_DEFAULTS.tableFee, MARKET_DEFAULTS.feePercent, MARKET_DEFAULTS.feeFixed, MARKET_DEFAULTS.maxTables,
+    'tithely', 1, 0, hasVolunteers ? id : null, hasPhotos ? `images/events/${id}/` : null,
+    999, now, now, currentUser?.username || ''
+  ).run();
+
+  // A page is only created for an event that has something to put on one —
+  // the same reasoning a payments-only or volunteers-only event does not get
+  // an unused page it would just have to delete.
+  let pageId = null;
+  if (hasRegistration || hasPayment) {
+    const cloneFromPageId = cap(form.get('clone_from'), 60);
+    let blocks;
+    if (cloneFromPageId) {
+      const src = await env.DB.prepare('SELECT blocks FROM pages WHERE id = ?').bind(cloneFromPageId).first().catch(() => null);
+      let parsed = [];
+      try { parsed = JSON.parse((src && src.blocks) || '[]'); } catch (_) { parsed = []; }
+      // The one thing a clone must NOT carry over verbatim: a registration
+      // block still pointing at the SOURCE event. Every other field — the
+      // words, the photos, the layout — is exactly what "start from" means.
+      blocks = sanitizeBlocks((Array.isArray(parsed) ? parsed : []).map((b) =>
+        (b && b.type === 'registration') ? { ...b, eventId: id } : b));
+    } else {
+      blocks = sanitizeBlocks(starterBlocks(name, 'ministry'));
+      if (hasRegistration) blocks.push(newBlock('registration', { eventId: id }));
+    }
+    pageId = 'page-' + Math.random().toString(36).slice(2, 8);
+    for (let i = 0; i < 5; i++) {
+      const clash = await env.DB.prepare('SELECT id FROM pages WHERE id = ?').bind(pageId).first();
+      if (!clash) break;
+      pageId = 'page-' + Math.random().toString(36).slice(2, 8);
+    }
+    const taken = await env.DB.prepare('SELECT slug FROM pages').all().catch(() => ({ results: [] }));
+    const slug = uniqueSlug(pageSlugify(name), new Set((taken.results || []).map((p) => p.slug)));
+    await env.DB.prepare(
+      "INSERT INTO pages (id, title, menu_label, slug, parent_id, sort, template, status, in_menu, seo_description, blocks, updated_at, updated_by) " +
+      "VALUES (?, ?, '', ?, NULL, 999, 'standard', 'draft', 0, '', ?, ?, ?)"
+    ).bind(pageId, name, slug, JSON.stringify(blocks), now, currentUser?.username || '').run();
+    await env.DB.prepare('UPDATE site_events SET page_landing_id = ?, page_registration_id = ? WHERE id = ?')
+      .bind(pageId, pageId, id).run();
+  }
+
+  await logAudit(env.DB, currentUser, 'create', 'event', id, name, null,
+    { name, has_registration: hasRegistration, has_payment: hasPayment, has_volunteers: hasVolunteers, has_photos: hasPhotos, page_id: pageId });
+  return id;
+}
+
+// ── PHASE D — one event's own screen ─────────────────────────────────────────
+async function renderEventScreen(env, currentUser, url, badges, id) {
+  const ev = await getEvent(env, id);
+  if (!ev) return new Response('', { status: 302, headers: { Location: '/events' } });
+  const canEvent = hasPermission(currentUser, ev.coordinator_permission) || hasPermission(currentUser, 'events_manage');
+  const canPages = hasPermission(currentUser, 'pages_edit');
+  if (!canEvent && !canPages) return new Response('Access denied.', { status: 403 });
+
+  const TABS = [
+    { key: 'registrations', label: 'Registrations', on: canEvent && Number(ev.has_registration) },
+    { key: 'page', label: 'Page & copy', on: canEvent || canPages },
+    { key: 'money', label: 'Money & dates', on: canEvent },
+    { key: 'volunteers', label: 'Volunteers', on: canEvent && Number(ev.has_volunteers) },
+    { key: 'photos', label: 'Photos', on: canEvent && Number(ev.has_photos) },
+  ].filter((t) => t.on);
+  const wanted = String(url.searchParams.get('tab') || '');
+  const active = (TABS.find((t) => t.key === wanted) || TABS[0] || { key: '' }).key;
+  const tabNav = TABS.length > 1 ? `<nav class="tlc-tabs" aria-label="${escapeHtml(ev.name || id)}">${TABS.map((t) =>
+    `<a class="tlc-tab${t.key === active ? ' is-on' : ''}" href="/events/${id}?tab=${t.key}"${t.key === active ? ' aria-current="page"' : ''}>${escapeHtml(t.label)}</a>`
+  ).join('')}</nav>` : '';
+
+  const [tone, statusLabel] = STATUS_PILL[ev.status] || STATUS_PILL.draft;
+  const bareHeader = `<header class="tlc-section-head">
+      <div class="tlc-section-headings">
+        <h1 class="tlc-title">${escapeHtml(ev.name || id)} ${statusPill(tone, statusLabel)}</h1>
+        <p class="tlc-purpose">${escapeHtml([ev.date_label, ev.hours_label].filter(Boolean).join(' · ') || 'Nothing about when this runs is set yet.')}</p>
+      </div>
+    </header>`;
+
+  let body = '';
+
+  // ── REGISTRATIONS + the field editor ───────────────────────────────────
+  if (active === 'registrations' && canEvent) {
+    const [rows, fields] = await Promise.all([listRegistrations(env, id), eventFields(env, id)]);
+    const regRows = rows.map((r) => {
+      const values = registrationFields(r, { includeSensitive: false });
+      const summary = fields.filter((f) => !f.sensitive).slice(0, 2)
+        .map((f) => values[f.key]).filter(Boolean).join(' · ');
+      return `<div class="tlc-row-wrap"><div class="tlc-row" style="grid-template-columns:2fr 1fr 1fr 1fr 118px;">
+        <span class="tlc-td">${primaryCell(r.contact_name || r.contact_email || `#${r.id}`, summary)}</span>
+        <span class="tlc-td">${escapeHtml(r.contact_email || '')}</span>
+        <span class="tlc-td">${r.qty || 1}${r.waitlisted ? ' <span class="tlc-hint">(waitlisted)</span>' : ''}</span>
+        <span class="tlc-td">
+          <form method="POST" action="/events/${id}/registrations/update" style="margin:0;display:inline-flex;gap:6px;align-items:center;">
+            <input type="hidden" name="id" value="${r.id}">
+            <select name="payment_status" onchange="this.form.submit()">
+              ${PAYMENT_STATES.map((s) => `<option value="${s.value}"${s.value === r.payment_status ? ' selected' : ''}>${escapeHtml(s.label)}</option>`).join('')}
+            </select>
+          </form>
+        </span>
+        <span class="tlc-td tlc-right">
+          <form method="POST" action="/events/${id}/registrations/delete" style="margin:0;" onsubmit="return confirm('Delete this sign-up?')">
+            <input type="hidden" name="id" value="${r.id}">
+            <button type="submit" class="tlc-edit" style="background:none;border:0;cursor:pointer;">Delete</button>
+          </form>
+        </span>
+      </div></div>`;
+    }).join('');
+
+    const fieldRows = panelList({
+      id: 'event-fields-list',
+      reorderAction: `/events/${id}/fields/reorder`,
+      empty: 'No fields yet — a registration form with none of its own asks only for whatever the coordinator adds here.',
+      rows: fields.map((f) => ({
+        id: f.id,
+        name: f.label,
+        sub: `${fieldKindLabel(f.kind)}${f.required ? ' · required' : ''}${f.sensitive ? ' · sensitive' : ''} · field_${f.key}`,
+        action: `<form method="POST" action="/events/${id}/fields/delete" style="margin:0;" onsubmit="return confirm('Delete this field? Answers already collected for it are kept, just no longer shown as a column.')">
+          <input type="hidden" name="id" value="${f.id}"><button type="submit" class="tlc-edit" style="background:none;border:0;cursor:pointer;">Delete</button>
+        </form>`,
+      })),
+    });
+
+    body = `${bareHeader}
+    ${rows.length ? `<div class="tlc-table">
+      <div class="tlc-thead" style="grid-template-columns:2fr 1fr 1fr 1fr 118px;">
+        <span class="tlc-th">Who</span><span class="tlc-th">Email</span><span class="tlc-th">Qty</span><span class="tlc-th">Payment</span><span class="tlc-th"></span>
+      </div>
+      <div class="tlc-tbody">${regRows}</div>
+    </div>` : `<p class="tlc-hint">Nobody has signed up yet.</p>`}
+    <div class="btn-row" style="margin:16px 0 28px;"><a class="tlc-action-quiet" href="/events/${id}/export.csv">Export CSV</a></div>
+    ${panel('The form’s own fields', `
+      ${fieldRows}
+      <form method="POST" action="/events/${id}/fields" style="margin-top:16px;display:grid;gap:10px;grid-template-columns:2fr 1fr 90px 90px 100px;align-items:end;">
+        ${renderField({ name: 'label', label: 'Field', placeholder: 'Child’s name', required: true })}
+        ${renderField({ kind: 'choice', name: 'kind', label: 'Kind', value: 'text', options: FIELD_KINDS })}
+        ${renderField({ kind: 'toggle', name: 'required', label: 'Required', value: 0, on: 'Yes', off: 'No' })}
+        ${renderField({ kind: 'toggle', name: 'sensitive', label: 'Sensitive', value: 0, on: 'Yes', off: 'No', hint: 'Kept out of the plain export column.' })}
+        <button type="submit" class="tlc-btn-primary">Add field</button>
+      </form>
+    `)}`;
+  }
+
+  // ── PAGE & COPY ─────────────────────────────────────────────────────────
+  if (active === 'page' && (canEvent || canPages)) {
+    const ids = [ev.page_landing_id, ev.page_registration_id].filter((v, i, a) => v && a.indexOf(v) === i);
+    const rows = [];
+    for (const pid of ids) {
+      const r = await env.DB.prepare('SELECT id, title, slug, status, blocks, published_blocks, updated_at, updated_by FROM pages WHERE id = ?').bind(pid).first().catch(() => null);
+      if (r) rows.push(r);
+    }
+    const cards = rows.map((r) => {
+      const published = !!r.published_blocks;
+      const pending = published && String(r.blocks || '') !== String(r.published_blocks || '');
+      const state = !published ? statusPill('warn', 'Never published') : (pending ? statusPill('warn', 'Unpublished edits') : statusPill('good', 'Live'));
+      return panel(r.title || r.id, `
+        <p class="tlc-hint" style="margin:0 0 12px;"><code>${escapeHtml(r.slug || '')}</code>${r.updated_at ? ` · last saved ${escapeHtml(String(r.updated_at).slice(0, 10))}` : ''}</p>
+        <div class="btn-row" style="margin:0;">
+          <a class="tlc-btn-primary" href="/pages/${escapeHtml(r.id)}/edit">Edit the page</a>
+          <a class="tlc-action-quiet" href="https://timothystl.org${escapeHtml(r.slug || '')}" target="_blank" rel="noopener">View it live</a>
+        </div>
+      `, { right: state });
+    }).join('');
+    body = `<header class="tlc-section-head">
+        <div class="tlc-section-headings">
+          <h1 class="tlc-title">Page &amp; copy</h1>
+          <p class="tlc-purpose">Every word a visitor reads is a field in the page editor — nothing about this event is typed into code.</p>
+        </div>
+      </header>
+      ${cards ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;">${cards}</div>`
+        : `<p class="tlc-hint">This event has no page of its own yet. Add a Registration block (or a page) from the Pages screen and it will show up here once linked.</p>`}`;
+  }
+
+  // ── MONEY & DATES ───────────────────────────────────────────────────────
+  if (active === 'money' && canEvent) {
+    const cfg = eventFeeConfig(ev);
+    body = `<header class="tlc-section-head">
+        <div class="tlc-section-headings">
+          <h1 class="tlc-title">Money &amp; dates</h1>
+          <p class="tlc-purpose">What this costs, when it runs, and whether it is taking sign-ups right now.</p>
+        </div>
+      </header>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        ${panel('Details', `
+          <form method="POST" action="/events/${id}/settings">
+            ${renderField({ name: 'name', label: 'Name', value: ev.name })}
+            ${renderField({ kind: 'choice', name: 'status', label: 'Status', value: ev.status,
+              options: [{ value: 'draft', label: 'Draft' }, { value: 'live', label: 'Live' }, { value: 'archived', label: 'Archived' }] })}
+            ${renderField({ name: 'date_label', label: 'When (in words)', value: ev.date_label })}
+            ${renderField({ name: 'hours_label', label: 'Hours (in words)', value: ev.hours_label })}
+            ${renderField({ name: 'coordinator_email', label: 'Coordinator email', type: 'email', value: ev.coordinator_email })}
+            ${Number(ev.has_registration) ? `
+              ${renderField({ kind: 'toggle', name: 'registration_open', label: 'Taking sign-ups', value: Number(ev.registration_open ?? 1), on: 'Open', off: 'Closed' })}
+              ${renderField({ kind: 'number', name: 'registration_cap', label: 'Capacity (blank = uncapped)', value: ev.registration_cap == null ? '' : ev.registration_cap, min: 0 })}
+              ${renderField({ kind: 'toggle', name: 'waitlist_enabled', label: 'Waitlist once full', value: Number(ev.waitlist_enabled), on: 'Yes', off: 'No, refuse instead' })}
+            ` : ''}
+            ${Number(ev.has_volunteers) ? renderField({ name: 'volunteer_slug', label: 'Serve slug', value: ev.volunteer_slug,
+              hint: 'The address this event answers to on serve.timothystl.org.' }) : ''}
+            ${Number(ev.has_photos) ? renderField({ name: 'photo_folder', label: 'Photo folder', value: ev.photo_folder,
+              hint: 'Where photographs for this event are stored, so the Photos tab knows which ones are its own.' }) : ''}
+            <div class="btn-row" style="margin-top:4px;"><button type="submit" class="tlc-btn-primary">Save</button></div>
+          </form>
+        `)}
+        ${Number(ev.has_payment) ? panel('Payment', `
+          <form method="POST" action="/events/${id}/money">
+            ${renderField({ kind: 'number', name: 'fee_amount', label: 'Base fee ($)', value: cfg.tableFee, min: 0, step: 1 })}
+            ${renderField({ kind: 'number', name: 'max_qty', label: 'Most one registration may take', value: cfg.maxTables, min: 1, step: 1 })}
+            ${renderField({ kind: 'number', name: 'fee_percent', label: 'Card processing fee (%)', value: cfg.feePercent, min: 0, step: 0.1 })}
+            ${renderField({ kind: 'number', name: 'fee_fixed', label: 'Card processing fee (fixed, $)', value: cfg.feeFixed, min: 0, step: 0.01 })}
+            ${renderField({ name: 'fund_id', label: 'Tithe.ly fund ID', value: cfg.fundId, placeholder: "Blank uses the base link's fund" })}
+            ${renderField({ kind: 'chips', name: 'payment_provider', label: 'Payment provider', value: cfg.paymentProvider,
+              options: [{ value: 'tithely', label: 'Tithe.ly' }, { value: 'square', label: 'Square' }] })}
+            <div class="btn-row" style="margin-top:4px;"><button type="submit" class="tlc-btn-primary">Save</button></div>
+          </form>
+        `) : ''}
+      </div>
+      <div class="btn-row" style="margin-top:24px;">
+        ${ev.status === 'archived'
+          ? `<form method="POST" action="/events/${id}/unarchive" style="margin:0;"><button type="submit" class="tlc-action-quiet">Unarchive</button></form>`
+          : `<form method="POST" action="/events/${id}/archive" style="margin:0;" onsubmit="return confirm('Archive this event? It stops showing on public listings; nothing is deleted.')"><button type="submit" class="tlc-action-quiet">Archive</button></form>`}
+      </div>`;
+  }
+
+  // ── VOLUNTEERS ──────────────────────────────────────────────────────────
+  // ⚠ READ-ONLY, and there is no sign-in — the same shape the market's own
+  // Volunteers tab always was, generalized off `volunteer_slug` instead of
+  // the literal string 'christmasmarket'. See Serve's own
+  // GET /api/signups/<slug>/summary — as of this writing that endpoint is
+  // still hardcoded to the market on the Serve side, so a slug other than
+  // 'christmasmarket' will get an honest "not available" here until that is
+  // generalized there too. Nothing here writes back, and nothing should.
+  if (active === 'volunteers' && canEvent) {
+    const slug = ev.volunteer_slug || '';
+    let vol = null;
+    let volError = '';
+    if (!slug) {
+      volError = 'No Serve slug is set for this event yet — set one on the Money & dates tab.';
+    } else {
+      try {
+        const res = await fetch(`https://serve.timothystl.org/api/signups/${encodeURIComponent(slug)}/summary`,
+          { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(4000) });
+        if (res.ok) vol = await res.json();
+        else volError = `Serve answered ${res.status}.`;
+      } catch (e) { volError = 'Serve could not be reached.'; }
+      if (vol && !Array.isArray(vol.roles)) { vol = null; volError = volError || 'Serve answered with something this screen could not read.'; }
+    }
+
+    const roles = Array.isArray(vol?.roles) ? vol.roles : [];
+    const shortOf = (r) => (r.shifts || []).reduce((a, sh) => a + Math.max(0, (Number(sh.needed) || 0) - (Number(sh.filled) || 0)), 0);
+    const sorted = roles.slice().sort((a, b) => shortOf(b) - shortOf(a));
+    const tile = (label, n, note) => `<div class="tlc-tile"><div class="tlc-tile-label">${escapeHtml(label)}</div><div class="tlc-tile-num">${escapeHtml(String(n))}</div><div class="tlc-tile-note">${escapeHtml(note)}</div></div>`;
+    const rolePanels = sorted.map((r) => {
+      const shifts = Array.isArray(r.shifts) ? r.shifts : [];
+      const rowsHtml = shifts.map((sh) => {
+        const needed = Number(sh.needed) || 0;
+        const filled = Number(sh.filled) || 0;
+        const people = Array.isArray(sh.people) ? sh.people : [];
+        const who = people.length
+          ? people.map((pp) => pp && pp.email ? `<a href="mailto:${escapeHtml(pp.email)}">${escapeHtml(pp.name || pp.email)}</a>` : escapeHtml((pp && pp.name) || '')).filter(Boolean).join(', ')
+          : '<span class="tlc-hint">Nobody yet — this shift is entirely open.</span>';
+        return `<tr><td style="padding:6px 12px 6px 0;">${escapeHtml(sh.label || '')}</td><td style="padding:6px 12px 6px 0;white-space:nowrap;">${filled} of ${needed}</td><td style="padding:6px 0;">${who}</td></tr>`;
+      }).join('');
+      const short = shortOf(r);
+      return panel(r.name || 'Role', `<table style="width:100%;border-collapse:collapse;font-size:14px;">${rowsHtml || '<tr><td class="tlc-hint">No shifts set up for this role yet.</td></tr>'}</table>`,
+        { right: (short > 0 ? statusPill('warn', short + ' still needed') : statusPill('good', 'Full'))
+          + (slug ? ` <a class="tlc-action-quiet" href="https://serve.timothystl.org/${escapeHtml(slug)}" target="_blank" rel="noopener">Manage shifts in Serve</a>` : '') });
+    }).join('');
+
+    body = `<header class="tlc-section-head">
+        <div class="tlc-section-headings">
+          <h1 class="tlc-title">Volunteers</h1>
+          <p class="tlc-purpose">Who is covering this, read from Serve. Shifts are set up and changed there — this is a window on them, not a second copy.</p>
+        </div>
+        ${slug ? `<div class="tlc-section-actions"><a class="tlc-btn-primary" href="https://serve.timothystl.org/${escapeHtml(slug)}" target="_blank" rel="noopener">Manage shifts in Serve</a></div>` : ''}
+      </header>`
+      + (vol ? `<div class="tlc-tiles">
+            ${tile('Signed up', vol.signedUp ?? 0, 'People who have taken a shift')}
+            ${tile('Open shifts', vol.openShifts ?? 0, 'Still to be covered')}
+            ${tile('Roles', roles.length, 'Jobs this event needs')}
+            ${tile('Sign-ups', vol.open ? 'Open' : 'Closed', vol.open ? 'Serve is taking volunteers' : 'Serve is not taking volunteers')}
+          </div>
+          ${rolePanels || `<p class="tlc-hint">Serve has no roles set up for this event yet.</p>`}`
+        : `<div class="alert alert-warn">Counts are not available right now — ${escapeHtml(volError || 'Serve did not answer.')} Nothing here is broken; the roster lives in Serve.</div>`);
+  }
+
+  // ── PHOTOS ──────────────────────────────────────────────────────────────
+  if (active === 'photos' && canEvent) {
+    const all = (await env.DB.prepare(
+      "SELECT id, filename, kind, url, thumb_url, alt FROM ministry_media ORDER BY id DESC LIMIT 400"
+    ).all().catch(() => ({ results: [] }))).results || [];
+    const needle = (ev.photo_folder || id).toLowerCase();
+    const idNeedle = id.toLowerCase();
+    const mine = all.filter((m) => `${m.url || ''} ${m.filename || ''}`.toLowerCase().includes(needle)
+      || `${m.url || ''} ${m.filename || ''}`.toLowerCase().includes(idNeedle));
+    const cards = mine.map((m) => `
+      <div class="tlc-card" style="padding:14px;">
+        ${m.kind === 'video' ? `<p class="tlc-hint" style="margin:0 0 8px;">Video</p>`
+          : `<img src="${escapeHtml(m.thumb_url || m.url)}" alt="${escapeHtml(m.alt || '')}" style="width:100%;height:150px;object-fit:cover;border-radius:8px;background:var(--tlc-linen);">`}
+        <p class="tlc-hint" style="margin:8px 0;word-break:break-all;">${escapeHtml(m.filename || '')}</p>
+        <form method="POST" action="/events/${id}/photo-alt" style="margin:0;">
+          <input type="hidden" name="id" value="${m.id}">
+          ${renderField({ name: 'alt', label: 'Description', value: m.alt || '' })}
+          <button type="submit" class="tlc-btn-primary" style="margin-top:6px;">Save</button>
+        </form>
+      </div>`).join('');
+    body = `<header class="tlc-section-head">
+        <div class="tlc-section-headings">
+          <h1 class="tlc-title">Photos</h1>
+          <p class="tlc-purpose">This event’s photographs, and what each one says to somebody who cannot see it.</p>
+        </div>
+      </header>
+      <p class="tlc-hint" style="margin:0 0 16px;">Photographs are added in the page editor, by dropping one onto a gallery or a banner — they land in the library and appear here. Store them under <code>${escapeHtml(ev.photo_folder || `images/events/${id}/`)}</code> so they stay together.</p>
+      ${mine.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;">${cards}</div>`
+        : `<p class="tlc-hint">No photographs for this event in the library yet.</p>`}
+      <p class="tlc-hint" style="margin-top:20px;">Every photograph on the site is on the <a href="/media">Media screen</a>.</p>`;
+  }
+
+  if (!body) body = `<div class="alert alert-warn">Nothing on this tab is reachable with what you hold.</div>`;
+
+  return html(`
+${sidebarShell('events', currentUser, `<a href="/events">All events</a>`, badges)}
+<div class="tlc-wrap">
+  ${tabNav}
+  ${body}
+</div>`, ev.name || id);
+}
+
 export async function handleEventsRoutes(request, env, path, method, currentUser, url, badges = {}) {
   if (path !== '/events' && !path.startsWith('/events/')) return null;
+
+  if (path === '/events' && method === 'GET') {
+    // Reachable by events_manage, OR any single event's own coordinator key —
+    // a VBS coordinator holding only event_vbs_manage still needs a way to
+    // reach their own row, even though the index otherwise belongs to
+    // events_manage. Same reasoning the market's sidebar row already carries.
+    const eventPerms = await eventCoordinatorPermissions(env);
+    const canSeeIndex = hasPermission(currentUser, 'events_manage')
+      || Object.keys(eventPerms).some((k) => hasPermission(currentUser, k))
+      || hasPermission(currentUser, 'market_manage');
+    if (!canSeeIndex) return new Response('Access denied.', { status: 403 });
+    return renderEventsList(env, currentUser, badges);
+  }
+
+  if (path === '/events/new') {
+    if (!hasPermission(currentUser, 'events_manage')) return new Response('Access denied.', { status: 403 });
+    if (method === 'GET') return renderNewEventForm(env, currentUser, badges);
+    if (method === 'POST') {
+      const form = await request.formData();
+      const id = await createEvent(env, currentUser, form);
+      return new Response('', { status: 302, headers: { Location: `/events/${id}?toast=${encodeURIComponent('Created · written to the audit log')}` } });
+    }
+  }
+
+  // ── /events/:id and its sub-routes ─────────────────────────────────────
+  // ⚠ [a-z0-9.-]+, not [a-z-]+ — /export.csv carries a literal dot, and a
+  // narrower class would silently fail to match it, falling through to
+  // whatever later route happens to answer instead (found by a test, not by
+  // reading — the CSV request landed on an unrelated screen).
+  const m = path.match(/^\/events\/([^/]+)(\/[a-z0-9.-]+(?:\/[a-z0-9.-]+)?)?$/);
+  if (!m) return null;
+  const id = decodeURIComponent(m[1]);
+  const action = m[2] || '';
+
+  if (!action && method === 'GET') return renderEventScreen(env, currentUser, url, badges, id);
+
+  // Every mutating route re-checks the SAME event's own permission —
+  // reaching one event's screen must never be a back door into another's.
+  const ev = await getEvent(env, id);
+  if (!ev) return new Response('', { status: 302, headers: { Location: '/events' } });
+  const canEvent = hasPermission(currentUser, ev.coordinator_permission) || hasPermission(currentUser, 'events_manage');
+
+  if (action === '/export.csv' && method === 'GET') {
+    if (!canEvent) return new Response('Access denied.', { status: 403 });
+    const [fields, rows] = await Promise.all([eventFields(env, id), listRegistrations(env, id)]);
+    const csv = registrationsCsv(ev, fields, rows);
+    return new Response(csv, {
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${id}-registrations-${churchDate()}.csv"`,
+      },
+    });
+  }
+
+  if (action === '/settings' && method === 'POST') {
+    if (!canEvent) return new Response('Access denied.', { status: 403 });
+    const form = await request.formData();
+    const before = { ...ev };
+    const patch = {
+      name: cap(form.get('name'), 200) || ev.name,
+      status: ['draft', 'live', 'archived'].includes(form.get('status')) ? form.get('status') : ev.status,
+      date_label: cap(form.get('date_label'), 200),
+      hours_label: cap(form.get('hours_label'), 200),
+      coordinator_email: cap(form.get('coordinator_email'), 200),
+      registration_open: form.getAll('registration_open').includes('1') ? 1 : 0,
+      registration_cap: form.get('registration_cap') ? Math.max(0, parseInt(form.get('registration_cap'), 10) || 0) : null,
+      waitlist_enabled: form.getAll('waitlist_enabled').includes('1') ? 1 : 0,
+      volunteer_slug: cap(form.get('volunteer_slug'), 200) || null,
+      photo_folder: cap(form.get('photo_folder'), 200) || null,
+      updated_at: new Date().toISOString(),
+      updated_by: currentUser?.username || '',
+    };
+    await updateEventRow(env, id, patch);
+    await logAudit(env.DB, currentUser, 'update', 'event', id, patch.name, before, patch);
+    return new Response('', { status: 302, headers: { Location: `/events/${id}?tab=money&toast=${encodeURIComponent('Saved · written to the audit log')}` } });
+  }
+
+  if (action === '/money' && method === 'POST') {
+    if (!canEvent) return new Response('Access denied.', { status: 403 });
+    const form = await request.formData();
+    const before = { ...ev };
+    const patch = {
+      fee_amount: num(form.get('fee_amount'), MARKET_DEFAULTS.tableFee),
+      max_qty: Math.max(1, Math.floor(num(form.get('max_qty'), MARKET_DEFAULTS.maxTables))),
+      fee_percent: num(form.get('fee_percent'), MARKET_DEFAULTS.feePercent),
+      fee_fixed: num(form.get('fee_fixed'), MARKET_DEFAULTS.feeFixed),
+      fund_id: cap(form.get('fund_id'), 200) || null,
+      payment_provider: form.get('payment_provider') === 'square' ? 'square' : 'tithely',
+      updated_at: new Date().toISOString(),
+      updated_by: currentUser?.username || '',
+    };
+    await updateEventRow(env, id, patch);
+    await logAudit(env.DB, currentUser, 'update', 'event', id, ev.name, before, patch);
+    return new Response('', { status: 302, headers: { Location: `/events/${id}?tab=money&toast=${encodeURIComponent('Saved · written to the audit log')}` } });
+  }
+
+  if ((action === '/archive' || action === '/unarchive') && method === 'POST') {
+    if (!canEvent) return new Response('Access denied.', { status: 403 });
+    const archiving = action === '/archive';
+    await updateEventRow(env, id, {
+      status: archiving ? 'archived' : 'draft',
+      archived_at: archiving ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(), updated_by: currentUser?.username || '',
+    });
+    await logAudit(env.DB, currentUser, archiving ? 'archive' : 'unarchive', 'event', id, ev.name, { status: ev.status }, { status: archiving ? 'archived' : 'draft' });
+    return new Response('', { status: 302, headers: { Location: `/events/${id}?tab=money` } });
+  }
+
+  if (action === '/photo-alt' && method === 'POST') {
+    if (!canEvent) return new Response('Access denied.', { status: 403 });
+    const form = await request.formData();
+    const mid = Number(form.get('id') || 0);
+    const alt = cap(form.get('alt'), 300);
+    const before = await env.DB.prepare('SELECT filename, alt FROM ministry_media WHERE id = ?').bind(mid).first().catch(() => null);
+    if (before) {
+      await env.DB.prepare('UPDATE ministry_media SET alt = ? WHERE id = ?').bind(alt, mid).run();
+      await logAudit(env.DB, currentUser, 'update', 'media', String(mid), before.filename || '', { alt: before.alt }, { alt });
+    }
+    return new Response('', { status: 302, headers: { Location: `/events/${id}?tab=photos&toast=${encodeURIComponent('Saved · written to the audit log')}` } });
+  }
+
+  // ── Fields ────────────────────────────────────────────────────────────
+  if (action === '/fields' && method === 'POST') {
+    if (!canEvent) return new Response('Access denied.', { status: 403 });
+    const form = await request.formData();
+    const label = cap(form.get('label'), 200);
+    if (!label) return new Response('', { status: 302, headers: { Location: `/events/${id}` } });
+    const kind = FIELD_KINDS.some((k) => k.value === form.get('kind')) ? form.get('kind') : 'text';
+    const existingKeys = (await eventFields(env, id)).map((f) => f.key);
+    const key = slugifyFieldKey(label, existingKeys);
+    const maxSort = await env.DB.prepare('SELECT COALESCE(MAX(sort_order),-1) AS n FROM site_event_fields WHERE event_id = ?').bind(id).first().catch(() => ({ n: -1 }));
+    await env.DB.prepare(
+      'INSERT INTO site_event_fields (event_id, key, label, kind, required, sensitive, sort_order) VALUES (?,?,?,?,?,?,?)'
+    ).bind(id, key, label, kind, form.getAll('required').includes('1') ? 1 : 0,
+      form.getAll('sensitive').includes('1') ? 1 : 0, ((maxSort && maxSort.n) || -1) + 1).run();
+    await logAudit(env.DB, currentUser, 'create', 'event_field', `${id}:${key}`, label, null, { label, kind });
+    return new Response('', { status: 302, headers: { Location: `/events/${id}` } });
+  }
+
+  if (action === '/fields/delete' && method === 'POST') {
+    if (!canEvent) return new Response('Access denied.', { status: 403 });
+    const form = await request.formData();
+    const fid = Number(form.get('id') || 0);
+    const before = await env.DB.prepare('SELECT * FROM site_event_fields WHERE id = ? AND event_id = ?').bind(fid, id).first().catch(() => null);
+    if (before) {
+      await env.DB.prepare('DELETE FROM site_event_fields WHERE id = ? AND event_id = ?').bind(fid, id).run();
+      await logAudit(env.DB, currentUser, 'delete', 'event_field', `${id}:${before.key}`, before.label, before, null);
+    }
+    return new Response('', { status: 302, headers: { Location: `/events/${id}` } });
+  }
+
+  if (action === '/fields/reorder' && method === 'POST') {
+    if (!canEvent) return new Response('Access denied.', { status: 403 });
+    const form = await request.formData();
+    let order = [];
+    try { order = JSON.parse(form.get('order') || '[]'); } catch (_) { order = []; }
+    const stmts = order.map((fid, i) =>
+      env.DB.prepare('UPDATE site_event_fields SET sort_order = ? WHERE id = ? AND event_id = ?').bind(i, Number(fid), id));
+    if (stmts.length) await env.DB.batch(stmts);
+    return new Response('', { status: 302, headers: { Location: `/events/${id}` } });
+  }
+
+  // ── Registrations ────────────────────────────────────────────────────
+  if (action === '/registrations/update' && method === 'POST') {
+    if (!canEvent) return new Response('Access denied.', { status: 403 });
+    const form = await request.formData();
+    const rid = Number(form.get('id') || 0);
+    const status = PAYMENT_STATES.some((s) => s.value === form.get('payment_status')) ? form.get('payment_status') : 'unpaid';
+    const before = await getRegistration(env, rid);
+    if (before && before.event_id === id) {
+      await updateRegistration(env, rid, { payment_status: status });
+      await logAudit(env.DB, currentUser, 'update', 'event_registration', String(rid), before.contact_name || before.contact_email || '', { payment_status: before.payment_status }, { payment_status: status });
+    }
+    return new Response('', { status: 302, headers: { Location: `/events/${id}` } });
+  }
+
+  if (action === '/registrations/delete' && method === 'POST') {
+    if (!canEvent) return new Response('Access denied.', { status: 403 });
+    const form = await request.formData();
+    const rid = Number(form.get('id') || 0);
+    const before = await getRegistration(env, rid);
+    if (before && before.event_id === id) {
+      await deleteRegistration(env, rid);
+      await logAudit(env.DB, currentUser, 'delete', 'event_registration', String(rid), before.contact_name || before.contact_email || '', before, null);
+    }
+    return new Response('', { status: 302, headers: { Location: `/events/${id}` } });
+  }
+
   return null;
+}
+
+async function updateEventRow(env, id, patch) {
+  const sets = [];
+  const args = [];
+  for (const [col, val] of Object.entries(patch)) { sets.push(`${col} = ?`); args.push(val); }
+  if (!sets.length) return;
+  args.push(id);
+  await env.DB.prepare(`UPDATE site_events SET ${sets.join(', ')} WHERE id = ?`).bind(...args).run();
 }
