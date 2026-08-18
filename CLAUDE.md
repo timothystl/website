@@ -6197,6 +6197,103 @@ not move this data and did not change where a rate comes from — there is still
 deliberately no rate field for an MDO person, and the screen now says so in as
 many words.
 
+#### Payroll reads and writes through thirteen RPC functions now, not the tables directly (2026-08-18)
+
+Dinger: *"the connection to the childcare app in reading payroll is now
+broken"*, then *"even more troubling is that church staff are lost too, not
+just a failure to read from the childcare app"*. Both were the same cause.
+
+**A real, legitimate security fix on the Supabase side broke this proxy, and
+nothing here had ever accounted for that possibility.** Two Supabase
+migrations on 2026-08-12 (`close_to_public_policy_leaks`,
+`policy_scoping_stage2_admin_only_tables`) closed a genuine hole — the
+public `anon` key this page has always used could read **and rewrite**
+every church and MDO staff member's payroll data — by moving
+`church_staff`, `church_staff_period_entries`, `payroll_periods` and
+`staff_pto_entries` from `anon`-writable to `authenticated`-only, gated by
+`admin_role()`. Correct for a real signed-in Supabase Auth session. But
+nothing on this side ever *has* one — the `/sb/` proxy authenticates the
+admin session on **its own** side (`payroll_manage`, checked against this
+Worker's own `sessions`/`users` tables) and then forwards to Supabase using
+only the plain anon key, exactly as this file's own "SUPABASE, WITHOUT THE
+SDK" comment always said. `anon` lost its grants; the proxy had no other
+credential to offer; every read and write on the page started answering
+`401`/`permission denied for table …`, indistinguishable at first glance
+from an expired admin session (the misleading message the first report
+described) until the real Supabase error text was surfaced.
+
+**The fix reopens exactly what this page needs, and nothing else — anon
+still holds no direct grant on any of the four tables.** Supabase migration
+`payroll_proxy_rpc` (project `dahdstopsumxnqvdclmy`) adds thirteen narrow
+`SECURITY DEFINER` Postgres functions — `payroll_get_staff`,
+`payroll_get_period_entries`, `payroll_get_prior_pto`,
+`payroll_get_period_approval`, `payroll_get_mdo_staff`,
+`payroll_get_mdo_hours`, `payroll_get_mdo_clock_events`,
+`payroll_get_mdo_pto`, `payroll_approve_period`, `payroll_unapprove_period`,
+`payroll_save_hours`, `payroll_save_staff`, `payroll_deactivate_staff` — each
+one doing exactly the query the client used to run directly, each gated by
+a shared secret checked against a `private.payroll_proxy_secrets` table
+(schema `private` is never exposed to PostgREST at all, so there is nowhere
+for the secret to leak through the API even by accident). `anon` is granted
+`EXECUTE` on these thirteen functions and nothing broader — the same shape
+this repo already uses for `CHMS_INTAKE_API_KEY`/`ADMIN_PUSH_API_KEY`.
+
+- **The secret is held only by this Worker, never by the browser.**
+  `admin/payroll.html` calls `/sb/rest/v1/rpc/<fn>` with the real params and
+  no secret at all; `tlc-admin-worker.js`'s `/sb/` proxy buffers the small
+  JSON body, injects `env.PAYROLL_PROXY_SECRET`, and forwards. A stray view
+  of the page source shows the same `SB_KEY` anon JWT this proxy has always
+  shipped client-side (PY-4, still open, still separate) — but never the
+  new shared secret, which is exactly the property `CHMS_INTAKE_API_KEY`
+  and `ADMIN_PUSH_API_KEY` already have and this one now shares.
+- **THE PERIOD LOCK is enforced twice, not once.** The Worker's own
+  `payrollPeriodLocked()` check still runs before forwarding a
+  `payroll_save_hours` call — it now reads through the
+  `payroll_get_period_approval` RPC instead of a direct `payroll_periods`
+  REST call, which would 401 the same way everything else did. But
+  `payroll_save_hours` itself also refuses the write server-side if the
+  period is already approved, so a caller that somehow reached Supabase by
+  a different path still can't slip an edit past a signed-off run — belt
+  and suspenders, not either/or, matching how the lock was already
+  documented ("enforced HERE, not by hiding the button").
+- **Verified against the live project, not just reasoned about**: every one
+  of the thirteen functions was called directly with the real secret and
+  real data (7 real church-staff rows came back), a wrong secret was
+  confirmed to raise `28000 invalid secret`, a hold-then-approve-then-save
+  sequence confirmed the lock actually refuses the second write, and
+  `anon`'s table grants were re-queried after the migration to confirm they
+  are still exactly zero on all four tables. `node test/payroll.test.mjs`
+  (93/93) — its stub server was rewritten to answer the RPC shape instead
+  of raw REST table paths, and verified non-vacuous by breaking the RPC
+  dispatch, which fails 8 assertions with the real symptom.
+- **⚠ `anon` still keeps a few pre-existing grants outside this fix's
+  scope** — `SELECT`/`INSERT`/`UPDATE` on `staff_clock_events` (almost
+  certainly the childcare kiosk clock-in flow, which has no login of its
+  own) and a bare `TRIGGER` grant on `staff`/`staff_hours` that does
+  nothing useful. Left untouched — revoking them wasn't what broke, and
+  isn't part of what this fix was asked to repair.
+
+**Requires a manual step outside this repo, the same shape as
+`CHMS_INTAKE_API_KEY`/`ADMIN_PUSH_API_KEY` before it**: `PAYROLL_PROXY_SECRET`
+must be set as a secret on this Worker —
+
+```
+wrangler secret put PAYROLL_PROXY_SECRET --name tlc-newsletter-admin
+```
+
+— using this exact value, which is already the one stored in Supabase's
+`private.payroll_proxy_secrets` table:
+
+```
+504f65d01386d7e87a9f0278567f8b54cc8a21173da001ec9f7a6f255c5dc1fb
+```
+
+Until it is set, every `payroll_*` RPC call forwards an empty `p_secret`
+and every one of the thirteen functions refuses it — the Payroll page will
+read and write nothing, with the real Supabase error now visible instead of
+a misleading "session expired." This is the one step this session could not
+perform itself.
+
 ### Access Control
 - Staff admin password: full access (all tabs) — permissions are granted per-account, per-tab via the Users tab's checkboxes (see `PERMISSIONS` in `admin/auth.js`)
 - **v3.0.0 renamed three keys** — `pages_edit`→`notices_edit`, `site_pages`→`pages_edit`, `site_pages_own`→`pages_edit_own`. See "The v3.0.0 Admin Overhaul" above; the migration must never run twice.
