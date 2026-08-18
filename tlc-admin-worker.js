@@ -1504,7 +1504,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-18-3'; // bumped: the market pages carry a jump bar (admin/market-page-seed.js, tools/extract-pages.mjs)
+    const SCHEMA_VERSION = '2026-08-18-4'; // bumped: force-republish the vendor page over stale hand-typed content, and splice the /christmasmarket jump bar in without touching anything else
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -2356,6 +2356,113 @@ export default {
         await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run();
         await env.DB.prepare('INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, ?)')
           .bind(MARKET_PUBLISH_MARKER, MARKET_PUBLISH_VERSION).run();
+      } catch (_) { /* retried on the next request */ }
+    }
+
+    // ── ONE-TIME: THE VENDOR PAGE'S LIVE CONTENT WAS NEVER THE SEED (2026-08-18) ──
+    // Reported after v5.23.0 shipped: "the jump to bars didnt get added". Checked
+    // against production, not assumed — the live /christmasmarket/vendors page
+    // renders a hero titled "Bring your goods to the Christmas Market" with a
+    // single "Vendor Application" button pointed at "#vendor", on a block whose
+    // id is a random generated one (b + base36 timestamp), not any of the fixed
+    // ids market-page-seed.js has ever used. That exact wording does not exist in
+    // ANY commit in this repo's history, hardcoded page or seed — it was built by
+    // hand, directly in the live editor, at some point after Phase 1's first
+    // publish. That is why MARKET_PUBLISH_MARKER (v1/v2/v3, above) has never once
+    // reached this page: its `updated_by = 'migration'` guard is doing exactly
+    // its job, refusing to overwrite what somebody typed. The problem is that
+    // what was typed predates the whole event-section commission and is not a
+    // deliberate choice about the redesign — it is what was there before the
+    // redesign existed, and Andrew (who asked for this build in the first place,
+    // and is now the one reporting it missing) wants the current seed live.
+    //
+    // ⚠ THIS BYPASSES THE updated_by GUARD, ON PURPOSE, ONCE. It is not a
+    // relaxation of canReseed() — a second person's edit made AFTER this runs is
+    // still respected forever, because this stamps updated_by = 'migration' back
+    // on the way out, the same as the original Phase 1 publish did.
+    // ⚠ Snapshotted to page_revisions FIRST, the same rule /use-redesign follows
+    // for a page with real prior work on it — nothing here is actually lost, it
+    // is one click away in the revision history if the wording mattered.
+    const MARKET_VENDORS_FORCE_MARKER = 'market_vendors_force_republish_v1';
+    const marketVendorsForced = markersOk || markers.get(MARKET_VENDORS_FORCE_MARKER) === 'done';
+    if (!marketVendorsForced) {
+      try {
+        const row = await env.DB.prepare('SELECT id, blocks, published_blocks FROM pages WHERE id = ?')
+          .bind(MARKET_VENDORS_PAGE.id).first().catch(() => null);
+        if (row) {
+          const priorPublished = sanitizeBlocks(parseBlocks(row.published_blocks));
+          const blocks = JSON.stringify(sanitizeBlocks(MARKET_VENDORS_PAGE.blocks));
+          // ⚠ Skipped when the live page already matches the seed — a healthy
+          // install (this migration having already run, or the ordinary
+          // MARKET_PUBLISH_MARKER path having correctly published it) must not
+          // grow a page_revisions row and rewrite the same bytes on every deploy.
+          if (JSON.stringify(priorPublished) !== blocks) {
+            if (priorPublished.length) {
+              await env.DB.prepare(
+                'INSERT INTO page_revisions (page_id, blocks, note, created_at, created_by) VALUES (?, ?, ?, ?, ?)'
+              ).bind(MARKET_VENDORS_PAGE.id, JSON.stringify(priorPublished),
+                     'Before the vendor-page redesign was force-applied over pre-existing hand-edited content',
+                     new Date().toISOString(), 'migration').run().catch(() => {});
+            }
+            await env.DB.prepare(
+              "UPDATE pages SET blocks = ?, published_blocks = ?, status = 'published', updated_at = datetime('now'), updated_by = 'migration' WHERE id = ?"
+            ).bind(blocks, blocks, MARKET_VENDORS_PAGE.id).run();
+          }
+        }
+        await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run();
+        await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, 'done')").bind(MARKET_VENDORS_FORCE_MARKER).run();
+      } catch (_) { /* retried on the next request */ }
+    }
+
+    // ── ONE-TIME: /christmasmarket'S JUMP BAR, ADDED WITHOUT TOUCHING ANYTHING
+    // ELSE (2026-08-18) ──
+    // /christmasmarket is one of the pages tools/extract-pages.mjs generates,
+    // and INSERT_BLOCKS added a jumplinks block to its generated seed in Phase 3.
+    // But the generic re-seed loop above (ALL_SEEDED_PAGES) is gated on
+    // canReseed(), which refuses any page already published — and this one was,
+    // long before Phase 3 shipped — so the regenerated seed, jump bar included,
+    // has been sitting in admin/site-pages.js the whole time with no path to
+    // reach either the draft or the live page. Confirmed against production:
+    // no jump bar, and the SEED ITSELF was never written to `blocks` either, so
+    // there was nothing in the editor for the office to review and Publish.
+    //
+    // ⚠ THIS DOES NOT REGENERATE THE PAGE FROM THE SEED. Overwriting the whole
+    // page would throw away anything Andrew has typed here since it was first
+    // published — the date, this year's photos, a rewritten sentence — and the
+    // whole point of the annual Christmas Market workflow (see CLAUDE.md) is
+    // that those edits are expected and must survive. This only SPLICES ONE
+    // BLOCK into whatever is already there, at the same position the extractor
+    // would have put it (index 1, straight under the banner), on both `blocks`
+    // and `published_blocks` independently, and touches nothing else — not the
+    // other blocks, not `updated_by`, not `updated_at` on a person's own name.
+    // Idempotent by construction: it only ever runs once, behind its own marker.
+    const CHRISTMASMARKET_JUMPBAR_MARKER = 'christmasmarket_jumpbar_v1';
+    const christmasmarketJumpbarAdded = markersOk || markers.get(CHRISTMASMARKET_JUMPBAR_MARKER) === 'done';
+    if (!christmasmarketJumpbarAdded) {
+      try {
+        const jumpBlock = sanitizeBlock(Object.assign(newBlock('jumplinks'), {
+          id: 'cm-jump-ins', title: 'Jump to', mode: 'auto', sticky: true,
+          url: '/christmasmarket/vendors', buttonText: 'Apply for a table',
+          items: [{ title: 'Volunteer at the market', url: 'https://serve.timothystl.org/christmasmarket' }],
+        }));
+        const row = await env.DB.prepare('SELECT id, blocks, published_blocks FROM pages WHERE id = ?')
+          .bind('christmasmarket').first().catch(() => null);
+        if (row) {
+          const splice = (col) => {
+            const list = sanitizeBlocks(parseBlocks(col));
+            if (!list.length || list.some((b) => b && b.type === 'jumplinks')) return null;
+            list.splice(Math.min(1, list.length), 0, jumpBlock);
+            return JSON.stringify(list);
+          };
+          const newBlocksCol = splice(row.blocks);
+          const newPublishedCol = row.published_blocks == null ? null : splice(row.published_blocks);
+          if (newBlocksCol != null || newPublishedCol != null) {
+            await env.DB.prepare('UPDATE pages SET blocks = COALESCE(?, blocks), published_blocks = COALESCE(?, published_blocks), updated_at = datetime(\'now\') WHERE id = ?')
+              .bind(newBlocksCol, newPublishedCol, 'christmasmarket').run();
+          }
+        }
+        await env.DB.prepare('CREATE TABLE IF NOT EXISTS _schema_version (key TEXT PRIMARY KEY, value TEXT)').run();
+        await env.DB.prepare("INSERT OR REPLACE INTO _schema_version (key, value) VALUES (?, 'done')").bind(CHRISTMASMARKET_JUMPBAR_MARKER).run();
       } catch (_) { /* retried on the next request */ }
     }
 
