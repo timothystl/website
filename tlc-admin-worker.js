@@ -465,7 +465,7 @@ async function badgeCounts(env, user) {
   const canPages = hasPermission(user, 'pages_edit') || hasPermission(user, 'pages_edit_own');
   const canApprove = hasPermission(user, 'newsletter_approve');
   const canMarket = hasPermission(user, 'market_manage');
-  const [gym, pages, newsletter, market] = await Promise.all([
+  const [gym, pages, newsletter, market, eventPerms] = await Promise.all([
     canGym ? n("SELECT COUNT(*) AS n FROM gym_bookings WHERE status='hold'") : 0,
     // A page counts as needing attention when its draft differs from what is
     // live, or when it has never been published at all. Same rule as the Pages
@@ -476,8 +476,12 @@ async function badgeCounts(env, user) {
     // Form could not show this at all — an abandoned submission left no row
     // anywhere — so it is the one number this screen exists to surface.
     canMarket ? n("SELECT COUNT(*) AS n FROM site_event_registrations WHERE event_id='christmasmarket' AND payment_status='unpaid'") : 0,
+    // Every event's own coordinator key, so the sidebar can show the Events
+    // row to a coordinator holding one of them without also holding
+    // events_manage — see the eventItems row in sidebarShell().
+    eventCoordinatorPermissions(env).catch(() => ({})),
   ]);
-  return { gym, pages, newsletter, market };
+  return { gym, pages, newsletter, market, eventPerms };
 }
 
 // One sort rule, shared by /api/news and pageData()'s self-filling news
@@ -11162,7 +11166,7 @@ ${sidebarShell('users', currentUser, '', await pageBadges())}
       <div class="form-group"><label>Email <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— used for password reset</span></label><input type="email" name="email" autocomplete="email" placeholder="user@timothystl.org"></div>
       <div class="form-group"><label>Password <span style="color:#B85C3A;">*</span></label><input type="password" name="password" autocomplete="new-password" placeholder="Min 8 characters"></div>
       <div class="form-group"><label>Confirm password</label><input type="password" name="password2" autocomplete="new-password"></div>
-      <div class="form-group"><label>Permissions</label>${permissionCheckboxes([])}</div>
+      <div class="form-group"><label>Permissions</label>${permissionCheckboxes([], await eventCoordinatorPermissions(env))}</div>
     </div>
     <div class="btn-row">
       <button type="submit" class="btn btn-primary">Create user</button>
@@ -11184,7 +11188,11 @@ ${sidebarShell('users', currentUser, '', await pageBadges())}
       if (password.length < 8) return new Response('Password must be at least 8 characters.', { status: 400 });
       const existing = await env.DB.prepare('SELECT id FROM users WHERE username = ?').bind(username).first();
       if (existing) return new Response('Username already taken.', { status: 400 });
-      const perms = Object.keys(PERMISSIONS).filter(k => form.get('perm_' + k) === '1');
+      // Dynamic per-event keys (event_<id>_manage) never live in the static
+      // PERMISSIONS object, so they are read off the event list itself —
+      // the same list permissionCheckboxes() was handed to draw their boxes.
+      const dynamicPermKeys = Object.keys(await eventCoordinatorPermissions(env));
+      const perms = [...Object.keys(PERMISSIONS), ...dynamicPermKeys].filter(k => form.get('perm_' + k) === '1');
       const hash = await hashPassword(password);
       await env.DB.prepare('INSERT INTO users (username, password_hash, permissions, created_at, active, email) VALUES (?, ?, ?, ?, 1, ?)')
         .bind(username, hash, JSON.stringify(perms), new Date().toISOString(), email).run();
@@ -11331,7 +11339,7 @@ ${sidebarShell('users', currentUser, '', await pageBadges())}
         <label>Password</label>
         <div class="tlc-static">Changed on its own screen, so nothing here can change it by mistake. <a href="/users/edit/${u.id}/password">Set a new password</a></div>
       </div>
-      <div class="form-group"><label>Permissions</label>${permissionCheckboxes(selectedPerms)}</div>
+      <div class="form-group"><label>Permissions</label>${permissionCheckboxes(selectedPerms, await eventCoordinatorPermissions(env))}</div>
       <div class="form-group">
         <label>Status</label>
         <div class="radio-row">
@@ -11363,7 +11371,11 @@ ${sidebarShell('users', currentUser, '', await pageBadges())}
       // was never a person in the first place, it was a password manager.
       const email = (form.get('email') || '').trim().toLowerCase() || null;
       const active = form.get('active') === '1' ? 1 : 0;
-      const perms = Object.keys(PERMISSIONS).filter(k => form.get('perm_' + k) === '1');
+      // Dynamic per-event keys (event_<id>_manage) never live in the static
+      // PERMISSIONS object, so they are read off the event list itself —
+      // the same list permissionCheckboxes() was handed to draw their boxes.
+      const dynamicPermKeys = Object.keys(await eventCoordinatorPermissions(env));
+      const perms = [...Object.keys(PERMISSIONS), ...dynamicPermKeys].filter(k => form.get('perm_' + k) === '1');
       // Fetch existing user to detect permission changes
       const existingUser = await env.DB.prepare('SELECT permissions, active FROM users WHERE id = ?').bind(uid).first();
       const oldPerms = existingUser ? existingUser.permissions : '[]';
