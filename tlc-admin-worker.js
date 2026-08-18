@@ -112,9 +112,10 @@ import { screenSubmission, formConfig, forwardToChms, officeEmailHtml, officeSub
 import { stripImageMetadata } from './admin/exif.js';
 import { handleMarketRoutes, marketSettings, marketConfig, marketPayUrl, priceBreakdown, money as marketMoney,
          sanitizeApplication, screenableText, coordinatorEmailHtml, vendorEmailHtml, marketInsertArgs } from './admin/market.js';
-import { getEvent, listEvents, eventFeeConfig, insertRegistration, eventCoordinatorPermissions,
+import { getEvent, listEvents, eventFeeConfig, insertRegistration, updateRegistration, eventCoordinatorPermissions,
          eventCoordinatorPermissionKey, slugifyEventId, handleEventsRoutes, eventFields,
          sanitizeRegistration, registrationScreenableText, splitRegistrationFields, capacityDecision } from './admin/events.js';
+import { createSquarePaymentLink, verifySquareSignature } from './admin/square.js';
 import { normalizeChannelInput, channelPageUrl, channelIdFrom, feedUrl,
          parseFeed, pickLatest, isChannelId } from './admin/sermons-feed.js';
 import { PALETTE as CHROME_PALETTE, BAR_KEYS, DEFAULTS as CHROME_DEFAULTS,
@@ -1408,6 +1409,59 @@ export default {
       return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } });
     }
 
+    // Square's payment.updated webhook — the other half of the per-application
+    // Checkout Link created in /api/market/apply, above. It has to sit above
+    // the CSRF Origin gate for the same reason /api/push/notify does: Square's
+    // server carries no Origin/Referer, so the gate would refuse it outright.
+    //
+    // ⚠ NOT `PUBLIC_CROSS_ORIGIN_POSTS` — that set is for a BROWSER's
+    // cross-origin POST, which still carries an Origin header the gate checks
+    // against ADMIN_ORIGIN/the gym portal's own origin. A server-to-server
+    // callback is a different trust model entirely: it is authenticated by
+    // Square's own HMAC signature (verifySquareSignature, admin/square.js),
+    // not by which page happened to be open in a browser.
+    if (path === '/api/square/webhook' && method === 'POST') {
+      const rawBody = await request.text();
+      const signature = request.headers.get('x-square-hmacsha256-signature') || '';
+      const verified = await verifySquareSignature(env, ADMIN_ORIGIN + '/api/square/webhook', rawBody, signature);
+      if (!verified) {
+        console.error('Square webhook: signature did not verify');
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+      }
+      let event;
+      try { event = JSON.parse(rawBody); } catch { return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } }); }
+
+      const payment = event?.type === 'payment.updated' ? event?.data?.object?.payment : null;
+      const orderId = payment?.order_id || '';
+      // ⚠ Anything other than a COMPLETED payment for a known order is
+      // answered 200 and quietly ignored — that is not an error, it is a
+      // payment that failed, or one that is not ours, or a Square event type
+      // this route has no reason to act on. Square retries on anything but a
+      // 2xx, and retrying an event this route was never going to act on
+      // would just be Square hammering an endpoint for no reason.
+      if (payment && payment.status === 'COMPLETED' && orderId) {
+        const reg = await env.DB.prepare(
+          'SELECT id, event_id, payment_status, amount_due_cents, contact_name FROM site_event_registrations WHERE square_order_id = ?'
+        ).bind(orderId).first().catch(() => null);
+        // ⚠ IDEMPOTENT ON PURPOSE. Square can and does redeliver the same
+        // event; a registration already marked paid is left alone rather
+        // than re-logged to the audit trail on every redelivery.
+        if (reg && reg.payment_status !== 'paid') {
+          const amountPaidCents = Number(payment?.amount_money?.amount);
+          await updateRegistration(env, reg.id, {
+            payment_status: 'paid',
+            amount_paid_cents: Number.isFinite(amountPaidCents) ? amountPaidCents : reg.amount_due_cents,
+          });
+          await logAudit(env.DB, { username: 'square-webhook' }, 'update', 'market_vendor', String(reg.id), reg.contact_name,
+            { payment_status: reg.payment_status }, { payment_status: 'paid' });
+        }
+      }
+      // Square only cares about the status code — always 200 past the
+      // signature check, whether or not anything matched, so a payment that
+      // is not one of ours never looks like a failure worth retrying.
+      return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
     // Reject obviously oversized requests up front. 25MB is a generous ceiling
     // for image/PDF uploads; text-only forms are well under 1MB. Without this,
     // a single malicious POST could push tens of MB into D1 / R2 / memory.
@@ -1544,7 +1598,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-19-1'; // bumped: site_events/site_event_fields/site_event_registrations (admin/events.js), on top of the force-republish + jump-bar migrations below
+    const SCHEMA_VERSION = '2026-08-19-2'; // bumped: site_event_registrations.square_order_id, for exact-match Square payment reconciliation
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -2278,6 +2332,13 @@ export default {
     try { await env.DB.prepare(DB_INIT_SITE_EVENT_FIELDS_INDEX).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_SITE_EVENT_REGISTRATIONS).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_SITE_EVENT_REGISTRATIONS_INDEX).run(); } catch (_) {}
+
+    // Square reconciles a payment to the exact application that created its
+    // checkout link — see admin/square.js and the /api/market/apply and
+    // /api/square/webhook routes below. NULL for every row created before
+    // this, for anything paid by check/cash, and for anything on Tithe.ly.
+    try { await env.DB.prepare('ALTER TABLE site_event_registrations ADD COLUMN square_order_id TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_site_event_registrations_square_order ON site_event_registrations (square_order_id)').run(); } catch (_) {}
 
     for (const p of PARTNER_SEED) {
       try {
@@ -3392,7 +3453,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
         const fields = {};
         for (const k of ['participant_names', 'business_name', 'website_or_social', 'returning_vendor',
           'email', 'phone', 'street', 'city', 'state', 'zip', 'product_description', 'sells_food',
-          'appliances_power', 'special_requests', 'tables', 'signature_name']) {
+          'appliances_power', 'special_requests', 'tables', 'signature_name', 'payment_method']) {
           fields[k] = form.get(k);
         }
         const { ok: valid, errors, value } = sanitizeApplication(fields, settings);
@@ -3447,7 +3508,57 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
           return new Response(JSON.stringify({ success: true, held: true }), { headers: corsH });
         }
 
-        const payUrl = marketPayUrl(settings, price.totalCents, value.tables);
+        // ⚠ A CHECK/CASH APPLICATION OWES THE FLAT FEE, NEVER THE GROSSED-UP
+        // ONE — see the comment on marketInsertArgs() in admin/market.js for
+        // why. This is the SAME figure that function already computed and
+        // stored; recomputed here rather than read back off the row so the
+        // emails and the JSON response don't need a second database round
+        // trip for a number already in scope.
+        const amountDueCents = value.payment_method === 'check' ? price.subtotalCents : price.totalCents;
+
+        // ── THE PAYMENT ADDRESS ────────────────────────────────────────────
+        // Check/cash gets no link at all — there is nothing to redirect to,
+        // and the coordinator marks it paid by hand once the check or cash
+        // actually arrives.
+        //
+        // A card application on Square gets a link created for THIS
+        // APPLICATION ALONE via Square's own API — see admin/square.js —
+        // rather than the office's static per-table-count link, so that the
+        // /api/square/webhook route below can later match a completed
+        // payment to this exact row by order id, not by amount and rough
+        // timing (two one-table vendors paying the same afternoon would be
+        // indistinguishable by amount alone). The id round-trips as Square's
+        // idempotency key, so a retried request cannot create a second link.
+        //
+        // ⚠ Square being down, not yet configured, or refusing the request
+        // all fall back to the SAME static link this page has always used —
+        // silently, the same shape every other integration on this site
+        // degrades by (Turnstile, the ChMS intake key, VAPID). A vendor must
+        // never be unable to pay because Square's API had a bad minute.
+        let payUrl = '';
+        if (value.payment_method !== 'check') {
+          if (settings.paymentProvider === 'square') {
+            try {
+              const link = await createSquarePaymentLink(env, {
+                idempotencyKey: `market-vendor-${id}`,
+                amountCents: amountDueCents,
+                name: `Christmas Market — ${value.tables} table${value.tables === 1 ? '' : 's'}`,
+                redirectUrl: 'https://timothystl.org/christmasmarket/vendors',
+              });
+              payUrl = link.url;
+              // Awaited, unlike the emails below — a webhook arriving before
+              // this landed would find no match at all, and Square's own
+              // redirect can in principle send a fast-moving vendor back to
+              // the church's site before this request has even answered.
+              await updateRegistration(env, id, { square_order_id: link.orderId });
+            } catch (e) {
+              console.error('Square payment link creation failed, falling back to the static link:', e?.message);
+              payUrl = marketPayUrl(settings, amountDueCents, value.tables);
+            }
+          } else {
+            payUrl = marketPayUrl(settings, amountDueCents, value.tables);
+          }
+        }
 
         // Both emails are best-effort and neither is awaited into the vendor's
         // answer. The application is already saved; a Brevo outage must not
@@ -3455,7 +3566,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
         ctx.waitUntil((async () => {
           await sendTransactionalEmail(env, {
             subject: `${screen.suspect ? '[likely spam] ' : ''}Christmas Market vendor — ${value.business_name || value.participant_names}`,
-            htmlContent: coordinatorEmailHtml(value, { totalCents: price.totalCents, photos, suspect: screen.suspect }),
+            htmlContent: coordinatorEmailHtml(value, { totalCents: amountDueCents, photos, suspect: screen.suspect }),
             toEmails: [settings.coordinatorEmail],
             replyTo: { email: value.email, name: value.participant_names },
           });
@@ -3466,7 +3577,7 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
           if (!screen.suspect) {
             await sendTransactionalEmail(env, {
               subject: 'Your Christmas Market table — Timothy Lutheran Church',
-              htmlContent: vendorEmailHtml(value, { totalCents: price.totalCents, payUrl, settings }),
+              htmlContent: vendorEmailHtml(value, { totalCents: amountDueCents, payUrl, settings }),
               toEmails: [value.email],
             });
           }
@@ -3474,12 +3585,13 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
 
         ctx.waitUntil(pushToAllSubscribers(env, {
           title: 'Christmas Market vendor application',
-          body: `${value.business_name || value.participant_names} — ${value.tables} table${value.tables === 1 ? '' : 's'}, ${marketMoney(price.totalCents)}`,
+          body: `${value.business_name || value.participant_names} — ${value.tables} table${value.tables === 1 ? '' : 's'}, ${marketMoney(amountDueCents)}`,
           tag: 'market-vendor', url: '/market',
         }));
 
         return new Response(JSON.stringify({
-          success: true, id, payUrl, total: marketMoney(price.totalCents), totalCents: price.totalCents,
+          success: true, id, payUrl, total: marketMoney(amountDueCents), totalCents: amountDueCents,
+          checkPay: value.payment_method === 'check',
         }), { headers: corsH });
       } catch (e) {
         console.error('Market application failed:', e?.message);

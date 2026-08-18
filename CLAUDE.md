@@ -527,6 +527,157 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### A Square payment reconciles itself, and a vendor can pay by check (2026-08-18)
+
+Dinger: *"i made a payment through the site for a vendor, but it does not
+record it in the system that a payment is made. is there a way to connect
+back from square that a payment was made?"* — then, choosing the exact-match
+design over a best-effort amount/time guess: *"will it apply the fees to the
+transaction like it does now? And what about those that will pay by check? i
+dont see an option for that."*
+
+**Reconciliation was never built for any provider — that was deliberate, and
+is why `amount_paid_cents` reads NULL rather than a number until a human
+looks.** Tithe.ly and Square both take the vendor's card without telling this
+Worker anything back. Square is the one of the two with a webhook worth
+building against, so it is the one that gets it; Tithe.ly is unchanged.
+
+- **⚠ THE STATIC PER-TABLE-COUNT LINKS CARRY NOTHING TO MATCH ON.** The
+  office's own pasted Square Payment Links (`settings.squareLinks`, one per
+  table count) cannot say *which vendor* paid — twelve different one-table
+  vendors produce the same amount on the same link. So matching by amount and
+  rough timing was the fallback design, and it was rejected for exactly the
+  reason it exists: it can be wrong, silently, the one time two vendors buy
+  the same table count the same afternoon.
+- **The fix is a payment link per application, not per table count.**
+  `admin/square.js`'s `createSquarePaymentLink()` calls Square's Checkout
+  Links API (`POST /v2/online-checkout/payment-links`, `quick_pay`) once, at
+  the moment `/api/market/apply` saves the row, and the resulting `order_id`
+  — read directly off that same creation response, never a later lookup —
+  is stored on `site_event_registrations.square_order_id`
+  (`updateRegistration(env, id, { square_order_id })`, admin/events.js's own
+  generic column-patcher — no new write path needed). A `payment.updated`
+  webhook later matches on that id alone. Exact, not probable.
+- **⚠ The office's static per-table links are NOT removed — they are the
+  fallback, unchanged.** `marketPayUrl()` still exists exactly as it did;
+  dynamic creation is attempted first when the market is on Square, and any
+  failure (Square down, `SQUARE_ACCESS_TOKEN`/`SQUARE_LOCATION_ID` not yet
+  set, a bad request) falls back to it silently — the same shape every other
+  integration on this site degrades by (Turnstile, the ChMS intake key,
+  VAPID). A vendor must never be unable to pay because Square's API had a bad
+  minute.
+- **⚠ The fee math does not change, and could not have — it was never
+  Square's job.** `priceBreakdown()` (`market-price.js`) still computes the
+  grossed-up total; Square is only ever handed the finished number
+  (`quick_pay.price_money.amount`) to charge. Automating *reconciliation* is
+  a separate question from computing *the amount*, and this feature only
+  touches the first.
+- The idempotency key is derived from the registration's own row id
+  (`market-vendor-${id}`), not random, so a retried request cannot create a
+  second link for one application.
+- **Sandbox and Production are different HOSTS in Square's API, not just
+  different tokens** — `connect.squareupsandbox.com` vs `connect.squareup.com`.
+  `SQUARE_ENVIRONMENT` (a Worker secret, defaults to production) is the switch.
+
+**Pay by check or cash is a real third option in the form now, not a line of
+fine print pointing at an email address that created no record.** Before
+this, a vendor who could not or would not pay online had exactly one path —
+email the coordinator — and that path never touched
+`site_event_registrations` at all. If the coordinator forgot, or was slow,
+that vendor simply did not exist to the system. The same failure this repo's
+own rule about the Google Form (2024) warns against, self-inflicted a second
+time on the very form that replaced it.
+
+- **A step-3 chip pair, "Pay online now" / "Pay by check or cash,"** stores
+  `payment_method` on `sanitizeApplication()`'s `value` (`card` default,
+  matching every application that already existed before this shipped) and
+  rides through to `fields_json` via `marketFieldsFromValue()` — there is no
+  dedicated column, because the whole point of the generic
+  `site_event_registrations.fields_json` blob is that a field like this needs
+  no schema change to exist.
+- **⚠ `marketInsertArgs(value, price, photos)` is where the flat-fee rule
+  actually lives**: `amount_due_cents` is `price.subtotalCents` for a check
+  application, `price.totalCents` for a card one. `subtotalCents` is exactly
+  `tables × tableFee` — the same figure `priceBreakdown()` was already
+  computing for the "1 table × $X" display line — so **no new pricing
+  function** was needed, only the right field of the one that already
+  exists.
+- **⚠ `payment_status` stays `'unpaid'` for a check application. It does NOT
+  get its own enum value.** Every filter, every CSV column and every existing
+  test keys off the four-state `PAYMENT_STATES` (admin/events.js); adding a
+  fifth state for "owes money, paying by check" would be the exact kind of
+  state nobody remembered to teach every reader about. `paymentLabel(row)` in
+  `admin/market.js` is purely presentational — it overrides the *displayed*
+  label to "Awaiting check" when `payment_method==='check' &&
+  payment_status==='unpaid'`, and nothing else reads it. The coordinator's
+  list, the CSV export and the vendor-edit drawer all render through it now;
+  the FILTER pills still key on the real `paymentState()` value, never the
+  relabel.
+- **`marketRowFromRegistration(reg)` reads `payment_method` back out of
+  `fields_json`, defaulting to `'card'`** — a registration saved before this
+  shipped has no such key at all, and reads exactly as every application
+  before this feature did.
+- The application is saved before there is anything to redirect to — same
+  rule as every card application, restated for the path that has no payment
+  step at all. A check vendor never leaves the page mid-application; there is
+  no page to send them to.
+- The confirmation emails (`coordinatorEmailHtml`/`vendorEmailHtml`,
+  `admin/market.js`) branch on `payment_method`, both to the vendor (asks
+  them to bring a check made out to Timothy Lutheran Church, or exact cash,
+  for the flat fee — no processing-fee line, since there is none to explain)
+  and to the coordinator (says the same, so nobody re-derives the amount from
+  the wrong total).
+
+**Requires a manual step outside this repo, the same shape as the ChMS
+intake key and the VAPID push keys before it**: none of this does anything
+until Square secrets are set on the Worker. In the Square Developer
+Dashboard, create an Application, then take its **Access Token** (there are
+separate Sandbox and Production tokens — use Sandbox first), its **Location
+ID**, and — from the application's Webhooks page, after adding a
+subscription pointed at `https://admin.timothystl.org/api/square/webhook`
+for the `payment.updated` event — the **Webhook Signature Key** Square
+generates for that subscription. Then:
+
+```
+wrangler secret put SQUARE_ACCESS_TOKEN --name tlc-newsletter-admin
+wrangler secret put SQUARE_LOCATION_ID --name tlc-newsletter-admin
+wrangler secret put SQUARE_WEBHOOK_SIGNATURE_KEY --name tlc-newsletter-admin
+wrangler secret put SQUARE_ENVIRONMENT --name tlc-newsletter-admin   # "sandbox" while testing; omit or set to anything else for production
+```
+
+Until all three of the first are set, every application silently falls back
+to the static link — nothing breaks, nothing charges the wrong amount, the
+reconciliation simply does not happen yet. The market also has to actually
+be switched to Square (`/market?tab=money` → Payment → provider) — on
+Tithe.ly, this whole feature is inert by design; Tithe.ly already resolves
+its amount at request time with no reconciliation gap to close.
+
+**⚠ The webhook header name and Square's API version date were not verified
+against a live Square account — this sandbox has no outbound access to
+Square's API at all.** `admin/square.js` reads the signature from
+`x-square-hmacsha256-signature` and sends `Square-Version: 2025-01-23`; both
+are recorded here as what should be true rather than what was confirmed.
+**Before relying on this in production, use Square's own Sandbox dashboard
+("Send test event" on the webhook subscription) to fire a real
+`payment.updated` event at `/api/square/webhook` and confirm it returns 200
+and marks the right row paid.** If the header name is wrong, every event
+will 401 and nothing will silently look successful — see
+`verifySquareSignature()` in `admin/square.js`.
+
+Run: `node admin/square.test.mjs` (16 — the signature check is verified
+against an independent HMAC computed with Node's own `crypto` module, the
+same shape as `admin/webpush.test.mjs`), `node admin/market.test.mjs` (206,
+`paymentLabel`, `marketRowFromRegistration`/`marketInsertArgs` field
+round-trips, and the CSV/email wording), `node admin/blocks.test.mjs`
+(3131, the chip markup and the fee row it hides), and six new groups in
+`test/admin-redesign.test.mjs` covering the flat-fee check total against the
+grossed-up card default, the Square link's `order_id` being captured from
+the creation response rather than a later lookup, the silent fallback to the
+static link when Square is unreachable or unconfigured, and the webhook
+itself — matching by order id alone, being idempotent against a redelivered
+event (one audit-log entry, not two), rejecting a bad signature, and
+ignoring (200, untouched) a payment that is not one of ours.
+
 ### The Christmas Market is an event section (v5.23.0, 2026-08-18)
 
 Built from `design_handoff_market_event/`, committed whole like the other
