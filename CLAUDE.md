@@ -85,7 +85,8 @@ points staff there.
 | page-prayer | /prayer | Exists |
 | page-news | /news | Exists — fetches live from admin API + newsletter archive, with the Google Calendar embedded below the posts (2026-08-01) |
 | page-values | /about/values | Exists (2026-08-01) — the four core values and the partner ministry paired to each, from `/api/values`. Nested under About via `NESTED_PATHS` in `public/index.html` |
-| page-marketvendors | /christmasmarket/vendors | Exists (v5.6.0) — the Christmas Market vendor application. Nested under the market page via `NESTED_PATHS`. On the block editor as of v5.18.0 (`admin/market-page-seed.js`, draft only until Published — see "/christmasmarket/vendors is on the block editor now" below) |
+| page-marketvendors | /christmasmarket/vendors | Exists — the market's rules, details, photographs and FAQ. **Rendered entirely from blocks and published** (v5.22.0); the hardcoded markup is deleted, so this page must stay published |
+| page-marketvendorsapply | /christmasmarket/vendors/apply | Exists (v5.22.0) — the vendor application and nothing else. `admin/market-vendors-apply-seed.js`; `tlcMarketInit()` runs here |
 | page-404 | (any unknown path) | Exists — shown for unrecognized URLs |
 
 ---
@@ -109,7 +110,8 @@ points staff there.
 ### Ministry Landing Pages (flyer-friendly short URLs, static)
 ```
 /christmasmarket  Admin-managed: dates, photos; links to the vendor application
-/christmasmarket/vendors  Vendor application — three steps, takes card payment
+/christmasmarket/vendors  Rules, details, photographs, FAQ
+/christmasmarket/vendors/apply  The application — three steps, takes card payment
 /foodpantry       Food Pantry info, hours, how to donate/volunteer
 /music            Music Ministry
 /stephen          Stephen Ministry
@@ -159,7 +161,7 @@ Extend current `tlc-admin-worker.js` with new tabs:
 | Subscribers | Office staff | **DONE** — newsletter subscriber list |
 | Redirects | Office staff | **DONE** — admin-managed URL redirects at `/redirects`, all four kinds in one list (hand-made, automatic 301s from renames, derived short links, giving) · **on the shared pattern** with a drawer |
 | Settings | Office staff — requires `settings_manage` | **DONE** (v3.1.0) — the `site_settings` keys the rest of the site reads, each with what reads it; anything with a screen of its own links there rather than duplicating the field |
-| Christmas Market | Market coordinator — requires `market_manage` | **DONE** (v5.6.0) — the vendor list that replaces the 2024 spreadsheet: who applied, what they sell, table numbers, and a payment state the coordinator keeps by hand because the website cannot see whether a card cleared. Fed by the public application at `/christmasmarket/vendors`; see "The Christmas Market takes its own vendor applications" below |
+| Christmas Market | Coordinator, office, bookkeeper — five tabs, each on its own permission | **DONE** (v5.22.0) — the whole event section: Vendors · Page & copy · Money & dates · Volunteers · Photos. The vendor list that replaces the 2024 spreadsheet: who applied, what they sell, table numbers, and a payment state the coordinator keeps by hand because the website cannot see whether a card cleared. Fed by the public application at `/christmasmarket/vendors`; see "The Christmas Market takes its own vendor applications" below |
 | Giving | Office staff — requires `giving_manage` permission | **DONE** (2026-07-27) — base Tithe.ly link, give.timothystl.org's amount tiers + per-tier links, and vendor/market one-off payment links (Tithe.ly or Square); see below |
 | Payroll | Office staff (Dinger) — requires `payroll_manage` permission | **DONE** (v3.2.0) — combined biweekly payroll (church staff + MDO preschool staff), rebuilt onto the shared shell with the design's period picker, Enter & approve / Report and three report layouts; see "Gym and Payroll, to the mockups" and "Payroll & Supabase" below |
 | Audit Log | Admins | **DONE** — change history + rollback, requires `audit_view` |
@@ -525,6 +527,132 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### The Christmas Market is an event section (v5.23.0, 2026-08-18)
+
+Built from `design_handoff_market_event/`, committed whole like the other
+handoffs. Options 1b (the public split) and 1c (five admin tabs) were the
+approved ones. Four phases, four commits.
+
+**Phase 1 — the vendor page is published, and the hardcoded copy is gone.**
+`admin/market-page-seed.js` had been sitting as a draft since v5.18.0 while
+`public/index.html` rendered the real page. Both existed, so both could drift.
+The seed was reconciled against the live markup (the hardcoded copy was
+authoritative), a marker-gated migration writes `published_blocks`, and the
+~350 lines of `#page-marketvendors` markup and its `data-mkt-*` fallback spans
+are **deleted**.
+- **⚠ `canReseed()` refuses anything already published**, so once Phase 1 runs,
+  the ordinary seed loop can never correct this page again. `MARKET_PUBLISH_MARKER`
+  carries a **version** value for exactly that: bump `MARKET_PUBLISH_VERSION` and
+  the block re-runs, guarded only on `updated_by === 'migration'` so it still
+  never touches a page a person has edited.
+- **⚠ THIS PAGE MUST STAY PUBLISHED.** There is no hardcoded fallback behind it
+  any more. Two assertions in `test/admin-redesign.test.mjs` that pinned it as
+  an unpublished draft were inverted, which is the diff that looks like a
+  regression and is not.
+- **`tlcMarketInit()` and the `.mkt-*` CSS were kept**, on Andrew's instruction,
+  though the handoff's claim that the `marketapp` block needs them is **false** —
+  the block ships its own delegated `MARKET_APP_SCRIPT` behind
+  `window.__tlcMktAppWired` and uses `.tlcb-mktapp-*` classes throughout. The
+  comment above `tlcMarketInit()` says so, and says not to wire it back up.
+
+**Phase 2 — two pages: the pitch, then the form.**
+`/christmasmarket/vendors` keeps the rules, the details, the photographs and
+the FAQ; `/christmasmarket/vendors/apply` (`marketvendorsapply`,
+`admin/market-vendors-apply-seed.js`) is a moss banner, a facts band and the
+application, and nothing else.
+- **⚠ The `marketapp` block was REMOVED from page A, not hidden.** A hidden
+  block is one somebody finds later and switches on, and then the market takes
+  money at two addresses.
+- **`marketfacts` is a new block type** and it is the reason the split is safe:
+  the day, the hours, the fee and the coordinator appear on both pages and are
+  **read from the settings on both**, so there is no typed copy to go stale in
+  December. It falls back to `MARKET_DEFAULTS` field by field, the same rule the
+  application block already carries — a genuinely empty `data.market` must print
+  the figures a visitor would really be charged, never "undefined".
+- **⚠ Four places have to agree about a nested address**, and they do:
+  `NESTED_PATHS` in `public/index.html`, `NESTED_PATHS` in `site-worker.js`, the
+  router's own case, and the page record's `slug`. The mirror test in
+  `test/site-edge-render.test.mjs` covers the first two.
+- **`tlcMarketInit()`'s router call moved to `marketvendorsapply`**, keeping the
+  v5.8.0 ordering rule: the script has to be declared ABOVE the router, or a
+  direct visit hits a hoisted-but-undefined `tlcMarketCfg`.
+- Added to `public/sitemap.xml`. No 301 — nothing moved, one address was added.
+
+**Phase 3 — `jumplinks`, and every block carries its own id.** See the commit
+and the test group; the load-bearing parts are that auto mode derives the chips
+from the page so there is nothing typed to fall out of step, that
+`.jump-bar--stuck{top:67px}` rather than the handoff's 0 (the nav is sticky at
+`z-index:100` and 67px tall, so a bar at 0 slides underneath it), and that the
+CSS is in `BLOCK_CSS` rather than `public/styles.css` as §5 says — **the editor
+canvas never loads the site stylesheet**, so a bar styled there would be
+invisible in the one place somebody is arranging it.
+- **⚠ `blockDomId()` gives every block an `id` now**, and is the one place both
+  halves are decided. A hand-typed Jump-to name still wins and is used **bare** —
+  see the entry above, where the `jump-` prefix turned out to be a bug: the box
+  on screen said one thing and the page answered to another. The fallback is the
+  block's own id. `renderPage` passes `siblings` down, which is what
+  auto mode reads — **a block rendered with no siblings genuinely renders no
+  chips**, and that is why several test loops pass `siblings` explicitly.
+- **⚠ One bar per page.** Two sticky bars stack and the second's links land
+  under the first. The first renders; the rest render nothing on the page and
+  say why in the editor.
+- `INSERT_BLOCKS` in `tools/extract-pages.mjs` is how `/christmasmarket` got
+  its bar: navigation over the content, which the extractor cannot find in the
+  markup because it is not content. Only that one page this release.
+
+**Phase 4 — `/market` is five tabs.** Vendors · Page & copy · Money & dates ·
+Volunteers · Photos, switched by `?tab=`.
+- **⚠ A tab a reader cannot use is ABSENT, not disabled**, and the default is
+  the **first tab that reader can open** rather than a hardcoded Vendors —
+  otherwise the office person holding only `pages_edit` lands on an empty screen
+  and concludes the tab is broken. Asking for a tab by name that you cannot see
+  lands you on one you can.
+- **⚠ Only the active tab is BUILT.** Rendering all five and hiding four would
+  read seventy vendors' home addresses, every page's blocks and the volunteer
+  roster on every view — and put that PII in the markup of a tab somebody opened
+  to fix a photograph's description.
+- **Two more permissions reach the page**: `pages_edit` (Page & copy) and
+  `ministries_edit` or `pages_edit` (Photos), joining `market_manage`,
+  `settings_manage` and `giving_manage`. **Every mutating route still checks its
+  own** — `pages_edit` alone still gets a 403 from `/market/export.csv` and from
+  `/market/settings`.
+- **⚠ Page & copy does NOT reorder blocks**, and that is a deliberate departure
+  from the handoff's drag-to-reorder section list. Blocks are arranged in the
+  page editor, where the canvas shows the result; a second surface writing the
+  same `blocks` column is the two-forms-one-key trap. The list here is a
+  read-only table of contents beside a real link into the editor, plus a plain
+  statement of whether what a visitor sees is what is in the draft.
+- **⚠ Photos has NO uploader.** One upload path (`/api/upload-image`, from the
+  editor's own picker) and one `ministry_media` row per photograph is what makes
+  "used nowhere" and the size warnings on the Media screen true. What this tab
+  adds is the one thing the library cannot do: show only the market's
+  photographs and let a missing description be fixed without hunting.
+- **Volunteers is a read-only GET of `serve.timothystl.org`** — no single
+  sign-on, no write-back, and a **4-second timeout**, because an admin screen
+  must not sit waiting on another application. Roles sort most short-handed
+  first (sorted by name it is a list; sorted by what is missing it is a
+  worklist). ⚠ A reply whose shape this screen cannot read is treated as no
+  reply — a proxy answering 200 would otherwise draw four tiles of zeros and
+  present them as the roster. An unreachable Serve degrades to the button that
+  always works. **The endpoint is being built in the sibling `chms` repo; until
+  it exists this tab shows its honest empty state, which is the intended
+  behavior and not a defect.**
+- **The sidebar has a sixth group, `Events`** (`GROUPS` in `admin/helpers.js`),
+  holding Christmas Market and Gym Rentals — the two screens that are a thing
+  the church PUTS ON, a date and a room and people turning up. Giving and
+  Payroll stay under Money & Building, being the church's own money rather than
+  an event's. ⚠ The market's sidebar ROW is gated on any of the five permissions
+  now, or the page writer would have no way to reach the pages they own; the
+  unpaid-application badge still needs `market_manage`.
+
+**Run:** `node admin/blocks.test.mjs`, `node admin/market.test.mjs` (the price
+assertions are untouched — `market-price.js` was never edited),
+`node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
+(the five-tab group signs in as five different presets), `node
+test/market-vendor.test.mjs` (rewritten against the block-rendered apply page),
+`node test/site-edge-render.test.mjs`, and `node test/public-phone.test.mjs`,
+which measures the jump bar at 390px. Every new group was verified
+non-vacuous by injecting the regression it guards.
 ### Two more bugs in the jump-to-name feature, one of them site-wide (v5.22.0, 2026-08-17)
 
 Two follow-up reports, both real, both traced to the ground.

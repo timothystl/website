@@ -1459,6 +1459,21 @@ export function panelList({ id, reorderAction = '', rows = [], empty = 'Nothing 
   return `<div class="tlc-plist" id="${esc(id)}"${reorderAction ? ` data-sortlist="${esc(reorderAction)}"` : ''}>${body}</div>`;
 }
 
+/* A row of tabs across the top of one screen. Deliberately a row of real
+   LINKS with real addresses, not a script that shows and hides panels: the tab
+   somebody is on survives a refresh, can be bookmarked, and a redirect after
+   a save can land them back where they were saving. Only used where a screen
+   genuinely has several jobs and one nav row \u2014 the Christmas Market. */
+export const TABS_CSS = `
+.tlc-tabs{display:flex;gap:4px;flex-wrap:wrap;margin:0 0 20px;border-bottom:1px solid var(--tlc-divider);}
+.tlc-tab{display:inline-flex;align-items:center;min-height:44px;padding:10px 16px;
+  font:600 14px/1 var(--sans);color:var(--tlc-muted);text-decoration:none;
+  border-bottom:3px solid transparent;margin-bottom:-1px;}
+.tlc-tab:hover{color:var(--tlc-ink);}
+.tlc-tab.is-on{color:var(--tlc-ink);border-bottom-color:var(--tlc-navy,#1E2D4A);}
+.tlc-tab:focus-visible{outline:2px solid var(--tlc-navy,#1E2D4A);outline-offset:-2px;border-radius:8px;}
+`;
+
 export const PANEL_LIST_CSS = `
 .tlc-plist{display:flex;flex-direction:column;}
 .tlc-plist-empty{margin:0;padding:16px;font-size:13px;color:var(--tlc-muted);text-wrap:pretty;}

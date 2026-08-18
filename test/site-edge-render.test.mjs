@@ -67,6 +67,7 @@ group('the edge and the router agree on where a page lives');
   eq(pathForPageId('worship'), '/worship', 'an ordinary page is its own id');
   eq(pathForPageId('values'), '/about/values', 'and a nested one is nested');
   eq(pathForPageId('marketvendors'), '/christmasmarket/vendors', 'and so is the market application');
+  eq(pathForPageId('marketvendorsapply'), '/christmasmarket/vendors/apply', 'and the apply page the split added');
 
   // ⚠ THE ASSERTION THIS FILE EXISTS FOR. site-worker.js carries a mirror of
   // tlcPathFor() in public/index.html, because the SPA routes by page ID and
@@ -83,7 +84,7 @@ group('the edge and the router agree on where a page lives');
     // eslint-disable-next-line no-new-func
     const theirs = new Function('NESTED_PATHS', 'id', 'return ' + fn[1] + ';')
       .bind(null, JSON.parse(nested[1].replace(/(\w+):/g, '"$1":').replace(/'/g, '"')));
-    for (const id of ['home', 'worship', 'values', 'news', 'give', 'ministries', 'marketvendors']) {
+    for (const id of ['home', 'worship', 'values', 'news', 'give', 'ministries', 'marketvendors', 'marketvendorsapply']) {
       eq(pathForPageId(id), theirs(id), 'the two copies agree for ' + id);
     }
   }

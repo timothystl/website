@@ -774,6 +774,53 @@ export const PAGE_SEEDS = {
     },
     {
       "id": "christmasmarket-2",
+      "type": "jumplinks",
+      "title": "Jump to",
+      "subtitle": "",
+      "eyebrow": "",
+      "body": "",
+      "url": "/christmasmarket/vendors",
+      "spaceAbove": 0,
+      "spaceBelow": 0,
+      "gap": 32,
+      "height": 48,
+      "split": "40",
+      "side": "left",
+      "cols": 2,
+      "align": "left",
+      "width": "full",
+      "topRule": false,
+      "count": 3,
+      "locked": false,
+      "bg": 0,
+      "ink": 0,
+      "size": "m",
+      "photo": "",
+      "photoAlt": "",
+      "video": "",
+      "stamp": "",
+      "tone": 0,
+      "corner": "tr",
+      "hidden": false,
+      "anchorId": "",
+      "items": [
+        {
+          "title": "Volunteer at the market",
+          "url": "https://serve.timothystl.org/christmasmarket"
+        }
+      ],
+      "links": [],
+      "mode": "auto",
+      "sticky": true,
+      "card": "off",
+      "cardShows": "services",
+      "cardEyebrow": "",
+      "cardBody": "",
+      "cardLinks": [],
+      "buttonText": "Apply for a table"
+    },
+    {
+      "id": "christmasmarket-3",
       "type": "text",
       "title": "",
       "subtitle": "",
@@ -812,7 +859,7 @@ export const PAGE_SEEDS = {
       "cardLinks": []
     },
     {
-      "id": "christmasmarket-3",
+      "id": "christmasmarket-4",
       "type": "text",
       "title": "",
       "subtitle": "",
@@ -851,7 +898,7 @@ export const PAGE_SEEDS = {
       "cardLinks": []
     },
     {
-      "id": "christmasmarket-4",
+      "id": "christmasmarket-5",
       "type": "buttons",
       "title": "",
       "subtitle": "",
