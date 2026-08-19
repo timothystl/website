@@ -13,7 +13,7 @@
 // claims and the second one is what a new deploy actually hits.
 import { DatabaseSync } from 'node:sqlite';
 import { churchDate } from '../admin/when.js';
-import worker from '../tlc-admin-worker.js';
+import worker, { PAYROLL_RPC_FNS } from '../tlc-admin-worker.js';
 import { ALL_PERMISSIONS } from '../admin/auth.js';
 // ⚠ Read from the record rather than pinned to a literal hex. These assertions
 // are about "the preview shows the site's real bar, not a color that exists
@@ -27,6 +27,7 @@ import crypto from 'node:crypto';
 
 let pass = 0, fail = 0;
 const { readFileSync } = await import('node:fs');
+const payrollPage = readFileSync(new URL('../admin/payroll.html', import.meta.url), 'utf8');
 const { hasMetadata } = await import('../admin/exif.js');
 const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error('  ✗ ' + msg); } };
 const eq = (a, b, msg) => ok(a === b, `${msg} — expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`);
@@ -2621,6 +2622,239 @@ group('an approved payroll period is locked server-side');
   eq(unapprove.status, 200, 'the approval itself can still be removed');
 
   globalThis.fetch = realFetch;
+}
+
+group('the voters reports are public, and at least not indexable (FX-12)');
+{
+  // ⚠ THIS GROUP PINS A DECISION, NOT A FIX. There is no member login anywhere
+  // on timothystl.org, so /api/voters cannot be gated without building one —
+  // whether a Zoom link and a set of council reports should be behind a
+  // sign-in is the congregation's call. What IS closed is the crawler half:
+  // public/robots.txt governs timothystl.org and says nothing at all about
+  // this origin, so both were indexable the moment an address appeared
+  // anywhere crawlable.
+  const { db, env } = await boot();
+  db.prepare("INSERT INTO voters_page (id, meeting_info, zoom_link, files_json) VALUES (1,'Annual meeting','https://zoom.example/j/1','[]')").run();
+
+  const api = await call(env, '/api/voters');
+  eq(api.status, 200, 'the voters page still gets its data with no credential');
+  has(await api.text(), 'zoom.example', 'including the meeting link');
+  has(api.headers.get('x-robots-tag') || '', 'noindex', 'but it is not something to index');
+
+  // The default R2 stub answers null for everything; the point here is the
+  // headers on a hit, so give it one object to find.
+  env.IMAGES = { ...env.IMAGES, get: async () => ({ body: 'PDF', writeHttpMetadata(h) { h.set('Content-Type', 'application/pdf'); } }) };
+  const doc = await call(env, '/docs/report.pdf');
+  eq(doc.status, 200, 'and a council report still downloads');
+  has(doc.headers.get('x-robots-tag') || '', 'noindex', 'without becoming a search result');
+}
+
+group('the renter portal carries security headers of its own (FX-06)');
+{
+  // ⚠ THIS PAGE IS AUTHENTICATED BY A BEARER TOKEN IN ITS OWN URL, which makes
+  // it a different problem from every other page in this Worker: anything that
+  // leaks the address leaks the booking history behind it.
+  const { db, env } = await boot();
+  db.prepare("INSERT INTO gym_groups (id,name,contact,email,access_token,active) VALUES (8,'Hoops','A','a@b.example','tok8',1)").run();
+  const res = await worker.fetch(new Request('https://admin.timothystl.org/gym/book/tok8'), env, ctx);
+  eq(res.status, 200, 'the portal still serves');
+  const h = (k) => res.headers.get(k) || '';
+
+  // The Tithe.ly pay button opens in a new tab. Without a referrer policy the
+  // token travels to Tithe.ly in the Referer header of that navigation.
+  eq(h('referrer-policy'), 'no-referrer', 'no Referer leaves this page');
+  has(h('x-robots-tag'), 'noindex', 'a token URL pasted anywhere crawlable is not indexed');
+  has(h('cache-control'), 'no-store', 'one renter’s bookings are not left in a shared cache');
+  eq(h('x-content-type-options'), 'nosniff', 'and nothing here is sniffed into another type');
+  has(h('content-security-policy'), "frame-ancestors 'none'", 'the page with the POST actions cannot be framed');
+  has(h('content-security-policy'), "form-action 'self'", 'and its forms cannot be re-pointed');
+
+  // ⚠ rel="noopener noreferrer" is the other half of the Referer story — the
+  // header covers the request, this covers window.opener on the opened page.
+  // Asserted against the SOURCE rather than one rendered route: the pay links
+  // are on the invoice and booking views, and a test that happened to render
+  // the calendar would pass while saying nothing.
+  const gymSrc = readFileSync(new URL('../admin/gym.js', import.meta.url), 'utf8');
+  const blanks = [...gymSrc.matchAll(/<a\b[^>]*?target="_blank"[^>]*?>/g)].map((m) => m[0]);
+  ok(blanks.length >= 3, 'the portal really does open things in a new tab: ' + blanks.length);
+  for (const a of blanks) ok(/noopener/.test(a) && /noreferrer/.test(a), 'it opens safely: ' + a.slice(0, 110));
+
+  // The site's own crawler instruction, which is a different mechanism from
+  // the header and is the one Google reads before it ever requests the page.
+  const robots = readFileSync(new URL('../public/robots.txt', import.meta.url), 'utf8');
+  has(robots, 'Disallow: /gym/', 'and robots.txt keeps crawlers off the portal entirely');
+}
+
+group('a newsletter that has not been sent is not public (FX-07)');
+{
+  // ⚠ IDs ARE SEQUENTIAL, so "you would have to guess the id" is not a
+  // control. The list endpoint two routes above this one has always filtered
+  // on status; the single-issue route was SELECT * with no filter at all.
+  const { db, env } = await boot();
+  const nl = (id, subject, status, note, camp, appr) => db.prepare(
+    `INSERT INTO newsletters (id,subject,status,published_at,pastor_note,brevo_campaign_id,approval_status)
+     VALUES (?,?,?,?,?,?,?)`).run(id, subject, status, '2026-08-01', note, camp, appr);
+  nl(901, 'Draft under review', 'draft', '<p>Not sent yet.</p>', 'cmp-1', 'pending');
+  nl(902, 'This week', 'published', '<p>Real issue.</p>', 'cmp-2', 'approved');
+
+  const draft = await call(env, '/api/newsletter/901');
+  eq(draft.status, 404, 'a draft is not served at all');
+  lacks(await draft.text(), 'Not sent yet', 'and none of its words leak in the refusal');
+
+  const live = await call(env, '/api/newsletter/902');
+  eq(live.status, 200, 'a published issue still is');
+  const row = JSON.parse(await live.text());
+  has(row.subject, 'This week', 'with its content');
+
+  // ⚠ AND ONLY THE PUBLIC COLUMNS. SELECT * shipped the Brevo campaign id and
+  // the approval state to anybody who asked — internal bookkeeping about how
+  // an issue was sent, on a public endpoint.
+  ok(!('brevo_campaign_id' in row), 'the Brevo campaign id stays internal');
+  ok(!('approval_status' in row), 'so does who approved it');
+}
+
+group('an upload needs a reason to be uploading (FX-08)');
+{
+  // ⚠ Nothing ever deletes an R2 object, so this is not "can they write a
+  // file" — it is "can they host a file on the church's domain forever".
+  const { db, env } = await boot();
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const upload = async (cookie, route = '/api/upload-image', type = 'image/png') => {
+    const fd = new FormData();
+    fd.append('file', new Blob([png], { type }), 'x.png');
+    return worker.fetch(new Request('https://admin.timothystl.org' + route, {
+      method: 'POST', headers: { cookie, origin: 'https://admin.timothystl.org' }, body: fd,
+    }), env, ctx);
+  };
+
+  // The Bookkeeper preset is the honest case: a real account, a real job, and
+  // no business putting files on the website.
+  const money = signIn(db, ['payroll_manage', 'giving_manage'], 'book');
+  eq((await upload(money.cookie)).status, 403, 'somebody who edits no content cannot upload an image');
+  eq((await upload(money.cookie, '/api/upload-doc', 'application/pdf')).status, 403, 'nor a document');
+
+  // And the people whose screens have an image picker are unaffected — this
+  // must not become a gate the office runs into every day.
+  const leader = signIn(db, ['ministries_edit'], 'leader');
+  ok((await upload(leader.cookie)).status !== 403, 'a ministry leader still uploads');
+  const office = signIn(db, ['notices_edit'], 'office');
+  ok((await upload(office.cookie, '/api/upload-doc', 'application/pdf')).status !== 403, 'and the voters documents still upload');
+
+  // Signed out is still the first gate, not the second.
+  // Signed out is still the first gate, not the second. ⚠ The session gate
+  // answers every unauthenticated request with the login PAGE, at 200 — an API
+  // POST included — so the honest assertion is that what comes back is the
+  // login screen and not an upload result. (That the status is 200 rather than
+  // 401 on an API path is a pre-existing oddity of the gate, not of this fix.)
+  const out = await upload('');
+  const outBody = await out.text();
+  has(outBody, '<!DOCTYPE html>', 'signed out, the upload endpoint answers with the login page');
+  lacks(outBody, '"url"', 'and never with an uploaded file');
+}
+
+group('the payroll proxy no longer fingerprints its own secret (FX-09)');
+{
+  // A Worker secret is write-only from every tool that can reach this repo, so
+  // when the two sides disagreed there was genuinely no other way to see
+  // which. That mismatch is resolved, and what was left was a deliberate
+  // partial disclosure of a secret with no remaining reason.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ code: '28000', message: 'invalid secret' }), { status: 403 });
+
+  const call403 = (e) => worker.fetch(new Request('https://admin.timothystl.org/sb/rest/v1/rpc/payroll_get_staff', {
+    method: 'POST', headers: { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/json', apikey: 'k' },
+    body: '{}',
+  }), e, ctx);
+
+  const secret = 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
+  const withSecret = await (await call403({ ...env, PAYROLL_PROXY_SECRET: secret })).text();
+  lacks(withSecret, secret.slice(0, 6), 'the first characters of the secret are not in the response');
+  lacks(withSecret, secret.slice(-6), 'nor the last');
+  lacks(withSecret, String(secret.length), 'nor its length');
+
+  // ⚠ The half that still helps and reveals nothing SURVIVES: whether this
+  // Worker holds the secret at all. Removing that would have made an unset
+  // secret indistinguishable from a wrong one, which is the diagnosis the
+  // fingerprint existed for in the first place.
+  const unset = await (await call403({ ...env, PAYROLL_PROXY_SECRET: '' })).text();
+  has(unset, 'PAYROLL_PROXY_SECRET is not set', 'an unset secret still says so plainly');
+  has(unset, 'wrangler', 'and names the way out');
+
+  globalThis.fetch = realFetch;
+}
+
+group('the Supabase proxy forwards thirteen RPC calls and refuses everything else (FX-11)');
+{
+  // It used to forward ANY path under /sb/ to Supabase with the caller's key —
+  // an authenticated open relay onto the whole project (AW-7). The 2026-08-12
+  // migration left `anon` with no direct grant on any payroll table, which
+  // narrows the blast radius but is not the same guarantee: that is the
+  // credential happening not to be able to do much, and it is one Supabase
+  // GRANT away from being wrong again.
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const realFetch = globalThis.fetch;
+  let forwarded = [];
+  globalThis.fetch = async (input) => {
+    forwarded.push(typeof input === 'string' ? input : input.url);
+    return new Response('null', { status: 200 });
+  };
+  const H = { cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/json', apikey: 'k' };
+  const post = (p, body = '{}') => worker.fetch(new Request('https://admin.timothystl.org' + p,
+    { method: 'POST', headers: H, body }), env, ctx);
+
+  forwarded = [];
+  const ok13 = await post('/sb/rest/v1/rpc/payroll_get_staff');
+  eq(ok13.status, 200, 'an allowlisted RPC still goes through');
+  eq(forwarded.length, 1, 'and really reached Supabase');
+
+  // ⚠ The four tables the migration closed. A 403 HERE means the request was
+  // never forwarded at all, which is a different and stronger fact than
+  // Supabase refusing it on arrival.
+  forwarded = [];
+  for (const t of ['church_staff', 'church_staff_period_entries', 'payroll_periods', 'staff_pto_entries']) {
+    eq((await post('/sb/rest/v1/' + t)).status, 403, 'the ' + t + ' table is refused at the proxy');
+  }
+  eq((await post('/sb/rest/v1/rpc/some_other_function')).status, 403, 'so is an RPC that is not one of ours');
+  eq((await post('/sb/auth/v1/token')).status, 403, 'and so is the auth endpoint');
+  eq(forwarded.length, 0, 'and not one of them reached Supabase');
+
+  // ⚠ PostgREST executes an RPC on GET too, so allowing the method would put a
+  // payroll write one address bar away from a CSRF — the Origin gate only runs
+  // on non-GET requests.
+  forwarded = [];
+  const viaGet = await worker.fetch(new Request(
+    'https://admin.timothystl.org/sb/rest/v1/rpc/payroll_save_hours', { headers: { cookie } }), env, ctx);
+  eq(viaGet.status, 403, 'a GET at an allowlisted RPC is refused too');
+  eq(forwarded.length, 0, 'and never reached Supabase');
+
+  // ⚠ THE LIST IS EXACTLY WHAT THE PAGE CALLS, in both directions — a
+  // fourteenth call added to the page without being added here would 403 in
+  // front of somebody running payroll, which is a bad way to find out.
+  const called = new Set([...payrollPage.matchAll(/sb\.rpc\('([a-z_]+)'/g)].map((m) => m[1]));
+  const allowed = new Set(PAYROLL_RPC_FNS);
+  eq(called.size, 13, 'the page calls thirteen RPC functions');
+  for (const f of called) ok(allowed.has(f), 'the proxy allows ' + f + ', which the page calls');
+  for (const f of allowed) ok(called.has(f), 'the page calls ' + f + ', which the proxy allows');
+
+  globalThis.fetch = realFetch;
+}
+
+group('the admin shell states frame-ancestors, and no longer allows eval (FX-10)');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const csp = (await call(env, '/dashboard', { cookie })).headers.get('content-security-policy') || '';
+
+  // ⚠ frame-ancestors DOES NOT INHERIT FROM default-src. Every admin screen
+  // except the page editor — which sets its own — was framable.
+  has(csp, "frame-ancestors 'none'", 'an admin screen cannot be framed');
+  has(csp, "base-uri 'none'", 'and an injected base tag cannot re-point its assets');
+  ok(!/unsafe-eval/.test(csp), "and script-src no longer allows 'unsafe-eval': " + csp);
+  // The half that was already right, pinned so a rewrite cannot lose it.
+  has(csp, "'unsafe-inline'", 'inline script is still allowed, which the shell genuinely needs');
 }
 
 group('payroll access is gated on its own permission');

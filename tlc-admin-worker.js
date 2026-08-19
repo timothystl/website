@@ -235,6 +235,27 @@ function cleanSlug(s) {
   return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 48);
 }
 
+// The thirteen payroll RPC functions the /sb/ proxy will forward to Supabase,
+// and the only thing it will forward. See the gate in _fetch for why this is a
+// list rather than a prefix, and admin/escaping.test.mjs's sibling assertion
+// that it matches what admin/payroll.html actually calls.
+export const PAYROLL_RPC_FNS = [
+  'payroll_get_staff',
+  'payroll_get_period_entries',
+  'payroll_get_prior_pto',
+  'payroll_get_period_approval',
+  'payroll_get_mdo_staff',
+  'payroll_get_mdo_hours',
+  'payroll_get_mdo_clock_events',
+  'payroll_get_mdo_pto',
+  'payroll_approve_period',
+  'payroll_unapprove_period',
+  'payroll_save_hours',
+  'payroll_save_staff',
+  'payroll_deactivate_staff',
+];
+const PAYROLL_RPC_PATHS = new Set(PAYROLL_RPC_FNS.map((f) => '/sb/rest/v1/rpc/' + f));
+
 // The page editor is a full-viewport screen served as a static shell, so it
 // gets its own headers: never cached (a stale draft would silently undo an
 // edit), never indexed, and no frame-ancestors.
@@ -1301,6 +1322,30 @@ export default {
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': ADMIN_ORIGIN },
         });
       }
+      // ── WHAT THIS PROXY WILL FORWARD, AND NOTHING ELSE ──
+      // It used to forward any path under /sb/ to Supabase with the caller's
+      // key — an authenticated open relay onto the whole project (AW-7 in the
+      // July 2026 review). Much reduced once the 2026-08-12 migration left
+      // `anon` with no direct grant on any payroll table, but "the credential
+      // happens not to be able to do much" is a weaker guarantee than "the
+      // request was never forwarded", and it is one Supabase grant away from
+      // failing.
+      //
+      // ⚠ THE LIST IS EXACTLY WHAT admin/payroll.html CALLS — the thirteen
+      // payroll_* RPC functions, no more. A test reads the page and asserts
+      // the two sets are identical in both directions, so adding a fourteenth
+      // call without adding it here fails rather than 403ing in front of
+      // somebody running payroll.
+      //
+      // ⚠ POST ONLY. PostgREST executes an RPC on GET too, so allowing the
+      // method would put a payroll write one address bar away from a CSRF —
+      // the Origin gate below only runs on non-GET.
+      if (!(method === 'POST' && PAYROLL_RPC_PATHS.has(path))) {
+        return new Response(JSON.stringify({ error: 'Not available.', code: 'PROXY_PATH_REFUSED' }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': ADMIN_ORIGIN },
+        });
+      }
       if (method !== 'GET' && method !== 'HEAD') {
         const origin = request.headers.get('Origin') || '';
         const referer = request.headers.get('Referer') || '';
@@ -1405,30 +1450,26 @@ export default {
       resHeaders.set('Access-Control-Allow-Origin', ADMIN_ORIGIN);
       resHeaders.set('Cache-Control', 'no-store');
 
-      // ── "invalid secret" with no way to compare the two sides ──
-      // A Worker secret is write-only, by design, from every tool that can
-      // reach this repo — nothing here can read back what
-      // PAYROLL_PROXY_SECRET actually holds to compare it against Supabase's
-      // copy. So when the mismatch is exactly this error, the response is
-      // widened with a masked fingerprint of what THIS Worker is sending —
-      // length, first 6, last 6 — never the value itself. Visible only to a
-      // signed-in admin with payroll_manage, the same audience that already
-      // sees every figure on this screen and the hardcoded anon key in the
-      // page source (PY-4). Enough to see "it's empty" or "it's 71 chars,
-      // not 64" without ever putting the real secret in a response body.
       if (isPayrollRpc && supabaseRes.status === 403) {
         const bodyText = await supabaseRes.text();
-        if (/invalid secret/i.test(bodyText)) {
-          const sv = env.PAYROLL_PROXY_SECRET;
-          const fp = !sv ? 'PAYROLL_PROXY_SECRET is not set on this Worker at all'
-            : `as this Worker holds it: ${sv.length} chars, starts "${sv.slice(0, 6)}", ends "${sv.slice(-6)}"`;
-          let widened = bodyText;
-          try {
-            const parsed = JSON.parse(bodyText);
-            parsed.message = (parsed.message || '') + ` [${fp}]`;
-            widened = JSON.stringify(parsed);
-          } catch (_) { widened = bodyText + ` [${fp}]`; }
-          return new Response(widened, { status: supabaseRes.status, headers: resHeaders });
+        // ── FX-09: THE FINGERPRINT IS GONE ─────────────────────────────────
+        // This used to widen an "invalid secret" 403 with the LENGTH and the
+        // first and last six characters of PAYROLL_PROXY_SECRET. The reasoning
+        // was sound at the time and is worth keeping written down: a Worker
+        // secret is write-only from every tool that can reach this repo, so
+        // when the two sides disagreed there was no other way to see which.
+        //
+        // That mismatch is resolved — the secret is set and was verified
+        // against the live project — so what is left is a deliberate partial
+        // disclosure of a secret with no remaining reason. Twelve of
+        // sixty-four hex characters is not a practical break; it is simply not
+        // something to leave in a response body once the question it answered
+        // has been answered. What survives is the half that still helps and
+        // reveals nothing: whether this Worker holds the secret AT ALL.
+        if (/invalid secret/i.test(bodyText) && !env.PAYROLL_PROXY_SECRET) {
+          return new Response(JSON.stringify({
+            message: 'PAYROLL_PROXY_SECRET is not set on this Worker — see the Payroll section of CLAUDE.md for the wrangler command that sets it.',
+          }), { status: supabaseRes.status, headers: resHeaders });
         }
         return new Response(bodyText, { status: supabaseRes.status, headers: resHeaders });
       }
@@ -2900,6 +2941,18 @@ export default {
     }
 
     // ── PUBLIC: serve uploaded docs from R2 ──
+    // ⚠ THIS IS THE VOTERS ASSEMBLY'S COUNCIL REPORTS, AND IT IS PUBLIC.
+    // Nothing on timothystl.org has a member login, so the /voters page fetches
+    // /api/voters and links here with no credential of any kind — see the
+    // note on that endpoint below, and FX-12 in CLAUDE.md, which is a decision
+    // for the church rather than a bug in this code.
+    //
+    // What IS closed here is the crawler half: public/robots.txt keeps Google
+    // off timothystl.org/voters, but that file says nothing about
+    // admin.timothystl.org, so the PDFs themselves were indexable the moment
+    // one of these addresses appeared anywhere crawlable. An unlisted address
+    // is not an access control; an unlisted address in a search result is not
+    // even unlisted.
     if (path.startsWith('/docs/') && method === 'GET') {
       const key = 'docs-' + path.slice('/docs/'.length);
       const obj = await env.IMAGES.get(key);
@@ -2907,6 +2960,7 @@ export default {
       const headers = new Headers();
       obj.writeHttpMetadata(headers);
       headers.set('Cache-Control', 'public, max-age=3600');
+      headers.set('X-Robots-Tag', 'noindex, nofollow');
       return new Response(obj.body, { headers });
     }
 
@@ -3372,7 +3426,26 @@ export default {
     // ── PUBLIC: single newsletter ──
     if (path.startsWith('/api/newsletter/') && method === 'GET') {
       const id = path.split('/').pop();
-      const row = await env.DB.prepare('SELECT * FROM newsletters WHERE id = ?').bind(id).first();
+      // ── FX-07: PUBLISHED ONLY, AND NAMED COLUMNS ────────────────────────
+      // This was `SELECT *` with no status filter, answering `{...row}`. The
+      // list endpoint twenty lines above filters correctly, so the only way in
+      // was a guessed id — which is the whole surface, because ids are
+      // sequential. A draft under approval, and every internal column on it
+      // (brevo_campaign_id, approval_status, sent_count), was public.
+      //
+      // ⚠ Named columns rather than `SELECT *`: a column added later is
+      // private until somebody decides otherwise, which is the right default
+      // for a table carrying send state and approval history. This list is
+      // exactly what loadNewsletters()/loadNewsletterDetail() in
+      // public/index.html read, plus the id they link by.
+      const row = await env.DB.prepare(
+        `SELECT id, subject, pastor_note, secondary_note, wol_content, lasm_content,
+                tertiary_note, tertiary_cta_label, tertiary_cta_url,
+                ministry_content, ministry_type, published_at, format,
+                cta_url, cta_label, bible_classes, news_item_ids
+           FROM newsletters
+          WHERE id = ? AND (status IS NULL OR status = 'published')`
+      ).bind(id).first();
       if (!row) return new Response('Not found', { status: 404 });
       const evts = await env.DB.prepare('SELECT * FROM events WHERE newsletter_id = ? ORDER BY event_date, sort_order').bind(id).all();
 
@@ -3996,13 +4069,29 @@ h1{font-family:'Lora',Georgia,serif;font-size:32px;color:#1E2D4A;margin-bottom:6
     }
 
     // ── PUBLIC: voters page data ──
+    // ⚠ DELIBERATELY PUBLIC, AND NOT BECAUSE NOBODY LOOKED. The /voters page in
+    // public/index.html fetches this with no credential, and there is no member
+    // login anywhere on timothystl.org to gate it against — so "gate it" is a
+    // sign-in feature, not a header. Whether a Zoom link and a set of council
+    // reports should be behind one is the congregation's call; FX-12 in
+    // CLAUDE.md is where that decision belongs. Recorded here so the next
+    // reader knows it was weighed rather than missed.
     if (path === '/api/voters' && method === 'GET') {
       const row = await env.DB.prepare('SELECT * FROM voters_page WHERE id = 1').first();
       const data = row || { meeting_info: '', zoom_link: '', files_json: '[]' };
       let files = [];
       try { files = JSON.parse(data.files_json || '[]'); } catch(_) {}
       return new Response(JSON.stringify({ meeting_info: data.meeting_info || '', zoom_link: data.zoom_link || '', files }), {
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=60' }
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'public, max-age=60',
+          // robots.txt covers timothystl.org/voters and says nothing about this
+          // origin, so without this the meeting's Zoom link is a crawlable JSON
+          // document. Keeping it out of an index is worth doing whichever way
+          // the sign-in question above is answered.
+          'X-Robots-Tag': 'noindex, nofollow',
+        }
       });
     }
 
@@ -6248,7 +6337,33 @@ ${PAYROLL_HTML}`, 'Payroll');
     }
 
     // ── IMAGE UPLOAD TO R2 ──
+    // ── FX-08: AN UPLOAD NEEDS SOMETHING TO PUT THE FILE ON ────────────────
+    // Both uploaders checked that a session existed and nothing else, so ANY
+    // account could host arbitrary images and PDFs on admin.timothystl.org,
+    // permanently — nothing ever deletes an R2 object, as the Media screen's
+    // own delete message admits. That included a Market coordinator holding
+    // `market_manage` alone and a Bookkeeper holding the money permissions,
+    // neither of whom has a screen that uploads anything.
+    //
+    // ⚠ A SET, NOT ONE PERMISSION, and derived from where the uploader is
+    // actually wired rather than from what sounds tidy: the classic TinyMCE
+    // handler (every rich field — newsletter, news, sermons, ministries,
+    // notices), the block editor's picker, the news header image, the staff
+    // photo picker, the Appearance logo, the Partners logo, and the gym's own
+    // rich editor. Anything not on this list has no screen that can reach
+    // these routes, so gating it costs nothing and closes the hole.
+    const UPLOAD_IMAGE_PERMS = ['newsletter_edit', 'news_edit', 'ministries_edit',
+      'sermons_edit', 'pages_edit', 'pages_edit_own', 'notices_edit', 'staff_edit',
+      'gym_manage'];
+    // The voter-document uploader is on one screen only, behind one permission.
+    const UPLOAD_DOC_PERMS = ['notices_edit'];
+    const canAny = (perms) => perms.some((k) => hasPermission(currentUser, k));
+
     if (path === '/api/upload-image' && method === 'POST') {
+      if (!canAny(UPLOAD_IMAGE_PERMS)) {
+        return new Response(JSON.stringify({ error: 'Your account cannot upload images.' }),
+          { status: 403, headers: { 'Content-Type': 'application/json' } });
+      }
       const form = await request.formData();
       const file = form.get('file');
       if (!file || typeof file === 'string') {
@@ -6290,6 +6405,10 @@ ${PAYROLL_HTML}`, 'Payroll');
 
     // ── UPLOAD VOTER DOCUMENT TO R2 ──
     if (path === '/api/upload-doc' && method === 'POST') {
+      if (!canAny(UPLOAD_DOC_PERMS)) {
+        return new Response(JSON.stringify({ error: 'Your account cannot upload documents.' }),
+          { status: 403, headers: { 'Content-Type': 'application/json' } });
+      }
       const form = await request.formData();
       const file = form.get('file');
       if (!file || typeof file === 'string') return new Response(JSON.stringify({ error: 'No file' }), { status: 400, headers: { 'Content-Type': 'application/json' } });

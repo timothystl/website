@@ -309,13 +309,48 @@ async function addGymBookingToGCal(env, { booking_date, start_time, end_time, gr
 }
 
 // ── GROUP BOOKING PORTAL ─────────────────────────────────────
+// ── FX-06: THE PORTAL'S OWN HEADERS ─────────────────────────────────────────
+// This page shipped with a content type and nothing else. It is the one page
+// in this Worker that renders renter-supplied content and is handed to people
+// outside the church, and it is authenticated by a BEARER TOKEN IN THE URL —
+// which is what makes each of these worth setting rather than merely tidy:
+//
+//  · Referrer-Policy — the invoice view links out to Tithe.ly. Without this the
+//    browser sends `https://timothystl.org/gym/book/<token>` to Tithe.ly in the
+//    Referer header on every payment. (The `rel="noopener noreferrer"` added to
+//    those links covers the same thing from the other side, and kills the
+//    reverse-tabnabbing `window.opener` handle as well.)
+//  · X-Robots-Tag — a token URL pasted anywhere crawlable would otherwise be
+//    indexable. `Disallow: /gym/` in public/robots.txt is the other half.
+//  · Cache-Control — this shows one renter's booking history and their private
+//    link. It has no business in a shared cache.
+//  · frame-ancestors — the page carries real POST actions.
+//
+// ⚠ 'unsafe-inline' is in script-src because the booking calendar ships as an
+// inline <script> in the body, exactly as the admin shell does. That is not
+// what this CSP is for: what it buys is that NO EXTERNAL SCRIPT HOST can load
+// here at all, and that a form on this page cannot post anywhere but back to
+// this origin. Google Fonts is the one outside allowance, and it is style and
+// font only — no script host is reachable from this page at all.
+const PORTAL_HEADERS = {
+  'Content-Type': 'text/html; charset=utf-8',
+  'Cache-Control': 'no-store',
+  'Referrer-Policy': 'no-referrer',
+  'X-Robots-Tag': 'noindex, nofollow',
+  'X-Content-Type-Options': 'nosniff',
+  'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+    + "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+    + "font-src https://fonts.gstatic.com; img-src 'self' data:; "
+    + "connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+};
+
 function portalHtml(body, title = 'Gym Rental Portal') {
   return new Response(`<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${title}</title>
+<title>${escapeHtml(title)}</title>
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;600;700;800&family=Lora:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
 <style>
 /* ⚠ NOT the admin shell — this is the PUBLIC renter portal, a standalone
@@ -437,7 +472,7 @@ input:focus,select:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(201
 </style>
 </head>
 <body>${body}</body>
-</html>`, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+</html>`, { headers: PORTAL_HEADERS });
 }
 
 // GYM_SLOTS: all possible rentable hour slots (8 AM–9 PM), each [startHour, label]
@@ -581,7 +616,7 @@ export async function handleGymRoutes(path, method, url, request, env, currentUs
       const paymentLink = await getPaymentLink(env);
       const _alertAmt = url.searchParams.get('amount');
       const _payLink = _alertAmt ? `${paymentLink}&amount=${_alertAmt}` : paymentLink;
-      const _payBtn = `<div style="margin-top:12px;"><a href="${_payLink}" target="_blank" style="display:inline-block;background:#00DB72;color:white;font-weight:700;font-size:14px;padding:10px 28px;border-radius:8px;text-decoration:none;">Pay Invoice Online</a></div>`;
+      const _payBtn = `<div style="margin-top:12px;"><a href="${_payLink}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#00DB72;color:white;font-weight:700;font-size:14px;padding:10px 28px;border-radius:8px;text-decoration:none;">Pay Invoice Online</a></div>`;
       const portalAlert = (portalMsg || '').startsWith('holds') ? `<div class="alert alert-success">✓ ${_pc} hold${_pc===1?'':'s'} placed! The church office will review and confirm your dates — you'll receive an invoice by email once confirmed.${_ps > 0 ? ` (${_ps} slot${_ps===1?'':'s'} were already taken and skipped.)` : ''}</div>`
         : portalMsg === 'nohold' ? `<div class="alert alert-error">No slots could be booked — they may have been taken or blocked. Please choose different times.</div>`
         : portalMsg === 'noselect' ? `<div class="alert alert-error">No dates were selected. Please use the pattern selector or tap individual slots before submitting.</div>`
@@ -1638,7 +1673,7 @@ function calcTotal() {
     ${expireCountdown ? `<div style="font-size:12px;color:#B85C3A;margin-top:3px;font-weight:600;">⏳ ${expireCountdown}</div>` : ''}
   </div>
   <span style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;white-space:nowrap;background:${badgeBg};color:${badgeColor};">${badgeText}</span>
-  ${isHold ? `<button onclick="askCancelModal('${b.id}')" style="background:transparent;color:#B85C3A;border:1px solid #B85C3A;font-size:12px;font-weight:700;padding:8px 14px;border-radius:8px;cursor:pointer;">Cancel</button>` : `<a href="${payHref}" target="_blank" style="background:var(--sage);color:white;font-size:12px;font-weight:700;padding:8px 14px;border-radius:8px;text-decoration:none;">Pay Online</a>`}
+  ${isHold ? `<button onclick="askCancelModal('${b.id}')" style="background:transparent;color:#B85C3A;border:1px solid #B85C3A;font-size:12px;font-weight:700;padding:8px 14px;border-radius:8px;cursor:pointer;">Cancel</button>` : `<a href="${payHref}" target="_blank" rel="noopener noreferrer" style="background:var(--sage);color:white;font-size:12px;font-weight:700;padding:8px 14px;border-radius:8px;text-decoration:none;">Pay Online</a>`}
 </div>`;
             }).join('');
 
@@ -4945,7 +4980,7 @@ ${sidebarShell('gym', currentUser, `<a href="/gym-rentals/invoices">\u2190 Invoi
     <hr style="border:none;border-top:1px solid var(--border);margin:24px 0;">
     <div style="background:var(--linen);border-radius:8px;padding:16px 20px;">
       <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--amber);margin-bottom:10px;">Payment</div>
-      <div style="text-align:center;margin-bottom:14px;"><a href="${paymentLink}&amount=${Math.round(total * 100)}" target="_blank" style="display:inline-block;background:#00DB72;color:white;font-weight:700;font-size:15px;padding:12px 36px;border-radius:6px;text-decoration:none;">Pay Online \u2192</a></div>
+      <div style="text-align:center;margin-bottom:14px;"><a href="${paymentLink}&amount=${Math.round(total * 100)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#00DB72;color:white;font-weight:700;font-size:15px;padding:12px 36px;border-radius:6px;text-decoration:none;">Pay Online \u2192</a></div>
       <div style="font-size:13px;color:var(--gray);text-align:center;margin-bottom:10px;">\u2014 or \u2014</div>
       <div style="font-size:14px;color:var(--charcoal);line-height:1.75;">Make check payable to <strong>Timothy Lutheran Church</strong> and bring to the office or mail to 6704 Fyler Ave, St. Louis, MO 63139.</div>
     </div>
