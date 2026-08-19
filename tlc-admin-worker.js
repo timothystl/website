@@ -1731,7 +1731,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-19-4'; // bumped: calendar_categories, the editable calendar category table
+    const SCHEMA_VERSION = '2026-08-19-5'; // bumped: news_items.calendar_category, so a post can say what it is on the calendar
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -2327,6 +2327,12 @@ export default {
     // would put words in the church's mouth.
     try { await env.DB.prepare('ALTER TABLE youth_pages ADD COLUMN value TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN value TEXT').run(); } catch (_) {}
+    // ⚠ WHAT A POST IS ON THE CALENDAR, said outright rather than guessed from
+    // the value tag. The four values only ever reached three of the calendar's
+    // categories, so a post could never be marked as a meeting or a rehearsal —
+    // it silently became "Special events". Blank still means "work it out from
+    // the value tag", so nothing already written changes.
+    try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN calendar_category TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE bible_classes ADD COLUMN value TEXT').run(); } catch (_) {}
     // Menu visibility, separate from published state. Taking a ministry out of
     // the header must not unpublish it — the page stays live at its address,
@@ -8215,6 +8221,13 @@ ${sidebarShell('news', currentUser, `<a href="https://timothystl.org/news" targe
     // New and Edit were two near-identical copies of the same 90 lines, on the
     // old chrome. One builder now, through the shared form renderer, so a post
     // opened from the redesigned list stays in the redesign.
+    // The live category list, for the picker below. Read once per render
+    // rather than per field, and falling back to the shipped list so the form
+    // still offers something sensible if the table cannot be read.
+    const newsCalCats = activeCategories(mergedCategories(
+      ((await env.DB.prepare('SELECT key, name, color_id, palette, sort_order, active FROM calendar_categories')
+        .all().catch(() => ({ results: [] }))).results) || []
+    ));
     const newsFormHtml = (item = null) => {
       const isNew = !item;
       const today = churchDate();
@@ -8243,6 +8256,14 @@ ${sidebarShell('news', currentUser, `<a href="https://timothystl.org/news" targe
           // it, but no form ever set one — so every post was untagged and the
           // filter could never match. Same shape of bug as the tap counter.
           { kind: 'html', html: `<div class="tlc-field"><label class="tlc-label">Value</label>${valueChips('value', item ? item.value : null)}<p class="tlc-hint">Which of the four this post serves. Used by the filters and the values report.</p></div>` },
+          // ⚠ Only offered on a post that HAS an event date, because only
+          // those reach the calendar at all. Offering it on an announcement
+          // would be a control that looks live and does nothing.
+          { kind: 'choice', name: 'calendar_category', label: 'On the calendar, this is',
+            value: item ? (item.calendar_category || '') : '',
+            options: [{ value: '', label: '— work it out from the value above —' }]
+              .concat(newsCalCats.map((c) => ({ value: c.key, label: c.name }))),
+            hint: 'Only used when the post has an event date. Sets which category it files under on the church calendar — the same list a Google event\u2019s color chooses from. Change the list under Pages \u2192 Calendar.' },
           { kind: 'html', html: tinymceEditorSection(item ? (item.body || '') : '') },
           { kind: 'html', html: `<div class="tlc-field"><label class="tlc-label">Header image</label>
             <input type="hidden" name="image_url" id="image_url_val" value="">
@@ -8300,8 +8321,8 @@ ${newsImageUploadScript()}`, 'New post — TLC Admin', TINYMCE_HEAD);
         form.get('ch_social') === '1' && 'social',
       ].filter(Boolean).join(',') || 'web';
       const newItemResult = await env.DB.prepare(
-        'INSERT INTO news_items (title, summary, body, image_url, publish_date, event_date, expire_date, pinned, theme, content_type, channels, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(title, summary, body, image_url, publish_date, event_date || null, expire_date || null, pinned, theme || null, content_type || null, channels, normalizeValue(form.get('value')) || null).run();
+        'INSERT INTO news_items (title, summary, body, image_url, publish_date, event_date, expire_date, pinned, theme, content_type, channels, value, calendar_category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(title, summary, body, image_url, publish_date, event_date || null, expire_date || null, pinned, theme || null, content_type || null, channels, normalizeValue(form.get('value')) || null, String(form.get('calendar_category') || '').trim() || null).run();
       await logAudit(env.DB, currentUser, 'create', 'news_item', newItemResult.meta.last_row_id, title, null, { title, summary, publish_date, expire_date, pinned });
       return new Response('', { status: 302, headers: { Location: '/newsitems?msg=saved' } });
     }
@@ -8344,8 +8365,8 @@ ${newsImageUploadScript(item.image_url || '')}`, 'Edit post — TLC Admin', TINY
       ].filter(Boolean).join(',') || 'web';
       const beforeItem = await env.DB.prepare('SELECT title, summary, body, image_url, publish_date, event_date, expire_date, pinned FROM news_items WHERE id = ?').bind(id).first();
       await env.DB.prepare(
-        'UPDATE news_items SET title=?, summary=?, body=?, image_url=?, publish_date=?, event_date=?, expire_date=?, pinned=?, theme=?, content_type=?, channels=?, value=? WHERE id=?'
-      ).bind(title, summary, body, image_url, publish_date, event_date || null, expire_date || null, pinned, theme || null, content_type || null, channels, normalizeValue(form.get('value')) || null, id).run();
+        'UPDATE news_items SET title=?, summary=?, body=?, image_url=?, publish_date=?, event_date=?, expire_date=?, pinned=?, theme=?, content_type=?, channels=?, value=?, calendar_category=? WHERE id=?'
+      ).bind(title, summary, body, image_url, publish_date, event_date || null, expire_date || null, pinned, theme || null, content_type || null, channels, normalizeValue(form.get('value')) || null, String(form.get('calendar_category') || '').trim() || null, id).run();
       await logAudit(env.DB, currentUser, 'update', 'news_item', id, title, beforeItem, { title, summary, publish_date, expire_date, pinned });
       return new Response('', { status: 302, headers: { Location: '/newsitems?msg=saved' } });
     }

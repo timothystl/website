@@ -4835,5 +4835,46 @@ group('the category screen is gated, like every other page screen');
     form: { name: 'Hijacked', palette: 'gray' } })).status, 403, 'and so is the save route, not just the screen');
 }
 
+group('a news post says what it is on the calendar, rather than having it guessed');
+{
+  const { db, env } = await boot();
+  const admin = signIn(db, ALL_PERMISSIONS);
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ items: [] }) });
+  try {
+    env.GCAL_API_KEY = 'test-key';
+    db.prepare("INSERT INTO site_settings (key, value) VALUES ('calendar_google_ids','one@group.calendar.google.com') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+
+    // The form offers the live categories, not a hardcoded list.
+    const form = await (await call(env, '/newsitems/new', { cookie: admin.cookie })).text();
+    ok(form.includes('On the calendar, this is'), 'the post form asks what it is on the calendar');
+    ok(form.includes('Meetings') && form.includes('Music'), 'and offers the categories the calendar actually has');
+
+    // ⚠ THE CASE THAT WAS IMPOSSIBLE BEFORE. The four values only ever reached
+    // three of the calendar's categories, so a council meeting with a date on
+    // it silently became "Special events" whatever anybody did.
+    const made = await call(env, '/newsitems/create', { cookie: admin.cookie, method: 'POST', form: {
+      title: 'Council meeting', summary: 'In the fellowship hall.',
+      publish_date: '2026-08-01', event_date: '2026-08-11', expire_date: '2026-12-31',
+      calendar_category: 'meetings', ch_web: '1',
+    } });
+    eq(made.status, 302, 'the post saves');
+    let feed = await (await call(env, '/api/calendar?month=2026-08', { fresh: true })).json();
+    const ev = feed.events.find((e) => e.title === 'Council meeting');
+    ok(ev, 'and reaches the calendar');
+    eq(ev.category, 'meetings', 'filed where the office said, not where the value tag would have put it');
+
+    // A post with no category set still falls back to the old guess, so
+    // nothing written before this field existed moves.
+    await call(env, '/newsitems/create', { cookie: admin.cookie, method: 'POST', form: {
+      title: 'Rally Day', summary: 'Come along.', publish_date: '2026-08-01',
+      event_date: '2026-08-12', expire_date: '2026-12-31', value: 'worship', ch_web: '1',
+    } });
+    feed = await (await call(env, '/api/calendar?month=2026-08', { fresh: true })).json();
+    eq(feed.events.find((e) => e.title === 'Rally Day').category, 'worship',
+      'an untagged post still follows its value, exactly as before');
+  } finally { globalThis.fetch = realFetch; }
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
