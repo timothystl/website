@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#FAF7F1;color:#1A1A2A;font-family:'Source Sans 3',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
+a{color:#2E7EA6;text-decoration:none;}
+a:hover{color:#1D3557;text-decoration:underline;}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:#F4EFE5;border-radius:4px;padding:1px 5px;}
+</style>
+</helmet>
+
+<div style="max-width:1040px;margin:0 auto;padding:56px 32px 90px;">
+
+  <header style="border-bottom:2px solid #1D3557;padding-bottom:18px;margin-bottom:34px;">
+    <div style="font:700 11px/1 'Source Sans 3',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#C9973A;margin-bottom:10px;">Design handoff · Christmas Market admin</div>
+    <h1 style="font:500 40px/1.12 'Lora',Georgia,serif;color:#1D3557;">The vendor list and the volunteer roster</h1>
+    <p style="margin-top:12px;font-size:16px;line-height:1.6;color:#4A4860;max-width:44em;text-wrap:pretty;">Two tabs of <code>/market</code> change. The vendor list stops sending the coordinator to a drawer for every edit and learns to sort and to track a check; the volunteer tab stops being one long read-only list and becomes four views of the same roster, all of them printable.</p>
+    <p style="margin-top:14px;font-size:13.5px;color:#8A8271;">Prototype: <a href="Market%20Admin.dc.html">Market Admin.dc.html</a> · source read from <code>admin/market.js</code>, <code>admin/ui.js</code>, <code>admin/helpers.js</code>, <code>admin/sections.js</code> · shift data from the Serve screenshots for Fri Dec 4 / Sat Dec 5.</p>
+  </header>
+
+  <section style="margin-bottom:52px;">
+    <h2 style="font:500 27px/1.2 'Lora',Georgia,serif;color:#1D3557;margin-bottom:8px;">What was wrong</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
+      <div style="border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;padding:16px 18px;">
+        <div style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;margin-bottom:8px;">Vendors</div>
+        <p style="font-size:14px;line-height:1.65;color:#4A4860;text-wrap:pretty;">Every change — a table number, a payment state — meant opening the drawer, saving, and landing back at the top of the list. Nothing could be sorted. A vendor paying by check had nowhere to record that the check arrived, so “awaiting check” and “never paid” looked identical.</p>
+      </div>
+      <div style="border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;padding:16px 18px;">
+        <div style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;margin-bottom:8px;">Volunteers</div>
+        <p style="font-size:14px;line-height:1.65;color:#4A4860;text-wrap:pretty;">One panel per role, and nothing else. A job lead could not be handed their own people for the day, and there was no way to see who is on site at 1 PM, or who is coming at all — which is what the welcome table and the kitchen actually need.</p>
+      </div>
+    </div>
+  </section>
+
+  <section style="margin-bottom:52px;">
+    <h2 style="font:500 27px/1.2 'Lora',Georgia,serif;color:#1D3557;margin-bottom:8px;">Vendors — the row is the form</h2>
+    <p style="font-size:15px;line-height:1.7;color:#4A4860;max-width:44em;margin-bottom:8px;text-wrap:pretty;">Category, tables, table number, payment state, check number and check date are all edited in place. Each cell saves on its own and writes to the audit log exactly as <code>/market/update</code> does today. The chevron opens the rest of the application underneath the row — what they sell, contact details, amount paid, staff notes — so the drawer is gone entirely.</p>
+    <ul style="margin:0 0 18px 20px;font-size:15px;line-height:1.9;color:#4A4860;">
+      <li>Every column header sorts, ascending then descending. Default is <strong>Category</strong>, then vendor name.</li>
+      <li><strong>Category</strong> is a new per-vendor field — product descriptions are free text and sort by whatever word they happen to start with.</li>
+      <li>A new filter, <strong>Awaiting check</strong>, and a fourth tile, <strong>Checks not in yet</strong>.</li>
+      <li><strong>✓ In</strong> stamps today’s date, records the check, and flips the row to Paid in one click.</li>
+    </ul>
+    <img src="screenshots/05-hp.png" alt="The vendor table with a row expanded in place" style="width:100%;display:block;border:1px solid #E7DFD1;border-radius:10px;">
+    <p style="font-size:13px;color:#8A8271;margin:8px 0 22px;">Sorted by category; the third row is expanded in place instead of opening a drawer. The table scrolls horizontally below about 1130px, so nothing is hidden.</p>
+    <img src="screenshots/01-vend.png" alt="Awaiting check filter" style="width:100%;display:block;border:1px solid #E7DFD1;border-radius:10px;">
+    <p style="font-size:13px;color:#8A8271;margin-top:8px;">The <em>Awaiting check</em> filter — the two vendors who said they would send a check and have not.</p>
+  </section>
+
+  <section style="margin-bottom:52px;">
+    <h2 style="font:500 27px/1.2 'Lora',Georgia,serif;color:#1D3557;margin-bottom:8px;">Volunteers — four views of one roster</h2>
+    <p style="font-size:15px;line-height:1.7;color:#4A4860;max-width:44em;margin-bottom:22px;text-wrap:pretty;">The tab stays a read-only window on Serve. What changes is that the same roster can be looked at four ways, and each way prints. A day switch sits above them — Friday setup and Saturday market are different days with different crews.</p>
+
+    <h3 style="font:600 15px/1.3 'Source Sans 3',sans-serif;color:#1A1A2A;margin-bottom:8px;">1 · By job</h3>
+    <p style="font-size:14.5px;line-height:1.65;color:#4A4860;max-width:44em;margin-bottom:10px;">A panel per job, most short-handed first, with the lead named and a <em>Sheet</em> button that prints that lead’s page alone.</p>
+    <img src="screenshots/handoff-vol-byjob.png" alt="Volunteers by job" style="width:100%;display:block;border:1px solid #E7DFD1;border-radius:10px;margin-bottom:26px;">
+
+    <h3 style="font:600 15px/1.3 'Source Sans 3',sans-serif;color:#1A1A2A;margin-bottom:8px;">2 · By time</h3>
+    <p style="font-size:14.5px;line-height:1.65;color:#4A4860;max-width:44em;margin-bottom:10px;">Slot by slot down the day, every job running in that slot side by side, with a “short” count per slot.</p>
+    <img src="screenshots/handoff-vol-bytime.png" alt="Volunteers by time slot" style="width:100%;display:block;border:1px solid #E7DFD1;border-radius:10px;margin-bottom:26px;">
+
+    <h3 style="font:600 15px/1.3 'Source Sans 3',sans-serif;color:#1A1A2A;margin-bottom:8px;">3 · Grid — clean hour increments, either way round</h3>
+    <p style="font-size:14.5px;line-height:1.65;color:#4A4860;max-width:44em;margin-bottom:10px;">The axis toggle decides what runs across the top. Rows and columns are whole hours; a shift is one block that starts and ends at its real minute, so a 7:30–11:00 shift covers three and a half hours and a 9:00–11:00 job beside it covers two. Green is covered, amber short, red nobody yet.</p>
+    <img src="screenshots/handoff-vol-grid-jobs.png" alt="Grid with jobs across the top" style="width:100%;display:block;border:1px solid #E7DFD1;border-radius:10px;">
+    <p style="font-size:13px;color:#8A8271;margin:8px 0 26px;">Jobs across the top, hours down the side. Twenty-two Saturday jobs, so it scrolls sideways. Flipping the toggle to <em>Time slots</em> turns this on its side — jobs down the left, hours across — which is the orientation the printed sheet below uses; see it whole there.</p>
+
+    <h3 style="font:600 15px/1.3 'Source Sans 3',sans-serif;color:#1A1A2A;margin-bottom:8px;">4 · Everybody</h3>
+    <p style="font-size:14.5px;line-height:1.65;color:#4A4860;max-width:44em;margin-bottom:10px;">Alphabetical: each person, when they arrive, when they can go home, total hours, and every shift they hold. This is the welcome-table list.</p>
+    <img src="screenshots/handoff-vol-everybody.png" alt="Master list of everybody coming" style="width:100%;display:block;border:1px solid #E7DFD1;border-radius:10px;">
+  </section>
+
+  <section style="margin-bottom:52px;">
+    <h2 style="font:500 27px/1.2 'Lora',Georgia,serif;color:#1D3557;margin-bottom:8px;">Printing</h2>
+    <p style="font-size:15px;line-height:1.7;color:#4A4860;max-width:44em;margin-bottom:18px;text-wrap:pretty;">Four print buttons, each opening a preview of exactly what comes out: <strong>job-lead sheets</strong> (one page each), <strong>master list</strong>, <strong>by time slot</strong>, and <strong>the grid</strong> — which prints in whichever orientation is on screen, with the same hour blocks.</p>
+    <img src="screenshots/handoff-print-grid-jobs.png" alt="The printed grid" style="width:100%;display:block;border:1px solid #E7DFD1;border-radius:10px;">
+    <p style="font-size:13px;color:#8A8271;margin:8px 0 22px;">The whole Saturday on one landscape sheet.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;">
+      <div>
+        <img src="screenshots/handoff-print-lead.png" alt="A job lead's sheet" style="width:100%;display:block;border:1px solid #E7DFD1;border-radius:10px;">
+        <p style="font-size:13px;color:#8A8271;margin-top:8px;">One page per lead — their shifts, their people.</p>
+      </div>
+      <div>
+        <img src="screenshots/handoff-print-master.png" alt="The master list sheet" style="width:100%;display:block;border:1px solid #E7DFD1;border-radius:10px;">
+        <p style="font-size:13px;color:#8A8271;margin-top:8px;">Everybody coming, with arrival and last shift.</p>
+      </div>
+    </div>
+  </section>
+
+  <section style="margin-bottom:52px;">
+    <h2 style="font:500 27px/1.2 'Lora',Georgia,serif;color:#1D3557;margin-bottom:8px;">Export CSV</h2>
+    <p style="font-size:15px;line-height:1.7;color:#4A4860;max-width:44em;text-wrap:pretty;">A button on the Volunteers tab writes one row per person per shift across both days, plus a row for every unfilled spot marked <code>(open)</code>. Columns: Day, Date, Job, Job lead, Start, End, Hours, Person, Spots filled, Spots needed, Status. Cells starting <code>= + - @</code> are escaped the same way the vendor CSV already does it, so the file is safe to hand to anybody with a spreadsheet.</p>
+  </section>
+
+  <section style="margin-bottom:52px;">
+    <h2 style="font:500 27px/1.2 'Lora',Georgia,serif;color:#1D3557;margin-bottom:14px;">What the build needs</h2>
+    <div style="border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;overflow:hidden;">
+      <div style="display:grid;grid-template-columns:1.15fr 2fr;gap:14px;padding:11px 18px;background:#F4EFE5;border-bottom:1px solid #E7DFD1;">
+        <span style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;">Where</span>
+        <span style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;">Change</span>
+      </div>
+      <sc-for list="{{ notes }}" as="n" hint-placeholder-count="7">
+        <div style="display:grid;grid-template-columns:1.15fr 2fr;gap:14px;padding:12px 18px;border-bottom:1px solid #EFE7D9;align-items:start;">
+          <span style="font:600 13px/1.45 'Source Sans 3',sans-serif;color:#1A1A2A;overflow-wrap:anywhere;">{{ n.where }}</span>
+          <span style="font-size:13.5px;line-height:1.6;color:#4A4860;text-wrap:pretty;">{{ n.what }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section>
+    <h2 style="font:500 27px/1.2 'Lora',Georgia,serif;color:#1D3557;margin-bottom:8px;">Still to confirm</h2>
+    <ul style="margin:10px 0 0 20px;font-size:15px;line-height:1.9;color:#4A4860;">
+      <li>Job leads in the prototype are invented — the real names need to come from somewhere, most likely a field in Serve.</li>
+      <li>Vendor categories are invented too, and the list itself (ten of them) is a first guess.</li>
+      <li>Whether a recorded check should set the payment state to Paid automatically, as it does here, or wait for the coordinator to confirm the deposit.</li>
+    </ul>
+  </section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const NOTES = [
+  { where: 'site_event_registrations · fields_json',
+    what: 'Two new fields on the market’s own shape: check_no and check_date. A third, category, from a fixed list. All three are optional and absent on every existing row.' },
+  { where: 'admin/market.js · /market/update',
+    what: 'Accept a single field per POST rather than the whole drawer, so a cell can save on its own; keep the existing audit entry per change. Recording a check number sets payment_status to paid and amount_paid_cents to amount_due_cents.' },
+  { where: 'admin/market.js · vendors tab',
+    what: 'Replace renderListSection + renderDrawer with the inline table. Sorting is client-side over the rows already rendered — no new query.' },
+  { where: 'admin/sections.js · SECTIONS.market',
+    what: 'New column set (Vendor, Category, Sells, Tbls, Table #, Payment, Check or cash) and a fifth filter, “Awaiting check”.' },
+  { where: 'Serve · /api/signups/christmasmarket/summary',
+    what: 'The tab needs structured times, not a label: each shift wants start and end (ISO or 24h), a day, and the job lead. Everything else this design shows is derived from those.' },
+  { where: 'admin/market.js · new /market/volunteers.csv',
+    what: 'Server-side twin of the CSV button, same columns, gated market_manage — the roster carries names and belongs behind the coordinator’s own permission.' },
+  { where: 'Print',
+    what: 'The sheets are plain markup with a landscape @page rule; no new library. Everything not printed carries data-noprint.' },
+];
+
+class Component extends DCLogic {
+  renderVals() {
+    return { notes: NOTES };
+  }
+}
+</script>
+</body>
+</html>

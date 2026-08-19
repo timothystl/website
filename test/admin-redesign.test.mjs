@@ -79,10 +79,14 @@ async function boot() {
 // request has its own — but this harness shares one ctx across the whole file,
 // so without this a second /api/pages would serve the first one's answer
 // forever and a test could never see a change take effect.
-async function call(env, path, { cookie = '', method = 'GET', form = null, fresh = false } = {}) {
+async function call(env, path, { cookie = '', method = 'GET', form = null, fresh = false, accept = '' } = {}) {
   const headers = new Headers();
   if (cookie) headers.set('cookie', cookie);
   headers.set('origin', 'https://admin.timothystl.org');
+  // A route that answers a browser's fetch() differently from a form post
+  // needs the header that tells the two apart — the market's inline cells are
+  // the first of those.
+  if (accept) headers.set('accept', accept);
   let body;
   if (form) {
     body = new URLSearchParams(form).toString();
@@ -3490,7 +3494,7 @@ async function applyAsVendor(env, over = {}) {
 // AND ITS APPLICATIONS ARE `site_event_registrations` ROWS, NOT
 // `market_vendors` ONES — see admin/events.js and the ONE-TIME migration in
 // tlc-admin-worker.js. Every group below still asserts the identical
-// user-facing behaviour (the routes, the forms, the redirects, the numbers a
+// user-facing behavior (the routes, the forms, the redirects, the numbers a
 // vendor is shown); only the SQL a test reads the result back with changed,
 // because the storage genuinely moved.
 const marketEvent = (db) => db.prepare("SELECT * FROM site_events WHERE id='christmasmarket'").get();
@@ -3591,7 +3595,17 @@ group('the coordinator’s list');
   has(body, 'Marla Kerr', 'the vendor appears');
   has(body, 'Beeswax candles', 'with what they sell');
   has(body, 'Not paid yet', 'and their payment state');
-  has(body, 'their space is not held', 'an unpaid row grows a warning row saying what that costs');
+  // ⚠ THE ROW IS THE FORM NOW, so the per-row warning band the list section
+  // used to grow under every unpaid vendor is gone — seventy of those under a
+  // dense table is a screen nobody can read, and the tiles above already
+  // count them. What must NOT be lost is the SENTENCE: somebody who applied
+  // and never finished at the card page is the one thing this screen exists
+  // to surface, because the Google Form it replaced could not see them at
+  // all. It is said once, over the list, with the filter that isolates them
+  // one click away.
+  has(body, 'no payment recorded', 'the unpaid case is still named over the list');
+  has(body, 'Their spaces are not held', 'and still says what that costs');
+  has(body, 'data-mktfilter="unpaid"', 'with one click to only those');
 
   // Recording a payment is what the screen is for.
   const saveRes = await call(env, '/market/update', {
@@ -3624,6 +3638,273 @@ group('the coordinator’s list');
   await applyAsVendor(env, { email: 'sue@example.com' });
   const withUnpaid = await (await call(env, '/market', { cookie })).text();
   has(withUnpaid, 'sidebar-badge', 'an unpaid application puts a badge on the sidebar');
+}
+
+
+// ── THE ROW IS THE FORM ──────────────────────────────────────────────────────
+// The drawer is gone. Every change the coordinator makes seventy times a
+// season — a table number, a category, a payment state, a check that arrived
+// — is made in the row and saves on its own. What is worth testing is not
+// that the markup exists; it is that each of those single-field POSTs writes
+// exactly what it says and nothing else, and that a field name arriving in a
+// request cannot become a column name.
+group('a vendor row edits in place');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  await applyAsVendor(env, { product_description: 'Beeswax candles', tables: '1' });
+  const id = db.prepare("SELECT id FROM site_event_registrations WHERE event_id='christmasmarket'").get().id;
+  const reg = () => db.prepare('SELECT * FROM site_event_registrations WHERE id = ?').get(id);
+  const fields = () => JSON.parse(reg().fields_json || '{}');
+  const cell = (field, value) => call(env, '/market/update', {
+    cookie, method: 'POST', accept: 'application/json',
+    form: { id: String(id), field, value: value == null ? '' : String(value) },
+  });
+
+  const body = await (await call(env, '/market', { cookie })).text();
+  has(body, 'data-cell="1"', 'the cells in the row are editable');
+  has(body, 'data-sort="category"', 'every column header sorts');
+  has(body, 'data-mktfilter="check"', 'and Awaiting check is one of the filters');
+  lacks(body, 'tlc-drawer', 'the drawer is gone — nothing opens a panel to change a number');
+
+  // ── One field at a time ──
+  const one = await cell('table_number', '19/20');
+  eq(one.status, 200, 'a single cell saves on its own');
+  eq(JSON.parse(await one.clone().text()).ok, true, 'and answers that it did');
+  eq(reg().table_number, '19/20', 'writing exactly that field');
+  eq(reg().payment_status, 'unpaid', '⚠ and touching nothing else — a whole-row write would have reset this');
+
+  await cell('category', 'Candles & soap');
+  eq(fields().category, 'Candles & soap', 'a category is stored on the application');
+  eq(fields().product_description, 'Beeswax candles',
+    '⚠ merged into fields_json, never replacing it — a save here cannot drop what the vendor typed');
+  await cell('category', 'Antiques & oddities');
+  eq(fields().category, 'Other', 'a category that is not on the list clamps to Other rather than being stored raw');
+
+  // ⚠ MARKING A ROW PAID RECORDS THE AMOUNT ASKED. Without it the row reads
+  // "Paid" over "asked $46.65", and the "Recorded as paid" tile — which sums
+  // amount_paid_cents — stays at zero however many rows are marked, so the
+  // reconciliation reads short for a reason nobody can find.
+  await cell('payment_status', 'paid');
+  eq(reg().amount_paid_cents, reg().amount_due_cents, 'marking a row paid records the amount asked');
+  // ⚠ And never over an amount somebody typed: a partial payment is a fact.
+  await cell('amount_paid', '20.00');
+  await cell('payment_status', 'unpaid');
+  await cell('payment_status', 'paid');
+  eq(reg().amount_paid_cents, 2000, 'but an amount already recorded is left exactly as it was');
+  // ⚠ And only `paid` does it — a waived fee and a vendor who dropped out
+  // both mean no money arrived, so recording one would make the collected
+  // figure include money the church never had.
+  await cell('amount_paid', '');
+  await cell('payment_status', 'waived');
+  eq(reg().amount_paid_cents, null, 'a waived fee records nothing, because nothing arrived');
+  await cell('payment_status', 'unpaid');
+  await cell('amount_paid', '');
+
+  // ⚠ CHANGING THE TABLE COUNT CHANGES WHAT THEY OWE. Leaving amount_due
+  // behind would leave the coordinator chasing the wrong figure, and no
+  // screen anywhere would say so.
+  const dueBefore = reg().amount_due_cents;
+  await cell('tables', '3');
+  eq(reg().qty, 3, 'a table count can be corrected in the row');
+  ok(reg().amount_due_cents > dueBefore, 'and what they are asked for follows it');
+  await cell('tables', '99');
+  eq(reg().qty, 3, 'a count past the market’s own limit is clamped to it, not stored');
+  await cell('tables', '1');
+
+  // ── The check ──
+  // ⚠ RECORDING A CHECK NUMBER IS WHAT TURNS "AWAITING CHECK" INTO PAID. That
+  // is a decision, not an inference: before this there was nowhere to record
+  // that a check had arrived, so "said they would send one" and "never paid"
+  // looked identical on the list.
+  db.prepare("UPDATE site_event_registrations SET fields_json = json_set(fields_json,'$.payment_method','check'), payment_status='unpaid', amount_paid_cents=NULL WHERE id = ?").run(id);
+  const awaiting = await (await call(env, '/market', { cookie })).text();
+  has(awaiting, 'Awaiting check', 'a check vendor with nothing recorded reads as awaiting one');
+  has(awaiting, 'Checks not in yet', 'and is counted on a tile of its own');
+
+  await cell('check_no', '1042');
+  eq(fields().check_no, '1042', 'the number is recorded');
+  ok(/^\d{4}-\d{2}-\d{2}$/.test(fields().check_date), 'and the day it came, stamped rather than asked for twice');
+  eq(reg().payment_status, 'paid', 'which turns the row paid');
+  eq(reg().amount_paid_cents, reg().amount_due_cents, 'for the whole amount asked');
+
+  // ⚠ Clearing the box back out must never un-pay anybody — the money is in
+  // the bank whatever the box now says.
+  await cell('check_no', '');
+  eq(reg().payment_status, 'paid', 'clearing the number does not undo the payment');
+
+  // ── ✓ In, which is the one-click version of all of that ──
+  const { env: env2, db: db2 } = await boot();
+  const { cookie: c2 } = signIn(db2);
+  await applyAsVendor(env2, { payment_method: 'check' });
+  const id2 = db2.prepare("SELECT id FROM site_event_registrations WHERE event_id='christmasmarket'").get().id;
+  const inRes = await call(env2, '/market/update', { cookie: c2, method: 'POST', accept: 'application/json', form: { id: String(id2), field: 'check_in' } });
+  eq(inRes.status, 200, '✓ In records the check in one click');
+  const r2 = db2.prepare('SELECT * FROM site_event_registrations WHERE id = ?').get(id2);
+  eq(r2.payment_status, 'paid', 'flipping the row to paid');
+  eq(r2.amount_paid_cents, r2.amount_due_cents, 'for the amount asked');
+  const f2 = JSON.parse(r2.fields_json || '{}');
+  eq(f2.check_no, '—', 'a check with no number written down still says one arrived');
+  ok(/^\d{4}-\d{2}-\d{2}$/.test(f2.check_date), 'dated today');
+
+  // ── The field name is checked before it is used ──
+  // ⚠ `updateRegistration()` builds its SQL from the KEYS of the object it is
+  // handed, so a field name taken straight from the request would be a column
+  // name taken straight from the request. Everything maps a posted name onto
+  // a fixed column, and anything else is refused.
+  const bogus = await call(env, '/market/update', {
+    cookie, method: 'POST', form: { id: String(id), field: 'payment_status = 1, staff_notes', value: 'x' },
+  });
+  eq(bogus.status, 302, 'a field name this list does not have is refused');
+  const bogusJson = await call(env, '/market/update', {
+    cookie, method: 'POST', accept: 'application/json',
+    form: { id: String(id), field: 'contact_email', value: 'attacker@example.com' },
+  });
+  eq(bogusJson.status, 400, 'and named as refused when the browser asked for an answer');
+  eq(reg().contact_email, 'marla@example.com', 'with the column it aimed at untouched');
+
+  // ⚠ THE WHOLE-FORM PATH IS KEPT, and not only for the tests that already
+  // used it: the expanded row is a real <form>, so a coordinator whose script
+  // never loaded can still record a payment.
+  const whole = await call(env, '/market/update', {
+    cookie, method: 'POST',
+    form: { id: String(id), table_number: '7', payment_status: 'waived', amount_paid: '', staff_notes: 'Comped' },
+  });
+  eq(whole.status, 302, 'the no-script path still posts the whole row');
+  eq(reg().table_number, '7', 'writing every field on it');
+  eq(reg().payment_status, 'waived', 'including the payment state');
+  eq(reg().amount_paid_cents, null, 'and blank is still NULL, not zero');
+
+  // Every one of those is in the audit log, which is what the drawer's own
+  // save always promised.
+  const entries = db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE entity_type='market_vendor'").get().n;
+  ok(entries >= 8, 'every cell save wrote its own audit entry');
+}
+
+// ── FOUR VIEWS OF ONE ROSTER, AND FOUR SHEETS ────────────────────────────────
+group('the volunteer roster is four views and four printed sheets');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db);
+  const realFetch = globalThis.fetch;
+  env.CHMS_INTAKE_API_KEY = 'test-intake-key';
+  // Two days, real clock times, one job short-handed and one with nobody at
+  // all — the shape the market's own roster actually has.
+  const ROSTER = {
+    open: true, signedUp: 3, openShifts: 5,
+    roles: [
+      { name: 'Tent crew', lead: 'Rick Vogel', shifts: [
+        { label: '9:00–11:00 am', date: '2026-12-04', needed: 6, filled: 1, people: [{ name: 'Rick Vogel', email: 'rick@example.com' }] },
+      ] },
+      { name: 'Kitchen', shifts: [
+        { label: '11:00 am–1:00 pm', date: '2026-12-05', needed: 3, filled: 1, people: [{ name: 'Marla Bruns', email: 'marla@example.com' }] },
+      ] },
+      { name: 'Trash', shifts: [
+        { label: '1:00–3:00 pm', date: '2026-12-05', needed: 4, filled: 0, people: [] },
+      ] },
+    ],
+  };
+  try {
+    globalThis.fetch = async () => new Response(JSON.stringify(ROSTER),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+
+    // ⚠ TWO DATES IS TWO DAYS, and only then is the day switch worth drawing:
+    // Friday setup and Saturday market are different crews doing different
+    // work, and one list of both is neither day's list.
+    const job = await (await call(env, '/market?tab=volunteers', { cookie })).text();
+    has(job, 'Friday, December 4', 'the day switch names the days the roster actually covers');
+    has(job, 'Saturday, December 5', 'both of them');
+    has(job, 'Tent crew', 'the first day’s jobs are shown');
+    lacks(job, 'Kitchen', '⚠ and the other day’s are NOT — a day switch that shows both days is not a day switch');
+    has(job, 'Lead · Rick Vogel', 'with the lead named, because the sheet is printed for them');
+    has(job, '5 still needed', 'and how short each job is');
+
+    const sat = await (await call(env, '/market?tab=volunteers&day=2026-12-05', { cookie })).text();
+    has(sat, 'Kitchen', 'picking the other day shows that day');
+    lacks(sat, 'Tent crew', 'and only that day');
+    // Most short-handed first — a roster sorted by name is a list, sorted by
+    // what is missing it is a worklist.
+    // Trash is short four and Kitchen short two, so the ordering is by what
+    // is missing and not by name — which is the whole reason it is sorted.
+    ok(sat.indexOf('Trash') < sat.indexOf('Kitchen'), 'jobs are ordered by how short-handed they are');
+
+    const time = await (await call(env, '/market?tab=volunteers&view=time&day=2026-12-05', { cookie })).text();
+    has(time, '11:00 AM', 'the by-time view runs down the day');
+    has(time, '2 short', 'saying how short each slot is');
+
+    const grid = await (await call(env, '/market?tab=volunteers&view=grid&day=2026-12-05', { cookie })).text();
+    has(grid, 'tlc-grid-block', 'the grid draws a block per shift');
+    has(grid, 'Across the top', 'with an axis to turn it on its side');
+    const flipped = await (await call(env, '/market?tab=volunteers&view=grid&axis=time&day=2026-12-05', { cookie })).text();
+    has(flipped, 'tlc-grid-rowlab', 'flipped, the jobs run down the left');
+
+    const everybody = await (await call(env, '/market?tab=volunteers&view=people&day=2026-12-05', { cookie })).text();
+    has(everybody, 'Marla Bruns', 'everybody coming is listed');
+    has(everybody, 'mailto:marla@example.com', 'and is somebody you can write to');
+    has(everybody, '11–1 pm', 'with when they arrive and when they can go home');
+
+    // ── The sheets ──
+    // ⚠ EACH IS A REAL ADDRESS, not a modal: it survives a reload, can be sent
+    // to a job lead as a link, and goes to the printer through the browser's
+    // own Print rather than through a script.
+    const lead = await (await call(env, '/market?tab=volunteers&print=leads&job=Kitchen&day=2026-12-05', { cookie })).text();
+    has(lead, 'Kitchen', 'a lead’s sheet is their job');
+    has(lead, 'Marla Bruns', 'and their people');
+    lacks(lead, 'Trash', '⚠ and nobody else’s — a lead handed the master list has to find their own job in it first');
+    has(lead, 'data-noprint', 'with the screen’s own chrome marked not to print');
+
+    const master = await (await call(env, '/market?tab=volunteers&print=people&day=2026-12-05', { cookie })).text();
+    has(master, 'Everybody coming', 'the master list prints');
+    const bySlot = await (await call(env, '/market?tab=volunteers&print=time&day=2026-12-05', { cookie })).text();
+    has(bySlot, 'Master list by time slot', 'and so does the by-time sheet');
+    const gridSheet = await (await call(env, '/market?tab=volunteers&print=grid&day=2026-12-05', { cookie })).text();
+    has(gridSheet, 'Who is where, hour by hour', 'and the grid');
+    has(gridSheet, 'Print landscape', 'which says which way up it wants to come out');
+
+    // ── The CSV ──
+    const csv = await call(env, '/market/volunteers.csv', { cookie });
+    eq(csv.status, 200, 'the roster exports');
+    eq(csv.headers.get('Content-Type').split(';')[0], 'text/csv', 'as a CSV');
+    const csvText = await csv.text();
+    has(csvText, 'Marla Bruns', 'with the people on it');
+    has(csvText, '(open)', '⚠ and a row for every spot nobody has taken — a file listing only who came is a thank-you list');
+    has(csvText, 'Friday, December 4', 'across both days, not just the one on screen');
+    has(csvText, 'Saturday, December 5', 'both of them');
+
+    // The roster carries the name of everybody coming, so it is behind the
+    // coordinator's own permission — same rule as the vendor export.
+    // ⚠ AN ARRAY, NOT AN OBJECT. `hasPermission` reads the stored JSON as a
+    // list of names, so `{ pages_edit: true }` grants NOTHING — and this
+    // assertion would then have passed on the outer gate refusing a user with
+    // no permissions at all, rather than on the route's own check. Verified
+    // by removing that check: with the array it fails, with the object it did
+    // not.
+    const writer = signIn(db, ['pages_edit'], 'marketpagewriter').cookie;
+    eq((await call(env, '/market/volunteers.csv', { cookie: writer })).status, 403,
+      'somebody who can only edit the market’s page cannot download the roster');
+
+    // ⚠ WHEN SERVE SENDS NO CLOCK, THE THREE VIEWS THAT NEED ONE SAY SO. A
+    // label this cannot read has no start and no end, and drawing it at
+    // midnight would put a block on the grid at a time nobody is coming.
+    globalThis.fetch = async () => new Response(JSON.stringify({ open: true, roles: [
+      { name: 'Odd job', shifts: [{ label: 'sometime after lunch', needed: 2, filled: 0, people: [] }] },
+    ] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    const noTimes = await (await call(env, '/market?tab=volunteers&view=grid', { cookie })).text();
+    has(noTimes, 'needs each shift', 'the grid says what it is missing rather than drawing a guess');
+    const stillThere = await (await call(env, '/market?tab=volunteers', { cookie })).text();
+    has(stillThere, 'Odd job', '⚠ while the by-job view — which needs no clock — still shows every shift');
+
+    // ⚠ AN UNREACHABLE SERVE IS A 503, NOT AN EMPTY FILE. A CSV with a header
+    // row and nothing under it reads as "nobody has signed up", which is a
+    // very different thing to hand somebody — and it is the one that gets
+    // acted on.
+    globalThis.fetch = async () => { throw new Error('nope'); };
+    const dead = await call(env, '/market/volunteers.csv', { cookie });
+    eq(dead.status, 503, 'an unreachable Serve refuses the export rather than exporting an empty roster');
+    has(await dead.text(), 'could not be read', 'and says which of the two it is');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 }
 
 // ── /market is one screen now, reachable by three different permissions ─────
@@ -4251,6 +4532,137 @@ group('with Google unreachable the feed still answers, and says which half is mi
     eq(feed.events.length, 1, 'and still gets everything that did answer');
     eq(feed.events[0].title, 'Trunk or Treat');
   } finally { globalThis.fetch = realFetch; }
+}
+
+// ── FX-04, end to end through the real Worker ───────────────────────────────
+// The unit tests in admin/blocks.test.mjs pin what sanitizeClassicRich does.
+// This pins that it is actually WIRED — to the write path, so a new row is
+// clean, and to the public read path, so the rows already in the table are
+// neutralized without a destructive migration over six years of newsletters.
+group('classic rich fields cannot carry script to the public site (FX-04)');
+{
+  const { db, env } = await boot();
+  const { cookie } = signIn(db, ALL_PERMISSIONS, 'editor');
+
+  const NASTY = '<p>Real words.</p><script>alert(1)</script><img src=x onerror=alert(2)>';
+  const TABLE = '<table><tbody><tr><td style="text-align:center">Sunday</td></tr></tbody></table>';
+
+  // ── the write path ──
+  const created = await call(env, '/newsitems/create', { cookie, method: 'POST', form: {
+    title: 'A post', summary: 'x', body: NASTY + TABLE,
+    publish_date: churchDate(), ch_web: '1',
+  }});
+  eq(created.status, 302, 'the news post saves');
+  const stored = db.prepare("SELECT body FROM news_items WHERE title = 'A post'").get();
+  ok(stored, 'and the row is there');
+  ok(!/script/i.test(stored.body), 'STORED clean — no script tag reaches the database');
+  ok(!/onerror/i.test(stored.body), 'and no event handler either');
+  has(stored.body, 'Real words.', 'the words survive');
+  has(stored.body, '<table>', "and so does the table — this is the half a naive fix breaks");
+  has(stored.body, 'text-align:center', 'including the alignment inside it');
+
+  // ── the legacy read path ──
+  // A row written before FX-04 existed, inserted straight into the table the
+  // way six years of them already sit there. Nothing sanitized it on the way
+  // in, so the public endpoint is the only thing standing between it and
+  // `innerHTML` on timothystl.org.
+  db.prepare('INSERT INTO news_items (title, summary, body, publish_date, channels) VALUES (?,?,?,?,?)')
+    .run('Legacy', 'x', NASTY, churchDate(), 'web');
+  const legacyRaw = db.prepare("SELECT body FROM news_items WHERE title = 'Legacy'").get().body;
+  has(legacyRaw, '<script>', 'the legacy row really is unsanitized in the table');
+
+  const feed = await (await call(env, '/api/news', { fresh: true })).json();
+  const legacy = feed.find((r) => r.title === 'Legacy');
+  ok(legacy, 'the legacy post is served');
+  ok(!/script/i.test(legacy.body), '/api/news cleans it on the way out');
+  has(legacy.body, 'Real words.', 'without losing the words');
+  ok(legacyRaw.includes('<script>'),
+    'and the stored bytes are UNCHANGED — cleaning on read is reversible, a migration is not');
+
+  // ── the newsletter, which is the field that reaches six hundred inboxes ──
+  db.prepare("INSERT INTO newsletters (subject, pastor_note, published_at, status) VALUES (?,?,?,'published')")
+    .run('An issue', NASTY, churchDate());
+  const nlId = db.prepare("SELECT id FROM newsletters WHERE subject = 'An issue'").get().id;
+  const list = await (await call(env, '/api/newsletters', { fresh: true })).json();
+  const issue = list.find((n) => n.subject === 'An issue');
+  ok(issue && !/script/i.test(issue.pastor_note), '/api/newsletters cleans the pastor note');
+  const detail = await (await call(env, '/api/newsletter/' + nlId, { fresh: true })).json();
+  ok(!/script/i.test(detail.pastor_note), 'and so does /api/newsletter/:id');
+  has(detail.pastor_note, 'Real words.', 'still without losing the words');
+}
+
+// ── FX-17: the block stylesheet is a link, not 85KB, and it is cacheable ────
+group('the block stylesheet ships as a cacheable asset (FX-17)');
+{
+  const { env } = await boot();
+
+  const res = await call(env, '/assets/blocks.css', { fresh: true });
+  eq(res.status, 200, '/assets/blocks.css answers');
+  has(res.headers.get('content-type') || '', 'text/css', 'as CSS');
+  has(res.headers.get('cache-control') || '', 'immutable', 'cached for a year and immutable');
+  // ⚠ CROSS-ORIGIN, unlike /assets/admin.css. timothystl.org is the one asking.
+  eq(res.headers.get('access-control-allow-origin'), '*', 'and reachable from the public site');
+  const css = await res.text();
+  ok(css.length > 50000, 'it really is the whole stylesheet');
+  ok(!css.trimStart().startsWith('<style'), 'served as raw CSS, not as a <style> tag');
+
+  const api = await (await call(env, '/api/pages', { fresh: true })).json();
+  ok(Object.keys(api.rendered).length > 0,
+    'there are published pages, so this assertion is not vacuous');
+  has(api.css, '<link', '/api/pages ships a <link>');
+  has(api.css, 'id="tlcb-css"',
+    'carrying the id the client reads to decide whether the stylesheet is already here');
+  has(api.css, '/assets/blocks.css', 'pointed at the asset route');
+  ok(!api.css.includes('<style'), 'and not the bytes');
+  ok(api.css.length < 300,
+    `the payload carries a link, not a stylesheet — got ${api.css.length} bytes`);
+}
+
+// ── FX-19: everything that changes what /api/pages says busts the edge copy ──
+// The chokepoint runs BEFORE routing, so this is testable without caring
+// whether the route behind each prefix exists, what it does, or whether the
+// signed-in account may use it. What is being pinned is the prefix list.
+group('the /api/pages cache chokepoint covers what feeds pageData (FX-19)');
+{
+  const { env } = await boot();
+  const deleted = [];
+  const realCaches = globalThis.caches;
+  globalThis.caches = { default: {
+    async match() { return null; },
+    async put() {},
+    async delete(req) { deleted.push(typeof req === 'string' ? req : req.url); return true; },
+  }};
+  try {
+    // Each of these feeds a self-filling block, so a write under it changes
+    // what a published page renders without the page itself being touched.
+    const busts = [
+      ['/pages/x/save', 'a page'],
+      ['/menu/reorder', 'the menu'],
+      ['/partners/update/1', 'a partner'],
+      ['/values/update/acceptance', 'a core value'],
+      ['/staff/create', 'a staff member — the Staff grid block'],
+      ['/giving-tiers/add', 'a giving amount — the Amount ladder block'],
+      ['/christian-education/create', 'a Bible class — the Bible classes block'],
+      ['/sermons/new-note', 'a sermon — the Sermon library block'],
+      ['/newsitems/create', 'a news post — the News feed block'],
+      ['/market/settings', 'a market setting — the Market facts block'],
+      ['/events/new', 'an event — the Registration block'],
+    ];
+    for (const [path, what] of busts) {
+      deleted.length = 0;
+      await call(env, path, { method: 'POST', form: { x: '1' } });
+      ok(deleted.some((u) => u.includes('/api/pages')), `saving ${what} busts the edge copy`);
+    }
+
+    // ⚠ And it is a list, not "bust on every POST". A login attempt changes
+    // nothing about what a visitor is served, and rebuilding that payload
+    // means five queries and a render of every published page.
+    deleted.length = 0;
+    await call(env, '/login', { method: 'POST', form: { username: 'x', password: 'y' } });
+    ok(!deleted.length, 'a POST that cannot change the public site does not bust it');
+  } finally {
+    if (realCaches === undefined) delete globalThis.caches; else globalThis.caches = realCaches;
+  }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

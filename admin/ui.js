@@ -1492,6 +1492,429 @@ export const PANEL_LIST_CSS = `
 @media (max-width:900px){.tlc-give-cols{grid-template-columns:1fr;}}
 `;
 
+
+// ── THE CHRISTMAS MARKET SCREEN ──────────────────────────────────────────────
+// Two things live here: the vendor table, whose rows are the form, and the
+// four volunteer views. Both are one screen's worth of rules and both are in
+// the shell stylesheet rather than inline on the page, for the same reason
+// every other per-screen block here is — the shell is served once, immutable,
+// and inlining ~7KB into a page that is re-rendered on every cell save would
+// re-send it every time.
+export const MARKET_CSS = `
+/* ── The vendor table ── */
+.tlc-mkt-section{max-width:1460px;}
+.tlc-mkt-band{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin:0 0 16px;}
+.tlc-mkt-bandlink{background:transparent;border:0;padding:0;font:600 13px var(--tlc-sans);
+  color:var(--tlc-navy);text-decoration:underline;cursor:pointer;}
+.tlc-mkt-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+.tlc-mkt-search{flex:1;min-width:200px;max-width:300px;display:flex;align-items:center;gap:8px;
+  background:#fff;border:1px solid var(--tlc-edge);border-radius:8px;padding:0 12px;color:var(--tlc-muted);}
+.tlc-mkt-search input{flex:1;border:0;outline:0;background:transparent;padding:9px 0;
+  font:400 13.5px var(--tlc-sans);color:var(--tlc-ink);width:100%;min-width:0;}
+.tlc-mkt-filters{display:flex;gap:7px;flex-wrap:wrap;}
+/* The chip, not a filled navy pill — a filter is not the primary action on
+   the screen, and a navy fill says it is. Same values as .filter-pill. */
+.tlc-mkt-filter{font:600 11.5px var(--tlc-sans);border-radius:8px;cursor:pointer;
+  background:var(--tlc-parchment);color:var(--tlc-body);border:1px solid var(--tlc-edge);padding:7px 12px;}
+.tlc-mkt-filter:hover{background:#fff;}
+.tlc-mkt-filter.is-on{background:var(--mist);color:var(--tlc-ink);border:2px solid var(--tlc-ink);padding:6px 11px;}
+.tlc-mkt-count{margin-left:auto;font-size:12.5px;color:var(--tlc-muted);white-space:nowrap;}
+.tlc-mkt-wrap{border:1px solid var(--tlc-edge);border-radius:12px;background:var(--tlc-card);overflow:auto;}
+/* ⚠ The table SCROLLS SIDEWAYS below about 1130px rather than dropping
+   columns. Every column here is one somebody edits; hiding the table number
+   on a narrow window would make the screen unusable on the laptop it is
+   actually used on, silently. */
+.tlc-mkt-table{min-width:1130px;}
+/* ⚠ The Payment column is sized for its longest label — Awaiting check — not
+   for its shortest. A select clips rather than wrapping, so half a column's
+   worth too narrow does not look cramped: it silently reads AWAITING CHE,
+   which is a different word. */
+.tlc-mkt-cells,.tlc-mkt-head{display:grid;
+  grid-template-columns:minmax(180px,1.8fr) minmax(112px,.95fr) minmax(130px,1.2fr) 52px 82px minmax(178px,1.15fr) minmax(158px,1.3fr) 32px;
+  gap:12px;align-items:center;}
+.tlc-mkt-head{padding:9px 16px;background:var(--tlc-sand);border-bottom:1px solid var(--tlc-edge);}
+.tlc-mkt-h{display:flex;align-items:center;gap:5px;background:transparent;border:0;padding:4px 0;cursor:pointer;
+  font:600 10.5px/1.4 var(--tlc-sans);letter-spacing:.12em;text-transform:uppercase;color:var(--tlc-muted);text-align:left;}
+.tlc-mkt-h.is-on{color:var(--tlc-ink);}
+.tlc-mkt-h:hover{color:var(--tlc-ink);}
+.tlc-mkt-h:focus-visible{outline:2px solid var(--tlc-navy);outline-offset:2px;border-radius:8px;}
+.tlc-mkt-caretsm{font-size:9px;color:var(--tlc-muted);}
+.tlc-mkt-row{border-bottom:1px solid var(--tlc-divider);background:var(--tlc-card);}
+.tlc-mkt-row:last-child{border-bottom:0;}
+/* A vendor who dropped out is still on the list — she may need their phone
+   number — but it must not read as a table that is coming. */
+.tlc-mkt-row.is-out{background:var(--tlc-parchment);}
+.tlc-mkt-row.is-out .tlc-mkt-biz{text-decoration:line-through;text-decoration-color:var(--tlc-muted);}
+.tlc-mkt-cells{padding:8px 16px;min-height:58px;}
+.tlc-mkt-name{min-width:0;display:flex;flex-direction:column;gap:2px;}
+.tlc-mkt-biz{font:600 13.5px/1.3 var(--tlc-sans);color:var(--tlc-ink);overflow-wrap:anywhere;}
+.tlc-mkt-sub{font-size:11.5px;line-height:1.35;color:var(--tlc-muted);overflow-wrap:anywhere;}
+.tlc-mkt-sells{font-size:12.5px;line-height:1.4;color:var(--tlc-body);min-width:0;overflow-wrap:anywhere;}
+.tlc-mkt-quiet{font-size:12px;line-height:1.5;color:var(--tlc-muted);}
+/* ⚠ A cell is transparent until it is reached for. The row has eight of them
+   and drawing eight boxes on seventy rows turns the list into a form nobody
+   can read; the border on hover and focus is what says it can be typed in. */
+.tlc-mkt-sel,.tlc-mkt-in{width:100%;min-width:0;font:500 12.5px var(--tlc-sans);color:var(--tlc-ink);
+  background:transparent;border:1px solid transparent;border-radius:8px;padding:6px 6px;}
+.tlc-mkt-sel{cursor:pointer;}
+.tlc-mkt-sel-n{font-weight:600;text-align:center;}
+.tlc-mkt-in{font-weight:600;font-size:13px;}
+.tlc-mkt-sel:hover,.tlc-mkt-in:hover{border-color:var(--tlc-edge);background:#fff;}
+.tlc-mkt-sel:focus,.tlc-mkt-in:focus{border-color:var(--tlc-blue);background:#fff;outline:none;
+  box-shadow:0 0 0 3px rgba(46,126,166,.14);}
+.tlc-mkt-pay{display:flex;flex-direction:column;gap:4px;min-width:0;}
+.tlc-mkt-pill{width:100%;font:600 11px var(--tlc-sans);letter-spacing:.04em;text-transform:uppercase;
+  border-radius:999px;padding:5px 8px;cursor:pointer;border:1px solid transparent;}
+.tlc-mkt-pill:focus{outline:none;box-shadow:0 0 0 3px rgba(46,126,166,.20);}
+.tlc-mkt-money{font-size:11px;color:var(--tlc-muted);white-space:nowrap;}
+.tlc-mkt-checkcol{min-width:0;}
+.tlc-mkt-check{display:flex;flex-direction:column;gap:4px;min-width:0;}
+.tlc-mkt-check-row{display:flex;align-items:center;gap:5px;min-width:0;}
+.tlc-mkt-in-check{background:#fff;border-color:#EADCBE;font-weight:500;font-size:12px;}
+.tlc-mkt-in-btn{flex:none;font:700 11px var(--tlc-sans);color:${TONES.good.fg};background:${TONES.good.bg};
+  border:1px solid ${TONES.good.bd};border-radius:8px;padding:6px 8px;cursor:pointer;min-height:30px;}
+.tlc-mkt-in-btn:hover{background:#E3E9D5;}
+.tlc-mkt-checkin{font-size:12px;line-height:1.4;color:${TONES.good.fg};overflow-wrap:anywhere;}
+.tlc-mkt-caret{justify-self:end;background:transparent;border:0;cursor:pointer;color:var(--tlc-muted);
+  font-size:13px;padding:6px;border-radius:8px;min-width:30px;min-height:30px;}
+.tlc-mkt-caret:hover{background:var(--tlc-sand);color:var(--tlc-ink);}
+/* ── The rest of the application, opened underneath its own row ── */
+.tlc-mkt-more{background:var(--tlc-parchment);border-top:1px solid var(--tlc-divider);}
+.tlc-mkt-more-grid{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:22px;padding:14px 16px 8px;margin:0;}
+@media (max-width:1000px){.tlc-mkt-more-grid{grid-template-columns:1fr;}}
+.tlc-mkt-lbl{display:block;font:600 10.5px/1 var(--tlc-sans);letter-spacing:.12em;text-transform:uppercase;
+  color:var(--tlc-muted);margin:0 0 6px;}
+.tlc-mkt-para{font-size:13px;line-height:1.65;color:var(--tlc-body);margin:0 0 12px;text-wrap:pretty;}
+.tlc-mkt-notes{width:100%;font:400 13px/1.55 var(--tlc-sans);color:var(--tlc-ink);background:#fff;
+  border:1px solid var(--tlc-edge);border-radius:8px;padding:9px 11px;resize:vertical;}
+.tlc-mkt-notes:focus{border-color:var(--tlc-blue);outline:none;box-shadow:0 0 0 3px rgba(46,126,166,.14);}
+.tlc-mkt-in-box{width:130px;background:#fff;border-color:var(--tlc-edge);padding:9px 11px;}
+.tlc-mkt-photo{height:72px;width:auto;border-radius:8px;margin:0 8px 8px 0;}
+.tlc-mkt-more-actions{margin-top:10px;}
+.tlc-mkt-del-form{margin:0;padding:0 16px 14px;}
+.tlc-mkt-del{background:transparent;border:0;padding:0;font:600 12.5px var(--tlc-sans);
+  color:${TONES.bad.fg};text-decoration:underline;cursor:pointer;}
+/* With JavaScript running, every cell has already saved itself by the time
+   anybody could reach this button — so it is the no-script path only, and
+   showing it otherwise would invite a second, redundant save. */
+.tlc-mkt-js .tlc-mkt-nojs{display:none;}
+/* ⚠ THE EXPLICIT display BEATS THE BROWSER'S OWN [hidden]{display:none}, so
+   hiding this has to be restated here or the empty state sits under a full
+   table forever, telling somebody that nothing matches while ten rows of
+   matches are on the screen above it. The same trap the shared empty state
+   carries — see its own note. */
+.tlc-mkt-none{padding:34px 18px;text-align:center;display:flex;flex-direction:column;gap:5px;}
+.tlc-mkt-none[hidden]{display:none;}
+.tlc-mkt-none-t{font:600 14px var(--tlc-sans);color:var(--tlc-body);}
+/* ⚠ A cell that saved says so, on the cell. A toast at the bottom of the
+   screen for a change made at the top of a seventy-row table is a message
+   about something the eye is nowhere near. */
+.tlc-mkt-saved{position:relative;}
+.tlc-mkt-saved::after{content:'Saved';position:absolute;right:2px;top:-14px;font:700 9.5px var(--tlc-sans);
+  letter-spacing:.1em;text-transform:uppercase;color:${TONES.good.fg};pointer-events:none;}
+.tlc-mkt-failed{border-color:${TONES.bad.bd} !important;background:${TONES.bad.bg} !important;}
+.tlc-tile--warn{border-color:${TONES.warn.bd};background:${TONES.warn.bg};}
+.tlc-tile--warn .tlc-tile-label,.tlc-tile--warn .tlc-tile-num,.tlc-tile--warn .tlc-tile-note{color:${TONES.warn.fg};}
+
+/* ── The volunteer roster ── */
+.tlc-vol-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
+.tlc-seg{display:inline-flex;background:var(--tlc-sand);border:1px solid var(--tlc-edge);
+  border-radius:9px;padding:3px;gap:3px;flex:none;}
+.tlc-seg a{font:600 13px var(--tlc-sans);border:0;border-radius:8px;padding:7px 14px;text-decoration:none;
+  color:var(--tlc-body);display:inline-flex;align-items:center;min-height:30px;}
+.tlc-seg a.is-on{background:#fff;color:var(--tlc-navy);box-shadow:0 1px 2px rgba(18,36,61,.10);}
+.tlc-vol-prints{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;}
+.tlc-vol-jobs{display:grid;grid-template-columns:repeat(auto-fill,minmax(430px,1fr));gap:16px;}
+@media (max-width:900px){.tlc-vol-jobs{grid-template-columns:1fr;}}
+.tlc-vol-job{border:1px solid var(--tlc-edge);border-radius:12px;background:var(--tlc-parchment);overflow:hidden;}
+.tlc-vol-job-h{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;
+  background:var(--tlc-sand);border-bottom:1px solid var(--tlc-edge);}
+.tlc-vol-job-n{display:block;font:600 13.5px/1.3 var(--tlc-sans);color:var(--tlc-ink);overflow-wrap:anywhere;}
+.tlc-vol-job-l{display:block;font-size:11.5px;color:var(--tlc-muted);margin-top:2px;}
+.tlc-vol-job-r{display:flex;align-items:center;gap:8px;flex:none;}
+.tlc-vol-job-b{padding:6px 16px 12px;}
+.tlc-vol-shift{display:grid;grid-template-columns:128px 54px 1fr;gap:12px;align-items:start;
+  padding:9px 0;border-bottom:1px solid var(--tlc-divider);}
+.tlc-vol-shift:last-child{border-bottom:0;}
+.tlc-vol-t{font:600 12.5px/1.4 var(--tlc-sans);color:var(--tlc-ink);}
+.tlc-vol-n{font:600 12.5px/1.4 var(--tlc-sans);white-space:nowrap;}
+.tlc-vol-who{font-size:12.5px;line-height:1.5;color:var(--tlc-body);text-wrap:pretty;overflow-wrap:anywhere;}
+.tlc-vol-ok{color:${TONES.good.fg};}
+.tlc-vol-short{color:${TONES.warn.fg};}
+.tlc-vol-none{color:${TONES.bad.fg};}
+.tlc-vol-panel{border:1px solid var(--tlc-edge);border-radius:12px;background:var(--tlc-card);overflow:hidden;}
+.tlc-vol-slot{display:grid;grid-template-columns:150px 1fr;gap:18px;padding:14px 18px;border-bottom:1px solid var(--tlc-divider);}
+.tlc-vol-slot:last-child{border-bottom:0;}
+@media (max-width:760px){.tlc-vol-slot{grid-template-columns:1fr;}}
+.tlc-vol-slot-t{font:500 17px/1.2 var(--tlc-serif);color:var(--tlc-navy);}
+.tlc-vol-slot-e{font-size:12px;color:var(--tlc-muted);margin-top:3px;}
+.tlc-vol-slot-jobs{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;}
+.tlc-vol-card{border:1px solid var(--tlc-edge);border-radius:11px;padding:10px 12px;}
+.tlc-vol-card-h{display:flex;align-items:baseline;justify-content:space-between;gap:8px;}
+.tlc-vol-card-n{font:600 12.5px/1.3 var(--tlc-sans);color:var(--tlc-ink);overflow-wrap:anywhere;}
+.tlc-vol-card-w{font-size:12px;line-height:1.5;color:var(--tlc-body);margin-top:4px;text-wrap:pretty;}
+.tlc-vol-fill-ok{background:var(--tlc-card);}
+.tlc-vol-fill-short{background:#FDF7EA;}
+.tlc-vol-fill-none{background:#FDF3EE;}
+/* ── The grid ──
+   Rows and columns are whole HOURS and a shift is one block laid over them,
+   starting and ending at its real minute. A row per distinct slot instead
+   would make a 7:30–11:00 shift the same height as a 9:00–11:00 one beside
+   it, which is exactly the thing somebody reads this grid to compare. */
+.tlc-grid-wrap{border:1px solid var(--tlc-edge);border-radius:12px;background:var(--tlc-card);overflow:auto;}
+.tlc-grid-head{display:flex;background:var(--tlc-sand);border-bottom:1px solid var(--tlc-edge);position:sticky;top:0;z-index:3;}
+.tlc-grid-hcell{font:600 10.5px/1.3 var(--tlc-sans);letter-spacing:.08em;text-transform:uppercase;
+  color:var(--tlc-muted);padding:11px 8px;border-left:1px solid var(--tlc-edge);min-width:0;overflow-wrap:anywhere;}
+.tlc-grid-row{display:flex;border-bottom:1px solid var(--tlc-divider);}
+.tlc-grid-row:last-child{border-bottom:0;}
+.tlc-grid-rowlab{flex:0 0 190px;padding:9px 12px;min-width:0;}
+.tlc-grid-rowlab b{display:block;font:600 12.5px/1.3 var(--tlc-sans);color:var(--tlc-ink);overflow-wrap:anywhere;}
+.tlc-grid-rowlab span{display:block;font-size:11px;color:var(--tlc-muted);margin-top:2px;}
+.tlc-grid-track{flex:none;position:relative;}
+.tlc-grid-block{position:absolute;border-radius:8px;padding:5px 8px;overflow:hidden;}
+.tlc-grid-count{font:700 11px/1.2 var(--tlc-sans);}
+.tlc-grid-who{font:500 11px/1.35 var(--tlc-sans);color:var(--tlc-body);overflow-wrap:anywhere;}
+.tlc-grid-hourlab{position:absolute;font:600 11.5px/1.2 var(--tlc-sans);color:var(--tlc-ink);white-space:nowrap;}
+.tlc-vol-rows{display:grid;grid-template-columns:1.4fr .7fr 2.6fr;gap:14px;padding:11px 18px;
+  border-bottom:1px solid var(--tlc-divider);align-items:start;}
+.tlc-vol-rows:last-child{border-bottom:0;}
+.tlc-vol-rows-h{background:var(--tlc-sand);border-bottom:1px solid var(--tlc-edge);
+  font:600 10.5px/1 var(--tlc-sans);letter-spacing:.12em;text-transform:uppercase;color:var(--tlc-muted);}
+@media (max-width:760px){.tlc-vol-rows{grid-template-columns:1fr;gap:4px;}}
+.tlc-vol-pname{font:600 13.5px/1.3 var(--tlc-sans);color:var(--tlc-ink);}
+.tlc-vol-pnote{display:block;font:400 11.5px var(--tlc-sans);color:var(--tlc-muted);margin-top:2px;}
+/* ── Print ──
+   The sheets are plain markup and one @page rule; there is no library and no
+   second rendering. Everything that is chrome carries data-noprint, so what
+   goes to the printer is exactly the sheet on the screen. */
+.tlc-print-sheet{max-width:720px;margin:0 auto 44px;}
+.tlc-print-sheet--wide{max-width:none;}
+.tlc-print-h{display:flex;align-items:baseline;justify-content:space-between;gap:14px;
+  border-bottom:2px solid var(--tlc-navy);padding-bottom:8px;margin-bottom:4px;}
+.tlc-print-t{font:500 21px/1.2 var(--tlc-serif);color:var(--tlc-navy);}
+.tlc-print-mark{font:600 11px var(--tlc-sans);letter-spacing:.12em;text-transform:uppercase;color:var(--tlc-muted);}
+.tlc-print-sub{font-size:12.5px;color:var(--tlc-secondary);margin-bottom:16px;}
+.tlc-print-block{margin-bottom:14px;}
+.tlc-print-bh{font:600 12.5px/1.3 var(--tlc-sans);color:var(--tlc-ink);
+  border-bottom:1px solid var(--tlc-edge);padding-bottom:4px;margin-bottom:6px;}
+.tlc-print-line{display:grid;grid-template-columns:150px 1fr;gap:14px;font-size:13px;line-height:1.65;
+  color:var(--tlc-ink);padding:2px 0;break-inside:avoid;}
+.tlc-print-line span:first-child{color:var(--tlc-body);}
+@media print{
+  [data-noprint]{display:none !important;}
+  /* ⚠ THE ADMIN'S OWN CHROME IS NOT PART OF THE SHEET. Without this the navy
+     sidebar prints down the left of every page — a job lead's handout arrives
+     with a column of admin navigation on it, and the sheet itself is squeezed
+     into what is left. The main column's own offset goes with it, or the
+     content prints inset by the width of a rail that is no longer there. */
+  .sidebar,.sidebar-backdrop,.tlc-ctx{display:none !important;}
+  .tlc-main{margin:0 !important;padding:0 !important;width:100% !important;}
+  body{background:#fff !important;}
+  .tlc-print-sheet{page-break-after:always;max-width:none;margin:0;}
+  .tlc-print-sheet:last-child{page-break-after:auto;}
+  .tlc-grid-wrap{border:1px solid var(--tlc-navy);overflow:visible;}
+}
+`;
+
+
+// ── THE VENDOR TABLE, IN THE BROWSER ─────────────────────────────────────────
+// Three jobs, and only the first of them talks to the server: saving a cell,
+// sorting the rows the page is already holding, and filtering them.
+//
+// ⚠ EVERYTHING HERE IS DELEGATED OFF THE SECTION, never bound per row. The
+// rows are re-ordered in place by the sort, and a handler attached to a row
+// would be carried around with it — which works — but a handler attached to a
+// cell that a save later REPLACES would not: the second edit to the same cell
+// would silently do nothing. That is the trap the gym renter's basket and the
+// block editor's row grips both hit; one listener on the section cannot have
+// it.
+export const MARKET_JS = `
+(function(){
+  var sec = document.querySelector('[data-mkt]');
+  if (!sec) return;
+  var TONES_MKT = ${JSON.stringify(TONES)};
+  // Says, in the markup, that the cells save themselves — which is what hides
+  // the no-script Save button. Set from script so that if this file never
+  // runs, the button is still there and the form still posts.
+  sec.classList.add('tlc-mkt-js');
+
+  var body = document.getElementById('tlc-mkt-body');
+  var countEl = document.getElementById('tlc-mkt-count');
+  var noneEl = document.getElementById('tlc-mkt-none');
+  var qEl = document.getElementById('tlc-mkt-q');
+  var filter = 'all';
+
+  function rows(){ return Array.prototype.slice.call(body.querySelectorAll('.tlc-mkt-row')); }
+
+  // ── Filtering and the count ──
+  // ⚠ The count is scoped to what the ACTIVE FILTER can reach, not to the
+  // whole table: "3 of 8 shown" where 8 is every application would teach the
+  // coordinator that five rows are hiding somewhere. Same rule the shared
+  // list sections have followed since the redesign.
+  function apply(){
+    var q = (qEl && qEl.value || '').trim().toLowerCase();
+    var reach = 0, shown = 0;
+    rows().forEach(function(r){
+      var inFilter = filter === 'all' ? true
+        : filter === 'check' ? r.getAttribute('data-check-pending') === '1'
+        : r.getAttribute('data-filter') === filter;
+      if (inFilter) reach++;
+      var hit = !q || (r.getAttribute('data-search') || '').indexOf(q) !== -1;
+      var on = inFilter && hit;
+      r.hidden = !on;
+      if (on) shown++;
+    });
+    if (countEl) {
+      countEl.textContent = shown === reach
+        ? shown + (shown === 1 ? ' application shown' : ' applications shown')
+        : shown + ' of ' + reach + ' shown';
+    }
+    if (noneEl) noneEl.hidden = shown !== 0;
+  }
+
+  function setFilter(v){
+    filter = v;
+    sec.querySelectorAll('[data-mktfilter]').forEach(function(b){
+      if (!b.classList.contains('tlc-mkt-filter')) return;
+      var on = b.getAttribute('data-mktfilter') === v;
+      b.classList.toggle('is-on', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    apply();
+  }
+
+  // ── Sorting ──
+  // Client-side over the rows already rendered — no new query, because the
+  // page is holding every one of them already. Ascending, then descending on
+  // a second click of the same column.
+  var sortKey = 'category', sortDir = 1;
+  function sortBy(key, numeric){
+    if (sortKey === key) sortDir = -sortDir; else { sortKey = key; sortDir = 1; }
+    var list = rows();
+    list.sort(function(a, b){
+      var av = a.getAttribute('data-s-' + key) || '';
+      var bv = b.getAttribute('data-s-' + key) || '';
+      var r = numeric ? (Number(av) - Number(bv)) : av.localeCompare(bv);
+      // Vendor name is the tiebreak on every column, so a re-sort of equal
+      // values does not shuffle rows around under somebody's cursor.
+      if (!r) r = (a.getAttribute('data-s-business') || '').localeCompare(b.getAttribute('data-s-business') || '');
+      else r = r * sortDir;
+      return r;
+    });
+    list.forEach(function(r){ body.appendChild(r); });
+    sec.querySelectorAll('.tlc-mkt-h').forEach(function(h){
+      var on = h.getAttribute('data-sort') === key;
+      h.classList.toggle('is-on', on);
+      var c = h.querySelector('.tlc-mkt-caretsm');
+      if (c) c.textContent = on ? (sortDir > 0 ? '▲' : '▼') : '';
+    });
+  }
+
+  // ── Saving one cell ──
+  var flashTimers = new WeakMap();
+  function flash(el){
+    el.classList.remove('tlc-mkt-failed');
+    el.classList.add('tlc-mkt-saved');
+    clearTimeout(flashTimers.get(el));
+    flashTimers.set(el, setTimeout(function(){ el.classList.remove('tlc-mkt-saved'); }, 1600));
+  }
+
+  // Redraws the three things that can change under each other — the payment
+  // pill, the money line, and the check column — from what the SERVER says
+  // the row now is. A cell that has just saved must never be repainted from
+  // what the browser hoped it sent.
+  function repaint(row, st){
+    if (!row || !st) return;
+    var pill = row.querySelector('[data-field="payment_status"]');
+    if (pill && pill.value !== st.payment_status) pill.value = st.payment_status;
+    if (pill) {
+      var tone = TONES_MKT[st.tone] || TONES_MKT.plain;
+      pill.style.background = tone.bg; pill.style.color = tone.fg; pill.style.borderColor = tone.bd;
+      var opt = pill.querySelector('option[value="unpaid"]');
+      if (opt) opt.textContent = st.checkMode === 'card' ? 'Not paid yet' : 'Awaiting check';
+    }
+    var moneyEl = row.querySelector('.tlc-mkt-money');
+    if (moneyEl) moneyEl.textContent = st.moneyLine;
+    var paid = row.querySelector('[data-field="amount_paid"]');
+    if (paid && document.activeElement !== paid) {
+      paid.value = st.moneyLine.indexOf('recorded') === -1 ? '' : paid.value;
+    }
+    row.setAttribute('data-filter', st.payment_status);
+    row.setAttribute('data-check-pending', st.checkMode === 'pending' ? '1' : '0');
+    row.setAttribute('data-s-status', (st.statusLabel || '').toLowerCase());
+    row.setAttribute('data-s-check', st.checkMode === 'received' ? '2' : st.checkMode === 'pending' ? '1' : '0');
+    row.classList.toggle('is-out', st.payment_status === 'dropped');
+    var col = row.querySelector('.tlc-mkt-checkcol');
+    // ⚠ The check column is only REBUILT when it changes shape — a number
+    // being typed must not have the box it is being typed into replaced.
+    if (col && st.checkMode === 'received' && !col.querySelector('.tlc-mkt-checkin')) {
+      col.innerHTML = '<span class="tlc-mkt-checkin"></span>';
+      col.firstChild.textContent = st.checkLabel;
+    } else if (col && st.checkMode === 'received') {
+      col.querySelector('.tlc-mkt-checkin').textContent = st.checkLabel;
+    }
+  }
+
+  function save(el, field, value){
+    var row = el.closest('.tlc-mkt-row');
+    var id = row && row.getAttribute('data-row');
+    if (!id) return;
+    var fd = new FormData();
+    fd.append('id', id);
+    fd.append('field', field);
+    fd.append('value', value == null ? '' : value);
+    fetch('/market/update', { method: 'POST', body: fd, credentials: 'same-origin',
+      headers: { Accept: 'application/json' } })
+      .then(function(r){ return r.ok ? r.json() : r.json().catch(function(){ return { ok: false }; }); })
+      .then(function(d){
+        if (!d || !d.ok) throw new Error((d && d.error) || 'not saved');
+        flash(el);
+        repaint(row, d.row);
+      })
+      .catch(function(){
+        // ⚠ A FAILED SAVE HAS TO LOOK FAILED. The whole risk of editing in
+        // place is somebody typing a table number, seeing it sit there, and
+        // walking away from a change that never reached the database.
+        el.classList.remove('tlc-mkt-saved');
+        el.classList.add('tlc-mkt-failed');
+        el.title = 'This did not save. Check your connection and try again.';
+      });
+  }
+
+  // change fires on a select the moment it is picked, and on a text input
+  // when it is left — which is the right moment for both: nobody wants a
+  // round trip per keystroke of a table number.
+  sec.addEventListener('change', function(e){
+    var el = e.target.closest('[data-cell]');
+    if (!el) return;
+    save(el, el.getAttribute('data-field'), el.value);
+  });
+
+  sec.addEventListener('click', function(e){
+    var f = e.target.closest('[data-mktfilter]');
+    if (f) { setFilter(f.getAttribute('data-mktfilter')); return; }
+    var h = e.target.closest('[data-sort]');
+    if (h) { sortBy(h.getAttribute('data-sort'), h.getAttribute('data-num') === '1'); return; }
+    var chk = e.target.closest('[data-checkin]');
+    if (chk) { save(chk, 'check_in', ''); return; }
+    var x = e.target.closest('[data-expand]');
+    if (x) {
+      var row = x.closest('.tlc-mkt-row');
+      var more = row && row.querySelector('.tlc-mkt-more');
+      if (!more) return;
+      var open = more.hidden;
+      more.hidden = !open;
+      x.setAttribute('aria-expanded', open ? 'true' : 'false');
+      x.textContent = open ? '▴' : '▾';
+    }
+  });
+
+  if (qEl) qEl.addEventListener('input', apply);
+  apply();
+})();
+
+`;
+
 export const NEWSLETTER_CSS = `
 /* ── The newsletter editor ──
    Two halves: what you are writing, and what it will look like. The preview

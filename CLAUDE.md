@@ -527,6 +527,145 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### The vendor row is the form, and the roster is four views (v5.30.0, 2026-08-19)
+
+Built from `design_handoff_market_layout/` — `Market Admin.dc.html` plus its own
+handoff page, committed whole like the four before it. Two tabs of `/market`
+change and nothing else does.
+
+**What was wrong, in the designer's own words:** every change — a table number,
+a payment state — meant opening the drawer, saving, and landing back at the top
+of the list. Nothing could be sorted. A vendor paying by check had nowhere to
+record that the check arrived, so *awaiting check* and *never paid* looked
+identical. And the volunteer tab was one panel per role and nothing else: a job
+lead could not be handed their own people, and there was no way to see who is on
+site at 1 PM.
+
+**Vendors — the row is the form.** `renderListSection` + `renderDrawer` are gone
+from this tab; `vendorTable()`/`vendorRow()` in `admin/market.js` are the whole
+of it. Category, tables, table number, payment state, check number and check
+date are edited in the row and each saves on its own.
+
+- **⚠ `/market/update` TAKES ONE FIELD, AND KEEPS THE WHOLE-FORM PATH.** A POST
+  with no `field` is the no-JavaScript path — the expanded row is a real
+  `<form>` — so a coordinator whose script never loaded can still record a
+  payment. One route, both shapes: a second route for the single-field case
+  would be a second place that has to agree about what "paid" means.
+- **⚠ THE POSTED FIELD NAME IS CHECKED AGAINST A LIST BEFORE IT IS USED.**
+  `updateRegistration()` (`admin/events.js`) builds its SQL from the KEYS of the
+  object it is handed, so a field name taken straight from the request would be
+  a **column name taken straight from the request**. Every branch maps a posted
+  name onto a fixed column and anything else is refused; a test posts
+  `field=contact_email` and asserts the column is untouched.
+- **⚠ THE CELL REDRAWS FROM WHAT THE SERVER STORED, NEVER FROM WHAT THE BROWSER
+  SENT.** `vendorCellState(row)` is one function: the table is rendered from it
+  and `/market/update` answers with it. A row saying Paid over a database that
+  says otherwise is the one failure this design must not have.
+- **⚠ A FAILED SAVE LOOKS FAILED.** The whole risk of editing in place is
+  somebody typing a table number, seeing it sit there looking typed, and walking
+  away from a change that never landed. `.tlc-mkt-failed` is checked in a real
+  browser with the route aborted.
+- **`category` is new, and it is a fixed list.** What a vendor writes under
+  "what do you sell" is a paragraph — it sorts by whichever word it starts with,
+  which is no order at all when the question is "how many bakers have we got".
+  ⚠ Blank stays blank: "not categorized yet" is a real state, and defaulting it
+  to Other would claim somebody had looked at every row.
+- **`check_no` / `check_date`, and a fourth tile.** ⚠ **Still no fifth
+  `payment_status`** — `checkState(row)` derives three states from the payment
+  method and whether a check is recorded, and nothing stores it. Recording a
+  number, or pressing **✓ In**, turns an *unpaid* row paid; clearing the box
+  never un-pays anybody, because the money is in the bank whatever the box now
+  says. A waived or dropped row is never on the chase list, and its check column
+  says "nothing owed" rather than offering boxes for a check that is not coming.
+- **⚠ MARKING A ROW PAID RECORDS THE AMOUNT ASKED**, unless one is already
+  recorded. Found by driving the real screen: without it the row reads "Paid"
+  over "asked $46.65" and the *Recorded as paid* tile — which sums
+  `amount_paid_cents` — stays at zero however many rows are marked. A
+  reconciliation that reads short for a reason nobody can find is exactly what
+  this screen exists to prevent, and it makes the manual path and the check path
+  agree. Only `paid` does it; waived and dropped both mean no money arrived.
+- **⚠ THE PER-ROW WARNING BAND IS GONE AND THE SENTENCE IS NOT.** Seventy
+  warning rows under a dense table is a screen nobody can read. The unpaid case
+  — somebody who applied and never finished at the card page, which the Google
+  Form could not see at all — is said once, over the list, with the filter that
+  isolates them one click away.
+- Sorting is client-side over the rows already rendered — no new query, because
+  the page is holding all of them. Each key is its own `data-s-*` attribute so
+  the comparison is on a value rather than on scraped markup.
+
+**Volunteers — four views of one roster, and four sheets.** Still a read-only
+window on Serve; what changed is that the same roster can be read four ways and
+each way prints. **Every view is an address** (`?view=`, `?day=`, `?axis=`,
+`?print=`), not a JavaScript mode — so a view survives a reload, can be sent to
+a job lead as a link, and prints through the browser's own Print.
+
+- **⚠ SERVE SENDS A LABEL, NOT A CLOCK, AND THREE OF THE FOUR VIEWS ARE
+  ARITHMETIC OVER ONE.** The contract as built
+  (`design_handoff_market_event/README.md`) is `{ label: '8:30–11:00 am',
+  needed, filled, people }`. `parseShiftLabel()` reads the clock back out of it
+  and prefers real `start`/`end`/`day`/`lead` fields the moment Serve grows
+  them — which is the one change this design asks of that repo.
+- **⚠ THE MERIDIEM ON THE END OF A LABEL BELONGS TO BOTH HALVES, and inheriting
+  it blindly is wrong the other way.** `8:30–11:00 am` gives one am for two
+  times; `11:00–2:30 pm` inherited straight reads 23:00–14:30, so a start that
+  inherited is pushed back twelve hours when it has to. Getting this wrong does
+  not throw — it draws a morning shift in the evening and looks plausible doing
+  it. ⚠ And the pattern is **not anchored at the start**: Serve's own labels name
+  the day in front of the times (`Friday 4–8pm`), and an anchored one reads
+  every single one of those as having no clock at all.
+- **⚠ A LABEL THAT CANNOT BE READ IS MARKED `timed: false`, NOT GIVEN A GUESS.**
+  `Saturday 10–1` says neither am nor pm anywhere; almost certainly ten to one,
+  and "almost certainly" is not something to draw a grid from. Those shifts are
+  absent from the three clock views, which say how many they left out, and
+  present in **By job**, which needs no clock — so nothing is ever unreachable.
+- **⚠ THE GRID'S ROWS ARE WHOLE HOURS AND A SHIFT IS A BLOCK LAID OVER THEM.** A
+  row per distinct slot — the obvious build, and the wrong one — makes a
+  7:30–11:00 shift exactly as tall as the 9:00–11:00 shift beside it, and how
+  long each job runs is the one thing somebody reads this grid to compare.
+- **⚠ THE DAY SWITCH IS NOT DRAWN WHEN THERE IS ONE DAY.** Serve sends no date
+  today, so a roster with none is one unnamed day and no chooser — a control
+  with one thing in it cannot do anything.
+- **⚠ THE PRINTED SHEET CARRIES NO ADMIN CHROME.** Found by looking at the
+  render: without the print rules the navy sidebar comes out down the left of
+  every page and a lead's handout arrives with a column of admin navigation on
+  it. Asserted by asking the browser what it will print, under
+  `emulateMedia({ media: 'print' })`.
+- **`/market/volunteers.csv` is the Export CSV button**, not a twin of it — the
+  button is a plain link to the route, so there is one assembly of the roster
+  rather than a second one in the browser that could drift. ⚠ It carries a row
+  for every spot nobody has taken, marked `(open)`: a file listing only who came
+  is a thank-you list, and what the coordinator is doing with a spreadsheet in
+  November is looking for holes. Gated `market_manage`, like the vendor export,
+  because it names everybody coming. ⚠ An unreachable Serve answers **503, not
+  an empty file** — a header row with nothing under it reads as "nobody has
+  signed up", and that is the one that gets acted on.
+- `fetchRoster(env)` is pulled out so the screen and the CSV read the roster the
+  same way — one fetch, one set of failure rules, one idea of what "Serve did
+  not answer" means.
+
+**⚠ Two of the prototype's own choices were overruled by this repo's rules**,
+the same way the arrows were in v5.8.0: its radii (7, 10, 4) are not in the
+legal set `admin/ui.test.mjs` enforces, and its 1–9 table selector is the
+market's own `market_max_tables` setting instead.
+
+**⚠ A CSS comment in `admin/ui.js` broke the module while writing this**, for the
+fourth time — a backtick quoting a class name inside a template literal.
+Describe a class in these comments; do not quote one.
+
+Run: `node admin/market.test.mjs` (318 — the label parser, the roster model, the
+four views and the CSV, plus a child process in `America/Chicago` so the
+date-anchoring assertion is not silently true on a UTC machine),
+`node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
+(the two new groups drive every single-field save through the real Worker), and
+`node --experimental-loader ./test/html-loader.mjs test/market-admin.test.mjs`
+(Chromium, 36 — the cell round trip, the sort, the filter, the failed save and
+the print sheet). ⚠ Every new group was verified by injecting the regression it
+guards; three of them were vacuous on the first attempt and are recorded as such
+in the files — a `<select>` never overflows its box, so a clipped label cannot
+be measured with `scrollWidth`; a parser assertion read off `.start` crashes
+instead of failing; and a permission test written with `{ pages_edit: true }`
+grants nothing at all, because `hasPermission` reads an array.
+
 ### The calendar is ours now (v5.29.0, 2026-08-19)
 
 Built from `design_handoff_church_calendar/`, boards 1b (the month) and 2a (the
@@ -6653,11 +6792,18 @@ excluded trees:
 
 ```
 git ls-files | grep -vE '^(admin/vendor|design_handoff_[a-z_]+)/|^CLAUDE\.md$' \
-  | xargs grep -rniE '\w*(colour|neighbour|centre|centred|behaviour|organis[eai]|recognis|initialis|sanitis|normalis|serialis|summaris|optimis|licenc|labelled|grey|honour)\w*' \
+  | xargs grep -rniE '\w*(colour|neighbour|centre|centred|behaviour|organis[eai]|recognis|initialis|sanitis|normalis|serialis|summaris|optimis[ae]|licenc|labelled|grey|honour)\w*' \
   | grep -vE 'labelledby|licen\[cs\]e'
 ```
 
 It should return nothing. Worth running before opening a PR that adds a screen.
+
+⚠ `optimis[ae]`, not a bare `optimis` — that shorter pattern also matches the
+correctly-spelled American *optimistic*, which `admin/ministry-editor.html`
+legitimately contains. A check that reports a false positive every time it runs
+is one people learn to skim, and then it stops catching the real hit. (It did:
+`behaviour` sat in `test/admin-redesign.test.mjs` until the 2026-08-19 review,
+one line below a false positive nobody had bothered to clear.)
 
 ⚠ **`CLAUDE.md` is excluded from its own check, and that is not laziness** —
 the section you are reading spells every one of those words out in order to
@@ -7750,16 +7896,17 @@ doing," not by severity.** Phase 1 is the set that needs no design decision and
 no conversation — patches and one piece of configuration. Phase 5 and 6 need
 Dinger's or Andrew's call on a policy, or a design of their own.
 
-⚠ **Nothing in this plan has been done.** It is a plan. The one exception is
-FX-01, which was applied in the same pull request that recorded this review,
-because CI cannot report on any of the others until it is green.
+⚠ **Status, 2026-08-19.** Phase 0 is done, and so are the four Andrew picked
+out of it: **FX-01 · FX-02 · FX-03 · FX-04 · FX-17 · FX-19 are shipped**, and
+**FX-05 is half done** — its code prerequisite is in, the Worker secret itself
+is a human step (see the entry). Everything else below is still a plan.
 
 | Phase | What it is | Codes |
 |---|---|---|
-| **0** | Green CI and honest docs — the floor everything else stands on | FX-01 … FX-03 |
-| **1** | Close the exposures. Small, self-contained, no decisions | FX-04 … FX-12 |
+| **0** | Green CI and honest docs — the floor everything else stands on | ~~FX-01 … FX-03~~ **DONE** |
+| **1** | Close the exposures. Small, self-contained, no decisions | ~~FX-04~~ **DONE** · FX-05 **part** · FX-06 … FX-12 |
 | **2** | The escaping sweep — one theme, done once, properly | FX-13 … FX-16 |
-| **3** | Loading speed — the wins that need no new design | FX-17 … FX-23 |
+| **3** | Loading speed — the wins that need no new design | ~~FX-17~~ **DONE** · FX-18 · ~~FX-19~~ **DONE** · FX-20 … FX-23 |
 | **4** | Correctness the office would feel | FX-24 … FX-28 |
 | **5** | Policy calls — needs a decision before code | FX-29 … FX-31 |
 | **6** | Consistency and hygiene | FX-32 … FX-38 |
@@ -7778,7 +7925,7 @@ still fails if the header is dropped from `admin/market.js` — verified in both
 directions. Nothing else in CI can be trusted until this is green, because a
 suite with one known failure stops being read for the second one.
 
-**FX-02 · Retire the `wip:` volunteers diagnostic.** `e71a0af` is a `wip:`
+**FX-02 · Retire the `wip:` volunteers diagnostic — DONE.** `e71a0af` is a `wip:`
 commit on the trunk. The `volError` branch it left (`admin/market.js:919-928`)
 still renders Serve's raw response body and `cf-ray` onto the coordinator's
 screen — a live debugging aid for an investigation that is over. Decide whether
@@ -7786,11 +7933,12 @@ the service binding actually fixed the 404, then cut the diagnostic back to the
 honest empty state the tab was designed around, and rewrite the comment above
 it as a conclusion rather than a running narrative.
 
-**FX-03 · Tighten the American-spelling grep, and fix the one real hit.**
-`behaviour` is back at `test/admin-redesign.test.mjs:3493`. Separately, the
-grep documented under **Design System** matches `optimis`, which flags the
-correctly-spelled *optimistic* — a check that cries wolf is a check nobody
-runs. Narrow it to `optimis[ae]` and re-run.
+**FX-03 · Tighten the American-spelling grep — DONE.** The grep documented
+under **Design System** matched `optimis`, which flags the correctly-spelled
+*optimistic*; it is `optimis[ae]` now, and the note beside it says why. The
+`behaviour` hit this was written for had already been fixed on main by the
+time the fix ran — recorded because "the check was clean, so I changed
+nothing" is worth distinguishing from "I fixed it".
 
 ---
 
@@ -7798,8 +7946,10 @@ runs. Narrow it to `optimis[ae]` and re-run.
 
 These are the ones where the shape of the fix is not in question.
 
-**FX-04 · Sanitize the classic rich-text fields on write.** (`SEC-1`, the
-largest item in the review.) `sanitizeRich()` already exists, is a real
+**FX-04 · Sanitize the classic rich-text fields — DONE.** (`SEC-1`, the
+largest item in the review.) See "The classic rich fields have a sanitizer at
+last" below for what shipped and why it is not the block editor's allowlist.
+The original statement of the work follows. `sanitizeRich()` already exists, is a real
 allowlist and is already tested. Put it on the write path for `pastor_note`,
 `secondary_note`, `wol_content`, `lasm_content`, `tertiary_note`, the extra
 notes, news `body`, sermon notes, youth page content and ministry posts. Today
@@ -7810,11 +7960,22 @@ so the admin's already-sanitized closed-state preview is not the control; and
 rows written before this exists were never filtered, so a one-time pass over
 the existing bodies belongs in the same change.
 
-**FX-05 · Set `TURNSTILE_SECRET_KEY`.** No code. The screening, the site-key
-field and the widget have been built and inert since 2026-07-31. It is the
-difference between a scoring heuristic and an actual gate on the forms that
-reach six hundred inboxes and every staff phone. Highest value per unit of
-effort on the whole list.
+**FX-05 · Set `TURNSTILE_SECRET_KEY` — CODE DONE, THE SECRET IS NOT.**
+⚠ **"No code" was wrong, and setting the secret before 2026-08-19 would have
+broken three of the five screened forms.** See "Turnstile could not have been
+switched on safely" below. The widget mounts are in now; what is left is two
+human actions, and they are still the highest value per unit of effort on this
+list:
+
+1. Create a Turnstile site key at Cloudflare and save it on the **Filtered
+   Mail** screen. ⚠ Choose the widget **mode** deliberately — the newsletter
+   band is site-wide chrome on all 28 pages, so a *Managed* key puts a visible
+   checkbox on every one of them, where *Invisible* or *Non-interactive*
+   renders nothing.
+2. `wrangler secret put TURNSTILE_SECRET_KEY --name tlc-newsletter-admin`
+
+Until both are done Turnstile stays inert, which is exactly what it has been
+since 2026-07-31 — nothing regresses by waiting.
 
 **FX-06 · Give the renter portal security headers.** `portalHtml()`
 (`admin/gym.js:305`) returns a content type and nothing else. It needs a CSP,
@@ -7890,7 +8051,9 @@ copy of the same string two lines below is escaped. That is the fourth site of
 
 ### Phase 3 — loading speed
 
-**FX-17 · Serve the block stylesheet as a cacheable asset.** (`PERF-1`.)
+**FX-17 · Serve the block stylesheet as a cacheable asset — DONE.** (`PERF-1`.)
+`/api/pages` now ships 101 bytes where it shipped 85,035. See "85KB of CSS
+became a link" below. The original statement follows.
 `BLOCK_CSS` is **85,033 bytes** of unminified, comment-carrying CSS. On a
 published page it ships **twice**: inline at the edge (`site-worker.js:600`,
 into HTML served `no-cache`) and again inside the `/api/pages` JSON. The admin's
@@ -7904,7 +8067,9 @@ already there — because `buildNav`/`fillFooter`/`applyAppearance` need the res
 of the payload. Split the chrome from the rendered pages so the second fetch is
 small, or have the edge inline the chrome record it already reads.
 
-**FX-19 · Widen the `/api/pages` cache chokepoint.** (`PERF-3`.)
+**FX-19 · Widen the `/api/pages` cache chokepoint — DONE.** (`PERF-3`.)
+Eleven prefixes now, from four, each named for the block it feeds. The original
+statement follows.
 `tlc-admin-worker.js:1570` busts on `/pages`, `/menu`, `/partners`, `/values`
 and its comment claims it covers "any POST that could change what /api/pages
 says." It misses `/staff/*`, `/giving*`, `/christian-education/*`, `/sermons*`,
@@ -8104,3 +8269,174 @@ the only path from a low-privilege admin account to script running on the
 church's public website. The second is a Worker secret and no code at all. The
 third takes 85KB off every page load and ends the complaint this file has now
 explained three separate times.
+
+---
+
+## Phase 0 and the first four fixes (2026-08-19)
+
+Andrew: *"Do phase 0 and then FX-04, FX-05, FX-17 + FX-19."* What follows is
+what each turned out to be, because two of them were not what the plan said.
+
+### The classic rich fields have a sanitizer at last (FX-04)
+
+`sanitizeRich()` has guarded every block in the page editor since the editor
+shipped. It guarded **none** of the classic TinyMCE fields — the newsletter's
+notes, a news body, a sermon note, a ministry page, a ministry post. Those were
+stored exactly as posted (`stripBlobImgs` and nothing else) and rendered as
+markup into six hundred inboxes and into `innerHTML` on timothystl.org. An
+account holding only `newsletter_edit` could put script on the public site.
+
+**⚠ THE OBVIOUS FIX — CALL `sanitizeRich` ON THE WAY IN — WOULD HAVE DELETED
+EVERY TABLE IN THE ARCHIVE.** The classic toolbar is `blocks | bold italic
+underline | align* | bullist numlist | link image | table | code`. It has a
+table button. Its own `NodeChange` handler writes
+`margin:8px;max-width:100%;height:auto` onto every image it touches. And
+`RICH_TAGS` has no table family, no `h1`, no `pre`, and allows no `style` at
+all. Reusing it would have silently eaten real, already-published content the
+first time anybody re-saved a letter.
+
+- **`sanitizeClassicRich` is a second profile, not a widened first one.**
+  `sanitizeProfile(input, profile)` is the one engine; `sanitizeRich` is that
+  engine plus `RICH_PROFILE`, byte-for-byte what it always did. That is the
+  same argument `sanitizeCardRich` and `sanitizeLineRich` are separate narrower
+  sets for, run in the other direction: **widening the classic set must never
+  widen the page editor's.** A test asserts the page editor still refuses a
+  table and still refuses a `style` attribute.
+- **⚠ `style` is allowlisted BY PROPERTY AND BY VALUE, which is not the same as
+  allowing one.** The note on `RICH_CLASSES` says a free style attribute must
+  never be permitted, and that still holds — it is arbitrary CSS running in
+  another admin's authenticated session. `safeStyle()` keeps a declaration only
+  if the property is on a fixed list and the value matches a character set with
+  **no parentheses in it**. That one exclusion is what kills `url(...)` and the
+  old `expression(...)`, and there is no legitimate value in `text-align` or
+  `margin` that needs a bracket.
+- **Sanitized on write AND on the public read paths.** Write protects
+  everything saved from now on and does nothing for the rows already in the
+  table — which are the ones the public site is rendering today. `richOut()`
+  cleans `/api/news`, `/api/newsletters`, `/api/newsletter/:id` and
+  `pageData()`'s news (the `newsfeed` block emits `n.body` raw, server-side,
+  into every published page).
+- **⚠ DELIBERATELY NOT A ONE-TIME MIGRATION OVER THE STORED BODIES.** A pass
+  like that cannot be undone, and the one thing worse than unsanitized markup in
+  the archive is a script that rewrites six years of newsletters and gets it
+  wrong on a body nobody thought to check. Cleaning on the way out is reversible
+  by deleting one line; the stored bytes are untouched, so if this profile turns
+  out to eat something real the content is still there. A test asserts exactly
+  that — the legacy row still contains its `<script>` in the table while the
+  API serves it clean.
+
+Run: the `classic rich fields` group in `node admin/blocks.test.mjs`, and the
+end-to-end group in `test/admin-redesign.test.mjs`. Verified against the bug in
+both halves: reverting the write path fails two assertions, reverting `richOut`
+fails three.
+
+### Turnstile could not have been switched on safely (FX-05)
+
+The plan said "No code." That was wrong, and it is the most useful thing this
+pass found.
+
+**Five forms run through `screenSubmission()`. Only two carried a Turnstile
+mount.** The contact and prayer forms have one in `public/index.html`. The
+newsletter band did not. And the Christmas Market application and the generic
+event registration are **blocks** — `admin/blocks.js` contained the string
+`tlc-turnstile` exactly zero times.
+
+A form with no widget posts no `cf-turnstile-response`. `verifyTurnstile()`
+scores that `missing`, which is **+5**, against `SUSPECT_SCORE` 3 and
+`HOLD_SCORE` 6. So the moment the secret was set:
+
+| | score | what happens |
+|---|---|---|
+| any market application | 5 | `suspect` → **the vendor's confirmation email is suppressed** |
+| one with a link in it ("see my shop at…") | 7 | `held` → **no payment link, invisible until somebody opens Filtered Mail** |
+| any newsletter signup | 5 | `suspect`; one more signal and the person is silently never subscribed |
+
+That is a self-inflicted version of the exact failure the market build exists to
+prevent — a maker who applies and leaves no usable record. Measured, not
+reasoned about: `scoreSubmission` was run over a realistic application.
+
+- **All five forms carry a mount now** — two added to `admin/blocks.js`
+  (public render only; the editor canvas gets none, since a challenge widget
+  inside the page editor is nonsense) and one to the newsletter band.
+- **⚠ `tlcMountTurnstile` had to become re-runnable, and that is the load-bearing
+  half.** It read `.tlc-turnstile` **once**, on the single pass that ran when
+  `/api/form-config` answered. The hardcoded forms are always in the document by
+  then; a block-rendered form injected on an SPA navigation is not. It now
+  renders any mount that has not been done yet, marks each with `data-ts-done`
+  before rendering so two calls cannot double-render one widget, loads the
+  script at most once, and is called again after every block injection.
+- **⚠ It still loads nothing until a form is actually present**, so the promise
+  that the 27 pages without one fetch no Turnstile script is kept.
+- **⚠ Whether the widget is VISIBLE is not decided here.** Turnstile's mode is
+  a property of the site key at Cloudflare. The newsletter band is chrome on all
+  28 pages, so a *Managed* key means a visible checkbox on every page of the
+  site and an *Invisible* one means nothing at all. That is the office's
+  decision, and it is why the secret is still not set: the code is now safe for
+  it, the choice is theirs.
+
+### 85KB of CSS became a link (FX-17)
+
+`BLOCK_CSS` is 85,033 bytes of unminified, comment-carrying stylesheet, and on a
+published page it travelled **twice**: injected inline at the edge into HTML
+served `no-cache`, and again inside the `/api/pages` JSON, which the client
+fetches regardless for the nav, footer and appearance record.
+
+`/assets/blocks.css` serves it `public, max-age=31536000, immutable`, busted by
+`?v=VERSION` — the same treatment the admin's own ~89KB got in August 2026.
+`/api/pages` ships **101 bytes** where it shipped 85,035.
+
+- **⚠ The `<link>` carries `id="tlcb-css"`, the same id the inline `<style>`
+  did.** `tlcEnsureBlockCss()` and `tlcTakeOverPage()` both ask
+  `getElementById('tlcb-css')` whether the stylesheet is already here, and a
+  `<link>` answers that as well as a `<style>` — which is the entire reason this
+  swap is invisible to the client. Change the id in one place and the client
+  injects a second copy on every navigation.
+- **⚠ `Access-Control-Allow-Origin`, unlike `/assets/admin.css`.** This one is
+  fetched cross-origin, by timothystl.org.
+- **⚠ `renderPage(withCss)` still emits the inline `<style>`, on purpose.** The
+  editor canvas renders through the same function and is a different situation:
+  behind a session, on the admin origin, re-rendered constantly. Moving it to a
+  link is worth doing and needs the canvas's own load ordering thought about —
+  it is not this change. The strip lines in the client stay for the same reason
+  a cached `/api/ministry` response can still carry the inline form.
+- **⚠ `/api/give-page` STILL SHIPS THE BYTES, and that is a decision.** It is
+  the second place `BLOCK_CSS` leaves this Worker, for `give.timothystl.org`.
+  Switching it would put a render-blocking cross-origin stylesheet into the
+  critical path of **the page that takes the money** — and this file's own rule
+  is that the giving page changes deliberately, with somebody watching, not as
+  a side effect of a performance pass. 85KB on one hostname most visitors reach
+  once is the cheaper half of the problem anyway. Left inline, on purpose.
+
+### The chokepoint's comment was longer than its list (FX-19)
+
+It claimed to cover "any POST that could change what /api/pages says" and named
+four prefixes. `pageData()` is fed by a great deal more, and every one of those
+rows is rendered *into* the payload by a self-filling block. Eleven prefixes
+now, each commented with the block it feeds: staff, giving, Christian Ed,
+sermons, news items, market and events joined pages, menu, partners and values.
+
+**⚠ The staleness was never just the 120s `max-age`.** It was that plus up to
+300s in `site-worker.js`'s own per-isolate `pagesCache` — about seven minutes,
+which is long enough to read as "my edit did not save" and go round again. That
+is one of the three separate causes this file has recorded for the same
+complaint.
+
+A test stubs `caches.default`, POSTs under each prefix and asserts the bust —
+and asserts that a `/login` POST does **not** bust, because this is a list and
+not "rebuild the payload on every POST".
+
+### Phase 0
+
+**FX-01** (the `X-Intake-Key` stub) shipped with the review itself. **FX-02**
+cut the `wip:` diagnostic back: `admin/market.js` no longer renders Serve's raw
+response body and `cf-ray` onto the coordinator's screen, and the comment above
+it reads as a conclusion — *the service binding fixed it, do not simplify this
+back to a hostname fetch* — rather than as a running investigation. **FX-03**
+narrowed the documented spelling grep to `optimis[ae]`; the `behaviour` hit it
+was written for had already been fixed on main.
+
+Run, for all of it: every `admin/*.test.mjs`, plus
+`node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
+(1215), `test/site-edge-render.test.mjs`, `test/give-page.test.mjs`,
+`test/events-admin.test.mjs`, `test/links-page.test.mjs`,
+`test/site-taps.test.mjs`.

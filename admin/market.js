@@ -14,8 +14,8 @@
 
 import { html, sidebarShell, escapeHtml } from './helpers.js';
 import { hasPermission, logAudit } from './auth.js';
-import { renderListSection, renderDrawer, primaryCell, statusPill, rowActions, panel, renderField } from './ui.js';
-import { section as sectionCfg, columnsOf, filtersOf } from './sections.js';
+import { statusPill, panel, renderField, TONES } from './ui.js';
+import { section as sectionCfg } from './sections.js';
 import { churchDate } from './when.js';
 import { withAmountAndFund } from '../give-link.js';
 // The pricing itself moved to a leaf module with no admin/ imports, so
@@ -141,11 +141,10 @@ export async function marketSettings(env) {
 // `market_vendors` columns — `marketFieldsFromValue()` carries a
 // `sanitizeApplication()` result over into `site_event_registrations`'s
 // `fields_json`, and `marketRowFromRegistration()` reconstructs a row shaped
-// exactly like the old `market_vendors` row, so every renderer, the CSV
-// export and the coordinator's drawer below did not need to change — they
-// still read `editing.business_name`, `editing.product_description`, and so
-// on, on an object built fresh from the new table instead of read straight
-// off the old one.
+// exactly like the old `market_vendors` row, so every renderer and the CSV
+// export did not need to change — they still read `row.business_name`,
+// `row.product_description`, and so on, on an object built fresh from the new
+// table instead of read straight off the old one.
 function marketFieldsFromValue(value) {
   return {
     business_name: value.business_name || '',
@@ -191,6 +190,17 @@ export function marketRowFromRegistration(reg) {
     // Absent on every application saved before this shipped — 'card' is the
     // one path that already existed, so it is the read-side default too.
     payment_method: f.payment_method === 'check' ? 'check' : 'card',
+    // ── THE THREE THE COORDINATOR SETS, NOT THE VENDOR ──────────────────
+    // `category`, `check_no` and `check_date` are absent on every row that
+    // existed before this shipped, and on every row a vendor has just
+    // submitted — nothing on the public application asks for any of them.
+    // They live in the same `fields_json` blob for the same reason
+    // everything else does: the generic registration table means a field
+    // like this needs no schema change to exist. An absent one reads as ''
+    // and renders exactly as it did before this feature.
+    category: cleanCategory(f.category),
+    check_no: String(f.check_no || ''),
+    check_date: String(f.check_date || ''),
     amount_due_cents: reg.amount_due_cents || 0,
     table_number: reg.table_number || '',
     payment_status: reg.payment_status || 'unpaid',
@@ -198,6 +208,53 @@ export function marketRowFromRegistration(reg) {
     square_order_id: reg.square_order_id || '',
     staff_notes: reg.staff_notes || '',
     created_at: reg.created_at,
+  };
+}
+
+// ── CATEGORY ─────────────────────────────────────────────────────────────────
+// A fixed list, not free text, and that is the whole point of it. What a
+// vendor writes in "what do you sell" is a paragraph — it sorts by whichever
+// word it happens to begin with, so the list could never answer "how many
+// bakers have we got" or "are the candle people all together". The
+// coordinator picks one per vendor from this list.
+//
+// ⚠ 'Other' is the fallback and must stay last: an unrecognized stored value
+// (a list edited between deploys, a hand-typed POST) lands there rather than
+// reaching the page unchecked, the same rule every `choices` field in the
+// block editor follows.
+export const VENDOR_CATEGORIES = [
+  'Baked goods', 'Candles & soap', 'Jewelry', 'Wood', 'Textiles',
+  'Ornaments', 'Food & drink', 'Art & prints', 'Wreaths & greens', 'Other',
+];
+
+// Blank stays blank — "not categorized yet" is a real state, and defaulting
+// it to 'Other' would quietly claim somebody had looked at every row.
+export function cleanCategory(v) {
+  const s = trim(v);
+  if (!s) return '';
+  return VENDOR_CATEGORIES.includes(s) ? s : 'Other';
+}
+
+// ── WHERE A CHECK HAS GOT TO ─────────────────────────────────────────────────
+// Three states, and only the middle one is new information. Before this, a
+// vendor who chose "pay by check" and a vendor who simply never paid looked
+// identical on the list — both said unpaid — so the coordinator had no way to
+// tell the person she is waiting on the post for from the person she has to
+// chase.
+//
+// ⚠ Still no fifth `payment_status`. This is derived, every time, from the
+// payment method and whether a check has been recorded; nothing stores it.
+export function checkState(row) {
+  if (row.payment_method !== 'check') return { paying: 'card', received: false, pending: false };
+  const received = !!(row.check_no || row.check_date);
+  return {
+    paying: 'check',
+    received,
+    // A vendor who dropped out or had the fee waived is not somebody the
+    // coordinator is waiting on a check from, whatever the payment method
+    // says — leaving them on the chase list is how a reconciliation reads
+    // short forever.
+    pending: !received && row.payment_status !== 'dropped' && row.payment_status !== 'waived',
   };
 }
 
@@ -239,6 +296,53 @@ export function paymentLabel(row) {
     return { value: st.value, tone: st.tone, label: 'Awaiting check' };
   }
   return st;
+}
+
+// ── WHAT A ROW LOOKS LIKE AFTER A CELL SAVES ─────────────────────────────────
+// The presentational state of the four cells that can change under each
+// other: the payment pill, the money line beneath it, and the check column,
+// which appears and disappears depending on both.
+//
+// ⚠ ONE FUNCTION, READ BY BOTH SIDES. The server renders the table from this
+// and `/market/update` answers with it, so a cell that has just saved is
+// redrawn from what the DATABASE now holds rather than from what the browser
+// hoped it had sent. Two descriptions of "what does a paid check-paying
+// vendor look like" is exactly how a row ends up saying Paid in one place and
+// Awaiting check in another after a single click.
+export function vendorCellState(row) {
+  const label = paymentLabel(row);
+  const chk = checkState(row);
+  return {
+    id: row.id,
+    payment_status: row.payment_status,
+    tone: label.tone,
+    statusLabel: label.label,
+    // "asked $46.65" and "$46.65 recorded" are different sentences on
+    // purpose: one is what the church wants, the other is what somebody has
+    // actually seen. NULL means nobody has looked yet, and reads as the first.
+    moneyLine: row.amount_paid_cents == null
+      ? 'asked ' + money(row.amount_due_cents)
+      : money(row.amount_paid_cents) + ' recorded',
+    // ⚠ FOUR MODES, NOT THREE. A check-paying vendor whose fee was waived, or
+    // who dropped out, is not somebody a check is expected from — `pending`
+    // is already false for both (see `checkState`) — and drawing them the
+    // number box and the ✓ In button invites the coordinator to record a
+    // check that is never coming, on the row that says in the cell beside it
+    // that nothing is owed.
+    checkMode: chk.paying === 'card' ? 'card'
+      : chk.received ? 'received'
+      : chk.pending ? 'pending' : 'quiet',
+    checkNo: row.check_no || '',
+    checkDate: row.check_date || '',
+    checkLabel: chk.received
+      ? '✓ Check ' + (row.check_no && row.check_no !== '—' ? '#' + row.check_no : '(no number)')
+        + (row.check_date ? ' · ' + row.check_date : '')
+      : '',
+    category: row.category || '',
+    tables: row.tables,
+    table_number: row.table_number || '',
+    due: money(row.amount_due_cents),
+  };
 }
 
 // The payment address, built at request time from `give_url` and the market's
@@ -323,6 +427,816 @@ ${byCheck
 // Returns a Response for the routes it owns, or null so the caller's route
 // chain carries on — the same contract handleFilteredRoutes and handleGymRoutes
 // use.
+// ── THE VENDOR TABLE — THE ROW IS THE FORM ───────────────────────────────────
+// Every change the coordinator makes seventy times in a season — a table
+// number, a category, a payment state, a check that arrived — is made in the
+// row itself and saves on its own. The drawer this replaces meant opening a
+// panel, saving, and landing back at the top of the list for each one of
+// them, which is what made the list slower to use than the spreadsheet it was
+// built to replace.
+//
+// ⚠ THE EXPANDED ROW IS A REAL <form> POSTING TO /market/update. Without
+// JavaScript every cell in it still saves, by the whole-form path the route
+// kept — the inline cells are an enhancement on top of a page that works
+// without them, not the only way in.
+const SELLS_CAP = 54;
+
+const sortKey = (v) => String(v == null ? '' : v).toLowerCase();
+
+function vendorRow(r, settings, cats) {
+  const cell = vendorCellState(r);
+  const sells = String(r.product_description || '').replace(/\s+/g, ' ').trim();
+  const sellsShort = sells.length > SELLS_CAP ? sells.slice(0, SELLS_CAP - 1) + '…' : sells;
+  const name = r.business_name || r.participant_names || '(no name given)';
+  const sub = [r.business_name ? r.participant_names : '', r.email].filter(Boolean).join(' · ');
+  const t = TONES[cell.tone] || TONES.plain;
+  const chk = checkState(r);
+  const attr = (k, v) => `${k}="${escapeHtml(String(v))}"`;
+  const d = (f) => `data-id="${r.id}" data-field="${f}"`;
+
+  const checkCol = cell.checkMode === 'card'
+    ? `<span class="tlc-mkt-quiet">Card, online</span>`
+    : cell.checkMode === 'quiet'
+      ? `<span class="tlc-mkt-quiet">Check or cash — nothing owed</span>`
+    : cell.checkMode === 'received'
+      ? `<span class="tlc-mkt-checkin">${escapeHtml(cell.checkLabel)}</span>`
+      : `<div class="tlc-mkt-check">
+          <div class="tlc-mkt-check-row">
+            <input type="text" class="tlc-mkt-in tlc-mkt-in-check" ${d('check_no')} data-cell="1"
+              value="${escapeHtml(cell.checkNo)}" placeholder="Check #" aria-label="Check number for ${escapeHtml(name)}">
+            <button type="button" class="tlc-mkt-in-btn" data-checkin="1" data-id="${r.id}"
+              title="Mark the check received today">✓ In</button>
+          </div>
+          <input type="date" class="tlc-mkt-in tlc-mkt-in-check" ${d('check_date')} data-cell="1"
+            value="${escapeHtml(cell.checkDate)}" aria-label="Date the check arrived">
+        </div>`;
+
+  // Sorting is done in the browser over the rows already rendered — no new
+  // query, and no round trip for something the page is already holding. Each
+  // key is written out as its own attribute so the comparison is on a value
+  // rather than on scraped markup; `tables` is numeric and `check` is an
+  // order, not a word, so both are stored as numbers.
+  const sorts = [
+    attr('data-s-business', sortKey(name)),
+    attr('data-s-category', sortKey(cell.category || 'zzz')),
+    attr('data-s-sells', sortKey(sells)),
+    attr('data-s-tables', r.tables || 0),
+    attr('data-s-tableno', sortKey(r.table_number)),
+    attr('data-s-status', sortKey(cell.statusLabel)),
+    attr('data-s-check', chk.received ? 2 : chk.pending ? 1 : 0),
+  ].join(' ');
+
+  return `<div class="tlc-mkt-row${r.payment_status === 'dropped' ? ' is-out' : ''}" data-row="${r.id}" ${sorts}
+    data-filter="${escapeHtml(paymentState(r.payment_status).value)}"
+    data-check-pending="${chk.pending ? '1' : '0'}"
+    data-search="${escapeHtml(`${r.participant_names || ''} ${r.business_name || ''} ${r.email || ''} ${sells} ${cell.category} ${r.table_number || ''}`.toLowerCase())}">
+    <div class="tlc-mkt-cells">
+      <div class="tlc-mkt-name">
+        <span class="tlc-mkt-biz">${escapeHtml(name)}</span>
+        ${sub ? `<span class="tlc-mkt-sub">${escapeHtml(sub)}</span>` : ''}
+      </div>
+      <select class="tlc-mkt-sel" ${d('category')} data-cell="1" aria-label="Category for ${escapeHtml(name)}">
+        <option value=""${cell.category ? '' : ' selected'}>—</option>
+        ${cats.map((c) => `<option value="${escapeHtml(c)}"${c === cell.category ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('')}
+      </select>
+      <span class="tlc-mkt-sells" title="${escapeHtml(sells)}">${escapeHtml(sellsShort)}${r.sells_food ? ' <strong>· food</strong>' : ''}</span>
+      <select class="tlc-mkt-sel tlc-mkt-sel-n" ${d('tables')} data-cell="1" aria-label="Tables for ${escapeHtml(name)}">
+        ${Array.from({ length: settings.maxTables }, (_, i) => i + 1).map((n) =>
+          `<option value="${n}"${n === r.tables ? ' selected' : ''}>${n}</option>`).join('')}
+      </select>
+      <input type="text" class="tlc-mkt-in" ${d('table_number')} data-cell="1"
+        value="${escapeHtml(r.table_number || '')}" placeholder="—" aria-label="Table number for ${escapeHtml(name)}">
+      <div class="tlc-mkt-pay">
+        <select class="tlc-mkt-pill" ${d('payment_status')} data-cell="1" aria-label="Payment for ${escapeHtml(name)}"
+          style="background:${t.bg};color:${t.fg};border-color:${t.bd};">
+          ${PAYMENT_STATES.map((st) => `<option value="${escapeHtml(st.value)}"${st.value === r.payment_status ? ' selected' : ''}>${escapeHtml(
+            st.value === 'unpaid' && r.payment_method === 'check' ? 'Awaiting check' : st.label)}</option>`).join('')}
+        </select>
+        <span class="tlc-mkt-money">${escapeHtml(cell.moneyLine)}</span>
+      </div>
+      <div class="tlc-mkt-checkcol">${checkCol}</div>
+      <button type="button" class="tlc-mkt-caret" data-expand="${r.id}" aria-expanded="false"
+        aria-controls="mkt-more-${r.id}" aria-label="Show the rest of ${escapeHtml(name)}’s application">▾</button>
+    </div>
+    <div class="tlc-mkt-more" id="mkt-more-${r.id}" hidden>
+      <form method="POST" action="/market/update" class="tlc-mkt-more-grid">
+        <input type="hidden" name="id" value="${r.id}">
+        <input type="hidden" name="table_number" value="${escapeHtml(r.table_number || '')}">
+        <input type="hidden" name="payment_status" value="${escapeHtml(r.payment_status || 'unpaid')}">
+        <input type="hidden" name="category" value="${escapeHtml(cell.category)}">
+        <div>
+          <div class="tlc-mkt-lbl">What they sell</div>
+          <p class="tlc-mkt-para">${escapeHtml(sells) || '<span class="tlc-mkt-quiet">Nothing written.</span>'}</p>
+          ${r.appliances_power ? `<div class="tlc-mkt-lbl">Appliances / power</div><p class="tlc-mkt-para">${escapeHtml(r.appliances_power)}</p>` : ''}
+          ${r.special_requests ? `<div class="tlc-mkt-lbl">Special requests</div><p class="tlc-mkt-para">${escapeHtml(r.special_requests)}</p>` : ''}
+          <div class="tlc-mkt-lbl">Your notes</div>
+          <textarea class="tlc-mkt-notes" name="staff_notes" ${d('staff_notes')} data-cell="1" rows="3"
+            placeholder="Only ever seen here — the vendor is not shown this.">${escapeHtml(r.staff_notes || '')}</textarea>
+        </div>
+        <div>
+          <div class="tlc-mkt-lbl">Contact</div>
+          <p class="tlc-mkt-para">${escapeHtml(r.participant_names || '')}<br>
+            ${r.email ? `<a href="mailto:${escapeHtml(r.email)}">${escapeHtml(r.email)}</a><br>` : ''}
+            ${escapeHtml(r.phone || '')}
+            ${r.website_or_social ? `<br>${escapeHtml(r.website_or_social)}` : ''}
+            ${[r.street, [r.city, r.state].filter(Boolean).join(', '), r.zip].filter(Boolean).length
+              ? `<br>${escapeHtml([r.street, [r.city, r.state].filter(Boolean).join(', '), r.zip].filter(Boolean).join(' · '))}` : ''}</p>
+          <p class="tlc-mkt-quiet">${escapeHtml(r.returning_vendor === 'yes' ? 'Returning vendor' : r.returning_vendor === 'no' ? 'First year' : 'Did not say')}
+            · applied ${escapeHtml(String(r.created_at || '').slice(0, 10))}<br>
+            Agreed to the vendor terms as ${escapeHtml(r.signature_name || '—')}</p>
+          ${photosOf(r).length ? `<div class="tlc-mkt-lbl" style="margin-top:10px;">Sample photos</div>${photosOf(r)
+            .map((u) => `<a href="${escapeHtml(u)}" target="_blank" rel="noopener"><img src="${escapeHtml(u)}" alt="" class="tlc-mkt-photo"></a>`).join('')}` : ''}
+        </div>
+        <div>
+          <div class="tlc-mkt-lbl">Money</div>
+          <p class="tlc-mkt-para">Asked for ${escapeHtml(cell.due)}<br>${escapeHtml(
+            r.payment_method === 'check'
+              ? 'Paying by check or cash — flat fee, no card charge added'
+              : 'Paying by card, online')}</p>
+          <label class="tlc-mkt-lbl" for="mkt-paid-${r.id}">Amount paid</label>
+          <input type="text" id="mkt-paid-${r.id}" class="tlc-mkt-in tlc-mkt-in-box" name="amount_paid"
+            ${d('amount_paid')} data-cell="1"
+            value="${escapeHtml(r.amount_paid_cents == null ? '' : (r.amount_paid_cents / 100).toFixed(2))}"
+            placeholder="${escapeHtml((r.amount_due_cents / 100).toFixed(2))}">
+          <p class="tlc-mkt-quiet">Blank is not the same as zero.${r.sells_food ? ' Selling food — the health department requirements are theirs.' : ''}</p>
+          <div class="tlc-mkt-more-actions">
+            <button type="submit" class="tlc-btn-primary tlc-mkt-nojs">Save</button>
+          </div>
+        </div>
+      </form>
+      <form method="POST" action="/market/delete" class="tlc-mkt-del-form"
+        onsubmit="return confirm('Delete this application? The vendor is not told, and nothing is refunded.');">
+        <input type="hidden" name="id" value="${r.id}">
+        <button type="submit" class="tlc-mkt-del">Delete this application</button>
+      </form>
+    </div>
+  </div>`;
+}
+
+// Every column sorts, ascending then descending. The default is Category and
+// then vendor name — which is the order the coordinator actually works in,
+// because the questions she is answering are "how many bakers" and "are the
+// candle people together", not "who applied first".
+const VENDOR_HEADS = [
+  { key: 'business', label: 'Vendor' },
+  { key: 'category', label: 'Category' },
+  { key: 'sells', label: 'Sells' },
+  { key: 'tables', label: 'Tbls', numeric: true },
+  { key: 'tableno', label: 'Table #' },
+  { key: 'status', label: 'Payment' },
+  { key: 'check', label: 'Check or cash', numeric: true },
+];
+
+// The five states a filter pill can select, plus the one that is not a state.
+// ⚠ 'check' keys off `checkState().pending`, NOT off a `payment_status`
+// value — see the note on the filter list in admin/sections.js. It is written
+// onto each row as its own attribute so the pill has one thing to match on.
+const VENDOR_FILTERS = [
+  { label: 'All', value: 'all' },
+  { label: 'Not paid yet', value: 'unpaid' },
+  { label: 'Awaiting check', value: 'check' },
+  { label: 'Paid', value: 'paid' },
+  { label: 'Fee waived', value: 'waived' },
+  { label: 'Dropped out', value: 'dropped' },
+];
+
+export function vendorTable(rows, settings, cfg) {
+  const cats = VENDOR_CATEGORIES;
+  const heads = VENDOR_HEADS.map((h, i) => `<button type="button" class="tlc-mkt-h${
+    h.key === 'category' ? ' is-on' : ''}" data-sort="${h.key}"${h.numeric ? ' data-num="1"' : ''}
+    aria-label="Sort by ${escapeHtml(h.label)}">${escapeHtml(h.label)}<span class="tlc-mkt-caretsm">${
+    h.key === 'category' ? '▲' : ''}</span></button>`).join('');
+
+  const filters = VENDOR_FILTERS.map((f) =>
+    `<button type="button" class="tlc-mkt-filter${f.value === 'all' ? ' is-on' : ''}" data-mktfilter="${escapeHtml(f.value)}"
+      aria-pressed="${f.value === 'all' ? 'true' : 'false'}">${escapeHtml(f.label)}</button>`).join('');
+
+  // Rendered in the default order — category, then name — so the page is
+  // already sorted before any script has run.
+  const ordered = rows.slice().sort((a, b) => {
+    const ca = (a.category || 'zzz').toLowerCase();
+    const cb = (b.category || 'zzz').toLowerCase();
+    const na = String(a.business_name || a.participant_names || '').toLowerCase();
+    const nb = String(b.business_name || b.participant_names || '').toLowerCase();
+    return ca.localeCompare(cb) || na.localeCompare(nb);
+  });
+
+  return `<div class="tlc-mkt-tools">
+      <label class="tlc-mkt-search">
+        <span aria-hidden="true">⌕</span>
+        <input type="search" id="tlc-mkt-q" placeholder="${escapeHtml(cfg.search || 'Search vendors')}"
+          aria-label="${escapeHtml(cfg.search || 'Search vendors')}">
+      </label>
+      <div class="tlc-mkt-filters">${filters}</div>
+      <span class="tlc-mkt-count" id="tlc-mkt-count" data-total="${rows.length}">${
+        rows.length} ${rows.length === 1 ? 'application' : 'applications'} shown</span>
+    </div>
+    <div class="tlc-mkt-wrap">
+      <div class="tlc-mkt-table" id="tlc-mkt-table">
+        <div class="tlc-mkt-head">${heads}<span></span></div>
+        <div class="tlc-mkt-body" id="tlc-mkt-body">
+          ${ordered.map((r) => vendorRow(r, settings, cats)).join('')}
+        </div>
+        <div class="tlc-mkt-none" id="tlc-mkt-none" hidden>
+          <span class="tlc-mkt-none-t">No vendor applications match that.</span>
+          <span class="tlc-mkt-quiet">Clear the search box, or pick All above.</span>
+        </div>
+      </div>
+    </div>
+    ${rows.length ? '' : `<p class="tlc-hint" style="margin-top:14px;">${escapeHtml(settings.open
+      ? 'The vendor page is open and waiting — applications land here as they arrive.'
+      : 'Applications are switched off, so the page is not taking any. Turn them on above.')}</p>`}
+    <p class="tlc-note"><span class="tlc-note-mark" aria-hidden="true">◆</span><span>${escapeHtml(cfg.note || '')}</span></p>`;
+}
+
+// ── THE VOLUNTEER ROSTER, AS FOUR WAYS OF LOOKING AT ONE THING ───────────────
+//
+// The tab stays a read-only window on Serve — shifts are created and changed
+// there, and two places editing one roster is two rosters. What changed is
+// that the same roster can now be read four ways, and each way prints:
+//
+//   by job     a panel per job, most short-handed first, for the job lead
+//   by time    slot by slot down the day, for whoever is running the floor
+//   grid       every job against the clock, for the wall in the kitchen
+//   everybody  alphabetical, for the welcome table
+//
+// ⚠ EVERY ONE OF THOSE EXCEPT THE FIRST NEEDS A REAL START AND END, AND
+// SERVE SENDS A LABEL. The contract as built (design_handoff_market_event,
+// and the endpoint itself) is `{ label: '8:30–11:00 am', needed, filled,
+// people }` — a string written for a human. So `parseShiftLabel()` reads the
+// clock back out of it, and everything below is derived from that. When Serve
+// grows real `start`/`end`/`day`/`lead` fields — which is the one change this
+// design asks of it — they are preferred and no parsing happens at all.
+//
+// ⚠ AND A SHIFT WHOSE TIME CANNOT BE READ IS MARKED `timed: false`, NOT GIVEN
+// A GUESS. Three of the four views are arithmetic on the clock; inventing
+// midnight for a label this could not parse would draw a block on the grid at
+// a time nobody is coming, which is worse than saying so. The views that need
+// times say how many shifts they had to leave out, and the by-job view — the
+// one that needs no clock at all — shows everything regardless.
+
+// Minutes past midnight, or null. Accepts what a person writes ('9:00 AM',
+// '8:30am', '2 PM'), what a form posts ('14:00'), and the ISO instant Serve
+// would send if it grew a real field ('2026-12-05T09:00:00Z' → its own local
+// clock reading, which is what a shift time is).
+export function parseClock(v) {
+  const s = String(v == null ? '' : v).trim();
+  if (!s) return null;
+  const iso = /^\d{4}-\d{2}-\d{2}[T ](\d{1,2}):(\d{2})/.exec(s);
+  if (iso) return Number(iso[1]) * 60 + Number(iso[2]);
+  const m = /^(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?$/i.exec(s);
+  if (m) {
+    const h = Number(m[1]) % 12;
+    return (m[3].toLowerCase() === 'p' ? h + 12 : h) * 60 + Number(m[2] || 0);
+  }
+  const h24 = /^(\d{1,2}):(\d{2})$/.exec(s);
+  if (h24) {
+    const h = Number(h24[1]);
+    return h > 23 ? null : h * 60 + Number(h24[2]);
+  }
+  return null;
+}
+
+// '8:30–11:00 am' → { start: 510, end: 660 }.
+//
+// ⚠ THE MERIDIEM ON THE END OF THE LABEL BELONGS TO BOTH HALVES, AND THAT IS
+// THE WHOLE DIFFICULTY. '11:00 am–2:30 pm' says each half outright, but
+// '8:30–11:00 am' gives one for two — and the market's own labels are written
+// both ways. So a start with no am/pm inherits the end's, and is then pushed
+// forward twelve hours if that would put it AFTER the end: '11:00–2:30 pm'
+// inherits PM, reads 23:00–14:30, and is corrected to 11:00 AM. Getting this
+// wrong does not throw — it silently draws a morning shift in the evening.
+export function parseShiftLabel(label) {
+  const s = String(label == null ? '' : label).replace(/\s+/g, ' ').trim();
+  if (!s) return null;
+  // ⚠ NOT ANCHORED AT THE START. Serve's own labels routinely name the day in
+  // front of the times — 'Friday 4–8pm', 'Saturday 5–7pm' — and an anchored
+  // pattern reads every one of those as having no clock at all, which quietly
+  // empties three of the four views on exactly the labels the market uses.
+  const m = /(\d{1,2}(?::\d{2})?\s*(?:[ap]\.?m\.?)?)\s*(?:–|—|-|to)\s*(\d{1,2}(?::\d{2})?\s*(?:[ap]\.?m\.?)?)/i.exec(s);
+  if (!m) return null;
+  const hasMer = (t) => /[ap]\.?m\.?$/i.test(t.trim());
+  const merOf = (t) => (/p\.?m\.?$/i.test(t.trim()) ? 'pm' : 'am');
+  let a = m[1].trim();
+  let b = m[2].trim();
+  if (!hasMer(a) && hasMer(b)) a += ' ' + merOf(b);
+  if (!hasMer(b) && hasMer(a)) b += ' ' + merOf(a);
+  let start = parseClock(a);
+  let end = parseClock(b);
+  if (start == null || end == null) return null;
+  // Only ever correct a half that had no meridiem of its own. A label that
+  // says '2:00 PM–11:00 AM' outright is wrong in Serve, and quietly fixing it
+  // here would hide that from the person who could correct it.
+  if (start >= end && !hasMer(m[1].trim())) start = (start + 720) % 1440;
+  if (start >= end && !hasMer(m[2].trim())) end = (end + 720) % 1440;
+  if (start == null || end == null || end <= start) return null;
+  return { start, end };
+}
+
+const MER = (m) => (m >= 720 ? ' PM' : ' AM');
+// '9:00 AM'. Whole hours keep their :00 because the grid's hour rules read as
+// a column of times, and '9 AM' beside '9:30 AM' does not line up.
+export function fmtClock(mins) {
+  const m = ((Math.round(mins) % 1440) + 1440) % 1440;
+  const h = Math.floor(m / 60);
+  return (((h + 11) % 12) + 1) + ':' + String(m % 60).padStart(2, '0') + MER(m);
+}
+// '9' / '9:30' — for a range, where the meridiem is said once at the end.
+export const fmtShort = (mins) => fmtClock(mins).replace(':00', '').replace(/ [AP]M$/, '');
+// The same, keeping the meridiem — for a time shown on its own, where '9'
+// could as easily be nine at night as nine in the morning.
+export const fmtShortMer = (mins) => fmtShort(mins) + MER(mins).toLowerCase();
+export const fmtRange = (a, b) => fmtShort(a) + '–' + fmtShort(b) + MER(b).toLowerCase();
+
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
+  'August', 'September', 'October', 'November', 'December'];
+// ⚠ Anchored at noon UTC, never `new Date('2026-12-04')`. A bare date string
+// is parsed as midnight UTC, which is the previous day for everybody west of
+// Greenwich — including St. Louis, including this Worker's readers. Same trap
+// the newsletter archive's month grouping is written around.
+export function fmtDay(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || '').trim());
+  if (!m) return '';
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12));
+  if (isNaN(d.getTime())) return '';
+  return DAY_NAMES[d.getUTCDay()] + ', ' + MONTHS[d.getUTCMonth()] + ' ' + d.getUTCDate();
+}
+
+const personOf = (p) => {
+  if (typeof p === 'string') return { name: p, email: '' };
+  if (!p || typeof p !== 'object') return null;
+  const name = String(p.name || p.email || '').trim();
+  return name ? { name, email: String(p.email || '').trim() } : null;
+};
+
+// Serve's payload in, the model every view below reads out.
+//
+// Returns `{ days, untimed, jobs }` — `days` is one entry per date the roster
+// covers, each with its own shifts. A roster with no dates at all (which is
+// what the endpoint sends today) is ONE day with a blank key and no label,
+// and the day switch is simply not drawn: a chooser with one thing in it is a
+// control that cannot do anything.
+export function normalizeRoster(vol) {
+  const roles = Array.isArray(vol && vol.roles) ? vol.roles : [];
+  const shifts = [];
+  let untimed = 0;
+  roles.forEach((role) => {
+    const job = String((role && role.name) || '').trim() || 'Unnamed job';
+    const lead = String((role && (role.lead || role.leader)) || '').trim();
+    (Array.isArray(role && role.shifts) ? role.shifts : []).forEach((sh) => {
+      if (!sh || typeof sh !== 'object') return;
+      const label = String(sh.label || '').trim();
+      // Structured fields win outright when Serve sends them — no parsing.
+      const start = parseClock(sh.start != null ? sh.start : sh.starts_at);
+      const end = parseClock(sh.end != null ? sh.end : sh.ends_at);
+      const fromLabel = start == null || end == null ? parseShiftLabel(label) : null;
+      const s = start != null && end != null && end > start ? { start, end } : fromLabel;
+      const people = (Array.isArray(sh.people) ? sh.people : []).map(personOf).filter(Boolean);
+      const needed = Math.max(0, Number(sh.needed) || 0);
+      // `filled` is Serve's own count and is trusted for the tiles, but the
+      // NAMES are what the sheets print — so a shift whose count and list
+      // disagree reports the longer of the two rather than quietly printing
+      // fewer people than it says are coming.
+      const filled = Math.max(people.length, Math.max(0, Number(sh.filled) || 0));
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(String(sh.date || role.date || '').trim())
+        ? String(sh.date || role.date).trim() : '';
+      if (!s) untimed += 1;
+      shifts.push({
+        job, lead, label, date,
+        start: s ? s.start : null, end: s ? s.end : null, timed: !!s,
+        needed, filled, people,
+      });
+    });
+  });
+
+  const keys = [...new Set(shifts.map((s) => s.date))].sort();
+  const days = keys.map((k) => ({
+    key: k || 'all',
+    label: k ? fmtDay(k) : '',
+    date: k,
+    shifts: shifts.filter((s) => s.date === k),
+  }));
+  return {
+    days: days.length ? days : [{ key: 'all', label: '', date: '', shifts: [] }],
+    untimed,
+    total: shifts.length,
+  };
+}
+
+// ── THE FOUR VIEWS, AS DATA ──────────────────────────────────────────────────
+// Pure, so each one is testable without a roster fetch or a browser, and so
+// the printed sheet and the screen are built from the same call rather than
+// from two readings of the same list.
+
+// Most short-handed first. A roster sorted by name is a list; sorted by what
+// is missing it is a worklist, which is the only reason the coordinator opens
+// it at all.
+export function jobsFor(shifts) {
+  const map = new Map();
+  shifts.forEach((sh) => {
+    if (!map.has(sh.job)) map.set(sh.job, { name: sh.job, lead: sh.lead, shifts: [] });
+    const j = map.get(sh.job);
+    if (!j.lead && sh.lead) j.lead = sh.lead;
+    j.shifts.push(sh);
+  });
+  return [...map.values()].map((j) => {
+    j.shifts.sort((a, b) => (a.start ?? 1e9) - (b.start ?? 1e9));
+    const needed = j.shifts.reduce((a, s) => a + s.needed, 0);
+    const filled = j.shifts.reduce((a, s) => a + s.filled, 0);
+    return { ...j, needed, filled, short: Math.max(0, needed - filled) };
+  }).sort((a, b) => (b.short - a.short) || a.name.localeCompare(b.name));
+}
+
+// One entry per distinct start+end, every job running in it side by side.
+export function slotsFor(shifts) {
+  const map = new Map();
+  shifts.filter((s) => s.timed).forEach((sh) => {
+    const k = sh.start + '|' + sh.end;
+    if (!map.has(k)) map.set(k, { start: sh.start, end: sh.end, entries: [] });
+    map.get(k).entries.push(sh);
+  });
+  return [...map.values()].map((s) => {
+    s.entries.sort((a, b) => a.job.localeCompare(b.job));
+    const needed = s.entries.reduce((a, e) => a + e.needed, 0);
+    const filled = s.entries.reduce((a, e) => a + e.filled, 0);
+    return { ...s, needed, filled, short: Math.max(0, needed - filled) };
+  }).sort((a, b) => (a.start - b.start) || (a.end - b.end));
+}
+
+// Alphabetical, with when they arrive and when they can go home. This is the
+// welcome-table list, and the only view keyed on a person rather than a job.
+export function peopleFor(shifts) {
+  const map = new Map();
+  shifts.forEach((sh) => sh.people.forEach((p) => {
+    if (!map.has(p.name)) map.set(p.name, { name: p.name, email: p.email, shifts: [] });
+    const e = map.get(p.name);
+    if (!e.email && p.email) e.email = p.email;
+    e.shifts.push(sh);
+  }));
+  return [...map.values()].map((p) => {
+    p.shifts.sort((a, b) => (a.start ?? 1e9) - (b.start ?? 1e9));
+    const timed = p.shifts.filter((s) => s.timed);
+    const from = timed.length ? Math.min(...timed.map((s) => s.start)) : null;
+    const to = timed.length ? Math.max(...timed.map((s) => s.end)) : null;
+    // Hours WORKED, not hours on site — somebody with a gap in the middle of
+    // the day is not owed lunch for it, and the welcome table wants to know
+    // how long each person actually signed up for.
+    const minutes = timed.reduce((a, s) => a + (s.end - s.start), 0);
+    return { ...p, from, to, hours: Math.round(minutes / 6) / 10 };
+  }).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// ── THE CSV ──────────────────────────────────────────────────────────────────
+// One row per person per shift, across every day, PLUS a row for every spot
+// nobody has taken, marked `(open)`. The open rows are the point: a file
+// listing only the people who came is a thank-you list, and what the
+// coordinator is doing with a spreadsheet in November is looking for holes.
+export function volunteerCsvRows(days) {
+  const head = ['Day', 'Date', 'Job', 'Job lead', 'Start', 'End', 'Hours', 'Person',
+    'Spots filled', 'Spots needed', 'Status'];
+  const out = [head];
+  days.forEach((day) => {
+    day.shifts.slice()
+      .sort((a, b) => ((a.start ?? 1e9) - (b.start ?? 1e9)) || a.job.localeCompare(b.job))
+      .forEach((s) => {
+        const hours = s.timed ? ((s.end - s.start) / 60).toFixed(2) : '';
+        const status = s.filled >= s.needed ? 'Full' : s.filled === 0 ? 'Nobody yet' : 'Short';
+        const base = [day.label || '', day.date || '', s.job, s.lead || '',
+          s.timed ? fmtClock(s.start) : s.label, s.timed ? fmtClock(s.end) : '', hours];
+        s.people.forEach((p) => out.push(base.concat([p.name, s.filled, s.needed, status])));
+        for (let i = s.people.length; i < s.needed; i++) {
+          out.push(base.concat(['(open)', s.filled, s.needed, status]));
+        }
+      });
+  });
+  return out;
+}
+
+// ⚠ Every cell goes through `csvCell` — a cell beginning = + - @ is a FORMULA
+// to a spreadsheet, and this file exists to be opened in one. Unlike the
+// vendor export there are no computed money columns here, so there is nothing
+// that a quoting guard could turn into text that stops summing: every column
+// is safe to guard, and a volunteer's name really can begin with a hyphen.
+export const volunteerCsv = (days) =>
+  volunteerCsvRows(days).map((r) => r.map(csvCell).join(',')).join('\r\n');
+
+// ── THE VOLUNTEER TAB, RENDERED ──────────────────────────────────────────────
+// Four views of one roster and four printed sheets, all of them addresses:
+// `?tab=volunteers&day=…&view=…&axis=…&print=…`. Nothing here is a JavaScript
+// mode. A view somebody has arranged survives a reload, can be sent to the
+// job lead as a link, and prints with the browser's own Print rather than
+// through a script — which also means the print sheets are markup a screen
+// reader can read, not a canvas.
+const VOL_VIEWS = [
+  { key: 'job', label: 'By job' },
+  { key: 'time', label: 'By time' },
+  { key: 'grid', label: 'Grid' },
+  { key: 'people', label: 'Everybody' },
+];
+
+const HOUR_H = 78;   // one hour, down the page, in the jobs-across grid
+const HOUR_W = 148;  // one hour, across the page, in the time-across grid
+
+const fillTone = (filled, needed) => (filled >= needed ? 'ok' : filled === 0 ? 'none' : 'short');
+const FILL = {
+  ok:    { bg: TONES.good.bg, bd: TONES.good.bd, fg: TONES.good.fg },
+  short: { bg: TONES.warn.bg, bd: TONES.warn.bd, fg: TONES.warn.fg },
+  none:  { bg: '#FBEDE7',     bd: TONES.bad.bd,  fg: TONES.bad.fg },
+};
+// 'Marla B.' — a grid block is a few hundred pixels wide and a column of full
+// names in it is a column of ellipses. The sheets and the list views print
+// the whole name; only the grid abbreviates.
+const shortName = (n) => {
+  const p = String(n || '').trim().split(/\s+/);
+  return p.length > 1 ? p[0] + ' ' + p[1].charAt(0) + '.' : (p[0] || '');
+};
+// ⚠ A NAME IS SOMEBODY YOU CAN WRITE TO. Wherever a full name is shown it is
+// a mailto link when Serve gave an address — the coordinator's most common
+// next action after reading a short-handed shift is emailing the people on
+// it, and a list of plain names makes her go and look each one up. The grid
+// is the exception: its blocks abbreviate to fit, and a link on 'Marla B.'
+// inside a 100px box is a tap target nobody can hit.
+const whoOf = (sh, brief) => (sh.people.length
+  ? sh.people.map((p) => (brief || !p.email
+    ? escapeHtml(brief ? shortName(p.name) : p.name)
+    : `<a href="mailto:${escapeHtml(p.email)}">${escapeHtml(p.name)}</a>`)).join(', ')
+  : '');
+
+const segLink = (base, items, current, param) => `<div class="tlc-seg" role="group">${items.map((i) =>
+  `<a class="${i.key === current ? 'is-on' : ''}" href="${escapeHtml(base + (base.includes('?') ? '&' : '?') + param + '=' + encodeURIComponent(i.key))}"${
+    i.key === current ? ' aria-current="true"' : ''}>${escapeHtml(i.label)}</a>`).join('')}</div>`;
+
+// ── By job — the job lead's own view ──
+function volByJob(shifts, base) {
+  const jobs = jobsFor(shifts);
+  if (!jobs.length) return `<p class="tlc-hint">No jobs are set up for this day yet.</p>`;
+  return `<div class="tlc-vol-jobs">${jobs.map((j) => `
+    <div class="tlc-vol-job">
+      <div class="tlc-vol-job-h">
+        <span style="min-width:0;">
+          <span class="tlc-vol-job-n">${escapeHtml(j.name)}</span>
+          <span class="tlc-vol-job-l">Lead · ${escapeHtml(j.lead || 'Unassigned')}</span>
+        </span>
+        <span class="tlc-vol-job-r">
+          ${j.short > 0 ? statusPill(j.filled === 0 ? 'bad' : 'warn', `${j.short} still needed`) : statusPill('good', 'Full')}
+          <a class="tlc-action-quiet" href="${escapeHtml(base + '&print=leads&job=' + encodeURIComponent(j.name))}"
+            title="Print this lead's sheet">Sheet</a>
+        </span>
+      </div>
+      <div class="tlc-vol-job-b">${j.shifts.map((s) => `
+        <div class="tlc-vol-shift">
+          <span class="tlc-vol-t">${escapeHtml(s.timed ? fmtRange(s.start, s.end) : (s.label || 'No time given'))}</span>
+          <span class="tlc-vol-n tlc-vol-${fillTone(s.filled, s.needed)}">${s.filled}/${s.needed}</span>
+          <span class="tlc-vol-who">${s.people.length ? whoOf(s)
+            : '<span class="tlc-hint">Nobody yet — this shift is entirely open.</span>'}</span>
+        </div>`).join('')}</div>
+    </div>`).join('')}</div>
+  <p class="tlc-note"><span class="tlc-note-mark" aria-hidden="true">◆</span><span>Most short-handed first, because that is the order the work is in. <strong>Sheet</strong> prints that one lead their own page — their shifts, their people, and nobody else's.</span></p>`;
+}
+
+// ── By time — the floor manager's view ──
+function volByTime(shifts, untimedHere) {
+  const slots = slotsFor(shifts);
+  if (!slots.length) return volNoTimes(untimedHere);
+  return `<div class="tlc-vol-panel">${slots.map((s) => `
+    <div class="tlc-vol-slot">
+      <div>
+        <div class="tlc-vol-slot-t">${escapeHtml(fmtClock(s.start))}</div>
+        <div class="tlc-vol-slot-e">to ${escapeHtml(fmtClock(s.end))}</div>
+        <div style="margin-top:8px;">${s.short > 0 ? statusPill('warn', `${s.short} short`) : statusPill('good', 'Covered')}</div>
+      </div>
+      <div class="tlc-vol-slot-jobs">${s.entries.map((e) => `
+        <div class="tlc-vol-card tlc-vol-fill-${fillTone(e.filled, e.needed)}">
+          <div class="tlc-vol-card-h">
+            <span class="tlc-vol-card-n">${escapeHtml(e.job)}</span>
+            <span class="tlc-vol-n tlc-vol-${fillTone(e.filled, e.needed)}">${e.filled}/${e.needed}</span>
+          </div>
+          <div class="tlc-vol-card-w">${e.people.length ? whoOf(e) : 'Open'}</div>
+        </div>`).join('')}</div>
+    </div>`).join('')}</div>
+  ${untimedNote(untimedHere)}`;
+}
+
+// ── The grid — every job against the clock ──
+// ⚠ THE ROWS AND COLUMNS ARE WHOLE HOURS AND A SHIFT IS A BLOCK LAID OVER
+// THEM. A row per distinct slot instead — which is the obvious way to build
+// this, and the wrong one — makes a 7:30–11:00 shift exactly as tall as the
+// 9:00–11:00 shift beside it, and how long each job actually runs is the one
+// thing somebody reads this grid to compare.
+function volGrid(shifts, axis) {
+  const timed = shifts.filter((s) => s.timed);
+  if (!timed.length) return volNoTimes(shifts.length);
+  const jobs = [...new Set(timed.map((s) => s.job))].sort((a, b) => a.localeCompare(b));
+  const hourStart = Math.floor(Math.min(...timed.map((s) => s.start)) / 60);
+  const hourEnd = Math.ceil(Math.max(...timed.map((s) => s.end)) / 60);
+  const hours = Math.max(1, hourEnd - hourStart);
+  const label = (i) => escapeHtml(fmtClock((hourStart + i) * 60));
+
+  const blockOf = (s, across) => {
+    const f = FILL[fillTone(s.filled, s.needed)];
+    const off = (s.start - hourStart * 60) / 60;
+    const len = (s.end - s.start) / 60;
+    const pos = across
+      ? `top:5px;bottom:5px;left:${Math.round(off * HOUR_W + 2)}px;width:${Math.round(len * HOUR_W - 4)}px;`
+      : `left:4px;right:4px;top:${Math.round(off * HOUR_H + 2)}px;height:${Math.round(len * HOUR_H - 4)}px;`;
+    return `<div class="tlc-grid-block" style="${pos}background:${f.bg};border:1px solid ${f.bd};"
+      title="${escapeHtml(`${s.job} · ${fmtRange(s.start, s.end)} · ${s.filled} of ${s.needed}`)}">
+      <span class="tlc-grid-count" style="color:${f.fg};">${s.filled} of ${s.needed}</span>
+      <span class="tlc-grid-who">${s.people.length ? whoOf(s, true) : 'Open'}</span>
+    </div>`;
+  };
+
+  if (axis === 'time') {
+    // Jobs down the left, hours across — the orientation the printed grid uses.
+    const trackW = hours * HOUR_W;
+    const rule = `repeating-linear-gradient(to right, var(--tlc-divider) 0 1px, transparent 1px ${HOUR_W}px)`;
+    return `<div class="tlc-grid-wrap"><div style="min-width:${190 + trackW}px;">
+      <div class="tlc-grid-head">
+        <span class="tlc-grid-hcell" style="flex:0 0 190px;border-left:0;">Job</span>
+        <div style="flex:none;position:relative;height:38px;width:${trackW}px;">
+          ${Array.from({ length: hours }, (_, i) =>
+            `<span class="tlc-grid-hourlab" style="top:10px;left:${i * HOUR_W}px;padding-left:8px;border-left:1px solid var(--tlc-edge);">${label(i)}</span>`).join('')}
+        </div>
+      </div>
+      ${jobs.map((job, i) => `
+        <div class="tlc-grid-row" style="background:${i % 2 ? 'var(--tlc-parchment)' : 'var(--tlc-card)'};">
+          <span class="tlc-grid-rowlab"><b>${escapeHtml(job)}</b><span>Lead · ${escapeHtml(
+            (timed.find((s) => s.job === job) || {}).lead || 'Unassigned')}</span></span>
+          <div class="tlc-grid-track" style="height:56px;width:${trackW}px;background-image:${rule};">
+            ${timed.filter((s) => s.job === job).map((s) => blockOf(s, true)).join('')}
+          </div>
+        </div>`).join('')}
+    </div></div>
+    <p class="tlc-note"><span class="tlc-note-mark" aria-hidden="true">◆</span><span>Same roster, turned on its side — this is the shape the printed grid uses, so what is on the screen is what comes out of the printer.</span></p>`;
+  }
+
+  // Hours down the side, jobs across the top.
+  const cols = `190px repeat(${jobs.length},minmax(104px,1fr))`;
+  const rule = `repeating-linear-gradient(var(--tlc-divider) 0 1px, transparent 1px ${HOUR_H}px)`;
+  return `<div class="tlc-grid-wrap"><div style="min-width:${190 + jobs.length * 104}px;">
+    <div class="tlc-grid-head" style="display:grid;grid-template-columns:${cols};">
+      <span class="tlc-grid-hcell" style="border-left:0;">Time</span>
+      ${jobs.map((g) => `<span class="tlc-grid-hcell">${escapeHtml(g)}</span>`).join('')}
+    </div>
+    <div style="display:grid;grid-template-columns:${cols};">
+      <div style="position:relative;height:${hours * HOUR_H}px;background-image:${rule};">
+        ${Array.from({ length: hours }, (_, i) =>
+          `<div class="tlc-grid-hourlab" style="left:0;top:${i * HOUR_H}px;padding:5px 12px;">${label(i)}</div>`).join('')}
+      </div>
+      ${jobs.map((job) => `
+        <div style="position:relative;height:${hours * HOUR_H}px;border-left:1px solid var(--tlc-divider);background-image:${rule};">
+          ${timed.filter((s) => s.job === job).map((s) => blockOf(s, false)).join('')}
+        </div>`).join('')}
+    </div>
+  </div></div>
+  <p class="tlc-note"><span class="tlc-note-mark" aria-hidden="true">◆</span><span>Every block is a real stretch of the day, so a 7:30–11:00 shift is one tall block and a 9:00–11:00 job beside it covers only its own hours. Green is covered, amber short, red nobody yet; blank means that job is not running then.</span></p>`;
+}
+
+// ── Everybody — the welcome table's list ──
+function volPeople(shifts) {
+  const people = peopleFor(shifts);
+  if (!people.length) return `<p class="tlc-hint">Nobody has taken a shift on this day yet.</p>`;
+  return `<div class="tlc-vol-panel">
+    <div class="tlc-vol-rows tlc-vol-rows-h"><span>Person</span><span>On site</span><span>Shifts</span></div>
+    ${people.map((p) => `
+      <div class="tlc-vol-rows">
+        <span class="tlc-vol-pname">${p.email
+          ? `<a href="mailto:${escapeHtml(p.email)}">${escapeHtml(p.name)}</a>`
+          : escapeHtml(p.name)}
+          <span class="tlc-vol-pnote">${p.shifts.length} shift${p.shifts.length === 1 ? '' : 's'}${
+            p.hours ? ` · ${p.hours} hrs` : ''}</span></span>
+        <span class="tlc-vol-t">${escapeHtml(p.from == null ? '—' : fmtRange(p.from, p.to))}</span>
+        <span class="tlc-vol-who">${p.shifts.map((s) => escapeHtml(
+          s.job + (s.timed ? ` (${fmtRange(s.start, s.end)})` : ''))).join(' · ')}</span>
+      </div>`).join('')}
+  </div>
+  <p class="tlc-note"><span class="tlc-note-mark" aria-hidden="true">◆</span><span>This is the list to print for the welcome table: everybody coming, when they arrive, and when they can go home. Hours are hours <em>worked</em> — a gap in the middle of somebody's day is not counted.</span></p>`;
+}
+
+// ⚠ WHEN SERVE SENDS NO CLOCK, THREE OF THE FOUR VIEWS SAY SO RATHER THAN
+// DRAWING SOMETHING. Serve's summary sends a shift's time as a LABEL written
+// for a human, and `parseShiftLabel()` reads most of them — but a label it
+// cannot read has no start and no end, and a view built on arithmetic over
+// the clock cannot honestly include it. Inventing midnight would put a block
+// on the grid at a time nobody is coming. By job, which needs no clock, shows
+// every shift regardless, so nothing is ever unreachable.
+const volNoTimes = (n) => `<div class="alert alert-warn">
+  <strong>This view needs each shift's start and end, and Serve has not sent them.</strong>
+  ${n ? `${n} shift${n === 1 ? '' : 's'} came through with a time this screen could not read.` : ''}
+  <strong>By job</strong> shows the whole roster whichever way the times are written, so nothing is hidden — and Serve sending a real start and end on each shift is what turns the other three on.
+</div>`;
+const untimedNote = (n) => (n ? `<p class="tlc-hint" style="margin-top:12px;">${n} shift${n === 1 ? '' : 's'} ${
+  n === 1 ? 'is' : 'are'} missing from this view — ${n === 1 ? 'its' : 'their'} time could not be read. <strong>By job</strong> shows ${
+  n === 1 ? 'it' : 'them'}.</p>` : '');
+
+// ── THE PRINTED SHEETS ───────────────────────────────────────────────────────
+// Plain markup and one @page rule; no library, and no second rendering of the
+// roster. Four of them, and each is a preview of exactly what comes out of
+// the printer, because it IS what comes out — everything that is chrome
+// carries data-noprint and everything else is the sheet.
+function printSheets(kind, shifts, dayLabel, job, axis) {
+  const head = (title, sub, wide) => `<div class="tlc-print-sheet${wide ? ' tlc-print-sheet--wide' : ''}">
+    <div class="tlc-print-h"><span class="tlc-print-t">${escapeHtml(title)}</span>
+      <span class="tlc-print-mark">Timothy Christmas Market</span></div>
+    <p class="tlc-print-sub">${escapeHtml(sub)}</p>`;
+  const block = (h, lines) => `<div class="tlc-print-block"><div class="tlc-print-bh">${escapeHtml(h)}</div>${
+    lines.map((l) => `<div class="tlc-print-line"><span>${escapeHtml(l[0])}</span><span>${escapeHtml(l[1])}</span></div>`).join('')}</div>`;
+
+  if (kind === 'grid') {
+    return head('Who is where, hour by hour', `${dayLabel} · green is covered, amber short, red nobody yet. Print landscape.`, true)
+      + volGrid(shifts, axis).replace(/<p class="tlc-note">[\s\S]*?<\/p>$/, '') + '</div>';
+  }
+  if (kind === 'time') {
+    const slots = slotsFor(shifts);
+    return head('Master list by time slot', dayLabel)
+      + slots.map((s) => block(`${fmtClock(s.start)} – ${fmtClock(s.end)}`, s.entries.map((e) =>
+        [e.job, `${e.people.length ? e.people.map((p) => p.name).join(', ') : 'OPEN'}  (${e.filled}/${e.needed})`]))).join('')
+      + '</div>';
+  }
+  if (kind === 'people') {
+    const people = peopleFor(shifts);
+    return head('Everybody coming — master list', `${dayLabel} · ${people.length} ${people.length === 1 ? 'person' : 'people'}`)
+      + block('Alphabetical, with arrival and last shift', people.map((p) => [
+        p.name,
+        (p.from == null ? 'time not given' : `${fmtClock(p.from)} – ${fmtClock(p.to)}`)
+          + ' · ' + p.shifts.map((s) => s.job + (s.timed ? ' ' + fmtShort(s.start) : '')).join(', '),
+      ])) + '</div>';
+  }
+  // One page per lead — their shifts, their people, and nobody else's. That
+  // is the whole point of it: a lead handed the master list has to find their
+  // own job in it first, on a morning when they have twelve other things on.
+  let jobs = jobsFor(shifts);
+  if (job) jobs = jobs.filter((j) => j.name === job);
+  jobs = jobs.slice().sort((a, b) => a.name.localeCompare(b.name));
+  if (!jobs.length) return `<p class="tlc-hint">Nothing to print — that job is not running on this day.</p>`;
+  return jobs.map((j) => head(j.name,
+    `${dayLabel} · lead: ${j.lead || 'Unassigned'} · ${j.filled} of ${j.needed} spots filled`)
+    + block('Your people', j.shifts.map((s) => [
+      s.timed ? `${fmtClock(s.start)} – ${fmtClock(s.end)}` : (s.label || 'Time not given'),
+      `${s.people.length ? s.people.map((p) => p.name).join(', ') : 'Nobody yet'}  (${s.filled} of ${s.needed})`,
+    ])) + '</div>').join('');
+}
+
+// ── READING THE ROSTER OUT OF SERVE ──────────────────────────────────────────
+// Pulled out of the volunteers tab so the CSV route reads the roster exactly
+// the way the screen does — one fetch, one set of failure rules, one idea of
+// what "Serve did not answer" means. Two copies of this would be two answers
+// to whether the market has enough volunteers.
+export async function fetchRoster(env) {
+  let vol = null;
+  let volError = '';
+  const intakeKey = env.CHMS_INTAKE_API_KEY || '';
+  if (!intakeKey) {
+  // A request Serve would only 401 anyway is not worth making — and
+  // "CHMS_INTAKE_API_KEY is not set" is a clearer thing to tell whoever
+  // opens this screen than a bare "Serve answered 401."
+  volError = 'CHMS_INTAKE_API_KEY is not set on this Worker.';
+  } else {
+  try {
+    // ⚠ A TIMEOUT, because this is another application on another host
+    // and an admin screen must not sit waiting on one. Four seconds and
+    // the tab renders its own honest empty state instead.
+    // ⚠ THE SERVICE BINDING, NOT A PLAIN fetch() TO THE HOSTNAME. A plain
+    // fetch from inside this Worker to serve.timothystl.org answered 404
+    // persistently, where the identical URL with the identical key fetched
+    // from off-network never did — and three cache-layer fixes in a row
+    // (no-store on Serve's side, cf:{cacheTtl:0} here, then a cache-busting
+    // query string that no colo could possibly have seen before) all failed
+    // to shift it, which rules out caching as the cause. `env.VOLUNTEER_WORKER`
+    // (bound to the chms Worker in wrangler.toml — the same binding
+    // `forwardToChms()` in `admin/forms.js` already uses) is an in-process
+    // call into the deployed chms code with no DNS, no edge routing and no
+    // cache in between, and it fixed it. Do not "simplify" this back to a
+    // hostname fetch.
+    //
+    // ⚠ It is undefined only in a harness with no service bindings, where the
+    // plain-fetch fallback is fine because nothing there could be stale.
+    const req = new Request(
+      'https://serve.timothystl.org/api/signups/christmasmarket/summary',
+      { headers: { Accept: 'application/json', 'X-Intake-Key': intakeKey } });
+    const res = env.VOLUNTEER_WORKER
+      ? await env.VOLUNTEER_WORKER.fetch(req, { signal: AbortSignal.timeout(4000) })
+      : await fetch(req, { signal: AbortSignal.timeout(4000) });
+    if (res.ok) vol = await res.json();
+    // ⚠ THE STATUS AND NOTHING ELSE. This used to capture Serve's raw
+    // response body and its cf-ray and render both onto the screen — a
+    // diagnostic for the 404 above, which the service binding fixed. Another
+    // application's raw error output is not something the market coordinator
+    // has any use for, and a body captured from a host that is misbehaving is
+    // the last thing worth painting into an admin page. What she needs is
+    // whether the roster could be read, which the empty state already says.
+    else volError = `Serve answered ${res.status}.`;
+  } catch (e) { volError = `Serve could not be reached: ${e.message || e}`; }
+}
+// ⚠ And an answer that is not the shape this expects is not an answer.
+// Something else on that host answering 200 with a page, or a proxy
+// returning its own JSON, would otherwise draw four tiles of zeros and
+// call them the roster.
+if (vol && !Array.isArray(vol.roles)) { vol = null; volError = volError || 'Serve answered with something this screen could not read.'; }
+  return { vol, volError };
+}
+
 export async function handleMarketRoutes(request, env, path, method, currentUser, url, badges = {}) {
   if (path !== '/market' && !path.startsWith('/market/')) return null;
 
@@ -396,28 +1310,174 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     });
   }
 
+  // ── THE ROSTER AS A SPREADSHEET ──────────────────────────────────────────
+  // The server-side twin of the Export CSV button on the Volunteers tab —
+  // same rows, same columns, from the same `volunteerCsv()`. The button IS
+  // this route, so there is one assembly of the roster rather than a second
+  // one in the browser that could come to disagree with it. Gated
+  // `market_manage` for the reason the vendor export is: the file carries the
+  // names of everybody coming, and that belongs behind the coordinator's own
+  // permission rather than behind whoever can edit the market's page.
+  if (path === '/market/volunteers.csv' && method === 'GET') {
+    if (!canMarket) return new Response('Access denied.', { status: 403 });
+    const { vol, volError } = await fetchRoster(env);
+    // ⚠ An unreachable Serve is a 503, not an empty file. A CSV with a header
+    // row and nothing under it reads as "nobody has signed up", which is a
+    // very different thing to hand somebody than "the roster could not be
+    // read" — and it is the one that gets acted on.
+    if (!vol) return new Response(`The roster could not be read. ${volError || 'Serve did not answer.'}`, { status: 503 });
+    return new Response(volunteerCsv(normalizeRoster(vol).days), {
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="christmas-market-volunteers-${churchDate()}.csv"`,
+      },
+    });
+  }
+
+  // ── ONE CELL AT A TIME, OR THE WHOLE FORM ────────────────────────────────
+  // The row IS the form now, so the ordinary case is a single field changing
+  // — a table number typed, a category picked, a check marked in — and each
+  // one saves on its own with its own audit entry. That is what makes the
+  // drawer unnecessary: nothing has to be opened, saved and closed to change
+  // one number, and nothing lands the coordinator back at the top of a list
+  // of seventy rows.
+  //
+  // ⚠ THE WHOLE-FORM PATH IS KEPT, AND NOT ONLY FOR THE TESTS. A POST with no
+  // `field` is the no-JavaScript path: the expanded row is a real <form> that
+  // submits normally if the fetch never runs, and a coordinator on a phone
+  // with a flaky connection must still be able to record a payment. One
+  // route, both shapes — a second route for the single-field case would be a
+  // second place that has to agree about what "paid" means.
+  //
+  // ⚠ AND THE FIELD NAME IS CHECKED AGAINST A LIST BEFORE IT IS USED.
+  // `updateRegistration()` builds its SQL from the KEYS of the object it is
+  // handed, so a field name that came straight from the request would be a
+  // column name coming straight from the request. Everything below maps a
+  // posted name onto a fixed column, and an unrecognized one is refused.
   if (path === '/market/update' && method === 'POST') {
     if (!canMarket) return new Response('Access denied.', { status: 403 });
     const form = await request.formData();
-    const id = Number(form.get('id') || 0);
-    if (!id) return new Response('', { status: 302, headers: { Location: '/market' } });
-    const before = await getRegistration(env, id);
-    if (!before || before.event_id !== 'christmasmarket') return new Response('', { status: 302, headers: { Location: '/market?msg=gone' } });
+    const wantsJson = (request.headers.get('Accept') || '').includes('application/json');
+    const fail = (code, message) => (wantsJson
+      ? new Response(JSON.stringify({ ok: false, error: message }), { status: code, headers: { 'Content-Type': 'application/json' } })
+      : new Response('', { status: 302, headers: { Location: '/market?msg=gone' } }));
 
-    const status = paymentState(String(form.get('payment_status') || '')).value;
-    const tableNumber = cap(form.get('table_number'), 40);
-    const notes = cap(form.get('staff_notes'), 2000);
+    const id = Number(form.get('id') || 0);
+    if (!id) return fail(400, 'No application was named.');
+    const before = await getRegistration(env, id);
+    if (!before || before.event_id !== 'christmasmarket') return fail(404, 'That application is no longer there.');
+    const row = marketRowFromRegistration(before);
+
+    const field = trim(form.get('field'));
+    const patch = {};
+    const fieldPatch = {};
+
     // Blank means "we have not recorded a payment", which is a different fact
     // from "they paid nothing" — so it stays NULL rather than becoming 0.
-    const paidRaw = trim(form.get('amount_paid'));
-    const paidCents = paidRaw === '' ? null : Math.round(num(paidRaw, 0) * 100);
+    const readPaid = (raw) => (trim(raw) === '' ? null : Math.round(num(raw, 0) * 100));
 
-    await updateRegistration(env, id, {
-      table_number: tableNumber || null, payment_status: status, amount_paid_cents: paidCents, staff_notes: notes || null,
-    });
+    if (!field) {
+      // The whole row, as the expanded panel posts it without script.
+      patch.table_number = cap(form.get('table_number'), 40) || null;
+      patch.payment_status = paymentState(String(form.get('payment_status') || '')).value;
+      patch.amount_paid_cents = readPaid(form.get('amount_paid'));
+      patch.staff_notes = cap(form.get('staff_notes'), 2000) || null;
+      if (form.get('category') != null) fieldPatch.category = cleanCategory(form.get('category'));
+    } else if (field === 'check_in') {
+      // ⚠ ONE CLICK IS THE POINT OF THIS BUTTON. A check arriving in the
+      // office mail is one event, and making the coordinator record a number,
+      // then a date, then change the payment state, then type the amount is
+      // four chances to do three of them. It stamps today — in CHURCH time,
+      // not the Worker's UTC, or a check that came in on Thursday evening is
+      // dated Friday — and leaves a number already typed alone.
+      fieldPatch.check_no = row.check_no || '—';
+      fieldPatch.check_date = row.check_date || churchDate();
+      patch.payment_status = 'paid';
+      patch.amount_paid_cents = before.amount_due_cents || 0;
+    } else if (field === 'table_number') {
+      patch.table_number = cap(form.get('value'), 40) || null;
+    } else if (field === 'payment_status') {
+      patch.payment_status = paymentState(String(form.get('value') || '')).value;
+      // ⚠ MARKING A ROW PAID RECORDS THE AMOUNT ASKED, unless one is already
+      // recorded. Without this the row reads "Paid" over "asked $46.65" and —
+      // worse — the "Recorded as paid" tile, which sums `amount_paid_cents`,
+      // stays at zero however many rows the coordinator marks. A
+      // reconciliation that reads short for a reason nobody can find is
+      // exactly what this screen exists to prevent, and it is the same rule
+      // recording a check number already follows; the two paths agreeing is
+      // the point.
+      //
+      // ⚠ An amount ALREADY recorded is never overwritten — a partial payment
+      // she typed by hand is a fact, and this must not quietly round it up to
+      // the full fee. And only `paid` does this: a waived fee and a vendor
+      // who dropped out both mean no money arrived, so recording one would
+      // make the collected figure include money the church never had.
+      if (patch.payment_status === 'paid' && before.amount_paid_cents == null) {
+        patch.amount_paid_cents = before.amount_due_cents || 0;
+      }
+    } else if (field === 'amount_paid') {
+      patch.amount_paid_cents = readPaid(form.get('value'));
+    } else if (field === 'staff_notes') {
+      patch.staff_notes = cap(form.get('value'), 2000) || null;
+    } else if (field === 'tables') {
+      // Changing the count changes what they OWE, and saying so is the whole
+      // reason this is editable here — but it never silently rewrites what
+      // they have already been recorded as paying.
+      const tables = clampTables(form.get('value'), settings.maxTables);
+      patch.qty = tables;
+      const price = priceBreakdown(tables, settings);
+      patch.amount_due_cents = row.payment_method === 'check' ? price.subtotalCents : price.totalCents;
+    } else if (field === 'category') {
+      fieldPatch.category = cleanCategory(form.get('value'));
+    } else if (field === 'check_no' || field === 'check_date') {
+      const value = cap(form.get('value'), 40);
+      fieldPatch[field] = value;
+      const other = field === 'check_no' ? row.check_date : row.check_no;
+      // A number with no date reads as a check that arrived at no particular
+      // time, which is the fact somebody reconciling a bank statement most
+      // wants. Typing one fills the other in rather than asking twice.
+      if (value && !other && field === 'check_no') fieldPatch.check_date = churchDate();
+      // ⚠ RECORDING A CHECK IS WHAT TURNS "AWAITING CHECK" INTO PAID, and
+      // that is a decision, not an inference — see the note above
+      // `checkState()`. It only ever moves an UNPAID row: a waived fee or a
+      // vendor who dropped out keeps the state the coordinator chose, and
+      // clearing the number back out never un-pays anybody, because the money
+      // is in the bank whatever the box now says.
+      if ((value || other) && row.payment_status === 'unpaid') {
+        patch.payment_status = 'paid';
+        patch.amount_paid_cents = before.amount_due_cents || 0;
+      }
+    } else {
+      return fail(400, 'That is not a field on this list.');
+    }
+
+    if (Object.keys(fieldPatch).length) {
+      // The market's own three coordinator fields live in `fields_json`
+      // alongside everything else the application carries — merged, never
+      // replaced, so a save here cannot drop what the vendor typed.
+      patch.fields_json = JSON.stringify({ ...registrationFields(before), ...fieldPatch });
+    }
+
+    await updateRegistration(env, id, patch);
+    const beforeState = { table_number: before.table_number, payment_status: before.payment_status,
+      amount_paid_cents: before.amount_paid_cents, qty: before.qty,
+      category: row.category, check_no: row.check_no, check_date: row.check_date };
+    const afterRow = marketRowFromRegistration({ ...before, ...patch });
     await logAudit(env.DB, currentUser, 'update', 'market_vendor', String(id), before.contact_name,
-      { table_number: before.table_number, payment_status: before.payment_status, amount_paid_cents: before.amount_paid_cents },
-      { table_number: tableNumber || null, payment_status: status, amount_paid_cents: paidCents });
+      beforeState,
+      { table_number: afterRow.table_number, payment_status: afterRow.payment_status,
+        amount_paid_cents: afterRow.amount_paid_cents, qty: afterRow.tables,
+        category: afterRow.category, check_no: afterRow.check_no, check_date: afterRow.check_date });
+
+    if (wantsJson) {
+      // The cell that saved gets back the row as it now stands, so the
+      // payment pill, the money line and the check column can all be redrawn
+      // from what was actually STORED rather than from what the browser hoped
+      // it had sent. A cell that says "saved" over a value the database does
+      // not hold is the one failure this design must not have.
+      return new Response(JSON.stringify({ ok: true, row: vendorCellState(afterRow) }),
+        { headers: { 'Content-Type': 'application/json' } });
+    }
     return new Response('', { status: 302, headers: { Location: '/market?toast=' + encodeURIComponent('Saved · written to the audit log') } });
   }
 
@@ -592,7 +1652,6 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     // ⚠ above the permission gate is the reasoning; this is where it is
     // actually enforced for the read side.
     let vendorSection = '';
-    let vendorDrawer = '';
     let alertHtml = '';
     // ⚠ Only the ACTIVE tab is built. Rendering all five and hiding four would
     // read every vendor's home address, every page's blocks and the volunteer
@@ -601,45 +1660,19 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     // photographs.
     if (active === 'vendors' && canMarket) {
       const rows = await allApplications(env);
-      const editId = Number(url.searchParams.get('edit') || 0);
-      const editing = editId ? rows.find((r) => r.id === editId) : null;
 
       const counts = {
         tables: rows.filter((r) => r.payment_status !== 'dropped').reduce((a, r) => a + (r.tables || 0), 0),
         unpaid: rows.filter((r) => r.payment_status === 'unpaid').length,
+        // ⚠ "Waiting on a card" and "checks not in yet" are two different
+        // problems with two different answers — one is an email, the other is
+        // a walk to the office mailbox — and before this they were one number
+        // that could only ever say "unpaid".
+        unpaidCard: rows.filter((r) => r.payment_status === 'unpaid' && r.payment_method !== 'check').length,
+        checkOut: rows.filter((r) => checkState(r).pending).length,
         collectedCents: rows.reduce((a, r) => a + (r.amount_paid_cents || 0), 0),
+        askedCents: rows.filter((r) => r.payment_status !== 'dropped').reduce((a, r) => a + (r.amount_due_cents || 0), 0),
       };
-
-      const listRows = rows.map((r) => {
-        const st = paymentState(r.payment_status);
-        const sells = String(r.product_description || '').replace(/\s+/g, ' ').trim();
-        return {
-          href: `/market?edit=${r.id}`,
-          filter: st.value,
-          search: `${r.participant_names || ''} ${r.business_name || ''} ${r.email || ''} ${r.product_description || ''} ${r.table_number || ''}`.toLowerCase(),
-          cells: [
-            primaryCell(r.business_name || r.participant_names,
-              [r.business_name ? r.participant_names : '', r.email].filter(Boolean).join(' · ')),
-            `<span title="${escapeHtml(sells)}">${escapeHtml(sells.length > 80 ? sells.slice(0, 79) + '…' : sells)}</span>`
-              + (r.sells_food ? ' <strong>· food</strong>' : ''),
-            `${r.tables}${r.table_number ? ` <span style="color:var(--tlc-muted);">· #${escapeHtml(r.table_number)}</span>` : ''}`,
-            // ⚠ The FILTER above still keys on the real four-state value —
-            // only the label shown here is relabeled for a check-paying
-            // vendor. Filtering by the display label would need a fifth
-            // filter pill for a state that does not actually exist.
-            statusPill(paymentLabel(r).tone, paymentLabel(r).label),
-          ],
-          actions: rowActions({ label: 'Open', href: `/market?edit=${r.id}` }),
-          // Somebody who applied and never finished at the card page is the
-          // one thing this screen exists to surface — the old workflow could
-          // not see them at all, because an abandoned Google Form left no row
-          // anywhere.
-          warn: r.payment_status === 'unpaid'
-            ? `No payment recorded. They were asked for ${money(r.amount_due_cents)} — their space is not held until it arrives.`
-            : '',
-          warnCta: r.payment_status === 'unpaid' ? { label: 'Record it', href: `/market?edit=${r.id}` } : null,
-        };
-      });
 
       const openPanel = panel('Applications', `
         <form method="POST" action="/market/applications" style="margin:0;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
@@ -668,82 +1701,58 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
         })()}</p>
       `, canSettings || canGiving ? { right: '<a class="tlc-action-quiet" href="/market?tab=money">Fees, dates &amp; payment</a>' } : {});
 
-      const tile = (label, n, note) =>
-        `<div class="tlc-tile"><div class="tlc-tile-label">${escapeHtml(label)}</div>`
+      const tile = (label, n, note, tone) =>
+        `<div class="tlc-tile${tone ? ' tlc-tile--' + tone : ''}"><div class="tlc-tile-label">${escapeHtml(label)}</div>`
         + `<div class="tlc-tile-num">${escapeHtml(String(n))}</div>`
         + `<div class="tlc-tile-note">${escapeHtml(note)}</div></div>`;
-      const headerExtra = `<div class="tlc-tiles">
-        ${tile('Applications', rows.length, 'Every vendor who has applied')}
-        ${tile('Tables asked for', counts.tables, 'Dropped-out vendors excluded')}
-        ${tile('Not paid yet', counts.unpaid, 'Spaces that are not held')}
-        ${tile('Recorded as paid', money(counts.collectedCents), 'What you have marked, not what the processor says')}
-      </div>${openPanel}`;
 
-      alertHtml = msg === 'gone' ? `<div class="alert alert-warn">That application is no longer there — somebody may have deleted it.</div>` : '';
+      // ⚠ The fourth tile is the new one, and it is amber rather than plain
+      // because it is the only one of the four that is a job of work. The
+      // other three are the state of the market; this one is a list of
+      // people the coordinator has to go and find.
+      const tiles = `<div class="tlc-tiles">
+        ${tile('Tables asked for', counts.tables, `${rows.length} application${rows.length === 1 ? '' : 's'}, dropped-out excluded`)}
+        ${tile('Recorded as paid', money(counts.collectedCents), `of ${money(counts.askedCents)} asked for`)}
+        ${tile('Waiting on a card', counts.unpaidCard, 'Applied online and never finished paying')}
+        ${tile('Checks not in yet', counts.checkOut, 'Said they would mail or bring one', 'warn')}
+      </div>`;
 
-      vendorSection = renderListSection({
-        key: 'market',
-        title: cfg.title,
-        purpose: cfg.purpose,
-        action: { label: cfg.action, href: '/market/export.csv' },
-        search: cfg.search,
-        filters: filtersOf('market'),
-        columns: columnsOf('market'),
-        rows: listRows,
-        headerExtra,
-        noun: 'application',
-        empty: 'No vendor applications yet.',
-        emptyHelp: settings.open
-          ? 'The vendor page is open and waiting — applications land here as they arrive.'
-          : 'Applications are switched off, so the page is not taking any. Turn them on above.',
-        note: cfg.note,
-      });
+      // ⚠ THE UNPAID CASE STILL HAS TO SAY WHAT IT COSTS. The list this
+      // replaced grew a warning row under every unpaid vendor saying their
+      // space was not held; a table whose whole point is that the rows are
+      // dense has no room for seventy of those, and the tiles above already
+      // count them. What must NOT be lost is the sentence — somebody who
+      // applied and never finished at the card page is the one thing this
+      // screen exists to surface, because the Google Form it replaced could
+      // not see them at all. So it is said once, over the list, with the
+      // filter that isolates them one click away.
+      const unpaidBand = counts.unpaid
+        ? `<div class="alert alert-warn tlc-mkt-band">
+            <strong>${counts.unpaid} application${counts.unpaid === 1 ? ' has' : 's have'} no payment recorded.</strong>
+            Their spaces are not held until it arrives.
+            ${counts.checkOut ? `${counts.checkOut} of them said they would send a check — those are the amber ones.` : ''}
+            <button type="button" class="tlc-mkt-bandlink" data-mktfilter="unpaid">Show only those</button>
+          </div>`
+        : '';
 
-      vendorDrawer = editing ? renderDrawer({
-        key: 'market-vendor',
-        title: editing.business_name || editing.participant_names,
-        sub: `Applied ${escapeHtml(String(editing.created_at || '').slice(0, 10))} · asked for ${escapeHtml(money(editing.amount_due_cents))}`,
-        action: '/market/update',
-        cancelHref: '/market',
-        deleteAction: '/market/delete',
-        deleteConfirm: 'Delete this application? The vendor is not told, and nothing is refunded.',
-        fields: [
-          { kind: 'html', html: `<input type="hidden" name="id" value="${editing.id}">` },
-          { name: 'table_number', label: 'Table number', value: editing.table_number || '',
-            placeholder: 'e.g. 19 or 19/20',
-            hint: 'Free text on purpose — a two-table vendor takes a range, and that is how the floor plan is written.' },
-          { kind: 'static', label: 'Paying by',
-            value: editing.payment_method === 'check' ? 'Check or cash' : 'Card, online',
-            hint: editing.payment_method === 'check'
-              ? 'They asked for the flat table fee — no card processing fee is included.'
-              : (editing.square_order_id ? 'Marked paid automatically once Square confirms this exact order.' : '') },
-          { kind: 'choice', name: 'payment_status', label: 'Payment', value: editing.payment_status || 'unpaid',
-            options: PAYMENT_STATES.map((s) => ({ value: s.value, label: s.label })),
-            hint: 'The website cannot see whether a card actually went through — this is your record, not the processor’s.' },
-          { name: 'amount_paid', label: 'Amount paid', type: 'text',
-            value: editing.amount_paid_cents == null ? '' : (editing.amount_paid_cents / 100).toFixed(2),
-            placeholder: (editing.amount_due_cents / 100).toFixed(2),
-            hint: 'Leave blank if you have not checked yet. Blank is not the same as zero.' },
-          { kind: 'textarea', name: 'staff_notes', label: 'Your notes', value: editing.staff_notes || '', rows: 3,
-            hint: 'Only ever seen here. The vendor is not shown this.' },
-          { kind: 'static', label: 'What they sell', html: `<span style="white-space:pre-wrap">${escapeHtml(editing.product_description || '')}</span>` },
-          ...(editing.sells_food ? [{ kind: 'static', label: 'Food or drink', html: 'Yes — health department requirements are theirs, and they are expecting to hear from you.' }] : []),
-          ...(editing.appliances_power ? [{ kind: 'static', label: 'Appliances / power', value: editing.appliances_power }] : []),
-          ...(editing.special_requests ? [{ kind: 'static', label: 'Special requests', html: `<span style="white-space:pre-wrap">${escapeHtml(editing.special_requests)}</span>` }] : []),
-          { kind: 'static', label: 'Contact', html:
-            `${escapeHtml(editing.participant_names)}<br>`
-            + `<a href="mailto:${escapeHtml(editing.email)}">${escapeHtml(editing.email)}</a><br>`
-            + `${escapeHtml(editing.phone || '')}`
-            + (editing.website_or_social ? `<br>${escapeHtml(editing.website_or_social)}` : '')
-            + ([editing.street, [editing.city, editing.state].filter(Boolean).join(', '), editing.zip].filter(Boolean).length
-                ? `<br>${escapeHtml([editing.street, [editing.city, editing.state].filter(Boolean).join(', '), editing.zip].filter(Boolean).join(' · '))}` : '') },
-          { kind: 'static', label: 'Sold with us before',
-            value: editing.returning_vendor === 'yes' ? 'Returning vendor' : editing.returning_vendor === 'no' ? 'First year' : 'Did not say' },
-          ...(photosOf(editing).length ? [{ kind: 'static', label: 'Sample photos', html: photosOf(editing)
-            .map((u) => `<a href="${escapeHtml(u)}" target="_blank" rel="noopener"><img src="${escapeHtml(u)}" alt="" style="height:72px;width:auto;border-radius:8px;margin:0 8px 8px 0;"></a>`).join('') }] : []),
-          { kind: 'static', label: 'Agreed to the vendor terms as', value: editing.signature_name || '' },
-        ],
-      }) : '';
+      alertHtml = msg === 'gone'
+        ? `<div class="alert alert-warn">That application is no longer there — somebody may have deleted it.</div>` : '';
+
+      vendorSection = `<section class="tlc-section tlc-mkt-section" data-mkt="1">
+        <header class="tlc-section-head">
+          <div class="tlc-section-headings">
+            <h1 class="tlc-title">${escapeHtml(cfg.title)}</h1>
+            <p class="tlc-purpose">${escapeHtml(cfg.purpose)}</p>
+          </div>
+          <div class="tlc-section-actions">
+            <a class="tlc-action" href="/market/export.csv">${escapeHtml(cfg.action)}</a>
+          </div>
+        </header>
+        ${tiles}
+        ${openPanel}
+        ${unpaidBand}
+        ${vendorTable(rows, settings, cfg)}
+      </section>`;
     }
 
     // ── MARKET SETTINGS — the seven plain fields, settings_manage only.
@@ -871,134 +1880,122 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
     // one roster is two rosters.
     let volunteersSection = '';
     if (active === 'volunteers' && canMarket) {
-      let vol = null;
-      let volError = '';
-      const intakeKey = env.CHMS_INTAKE_API_KEY || '';
-      if (!intakeKey) {
-        // A request Serve would only 401 anyway is not worth making — and
-        // "CHMS_INTAKE_API_KEY is not set" is a clearer thing to tell whoever
-        // opens this screen than a bare "Serve answered 401."
-        volError = 'CHMS_INTAKE_API_KEY is not set on this Worker.';
-      } else {
-        try {
-          // ⚠ A TIMEOUT, because this is another application on another host
-          // and an admin screen must not sit waiting on one. Four seconds and
-          // the tab renders its own honest empty state instead.
-          // ⚠ THIS GOES THROUGH THE SERVICE BINDING, NOT A PLAIN fetch() TO THE
-          // HOSTNAME — and that switch is what actually fixed this, after two
-          // rounds of cache-layer fixes (Cache-Control: no-store on Serve's own
-          // responses, cf:{cacheTtl:0} here, then a cache-busting query string)
-          // all failed to stop a live 404 that an external curl to the exact
-          // same URL with the exact same key never reproduced. The cache-busted
-          // URL — one no colo could possibly have cached before — STILL 404'd,
-          // which rules out edge caching as the cause entirely: something about
-          // a plain fetch() from inside this Worker to an external hostname on
-          // the SAME Cloudflare account was resolving differently than a real
-          // request from off-network, consistently, at whichever colo this
-          // Worker's own execution landed on. `env.VOLUNTEER_WORKER` (bound to
-          // the chms repo's Worker in wrangler.toml, the same binding
-          // `forwardToChms()` in `admin/forms.js` already uses) sidesteps all
-          // of that: it is an in-process call directly into the currently
-          // deployed chms Worker code, with no DNS, no edge routing and no
-          // cache layer of any kind in between — there is nothing left for a
-          // colo to get wrong. `env.VOLUNTEER_WORKER` is undefined only in a
-          // harness with no service bindings configured, where falling back to
-          // a plain fetch is fine since nothing there could be stale.
-          const req = new Request(
-            'https://serve.timothystl.org/api/signups/christmasmarket/summary',
-            { headers: { Accept: 'application/json', 'X-Intake-Key': intakeKey } });
-          const res = env.VOLUNTEER_WORKER
-            ? await env.VOLUNTEER_WORKER.fetch(req, { signal: AbortSignal.timeout(4000) })
-            : await fetch(req, { signal: AbortSignal.timeout(4000) });
-          if (res.ok) vol = await res.json();
-          else {
-            // Live diagnostic: the status alone hasn't been enough to explain
-            // a persistent "404" here that no external reproduction (same
-            // key, same URL) has matched — capture what Serve actually sent
-            // back, since this screen is already gated on canMarket and
-            // nothing here is shown to a visitor.
-            let bodySnippet = '';
-            let ct = '';
-            try {
-              ct = res.headers.get('content-type') || '';
-              const cfRay = res.headers.get('cf-ray') || '';
-              const text = await res.text();
-              bodySnippet = (text || '').slice(0, 300);
-              volError = `Serve answered ${res.status} (${ct || 'no content-type'}` +
-                (cfRay ? `, cf-ray ${cfRay}` : '') + `): ${bodySnippet || '(empty body)'}`;
-            } catch (readErr) {
-              volError = `Serve answered ${res.status}, and the body could not be read: ${readErr.message || readErr}`;
-            }
-          }
-        } catch (e) { volError = `Serve could not be reached: ${e.message || e}`; }
+      const { vol, volError } = await fetchRoster(env);
+
+      const roster = normalizeRoster(vol || {});
+      // ⚠ THE DAY SWITCH IS NOT DRAWN WHEN THERE IS ONE DAY. Friday setup and
+      // Saturday market are different days with different crews, and Serve
+      // will send a date per shift once it can — but it does not today, and a
+      // chooser with one thing in it is a control that cannot do anything.
+      const days = roster.days;
+      const wantDay = String(url.searchParams.get('day') || '');
+      const day = days.find((d) => d.key === wantDay) || days[0];
+      const dayLabel = day.label || settings.dateLabel || 'the market';
+      const shifts = day.shifts;
+      const untimedHere = shifts.filter((s) => !s.timed).length;
+
+      const wantView = String(url.searchParams.get('view') || '');
+      const view = VOL_VIEWS.some((v) => v.key === wantView) ? wantView : 'job';
+      const axis = url.searchParams.get('axis') === 'time' ? 'time' : 'jobs';
+      const printKind = ['leads', 'time', 'people', 'grid'].includes(String(url.searchParams.get('print') || ''))
+        ? String(url.searchParams.get('print')) : '';
+      const printJob = String(url.searchParams.get('job') || '');
+
+      // Every control on this tab is a link, so each one needs the address it
+      // would produce — this is that, with the day carried along unless the
+      // control IS the day switch.
+      const qs = (extra, keepDay = true) => {
+        const p = new URLSearchParams({ tab: 'volunteers' });
+        if (keepDay && day.key !== 'all') p.set('day', day.key);
+        Object.entries(extra || {}).forEach(([k, v]) => { if (v) p.set(k, v); });
+        return '/market?' + p.toString();
+      };
+      const base = qs({ view, axis: axis === 'time' ? 'time' : '' });
+
+      // ── A PRINT ADDRESS RENDERS THE SHEET AND NOTHING ELSE ──────────────
+      // Not a modal: this way the sheet survives a reload, can be handed to a
+      // job lead as a link, and goes to the printer through the browser's own
+      // Print — so nothing intercepts ⌘P, and there is no dialog that a page
+      // inside a frame cannot dismiss.
+      if (printKind && vol) {
+        const sheetTitle = printKind === 'leads'
+          ? (printJob ? `${printJob} — the lead's sheet` : 'one sheet per job lead')
+          : printKind === 'time' ? 'the master list by time slot'
+          : printKind === 'grid' ? 'the grid, hour by hour' : 'everybody coming';
+        return html(`
+${sidebarShell('market', currentUser, '', badges)}
+<div class="tlc-wrap">
+  <section class="tlc-section" style="max-width:none;">
+    <div data-noprint="1" style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:22px;">
+      <span class="tlc-mkt-quiet">Print preview — ${escapeHtml(sheetTitle)}. Everything on this page is what comes out; use your browser's Print.</span>
+      <a class="tlc-action-quiet" href="${escapeHtml(base)}">Back to the roster</a>
+    </div>
+    ${printSheets(printKind, shifts, dayLabel, printJob, axis)}
+  </section>
+</div>`, 'Christmas Market — print');
       }
-      // ⚠ And an answer that is not the shape this expects is not an answer.
-      // Something else on that host answering 200 with a page, or a proxy
-      // returning its own JSON, would otherwise draw four tiles of zeros and
-      // call them the roster.
-      if (vol && !Array.isArray(vol.roles)) { vol = null; volError = volError || 'Serve answered with something this screen could not read.'; }
 
-      const roles = Array.isArray(vol?.roles) ? vol.roles : [];
-      // ⚠ Most short-handed first. A roster sorted by name is a list; sorted by
-      // what is missing, it is a worklist — which is the only reason the
-      // coordinator opens it.
-      const shortOf = (r) => (r.shifts || []).reduce((a, sh) =>
-        a + Math.max(0, (Number(sh.needed) || 0) - (Number(sh.filled) || 0)), 0);
-      const sorted = roles.slice().sort((a, b) => shortOf(b) - shortOf(a));
-
-      const tile = (label, n, note) =>
-        `<div class="tlc-tile"><div class="tlc-tile-label">${escapeHtml(label)}</div>`
+      const tile = (label, n, note, tone) =>
+        `<div class="tlc-tile${tone ? ' tlc-tile--' + tone : ''}"><div class="tlc-tile-label">${escapeHtml(label)}</div>`
         + `<div class="tlc-tile-num">${escapeHtml(String(n))}</div>`
         + `<div class="tlc-tile-note">${escapeHtml(note)}</div></div>`;
 
-      const rolePanels = sorted.map((r) => {
-        const shifts = Array.isArray(r.shifts) ? r.shifts : [];
-        const rows = shifts.map((sh) => {
-          const needed = Number(sh.needed) || 0;
-          const filled = Number(sh.filled) || 0;
-          const people = Array.isArray(sh.people) ? sh.people : [];
-          const who = people.length
-            ? people.map((pp) => pp && pp.email
-              ? `<a href="mailto:${escapeHtml(pp.email)}">${escapeHtml(pp.name || pp.email)}</a>`
-              : escapeHtml((pp && pp.name) || '')).filter(Boolean).join(', ')
-            // ⚠ An empty shift says so in words. A blank cell reads as data
-            // that failed to load, which is the one thing it must not be
-            // confused with on a screen that can also fail to load.
-            : '<span class="tlc-hint">Nobody yet — this shift is entirely open.</span>';
-          return `<tr><td style="padding:6px 12px 6px 0;">${escapeHtml(sh.label || '')}</td>`
-            + `<td style="padding:6px 12px 6px 0;white-space:nowrap;">${filled} of ${needed}</td>`
-            + `<td style="padding:6px 0;">${who}</td></tr>`;
-        }).join('');
-        const short = shortOf(r);
-        return panel(r.name || 'Role', `
-          <table style="width:100%;border-collapse:collapse;font-size:14px;">${rows
-            || '<tr><td class="tlc-hint">No shifts are set up for this role yet.</td></tr>'}</table>
-        `, {
-          right: (short > 0 ? statusPill('warn', short + ' still needed') : statusPill('good', 'Full'))
-            + ` <a class="tlc-action-quiet" href="https://serve.timothystl.org/christmasmarket" target="_blank" rel="noopener">Manage shifts in Serve</a>`,
-        });
-      }).join('');
+      const people = peopleFor(shifts);
+      const needed = shifts.reduce((a, s) => a + s.needed, 0);
+      const filled = shifts.reduce((a, s) => a + s.filled, 0);
+      const thinnest = slotsFor(shifts).slice().sort((a, b) => b.short - a.short)[0];
 
-      // ⚠ A failure here is NOT an error state for this screen. Serve being
-      // down, or this endpoint not existing yet, must not stop the coordinator
-      // opening the tab — so it degrades to the one thing that always
-      // works, a link to the app that owns the roster.
-      volunteersSection = `<header class="tlc-section-head">
+      const viewBody = view === 'time' ? volByTime(shifts, untimedHere)
+        : view === 'grid' ? volGrid(shifts, axis)
+        : view === 'people' ? volPeople(shifts)
+        : volByJob(shifts, base);
+
+      const axisBar = view === 'grid' && shifts.some((s) => s.timed) ? `
+        <div data-noprint="1" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:-4px 0 14px;">
+          <span class="tlc-mkt-lbl" style="margin:0;">Across the top</span>
+          ${segLink(qs({ view: 'grid' }), [{ key: 'jobs', label: 'Jobs' }, { key: 'time', label: 'Time slots' }], axis, 'axis')}
+        </div>` : '';
+
+      const dayBar = days.length > 1
+        ? segLink(qs({ view, axis: axis === 'time' ? 'time' : '' }, false),
+            days.map((d) => ({ key: d.key, label: d.label || 'The market' })), day.key, 'day')
+        : '';
+
+      const printBtn = (kind, label) =>
+        `<a class="tlc-action-quiet" href="${escapeHtml(qs({ view, print: kind, axis: axis === 'time' ? 'time' : '' }))}">${escapeHtml(label)}</a>`;
+
+      volunteersSection = `<section class="tlc-section" style="max-width:1460px;">
+        <header class="tlc-section-head" data-noprint="1">
           <div class="tlc-section-headings">
             <h1 class="tlc-title">Volunteers</h1>
-            <p class="tlc-purpose">Who is covering the market, read from Serve. Shifts are set up and changed there — this is a window on them, not a second copy.</p>
+            <p class="tlc-purpose">Who is covering the market, read from Serve. Shifts are set up and changed there — this is a window on them, and the place you print from.</p>
           </div>
-          <div class="tlc-section-actions"><a class="tlc-btn-primary" href="https://serve.timothystl.org/christmasmarket" target="_blank" rel="noopener">Manage shifts in Serve</a></div>
+          <div class="tlc-section-actions"><a class="tlc-action" href="https://serve.timothystl.org/christmasmarket" target="_blank" rel="noopener">Manage shifts in Serve</a></div>
         </header>`
         + (vol
-          ? `<div class="tlc-tiles">
-              ${tile('Signed up', vol.signedUp ?? 0, 'People who have taken a shift')}
-              ${tile('Open shifts', vol.openShifts ?? 0, 'Still to be covered')}
-              ${tile('Roles', roles.length, 'Jobs the market needs')}
-              ${tile('Sign-ups', vol.open ? 'Open' : 'Closed', vol.open ? 'Serve is taking volunteers' : 'Serve is not taking volunteers')}
+          ? `<div class="tlc-tiles" data-noprint="1">
+              ${tile('Signed up', people.length, `People who have taken a shift${day.label ? ' ' + day.label.split(',')[0] : ''}`)}
+              ${tile('Spots filled', `${filled} of ${needed}`, `Across ${shifts.length} shift${shifts.length === 1 ? '' : 's'}`)}
+              ${tile('Still needed', Math.max(0, needed - filled), 'Spots with nobody in them yet', Math.max(0, needed - filled) ? 'warn' : '')}
+              ${tile('Thinnest hour', thinnest ? fmtShortMer(thinnest.start) : '—',
+                thinnest ? `${thinnest.short} short across ${thinnest.entries.length} job${thinnest.entries.length === 1 ? '' : 's'}` : 'Every slot is covered')}
             </div>
-            ${rolePanels || `<p class="tlc-hint">Serve has no roles for the market yet. Set them up there and they appear here.</p>`}`
-          : `<div class="alert alert-warn">Counts are not available right now — ${escapeHtml(volError || 'Serve did not answer.')} Nothing is wrong with the market itself; the roster lives in Serve and is still there, behind the button above.</div>`);
+            <div class="tlc-vol-bar" data-noprint="1">
+              ${dayBar}
+              ${segLink(qs({ axis: axis === 'time' ? 'time' : '' }), VOL_VIEWS, view, 'view')}
+              <span class="tlc-vol-prints">
+                ${printBtn('leads', 'Print job-lead sheets')}
+                ${printBtn('people', 'Print master list')}
+                ${printBtn('time', 'Print by time slot')}
+                ${printBtn('grid', 'Print the grid')}
+                <a class="tlc-action" href="/market/volunteers.csv"
+                  title="One row per person per shift across both days, plus a row for every spot nobody has taken">Export CSV</a>
+              </span>
+            </div>
+            ${axisBar}
+            ${viewBody}`
+          : `<div class="alert alert-warn">Counts are not available right now — ${escapeHtml(volError || 'Serve did not answer.')} Nothing is wrong with the market itself; the roster lives in Serve and is still there, behind the button above.</div>`)
+        + `</section>`;
     }
 
     // ── PHOTOS ───────────────────────────────────────────────────────────
@@ -1050,8 +2047,8 @@ export async function handleMarketRoutes(request, env, path, method, currentUser
       : '';
 
     // A visitor with no market_manage sees no vendor list at all — the
-    // config panels need SOME header, since renderListSection normally
-    // supplies it, so a bare one stands in for exactly that case.
+    // config panels need SOME header, since the vendor tab normally supplies
+    // it, so a bare one stands in for exactly that case.
     const bareHeader = active === 'money' ? `<header class="tlc-section-head">
         <div class="tlc-section-headings">
           <h1 class="tlc-title">Money &amp; dates</h1>
@@ -1066,7 +2063,6 @@ ${sidebarShell('market', currentUser, `<a href="https://timothystl.org/christmas
   ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
   ${bareHeader}
   ${vendorSection}
-  ${vendorDrawer}
   ${configSection}
   ${pagesSection}
   ${volunteersSection}

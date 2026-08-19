@@ -1893,6 +1893,18 @@ if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
         <input type="text" name="name" placeholder="Your name (optional)" class="form-input" style="flex:1;min-width:160px;max-width:220px;background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.25);color:white;" autocomplete="given-name">
         <input type="email" name="email" placeholder="Email address" required class="form-input" style="flex:1;min-width:200px;max-width:280px;background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.25);color:white;" autocomplete="email">
         <input type="text" name="website" style="display:none;" tabindex="-1" autocomplete="off">
+        <!-- ⚠ THE FIFTH SCREENED FORM (FX-05). /api/subscribe runs the same
+             screener the contact and prayer forms do, so without a mount here
+             it would post no cf-turnstile-response once a secret key is set —
+             a permanent +5 on every signup, which is one extra signal away
+             from HOLDING somebody who then never lands on the list and is
+             never told. Whether this shows a visible challenge is decided by
+             the widget MODE on the site key at Cloudflare, not here: an
+             Invisible or Non-interactive key renders nothing. This band is
+             site-wide chrome on all 28 pages, so a Managed key would put a
+             visible checkbox on every one of them — that is the office's
+             call to make when they create the key. -->
+        <div class="tlc-turnstile" style="flex-basis:100%;display:flex;justify-content:center;"></div>
         <button type="submit" id="newsletter-signup-btn" class="btn btn-secondary">Subscribe</button>
       </form>
       <div id="newsletter-signup-alert" style="display:none;margin-top:16px;font-size:14px;color:rgba(255,255,255,.85);"></div>
@@ -3082,6 +3094,10 @@ function tlcTakeOverPage(slug, blocksHtml) {
   tlcRunBlockScripts(host);
   tlcCalRetire(pageEl);
   tlcCalScan(host);
+  // A block can carry a form — the market application, an event sign-up — and
+  // its Turnstile mount has only just entered the document. See the note on
+  // tlcMountTurnstile for what a missed mount costs once a secret key is set.
+  tlcMountTurnstile();
   var pageDiv = host.querySelector('.tlcb-page');
   // A page rendered through a layout has already decided whether it runs full
   // width — forcing it here would put a sidebar page edge to edge. Only the
@@ -4468,15 +4484,41 @@ var tlcFormToken = '';
 
 // Only runs if a Turnstile site key has been saved in the admin. Until then
 // nothing is loaded and the forms look exactly as they do today.
+//
+// ⚠ RE-RUNNABLE, AND THAT IS THE WHOLE POINT (FX-05). This used to read
+// `.tlc-turnstile` ONCE, on the one pass that ran when /api/form-config
+// answered, and render into whatever existed at that instant. The contact and
+// prayer forms are in the hardcoded markup so they were always there — but the
+// Christmas Market application and the event sign-up are BLOCKS, injected
+// later, and on an SPA navigation they are injected long after this has run.
+// A widget that never mounts is not a cosmetic miss: the form then posts no
+// `cf-turnstile-response`, the Worker scores that as `missing`, and with a
+// secret key configured that is +5 — enough on its own to mark every single
+// vendor application `suspect` and suppress its confirmation email, and enough
+// with one link in the description to HOLD it with no payment link at all.
+var tlcTurnstileKey = '';
 function tlcMountTurnstile(siteKey) {
-  const mounts = document.querySelectorAll('.tlc-turnstile');
-  if (!mounts.length) return;
-  window.tlcTurnstileReady = function() {
-    mounts.forEach(function(el) {
-      try { window.turnstile.render(el, { sitekey: siteKey }); } catch (_) {}
+  if (siteKey) tlcTurnstileKey = siteKey;
+  if (!tlcTurnstileKey) return;
+  // Nothing to mount yet is not an error — a later block injection calls this
+  // again. Not loading the script until there is a form keeps the promise that
+  // nothing is fetched on the 27 pages that have none.
+  if (!document.querySelector('.tlc-turnstile:not([data-ts-done])')) return;
+  var renderPending = function () {
+    if (!window.turnstile) return;
+    document.querySelectorAll('.tlc-turnstile:not([data-ts-done])').forEach(function (el) {
+      // Marked before rendering, so a second call cannot double-render a
+      // widget while the first render is still in flight.
+      el.setAttribute('data-ts-done', '1');
+      try { window.turnstile.render(el, { sitekey: tlcTurnstileKey }); } catch (_) {}
     });
   };
+  if (window.turnstile) { renderPending(); return; }
+  window.tlcTurnstileReady = renderPending;
+  // One script tag, however many times this is called.
+  if (document.getElementById('tlc-turnstile-js')) return;
   const s = document.createElement('script');
+  s.id = 'tlc-turnstile-js';
   s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=tlcTurnstileReady';
   s.async = true; s.defer = true;
   document.head.appendChild(s);

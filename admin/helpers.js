@@ -7,10 +7,10 @@ import { TINYMCE_HEAD, TINYMCE_BASE } from './db.js';
 // editor's canvas uses. Preview only — nothing here touches what is stored.
 import { sanitizeRich } from './blocks.js';
 import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
-import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, TABS_CSS, NEWSLETTER_CSS, PANEL_LIST_JS, SIDEBAR_JS, TOGGLE_WORD_JS, LOCKED_FIELD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
+import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, TABS_CSS, MARKET_CSS, MARKET_JS, NEWSLETTER_CSS, PANEL_LIST_JS, SIDEBAR_JS, TOGGLE_WORD_JS, LOCKED_FIELD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 import { APPEARANCE_CSS } from './appearance.js';
 
-export const VERSION = 'v5.29.0'; // minor: the site draws its own church calendar from a merged Google + News & Events feed, replacing the capped Google embed
+export const VERSION = 'v5.31.0'; // minor: the classic rich fields are sanitized (FX-04), Turnstile can be switched on safely (FX-05), the 85KB block stylesheet is a cacheable asset (FX-17), and the /api/pages cache chokepoint covers what actually feeds it (FX-19)
 
 // ── THE SHARED SHELL CSS/JS, EXTERNALISED ───────────────────────
 // This used to be inlined into every admin response inside <style>/<script>
@@ -367,6 +367,7 @@ ${PRESET_CSS}
 ${GYM_CAL_CSS}
 ${PANEL_LIST_CSS}
 ${TABS_CSS}
+${MARKET_CSS}
 ${APPEARANCE_CSS}
 ${NEWSLETTER_CSS}
 ${TOAST_CSS}
@@ -622,6 +623,7 @@ ${TOAST_JS}
 ${CMDK_JS}
 ${PUSH_JS}
 ${RICH_FIELD_JS}
+${MARKET_JS}
 `;
 
 export function html(body, title = 'TLC Admin', extraHead = '') {

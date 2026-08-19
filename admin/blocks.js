@@ -1362,16 +1362,27 @@ const RICH_DROP_WITH_CONTENT = /<(script|style|iframe|object|embed|form|link|met
 // TinyMCE output is user input. Only staff can reach the editor, but a stored
 // XSS here would run in another staff member's authenticated admin session —
 // the cross-privilege escalation path called out in the July 2026 review.
-export function sanitizeRich(input) {
+//
+// ── ONE ENGINE, TWO PROFILES (FX-04) ─────────────────────────────────────────
+// The loop below used to BE sanitizeRich. It is parameterized now because the
+// classic admin forms (the newsletter's notes, a news body, a sermon note)
+// needed sanitizing too and could not take this exact allowlist — see
+// CLASSIC_PROFILE below for why. Copying the loop instead would have been two
+// implementations of the one thing in this codebase that must not have two.
+//
+// A profile is { tags, attrs, voids, classes, styles }. `styles` absent means
+// the `style` attribute is not allowed at all, which is what every profile but
+// the classic one wants.
+function sanitizeProfile(input, profile) {
   if (!input) return '';
   let s = String(input).slice(0, 40000);
   s = s.replace(RICH_DROP_WITH_CONTENT, '');
   s = s.replace(/<!--[\s\S]*?-->/g, '');
   s = s.replace(/<\/?([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>/g, (match, tag, attrs) => {
     const t = tag.toLowerCase();
-    if (!RICH_TAGS.has(t)) return '';
-    if (match.startsWith('</')) return RICH_VOID.has(t) ? '' : '</' + t + '>';
-    const allowed = RICH_ATTRS[t] || [];
+    if (!profile.tags.has(t)) return '';
+    if (match.startsWith('</')) return profile.voids.has(t) ? '' : '</' + t + '>';
+    const allowed = profile.attrs[t] || [];
     let out = '';
     const re = /([a-zA-Z][a-zA-Z0-9-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/g;
     let m;
@@ -1389,10 +1400,17 @@ export function sanitizeRich(input) {
       // harder to reason about than none.
       if (name === 'class') {
         const cls = val.split(/\s+/).filter(Boolean);
-        if (!cls.length || !cls.every((c) => RICH_CLASSES.has(c))) continue;
+        if (!cls.length || !cls.every((c) => profile.classes.has(c))) continue;
         val = cls.join(' ');
       }
+      if (name === 'style') {
+        val = safeStyle(val, profile.styles);
+        if (!val) continue;
+      }
       if ((name === 'width' || name === 'height') && !/^\d{1,4}$/.test(val)) continue;
+      if (name === 'colspan' || name === 'rowspan') {
+        if (!/^\d{1,3}$/.test(val)) continue;
+      }
       if (name === 'target') val = '_blank';
       out += ' ' + name + '="' + esc(val) + '"';
     }
@@ -1400,6 +1418,93 @@ export function sanitizeRich(input) {
     return '<' + t + out + '>';
   });
   return s;
+}
+
+const RICH_PROFILE = { tags: RICH_TAGS, attrs: RICH_ATTRS, voids: RICH_VOID, classes: RICH_CLASSES, styles: null };
+
+export function sanitizeRich(input) {
+  return sanitizeProfile(input, RICH_PROFILE);
+}
+
+// ── A CONSTRAINED `style`, WHICH IS NOT THE SAME AS ALLOWING ONE ─────────────
+// The note on RICH_CLASSES above says a free style attribute must never be
+// allowed, and that still holds: it is arbitrary CSS running in another admin's
+// authenticated session. But the classic editor WRITES styles itself — its own
+// NodeChange handler puts `margin:8px;max-width:100%;height:auto` on every
+// image it touches — so dropping the attribute wholesale would visibly break
+// every picture in the newsletter archive.
+//
+// So the property is allowlisted AND the value is character-restricted:
+//   · a declaration whose property is not on the list is dropped
+//   · parentheses are rejected outright, which is what kills url(...) and the
+//     old expression(...) — there is no safe value in these properties that
+//     needs one
+//   · quotes, backslashes, angle brackets, @ and & cannot appear either
+// Anything unrecognized drops that declaration and keeps the rest, so a paste
+// from Word loses its font soup and keeps its alignment.
+const STYLE_VALUE_RE = /^[a-zA-Z0-9 .,%#/-]+$/;
+export function safeStyle(value, allowedProps) {
+  if (!allowedProps || !allowedProps.size) return '';
+  const out = [];
+  for (const decl of String(value || '').slice(0, 600).split(';')) {
+    const i = decl.indexOf(':');
+    if (i < 0) continue;
+    const prop = decl.slice(0, i).trim().toLowerCase();
+    const val = decl.slice(i + 1).trim();
+    if (!allowedProps.has(prop)) continue;
+    if (!val || val.length > 80 || !STYLE_VALUE_RE.test(val)) continue;
+    out.push(prop + ':' + val);
+  }
+  return out.join(';');
+}
+
+// ── THE CLASSIC ADMIN FORMS' PROFILE (FX-04) ────────────────────────────────
+// The newsletter's notes, a news body, a sermon note, a youth page and a
+// ministry post are all edited by the CLASSIC TinyMCE (admin/helpers.js), whose
+// toolbar is `blocks | bold italic underline | align* | bullist numlist |
+// link image | table | code`. Every one of those has to survive the round trip
+// or sanitizing silently eats real, already-published content.
+//
+// ⚠ THIS IS WIDER THAN sanitizeRich AND THAT IS THE WHOLE POINT — but it is a
+// SEPARATE SET, exactly like sanitizeCardRich and sanitizeLineRich are narrower
+// separate sets. Widening one must never quietly widen another. In particular
+// the page editor must NOT gain tables or `style` by being handed this profile.
+//
+// What the block editor's list lacks and this needs:
+//   · the table family — the classic toolbar has a `table` button
+//   · h1/h5/h6/pre — TinyMCE's `blocks` dropdown offers all six headings
+//   · `style`, constrained by safeStyle above — alignment, and the image
+//     margins the editor writes itself
+const CLASSIC_TAGS = new Set([...RICH_TAGS, 'h1', 'h5', 'h6', 'pre', 'code',
+  'table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th', 'caption', 'colgroup', 'col']);
+const CLASSIC_STYLES = new Set(['text-align', 'margin', 'margin-top', 'margin-right',
+  'margin-bottom', 'margin-left', 'padding', 'width', 'height', 'max-width', 'min-width',
+  'border', 'border-collapse', 'vertical-align', 'float']);
+const CLASSIC_ATTRS = (() => {
+  const styled = ['style'];
+  const a = {
+    a: ['href', 'target'],
+    img: ['src', 'alt', 'width', 'height', 'style'],
+    td: ['colspan', 'rowspan', 'style'],
+    th: ['colspan', 'rowspan', 'scope', 'style'],
+    table: ['style', 'border'],
+    col: ['span', 'style'],
+    colgroup: ['span', 'style'],
+    p: ['class', 'style'],
+  };
+  for (const t of ['div', 'span', 'li', 'ul', 'ol', 'tr', 'thead', 'tbody', 'tfoot',
+    'caption', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre']) a[t] = styled;
+  return a;
+})();
+const CLASSIC_VOID = new Set([...RICH_VOID, 'col']);
+const CLASSIC_PROFILE = {
+  tags: CLASSIC_TAGS, attrs: CLASSIC_ATTRS, voids: CLASSIC_VOID,
+  classes: RICH_CLASSES, styles: CLASSIC_STYLES,
+};
+
+// The one to call on a classic admin form's rich field, on the way IN.
+export function sanitizeClassicRich(input) {
+  return sanitizeProfile(input, CLASSIC_PROFILE);
 }
 
 export const cleanText = (s, max = 200) => String(s == null ? '' : s).replace(/[\u0000-\u001F\u007F]/g, ' ').trim().slice(0, max);
@@ -1869,7 +1974,23 @@ export function starterBlocks(title, key = 'ministry') {
 // Shipped once per page (renderPage prepends it). Class-prefixed `tlcb-` so it
 // cannot collide with the public site's own stylesheet or the admin shell.
 
-export const BLOCK_CSS = `<style id="tlcb-css">
+// ── FX-17: THE BYTES, SEPARATE FROM THE TAG THAT CARRIES THEM ───────────────
+// This stylesheet is 85KB, and it used to travel inline on every published page
+// TWICE — once injected into the document at the edge (into HTML served
+// `no-cache`, so never reusable) and again inside the /api/pages JSON, because
+// the client fetches that payload regardless for the nav and the footer.
+//
+// The admin's own ~89KB went to /assets/admin.css, `immutable`, cache-busted by
+// ?v=VERSION, back in 2026-08-03. This is the same move for the public site:
+// BLOCK_CSS_RAW is served at /assets/blocks.css and /api/pages ships a <link>
+// pointing at it instead of the bytes.
+//
+// ⚠ BLOCK_CSS (the inline <style>) IS STILL WHAT renderPage EMITS. The editor
+// canvas renders through the same function and is a different situation — it is
+// behind a session, on the admin origin, and re-renders constantly while
+// somebody arranges a page. Changing that too is worth doing and is not this
+// change; a <link> there needs the canvas's own load ordering thought about.
+export const BLOCK_CSS_RAW = `
 /* Whole-page mode: the blocks are the page, so each one is centered at the
    site's own content width while the banner runs edge to edge. */
 .tlcb-page--full{--tlcb-wrap:1100px;}
@@ -3003,7 +3124,21 @@ aside.tlcb-card{background:linear-gradient(180deg,#FFFDF8 0%,#F5F0E6 100%);borde
 PHONE_RULES_PLACEHOLDER
   .tlcb-hide-phone{display:none!important;}
 }
-</style>`.replace('PHONE_RULES_PLACEHOLDER', phoneRules(''));
+`.replace('PHONE_RULES_PLACEHOLDER', phoneRules(''));
+
+// The inline form, unchanged, for every caller that wants the bytes in the
+// document — renderPage(withCss) and anything rendering outside a page that can
+// link to the asset route.
+export const BLOCK_CSS = `<style id="tlcb-css">\n${BLOCK_CSS_RAW}\n</style>`;
+
+// ⚠ THE SAME id THE INLINE TAG CARRIES. tlcEnsureBlockCss() and
+// tlcTakeOverPage() in public/index.html both ask `getElementById('tlcb-css')`
+// whether the stylesheet is already here; a <link> answers that question just
+// as well as a <style>, which is the only reason this swap is invisible to
+// them. Change the id in one place and the client silently injects a second
+// copy on every navigation.
+export const blockCssLink = (version) =>
+  `<link id="tlcb-css" rel="stylesheet" href="https://admin.timothystl.org/assets/blocks.css?v=${encodeURIComponent(version || '0')}">`;
 
 // What "phone" does to a block layout, written once. The public page applies it
 // through a media query; the editor applies the identical rules to the paper
@@ -5367,6 +5502,7 @@ function renderInner(b, opts) {
           <div class="tlcb-mktapp-field"><label for="mkt-b-sign">Type your name to agree <span class="tlcb-mktapp-req">*</span></label>
             <input type="text" id="mkt-b-sign" name="signature_name" placeholder="Your full name"${dis}></div>
           <div class="tlcb-mktapp-alert" role="alert"></div>
+          ${editing ? '' : '<div class="tlc-turnstile" style="margin-bottom:12px;"></div>'}
           <div class="tlcb-mktapp-foot">
             <button type="button" class="tlcb-btn tlcb-btn--ghost" data-goto="2"${dis}>Back</button>
             ${editing ? `<span class="tlcb-btn" data-submit-label>Submit and pay ${esc(marketMoney(price.totalCents))}</span>`
@@ -5455,6 +5591,7 @@ function renderInner(b, opts) {
         ${qtyRow}
         ${totalBlock}
         <div class="tlcb-reg-alert" role="alert"></div>
+        ${editing ? '' : '<div class="tlc-turnstile" style="margin-bottom:12px;"></div>'}
         <div class="tlcb-reg-foot">
           ${editing ? `<span class="tlcb-btn" data-submit-label>${esc(submitLabel)}</span>`
             : `<button type="submit" class="tlcb-btn" data-submit-label${dis}>${esc(submitLabel)}</button>`}
