@@ -705,7 +705,10 @@ export const BLOCK_DEFS = {
     url: true, urlLabel: 'Google Calendar embed URL', richBody: true,
     choices: [
       { key: 'embedHeight', label: 'How tall', def: 'm', options: EMBED_HEIGHTS,
-        note: 'A month grid needs the room; a short tray is right when the calendar is not the point of the page.' },
+        // ⚠ Says which case it applies to, because for the common one it
+        // applies to nothing: the church calendar sizes itself, and a control
+        // that silently does nothing is worse than one that explains itself.
+        note: 'Only applies to an embedded form or other embed. Left blank, or given a Google Calendar address, this block draws the church calendar, which sizes itself.' },
     ],
     switches: [
       { key: 'subscribe', label: 'Offer to add it to a phone', def: true,
@@ -3131,21 +3134,15 @@ export function blocksClientConfig(data) {
 
 // ── RENDERING ────────────────────────────────────────────────────────────────
 
-// ⚠ GOOGLE LAYS THE MONTH GRID OUT TO THE `height` IN THE URL, not to the box
-// it is dropped into. An iframe made taller on its own just gains white space
-// under a day that still reads "N more" — which is exactly what raising only
-// the CSS height in v5.5.0 produced. Only touches a Google Calendar address;
-// this field also takes a Google Form and other embeds, and appending a height
-// to one of those would be inventing a parameter it never asked for.
-//
-// ⚠ Mirrored by tlcCalSrc() in public/index.html for the hardcoded pages.
-export function calendarSrc(src, px) {
-  if (!/^https?:\/\/calendar\.google\.com\//i.test(src)) return src;
-  const n = Math.max(200, Math.min(2000, Math.round(Number(px) || 0)));
-  if (!n) return src;
-  const out = src.replace(/([?&])height=\d+/, '$1height=' + n);
-  return out === src ? out + (src.includes('?') ? '&' : '?') + 'height=' + n : out;
-}
+// ⚠ calendarSrc() USED TO LIVE HERE and is deliberately gone. It wrote the
+// height Google needs into a Google Calendar embed address — because Google
+// lays its month grid out to the height in the URL rather than to the box.
+// No Google Calendar address can reach an iframe any more: the Calendar block
+// treats one as the CHURCH calendar and renders the site's own month instead
+// (see the `calendar` branch in renderBlock). So the function could only ever
+// have been code that looked live and did nothing, which is the one thing this
+// repo keeps having to delete. Its browser mirror, tlcCalSrc() in
+// public/index.html, went with the embeds it served.
 
 const sizeOf = (b) => SIZES.find((s) => s.key === b.size) || SIZES[1];
 const shadeOf = (b) => (SHADES.find((s) => s.key === b.shade) || SHADES[0]).css;
@@ -4899,7 +4896,7 @@ function renderInner(b, opts) {
       return `<div class="tlcb-stack">${renderHead(opts, b)}${inner}</div>`;
     }
     const inner = src && !opts.editing
-      ? `<iframe src="${esc(calendarSrc(src, px))}" title="${esc(b.title || 'Calendar')}" loading="lazy" style="width:100%;height:${px}px;border:0;border-radius:9px"></iframe>`
+      ? `<iframe src="${esc(src)}" title="${esc(b.title || 'Calendar')}" loading="lazy" style="width:100%;height:${px}px;border:0;border-radius:9px"></iframe>`
       : `<div style="border:1px solid #DDE3ED;border-radius:9px;padding:26px;text-align:center;background:#F7F3EC;color:#8A8898;font-size:13px">Embed</div>`;
     return `<div class="tlcb-stack">${renderHead(opts, b)}${inner}</div>`;
   }
