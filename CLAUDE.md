@@ -870,6 +870,85 @@ works when measured in a viewport the size of the paper (989x749); at the
 default viewport a sheet that would lose its last week measures as fitting
 comfortably.
 
+### The calendar's categories are the office's now, and rentals are on it (2026-08-19)
+
+Dinger, once the calendar was finally rendering: *"how do i set the color of the
+event type, and set what things should fit into? and we have building rental
+feed in this app too, could those get brought in?"*
+
+**Two answers. The first half was already possible and undocumented; the second
+half was not possible at all.**
+
+- **Setting an event's color is a Google job** and always was — the picker on
+  the event. `public/manual.html` says where it is.
+- **Deciding what the colors MEAN was hardcoded**, which is the part that could
+  only be answered with work. `calendar_categories` is the table now, seeded
+  from `DEFAULT_CATEGORIES` so nothing on the site moved the day it appeared,
+  and `/calendar-categories` (gated `pages_edit`, nested under Pages) is the
+  screen. Rename, re-point at a different Google color, restyle, add, retire.
+- **⚠ COLORS ARE A PALETTE, NOT A PICKER**, the same rule the Appearance screen
+  holds the header to. A category's color is used twice on every chip — as the
+  ink of the time and as the tint behind it — so a free hex is one paste away
+  from a month nobody can read, on the page the whole congregation opens.
+  `CALENDAR_PALETTE` is twelve pairs chosen together, and the swatch is stored
+  as a KEY so adjusting a pair moves every category wearing it.
+- **⚠ ONE GOOGLE COLOR FEEDS ONE CATEGORY, and it is checked in the route
+  rather than left to the UNIQUE index.** A constraint error reaches the
+  top-level catch and shows a reference number, which tells somebody
+  re-pointing a color nothing at all. The index is still there, for the stale
+  tab.
+- **⚠ `Other` CANNOT BE RETIRED OR DELETED, whatever the form posts.** Most
+  events carry no color — 40 of the first 45 — so it is where nearly everything
+  lands. `mergedCategories()` forces it active and `activeCategories()` puts it
+  back if it is missing.
+- **⚠ AN EVENT WHOSE COLOR NO CATEGORY CLAIMS FALLS TO `Other`, NEVER OUT OF
+  THE FEED.** Re-point Worship away from Blueberry and every Blueberry event
+  becomes uncategorized — it does not vanish. A test drives exactly that.
+- **⚠ A CATEGORY WITH NO GOOGLE COLOR SAYS SO, in a warning band.** Nothing can
+  ever land in it; it is a control that looks live and does nothing, which this
+  admin names out loud rather than leaving to be discovered.
+- **⚠ THE CATEGORY FINGERPRINT IS PART OF THE FEED'S CACHE KEY.** The month is
+  cached ten minutes, which is right for events and wrong for somebody who has
+  just renamed a category and gone to look — they would see the old name and
+  conclude the screen does not work. Their `updated_at`s are hashed into the
+  key, so an edit changes the key and the next request rebuilds. It costs one
+  indexed read on a cache hit.
+- **⚠ NOT `slugify()` FOR THE KEY.** That builds a page ADDRESS and returns a
+  leading slash, so a new category would be stored as `/fellowship` and quietly
+  match nothing. Caught by a test, not by reading it.
+
+**Building rentals are a third source, and the renter is never named.**
+`readGymBookings()` reads `gym_bookings` directly rather than the Google
+calendar the gym pushes to — the push is best-effort, silently does nothing
+when the service account is unconfigured, and did not exist when the earliest
+bookings were taken, so the table is the only place that has all of them.
+
+- **⚠ `gym_groups` IS NOT JOINED AND `notes` IS NOT READ.** This is a public
+  page. A visitor checking whether the gym is free needs the time, not who
+  booked it; the entry says `Building in use` and stops. `notes` is typed by
+  the renter and is the field GY-2 found being rendered unescaped into staff
+  email — it has no business here at all.
+- **⚠ AND THE COPY THE GYM PUSHES TO GOOGLE IS DROPPED, which is the half that
+  is easy to miss.** `addGymBookingToGCal()` writes `Gym Rental — <group name>`;
+  if that calendar is ever added to `calendar_google_ids`, every renter's name
+  lands on the church's public calendar. `fetchGoogleEvents()` filters those
+  titles out, so the privacy rule holds however the calendars are configured
+  later. A test asserts the group name appears nowhere in the payload.
+- **Only `confirmed`.** A hold is not a booking anybody can rely on.
+- **The source filter is a pill per source that the month ACTUALLY HAS**, so a
+  month with no rentals offers no building-use pill — the dead-control rule
+  again. "Both sources" became "All sources" once there were three.
+- ⚠ `dedupeEvents()` was written around exactly two sources ("the News record
+  wins, Google wins the clock"). It is a rank now — news > building > gcal for
+  the words, and *whichever entry actually carries a clock* for the time. Same
+  behavior for the original pair, and it no longer breaks when a third arrives.
+
+Run: `node admin/calendar.test.mjs`, and the three groups in
+`test/admin-redesign.test.mjs` (`building rentals reach the calendar, and never
+name the renter`, `the calendar categories are editable, and the feed follows
+them`, `the category screen is gated`), plus the two source-pill groups in
+`test/public-calendar.test.mjs`.
+
 ### The Christmas Market generalized into `/events`, and a new event can adopt a page instead of getting a second one (v5.27.0, 2026-08-18)
 
 Built from `design_handoff_events/`, the follow-on to the market handoff below —

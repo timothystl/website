@@ -223,6 +223,35 @@ async function goToFixtureMonth(p) {
   await ctx.close();
 }
 
+// ── building use is its own source, and only when there is some ─
+{
+  const withRental = FEED.events.concat([
+    ev({ id: 'b:1', title: 'Building in use', start: day(21) + 'T18:00:00', end: day(21) + 'T20:00:00',
+      source: 'building', category: 'facility' }),
+  ]);
+  const { p, ctx } = await open({ feed: { ...FEED, events: withRental } });
+  await goToFixtureMonth(p);
+  const srcPills = await p.$$eval('.tlc-cal-src .tlc-cal-pill', (b) => b.map((x) => x.getAttribute('data-val')));
+  ok(srcPills.includes('building'), 'a month with a rental in it offers the building-use filter');
+  await p.click('.tlc-cal-pill[data-cal="src"][data-val="building"]');
+  await p.waitForTimeout(120);
+  const shown = await p.$$eval('.tlc-cal-chip .tlc-cal-name', (n) => n.map((x) => x.textContent));
+  eq(shown.length, 1, 'and filtering to it leaves the booking alone');
+  eq(shown[0], 'Building in use', 'which says the building is taken, and does not name the renter');
+  await ctx.close();
+}
+
+{
+  // ⚠ Most months have no rentals at all, and a pill whose only outcome is the
+  // empty state is the dead control this site is held to everywhere else.
+  const { p, ctx } = await open();
+  await goToFixtureMonth(p);
+  const srcPills = await p.$$eval('.tlc-cal-src .tlc-cal-pill', (b) => b.map((x) => x.getAttribute('data-val')));
+  ok(!srcPills.includes('building'), 'a month with no rentals does not offer the filter');
+  ok(srcPills.includes('gcal') && srcPills.includes('news'), 'but still offers the sources it does have');
+  await ctx.close();
+}
+
 // ── a category nobody used gets no pill ─────────────────────
 {
   const { p, ctx } = await open();

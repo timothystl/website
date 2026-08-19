@@ -50,6 +50,14 @@ export const SECTIONS = {
     openMode: 'editor',
     note: 'Editing here is the only place the words change — the order, the gradient and the accent color are fixed to the church’s own palette and are not editable.'
   },
+  calcats: {
+    label: 'Calendar', glyph: '▩', title: 'Calendar categories',
+    purpose: 'What the church calendar sorts events into, and which Google Calendar color feeds each one. Whoever enters an event picks that color once in Google; everything else about how it looks on the site is here.',
+    action: '+ Add category', search: 'Search categories',
+    filters: ['All', 'In use', 'Retired', 'No color yet'],
+    columns: [['Category', '2.2fr'], ['Google color', '1.3fr'], ['Shown as', '1.2fr'], ['Status', '1fr']],
+    note: 'An event whose color nobody set — which is most of them — is filed under Other and shown in gray rather than dropped. That is why Other cannot be retired.'
+  },
   menu: {
     label: 'Menu', glyph: '☰', title: 'Menu', purpose: 'The order and shape of the header and footer. Items can point at a page, an outside site, or a short link — and the label in the bar can be shorter than the page name.',
     action: '+ Add item'

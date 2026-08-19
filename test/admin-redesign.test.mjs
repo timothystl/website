@@ -4705,5 +4705,135 @@ group("a gym group's own screen renders, and escapes what it renders (FX-16)");
   ok(!body.includes('<b>6pm</b>'), 'and not rendered as markup');
 }
 
+group('building rentals reach the calendar, and never name the renter');
+{
+  const { db, env } = await boot();
+  const realFetch = globalThis.fetch;
+  // Google is asked for, and answers with the gym's own pushed copy — the one
+  // that DOES carry the group name.
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ items: [
+    { id: 'g1', summary: 'Gym Rental — Lindenwood Soccer Club', colorId: '8',
+      start: { dateTime: '2026-08-20T18:00:00-05:00' }, end: { dateTime: '2026-08-20T20:00:00-05:00' } },
+    { id: 'g2', summary: 'Divine Service', colorId: '9',
+      start: { dateTime: '2026-08-16T08:00:00-05:00' }, end: { dateTime: '2026-08-16T09:15:00-05:00' } },
+  ] }) });
+  try {
+    env.GCAL_API_KEY = 'test-key';
+    db.prepare("INSERT INTO site_settings (key, value) VALUES ('calendar_google_ids','one@group.calendar.google.com') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+    db.prepare("INSERT INTO gym_groups (name, contact, email, active) VALUES (?,?,?,1)")
+      .run('Lindenwood Soccer Club', 'A Renter', 'renter@example.com');
+    const gid = db.prepare('SELECT id FROM gym_groups').get().id;
+    db.prepare("INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, status, notes) VALUES (?,?,?,?,?,?)")
+      .run(gid, '2026-08-20', '18:00', '20:00', 'confirmed', 'Bring the portable goals; back door code 1234');
+    // A hold is not a booking anybody can rely on, so it stays off the calendar.
+    db.prepare("INSERT INTO gym_bookings (group_id, booking_date, start_time, end_time, status) VALUES (?,?,?,?,?)")
+      .run(gid, '2026-08-21', '18:00', '20:00', 'hold');
+
+    const feed = await (await call(env, '/api/calendar?month=2026-08', { fresh: true })).json();
+    const body = JSON.stringify(feed);
+
+    const building = feed.events.filter((e) => e.source === 'building');
+    eq(building.length, 1, 'the confirmed booking is on the calendar');
+    eq(building[0].title, 'Building in use', 'and it says the building is in use');
+    eq(building[0].start, '2026-08-20T18:00:00', 'with the real time');
+    eq(building[0].category, 'facility', 'filed under Facility / rentals');
+
+    // ⚠ THE PRIVACY RULE, AND IT HAS TWO HALVES. The renter is not named by the
+    // booking entry — and the copy the gym PUSHES to Google, which does carry
+    // the name, is dropped rather than shown alongside it. Without the second
+    // half, adding the gym's calendar to the public list publishes every
+    // renter's name on the church's public calendar.
+    ok(!body.includes('Lindenwood Soccer Club'), 'the renter is never named anywhere in the feed');
+    ok(!body.includes('Gym Rental'), 'and the pushed Google copy is dropped, not shown beside it');
+    // The renter's own notes are the field the July 2026 review found being
+    // rendered unescaped into staff email. They have no business here at all.
+    ok(!body.includes('back door code'), 'and the renter notes never reach a public page');
+
+    eq(feed.events.filter((e) => e.title === 'Divine Service').length, 1, 'an ordinary Google event is untouched');
+    eq(feed.events.filter((e) => e.start.startsWith('2026-08-21')).length, 0, 'a hold is not shown as a booking');
+  } finally { globalThis.fetch = realFetch; }
+}
+
+group('the calendar categories are editable, and the feed follows them');
+{
+  const { db, env } = await boot();
+  const admin = signIn(db, ALL_PERMISSIONS);
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ items: [
+    { id: 'g1', summary: 'Divine Service', colorId: '9',
+      start: { dateTime: '2026-08-16T08:00:00-05:00' }, end: { dateTime: '2026-08-16T09:15:00-05:00' } },
+  ] }) });
+  try {
+    env.GCAL_API_KEY = 'test-key';
+    db.prepare("INSERT INTO site_settings (key, value) VALUES ('calendar_google_ids','one@group.calendar.google.com') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+    const screen = await call(env, '/calendar-categories', { cookie: admin.cookie });
+    eq(screen.status, 200, 'the screen opens');
+    const shown = await screen.text();
+    ok(shown.includes('Worship') && shown.includes('Blueberry'), 'it lists a category and the Google color that feeds it');
+    ok(shown.includes('Other'), 'including the one an uncolored event lands in');
+
+    // Blueberry feeds Worship to start with.
+    let feed = await (await call(env, '/api/calendar?month=2026-08', { fresh: true })).json();
+    eq(feed.events[0].category, 'worship', 'a Blueberry event is Worship');
+
+    // Rename it and re-point it at Basil.
+    const saved = await call(env, '/calendar-categories/save/worship', { cookie: admin.cookie, method: 'POST',
+      form: { name: 'Divine Service', color_id: '4', palette: 'moss', active: '1' } });
+    eq(saved.status, 302, 'the save is accepted');
+    feed = await (await call(env, '/api/calendar?month=2026-08', { fresh: true })).json();
+    const cat = feed.categories.find((c) => c.key === 'worship');
+    eq(cat.name, 'Divine Service', 'the new name reaches the public feed');
+    eq(cat.color, '#4A5E3A', 'and so does the palette swatch it now wears');
+    // ⚠ Blueberry no longer feeds anything — Worship was re-pointed at Flamingo
+    // — so the event falls to the neutral category rather than disappearing.
+    eq(feed.events[0].category, 'other', 'an event whose color no category claims is Other, never dropped');
+    eq(feed.events.length, 1, 'and it is still on the calendar');
+
+    // ⚠ Two categories cannot share one Google color — the question has no answer.
+    const clash = await call(env, '/calendar-categories/save/learn', { cookie: admin.cookie, method: 'POST',
+      form: { name: 'Learn', color_id: '4', palette: 'teal', active: '1' } });
+    eq(clash.headers.get('location'), '/calendar-categories?msg=taken', 'a color already in use is refused, with a reason');
+    const still = await call(env, '/calendar-categories', { cookie: admin.cookie });
+    ok((await still.text()).includes('Divine Service'), 'and the category that had it keeps it');
+
+    // ⚠ Other cannot be retired however the form arrives — it is where every
+    // uncolored event lands, which is most of them.
+    await call(env, '/calendar-categories/save/other', { cookie: admin.cookie, method: 'POST',
+      form: { name: 'Other', palette: 'gray' } });
+    feed = await (await call(env, '/api/calendar?month=2026-08', { fresh: true })).json();
+    ok(feed.categories.some((c) => c.key === 'other'), 'Other survives a post that would retire it');
+
+    // A retired category stops being offered.
+    await call(env, '/calendar-categories/save/music', { cookie: admin.cookie, method: 'POST',
+      form: { name: 'Music', color_id: '3', palette: 'plum' } });
+    feed = await (await call(env, '/api/calendar?month=2026-08', { fresh: true })).json();
+    ok(!feed.categories.some((c) => c.key === 'music'), 'a retired category is gone from the public list');
+
+    // Adding one.
+    const added = await call(env, '/calendar-categories/add', { cookie: admin.cookie, method: 'POST',
+      form: { name: 'Fellowship', color_id: '9', palette: 'gold' } });
+    eq(added.status, 302, 'a new category is accepted');
+    feed = await (await call(env, '/api/calendar?month=2026-08', { fresh: true })).json();
+    ok(feed.categories.some((c) => c.name === 'Fellowship'), 'and reaches the public list');
+    // Flamingo now feeds it, so the neutral fallback is no longer where a
+    // Flamingo event goes.
+    eq(feed.categories.find((c) => c.name === 'Fellowship').colorId, '9', 'carrying the color it was given');
+    // ⚠ And the event follows the color rather than the old category name:
+    // Blueberry now feeds Fellowship, so the service that fell to Other when
+    // Worship was re-pointed lands there.
+    eq(feed.events[0].category, 'fellowship', 'an event moves when a category takes over its color');
+  } finally { globalThis.fetch = realFetch; }
+}
+
+group('the category screen is gated, like every other page screen');
+{
+  const { db, env } = await boot();
+  const nobody = signIn(db, ['news_edit'], 'newsy');
+  eq((await call(env, '/calendar-categories', { cookie: nobody.cookie })).status, 403,
+    'an account without pages_edit is refused');
+  eq((await call(env, '/calendar-categories/save/worship', { cookie: nobody.cookie, method: 'POST',
+    form: { name: 'Hijacked', palette: 'gray' } })).status, 403, 'and so is the save route, not just the screen');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

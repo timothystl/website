@@ -6,6 +6,7 @@
 
 
 import { TINYMCE_HEAD, TINYMCE_VERSION, DB_INIT_NEWSLETTERS, DB_INIT_EVENTS, DB_INIT_NEWS_ITEMS, DB_INIT_YOUTH_PAGES, DB_INIT_MINISTRY_POSTS, DB_INIT_VOTERS_PAGE, DB_INIT_SERMON_SERIES, DB_INIT_PAGE_CONTENT, DB_INIT_NOTICES, DB_INIT_STAFF_MEMBERS, DB_INIT_SITE_SETTINGS, DB_INIT_GYM_GROUPS, DB_INIT_GYM_BOOKINGS, DB_INIT_GYM_BOOKING_SLOT_INDEX, DB_INIT_GYM_RECURRENCES, DB_INIT_GYM_BLOCKED, DB_INIT_GYM_INVOICES, DB_INIT_SERMON_NOTES, DB_INIT_SUBSCRIBERS, DB_INIT_USERS, DB_INIT_SESSIONS, DB_INIT_AUDIT_LOG, DB_INIT_PASSWORD_RESETS, DB_INIT_MINISTRY_MEDIA, DB_INIT_MINISTRY_REVISIONS, DB_INIT_MINISTRY_SECTIONS, DB_INIT_PAGES, DB_INIT_PAGE_REDIRECTS, DB_INIT_PAGE_REVISIONS, DB_INIT_FORM_SUBMISSIONS, DB_INIT_PARTNERS, PARTNER_SEED, DB_INIT_MENU_ITEMS, MENU_SEED, DB_INIT_FOOTER_COLUMNS, FOOTER_COLUMN_SEED, FOOTER_ITEM_COLUMNS, TAP_SEED, CARD_KINDS, isFormCard, SIGNUP_CARD_SEED, MDO_SECTION_SEED, THEMES, CONTENT_TYPES, MINISTRY_SLUGS, INITIAL_STAFF, INITIAL_SETTINGS, parseServiceTimes, DB_INIT_PUSH_SUBSCRIPTIONS, DB_INIT_PAYROLL_READY_NOTIFIED, DB_INIT_MARKET_VENDORS, DB_INIT_MARKET_VENDORS_INDEX, DB_INIT_CORE_VALUES,
+         DB_INIT_CALENDAR_CATEGORIES, DB_INIT_CALENDAR_CATEGORIES_COLOR,
          DB_INIT_SITE_EVENTS, DB_INIT_SITE_EVENT_FIELDS, DB_INIT_SITE_EVENT_FIELDS_INDEX,
          DB_INIT_SITE_EVENT_REGISTRATIONS, DB_INIT_SITE_EVENT_REGISTRATIONS_INDEX,
          MARKET_LEGACY_SETTINGS_DEFAULTS, MARKET_LEGACY_SETTINGS_KEYS } from './admin/db.js';
@@ -41,8 +42,9 @@ import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHt
 import { buildPayrollCsv, buildPayrollPdfLines } from './admin/payroll-report.js';
 import { buildMonospacePdf } from './admin/pdf.js';
 import { handleGymRoutes, sweepExpiredItems, extractImageKeys, getGCalAccessToken } from './admin/gym.js';
-import { buildCalendarFeed, buildIcs, parseCalendarIds, monthRange, shiftMonth, CATEGORIES as CAL_CATEGORIES }
-  from './admin/calendar.js';
+import { buildCalendarFeed, buildIcs, parseCalendarIds, monthRange, shiftMonth,
+         mergedCategories, activeCategories, CALENDAR_PALETTE, GOOGLE_COLORS, googleColorName,
+         DEFAULT_CATEGORIES, NEUTRAL_CATEGORY } from './admin/calendar.js';
 import { migrateLegacyPage, starterBlocks, sanitizeBlocks, sanitizeBlock, parseBlocks, newBlock,
          renderPage, renderBlock, BLOCK_DEFS, BLOCK_TYPE_KEYS, GROUPS, BG, INK, SIZES, SPLITS, TONES,
          STAMP_PRESETS, safeUrl, esc as escBlock, editorPhoneCss, blocksClientConfig, makeBlockId,
@@ -172,6 +174,15 @@ const PUBLIC_SETTINGS_KEYS = new Set(['zoom_url', 'councilfiles_url', 'give_url'
 // what it says busts it (see the chokepoint in _fetch), and the response's
 // own max-age=120 is the safety net for anything the chokepoint misses.
 // `caches` does not exist in the Node test harness, so every touch is gated.
+// Which palette swatch each shipped category is seeded with. Kept beside the
+// seed rather than on DEFAULT_CATEGORIES, because the seed list carries the
+// literal colors the site shipped with and this is only how they map onto the
+// editable palette.
+const CAL_SEED_PALETTE = {
+  worship: 'navy', learn: 'teal', ministry: 'moss', facility: 'stone', youth: 'amber',
+  wol: 'slate', mdo: 'sand', music: 'plum', meetings: 'steel', special: 'gold', other: 'gray',
+};
+
 const PAGES_CACHE_URL = 'https://admin.timothystl.org/api/pages';
 
 // Per-binding: a database that has at least one user account. The first-run
@@ -1720,7 +1731,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-19-3'; // bumped: calendar_google_ids setting, for the site's own calendar feed
+    const SCHEMA_VERSION = '2026-08-19-4'; // bumped: calendar_categories, the editable calendar category table
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -2019,6 +2030,18 @@ export default {
     try { await env.DB.prepare(DB_INIT_SITE_SETTINGS).run(); } catch (_) {}
     // Gym rental tables
     try { await env.DB.prepare(DB_INIT_GYM_GROUPS).run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_CALENDAR_CATEGORIES).run(); } catch (_) {}
+    try { await env.DB.prepare(DB_INIT_CALENDAR_CATEGORIES_COLOR).run(); } catch (_) {}
+    // Seeded from the shipped list, INSERT OR IGNORE, so editing a category is
+    // never undone by a deploy and the table matches the site on day one.
+    for (let i = 0; i < DEFAULT_CATEGORIES.length; i++) {
+      const c = DEFAULT_CATEGORIES[i];
+      try {
+        await env.DB.prepare(
+          'INSERT OR IGNORE INTO calendar_categories (key, name, color_id, palette, sort_order, active) VALUES (?,?,?,?,?,1)'
+        ).bind(c.key, c.name, c.colorId || null, CAL_SEED_PALETTE[c.key] || 'gray', i).run();
+      } catch (_) {}
+    }
     try { await env.DB.prepare(DB_INIT_GYM_BOOKINGS).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_GYM_RECURRENCES).run(); } catch (_) {}
     try { await env.DB.prepare(DB_INIT_GYM_BLOCKED).run(); } catch (_) {}
@@ -3098,8 +3121,28 @@ export default {
       const from = wantsIcs ? monthRange(...shiftMonth(y, m, -1)).from : win.from;
       const to   = wantsIcs ? monthRange(...shiftMonth(y, m, 12)).to   : win.to;
 
+      // ⚠ The categories are read, never assumed. An unreadable table falls
+      // back to the shipped list rather than to nothing, so a visitor never
+      // meets a calendar with no palette at all.
+      //
+      // ⚠ AND THEY ARE READ BEFORE THE CACHE IS CONSULTED, on purpose. The
+      // month is cached for ten minutes, which is right for events — but an
+      // office person who has just renamed a category and gone to look at the
+      // calendar would otherwise see the old name and conclude the screen does
+      // not work. Their fingerprint is part of the cache key, so an edit
+      // changes the key and the next request rebuilds; the stale entries age
+      // out on their own. It costs one indexed read on a cache hit.
+      const catRows = await env.DB.prepare(
+        'SELECT key, name, color_id, palette, sort_order, active, updated_at FROM calendar_categories'
+      ).all().catch(() => ({ results: [] }));
+      const cats = mergedCategories(catRows.results || []);
+      const catStamp = (catRows.results || [])
+        .map((r) => `${r.key}:${r.updated_at || ''}:${r.active}`).sort().join('|');
+      let catV = 0;
+      for (let i = 0; i < catStamp.length; i++) catV = ((catV * 31) + catStamp.charCodeAt(i)) | 0;
+
       const cache = edgeCache();
-      const cacheKey = new Request(`https://admin.timothystl.org/api/calendar${wantsIcs ? '.ics' : ''}?from=${from}&to=${to}`);
+      const cacheKey = new Request(`https://admin.timothystl.org/api/calendar${wantsIcs ? '.ics' : ''}?from=${from}&to=${to}&v=${catV >>> 0}`);
       if (cache) {
         const hit = await cache.match(cacheKey).catch(() => null);
         if (hit) return hit;
@@ -3110,18 +3153,18 @@ export default {
       let feed;
       try {
         feed = await buildCalendarFeed(env, {
-          from, to, getToken: getGCalAccessToken,
+          from, to, getToken: getGCalAccessToken, cats,
           calendarIds: parseCalendarIds(idRow && idRow.value),
         });
       } catch (_) {
         // ⚠ Never a 500 on this route. The page's own fallback is a link out to
         // Google Calendar, and it can only offer that if it gets an answer it
         // can read — an error page reads to the client as a network failure.
-        feed = { from, to, events: [], categories: CAL_CATEGORIES, sources: { google: false, news: false, googleReason: 'error' } };
+        feed = { from, to, events: [], categories: activeCategories(cats), sources: { google: false, news: false, building: false, googleReason: 'error' } };
       }
 
       const out = wantsIcs
-        ? new Response(buildIcs(feed.events), {
+        ? new Response(buildIcs(feed.events, { cats }), {
             headers: { 'Content-Type': 'text/calendar; charset=utf-8',
                        'Content-Disposition': 'inline; filename="timothy-lutheran.ics"',
                        'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=600' },
@@ -5639,6 +5682,173 @@ ${sidebarShell('partners', currentUser, `<a href="/partners">← All partners</a
     // The four core values' office-editable words and photo. Unlike Partners,
     // there is nothing here to add or delete — the four rows are seeded once
     // by the schema migration and always exist, one per key in admin/values.js.
+    // ── THE CALENDAR'S CATEGORIES ──────────────────────────────
+    // What the public calendar sorts events into, and which Google color feeds
+    // each one. Gated on pages_edit: this is what the church's own website
+    // shows, not an account or a payment setting.
+    if (path === '/calendar-categories' || path.startsWith('/calendar-categories/')) {
+      if (!hasPermission(currentUser, 'pages_edit')) {
+        return new Response('Access denied.', { status: 403 });
+      }
+      const readCats = async () => {
+        const r = await env.DB.prepare(
+          'SELECT key, name, color_id, palette, sort_order, active FROM calendar_categories'
+        ).all().catch(() => ({ results: [] }));
+        return mergedCategories(r.results || []);
+      };
+
+      if (path === '/calendar-categories' && method === 'GET') {
+        const cats = await readCats();
+        const msg = url.searchParams.get('msg');
+        const alertHtml = msg === 'saved' ? `<div class="alert alert-success">✓ Category saved. The calendar picks it up within a few minutes.</div>`
+          : msg === 'added' ? `<div class="alert alert-success">✓ Category added. Give it a Google color so events can land in it.</div>`
+          : msg === 'taken' ? `<div class="alert alert-error">Another category already uses that Google color. Two categories cannot share one.</div>`
+          : msg === 'locked' ? `<div class="alert alert-warn">Other cannot be retired — it is where an event nobody colored ends up.</div>`
+          : msg === 'badkey' ? `<div class="alert alert-error">That name needs at least one letter or number in it.</div>` : '';
+
+        const editKey = url.searchParams.get('edit') || '';
+        const editing = cats.find((c) => c.key === editKey) || null;
+        const adding = editKey === ':new';
+
+        const listRows = cats.map((c) => {
+          const retired = c.active === false;
+          const swatch = `<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${escapeHtml(c.color)};margin-right:7px;vertical-align:middle"></span>`;
+          return {
+            href: `/calendar-categories?edit=${encodeURIComponent(c.key)}`,
+            filter: retired ? 'retired' : (c.colorId ? 'in-use' : 'no-color-yet'),
+            search: `${c.name} ${c.google} ${c.key}`.toLowerCase(),
+            cells: [
+              primaryCell(c.name, c.key === NEUTRAL_CATEGORY ? 'Where an uncolored event lands' : c.key),
+              c.colorId ? escapeHtml(c.google || ('Color ' + c.colorId))
+                : c.key === NEUTRAL_CATEGORY
+                  // ⚠ For Other, having no color is the whole job — it is
+                  // where an event nobody colored lands. An amber "no color
+                  // yet" pill here would read as a fault on the one row that
+                  // is working exactly as designed.
+                  ? `<span class="tlc-primary-sub">Any color no category claims</span>`
+                  : statusPill('warn', 'No color yet'),
+              `${swatch}${escapeHtml((CALENDAR_PALETTE.find((x) => x.color === c.color) || {}).name || 'Custom')}`,
+              retired ? statusPill('plain', 'Retired') : statusPill('good', 'In use'),
+            ],
+            // ⚠ A category with no Google color can never receive an event —
+            // it is a control that looks live and does nothing, which is the
+            // one thing this admin says out loud rather than leaving to be
+            // discovered.
+            warn: (!retired && !c.colorId && c.key !== NEUTRAL_CATEGORY)
+              ? `Nothing can land in “${c.name}” until it is given a Google color — events are filed by the color whoever enters them picks.`
+              : '',
+            warnCta: (!retired && !c.colorId && c.key !== NEUTRAL_CATEGORY)
+              ? { label: 'Choose a color', href: `/calendar-categories?edit=${encodeURIComponent(c.key)}` }
+              : null,
+          };
+        });
+
+        const usedColors = new Set(cats.filter((c) => c.colorId && c.key !== (editing || {}).key).map((c) => String(c.colorId)));
+        const colorOptions = [{ value: '', label: '— no color yet —' }].concat(
+          GOOGLE_COLORS.map((g) => ({ value: g.id, label: g.name + (usedColors.has(g.id) ? ' (already used)' : '') }))
+        );
+        // ⚠ THE KEY RIDES IN THE ACTION URL, not in a hidden field — the
+        // drawer's field vocabulary has no hidden kind, deliberately: every
+        // control it offers is one somebody can see and reason about.
+        const drawer = (editing || adding) ? renderDrawer({
+          key: 'calcat',
+          title: adding ? 'Add a category' : `Edit ${editing.name}`,
+          sub: adding ? 'A new category needs a Google color before anything can land in it.' : `Filed under ${editing.key}`,
+          action: adding ? '/calendar-categories/add' : `/calendar-categories/save/${encodeURIComponent(editing.key)}`,
+          cancelHref: '/calendar-categories',
+          fields: [
+            { kind: 'text', name: 'name', label: 'Name', value: adding ? '' : editing.name, required: true,
+              hint: 'What the filter pill and the printed key call it.' },
+            { kind: 'choice', name: 'color_id', label: 'Google color', value: adding ? '' : (editing.colorId || ''),
+              options: colorOptions,
+              hint: 'The color whoever enters the event picks in Google. Each color can feed only one category.' },
+            { kind: 'choice', name: 'palette', label: 'Shown as', value: adding ? 'gray' : (editing.palette || ''),
+              options: CALENDAR_PALETTE.map((x) => ({ value: x.key, label: x.name })),
+              hint: 'How it looks on the site — the color of the time and the tint behind it. A fixed set, so a category can never be made unreadable.' },
+            ...(adding || editing.key === NEUTRAL_CATEGORY ? [] : [{ kind: 'toggle', name: 'active', label: 'Status',
+              value: editing.active !== false, on: 'In use', off: 'Retired',
+              hint: 'A retired category keeps its events — they fall back to Other — but stops being offered as a filter.' }]),
+          ],
+        }) : '';
+
+        return html(`
+${sidebarShell('calcats', currentUser, `<a href="https://timothystl.org/calendar" target="_blank">View the calendar</a>`, await pageBadges())}
+<div class="tlc-wrap">
+  ${alertHtml ? `<div class="tlc-section" style="padding-bottom:0;">${alertHtml}</div>` : ''}
+  ${renderListSection({
+    key: 'calcats',
+    title: sectionCfg('calcats').title,
+    purpose: sectionCfg('calcats').purpose,
+    search: sectionCfg('calcats').search,
+    action: { label: sectionCfg('calcats').action, href: '/calendar-categories?edit=%3Anew' },
+    filters: filtersOf('calcats'),
+    columns: columnsOf('calcats'),
+    rows: listRows,
+    noun: 'category',
+    nounPlural: 'categories',
+    note: sectionCfg('calcats').note,
+  })}
+</div>
+${drawer}`, 'Calendar categories');
+      }
+
+      if (path.startsWith('/calendar-categories/save/') && method === 'POST') {
+        const form = await request.formData();
+        const key = decodeURIComponent(path.slice('/calendar-categories/save/'.length));
+        const cats = await readCats();
+        const cat = cats.find((c) => c.key === key);
+        if (!cat) return new Response('', { status: 302, headers: { Location: '/calendar-categories' } });
+
+        const colorId = String(form.get('color_id') || '').trim();
+        // ⚠ CHECKED HERE, NOT LEFT TO THE UNIQUE INDEX. A constraint error
+        // reaches the top-level catch and shows a reference number, which
+        // tells somebody re-pointing a color nothing about what went wrong.
+        if (colorId && cats.some((c) => c.key !== key && String(c.colorId) === colorId)) {
+          return new Response('', { status: 302, headers: { Location: '/calendar-categories?msg=taken' } });
+        }
+        // ⚠ The neutral category is forced on however the form arrives.
+        const active = key === NEUTRAL_CATEGORY ? 1 : (form.getAll('active').includes('1') ? 1 : 0);
+        const name = String(form.get('name') || '').trim() || cat.name;
+        const palette = CALENDAR_PALETTE.some((x) => x.key === form.get('palette')) ? String(form.get('palette')) : (cat.palette || 'gray');
+
+        await env.DB.prepare(
+          `INSERT INTO calendar_categories (key, name, color_id, palette, sort_order, active, updated_at)
+           VALUES (?,?,?,?,?,?,?)
+           ON CONFLICT(key) DO UPDATE SET name=excluded.name, color_id=excluded.color_id,
+             palette=excluded.palette, active=excluded.active, updated_at=excluded.updated_at`
+        ).bind(key, name, colorId || null, palette, cat.sort_order || 0, active, new Date().toISOString()).run();
+        await logAudit(env.DB, currentUser, 'update', 'calendar-category', key, name,
+          { name: cat.name, color: cat.google, active: cat.active }, { name, color: googleColorName(colorId), active: !!active });
+        bustPagesCache(ctx);
+        return new Response('', { status: 302, headers: { Location: '/calendar-categories?msg=saved' } });
+      }
+
+      if (path === '/calendar-categories/add' && method === 'POST') {
+        const form = await request.formData();
+        const name = String(form.get('name') || '').trim();
+        // ⚠ NOT slugify() — that builds a PAGE address and returns a leading
+        // slash, which would make the stored key "/fellowship" and quietly
+        // never match anything. A category key is an identifier, not a path.
+        const key = name.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 24);
+        if (!key) return new Response('', { status: 302, headers: { Location: '/calendar-categories?msg=badkey' } });
+        const cats = await readCats();
+        if (cats.some((c) => c.key === key)) {
+          return new Response('', { status: 302, headers: { Location: `/calendar-categories?edit=${encodeURIComponent(key)}` } });
+        }
+        const colorId = String(form.get('color_id') || '').trim();
+        if (colorId && cats.some((c) => String(c.colorId) === colorId)) {
+          return new Response('', { status: 302, headers: { Location: '/calendar-categories?msg=taken' } });
+        }
+        const palette = CALENDAR_PALETTE.some((x) => x.key === form.get('palette')) ? String(form.get('palette')) : 'gray';
+        await env.DB.prepare(
+          'INSERT OR IGNORE INTO calendar_categories (key, name, color_id, palette, sort_order, active, updated_at) VALUES (?,?,?,?,?,1,?)'
+        ).bind(key, name, colorId || null, palette, cats.length, new Date().toISOString()).run();
+        await logAudit(env.DB, currentUser, 'create', 'calendar-category', key, name, null, { name, color: googleColorName(colorId) });
+        bustPagesCache(ctx);
+        return new Response('', { status: 302, headers: { Location: '/calendar-categories?msg=added' } });
+      }
+    }
+
     if (path === '/values' || path.startsWith('/values/')) {
       if (!hasPermission(currentUser, 'pages_edit')) {
         return new Response('Access denied.', { status: 403 });
