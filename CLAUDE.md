@@ -64,7 +64,7 @@ points staff there.
 - **Backend:** Cloudflare Workers + D1 (SQLite) + KV
 - **CI/CD:** GitHub Actions (`.github/workflows/deploy.yml`)
 - **Newsletter:** Brevo email sending + website archive (Beehiiv removed)
-- **Calendar:** Google Calendar RSS embed at `/calendar`
+- **Calendar:** the site's own month at `/calendar`, drawn from a merged Google Calendar + News & Events feed (`admin/calendar.js`, `/api/calendar`). No longer a Google embed — see "The calendar is ours now" below
 - **Giving:** Tithely (`give.tithe.ly`) — displayed on site and in emails. Breeze is still used internally for people management and automated giving (some members have recurring giving set up via their bank to Breeze). Tithely and Breeze are the same company so this coexistence is not an issue. Do not prompt to "cancel Breeze."
 - **Volunteer signups:** Separate worker, branded "Serve" at serve.timothystl.org (already complete; renamed 2026-07-20 from volunteer.timothystl.org)
 
@@ -526,6 +526,153 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
+
+### The calendar is ours now (v5.29.0, 2026-08-19)
+
+Built from `design_handoff_church_calendar/`, boards 1b (the month) and 2a (the
+print sheet), with 1c's list as the phone layout it asks for. It closes the
+"custom-rendered calendar" item that had been sitting on the pending list since
+2026-08-17 with three options and no decision.
+
+**⚠ THE CAP WAS NEVER OURS TO RAISE, WHICH IS WHY TWO EARLIER FIXES DID NOTHING.**
+v5.5.0 made the iframe taller. v5.15.0 found the real bug — Google lays the month
+out to the `height` in the URL, not to the box — and put a height in the address.
+Both were correct and neither fixed the report, because **Google's month view
+caps how many events a day cell shows before folding the rest into "N more",
+independent of height**. A Sunday with two services, Bible class and Sunday
+School showed two of them and a link. There is no parameter for it; the only way
+past it is to stop asking Google to draw the month.
+
+So the site draws it. `/calendar` and the strip at the bottom of `/news` are the
+same renderer over the same feed, and **a week row simply grows to whatever its
+busiest day holds** — the assertion `test/public-calendar.test.mjs` is built
+around is seven events on one Sunday and seven chips.
+
+**And the feed being ours is the second half, not a side effect.** Events were
+already recorded in two places and always had been: Google holds the room-and-time
+bookings, and a News & Events record holds anything with a description, a photo
+or a sign-up. Google imports from nothing, so nobody could merge them there.
+`admin/calendar.js` merges them here — which is the whole reason the Subscribe
+button is worth having, since subscribing to the Google calendar directly gets
+you half the events.
+
+- **⚠ EVERY TIME IN THE PAYLOAD IS A CHURCH WALL CLOCK CARRYING NO TIMEZONE** —
+  `2026-08-16T08:00:00`, no `Z` and no offset, deliberately. The Worker asks
+  Google for Chicago times and keeps the digits as text; the browser SLICES them
+  and never hands one to `new Date()`. A church calendar says 8:00 am and means
+  8:00 in St. Louis to every reader — converting would tell somebody in Denver
+  the service is at 7. Do not "fix" this into instants; that is the bug, not the
+  omission. The one genuine instant in the file is the `.ics` `DTSTAMP`, which is
+  UTC because it really is a moment.
+- **⚠ AN ALL-DAY EVENT'S END IS MADE INCLUSIVE AT THE BOUNDARY.** Google reports
+  a one-day all-day event as 08-16 → 08-17, and carried through as-is every
+  all-day event sits on one day too many — a Mon–Fri VBS running into Saturday.
+  `normalizeGoogleEvent()` fixes it once, which is why nothing downstream — not
+  the grid, not the list, not the print sheet — has to know about it. The `.ics`
+  writer puts the exclusive day back, because that is what `DTEND` means.
+- **⚠ `singleEvents=true` IS LOAD-BEARING AND MUST NOT BE REMOVED.** Without it a
+  weekly service comes back as one event carrying an `RRULE` and every Sunday but
+  the first vanishes. Expanding recurrence ourselves is a project; asking Google
+  to do it is a query parameter — and it is the reason the public `.ics` feed was
+  rejected as a data source, since that carries the `RRULE` unexpanded.
+- **⚠ A GOOGLE EVENT HAS NO CATEGORY FIELD, SO THE COLOR IS THE CATEGORY.** Ten
+  of Google's eleven event colors map to a category; the site then draws its own
+  palette from the key rather than Google's hues, so ten categories still read as
+  one calendar. **Nothing is ever dropped for having the wrong color** — Flamingo,
+  and the far commoner case of nobody touching the picker at all, land on a
+  neutral "Other" rather than falling out of the feed. A church event silently
+  missing from the church calendar is the worst failure this feature has, and it
+  is the one the office is most likely to cause by accident. The office-facing
+  copy of the table is in `public/manual.html`; change one, change both.
+- **⚠ THE NEWS RECORD WINS THE WORDS AND GOOGLE WINS THE CLOCK.** The de-dupe
+  collapses the same title on the same day, and the handoff says the News record
+  wins because it has the richer copy — true, but taken literally it turns a 9:30
+  service into a shapeless all-day chip, because a News record has no time column
+  at all. The merged entry keeps the News description and Google's start, and its
+  source reads `both` rather than picking a winner. **Two entries from the SAME
+  source are never merged**: Google legitimately holds one title twice when a room
+  is booked back to back, and collapsing those would delete a real booking.
+- **⚠ THE PRINT SHEET IGNORES THE FILTERS ON SCREEN, AND IT IS THE ONE PLACE A CAP
+  IS RIGHT.** Somebody printing the month for the narthex wants the month; a sheet
+  quietly missing every category but one, because of a pill clicked five minutes
+  ago, is wrong in a way nobody can see by looking at it. Its cells are a fixed
+  112px with `overflow:hidden` because the sheet has to stay one page — a
+  different promise from the screen's, which is why the screen has no cap at all.
+  The whole page around it carries `data-noprint` (and the nav, hero, footer and
+  newsletter band are hidden by selector), or the sheet lands on page two.
+- **⚠ ONE PRINT SHEET IN THE DOCUMENT.** The `/news` mount is `compact` and draws
+  none; `/calendar` owns it. Two would print two pages, the second a month nobody
+  asked for.
+- **⚠ NEVER A SEVEN-COLUMN GRID ON A PHONE.** 390px over seven days is about 50px
+  each, which does not fit a date and a word — the same reasoning that had the old
+  embed switching to Google's `AGENDA` view under 700px. Under 900px the renderer
+  draws board 1c's week-grouped list instead, and it is chosen **in the renderer**;
+  the CSS rule that also hides the grid is a second belt for a resize caught
+  between the two. Unlike the iframe, re-rendering on resize costs nothing here —
+  the old one deliberately did not follow a resize because reloading the embed
+  lost the month somebody had navigated to.
+- **A category with nothing in it this month gets no pill.** All eleven would be
+  nine controls whose only possible outcome is the empty state, which is the
+  dead-control rule this repo already holds everything else to. The currently
+  selected one is kept even when the new month has none of it, so a filter can
+  never become impossible to clear.
+- **Everything degrades to something honest.** No credentials → the News & Events
+  entries alone, and a line saying which half is missing with a link straight to
+  Google Calendar. One calendar of two failing → the one that answered is kept and
+  the page still says a calendar is missing. The whole feed failing → the link out,
+  never an empty grid. A failed month is dropped from the client's cache rather
+  than kept, so coming back to it tries again instead of showing the same failure
+  forever. The route itself never 500s, because to the browser an error page is
+  indistinguishable from the network being down.
+- **`getGCalAccessToken()` is exported from `admin/gym.js` with a scope
+  parameter** rather than copied. The default is the write scope the gym has
+  always asked for, so its behavior is byte-identical; the reader asks for
+  `calendar.readonly`. A second copy of JWT signing is a second place for a wrong
+  byte to produce a token that silently never authenticates.
+- **Two credential paths, and either works**: the gym's service account (each
+  calendar shared with it as "See all event details"), or a plain `GCAL_API_KEY`,
+  which reads a public calendar with nothing shared with anybody — which is what
+  these two already are.
+- **`calendar_google_ids` is a setting**, seeded with the two ids that were
+  hardcoded in the old embed URL, so adding the school's calendar is a field
+  rather than a deploy. ⚠ It is a different thing from `gcal_calendar_id`, which
+  is the single calendar gym bookings are WRITTEN to.
+- **⚠ The Calendar BLOCK is still a Google embed, deliberately**, and that is the
+  one inconsistency worth knowing about rather than discovering: its URL field
+  takes a Google Form and other embeds as well as a calendar, so it cannot simply
+  become the church calendar — which means a page built in the editor with a
+  Calendar block still gets Google's cap. `tlcCalSrc()` in `public/index.html` is
+  gone with the embeds it served, so `calendarSrc()` in `admin/blocks.js` is the
+  last implementation standing and its mirror test in `admin/blocks.test.mjs` now
+  asserts exactly that.
+
+**⚠ NOTHING HERE WAS VERIFIED AGAINST A LIVE GOOGLE, AND THAT IS THE ONE THING TO
+CHECK FIRST.** `www.googleapis.com` and `calendar.google.com` are both unreachable
+from this sandbox — the same wall the v5.15.0 note ran into. Every Google-facing
+path is tested against stubs shaped like the documented API, so the request
+parameters, the parsing and the failure behavior are pinned, but no real
+`items[]` has ever been through this code. **Open `/calendar` with credentials set
+and confirm a Sunday's services are all there, then check one all-day event
+spanning several days lands on exactly those days.** If the events are there but
+every one is gray, the color-to-category mapping is right and the office simply
+has not colored anything yet.
+
+**Requires two manual steps outside this repo, the same shape as the Square,
+VAPID and ChMS keys before it** — until one of them is done the page shows News &
+Events entries only and says so:
+
+1. Either share both calendars with the existing service account
+   (`GCAL_SERVICE_ACCOUNT_EMAIL`) as **See all event details** in each calendar's
+   Google settings, **or** set an API key:
+   `wrangler secret put GCAL_API_KEY --name tlc-newsletter-admin`.
+2. Nothing else. `calendar_google_ids` is seeded with the two ids already in use.
+
+Run: `node admin/calendar.test.mjs` (26 — the merge, the de-dupe, the exclusive-end
+trap, the wall clock, the category fallbacks and the `.ics` writer, each verified
+non-vacuous by injecting the bug it guards) and, in a browser,
+`NODE_PATH=$(npm root -g) node test/public-calendar.test.mjs` (55 — the uncapped
+Sunday, the filters, the phone list, the print sheet and both fallbacks; also
+verified against injected regressions).
 
 ### The Christmas Market generalized into `/events`, and a new event can adopt a page instead of getting a second one (v5.27.0, 2026-08-18)
 
@@ -6567,11 +6714,7 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 ## Pending / Deferred Items
 
 ### Still Needs to Be Built
-- **A custom-rendered calendar, reading the church's own feed** — flagged 2026-08-17. Dinger, on `/calendar` and the `/news` embed: a busy Wednesday reads "10am Bible Class · 4 more" (later "3 more") with visible empty space under it. Chased as a bug and it partly was one — see "The iframe got taller and the calendar did not" above, v5.15.0 — but after that fix landed the collapsing continued, and research turned up a second, harder limit: **Google Calendar's own month view caps how many events a day cell shows before folding the rest into "N more", independent of how tall the embed is.** Multiple long-running Google Calendar Community threads ask for exactly this ("how to increase the number of events displayed," "can I set my calendar so ALL events are shown") with no resolution from Google in years — this is how Google's month grid behaves everywhere, not an embed-specific bug. ⚠ **Could not be verified directly**: `calendar.google.com` is unreachable from the sandbox that did this work, on every fetch path tried. Dinger confirmed by hand that "N more" is clickable and opens the rest of that day's events in a popover — so the embed is working as Google designed it, not broken. The three real paths, discussed and left for a future session to scope: (1) accept it, since the popover already shows everything; (2) switch a page to `mode=AGENDA` for a scrollable list with nothing collapsed — already the phone behavior under 700px, in `tlcLoadCalendar()`; (3) **a custom calendar** that reads the church's calendar via its own feed (iCal or the Calendar API) and renders the grid ourselves, with no per-day cap. Real project — its own data source, its own render, and a decision about whether it replaces the Google embed everywhere or only on the pages where density is the problem.
-- ~~**Whether to keep paying Tiny at all**~~ — **done, and the plan is CANCELLED (2026-08-07).** Dinger: *"Self host it. We don't need the paid functions"*, then *"i canceled the plan"*. The editor is `admin/vendor/tinymce/` (TinyMCE 7 open-source, GPLv2+) served by the `/assets/tinymce/` route; there is no API key, no meter and no account behind it any more. ⚠ **Nothing may reintroduce a cloud dependency** — `cdn.tiny.cloud` now points at a cancelled subscription, so a stray call would not merely cost money, it would put a license notice over the editor. Two tests hold that line: `admin/tinymce-assets.test.mjs` fails on the hostname appearing in any live code, and `test/tinymce-selfhost.test.mjs` boots the real library and asserts **no request leaves the origin at all**. See "It is self-hosted now, and where the 614 went" above for where the loads were going.
-- ~~**The footer is not admin-editable at all**~~ — **done v4.23.0, 2026-08-05.** `footer_columns` + `menu_items.column_id`; headings, membership and order are all editable under Menu → Footer columns, and deleting a column never deletes its links. See "The footer is columns now" above. *(Original note kept below for context.)* The footer's column headings ("Visit", "Connect", "Programs", "Partners") and which links sit under each were hardcoded in `public/index.html` — the admin's Menu screen only manages the *header* nav and a flat list of footer outside-links repeated on mobile, neither of which touches the desktop footer's structure at all. What's wanted: real admin control over the footer's column headings and which links sit under each, add/remove/rename a column, reassign a link between columns — not just reordering within a fixed set of columns like the Partners tab's new drag-to-reorder. This is a genuinely separate build from the Menu screen's existing flat `menu_items` list (`MAX_DEPTH.footer = 0`), not an extension of it — likely wants its own "footer columns" concept (a new table for column headings + order, with footer links assigned to one) rather than shoehorning grouping into `menu_items`. Scoped but not started.
-- ~~**`give.timothystl.org` is not a block-editor page**~~ — **built v4.24.0, 2026-08-05**, and **waiting on one Publish**. The draft is seeded; `published_blocks` is empty, so the live page still renders `give-landing.js` until somebody opens `/pages/give-landing/edit` and presses Publish. That last step is deliberately manual: this is the page that takes the money, and a deploy that swaps its rendering path while nobody is watching is exactly the risk the original deferral existed to avoid. See "give.timothystl.org is a block-editor page" below and `admin/BLOCK-EDITOR-ROLLOUT.md` §3. `give_keep_in_step` was **deleted**, not wired up — it was a key nothing ever read, attached to a switch that promised to keep the two giving pages in step.
-
+- ~~**A custom-rendered calendar, reading the church's own feed**~~ — **done v5.29.0, 2026-08-19.** Option (3), the one the note called a real project: `/calendar` and the `/news` strip are drawn by the site from `/api/calendar`, a merged Google + News & Events feed, and there is no per-day cap at all. See "The calendar is ours now" above for the design, the color-to-category rule and the two manual steps it still wants. ⚠ The note's own caveat still stands and now matters more, not less: **`calendar.google.com` and `www.googleapis.com` are unreachable from this sandbox**, so every Google-facing path is verified against stubs and against the API's documented shape, never against a live answer. The first person with real credentials should open `/calendar` and check that a Sunday's services are all there.
 - **24 of the 25 page drafts are still unpublished** — not a code gap. Every page has had a block draft since the site editor shipped; `/give` is the first published. The rest need somebody to compare each draft against the live page, fix what the extractor flattened, and press Publish. Sequencing, known extractor gaps and the three pages that deliberately are not block pages are all in `admin/BLOCK-EDITOR-ROLLOUT.md`.
 
 - ~~**Weekly newsletter display wants adjustments**~~ — **done v4.35.0, 2026-08-13.** It was the archive, not the composer: the newest letter is open and everything older folds away under its month, closed. See "The newsletter archive folds away by month" above. *(Original note:)* flagged 2026-08-05, Andrew's own words, no specifics given yet.

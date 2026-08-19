@@ -282,7 +282,17 @@ group('Text size is a multiplier, and Normal changes nothing');
   ok(/--tlc-head-scale:1;/.test(css), 'and the heading scale as 1');
   // Every size on the sheet goes through one of the two, so the control is
   // whole rather than reaching the handful of rules somebody remembered.
-  const sizes = css.match(/font-size:[^;}]+/g) || [];
+  // ⚠ ONE EXCEPTION, AND IT IS A REAL ONE: the calendar's print sheet. Its
+  // sizes are literal on purpose — the sheet's whole promise is that a month
+  // fits on one landscape page, and the office choosing "Larger" for reading
+  // the site must not silently push the last week onto a second sheet. Text
+  // size is a screen setting; paper is not a screen. Everything else on the
+  // sheet still scales, so this cannot be used to smuggle in an unscaled
+  // on-screen rule.
+  const printBlock = css.slice(css.indexOf('/* ═══ THE PRINT SHEET'));
+  const screenCss = css.slice(0, css.indexOf('/* ═══ THE PRINT SHEET'));
+  ok(printBlock.length > 400, 'the print sheet is where it is expected to be');
+  const sizes = screenCss.match(/font-size:[^;}]+/g) || [];
   ok(sizes.length > 60, 'the sheet really does set a lot of sizes (' + sizes.length + ')');
   const missed = sizes.filter((d) => !/var\(--tlc-(text|head)-scale, 1\)/.test(d));
   eq(missed.length, 0, 'and every one of them scales: ' + missed.slice(0, 3).join(' | '));

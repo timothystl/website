@@ -738,6 +738,12 @@ export const INITIAL_SETTINGS = [
   { key: 'gym_rate_per_hour', value: '25.00',                   label: 'Gym rental rate (per hour, $)',  hint: 'Hourly rate charged for gym rentals. Shown to groups when they confirm a booking.' },
   { key: 'gym_hold_hours',    value: '48',                      label: 'Gym hold duration (hours)',      hint: 'How many hours a tentative hold lasts before auto-expiring. Default: 48.' },
   { key: 'gcal_calendar_id',  value: '',                        label: 'Google Calendar ID (gym rentals)', hint: 'Calendar ID that confirmed gym bookings are automatically added to. Format: xxxxx@group.calendar.google.com or your Gmail address for a personal calendar. Also requires GCAL_SERVICE_ACCOUNT_EMAIL and GCAL_PRIVATE_KEY set as Cloudflare Worker secrets.' },
+  // ⚠ THE PUBLIC CALENDAR'S OWN CALENDARS, and a different thing entirely from
+  // gcal_calendar_id above — that one is the single calendar gym bookings are
+  // WRITTEN to. This is the list the site's /calendar page READS. The two ids
+  // seeded here are the ones that were hardcoded in the old Google embed URL,
+  // so the page shows exactly what it always showed with nothing typed in.
+  { key: 'calendar_google_ids', value: 'calendar@timothystl.org, c_7f6d3db77b48c01af48592e21b2743d22fdf2b221d9d3c4e0c02680b73b89041@group.calendar.google.com', label: 'Calendars shown on /calendar', hint: 'Which Google calendars the church calendar page reads, comma separated. Reading them needs either the GCAL_SERVICE_ACCOUNT_EMAIL / GCAL_PRIVATE_KEY service account granted "See all event details" on each one, or a GCAL_API_KEY secret if the calendars are public.' },
   { key: 'gym_admin_email',   value: 'dinger@timothystl.org',  label: 'Gym booking notification email', hint: 'Email notified when a group places a hold, confirms a booking, or submits a recurring request.' },
   // ⚠ Blank means "serve the renter portal on the admin host", which is what it
   // has always done — and that is the safe default, because the Cloudflare route

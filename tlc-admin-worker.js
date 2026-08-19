@@ -40,7 +40,9 @@ import { hashPassword, verifyPassword, createSession, getSession, deleteSession,
 import { sendBrevoNewsletter, sendTransactionalEmail, buildEmailHtml, buildWebHtml, cancelBrevoCampaign, getBrevoListCount } from './admin/email.js';
 import { buildPayrollCsv, buildPayrollPdfLines } from './admin/payroll-report.js';
 import { buildMonospacePdf } from './admin/pdf.js';
-import { handleGymRoutes, sweepExpiredItems, extractImageKeys } from './admin/gym.js';
+import { handleGymRoutes, sweepExpiredItems, extractImageKeys, getGCalAccessToken } from './admin/gym.js';
+import { buildCalendarFeed, buildIcs, parseCalendarIds, monthRange, shiftMonth, CATEGORIES as CAL_CATEGORIES }
+  from './admin/calendar.js';
 import { migrateLegacyPage, starterBlocks, sanitizeBlocks, sanitizeBlock, parseBlocks, newBlock,
          renderPage, renderBlock, BLOCK_DEFS, BLOCK_TYPE_KEYS, GROUPS, BG, INK, SIZES, SPLITS, TONES,
          STAMP_PRESETS, safeUrl, esc as escBlock, editorPhoneCss, blocksClientConfig, makeBlockId,
@@ -1657,7 +1659,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-19-2'; // bumped: site_event_registrations.square_order_id, for exact-match Square payment reconciliation
+    const SCHEMA_VERSION = '2026-08-19-3'; // bumped: calendar_google_ids setting, for the site's own calendar feed
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -3006,6 +3008,64 @@ export default {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*',
                    'Cache-Control': 'public, max-age=1800' },
       });
+      if (cache && ctx && ctx.waitUntil) ctx.waitUntil(cache.put(cacheKey, out.clone()));
+      return out;
+    }
+
+    // ── PUBLIC: THE CHURCH CALENDAR ───────────────────────────
+    // The merged month feed the site's own calendar renders from, replacing
+    // the Google embed and its per-cell "N more" cap. See admin/calendar.js
+    // for the merge rule, the color-to-category table and why every time in
+    // the payload is a bare church wall clock.
+    //
+    // ⚠ ONE MONTH PER REQUEST, keyed by ?month=YYYY-MM. Serving the whole year
+    // would make the payload grow forever and the edge cache useless; a month
+    // is what the grid draws and what somebody navigates by.
+    if ((path === '/api/calendar' || path === '/api/calendar.ics') && method === 'GET') {
+      const wantsIcs = path === '/api/calendar.ics';
+      const now = churchDate();
+      const asked = String(url.searchParams.get('month') || '').trim();
+      const ym = /^\d{4}-(0[1-9]|1[0-2])$/.test(asked) ? asked : now.slice(0, 7);
+      // Subscribing to one month would leave somebody's calendar app empty next
+      // month, so the .ics is deliberately a WINDOW rather than the month on
+      // screen: back to the start of last month and on for a year.
+      const [y, m] = ym.split('-').map(Number);
+      const win = monthRange(y, m);
+      const from = wantsIcs ? monthRange(...shiftMonth(y, m, -1)).from : win.from;
+      const to   = wantsIcs ? monthRange(...shiftMonth(y, m, 12)).to   : win.to;
+
+      const cache = edgeCache();
+      const cacheKey = new Request(`https://admin.timothystl.org/api/calendar${wantsIcs ? '.ics' : ''}?from=${from}&to=${to}`);
+      if (cache) {
+        const hit = await cache.match(cacheKey).catch(() => null);
+        if (hit) return hit;
+      }
+
+      const idRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'calendar_google_ids'")
+        .first().catch(() => null);
+      let feed;
+      try {
+        feed = await buildCalendarFeed(env, {
+          from, to, getToken: getGCalAccessToken,
+          calendarIds: parseCalendarIds(idRow && idRow.value),
+        });
+      } catch (_) {
+        // ⚠ Never a 500 on this route. The page's own fallback is a link out to
+        // Google Calendar, and it can only offer that if it gets an answer it
+        // can read — an error page reads to the client as a network failure.
+        feed = { from, to, events: [], categories: CAL_CATEGORIES, sources: { google: false, news: false, googleReason: 'error' } };
+      }
+
+      const out = wantsIcs
+        ? new Response(buildIcs(feed.events), {
+            headers: { 'Content-Type': 'text/calendar; charset=utf-8',
+                       'Content-Disposition': 'inline; filename="timothy-lutheran.ics"',
+                       'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=600' },
+          })
+        : new Response(JSON.stringify(feed), {
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*',
+                       'Cache-Control': 'public, max-age=600' },
+          });
       if (cache && ctx && ctx.waitUntil) ctx.waitUntil(cache.put(cacheKey, out.clone()));
       return out;
     }
@@ -10573,6 +10633,7 @@ ${sidebarShell('redirects', currentUser, '', await pageBadges())}
         { key: 'gym_hold_hours', label: 'Gym hold duration', group: 'gym-rentals', used: 'Booking portal · hold expiry', href: '/gym-rentals' },
         { key: 'gym_payment_link', label: 'Gym payment link', group: 'gym-rentals', used: 'Invoices · confirmation emails', href: '/gym-rentals' },
         { key: 'gcal_calendar_id', label: 'Gym calendar ID', group: 'gym-rentals', used: 'Confirmed bookings → Google Calendar', href: '/gym-rentals' },
+        { key: 'calendar_google_ids', label: 'Calendars shown on /calendar', group: 'links', used: 'The church calendar page and its subscribe feed' },
         { key: 'gym_admin_email', label: 'Gym booking notifications', group: 'notifications', used: 'Holds, confirmations, recurring requests', href: '/gym-rentals' },
         // All seven — plus the fund ID and payment provider, which never
         // appeared on this list at all — moved to the Christmas Market
@@ -10684,7 +10745,7 @@ ${sidebarShell('settings', currentUser, '', await pageBadges())}
       // the identical reasoning, one release earlier.
       const SETTABLE = new Set(['church_address_line', 'church_address_city', 'church_phone', 'church_email',
         'church_service_times', 'give_url', 'zoom_url', 'councilfiles_url', 'gym_rate_per_hour', 'gym_hold_hours',
-        'gym_payment_link', 'gcal_calendar_id', 'gym_admin_email', 'turnstile_site_key',
+        'gym_payment_link', 'gcal_calendar_id', 'gym_admin_email', 'turnstile_site_key', 'calendar_google_ids',
         'payroll_bookkeeper_email']);
       const form = await request.formData();
       const key = String(form.get('key') || '');
