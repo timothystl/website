@@ -880,11 +880,12 @@ if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
       <div class="wrap">
         <span class="eyebrow">On the calendar</span>
         <h2>What's coming up</h2>
-        <div style="border-radius:var(--r-md);overflow:hidden;border:1px solid var(--border);margin-top:18px;">
-          <iframe id="gcal-frame-news" src="" data-src="https://calendar.google.com/calendar/embed?src=calendar%40timothystl.org&src=c_7f6d3db77b48c01af48592e21b2743d22fdf2b221d9d3c4e0c02680b73b89041%40group.calendar.google.com&ctz=America%2FChicago&mode=MONTH&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0" style="border:0;display:block;width:100%;height:1100px;" frameborder="0" scrolling="no" title="Timothy Lutheran Church calendar" loading="lazy"></iframe>
-        </div>
+        <!-- The month the site renders itself. See tlcCalMount() below and
+             admin/calendar.js in the Worker; it is filled when this page is
+             opened, never at load. -->
+        <div id="tlc-cal-news" style="margin-top:18px;"></div>
         <div style="margin-top:12px;">
-          <a href="https://calendar.google.com/calendar/embed?src=calendar%40timothystl.org&ctz=America%2FChicago" target="_blank" rel="noopener" style="font-family:var(--sans);font-size:13px;color:var(--mid);font-weight:600;">Open in Google Calendar</a>
+          <a href="/calendar" onclick="event.preventDefault();showPage('calendar');" style="font-family:var(--font-ui);font-size:13px;color:var(--mid);font-weight:600;">See the full calendar</a>
         </div>
       </div>
     </section>
@@ -918,12 +919,14 @@ if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
   <div id="notices-calendar"></div>
   <section class="section section--white">
     <div class="wrap">
-      <div style="border-radius:var(--r-md);overflow:hidden;border:1px solid var(--border);">
-        <iframe id="gcal-frame" src="" data-src="https://calendar.google.com/calendar/embed?src=calendar%40timothystl.org&src=c_7f6d3db77b48c01af48592e21b2743d22fdf2b221d9d3c4e0c02680b73b89041%40group.calendar.google.com&ctz=America%2FChicago&mode=MONTH&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0" style="border:0;display:block;width:100%;height:1100px;" frameborder="0" scrolling="no" title="Timothy Lutheran Church calendar"></iframe>
-      </div>
-      <div style="margin-top:12px;">
-        <a href="https://calendar.google.com/calendar/embed?src=calendar%40timothystl.org&ctz=America%2FChicago" target="_blank" style="font-family:var(--sans);font-size:13px;color:var(--mid);font-weight:600;">Open in Google Calendar</a>
-      </div>
+      <!-- ⚠ THIS IS NOT AN EMBED ANY MORE. The month is drawn here, from
+           /api/calendar — the two Google calendars and the News & Events
+           records merged into one feed. Google's own month view caps how many
+           events a day cell shows ("N more") at any iframe height, which is
+           why raising the height twice never fixed it; there is no cap here.
+           The print sheet is written into this container too, and everything
+           else on the page carries data-noprint. -->
+      <div id="tlc-cal-main"></div>
     </div>
   </section>
 </div>
@@ -3407,7 +3410,7 @@ window.showPage = function(id, addHistory) {
   lastKnownPath = location.pathname;
   updatePageMeta(id);
   if (id === 'calendar') {
-    tlcLoadCalendar(document.getElementById('gcal-frame'));
+    tlcCalMount('tlc-cal-main');
   }
   if (id === 'wol') {
     var wolFrame = document.getElementById('wol-yt-frame');
@@ -3483,54 +3486,488 @@ function loadLegacyNewsPage() {
     if (nlDetail) nlDetail.style.display = 'none';
   }
   loadNewsletters(); loadNewsItems();
-  // The calendar iframe is only given its src when the page is actually
-  // opened, so /news costs no more to load than it did before.
-  tlcLoadCalendar(document.getElementById('gcal-frame-news'));
+  // The calendar only fetches its month when the page is actually opened, so
+  // /news costs no more to load than it did with the iframe. `compact` keeps
+  // the print sheet off this mount: there is one sheet in the document and
+  // /calendar owns it, or printing from here would produce two pages.
+  tlcCalMount('tlc-cal-news', { compact: true });
 }
 
-// ── THE GOOGLE CALENDAR EMBED ───────────────────────────────────────────────
-// Dinger: the calendar is squished and you cannot see a full day. Two causes,
-// and only one of them is the height.
+// ── THE CHURCH CALENDAR ─────────────────────────────────────────────────────
+// The site draws its own month now. It used to be a Google Calendar iframe, and
+// Google caps how many events a day cell will show before folding the rest into
+// "N more" — at any iframe height, which is why making the frame taller (twice)
+// never fixed it. A Sunday with three services showed one and a link.
 //
-// 1. A month grid needs room. At 600px, six week-rows get under 90px each,
-//    which is one event and a "+2 more" link on any week the church is busy —
-//    so the thing the calendar exists to show is the thing it hides.
-// 2. ⚠ A MONTH GRID IS THE WRONG VIEW ON A PHONE, at any height. Seven columns
-//    across 390px is about 50px a day, which is not enough for a date and a
-//    word. Google's own AGENDA view is a list of days with their events spelled
-//    out, which is what somebody on a phone actually wants.
+// Two things follow from rendering it here. There is no cap: a week row grows
+// to whatever its busiest day holds. And the feed is ours to assemble, so the
+// News & Events records — the things with a description, a photo and a sign-up —
+// sit on the same grid as the room-and-time bookings in Google, with nobody
+// re-typing anything. admin/calendar.js is the Worker half: the merge, the
+// de-dupe and the color-to-category table.
 //
-// The mode is decided once, when the frame is given its address. It deliberately
-// does NOT follow a resize: reloading the embed under somebody who is reading
-// it — losing the month they had navigated to — is worse than a laptop window
-// dragged narrow keeping the grid.
-var TLC_CAL_PHONE = 700;
-// ⚠ THE HEIGHT HAS TO BE IN THE URL, NOT ONLY ON THE IFRAME. Google lays the
-// month grid out to the `height` parameter it is given and letterboxes inside
-// whatever box it is put in — so making the iframe taller, which is all
-// v5.5.0 did, made the white space taller and left the grid exactly as it was.
-// The symptom is a busy Wednesday still collapsing to "4 more" with visible
-// empty space underneath it, which is what was reported.
-//
-// ⚠ Mirrored by calendarSrc() in admin/blocks.js, which does the same thing
-// for the Calendar block. Two copies because one runs in the browser and the
-// other in the Worker at render time; there is no module both can import.
-function tlcCalSrc(src, px) {
-  var out = src.replace(/([?&])height=\d+/, '$1height=' + px);
-  return out === src ? out + '&height=' + px : out;
+// ⚠ EVERY TIME THAT ARRIVES HERE IS A CHURCH WALL CLOCK CARRYING NO TIMEZONE —
+// '2026-08-16T08:00:00', no Z and no offset. It is SLICED as text, never handed
+// to `new Date()`. A church calendar says 8:00 am and means 8:00 in St. Louis to
+// every reader; converting would tell somebody in Denver the service is at 7.
+var TLC_CAL_API = 'https://admin.timothystl.org/api/calendar';
+var TLC_CAL_GOOGLE_OUT = 'https://calendar.google.com/calendar/embed?src=calendar%40timothystl.org&ctz=America%2FChicago';
+// One fetch per month, shared by both mounts — /calendar and the strip on /news
+// are the same month and must not ask for it twice.
+var tlcCalFeeds = {};
+var tlcCalViews = [];
+
+function tlcCalEsc(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
-function tlcLoadCalendar(frame) {
-  if (!frame || frame.getAttribute('src')) return;
-  var src = frame.dataset.src || '';
-  var phone = window.innerWidth < TLC_CAL_PHONE;
-  if (phone) src = src.replace('mode=MONTH', 'mode=AGENDA');
-  // A month with several things on a weekday needs about this much before
-  // Google stops folding the day into "N more". The agenda list scrolls itself
-  // and needs none of it.
-  var px = phone ? 520 : 1100;
-  frame.style.height = px + 'px';
-  frame.src = tlcCalSrc(src, px);
+// Today where the church is, not where the reader is — so "TODAY" is on the
+// right square for somebody reading this in another timezone, and so an evening
+// in St. Louis is not already tomorrow.
+function tlcCalToday() {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' }).format(new Date());
+  } catch (e) {
+    var n = new Date();
+    return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-' + String(n.getDate()).padStart(2, '0');
+  }
 }
+var TLC_CAL_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+var TLC_CAL_DOWS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+function tlcCalKey(y, m) { return y + '-' + String(m).padStart(2, '0'); }
+function tlcCalShift(y, m, n) { var z = y * 12 + (m - 1) + n; return { y: Math.floor(z / 12), m: (z % 12) + 1 }; }
+function tlcCalAddDays(ymd, n) {
+  var p = ymd.split('-');
+  var d = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2]) + n * 86400000);
+  return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0');
+}
+// Day of week for a bare date, computed in UTC so it cannot be shifted by the
+// reader's own offset — the same reason the arithmetic above is UTC.
+function tlcCalDow(ymd) {
+  var p = ymd.split('-');
+  return new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])).getUTCDay();
+}
+
+function tlcCalTime(ev) {
+  if (ev.allDay) return 'All day';
+  var m = /T(\d{2}):(\d{2})/.exec(ev.start || '');
+  if (!m) return '';
+  var h = +m[1], mn = m[2];
+  var ap = h < 12 ? 'AM' : 'PM';
+  h = h % 12; if (h === 0) h = 12;
+  return h + ':' + mn + ' ' + ap;
+}
+// The print sheet gets a 112px-tall cell for the whole day, so the time is a
+// short prefix rather than a column: "8a", "10:45a", "12p".
+function tlcCalShortTime(ev) {
+  if (ev.allDay) return '';
+  var m = /T(\d{2}):(\d{2})/.exec(ev.start || '');
+  if (!m) return '';
+  var h = +m[1], mn = m[2];
+  var ap = h < 12 ? 'a' : 'p';
+  h = h % 12; if (h === 0) h = 12;
+  return (mn === '00' ? String(h) : h + ':' + mn) + ap;
+}
+// Every date an event touches, inclusive. The Worker already made an all-day
+// event's `end` inclusive — Google's own is exclusive, and fixing it once at
+// that boundary is why nothing here has to know about the off-by-one.
+function tlcCalDates(ev) {
+  var a = String(ev.start || '').slice(0, 10);
+  var b = String(ev.end || ev.start || '').slice(0, 10);
+  if (!a) return [];
+  if (!b || b < a) b = a;
+  var out = [], cur = a, guard = 0;
+  while (cur <= b && guard++ < 400) { out.push(cur); cur = tlcCalAddDays(cur, 1); }
+  return out;
+}
+
+function tlcCalCat(st, key) {
+  for (var i = 0; i < st.cats.length; i++) if (st.cats[i].key === key) return st.cats[i];
+  return { key: 'other', name: 'Other', color: '#8C8880', tint: '#F1EFEA' };
+}
+// 'both' is a real source, not a third calendar: it is one happening that is in
+// Google AND in News & Events, collapsed by the Worker. It therefore has to
+// answer to both source filters rather than falling out of each.
+function tlcCalMatches(st, ev) {
+  if (st.filter !== 'all' && ev.category !== st.filter) return false;
+  if (st.src === 'all') return true;
+  return ev.source === st.src || ev.source === 'both';
+}
+
+// ── Mounting ────────────────────────────────────────────────────────────────
+// Two mounts, one renderer: /calendar and the strip at the bottom of /news.
+// Nothing is fetched until the page carrying a mount is actually opened, which
+// is the lazy behavior the iframe already had — /news costs no more than it did.
+function tlcCalMount(hostId, opts) {
+  var host = document.getElementById(hostId);
+  if (!host) return null;
+  var found = null;
+  for (var i = 0; i < tlcCalViews.length; i++) if (tlcCalViews[i].host === host) found = tlcCalViews[i];
+  if (found) { tlcCalLoad(found); return found; }
+  var today = tlcCalToday();
+  var st = {
+    host: host, id: hostId,
+    y: +today.slice(0, 4), m: +today.slice(5, 7),
+    filter: 'all', src: 'all', view: 'month', sel: null,
+    events: [], cats: [], sources: {}, status: 'loading',
+    compact: !!(opts && opts.compact),
+  };
+  tlcCalViews.push(st);
+  host.addEventListener('click', function (e) { tlcCalClick(st, e); });
+  tlcCalRender(st);
+  tlcCalLoad(st);
+  return st;
+}
+
+function tlcCalLoad(st) {
+  var key = tlcCalKey(st.y, st.m);
+  if (tlcCalFeeds[key]) {
+    tlcCalFeeds[key].then(function (feed) { tlcCalApply(st, key, feed); })
+      .catch(function () { tlcCalApply(st, key, null); });
+    return;
+  }
+  st.status = 'loading'; tlcCalRender(st);
+  tlcCalFeeds[key] = fetch(TLC_CAL_API + '?month=' + key).then(function (r) {
+    if (!r.ok) throw new Error('bad status');
+    return r.json();
+  });
+  tlcCalFeeds[key].then(function (feed) { tlcCalApply(st, key, feed); })
+    .catch(function () {
+      // ⚠ The failed promise is dropped from the cache rather than kept, so
+      // coming back to the month tries again instead of showing the same
+      // failure forever.
+      delete tlcCalFeeds[key];
+      tlcCalApply(st, key, null);
+    });
+}
+
+function tlcCalApply(st, key, feed) {
+  if (tlcCalKey(st.y, st.m) !== key) return; // they navigated on; this answer is stale
+  if (!feed) { st.status = 'error'; st.events = []; st.sources = {}; tlcCalRender(st); return; }
+  st.status = 'ready';
+  st.events = Array.isArray(feed.events) ? feed.events : [];
+  st.cats = Array.isArray(feed.categories) ? feed.categories : [];
+  st.sources = feed.sources || {};
+  st.sel = null;
+  tlcCalRender(st);
+}
+
+// ── Clicks ──────────────────────────────────────────────────────────────────
+// Delegated off the host, because the whole calendar is rebuilt on every change
+// and handlers bound to the buttons themselves would be thrown away by the
+// first one somebody used.
+function tlcCalClick(st, e) {
+  var t = e.target.closest('[data-cal]');
+  if (!t || !st.host.contains(t)) return;
+  var act = t.getAttribute('data-cal'), val = t.getAttribute('data-val');
+  if (act === 'prev' || act === 'next') {
+    var n = tlcCalShift(st.y, st.m, act === 'prev' ? -1 : 1);
+    st.y = n.y; st.m = n.m; st.sel = null; tlcCalLoad(st); tlcCalRender(st); return;
+  }
+  if (act === 'today') {
+    var td = tlcCalToday();
+    st.y = +td.slice(0, 4); st.m = +td.slice(5, 7); st.sel = null; tlcCalLoad(st); tlcCalRender(st); return;
+  }
+  if (act === 'cat') { st.filter = val; st.sel = null; tlcCalRender(st); return; }
+  if (act === 'src') { st.src = val; st.sel = null; tlcCalRender(st); return; }
+  if (act === 'view') { st.view = val; st.sel = null; tlcCalRender(st); return; }
+  if (act === 'print') { window.print(); return; }
+  if (act === 'event') { st.sel = (st.sel === val ? null : val); tlcCalRender(st); return; }
+  if (act === 'closedetail') { st.sel = null; tlcCalRender(st); return; }
+}
+
+// ── Rendering ───────────────────────────────────────────────────────────────
+function tlcCalRender(st) {
+  var monthName = TLC_CAL_MONTHS[st.m - 1] + ' ' + st.y;
+  var visible = st.events.filter(function (ev) { return tlcCalMatches(st, ev); });
+  var wide = window.innerWidth > 900;
+  var view = wide ? st.view : 'list';
+  var body = st.status === 'loading' ? tlcCalSkeleton()
+    : view === 'month' ? tlcCalGrid(st, visible)
+    : tlcCalList(st, visible);
+
+  st.host.innerHTML =
+    '<div class="tlc-cal" data-noprint="1">' +
+      tlcCalBar(st, monthName) +
+      tlcCalNote(st) +
+      tlcCalSourceBand(st) +
+      tlcCalCatBand(st) +
+      body +
+      tlcCalDetail(st) +
+    '</div>' +
+    tlcCalPrintSheet(st, monthName);
+}
+
+function tlcCalBar(st, monthName) {
+  var printer = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>';
+  return '<div class="tlc-cal-bar">' +
+    '<div class="tlc-cal-barL">' +
+      '<div class="tlc-cal-nav">' +
+        '<button class="tlc-cal-arrow" data-cal="prev" aria-label="Previous month">&lsaquo;</button>' +
+        '<button class="tlc-cal-arrow" data-cal="next" aria-label="Next month">&rsaquo;</button>' +
+      '</div>' +
+      '<h2 class="tlc-cal-title" aria-live="polite">' + tlcCalEsc(monthName) + '</h2>' +
+      '<button class="tlc-cal-today" data-cal="today">Today</button>' +
+    '</div>' +
+    '<div class="tlc-cal-barR">' +
+      '<div class="tlc-cal-seg" role="group" aria-label="Calendar view">' +
+        '<button data-cal="view" data-val="month" aria-pressed="' + (st.view === 'month') + '">Month</button>' +
+        '<button data-cal="view" data-val="list" aria-pressed="' + (st.view === 'list') + '">List</button>' +
+      '</div>' +
+      // Subscribe is the thing Google's embed buries, so it stays on the bar.
+      // The window is a year from last month, not the month on screen — a
+      // subscription that emptied when the month turned would be worthless.
+      '<a class="tlc-cal-sub" href="' + TLC_CAL_API + '.ics?month=' + tlcCalKey(st.y, st.m) + '" ' +
+        'title="Add the church calendar to your own calendar app">Subscribe</a>' +
+      '<button class="tlc-cal-print" data-cal="print">' + printer + 'Print month</button>' +
+    '</div>' +
+  '</div>';
+}
+
+// The honest line when a source could not be read. ⚠ It says which half is
+// missing and offers Google directly, rather than letting a grid that is
+// quietly short of every room booking pass for a complete month.
+function tlcCalNote(st) {
+  if (st.status === 'error') {
+    return '<div class="tlc-cal-note">The calendar could not be loaded just now. ' +
+      '<a href="' + TLC_CAL_GOOGLE_OUT + '" target="_blank" rel="noopener">Open it in Google Calendar</a> instead.</div>';
+  }
+  if (st.status === 'ready' && st.sources && st.sources.google === false) {
+    return '<div class="tlc-cal-note">Showing News &amp; Events entries only — the Google calendar could not be read. ' +
+      '<a href="' + TLC_CAL_GOOGLE_OUT + '" target="_blank" rel="noopener">Open it in Google Calendar</a>.</div>';
+  }
+  return '';
+}
+
+function tlcCalPill(act, val, active, label, dotColor) {
+  return '<button class="tlc-cal-pill" data-cal="' + act + '" data-val="' + tlcCalEsc(val) + '" aria-pressed="' + (!!active) + '">' +
+    (dotColor ? '<span class="tlc-cal-dot" style="background:' + tlcCalEsc(dotColor) + '"></span>' : '') +
+    tlcCalEsc(label) + '</button>';
+}
+
+function tlcCalSourceBand(st) {
+  return '<div class="tlc-cal-src">' +
+    '<span class="tlc-cal-eyebrow">Source</span>' +
+    '<div class="tlc-cal-pills">' +
+      tlcCalPill('src', 'all', st.src === 'all', 'Both sources') +
+      tlcCalPill('src', 'gcal', st.src === 'gcal', 'Google Calendar') +
+      tlcCalPill('src', 'news', st.src === 'news', 'News & Events') +
+    '</div>' +
+    '<div class="tlc-cal-key">' +
+      '<span class="k"><span class="tlc-cal-swatch" style="background:var(--mid)"></span>Google</span>' +
+      '<span class="k"><span class="tlc-cal-swatch" style="background:var(--amber)"></span>News &amp; Events</span>' +
+    '</div>' +
+  '</div>';
+}
+
+// ⚠ ONLY THE CATEGORIES THIS MONTH ACTUALLY HAS get a pill. All eleven would
+// mean nine controls whose only possible outcome is the empty state, and a
+// control that looks live and does nothing is worse than one that is not there
+// — the same rule the rest of this site is held to. A pill for the category
+// currently selected is kept even if the new month has none of it, so the
+// filter never becomes impossible to clear.
+function tlcCalCatBand(st) {
+  var present = {};
+  st.events.forEach(function (ev) { present[ev.category] = true; });
+  var pills = [tlcCalPill('cat', 'all', st.filter === 'all', 'All events', '')];
+  st.cats.forEach(function (c) {
+    if (!present[c.key] && st.filter !== c.key) return;
+    pills.push(tlcCalPill('cat', c.key, st.filter === c.key, c.name, c.color));
+  });
+  if (pills.length === 1) return '';
+  return '<div class="tlc-cal-cats">' + pills.join('') + '</div>';
+}
+
+var TLC_CAL_SRC_COLOR = { gcal: '#2E7EA6', news: '#C9973A', both: '#4A5E3A' };
+var TLC_CAL_SRC_NAME  = { gcal: 'Google Calendar', news: 'News & Events', both: 'In both' };
+
+// The six weeks the grid draws: back to the Sunday on or before the 1st, then
+// 42 days. Six rows always, so the calendar does not change height as the
+// months go by.
+function tlcCalCells(st) {
+  var first = tlcCalKey(st.y, st.m) + '-01';
+  var start = tlcCalAddDays(first, -tlcCalDow(first));
+  var out = [];
+  for (var i = 0; i < 42; i++) out.push(tlcCalAddDays(start, i));
+  return out;
+}
+function tlcCalBucket(events) {
+  var by = {};
+  events.forEach(function (ev) {
+    tlcCalDates(ev).forEach(function (d) { (by[d] = by[d] || []).push(ev); });
+  });
+  return by;
+}
+
+function tlcCalEmpty(st) {
+  var why = st.events.length
+    ? 'Nothing in ' + TLC_CAL_MONTHS[st.m - 1] + ' matches that combination of source and category.'
+    : 'There is nothing on the calendar for ' + TLC_CAL_MONTHS[st.m - 1] + ' ' + st.y + ' yet.';
+  return '<div class="tlc-cal-empty"><b>Nothing to show</b><span>' + tlcCalEsc(why) + '</span></div>';
+}
+
+function tlcCalGrid(st, visible) {
+  var by = tlcCalBucket(visible), today = tlcCalToday(), mk = tlcCalKey(st.y, st.m);
+  var head = TLC_CAL_DOWS.map(function (d) { return '<div>' + d + '</div>'; }).join('');
+  var cells = tlcCalCells(st).map(function (d) {
+    var out = d.slice(0, 7) !== mk;
+    var cls = 'tlc-cal-day' + (out ? ' tlc-cal-day--out' : '') + (d === today ? ' tlc-cal-day--today' : '');
+    var evs = (by[d] || []).map(function (ev) { return tlcCalChip(st, ev, d); }).join('');
+    return '<div class="' + cls + '">' +
+      '<div class="tlc-cal-dayhd"><span class="tlc-cal-num">' + (+d.slice(8, 10)) + '</span>' +
+      (d === today ? '<span class="tlc-cal-todaytag">Today</span>' : '') + '</div>' + evs + '</div>';
+  }).join('');
+  return '<div class="tlc-cal-dows" aria-hidden="true">' + head + '</div>' +
+    '<div class="tlc-cal-grid">' + cells + '</div>' +
+    (visible.length ? '' : tlcCalEmpty(st));
+}
+
+function tlcCalChip(st, ev, onDate) {
+  var c = tlcCalCat(st, ev.category);
+  // A multi-day event says so on the days after the first, rather than
+  // repeating a start time that has already been and gone.
+  var continued = onDate !== String(ev.start).slice(0, 10);
+  var time = continued ? 'Continues' : tlcCalTime(ev);
+  return '<button class="tlc-cal-chip" style="background:' + tlcCalEsc(c.tint) + '" ' +
+      'data-cal="event" data-val="' + tlcCalEsc(ev.id) + '">' +
+    '<span class="tlc-cal-chipT">' +
+      '<span class="tlc-cal-time" style="color:' + tlcCalEsc(c.color) + '">' + tlcCalEsc(time) + '</span>' +
+      '<span class="tlc-cal-srcdot" style="background:' + (TLC_CAL_SRC_COLOR[ev.source] || '#8C8880') + '" ' +
+        'title="' + tlcCalEsc(TLC_CAL_SRC_NAME[ev.source] || 'Calendar') + '"></span>' +
+    '</span>' +
+    '<span class="tlc-cal-name">' + tlcCalEsc(ev.title) + '</span>' +
+  '</button>';
+}
+
+// The week-grouped list. It is what a phone always gets — seven columns across
+// 390px is about 50px a day, which does not fit a date and a word — and what
+// the List toggle shows on a desktop. Days with nothing on them are simply not
+// rows: a list of empty days is not a list.
+function tlcCalList(st, visible) {
+  var by = tlcCalBucket(visible), today = tlcCalToday(), mk = tlcCalKey(st.y, st.m);
+  var days = Object.keys(by).filter(function (d) { return d.slice(0, 7) === mk; }).sort();
+  if (!days.length) return tlcCalEmpty(st);
+  var html = '', week = null;
+  days.forEach(function (d) {
+    var wkStart = tlcCalAddDays(d, -tlcCalDow(d));
+    if (wkStart !== week) {
+      week = wkStart;
+      var wkEnd = tlcCalAddDays(wkStart, 6);
+      html += '<div class="tlc-cal-weekhd"><b>Week of ' + TLC_CAL_MONTHS[+wkStart.slice(5, 7) - 1].slice(0, 3) +
+        ' ' + (+wkStart.slice(8, 10)) + '</b><span>' + tlcCalRangeLabel(wkStart, wkEnd) + '</span></div>';
+    }
+    html += '<div class="tlc-cal-listday' + (d === today ? ' tlc-cal-listday--today' : '') + '">' +
+      '<div class="tlc-cal-listdate">' +
+        '<span class="dw">' + TLC_CAL_DOWS[tlcCalDow(d)].slice(0, 3) + '</span>' +
+        '<span class="dn">' + (+d.slice(8, 10)) + '</span>' +
+        '<span class="dm">' + TLC_CAL_MONTHS[+d.slice(5, 7) - 1] + '</span>' +
+      '</div><div class="tlc-cal-listevs">' +
+      by[d].map(function (ev) {
+        var c = tlcCalCat(st, ev.category);
+        var continued = d !== String(ev.start).slice(0, 10);
+        return '<button class="tlc-cal-listev" data-cal="event" data-val="' + tlcCalEsc(ev.id) + '">' +
+          '<span class="ltime" style="color:' + tlcCalEsc(c.color) + '">' +
+            tlcCalEsc(continued ? 'Continues' : tlcCalTime(ev)) + '</span>' +
+          '<span><span class="lt">' + tlcCalEsc(ev.title) + '</span>' +
+          (ev.location ? '<span class="lw">' + tlcCalEsc(ev.location) + '</span>'
+                       : '<span class="lw">' + tlcCalEsc(c.name) + '</span>') + '</span>' +
+        '</button>';
+      }).join('') +
+      '</div></div>';
+  });
+  return '<div>' + html + '</div>';
+}
+function tlcCalRangeLabel(a, b) {
+  var ma = TLC_CAL_MONTHS[+a.slice(5, 7) - 1].slice(0, 3), mb = TLC_CAL_MONTHS[+b.slice(5, 7) - 1].slice(0, 3);
+  return ma + ' ' + (+a.slice(8, 10)) + ' – ' + (ma === mb ? '' : mb + ' ') + (+b.slice(8, 10));
+}
+
+function tlcCalSkeleton() {
+  var cells = '';
+  for (var i = 0; i < 42; i++) {
+    cells += '<div class="tlc-cal-day"><div class="tlc-cal-dayhd"><span class="tlc-cal-num">&nbsp;</span></div>' +
+      (i % 3 === 0 ? '<div class="tlc-cal-skel"></div>' : '') + '</div>';
+  }
+  return '<div class="tlc-cal-dows" aria-hidden="true">' +
+    TLC_CAL_DOWS.map(function (d) { return '<div>' + d + '</div>'; }).join('') + '</div>' +
+    '<div class="tlc-cal-grid" aria-busy="true">' + cells + '</div>';
+}
+
+// Clicking a chip opens this under the calendar rather than over it. A modal
+// would need a focus trap, an Escape handler and somewhere to put focus back;
+// a panel in the flow needs none of that and cannot cover the day somebody was
+// reading.
+function tlcCalDetail(st) {
+  if (!st.sel) return '';
+  var ev = null;
+  for (var i = 0; i < st.events.length; i++) if (st.events[i].id === st.sel) ev = st.events[i];
+  if (!ev) return '';
+  var c = tlcCalCat(st, ev.category);
+  var d = String(ev.start).slice(0, 10);
+  var when = TLC_CAL_DOWS[tlcCalDow(d)] + ', ' + TLC_CAL_MONTHS[+d.slice(5, 7) - 1] + ' ' + (+d.slice(8, 10)) +
+    (ev.allDay ? '' : ' · ' + tlcCalTime(ev));
+  return '<div class="tlc-cal-detail" role="region" aria-label="Event details">' +
+    '<span class="meta" style="color:' + tlcCalEsc(c.color) + '">' + tlcCalEsc(c.name) + ' · ' + tlcCalEsc(when) + '</span>' +
+    '<h3>' + tlcCalEsc(ev.title) + '</h3>' +
+    (ev.location ? '<p><b>Where:</b> ' + tlcCalEsc(ev.location) + '</p>' : '') +
+    (ev.description ? '<p>' + tlcCalEsc(ev.description) + '</p>' : '') +
+    '<button class="close" data-cal="closedetail">Close</button>' +
+  '</div>';
+}
+
+// ── The print sheet ─────────────────────────────────────────────────────────
+// ⚠ IT IGNORES THE FILTERS ON SCREEN, deliberately. Somebody printing the month
+// for the narthex wants the month; a sheet quietly missing every category but
+// one — because of a pill clicked five minutes ago — is wrong in a way nobody
+// can see by looking at it.
+// ⚠ AND IT IS THE ONE PLACE A CAP IS RIGHT. The cells are a fixed height with
+// overflow hidden because the sheet has to stay one page. That is a different
+// promise from the screen's, which is why the screen has none.
+function tlcCalPrintSheet(st, monthName) {
+  if (st.compact) return ''; // one sheet in the document; /calendar owns it
+  var by = tlcCalBucket(st.events), mk = tlcCalKey(st.y, st.m);
+  var used = {};
+  st.events.forEach(function (ev) { used[ev.category] = true; });
+  var legend = st.cats.filter(function (c) { return used[c.key]; }).map(function (c) {
+    return '<div><span class="sw" style="background:' + tlcCalEsc(c.color) + '"></span>' +
+      '<span class="nm">' + tlcCalEsc(c.name) + '</span></div>';
+  }).join('');
+  var head = TLC_CAL_DOWS.map(function (d) { return '<div class="dw">' + d.slice(0, 3).toUpperCase() + '</div>'; }).join('');
+  var cells = tlcCalCells(st).map(function (d) {
+    var out = d.slice(0, 7) !== mk;
+    var evs = (by[d] || []).map(function (ev) {
+      var c = tlcCalCat(st, ev.category);
+      var t = d === String(ev.start).slice(0, 10) ? tlcCalShortTime(ev) : '';
+      return '<div class="tlc-print-ev"><span class="bar" style="background:' + tlcCalEsc(c.color) + '"></span>' +
+        '<span class="tx">' + (t ? '<b>' + tlcCalEsc(t) + '</b> ' : '') + tlcCalEsc(ev.title) + '</span></div>';
+    }).join('');
+    return '<div class="tlc-print-cell' + (out ? ' tlc-print-cell--out' : '') + '">' +
+      '<span class="n">' + (+d.slice(8, 10)) + '</span>' + evs + '</div>';
+  }).join('');
+  return '<div class="tlc-print-sheet">' +
+    '<div class="tlc-print-head"><div>' +
+      '<div class="who">Timothy Lutheran Church · 6704 Fyler Ave</div>' +
+      '<div class="mon">' + tlcCalEsc(monthName) + '</div>' +
+    '</div><div class="tlc-print-legend">' + legend + '</div></div>' +
+    '<div class="tlc-print-grid">' + head + cells + '</div>' +
+    '<div class="tlc-print-foot"><span>timothystl.org/calendar · (314) 781-8673</span>' +
+    '<span>Sunday worship 8:00 &amp; 10:45 am</span></div>' +
+  '</div>';
+}
+
+// A desktop dragged narrow, or a phone turned sideways, changes which of the
+// two layouts is right. Re-rendering costs nothing here — unlike the old
+// iframe, where it meant reloading the embed and losing the month somebody had
+// navigated to, which is why that one deliberately did not follow a resize.
+var tlcCalResizeTimer = null;
+window.addEventListener('resize', function () {
+  if (!tlcCalViews.length) return;
+  clearTimeout(tlcCalResizeTimer);
+  tlcCalResizeTimer = setTimeout(function () {
+    tlcCalViews.forEach(function (st) { if (st.host.offsetParent !== null) tlcCalRender(st); });
+  }, 180);
+});
 // ⚠ THIS BLOCK HAS TO SIT ABOVE THE ROUTER, and it is the only reason it is
 // here rather than beside the other form handlers further down. The router
 // below runs at parse time and calls showPage() synchronously, which for

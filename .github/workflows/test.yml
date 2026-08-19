@@ -127,6 +127,7 @@ jobs:
 #   node test/editor-phone.test.mjs      # the editor at 390px, by tap
 #   node test/site-editor.test.mjs       # the pages rail and Page tab
 #   node test/public-page.test.mjs       # the live site
+#   node test/public-calendar.test.mjs   # the church calendar — see below
 #   node test/public-phone.test.mjs      # [B8] tap targets at 390px, MEASURED
 #   node test/payroll.test.mjs           # payroll, against a stubbed Supabase
 #   node test/rich-field.test.mjs        # rich fields open on demand — see below
@@ -156,6 +157,16 @@ jobs:
 # half, that a field nobody opened still submits exactly what it held. It
 # stubs TinyMCE and never fetches the real library, so running it costs no
 # editor loads against the church's account.
+#
+# ⚠ public-calendar is the one to run after any change to the calendar — the
+# renderer in public/index.html, its rules in public/styles.css, or the shape
+# admin/calendar.js returns. The whole reason that page stopped being a Google
+# embed is that Google's month view folds a busy day into "N more" at any
+# height, so the assertion it is built around is the uncapped one: seven events
+# on one Sunday, seven chips, nothing folded away. It also measures the phone
+# layout and the print sheet, neither of which can be checked by reading CSS.
+# The merge, the de-dupe, the color-to-category table and the .ics writer need
+# no browser and are in admin/calendar.test.mjs, which DOES run above.
 #
 # ⚠ public-phone is the one to run after any change to public/styles.css. The
 # backlog asked for "a tap-through on a real phone"; a person doing that tells
