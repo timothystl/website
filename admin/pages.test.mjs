@@ -66,6 +66,28 @@ group('list order');
     'children follow their parent; an orphan still appears rather than vanishing');
   eq(orderPages(rows).length, rows.length, 'no page is lost or duplicated');
   eq(orderPages([]).length, 0, 'an empty site does not throw');
+
+  // A page whose parent is itself not top-level — the Christmas Market vendor
+  // application, filed under Christmas Market, itself filed under Ministries
+  // — is a real third level, created directly by its seed rather than through
+  // the Settings screen (which refuses that nesting). A single-level walk
+  // left a page like this unplaced by the loop above and fell into the
+  // orphan catch-all, landing nowhere near its real parent — this is the case
+  // that broke: a grandchild sits right after its real parent, not at the end.
+  const deep = [
+    row({ id: 'sermons', slug: '/sermons', sort: 40 }),
+    row({ id: 'ministries', slug: '/ministries', sort: 50 }),
+    row({ id: 'christmasmarket', slug: '/christmasmarket', parent_id: 'ministries', sort: 60 }),
+    row({ id: 'marketvendors', slug: '/christmasmarket/vendors', parent_id: 'christmasmarket', sort: 10 }),
+    row({ id: 'marketvendorsapply', slug: '/christmasmarket/vendors/apply', parent_id: 'marketvendors', sort: 10 }),
+  ];
+  eq(JSON.stringify(orderPages(deep).map((p) => p.id)),
+    JSON.stringify(['sermons', 'ministries', 'christmasmarket', 'marketvendors', 'marketvendorsapply']),
+    'a grandchild — and great-grandchild — sit under their real parent, not beside Sermons or at the end');
+
+  // A parent chain that loops back on itself must not hang the whole list.
+  const cyclic = [row({ id: 'a', parent_id: 'b' }), row({ id: 'b', parent_id: 'a' })];
+  eq(orderPages(cyclic).length, 2, 'a cyclic parent chain still terminates and loses nothing');
 }
 
 // ── filters ──────────────────────────────────────────────────────────────────
