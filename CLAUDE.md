@@ -646,33 +646,64 @@ you half the events.
   last implementation standing and its mirror test in `admin/blocks.test.mjs` now
   asserts exactly that.
 
-**⚠ NOTHING HERE WAS VERIFIED AGAINST A LIVE GOOGLE, AND THAT IS THE ONE THING TO
-CHECK FIRST.** `www.googleapis.com` and `calendar.google.com` are both unreachable
-from this sandbox — the same wall the v5.15.0 note ran into. Every Google-facing
-path is tested against stubs shaped like the documented API, so the request
-parameters, the parsing and the failure behavior are pinned, but no real
-`items[]` has ever been through this code. **Open `/calendar` with credentials set
-and confirm a Sunday's services are all there, then check one all-day event
-spanning several days lands on exactly those days.** If the events are there but
-every one is gray, the color-to-category mapping is right and the office simply
-has not colored anything yet.
+**⚠ VERIFIED LIVE AFTER THE MERGE, AND TWO THINGS THIS SECTION FIRST SAID WERE
+WRONG.** It was written saying nothing had been through a real Google — true of
+the sandbox this was built in, where `www.googleapis.com` and
+`calendar.google.com` are both unreachable, the same wall the v5.15.0 note ran
+into. The deployed Worker is not in that sandbox. Checked against production the
+minute it shipped:
 
-**Requires two manual steps outside this repo, the same shape as the Square,
-VAPID and ChMS keys before it** — until one of them is done the page shows News &
-Events entries only and says so:
+- **`sources.google` is `true`. The service account already had read access to
+  both calendars**, so the manual step this section originally described as
+  required was never required at all. Nothing was shared, no `GCAL_API_KEY` was
+  set. ⚠ Do not go looking for that step, and do not ask the office to do it.
+- **45 events for August: 40 from Google, 5 from News & Events.** The merge does
+  what it says.
+- **Sunday 23 August comes back with SIX** — 8:00 Worship, 9:30 Christian
+  Education, 10:45 Worship, and three all-day announcements. That is exactly the
+  day Google's own embed was folding into "N more", and it is the whole reason
+  this exists.
+- **Recurring events are expanded**, so `singleEvents=true` is doing its job
+  against the real API rather than only against a stub: Bible Class, Sing-a-long,
+  Children's Choir, Handbells and Timothy Choir each land on their own week.
+- Times come back as bare wall clocks — `08:00`, `09:30`, `10:45` — with no
+  offset, which is the property the whole file is built around.
+- `/api/calendar.ics` answers `text/calendar` with 563 events and
+  `DTSTART;TZID=America/Chicago`, and `timothystl.org/calendar` serves the mount
+  with no `gcal-frame` iframe left anywhere in it.
 
-1. Either share both calendars with the existing service account
-   (`GCAL_SERVICE_ACCOUNT_EMAIL`) as **See all event details** in each calendar's
-   Google settings, **or** set an API key:
-   `wrangler secret put GCAL_API_KEY --name tlc-newsletter-admin`.
-2. Nothing else. `calendar_google_ids` is seeded with the two ids already in use.
+**⚠ WHAT IS ACTUALLY OUTSTANDING IS A JOB FOR THE OFFICE, NOT A DEVELOPER: 40 of
+those 45 events came back as `other`.** Nobody has colored anything in Google
+yet, so nearly every chip renders gray and the category filters have almost
+nothing to separate. That is the designed behavior — an uncolored event appears
+rather than being dropped — but the filters only start earning their place once
+somebody works through the color table in `public/manual.html`. The five that
+are not `other` are News & Events records taking their category from their value
+tag, which is the other half of the rule working.
+
+**No manual step, and `calendar_google_ids` is seeded with the two ids already in
+use.** The one thing that would need doing is if a THIRD calendar is ever added
+and the service account has not been given access to it — that is when the
+"share it as See all event details, or set `GCAL_API_KEY`" instruction becomes
+real, and the page will say so on its own face rather than failing quietly.
 
 Run: `node admin/calendar.test.mjs` (26 — the merge, the de-dupe, the exclusive-end
 trap, the wall clock, the category fallbacks and the `.ics` writer, each verified
 non-vacuous by injecting the bug it guards) and, in a browser,
-`NODE_PATH=$(npm root -g) node test/public-calendar.test.mjs` (55 — the uncapped
+`NODE_PATH=$(npm root -g) node test/public-calendar.test.mjs` (62 — the uncapped
 Sunday, the filters, the phone list, the print sheet and both fallbacks; also
 verified against injected regressions).
+
+⚠ **Two of that suite's assertions are load-bearing in a way that is easy to
+undo.** The print sheet's one-page check generates a real PDF and counts the
+pages — reading the CSS would never have caught that the design's 112px cell
+makes the sheet two pages — but counting pages ALONE is not enough either: the
+sheet is `height:100vh` with `overflow:hidden`, so a grid too tall for it prints
+as one page by CUTTING the last week off, which is worse than two pages because
+the sheet then looks complete. The second assertion catches that, and it only
+works when measured in a viewport the size of the paper (989x749); at the
+default viewport a sheet that would lose its last week measures as fitting
+comfortably.
 
 ### The Christmas Market generalized into `/events`, and a new event can adopt a page instead of getting a second one (v5.27.0, 2026-08-18)
 
@@ -6714,7 +6745,7 @@ Set per-page. Homepage is highest priority. Can be added incrementally — not r
 ## Pending / Deferred Items
 
 ### Still Needs to Be Built
-- ~~**A custom-rendered calendar, reading the church's own feed**~~ — **done v5.29.0, 2026-08-19.** Option (3), the one the note called a real project: `/calendar` and the `/news` strip are drawn by the site from `/api/calendar`, a merged Google + News & Events feed, and there is no per-day cap at all. See "The calendar is ours now" above for the design, the color-to-category rule and the two manual steps it still wants. ⚠ The note's own caveat still stands and now matters more, not less: **`calendar.google.com` and `www.googleapis.com` are unreachable from this sandbox**, so every Google-facing path is verified against stubs and against the API's documented shape, never against a live answer. The first person with real credentials should open `/calendar` and check that a Sunday's services are all there.
+- ~~**A custom-rendered calendar, reading the church's own feed**~~ — **done v5.29.0, 2026-08-19.** Option (3), the one the note called a real project: `/calendar` and the `/news` strip are drawn by the site from `/api/calendar`, a merged Google + News & Events feed, and there is no per-day cap at all. See "The calendar is ours now" above. ⚠ **Verified against production after the merge, and the calendar the note was written about is fixed**: Sunday 23 August returns all six of its events where Google's embed folded three of them into "N more". The note's caveat about `calendar.google.com` being unreachable applies to the sandbox this was built in, not to the deployed Worker, which reads Google fine. What is left is the office coloring its Google events so the category filters have something to separate.
 - **24 of the 25 page drafts are still unpublished** — not a code gap. Every page has had a block draft since the site editor shipped; `/give` is the first published. The rest need somebody to compare each draft against the live page, fix what the extractor flattened, and press Publish. Sequencing, known extractor gaps and the three pages that deliberately are not block pages are all in `admin/BLOCK-EDITOR-ROLLOUT.md`.
 
 - ~~**Weekly newsletter display wants adjustments**~~ — **done v4.35.0, 2026-08-13.** It was the archive, not the composer: the newest letter is open and everything older folds away under its month, closed. See "The newsletter archive folds away by month" above. *(Original note:)* flagged 2026-08-05, Andrew's own words, no specifics given yet.
