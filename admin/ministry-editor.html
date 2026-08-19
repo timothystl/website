@@ -2055,17 +2055,24 @@ function inspectorSections(b, d) {
   out += '<div class="ed-sec ed-sec--rule"><div class="ed-lab-row"><span class="ed-lab">Stamp</span>' +
     '<span class="ed-read">' + esc(b.stamp || 'None') + '</span></div><div class="ed-chips">' +
     chip('stamp', '', 'None', !b.stamp) +
-    C.stamps.map(function (s) { return chip('stamp', s, s, b.stamp === s); }).join('') + '</div>';
+    C.stamps.map(function (s) { return chip('stamp', s, s, b.stamp === s); }).join('') + '</div>' +
+    '<input class="ed-field" id="edStamp" data-in="stamp" data-k="stamp" value="' + esc(b.stamp || '') +
+    '" placeholder="Or type your own" style="margin-top:8px" maxlength="40">';
   if (b.stamp) {
     out += '<div class="ed-chips">' + C.TONES.map(function (t, i) {
       return '<button type="button" class="ed-pick" data-a="tone" data-v="' + i + '" data-k="tone:' + i + '" aria-pressed="' + (i === b.tone) + '"' +
         ' style="background:' + t.bg + ';color:' + t.fg + ';border:1px solid ' + t.bg + ';font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:10.5px' +
         (i === b.tone ? ';box-shadow:0 0 0 2px #2E7EA6' : '') + '">' + esc(t.name) + '</button>';
     }).join('') + '</div>' +
-    '<div class="ed-chips">' + chip('corner', 'tl', 'Left', b.corner === 'tl') + chip('corner', 'tr', 'Right', b.corner === 'tr') + '</div>' +
-    '<div class="ed-chips">' + C.stampSizes.map(function (s) { return chip('stampSize', s.key, s.label, (b.stampSize || 'm') === s.key); }).join('') + '</div>';
+    '<div class="ed-chips">' + chip('corner', 'tl', 'Left', b.corner === 'tl') + chip('corner', 'bc', 'Center', b.corner === 'bc') + chip('corner', 'tr', 'Right', b.corner === 'tr') + '</div>' +
+    '<div class="ed-chips">' + C.stampSizes.map(function (s) { return chip('stampSize', s.key, s.label, (b.stampSize || 'm') === s.key); }).join('') + '</div>' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;font-size:13.5px;color:#1E2D4A;margin-top:10px">' +
+      '<span id="edStampPulseLab">Pulse to draw the eye</span>' +
+      '<button type="button" class="ed-track" data-a="stampPulse" data-k="stampPulse" role="switch" aria-labelledby="edStampPulseLab"' +
+      ' aria-checked="' + !!b.stampPulse + '" aria-pressed="' + !!b.stampPulse + '"><span class="ed-knob"></span></button>' +
+    '</div>';
   }
-  out += '<span class="ed-note">Sits tilted over the block\'s lower corner. Click it on the page to reword it.</span></div>';
+  out += '<span class="ed-note">Sits tilted over the block. Type your own words above, or click it right on the page to reword it — Center sits it across the block\'s lower edge instead of tucked into a corner, and Large makes it read as a real banner rather than a tag. Skipped for anyone who has asked their device to reduce motion.</span></div>';
 
   // 10-12. Show on phone, reassurance, reset
   out += '<div class="ed-sec ed-sec--rule" style="gap:10px">' +
@@ -2424,8 +2431,9 @@ function inspectorAction(action, value) {
     // sweep took it anyway and the change log read 'Stamp Upcoming'.
     case 'stamp': patch(b.id, { stamp: value }, value ? 'Stamp → ' + value : 'Removed stamp', 'rerender'); break;
     case 'tone': patch(b.id, { tone: Number(value) }, 'Stamp color ' + C.TONES[Number(value)].name, 'rerender'); break;
-    case 'corner': patch(b.id, { corner: value }, 'Stamp moved ' + (value === 'tl' ? 'left' : 'right'), 'rerender'); break;
+    case 'corner': patch(b.id, { corner: value }, 'Stamp moved ' + (value === 'tl' ? 'left' : value === 'bc' ? 'to center' : 'right'), 'rerender'); break;
     case 'stampSize': patch(b.id, { stampSize: value }, 'Stamp size ' + value, 'rerender'); break;
+    case 'stampPulse': patch(b.id, { stampPulse: !b.stampPulse }, b.stampPulse ? 'Stamp pulse off' : 'Stamp pulse on', 'rerender'); break;
     case 'hide': toggleHide(b.id); break;
     case 'reset': resetBlock(b.id); break;
     case 'save-section': saveSection([b], d.label); break;
@@ -2542,6 +2550,7 @@ function inspectorInput(target) {
     return;
   }
   if (spec === 'url') b.url = value;
+  else if (spec === 'stamp') b.stamp = value;
   else if (spec === 'contactEmail') b.contactEmail = value;
   else if (spec === 'anchorId') b.anchorId = value;
   else if (spec === 'photoAlt') b.photoAlt = value;
