@@ -1305,7 +1305,15 @@ $('emailBtn').addEventListener('click', async () => {
   btn.disabled = false; btn.textContent = 'Email report';
   if (!res.ok) { showError(body.error || 'The report could not be sent.'); return; }
   showError('');
-  $('periodSummary').textContent = 'Sent to ' + (body.to || 'the bookkeeper') + '.';
+  const sentMsg = 'Sent to ' + (body.to || 'the bookkeeper') + '.';
+  // #periodSummary sits inside the Enter & approve roster, well below the
+  // button somebody just pressed — on a phone that's a whole scroll of staff
+  // rows away, so the only confirmation the site ever gave was invisible
+  // unless you happened to already be scrolled down there. A toast answers
+  // right where the click happened, regardless of scroll position; the
+  // periodSummary write stays too, since it's still true once you get there.
+  $('periodSummary').textContent = sentMsg;
+  if (window.tlcToast) window.tlcToast(sentMsg);
   flashSaved();
 });
 
