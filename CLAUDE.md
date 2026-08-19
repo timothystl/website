@@ -527,6 +527,145 @@ screen managed only a flat list (`MAX_DEPTH.footer = 0`), which cannot express
 Run: `node admin/menu.test.mjs`, plus two groups in
 `test/admin-redesign.test.mjs`.
 
+### The vendor row is the form, and the roster is four views (v5.29.0, 2026-08-19)
+
+Built from `design_handoff_market_layout/` — `Market Admin.dc.html` plus its own
+handoff page, committed whole like the four before it. Two tabs of `/market`
+change and nothing else does.
+
+**What was wrong, in the designer's own words:** every change — a table number,
+a payment state — meant opening the drawer, saving, and landing back at the top
+of the list. Nothing could be sorted. A vendor paying by check had nowhere to
+record that the check arrived, so *awaiting check* and *never paid* looked
+identical. And the volunteer tab was one panel per role and nothing else: a job
+lead could not be handed their own people, and there was no way to see who is on
+site at 1 PM.
+
+**Vendors — the row is the form.** `renderListSection` + `renderDrawer` are gone
+from this tab; `vendorTable()`/`vendorRow()` in `admin/market.js` are the whole
+of it. Category, tables, table number, payment state, check number and check
+date are edited in the row and each saves on its own.
+
+- **⚠ `/market/update` TAKES ONE FIELD, AND KEEPS THE WHOLE-FORM PATH.** A POST
+  with no `field` is the no-JavaScript path — the expanded row is a real
+  `<form>` — so a coordinator whose script never loaded can still record a
+  payment. One route, both shapes: a second route for the single-field case
+  would be a second place that has to agree about what "paid" means.
+- **⚠ THE POSTED FIELD NAME IS CHECKED AGAINST A LIST BEFORE IT IS USED.**
+  `updateRegistration()` (`admin/events.js`) builds its SQL from the KEYS of the
+  object it is handed, so a field name taken straight from the request would be
+  a **column name taken straight from the request**. Every branch maps a posted
+  name onto a fixed column and anything else is refused; a test posts
+  `field=contact_email` and asserts the column is untouched.
+- **⚠ THE CELL REDRAWS FROM WHAT THE SERVER STORED, NEVER FROM WHAT THE BROWSER
+  SENT.** `vendorCellState(row)` is one function: the table is rendered from it
+  and `/market/update` answers with it. A row saying Paid over a database that
+  says otherwise is the one failure this design must not have.
+- **⚠ A FAILED SAVE LOOKS FAILED.** The whole risk of editing in place is
+  somebody typing a table number, seeing it sit there looking typed, and walking
+  away from a change that never landed. `.tlc-mkt-failed` is checked in a real
+  browser with the route aborted.
+- **`category` is new, and it is a fixed list.** What a vendor writes under
+  "what do you sell" is a paragraph — it sorts by whichever word it starts with,
+  which is no order at all when the question is "how many bakers have we got".
+  ⚠ Blank stays blank: "not categorized yet" is a real state, and defaulting it
+  to Other would claim somebody had looked at every row.
+- **`check_no` / `check_date`, and a fourth tile.** ⚠ **Still no fifth
+  `payment_status`** — `checkState(row)` derives three states from the payment
+  method and whether a check is recorded, and nothing stores it. Recording a
+  number, or pressing **✓ In**, turns an *unpaid* row paid; clearing the box
+  never un-pays anybody, because the money is in the bank whatever the box now
+  says. A waived or dropped row is never on the chase list, and its check column
+  says "nothing owed" rather than offering boxes for a check that is not coming.
+- **⚠ MARKING A ROW PAID RECORDS THE AMOUNT ASKED**, unless one is already
+  recorded. Found by driving the real screen: without it the row reads "Paid"
+  over "asked $46.65" and the *Recorded as paid* tile — which sums
+  `amount_paid_cents` — stays at zero however many rows are marked. A
+  reconciliation that reads short for a reason nobody can find is exactly what
+  this screen exists to prevent, and it makes the manual path and the check path
+  agree. Only `paid` does it; waived and dropped both mean no money arrived.
+- **⚠ THE PER-ROW WARNING BAND IS GONE AND THE SENTENCE IS NOT.** Seventy
+  warning rows under a dense table is a screen nobody can read. The unpaid case
+  — somebody who applied and never finished at the card page, which the Google
+  Form could not see at all — is said once, over the list, with the filter that
+  isolates them one click away.
+- Sorting is client-side over the rows already rendered — no new query, because
+  the page is holding all of them. Each key is its own `data-s-*` attribute so
+  the comparison is on a value rather than on scraped markup.
+
+**Volunteers — four views of one roster, and four sheets.** Still a read-only
+window on Serve; what changed is that the same roster can be read four ways and
+each way prints. **Every view is an address** (`?view=`, `?day=`, `?axis=`,
+`?print=`), not a JavaScript mode — so a view survives a reload, can be sent to
+a job lead as a link, and prints through the browser's own Print.
+
+- **⚠ SERVE SENDS A LABEL, NOT A CLOCK, AND THREE OF THE FOUR VIEWS ARE
+  ARITHMETIC OVER ONE.** The contract as built
+  (`design_handoff_market_event/README.md`) is `{ label: '8:30–11:00 am',
+  needed, filled, people }`. `parseShiftLabel()` reads the clock back out of it
+  and prefers real `start`/`end`/`day`/`lead` fields the moment Serve grows
+  them — which is the one change this design asks of that repo.
+- **⚠ THE MERIDIEM ON THE END OF A LABEL BELONGS TO BOTH HALVES, and inheriting
+  it blindly is wrong the other way.** `8:30–11:00 am` gives one am for two
+  times; `11:00–2:30 pm` inherited straight reads 23:00–14:30, so a start that
+  inherited is pushed back twelve hours when it has to. Getting this wrong does
+  not throw — it draws a morning shift in the evening and looks plausible doing
+  it. ⚠ And the pattern is **not anchored at the start**: Serve's own labels name
+  the day in front of the times (`Friday 4–8pm`), and an anchored one reads
+  every single one of those as having no clock at all.
+- **⚠ A LABEL THAT CANNOT BE READ IS MARKED `timed: false`, NOT GIVEN A GUESS.**
+  `Saturday 10–1` says neither am nor pm anywhere; almost certainly ten to one,
+  and "almost certainly" is not something to draw a grid from. Those shifts are
+  absent from the three clock views, which say how many they left out, and
+  present in **By job**, which needs no clock — so nothing is ever unreachable.
+- **⚠ THE GRID'S ROWS ARE WHOLE HOURS AND A SHIFT IS A BLOCK LAID OVER THEM.** A
+  row per distinct slot — the obvious build, and the wrong one — makes a
+  7:30–11:00 shift exactly as tall as the 9:00–11:00 shift beside it, and how
+  long each job runs is the one thing somebody reads this grid to compare.
+- **⚠ THE DAY SWITCH IS NOT DRAWN WHEN THERE IS ONE DAY.** Serve sends no date
+  today, so a roster with none is one unnamed day and no chooser — a control
+  with one thing in it cannot do anything.
+- **⚠ THE PRINTED SHEET CARRIES NO ADMIN CHROME.** Found by looking at the
+  render: without the print rules the navy sidebar comes out down the left of
+  every page and a lead's handout arrives with a column of admin navigation on
+  it. Asserted by asking the browser what it will print, under
+  `emulateMedia({ media: 'print' })`.
+- **`/market/volunteers.csv` is the Export CSV button**, not a twin of it — the
+  button is a plain link to the route, so there is one assembly of the roster
+  rather than a second one in the browser that could drift. ⚠ It carries a row
+  for every spot nobody has taken, marked `(open)`: a file listing only who came
+  is a thank-you list, and what the coordinator is doing with a spreadsheet in
+  November is looking for holes. Gated `market_manage`, like the vendor export,
+  because it names everybody coming. ⚠ An unreachable Serve answers **503, not
+  an empty file** — a header row with nothing under it reads as "nobody has
+  signed up", and that is the one that gets acted on.
+- `fetchRoster(env)` is pulled out so the screen and the CSV read the roster the
+  same way — one fetch, one set of failure rules, one idea of what "Serve did
+  not answer" means.
+
+**⚠ Two of the prototype's own choices were overruled by this repo's rules**,
+the same way the arrows were in v5.8.0: its radii (7, 10, 4) are not in the
+legal set `admin/ui.test.mjs` enforces, and its 1–9 table selector is the
+market's own `market_max_tables` setting instead.
+
+**⚠ A CSS comment in `admin/ui.js` broke the module while writing this**, for the
+fourth time — a backtick quoting a class name inside a template literal.
+Describe a class in these comments; do not quote one.
+
+Run: `node admin/market.test.mjs` (318 — the label parser, the roster model, the
+four views and the CSV, plus a child process in `America/Chicago` so the
+date-anchoring assertion is not silently true on a UTC machine),
+`node --experimental-loader ./test/html-loader.mjs test/admin-redesign.test.mjs`
+(the two new groups drive every single-field save through the real Worker), and
+`node --experimental-loader ./test/html-loader.mjs test/market-admin.test.mjs`
+(Chromium, 36 — the cell round trip, the sort, the filter, the failed save and
+the print sheet). ⚠ Every new group was verified by injecting the regression it
+guards; three of them were vacuous on the first attempt and are recorded as such
+in the files — a `<select>` never overflows its box, so a clipped label cannot
+be measured with `scrollWidth`; a parser assertion read off `.start` crashes
+instead of failing; and a permission test written with `{ pages_edit: true }`
+grants nothing at all, because `hasPermission` reads an array.
+
 ### The Christmas Market generalized into `/events`, and a new event can adopt a page instead of getting a second one (v5.27.0, 2026-08-18)
 
 Built from `design_handoff_events/`, the follow-on to the market handoff below —

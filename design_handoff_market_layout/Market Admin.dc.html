@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#FAF7F1;color:#1A1A2A;font-family:'Source Sans 3',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
+a{color:#2E7EA6;text-decoration:none;}
+a:hover{color:#1D3557;text-decoration:underline;}
+input,select,textarea,button{font-family:inherit;}
+@media print{[data-noprint]{display:none !important;}}
+@page{size:landscape;margin:0.4in;}
+</style>
+</helmet>
+
+<div style="display:flex;align-items:stretch;min-height:100vh;background:#FAF7F1;">
+
+  <aside data-noprint="1" style="flex:0 0 228px;width:228px;position:sticky;top:0;height:100vh;background:#1D3557;display:flex;flex-direction:column;overflow:hidden;">
+    <div style="padding:16px 18px 14px;border-bottom:1px solid rgba(237,242,247,.12);flex-shrink:0;">
+      <div style="font:600 16px/1.2 'Source Sans 3',sans-serif;color:#FAF7F1;">Timothy Lutheran</div>
+      <div style="font:700 11.5px/1 'Source Sans 3',sans-serif;color:#C9973A;letter-spacing:.16em;text-transform:uppercase;margin-top:5px;">Admin <span style="font:400 11px/1 'Source Sans 3',sans-serif;color:#6B7F99;text-transform:none;letter-spacing:0;margin-left:6px;">v5.28.3</span></div>
+    </div>
+    <div style="padding:10px 18px;font-family:'Source Sans 3',sans-serif;font-size:12.5px;color:#8598B0;border-bottom:1px solid rgba(237,242,247,.12);">marla</div>
+    <div style="flex:1;min-height:0;overflow-y:auto;">
+      <div style="padding:8px 0 4px;">
+        <a href="#" style="display:flex;align-items:center;gap:11px;margin:1px 8px;padding:9px 12px;border-radius:9px;color:#C6D0DC;font:500 13.5px/1.35 'Source Sans 3',sans-serif;text-decoration:none;"><span style="flex:none;width:7px;height:7px;border-radius:50%;background:#5A7191;"></span><span style="flex:1;min-width:0;">Dashboard</span></a>
+      </div>
+      <div style="padding:8px 0 4px;">
+        <div style="font:700 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#D9A445;padding:8px 18px 8px 20px;">Website</div>
+        <a href="#" style="display:flex;align-items:center;gap:11px;margin:1px 8px;padding:9px 12px;border-radius:9px;color:#C6D0DC;font:500 13.5px/1.35 'Source Sans 3',sans-serif;text-decoration:none;"><span style="flex:none;width:7px;height:7px;border-radius:50%;background:#5A7191;"></span><span style="flex:1;min-width:0;">Pages</span><span style="flex:none;padding:1px 7px;border-radius:999px;background:rgba(201,151,58,.22);color:#E8C070;font:700 10.5px/1.6 'Source Sans 3',sans-serif;">2</span></a>
+        <a href="#" style="display:flex;align-items:center;gap:11px;margin:1px 8px;padding:9px 12px;border-radius:9px;color:#C6D0DC;font:500 13.5px/1.35 'Source Sans 3',sans-serif;text-decoration:none;"><span style="flex:none;width:7px;height:7px;border-radius:50%;background:#5A7191;"></span><span style="flex:1;min-width:0;">Menu</span></a>
+        <a href="#" style="display:flex;align-items:center;gap:11px;margin:1px 8px;padding:9px 12px;border-radius:9px;color:#C6D0DC;font:500 13.5px/1.35 'Source Sans 3',sans-serif;text-decoration:none;"><span style="flex:none;width:7px;height:7px;border-radius:50%;background:#5A7191;"></span><span style="flex:1;min-width:0;">Notices</span></a>
+        <a href="#" style="display:flex;align-items:center;gap:11px;margin:1px 8px;padding:9px 12px;border-radius:9px;color:#C6D0DC;font:500 13.5px/1.35 'Source Sans 3',sans-serif;text-decoration:none;"><span style="flex:none;width:7px;height:7px;border-radius:50%;background:#5A7191;"></span><span style="flex:1;min-width:0;">NFC Taps</span></a>
+        <a href="#" style="display:flex;align-items:center;gap:11px;margin:1px 8px;padding:9px 12px;border-radius:9px;color:#C6D0DC;font:500 13.5px/1.35 'Source Sans 3',sans-serif;text-decoration:none;"><span style="flex:none;width:7px;height:7px;border-radius:50%;background:#5A7191;"></span><span style="flex:1;min-width:0;">Redirects</span></a>
+      </div>
+      <div style="padding:8px 0 4px;">
+        <div style="font:700 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#D9A445;padding:8px 18px 8px 20px;">Communication</div>
+        <a href="#" style="display:flex;align-items:center;gap:11px;margin:1px 8px;padding:9px 12px;border-radius:9px;color:#C6D0DC;font:500 13.5px/1.35 'Source Sans 3',sans-serif;text-decoration:none;"><span style="flex:none;width:7px;height:7px;border-radius:50%;background:#5A7191;"></span><span style="flex:1;min-width:0;">Newsletter</span></a>
+        <a href="#" style="display:flex;align-items:center;gap:11px;margin:1px 8px;padding:9px 12px;border-radius:9px;color:#C6D0DC;font:500 13.5px/1.35 'Source Sans 3',sans-serif;text-decoration:none;"><span style="flex:none;width:7px;height:7px;border-radius:50%;background:#5A7191;"></span><span style="flex:1;min-width:0;">Subscribers</span></a>
+        <a href="#" style="display:flex;align-items:center;gap:11px;margin:1px 8px;padding:9px 12px;border-radius:9px;color:#C6D0DC;font:500 13.5px/1.35 'Source Sans 3',sans-serif;text-decoration:none;"><span style="flex:none;width:7px;height:7px;border-radius:50%;background:#5A7191;"></span><span style="flex:1;min-width:0;">Filtered Mail</span></a>
+      </div>
+      <div style="padding:8px 0 4px;">
+        <div style="font:700 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#D9A445;padding:8px 18px 8px 20px;">Events</div>
+        <a href="#" style="display:flex;align-items:center;gap:11px;margin:1px 8px;padding:9px 12px;border-radius:9px;color:#C6D0DC;font:500 13.5px/1.35 'Source Sans 3',sans-serif;text-decoration:none;"><span style="flex:none;width:7px;height:7px;border-radius:50%;background:#5A7191;"></span><span style="flex:1;min-width:0;">Events</span></a>
+        <a href="#" style="display:flex;align-items:center;gap:11px;margin:1px 8px;padding:9px 12px;border-radius:9px;background:#27496E;color:#FFFFFF;font:600 13.5px/1.35 'Source Sans 3',sans-serif;text-decoration:none;box-shadow:inset 0 0 0 1px rgba(255,255,255,.16);"><span style="flex:none;width:7px;height:7px;border-radius:50%;background:#E0A82E;"></span><span style="flex:1;min-width:0;">Christmas Market</span><span style="flex:none;padding:1px 7px;border-radius:999px;background:rgba(201,151,58,.22);color:#E8C070;font:700 10.5px/1.6 'Source Sans 3',sans-serif;">4</span></a>
+        <a href="#" style="display:flex;align-items:center;gap:11px;margin:1px 8px;padding:9px 12px;border-radius:9px;color:#C6D0DC;font:500 13.5px/1.35 'Source Sans 3',sans-serif;text-decoration:none;"><span style="flex:none;width:7px;height:7px;border-radius:50%;background:#5A7191;"></span><span style="flex:1;min-width:0;">Gym Rentals</span></a>
+      </div>
+      <div style="padding:8px 0 4px;">
+        <div style="font:700 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#D9A445;padding:8px 18px 8px 20px;">Money &amp; Building</div>
+        <a href="#" style="display:flex;align-items:center;gap:11px;margin:1px 8px;padding:9px 12px;border-radius:9px;color:#C6D0DC;font:500 13.5px/1.35 'Source Sans 3',sans-serif;text-decoration:none;"><span style="flex:none;width:7px;height:7px;border-radius:50%;background:#5A7191;"></span><span style="flex:1;min-width:0;">Giving</span></a>
+        <a href="#" style="display:flex;align-items:center;gap:11px;margin:1px 8px;padding:9px 12px;border-radius:9px;color:#C6D0DC;font:500 13.5px/1.35 'Source Sans 3',sans-serif;text-decoration:none;"><span style="flex:none;width:7px;height:7px;border-radius:50%;background:#5A7191;"></span><span style="flex:1;min-width:0;">Payroll</span></a>
+      </div>
+      <div style="padding:8px 0 4px;">
+        <div style="font:700 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#D9A445;padding:8px 18px 8px 20px;">People &amp; Access</div>
+        <a href="#" style="display:flex;align-items:center;gap:11px;margin:1px 8px;padding:9px 12px;border-radius:9px;color:#C6D0DC;font:500 13.5px/1.35 'Source Sans 3',sans-serif;text-decoration:none;"><span style="flex:none;width:7px;height:7px;border-radius:50%;background:#5A7191;"></span><span style="flex:1;min-width:0;">Staff</span></a>
+        <a href="#" style="display:flex;align-items:center;gap:11px;margin:1px 8px;padding:9px 12px;border-radius:9px;color:#C6D0DC;font:500 13.5px/1.35 'Source Sans 3',sans-serif;text-decoration:none;"><span style="flex:none;width:7px;height:7px;border-radius:50%;background:#5A7191;"></span><span style="flex:1;min-width:0;">Users</span></a>
+        <a href="#" style="display:flex;align-items:center;gap:11px;margin:1px 8px;padding:9px 12px;border-radius:9px;color:#C6D0DC;font:500 13.5px/1.35 'Source Sans 3',sans-serif;text-decoration:none;"><span style="flex:none;width:7px;height:7px;border-radius:50%;background:#5A7191;"></span><span style="flex:1;min-width:0;">Audit Log</span></a>
+      </div>
+      <div style="padding:8px 0 4px;">
+        <div style="font:700 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#D9A445;padding:8px 18px 8px 20px;">Setup</div>
+        <a href="#" style="display:flex;align-items:center;gap:11px;margin:1px 8px;padding:9px 12px;border-radius:9px;color:#C6D0DC;font:500 13.5px/1.35 'Source Sans 3',sans-serif;text-decoration:none;"><span style="flex:none;width:7px;height:7px;border-radius:50%;background:#5A7191;"></span><span style="flex:1;min-width:0;">Media</span></a>
+        <a href="#" style="display:flex;align-items:center;gap:11px;margin:1px 8px;padding:9px 12px;border-radius:9px;color:#C6D0DC;font:500 13.5px/1.35 'Source Sans 3',sans-serif;text-decoration:none;"><span style="flex:none;width:7px;height:7px;border-radius:50%;background:#5A7191;"></span><span style="flex:1;min-width:0;">Settings</span></a>
+      </div>
+    </div>
+    <div style="padding:14px 20px 18px;border-top:1px solid rgba(237,242,247,.12);display:flex;flex-direction:column;gap:8px;flex-shrink:0;">
+      <a href="#" style="font-family:'Source Sans 3',sans-serif;font-size:11.5px;font-weight:600;color:#8397AF;text-decoration:none;">⌘K searches every section</a>
+      <a href="#" style="font-family:'Source Sans 3',sans-serif;font-size:12.5px;font-weight:600;color:#C9973A;text-decoration:none;">Sign out</a>
+    </div>
+  </aside>
+
+  <div style="flex:1;min-width:0;">
+    <div data-noprint="1" style="display:flex;align-items:center;gap:14px;height:46px;padding:0 26px;background:#1E2D4A;color:#EDF2F7;position:sticky;top:0;z-index:90;">
+      <div style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;overflow:hidden;">
+        <span style="font:500 12.5px/1 'Source Sans 3',sans-serif;color:#8598B0;white-space:nowrap;">Events</span>
+        <span style="font:400 12.5px/1 'Source Sans 3',sans-serif;color:#4E6180;">/</span>
+        <span style="font:600 13.5px/1 'Source Sans 3',sans-serif;color:#FFFFFF;white-space:nowrap;">Christmas Market vendors</span>
+        <span style="flex:none;padding:1px 9px;border-radius:999px;background:rgba(201,151,58,.22);color:#E8C070;font:700 10.5px/1.7 'Source Sans 3',sans-serif;white-space:nowrap;">4 waiting</span>
+      </div>
+      <div style="flex:none;display:flex;align-items:center;gap:12px;white-space:nowrap;">
+        <button type="button" style="padding:6px 11px;border:1px solid rgba(196,206,223,.35);border-radius:8px;background:transparent;font:500 12.5px/1 'Source Sans 3',sans-serif;color:#AFC0D2;cursor:pointer;">⌘K</button>
+        <a href="#" style="font:600 12.5px/1 'Source Sans 3',sans-serif;color:#AFC0D2;text-decoration:none;">View site</a>
+      </div>
+    </div>
+    <div data-noprint="1" style="padding:16px 26px 0;display:flex;gap:16px;flex-wrap:wrap;">
+      <a href="#" style="font:600 13px/1 'Source Sans 3',sans-serif;color:#2E7EA6;text-decoration:none;">View the vendor page</a>
+    </div>
+
+    <div style="font-family:'Source Sans 3',sans-serif;">
+      <nav data-noprint="1" style="display:flex;gap:4px;flex-wrap:wrap;margin:20px 26px 20px;border-bottom:1px solid #EFE7D9;">
+        <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="5">
+          <button type="button" onClick="{{ onTab }}" data-key="{{ t.key }}" style-hover="color:#1A1A2A" style="display:inline-flex;align-items:center;min-height:44px;padding:10px 16px;font:600 14px/1 'Source Sans 3',sans-serif;color:{{ t.color }};background:transparent;border:0;border-bottom:3px solid {{ t.line }};margin-bottom:-1px;cursor:pointer;">{{ t.label }}</button>
+        </sc-for>
+      </nav>
+
+      <sc-if value="{{ isVendors }}" hint-placeholder-val="{{ true }}">
+        <section data-shot="vendors" style="padding:0 26px 40px;max-width:1560px;">
+          <header style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:18px;">
+            <div style="min-width:0;">
+              <h1 style="font:500 25px/1.2 'Lora',Georgia,serif;color:#1D3557;margin:0;">Christmas Market vendors</h1>
+              <p style="margin:6px 0 0;font-size:13.5px;line-height:1.5;color:#6A6858;max-width:56em;text-wrap:pretty;">Every vendor who has applied for a table, what they sell, and whether they have paid. Table numbers, check numbers and placement notes are typed straight into the row — nothing here needs a form to change.</p>
+            </div>
+            <div style="flex:none;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <button type="button" onClick="{{ onToggleToday }}" style="flex:none;display:inline-flex;align-items:center;background:#fff;color:#1D3557;font:600 13px 'Source Sans 3',sans-serif;padding:9px 15px;border:1px solid #E7DFD1;border-radius:8px;cursor:pointer;">{{ todayBtnLabel }}</button>
+              <a href="#" style="flex:none;display:inline-flex;align-items:center;background:#1E2D4A;color:#F5E4C0;font:600 13.5px 'Source Sans 3',sans-serif;padding:10px 17px;border-radius:8px;text-decoration:none;">Export CSV</a>
+            </div>
+          </header>
+
+          <sc-if value="{{ showToday }}" hint-placeholder-val="{{ false }}">
+            <div style="border:1px solid #EADCBE;background:#FAF0DC;color:#7A5B18;border-radius:12px;padding:13px 16px;font-size:13.5px;line-height:1.55;margin-bottom:18px;">This is the screen as it stands today, drawn from <code>admin/market.js</code>: four columns, and every edit behind the slide-over drawer. Switch back to see the proposed layout.</div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px;">
+              <div style="border:1px solid #E7DFD1;border-radius:11px;background:#FAF7F1;padding:15px 17px;display:flex;flex-direction:column;gap:5px;"><div style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;">Applications</div><div style="font:500 30px/1 'Lora',Georgia,serif;color:#1D3557;">{{ counts.total }}</div><div style="font-size:12px;line-height:1.45;color:#8A8271;">Every vendor who has applied</div></div>
+              <div style="border:1px solid #E7DFD1;border-radius:11px;background:#FAF7F1;padding:15px 17px;display:flex;flex-direction:column;gap:5px;"><div style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;">Tables asked for</div><div style="font:500 30px/1 'Lora',Georgia,serif;color:#1D3557;">{{ counts.tables }}</div><div style="font-size:12px;line-height:1.45;color:#8A8271;">Dropped-out vendors excluded</div></div>
+              <div style="border:1px solid #E7DFD1;border-radius:11px;background:#FAF7F1;padding:15px 17px;display:flex;flex-direction:column;gap:5px;"><div style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;">Not paid yet</div><div style="font:500 30px/1 'Lora',Georgia,serif;color:#1D3557;">{{ counts.unpaid }}</div><div style="font-size:12px;line-height:1.45;color:#8A8271;">Spaces that are not held</div></div>
+              <div style="border:1px solid #E7DFD1;border-radius:11px;background:#FAF7F1;padding:15px 17px;display:flex;flex-direction:column;gap:5px;"><div style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;">Recorded as paid</div><div style="font:500 30px/1 'Lora',Georgia,serif;color:#1D3557;">{{ counts.collected }}</div><div style="font-size:12px;line-height:1.45;color:#8A8271;">What you have marked, not what the processor says</div></div>
+            </div>
+            <div style="border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;overflow:hidden;">
+              <div style="display:grid;grid-template-columns:2.3fr 2fr .9fr minmax(126px,1.1fr) 118px;gap:14px;padding:11px 18px;background:#F4EFE5;border-bottom:1px solid #E7DFD1;">
+                <span style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;">Vendor</span>
+                <span style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;">Sells</span>
+                <span style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;">Tables</span>
+                <span style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;">Payment</span>
+                <span style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;text-align:right;justify-self:end;"></span>
+              </div>
+              <div>
+                <sc-for list="{{ todayRows }}" as="v" hint-placeholder-count="8">
+                  <div style="border-bottom:1px solid #EFE7D9;">
+                    <sc-if value="{{ v.isUnpaid }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;align-items:center;gap:9px;padding:9px 18px 11px;background:#FBF1DC;border-bottom:1px solid #EBD5A6;font-size:12.5px;color:#7A5B18;">
+                        <span style="flex:none;font-size:10px;color:#8C3A28;">▲</span>
+                        <span style="flex:1;text-wrap:pretty;">No payment recorded. They were asked for {{ v.due }} — their space is not held until it arrives.</span>
+                        <a href="#" style="flex:none;font-weight:700;color:#7A5B18;text-decoration:underline;">Record it</a>
+                      </div>
+                    </sc-if>
+                    <div style="display:grid;grid-template-columns:2.3fr 2fr .9fr minmax(126px,1.1fr) 118px;gap:14px;align-items:center;padding:12px 18px;min-height:56px;cursor:pointer;">
+                      <span style="font-size:13px;color:#4A4860;min-width:0;">
+                        <span style="display:flex;align-items:center;gap:10px;min-width:0;"><span style="min-width:0;display:flex;flex-direction:column;gap:2px;"><span style="font:600 13.5px/1.3 'Source Sans 3',sans-serif;color:#1A1A2A;">{{ v.business }}</span><span style="font-size:11.5px;line-height:1.35;color:#8A8271;">{{ v.sub }}</span></span></span>
+                      </span>
+                      <span style="font-size:13px;color:#4A4860;min-width:0;overflow-wrap:anywhere;">{{ v.sellsShort }}</span>
+                      <span style="font-size:13px;color:#4A4860;">{{ v.tablesCell }}</span>
+                      <span style="font-size:13px;color:#4A4860;"><span style="display:inline-block;font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.08em;text-transform:uppercase;padding:5px 10px;border-radius:999px;border:1px solid {{ v.tone.bd }};background:{{ v.tone.bg }};color:{{ v.tone.fg }};white-space:nowrap;">{{ v.statusLabel }}</span></span>
+                      <span style="font-size:13px;text-align:right;justify-self:end;display:flex;align-items:center;gap:12px;white-space:nowrap;"><a href="#" style="font-size:13px;font-weight:600;color:#1D3557;">Open</a></span>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <p style="display:flex;gap:9px;align-items:baseline;margin:14px 0 0;font-size:13px;line-height:1.65;color:#4A4860;max-width:66em;text-wrap:pretty;"><span style="flex:none;color:#C9973A;font-size:11px;">◆</span><span>A payment state is your record, not the processor’s — the website hands a vendor to the card page and cannot see what happens there. Anything still reading “not paid yet” is a space that is not held.</span></p>
+          </sc-if>
+
+          <sc-if value="{{ showNew }}" hint-placeholder-val="{{ true }}">
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px;">
+              <div style="border:1px solid #E7DFD1;border-radius:11px;background:#FAF7F1;padding:15px 17px;display:flex;flex-direction:column;gap:5px;"><div style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;">Tables asked for</div><div style="font:500 30px/1 'Lora',Georgia,serif;color:#1D3557;">{{ counts.tables }}</div><div style="font-size:12px;line-height:1.45;color:#8A8271;">{{ counts.total }} applications, dropped-out excluded</div></div>
+              <div style="border:1px solid #E7DFD1;border-radius:11px;background:#FAF7F1;padding:15px 17px;display:flex;flex-direction:column;gap:5px;"><div style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;">Recorded as paid</div><div style="font:500 30px/1 'Lora',Georgia,serif;color:#1D3557;">{{ counts.collected }}</div><div style="font-size:12px;line-height:1.45;color:#8A8271;">of {{ counts.asked }} asked for</div></div>
+              <div style="border:1px solid #E7DFD1;border-radius:11px;background:#FAF7F1;padding:15px 17px;display:flex;flex-direction:column;gap:5px;"><div style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;">Waiting on a card</div><div style="font:500 30px/1 'Lora',Georgia,serif;color:#1D3557;">{{ counts.unpaidCard }}</div><div style="font-size:12px;line-height:1.45;color:#8A8271;">Applied online and never finished paying</div></div>
+              <div style="border:1px solid #EBD5A6;border-radius:11px;background:#FAF0DC;padding:15px 17px;display:flex;flex-direction:column;gap:5px;"><div style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#7A5B18;">Checks not in yet</div><div style="font:500 30px/1 'Lora',Georgia,serif;color:#7A5B18;">{{ counts.checkOut }}</div><div style="font-size:12px;line-height:1.45;color:#7A5B18;">Said they would mail or bring one</div></div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+              <label style="flex:1;min-width:200px;max-width:300px;display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #E7DFD1;border-radius:8px;padding:0 12px;">
+                <span style="color:#8A8271;font-size:14px;">⌕</span>
+                <input type="search" onInput="{{ onQuery }}" placeholder="Search vendors, products, table numbers" aria-label="Search vendors" style="flex:1;border:0;outline:0;background:transparent;padding:9px 0;font:400 13.5px 'Source Sans 3',sans-serif;color:#1E2D4A;width:100%;">
+              </label>
+              <div style="display:flex;gap:7px;flex-wrap:wrap;">
+                <sc-for list="{{ filterBtns }}" as="f" hint-placeholder-count="6">
+                  <button type="button" onClick="{{ onFilter }}" data-value="{{ f.value }}" style="font:600 11.5px 'Source Sans 3',sans-serif;border-radius:8px;cursor:pointer;background:{{ f.bg }};color:{{ f.fg }};border:{{ f.border }};padding:{{ f.pad }};">{{ f.label }}</button>
+                </sc-for>
+              </div>
+              <span style="margin-left:auto;font-size:12.5px;color:#8A8271;white-space:nowrap;">{{ countLabel }}</span>
+            </div>
+
+            <div style="border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;overflow:auto;">
+              <div style="min-width:1000px;">
+              <div style="display:grid;grid-template-columns:minmax(190px,2fr) minmax(116px,1fr) minmax(150px,1.35fr) 54px 78px minmax(128px,1.1fr) minmax(158px,1.35fr) 30px;gap:12px;padding:9px 16px;background:#F4EFE5;border-bottom:1px solid #E7DFD1;align-items:center;">
+                <sc-for list="{{ headers }}" as="h" hint-placeholder-count="7">
+                  <button type="button" onClick="{{ onSort }}" data-key="{{ h.key }}" style="display:flex;align-items:center;gap:5px;background:transparent;border:0;padding:4px 0;cursor:{{ h.cursor }};font:600 10.5px/1.4 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:{{ h.color }};text-align:left;">{{ h.label }}<span style="font-size:9px;color:#8A8271;">{{ h.caret }}</span></button>
+                </sc-for>
+                <span></span>
+              </div>
+              <div>
+                <sc-for list="{{ rows }}" as="v" hint-placeholder-count="10">
+                  <div style="border-bottom:1px solid #EFE7D9;background:{{ v.rowBg }};">
+                    <div style="display:grid;grid-template-columns:minmax(190px,2fr) minmax(116px,1fr) minmax(150px,1.35fr) 54px 78px minmax(128px,1.1fr) minmax(158px,1.35fr) 30px;gap:12px;align-items:center;padding:8px 16px;min-height:58px;">
+                      <div style="min-width:0;display:flex;flex-direction:column;gap:2px;">
+                        <span style="font:600 13.5px/1.3 'Source Sans 3',sans-serif;color:#1A1A2A;">{{ v.business }}</span>
+                        <span style="font-size:11.5px;line-height:1.35;color:#8A8271;">{{ v.sub }}</span>
+                      </div>
+                      <select onChange="{{ onCell }}" data-id="{{ v.id }}" data-field="category" value="{{ v.category }}" style="width:100%;font:500 12.5px 'Source Sans 3',sans-serif;color:#1A1A2A;background:transparent;border:1px solid transparent;border-radius:7px;padding:6px 4px;cursor:pointer;">
+                        <sc-for list="{{ categories }}" as="c" hint-placeholder-count="9">
+                          <option value="{{ c }}">{{ c }}</option>
+                        </sc-for>
+                      </select>
+                      <span style="font-size:12.5px;line-height:1.4;color:#4A4860;min-width:0;overflow-wrap:anywhere;">{{ v.sellsShort }}</span>
+                      <select onChange="{{ onCell }}" data-id="{{ v.id }}" data-field="tables" value="{{ v.tables }}" aria-label="Tables" style="width:100%;font:600 13px 'Source Sans 3',sans-serif;color:#1A1A2A;background:transparent;border:1px solid transparent;border-radius:7px;padding:6px 2px;cursor:pointer;">
+                        <sc-for list="{{ tableOpts }}" as="n" hint-placeholder-count="9">
+                          <option value="{{ n }}">{{ n }}</option>
+                        </sc-for>
+                      </select>
+                      <input type="text" onChange="{{ onCell }}" data-id="{{ v.id }}" data-field="tableNo" value="{{ v.tableNo }}" placeholder="—" aria-label="Table number" style="width:100%;font:600 13px 'Source Sans 3',sans-serif;color:#1A1A2A;background:transparent;border:1px solid transparent;border-radius:7px;padding:7px 8px;" style-hover="border-color:#E7DFD1;background:#fff" style-focus="border-color:#2E7EA6;background:#fff;outline:none;box-shadow:0 0 0 3px rgba(46,126,166,.14)">
+                      <div style="display:flex;flex-direction:column;gap:4px;min-width:0;">
+                        <select onChange="{{ onCell }}" data-id="{{ v.id }}" data-field="status" value="{{ v.status }}" style="width:100%;font:600 11px 'Source Sans 3',sans-serif;letter-spacing:.06em;text-transform:uppercase;border-radius:999px;padding:5px 8px;cursor:pointer;background:{{ v.tone.bg }};color:{{ v.tone.fg }};border:1px solid {{ v.tone.bd }};">
+                          <option value="unpaid">Not paid yet</option>
+                          <option value="paid">Paid</option>
+                          <option value="waived">Fee waived</option>
+                          <option value="dropped">Dropped out</option>
+                        </select>
+                        <span style="font-size:11px;color:#8A8271;white-space:nowrap;">{{ v.moneyLine }}</span>
+                      </div>
+                      <div style="min-width:0;">
+                        <sc-if value="{{ v.checkPending }}" hint-placeholder-val="{{ false }}">
+                          <div style="display:flex;flex-direction:column;gap:4px;min-width:0;">
+                            <div style="display:flex;align-items:center;gap:5px;min-width:0;">
+                              <input type="text" onChange="{{ onCell }}" data-id="{{ v.id }}" data-field="checkNo" value="{{ v.checkNo }}" placeholder="Check #" aria-label="Check number" style="flex:1;min-width:0;font:500 12px 'Source Sans 3',sans-serif;color:#1A1A2A;background:#fff;border:1px solid #EADCBE;border-radius:7px;padding:6px 7px;" style-focus="border-color:#2E7EA6;outline:none;box-shadow:0 0 0 3px rgba(46,126,166,.14)">
+                              <button type="button" onClick="{{ onCheckIn }}" data-id="{{ v.id }}" title="Mark the check received today" style="flex:none;font:700 11px 'Source Sans 3',sans-serif;color:#3F5424;background:#EDF0E4;border:1px solid #D3DCC2;border-radius:7px;padding:6px 8px;cursor:pointer;">✓ In</button>
+                            </div>
+                            <input type="date" onChange="{{ onCell }}" data-id="{{ v.id }}" data-field="checkDate" value="{{ v.checkDate }}" aria-label="Date the check arrived" style="width:100%;min-width:0;font:500 11.5px 'Source Sans 3',sans-serif;color:#4A4860;background:#fff;border:1px solid #EADCBE;border-radius:7px;padding:5px 6px;" style-focus="border-color:#2E7EA6;outline:none;box-shadow:0 0 0 3px rgba(46,126,166,.14)">
+                          </div>
+                        </sc-if>
+                        <sc-if value="{{ v.checkIn }}" hint-placeholder-val="{{ false }}">
+                          <span style="font-size:12px;line-height:1.4;color:#3F5424;">✓ Check {{ v.checkNoLabel }} · {{ v.checkDateLabel }}</span>
+                        </sc-if>
+                        <sc-if value="{{ v.payingCard }}" hint-placeholder-val="{{ false }}">
+                          <span style="font-size:12px;color:#8A8271;">Card, online</span>
+                        </sc-if>
+                      </div>
+                      <button type="button" onClick="{{ onExpand }}" data-id="{{ v.id }}" aria-label="Show the rest of this application" style="justify-self:end;background:transparent;border:0;cursor:pointer;color:#8A8271;font-size:13px;padding:6px;border-radius:7px;">{{ v.caret }}</button>
+                    </div>
+                    <sc-if value="{{ v.open }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:22px;padding:4px 16px 18px 16px;background:#FAF7F1;border-top:1px solid #EFE7D9;">
+                        <div>
+                          <div style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;margin-bottom:6px;">What they sell</div>
+                          <p style="font-size:13px;line-height:1.6;color:#4A4860;margin-bottom:10px;text-wrap:pretty;">{{ v.sells }}</p>
+                          <div style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;margin-bottom:6px;">Your notes</div>
+                          <textarea onChange="{{ onCell }}" data-id="{{ v.id }}" data-field="notes" value="{{ v.notes }}" rows="3" placeholder="Only ever seen here — the vendor is not shown this." style="width:100%;font:400 13px/1.55 'Source Sans 3',sans-serif;color:#1A1A2A;background:#fff;border:1px solid #E7DFD1;border-radius:8px;padding:9px 11px;resize:vertical;" style-focus="border-color:#2E7EA6;outline:none;box-shadow:0 0 0 3px rgba(46,126,166,.14)"></textarea>
+                        </div>
+                        <div>
+                          <div style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;margin-bottom:6px;">Contact</div>
+                          <p style="font-size:13px;line-height:1.7;color:#4A4860;">{{ v.names }}<br><a href="#">{{ v.email }}</a><br>{{ v.phone }}<br>{{ v.address }}</p>
+                          <p style="font-size:12.5px;line-height:1.6;color:#8A8271;margin-top:10px;">{{ v.returning }} · applied {{ v.applied }}<br>Agreed to the vendor terms as {{ v.signature }}</p>
+                        </div>
+                        <div>
+                          <div style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;margin-bottom:6px;">Money</div>
+                          <p style="font-size:13px;line-height:1.7;color:#4A4860;">Asked for {{ v.due }}<br>{{ v.methodLabel }}</p>
+                          <label style="display:block;margin-top:10px;">
+                            <span style="display:block;font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;margin-bottom:6px;">Amount paid</span>
+                            <input type="text" onChange="{{ onCell }}" data-id="{{ v.id }}" data-field="paid" defaultValue="{{ v.paidValue }}" placeholder="{{ v.dueValue }}" style="width:120px;font:500 13px 'Source Sans 3',sans-serif;color:#1A1A2A;background:#fff;border:1px solid #E7DFD1;border-radius:8px;padding:9px 11px;" style-focus="border-color:#2E7EA6;outline:none;box-shadow:0 0 0 3px rgba(46,126,166,.14)">
+                          </label>
+                          <p style="font-size:12.5px;line-height:1.55;color:#8A8271;margin-top:8px;">Blank is not the same as zero. {{ v.foodLine }}</p>
+                        </div>
+                      </div>
+                    </sc-if>
+                  </div>
+                </sc-for>
+                <sc-if value="{{ noRows }}" hint-placeholder-val="{{ false }}">
+                  <div style="padding:34px 18px;text-align:center;display:flex;flex-direction:column;gap:5px;">
+                    <span style="font:600 14px 'Source Sans 3',sans-serif;color:#4A4860;">No vendor applications match that.</span>
+                    <span style="font-size:13px;color:#8A8271;">Clear the search box, or pick All above.</span>
+                  </div>
+                </sc-if>
+              </div>
+              </div>
+            </div>
+            <p style="display:flex;gap:9px;align-items:baseline;margin:14px 0 0;font-size:13px;line-height:1.65;color:#4A4860;max-width:66em;text-wrap:pretty;"><span style="flex:none;color:#C9973A;font-size:11px;">◆</span><span>Every edit in a row saves on its own and goes to the audit log, same as the drawer did. A payment state is still your record, not the processor’s — recording a check number is what turns “awaiting check” into paid.</span></p>
+          </sc-if>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ isVolunteers }}" hint-placeholder-val="{{ false }}">
+        <section data-shot="volunteers" style="padding:0 26px 40px;max-width:1420px;">
+          <header data-noprint="1" style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:18px;">
+            <div style="min-width:0;">
+              <h1 style="font:500 25px/1.2 'Lora',Georgia,serif;color:#1D3557;margin:0;">Volunteers</h1>
+              <p style="margin:6px 0 0;font-size:13.5px;line-height:1.5;color:#6A6858;max-width:56em;text-wrap:pretty;">Who is covering the market, read from Serve. Shifts are set up and changed there — this is a window on them, and the place you print from.</p>
+            </div>
+            <div style="flex:none;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <a href="#" style="flex:none;display:inline-flex;align-items:center;background:#1E2D4A;color:#F5E4C0;font:600 13.5px 'Source Sans 3',sans-serif;padding:10px 17px;border-radius:8px;text-decoration:none;">Manage shifts in Serve</a>
+            </div>
+          </header>
+
+          <div data-noprint="1" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px;">
+            <div style="border:1px solid #E7DFD1;border-radius:11px;background:#FAF7F1;padding:15px 17px;display:flex;flex-direction:column;gap:5px;"><div style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;">Signed up</div><div style="font:500 30px/1 'Lora',Georgia,serif;color:#1D3557;">{{ vol.people }}</div><div style="font-size:12px;line-height:1.45;color:#8A8271;">People who have taken a shift {{ vol.dayWord }}</div></div>
+            <div style="border:1px solid #E7DFD1;border-radius:11px;background:#FAF7F1;padding:15px 17px;display:flex;flex-direction:column;gap:5px;"><div style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;">Spots filled</div><div style="font:500 30px/1 'Lora',Georgia,serif;color:#1D3557;">{{ vol.filledLabel }}</div><div style="font-size:12px;line-height:1.45;color:#8A8271;">Across {{ vol.shiftCount }} shifts</div></div>
+            <div style="border:1px solid #EBD5A6;border-radius:11px;background:#FAF0DC;padding:15px 17px;display:flex;flex-direction:column;gap:5px;"><div style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#7A5B18;">Still needed</div><div style="font:500 30px/1 'Lora',Georgia,serif;color:#7A5B18;">{{ vol.short }}</div><div style="font-size:12px;line-height:1.45;color:#7A5B18;">{{ vol.shortNote }}</div></div>
+            <div style="border:1px solid #E7DFD1;border-radius:11px;background:#FAF7F1;padding:15px 17px;display:flex;flex-direction:column;gap:5px;"><div style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;">Thinnest hour</div><div style="font:500 30px/1 'Lora',Georgia,serif;color:#1D3557;">{{ vol.worstSlot }}</div><div style="font-size:12px;line-height:1.45;color:#8A8271;">{{ vol.worstNote }}</div></div>
+          </div>
+
+          <div data-noprint="1" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+            <div style="display:inline-flex;background:#F4EFE5;border:1px solid #E7DFD1;border-radius:9px;padding:3px;gap:3px;flex:none;">
+              <sc-for list="{{ dayBtns }}" as="d" hint-placeholder-count="2">
+                <button type="button" onClick="{{ onDay }}" data-value="{{ d.value }}" style="font:600 13px 'Source Sans 3',sans-serif;border:0;border-radius:8px;padding:7px 14px;cursor:pointer;background:{{ d.bg }};color:{{ d.fg }};box-shadow:{{ d.shadow }};">{{ d.label }}</button>
+              </sc-for>
+            </div>
+            <div style="display:inline-flex;background:#F4EFE5;border:1px solid #E7DFD1;border-radius:9px;padding:3px;gap:3px;flex:none;">
+              <sc-for list="{{ viewBtns }}" as="b" hint-placeholder-count="4">
+                <button type="button" onClick="{{ onView }}" data-value="{{ b.value }}" style="font:600 13px 'Source Sans 3',sans-serif;border:0;border-radius:8px;padding:7px 14px;cursor:pointer;background:{{ b.bg }};color:{{ b.fg }};box-shadow:{{ b.shadow }};">{{ b.label }}</button>
+              </sc-for>
+            </div>
+            <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;">
+              <button type="button" onClick="{{ onPrint }}" data-kind="leads" style="font:600 12.5px 'Source Sans 3',sans-serif;color:#1D3557;background:#fff;border:1px solid #E7DFD1;border-radius:8px;padding:8px 14px;cursor:pointer;">Print job-lead sheets</button>
+              <button type="button" onClick="{{ onPrint }}" data-kind="people" style="font:600 12.5px 'Source Sans 3',sans-serif;color:#1D3557;background:#fff;border:1px solid #E7DFD1;border-radius:8px;padding:8px 14px;cursor:pointer;">Print master list</button>
+              <button type="button" onClick="{{ onPrint }}" data-kind="time" style="font:600 12.5px 'Source Sans 3',sans-serif;color:#1D3557;background:#fff;border:1px solid #E7DFD1;border-radius:8px;padding:8px 14px;cursor:pointer;">Print by time slot</button>
+              <button type="button" onClick="{{ onPrint }}" data-kind="grid" style="font:600 12.5px 'Source Sans 3',sans-serif;color:#1D3557;background:#fff;border:1px solid #E7DFD1;border-radius:8px;padding:8px 14px;cursor:pointer;">Print the grid</button>
+              <button type="button" onClick="{{ onCsv }}" title="One row per person per shift, both days" style="font:600 12.5px 'Source Sans 3',sans-serif;color:#F5E4C0;background:#1E2D4A;border:1px solid #1E2D4A;border-radius:8px;padding:8px 14px;cursor:pointer;">Export CSV</button>
+            </span>
+          </div>
+
+          <sc-if value="{{ volJobView }}" hint-placeholder-val="{{ true }}">
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(430px,1fr));gap:16px;">
+              <sc-for list="{{ jobs }}" as="j" hint-placeholder-count="6">
+                <div style="border:1px solid #E7DFD1;border-radius:12px;background:#FAF7F1;overflow:hidden;">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;background:#F4EFE5;border-bottom:1px solid #E7DFD1;">
+                    <span style="min-width:0;">
+                      <span style="display:block;font:600 13.5px/1.3 'Source Sans 3',sans-serif;color:#1A1A2A;">{{ j.name }}</span>
+                      <span style="display:block;font-size:11.5px;color:#8A8271;margin-top:2px;">Lead · {{ j.lead }}</span>
+                    </span>
+                    <span style="display:flex;align-items:center;gap:8px;flex:none;">
+                      <span style="display:inline-block;font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.08em;text-transform:uppercase;padding:5px 10px;border-radius:999px;background:{{ j.tone.bg }};color:{{ j.tone.fg }};border:1px solid {{ j.tone.bd }};white-space:nowrap;">{{ j.pill }}</span>
+                      <button type="button" onClick="{{ onPrintJob }}" data-job="{{ j.name }}" title="Print this lead's sheet" style="font:600 11.5px 'Source Sans 3',sans-serif;color:#1D3557;background:#fff;border:1px solid #E7DFD1;border-radius:7px;padding:5px 9px;cursor:pointer;">Sheet</button>
+                    </span>
+                  </div>
+                  <div style="padding:6px 16px 12px;">
+                    <sc-for list="{{ j.shifts }}" as="s" hint-placeholder-count="3">
+                      <div style="display:grid;grid-template-columns:118px 54px 1fr;gap:12px;align-items:start;padding:9px 0;border-bottom:1px solid #EFE7D9;">
+                        <span style="font:600 12.5px/1.4 'Source Sans 3',sans-serif;color:#1A1A2A;white-space:nowrap;">{{ s.time }}</span>
+                        <span style="font:600 12.5px/1.4 'Source Sans 3',sans-serif;color:{{ s.countColor }};white-space:nowrap;">{{ s.count }}</span>
+                        <span style="font-size:12.5px;line-height:1.5;color:#4A4860;text-wrap:pretty;">{{ s.who }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ volTimeView }}" hint-placeholder-val="{{ false }}">
+            <div style="border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;overflow:hidden;">
+              <sc-for list="{{ slots }}" as="s" hint-placeholder-count="8">
+                <div style="display:grid;grid-template-columns:150px 1fr;gap:18px;padding:14px 18px;border-bottom:1px solid #EFE7D9;">
+                  <div>
+                    <div style="font:500 17px/1.2 'Lora',Georgia,serif;color:#1D3557;">{{ s.start }}</div>
+                    <div style="font-size:12px;color:#8A8271;margin-top:3px;">to {{ s.end }}</div>
+                    <div style="font:600 11px/1 'Source Sans 3',sans-serif;letter-spacing:.06em;text-transform:uppercase;color:{{ s.tone.fg }};background:{{ s.tone.bg }};border:1px solid {{ s.tone.bd }};border-radius:999px;padding:5px 9px;display:inline-block;margin-top:8px;">{{ s.pill }}</div>
+                  </div>
+                  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;">
+                    <sc-for list="{{ s.entries }}" as="e" hint-placeholder-count="4">
+                      <div style="border:1px solid #E7DFD1;border-radius:10px;background:{{ e.bg }};padding:10px 12px;">
+                        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;">
+                          <span style="font:600 12.5px/1.3 'Source Sans 3',sans-serif;color:#1A1A2A;">{{ e.job }}</span>
+                          <span style="font:600 11.5px 'Source Sans 3',sans-serif;color:{{ e.countColor }};white-space:nowrap;">{{ e.count }}</span>
+                        </div>
+                        <div style="font-size:12px;line-height:1.5;color:#4A4860;margin-top:4px;text-wrap:pretty;">{{ e.who }}</div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ volGridView }}" hint-placeholder-val="{{ false }}">
+            <div data-noprint="1" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:-4px 0 14px;">
+              <span style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;">Across the top</span>
+              <div style="display:inline-flex;background:#F4EFE5;border:1px solid #E7DFD1;border-radius:9px;padding:3px;gap:3px;">
+                <sc-for list="{{ axisBtns }}" as="a" hint-placeholder-count="2">
+                  <button type="button" onClick="{{ onAxis }}" data-value="{{ a.value }}" style="font:600 13px 'Source Sans 3',sans-serif;border:0;border-radius:8px;padding:7px 14px;cursor:pointer;background:{{ a.bg }};color:{{ a.fg }};box-shadow:{{ a.shadow }};">{{ a.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+            <sc-if value="{{ gridByTime }}" hint-placeholder-val="{{ false }}">
+              <div style="border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;overflow:auto;">
+                <div style="min-width:{{ tTotalWidth }};">
+                  <div style="display:flex;background:#F4EFE5;border-bottom:1px solid #E7DFD1;position:sticky;top:0;z-index:3;">
+                    <span style="flex:0 0 190px;font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;padding:12px;">Job</span>
+                    <div style="flex:none;position:relative;height:38px;width:{{ tTrackWidth }};">
+                      <sc-for list="{{ tHourLabels }}" as="h" hint-placeholder-count="12">
+                        <span style="position:absolute;top:10px;left:{{ h.left }};padding-left:8px;border-left:1px solid #E7DFD1;font:600 11.5px/1.2 'Source Sans 3',sans-serif;color:#1A1A2A;white-space:nowrap;">{{ h.label }}</span>
+                      </sc-for>
+                    </div>
+                  </div>
+                  <sc-for list="{{ tJobTracks }}" as="r" hint-placeholder-count="10">
+                    <div style="display:flex;border-bottom:1px solid #EFE7D9;background:{{ r.bg }};">
+                      <span style="flex:0 0 190px;padding:9px 12px;min-width:0;">
+                        <span style="display:block;font:600 12.5px/1.3 'Source Sans 3',sans-serif;color:#1A1A2A;">{{ r.name }}</span>
+                        <span style="display:block;font-size:11px;color:#8A8271;margin-top:2px;">{{ r.lead }}</span>
+                      </span>
+                      <div style="flex:none;position:relative;height:56px;width:{{ tTrackWidth }};background-image:{{ tHourBg }};">
+                        <sc-for list="{{ r.blocks }}" as="s" hint-placeholder-count="3">
+                          <div style="position:absolute;top:5px;bottom:5px;left:{{ s.left }};width:{{ s.width }};border-radius:8px;padding:5px 9px;overflow:hidden;background:{{ s.bg }};border:1px solid {{ s.bd }};">
+                            <span style="font:700 11px/1.2 'Source Sans 3',sans-serif;color:{{ s.fg }};">{{ s.count }}</span>
+                            <span style="font:500 11px/1.35 'Source Sans 3',sans-serif;color:#4A4860;margin-left:6px;overflow-wrap:anywhere;">{{ s.who }}</span>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+              <p style="display:flex;gap:9px;align-items:baseline;margin:14px 0 0;font-size:13px;line-height:1.65;color:#4A4860;max-width:66em;text-wrap:pretty;"><span style="flex:none;color:#C9973A;font-size:11px;">◆</span><span>Same data, turned on its side — this is the shape the printed grid uses, so what you see here is what comes out of the printer.</span></p>
+            </sc-if>
+            <sc-if value="{{ gridByJobs }}" hint-placeholder-val="{{ true }}">
+            <div style="border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;overflow:auto;">
+              <div style="min-width:1040px;">
+                <div style="display:grid;grid-template-columns:{{ gridCols }};background:#F4EFE5;border-bottom:1px solid #E7DFD1;position:sticky;top:0;z-index:3;">
+                  <span style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;padding:11px 12px;">Time</span>
+                  <sc-for list="{{ gridJobs }}" as="g" hint-placeholder-count="8">
+                    <span style="font:600 10.5px/1.3 'Source Sans 3',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#8A8271;padding:11px 8px;border-left:1px solid #E7DFD1;">{{ g }}</span>
+                  </sc-for>
+                </div>
+                <div style="display:grid;grid-template-columns:{{ gridCols }};grid-template-rows:{{ timelineHeight }};">
+                  <div style="position:relative;height:{{ timelineHeight }};background-image:{{ hourBg }};">
+                    <sc-for list="{{ timelineHourLabels }}" as="h" hint-placeholder-count="12">
+                      <div style="position:absolute;left:0;right:0;top:{{ h.top }};padding:5px 12px;font:600 11.5px/1.2 'Source Sans 3',sans-serif;color:#1A1A2A;white-space:nowrap;">{{ h.label }}</div>
+                    </sc-for>
+                  </div>
+                  <sc-for list="{{ timelineColumns }}" as="col" hint-placeholder-count="8">
+                    <div style="position:relative;height:{{ timelineHeight }};border-left:1px solid #EFE7D9;background-image:{{ hourBg }};">
+                      <sc-for list="{{ col.blocks }}" as="s" hint-placeholder-count="3">
+                        <div style="position:absolute;left:4px;right:4px;top:{{ s.top }};height:{{ s.height }};border-radius:8px;padding:5px 8px;overflow:hidden;background:{{ s.bg }};border:1px solid {{ s.bd }};">
+                          <div style="font:700 11px/1.2 'Source Sans 3',sans-serif;color:{{ s.fg }};">{{ s.count }}</div>
+                          <div style="font:500 11px/1.35 'Source Sans 3',sans-serif;color:#4A4860;margin-top:2px;overflow-wrap:anywhere;">{{ s.who }}</div>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+            <p style="display:flex;gap:9px;align-items:baseline;margin:14px 0 0;font-size:13px;line-height:1.65;color:#4A4860;max-width:66em;text-wrap:pretty;"><span style="flex:none;color:#C9973A;font-size:11px;">◆</span><span>Every row is a real stretch of the day, so a 7:30–11:00 shift is one tall block and a 9:00–11:00 shift beside it only covers its own hours. Amber is short-handed, red is nobody yet, blank means that job is not running then.</span></p>
+            </sc-if>
+          </sc-if>
+
+          <sc-if value="{{ volPeopleView }}" hint-placeholder-val="{{ false }}">
+            <div style="border:1px solid #E7DFD1;border-radius:12px;background:#FFFDF9;overflow:hidden;">
+              <div style="display:grid;grid-template-columns:1.4fr .7fr 2.6fr;gap:14px;padding:11px 18px;background:#F4EFE5;border-bottom:1px solid #E7DFD1;">
+                <span style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;">Person</span>
+                <span style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;">On site</span>
+                <span style="font:600 10.5px/1 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;">Shifts</span>
+              </div>
+              <sc-for list="{{ peopleRows }}" as="p" hint-placeholder-count="12">
+                <div style="display:grid;grid-template-columns:1.4fr .7fr 2.6fr;gap:14px;padding:11px 18px;border-bottom:1px solid #EFE7D9;align-items:start;">
+                  <span style="font:600 13.5px/1.3 'Source Sans 3',sans-serif;color:#1A1A2A;">{{ p.name }}<span style="display:block;font:400 11.5px 'Source Sans 3',sans-serif;color:#8A8271;margin-top:2px;">{{ p.note }}</span></span>
+                  <span style="font:600 12.5px 'Source Sans 3',sans-serif;color:#4A4860;white-space:nowrap;">{{ p.span }}</span>
+                  <span style="font-size:12.5px;line-height:1.6;color:#4A4860;text-wrap:pretty;">{{ p.shifts }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <p style="display:flex;gap:9px;align-items:baseline;margin:14px 0 0;font-size:13px;line-height:1.65;color:#4A4860;max-width:66em;text-wrap:pretty;"><span style="flex:none;color:#C9973A;font-size:11px;">◆</span><span>This is the list to print for the welcome table: everybody coming {{ vol.dayWord }}, when they arrive, when they can go home.</span></p>
+          </sc-if>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ isOther }}" hint-placeholder-val="{{ false }}">
+        <section style="padding:0 26px 40px;max-width:1180px;">
+          <header style="margin-bottom:18px;">
+            <h1 style="font:500 25px/1.2 'Lora',Georgia,serif;color:#1D3557;margin:0;">{{ otherTitle }}</h1>
+            <p style="margin:6px 0 0;font-size:13.5px;line-height:1.5;color:#6A6858;max-width:56em;text-wrap:pretty;">{{ otherPurpose }}</p>
+          </header>
+          <div style="border:1px solid #E7DFD1;border-radius:12px;background:#FAF7F1;padding:34px 18px;text-align:center;">
+            <p style="font:600 14px 'Source Sans 3',sans-serif;color:#4A4860;">Unchanged in this pass.</p>
+            <p style="font-size:13px;color:#8A8271;margin-top:5px;">This tab is exactly as it ships today — the work here is the Vendors and Volunteers tabs.</p>
+          </div>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ printing }}" hint-placeholder-val="{{ false }}">
+        <div data-shot="print" style="position:fixed;inset:0;background:#fff;z-index:200;overflow:auto;padding:34px 40px 60px;">
+          <div data-noprint="1" style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:22px;">
+            <span style="font:600 13px 'Source Sans 3',sans-serif;color:#8A8271;">Print preview — {{ printTitle }}</span>
+            <span style="display:flex;gap:8px;">
+              <button type="button" onClick="{{ onDoPrint }}" style="font:600 12.5px 'Source Sans 3',sans-serif;color:#F5E4C0;background:#1E2D4A;border:0;border-radius:8px;padding:9px 16px;cursor:pointer;">Print</button>
+              <button type="button" onClick="{{ onClosePrint }}" style="font:600 12.5px 'Source Sans 3',sans-serif;color:#1D3557;background:#fff;border:1px solid #E7DFD1;border-radius:8px;padding:9px 16px;cursor:pointer;">Close</button>
+            </span>
+          </div>
+          <sc-if value="{{ printHint }}" hint-placeholder-val="{{ false }}">
+            <div data-noprint="1" style="max-width:700px;margin:0 auto 22px;border:1px solid #EADCBE;background:#FAF0DC;color:#7A5B18;border-radius:10px;padding:11px 14px;font-size:13px;line-height:1.55;">Open this page in its own tab and press ⌘P / Ctrl-P — a print dialog cannot be opened from inside the preview frame.</div>
+          </sc-if>
+          <sc-if value="{{ printGrid }}" hint-placeholder-val="{{ false }}">
+            <div data-shot="printsheet" style="max-width:none;">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;border-bottom:2px solid #1D3557;padding-bottom:8px;margin-bottom:4px;">
+                <span style="font:500 20px/1.2 'Lora',Georgia,serif;color:#1D3557;">Who is where, hour by hour</span>
+                <span style="font:600 11px 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;">Timothy Christmas Market · {{ printDayLabel }}</span>
+              </div>
+              <p style="font-size:11.5px;color:#6A6858;margin-bottom:12px;">Green is covered, amber is short, red is nobody yet. Every bar starts and ends at its real time. Print landscape.</p>
+              <sc-if value="{{ printAxisTime }}" hint-placeholder-val="{{ false }}">
+                <div style="border:1px solid #1D3557;">
+                  <div style="display:flex;border-bottom:1px solid #1D3557;background:#F4EFE5;">
+                    <span style="flex:0 0 132px;font:700 9px/1.2 'Source Sans 3',sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#1D3557;padding:6px;">Job</span>
+                    <div style="flex:1;position:relative;height:22px;">
+                      <sc-for list="{{ pHourPcts }}" as="h" hint-placeholder-count="12">
+                        <span style="position:absolute;top:6px;left:{{ h.pct }};padding-left:3px;border-left:1px solid #C9C2B4;font:700 8.5px/1.2 'Source Sans 3',sans-serif;color:#1D3557;white-space:nowrap;">{{ h.label }}</span>
+                      </sc-for>
+                    </div>
+                  </div>
+                  <sc-for list="{{ pTracks }}" as="r" hint-placeholder-count="12">
+                    <div style="display:flex;border-top:1px solid #C9C2B4;">
+                      <span style="flex:0 0 132px;padding:4px 6px;font:700 8.5px/1.25 'Source Sans 3',sans-serif;color:#1A1A2A;overflow-wrap:anywhere;">{{ r.name }}</span>
+                      <div style="flex:1;position:relative;height:40px;background-image:{{ pHourBgH }};">
+                        <sc-for list="{{ r.blocks }}" as="s" hint-placeholder-count="3">
+                          <div style="position:absolute;top:2px;bottom:2px;left:{{ s.left }};width:{{ s.width }};border:1px solid {{ s.bd }};background:{{ s.bg }};border-radius:3px;padding:2px 4px;overflow:hidden;font:600 8px/1.25 'Source Sans 3',sans-serif;color:#1A1A2A;overflow-wrap:anywhere;">{{ s.text }}</div>
+                        </sc-for>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ printAxisJobs }}" hint-placeholder-val="{{ true }}">
+                <div style="border:1px solid #1D3557;">
+                  <div style="display:flex;border-bottom:1px solid #1D3557;background:#F4EFE5;">
+                    <span style="flex:0 0 54px;font:700 8.5px/1.2 'Source Sans 3',sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#1D3557;padding:5px 4px;">Time</span>
+                    <sc-for list="{{ pJobHeads }}" as="g" hint-placeholder-count="10">
+                      <span style="flex:1;min-width:0;font:700 7.5px/1.2 'Source Sans 3',sans-serif;color:#1D3557;padding:5px 3px;border-left:1px solid #C9C2B4;overflow-wrap:anywhere;">{{ g }}</span>
+                    </sc-for>
+                  </div>
+                  <div style="display:flex;height:{{ pvHeight }};">
+                    <div style="flex:0 0 54px;position:relative;background-image:{{ pHourBgV }};">
+                      <sc-for list="{{ pvHourLabels }}" as="h" hint-placeholder-count="12">
+                        <span style="position:absolute;left:4px;top:{{ h.top }};font:700 8px/1.2 'Source Sans 3',sans-serif;color:#1A1A2A;white-space:nowrap;">{{ h.label }}</span>
+                      </sc-for>
+                    </div>
+                    <sc-for list="{{ pvColumns }}" as="col" hint-placeholder-count="10">
+                      <div style="flex:1;min-width:0;position:relative;border-left:1px solid #C9C2B4;background-image:{{ pHourBgV }};">
+                        <sc-for list="{{ col.blocks }}" as="s" hint-placeholder-count="3">
+                          <div style="position:absolute;left:1px;right:1px;top:{{ s.top }};height:{{ s.height }};border:1px solid {{ s.bd }};background:{{ s.bg }};border-radius:3px;padding:1px 2px;overflow:hidden;font:600 7.5px/1.2 'Source Sans 3',sans-serif;color:#1A1A2A;overflow-wrap:anywhere;">{{ s.text }}</div>
+                        </sc-for>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-if>
+            </div>
+          </sc-if>
+          <sc-for list="{{ printSheets }}" as="sheet" hint-placeholder-count="2">
+            <div data-shot="printsheet" style="max-width:700px;margin:0 auto 44px;page-break-after:always;">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;border-bottom:2px solid #1D3557;padding-bottom:8px;margin-bottom:4px;">
+                <span style="font:500 22px/1.2 'Lora',Georgia,serif;color:#1D3557;">{{ sheet.title }}</span>
+                <span style="font:600 11px 'Source Sans 3',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8A8271;">Timothy Christmas Market</span>
+              </div>
+              <p style="font-size:12.5px;color:#6A6858;margin-bottom:16px;">{{ sheet.sub }}</p>
+              <sc-for list="{{ sheet.blocks }}" as="b" hint-placeholder-count="4">
+                <div style="margin-bottom:14px;">
+                  <div style="font:600 12.5px/1.3 'Source Sans 3',sans-serif;color:#1A1A2A;border-bottom:1px solid #E7DFD1;padding-bottom:4px;margin-bottom:6px;">{{ b.head }}</div>
+                  <sc-for list="{{ b.lines }}" as="l" hint-placeholder-count="3">
+                    <div style="display:grid;grid-template-columns:150px 1fr;gap:14px;font-size:13px;line-height:1.65;color:#1A1A2A;padding:2px 0;">
+                      <span style="color:#4A4860;">{{ l.left }}</span>
+                      <span style="text-wrap:pretty;">{{ l.right }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-for>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;density&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;comfortable&quot;,&quot;compact&quot;],&quot;default&quot;:&quot;comfortable&quot;,&quot;tsType&quot;:&quot;'comfortable' | 'compact'&quot;,&quot;section&quot;:&quot;Vendor table&quot;},&quot;showTodayCompare&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Vendor table&quot;},&quot;defaultVolView&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;job&quot;,&quot;time&quot;,&quot;grid&quot;,&quot;people&quot;],&quot;default&quot;:&quot;job&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Volunteers&quot;}}">
+const TONES = {
+  good: { bg:'#EDF0E4', fg:'#3F5424', bd:'#D3DCC2' },
+  warn: { bg:'#FAF0DC', fg:'#7A5B18', bd:'#EBD5A6' },
+  bad:  { bg:'#F7E4DE', fg:'#8C3A28', bd:'#E4C8C8' },
+  plain:{ bg:'#EFE7D9', fg:'#6A6858', bd:'#E0DACE' },
+};
+
+const CATEGORIES = ['Baked goods','Candles & soap','Jewelry','Wood','Textiles','Ornaments','Food & drink','Art & prints','Wreaths & greens','Other'];
+
+const VENDORS = [
+  { id:1, business:'Wanderlust Woodworks', names:'Tom & Judy Kessler', email:'tkessler@example.com', phone:'(314) 555-0142', city:'Affton, MO 63123', category:'Wood', sells:'Hand-turned bowls, cutting boards, and a small run of ornaments turned from a walnut that came down at our place.', food:false, tables:2, tableNo:'19/20', method:'card', status:'paid', dueCents:9299, paidCents:9299, checkNo:'', checkDate:'', notes:'Wants to be near an outlet for the small lathe demo.', returning:'Returning vendor', applied:'2026-08-02', signature:'Tom Kessler' },
+  { id:2, business:"Sweet Hilda's Bakery", names:'Hilda Vogt', email:'hilda.vogt@example.com', phone:'(314) 555-0198', city:'St. Louis, MO 63109', category:'Baked goods', sells:'Springerle, lebkuchen, and stollen baked the week of the market.', food:true, tables:1, tableNo:'4', method:'check', status:'unpaid', dueCents:4500, paidCents:null, checkNo:'', checkDate:'', notes:'', returning:'Returning vendor', applied:'2026-08-04', signature:'Hilda Vogt' },
+  { id:3, business:'Bee Line Apiary', names:'Marcus Dohrmann', email:'marcus@example.com', phone:'(636) 555-0117', city:"O'Fallon, MO 63366", category:'Food & drink', sells:'Raw honey, creamed honey, beeswax candles and lip balm.', food:true, tables:1, tableNo:'7', method:'check', status:'paid', dueCents:4500, paidCents:4500, checkNo:'1042', checkDate:'2026-08-12', notes:'Check came in the office mail.', returning:'Returning vendor', applied:'2026-08-05', signature:'Marcus Dohrmann' },
+  { id:4, business:'Prairie Thread Co.', names:'Anna Lammert', email:'anna.lammert@example.com', phone:'(314) 555-0164', city:'Webster Groves, MO 63119', category:'Textiles', sells:'Quilted table runners, tea towels, and potholders.', food:false, tables:1, tableNo:'12', method:'card', status:'paid', dueCents:4665, paidCents:4665, checkNo:'', checkDate:'', notes:'', returning:'First year', applied:'2026-08-06', signature:'Anna Lammert' },
+  { id:5, business:'Little Bear Knits', names:'Steph Ruhl', email:'sruhl@example.com', phone:'(314) 555-0125', city:'Kirkwood, MO 63122', category:'Textiles', sells:'Knitted hats, mittens and baby blankets.', food:false, tables:1, tableNo:'', method:'card', status:'unpaid', dueCents:4665, paidCents:null, checkNo:'', checkDate:'', notes:'', returning:'First year', applied:'2026-08-07', signature:'Stephanie Ruhl' },
+  { id:6, business:'Glass Garden', names:'Renee Ostermann', email:'renee.o@example.com', phone:'(314) 555-0173', city:'St. Louis, MO 63116', category:'Art & prints', sells:'Stained glass panels and suncatchers, plus a few repaired antique windows.', food:false, tables:2, tableNo:'22/23', method:'card', status:'paid', dueCents:9299, paidCents:9299, checkNo:'', checkDate:'', notes:'Needs a wall behind her — panels hang.', returning:'Returning vendor', applied:'2026-08-07', signature:'Renee Ostermann' },
+  { id:7, business:'Kringle Kitchen', names:'Dale Fischer', email:'dale.fischer@example.com', phone:'(314) 555-0188', city:'Sunset Hills, MO 63127', category:'Baked goods', sells:'Kolaches and cinnamon rolls, baked on site in the church kitchen if allowed.', food:true, tables:1, tableNo:'2', method:'check', status:'unpaid', dueCents:4500, paidCents:null, checkNo:'', checkDate:'', notes:'Asked about kitchen access — needs a health dept answer.', returning:'First year', applied:'2026-08-09', signature:'Dale Fischer' },
+  { id:8, business:'Fischer Family Farm', names:'Ben Fischer', email:'ben@example.com', phone:'(636) 555-0151', city:'Wentzville, MO 63385', category:'Wreaths & greens', sells:'Fresh wreaths, swags, and table centerpieces cut that week.', food:false, tables:3, tableNo:'30/31/32', method:'card', status:'paid', dueCents:13934, paidCents:13934, checkNo:'', checkDate:'', notes:'Arriving early — truck unload at the north door.', returning:'Returning vendor', applied:'2026-08-10', signature:'Ben Fischer' },
+  { id:9, business:'Tin Star Metalwork', names:'Cal Bruns', email:'cal.bruns@example.com', phone:'(314) 555-0139', city:'Maplewood, MO 63143', category:'Other', sells:'Cut metal signs, coat hooks, and bottle openers.', food:false, tables:1, tableNo:'15', method:'card', status:'unpaid', dueCents:4665, paidCents:null, checkNo:'', checkDate:'', notes:'', returning:'First year', applied:'2026-08-11', signature:'Calvin Bruns' },
+  { id:10, business:'Sudsy Sheep Soaps', names:'Marla Bruns', email:'marla.bruns@example.com', phone:'(314) 555-0110', city:'Affton, MO 63123', category:'Candles & soap', sells:'Goat milk soap, lotion bars, and bath salts.', food:false, tables:1, tableNo:'9', method:'card', status:'paid', dueCents:4665, paidCents:4665, checkNo:'', checkDate:'', notes:'', returning:'Returning vendor', applied:'2026-08-12', signature:'Marla Bruns' },
+  { id:11, business:'Nutcracker Nook', names:'Ellen Ritter', email:'ellen.ritter@example.com', phone:'(314) 555-0177', city:'Affton, MO 63123', category:'Ornaments', sells:'German glass ornaments, nutcrackers, and pyramids brought back from Seiffen.', food:false, tables:2, tableNo:'17/18', method:'card', status:'paid', dueCents:9299, paidCents:9299, checkNo:'', checkDate:'', notes:'', returning:'Returning vendor', applied:'2026-08-12', signature:'Ellen Ritter' },
+  { id:12, business:"St. Nick's Sweets", names:'Joyce Lammert', email:'joyce.l@example.com', phone:'(314) 555-0146', city:'St. Louis, MO 63128', category:'Baked goods', sells:'Fudge, peanut brittle and caramels, boxed for gifts.', food:true, tables:1, tableNo:'5', method:'check', status:'paid', dueCents:4500, paidCents:4500, checkNo:'877', checkDate:'2026-08-03', notes:'', returning:'Returning vendor', applied:'2026-07-30', signature:'Joyce Lammert' },
+  { id:13, business:'Painted Pony Studio', names:'Karen Weber', email:'kweber@example.com', phone:'(314) 555-0102', city:'Ballwin, MO 63021', category:'Art & prints', sells:'Watercolor prints and greeting cards of St. Louis churches.', food:false, tables:1, tableNo:'', method:'card', status:'dropped', dueCents:4665, paidCents:null, checkNo:'', checkDate:'', notes:'Emailed 8/14 — a family wedding that weekend.', returning:'First year', applied:'2026-08-01', signature:'Karen Weber' },
+  { id:14, business:'Alpine Alpacas', names:'Rick & Sue Vogel', email:'rvogel@example.com', phone:'(314) 555-0191', city:'Affton, MO 63123', category:'Textiles', sells:'Alpaca socks, yarn, and felted insoles.', food:false, tables:1, tableNo:'11', method:'check', status:'waived', dueCents:4500, paidCents:null, checkNo:'', checkDate:'', notes:'Fee waived — Rick runs setup and teardown both days.', returning:'Returning vendor', applied:'2026-08-02', signature:'Rick Vogel' },
+];
+
+const LEADS = {
+  'Move stuff out of storage room':'Rick Vogel', 'Set up tents':'Rick Vogel', 'Help Rick run power cords':'Rick Vogel',
+  'Move Glasses':'Ben Ostermann', 'Set up Tables and Chairs':'Rick Vogel', 'Want free lunch?':'Marla Bruns',
+  'Help Rick install lights':'Rick Vogel', 'Potato Salad Prep':'Marla Bruns', 'Set up Payment System':'Karen Dohrmann',
+  'Signs':'Ben Ostermann', 'Propane Heaters':'Rick Vogel',
+  'Load-In Traffic Control':'Ben Ostermann', 'Vendor Directions':'Joyce Lammert', 'German Potato Salad Makers':'Marla Bruns',
+  'Kitchen':'Marla Bruns', 'Grill Setup':'Dale Fischer', 'Hot Drinks Setup':'Ellen Ritter', 'Go-Fer':'Ben Ostermann',
+  'Cashiers':'Karen Dohrmann', 'Greeters':'Joyce Lammert', 'Grill Brats and Franks':'Dale Fischer', 'Hot Drinks':'Ellen Ritter',
+  'Sales Assistant':'Karen Dohrmann', 'Ticket Sales / Info Booth':'Karen Dohrmann', 'Trash':'Ben Ostermann',
+  'Music':'Pastor Andrew', 'Kitchen Cleanup':'Marla Bruns', 'Knockdown Boxes':'Ben Ostermann', 'Debris Pickup':'Ben Ostermann',
+  'Misc Labor':'Rick Vogel', 'Power and Light Teardown':'Rick Vogel', 'Tear Down Tables and Chairs':'Rick Vogel', 'Tent Teardown':'Rick Vogel',
+};
+
+const S = (job, start, end, needed, people) => ({ job, start, end, needed, people: people || [] });
+
+const FRI = [
+  S('Move stuff out of storage room','9:00 AM','11:00 AM',4,['Rick Vogel']),
+  S('Set up tents','9:00 AM','11:00 AM',18,['Ben Ostermann','Cal Bruns','Tom Kessler','Dale Fischer','Kurt Ahlemeyer','Nathan Ruhl']),
+  S('Help Rick run power cords','11:00 AM','12:00 PM',1,['Kurt Ahlemeyer']),
+  S('Move Glasses','11:00 AM','12:00 PM',2,['Joyce Lammert']),
+  S('Set up Tables and Chairs','11:00 AM','12:00 PM',6,['Ben Ostermann','Cal Bruns','Nathan Ruhl','Tom Kessler']),
+  S('Want free lunch?','12:00 PM','1:00 PM',30,['Marla Bruns','Ellen Ritter','Joyce Lammert','Rick Vogel','Ben Ostermann','Cal Bruns','Tom Kessler','Nathan Ruhl','Kurt Ahlemeyer','Dale Fischer']),
+  S('Help Rick install lights','1:00 PM','3:00 PM',1,[]),
+  S('Potato Salad Prep','1:00 PM','3:00 PM',2,['Marla Bruns','Sue Vogel']),
+  S('Set up Payment System','1:00 PM','2:00 PM',2,['Karen Dohrmann']),
+  S('Signs','1:00 PM','2:00 PM',2,['Joyce Lammert','Ellen Ritter']),
+  S('Propane Heaters','3:00 PM','4:00 PM',1,['Rick Vogel']),
+];
+
+const SAT = [
+  S('Load-In Traffic Control','7:30 AM','11:00 AM',2,['Ben Ostermann','Kurt Ahlemeyer']),
+  S('Vendor Directions','7:30 AM','11:00 AM',2,['Joyce Lammert']),
+  S('German Potato Salad Makers','9:00 AM','11:00 AM',2,['Marla Bruns','Sue Vogel']),
+  S('Kitchen','9:00 AM','11:00 AM',3,['Ellen Ritter','Hilda Vogt']),
+  S('Grill Setup','10:00 AM','11:00 AM',3,['Dale Fischer','Cal Bruns']),
+  S('Hot Drinks Setup','10:00 AM','11:00 AM',3,['Anna Lammert','Steph Ruhl']),
+  S('Go-Fer','10:00 AM','12:00 PM',1,['Nathan Ruhl']),
+  S('Cashiers','10:30 AM','12:30 PM',2,['Karen Dohrmann','Renee Ostermann']),
+  S('German Potato Salad Makers','11:00 AM','1:00 PM',2,['Marla Bruns']),
+  S('Greeters','11:00 AM','1:00 PM',2,['Joyce Lammert','Judy Kessler']),
+  S('Grill Brats and Franks','11:00 AM','1:00 PM',3,['Dale Fischer']),
+  S('Hot Drinks','11:00 AM','1:00 PM',4,['Anna Lammert','Steph Ruhl']),
+  S('Kitchen','11:00 AM','1:00 PM',3,['Ellen Ritter','Hilda Vogt','Sue Vogel']),
+  S('Sales Assistant','11:00 AM','1:00 PM',2,['Renee Ostermann']),
+  S('Ticket Sales / Info Booth','11:00 AM','1:00 PM',2,['Karen Dohrmann']),
+  S('Trash','11:00 AM','1:00 PM',1,['Nathan Ruhl']),
+  S('Cashiers','12:30 PM','3:00 PM',2,['Karen Dohrmann']),
+  S('German Potato Salad Makers','1:00 PM','3:00 PM',2,[]),
+  S('Greeters','1:00 PM','3:00 PM',2,['Judy Kessler','Tom Kessler']),
+  S('Grill Brats and Franks','1:00 PM','3:00 PM',3,['Cal Bruns']),
+  S('Hot Drinks','1:00 PM','3:00 PM',4,['Steph Ruhl']),
+  S('Kitchen','1:00 PM','3:00 PM',3,['Marla Bruns','Hilda Vogt']),
+  S('Sales Assistant','1:00 PM','3:00 PM',2,['Renee Ostermann','Anna Lammert']),
+  S('Ticket Sales / Info Booth','1:00 PM','3:00 PM',2,[]),
+  S('Trash','1:00 PM','3:00 PM',1,[]),
+  S('Cashiers','3:00 PM','5:00 PM',2,['Karen Dohrmann','Judy Kessler']),
+  S('German Potato Salad Makers','3:00 PM','5:00 PM',2,['Sue Vogel']),
+  S('Greeters','3:00 PM','5:00 PM',2,['Joyce Lammert']),
+  S('Grill Brats and Franks','3:00 PM','5:00 PM',3,['Dale Fischer']),
+  S('Hot Drinks','3:00 PM','5:00 PM',4,['Anna Lammert']),
+  S('Kitchen','3:00 PM','5:00 PM',3,['Ellen Ritter','Hilda Vogt']),
+  S('Music','3:00 PM','4:00 PM',2,['Pastor Andrew','Nathan Ruhl']),
+  S('Sales Assistant','3:00 PM','5:00 PM',2,['Renee Ostermann']),
+  S('Ticket Sales / Info Booth','3:00 PM','5:00 PM',2,[]),
+  S('Trash','3:00 PM','5:00 PM',1,['Ben Ostermann']),
+  S('Kitchen Cleanup','5:00 PM','6:30 PM',3,['Marla Bruns','Ellen Ritter']),
+  S('Knockdown Boxes','5:00 PM','7:00 PM',2,['Cal Bruns']),
+  S('Music','5:00 PM','6:00 PM',2,['Pastor Andrew']),
+  S('Trash','5:00 PM','6:00 PM',1,['Nathan Ruhl']),
+  S('Debris Pickup','5:00 PM','7:00 PM',2,['Ben Ostermann']),
+  S('Misc Labor','6:00 PM','7:00 PM',4,['Kurt Ahlemeyer','Tom Kessler']),
+  S('Power and Light Teardown','6:00 PM','7:00 PM',2,['Rick Vogel']),
+  S('Tear Down Tables and Chairs','6:00 PM','7:00 PM',6,['Cal Bruns','Nathan Ruhl','Ben Ostermann']),
+  S('Tent Teardown','6:30 PM','7:30 PM',12,['Rick Vogel','Kurt Ahlemeyer','Tom Kessler','Dale Fischer','Cal Bruns']),
+];
+
+const mins = (t) => {
+  const m = /^(\d+):(\d+)\s*(AM|PM)$/.exec(t.trim());
+  if (!m) return 0;
+  let h = Number(m[1]) % 12;
+  if (m[3] === 'PM') h += 12;
+  return h * 60 + Number(m[2]);
+};
+const money = (c) => (c == null ? '—' : '$' + (c / 100).toFixed(2));
+const shortDate = (iso) => {
+  if (!iso) return '';
+  const p = String(iso).split('-');
+  if (p.length < 3) return iso;
+  const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return M[Number(p[1]) - 1] + ' ' + Number(p[2]);
+};
+const compact = (t, n) => {
+  const s = String(t || '').replace(/\s+/g, ' ').trim();
+  return s.length > n ? s.slice(0, n - 1) + '…' : s;
+};
+
+const TABS = [
+  { key:'vendors', label:'Vendors' },
+  { key:'pages', label:'Page & copy' },
+  { key:'money', label:'Money & dates' },
+  { key:'volunteers', label:'Volunteers' },
+  { key:'photos', label:'Photos' },
+];
+
+const OTHER = {
+  pages: { title:'Page & copy', purpose:'The market’s own public pages — the event page and the vendor application — edited in the page editor.' },
+  money: { title:'Money & dates', purpose:'What the market costs a vendor, when it runs, and where the money lands. Changed here once a year, and every page reads it from here.' },
+  photos: { title:'Photos', purpose:'The market’s photographs, and what each one says to somebody who cannot see it.' },
+};
+
+class Component extends DCLogic {
+  state = {
+    tab: 'vendors',
+    showToday: false,
+    sort: { key: 'category', dir: 1 },
+    filter: 'all',
+    query: '',
+    open: {},
+    vendors: VENDORS.map((v) => ({ ...v })),
+    day: 'sat',
+    view: null,
+    print: null,
+    printJob: '',
+    gridAxis: 'jobs',
+  };
+
+  get view() { return this.state.view || this.props.defaultVolView || 'job'; }
+
+  vendorAt(id) { return this.state.vendors.find((v) => String(v.id) === String(id)); }
+
+  patch = (id, fields) => {
+    this.setState((s) => ({
+      vendors: s.vendors.map((v) => (String(v.id) === String(id) ? { ...v, ...fields } : v)),
+    }));
+  };
+
+  onCell = (e) => {
+    const el = e.target;
+    const id = el.dataset.id;
+    const f = el.dataset.field;
+    const val = el.value;
+    if (f === 'tables') {
+      this.patch(id, { tables: Math.max(1, Math.min(9, parseInt(val, 10) || 1)) });
+    } else if (f === 'paid') {
+      const trimmed = String(val).trim();
+      this.patch(id, { paidCents: trimmed === '' ? null : Math.round(Number(trimmed.replace(/[^0-9.]/g, '')) * 100) });
+    } else if (f === 'status') {
+      this.patch(id, { status: val });
+    } else if (f === 'checkNo' || f === 'checkDate') {
+      const v = this.vendorAt(id);
+      const next = { [f]: val };
+      const other = f === 'checkNo' ? v.checkDate : v.checkNo;
+      if (val && !other && f === 'checkNo') next.checkDate = new Date().toISOString().slice(0, 10);
+      if ((val || other) && v.status === 'unpaid') { next.status = 'paid'; next.paidCents = v.dueCents; }
+      this.patch(id, next);
+    } else if (f === 'category') {
+      this.patch(id, { category: val });
+    } else if (f === 'tableNo') {
+      this.patch(id, { tableNo: val });
+    } else if (f === 'notes') {
+      this.patch(id, { notes: val });
+    }
+  };
+
+  onCheckIn = (e) => {
+    const id = e.currentTarget.dataset.id;
+    const v = this.vendorAt(id);
+    this.patch(id, {
+      checkNo: v.checkNo || '—',
+      checkDate: v.checkDate || new Date().toISOString().slice(0, 10),
+      status: 'paid',
+      paidCents: v.dueCents,
+    });
+  };
+
+  dayShifts() { return this.state.day === 'fri' ? FRI : SAT; }
+
+  jobsFor(list) {
+    const map = new Map();
+    list.forEach((sh) => {
+      if (!map.has(sh.job)) map.set(sh.job, { name: sh.job, lead: LEADS[sh.job] || 'Unassigned', shifts: [] });
+      map.get(sh.job).shifts.push(sh);
+    });
+    const out = [...map.values()].map((j) => {
+      j.shifts.sort((a, b) => mins(a.start) - mins(b.start));
+      const needed = j.shifts.reduce((a, s) => a + s.needed, 0);
+      const filled = j.shifts.reduce((a, s) => a + s.people.length, 0);
+      return { ...j, needed, filled, short: Math.max(0, needed - filled) };
+    });
+    out.sort((a, b) => (b.short - a.short) || a.name.localeCompare(b.name));
+    return out;
+  }
+
+  slotsFor(list) {
+    const map = new Map();
+    list.forEach((sh) => {
+      const k = sh.start + '|' + sh.end;
+      if (!map.has(k)) map.set(k, { start: sh.start, end: sh.end, entries: [] });
+      map.get(k).entries.push(sh);
+    });
+    const out = [...map.values()];
+    out.forEach((s) => s.entries.sort((a, b) => a.job.localeCompare(b.job)));
+    out.sort((a, b) => (mins(a.start) - mins(b.start)) || (mins(a.end) - mins(b.end)));
+    return out;
+  }
+
+  peopleFor(list) {
+    const map = new Map();
+    list.forEach((sh) => sh.people.forEach((p) => {
+      if (!map.has(p)) map.set(p, []);
+      map.get(p).push(sh);
+    }));
+    const out = [...map.entries()].map(([name, shifts]) => {
+      shifts.sort((a, b) => mins(a.start) - mins(b.start));
+      const from = shifts[0].start;
+      const to = shifts.reduce((acc, s) => (mins(s.end) > mins(acc) ? s.end : acc), shifts[0].end);
+      const hours = shifts.reduce((a, s) => a + (mins(s.end) - mins(s.start)), 0) / 60;
+      return { name, shifts, from, to, hours };
+    });
+    out.sort((a, b) => a.name.localeCompare(b.name));
+    return out;
+  }
+
+  onTab = (e) => this.setState({ tab: e.currentTarget.dataset.key });
+  onToggleToday = () => this.setState((s) => ({ showToday: !s.showToday }));
+  onSort = (e) => {
+    const key = e.currentTarget.dataset.key;
+    if (!key) return;
+    this.setState((s) => ({ sort: { key, dir: s.sort.key === key ? -s.sort.dir : 1 } }));
+  };
+  onFilter = (e) => this.setState({ filter: e.currentTarget.dataset.value });
+  onQuery = (e) => this.setState({ query: e.target.value });
+  onExpand = (e) => {
+    const id = e.currentTarget.dataset.id;
+    this.setState((s) => ({ open: { ...s.open, [id]: !s.open[id] } }));
+  };
+  onDay = (e) => this.setState({ day: e.currentTarget.dataset.value });
+  onView = (e) => this.setState({ view: e.currentTarget.dataset.value });
+  onPrint = (e) => this.setState({ print: e.currentTarget.dataset.kind, printJob: '' });
+  onPrintJob = (e) => this.setState({ print: 'leads', printJob: e.currentTarget.dataset.job });
+  onClosePrint = () => this.setState({ print: null, printJob: '' });
+  // ⚠ window.print() opens a MODAL dialog that blocks the renderer thread. In an
+  // embedded preview there is no way to dismiss it, so the whole page freezes —
+  // only fire it when this page is the top-level document.
+  onDoPrint = () => {
+    if (typeof window === 'undefined') return;
+    if (window.top !== window) { this.setState({ printHint: true }); return; }
+    window.print();
+  };
+  onAxis = (e) => this.setState({ gridAxis: e.currentTarget.dataset.value });
+
+  onCsv = () => {
+    const q = (v) => {
+      const s = String(v == null ? '' : v);
+      const safe = /^[=+\-@\t\r]/.test(s) ? "'" + s : s;
+      return '"' + safe.replace(/"/g, '""') + '"';
+    };
+    const head = ['Day', 'Date', 'Job', 'Job lead', 'Start', 'End', 'Hours', 'Person', 'Spots filled', 'Spots needed', 'Status'];
+    const lines = [head.map(q).join(',')];
+    [['Friday', '2026-12-04', FRI], ['Saturday', '2026-12-05', SAT]].forEach(([dayName, date, list]) => {
+      list.slice().sort((a, b) => mins(a.start) - mins(b.start) || a.job.localeCompare(b.job)).forEach((s) => {
+        const hours = ((mins(s.end) - mins(s.start)) / 60).toFixed(2);
+        const lead = LEADS[s.job] || '';
+        const base = [dayName, date, s.job, lead, s.start, s.end, hours];
+        const status = s.people.length >= s.needed ? 'Full' : s.people.length === 0 ? 'Nobody yet' : 'Short';
+        if (s.people.length) {
+          s.people.forEach((p) => lines.push(base.concat([p, s.people.length, s.needed, status]).map(q).join(',')));
+        }
+        for (let i = s.people.length; i < s.needed; i++) {
+          lines.push(base.concat(['(open)', s.people.length, s.needed, status]).map(q).join(','));
+        }
+      });
+    });
+    const csv = lines.join('\r\n');
+    if (typeof window === 'undefined') return;
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'christmas-market-volunteers.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  };
+
+  printSheets() {
+    const kind = this.state.print;
+    if (kind === 'grid') return [];
+    const list = this.dayShifts();
+    const dayLabel = this.state.day === 'fri' ? 'Friday, December 4' : 'Saturday, December 5';
+    if (kind === 'leads') {
+      let jobs = this.jobsFor(list);
+      if (this.state.printJob) jobs = jobs.filter((j) => j.name === this.state.printJob);
+      jobs.sort((a, b) => a.name.localeCompare(b.name));
+      return jobs.map((j) => ({
+        title: j.name,
+        sub: dayLabel + ' · lead: ' + j.lead + ' · ' + j.filled + ' of ' + j.needed + ' spots filled',
+        blocks: [{
+          head: 'Your people',
+          lines: j.shifts.map((s) => ({
+            left: s.start + ' – ' + s.end,
+            right: (s.people.length ? s.people.join(', ') : 'Nobody yet') + '  (' + s.people.length + ' of ' + s.needed + ')',
+          })),
+        }],
+      }));
+    }
+    if (kind === 'time') {
+      return [{
+        title: 'Master list by time slot',
+        sub: dayLabel,
+        blocks: this.slotsFor(list).map((s) => ({
+          head: s.start + ' – ' + s.end,
+          lines: s.entries.map((e) => ({
+            left: e.job,
+            right: (e.people.length ? e.people.join(', ') : 'OPEN') + '  (' + e.people.length + '/' + e.needed + ')',
+          })),
+        })),
+      }];
+    }
+    const people = this.peopleFor(list);
+    return [{
+      title: 'Everybody coming — master list',
+      sub: dayLabel + ' · ' + people.length + ' people',
+      blocks: [{
+        head: 'Alphabetical, with arrival and last shift',
+        lines: people.map((p) => ({
+          left: p.name,
+          right: p.from + ' – ' + p.to + ' · ' + p.shifts.map((s) => s.job + ' ' + s.start).join(', '),
+        })),
+      }],
+    }];
+  }
+
+  renderVals() {
+    const st = this.state;
+    const density = this.props.density || 'comfortable';
+
+    const cat = (v) => v.category || 'Other';
+    const decorated = st.vendors.map((v) => {
+      const checkIn = v.method === 'check' && !!(v.checkNo || v.checkDate);
+      const checkPending = v.method === 'check' && !checkIn && v.status !== 'dropped' && v.status !== 'waived';
+      return { ...v, checkIn, checkPending };
+    });
+
+    const counts = {
+      total: decorated.length,
+      tables: decorated.filter((v) => v.status !== 'dropped').reduce((a, v) => a + v.tables, 0),
+      unpaid: decorated.filter((v) => v.status === 'unpaid').length,
+      unpaidCard: decorated.filter((v) => v.status === 'unpaid' && v.method === 'card').length,
+      checkOut: decorated.filter((v) => v.checkPending).length,
+      collected: money(decorated.reduce((a, v) => a + (v.paidCents || 0), 0)),
+      asked: money(decorated.filter((v) => v.status !== 'dropped').reduce((a, v) => a + v.dueCents, 0)),
+    };
+
+    const FILTERS = [
+      { label:'All', value:'all' },
+      { label:'Not paid yet', value:'unpaid' },
+      { label:'Awaiting check', value:'check' },
+      { label:'Paid', value:'paid' },
+      { label:'Fee waived', value:'waived' },
+      { label:'Dropped out', value:'dropped' },
+    ];
+    const filterBtns = FILTERS.map((f) => {
+      const on = st.filter === f.value;
+      return {
+        label: f.label, value: f.value,
+        bg: on ? '#E7EEF7' : '#FAF7F1',
+        fg: on ? '#1E2D4A' : '#4A4860',
+        border: on ? '2px solid #1E2D4A' : '1px solid #E7DFD1',
+        pad: on ? '6px 11px' : '7px 12px',
+      };
+    });
+
+    const q = st.query.trim().toLowerCase();
+    let rows = decorated.filter((v) => {
+      if (st.filter === 'unpaid' && v.status !== 'unpaid') return false;
+      if (st.filter === 'paid' && v.status !== 'paid') return false;
+      if (st.filter === 'waived' && v.status !== 'waived') return false;
+      if (st.filter === 'dropped' && v.status !== 'dropped') return false;
+      if (st.filter === 'check' && !v.checkPending) return false;
+      if (!q) return true;
+      return (v.business + ' ' + v.names + ' ' + v.email + ' ' + v.sells + ' ' + v.category + ' ' + v.tableNo).toLowerCase().includes(q);
+    });
+
+    const key = st.sort.key;
+    const dir = st.sort.dir;
+    rows = rows.slice().sort((a, b) => {
+      let r = 0;
+      if (key === 'business') r = a.business.localeCompare(b.business);
+      else if (key === 'category') r = cat(a).localeCompare(cat(b)) || a.business.localeCompare(b.business);
+      else if (key === 'tables') r = a.tables - b.tables;
+      else if (key === 'tableNo') r = String(a.tableNo).localeCompare(String(b.tableNo), undefined, { numeric: true });
+      else if (key === 'status') r = a.status.localeCompare(b.status);
+      else if (key === 'check') r = (a.checkIn ? 2 : a.checkPending ? 1 : 0) - (b.checkIn ? 2 : b.checkPending ? 1 : 0);
+      else if (key === 'sells') r = a.sells.localeCompare(b.sells);
+      return r * dir;
+    });
+
+    const HEADS = [
+      { key:'business', label:'Vendor' },
+      { key:'category', label:'Category' },
+      { key:'sells', label:'Sells' },
+      { key:'tables', label:'Tbls' },
+      { key:'tableNo', label:'Table #' },
+      { key:'status', label:'Payment' },
+      { key:'check', label:'Check or cash' },
+    ];
+    const headers = HEADS.map((h) => ({
+      key: h.key, label: h.label, cursor: 'pointer',
+      color: st.sort.key === h.key ? '#1E2D4A' : '#8A8271',
+      caret: st.sort.key === h.key ? (dir > 0 ? '▲' : '▼') : '',
+    }));
+
+    const toneFor = (v) => {
+      if (v.status === 'paid') return TONES.good;
+      if (v.status === 'waived') return TONES.plain;
+      if (v.status === 'dropped') return TONES.plain;
+      return v.method === 'check' ? TONES.warn : TONES.bad;
+    };
+    const labelFor = (v) => {
+      if (v.status === 'paid') return 'Paid';
+      if (v.status === 'waived') return 'Fee waived';
+      if (v.status === 'dropped') return 'Dropped out';
+      return v.method === 'check' ? 'Awaiting check' : 'Not paid yet';
+    };
+
+    const rowVals = rows.map((v) => ({
+      id: v.id,
+      business: v.business,
+      sub: v.names + ' · ' + v.email,
+      category: v.category,
+      sells: v.sells,
+      sellsShort: compact(v.sells, density === 'compact' ? 38 : 54) + (v.food ? ' · food' : ''),
+      tables: v.tables,
+      tableNo: v.tableNo,
+      status: v.status,
+      tone: toneFor(v),
+      statusLabel: labelFor(v),
+      moneyLine: v.paidCents == null ? 'asked ' + money(v.dueCents) : money(v.paidCents) + ' recorded',
+      checkPending: v.checkPending,
+      checkIn: v.checkIn,
+      payingCard: v.method === 'card',
+      checkNo: v.checkNo,
+      checkDate: v.checkDate,
+      checkNoLabel: v.checkNo && v.checkNo !== '—' ? '#' + v.checkNo : '(no number)',
+      checkDateLabel: shortDate(v.checkDate) || 'today',
+      notes: v.notes,
+      names: v.names,
+      email: v.email,
+      phone: v.phone,
+      address: v.city,
+      returning: v.returning,
+      applied: shortDate(v.applied),
+      signature: v.signature,
+      due: money(v.dueCents),
+      dueValue: (v.dueCents / 100).toFixed(2),
+      paidValue: v.paidCents == null ? '' : (v.paidCents / 100).toFixed(2),
+      methodLabel: v.method === 'check' ? 'Paying by check or cash — flat fee, no card charge added' : 'Paying by card, online',
+      foodLine: v.food ? 'Selling food — the health department requirements are theirs.' : '',
+      caret: st.open[v.id] ? '▲' : '▼',
+      open: !!st.open[v.id],
+      rowBg: v.status === 'dropped' ? '#FAF7F1' : '#FFFDF9',
+    }));
+
+    const todayRows = decorated.map((v) => ({
+      business: v.business,
+      sub: v.names + ' · ' + v.email,
+      sellsShort: compact(v.sells, 80) + (v.food ? ' · food' : ''),
+      tablesCell: v.tables + (v.tableNo ? ' · #' + v.tableNo : ''),
+      tone: toneFor(v),
+      statusLabel: labelFor(v),
+      isUnpaid: v.status === 'unpaid',
+      due: money(v.dueCents),
+    }));
+
+    const list = this.dayShifts();
+    const jobsRaw = this.jobsFor(list);
+    const slotsRaw = this.slotsFor(list);
+    const peopleRaw = this.peopleFor(list);
+
+    const countColor = (filled, needed) => (filled >= needed ? '#3F5424' : filled === 0 ? '#8C3A28' : '#7A5B18');
+    const jobs = jobsRaw.map((j) => ({
+      name: j.name,
+      lead: j.lead,
+      pill: j.short > 0 ? j.short + ' still needed' : 'Full',
+      tone: j.short > 0 ? (j.filled === 0 ? TONES.bad : TONES.warn) : TONES.good,
+      shifts: j.shifts.map((s) => ({
+        time: s.start.replace(':00', '') + '–' + s.end.replace(':00', ''),
+        count: s.people.length + '/' + s.needed,
+        countColor: countColor(s.people.length, s.needed),
+        who: s.people.length ? s.people.join(', ') : 'Nobody yet — this shift is entirely open.',
+      })),
+    }));
+
+    const slots = slotsRaw.map((s) => {
+      const needed = s.entries.reduce((a, e) => a + e.needed, 0);
+      const filled = s.entries.reduce((a, e) => a + e.people.length, 0);
+      const short = Math.max(0, needed - filled);
+      return {
+        start: s.start, end: s.end,
+        pill: short > 0 ? short + ' short' : 'Covered',
+        tone: short > 0 ? TONES.warn : TONES.good,
+        entries: s.entries.map((e) => ({
+          job: e.job,
+          count: e.people.length + '/' + e.needed,
+          countColor: countColor(e.people.length, e.needed),
+          who: e.people.length ? e.people.join(', ') : 'Open',
+          bg: e.people.length >= e.needed ? '#FFFDF9' : e.people.length === 0 ? '#FDF3EE' : '#FDF7EA',
+        })),
+      };
+    });
+
+    const gridJobs = [...new Set(list.map((s) => s.job))].sort((a, b) => a.localeCompare(b));
+    const gridCols = '124px repeat(' + gridJobs.length + ',minmax(104px,1fr))';
+
+    const bounds = [...new Set(list.flatMap((s) => [mins(s.start), mins(s.end)]))].sort((a, b) => a - b);
+    const boundLabel = (m) => {
+      const h24 = Math.floor(m / 60);
+      const mm = m % 60;
+      const h = ((h24 + 11) % 12) + 1;
+      return h + (mm ? ':' + String(mm).padStart(2, '0') : '') + (h24 >= 12 ? ' PM' : ' AM');
+    };
+    const HOUR_H = 78;
+    const HOUR_W = 148;
+    const hourStart = Math.floor(bounds[0] / 60);
+    const hourEnd = Math.ceil(bounds[bounds.length - 1] / 60);
+    const hourCount = Math.max(1, hourEnd - hourStart);
+    const timelineHeight = hourCount * HOUR_H + 'px';
+    const hourBg = 'repeating-linear-gradient(#EFE7D9 0 1px, transparent 1px ' + HOUR_H + 'px)';
+    const timelineHourLabels = Array.from({ length: hourCount }, (_, i) => ({
+      top: i * HOUR_H + 'px',
+      label: boundLabel((hourStart + i) * 60),
+    }));
+    const timelineColumns = gridJobs.map((job) => ({
+      blocks: list.filter((s) => s.job === job).map((s) => {
+        const ok = s.people.length >= s.needed;
+        const none = s.people.length === 0;
+        const top = (mins(s.start) - hourStart * 60) * HOUR_H / 60;
+        const h = (mins(s.end) - mins(s.start)) * HOUR_H / 60;
+        return {
+          top: Math.round(top + 2) + 'px',
+          height: Math.round(h - 4) + 'px',
+          bg: ok ? '#EDF0E4' : none ? '#FBEDE7' : '#FAF0DC',
+          bd: ok ? '#D3DCC2' : none ? '#E4C8C8' : '#EBD5A6',
+          fg: ok ? '#3F5424' : none ? '#8C3A28' : '#7A5B18',
+          count: s.people.length + ' of ' + s.needed,
+          who: s.people.length ? s.people.map((p) => p.split(' ')[0] + ' ' + (p.split(' ')[1] || '').charAt(0) + '.').join(', ') : 'Open',
+        };
+      }),
+    }));
+
+    const timelineRowSizes = bounds.slice(0, -1)
+      .map((b, i) => Math.max(72, Math.round((bounds[i + 1] - b) * 0.78)) + 'px').join(' ');
+    const timelineBands = bounds.slice(0, -1).map((b, i) => ({ row: String(i + 1), bg: i % 2 ? '#FBF9F5' : '#FFFDF9' }));
+    const timelineCols = gridJobs.map((g, i) => ({ col: String(i + 2) }));
+    const timelineTicks = bounds.slice(0, -1).map((b, i) => ({
+      row: String(i + 1),
+      label: boundLabel(b),
+      dur: (bounds[i + 1] - b) + ' min',
+    }));
+    const timelineBlocks = list.map((s) => {
+      const ok = s.people.length >= s.needed;
+      const none = s.people.length === 0;
+      return {
+        col: String(gridJobs.indexOf(s.job) + 2),
+        row: (bounds.indexOf(mins(s.start)) + 1) + ' / ' + (bounds.indexOf(mins(s.end)) + 1),
+        bg: ok ? '#EDF0E4' : none ? '#FBEDE7' : '#FAF0DC',
+        bd: ok ? '#D3DCC2' : none ? '#E4C8C8' : '#EBD5A6',
+        fg: ok ? '#3F5424' : none ? '#8C3A28' : '#7A5B18',
+        count: s.people.length + ' of ' + s.needed,
+        who: s.people.length ? s.people.map((p) => p.split(' ')[0] + ' ' + (p.split(' ')[1] || '').charAt(0) + '.').join(', ') : 'Open',
+        time: s.start.replace(':00', '') + '–' + s.end.replace(':00', ''),
+      };
+    });
+    const gridRows = slotsRaw.map((s) => ({
+      label: s.start.replace(':00', '') + '–' + s.end.replace(':00', ''),
+      cells: gridJobs.map((job) => {
+        const e = s.entries.find((x) => x.job === job);
+        if (!e) return { text: '', bg: '#FBF9F5', color: '#B8B0A0' };
+        const ok = e.people.length >= e.needed;
+        return {
+          text: e.people.length + '/' + e.needed + (e.people.length ? ' · ' + e.people.map((p) => p.split(' ')[0]).join(', ') : ''),
+          bg: ok ? '#EDF0E4' : e.people.length === 0 ? '#F7E4DE' : '#FAF0DC',
+          color: ok ? '#3F5424' : e.people.length === 0 ? '#8C3A28' : '#7A5B18',
+        };
+      }),
+    }));
+
+    const peopleRows = peopleRaw.map((p) => ({
+      name: p.name,
+      note: p.shifts.length + (p.shifts.length === 1 ? ' shift' : ' shifts') + ' · ' + (Math.round(p.hours * 10) / 10) + ' hrs',
+      span: p.from.replace(':00', '') + '–' + p.to.replace(':00', ''),
+      shifts: p.shifts.map((s) => s.job + ' (' + s.start.replace(':00', '') + '–' + s.end.replace(':00', '') + ')').join(' · '),
+    }));
+
+    const totalNeeded = list.reduce((a, s) => a + s.needed, 0);
+    const totalFilled = list.reduce((a, s) => a + s.people.length, 0);
+    const worst = slots.slice().sort((a, b) => {
+      const na = Number(String(a.pill).split(' ')[0]) || 0;
+      const nb = Number(String(b.pill).split(' ')[0]) || 0;
+      return nb - na;
+    })[0];
+
+    const view = this.view;
+    const seg = (on) => ({
+      bg: on ? '#fff' : 'transparent',
+      fg: on ? '#1D3557' : '#4A4860',
+      shadow: on ? '0 1px 2px rgba(18,36,61,.10)' : 'none',
+    });
+
+    const printKind = st.print;
+
+    return {
+      tabs: TABS.map((t) => ({
+        key: t.key, label: t.label,
+        color: st.tab === t.key ? '#1A1A2A' : '#8A8271',
+        line: st.tab === t.key ? '#1D3557' : 'transparent',
+      })),
+      onTab: this.onTab,
+      isVendors: st.tab === 'vendors',
+      isVolunteers: st.tab === 'volunteers',
+      isOther: st.tab !== 'vendors' && st.tab !== 'volunteers',
+      otherTitle: (OTHER[st.tab] || {}).title || '',
+      otherPurpose: (OTHER[st.tab] || {}).purpose || '',
+
+      showToday: st.showToday && this.props.showTodayCompare !== false,
+      showNew: !(st.showToday && this.props.showTodayCompare !== false),
+      todayBtnLabel: st.showToday ? 'Back to the proposed layout' : "See today's screen",
+      onToggleToday: this.onToggleToday,
+
+      counts,
+      filterBtns, onFilter: this.onFilter, onQuery: this.onQuery,
+      countLabel: rows.length === decorated.length ? rows.length + ' applications shown' : rows.length + ' of ' + decorated.length + ' shown',
+      headers, onSort: this.onSort,
+      categories: CATEGORIES,
+      tableOpts: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+      rows: rowVals,
+      noRows: rowVals.length === 0,
+      todayRows,
+      onCell: this.onCell, onCheckIn: this.onCheckIn, onExpand: this.onExpand,
+
+      dayBtns: [
+        { label:'Fri, Dec 4 — setup', value:'fri', ...seg(st.day === 'fri') },
+        { label:'Sat, Dec 5 — market', value:'sat', ...seg(st.day === 'sat') },
+      ],
+      onDay: this.onDay,
+      viewBtns: [
+        { label:'By job', value:'job', ...seg(view === 'job') },
+        { label:'By time', value:'time', ...seg(view === 'time') },
+        { label:'Grid', value:'grid', ...seg(view === 'grid') },
+        { label:'Everybody', value:'people', ...seg(view === 'people') },
+      ],
+      onView: this.onView,
+      volJobView: view === 'job',
+      volTimeView: view === 'time',
+      volGridView: view === 'grid',
+      volPeopleView: view === 'people',
+      vol: {
+        people: peopleRaw.length,
+        filledLabel: totalFilled + ' of ' + totalNeeded,
+        shiftCount: list.length,
+        short: Math.max(0, totalNeeded - totalFilled),
+        shortNote: st.day === 'fri' ? 'Tent crew is most of it' : 'Spots with nobody in them yet',
+        worstSlot: worst ? worst.start.replace(':00', '') : '—',
+        worstNote: worst ? worst.pill + ' across ' + worst.entries.length + ' jobs' : '',
+        dayWord: st.day === 'fri' ? 'Friday' : 'Saturday',
+      },
+      jobs, slots, gridJobs, gridCols, peopleRows,
+      timelineHeight, hourBg, timelineHourLabels, timelineColumns,
+      onAxis: this.onAxis, onCsv: this.onCsv,
+      gridByJobs: (st.gridAxis || 'jobs') === 'jobs',
+      gridByTime: st.gridAxis === 'time',
+      axisBtns: [
+        { label:'Jobs', value:'jobs', ...seg((st.gridAxis || 'jobs') === 'jobs') },
+        { label:'Time slots', value:'time', ...seg(st.gridAxis === 'time') },
+      ],
+      tTotalWidth: (190 + hourCount * HOUR_W) + 'px',
+      tTrackWidth: (hourCount * HOUR_W) + 'px',
+      tHourBg: 'repeating-linear-gradient(to right, #EFE7D9 0 1px, transparent 1px ' + HOUR_W + 'px)',
+      tHourLabels: Array.from({ length: hourCount }, (_, i) => ({
+        left: i * HOUR_W + 'px',
+        label: boundLabel((hourStart + i) * 60),
+      })),
+      tJobTracks: gridJobs.map((job, i) => ({
+        name: job,
+        lead: 'Lead · ' + (LEADS[job] || 'Unassigned'),
+        bg: i % 2 ? '#FBF9F5' : '#FFFDF9',
+        blocks: list.filter((s) => s.job === job).map((s) => {
+          const ok = s.people.length >= s.needed;
+          const none = s.people.length === 0;
+          return {
+            left: Math.round((mins(s.start) - hourStart * 60) * HOUR_W / 60 + 2) + 'px',
+            width: Math.round((mins(s.end) - mins(s.start)) * HOUR_W / 60 - 4) + 'px',
+            bg: ok ? '#EDF0E4' : none ? '#FBEDE7' : '#FAF0DC',
+            bd: ok ? '#D3DCC2' : none ? '#E4C8C8' : '#EBD5A6',
+            fg: ok ? '#3F5424' : none ? '#8C3A28' : '#7A5B18',
+            count: s.people.length + '/' + s.needed,
+            who: s.people.length ? s.people.map((p) => p.split(' ')[0] + ' ' + (p.split(' ')[1] || '').charAt(0) + '.').join(', ') : 'Open',
+          };
+        }),
+      })),
+      onPrint: this.onPrint, onPrintJob: this.onPrintJob, onClosePrint: this.onClosePrint, onDoPrint: this.onDoPrint,
+      printing: !!printKind,
+      printHint: !!st.printHint,
+      printGrid: printKind === 'grid',
+      printDayLabel: st.day === 'fri' ? 'Friday, December 4' : 'Saturday, December 5',
+      printAxisTime: st.gridAxis === 'time',
+      printAxisJobs: (st.gridAxis || 'jobs') === 'jobs',
+      pHourPcts: Array.from({ length: hourCount }, (_, i) => ({
+        pct: (i / hourCount * 100).toFixed(3) + '%',
+        label: boundLabel((hourStart + i) * 60),
+      })),
+      pHourBgH: 'repeating-linear-gradient(to right, #DCD5C7 0 1px, transparent 1px calc(100% / ' + hourCount + '))',
+      pHourBgV: 'repeating-linear-gradient(#DCD5C7 0 1px, transparent 1px calc(100% / ' + hourCount + '))',
+      pvHeight: (hourCount * 46) + 'px',
+      pvHourLabels: Array.from({ length: hourCount }, (_, i) => ({
+        top: (i * 46 + 2) + 'px',
+        label: boundLabel((hourStart + i) * 60),
+      })),
+      pJobHeads: gridJobs,
+      pTracks: gridJobs.map((job) => ({
+        name: job,
+        blocks: list.filter((s) => s.job === job).map((s) => {
+          const ok = s.people.length >= s.needed;
+          const none = s.people.length === 0;
+          const total = hourCount * 60;
+          return {
+            left: ((mins(s.start) - hourStart * 60) / total * 100).toFixed(3) + '%',
+            width: ((mins(s.end) - mins(s.start)) / total * 100).toFixed(3) + '%',
+            bg: ok ? '#EDF0E4' : none ? '#FBEDE7' : '#FAF0DC',
+            bd: ok ? '#9FB27F' : none ? '#D89B8B' : '#D8B871',
+            text: s.people.length + '/' + s.needed + (s.people.length ? ' · ' + s.people.map((p) => p.split(' ')[0]).join(', ') : ' open'),
+          };
+        }),
+      })),
+      pvColumns: gridJobs.map((job) => ({
+        blocks: list.filter((s) => s.job === job).map((s) => {
+          const ok = s.people.length >= s.needed;
+          const none = s.people.length === 0;
+          return {
+            top: Math.round((mins(s.start) - hourStart * 60) * 46 / 60 + 1) + 'px',
+            height: Math.round((mins(s.end) - mins(s.start)) * 46 / 60 - 2) + 'px',
+            bg: ok ? '#EDF0E4' : none ? '#FBEDE7' : '#FAF0DC',
+            bd: ok ? '#9FB27F' : none ? '#D89B8B' : '#D8B871',
+            text: s.people.length + '/' + s.needed + (s.people.length ? ' ' + s.people.map((p) => p.split(' ')[0]).join(', ') : ''),
+          };
+        }),
+      })),
+      printTitle: printKind === 'leads' ? (st.printJob ? st.printJob + ' sheet' : 'one sheet per job lead') : printKind === 'time' ? 'master list by time slot' : printKind === 'grid' ? 'the grid, hour by hour' : 'everybody coming',
+      printSheets: printKind ? this.printSheets() : [],
+    };
+  }
+}
+</script>
+</body>
+</html>

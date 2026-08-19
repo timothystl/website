@@ -205,9 +205,21 @@ export const SECTIONS = {
     label: 'Christmas Market', glyph: '❆', title: 'Christmas Market vendors',
     purpose: 'Every vendor who has applied for a table, what they sell, and whether they have paid. Table numbers and placement notes live here too — this is the spreadsheet.',
     action: 'Export CSV', search: 'Search vendors, products, table numbers',
-    filters: ['All', 'Not paid yet', 'Paid', 'Fee waived', 'Dropped out'],
-    columns: [['Vendor', '2.3fr'], ['Sells', '2fr'], ['Tables', '.9fr'], ['Payment', '1.1fr']],
-    note: 'A payment state is your record, not the processor’s — the website hands a vendor to the card page and cannot see what happens there. Anything still reading “not paid yet” is a space that is not held.'
+    // ⚠ 'Awaiting check' is a FILTER, not a fifth payment_status. A vendor
+    // who said they would send a check is factually unpaid until it arrives;
+    // what the coordinator needs is a way to see only those, because they are
+    // the ones she chases by post rather than by email. `paymentLabel()`
+    // already relabels the pill for exactly this case — the filter is the
+    // same fact, made selectable.
+    filters: ['All', 'Not paid yet', 'Awaiting check', 'Paid', 'Fee waived', 'Dropped out'],
+    // The row is the form now (see the vendor table in admin/market.js), so
+    // these are the columns that are EDITED as well as read. Category is new:
+    // a product description is free text and sorts by whatever word it
+    // happens to begin with, which is no order at all when the question is
+    // "how many bakers have we got".
+    columns: [['Vendor', '2fr'], ['Category', '1.1fr'], ['Sells', '1.4fr'], ['Tbls', '.5fr'],
+      ['Table #', '.75fr'], ['Payment', '1.15fr'], ['Check or cash', '1.35fr'], ['', '.3fr']],
+    note: 'Every edit in a row saves on its own and goes to the audit log, same as the drawer did. A payment state is still your record, not the processor’s — recording a check number is what turns “awaiting check” into paid.'
   },
   giving: { label: 'Giving', glyph: '♡', title: 'Giving', purpose: 'The giving page itself, the amounts and funds offered on it, and the single platform link every other screen reads.' },
   payroll: { label: 'Payroll', glyph: '▤', title: 'Payroll', purpose: 'Enter hours and exceptions, approve the period, then print the gross-pay report — church staff and Timothy MDO, with a combined total. Withholding, taxes, and bank details stay with the payroll service.' },

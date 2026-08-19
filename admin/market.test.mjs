@@ -19,7 +19,12 @@ import {
   sanitizeApplication, screenableText, paymentState, PAYMENT_STATES, marketPayUrl, photosOf,
   marketRowFromRegistration, marketInsertArgs, paymentLabel,
   coordinatorEmailHtml, vendorEmailHtml,
+  VENDOR_CATEGORIES, cleanCategory, checkState, vendorCellState,
+  parseClock, parseShiftLabel, fmtClock, fmtRange, fmtDay,
+  normalizeRoster, jobsFor, slotsFor, peopleFor, volunteerCsvRows, volunteerCsv,
 } from './market.js';
+
+import { execFileSync } from 'node:child_process';
 
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.error('  ✗ ' + msg); } };
@@ -315,6 +320,310 @@ group('the confirmation emails branch on how the vendor chose to pay');
   ok(!coordCardHtml.includes('no card processing fee'), 'the coordinator email says nothing extra for a card application');
   const coordCheckHtml = coordinatorEmailHtml({ ...checkVendor, product_description: 'Purses', signature_name: 'Marla Kerr' }, { totalCents: 3000 });
   ok(coordCheckHtml.includes('no card processing fee'), 'and flags a check application so she knows not to expect the fee in the total');
+}
+
+
+// ── THE COORDINATOR'S THREE OWN FIELDS ───────────────────────────────────────
+group('category, and where a check has got to');
+{
+  eq(cleanCategory('Wood'), 'Wood', 'a category from the list is kept');
+  eq(cleanCategory(''), '', 'and blank stays blank — "not categorized yet" is a real state, not Other');
+  eq(cleanCategory('   '), '', 'whitespace is blank too');
+  // ⚠ A stored value that is not on the list — a list edited between deploys,
+  // or a hand-typed POST — lands on Other rather than reaching the page
+  // unchecked. Same rule every `choices` field in the block editor follows.
+  eq(cleanCategory('Antiques'), 'Other', 'anything else clamps to Other rather than being written out');
+  eq(cleanCategory('<script>'), 'Other', 'including something that is trying to be markup');
+  ok(VENDOR_CATEGORIES[VENDOR_CATEGORIES.length - 1] === 'Other', 'Other is last, because it is the fallback');
+
+  const card = { payment_method: 'card', payment_status: 'unpaid', check_no: '', check_date: '' };
+  eq(checkState(card).paying, 'card', 'a card vendor is not somebody a check is expected from');
+  eq(checkState(card).pending, false, 'and never appears on the chase list');
+
+  const owed = { payment_method: 'check', payment_status: 'unpaid', check_no: '', check_date: '' };
+  eq(checkState(owed).pending, true, 'a check vendor with nothing recorded is being waited on');
+  eq(checkState(owed).received, false, 'and nothing has arrived');
+
+  eq(checkState({ ...owed, check_no: '1042' }).received, true, 'a number recorded means it arrived');
+  eq(checkState({ ...owed, check_no: '1042' }).pending, false, 'and takes them off the chase list');
+  eq(checkState({ ...owed, check_date: '2026-08-12' }).received, true, 'a date alone is enough — a check with no number is still a check');
+
+  // ⚠ Waived and dropped are the two that would otherwise sit on the chase
+  // list forever. Timothy MDO, the Word of Life 8th grade and the youth group
+  // take tables at no charge; nobody is ever putting a check in the post for
+  // those, and a reconciliation that keeps counting them reads short every
+  // year for a reason nobody can find.
+  eq(checkState({ ...owed, payment_status: 'waived' }).pending, false, 'a waived fee is not a check anybody is waiting for');
+  eq(checkState({ ...owed, payment_status: 'dropped' }).pending, false, 'and neither is a vendor who dropped out');
+}
+
+group('what a row looks like after a cell saves');
+{
+  const base = { id: 4, payment_method: 'check', payment_status: 'unpaid', amount_due_cents: 4500,
+    amount_paid_cents: null, tables: 1, table_number: '', check_no: '', check_date: '', category: '' };
+  const st = vendorCellState(base);
+  eq(st.statusLabel, 'Awaiting check', 'a check vendor who has not paid is told apart from one who simply has not');
+  eq(st.tone, 'warn', 'in the tone of something waiting, not something broken');
+  eq(st.checkMode, 'pending', 'and the check column offers somewhere to record it');
+  // ⚠ NULL is "nobody has checked yet", which is a different fact from "they
+  // paid nothing" — the two sentences say so.
+  eq(st.moneyLine, 'asked $45', 'an unchecked row says what was asked for');
+  eq(vendorCellState({ ...base, amount_paid_cents: 4500 }).moneyLine, '$45 recorded',
+    'and a checked one says what somebody actually saw');
+  eq(vendorCellState({ ...base, amount_paid_cents: 0 }).moneyLine, '$0 recorded',
+    'zero recorded is a recorded fact, not an absent one');
+
+  const paid = vendorCellState({ ...base, check_no: '1042', check_date: '2026-08-12', payment_status: 'paid' });
+  eq(paid.checkMode, 'received', 'a recorded check turns the column into a statement');
+  ok(paid.checkLabel.includes('#1042') && paid.checkLabel.includes('2026-08-12'),
+    'carrying the number and the day it came');
+  // The ✓ In button stamps '—' when nobody typed a number, and a check with no
+  // number is still a check that arrived.
+  ok(vendorCellState({ ...base, check_no: '—', payment_status: 'paid' }).checkLabel.includes('(no number)'),
+    'a check recorded without a number says so rather than printing a dash as if it were one');
+  eq(vendorCellState({ ...base, payment_method: 'card' }).checkMode, 'card', 'a card vendor gets no check boxes at all');
+}
+
+// ── THE VOLUNTEER ROSTER ─────────────────────────────────────────────────────
+// ⚠ THE ONE THING WORTH TESTING HARDEST IS THE CLOCK. Serve sends a shift's
+// time as a LABEL written for a human, and three of the four views are
+// arithmetic over it — so a label read wrong does not throw, it draws a
+// morning shift in the evening and looks entirely plausible doing it.
+group('reading a shift time out of a label');
+{
+  eq(parseClock('9:00 AM'), 540, 'a plain morning time');
+  eq(parseClock('9:00 PM'), 1260, 'and an evening one');
+  eq(parseClock('12:00 AM'), 0, 'midnight is zero, not twelve hundred');
+  eq(parseClock('12:30 PM'), 750, 'and noon is twelve hundred, not zero');
+  eq(parseClock('8:30am'), 510, 'with or without the space');
+  eq(parseClock('2 PM'), 840, 'and with or without the minutes');
+  eq(parseClock('14:00'), 840, 'a 24-hour time is read as itself');
+  eq(parseClock('2026-12-05T07:30:00Z'), 450, 'and an ISO instant gives up its own clock reading');
+  eq(parseClock('sometime after lunch'), null, 'anything else is null rather than a guess');
+  eq(parseClock(''), null, 'and so is nothing');
+  eq(parseClock('25:00'), null, 'a 25th hour is not a time');
+
+  // ⚠ Read through a helper that survives a null rather than off `.start`
+  // directly: a parser regression that returns null would THROW on a bare
+  // property read, and a crashed suite is a much weaker signal than a named
+  // failing assertion — it stops at the first one and says nothing about the
+  // rest.
+  const range = (l) => { const r = parseShiftLabel(l); return r ? `${r.start}-${r.end}` : 'null'; };
+
+  eq(range('11:00 am–2:30 pm'), '660-870', 'a label saying both halves outright is read as written');
+
+  // ⚠ THE MERIDIEM ON THE END OF THE LABEL BELONGS TO BOTH HALVES. This is
+  // the case that makes the parser worth having: '8:30–11:00 am' gives one
+  // am for two times.
+  eq(range('8:30–11:00 am'), '510-660', 'a start with no am/pm inherits the end’s, and the end keeps its own');
+
+  // ⚠ AND INHERITING IT BLINDLY IS WRONG THE OTHER WAY. '11:00–2:30 pm'
+  // inherited straight would read 23:00–14:30 — an end before its start —
+  // so a start that inherited is pushed back twelve hours when it has to be.
+  eq(range('11:00–2:30 pm'), '660-870',
+    'a start that inherited PM and would land after its end is corrected back to the morning');
+
+  eq(range('7:30 AM - 11:00 AM'), '450-660', 'a hyphen works as well as a dash');
+  eq(range('9:00 AM to 11:00 AM'), '540-660', 'and so does the word to');
+  // ⚠ Serve's own labels routinely name the day in front of the times, so an
+  // anchored pattern would read every one of them as having no clock at all
+  // and quietly empty three of the four views on exactly the labels the
+  // market uses.
+  eq(range('Friday 4–8pm'), '960-1200', 'a day written in front of the times is stepped over');
+  // ⚠ AND A LABEL THAT SAYS NEITHER HALF IS LEFT UNTIMED RATHER THAN GUESSED.
+  // '10–1' is almost certainly ten in the morning to one in the afternoon —
+  // and 'almost certainly' is not something to draw a grid from. The by-job
+  // view shows it regardless, so nothing is lost but the guess.
+  eq(range('Saturday 10–1'), 'null', 'a range with no am or pm anywhere in it is not a time');
+  eq(range('all afternoon'), 'null', 'a label with no clock in it is null, never a guess');
+  eq(range('2:00 PM–11:00 AM'), 'null',
+    'a label that says an end before its start OUTRIGHT is refused rather than quietly corrected — that is wrong in Serve, and hiding it here hides it from whoever could fix it');
+
+  eq(fmtClock(510), '8:30 AM', 'a time reads back the way somebody would say it');
+  eq(fmtClock(720), '12:00 PM', 'noon is PM');
+  eq(fmtClock(0), '12:00 AM', 'and midnight is AM');
+  eq(fmtRange(450, 660), '7:30–11 am', 'a range says the meridiem once, at the end');
+  eq(fmtRange(660, 900), '11–3 pm', 'even when the two halves are on different sides of noon');
+
+  // ⚠ ANCHORED AT NOON UTC, never `new Date('2026-12-04')`. A bare date
+  // string is parsed as midnight UTC, which is the day BEFORE for everybody
+  // west of Greenwich — including St. Louis, and including this Worker's
+  // readers. Same trap the newsletter archive's month grouping is written
+  // around.
+  eq(fmtDay('2026-12-04'), 'Friday, December 4', 'a date reads as the day it actually is');
+  eq(fmtDay('2026-12-05'), 'Saturday, December 5', 'the market day too');
+  eq(fmtDay('2026-01-01'), 'Thursday, January 1', 'and a date that would roll backwards over a year boundary');
+  eq(fmtDay('nonsense'), '', 'anything unparseable is blank rather than Invalid Date');
+
+  // ⚠ AND THAT HAS TO HOLD ON A MACHINE THAT IS NOT IN UTC, which is the only
+  // place the bug it guards against can appear at all. A bare `new Date(iso)`
+  // read with local getters is right in UTC and a day early everywhere west
+  // of Greenwich — including St. Louis — so a test running in UTC passes
+  // whether or not the noon anchor is there. Re-run in the church's own zone,
+  // in a child process, because TZ is fixed for the life of a Node process.
+  const inChicago = execFileSync(process.execPath, ['-e',
+    "import('./admin/market.js').then(m=>process.stdout.write(m.fmtDay('2026-12-04')+'|'+m.fmtDay('2026-01-01')))"],
+    { env: { ...process.env, TZ: 'America/Chicago' }, encoding: 'utf8' });
+  eq(inChicago, 'Friday, December 4|Thursday, January 1',
+    'a date reads as the same day in the church’s own timezone as it does in the Worker’s UTC');
+}
+
+group('the roster, normalized');
+{
+  const SERVE = {
+    open: true, signedUp: 4, openShifts: 3,
+    roles: [
+      { name: 'Setup', shifts: [
+        { label: '9:00–11:00 am', needed: 4, filled: 2, people: [{ name: 'Rick Vogel', email: 'rick@example.com' }, { name: 'Ben Ostermann', email: '' }] },
+        { label: 'whenever', needed: 2, filled: 0, people: [] },
+      ] },
+      { name: 'Kitchen', shifts: [
+        { label: '11:00 am–1:00 pm', needed: 3, filled: 1, people: [{ name: 'Marla Bruns', email: 'marla@example.com' }] },
+      ] },
+    ],
+  };
+  const r = normalizeRoster(SERVE);
+  eq(r.days.length, 1, 'a roster with no dates is one day, so no day switch is drawn for a chooser that could not do anything');
+  eq(r.days[0].label, '', 'and that day has no label to print, because Serve did not give one');
+  eq(r.total, 3, 'every shift is carried');
+  eq(r.untimed, 1, 'and the one whose time could not be read is counted rather than dropped');
+  const shifts = r.days[0].shifts;
+  eq(shifts[0].start, 540, 'a readable label becomes a real start');
+  eq(shifts[1].timed, false, '⚠ an unreadable one is marked untimed, NOT given a guessed midnight');
+  eq(shifts[1].start, null, 'with no start at all');
+
+  // ⚠ STRUCTURED FIELDS WIN OUTRIGHT — this is the one change the design asks
+  // of Serve, and the day it lands no parsing should happen at all.
+  const structured = normalizeRoster({ roles: [{ name: 'Grill', lead: 'Dale Fischer', shifts: [
+    { label: 'nonsense that cannot be parsed', start: '10:00 AM', end: '1:00 PM', date: '2026-12-05', needed: 3, filled: 0, people: [] },
+  ] }] });
+  const g = structured.days[0].shifts[0];
+  eq(g.start, 600, 'a real start field is used in preference to the label');
+  eq(g.end, 780, 'and a real end field');
+  eq(g.lead, 'Dale Fischer', 'a lead sent by Serve is carried through');
+  eq(structured.days[0].label, 'Saturday, December 5', 'and a date puts the shift on a named day');
+
+  // Two dates is two days, in order, and only then is the switch worth drawing.
+  const twoDays = normalizeRoster({ roles: [{ name: 'Tents', shifts: [
+    { label: '9:00–11:00 am', date: '2026-12-05', needed: 2, filled: 0, people: [] },
+    { label: '9:00–11:00 am', date: '2026-12-04', needed: 2, filled: 0, people: [] },
+  ] }] });
+  eq(twoDays.days.length, 2, 'two dates is two days');
+  eq(twoDays.days[0].date, '2026-12-04', 'in date order, setup before market');
+
+  // ⚠ The NAMES are what the printed sheets carry, so a shift whose own count
+  // disagrees with its list of people reports the longer of the two — printing
+  // fewer people than the count claims are coming is the worse mistake.
+  const mismatch = normalizeRoster({ roles: [{ name: 'X', shifts: [
+    { label: '9:00–10:00 am', needed: 5, filled: 1, people: [{ name: 'A' }, { name: 'B' }, { name: 'C' }] },
+  ] }] });
+  eq(mismatch.days[0].shifts[0].filled, 3, 'three names beat a count of one');
+
+  eq(normalizeRoster({}).days.length, 1, 'an empty answer is still one day, so every view has something to render');
+  eq(normalizeRoster({}).days[0].shifts.length, 0, 'with nothing in it');
+  eq(normalizeRoster(null).total, 0, 'and null does not throw');
+}
+
+group('the four views');
+{
+  const R = normalizeRoster({ roles: [
+    { name: 'Kitchen', shifts: [
+      { label: '9:00–11:00 am', needed: 3, filled: 1, people: [{ name: 'Marla Bruns', email: 'm@example.com' }] },
+      { label: '11:00 am–1:00 pm', needed: 3, filled: 3, people: [{ name: 'Marla Bruns', email: 'm@example.com' }, { name: 'Sue Vogel' }, { name: 'Hilda Vogt' }] },
+    ] },
+    { name: 'Tents', lead: 'Rick Vogel', shifts: [
+      { label: '9:00–11:00 am', needed: 6, filled: 0, people: [] },
+    ] },
+    { name: 'Greeters', shifts: [
+      { label: '11:00 am–1:00 pm', needed: 2, filled: 2, people: [{ name: 'Joyce Lammert' }, { name: 'Sue Vogel' }] },
+    ] },
+  ] });
+  const shifts = R.days[0].shifts;
+
+  // ⚠ MOST SHORT-HANDED FIRST. Sorted by name this is a list; sorted by what
+  // is missing it is a worklist, which is the only reason it gets opened.
+  const jobs = jobsFor(shifts);
+  eq(jobs[0].name, 'Tents', 'the job missing six people leads');
+  eq(jobs[0].short, 6, 'by how many it is short');
+  eq(jobs[1].name, 'Kitchen', 'then the one missing two');
+  eq(jobs[2].name, 'Greeters', 'and a full job is last');
+  eq(jobs[2].short, 0, 'with nothing outstanding');
+  eq(jobs[1].shifts[0].start, 540, 'a job’s own shifts are in time order');
+  eq(jobs[0].lead, 'Rick Vogel', 'a lead is carried onto the job');
+  eq(jobs[1].lead, '', 'and one Serve never sent is blank rather than invented');
+
+  const slots = slotsFor(shifts);
+  eq(slots.length, 2, 'the day is two distinct slots');
+  eq(slots[0].start, 540, 'earliest first');
+  eq(slots[0].short, 8, 'and each says how short it is across every job running in it');
+  eq(slots[0].entries.length, 2, 'with the jobs of that slot beside each other');
+  eq(slots[0].entries[0].job, 'Kitchen', 'in alphabetical order, because there is no other order to a slot');
+
+  // ⚠ An untimed shift cannot be placed on the clock, so it is absent from
+  // the slot view rather than piled at midnight. By job — which needs no
+  // clock — still shows it, so it is never unreachable.
+  const withUntimed = normalizeRoster({ roles: [{ name: 'Odd', shifts: [{ label: 'whenever', needed: 1, filled: 0, people: [] }] }] });
+  eq(slotsFor(withUntimed.days[0].shifts).length, 0, 'an unreadable time is left out of the by-time view');
+  eq(jobsFor(withUntimed.days[0].shifts).length, 1, 'and shown by the view that needs no clock');
+
+  const people = peopleFor(shifts);
+  eq(people.length, 4, 'everybody coming, once each however many shifts they hold');
+  eq(people[0].name, 'Hilda Vogt', 'alphabetical, because this is the welcome table’s list');
+  const marla = people.find((p) => p.name === 'Marla Bruns');
+  eq(marla.shifts.length, 2, 'somebody on two shifts is one person with two shifts');
+  eq(marla.from, 540, 'arriving for the first');
+  eq(marla.to, 780, 'and free after the last');
+  eq(marla.hours, 4, 'having worked both');
+  eq(marla.email, 'm@example.com', 'and reachable, because emailing the roster is the next thing anybody does with it');
+
+  // ⚠ HOURS WORKED, NOT HOURS ON SITE. Somebody with a gap in the middle of
+  // the day is not owed lunch for it, and the two figures differ by exactly
+  // the gap.
+  const gap = peopleFor(normalizeRoster({ roles: [{ name: 'J', shifts: [
+    { label: '9:00–10:00 am', needed: 1, filled: 1, people: [{ name: 'Zed' }] },
+    { label: '3:00–4:00 pm', needed: 1, filled: 1, people: [{ name: 'Zed' }] },
+  ] }] }).days[0].shifts)[0];
+  eq(gap.hours, 2, 'two one-hour shifts six hours apart is two hours worked');
+  eq(gap.from, 540, 'though they are on site from the first');
+  eq(gap.to, 960, 'to the last');
+}
+
+group('the roster as a spreadsheet');
+{
+  const R = normalizeRoster({ roles: [{ name: 'Grill', shifts: [
+    { label: '11:00 am–1:00 pm', date: '2026-12-05', needed: 3, filled: 1, people: [{ name: 'Dale Fischer' }] },
+  ] }] });
+  const rows = volunteerCsvRows(R.days);
+  eq(rows[0][0], 'Day', 'the header names the day first');
+  eq(rows[0].length, 11, 'and there are eleven columns');
+  eq(rows.length, 4, 'one row for the person, and one for each spot nobody has taken');
+  eq(rows[1][7], 'Dale Fischer', 'the person who signed up');
+  // ⚠ THE (open) ROWS ARE THE POINT. A file listing only the people who came
+  // is a thank-you list; what the coordinator is doing with a spreadsheet in
+  // November is looking for the holes.
+  eq(rows[2][7], '(open)', 'a spot with nobody in it is a row of its own');
+  eq(rows[3][7], '(open)', 'one per missing spot, so they can be counted');
+  eq(rows[1][6], '2.00', 'with the hours the shift runs');
+  eq(rows[1][10], 'Short', 'and whether it is covered');
+  eq(rows[1][1], '2026-12-05', 'dated');
+  eq(rows[1][0], 'Saturday, December 5', 'and named');
+
+  const text = volunteerCsv(R.days);
+  ok(text.split('\r\n').length === 4, 'the file is those rows, CRLF as a spreadsheet expects');
+  ok(text.startsWith('"Day"'), 'every cell quoted');
+
+  // ⚠ A cell beginning = + - @ is a FORMULA to a spreadsheet, and this file
+  // exists to be opened in one. Unlike the vendor export there is no computed
+  // money column here that a quoting guard would turn into text that stops
+  // summing, so every column is guarded — and a volunteer's name really can
+  // begin with a hyphen.
+  const nasty = volunteerCsv(normalizeRoster({ roles: [{ name: '=cmd|calc', shifts: [
+    { label: '9:00–10:00 am', needed: 1, filled: 1, people: [{ name: '-Bobby' }] },
+  ] }] }).days);
+  ok(nasty.includes(`"'=cmd|calc"`), 'a job name that is trying to be a formula is neutralized');
+  ok(nasty.includes(`"'-Bobby"`), 'and so is a person’s');
+
+  eq(volunteerCsvRows([]).length, 1, 'an empty roster is the header alone, never a row of nothing');
 }
 
 console.log(`\nmarket.test.mjs: ${pass} passed, ${fail} failed`);
