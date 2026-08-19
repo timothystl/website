@@ -1913,6 +1913,12 @@ if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
       <div style="font-family:var(--serif);font-size:22px;color:white;margin-bottom:8px;">You're on the list!</div>
       <div style="color:rgba(255,255,255,.75);font-size:15px;">Thanks for signing up. Look for our newsletter in your inbox soon.</div>
     </div>
+    <!-- A second way to stay connected, for something the weekly letter is too
+         slow for — a canceled service, a closing. Starts hidden and stays that
+         way on a browser that cannot do this (see tlcPushInit below); a control
+         that would just fail is worse than no control. -->
+    <button type="button" id="site-push-toggle" class="btn btn-ghost" hidden style="margin-top:18px;"></button>
+    <div id="site-push-alert" style="display:none;margin-top:10px;font-size:13px;color:rgba(255,255,255,.75);"></div>
   </div>
 </section>
 
@@ -4647,6 +4653,82 @@ async function handleNewsletterSignup(e) {
   }
 }
 
+// ── BROWSER PUSH ALERTS ──────────────────────────────────────────
+// The congregation half of "Push Alert" — see admin/webpush.js and CLAUDE.md.
+// A separate audience from the office's own devices (which ring on held mail,
+// a new message, a gym request, payroll turning ready): this is a visitor
+// opting in on this site, so a staff account can later ring "worship is
+// canceled" out to whoever asked. Mirrors PUSH_JS in admin/helpers.js closely
+// on purpose — same shape, a different origin's service worker and a
+// different pair of endpoints.
+function tlcPushB64ToUint8Array(b64) {
+  var pad = '='.repeat((4 - b64.length % 4) % 4);
+  var base64 = (b64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+  var raw = atob(base64);
+  var out = new Uint8Array(raw.length);
+  for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+function tlcPushInit() {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('/sw.js').catch(function(){});
+  if (!('PushManager' in window)) return;
+
+  var btn = document.getElementById('site-push-toggle');
+  if (!btn) return;
+  var note = document.getElementById('site-push-alert');
+
+  function setLabel(subscribed) {
+    btn.textContent = subscribed ? 'Browser alerts: On' : 'Turn on browser alerts';
+    btn.setAttribute('aria-pressed', subscribed ? 'true' : 'false');
+  }
+  function showNote(msg) {
+    if (!note) return;
+    note.style.display = 'block';
+    note.textContent = msg;
+  }
+
+  navigator.serviceWorker.ready.then(function(reg) {
+    return reg.pushManager.getSubscription();
+  }).then(function(sub) {
+    btn.hidden = false;
+    setLabel(!!sub);
+  }).catch(function(){});
+
+  btn.addEventListener('click', function() {
+    btn.disabled = true;
+    navigator.serviceWorker.ready.then(function(reg) {
+      return reg.pushManager.getSubscription().then(function(existing) {
+        if (existing) {
+          return existing.unsubscribe().then(function() {
+            return fetch('https://admin.timothystl.org/api/push/unsubscribe-public', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ endpoint: existing.endpoint })
+            });
+          }).then(function() { setLabel(false); showNote('Browser alerts off — this device will no longer ring.'); });
+        }
+        return fetch('https://admin.timothystl.org/api/push/vapid-public-key').then(function(r) {
+          if (!r.ok) throw new Error('not configured');
+          return r.text();
+        }).then(function(key) {
+          return reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: tlcPushB64ToUint8Array(key)
+          });
+        }).then(function(newSub) {
+          return fetch('https://admin.timothystl.org/api/push/subscribe-public', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newSub.toJSON())
+          });
+        }).then(function() { setLabel(true); showNote('Browser alerts on — occasional, time-sensitive updates only.'); });
+      });
+    }).catch(function() {
+      showNote('Could not turn on browser alerts — check the browser prompt.');
+    }).finally(function() { btn.disabled = false; });
+  });
+}
+
 // ── VOTERS PAGE ───────────────────────────────────────────────
 async function loadVotersPage() {
   try {
@@ -4854,6 +4936,8 @@ async function loadChristmasMarketPosts() {
 // Not called at boot either — showPage('christmasmarket') runs it.
 </script>
 <script>
+
+tlcPushInit();
 
 // ── SUNDAY DETECTION: highlight Watch Live button ────────────────
 (function() {

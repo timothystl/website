@@ -14,6 +14,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { churchDate } from '../admin/when.js';
 import worker, { PAYROLL_RPC_FNS } from '../tlc-admin-worker.js';
+import { pushToAllSubscribers, pushToPublicSubscribers } from '../admin/webpush.js';
 import { ALL_PERMISSIONS } from '../admin/auth.js';
 // ⚠ Read from the record rather than pinned to a literal hex. These assertions
 // are about "the preview shows the site's real bar, not a color that exists
@@ -111,6 +112,26 @@ function signIn(db, permissions = ALL_PERMISSIONS, username = 'dinger') {
     .run(token, uid, username, JSON.stringify(permissions),
       new Date(Date.now() + 864e5).toISOString(), new Date().toISOString());
   return { cookie: `tlc_session=${token}`, uid };
+}
+
+// A real EC keypair, shaped exactly like a real VAPID pair — buildVapidAuthHeader
+// (admin/webpush.js) signs a real JWT against it, so a placeholder string like
+// 'k' throws inside crypto.subtle.importKey before a push ever gets as far as
+// fetch(). Shared by every group that actually sends a push, not regenerated
+// per assertion.
+function fakeVapidKeys() {
+  const ecdh = crypto.createECDH('prime256v1');
+  ecdh.generateKeys();
+  return { VAPID_PUBLIC_KEY: ecdh.getPublicKey().toString('base64url'), VAPID_PRIVATE_KEY: ecdh.getPrivateKey().toString('base64url') };
+}
+
+// Real EC subscription key material — sendWebPush encrypts against p256dh/auth
+// before it ever reaches fetch(), so a placeholder string throws inside
+// encryptPayload and the row silently never gets that far.
+function fakeSubKeys() {
+  const ecdh = crypto.createECDH('prime256v1');
+  ecdh.generateKeys();
+  return { p256dh: ecdh.getPublicKey().toString('base64url'), auth: crypto.randomBytes(16).toString('base64url') };
 }
 
 // ── the schema the overhaul adds ─────────────────────────────────────────────
@@ -5108,6 +5129,179 @@ group('a news post says what it is on the calendar, rather than having it guesse
     eq(feed.events.find((e) => e.title === 'Rally Day').category, 'worship',
       'an untagged post still follows its value, exactly as before');
   } finally { globalThis.fetch = realFetch; }
+}
+
+
+group('push notifications have two audiences, and the six existing triggers stay in the staff one');
+{
+  // Andrew's answer to the review's own SEC-6/FX-29 finding — not scoping the
+  // six existing triggers by permission, but a second, genuinely different
+  // audience: "all push notifications should go to admin, and then
+  // notifications from admin can go out to all users."
+  const { db, env } = await boot();
+  const cols = db.prepare('PRAGMA table_info(push_subscriptions)').all().map((r) => r.name);
+  ok(cols.includes('audience'), 'the table carries an audience column');
+
+  // A staff row from BEFORE this shipped — inserted the way the existing
+  // /api/push/subscribe route always has, naming no audience at all — has to
+  // land on 'staff' by the column's own DEFAULT, not by a backfill script.
+  const k1 = fakeSubKeys();
+  db.prepare('INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (1, ?, ?, ?)')
+    .run('https://fcm.example/old-staff-device', k1.p256dh, k1.auth);
+  const oldRow = db.prepare("SELECT audience FROM push_subscriptions WHERE endpoint = 'https://fcm.example/old-staff-device'").get();
+  eq(oldRow.audience, 'staff', 'a pre-existing subscription is a staff one, with no migration script');
+
+  const realFetch = globalThis.fetch;
+  const reached = [];
+  globalThis.fetch = async (input) => {
+    reached.push(typeof input === 'string' ? input : input.url);
+    return new Response('', { status: 201 });
+  };
+  const k2 = fakeSubKeys();
+  db.prepare("INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, audience) VALUES (2, ?, ?, ?, 'staff')")
+    .run('https://fcm.example/staff-2', k2.p256dh, k2.auth);
+  const k3 = fakeSubKeys();
+  db.prepare("INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, audience) VALUES (NULL, ?, ?, ?, 'public')")
+    .run('https://fcm.example/pew-visitor', k3.p256dh, k3.auth);
+
+  const envWithVapid = { ...env, ...fakeVapidKeys() };
+
+  reached.length = 0;
+  const staffResult = await pushToAllSubscribers(envWithVapid, { title: 'x', body: 'y' });
+  eq(staffResult.total, 2, 'the default call reaches every STAFF row — the old one and the new one');
+  ok(reached.every((u) => !u.includes('pew-visitor')), 'and never the public row: ' + JSON.stringify(reached));
+
+  reached.length = 0;
+  const publicResult = await pushToPublicSubscribers(envWithVapid, { title: 'x', body: 'y' });
+  eq(publicResult.total, 1, 'pushToPublicSubscribers reaches only the public row');
+  ok(reached.some((u) => u.includes('pew-visitor')), 'the visitor really was pushed');
+  ok(reached.every((u) => !u.includes('staff')), 'and no staff device was, from the public call');
+
+  globalThis.fetch = realFetch;
+}
+
+group('a visitor subscribes on the public site, not the admin');
+{
+  const { db, env } = await boot();
+  const fakeSub = {
+    endpoint: 'https://fcm.googleapis.com/fcm/send/abc123',
+    keys: { p256dh: 'BN' + 'A'.repeat(85), auth: 'B'.repeat(22) },
+  };
+  const post = (path, body) => worker.fetch(new Request('https://admin.timothystl.org' + path, {
+    method: 'POST', headers: { origin: 'https://timothystl.org', 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }), env, ctx);
+
+  // ⚠ No cookie anywhere in this group — the whole point is that a visitor
+  // has never signed into anything.
+  const sub = await post('/api/push/subscribe-public', fakeSub);
+  eq(sub.status, 200, 'the subscribe route needs no session');
+  const row = db.prepare("SELECT user_id, audience FROM push_subscriptions WHERE endpoint = ?").get(fakeSub.endpoint);
+  ok(row, 'the row was written');
+  eq(row.user_id, null, 'attributed to nobody');
+  eq(row.audience, 'public', 'and filed in the congregation’s audience, not staff’s');
+
+  // The CORS preflight a JSON cross-origin POST actually triggers in a real
+  // browser — unlike the FormData routes beside it, this one is not simple.
+  const preflight = await worker.fetch(new Request('https://admin.timothystl.org/api/push/subscribe-public', {
+    method: 'OPTIONS', headers: { origin: 'https://timothystl.org' },
+  }), env, ctx);
+  eq(preflight.status, 204, 'the preflight itself succeeds');
+  has(preflight.headers.get('access-control-allow-methods') || '', 'POST', 'and allows the real request that follows it');
+
+  // Garbage shaped nothing like a real PushManager subscription is refused,
+  // not silently stored as a dead row.
+  const bad = await post('/api/push/subscribe-public', { endpoint: 'javascript:alert(1)', keys: { p256dh: 'x', auth: 'y' } });
+  eq(bad.status, 400, 'an endpoint that is not a real push service address is refused');
+
+  const gone = await post('/api/push/unsubscribe-public', { endpoint: fakeSub.endpoint });
+  eq(gone.status, 200, 'and unsubscribing needs no session either');
+  ok(!db.prepare('SELECT 1 FROM push_subscriptions WHERE endpoint = ?').get(fakeSub.endpoint), 'the row is gone');
+
+  // The vapid key endpoint needs a CORS header now too — this site fetches it
+  // cross-origin, which the admin's own same-origin PWA never had to.
+  const vapid = await worker.fetch(new Request('https://admin.timothystl.org/api/push/vapid-public-key', {
+    headers: { origin: 'https://timothystl.org' },
+  }), env, ctx);
+  eq(vapid.headers.get('access-control-allow-origin'), '*', 'so a browser is allowed to read the key');
+}
+
+group('Push Alert composes a message for the OTHER audience, and only that one');
+{
+  const { db, env } = await boot();
+  const envWithVapid = { ...env, ...fakeVapidKeys() };
+  const office = signIn(db, ['notices_edit'], 'office');
+  const outsider = signIn(db, ALL_PERMISSIONS.filter((p) => p !== 'notices_edit'), 'noaccess');
+
+  eq((await call(env, '/notify', { cookie: outsider.cookie })).status, 403, 'gated the same as Notices — no separate permission invented');
+  const openPage = await call(env, '/notify', { cookie: office.cookie });
+  eq(openPage.status, 200, 'whoever can write a Notice can open this');
+  const body = await openPage.text();
+  has(body, 'Push Alert', 'the sidebar names it plainly');
+
+  // ⚠ Real, ABSOLUTE endpoint URLs — buildVapidAuthHeader's first line is
+  // `new URL(endpoint).origin`, which throws on anything else, and that
+  // throw is swallowed by the same per-row try/catch that protects one bad
+  // subscription from blocking the rest — so a bare id here would silently
+  // never be pushed, which is exactly the failure this group exists to rule out.
+  const ks = fakeSubKeys(); const kv1 = fakeSubKeys(); const kv2 = fakeSubKeys();
+  db.prepare('INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, audience) VALUES (5, ?, ?, ?, ?)').run('https://fcm.example/s1', ks.p256dh, ks.auth, 'staff');
+  db.prepare('INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, audience) VALUES (NULL, ?, ?, ?, ?)').run('https://fcm.example/v1', kv1.p256dh, kv1.auth, 'public');
+  db.prepare('INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, audience) VALUES (NULL, ?, ?, ?, ?)').run('https://fcm.example/v2', kv2.p256dh, kv2.auth, 'public');
+  const countPage = await (await call(envWithVapid, '/notify', { cookie: office.cookie })).text();
+  has(countPage, '2', 'the screen counts the public audience, not the two staff plus two public');
+  lacks(countPage, 'not configured', 'and says nothing is missing once VAPID keys are present');
+
+  const realFetch = globalThis.fetch;
+  const reached = [];
+  globalThis.fetch = async (input) => {
+    reached.push(typeof input === 'string' ? input : input.url);
+    return new Response('', { status: 201 });
+  };
+  const sent = await worker.fetch(new Request('https://admin.timothystl.org/notify/send', {
+    method: 'POST', headers: { cookie: office.cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ title: 'Worship is canceled', body: 'Ice on the lot — stay home and stay warm.', url: '/news' }).toString(),
+  }), envWithVapid, ctx);
+  eq(sent.status, 302, 'sending redirects back with a toast');
+  has(decodeURIComponent(sent.headers.get('location') || ''), 'Sent to 2 of 2', 'and the toast counts only the audience it reached');
+  eq(reached.length, 2, 'exactly the two public rows were pushed');
+  ok(reached.every((u) => u.endsWith('/v1') || u.endsWith('/v2')), 'never the staff row: ' + JSON.stringify(reached));
+
+  const audit = db.prepare("SELECT * FROM audit_log WHERE entity_type = 'push_alert' ORDER BY id DESC LIMIT 1").get();
+  ok(audit, 'the broadcast is in the audit log');
+  eq(audit.username, 'office', 'attributed to whoever sent it');
+  has(audit.entity_label, 'Worship is canceled', 'naming the title');
+
+  // ⚠ A protocol-relative address is exactly the shape safeUrl() in
+  // admin/blocks.js gets wrong (SEC-15) — this field deliberately does not
+  // reuse it, and only accepts a single leading slash.
+  globalThis.fetch = async () => new Response('', { status: 201 });
+  const openRedirect = await worker.fetch(new Request('https://admin.timothystl.org/notify/send', {
+    method: 'POST', headers: { cookie: office.cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ title: 'x', body: 'y', url: '//evil.example' }).toString(),
+  }), envWithVapid, ctx);
+  eq(openRedirect.status, 302, 'the send itself still succeeds');
+  const lastAudit = db.prepare("SELECT after_state FROM audit_log WHERE entity_type = 'push_alert' ORDER BY id DESC LIMIT 1").get();
+  lacks(lastAudit.after_state, 'evil.example', 'but the protocol-relative address never reached the payload');
+
+  // A title or body left blank is refused rather than sending an empty push
+  // to every subscriber.
+  const blank = await worker.fetch(new Request('https://admin.timothystl.org/notify/send', {
+    method: 'POST', headers: { cookie: office.cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ title: '', body: '' }).toString(),
+  }), envWithVapid, ctx);
+  eq(blank.status, 302, 'refused with a toast, not a 500');
+  has(blank.headers.get('location') || '', 'required', 'naming what is missing');
+
+  globalThis.fetch = realFetch;
+
+  // The route itself is still gated even with a valid form — a stale tab or
+  // a crafted POST cannot reach it either.
+  const forced = await worker.fetch(new Request('https://admin.timothystl.org/notify/send', {
+    method: 'POST', headers: { cookie: outsider.cookie, origin: 'https://admin.timothystl.org', 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ title: 'x', body: 'y' }).toString(),
+  }), env, ctx);
+  eq(forced.status, 403, 'notices_edit is required to send, not just to open the screen');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

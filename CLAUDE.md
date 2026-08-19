@@ -398,6 +398,108 @@ is not runnable directly (it's WebCrypto, browser/Workers-only); run
   Andrew asked for his own copy of every report, deduped against the
   bookkeeper's address in case they're ever the same.
 
+### Push Alert: two audiences, not scoped triggers (v5.34.0, 2026-08-19)
+
+The review above (SEC-6/FX-29) found that `pushToAllSubscribers()` reads the
+whole `push_subscriptions` table and rings every device, whatever its
+permissions — the Market coordinator preset exists precisely so a volunteer
+sees only the vendor list, and it was still ringing her phone with 150
+characters of a prayer request. The proposed fix was to scope the six
+existing triggers by permission. Andrew's answer was a different shape: *"i
+think all push notifications should go to admin, and then notifications from
+admin can go out to all users. like a notice that worship is canceled,
+etc."*
+
+**Not permission-scoping — a second audience.** The six triggers that were
+already here (held mail, every delivered contact/prayer message, a new gym
+hold, payroll turning ready, and the two relayed from
+`connect.timothystl.org`) are **unchanged** — they still call
+`pushToAllSubscribers(env, payload)` with no audience argument, and that
+still means the office's own devices, exactly as before. What is new is a
+second door, for a message a human composes on purpose, aimed at people who
+were never staff to begin with: the congregation.
+
+- **`push_subscriptions.audience`** is `'staff'` or `'public'`, defaulting to
+  `'staff'`. SQLite backfills a non-null `DEFAULT` onto every existing row
+  when a column is added, so every subscription already on file — every
+  office phone that has ever tapped "Notifications" — became a staff one
+  with no migration script, no UPDATE, nothing to get wrong.
+- **`pushToAllSubscribers(env, payload, audience = 'staff')`** now filters by
+  it, and **returns counts** (`{ sent, gone, total }`) instead of nothing —
+  every existing caller still ignores the return value inside
+  `ctx.waitUntil`, exactly as before; the one new caller that fires a
+  broadcast on purpose needs to tell the office how many phones it actually
+  reached. `pushToPublicSubscribers(env, payload)` is the one door onto the
+  other audience, so nothing sending a congregation broadcast has to know
+  the column name or remember that the default would otherwise ring the
+  office instead.
+- **A visitor subscribes on the public site, not the admin.** There was no
+  such surface before this — every existing subscription came through the
+  admin's own PWA, behind a session. A small "Turn on browser alerts" link
+  sits under the newsletter sign-up form (site-wide chrome, on every page,
+  next to the other "stay connected" control) and talks to
+  `/api/push/subscribe-public` / `/api/push/unsubscribe-public` — public
+  routes, no session, `user_id` stays NULL. ⚠ **These are the first
+  genuinely cross-origin JSON POSTs in this file's set of public routes.**
+  Every earlier one (`/api/contact`, `/api/prayer`, `/api/subscribe`,
+  `/api/market/apply`) posts FormData, which the CORS spec treats as a
+  "simple request" needing no preflight — their own `OPTIONS` checks, where
+  they have one, are dead code a real browser never triggers (see DSN-6 in
+  the review above). A JSON body is not simple: the browser sends a real
+  preflight first and refuses the POST unless it gets back the right
+  `Access-Control-Allow-Methods`/`-Headers`, so both routes answer `OPTIONS`
+  for real. `/api/push/vapid-public-key` needed `Access-Control-Allow-Origin`
+  added too, on both its branches (configured and the 501) — the admin's own
+  PWA fetches it same-origin and never needed the header; this site fetches
+  it cross-origin and cannot read the response body without it.
+- **⚠ Not `screenSubmission()`.** That scores a name/email/message shape
+  this payload does not have. The real risk here is not content, it is a
+  scripted flood of junk rows, and validating the three fields are shaped
+  like what a real `PushManager.subscribe()` actually hands back — an
+  `https://` endpoint, two short base64url keys — is what a scripted POST
+  with no browser behind it cannot cheaply fake, and is proportionate to
+  what an abused row costs: one wasted D1 row nobody reads, since a
+  fabricated endpoint just fails to deliver. No IP rate limiter was built
+  for this; the existing flood-limit machinery in `admin/spam.js` is shaped
+  around a name/email/message triple and doesn't fit, and a second, weaker
+  limiter bolted on beside it would be worse than none.
+- **`/notify` is the composer**, gated on `notices_edit` — not a new
+  permission. This is a Notice that rings a phone instead of sitting in a
+  banner; whoever can already put "Worship is canceled" on the website has
+  every reason to be the one who can also push it. The screen shows the
+  live public-subscriber count before anything is sent, and the send
+  confirmation names exactly how many it reached — not a courtesy estimate,
+  the real `{sent, total}` the RFC 8291 encryption actually produced.
+- **⚠ `/notify/send` is `await`ed, not `ctx.waitUntil`ed** — the one
+  deliberate departure from every other caller. Every other trigger fires a
+  push alongside an action that has already succeeded on its own (a
+  submission was stored, a hold was taken); the push there is a courtesy
+  that must never be allowed to block or fail that action. Here the push
+  **is** the action — the office is looking at this screen specifically to
+  find out it went out, and a fire-and-forget confirmation would be a
+  confirmation of nothing.
+- **⚠ The "Link" field takes a site-relative path only, not a general
+  URL** — a single leading slash, explicitly refusing `//` (`if
+  (!/^\/(?!\/)/.test(notifyUrl)) notifyUrl = '';`). `safeUrl()` in
+  `admin/blocks.js` accepts a leading `//` as site-relative when it is
+  actually protocol-relative to an outside host (SEC-15 in the review
+  above); rather than reuse that gap in a brand-new field, this one simply
+  cannot express it.
+- **Logged to the audit log** like everything else that changes public-facing
+  state — the title, the body, the resolved link, and the actual send counts,
+  attributed to whoever pressed Send.
+
+Run: three new groups in `test/admin-redesign.test.mjs` — the audience split
+(a pre-existing staff row lands on `'staff'` with no migration, a broadcast
+never reaches a staff device and vice versa), the two public routes (no
+session needed, a fabricated endpoint refused, the real CORS preflight
+answered), and the `/notify` screen end to end (gated, counts the right
+audience, the protocol-relative address never reaches the payload, a blank
+title or body is refused). Every one of the four new checks was verified by
+reverting the fix it guards: the audience filter fails 7 assertions with
+staff and public bleeding together, the gate fails 2 with the real 200/302,
+the endpoint validation fails 1, the open-redirect guard fails 1.
+
 ### Cross-repo follow-up: scheduler and volunteer sign-up notifications (noted 2026-08-04)
 
 Andrew wants push notifications for two more events, and both now live on
@@ -8008,7 +8110,7 @@ is still a plan.
 | **2** | The escaping sweep — one theme, done once, properly | ~~FX-13 … FX-16~~ **DONE** |
 | **3** | Loading speed — the wins that need no new design | ~~FX-17~~ **DONE** · FX-18 · ~~FX-19~~ **DONE** · FX-20 … FX-23 |
 | **4** | Correctness the office would feel | FX-24 … FX-28 |
-| **5** | Policy calls — needs a decision before code | FX-29 … FX-31 |
+| **5** | Policy calls — needs a decision before code | ~~FX-29~~ **ANSWERED** (2026-08-19) · FX-30 … FX-31 |
 | **6** | Consistency and hygiene | FX-32 … FX-38 |
 | **7** | Structural — each one its own project | FX-39 … FX-43 |
 
@@ -8253,18 +8355,20 @@ when any occurred.
 
 ### Phase 5 — policy calls, decide before coding
 
-**FX-29 · Scope push notifications by permission.** (`SEC-6`.)
-`pushToAllSubscribers()` (`admin/webpush.js:167`) reads the whole table and
-sends to all of it. Any account with a session can subscribe. So the Market
-coordinator preset — which exists precisely so a volunteer sees only the vendor
-list — receives **prayer-request content** (150 characters, per
-`tlc-admin-worker.js:3407`) and contact-message bodies on her phone. The push
-channel is the one surface here that does not participate in the permission
-model, and that model is the most carefully argued thing in the codebase.
-⚠ Also add an ownership check to `/api/push/unsubscribe`, which today deletes
-any endpoint given to it.
-**The decision:** which permission gates which trigger, and whether a push
-should carry message content at all or only "something arrived."
+**FX-29 · Scope push notifications by permission — ANSWERED, DIFFERENT SHAPE.**
+(`SEC-6`.) Not permission-scoping the six existing triggers — Andrew's own
+words: *"i think all push notifications should go to admin, and then
+notifications from admin can go out to all users."* `push_subscriptions`
+carries an `audience` column now (`staff` default, `public` for a new
+congregation-facing broadcast), the six triggers are untouched, and `/notify`
+is the one door onto the other audience. See "Push Alert: two audiences, not
+scoped triggers" above for the whole design. ⚠ **Still genuinely open, and
+NOT touched by that work**: an ownership check on `/api/push/unsubscribe`
+(the STAFF route), which still deletes any endpoint handed to it — the same
+bearer-endpoint model the new public unsubscribe route deliberately adopted
+rather than solved, because the endpoint is unguessable and that boundary
+already held for the staff route. Worth a second look if that assumption is
+ever wrong.
 
 **FX-30 · Decide the fate of the renter self-confirm routes.** (`SEC-4`/`GY-5`.)
 `admin/gym.js:1483`, `:1533` and `:1801` let a renter holding only the group
