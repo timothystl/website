@@ -1267,7 +1267,7 @@ $('exportBtn').addEventListener('click', () => {
 // email itself and escapes every field on the way in, so a staff name can
 // never become markup in something that lands in an outside inbox — and the
 // emailed report cannot drift from a hand-built copy of the same thing.
-$('emailBtn').addEventListener('click', async () => {
+async function sendPayrollEmail(force) {
   const sel = $('periodSelect');
   if (!sel.value) return;
   const [periodStart, periodEnd] = sel.value.split('|');
@@ -1294,6 +1294,7 @@ $('emailBtn').addEventListener('click', async () => {
         total: rep.total,
         mdo: rep.mdo,
         church: rep.church,
+        force: !!force,
       }),
     });
     body = await res.json().catch(() => ({}));
@@ -1304,6 +1305,21 @@ $('emailBtn').addEventListener('click', async () => {
   }
   btn.disabled = false; btn.textContent = 'Email report';
   if (!res.ok) { showError(body.error || 'The report could not be sent.'); return; }
+  // The Worker checks whether this exact period was already emailed in the
+  // last 12 hours and answers with this instead of sending — a real
+  // question, not an error, so it never reaches showError(). Only a
+  // confirmed resend carries force:true, which skips the check outright.
+  if (body.already_sent) {
+    const when = body.last_sent_at ? new Date(body.last_sent_at) : null;
+    const stamp = when && !isNaN(when)
+      ? when.toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) + ' at '
+        + when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+      : 'recently';
+    if (confirm('This period was already emailed to ' + (body.last_sent_to || 'the bookkeeper') + ' on ' + stamp + '. Send it again?')) {
+      return sendPayrollEmail(true);
+    }
+    return;
+  }
   showError('');
   const sentMsg = 'Sent to ' + (body.to || 'the bookkeeper') + '.';
   // #periodSummary sits inside the Enter & approve roster, well below the
@@ -1315,7 +1331,8 @@ $('emailBtn').addEventListener('click', async () => {
   $('periodSummary').textContent = sentMsg;
   if (window.tlcToast) window.tlcToast(sentMsg);
   flashSaved();
-});
+}
+$('emailBtn').addEventListener('click', () => sendPayrollEmail(false));
 
 // ════════════════════════════════════════════════════════════
 // THE PERSON DRAWER
