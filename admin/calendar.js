@@ -264,21 +264,75 @@ export function plainText(html) {
     .replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 }
 
-// A News & Events record becomes an all-day entry on its event date. It has no
-// time column and no location column, and inventing either would be worse than
-// the honest all-day chip: "sometime that day" is exactly what the record says.
+// A News & Events record becomes an entry on its event date.
+//
+// It used to be all-day always, because the record genuinely had no time
+// column — and that was the reason the newsletter kept its own separate event
+// rows: a 7:00 pm council meeting could be typed into an email and could not
+// be said here at all. `event_time` is that column, so a post entered once is
+// now a complete event and the newsletter has nothing left to retype.
+//
+// ⚠ THE TIME IS A CHURCH WALL CLOCK, like every other time in this file, and
+// it is assembled by CONCATENATION rather than by any date arithmetic. The
+// column holds exactly what an <input type="time"> posts — `19:00` — so the
+// event starts at 19:00 in St. Louis whoever is reading it.
+//
+// ⚠ A BLANK TIME IS STILL ALL DAY, not midnight. `19:00` and `` are different
+// facts, and reading the second as `00:00` would put every dateless-but-timed
+// announcement at the top of the day looking deliberate.
 export function normalizeNewsItem(row, cats) {
   if (!row || !isYmd(row.event_date)) return null;
   const title = String(row.title || '').trim();
   if (!title) return null;
-  return {
+  const start = clockOnDay(row.event_date, row.event_time);
+  const base = {
     id: `n:${row.id}`,
-    start: row.event_date, end: row.event_date, allDay: true,
-    title, location: '',
+    title, location: String(row.event_location || '').trim(),
     description: plainText(row.summary || row.body || ''),
     category: categoryForNews(row, cats), source: 'news',
     url: '/news',
   };
+  if (!start) return { ...base, start: row.event_date, end: row.event_date, allDay: true };
+  return { ...base, start, end: newsEnd(row.event_date, start, row.event_end_time), allDay: false };
+}
+
+// `HH:MM` on a date, as a wall clock. Anything that is not a real time of day
+// — blank, `25:00`, whatever a stale form posts — is no time at all rather
+// than a guess, which is what sends the record back to being all-day.
+export function clockOnDay(ymd, hm) {
+  const t = normalizeClock(hm);
+  return t ? `${ymd}T${t}:00` : null;
+}
+
+// `HH:MM`, or null. Exported because the save path needs the same answer the
+// renderer does — a value the calendar would ignore must not be STORED either,
+// or the form comes back showing a time the month does not show.
+export function normalizeClock(hm) {
+  const m = /^([01]\d|2[0-3]):([0-5]\d)/.exec(String(hm || '').trim());
+  return m ? `${m[1]}:${m[2]}` : null;
+}
+
+// ⚠ AN END TIME IS OPTIONAL AND A DERIVED ONE IS NEVER SHOWN.
+//
+// The screen prints the START and nothing else — `tlcCalTime()` reads
+// `ev.start` and has no branch for an end — so a derived end cannot make the
+// page claim a duration nobody entered. But `.ics` has no way to express "it
+// starts at 7 and we did not say when it stops": DTEND equal to DTSTART is a
+// zero-length event, which a calendar app draws as a hairline somebody's eye
+// slides straight past. So an unstated end becomes one hour, the same
+// assumption every calendar app makes when you type a start and stop.
+//
+// ⚠ AND IT IS CLAMPED TO THE SAME DAY. `tlcCalDates()` walks from the start
+// date to the END date inclusive, so a 11:30 pm event given a naive +1 hour
+// would be drawn on two days — tomorrow's grid growing an event that finished
+// before anybody woke up.
+export function newsEnd(ymd, start, endTime) {
+  const stated = clockOnDay(ymd, endTime);
+  if (stated && stated > start) return stated;
+  const m = /T(\d{2}):(\d{2})/.exec(start);
+  const h = Number(m[1]);
+  if (h >= 23) return `${ymd}T23:59:00`;
+  return `${ymd}T${String(h + 1).padStart(2, '0')}:${m[2]}:00`;
 }
 
 // ── DE-DUPE ─────────────────────────────────────────────────────────────────
@@ -519,7 +573,8 @@ export async function buildCalendarFeed(env, { from, to, getToken, calendarIds, 
 export async function readNewsEvents(env, from, to, cats) {
   try {
     const rows = await env.DB.prepare(
-      `SELECT id, title, summary, body, event_date, publish_date, theme, value, calendar_category
+      `SELECT id, title, summary, body, event_date, event_time, event_end_time, event_location,
+              publish_date, theme, value, calendar_category
          FROM news_items
         WHERE event_date IS NOT NULL AND event_date >= ? AND event_date <= ?
           AND (channels IS NULL OR channels LIKE '%web%')

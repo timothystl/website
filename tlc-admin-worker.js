@@ -44,7 +44,7 @@ import { buildMonospacePdf } from './admin/pdf.js';
 import { handleGymRoutes, sweepExpiredItems, extractImageKeys, getGCalAccessToken } from './admin/gym.js';
 import { buildCalendarFeed, buildIcs, parseCalendarIds, monthRange, shiftMonth,
          mergedCategories, activeCategories, CALENDAR_PALETTE, GOOGLE_COLORS, googleColorName,
-         DEFAULT_CATEGORIES, NEUTRAL_CATEGORY } from './admin/calendar.js';
+         DEFAULT_CATEGORIES, NEUTRAL_CATEGORY, normalizeClock } from './admin/calendar.js';
 import { migrateLegacyPage, starterBlocks, sanitizeBlocks, sanitizeBlock, parseBlocks, newBlock,
          renderPage, renderBlock, BLOCK_DEFS, BLOCK_TYPE_KEYS, GROUPS, BG, INK, SIZES, SPLITS, TONES,
          STAMP_PRESETS, safeUrl, esc as escBlock, editorPhoneCss, blocksClientConfig, makeBlockId,
@@ -1731,7 +1731,7 @@ export default {
     // homepage makes. The whole table is a handful of rows, so it is read
     // once into a Map; see MARKERS_SEEN above for why the memo is keyed on
     // env.DB and only ever set when no work ran.
-    const SCHEMA_VERSION = '2026-08-19-5'; // bumped: news_items.calendar_category, so a post can say what it is on the calendar
+    const SCHEMA_VERSION = '2026-08-19-6'; // bumped: news_items.event_time/event_end_time/event_location, so a post is a whole event
     const markersOk = MARKERS_SEEN.get(env.DB) === SCHEMA_VERSION;
     const markers = new Map();
     if (!markersOk) {
@@ -2333,6 +2333,15 @@ export default {
     // it silently became "Special events". Blank still means "work it out from
     // the value tag", so nothing already written changes.
     try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN calendar_category TEXT').run(); } catch (_) {}
+    // ⚠ THE CLOCK A NEWS POST NEVER HAD, and the reason the newsletter kept a
+    // second set of event rows of its own. A record could say WHICH DAY and
+    // nothing more, so "Council meeting, 7:00 pm" could be typed into an email
+    // and could not be said here at all — which is what made somebody type it
+    // again into Google. All three are nullable: blank `event_time` is a
+    // genuinely all-day event, not midnight.
+    try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN event_time TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN event_end_time TEXT').run(); } catch (_) {}
+    try { await env.DB.prepare('ALTER TABLE news_items ADD COLUMN event_location TEXT').run(); } catch (_) {}
     try { await env.DB.prepare('ALTER TABLE bible_classes ADD COLUMN value TEXT').run(); } catch (_) {}
     // Menu visibility, separate from published state. Taking a ministry out of
     // the header must not unpublish it — the page stays live at its address,
@@ -8280,7 +8289,19 @@ ${sidebarShell('news', currentUser, `<a href="https://timothystl.org/news" targe
             <p class="tlc-hint">The weekly email pulls from the posts ticked for it, rather than asking you to retype them.</p></div>` },
           { kind: 'date', name: 'publish_date', label: 'Publish date', value: item ? (item.publish_date || '') : today },
           { kind: 'date', name: 'event_date', label: 'Event date', value: item ? (item.event_date || '') : '',
-            hint: 'Optional. A post with one sorts by the event rather than by when it was written.' },
+            hint: 'Optional. A post with one sorts by the event rather than by when it was written \u2014 and appears on the church calendar, the printed month and the weekly email, without being entered anywhere else.' },
+          // ⚠ THE FIELD THAT ENDS THE RETYPING. Without a time, a post could
+          // only ever be an all-day chip, so a 7:00 pm meeting had to be typed
+          // into the newsletter by hand and into Google by hand. Leaving it
+          // blank is still a real answer — an all-day event — which is why
+          // there is no default and no placeholder time.
+          { kind: 'text', type: 'time', name: 'event_time', label: 'Starts at', value: item ? (item.event_time || '') : '',
+            hint: 'Leave blank for something that runs all day. Church time, always.' },
+          { kind: 'text', type: 'time', name: 'event_end_time', label: 'Ends at', value: item ? (item.event_end_time || '') : '',
+            hint: 'Optional. The calendar page shows only the start; this is what a subscribed phone uses to draw how long it runs.' },
+          { kind: 'text', name: 'event_location', label: 'Where', value: item ? (item.event_location || '') : '',
+            placeholder: 'e.g. Fellowship Hall',
+            hint: 'Optional. Shown on the event and carried into a subscribed calendar.' },
           { kind: 'date', name: 'expire_date', label: 'Expire date', value: item ? (item.expire_date || '') : in90,
             hint: 'The post hides itself after this date. Clear it only for something genuinely permanent.' },
           { kind: 'toggle', name: 'pinned', label: 'Pin to the top', value: item ? !!item.pinned : false,
@@ -8308,6 +8329,9 @@ ${newsImageUploadScript()}`, 'New post — TLC Admin', TINYMCE_HEAD);
       const image_url = (form.get('image_url') || '').trim().startsWith('blob:') ? '' : (form.get('image_url') || '');
       const publish_date = form.get('publish_date') || churchDate();
       const event_date = form.get('event_date') || '';
+      const event_time = normalizeClock(form.get('event_time'));
+      const event_end_time = normalizeClock(form.get('event_end_time'));
+      const event_location = String(form.get('event_location') || '').trim();
       const expire_date = form.get('expire_date') || '';
       // A toggle posts a hidden 0 ahead of its checkbox, so get() always sees
       // the 0. getAll() is the only reading that is true when it is really on.
@@ -8321,8 +8345,8 @@ ${newsImageUploadScript()}`, 'New post — TLC Admin', TINYMCE_HEAD);
         form.get('ch_social') === '1' && 'social',
       ].filter(Boolean).join(',') || 'web';
       const newItemResult = await env.DB.prepare(
-        'INSERT INTO news_items (title, summary, body, image_url, publish_date, event_date, expire_date, pinned, theme, content_type, channels, value, calendar_category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(title, summary, body, image_url, publish_date, event_date || null, expire_date || null, pinned, theme || null, content_type || null, channels, normalizeValue(form.get('value')) || null, String(form.get('calendar_category') || '').trim() || null).run();
+        'INSERT INTO news_items (title, summary, body, image_url, publish_date, event_date, event_time, event_end_time, event_location, expire_date, pinned, theme, content_type, channels, value, calendar_category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(title, summary, body, image_url, publish_date, event_date || null, event_time, event_end_time, event_location || null, expire_date || null, pinned, theme || null, content_type || null, channels, normalizeValue(form.get('value')) || null, String(form.get('calendar_category') || '').trim() || null).run();
       await logAudit(env.DB, currentUser, 'create', 'news_item', newItemResult.meta.last_row_id, title, null, { title, summary, publish_date, expire_date, pinned });
       return new Response('', { status: 302, headers: { Location: '/newsitems?msg=saved' } });
     }
@@ -8351,6 +8375,9 @@ ${newsImageUploadScript(item.image_url || '')}`, 'Edit post — TLC Admin', TINY
       const image_url = (form.get('image_url') || '').trim().startsWith('blob:') ? '' : (form.get('image_url') || '');
       const publish_date = form.get('publish_date') || '';
       const event_date = form.get('event_date') || '';
+      const event_time = normalizeClock(form.get('event_time'));
+      const event_end_time = normalizeClock(form.get('event_end_time'));
+      const event_location = String(form.get('event_location') || '').trim();
       const expire_date = form.get('expire_date') || '';
       // A toggle posts a hidden 0 ahead of its checkbox, so get() always sees
       // the 0. getAll() is the only reading that is true when it is really on.
@@ -8365,8 +8392,8 @@ ${newsImageUploadScript(item.image_url || '')}`, 'Edit post — TLC Admin', TINY
       ].filter(Boolean).join(',') || 'web';
       const beforeItem = await env.DB.prepare('SELECT title, summary, body, image_url, publish_date, event_date, expire_date, pinned FROM news_items WHERE id = ?').bind(id).first();
       await env.DB.prepare(
-        'UPDATE news_items SET title=?, summary=?, body=?, image_url=?, publish_date=?, event_date=?, expire_date=?, pinned=?, theme=?, content_type=?, channels=?, value=?, calendar_category=? WHERE id=?'
-      ).bind(title, summary, body, image_url, publish_date, event_date || null, expire_date || null, pinned, theme || null, content_type || null, channels, normalizeValue(form.get('value')) || null, String(form.get('calendar_category') || '').trim() || null, id).run();
+        'UPDATE news_items SET title=?, summary=?, body=?, image_url=?, publish_date=?, event_date=?, event_time=?, event_end_time=?, event_location=?, expire_date=?, pinned=?, theme=?, content_type=?, channels=?, value=?, calendar_category=? WHERE id=?'
+      ).bind(title, summary, body, image_url, publish_date, event_date || null, event_time, event_end_time, event_location || null, expire_date || null, pinned, theme || null, content_type || null, channels, normalizeValue(form.get('value')) || null, String(form.get('calendar_category') || '').trim() || null, id).run();
       await logAudit(env.DB, currentUser, 'update', 'news_item', id, title, beforeItem, { title, summary, publish_date, expire_date, pinned });
       return new Response('', { status: 302, headers: { Location: '/newsitems?msg=saved' } });
     }
