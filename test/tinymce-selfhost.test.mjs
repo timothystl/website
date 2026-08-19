@@ -20,7 +20,7 @@ import { createRequire } from 'node:module'; import { execSync } from 'node:chil
 const gr = execSync('npm root -g').toString().trim();
 const { chromium } = createRequire(path.join(gr, 'x.js'))('playwright');
 import { TINYMCE_VERSION, TINYMCE_BASE, TINYMCE_HEAD } from '../admin/db.js';
-import { tinymceField, RICH_FIELD_JS, ADMIN_SHELL_CSS } from '../admin/helpers.js';
+import { tinymceField, RICH_FIELD_JS, ADMIN_SHELL_CSS, ADMIN_CSP } from '../admin/helpers.js';
 
 const TYPES = { '.js': 'text/javascript', '.css': 'text/css', '.md': 'text/plain', '.txt': 'text/plain', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
 const vendor = new URL('../admin/vendor/tinymce/', import.meta.url);
@@ -79,7 +79,11 @@ const srv = http.createServer((q, r) => {
     r.writeHead(200, { 'Content-Type': 'text/html' });
     return r.end('<!doctype html><html><body>not the file</body></html>');
   }
-  r.writeHead(200, { 'Content-Type': 'text/html' });
+  // ⚠ THE REAL ADMIN CSP, not a paraphrase of it. This is what makes the
+  // 'unsafe-eval' removal (FX-10) verifiable rather than asserted: the library
+  // boots under the exact header a signed-in admin gets, and any policy
+  // violation it provokes is recorded below.
+  r.writeHead(200, { 'Content-Type': 'text/html', 'Content-Security-Policy': ADMIN_CSP });
   r.end(page(TINYMCE_BASE));
 });
 await new Promise((r) => srv.listen(0, r));
@@ -90,6 +94,16 @@ const p = await (await b.newContext()).newPage();
 const errs = []; const logs = []; const assets = [];
 p.on('pageerror', (e) => errs.push(String(e)));
 p.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') logs.push(m.text()); });
+// Every CSP violation the page provokes, collected before anything navigates.
+// addInitScript runs in each new document BEFORE its own scripts, so a
+// violation raised while TinyMCE is still booting is still caught.
+const csp = [];
+await p.exposeFunction('__cspViolation', (d) => { csp.push(d); });
+await p.addInitScript(() => {
+  document.addEventListener('securitypolicyviolation', (e) => {
+    window.__cspViolation({ directive: e.violatedDirective, blocked: e.blockedURI, sample: (e.sample || '').slice(0, 120) });
+  });
+});
 const offsite = [];
 p.on('request', (req) => {
   const u = new URL(req.url());
@@ -191,5 +205,17 @@ ok((posted.get('pastor_note') || '').includes('Added today.'), 'the typed text w
 ok((posted.get('pastor_note') || '').includes('last week'), 'and the original text survived');
 
 await b.close(); srv.close();
+group('it boots under the real admin CSP, with no unsafe-eval (FX-10)');
+// ⚠ THE POINT OF THIS GROUP IS THE ABSENCE OF 'unsafe-eval'. The header the
+// page above was served IS admin/helpers.js's ADMIN_CSP — so if TinyMCE, its
+// plugins, or the shell's own scripts ever reach for eval or new Function,
+// script-src refuses it and a violation lands in `csp`. Everything already
+// asserted above — the editor opening on stored content, the toolbar buttons,
+// the save — ran under that header, so a green suite is the evidence.
+ok(!/unsafe-eval/.test(ADMIN_CSP), "the admin CSP does not allow 'unsafe-eval'");
+ok(/frame-ancestors 'none'/.test(ADMIN_CSP), 'and it states frame-ancestors outright, which does not inherit from default-src');
+ok(/base-uri 'none'/.test(ADMIN_CSP), 'and base-uri, so an injected base tag cannot re-point every relative asset');
+ok(csp.length === 0, 'no CSP violation fired while the real library booted: ' + JSON.stringify(csp).slice(0, 300));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -10,7 +10,7 @@ import { PERMISSIONS, PERMISSION_PRESETS, hasPermission } from './auth.js';
 import { ADMIN_UI_CSS, LIST_SECTION_JS, MENU_CSS, PRESET_CSS, GYM_CAL_CSS, PANEL_LIST_CSS, TABS_CSS, MARKET_CSS, MARKET_JS, NEWSLETTER_CSS, PANEL_LIST_JS, SIDEBAR_JS, TOGGLE_WORD_JS, LOCKED_FIELD_JS, TOAST_CSS, TOAST_JS, CMDK_CSS, CMDK_JS, CMDK_HTML } from './ui.js';
 import { APPEARANCE_CSS } from './appearance.js';
 
-export const VERSION = 'v5.32.2'; // minor: the escaping sweep — every plain-text field in the newsletter email and the public renderer is escaped, escText is attribute-safe, the gym's four partial escapes are gone, and the document title is escaped at the sink
+export const VERSION = 'v5.33.0'; // minor: Phase 1 of the review's remediation plan — the exposures, closed
 
 // ── THE SHARED SHELL CSS/JS, EXTERNALISED ───────────────────────
 // This used to be inlined into every admin response inside <style>/<script>
@@ -633,6 +633,15 @@ ${MARKET_JS}
 // as markup. Escaping in the one place every screen goes through is the
 // difference between a rule and six places somebody has to remember. No caller
 // passes markup as a title; a title is text by definition.
+// The admin shell's Content-Security-Policy, exported so a test can serve the
+// real header rather than a paraphrase of it. See the comment at its use below
+// for why frame-ancestors and base-uri are stated outright and why
+// 'unsafe-eval' is not here.
+export const ADMIN_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+  + "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+  + "font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; "
+  + "connect-src 'self'; frame-src 'self'; frame-ancestors 'none'; base-uri 'none'";
+
 export function html(body, title = 'TLC Admin', extraHead = '') {
   return new Response(`<!DOCTYPE html>
 <html lang="en">
@@ -674,7 +683,20 @@ ${extraHead}
       // fonts.googleapis.com serves the Lora / Source Sans 3 stylesheet and
       // fonts.gstatic.com the font files themselves — the redesign's type
       // system needs both, and a blocked font silently falls back to Georgia.
-      'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self'; frame-src 'self';"
+      //
+      // ⚠ frame-ancestors DOES NOT INHERIT FROM default-src. Without it stated
+      // outright, every admin screen is framable — the page editor sets its own
+      // (EDITOR_HEADERS in tlc-admin-worker.js) and was the only screen that
+      // was not. base-uri is the same shape of omission: a base tag injected
+      // into a page would re-point every relative script and stylesheet on it.
+      //
+      // ⚠ 'unsafe-eval' is deliberately absent. It was here from the start and
+      // nothing ever needed it: the vendored TinyMCE contains no eval and no
+      // new Function, the page editor has run the same library under a CSP
+      // without it since the editor shipped, and test/tinymce-selfhost.test.mjs
+      // boots the real library under this exact header and asserts no policy
+      // violation fires. Do not add it back without a violation to point at.
+      'Content-Security-Policy': ADMIN_CSP
     }
   });
 }
